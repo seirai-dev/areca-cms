@@ -1,0 +1,211 @@
+import { and, desc, eq, ilike, or, sql } from 'drizzle-orm'
+import type { InferSelectModel } from 'drizzle-orm'
+import sharp from 'sharp'
+
+import { getStorage } from '#/adapters'
+import { db } from '#/db'
+import { asset, entry } from '#/db/schema'
+import { env } from '#/env'
+
+export type Asset = InferSelectModel<typeof asset>
+
+export type ResolvedAssetValue = {
+  url: string
+  width: number | null
+  height: number | null
+  alt: string
+  mimeType: string
+}
+
+const ALLOWED_MIMES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'image/svg+xml',
+  'application/pdf',
+])
+
+const RASTER_MIMES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+])
+
+const EXT_BY_MIME: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+  'image/svg+xml': 'svg',
+  'application/pdf': 'pdf',
+}
+
+const MAX_SIZE_BYTES = 20 * 1024 * 1024
+
+export class AssetValidationError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'AssetValidationError'
+  }
+}
+
+export class AssetInUseError extends Error {
+  constructor(public readonly usage: number) {
+    super(`Asset is in use by ${usage} entries`)
+    this.name = 'AssetInUseError'
+  }
+}
+
+export async function uploadAsset(input: {
+  organizationId: string
+  file: { buffer: Buffer; filename: string; mimeType: string }
+  actorId: string
+  altText?: string
+}): Promise<Asset> {
+  const mimeType = input.file.mimeType.toLowerCase()
+  if (!ALLOWED_MIMES.has(mimeType)) {
+    throw new AssetValidationError(`Unsupported mime type: ${input.file.mimeType}`)
+  }
+  if (input.file.buffer.byteLength > MAX_SIZE_BYTES) {
+    throw new AssetValidationError('File exceeds the 20 MB size limit')
+  }
+
+  let width: number | null = null
+  let height: number | null = null
+  if (RASTER_MIMES.has(mimeType)) {
+    const meta = await sharp(input.file.buffer).metadata()
+    width = meta.width ?? null
+    height = meta.height ?? null
+  }
+
+  const ext = EXT_BY_MIME[mimeType] ?? 'bin'
+  const storageKey = `${input.organizationId}/${crypto.randomUUID()}.${ext}`
+  const storage = getStorage()
+  await storage.put(storageKey, input.file.buffer, mimeType)
+
+  const [row] = await db
+    .insert(asset)
+    .values({
+      organizationId: input.organizationId,
+      storageKey,
+      originalFilename: input.file.filename,
+      mimeType,
+      size: input.file.buffer.byteLength,
+      width,
+      height,
+      altText: input.altText,
+      createdBy: input.actorId,
+    })
+    .returning()
+
+  if (!row) {
+    throw new Error('Failed to insert asset')
+  }
+  return row
+}
+
+export async function listAssets(
+  organizationId: string,
+  opts: { search?: string; limit: number; offset: number },
+): Promise<Asset[]> {
+  const search = opts.search?.trim()
+  return db
+    .select()
+    .from(asset)
+    .where(
+      search
+        ? and(
+            eq(asset.organizationId, organizationId),
+            or(
+              ilike(asset.originalFilename, `%${search}%`),
+              ilike(asset.altText, `%${search}%`),
+            ),
+          )
+        : eq(asset.organizationId, organizationId),
+    )
+    .orderBy(desc(asset.createdAt))
+    .limit(opts.limit)
+    .offset(opts.offset)
+}
+
+export async function getAsset(id: string): Promise<Asset | undefined> {
+  const [row] = await db.select().from(asset).where(eq(asset.id, id)).limit(1)
+  return row
+}
+
+export async function updateAsset(
+  id: string,
+  patch: { altText: string },
+): Promise<Asset> {
+  const [row] = await db
+    .update(asset)
+    .set({ altText: patch.altText })
+    .where(eq(asset.id, id))
+    .returning()
+  if (!row) {
+    throw new Error('Asset not found')
+  }
+  return row
+}
+
+export async function assetUsage(id: string): Promise<number> {
+  const pattern = `%${id}%`
+  const [row] = await db
+    .select({
+      count: sql<number>`cast(count(*) as int)`,
+    })
+    .from(entry)
+    .where(
+      sql`${entry.draftData}::text LIKE ${pattern} OR ${entry.publishedData}::text LIKE ${pattern}`,
+    )
+  return Number(row?.count ?? 0)
+}
+
+export async function deleteAsset(id: string): Promise<void> {
+  const existing = await getAsset(id)
+  if (!existing) {
+    throw new Error('Asset not found')
+  }
+  const usage = await assetUsage(id)
+  if (usage > 0) {
+    throw new AssetInUseError(usage)
+  }
+  await getStorage().delete(existing.storageKey)
+  await db.delete(asset).where(eq(asset.id, id))
+}
+
+export function assetUrl(assetRow: Pick<Asset, 'storageKey'>): string {
+  return `${env.APP_URL}/api/assets/file/${assetRow.storageKey}`
+}
+
+export async function resolveAssetValue(
+  assetId: string,
+): Promise<ResolvedAssetValue | null> {
+  const row = await getAsset(assetId)
+  if (!row) return null
+  return {
+    url: assetUrl(row),
+    width: row.width,
+    height: row.height,
+    alt: row.altText ?? '',
+    mimeType: row.mimeType,
+  }
+}
+
+export async function streamAssetFile(storageKey: string): Promise<Response> {
+  const object = await getStorage().get(storageKey)
+  if (!object) {
+    return new Response('Not found', { status: 404 })
+  }
+  const body = Buffer.isBuffer(object.body)
+    ? new Uint8Array(object.body)
+    : object.body
+  return new Response(body, {
+    headers: {
+      'Content-Type': object.contentType ?? 'application/octet-stream',
+      'Cache-Control': 'public, max-age=31536000, immutable',
+    },
+  })
+}

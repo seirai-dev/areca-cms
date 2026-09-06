@@ -1,0 +1,78 @@
+import { createFileRoute } from '@tanstack/react-router'
+import '@tanstack/react-start'
+import { z } from 'zod'
+
+import type { FieldType } from '#/lib/types'
+import { syncManifest } from '#/server/content/collections'
+import { authenticateSite } from '#/server/content/site-auth'
+
+const fieldTypes = [
+  'text',
+  'textarea',
+  'richtext',
+  'image',
+  'date',
+  'datetime',
+  'select',
+  'reference',
+  'slug',
+  'boolean',
+  'number',
+] as const satisfies readonly FieldType[]
+
+const fieldSchema = z.object({
+  key: z.string().min(1),
+  label: z.string().min(1),
+  type: z.enum(fieldTypes),
+  required: z.boolean().optional(),
+  options: z.array(z.string()).optional(),
+  collection: z.string().optional(),
+  description: z.string().optional(),
+})
+
+const manifestSchema = z.object({
+  collections: z.record(
+    z.string(),
+    z.object({
+      route: z.string().min(1),
+      label: z.string().optional(),
+      fields: z.array(fieldSchema),
+    }),
+  ),
+})
+
+export async function postSitesManifest(request: Request) {
+  const site = await authenticateSite(request)
+  if (!site) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  let body: unknown
+  try {
+    body = await request.json()
+  } catch {
+    return Response.json(
+      { error: 'Invalid body', issues: [{ message: 'Expected JSON' }] },
+      { status: 400 },
+    )
+  }
+
+  const parsed = manifestSchema.safeParse(body)
+  if (!parsed.success) {
+    return Response.json(
+      { error: 'Invalid body', issues: parsed.error.issues },
+      { status: 400 },
+    )
+  }
+
+  await syncManifest(site.id, parsed.data)
+  return Response.json({ ok: true as const })
+}
+
+export const Route = createFileRoute('/api/sites/manifest')({
+  server: {
+    handlers: {
+      POST: ({ request }) => postSitesManifest(request),
+    },
+  },
+})

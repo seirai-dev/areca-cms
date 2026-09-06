@@ -57,14 +57,31 @@ export type SnapshotRichText = {
 export type SnapshotEntry = {
   id: string
   slug: string
-  data: Record<string, unknown>
   publishedAt: string | null
+  data: Record<string, unknown>
 }
 
+/** Wire contract — matches `@areca/site-sdk` `Snapshot`. */
 export type Snapshot = {
-  siteId: string
+  publicationId: string
+  siteKey: string
   createdAt: string
+  hash: string
   collections: Record<string, SnapshotEntry[]>
+}
+
+export type ImageValue = {
+  url: string
+  width: number | null
+  height: number | null
+  alt: string
+  mimeType: string
+}
+
+export type ReferenceValue = {
+  collection: string
+  slug: string
+  id: string
 }
 
 export type SiteManifest = {

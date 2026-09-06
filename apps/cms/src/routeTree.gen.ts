@@ -10,11 +10,21 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiAssetsUploadRouteImport } from './routes/api/assets/upload'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiSitesManifestRouteImport } from './routes/api/sites/manifest'
+import { Route as ApiSitesPreviewRouteImport } from './routes/api/sites/preview'
+import { Route as ApiAssetsFileSplatRouteImport } from './routes/api/assets/file/$'
+import { Route as ApiSitesSnapshotCurrentRouteImport } from './routes/api/sites/snapshot/current'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAssetsUploadRoute = ApiAssetsUploadRouteImport.update({
+  id: '/api/assets/upload',
+  path: '/api/assets/upload',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
@@ -22,31 +32,93 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiSitesManifestRoute = ApiSitesManifestRouteImport.update({
+  id: '/api/sites/manifest',
+  path: '/api/sites/manifest',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSitesPreviewRoute = ApiSitesPreviewRouteImport.update({
+  id: '/api/sites/preview',
+  path: '/api/sites/preview',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAssetsFileSplatRoute = ApiAssetsFileSplatRouteImport.update({
+  id: '/api/assets/file/$',
+  path: '/api/assets/file/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSitesSnapshotCurrentRoute = ApiSitesSnapshotCurrentRouteImport.update({
+  id: '/api/sites/snapshot/current',
+  path: '/api/sites/snapshot/current',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/api/assets/upload': typeof ApiAssetsUploadRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/sites/manifest': typeof ApiSitesManifestRoute
+  '/api/sites/preview': typeof ApiSitesPreviewRoute
+  '/api/assets/file/$': typeof ApiAssetsFileSplatRoute
+  '/api/sites/snapshot/current': typeof ApiSitesSnapshotCurrentRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/assets/upload': typeof ApiAssetsUploadRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/sites/manifest': typeof ApiSitesManifestRoute
+  '/api/sites/preview': typeof ApiSitesPreviewRoute
+  '/api/assets/file/$': typeof ApiAssetsFileSplatRoute
+  '/api/sites/snapshot/current': typeof ApiSitesSnapshotCurrentRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/api/assets/upload': typeof ApiAssetsUploadRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/sites/manifest': typeof ApiSitesManifestRoute
+  '/api/sites/preview': typeof ApiSitesPreviewRoute
+  '/api/assets/file/$': typeof ApiAssetsFileSplatRoute
+  '/api/sites/snapshot/current': typeof ApiSitesSnapshotCurrentRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/auth/$'
+  fullPaths:
+    | '/'
+    | '/api/assets/upload'
+    | '/api/auth/$'
+    | '/api/sites/manifest'
+    | '/api/sites/preview'
+    | '/api/assets/file/$'
+    | '/api/sites/snapshot/current'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/auth/$'
-  id: '__root__' | '/' | '/api/auth/$'
+  to:
+    | '/'
+    | '/api/assets/upload'
+    | '/api/auth/$'
+    | '/api/sites/manifest'
+    | '/api/sites/preview'
+    | '/api/assets/file/$'
+    | '/api/sites/snapshot/current'
+  id:
+    | '__root__'
+    | '/'
+    | '/api/assets/upload'
+    | '/api/auth/$'
+    | '/api/sites/manifest'
+    | '/api/sites/preview'
+    | '/api/assets/file/$'
+    | '/api/sites/snapshot/current'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ApiAssetsUploadRoute: typeof ApiAssetsUploadRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiSitesManifestRoute: typeof ApiSitesManifestRoute
+  ApiSitesPreviewRoute: typeof ApiSitesPreviewRoute
+  ApiAssetsFileSplatRoute: typeof ApiAssetsFileSplatRoute
+  ApiSitesSnapshotCurrentRoute: typeof ApiSitesSnapshotCurrentRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -58,6 +130,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/assets/upload': {
+      id: '/api/assets/upload'
+      path: '/api/assets/upload'
+      fullPath: '/api/assets/upload'
+      preLoaderRoute: typeof ApiAssetsUploadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -65,12 +144,45 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/sites/manifest': {
+      id: '/api/sites/manifest'
+      path: '/api/sites/manifest'
+      fullPath: '/api/sites/manifest'
+      preLoaderRoute: typeof ApiSitesManifestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/sites/preview': {
+      id: '/api/sites/preview'
+      path: '/api/sites/preview'
+      fullPath: '/api/sites/preview'
+      preLoaderRoute: typeof ApiSitesPreviewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/assets/file/$': {
+      id: '/api/assets/file/$'
+      path: '/api/assets/file/$'
+      fullPath: '/api/assets/file/$'
+      preLoaderRoute: typeof ApiAssetsFileSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/sites/snapshot/current': {
+      id: '/api/sites/snapshot/current'
+      path: '/api/sites/snapshot/current'
+      fullPath: '/api/sites/snapshot/current'
+      preLoaderRoute: typeof ApiSitesSnapshotCurrentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ApiAssetsUploadRoute: ApiAssetsUploadRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiSitesManifestRoute: ApiSitesManifestRoute,
+  ApiSitesPreviewRoute: ApiSitesPreviewRoute,
+  ApiAssetsFileSplatRoute: ApiAssetsFileSplatRoute,
+  ApiSitesSnapshotCurrentRoute: ApiSitesSnapshotCurrentRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
