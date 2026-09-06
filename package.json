@@ -1,0 +1,20 @@
+{
+  "name": "areca",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter @areca/cms dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "db:generate": "pnpm --filter @areca/cms db:generate",
+    "db:migrate": "pnpm --filter @areca/cms db:migrate",
+    "db:push": "pnpm --filter @areca/cms db:push",
+    "db:studio": "pnpm --filter @areca/cms db:studio"
+  },
+  "devDependencies": {
+    "eslint": "^9.20.0",
+    "prettier": "^3.8.1",
+    "typescript": "^6.0.2",
+    "vitest": "^3.2.4"
+  }
+}
