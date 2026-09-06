@@ -9,18 +9,54 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
+import { Route as AppRouteImport } from './routes/_app'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as AppIndexRouteImport } from './routes/_app/index'
+import { Route as AppAdminRouteImport } from './routes/_app/admin'
+import { Route as InviteTokenRouteImport } from './routes/invite/$token'
+import { Route as AppAdminIndexRouteImport } from './routes/_app/admin/index'
+import { Route as AppSitesSiteIdRouteImport } from './routes/_app/sites/$siteId'
 import { Route as ApiAssetsUploadRouteImport } from './routes/api/assets/upload'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiSitesManifestRouteImport } from './routes/api/sites/manifest'
 import { Route as ApiSitesPreviewRouteImport } from './routes/api/sites/preview'
+import { Route as AppSitesSiteIdIndexRouteImport } from './routes/_app/sites/$siteId/index'
 import { Route as ApiAssetsFileSplatRouteImport } from './routes/api/assets/file/$'
 import { Route as ApiSitesSnapshotCurrentRouteImport } from './routes/api/sites/snapshot/current'
 
-const IndexRoute = IndexRouteImport.update({
+const AppRoute = AppRouteImport.update({
+  id: '/_app',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAdminRoute = AppAdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => AppRoute,
+} as any)
+const InviteTokenRoute = InviteTokenRouteImport.update({
+  id: '/invite/$token',
+  path: '/invite/$token',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AppAdminIndexRoute = AppAdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppAdminRoute,
+} as any)
+const AppSitesSiteIdRoute = AppSitesSiteIdRouteImport.update({
+  id: '/sites/$siteId',
+  path: '/sites/$siteId',
+  getParentRoute: () => AppRoute,
 } as any)
 const ApiAssetsUploadRoute = ApiAssetsUploadRouteImport.update({
   id: '/api/assets/upload',
@@ -42,6 +78,11 @@ const ApiSitesPreviewRoute = ApiSitesPreviewRouteImport.update({
   path: '/api/sites/preview',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppSitesSiteIdIndexRoute = AppSitesSiteIdIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppSitesSiteIdRoute,
+} as any)
 const ApiAssetsFileSplatRoute = ApiAssetsFileSplatRouteImport.update({
   id: '/api/assets/file/$',
   path: '/api/assets/file/$',
@@ -54,65 +95,101 @@ const ApiSitesSnapshotCurrentRoute = ApiSitesSnapshotCurrentRouteImport.update({
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
+  '/': typeof AppIndexRoute
+  '/login': typeof LoginRoute
+  '/admin': typeof AppAdminRouteWithChildren
+  '/invite/$token': typeof InviteTokenRoute
+  '/sites/$siteId': typeof AppSitesSiteIdRouteWithChildren
   '/api/assets/upload': typeof ApiAssetsUploadRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/sites/manifest': typeof ApiSitesManifestRoute
   '/api/sites/preview': typeof ApiSitesPreviewRoute
+  '/admin/': typeof AppAdminIndexRoute
   '/api/assets/file/$': typeof ApiAssetsFileSplatRoute
   '/api/sites/snapshot/current': typeof ApiSitesSnapshotCurrentRoute
+  '/sites/$siteId/': typeof AppSitesSiteIdIndexRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
+  '/login': typeof LoginRoute
+  '/invite/$token': typeof InviteTokenRoute
+  '/': typeof AppIndexRoute
   '/api/assets/upload': typeof ApiAssetsUploadRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/sites/manifest': typeof ApiSitesManifestRoute
   '/api/sites/preview': typeof ApiSitesPreviewRoute
+  '/admin': typeof AppAdminIndexRoute
   '/api/assets/file/$': typeof ApiAssetsFileSplatRoute
   '/api/sites/snapshot/current': typeof ApiSitesSnapshotCurrentRoute
+  '/sites/$siteId': typeof AppSitesSiteIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
+  '/_app': typeof AppRouteWithChildren
+  '/login': typeof LoginRoute
+  '/_app/admin': typeof AppAdminRouteWithChildren
+  '/invite/$token': typeof InviteTokenRoute
+  '/_app/': typeof AppIndexRoute
+  '/_app/sites/$siteId': typeof AppSitesSiteIdRouteWithChildren
   '/api/assets/upload': typeof ApiAssetsUploadRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/sites/manifest': typeof ApiSitesManifestRoute
   '/api/sites/preview': typeof ApiSitesPreviewRoute
+  '/_app/admin/': typeof AppAdminIndexRoute
   '/api/assets/file/$': typeof ApiAssetsFileSplatRoute
   '/api/sites/snapshot/current': typeof ApiSitesSnapshotCurrentRoute
+  '/_app/sites/$siteId/': typeof AppSitesSiteIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/login'
+    | '/admin'
+    | '/invite/$token'
+    | '/sites/$siteId'
     | '/api/assets/upload'
     | '/api/auth/$'
     | '/api/sites/manifest'
     | '/api/sites/preview'
+    | '/admin/'
     | '/api/assets/file/$'
     | '/api/sites/snapshot/current'
+    | '/sites/$siteId/'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/login'
+    | '/invite/$token'
     | '/'
     | '/api/assets/upload'
     | '/api/auth/$'
     | '/api/sites/manifest'
     | '/api/sites/preview'
+    | '/admin'
     | '/api/assets/file/$'
     | '/api/sites/snapshot/current'
+    | '/sites/$siteId'
   id:
     | '__root__'
-    | '/'
+    | '/_app'
+    | '/login'
+    | '/_app/admin'
+    | '/invite/$token'
+    | '/_app/'
+    | '/_app/sites/$siteId'
     | '/api/assets/upload'
     | '/api/auth/$'
     | '/api/sites/manifest'
     | '/api/sites/preview'
+    | '/_app/admin/'
     | '/api/assets/file/$'
     | '/api/sites/snapshot/current'
+    | '/_app/sites/$siteId/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
+  AppRoute: typeof AppRouteWithChildren
+  LoginRoute: typeof LoginRoute
+  InviteTokenRoute: typeof InviteTokenRoute
   ApiAssetsUploadRoute: typeof ApiAssetsUploadRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiSitesManifestRoute: typeof ApiSitesManifestRoute
@@ -123,12 +200,54 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
+    '/_app': {
+      id: '/_app'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_app/': {
+      id: '/_app/'
       path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+      preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/admin': {
+      id: '/_app/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AppAdminRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/invite/$token': {
+      id: '/invite/$token'
+      path: '/invite/$token'
+      fullPath: '/invite/$token'
+      preLoaderRoute: typeof InviteTokenRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_app/admin/': {
+      id: '/_app/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AppAdminIndexRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
+    '/_app/sites/$siteId': {
+      id: '/_app/sites/$siteId'
+      path: '/sites/$siteId'
+      fullPath: '/sites/$siteId'
+      preLoaderRoute: typeof AppSitesSiteIdRouteImport
+      parentRoute: typeof AppRoute
     }
     '/api/assets/upload': {
       id: '/api/assets/upload'
@@ -158,6 +277,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSitesPreviewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app/sites/$siteId/': {
+      id: '/_app/sites/$siteId/'
+      path: '/'
+      fullPath: '/sites/$siteId/'
+      preLoaderRoute: typeof AppSitesSiteIdIndexRouteImport
+      parentRoute: typeof AppSitesSiteIdRoute
+    }
     '/api/assets/file/$': {
       id: '/api/assets/file/$'
       path: '/api/assets/file/$'
@@ -175,8 +301,48 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AppAdminRouteChildren {
+  AppAdminIndexRoute: typeof AppAdminIndexRoute
+}
+
+const AppAdminRouteChildren: AppAdminRouteChildren = {
+  AppAdminIndexRoute: AppAdminIndexRoute,
+}
+
+const AppAdminRouteWithChildren = AppAdminRoute._addFileChildren(
+  AppAdminRouteChildren,
+)
+
+interface AppSitesSiteIdRouteChildren {
+  AppSitesSiteIdIndexRoute: typeof AppSitesSiteIdIndexRoute
+}
+
+const AppSitesSiteIdRouteChildren: AppSitesSiteIdRouteChildren = {
+  AppSitesSiteIdIndexRoute: AppSitesSiteIdIndexRoute,
+}
+
+const AppSitesSiteIdRouteWithChildren = AppSitesSiteIdRoute._addFileChildren(
+  AppSitesSiteIdRouteChildren,
+)
+
+interface AppRouteChildren {
+  AppAdminRoute: typeof AppAdminRouteWithChildren
+  AppIndexRoute: typeof AppIndexRoute
+  AppSitesSiteIdRoute: typeof AppSitesSiteIdRouteWithChildren
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppAdminRoute: AppAdminRouteWithChildren,
+  AppIndexRoute: AppIndexRoute,
+  AppSitesSiteIdRoute: AppSitesSiteIdRouteWithChildren,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
+  AppRoute: AppRouteWithChildren,
+  LoginRoute: LoginRoute,
+  InviteTokenRoute: InviteTokenRoute,
   ApiAssetsUploadRoute: ApiAssetsUploadRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiSitesManifestRoute: ApiSitesManifestRoute,
@@ -187,3 +353,12 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}

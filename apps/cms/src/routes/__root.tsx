@@ -1,5 +1,7 @@
+import type { ReactNode } from 'react'
 import {
   HeadContent,
+  Outlet,
   Scripts,
   createRootRouteWithContext,
 } from '@tanstack/react-router'
@@ -8,20 +10,15 @@ import { TanStackDevtools } from '@tanstack/react-devtools'
 
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 
+import { Toaster } from '#/components/ui/sonner'
+import { TooltipProvider } from '#/components/ui/tooltip'
+import type { RouterContext } from '#/lib/router-context'
 import { getLocale } from '#/paraglide/runtime'
 
 import appCss from '../styles.css?url'
 
-import type { QueryClient } from '@tanstack/react-query'
-
-interface MyRouterContext {
-  queryClient: QueryClient
-}
-
-export const Route = createRootRouteWithContext<MyRouterContext>()({
+export const Route = createRootRouteWithContext<RouterContext>()({
   beforeLoad: async () => {
-    // Other redirect strategies are possible; see
-    // https://github.com/TanStack/router/tree/main/examples/react/i18n-paraglide#offline-redirect
     if (typeof document !== 'undefined') {
       document.documentElement.setAttribute('lang', getLocale())
     }
@@ -37,7 +34,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
         content: 'width=device-width, initial-scale=1',
       },
       {
-        title: 'TanStack Start Starter',
+        title: 'Areca',
       },
     ],
     links: [
@@ -47,17 +44,30 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
       },
     ],
   }),
+  notFoundComponent: () => (
+    <div className="p-8">
+      <h1 className="text-2xl font-semibold">Not found</h1>
+    </div>
+  ),
   shellComponent: RootDocument,
+  component: RootComponent,
 })
 
-function RootDocument({ children }: { children: React.ReactNode }) {
+function RootComponent() {
+  return <Outlet />
+}
+
+function RootDocument({ children }: { children: ReactNode }) {
   return (
     <html lang={getLocale()}>
       <head>
         <HeadContent />
       </head>
       <body>
-        {children}
+        <TooltipProvider>
+          {children}
+          <Toaster />
+        </TooltipProvider>
         <TanStackDevtools
           config={{
             position: 'bottom-right',

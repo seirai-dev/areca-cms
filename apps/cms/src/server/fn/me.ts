@@ -4,15 +4,43 @@ import { z } from 'zod'
 
 import { db } from '#/db'
 import { membership, organization, site } from '#/db/schema'
-import { requireUser } from '#/lib/session.server'
+import type { MembershipRole } from '#/lib/types'
+import { getSession, requireUser } from '#/lib/session.server'
 import { acceptInvitation, getInvitation } from '#/server/admin/members'
 import { NotFoundError } from '#/server/content/errors'
 
 const meFn = { strict: { output: false } as const }
 
+export type Me = {
+  user: {
+    id: string
+    name: string
+    email: string
+    isAgencyAdmin: boolean
+  }
+  memberships: Array<{
+    organizationId: string
+    organizationName: string
+    organizationSlug: string
+    role: MembershipRole
+  }>
+  sites: Array<{
+    id: string
+    name: string
+    slug: string
+    organizationId: string
+    organizationName: string
+    productionUrl: string
+  }>
+}
+
 export const getMeFn = createServerFn({ method: 'GET', ...meFn }).handler(
-  async () => {
-    const session = await requireUser()
+  async (): Promise<Me | null> => {
+    const session = await getSession()
+    if (!session) {
+      return null
+    }
+
     const currentUser = {
       id: session.user.id,
       name: session.user.name,
@@ -37,15 +65,22 @@ export const getMeFn = createServerFn({ method: 'GET', ...meFn }).handler(
       name: site.name,
       slug: site.slug,
       organizationId: site.organizationId,
+      organizationName: organization.name,
+      productionUrl: site.productionUrl,
     }
 
     const sites = currentUser.isAgencyAdmin
-      ? await db.select(siteColumns).from(site).orderBy(site.name)
+      ? await db
+          .select(siteColumns)
+          .from(site)
+          .innerJoin(organization, eq(site.organizationId, organization.id))
+          .orderBy(site.name)
       : memberships.length === 0
         ? []
         : await db
             .select(siteColumns)
             .from(site)
+            .innerJoin(organization, eq(site.organizationId, organization.id))
             .where(
               inArray(
                 site.organizationId,
@@ -65,7 +100,19 @@ export const getInvitationFn = createServerFn({ method: 'GET', ...meFn })
     if (!invite) {
       throw new NotFoundError('Invitation not found')
     }
-    return invite
+
+    const [org] = await db
+      .select({ name: organization.name })
+      .from(organization)
+      .where(eq(organization.id, invite.organizationId))
+      .limit(1)
+
+    return {
+      email: invite.email,
+      role: invite.role,
+      organizationId: invite.organizationId,
+      organizationName: org?.name ?? 'Organization',
+    }
   })
 
 export const acceptInvitationFn = createServerFn({ method: 'POST', ...meFn })

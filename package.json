@@ -12,6 +12,7 @@
     "db:studio": "pnpm --filter @areca/cms db:studio"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "eslint": "^9.20.0",
     "prettier": "^3.8.1",
     "typescript": "^6.0.2",
