@@ -6,10 +6,17 @@
     "#/*": "./src/*"
   },
   "scripts": {
+    "prebuild": "node ./scripts/prebuild.mjs",
+    "content:pull": "areca pull --out src/generated/content",
+    "content:fixture": "tsx ./scripts/fixture-content.ts",
+    "sync-manifest": "tsx ./node_modules/@areca/site-sdk/dist/cli.js sync-manifest ./areca.config.ts",
     "dev": "vite dev --port 3001",
     "build": "vite build",
+    "start": "node .output/server/index.mjs",
+    "generate-routes": "tsr generate",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "verify:prerender": "tsx ./scripts/verify-prerender.ts"
   },
   "dependencies": {
     "@areca/site-sdk": "workspace:*",
@@ -19,13 +26,17 @@
     "nitro": "3.0.260610-beta",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "tailwindcss": "^4.1.18"
+    "tailwindcss": "^4.1.18",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
+    "@tailwindcss/typography": "^0.5.20",
+    "@tanstack/router-cli": "^1.167.33",
     "@types/node": "^22.10.2",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^6.0.1",
+    "tsx": "^4.23.13",
     "typescript": "^6.0.2",
     "vite": "^8.0.0",
     "vitest": "^3.2.4"

@@ -27,9 +27,20 @@ export function createArecaClient(options: ArecaClientOptions = {}): ArecaClient
     Accept: 'application/json',
   }
 
+  async function cmsFetch(url: string, init: RequestInit): Promise<Response> {
+    try {
+      return await fetch(url, init)
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      throw new Error(
+        `Failed to reach CMS at ${cmsUrl}. ${detail}. If the CMS is up, publish content before running areca pull.`,
+      )
+    }
+  }
+
   return {
     async syncManifest(config) {
-      const res = await fetch(`${cmsUrl}/api/sites/manifest`, {
+      const res = await cmsFetch(`${cmsUrl}/api/sites/manifest`, {
         method: 'POST',
         headers: {
           ...headers,
@@ -46,7 +57,7 @@ export function createArecaClient(options: ArecaClientOptions = {}): ArecaClient
     },
 
     async fetchSnapshot() {
-      const res = await fetch(`${cmsUrl}/api/sites/snapshot/current`, {
+      const res = await cmsFetch(`${cmsUrl}/api/sites/snapshot/current`, {
         method: 'GET',
         headers,
       })
@@ -67,7 +78,7 @@ export function createArecaClient(options: ArecaClientOptions = {}): ArecaClient
 
     async fetchPreview(token) {
       const url = `${cmsUrl}/api/sites/preview?${new URLSearchParams({ token })}`
-      const res = await fetch(url, {
+      const res = await cmsFetch(url, {
         method: 'GET',
         headers,
       })

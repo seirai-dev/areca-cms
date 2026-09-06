@@ -219,7 +219,16 @@ importers:
       tailwindcss:
         specifier: ^4.1.18
         version: 4.3.3
+      zod:
+        specifier: ^4.5.4
+        version: 4.5.4
     devDependencies:
+      '@tailwindcss/typography':
+        specifier: ^0.5.20
+        version: 0.5.20(tailwindcss@4.3.3)
+      '@tanstack/router-cli':
+        specifier: ^1.167.33
+        version: 1.167.33(supports-color@7.2.0)
       '@types/node':
         specifier: ^22.10.2
         version: 22.20.1
@@ -232,6 +241,9 @@ importers:
       '@vitejs/plugin-react':
         specifier: ^6.0.1
         version: 6.1.1(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13))
+      tsx:
+        specifier: ^4.23.13
+        version: 4.23.13
       typescript:
         specifier: ^6.0.2
         version: 6.0.3
@@ -7662,7 +7674,7 @@ snapshots:
 
   '@types/pg@8.23.1':
     dependencies:
-      '@types/node': 22.20.1
+      '@types/node': 24.13.3
       pg-protocol: 1.16.0
       pg-types: 2.2.0
 

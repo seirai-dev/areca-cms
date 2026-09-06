@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { realpathSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { parseArgs, usage } from './args.js'
@@ -67,7 +68,14 @@ async function loadConfig(configPath: string): Promise<SiteContentConfig> {
 function isMainModule(): boolean {
   const entry = process.argv[1]
   if (!entry) return false
-  return resolve(fileURLToPath(import.meta.url)).toLowerCase() === resolve(entry).toLowerCase()
+  try {
+    return (
+      realpathSync(fileURLToPath(import.meta.url)).toLowerCase() ===
+      realpathSync(entry).toLowerCase()
+    )
+  } catch {
+    return resolve(fileURLToPath(import.meta.url)).toLowerCase() === resolve(entry).toLowerCase()
+  }
 }
 
 if (isMainModule()) {

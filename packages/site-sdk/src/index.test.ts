@@ -138,6 +138,20 @@ describe('createArecaClient', () => {
     await expect(client.fetchSnapshot()).rejects.toThrow(/No publication exists/)
   })
 
+  it('fetchSnapshot throws a clear error when the CMS is unreachable', async () => {
+    globalThis.fetch = async () => {
+      throw new TypeError('fetch failed')
+    }
+
+    const client = createArecaClient({
+      cmsUrl: 'https://cms.example.com',
+      siteToken: 'site-token',
+    })
+    await expect(client.fetchSnapshot()).rejects.toThrow(
+      /Failed to reach CMS at https:\/\/cms.example.com.*areca pull/,
+    )
+  })
+
   it('fetchPreview requests the token query and returns the entry', async () => {
     const preview = { collection: 'articles', slug: 'hello', entry: sampleEntry }
     globalThis.fetch = async (input) => {

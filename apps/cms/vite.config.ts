@@ -19,9 +19,14 @@ const config = defineConfig({
     }),
     nitro({ rollupConfig: { external: [/^@sentry\//] } }),
     tailwindcss(),
-    tanstackStart(),
+    tanstackStart({
+      server: {
+        entry: 'server.ts',
+      },
+    }),
     viteReact(),
   ],
 })
+
 
 export default config

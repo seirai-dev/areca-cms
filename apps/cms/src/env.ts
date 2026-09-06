@@ -22,6 +22,10 @@ export const env = createEnv({
     SMTP_FROM: z.string().min(1),
     DOKPLOY_URL: z.string().url(),
     DOKPLOY_API_KEY: z.string().optional(),
+    WORKER_ENABLED: z
+      .enum(['true', 'false'])
+      .optional()
+      .transform((value) => value !== 'false'),
   },
 
   /**

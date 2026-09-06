@@ -1,0 +1,292 @@
+import { createHash } from 'node:crypto'
+import { eq, inArray } from 'drizzle-orm'
+import { describe, expect, it } from 'vitest'
+
+import { db } from '#/db'
+import { organization, site, user } from '#/db/schema'
+
+import { listAuditLog } from './audit.ts'
+import {
+  acceptInvitation,
+  inviteMember,
+  listMembers,
+  removeMember,
+} from './members.ts'
+import {
+  createOrganization,
+  deleteOrganization,
+  listOrganizations,
+} from './organizations.ts'
+import {
+  createSite,
+  rotateSiteTokenAdmin,
+  updateSite,
+} from './sites.ts'
+
+const hasDb = Boolean(process.env.DATABASE_URL)
+
+type MailpitAddress = { Address?: string }
+type MailpitMessage = { To?: MailpitAddress[] }
+type MailpitMessages = { messages?: MailpitMessage[] }
+
+async function findMailpitMessage(email: string) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const res = await fetch('http://localhost:8025/api/v1/messages')
+    if (res.ok) {
+      const body = (await res.json()) as MailpitMessages
+      const found = (body.messages ?? []).find((message) =>
+        (message.To ?? []).some((to) => to.Address === email),
+      )
+      if (found) return found
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200))
+  }
+  throw new Error(`Mailpit message for ${email} not found`)
+}
+
+async function createActor(suffix: string) {
+  const [actor] = await db
+    .insert(user)
+    .values({
+      id: crypto.randomUUID(),
+      name: `Admin Actor ${suffix}`,
+      email: `actor-${suffix}@test.local`,
+      emailVerified: true,
+    })
+    .returning()
+  if (!actor) throw new Error('Failed to create actor')
+  return actor
+}
+
+async function cleanup(orgIds: string[], userIds: string[]) {
+  if (orgIds.length > 0) {
+    await db.delete(organization).where(inArray(organization.id, orgIds))
+  }
+  if (userIds.length > 0) {
+    await db.delete(user).where(inArray(user.id, userIds))
+  }
+}
+
+describe.skipIf(!hasDb)('admin', () => {
+  it('creates and lists organizations and refuses delete when sites exist', async () => {
+    const suffix = crypto.randomUUID()
+    const actor = await createActor(suffix)
+    const orgIds: string[] = []
+    const userIds = [actor.id]
+
+    try {
+      const created = await createOrganization({
+        name: `Admin Org ${suffix}`,
+        slug: `admin-org-${suffix}`,
+        actorId: actor.id,
+      })
+      orgIds.push(created.id)
+
+      const listed = await listOrganizations()
+      const found = listed.find((org) => org.id === created.id)
+      expect(found).toMatchObject({
+        id: created.id,
+        name: created.name,
+        slug: created.slug,
+        siteCount: 0,
+        memberCount: 0,
+      })
+
+      const empty = await createOrganization({
+        name: `Empty Org ${suffix}`,
+        slug: `empty-org-${suffix}`,
+        actorId: actor.id,
+      })
+      await deleteOrganization(empty.id)
+      const afterDelete = await listOrganizations()
+      expect(afterDelete.find((org) => org.id === empty.id)).toBeUndefined()
+
+      const createdSite = await createSite({
+        organizationId: created.id,
+        name: `Admin Site ${suffix}`,
+        slug: `admin-site-${suffix}`,
+        productionUrl: 'https://example.test',
+        actorId: actor.id,
+      })
+      expect(createdSite.organizationId).toBe(created.id)
+
+      const afterSite = await listOrganizations()
+      expect(afterSite.find((org) => org.id === created.id)?.siteCount).toBe(1)
+
+      await expect(deleteOrganization(created.id)).rejects.toThrow(
+        'Cannot delete an organization that has sites',
+      )
+    } finally {
+      await cleanup(orgIds, userIds)
+    }
+  })
+
+  it('returns a plain site token whose sha256 matches tokenHash, rotates it, and validates deploymentTarget', async () => {
+    const suffix = crypto.randomUUID()
+    const actor = await createActor(suffix)
+    const orgIds: string[] = []
+    const userIds = [actor.id]
+
+    try {
+      const org = await createOrganization({
+        name: `Token Org ${suffix}`,
+        slug: `token-org-${suffix}`,
+        actorId: actor.id,
+      })
+      orgIds.push(org.id)
+
+      const created = await createSite({
+        organizationId: org.id,
+        name: `Token Site ${suffix}`,
+        slug: `token-site-${suffix}`,
+        productionUrl: 'https://token.example.test',
+        actorId: actor.id,
+      })
+
+      expect(created.token).toMatch(/^[0-9a-f]{64}$/)
+      expect(created).not.toHaveProperty('tokenHash')
+
+      const [stored] = await db
+        .select({ tokenHash: site.tokenHash })
+        .from(site)
+        .where(eq(site.id, created.id))
+        .limit(1)
+      expect(stored?.tokenHash).toBe(
+        createHash('sha256').update(created.token).digest('hex'),
+      )
+
+      const rotated = await rotateSiteTokenAdmin(created.id)
+      expect(rotated.token).not.toBe(created.token)
+
+      const [afterRotate] = await db
+        .select({ tokenHash: site.tokenHash })
+        .from(site)
+        .where(eq(site.id, created.id))
+        .limit(1)
+      expect(afterRotate?.tokenHash).toBe(
+        createHash('sha256').update(rotated.token).digest('hex'),
+      )
+      expect(afterRotate?.tokenHash).not.toBe(stored?.tokenHash)
+
+      const updated = await updateSite(created.id, {
+        deploymentTarget: {
+          provider: 'dokploy',
+          applicationId: 'app-1',
+          healthCheckUrl: 'https://token.example.test/health',
+        },
+      })
+      expect(updated.deploymentTarget).toEqual({
+        provider: 'dokploy',
+        applicationId: 'app-1',
+        healthCheckUrl: 'https://token.example.test/health',
+      })
+
+      await expect(
+        updateSite(created.id, {
+          deploymentTarget: {
+            provider: 'vercel',
+            applicationId: 'nope',
+          } as never,
+        }),
+      ).rejects.toThrow()
+    } finally {
+      await cleanup(orgIds, userIds)
+    }
+  })
+
+  it('invites a member by email, accepts, and refuses removing the last owner', async () => {
+    const suffix = crypto.randomUUID()
+    const actor = await createActor(suffix)
+    const [invitee] = await db
+      .insert(user)
+      .values({
+        id: crypto.randomUUID(),
+        name: `Invitee ${suffix}`,
+        email: `invitee-${suffix}@test.local`,
+        emailVerified: true,
+      })
+      .returning()
+    if (!invitee) throw new Error('Failed to create invitee')
+
+    const orgIds: string[] = []
+    const userIds = [actor.id, invitee.id]
+    const inviteEmail = `invite-${suffix}@mailpit.test`
+
+    try {
+      const org = await createOrganization({
+        name: `Invite Org ${suffix}`,
+        slug: `invite-org-${suffix}`,
+        actorId: actor.id,
+      })
+      orgIds.push(org.id)
+
+      const invitation = await inviteMember({
+        organizationId: org.id,
+        email: inviteEmail,
+        role: 'owner',
+        actorId: actor.id,
+      })
+      expect(invitation.token).toMatch(/^[0-9a-f]{64}$/)
+
+      const message = await findMailpitMessage(inviteEmail)
+      expect(message).toBeDefined()
+
+      await acceptInvitation({ token: invitation.token, userId: invitee.id })
+
+      const members = await listMembers(org.id)
+      expect(members).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            userId: invitee.id,
+            role: 'owner',
+            email: invitee.email,
+          }),
+        ]),
+      )
+
+      await expect(removeMember(org.id, invitee.id)).rejects.toThrow(
+        'Cannot remove the last owner',
+      )
+    } finally {
+      await cleanup(orgIds, userIds)
+    }
+  })
+
+  it('lists audit log entries with the actor name', async () => {
+    const suffix = crypto.randomUUID()
+    const actor = await createActor(suffix)
+    const orgIds: string[] = []
+    const userIds = [actor.id]
+
+    try {
+      const org = await createOrganization({
+        name: `Audit Org ${suffix}`,
+        slug: `audit-org-${suffix}`,
+        actorId: actor.id,
+      })
+      orgIds.push(org.id)
+
+      const entries = await listAuditLog({
+        organizationId: org.id,
+        limit: 20,
+        offset: 0,
+      })
+
+      expect(entries.length).toBeGreaterThan(0)
+      expect(entries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            organizationId: org.id,
+            actorId: actor.id,
+            actorName: actor.name,
+            action: 'organization.create',
+            targetType: 'organization',
+            targetId: org.id,
+          }),
+        ]),
+      )
+    } finally {
+      await cleanup(orgIds, userIds)
+    }
+  })
+})
