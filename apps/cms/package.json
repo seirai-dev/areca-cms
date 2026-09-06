@@ -20,6 +20,7 @@
     "db:push": "drizzle-kit push",
     "db:pull": "drizzle-kit pull",
     "db:studio": "drizzle-kit studio",
+    "db:seed": "tsx --env-file=.env.local scripts/seed.ts",
     "s3:init": "tsx --env-file=.env.local scripts/ensure-bucket.ts"
   },
   "dependencies": {
@@ -45,6 +46,7 @@
     "drizzle-orm": "^0.45.1",
     "lucide-react": "^0.577.0",
     "nitro": "3.0.260610-beta",
+    "nodemailer": "^10.0.0",
     "pg": "^8.16.3",
     "radix-ui": "^1.6.7",
     "react": "^19.2.0",
@@ -61,6 +63,7 @@
     "@tanstack/eslint-config": "0.4.0",
     "@tanstack/router-cli": "^1.132.0",
     "@types/node": "^22.10.2",
+    "@types/nodemailer": "^8.0.1",
     "@types/pg": "^8.15.6",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
