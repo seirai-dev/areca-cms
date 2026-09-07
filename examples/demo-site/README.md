@@ -7,26 +7,26 @@ A TanStack Start customer site that consumes Areca at **build time**. Editors pu
 `areca.config.ts` declares the `acme-site` articles collection (same schema the CMS seed creates).
 
 ```bash
-# Production / Dokploy (requires env):
+# After the CMS has a live publication (loads `.env.local` automatically):
 pnpm content:pull
 # → areca pull --out src/generated/content
 
 # Push the schema to the CMS:
 pnpm sync-manifest
 
-# Local / CI without a live publication:
+# No CMS fallback only — never used when ARECA_* env vars are set:
 pnpm content:fixture
 ```
 
-`src/generated/content/` is gitignored. The fixture writes `manifest.json` + `articles.json` (3 articles with `{ json, html, markdown }` rich text) so `dev` and `build` work without the CMS.
+`src/generated/content/` is gitignored. Copy `.env.example` to `.env.local` and paste the site token. Scripts load `.env.local` via Node `--env-file-if-exists`.
 
-`prebuild` runs `areca pull --out src/generated/content` when `ARECA_CMS_URL` and `ARECA_SITE_TOKEN` are set. Otherwise it keeps an existing fixture.
+`prebuild` runs `areca pull` when `ARECA_CMS_URL` and `ARECA_SITE_TOKEN` are set, and **fails loudly** if the pull fails (it does not fall back to the fixture). The fixture is only for local/CI work without a CMS.
 
 ## Environment
 
-See `.env.example`:
+See `.env.example` (copy to gitignored `.env.local`):
 
-- `ARECA_CMS_URL` — CMS base URL
+- `ARECA_CMS_URL` — CMS base URL (`http://localhost:3000` locally; LAN URL for Dokploy)
 - `ARECA_SITE_TOKEN` — site token (`Authorization: Bearer`)
 
 ## Scripts

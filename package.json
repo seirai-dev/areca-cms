@@ -10,7 +10,8 @@
     "db:generate": "pnpm --filter @areca/cms db:generate",
     "db:migrate": "pnpm --filter @areca/cms db:migrate",
     "db:push": "pnpm --filter @areca/cms db:push",
-    "db:studio": "pnpm --filter @areca/cms db:studio"
+    "db:studio": "pnpm --filter @areca/cms db:studio",
+    "db:reset": "pnpm --filter @areca/cms db:reset"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
