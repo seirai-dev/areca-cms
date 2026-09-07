@@ -10,6 +10,7 @@ export type FieldType =
   | 'slug'
   | 'boolean'
   | 'number'
+  | 'url'
 
 export type Field = {
   key: string
@@ -19,6 +20,8 @@ export type Field = {
   options?: string[]
   collection?: string
   description?: string
+  /** Other date/datetime field key that this value must be on or after. */
+  after?: string
 }
 
 export type MembershipRole = 'owner' | 'editor'

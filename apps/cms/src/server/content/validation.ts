@@ -112,6 +112,23 @@ function schemaForField(field: Field, mode: SchemaMode): z.ZodType {
       return wrap(z.boolean(), field, mode, false)
     case 'number':
       return wrap(z.number(), field, mode, false)
+    case 'url':
+      return wrap(
+        z.string().url().refine(
+          (value) => {
+            try {
+              const parsed = new URL(value)
+              return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+            } catch {
+              return false
+            }
+          },
+          { message: 'Invalid URL' },
+        ),
+        field,
+        mode,
+        true,
+      )
   }
 }
 
@@ -147,7 +164,33 @@ export function validateEntryData(
     }
   }
 
-  return { ok: true, data: result.data as EntryData }
+  const parsed = result.data as EntryData
+  const dateErrors = validateDateOrder(fields, parsed)
+  if (dateErrors.length > 0) {
+    return { ok: false, errors: dateErrors }
+  }
+
+  return { ok: true, data: parsed }
+}
+
+function validateDateOrder(fields: Field[], data: EntryData): FieldError[] {
+  const errors: FieldError[] = []
+  for (const field of fields) {
+    if ((field.type !== 'date' && field.type !== 'datetime') || !field.after) {
+      continue
+    }
+    const value = data[field.key]
+    const other = data[field.after]
+    if (typeof value !== 'string' || value === '') continue
+    if (typeof other !== 'string' || other === '') continue
+    if (Date.parse(value) < Date.parse(other)) {
+      errors.push({
+        path: field.key,
+        message: `Must be on or after ${field.after}`,
+      })
+    }
+  }
+  return errors
 }
 
 export async function validateReferences(

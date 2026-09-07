@@ -123,6 +123,10 @@ export async function removeMember(organizationId: string, userId: string) {
   })
 }
 
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase()
+}
+
 export async function inviteMember(input: {
   organizationId: string
   email: string
@@ -138,13 +142,52 @@ export async function inviteMember(input: {
     throw new NotFoundError('Organization not found')
   }
 
+  const email = normalizeEmail(input.email)
+
+  const [existingUser] = await db
+    .select({ id: user.id })
+    .from(user)
+    .where(eq(user.email, email))
+    .limit(1)
+  if (existingUser) {
+    const [existingMember] = await db
+      .select({ id: membership.id })
+      .from(membership)
+      .where(
+        and(
+          eq(membership.userId, existingUser.id),
+          eq(membership.organizationId, input.organizationId),
+        ),
+      )
+      .limit(1)
+    if (existingMember) {
+      throw new ConflictError('This email is already a member')
+    }
+  }
+
+  const [pending] = await db
+    .select({ id: invitation.id })
+    .from(invitation)
+    .where(
+      and(
+        eq(invitation.organizationId, input.organizationId),
+        eq(invitation.email, email),
+        isNull(invitation.acceptedAt),
+        gt(invitation.expiresAt, new Date()),
+      ),
+    )
+    .limit(1)
+  if (pending) {
+    throw new ConflictError('An invitation is already pending for this email')
+  }
+
   const token = randomBytes(32).toString('hex')
   const expiresAt = new Date(Date.now() + INVITE_TTL_MS)
 
   const [created] = await db
     .insert(invitation)
     .values({
-      email: input.email,
+      email,
       organizationId: input.organizationId,
       role: input.role,
       token,
@@ -169,7 +212,7 @@ export async function inviteMember(input: {
     action: 'member.invite',
     targetType: 'invitation',
     targetId: created.id,
-    meta: { email: input.email, role: input.role },
+    meta: { email, role: input.role },
   })
 
   return created
@@ -227,6 +270,18 @@ export async function acceptInvitation(input: { token: string; userId: string })
   const invite = await getInvitation(input.token)
   if (!invite) {
     throw new NotFoundError('Invitation not found')
+  }
+
+  const [invitee] = await db
+    .select({ email: user.email })
+    .from(user)
+    .where(eq(user.id, input.userId))
+    .limit(1)
+  if (!invitee) {
+    throw new NotFoundError('User not found')
+  }
+  if (normalizeEmail(invitee.email) !== normalizeEmail(invite.email)) {
+    throw new ConflictError('Signed-in email does not match this invitation')
   }
 
   const acceptedAt = new Date()

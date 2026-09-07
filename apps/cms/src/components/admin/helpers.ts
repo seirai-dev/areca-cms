@@ -12,6 +12,7 @@ export const FIELD_TYPES: FieldType[] = [
   'slug',
   'boolean',
   'number',
+  'url',
 ]
 
 export const adminQueryKeys = {
@@ -22,7 +23,8 @@ export const adminQueryKeys = {
   invitations: (organizationId: string) =>
     ['invitations', organizationId] as const,
   users: ['users'] as const,
-  audit: (offset: number) => ['audit', offset] as const,
+  audit: (offset: number, organizationId?: string) =>
+    ['audit', organizationId ?? 'all', offset] as const,
   collections: (siteId: string) => ['collections', siteId] as const,
 }
 

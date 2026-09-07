@@ -194,4 +194,30 @@ describe.skipIf(!hasDb)('buildSnapshot', () => {
       })
     })
   })
+
+  it('errors when an image field points at a missing asset', async () => {
+    await withTestSite(async (ctx) => {
+      await createTestCollection(ctx.site.id)
+
+      const created = await createEntry({
+        siteId: ctx.site.id,
+        collectionKey: 'articles',
+        data: {
+          title: 'Missing hero',
+          slug: `missing-hero-${ctx.suffix}`,
+          body: sampleRichText,
+          heroImage: 'asset_does_not_exist',
+        },
+        actorId: ctx.actor.id,
+      })
+      await publishEntry(created.id, ctx.actor.id)
+
+      const result = await buildSnapshot(ctx.site.id)
+      expect(result.ok).toBe(false)
+      if (result.ok) return
+      expect(result.errors.some((err) => err.includes('asset not found'))).toBe(
+        true,
+      )
+    })
+  })
 })

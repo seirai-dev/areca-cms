@@ -18,7 +18,13 @@ export const ALLOWED_MARK_TYPES = new Set(['bold', 'italic', 'link'])
 export function isAllowedLinkHref(href: string): boolean {
   try {
     const url = new URL(href)
-    return url.protocol === 'http:' || url.protocol === 'https:' || url.protocol === 'mailto:'
+    if (url.protocol === 'mailto:') {
+      return url.pathname.length > 0
+    }
+    if (url.protocol === 'http:' || url.protocol === 'https:') {
+      return url.hostname.length > 0
+    }
+    return false
   } catch {
     return false
   }

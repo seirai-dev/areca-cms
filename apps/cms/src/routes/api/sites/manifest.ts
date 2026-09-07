@@ -18,6 +18,7 @@ const fieldTypes = [
   'slug',
   'boolean',
   'number',
+  'url',
 ] as const satisfies readonly FieldType[]
 
 const fieldSchema = z.object({
@@ -28,6 +29,7 @@ const fieldSchema = z.object({
   options: z.array(z.string()).optional(),
   collection: z.string().optional(),
   description: z.string().optional(),
+  after: z.string().min(1).optional(),
 })
 
 const manifestSchema = z.object({

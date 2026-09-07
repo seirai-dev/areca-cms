@@ -53,14 +53,24 @@ function SiteLayout() {
             Team
           </Link>
         ) : isOwner ? (
-          <Link
-            to="/orgs/$orgId/members"
-            params={{ orgId: site.organizationId }}
-            className="hover:underline"
-            data-testid="team-nav"
-          >
-            Team
-          </Link>
+          <>
+            <Link
+              to="/orgs/$orgId/members"
+              params={{ orgId: site.organizationId }}
+              className="hover:underline"
+              data-testid="team-nav"
+            >
+              Team
+            </Link>
+            <Link
+              to="/orgs/$orgId/audit"
+              params={{ orgId: site.organizationId }}
+              className="hover:underline"
+              data-testid="org-audit-nav"
+            >
+              Activity
+            </Link>
+          </>
         ) : null}
         {me.user.isAgencyAdmin ? (
           <a href={`/sites/${siteId}/settings`} className="hover:underline">

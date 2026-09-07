@@ -22,6 +22,7 @@ const allFields: Field[] = [
   { key: 'author', label: 'Author', type: 'reference', collection: 'authors' },
   { key: 'featured', label: 'Featured', type: 'boolean' },
   { key: 'count', label: 'Count', type: 'number' },
+  { key: 'website', label: 'Website', type: 'url' },
 ]
 
 describe('buildEntrySchema / validateEntryData', () => {
@@ -38,6 +39,7 @@ describe('buildEntrySchema / validateEntryData', () => {
       author: 'entry_1',
       featured: true,
       count: 3,
+      website: 'https://example.com',
     })
     expect(result.ok).toBe(true)
   })
@@ -97,6 +99,13 @@ describe('buildEntrySchema / validateEntryData', () => {
       { mode: 'partial' },
     )
     expect(count.ok).toBe(false)
+
+    const website = validateEntryData(
+      allFields,
+      { website: 'not-a-url' },
+      { mode: 'partial' },
+    )
+    expect(website.ok).toBe(false)
   })
 
   it('rejects invalid values per field type in strict mode', () => {
@@ -160,6 +169,48 @@ describe('buildEntrySchema / validateEntryData', () => {
         count: '1',
       }).ok,
     ).toBe(false)
+
+    expect(
+      validateEntryData(allFields, {
+        title: 'Hello',
+        slug: 'hello',
+        content: sampleRichText,
+        website: 'javascript:alert(1)',
+      }).ok,
+    ).toBe(false)
+  })
+
+  it('rejects a date that is before its after field', () => {
+    const fields: Field[] = [
+      { key: 'opensAt', label: 'Opens', type: 'date', required: true },
+      {
+        key: 'closesAt',
+        label: 'Closes',
+        type: 'date',
+        required: true,
+        after: 'opensAt',
+      },
+    ]
+    const ok = validateEntryData(fields, {
+      opensAt: '2026-01-01',
+      closesAt: '2026-01-10',
+    })
+    expect(ok.ok).toBe(true)
+
+    const bad = validateEntryData(fields, {
+      opensAt: '2026-01-10',
+      closesAt: '2026-01-01',
+    })
+    expect(bad.ok).toBe(false)
+    if (bad.ok) return
+    expect(bad.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: 'closesAt',
+          message: 'Must be on or after opensAt',
+        }),
+      ]),
+    )
   })
 
   it('treats optional fields as nullable', () => {
@@ -175,6 +226,7 @@ describe('buildEntrySchema / validateEntryData', () => {
       author: null,
       featured: null,
       count: null,
+      website: null,
     })
     expect(result.ok).toBe(true)
   })

@@ -42,6 +42,16 @@ export function CollectionField({
         />
       )
       break
+    case 'url':
+      control = (
+        <TextFieldInput
+          id={id}
+          type="url"
+          value={value}
+          onChange={(next) => onChange(next)}
+        />
+      )
+      break
     case 'textarea':
       control = (
         <TextareaFieldInput

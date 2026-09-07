@@ -47,8 +47,8 @@ docker-compose.yml    postgres:17, rustfs (S3-compatible), mailpit
   `queued|building|validating|deploying|succeeded|failed|cancelled`, attempts, startedAt, finishedAt, logs text, error text).
 - `audit_log` (organizationId, siteId?, actorId, action, targetType, targetId, meta JSON, createdAt).
 
-Field types: `text | textarea | richtext | image | date | datetime | select | reference | slug | boolean | number`.
-Field def: `{ key, label, type, required?, options? (select), collection? (reference), description? }`.
+Field types: `text | textarea | richtext | image | date | datetime | select | reference | slug | boolean | number | url`.
+Field def: `{ key, label, type, required?, options? (select), collection? (reference), description?, after? (date/datetime must be on or after this field key) }`.
 
 ## Publishing flow
 1. Editor clicks Publish (or scheduler fires): entry `publishedData = draftData`, revision recorded.

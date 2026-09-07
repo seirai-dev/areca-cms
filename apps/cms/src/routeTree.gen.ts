@@ -24,6 +24,7 @@ import { Route as ApiSitesManifestRouteImport } from './routes/api/sites/manifes
 import { Route as ApiSitesPreviewRouteImport } from './routes/api/sites/preview'
 import { Route as AppAdminOrganizationsIndexRouteImport } from './routes/_app/admin/organizations/index'
 import { Route as AppAdminOrganizationsOrgIdRouteImport } from './routes/_app/admin/organizations/$orgId'
+import { Route as AppOrgsOrgIdAuditRouteImport } from './routes/_app/orgs/$orgId/audit'
 import { Route as AppOrgsOrgIdMembersRouteImport } from './routes/_app/orgs/$orgId/members'
 import { Route as AppSitesSiteIdIndexRouteImport } from './routes/_app/sites/$siteId/index'
 import { Route as AppSitesSiteIdMediaRouteImport } from './routes/_app/sites/$siteId/media'
@@ -112,6 +113,11 @@ const AppAdminOrganizationsOrgIdRoute =
     path: '/organizations/$orgId',
     getParentRoute: () => AppAdminRoute,
   } as any)
+const AppOrgsOrgIdAuditRoute = AppOrgsOrgIdAuditRouteImport.update({
+  id: '/orgs/$orgId/audit',
+  path: '/orgs/$orgId/audit',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppOrgsOrgIdMembersRoute = AppOrgsOrgIdMembersRouteImport.update({
   id: '/orgs/$orgId/members',
   path: '/orgs/$orgId/members',
@@ -186,6 +192,7 @@ export interface FileRoutesByFullPath {
   '/api/sites/preview': typeof ApiSitesPreviewRoute
   '/admin/': typeof AppAdminIndexRoute
   '/admin/organizations/$orgId': typeof AppAdminOrganizationsOrgIdRoute
+  '/orgs/$orgId/audit': typeof AppOrgsOrgIdAuditRoute
   '/orgs/$orgId/members': typeof AppOrgsOrgIdMembersRoute
   '/sites/$siteId/media': typeof AppSitesSiteIdMediaRoute
   '/sites/$siteId/releases': typeof AppSitesSiteIdReleasesRoute
@@ -211,6 +218,7 @@ export interface FileRoutesByTo {
   '/api/sites/preview': typeof ApiSitesPreviewRoute
   '/admin': typeof AppAdminIndexRoute
   '/admin/organizations/$orgId': typeof AppAdminOrganizationsOrgIdRoute
+  '/orgs/$orgId/audit': typeof AppOrgsOrgIdAuditRoute
   '/orgs/$orgId/members': typeof AppOrgsOrgIdMembersRoute
   '/sites/$siteId/media': typeof AppSitesSiteIdMediaRoute
   '/sites/$siteId/releases': typeof AppSitesSiteIdReleasesRoute
@@ -239,6 +247,7 @@ export interface FileRoutesById {
   '/api/sites/preview': typeof ApiSitesPreviewRoute
   '/_app/admin/': typeof AppAdminIndexRoute
   '/_app/admin/organizations/$orgId': typeof AppAdminOrganizationsOrgIdRoute
+  '/_app/orgs/$orgId/audit': typeof AppOrgsOrgIdAuditRoute
   '/_app/orgs/$orgId/members': typeof AppOrgsOrgIdMembersRoute
   '/_app/sites/$siteId/media': typeof AppSitesSiteIdMediaRoute
   '/_app/sites/$siteId/releases': typeof AppSitesSiteIdReleasesRoute
@@ -268,6 +277,7 @@ export interface FileRouteTypes {
     | '/api/sites/preview'
     | '/admin/'
     | '/admin/organizations/$orgId'
+    | '/orgs/$orgId/audit'
     | '/orgs/$orgId/members'
     | '/sites/$siteId/media'
     | '/sites/$siteId/releases'
@@ -293,6 +303,7 @@ export interface FileRouteTypes {
     | '/api/sites/preview'
     | '/admin'
     | '/admin/organizations/$orgId'
+    | '/orgs/$orgId/audit'
     | '/orgs/$orgId/members'
     | '/sites/$siteId/media'
     | '/sites/$siteId/releases'
@@ -320,6 +331,7 @@ export interface FileRouteTypes {
     | '/api/sites/preview'
     | '/_app/admin/'
     | '/_app/admin/organizations/$orgId'
+    | '/_app/orgs/$orgId/audit'
     | '/_app/orgs/$orgId/members'
     | '/_app/sites/$siteId/media'
     | '/_app/sites/$siteId/releases'
@@ -452,6 +464,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/organizations/$orgId'
       preLoaderRoute: typeof AppAdminOrganizationsOrgIdRouteImport
       parentRoute: typeof AppAdminRoute
+    }
+    '/_app/orgs/$orgId/audit': {
+      id: '/_app/orgs/$orgId/audit'
+      path: '/orgs/$orgId/audit'
+      fullPath: '/orgs/$orgId/audit'
+      preLoaderRoute: typeof AppOrgsOrgIdAuditRouteImport
+      parentRoute: typeof AppRoute
     }
     '/_app/orgs/$orgId/members': {
       id: '/_app/orgs/$orgId/members'
@@ -598,6 +617,7 @@ interface AppRouteChildren {
   AppAdminRoute: typeof AppAdminRouteWithChildren
   AppIndexRoute: typeof AppIndexRoute
   AppSitesSiteIdRoute: typeof AppSitesSiteIdRouteWithChildren
+  AppOrgsOrgIdAuditRoute: typeof AppOrgsOrgIdAuditRoute
   AppOrgsOrgIdMembersRoute: typeof AppOrgsOrgIdMembersRoute
 }
 
@@ -605,6 +625,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppAdminRoute: AppAdminRouteWithChildren,
   AppIndexRoute: AppIndexRoute,
   AppSitesSiteIdRoute: AppSitesSiteIdRouteWithChildren,
+  AppOrgsOrgIdAuditRoute: AppOrgsOrgIdAuditRoute,
   AppOrgsOrgIdMembersRoute: AppOrgsOrgIdMembersRoute,
 }
 

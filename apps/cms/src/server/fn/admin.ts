@@ -246,7 +246,11 @@ export const listAuditLogFn = createServerFn({ method: 'GET', ...adminFn })
     }),
   )
   .handler(async ({ data }) => {
-    await requireAgencyAdmin()
+    if (data.organizationId) {
+      await requireOrgMember(data.organizationId, 'owner')
+    } else {
+      await requireAgencyAdmin()
+    }
     return listAuditLog(data)
   })
 

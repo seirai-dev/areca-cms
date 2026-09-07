@@ -229,7 +229,7 @@ describe.skipIf(!hasDb)('admin', () => {
 
     const orgIds: string[] = []
     const userIds = [actor.id, invitee.id]
-    const inviteEmail = `invite-${suffix}@mailpit.test`
+    const inviteEmail = invitee.email
 
     try {
       const org = await createOrganization({
@@ -269,6 +269,79 @@ describe.skipIf(!hasDb)('admin', () => {
       await expect(
         updateMemberRole(org.id, invitee.id, 'editor'),
       ).rejects.toThrow('Cannot demote the last owner')
+    } finally {
+      await cleanup(orgIds, userIds)
+    }
+  })
+
+  it('rejects duplicate invites, existing members, and email-mismatched accepts', async () => {
+    const suffix = crypto.randomUUID()
+    const actor = await createActor(suffix)
+    const [invitee] = await db
+      .insert(user)
+      .values({
+        id: crypto.randomUUID(),
+        name: `Invitee ${suffix}`,
+        email: `invitee-${suffix}@test.local`,
+        emailVerified: true,
+      })
+      .returning()
+    if (!invitee) throw new Error('Failed to create invitee')
+
+    const [stranger] = await db
+      .insert(user)
+      .values({
+        id: crypto.randomUUID(),
+        name: `Stranger ${suffix}`,
+        email: `stranger-${suffix}@test.local`,
+        emailVerified: true,
+      })
+      .returning()
+    if (!stranger) throw new Error('Failed to create stranger')
+
+    const orgIds: string[] = []
+    const userIds = [actor.id, invitee.id, stranger.id]
+    const inviteEmail = invitee.email
+
+    try {
+      const org = await createOrganization({
+        name: `Invite Edge Org ${suffix}`,
+        slug: `invite-edge-org-${suffix}`,
+        actorId: actor.id,
+      })
+      orgIds.push(org.id)
+
+      const first = await inviteMember({
+        organizationId: org.id,
+        email: inviteEmail.toUpperCase(),
+        role: 'editor',
+        actorId: actor.id,
+      })
+      expect(first.email).toBe(inviteEmail)
+
+      await expect(
+        inviteMember({
+          organizationId: org.id,
+          email: inviteEmail,
+          role: 'editor',
+          actorId: actor.id,
+        }),
+      ).rejects.toThrow('An invitation is already pending for this email')
+
+      await expect(
+        acceptInvitation({ token: first.token, userId: stranger.id }),
+      ).rejects.toThrow('Signed-in email does not match this invitation')
+
+      await acceptInvitation({ token: first.token, userId: invitee.id })
+
+      await expect(
+        inviteMember({
+          organizationId: org.id,
+          email: inviteEmail,
+          role: 'editor',
+          actorId: actor.id,
+        }),
+      ).rejects.toThrow('This email is already a member')
     } finally {
       await cleanup(orgIds, userIds)
     }

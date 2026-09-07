@@ -143,6 +143,24 @@ describe('validateRichText', () => {
     expect(
       validateRichText({
         type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'text',
+                text: 'x',
+                marks: [{ type: 'link', attrs: { href: 'https://' } }],
+              },
+            ],
+          },
+        ],
+      }),
+    ).toContain('Link href uses a disallowed protocol')
+
+    expect(
+      validateRichText({
+        type: 'doc',
         content: [{ type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'H' }] }],
       }),
     ).toContain('Heading level must be between 2 and 4')
