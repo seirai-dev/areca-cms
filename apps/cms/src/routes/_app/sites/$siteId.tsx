@@ -24,12 +24,20 @@ function SiteLayout() {
         <Link to="/sites/$siteId" params={{ siteId }} className="hover:underline">
           Content
         </Link>
-        <a href={`/sites/${siteId}/media`} className="hover:underline">
+        <Link
+          to="/sites/$siteId/media"
+          params={{ siteId }}
+          className="hover:underline"
+        >
           Media
-        </a>
-        <a href={`/sites/${siteId}/releases`} className="hover:underline">
+        </Link>
+        <Link
+          to="/sites/$siteId/releases"
+          params={{ siteId }}
+          className="hover:underline"
+        >
           Releases
-        </a>
+        </Link>
         {me.user.isAgencyAdmin ? (
           <a href={`/sites/${siteId}/settings`} className="hover:underline">
             Settings
