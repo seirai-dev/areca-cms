@@ -164,4 +164,59 @@ describe.skipIf(!hasDb)('site API routes', () => {
     expect(badPreview.status).toBe(401)
     })
   })
+
+  it('ignores an active job that points at another site publication', async () => {
+    await withTestSite(async (siteA) => {
+      await withTestSite(async (siteB) => {
+        const snapshotA: Snapshot = {
+          publicationId: '',
+          siteKey: siteA.site.slug,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          hash: 'hash-a',
+          collections: { articles: [] },
+        }
+        const snapshotB: Snapshot = {
+          ...snapshotA,
+          siteKey: siteB.site.slug,
+          hash: 'hash-b',
+        }
+
+        const [liveA] = await db
+          .insert(publication)
+          .values({
+            siteId: siteA.site.id,
+            snapshot: snapshotA,
+            snapshotHash: 'hash-a',
+            status: 'live',
+          })
+          .returning()
+        const [foreign] = await db
+          .insert(publication)
+          .values({
+            siteId: siteB.site.id,
+            snapshot: snapshotB,
+            snapshotHash: 'hash-b',
+            status: 'building',
+          })
+          .returning()
+
+        await db.insert(buildJob).values({
+          siteId: siteA.site.id,
+          publicationId: foreign!.id,
+          status: 'deploying',
+        })
+
+        const current = await getSitesSnapshotCurrent(
+          new Request('http://cms.test/api/sites/snapshot/current', {
+            headers: bearer(siteA.token),
+          }),
+        )
+        expect(current.status).toBe(200)
+        const json = (await current.json()) as Snapshot
+        expect(json.publicationId).toBe(liveA!.id)
+        expect(json.hash).toBe('hash-a')
+        expect(json.publicationId).not.toBe(foreign!.id)
+      })
+    })
+  })
 })

@@ -40,18 +40,30 @@ export function EntryStatusBadge({
   status,
   testId,
 }: {
-  status: EntryStatus
+  status: EntryStatus | 'unsaved'
   testId?: string
 }) {
+  const label = status === 'unsaved' ? 'draft' : status
+  const variant = status === 'unsaved' ? 'secondary' : entryVariant[status]
   return (
-    <Badge variant={entryVariant[status]} data-testid={testId}>
-      {status}
+    <Badge variant={variant} data-testid={testId} data-status={status}>
+      {label}
     </Badge>
   )
 }
 
-export function PublicationStatusBadge({ status }: { status: PublicationStatus }) {
-  return <Badge variant={publicationVariant[status]}>{status}</Badge>
+export function PublicationStatusBadge({
+  status,
+  testId,
+}: {
+  status: PublicationStatus
+  testId?: string
+}) {
+  return (
+    <Badge variant={publicationVariant[status]} data-testid={testId} data-status={status}>
+      {status}
+    </Badge>
+  )
 }
 
 export function JobStatusBadge({ status }: { status: BuildJobStatus }) {

@@ -75,11 +75,27 @@ function ReleasesPage() {
   const publicationsQuery = useQuery({
     queryKey: queryKeys.publications(siteId),
     queryFn: () => listPublicationsFn({ data: { siteId, limit: 50, offset: 0 } }),
+    refetchInterval: (query) => {
+      const items = query.state.data as PublicationRow[] | undefined
+      const busy = items?.some(
+        (item) => item.status === 'pending' || item.status === 'building',
+      )
+      return busy ? 2000 : false
+    },
   })
 
   const jobsQuery = useQuery({
     queryKey: queryKeys.buildJobs(siteId),
     queryFn: () => listBuildJobsFn({ data: { siteId, limit: 50 } }),
+    refetchInterval: (query) => {
+      const items = query.state.data as JobRow[] | undefined
+      const busy = items?.some((item) =>
+        ACTIVE_JOB_STATUSES.includes(
+          item.status as (typeof ACTIVE_JOB_STATUSES)[number],
+        ),
+      )
+      return busy ? 2000 : false
+    },
   })
 
   const logsQuery = useQuery({
@@ -130,7 +146,12 @@ function ReleasesPage() {
     }),
     pubHelper.accessor('status', {
       header: 'Status',
-      cell: ({ row }) => <PublicationStatusBadge status={row.original.status} />,
+      cell: ({ row }) => (
+        <PublicationStatusBadge
+          status={row.original.status}
+          testId={`publication-status-${row.original.status}`}
+        />
+      ),
     }),
     pubHelper.accessor('snapshotHash', {
       header: 'Hash',
@@ -153,6 +174,7 @@ function ReleasesPage() {
             type="button"
             size="sm"
             variant="outline"
+            data-testid="rollback-publication"
             onClick={() => setRollbackId(row.original.id)}
           >
             Rollback

@@ -3,7 +3,24 @@ import { eq, inArray } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
 import { db } from '#/db'
-import { organization, site, user } from '#/db/schema'
+import {
+  auditLog,
+  buildJob,
+  collection,
+  entry,
+  entryRevision,
+  organization,
+  publication,
+  site,
+  user,
+} from '#/db/schema'
+import { createEntry, publishEntry } from '#/server/content/entries'
+import {
+  createTestCollection,
+  sampleRichText,
+  withTestSite,
+} from '#/server/content/test-utils'
+import { requestPublication } from '#/server/publishing/publications'
 
 import { listAuditLog } from './audit.ts'
 import {
@@ -11,6 +28,7 @@ import {
   inviteMember,
   listMembers,
   removeMember,
+  updateMemberRole,
 } from './members.ts'
 import {
   createOrganization,
@@ -19,6 +37,7 @@ import {
 } from './organizations.ts'
 import {
   createSite,
+  deleteSite,
   rotateSiteTokenAdmin,
   updateSite,
 } from './sites.ts'
@@ -247,6 +266,9 @@ describe.skipIf(!hasDb)('admin', () => {
       await expect(removeMember(org.id, invitee.id)).rejects.toThrow(
         'Cannot remove the last owner',
       )
+      await expect(
+        updateMemberRole(org.id, invitee.id, 'editor'),
+      ).rejects.toThrow('Cannot demote the last owner')
     } finally {
       await cleanup(orgIds, userIds)
     }
@@ -288,5 +310,71 @@ describe.skipIf(!hasDb)('admin', () => {
     } finally {
       await cleanup(orgIds, userIds)
     }
+  })
+
+  it('cascades site-scoped rows when deleting a site', async () => {
+    await withTestSite(async (ctx) => {
+      await createTestCollection(ctx.site.id)
+      const created = await createEntry({
+        siteId: ctx.site.id,
+        collectionKey: 'articles',
+        data: {
+          title: 'To delete',
+          slug: `del-${ctx.suffix}`,
+          body: sampleRichText,
+        },
+        actorId: ctx.actor.id,
+      })
+      await publishEntry(created.id, ctx.actor.id)
+      const requested = await requestPublication({
+        siteId: ctx.site.id,
+        actorId: ctx.actor.id,
+      })
+      expect(requested.ok).toBe(true)
+
+      const entryId = created.id
+      await deleteSite(ctx.site.id)
+
+      expect(
+        (
+          await db.select().from(site).where(eq(site.id, ctx.site.id))
+        ).length,
+      ).toBe(0)
+      expect(
+        (
+          await db.select().from(collection).where(eq(collection.siteId, ctx.site.id))
+        ).length,
+      ).toBe(0)
+      expect(
+        (await db.select().from(entry).where(eq(entry.siteId, ctx.site.id))).length,
+      ).toBe(0)
+      expect(
+        (
+          await db
+            .select()
+            .from(entryRevision)
+            .where(eq(entryRevision.entryId, entryId))
+        ).length,
+      ).toBe(0)
+      expect(
+        (
+          await db
+            .select()
+            .from(publication)
+            .where(eq(publication.siteId, ctx.site.id))
+        ).length,
+      ).toBe(0)
+      expect(
+        (
+          await db.select().from(buildJob).where(eq(buildJob.siteId, ctx.site.id))
+        ).length,
+      ).toBe(0)
+
+      const leftoverAudit = await db
+        .select()
+        .from(auditLog)
+        .where(eq(auditLog.siteId, ctx.site.id))
+      expect(leftoverAudit).toHaveLength(0)
+    })
   })
 })

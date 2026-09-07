@@ -115,6 +115,10 @@ export function EntryEditor({
     queryKey: queryKeys.entry(resolvedId ?? 'new'),
     queryFn: () => getEntryFn({ data: { id: resolvedId! } }),
     enabled: Boolean(resolvedId),
+    refetchInterval: (query) => {
+      const data = query.state.data as EntryRecord | undefined
+      return data?.status === 'scheduled' ? 2000 : false
+    },
   })
 
   const revisionsQuery = useQuery({
@@ -294,19 +298,17 @@ export function EntryEditor({
     onError: (error) => toast.error(errorMessage(error, 'Could not restore')),
   })
 
-  const previewMutation = useMutation({
-    mutationFn: () =>
+  const previewQuery = useQuery({
+    queryKey: queryKeys.previewUrl(siteId, collectionKey, entry?.slug ?? ''),
+    queryFn: () =>
       getPreviewUrlFn({
         data: {
           siteId,
           collection: collectionKey,
-          slug: entry?.slug ?? String(data.slug ?? ''),
+          slug: entry!.slug,
         },
       }),
-    onSuccess: (result) => {
-      window.open(result.url, '_blank', 'noopener,noreferrer')
-    },
-    onError: (error) => toast.error(errorMessage(error, 'Could not open preview')),
+    enabled: Boolean(entry?.slug),
   })
 
   const heading = useMemo(() => {
@@ -334,20 +336,26 @@ export function EntryEditor({
   }
 
   const revisions = (revisionsQuery.data ?? []) as RevisionRecord[]
-  const previewDisabled = isNew || dirty || !entry?.slug
+  const actionsReady =
+    Boolean(entry) &&
+    !saveMutation.isPending &&
+    !(entryQuery.isFetching && entry?.status !== 'scheduled')
+  const previewUrl = previewQuery.data?.url
+  const persistedStatus = entry?.status ?? 'unsaved'
 
   return (
-    <div className="grid gap-6">
+    <div
+      className="grid gap-6"
+      data-testid="entry-editor"
+      data-ready={actionsReady ? 'true' : 'false'}
+      data-dirty={dirty ? 'true' : 'false'}
+    >
       <PageHeader
         title={heading}
         description={collectionLabel}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {entry ? (
-              <EntryStatusBadge status={entry.status} testId="entry-status" />
-            ) : (
-              <EntryStatusBadge status="draft" testId="entry-status" />
-            )}
+            <EntryStatusBadge status={persistedStatus} testId="entry-status" />
             <Button
               type="button"
               onClick={() => saveMutation.mutate()}
@@ -356,15 +364,27 @@ export function EntryEditor({
             >
               {saveMutation.isPending ? 'Saving…' : 'Save draft'}
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={previewDisabled || previewMutation.isPending}
-              data-testid="preview-entry"
-              onClick={() => previewMutation.mutate()}
-            >
-              Preview
-            </Button>
+            {previewUrl ? (
+              <Button asChild variant="outline">
+                <a
+                  href={previewUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid="preview-entry"
+                >
+                  Preview
+                </a>
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                disabled
+                data-testid="preview-entry"
+              >
+                Preview
+              </Button>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button type="button" variant="secondary" data-testid="publish-menu">
@@ -374,14 +394,15 @@ export function EntryEditor({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem
-                  disabled={!resolvedId || publishMutation.isPending}
+                  disabled={!actionsReady || publishMutation.isPending}
                   data-testid="publish-now"
                   onSelect={() => publishMutation.mutate()}
                 >
                   Publish now
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  disabled={!resolvedId}
+                  disabled={!actionsReady}
+                  data-testid="schedule-entry"
                   onSelect={() => {
                     setScheduleAt(toDatetimeLocalValue(new Date()))
                     setScheduleTz(browserTimezone())
@@ -392,19 +413,19 @@ export function EntryEditor({
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  disabled={!resolvedId || entry?.status !== 'published'}
+                  disabled={!actionsReady || entry?.status !== 'published'}
                   onSelect={() => unpublishMutation.mutate()}
                 >
                   Unpublish
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  disabled={!resolvedId || entry?.status === 'archived'}
+                  disabled={!actionsReady || entry?.status === 'archived'}
                   onSelect={() => archiveMutation.mutate()}
                 >
                   Archive
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  disabled={!resolvedId}
+                  disabled={!actionsReady}
                   variant="destructive"
                   onSelect={() => setDeleteOpen(true)}
                 >
@@ -506,6 +527,7 @@ export function EntryEditor({
           <div className="grid gap-3">
             <Input
               type="datetime-local"
+              data-testid="schedule-at"
               value={scheduleAt}
               onChange={(event) => setScheduleAt(event.target.value)}
             />
@@ -525,6 +547,7 @@ export function EntryEditor({
           <DialogFooter>
             <Button
               type="button"
+              data-testid="schedule-confirm"
               disabled={!scheduleAt || scheduleMutation.isPending}
               onClick={() => scheduleMutation.mutate()}
             >

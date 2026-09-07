@@ -47,6 +47,21 @@ export async function updateMemberRole(
     throw new NotFoundError('Member not found')
   }
 
+  if (existing.role === 'owner' && role !== 'owner') {
+    const owners = await db
+      .select({ id: membership.id })
+      .from(membership)
+      .where(
+        and(
+          eq(membership.organizationId, organizationId),
+          eq(membership.role, 'owner'),
+        ),
+      )
+    if (owners.length <= 1) {
+      throw new ConflictError('Cannot demote the last owner')
+    }
+  }
+
   const [updated] = await db
     .update(membership)
     .set({ role })

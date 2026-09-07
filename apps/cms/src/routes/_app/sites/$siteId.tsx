@@ -16,6 +16,11 @@ export const Route = createFileRoute('/_app/sites/$siteId')({
 function SiteLayout() {
   const { site, me } = Route.useRouteContext()
   const { siteId } = Route.useParams()
+  const isOwner = me.memberships.some(
+    (membership) =>
+      membership.organizationId === site.organizationId &&
+      membership.role === 'owner',
+  )
 
   return (
     <div className="grid gap-6">
@@ -38,6 +43,25 @@ function SiteLayout() {
         >
           Releases
         </Link>
+        {me.user.isAgencyAdmin ? (
+          <Link
+            to="/admin/organizations/$orgId"
+            params={{ orgId: site.organizationId }}
+            className="hover:underline"
+            data-testid="team-nav"
+          >
+            Team
+          </Link>
+        ) : isOwner ? (
+          <Link
+            to="/orgs/$orgId/members"
+            params={{ orgId: site.organizationId }}
+            className="hover:underline"
+            data-testid="team-nav"
+          >
+            Team
+          </Link>
+        ) : null}
         {me.user.isAgencyAdmin ? (
           <a href={`/sites/${siteId}/settings`} className="hover:underline">
             Settings

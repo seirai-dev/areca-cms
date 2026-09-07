@@ -26,7 +26,7 @@ import {
   requestRollback,
 } from './publications.ts'
 import { resetSchedulerAttempts, runSchedulerTick } from './scheduler.ts'
-import { claimNextJob, processJob } from './worker.ts'
+import { claimNextJob, processJob, recoverStaleJobs } from './worker.ts'
 
 const hasDb = Boolean(process.env.DATABASE_URL)
 
@@ -257,6 +257,36 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
         const a2Queued = await getBuildJob(a2.job.id)
         expect(a2Queued?.status).toBe('building')
       })
+    })
+  })
+
+  it('fails jobs stuck in building longer than 30 minutes on recovery', async () => {
+    await withTestSite(async (ctx) => {
+      await createTestCollection(ctx.site.id)
+      await seedPublishedEntry(ctx.site.id, ctx.actor.id, ctx.suffix, 'stale')
+
+      const requested = await requestPublication({
+        siteId: ctx.site.id,
+        actorId: ctx.actor.id,
+      })
+      expect(requested.ok).toBe(true)
+      if (!requested.ok) return
+
+      const staleStarted = new Date(Date.now() - 31 * 60 * 1000)
+      await db
+        .update(buildJob)
+        .set({ status: 'building', startedAt: staleStarted, attempts: 1 })
+        .where(eq(buildJob.id, requested.job.id))
+
+      const recovered = await recoverStaleJobs()
+      expect(recovered.some((job) => job.id === requested.job.id)).toBe(true)
+
+      const failed = await getBuildJob(requested.job.id)
+      expect(failed?.status).toBe('failed')
+      expect(failed?.error).toBe('worker restarted')
+      expect((await getPublication(requested.publication.id))?.status).toBe(
+        'failed',
+      )
     })
   })
 })

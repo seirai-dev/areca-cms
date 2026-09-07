@@ -32,7 +32,12 @@ export async function getSitesSnapshotCurrent(request: Request) {
     const [found] = await db
       .select()
       .from(publication)
-      .where(eq(publication.id, activeJob.publicationId))
+      .where(
+        and(
+          eq(publication.id, activeJob.publicationId),
+          eq(publication.siteId, site.id),
+        ),
+      )
       .limit(1)
     pub = found
   }

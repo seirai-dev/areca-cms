@@ -1,4 +1,4 @@
-import { and, eq, lte, ne, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNotNull, isNull, lte, ne, or, sql } from 'drizzle-orm'
 
 import { getDeploymentAdapter } from '#/adapters'
 import type { DeploymentAdapter, DeploymentTarget } from '#/adapters/deployment/types'
@@ -18,6 +18,8 @@ const DEPLOY_TIMEOUT_MS = 15 * 60 * 1000
 const DEPLOY_POLL_MS = 5000
 const HEALTH_TIMEOUT_MS = 2 * 60 * 1000
 const HEALTH_POLL_MS = 5000
+const STALE_JOB_MS = 30 * 60 * 1000
+const STALE_JOB_STATUSES = ['building', 'validating', 'deploying'] as const
 
 type WorkerState = {
   timer: ReturnType<typeof setInterval>
@@ -288,6 +290,41 @@ async function tick() {
   }
 }
 
+export async function recoverStaleJobs(
+  olderThanMs = STALE_JOB_MS,
+  now = new Date(),
+) {
+  const cutoff = new Date(now.getTime() - olderThanMs)
+  const stale = await db
+    .select()
+    .from(buildJob)
+    .where(
+      and(
+        inArray(buildJob.status, [...STALE_JOB_STATUSES]),
+        or(
+          and(isNotNull(buildJob.startedAt), lte(buildJob.startedAt, cutoff)),
+          and(isNull(buildJob.startedAt), lte(buildJob.createdAt, cutoff)),
+        ),
+      ),
+    )
+
+  for (const job of stale) {
+    const [existingSite] = await db
+      .select({ organizationId: site.organizationId })
+      .from(site)
+      .where(eq(site.id, job.siteId))
+      .limit(1)
+    await failJob(
+      job,
+      job.publicationId,
+      'worker restarted',
+      existingSite?.organizationId ?? null,
+    )
+  }
+
+  return stale
+}
+
 export function startWorker({ intervalMs = 3000 }: { intervalMs?: number } = {}) {
   if (!env.WORKER_ENABLED) return
   if (g.__arecaWorker) return g.__arecaWorker
@@ -301,10 +338,17 @@ export function startWorker({ intervalMs = 3000 }: { intervalMs?: number } = {})
         state.ticking = false
       })
     }, intervalMs),
-    ticking: false,
+    ticking: true,
   }
   g.__arecaWorker = state
-  void tick()
+  void recoverStaleJobs()
+    .catch((error) => {
+      console.error('[areca] stale job recovery failed', error)
+    })
+    .finally(() => {
+      state.ticking = false
+      void tick()
+    })
   return state
 }
 
