@@ -2,7 +2,12 @@ import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 
-import { adminQueryKeys, formatDate } from '#/components/admin/helpers'
+import {
+  adminQueryKeys,
+  formatAuditAction,
+  formatAuditTarget,
+  formatDate,
+} from '#/components/admin/helpers'
 import { TableSkeleton } from '#/components/admin/table-skeleton'
 import { EmptyState } from '#/components/empty-state'
 import { Button } from '#/components/ui/button'
@@ -73,13 +78,19 @@ export function AuditLogList({ organizationId }: { organizationId?: string }) {
             <TableRow key={row.id}>
               <TableCell>{formatDate(row.createdAt)}</TableCell>
               <TableCell>{row.actorName ?? 'System'}</TableCell>
-              <TableCell>{row.action}</TableCell>
+              <TableCell>{formatAuditAction(row.action)}</TableCell>
               <TableCell>
-                {row.targetType} {row.targetId}
+                {formatAuditTarget({
+                  targetType: row.targetType,
+                  targetId: row.targetId,
+                  organizationName: row.organizationName,
+                  siteName: row.siteName,
+                  meta: row.meta,
+                })}
               </TableCell>
               <TableCell className="text-muted-foreground">
-                {row.organizationId}
-                {row.siteId ? ` / ${row.siteId}` : ''}
+                {[row.organizationName, row.siteName].filter(Boolean).join(' / ') ||
+                  '—'}
               </TableCell>
             </TableRow>
           ))}

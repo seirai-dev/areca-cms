@@ -62,7 +62,9 @@ function InvitePage() {
     if (result.error) {
       setError(result.error.message ?? 'Could not create account')
       setSigningUp(false)
+      return
     }
+    setSigningUp(false)
   }
 
   const loggedIn = Boolean(session?.user)
@@ -71,7 +73,7 @@ function InvitePage() {
     <div className="flex min-h-svh items-center justify-center p-6">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>Invitation</CardTitle>
+          <CardTitle className="text-2xl">Invitation</CardTitle>
           <CardDescription>
             Join {invitation.organizationName} as {invitation.role}.
           </CardDescription>

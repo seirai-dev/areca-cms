@@ -199,9 +199,11 @@ export function OrgMembers({ organizationId }: { organizationId: string }) {
             title="No members"
             description="Invite someone to this organization."
             action={
-              <DialogTrigger asChild>
-                <Button type="button">Invite</Button>
-              </DialogTrigger>
+              inviteOpen ? undefined : (
+                <Button type="button" onClick={() => setInviteOpen(true)}>
+                  Invite
+                </Button>
+              )
             }
           />
         )}

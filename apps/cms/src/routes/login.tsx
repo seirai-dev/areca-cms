@@ -73,7 +73,7 @@ function LoginPage() {
     <div className="flex min-h-svh items-center justify-center p-6">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle>Sign in to Areca</CardTitle>
+          <CardTitle className="text-2xl">Sign in to Areca</CardTitle>
           <CardDescription>Use your email and password.</CardDescription>
         </CardHeader>
         <CardContent>

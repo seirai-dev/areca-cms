@@ -41,9 +41,12 @@ test('empty CMS redirects to /setup and creates the first admin', async ({
 
   await expect(page).toHaveURL('/', { timeout: 15_000 })
   await expect(page.getByTestId('get-started')).toBeVisible()
+
+  await page.goto('/setup')
+  await expect(page).toHaveURL('/', { timeout: 15_000 })
 })
 
-test('a second visit to /setup redirects to /login', async ({ page }) => {
+test('a signed-out visit to /setup redirects to /login', async ({ page }) => {
   await page.goto('/setup')
   await expect(page).toHaveURL(/\/login/, { timeout: 15_000 })
 })

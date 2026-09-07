@@ -36,7 +36,9 @@ export async function openSite(page: Page, name: string | RegExp) {
 }
 
 export async function waitForSavedDraft(page: Page) {
-  await expect(page.getByText('Draft saved')).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByText('Draft saved').first()).toBeVisible({
+    timeout: 15_000,
+  })
   await expect(page.getByTestId('entry-status')).not.toHaveAttribute(
     'data-status',
     'unsaved',
@@ -100,16 +102,19 @@ export async function createIsolatedAcmeSite(page: Page, suffix: string) {
   await page.getByTestId('collection-route').fill('/blog/$slug')
   await page.getByTestId('field-key-0').fill('title')
   await page.getByTestId('field-label-0').fill('Title')
+  await page.getByTestId('field-row-0').getByText('Required').click()
   await page.getByTestId('add-field').click()
   await page.getByTestId('field-key-1').fill('slug')
   await page.getByTestId('field-label-1').fill('Slug')
   await page.getByTestId('field-type-1').click()
   await page.getByRole('option', { name: 'slug' }).click()
+  await page.getByTestId('field-row-1').getByText('Required').click()
   await page.getByTestId('add-field').click()
   await page.getByTestId('field-key-2').fill('body')
   await page.getByTestId('field-label-2').fill('Body')
   await page.getByTestId('field-type-2').click()
   await page.getByRole('option', { name: 'richtext' }).click()
+  await page.getByTestId('field-row-2').getByText('Required').click()
   await page.getByTestId('add-field').click()
   await page.getByTestId('field-key-3').fill('heroImage')
   await page.getByTestId('field-label-3').fill('Hero image')

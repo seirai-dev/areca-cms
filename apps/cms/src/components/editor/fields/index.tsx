@@ -74,6 +74,7 @@ export function CollectionField({
       control = (
         <SelectFieldInput
           field={field}
+          id={id}
           value={value}
           onChange={(next) => onChange(next)}
         />

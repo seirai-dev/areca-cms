@@ -47,6 +47,7 @@ type PublicationRow = {
   wasLive: boolean
   snapshotHash: string
   requestedBy: string | null
+  requestedByName: string | null
   createdAt: string | Date
   deployedAt: string | Date | null
 }
@@ -158,9 +159,9 @@ function ReleasesPage() {
       header: 'Hash',
       cell: ({ row }) => shortId(row.original.snapshotHash),
     }),
-    pubHelper.accessor('requestedBy', {
+    pubHelper.accessor('requestedByName', {
       header: 'Requested by',
-      cell: ({ row }) => shortId(row.original.requestedBy ?? '—', 12),
+      cell: ({ row }) => row.original.requestedByName ?? 'System',
     }),
     pubHelper.accessor('deployedAt', {
       header: 'Deployed',

@@ -116,25 +116,28 @@ describe.skipIf(!hasDb)('entries', () => {
     })
   })
 
-  it('allows empty required fields on draft update but not on publish', async () => {
+  it('allows empty richtext on draft but not on publish', async () => {
     await withTestSite(async (ctx) => {
       await createTestCollection(ctx.site.id)
       const slug = `draft-${ctx.suffix}`
+      const emptyBody = { type: 'doc', content: [{ type: 'paragraph' }] }
 
       const created = await createEntry({
         siteId: ctx.site.id,
         collectionKey: 'articles',
-        data: { title: '', slug, body: sampleRichText },
+        data: { title: 'Draft', slug, body: emptyBody },
         actorId: ctx.actor.id,
       })
       expect(created.status).toBe('draft')
 
-      const updated = await updateDraft(
-        created.id,
-        { title: '', slug, body: sampleRichText },
-        ctx.actor.id,
-      )
-      expect(updated.draftData.title).toBe('')
+      await expect(
+        createEntry({
+          siteId: ctx.site.id,
+          collectionKey: 'articles',
+          data: { title: '', slug: `${slug}-empty`, body: sampleRichText },
+          actorId: ctx.actor.id,
+        }),
+      ).rejects.toBeInstanceOf(ValidationError)
 
       await expect(
         publishEntry(created.id, ctx.actor.id),

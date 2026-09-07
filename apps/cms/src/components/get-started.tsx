@@ -34,13 +34,17 @@ export function GetStarted() {
           <li>
             Connect your site. In the site package (for the demo,{' '}
             <code className="rounded bg-muted px-1">examples/demo-site</code>
-            ), write <code className="rounded bg-muted px-1">.env.local</code>{' '}
-            and sync the schema:
+            ), write <code className="rounded bg-muted px-1">.env.local</code>
+            :
             <pre className="mt-2 overflow-x-auto rounded-md bg-muted p-3 text-xs leading-6">
               {`ARECA_CMS_URL=http://localhost:3000
-ARECA_SITE_TOKEN=<paste the site token>
-pnpm sync-manifest`}
+ARECA_SITE_TOKEN=<paste the site token>`}
             </pre>
+            Then run{' '}
+            <code className="rounded bg-muted px-1">
+              pnpm --filter @areca/demo-site sync-manifest
+            </code>
+            .
           </li>
           <li>Create and publish content in a collection.</li>
           <li>

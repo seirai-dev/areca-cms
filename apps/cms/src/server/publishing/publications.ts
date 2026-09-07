@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray } from 'drizzle-orm'
 
 import { db } from '#/db'
-import { buildJob, publication, site } from '#/db/schema'
+import { buildJob, publication, site, user } from '#/db/schema'
 import type { BuildJobStatus } from '#/lib/types'
 import { audit } from '#/server/audit'
 import { buildSnapshot } from '#/server/content/snapshot'
@@ -225,8 +225,12 @@ export async function listPublications(
   const limit = options.limit ?? 50
   const offset = options.offset ?? 0
   const items = await db
-    .select()
+    .select({
+      publication,
+      requestedByName: user.name,
+    })
     .from(publication)
+    .leftJoin(user, eq(publication.requestedBy, user.id))
     .where(eq(publication.siteId, siteId))
     .orderBy(desc(publication.createdAt))
     .limit(limit)
@@ -239,7 +243,7 @@ export async function listPublications(
         .where(
           inArray(
             buildJob.publicationId,
-            items.map((item) => item.id),
+            items.map((item) => item.publication.id),
           ),
         )
         .orderBy(desc(buildJob.createdAt))
@@ -252,8 +256,9 @@ export async function listPublications(
     }
   }
 
-  return items.map((item) => ({
+  return items.map(({ publication: item, requestedByName }) => ({
     ...item,
+    requestedByName: requestedByName ?? null,
     job: latestJob.get(item.id) ?? null,
   }))
 }

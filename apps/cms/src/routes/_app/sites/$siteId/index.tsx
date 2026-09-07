@@ -41,7 +41,11 @@ function SiteContentPage() {
   })
 
   return (
-    <div className="grid gap-6">
+    <div
+      className="grid gap-6"
+      data-testid="site-content"
+      data-ready={collectionsQuery.isFetched ? 'true' : 'false'}
+    >
       <ReleaseStatusBar siteId={siteId} />
       {collectionsQuery.isLoading ? (
         <div className="grid gap-4 md:grid-cols-2">
@@ -51,7 +55,7 @@ function SiteContentPage() {
       ) : collections.length === 0 ? (
         <EmptyState
           title="No collections"
-          description="Sync a manifest from your site (`pnpm sync-manifest`) or add a collection in Settings."
+          description="Sync a manifest from your site (`pnpm --filter @areca/demo-site sync-manifest`). An agency admin can also add a collection in Settings."
         />
       ) : (
         <div className="grid gap-4 md:grid-cols-2">

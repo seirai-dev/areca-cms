@@ -3,7 +3,13 @@ import { toast } from 'sonner'
 import { Alert, AlertDescription, AlertTitle } from '#/components/ui/alert'
 import { Button } from '#/components/ui/button'
 
-export function TokenAlert({ token }: { token: string }) {
+export function TokenAlert({
+  token,
+  onDismiss,
+}: {
+  token: string
+  onDismiss?: () => void
+}) {
   async function copy() {
     try {
       await navigator.clipboard.writeText(token)
@@ -28,6 +34,11 @@ export function TokenAlert({ token }: { token: string }) {
           <Button type="button" size="sm" variant="outline" onClick={() => void copy()}>
             Copy
           </Button>
+          {onDismiss ? (
+            <Button type="button" size="sm" variant="ghost" onClick={onDismiss}>
+              Dismiss
+            </Button>
+          ) : null}
         </div>
       </AlertDescription>
     </Alert>

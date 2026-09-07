@@ -19,9 +19,17 @@ export default defineConfig({
     },
     {
       name: 'chromium',
-      testIgnore: /setup\.spec\.ts/,
+      testIgnore: /setup\.spec\.ts|qa\//,
       use: { ...devices['Desktop Chrome'] },
       dependencies: ['setup'],
+    },
+    {
+      name: 'qa',
+      testMatch: /qa\/.*\.spec\.ts/,
+      fullyParallel: false,
+      workers: 1,
+      timeout: 300_000,
+      use: { ...devices['Desktop Chrome'] },
     },
   ],
   webServer: {

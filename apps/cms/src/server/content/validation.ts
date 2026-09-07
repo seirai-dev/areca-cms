@@ -25,6 +25,20 @@ function isIsoDateTime(value: string) {
   return ISO_DATETIME.test(value) && !Number.isNaN(Date.parse(value))
 }
 
+export function isEmptyRichText(value: unknown): boolean {
+  if (value == null || value === '') return true
+  if (typeof value !== 'object' || Array.isArray(value)) return false
+  const doc = value as { type?: string; content?: unknown[] }
+  if (doc.type !== 'doc') return false
+  const content = doc.content ?? []
+  if (content.length === 0) return true
+  return content.every((node) => {
+    if (!node || typeof node !== 'object' || Array.isArray(node)) return false
+    const item = node as { type?: string; content?: unknown[] }
+    return item.type === 'paragraph' && (!item.content || item.content.length === 0)
+  })
+}
+
 function wrap(
   schema: z.ZodType,
   field: Field,
@@ -45,15 +59,17 @@ function schemaForField(field: Field, mode: SchemaMode): z.ZodType {
   switch (field.type) {
     case 'text':
     case 'textarea':
-      return wrap(
-        field.required && mode === 'strict'
-          ? z.string().min(1)
-          : z.string(),
-        field,
-        mode,
-        true,
-      )
+      if (field.required) {
+        return z.string().min(1, 'Required')
+      }
+      return wrap(z.string(), field, mode, true)
     case 'slug':
+      if (field.required) {
+        return z
+          .string()
+          .min(1, 'Required')
+          .regex(SLUG_PATTERN, 'Invalid slug')
+      }
       return wrap(
         z.string().regex(SLUG_PATTERN, 'Invalid slug'),
         field,
@@ -62,7 +78,7 @@ function schemaForField(field: Field, mode: SchemaMode): z.ZodType {
       )
     case 'richtext': {
       const richtext = z.any().superRefine((value, ctx) => {
-        if (value == null || value === '') {
+        if (isEmptyRichText(value)) {
           if (mode === 'strict' && field.required) {
             ctx.addIssue({ code: 'custom', message: 'Required' })
           }

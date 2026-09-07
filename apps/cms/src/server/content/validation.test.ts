@@ -52,9 +52,40 @@ describe('buildEntrySchema / validateEntryData', () => {
     expect(paths).toEqual(expect.arrayContaining(['title', 'slug', 'content']))
   })
 
-  it('allows empty required fields in partial mode', () => {
-    const result = validateEntryData(allFields, { title: '', slug: '' }, { mode: 'partial' })
-    expect(result.ok).toBe(true)
+  it('requires title and slug even in partial mode, but allows empty richtext', () => {
+    const emptyIdentity = validateEntryData(
+      allFields,
+      { title: '', slug: '' },
+      { mode: 'partial' },
+    )
+    expect(emptyIdentity.ok).toBe(false)
+    if (!emptyIdentity.ok) {
+      const paths = emptyIdentity.errors.map((e) => e.path)
+      expect(paths).toEqual(expect.arrayContaining(['title', 'slug']))
+    }
+
+    const emptyRich = validateEntryData(
+      allFields,
+      { title: 'Hi', slug: 'hi' },
+      { mode: 'partial' },
+    )
+    expect(emptyRich.ok).toBe(true)
+  })
+
+  it('rejects empty richtext on publish', () => {
+    const result = validateEntryData(
+      allFields,
+      {
+        title: 'Hi',
+        slug: 'hi',
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
+      },
+      { mode: 'strict' },
+    )
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.errors.some((e) => e.path === 'content')).toBe(true)
+    }
   })
 
   it('still checks types and formats in partial mode', () => {

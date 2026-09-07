@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Link,
@@ -72,6 +72,13 @@ function OrganizationDetailPage() {
   const [createdToken, setCreatedToken] = useState<string | null>(null)
   const [orgName, setOrgName] = useState('')
 
+  useEffect(() => {
+    const stored = sessionStorage.getItem(`areca.site-token.${orgId}`)
+    if (stored) {
+      setCreatedToken(stored)
+    }
+  }, [orgId])
+
   const orgsQuery = useQuery({
     queryKey: adminQueryKeys.organizations,
     queryFn: () => listOrganizations(),
@@ -95,6 +102,7 @@ function OrganizationDetailPage() {
       }),
     onSuccess: async (site) => {
       toast.success('Site created')
+      sessionStorage.setItem(`areca.site-token.${orgId}`, site.token)
       setCreatedToken(site.token)
       setSiteOpen(false)
       setSiteName('')
@@ -175,7 +183,15 @@ function OrganizationDetailPage() {
       data-ready="true"
     >
       <PageHeader title={org.name} description={org.slug} />
-      {createdToken ? <TokenAlert token={createdToken} /> : null}
+      {createdToken ? (
+        <TokenAlert
+          token={createdToken}
+          onDismiss={() => {
+            sessionStorage.removeItem(`areca.site-token.${orgId}`)
+            setCreatedToken(null)
+          }}
+        />
+      ) : null}
 
       <Tabs defaultValue="sites">
         <TabsList>
@@ -229,9 +245,11 @@ function OrganizationDetailPage() {
                 title="No sites"
                 description="Create a site to get a site token for the SDK."
                 action={
-                  <DialogTrigger asChild>
-                    <Button type="button">New site</Button>
-                  </DialogTrigger>
+                  siteOpen ? undefined : (
+                    <Button type="button" onClick={() => setSiteOpen(true)}>
+                      New site
+                    </Button>
+                  )
                 }
               />
             )}

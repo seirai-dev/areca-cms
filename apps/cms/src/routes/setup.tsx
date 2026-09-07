@@ -13,13 +13,15 @@ import {
 import { Input } from '#/components/ui/input'
 import { FormField } from '#/components/form-field'
 import { authClient } from '#/lib/auth-client'
+import { getMeFn } from '#/server/fn/me'
 import { completeSetupFn, getSetupStatusFn } from '#/server/fn/setup'
 
 export const Route = createFileRoute('/setup')({
   beforeLoad: async () => {
     const { needsSetup } = await getSetupStatusFn()
     if (!needsSetup) {
-      throw redirect({ href: '/login' })
+      const me = await getMeFn()
+      throw redirect({ href: me ? '/' : '/login' })
     }
   },
   component: SetupPage,
@@ -67,7 +69,7 @@ function SetupPage() {
     <div className="flex min-h-svh items-center justify-center p-6">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle>Set up Areca</CardTitle>
+          <CardTitle className="text-2xl">Set up Areca</CardTitle>
           <CardDescription>
             Create the first agency admin. This can only be done while no
             accounts exist.

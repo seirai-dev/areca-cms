@@ -36,12 +36,15 @@ export function ImageFieldInput({
   return (
     <div className="flex flex-col gap-3">
       {asset ? (
-        <img
-          src={assetFileUrl(asset.storageKey)}
-          alt={asset.altText ?? asset.originalFilename}
-          className="h-32 w-auto rounded-md border object-cover"
-          data-testid="image-field-thumb"
-        />
+        <div className="grid gap-1">
+          <img
+            src={assetFileUrl(asset.storageKey)}
+            alt={asset.altText ?? asset.originalFilename}
+            className="h-32 w-auto rounded-md border object-cover"
+            data-testid="image-field-thumb"
+          />
+          <p className="text-sm text-muted-foreground">{asset.originalFilename}</p>
+        </div>
       ) : assetId ? (
         <p className="text-sm text-muted-foreground">Asset {assetId}</p>
       ) : null}

@@ -38,8 +38,8 @@ export function ConfirmDialog({
     setPending(true)
     try {
       await onConfirm()
-      onOpenChange?.(false)
     } finally {
+      onOpenChange?.(false)
       setPending(false)
     }
   }

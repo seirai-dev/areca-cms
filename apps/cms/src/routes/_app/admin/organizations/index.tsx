@@ -139,9 +139,11 @@ function OrganizationsPage() {
             title="No organizations"
             description="Create an organization to add sites and members."
             action={
-              <DialogTrigger asChild>
-                <Button type="button">New organization</Button>
-              </DialogTrigger>
+              open ? undefined : (
+                <Button type="button" onClick={() => setOpen(true)}>
+                  New organization
+                </Button>
+              )
             }
           />
         )}

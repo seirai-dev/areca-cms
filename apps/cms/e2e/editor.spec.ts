@@ -48,6 +48,17 @@ test('owner can author, publish, and release an article', async ({ page }) => {
     'draft',
   )
 
+  await page.reload()
+  await expect(page.getByTestId('entry-editor')).toHaveAttribute(
+    'data-ready',
+    'true',
+    { timeout: 15_000 },
+  )
+  await expect(page.getByTestId('rich-text-editor')).toContainText(
+    'Hello from the e2e editor',
+  )
+  await expect(page.getByTestId('image-field-thumb')).toBeVisible()
+
   await page.getByTestId('publish-menu').click()
   await expect(page.getByTestId('publish-now')).not.toHaveAttribute(
     'data-disabled',
@@ -65,4 +76,48 @@ test('owner can author, publish, and release an article', async ({ page }) => {
 
   await page.getByRole('link', { name: 'Releases' }).click()
   await expect(page.getByText('live', { exact: true }).first()).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'Acme Owner' })).toBeVisible()
+})
+
+test('draft save shows field errors for empty title and invalid slug', async ({
+  page,
+}) => {
+  test.setTimeout(90_000)
+  const suffix = uniqueSuffix()
+  const { siteName } = await createIsolatedAcmeSite(page, `val-${suffix}`)
+
+  await login(page, 'owner@acme.local')
+  await openSite(page, siteName)
+  await page.getByTestId('collection-articles').getByRole('link', { name: 'Open' }).click()
+  await page.getByTestId('new-entry').click()
+
+  await page.getByLabel(/Slug/).fill('Hello World')
+  await page.getByTestId('save-draft').click()
+  await expect(page.getByRole('alert').filter({ hasText: /Required|Invalid slug/i }).first()).toBeVisible({
+    timeout: 15_000,
+  })
+
+  await page.getByLabel(/Title/).fill(`Valid ${suffix}`)
+  await page.getByLabel(/Slug/).fill(`valid-${suffix}`)
+  await page.getByTestId('rich-text-editor').click()
+  await page.keyboard.type('Body')
+  await page.getByTestId('save-draft').click()
+  await waitForSavedDraft(page)
+
+  await page.getByLabel(/Title/).fill('')
+  await page.getByTestId('save-draft').click()
+  await expect(page.getByRole('alert').filter({ hasText: 'Required' }).first()).toBeVisible({
+    timeout: 15_000,
+  })
+
+  await page.getByRole('link', { name: /Back to/ }).click()
+  await page.getByTestId('new-entry').click()
+  await page.getByLabel(/Title/).fill(`Empty body ${suffix}`)
+  await page.getByTestId('save-draft').click()
+  await waitForSavedDraft(page)
+  await page.getByTestId('publish-menu').click()
+  await page.getByTestId('publish-now').click()
+  await expect(
+    page.getByRole('alert').filter({ hasText: /Required|Could not publish/i }).first(),
+  ).toBeVisible({ timeout: 15_000 })
 })

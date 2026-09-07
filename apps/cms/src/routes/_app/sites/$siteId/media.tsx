@@ -122,7 +122,11 @@ function MediaPage() {
           {assets.map((asset) => {
             const alt = altDrafts[asset.id] ?? asset.altText ?? ''
             return (
-              <div key={asset.id} className="grid gap-2 rounded-lg border p-2">
+              <div
+                key={asset.id}
+                className="grid gap-2 rounded-lg border p-2"
+                data-testid={`media-card-${asset.originalFilename}`}
+              >
                 {asset.mimeType.startsWith('image/') ? (
                   <img
                     src={assetFileUrl(asset.storageKey)}

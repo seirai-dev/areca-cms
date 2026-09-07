@@ -1,7 +1,7 @@
 import { and, desc, eq } from 'drizzle-orm'
 
 import { db } from '#/db'
-import { auditLog, user } from '#/db/schema'
+import { auditLog, organization, site, user } from '#/db/schema'
 
 export async function listAuditLog(input: {
   organizationId?: string
@@ -21,7 +21,9 @@ export async function listAuditLog(input: {
     .select({
       id: auditLog.id,
       organizationId: auditLog.organizationId,
+      organizationName: organization.name,
       siteId: auditLog.siteId,
+      siteName: site.name,
       actorId: auditLog.actorId,
       actorName: user.name,
       action: auditLog.action,
@@ -32,6 +34,8 @@ export async function listAuditLog(input: {
     })
     .from(auditLog)
     .leftJoin(user, eq(auditLog.actorId, user.id))
+    .leftJoin(organization, eq(auditLog.organizationId, organization.id))
+    .leftJoin(site, eq(auditLog.siteId, site.id))
     .where(filters.length > 0 ? and(...filters) : undefined)
     .orderBy(desc(auditLog.createdAt))
     .limit(input.limit)

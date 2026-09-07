@@ -1,6 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link, useRouterState } from '@tanstack/react-router'
-import { Building2, Globe, LayoutDashboard, LogOut } from 'lucide-react'
+import {
+  Building2,
+  ClipboardList,
+  Globe,
+  LayoutDashboard,
+  LogOut,
+  Users,
+} from 'lucide-react'
 
 import { Avatar, AvatarFallback } from '#/components/ui/avatar'
 import { Button } from '#/components/ui/button'
@@ -111,6 +118,7 @@ export function AppSidebar({ me }: { me: Me }) {
                     isActive={pathname.startsWith('/admin/users')}
                   >
                     <a href="/admin/users">
+                      <Users />
                       <span>Users</span>
                     </a>
                   </SidebarMenuButton>
@@ -121,6 +129,7 @@ export function AppSidebar({ me }: { me: Me }) {
                     isActive={pathname.startsWith('/admin/audit')}
                   >
                     <a href="/admin/audit">
+                      <ClipboardList />
                       <span>Audit</span>
                     </a>
                   </SidebarMenuButton>

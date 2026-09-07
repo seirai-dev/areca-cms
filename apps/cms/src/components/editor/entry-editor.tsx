@@ -84,7 +84,7 @@ type RevisionRecord = {
 function payloadFromData(data: EntryData) {
   const next: EntryData = {}
   for (const [key, value] of Object.entries(data)) {
-    if (value === '' || value === undefined) continue
+    if (value === undefined) continue
     next[key] = value
   }
   return next
@@ -128,6 +128,7 @@ export function EntryEditor({
   })
 
   const [data, setData] = useState<EntryData>(() => initialEntryData(fields))
+  const [hydratedId, setHydratedId] = useState<string | undefined>(undefined)
   const [slugManual, setSlugManual] = useState(false)
   const [savedSnapshot, setSavedSnapshot] = useState<string>(
     JSON.stringify(initialEntryData(fields)),
@@ -139,6 +140,7 @@ export function EntryEditor({
   const [scheduleTz, setScheduleTz] = useState(browserTimezone)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [restoreId, setRestoreId] = useState<string | null>(null)
+  const [editorTab, setEditorTab] = useState('edit')
 
   const entry = (entryQuery.data ?? null) as EntryRecord | null
 
@@ -148,6 +150,7 @@ export function EntryEditor({
     setData(next)
     setSavedSnapshot(JSON.stringify(next))
     setSlugManual(true)
+    setHydratedId(entry.id)
   }, [entry, fields])
 
   const dirty = JSON.stringify(data) !== savedSnapshot
@@ -292,6 +295,7 @@ export function EntryEditor({
       restoreRevisionFn({ data: { entryId: resolvedId!, revisionId } }),
     onSuccess: async () => {
       setRestoreId(null)
+      setEditorTab('edit')
       toast.success('Revision restored')
       await invalidateEntry(resolvedId!)
     },
@@ -318,7 +322,10 @@ export function EntryEditor({
     return entry?.slug ?? 'Entry'
   }, [data, entry?.slug, isNew, titleField])
 
-  if (entryId && entryQuery.isLoading) {
+  if (
+    entryId &&
+    (entryQuery.isLoading || !entry || hydratedId !== entryId)
+  ) {
     return (
       <div className="grid gap-4">
         <Skeleton className="h-10 w-64" />
@@ -451,7 +458,7 @@ export function EntryEditor({
         </Alert>
       ) : null}
 
-      <Tabs defaultValue="edit">
+      <Tabs value={editorTab} onValueChange={setEditorTab}>
         <TabsList>
           <TabsTrigger value="edit">Edit</TabsTrigger>
           <TabsTrigger value="revisions" disabled={isNew}>

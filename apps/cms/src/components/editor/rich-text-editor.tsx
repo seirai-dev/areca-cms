@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { EditorContent, useEditor } from '@tiptap/react'
 import {
   Bold,
@@ -65,7 +65,7 @@ export function RichTextEditor({
     editorProps: {
       attributes: {
         class:
-          'prose prose-sm min-h-40 max-w-none px-3 py-2 focus:outline-none',
+          'prose prose-sm min-h-40 max-w-none px-3 py-2 focus:outline-none [&_img]:h-auto [&_img]:max-w-xs [&_img]:min-h-16',
         'data-testid': 'rich-text-editor',
       },
     },
@@ -73,6 +73,13 @@ export function RichTextEditor({
       onChange(next.getJSON())
     },
   })
+
+  useEffect(() => {
+    if (!editor) return
+    const incoming = (value as object | null) ?? emptyRichText()
+    if (JSON.stringify(editor.getJSON()) === JSON.stringify(incoming)) return
+    editor.commands.setContent(incoming, { emitUpdate: false })
+  }, [editor, value])
 
   const insertImage = useCallback(
     (asset: MediaAsset) => {
@@ -134,13 +141,22 @@ export function RichTextEditor({
           label="Link"
           active={editor.isActive('link')}
           onClick={() => {
-            const href = window.prompt('Link URL', editor.getAttributes('link').href ?? 'https://')
+            const { from, to } = editor.state.selection
+            const href = window.prompt(
+              'Link URL',
+              editor.getAttributes('link').href ?? 'https://',
+            )
             if (href === null) return
             if (href === '') {
               editor.chain().focus().unsetLink().run()
               return
             }
-            editor.chain().focus().setLink({ href }).run()
+            editor
+              .chain()
+              .focus()
+              .setTextSelection({ from, to })
+              .setLink({ href })
+              .run()
           }}
         >
           <Link2 />

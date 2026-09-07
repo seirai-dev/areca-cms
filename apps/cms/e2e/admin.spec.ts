@@ -72,6 +72,8 @@ test('agency admin can create an org, site, collection, and invitation', async (
   await page.getByRole('tab', { name: 'Members' }).click()
   await page.getByTestId('invite-member').click()
   await page.getByTestId('invite-email').fill(inviteEmail)
+  await page.locator('#invite-role').click()
+  await page.getByRole('option', { name: 'owner', exact: true }).click()
   await page.getByRole('button', { name: 'Send invitation' }).click()
   await expect(page.getByText('Invitation sent')).toBeVisible({
     timeout: 15_000,
@@ -79,4 +81,12 @@ test('agency admin can create an org, site, collection, and invitation', async (
   await expect(
     page.getByTestId('pending-invitations').getByText(inviteEmail),
   ).toBeVisible()
+
+  await page.goto('/admin/audit')
+  await expect(
+    page.getByRole('cell', { name: 'Created organization' }).first(),
+  ).toBeVisible({
+    timeout: 15_000,
+  })
+  await expect(page.getByRole('cell', { name: orgName, exact: true }).first()).toBeVisible()
 })
