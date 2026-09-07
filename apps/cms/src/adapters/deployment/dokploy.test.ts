@@ -41,10 +41,15 @@ describe('createDokployAdapter', () => {
       fetch: fakeFetch((url, init) => {
         calls.push({ url, init })
         if (url.endsWith('/api/application.deploy')) return json(true)
+        if (url.endsWith('/api/application.saveEnvironment')) return json(true)
         if (url.includes('/api/application.one')) {
           return json({
             applicationId: 'app-1',
             applicationStatus: 'running',
+            env: 'PORT=3000',
+            buildArgs: 'ARECA_CMS_URL=http://cms.test',
+            buildSecrets: '',
+            createEnvFile: false,
             deployments: [
               { deploymentId: 'old', createdAt: '2026-01-01T00:00:00.000Z' },
               { deploymentId: 'new', createdAt: '2026-01-02T00:00:00.000Z' },
@@ -59,16 +64,46 @@ describe('createDokployAdapter', () => {
     const result = await adapter.deploy(target, (line) => logs.push(line))
 
     expect(result.deploymentId).toBe('new')
-    expect(calls[0]?.url).toBe('http://dokploy.test/api/application.deploy')
-    expect(calls[0]?.init?.method).toBe('POST')
-    expect(calls[0]?.init?.headers).toMatchObject({ 'x-api-key': 'test-key' })
-    expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
+    expect(calls.map((call) => call.url)).toEqual([
+      'http://dokploy.test/api/application.one?applicationId=app-1',
+      'http://dokploy.test/api/application.saveEnvironment',
+      'http://dokploy.test/api/application.deploy',
+      'http://dokploy.test/api/application.one?applicationId=app-1',
+    ])
+    expect(calls[2]?.init?.method).toBe('POST')
+    expect(calls[2]?.init?.headers).toMatchObject({ 'x-api-key': 'test-key' })
+    expect(JSON.parse(String(calls[2]?.init?.body))).toEqual({
       applicationId: 'app-1',
     })
-    expect(calls[1]?.url).toBe(
-      'http://dokploy.test/api/application.one?applicationId=app-1',
-    )
+    const saved = JSON.parse(String(calls[1]?.init?.body)) as {
+      buildArgs: string
+    }
+    expect(saved.buildArgs).toMatch(/ARECA_SNAPSHOT_ID=\d+/)
     expect(logs.length).toBeGreaterThan(0)
+  })
+
+  it('treats an empty application.deploy body as success', async () => {
+    const adapter = createDokployAdapter({
+      baseUrl: 'http://dokploy.test',
+      apiKey: 'k',
+      fetch: fakeFetch((url) => {
+        if (url.endsWith('/api/application.deploy')) {
+          return new Response('', { status: 200 })
+        }
+        if (url.endsWith('/api/application.saveEnvironment')) {
+          return json(true)
+        }
+        return json({
+          applicationId: 'app-1',
+          applicationStatus: 'running',
+          deployments: [
+            { deploymentId: 'dep-empty', createdAt: '2026-01-02T00:00:00.000Z' },
+          ],
+        })
+      }),
+    })
+    const result = await adapter.deploy(target, () => {})
+    expect(result.deploymentId).toBe('dep-empty')
   })
 
   it('uses applicationId + timestamp when deployments is missing', async () => {
@@ -77,6 +112,7 @@ describe('createDokployAdapter', () => {
       apiKey: 'k',
       fetch: fakeFetch((url) => {
         if (url.endsWith('/api/application.deploy')) return json(true)
+        if (url.endsWith('/api/application.saveEnvironment')) return json(true)
         return json({ applicationId: 'app-1', applicationStatus: 'running' })
       }),
     })
@@ -125,6 +161,29 @@ describe('createDokployAdapter', () => {
     expect(result).toBe('error')
   })
 
+  it('does not treat a leftover applicationStatus done as success', async () => {
+    let polls = 0
+    const adapter = createDokployAdapter({
+      baseUrl: 'http://dokploy.test',
+      apiKey: 'k',
+      fetch: fakeFetch(() => {
+        polls += 1
+        return json({
+          applicationStatus: polls < 3 ? 'done' : 'running',
+          deployments: [],
+        })
+      }),
+    })
+    const result = await adapter.waitForCompletion(
+      target,
+      'dep-stale',
+      { timeoutMs: 80, pollMs: 10 },
+      () => {},
+    )
+    expect(result).toBe('timeout')
+    expect(polls).toBeGreaterThanOrEqual(3)
+  })
+
   it('returns timeout when status stays running', async () => {
     const adapter = createDokployAdapter({
       baseUrl: 'http://dokploy.test',
@@ -153,6 +212,26 @@ describe('createDokployAdapter', () => {
     const ok = await adapter.healthCheck('http://site.test', {
       timeoutMs: 500,
       intervalMs: 10,
+    })
+    expect(ok).toBe(true)
+    expect(attempts).toBeGreaterThanOrEqual(3)
+  })
+
+  it('waits until health JSON matches expectPublicationId', async () => {
+    let attempts = 0
+    const adapter = createDokployAdapter({
+      baseUrl: 'http://dokploy.test',
+      apiKey: 'k',
+      fetch: fakeFetch(() => {
+        attempts += 1
+        const publicationId = attempts < 3 ? 'old' : 'pub-new'
+        return json({ ok: true, publicationId })
+      }),
+    })
+    const ok = await adapter.healthCheck('http://site.test', {
+      timeoutMs: 500,
+      intervalMs: 10,
+      expectPublicationId: 'pub-new',
     })
     expect(ok).toBe(true)
     expect(attempts).toBeGreaterThanOrEqual(3)

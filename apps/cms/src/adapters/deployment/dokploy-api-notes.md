@@ -11,7 +11,8 @@ Auth: header `x-api-key` (not Bearer). Base path `/api`.
 ## application.deploy — `POST /api/application.deploy`
 
 Required: `{ applicationId }`. Optional: `title`, `description`.
-Response is typically `true`; the deployment id is **not** returned here.
+Response is typically `true` or an **empty 200 body** (adapter treats empty as success).
+The deployment id is **not** returned here — read `application.one` → `deployments[]`.
 
 ## application.one — `GET /api/application.one?applicationId=`
 

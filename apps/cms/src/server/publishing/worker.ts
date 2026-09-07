@@ -168,6 +168,7 @@ export async function processJob(
         const healthy = await deps.adapter.healthCheck(target.healthCheckUrl, {
           timeoutMs: HEALTH_TIMEOUT_MS,
           intervalMs: HEALTH_POLL_MS,
+          expectPublicationId: pub.id,
         })
         if (!healthy) {
           await failJob(

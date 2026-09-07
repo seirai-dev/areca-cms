@@ -39,12 +39,14 @@ export function createDokployAdapter(opts: {
     }
 
     const res = await fetchFn(`${baseUrl}${path}`, { ...init, headers })
+    const text = await res.text()
     if (!res.ok) {
       throw new Error(
-        `Dokploy ${init.method ?? 'GET'} ${path} failed: ${res.status}`,
+        `Dokploy ${init.method ?? 'GET'} ${path} failed: ${res.status}${text ? ` ${text}` : ''}`,
       )
     }
-    return (await res.json()) as T
+    if (!text.trim()) return undefined as T
+    return JSON.parse(text) as T
   }
 
   function getApplication(applicationId: string) {
@@ -53,9 +55,27 @@ export function createDokployAdapter(opts: {
     )
   }
 
+  async function bustContentCache(applicationId: string, log: (line: string) => void) {
+    const app = await getApplication(applicationId)
+    const snapshotId = `${Date.now()}`
+    const buildArgs = upsertEnvLine(app.buildArgs, 'ARECA_SNAPSHOT_ID', snapshotId)
+    await request('/api/application.saveEnvironment', {
+      method: 'POST',
+      body: JSON.stringify({
+        applicationId,
+        env: app.env ?? '',
+        buildArgs,
+        buildSecrets: app.buildSecrets ?? '',
+        createEnvFile: app.createEnvFile ?? false,
+      }),
+    })
+    log(`build arg ARECA_SNAPSHOT_ID=${snapshotId}`)
+  }
+
   return {
     async deploy(target, log) {
       log(`Deploying ${target.applicationId}`)
+      await bustContentCache(target.applicationId, log)
       await request('/api/application.deploy', {
         method: 'POST',
         body: JSON.stringify({ applicationId: target.applicationId }),
@@ -64,20 +84,25 @@ export function createDokployAdapter(opts: {
       return { deploymentId: newestDeploymentId(app, target.applicationId) }
     },
 
-    async waitForCompletion(target, _deploymentId, { timeoutMs, pollMs }, log) {
+    async waitForCompletion(target, deploymentId, { timeoutMs, pollMs }, log) {
       const started = Date.now()
       const deadline = started + timeoutMs
       let lastStatus: string | undefined
+      let seenRunning = false
 
       while (Date.now() < deadline) {
         const app = await getApplication(target.applicationId)
-        const status = app.applicationStatus
+        const deployment = app.deployments?.find(
+          (item) => item.deploymentId === deploymentId,
+        )
+        const status = deployment?.status ?? app.applicationStatus
+        if (status === 'running') seenRunning = true
         if (status !== lastStatus) {
           log(`applicationStatus: ${status}`)
           lastStatus = status
         }
-        if (status === 'done') return 'done'
         if (status === 'error') return 'error'
+        if (status === 'done' && (deployment || seenRunning)) return 'done'
         if (status === 'idle' && Date.now() - started >= 30_000) return 'error'
 
         const wait = Math.min(pollMs, deadline - Date.now())
@@ -88,7 +113,7 @@ export function createDokployAdapter(opts: {
       return 'timeout'
     },
 
-    async healthCheck(url, { timeoutMs, intervalMs }) {
+    async healthCheck(url, { timeoutMs, intervalMs, expectPublicationId }) {
       const deadline = Date.now() + timeoutMs
       while (true) {
         try {
@@ -96,7 +121,11 @@ export function createDokployAdapter(opts: {
           const res = await fetchFn(url, {
             signal: AbortSignal.timeout(remaining),
           })
-          if (res.status === 200) return true
+          if (res.status === 200) {
+            if (!expectPublicationId) return true
+            const body = (await res.json()) as { publicationId?: string }
+            if (body.publicationId === expectPublicationId) return true
+          }
         } catch {
           // retry until timeout
         }
@@ -111,11 +140,28 @@ export function createDokployAdapter(opts: {
 interface DokployDeployment {
   deploymentId?: string
   createdAt?: string
+  status?: string
 }
 
 interface DokployApplication {
   applicationStatus?: string
   deployments?: DokployDeployment[]
+  env?: string | null
+  buildArgs?: string | null
+  buildSecrets?: string | null
+  createEnvFile?: boolean | null
+}
+
+function upsertEnvLine(
+  raw: string | null | undefined,
+  key: string,
+  value: string,
+): string {
+  const lines = (raw ?? '').split(/\r?\n/).filter((line) => line.length > 0)
+  const index = lines.findIndex((line) => line.startsWith(`${key}=`))
+  if (index >= 0) lines[index] = `${key}=${value}`
+  else lines.push(`${key}=${value}`)
+  return lines.join('\n')
 }
 
 function newestDeploymentId(

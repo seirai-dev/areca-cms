@@ -17,6 +17,10 @@ export interface DeploymentAdapter {
   ): Promise<'done' | 'error' | 'timeout'>
   healthCheck(
     url: string,
-    opts: { timeoutMs: number; intervalMs: number },
+    opts: {
+      timeoutMs: number
+      intervalMs: number
+      expectPublicationId?: string
+    },
   ): Promise<boolean>
 }
