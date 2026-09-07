@@ -67,7 +67,7 @@ Page title: **Set up Areca**.
 
 Expected: you are signed in and land on `/` (Dashboard). With zero organizations the **Get started** card lists the remaining steps.
 
-A second visit to `/setup` redirects to `/login` (“already set up”). `/login` and every signed-in page also redirect to `/setup` while the user table is empty.
+A second visit to `/setup` redirects to `/login` when you are signed out (“already set up”). If you still have a session you land on the dashboard instead. `/login` and every signed-in page also redirect to `/setup` while the user table is empty.
 
 ## 5. Create an organization
 
