@@ -1,17 +1,26 @@
 import { expect, test } from '@playwright/test'
 
-import { TINY_PNG, login, openSite, uniqueSuffix, waitForSavedDraft } from './helpers'
+import {
+  TINY_PNG,
+  createIsolatedAcmeSite,
+  login,
+  openSite,
+  uniqueSuffix,
+  waitForSavedDraft,
+} from './helpers'
 
 test('owner can author, publish, and release an article', async ({ page }) => {
   test.setTimeout(90_000)
-  const title = `E2E Article ${uniqueSuffix()}`
+  const suffix = uniqueSuffix()
+  const title = `E2E Article ${suffix}`
   const expectedSlug = title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
+  const { siteName } = await createIsolatedAcmeSite(page, `ed-${suffix}`)
 
   await login(page, 'owner@acme.local')
-  await openSite(page, /acme-site/i)
+  await openSite(page, siteName)
 
   await page.getByTestId('collection-articles').getByRole('link', { name: 'Open' }).click()
   await page.getByTestId('new-entry').click()

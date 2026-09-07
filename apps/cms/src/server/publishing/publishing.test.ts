@@ -133,6 +133,7 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
       const liveAfterFirstDeploy = await getLivePublication(ctx.site.id)
       expect(liveAfterFirstDeploy?.id).toBe(second.publication.id)
       expect(liveAfterFirstDeploy?.status).toBe('live')
+      expect(liveAfterFirstDeploy?.wasLive).toBe(true)
       expect((await getPublication(first.publication.id))?.status).toBe(
         'superseded',
       )
@@ -185,6 +186,65 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
       expect((await getPublication(third.publication.id))?.status).toBe(
         'superseded',
       )
+    })
+  })
+
+  it('keeps a previously live publication rollback-eligible after a failed rollback deploy', async () => {
+    await withTestSite(async (ctx) => {
+      await createTestCollection(ctx.site.id)
+      await setDeploymentTarget(ctx.site.id)
+      await seedPublishedEntry(ctx.site.id, ctx.actor.id, ctx.suffix, 'retry')
+
+      const first = await requestPublication({
+        siteId: ctx.site.id,
+        actorId: ctx.actor.id,
+      })
+      expect(first.ok).toBe(true)
+      if (!first.ok) return
+      await processJob(first.job, { adapter: createMockDeploymentAdapter() })
+      expect((await getPublication(first.publication.id))?.wasLive).toBe(true)
+
+      const rollback = await requestRollback({
+        siteId: ctx.site.id,
+        publicationId: first.publication.id,
+        actorId: ctx.actor.id,
+      })
+      await processJob(rollback.job, { adapter: failingAdapter })
+
+      const failed = await getPublication(first.publication.id)
+      expect(failed?.status).toBe('failed')
+      expect(failed?.wasLive).toBe(true)
+
+      const retry = await requestRollback({
+        siteId: ctx.site.id,
+        publicationId: first.publication.id,
+        actorId: ctx.actor.id,
+      })
+      expect(retry.publication.status).toBe('pending')
+      expect(retry.job.status).toBe('queued')
+    })
+  })
+
+  it('rejects rollback for a publication that was never live', async () => {
+    await withTestSite(async (ctx) => {
+      await createTestCollection(ctx.site.id)
+      await seedPublishedEntry(ctx.site.id, ctx.actor.id, ctx.suffix, 'never')
+
+      const first = await requestPublication({
+        siteId: ctx.site.id,
+        actorId: ctx.actor.id,
+      })
+      expect(first.ok).toBe(true)
+      if (!first.ok) return
+      expect((await getPublication(first.publication.id))?.wasLive).toBe(false)
+
+      await expect(
+        requestRollback({
+          siteId: ctx.site.id,
+          publicationId: first.publication.id,
+          actorId: ctx.actor.id,
+        }),
+      ).rejects.toThrow(/has not been live/)
     })
   })
 

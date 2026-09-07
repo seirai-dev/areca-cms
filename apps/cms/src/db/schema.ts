@@ -254,6 +254,7 @@ export const publication = pgTable(
       onDelete: 'set null',
     }),
     status: text('status').$type<PublicationStatus>().notNull(),
+    wasLive: boolean('was_live').notNull().default(false),
     createdAt: createdAt(),
     deployedAt: timestamptz('deployed_at'),
   },

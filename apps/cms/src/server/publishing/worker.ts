@@ -196,7 +196,7 @@ export async function processJob(
         )
       await tx
         .update(publication)
-        .set({ status: 'live', deployedAt: now })
+        .set({ status: 'live', deployedAt: now, wasLive: true })
         .where(eq(publication.id, pub.id))
       await tx
         .update(buildJob)

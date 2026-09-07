@@ -44,6 +44,7 @@ export const Route = createFileRoute('/_app/sites/$siteId/releases')({
 type PublicationRow = {
   id: string
   status: PublicationStatus
+  wasLive: boolean
   snapshotHash: string
   requestedBy: string | null
   createdAt: string | Date
@@ -62,8 +63,8 @@ type JobRow = {
 const EMPTY_PUBLICATIONS: PublicationRow[] = []
 const EMPTY_JOBS: JobRow[] = []
 
-function canRollback(status: PublicationStatus) {
-  return status === 'superseded' || status === 'rolled_back'
+function canRollback(row: PublicationRow) {
+  return row.wasLive && row.status !== 'live'
 }
 
 function ReleasesPage() {
@@ -169,7 +170,7 @@ function ReleasesPage() {
       id: 'actions',
       header: '',
       cell: ({ row }) =>
-        canRollback(row.original.status) ? (
+        canRollback(row.original) ? (
           <Button
             type="button"
             size="sm"

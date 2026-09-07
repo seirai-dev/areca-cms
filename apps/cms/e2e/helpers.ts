@@ -107,6 +107,11 @@ export async function createIsolatedAcmeSite(page: Page, suffix: string) {
   await page.getByTestId('field-label-2').fill('Body')
   await page.getByTestId('field-type-2').click()
   await page.getByRole('option', { name: 'richtext' }).click()
+  await page.getByTestId('add-field').click()
+  await page.getByTestId('field-key-3').fill('heroImage')
+  await page.getByTestId('field-label-3').fill('Hero image')
+  await page.getByTestId('field-type-3').click()
+  await page.getByRole('option', { name: 'image' }).click()
   await page.getByTestId('save-collection').click()
   await expect(page.getByRole('cell', { name: 'articles', exact: true })).toBeVisible(
     { timeout: 15_000 },

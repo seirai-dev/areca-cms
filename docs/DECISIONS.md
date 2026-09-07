@@ -42,7 +42,7 @@ docker-compose.yml    postgres:17, rustfs (S3-compatible), mailpit
   scheduledAt timestamptz, scheduleTimezone, publishedAt, createdBy, updatedBy, timestamps).
 - `entry_revision` (entryId, data JSON, createdBy, createdAt, note).
 - `asset` (organizationId, storageKey, originalFilename, mimeType, size, width, height, altText, createdBy).
-- `publication` (siteId, snapshot JSON, snapshotHash sha256, requestedBy, status: `pending|building|live|failed|superseded|rolled_back`, createdAt, deployedAt).
+- `publication` (siteId, snapshot JSON, snapshotHash sha256, requestedBy, status: `pending|building|live|failed|superseded|rolled_back`, wasLive bool, createdAt, deployedAt). `wasLive` stays true after the first successful deploy so a later failed rollback can be retried.
 - `build_job` (siteId, publicationId, priority int (higher first; "urgent" = 100), status:
   `queued|building|validating|deploying|succeeded|failed|cancelled`, attempts, startedAt, finishedAt, logs text, error text).
 - `audit_log` (organizationId, siteId?, actorId, action, targetType, targetId, meta JSON, createdAt).
@@ -58,7 +58,7 @@ Field def: `{ key, label, type, required?, options? (select), collection? (refer
 4. Worker (in-process `setInterval` loop in the CMS server, one job per site at a time, global concurrency 2):
    `building` → call `DeploymentAdapter.deploy(site)` → poll status until done (timeout) → `healthCheck(url)` → publication `live`,
    previous live publication → `superseded`; entries with status `scheduled` whose time passed → `published`. On failure: job `failed`, publication `failed`, previous stays live.
-5. Rollback: pick an earlier publication → new build job with that publication id (becomes `live` again after success).
+5. Rollback: pick a publication with `wasLive` → new build job with that publication id (becomes `live` again after success). Eligibility is `wasLive`, not current status, so a failed rollback can be retried.
 
 ## Site integration (how the site gets content)
 - Dokploy builds the site from its git repo. Build env has `ARECA_CMS_URL`, `ARECA_SITE_TOKEN`.

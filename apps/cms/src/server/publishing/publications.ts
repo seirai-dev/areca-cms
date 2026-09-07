@@ -2,16 +2,10 @@ import { and, desc, eq, inArray } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { buildJob, publication, site } from '#/db/schema'
-import type { BuildJobStatus, PublicationStatus } from '#/lib/types'
+import type { BuildJobStatus } from '#/lib/types'
 import { audit } from '#/server/audit'
 import { buildSnapshot } from '#/server/content/snapshot'
 import { ConflictError, NotFoundError, ValidationError } from '#/server/content/errors'
-
-const ROLLBACK_STATUSES: PublicationStatus[] = [
-  'live',
-  'superseded',
-  'rolled_back',
-]
 
 export function dbActorId(actorId: string | null | undefined) {
   if (!actorId || actorId === 'system') return null
@@ -144,7 +138,7 @@ export async function requestRollback(input: {
   if (!pub || pub.siteId !== input.siteId) {
     throw new NotFoundError('Publication not found')
   }
-  if (!ROLLBACK_STATUSES.includes(pub.status)) {
+  if (!pub.wasLive) {
     throw new ValidationError([
       {
         path: 'publicationId',
