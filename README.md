@@ -33,6 +33,10 @@ publication marked live
 
 ## Quick start
 
+Empty CMS (recommended first time): see [`docs/ONBOARDING.md`](docs/ONBOARDING.md).
+
+Seeded demo data:
+
 ```powershell
 docker compose up -d
 pnpm install
@@ -69,6 +73,7 @@ pnpm -r typecheck
 
 ## Docs
 
+- [`docs/ONBOARDING.md`](docs/ONBOARDING.md) — empty CMS → first admin → demo site
 - [`docs/DECISIONS.md`](docs/DECISIONS.md) — architecture decisions
 - [`docs/MVP_STATUS.md`](docs/MVP_STATUS.md) — Suggested MVP audit
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — Dokploy customer-site deploy
