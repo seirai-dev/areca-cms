@@ -16,7 +16,11 @@ test('site token can sync a manifest and read an empty snapshot', async ({
 
   await login(page)
   await page.goto('/admin/organizations')
+  await expect(page.getByRole('heading', { name: 'Organizations' })).toBeVisible()
+  await expect(page.getByRole('table')).toBeVisible()
+
   await page.getByTestId('new-organization').click()
+  await expect(page.getByTestId('org-name')).toBeVisible()
   await page.getByTestId('org-name').fill(orgName)
   await expect(page.getByTestId('org-slug')).toHaveValue(orgSlug)
   await page.getByRole('button', { name: 'Create organization' }).click()
