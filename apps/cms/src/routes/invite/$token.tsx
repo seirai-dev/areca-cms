@@ -122,6 +122,7 @@ function InvitePage() {
                     type="password"
                     autoComplete="new-password"
                     required
+                    minLength={8}
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                   />

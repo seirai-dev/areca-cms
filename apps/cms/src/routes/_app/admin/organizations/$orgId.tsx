@@ -68,7 +68,7 @@ function OrganizationDetailPage() {
   const [siteName, setSiteName] = useState('')
   const [siteSlug, setSiteSlug] = useState('')
   const [slugTouched, setSlugTouched] = useState(false)
-  const [productionUrl, setProductionUrl] = useState('https://')
+  const [productionUrl, setProductionUrl] = useState('http://localhost:3001')
   const [createdToken, setCreatedToken] = useState<string | null>(null)
   const [orgName, setOrgName] = useState('')
 
@@ -100,7 +100,7 @@ function OrganizationDetailPage() {
       setSiteName('')
       setSiteSlug('')
       setSlugTouched(false)
-      setProductionUrl('https://')
+      setProductionUrl('http://localhost:3001')
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: adminQueryKeys.sites(orgId) }),
         queryClient.invalidateQueries({
@@ -169,7 +169,11 @@ function OrganizationDetailPage() {
   const hasSites = (org.siteCount ?? 0) > 0 || (sitesQuery.data?.length ?? 0) > 0
 
   return (
-    <div className="grid gap-6">
+    <div
+      className="grid gap-6"
+      data-testid="organization-page"
+      data-ready="true"
+    >
       <PageHeader title={org.name} description={org.slug} />
       {createdToken ? <TokenAlert token={createdToken} /> : null}
 
@@ -236,7 +240,8 @@ function OrganizationDetailPage() {
                 <DialogHeader>
                   <DialogTitle>New site</DialogTitle>
                   <DialogDescription>
-                    The site token is shown once after creation.
+                    The site token is shown once after creation. For the local
+                    demo site use http://localhost:3001 as the production URL.
                   </DialogDescription>
                 </DialogHeader>
                 <FormField label="Name" htmlFor="site-name">
@@ -266,6 +271,7 @@ function OrganizationDetailPage() {
                     data-testid="site-production-url"
                     type="url"
                     required
+                    placeholder="http://localhost:3001"
                     value={productionUrl}
                     onChange={(event) => setProductionUrl(event.target.value)}
                   />

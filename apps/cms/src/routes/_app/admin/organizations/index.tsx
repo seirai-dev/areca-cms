@@ -87,7 +87,11 @@ function OrganizationsPage() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <div className="grid gap-6">
+      <div
+        className="grid gap-6"
+        data-testid="organizations-page"
+        data-ready={orgsQuery.isFetched ? 'true' : 'false'}
+      >
         <PageHeader
           title="Organizations"
           description="Agency customers and their sites."

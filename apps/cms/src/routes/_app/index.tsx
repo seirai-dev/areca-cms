@@ -1,6 +1,7 @@
 import { Link, createFileRoute } from '@tanstack/react-router'
 
 import { EmptyState } from '#/components/empty-state'
+import { GetStarted } from '#/components/get-started'
 import { PageHeader } from '#/components/page-header'
 import { Button } from '#/components/ui/button'
 import {
@@ -31,7 +32,9 @@ function DashboardPage() {
           ) : null
         }
       />
-      {me.sites.length === 0 ? (
+      {me.user.isAgencyAdmin && me.organizationCount === 0 ? (
+        <GetStarted />
+      ) : me.sites.length === 0 ? (
         <EmptyState
           title="No sites yet"
           description="You do not have access to any sites."

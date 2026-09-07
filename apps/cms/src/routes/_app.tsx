@@ -9,9 +9,14 @@ import {
   SidebarTrigger,
 } from '#/components/ui/sidebar'
 import { getMeFn } from '#/server/fn/me'
+import { getSetupStatusFn } from '#/server/fn/setup'
 
 export const Route = createFileRoute('/_app')({
   beforeLoad: async ({ location }) => {
+    const { needsSetup } = await getSetupStatusFn()
+    if (needsSetup) {
+      throw redirect({ href: '/setup' })
+    }
     const me = await getMeFn()
     if (!me) {
       throw redirect({

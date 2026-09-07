@@ -10,10 +10,16 @@ export function SlugFieldInput({
   onChange: (value: string) => void
 }) {
   return (
-    <Input
-      id={id}
-      value={typeof value === 'string' ? value : ''}
-      onChange={(event) => onChange(event.target.value)}
-    />
+    <div className="grid gap-1">
+      <Input
+        id={id}
+        value={typeof value === 'string' ? value : ''}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      <p className="text-xs text-muted-foreground">
+        Lowercase letters, numbers, and hyphens only (e.g. hello-world).
+        Filled from the title until you edit it.
+      </p>
+    </div>
   )
 }

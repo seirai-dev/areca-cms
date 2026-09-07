@@ -129,7 +129,8 @@ export function ReleaseStatusBar({ siteId }: { siteId: string }) {
         </div>
       </div>
       <p className="text-sm text-muted-foreground">
-        Publishing builds and deploys all published entries.
+        Publishing builds a snapshot of all published entries. Without a
+        deployment target the release goes live immediately.
       </p>
       {publishErrors.length > 0 ? (
         <Alert variant="destructive">

@@ -15,6 +15,7 @@ import { FormField } from '#/components/form-field'
 import { authClient } from '#/lib/auth-client'
 import { safeRedirectPath } from '#/lib/safe-redirect'
 import { getMeFn } from '#/server/fn/me'
+import { getSetupStatusFn } from '#/server/fn/setup'
 
 type LoginSearch = {
   redirect?: string
@@ -25,6 +26,10 @@ export const Route = createFileRoute('/login')({
     redirect: typeof search.redirect === 'string' ? search.redirect : undefined,
   }),
   beforeLoad: async ({ search }) => {
+    const { needsSetup } = await getSetupStatusFn()
+    if (needsSetup) {
+      throw redirect({ href: '/setup' })
+    }
     const me = await getMeFn()
     if (me) {
       throw redirect({ href: safeRedirectPath(search.redirect) })

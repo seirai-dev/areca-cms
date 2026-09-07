@@ -51,7 +51,7 @@ function SiteContentPage() {
       ) : collections.length === 0 ? (
         <EmptyState
           title="No collections"
-          description="This site has no enabled collections yet."
+          description="Sync a manifest from your site (`pnpm sync-manifest`) or add a collection in Settings."
         />
       ) : (
         <div className="grid gap-4 md:grid-cols-2">

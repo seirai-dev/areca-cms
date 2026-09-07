@@ -197,7 +197,11 @@ function SiteSettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>General</CardTitle>
-          <CardDescription>Public site name and production URL.</CardDescription>
+          <CardDescription>
+            Production URL is the live site origin (local demo:{' '}
+            <code>http://localhost:3001</code>). Preview opens{' '}
+            <code>/__preview/…</code> on this host.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form className="grid max-w-lg gap-4" onSubmit={onGeneral}>

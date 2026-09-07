@@ -11,8 +11,17 @@ export default defineConfig({
   },
   projects: [
     {
-      name: 'chromium',
+      name: 'setup',
+      testMatch: /setup\.spec\.ts/,
+      fullyParallel: false,
+      workers: 1,
       use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'chromium',
+      testIgnore: /setup\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'] },
+      dependencies: ['setup'],
     },
   ],
   webServer: {

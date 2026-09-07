@@ -1,5 +1,5 @@
 import { createServerFn } from '@tanstack/react-start'
-import { eq, inArray } from 'drizzle-orm'
+import { eq, inArray, sql } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { db } from '#/db'
@@ -32,6 +32,7 @@ export type Me = {
     organizationName: string
     productionUrl: string
   }>
+  organizationCount: number
 }
 
 export const getMeFn = createServerFn({ method: 'GET', ...meFn }).handler(
@@ -89,7 +90,17 @@ export const getMeFn = createServerFn({ method: 'GET', ...meFn }).handler(
             )
             .orderBy(site.name)
 
-    return { user: currentUser, memberships, sites }
+    const organizationCount = currentUser.isAgencyAdmin
+      ? Number(
+          (
+            await db
+              .select({ n: sql<number>`cast(count(*) as int)` })
+              .from(organization)
+          )[0]?.n ?? 0,
+        )
+      : memberships.length
+
+    return { user: currentUser, memberships, sites, organizationCount }
   },
 )
 
