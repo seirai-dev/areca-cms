@@ -29,11 +29,19 @@ test('owner can publish twice and rollback the superseded release', async ({
     { timeout: 15_000 },
   )
 
-  await page.getByRole('link', { name: 'Content' }).click()
+  await page
+    .getByTestId('site-nav')
+    .getByRole('link', { name: 'Content' })
+    .click()
   await page.getByTestId('publish-site').click()
-  await expect(page.getByTestId('release-live')).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByTestId('release-live')).toBeVisible({
+    timeout: 30_000,
+  })
 
-  await page.getByTestId('collection-articles').getByRole('link', { name: 'Open' }).click()
+  await page
+    .getByTestId('collection-articles')
+    .getByRole('link', { name: 'Open' })
+    .click()
   await page.getByRole('link', { name: title }).click()
   await expect(page.getByTestId('entry-editor')).toHaveAttribute(
     'data-ready',
@@ -51,18 +59,29 @@ test('owner can publish twice and rollback the superseded release', async ({
     { timeout: 15_000 },
   )
 
-  await page.getByRole('link', { name: 'Content' }).click()
+  await page
+    .getByTestId('site-nav')
+    .getByRole('link', { name: 'Content' })
+    .click()
   await page.getByTestId('publish-site').click()
-  await expect(page.getByTestId('release-live')).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByTestId('release-live')).toBeVisible({
+    timeout: 30_000,
+  })
 
-  await page.getByRole('link', { name: 'Releases' }).click()
+  await page
+    .getByTestId('site-nav')
+    .getByRole('link', { name: 'Releases' })
+    .click()
   await expect(page.getByTestId('publication-status-live')).toHaveCount(1, {
     timeout: 30_000,
   })
   await expect(page.getByTestId('publication-status-superseded')).toHaveCount(1)
 
   await page.getByTestId('rollback-publication').click()
-  await page.getByRole('alertdialog').getByRole('button', { name: 'Rollback' }).click()
+  await page
+    .getByRole('alertdialog')
+    .getByRole('button', { name: 'Rollback' })
+    .click()
   await expect(page.getByText('Rollback requested')).toBeVisible({
     timeout: 15_000,
   })

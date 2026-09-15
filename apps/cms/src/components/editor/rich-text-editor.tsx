@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import { EditorContent, useEditor } from '@tiptap/react'
+import type { FormEvent } from 'react'
+import { EditorContent, useEditor, useEditorState } from '@tiptap/react'
+import { BubbleMenu } from '@tiptap/react/menus'
 import {
   Bold,
   Code,
@@ -9,44 +11,110 @@ import {
   ImageIcon,
   Italic,
   Link2,
+  Link2Off,
   List,
   ListOrdered,
   Minus,
+  Pilcrow,
   Quote,
   Redo2,
   Undo2,
 } from 'lucide-react'
 
 import { Button } from '#/components/ui/button'
+import { Input } from '#/components/ui/input'
+import { Label } from '#/components/ui/label'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '#/components/ui/popover'
+import { Separator } from '#/components/ui/separator'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '#/components/ui/tooltip'
 import { richTextExtensions } from '#/server/richtext/extensions'
+import { isAllowedLinkHref } from '#/server/richtext/allowlist'
 
-import { MediaPickerDialog, type MediaAsset } from './media-picker'
+import { MediaPickerDialog } from './media-picker'
+import type { MediaAsset } from './media-picker'
 import { assetFileUrl, emptyRichText } from './utils'
+
+const isMac =
+  typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
+const mod = isMac ? '⌘' : 'Ctrl+'
 
 function ToolbarButton({
   onClick,
   active,
+  disabled,
   label,
+  shortcut,
   children,
+  ...rest
 }: {
-  onClick: () => void
+  onClick?: () => void
   active?: boolean
+  disabled?: boolean
   label: string
+  shortcut?: string
   children: React.ReactNode
-}) {
+} & Omit<React.ComponentProps<typeof Button>, 'onClick' | 'children'>) {
   return (
-    <Button
-      type="button"
-      size="icon-xs"
-      variant={active ? 'secondary' : 'ghost'}
-      aria-label={label}
-      onClick={onClick}
-    >
-      {children}
-    </Button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          size="icon-sm"
+          variant={active ? 'secondary' : 'ghost'}
+          aria-label={label}
+          aria-pressed={active}
+          disabled={disabled}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={onClick}
+          {...rest}
+        >
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">
+        {label}
+        {shortcut ? (
+          <span className="ml-1.5 opacity-70">{shortcut}</span>
+        ) : null}
+      </TooltipContent>
+    </Tooltip>
   )
 }
 
+const EMPTY_TOOLBAR_STATE = {
+  isEmpty: true,
+  h2: false,
+  h3: false,
+  h4: false,
+  paragraph: true,
+  bold: false,
+  italic: false,
+  link: false,
+  bulletList: false,
+  orderedList: false,
+  blockquote: false,
+  codeBlock: false,
+  canUndo: false,
+  canRedo: false,
+}
+
+function ToolbarSeparator() {
+  return <Separator orientation="vertical" className="mx-0.5 h-5 self-center" />
+}
+
+/**
+ * Tiptap-based editor. The toolbar sticks below the app header (and the entry
+ * action bar) while the body scrolls; `--rich-text-toolbar-top` is set by the
+ * entry editor to the combined height of whatever is stacked above.
+ */
 export function RichTextEditor({
   value,
   onChange,
@@ -57,6 +125,9 @@ export function RichTextEditor({
   organizationId: string
 }) {
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [linkOpen, setLinkOpen] = useState(false)
+  const [linkHref, setLinkHref] = useState('')
+  const [linkError, setLinkError] = useState<string | null>(null)
 
   const editor = useEditor({
     extensions: richTextExtensions,
@@ -65,13 +136,38 @@ export function RichTextEditor({
     editorProps: {
       attributes: {
         class:
-          'prose prose-sm min-h-40 max-w-none px-3 py-2 focus:outline-none [&_img]:h-auto [&_img]:max-w-xs [&_img]:min-h-16',
+          'prose prose-sm min-h-56 max-w-none px-4 py-3 focus:outline-none [&_img]:h-auto [&_img]:max-w-xs [&_img]:min-h-16 [&_a]:underline',
         'data-testid': 'rich-text-editor',
       },
     },
     onUpdate: ({ editor: next }) => {
       onChange(next.getJSON())
     },
+  })
+
+  // Subscribe to the pieces of editor state the toolbar renders, so active
+  // states update on selection changes (not only on document changes).
+  const liveState = useEditorState({
+    editor,
+    selector: ({ editor: e }) =>
+      e
+        ? {
+            isEmpty: e.isEmpty,
+            h2: e.isActive('heading', { level: 2 }),
+            h3: e.isActive('heading', { level: 3 }),
+            h4: e.isActive('heading', { level: 4 }),
+            paragraph: e.isActive('paragraph'),
+            bold: e.isActive('bold'),
+            italic: e.isActive('italic'),
+            link: e.isActive('link'),
+            bulletList: e.isActive('bulletList'),
+            orderedList: e.isActive('orderedList'),
+            blockquote: e.isActive('blockquote'),
+            codeBlock: e.isActive('codeBlock'),
+            canUndo: e.can().undo(),
+            canRedo: e.can().redo(),
+          }
+        : null,
   })
 
   useEffect(() => {
@@ -95,117 +191,302 @@ export function RichTextEditor({
     [editor],
   )
 
-  if (!editor) {
-    return <div className="min-h-40 rounded-md border" />
+  const openLinkEditor = useCallback(() => {
+    if (!editor) return
+    setLinkHref((editor.getAttributes('link').href as string | undefined) ?? '')
+    setLinkError(null)
+    setLinkOpen(true)
+  }, [editor])
+
+  function applyLink(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!editor) return
+    let href = linkHref.trim()
+    if (!href) {
+      editor.chain().focus().extendMarkRange('link').unsetLink().run()
+      setLinkOpen(false)
+      return
+    }
+    if (!/^[a-z]+:/i.test(href)) href = `https://${href}`
+    if (!isAllowedLinkHref(href)) {
+      setLinkError('Enter a valid http(s) or mailto link.')
+      return
+    }
+    const { from, to, empty } = editor.state.selection
+    if (empty && !editor.isActive('link')) {
+      editor
+        .chain()
+        .focus()
+        .insertContent({
+          type: 'text',
+          text: href,
+          marks: [{ type: 'link', attrs: { href } }],
+        })
+        .run()
+    } else {
+      editor
+        .chain()
+        .focus()
+        .setTextSelection({ from, to })
+        .extendMarkRange('link')
+        .setLink({ href })
+        .run()
+    }
+    setLinkOpen(false)
   }
 
+  if (!editor) {
+    return (
+      <div className="min-h-56 animate-pulse rounded-md border bg-muted/40" />
+    )
+  }
+
+  // Until the first transaction the state snapshot can lag behind the editor
+  // instance (e.g. a brand-new entry with default content), so fall back to a
+  // neutral state instead of hiding the editor.
+  const state = liveState ?? EMPTY_TOOLBAR_STATE
+
+  const chain = () => editor.chain().focus()
+
   return (
-    <div className="rounded-md border">
-      <div className="flex flex-wrap gap-0.5 border-b p-1">
+    <div className="relative rounded-md border bg-card focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/30">
+      <div
+        className="sticky z-10 flex flex-wrap items-center gap-0.5 rounded-t-md border-b bg-card/95 p-1 backdrop-blur supports-[backdrop-filter]:bg-card/80"
+        style={{ top: 'var(--rich-text-toolbar-top, var(--app-header-h))' }}
+        role="toolbar"
+        aria-label="Formatting"
+      >
+        <ToolbarButton
+          label="Paragraph"
+          active={state.paragraph}
+          onClick={() => chain().setParagraph().run()}
+        >
+          <Pilcrow />
+        </ToolbarButton>
         <ToolbarButton
           label="Heading 2"
-          active={editor.isActive('heading', { level: 2 })}
-          onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+          shortcut={`${mod}⌥2`}
+          active={state.h2}
+          onClick={() => chain().toggleHeading({ level: 2 }).run()}
         >
           <Heading2 />
         </ToolbarButton>
         <ToolbarButton
           label="Heading 3"
-          active={editor.isActive('heading', { level: 3 })}
-          onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+          shortcut={`${mod}⌥3`}
+          active={state.h3}
+          onClick={() => chain().toggleHeading({ level: 3 }).run()}
         >
           <Heading3 />
         </ToolbarButton>
         <ToolbarButton
           label="Heading 4"
-          active={editor.isActive('heading', { level: 4 })}
-          onClick={() => editor.chain().focus().toggleHeading({ level: 4 }).run()}
+          shortcut={`${mod}⌥4`}
+          active={state.h4}
+          onClick={() => chain().toggleHeading({ level: 4 }).run()}
         >
           <Heading4 />
         </ToolbarButton>
+        <ToolbarSeparator />
         <ToolbarButton
           label="Bold"
-          active={editor.isActive('bold')}
-          onClick={() => editor.chain().focus().toggleBold().run()}
+          shortcut={`${mod}B`}
+          active={state.bold}
+          onClick={() => chain().toggleBold().run()}
         >
           <Bold />
         </ToolbarButton>
         <ToolbarButton
           label="Italic"
-          active={editor.isActive('italic')}
-          onClick={() => editor.chain().focus().toggleItalic().run()}
+          shortcut={`${mod}I`}
+          active={state.italic}
+          onClick={() => chain().toggleItalic().run()}
         >
           <Italic />
         </ToolbarButton>
-        <ToolbarButton
-          label="Link"
-          active={editor.isActive('link')}
-          onClick={() => {
-            const { from, to } = editor.state.selection
-            const href = window.prompt(
-              'Link URL',
-              editor.getAttributes('link').href ?? 'https://',
-            )
-            if (href === null) return
-            if (href === '') {
-              editor.chain().focus().unsetLink().run()
-              return
-            }
-            editor
-              .chain()
-              .focus()
-              .setTextSelection({ from, to })
-              .setLink({ href })
-              .run()
-          }}
-        >
-          <Link2 />
-        </ToolbarButton>
+        <Popover open={linkOpen} onOpenChange={setLinkOpen}>
+          <PopoverTrigger asChild>
+            <ToolbarButton
+              label={state.link ? 'Edit link' : 'Link'}
+              shortcut={`${mod}K`}
+              active={state.link}
+              onClick={openLinkEditor}
+              data-testid="rich-text-link"
+            >
+              <Link2 />
+            </ToolbarButton>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-80">
+            <form className="grid gap-3" onSubmit={applyLink}>
+              <div className="grid gap-1.5">
+                <Label htmlFor="rich-text-link-url">Link URL</Label>
+                <Input
+                  id="rich-text-link-url"
+                  autoFocus
+                  placeholder="https://example.com"
+                  value={linkHref}
+                  onChange={(event) => {
+                    setLinkHref(event.target.value)
+                    setLinkError(null)
+                  }}
+                  aria-invalid={linkError ? true : undefined}
+                />
+                {linkError ? (
+                  <p className="text-xs text-destructive" role="alert">
+                    {linkError}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Links open in a new tab on the live site.
+                  </p>
+                )}
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                {state.link ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      chain().extendMarkRange('link').unsetLink().run()
+                      setLinkOpen(false)
+                    }}
+                  >
+                    <Link2Off />
+                    Remove
+                  </Button>
+                ) : (
+                  <span />
+                )}
+                <Button type="submit" size="sm">
+                  {state.link ? 'Update' : 'Add link'}
+                </Button>
+              </div>
+            </form>
+          </PopoverContent>
+        </Popover>
+        <ToolbarSeparator />
         <ToolbarButton
           label="Bullet list"
-          active={editor.isActive('bulletList')}
-          onClick={() => editor.chain().focus().toggleBulletList().run()}
+          shortcut={`${mod}⇧8`}
+          active={state.bulletList}
+          onClick={() => chain().toggleBulletList().run()}
         >
           <List />
         </ToolbarButton>
         <ToolbarButton
-          label="Ordered list"
-          active={editor.isActive('orderedList')}
-          onClick={() => editor.chain().focus().toggleOrderedList().run()}
+          label="Numbered list"
+          shortcut={`${mod}⇧7`}
+          active={state.orderedList}
+          onClick={() => chain().toggleOrderedList().run()}
         >
           <ListOrdered />
         </ToolbarButton>
         <ToolbarButton
           label="Quote"
-          active={editor.isActive('blockquote')}
-          onClick={() => editor.chain().focus().toggleBlockquote().run()}
+          shortcut={`${mod}⇧B`}
+          active={state.blockquote}
+          onClick={() => chain().toggleBlockquote().run()}
         >
           <Quote />
         </ToolbarButton>
         <ToolbarButton
           label="Code block"
-          active={editor.isActive('codeBlock')}
-          onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+          shortcut={`${mod}⌥C`}
+          active={state.codeBlock}
+          onClick={() => chain().toggleCodeBlock().run()}
         >
           <Code />
         </ToolbarButton>
-        <ToolbarButton label="Image" onClick={() => setPickerOpen(true)}>
+        <ToolbarSeparator />
+        <ToolbarButton label="Insert image" onClick={() => setPickerOpen(true)}>
           <ImageIcon />
         </ToolbarButton>
         <ToolbarButton
-          label="Horizontal rule"
-          onClick={() => editor.chain().focus().setHorizontalRule().run()}
+          label="Divider"
+          onClick={() => chain().setHorizontalRule().run()}
         >
           <Minus />
         </ToolbarButton>
-        <ToolbarButton label="Undo" onClick={() => editor.chain().focus().undo().run()}>
-          <Undo2 />
-        </ToolbarButton>
-        <ToolbarButton label="Redo" onClick={() => editor.chain().focus().redo().run()}>
-          <Redo2 />
-        </ToolbarButton>
+        <div className="ml-auto flex items-center gap-0.5">
+          <ToolbarButton
+            label="Undo"
+            shortcut={`${mod}Z`}
+            disabled={!state.canUndo}
+            onClick={() => chain().undo().run()}
+          >
+            <Undo2 />
+          </ToolbarButton>
+          <ToolbarButton
+            label="Redo"
+            shortcut={`${mod}⇧Z`}
+            disabled={!state.canRedo}
+            onClick={() => chain().redo().run()}
+          >
+            <Redo2 />
+          </ToolbarButton>
+        </div>
       </div>
-      <EditorContent editor={editor} />
+
+      <div className="relative">
+        {state.isEmpty ? (
+          <p
+            aria-hidden="true"
+            className="pointer-events-none absolute top-3 left-4 text-sm text-muted-foreground"
+          >
+            Start writing…
+          </p>
+        ) : null}
+        <EditorContent editor={editor} />
+      </div>
+
+      <BubbleMenu
+        editor={editor}
+        appendTo={() => document.body}
+        options={{ strategy: 'fixed', placement: 'top', offset: 8 }}
+        shouldShow={({ editor: e, from, to }) =>
+          from !== to && !e.isActive('image') && !e.isActive('codeBlock')
+        }
+        className="z-40 flex items-center gap-0.5 rounded-md border bg-popover p-0.5 text-popover-foreground shadow-md"
+      >
+        <ToolbarButton
+          label="Bold"
+          active={state.bold}
+          onClick={() => chain().toggleBold().run()}
+        >
+          <Bold />
+        </ToolbarButton>
+        <ToolbarButton
+          label="Italic"
+          active={state.italic}
+          onClick={() => chain().toggleItalic().run()}
+        >
+          <Italic />
+        </ToolbarButton>
+        <ToolbarButton
+          label={state.link ? 'Edit link' : 'Link'}
+          active={state.link}
+          onClick={openLinkEditor}
+        >
+          <Link2 />
+        </ToolbarButton>
+        <ToolbarSeparator />
+        <ToolbarButton
+          label="Heading 2"
+          active={state.h2}
+          onClick={() => chain().toggleHeading({ level: 2 }).run()}
+        >
+          <Heading2 />
+        </ToolbarButton>
+        <ToolbarButton
+          label="Heading 3"
+          active={state.h3}
+          onClick={() => chain().toggleHeading({ level: 3 }).run()}
+        >
+          <Heading3 />
+        </ToolbarButton>
+      </BubbleMenu>
+
       <MediaPickerDialog
         open={pickerOpen}
         onOpenChange={setPickerOpen}

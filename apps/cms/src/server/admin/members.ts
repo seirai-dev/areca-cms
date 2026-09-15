@@ -6,10 +6,19 @@ import { db } from '#/db'
 import { invitation, membership, organization, user } from '#/db/schema'
 import { env } from '#/env'
 import type { MembershipRole } from '#/lib/types'
+import { getBranding } from '#/server/admin/branding'
 import { audit } from '#/server/audit'
 import { ConflictError, NotFoundError } from '#/server/content/errors'
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
 
 export async function listMembers(organizationId: string) {
   return db
@@ -199,11 +208,13 @@ export async function inviteMember(input: {
   }
 
   const link = `${env.APP_URL}/invite/${token}`
+  const brand = await getBranding()
   await sendEmail({
     to: input.email,
+    fromName: brand.emailFromName ?? brand.appName,
     subject: `Invitation to ${org.name}`,
-    text: `You have been invited to ${org.name} as ${input.role}.\n\nAccept: ${link}`,
-    html: `<p>You have been invited to ${org.name} as ${input.role}.</p><p><a href="${link}">Accept invitation</a></p>`,
+    text: `You have been invited to ${org.name} as ${input.role}.\n\nAccept: ${link}\n\n— ${brand.appName}`,
+    html: `<p>You have been invited to ${org.name} as ${input.role}.</p><p><a href="${link}">Accept invitation</a></p><p style="color:#666;font-size:12px">— ${escapeHtml(brand.appName)}</p>`,
   })
 
   await audit({
@@ -266,7 +277,10 @@ export async function getInvitation(token: string) {
   return row ?? null
 }
 
-export async function acceptInvitation(input: { token: string; userId: string }) {
+export async function acceptInvitation(input: {
+  token: string
+  userId: string
+}) {
   const invite = await getInvitation(input.token)
   if (!invite) {
     throw new NotFoundError('Invitation not found')

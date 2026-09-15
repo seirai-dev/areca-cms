@@ -1,7 +1,9 @@
-import { execSync, spawn, type ChildProcess } from 'node:child_process'
+import { execSync, spawn } from 'node:child_process'
+import type { ChildProcess } from 'node:child_process'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { expect, test, type Browser, type Page } from '@playwright/test'
+import { expect, test } from '@playwright/test'
+import type { Browser, Page } from '@playwright/test'
 
 import {
   datetimeLocalMinutesAgo,
@@ -90,11 +92,14 @@ async function fillRichText(page: Page) {
   await page.keyboard.press('Enter')
   await page.getByRole('button', { name: 'Image' }).click()
   await expect(page.getByTestId('media-picker')).toBeVisible()
-  await page.getByTestId('media-picker').getByTestId('media-upload').setInputFiles({
-    name: 'body-inline.png',
-    mimeType: 'image/png',
-    buffer: QA_PNG,
-  })
+  await page
+    .getByTestId('media-picker')
+    .getByTestId('media-upload')
+    .setInputFiles({
+      name: 'body-inline.png',
+      mimeType: 'image/png',
+      buffer: QA_PNG,
+    })
   await expect(page.getByTestId('media-picker')).toBeHidden({ timeout: 15_000 })
   await expect(editor.locator('img')).toHaveCount(1, { timeout: 15_000 })
 }
@@ -103,7 +108,9 @@ test('01 setup, get started, sign out and back in', async ({ page }) => {
   test.setTimeout(90_000)
   await page.goto('http://localhost:3000')
   await expect(page).toHaveURL(/\/setup/, { timeout: 15_000 })
-  await expect(page.getByRole('heading', { name: 'Set up Areca' })).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Set up Areca' }),
+  ).toBeVisible()
   await screenshot(page, 'setup')
 
   await expect(page.locator('form[data-ready="true"]')).toBeVisible()
@@ -144,7 +151,9 @@ test('02 create org, site, invites, role dashboards, admin lists', async ({
   test.setTimeout(180_000)
   await qaLogin(page, 'qa-admin@areca.local')
   await page.goto('/admin/organizations')
-  await expect(page.getByRole('heading', { name: 'Organizations' })).toBeVisible({
+  await expect(
+    page.getByRole('heading', { name: 'Organizations' }),
+  ).toBeVisible({
     timeout: 15_000,
   })
   await expect(page.getByTestId('organizations-page')).toHaveAttribute(
@@ -179,7 +188,9 @@ test('02 create org, site, invites, role dashboards, admin lists', async ({
   await expect(page.getByRole('heading', { name: 'New site' })).toHaveCount(0, {
     timeout: 15_000,
   })
-  state.siteToken = (await page.getByTestId('site-token-value').innerText()).trim()
+  state.siteToken = (
+    await page.getByTestId('site-token-value').innerText()
+  ).trim()
   expect(state.siteToken).toBeTruthy()
   await screenshot(page, 'site-token-once')
 
@@ -191,7 +202,9 @@ test('02 create org, site, invites, role dashboards, admin lists', async ({
     await page.getByRole('tab', { name: 'Members' }).click()
     await expect(page.getByTestId('pending-invitations')).toBeVisible()
     await page.getByTestId('invite-member').click()
-    await expect(page.getByTestId('invite-email')).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByTestId('invite-email')).toBeVisible({
+      timeout: 15_000,
+    })
     await page.getByTestId('invite-email').fill(email)
     await page.locator('#invite-role').click()
     await page.getByRole('listbox').waitFor()
@@ -219,12 +232,19 @@ test('02 create org, site, invites, role dashboards, admin lists', async ({
     ownerLink,
   )
   await expect(
-    owner.page.getByTestId('sites-nav').getByRole('link', { name: /Acme Site/ }),
+    owner.page
+      .getByTestId('sites-nav')
+      .getByRole('link', { name: /Acme Site/ }),
   ).toBeVisible()
   await expect(owner.page.getByTestId('agency-nav')).toHaveCount(0)
-  await owner.page.getByTestId('sites-nav').getByRole('link', { name: /Acme Site/ }).click()
+  await owner.page
+    .getByTestId('sites-nav')
+    .getByRole('link', { name: /Acme Site/ })
+    .click()
   await expect(owner.page.getByTestId('team-nav')).toBeVisible()
-  await expect(owner.page.getByRole('link', { name: 'Settings' })).toHaveCount(0)
+  await expect(owner.page.getByRole('link', { name: 'Settings' })).toHaveCount(
+    0,
+  )
   await expect(owner.page.getByTestId('site-content')).toHaveAttribute(
     'data-ready',
     'true',
@@ -238,12 +258,19 @@ test('02 create org, site, invites, role dashboards, admin lists', async ({
     editorLink,
   )
   await expect(
-    editor.page.getByTestId('sites-nav').getByRole('link', { name: /Acme Site/ }),
+    editor.page
+      .getByTestId('sites-nav')
+      .getByRole('link', { name: /Acme Site/ }),
   ).toBeVisible()
   await expect(editor.page.getByTestId('agency-nav')).toHaveCount(0)
-  await editor.page.getByTestId('sites-nav').getByRole('link', { name: /Acme Site/ }).click()
+  await editor.page
+    .getByTestId('sites-nav')
+    .getByRole('link', { name: /Acme Site/ })
+    .click()
   await expect(editor.page.getByTestId('team-nav')).toHaveCount(0)
-  await expect(editor.page.getByRole('link', { name: 'Settings' })).toHaveCount(0)
+  await expect(editor.page.getByRole('link', { name: 'Settings' })).toHaveCount(
+    0,
+  )
   await expect(editor.page.getByTestId('site-content')).toHaveAttribute(
     'data-ready',
     'true',
@@ -255,16 +282,28 @@ test('02 create org, site, invites, role dashboards, admin lists', async ({
 
   await page.goto('/admin/users')
   await expect(page.getByRole('heading', { name: 'Users' })).toBeVisible()
-  await expect(page.getByRole('cell', { name: 'qa-admin@areca.local', exact: true })).toBeVisible()
-  await expect(page.getByRole('cell', { name: 'qa-owner@example.com', exact: true })).toBeVisible()
-  await expect(page.getByRole('cell', { name: 'qa-editor@example.com', exact: true })).toBeVisible()
+  await expect(
+    page.getByRole('cell', { name: 'qa-admin@areca.local', exact: true }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole('cell', { name: 'qa-owner@example.com', exact: true }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole('cell', { name: 'qa-editor@example.com', exact: true }),
+  ).toBeVisible()
   await screenshot(page, 'admin-users')
 
   await page.goto('/admin/audit')
   await expect(page.getByRole('heading', { name: 'Audit log' })).toBeVisible()
-  await expect(page.getByRole('cell', { name: 'Agency Admin' }).first()).toBeVisible()
+  await expect(
+    page.getByRole('cell', { name: 'Agency Admin' }).first(),
+  ).toBeVisible()
   const auditText = await page.locator('table').innerText()
-  if (/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i.test(auditText)) {
+  if (
+    /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i.test(
+      auditText,
+    )
+  ) {
     logIssue({
       area: 'audit',
       severity: 'visual',
@@ -298,17 +337,26 @@ test('03 sync demo-site manifest and inspect collection fields', async ({
   await page.goto('/')
   await openAcmeSite(page)
   state.siteId = page.url().match(/\/sites\/([^/]+)/)?.[1] ?? ''
-  await page.getByRole('link', { name: 'Settings' }).click()
+  await page
+    .getByTestId('site-nav')
+    .getByRole('link', { name: 'Settings' })
+    .click()
   await expect(page.getByRole('heading', { name: 'Collections' })).toBeVisible()
-  await expect(page.getByRole('cell', { name: 'articles', exact: true })).toBeVisible({
+  await expect(
+    page.getByRole('cell', { name: 'articles', exact: true }),
+  ).toBeVisible({
     timeout: 15_000,
   })
-  await expect(page.getByRole('cell', { name: 'Articles', exact: true })).toBeVisible()
+  await expect(
+    page.getByRole('cell', { name: 'Articles', exact: true }),
+  ).toBeVisible()
   await expect(page.getByRole('cell', { name: '/blog/$slug' })).toBeVisible()
   await screenshot(page, 'site-settings-collections')
 
   await page.getByRole('button', { name: 'Edit' }).click()
-  await expect(page.getByRole('heading', { name: 'Edit collection' })).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Edit collection' }),
+  ).toBeVisible()
   await expect(page.getByTestId('collection-key')).toHaveValue('articles')
   await expect(page.getByTestId('field-key-0')).toHaveValue('title')
   await expect(page.getByTestId('field-label-0')).toHaveValue('Title')
@@ -331,7 +379,10 @@ test('04 editor authors articles, persistence, revisions, validation', async ({
   await openAcmeSite(page)
   await screenshot(page, 'editor-site-dashboard')
 
-  await page.getByTestId('collection-articles').getByRole('link', { name: 'Open' }).click()
+  await page
+    .getByTestId('collection-articles')
+    .getByRole('link', { name: 'Open' })
+    .click()
   await screenshot(page, 'articles-empty')
   await page.getByTestId('new-entry').click()
   await expect(page.getByTestId('entry-editor')).toBeVisible()
@@ -360,9 +411,9 @@ test('04 editor authors articles, persistence, revisions, validation', async ({
   await expect(filledBody.locator('strong')).toContainText('boldword')
   await expect(filledBody.locator('h2')).toHaveText('A section heading')
   await expect(filledBody.locator('ul')).toContainText('First bullet')
-  await expect(filledBody.locator('a[href="https://example.com"]')).toContainText(
-    'Acme',
-  )
+  await expect(
+    filledBody.locator('a[href="https://example.com"]'),
+  ).toContainText('Acme')
   await expect(filledBody.locator('img')).toHaveCount(1)
   await screenshot(page, 'article-filled')
 
@@ -382,7 +433,9 @@ test('04 editor authors articles, persistence, revisions, validation', async ({
     'A short excerpt for the welcome post.',
   )
   await expect(page.locator('#field-category')).toContainText('news')
-  await expect(page.locator('#field-publishedAt')).toHaveValue('2026-09-01T10:00')
+  await expect(page.locator('#field-publishedAt')).toHaveValue(
+    '2026-09-01T10:00',
+  )
   await expect(page.getByTestId('image-field-thumb')).toBeVisible()
   const body = page.getByTestId('rich-text-editor')
   await expect(body.locator('strong')).toContainText('boldword')
@@ -393,8 +446,10 @@ test('04 editor authors articles, persistence, revisions, validation', async ({
   await screenshot(page, 'article-reloaded')
 
   await page.getByRole('link', { name: 'Back to Articles' }).click()
-  await expect(page.getByRole('link', { name: 'Welcome to Acme' })).toBeVisible()
-  await expect(page.getByText('draft', { exact: true }).first()).toBeVisible()
+  await expect(
+    page.getByRole('link', { name: 'Welcome to Acme' }),
+  ).toBeVisible()
+  await expect(page.getByText('Draft', { exact: true }).first()).toBeVisible()
   await screenshot(page, 'articles-one-draft')
 
   async function createQuickArticle(title: string, withHero: boolean) {
@@ -464,7 +519,10 @@ test('04 editor authors articles, persistence, revisions, validation', async ({
   await waitForSavedDraft(page)
   await page.getByRole('tab', { name: 'Revisions' }).click()
   await page.getByRole('button', { name: 'Restore' }).nth(1).click()
-  await page.getByRole('alertdialog').getByRole('button', { name: 'Restore' }).click()
+  await page
+    .getByRole('alertdialog')
+    .getByRole('button', { name: 'Restore' })
+    .click()
   await expect(page.getByText('Revision restored')).toBeVisible({
     timeout: 15_000,
   })
@@ -474,7 +532,9 @@ test('04 editor authors articles, persistence, revisions, validation', async ({
 
   await page.getByLabel(/Title/).fill('')
   await page.getByTestId('save-draft').click()
-  await expect(page.getByRole('alert').filter({ hasText: /required/i })).toBeVisible({
+  await expect(
+    page.getByRole('alert').filter({ hasText: /required/i }),
+  ).toBeVisible({
     timeout: 10_000,
   })
   await screenshot(page, 'validation-empty-title')
@@ -509,7 +569,10 @@ test('05 schedule past draft and wait for worker', async ({ browser }) => {
   const page = await context.newPage()
   await qaLogin(page, 'qa-editor@example.com')
   await openAcmeSite(page)
-  await page.getByTestId('collection-articles').getByRole('link', { name: 'Open' }).click()
+  await page
+    .getByTestId('collection-articles')
+    .getByRole('link', { name: 'Open' })
+    .click()
   await page.getByRole('link', { name: 'Welcome to Acme' }).click()
   await expect(page.getByTestId('entry-editor')).toHaveAttribute(
     'data-ready',
@@ -534,10 +597,18 @@ test('05 schedule past draft and wait for worker', async ({ browser }) => {
     'published',
     { timeout: 25_000 },
   )
-  await page.getByRole('link', { name: 'Content' }).click()
-  await expect(page.getByTestId('release-live')).toBeVisible({ timeout: 30_000 })
+  await page
+    .getByTestId('site-nav')
+    .getByRole('link', { name: 'Content' })
+    .click()
+  await expect(page.getByTestId('release-live')).toBeVisible({
+    timeout: 30_000,
+  })
   await screenshot(page, 'status-bar-after-schedule')
-  await page.getByRole('link', { name: 'Releases' }).click()
+  await page
+    .getByTestId('site-nav')
+    .getByRole('link', { name: 'Releases' })
+    .click()
   await expect(page.getByTestId('publication-status-live')).toBeVisible({
     timeout: 15_000,
   })
@@ -551,7 +622,10 @@ test('06 preview URL shape on a new draft', async ({ browser }) => {
   const page = await context.newPage()
   await qaLogin(page, 'qa-editor@example.com')
   await openAcmeSite(page)
-  await page.getByTestId('collection-articles').getByRole('link', { name: 'Open' }).click()
+  await page
+    .getByTestId('collection-articles')
+    .getByRole('link', { name: 'Open' })
+    .click()
   await page.getByTestId('new-entry').click()
   await page.getByLabel(/Title/).fill('Preview only draft')
   await page.getByTestId('rich-text-editor').click()
@@ -560,7 +634,9 @@ test('06 preview URL shape on a new draft', async ({ browser }) => {
   await waitForSavedDraft(page)
 
   const preview = page.getByTestId('preview-entry')
-  await expect(preview).toHaveAttribute('href', /[?&]token=/, { timeout: 15_000 })
+  await expect(preview).toHaveAttribute('href', /[?&]token=/, {
+    timeout: 15_000,
+  })
   const href = (await preview.getAttribute('href')) ?? ''
   expect(href).toMatch(
     /^http:\/\/localhost:3001\/__preview\/articles\/preview-only-draft\?token=/,
@@ -580,13 +656,24 @@ test('07 publish site, logs, rollback as owner', async ({ browser }) => {
   await expect(page.getByText('Publish requested')).toBeVisible({
     timeout: 15_000,
   })
-  await expect(page.getByTestId('release-live')).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByTestId('release-live')).toBeVisible({
+    timeout: 30_000,
+  })
   await screenshot(page, 'owner-live-status')
 
-  await page.getByRole('link', { name: 'Releases' }).click()
+  await page
+    .getByTestId('site-nav')
+    .getByRole('link', { name: 'Releases' })
+    .click()
   await expect(page.getByTestId('publication-status-live')).toBeVisible()
-  const releasesText = await page.locator('main, [class*="grid"]').first().innerText()
-  if (/\b[0-9a-f]{8}-[0-9a-f]{4}-/.test(releasesText) && !/QA Owner|Agency Admin/i.test(releasesText)) {
+  const releasesText = await page
+    .locator('main, [class*="grid"]')
+    .first()
+    .innerText()
+  if (
+    /\b[0-9a-f]{8}-[0-9a-f]{4}-/.test(releasesText) &&
+    !/QA Owner|Agency Admin/i.test(releasesText)
+  ) {
     logIssue({
       area: 'releases',
       severity: 'visual',
@@ -597,21 +684,34 @@ test('07 publish site, logs, rollback as owner', async ({ browser }) => {
 
   await page.getByRole('button', { name: 'Logs' }).first().click()
   await expect(page.getByRole('heading', { name: 'Build logs' })).toBeVisible()
-  await expect(page.locator('pre')).toContainText(/no deployment target|live|succeeded/i)
+  await expect(page.locator('pre')).toContainText(
+    /no deployment target|live|succeeded/i,
+  )
   await screenshot(page, 'build-logs')
   await page.keyboard.press('Escape')
 
-  await page.getByRole('link', { name: 'Content' }).click()
+  await page
+    .getByTestId('site-nav')
+    .getByRole('link', { name: 'Content' })
+    .click()
   await page.getByTestId('publish-site').click()
-  await expect(page.getByTestId('release-live')).toBeVisible({ timeout: 30_000 })
-  await page.getByRole('link', { name: 'Releases' }).click()
+  await expect(page.getByTestId('release-live')).toBeVisible({
+    timeout: 30_000,
+  })
+  await page
+    .getByTestId('site-nav')
+    .getByRole('link', { name: 'Releases' })
+    .click()
   await expect(page.getByTestId('publication-status-superseded')).toBeVisible({
     timeout: 30_000,
   })
   await screenshot(page, 'releases-superseded')
 
   await page.getByTestId('rollback-publication').click()
-  await page.getByRole('alertdialog').getByRole('button', { name: 'Rollback' }).click()
+  await page
+    .getByRole('alertdialog')
+    .getByRole('button', { name: 'Rollback' })
+    .click()
   await expect(page.getByText('Rollback requested')).toBeVisible({
     timeout: 15_000,
   })
@@ -630,17 +730,22 @@ test('08 media library alt persist, in-use and unused delete', async ({
   const page = await context.newPage()
   await qaLogin(page, 'qa-editor@example.com')
   await openAcmeSite(page)
-  await page.getByRole('link', { name: 'Media' }).click()
+  await page
+    .getByTestId('site-nav')
+    .getByRole('link', { name: 'Media' })
+    .click()
   await screenshot(page, 'media-library')
 
   const firstAlt = page.locator('input[placeholder="Alt text"]').first()
   await firstAlt.fill('Welcome hero')
   await firstAlt.blur()
-  await expect(page.getByText('Alt text saved')).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByText('Alt text saved')).toBeVisible({
+    timeout: 15_000,
+  })
   await page.reload()
-  await expect(page.locator('input[placeholder="Alt text"]').first()).toHaveValue(
-    'Welcome hero',
-  )
+  await expect(
+    page.locator('input[placeholder="Alt text"]').first(),
+  ).toHaveValue('Welcome hero')
   await screenshot(page, 'media-alt-persisted')
 
   await page.getByRole('button', { name: 'Upload' }).click()
@@ -650,7 +755,9 @@ test('08 media library alt persist, in-use and unused delete', async ({
     mimeType: 'image/png',
     buffer: QA_PNG,
   })
-  await expect(page.getByText('unused-qa-2.png')).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByText('unused-qa-2.png')).toBeVisible({
+    timeout: 15_000,
+  })
 
   const mediaCard = (filename: string) =>
     page.locator('p').filter({ hasText: filename }).locator('xpath=..')
@@ -658,7 +765,10 @@ test('08 media library alt persist, in-use and unused delete', async ({
   const heroCard = mediaCard('hero.png')
   if (await heroCard.count()) {
     await heroCard.getByRole('button', { name: 'Delete' }).click()
-    await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click()
+    await page
+      .getByRole('alertdialog')
+      .getByRole('button', { name: 'Delete' })
+      .click()
     await expect(page.getByText(/in use/i)).toBeVisible({ timeout: 15_000 })
     await screenshot(page, 'media-in-use-error')
   } else {
@@ -669,8 +779,13 @@ test('08 media library alt persist, in-use and unused delete', async ({
     })
   }
 
-  await mediaCard('unused-qa-2.png').getByRole('button', { name: 'Delete' }).click()
-  await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click()
+  await mediaCard('unused-qa-2.png')
+    .getByRole('button', { name: 'Delete' })
+    .click()
+  await page
+    .getByRole('alertdialog')
+    .getByRole('button', { name: 'Delete' })
+    .click()
   await expect(page.getByText('Deleted')).toBeVisible({ timeout: 15_000 })
   await expect(page.getByText('unused-qa-2.png')).toHaveCount(0)
   await screenshot(page, 'media-after-unused-delete')
@@ -694,7 +809,9 @@ test('09 demo site pull, pages, preview, health', async ({ browser }) => {
       'true',
       { timeout: 15_000 },
     )
-    const href = await recoverPage.getByTestId('preview-entry').getAttribute('href')
+    const href = await recoverPage
+      .getByTestId('preview-entry')
+      .getAttribute('href')
     state.previewUrl = href ?? ''
     await recover.close()
   }
@@ -729,7 +846,9 @@ test('09 demo site pull, pages, preview, health', async ({ browser }) => {
     const context = await browser.newContext()
     const page = await context.newPage()
     await page.goto('http://localhost:3001')
-    await expect(page.getByRole('heading', { name: /Build once/i })).toBeVisible()
+    await expect(
+      page.getByRole('heading', { name: /Build once/i }),
+    ).toBeVisible()
     await screenshot(page, 'demo-home')
 
     await page.goto('http://localhost:3001/blog')
@@ -740,7 +859,9 @@ test('09 demo site pull, pages, preview, health', async ({ browser }) => {
     await screenshot(page, 'demo-blog')
 
     await page.goto('http://localhost:3001/blog/welcome-to-acme')
-    await expect(page.getByRole('heading', { name: 'Welcome to Acme' })).toBeVisible()
+    await expect(
+      page.getByRole('heading', { name: 'Welcome to Acme' }),
+    ).toBeVisible()
     await screenshot(page, 'demo-article')
 
     const health = await fetch('http://localhost:3001/api/health')
@@ -789,16 +910,24 @@ test('10 agency housekeeping, token rotate, danger zone, responsive', async ({
   }
   await openAcmeSite(page)
   state.siteId = state.siteId || page.url().match(/\/sites\/([^/]+)/)?.[1] || ''
-  await page.getByRole('link', { name: 'Settings' }).click()
+  await page
+    .getByTestId('site-nav')
+    .getByRole('link', { name: 'Settings' })
+    .click()
   await screenshot(page, 'site-settings')
 
   const oldToken = state.siteToken || readDemoSiteToken()
   await page.getByRole('button', { name: 'Rotate token' }).click()
-  await page.getByRole('dialog').getByRole('button', { name: 'Rotate token' }).click()
+  await page
+    .getByRole('alertdialog')
+    .getByRole('button', { name: 'Rotate token' })
+    .click()
   await expect(page.getByTestId('site-token-alert')).toBeVisible({
     timeout: 15_000,
   })
-  const newToken = (await page.getByTestId('site-token-value').innerText()).trim()
+  const newToken = (
+    await page.getByTestId('site-token-value').innerText()
+  ).trim()
   expect(newToken).toBeTruthy()
   expect(newToken).not.toBe(oldToken)
   await screenshot(page, 'token-rotated')
@@ -813,13 +942,19 @@ test('10 agency housekeeping, token rotate, danger zone, responsive', async ({
   expect(ok.status()).toBe(200)
 
   await page.getByTestId('application-id').fill('dokploy-app-qa')
-  await page.getByTestId('health-check-url').fill('http://localhost:3001/api/health')
+  await page
+    .getByTestId('health-check-url')
+    .fill('http://localhost:3001/api/health')
   await page.getByTestId('save-deployment-target').click()
   await expect(page.getByText('Deployment target updated')).toBeVisible({
     timeout: 15_000,
   })
   await screenshot(page, 'deployment-target-set')
   await page.getByRole('button', { name: 'Clear target' }).click()
+  await page
+    .getByRole('alertdialog')
+    .getByRole('button', { name: 'Clear target' })
+    .click()
   await expect(page.getByText('Deployment target updated')).toBeVisible({
     timeout: 15_000,
   })
@@ -834,7 +969,9 @@ test('10 agency housekeeping, token rotate, danger zone, responsive', async ({
   })
   await screenshot(page, 'org-renamed')
 
-  await expect(page.getByRole('button', { name: 'Delete organization' })).toBeDisabled()
+  await expect(
+    page.getByRole('button', { name: 'Delete organization' }),
+  ).toBeDisabled()
   await screenshot(page, 'org-danger-zone-disabled')
 
   await page.getByRole('tab', { name: 'Sites' }).click()
@@ -850,10 +987,15 @@ test('10 agency housekeeping, token rotate, danger zone, responsive', async ({
     .getByRole('link', { name: 'Settings' })
     .click()
   await page.getByRole('button', { name: 'Delete site' }).click()
-  await expect(page.getByRole('dialog').getByRole('button', { name: 'Delete site' })).toBeDisabled()
+  await expect(
+    page.getByRole('alertdialog').getByRole('button', { name: 'Delete site' }),
+  ).toBeDisabled()
   await screenshot(page, 'delete-site-confirm')
-  await page.locator('#delete-site-slug').fill('throwaway')
-  await page.getByRole('dialog').getByRole('button', { name: 'Delete site' }).click()
+  await page.getByTestId('confirm-text').fill('throwaway')
+  await page
+    .getByRole('alertdialog')
+    .getByRole('button', { name: 'Delete site' })
+    .click()
   await expect(page.getByText('Site deleted')).toBeVisible({ timeout: 15_000 })
   await page.goto(`/admin/organizations/${state.orgId}`)
   await expect(page.getByRole('cell', { name: 'throwaway' })).toHaveCount(0)
@@ -863,7 +1005,9 @@ test('10 agency housekeeping, token rotate, danger zone, responsive', async ({
   await page.setViewportSize({ width: 390, height: 844 })
   await screenshot(page, 'dashboard-390')
   const dashOverflow = await page.evaluate(
-    () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 2,
+    () =>
+      document.documentElement.scrollWidth >
+      document.documentElement.clientWidth + 2,
   )
   if (dashOverflow) {
     logIssue({
@@ -877,10 +1021,14 @@ test('10 agency housekeeping, token rotate, danger zone, responsive', async ({
   await screenshot(page, 'dashboard-390-sidebar')
 
   await page.goto(`/sites/${state.siteId}/c/articles/new`)
-  await expect(page.getByTestId('entry-editor')).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByTestId('entry-editor')).toBeVisible({
+    timeout: 15_000,
+  })
   await screenshot(page, 'editor-390')
   const editorOverflow = await page.evaluate(
-    () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 2,
+    () =>
+      document.documentElement.scrollWidth >
+      document.documentElement.clientWidth + 2,
   )
   if (editorOverflow) {
     logIssue({

@@ -1,4 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState } from 'react'
+import type { FormEvent } from 'react'
 
 import { FormField } from '#/components/form-field'
 import { Button } from '#/components/ui/button'
@@ -119,7 +120,9 @@ export function CollectionFormDialog({
                   .filter(Boolean)
               : undefined,
           collection:
-            field.type === 'reference' ? field.collection.trim() || undefined : undefined,
+            field.type === 'reference'
+              ? field.collection.trim() || undefined
+              : undefined,
         })),
     })
   }
@@ -129,7 +132,9 @@ export function CollectionFormDialog({
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <form className="grid gap-4" onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>{editing ? 'Edit collection' : 'Add collection'}</DialogTitle>
+            <DialogTitle>
+              {editing ? 'Edit collection' : 'Add collection'}
+            </DialogTitle>
             <DialogDescription>
               Collection schemas are agency-owned and used by the site manifest.
             </DialogDescription>
@@ -177,7 +182,9 @@ export function CollectionFormDialog({
                 size="sm"
                 variant="outline"
                 data-testid="add-field"
-                onClick={() => setFields((current) => [...current, emptyField()])}
+                onClick={() =>
+                  setFields((current) => [...current, emptyField()])
+                }
               >
                 Add field
               </Button>
@@ -268,19 +275,25 @@ export function CollectionFormDialog({
                     />
                   </FormField>
                 ) : null}
-                {fields.length > 1 ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="justify-self-start"
-                    onClick={() =>
-                      setFields((current) => current.filter((_, i) => i !== index))
-                    }
-                  >
-                    Remove field
-                  </Button>
-                ) : null}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="justify-self-start"
+                  disabled={fields.length <= 1}
+                  title={
+                    fields.length <= 1
+                      ? 'A collection needs at least one field'
+                      : undefined
+                  }
+                  onClick={() =>
+                    setFields((current) =>
+                      current.filter((_, i) => i !== index),
+                    )
+                  }
+                >
+                  Remove field
+                </Button>
               </div>
             ))}
           </div>

@@ -1,18 +1,13 @@
-import { useState, type FormEvent } from 'react'
+import { useState } from 'react'
+import type { FormEvent } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { Link, createFileRoute, notFound } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 
 import { Alert, AlertDescription } from '#/components/ui/alert'
 import { Button } from '#/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '#/components/ui/card'
 import { Input } from '#/components/ui/input'
+import { BrandMark } from '#/components/brand-mark'
 import { FormField } from '#/components/form-field'
 import { authClient } from '#/lib/auth-client'
 import { acceptInvitationFn, getInvitationFn } from '#/server/fn/me'
@@ -25,6 +20,25 @@ export const Route = createFileRoute('/invite/$token')({
       throw notFound()
     }
   },
+  notFoundComponent: () => (
+    <div className="flex min-h-svh items-center justify-center p-6">
+      <div className="w-full max-w-sm">
+        <BrandMark className="mb-8" />
+        <div className="mb-6 grid gap-1.5">
+          <h1 className="text-2xl">Invitation not found</h1>
+          <p className="text-sm text-muted-foreground">
+            This invitation link is invalid, has expired, or was already used.
+            Ask the person who invited you to send a new one.
+          </p>
+        </div>
+        <div>
+          <Button asChild variant="outline" className="w-full">
+            <Link to="/login">Go to sign in</Link>
+          </Button>
+        </div>
+      </div>
+    </div>
+  ),
   component: InvitePage,
 })
 
@@ -44,7 +58,9 @@ function InvitePage() {
       window.location.assign('/')
     },
     onError: (err) => {
-      setError(err instanceof Error ? err.message : 'Could not accept invitation')
+      setError(
+        err instanceof Error ? err.message : 'Could not accept invitation',
+      )
     },
   })
 
@@ -71,14 +87,15 @@ function InvitePage() {
 
   return (
     <div className="flex min-h-svh items-center justify-center p-6">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle className="text-2xl">Invitation</CardTitle>
-          <CardDescription>
+      <div className="w-full max-w-md">
+        <BrandMark className="mb-8" />
+        <div className="mb-6 grid gap-1.5">
+          <h1 className="text-2xl">Invitation</h1>
+          <p className="text-sm text-muted-foreground">
             Join {invitation.organizationName} as {invitation.role}.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4">
+          </p>
+        </div>
+        <div className="grid gap-4">
           {error ? (
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>
@@ -145,8 +162,8 @@ function InvitePage() {
               </p>
             </>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   )
 }

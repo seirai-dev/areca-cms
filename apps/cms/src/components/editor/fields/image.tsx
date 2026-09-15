@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { ImageIcon } from 'lucide-react'
 
 import { Button } from '#/components/ui/button'
-import { listAssetsFn } from '#/server/fn/assets'
+import { getAssetFn } from '#/server/fn/assets'
 
-import { MediaPickerDialog, type MediaAsset } from '../media-picker'
+import { MediaPickerDialog } from '../media-picker'
+import type { MediaAsset } from '../media-picker'
 import { queryKeys } from '../query-keys'
 import { assetFileUrl } from '../utils'
 
@@ -20,37 +22,63 @@ export function ImageFieldInput({
   const [open, setOpen] = useState(false)
   const assetId = typeof value === 'string' ? value : ''
 
-  const assetsQuery = useQuery({
-    queryKey: queryKeys.assets(organizationId, ''),
-    queryFn: () =>
-      listAssetsFn({
-        data: { organizationId, limit: 100, offset: 0 },
-      }),
+  const assetQuery = useQuery({
+    queryKey: queryKeys.asset(assetId),
+    queryFn: () => getAssetFn({ data: { id: assetId } }),
     enabled: Boolean(assetId),
   })
-
-  const asset = ((assetsQuery.data ?? []) as MediaAsset[]).find(
-    (item) => item.id === assetId,
-  )
+  const asset = (assetQuery.data ?? null) as MediaAsset | null
 
   return (
     <div className="flex flex-col gap-3">
-      {asset ? (
-        <div className="grid gap-1">
-          <img
-            src={assetFileUrl(asset.storageKey)}
-            alt={asset.altText ?? asset.originalFilename}
-            className="h-32 w-auto rounded-md border object-cover"
-            data-testid="image-field-thumb"
-          />
-          <p className="text-sm text-muted-foreground">{asset.originalFilename}</p>
+      {assetId ? (
+        <div className="flex items-start gap-3">
+          {asset ? (
+            <img
+              src={assetFileUrl(asset.storageKey)}
+              alt={asset.altText ?? asset.originalFilename}
+              className="h-28 w-auto max-w-56 rounded-md border object-cover"
+              data-testid="image-field-thumb"
+            />
+          ) : (
+            <div className="flex h-28 w-40 items-center justify-center rounded-md border bg-muted text-muted-foreground">
+              <ImageIcon className="size-6" />
+            </div>
+          )}
+          <div className="min-w-0 text-sm">
+            {asset ? (
+              <>
+                <p
+                  className="truncate font-medium"
+                  title={asset.originalFilename}
+                >
+                  {asset.originalFilename}
+                </p>
+                {asset.width && asset.height ? (
+                  <p className="text-muted-foreground">
+                    {asset.width}×{asset.height}
+                  </p>
+                ) : null}
+                {!asset.altText ? (
+                  <p className="text-xs text-muted-foreground">
+                    No alt text yet. Add one in Media for accessibility.
+                  </p>
+                ) : null}
+              </>
+            ) : assetQuery.isLoading ? (
+              <p className="text-muted-foreground">Loading…</p>
+            ) : (
+              <p className="text-destructive">
+                This image was deleted from the media library.
+              </p>
+            )}
+          </div>
         </div>
-      ) : assetId ? (
-        <p className="text-sm text-muted-foreground">Asset {assetId}</p>
       ) : null}
       <div className="flex gap-2">
         <Button type="button" variant="outline" onClick={() => setOpen(true)}>
-          Choose
+          <ImageIcon />
+          {assetId ? 'Replace' : 'Choose'}
         </Button>
         {assetId ? (
           <Button type="button" variant="ghost" onClick={() => onChange('')}>

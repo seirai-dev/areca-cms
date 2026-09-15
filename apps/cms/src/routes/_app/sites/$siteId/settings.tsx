@@ -1,18 +1,23 @@
-import { useState, type FormEvent } from 'react'
+import type { FormEvent } from 'react'
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
+import { Layers, Pencil, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 
-import {
-  CollectionFormDialog,
-  type CollectionDraft,
-} from '#/components/admin/collection-form-dialog'
+import type { CollectionDraft } from '#/components/admin/collection-form-dialog'
+import { CollectionFormDialog } from '#/components/admin/collection-form-dialog'
 import { adminQueryKeys, errorMessage } from '#/components/admin/helpers'
 import { TableSkeleton } from '#/components/admin/table-skeleton'
 import { TokenAlert } from '#/components/admin/token-alert'
+import { ConfirmDialog } from '#/components/confirm-dialog'
+import { createDataColumns, DataTable } from '#/components/data-table'
 import { EmptyState } from '#/components/empty-state'
 import { FormField } from '#/components/form-field'
+import { PageHeader } from '#/components/page-header'
+import { QueryError } from '#/components/query-error'
+import { Badge } from '#/components/ui/badge'
 import { Button } from '#/components/ui/button'
 import {
   Card,
@@ -21,23 +26,9 @@ import {
   CardHeader,
   CardTitle,
 } from '#/components/ui/card'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '#/components/ui/dialog'
 import { Input } from '#/components/ui/input'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '#/components/ui/table'
+import { Skeleton } from '#/components/ui/skeleton'
+import type { Field } from '#/lib/types'
 import { listCollectionsFn, upsertCollectionFn } from '#/server/fn/content'
 import {
   deleteSiteFn,
@@ -48,12 +39,23 @@ import {
 
 export const Route = createFileRoute('/_app/sites/$siteId/settings')({
   beforeLoad: ({ context }) => {
-    if (!context.me?.user.isAgencyAdmin) {
+    if (!context.me.user.isAgencyAdmin) {
       throw redirect({ to: '/' })
     }
   },
   component: SiteSettingsPage,
 })
+
+type CollectionRow = {
+  id: string
+  key: string
+  label: string
+  routePattern: string
+  enabled: boolean
+  fields: Field[]
+}
+
+const EMPTY_COLLECTIONS: CollectionRow[] = []
 
 function SiteSettingsPage() {
   const { siteId } = Route.useParams()
@@ -84,8 +86,7 @@ function SiteSettingsPage() {
   const [collectionOpen, setCollectionOpen] = useState(false)
   const [editingCollection, setEditingCollection] =
     useState<CollectionDraft | null>(null)
-  const [deleteOpen, setDeleteOpen] = useState(false)
-  const [deleteConfirm, setDeleteConfirm] = useState('')
+  const [clearTargetOpen, setClearTargetOpen] = useState(false)
 
   const displayName = name ?? site?.name ?? ''
   const displayUrl = productionUrl ?? site?.productionUrl ?? ''
@@ -101,6 +102,8 @@ function SiteSettingsPage() {
       }),
     onSuccess: async () => {
       toast.success('Site updated')
+      setName(null)
+      setProductionUrl(null)
       await queryClient.invalidateQueries({
         queryKey: adminQueryKeys.site(siteId),
       })
@@ -109,11 +112,13 @@ function SiteSettingsPage() {
   })
 
   const targetMutation = useMutation({
-    mutationFn: (deploymentTarget: {
-      provider: 'dokploy'
-      applicationId: string
-      healthCheckUrl?: string
-    } | null) => updateSite({ data: { id: siteId, deploymentTarget } }),
+    mutationFn: (
+      deploymentTarget: {
+        provider: 'dokploy'
+        applicationId: string
+        healthCheckUrl?: string
+      } | null,
+    ) => updateSite({ data: { id: siteId, deploymentTarget } }),
     onSuccess: async () => {
       toast.success('Deployment target updated')
       setApplicationId(null)
@@ -175,25 +180,125 @@ function SiteSettingsPage() {
     event.preventDefault()
     targetMutation.mutate({
       provider: 'dokploy',
-      applicationId: displayAppId,
+      applicationId: displayAppId.trim(),
       healthCheckUrl: displayHealth.trim() || undefined,
     })
   }
 
+  function openCollectionDialog(draft: CollectionDraft | null) {
+    setEditingCollection(draft)
+    requestAnimationFrame(() => setCollectionOpen(true))
+  }
+
+  const collectionHelper = createDataColumns<CollectionRow>()
+  const collectionColumns = collectionHelper.columns([
+    collectionHelper.accessor('key', {
+      header: 'Key',
+      cell: ({ row }) => (
+        <span className="font-mono text-xs">{row.original.key}</span>
+      ),
+    }),
+    collectionHelper.accessor('label', { header: 'Label' }),
+    collectionHelper.accessor('routePattern', {
+      header: 'Route',
+      cell: ({ row }) => (
+        <span className="font-mono text-xs">{row.original.routePattern}</span>
+      ),
+    }),
+    collectionHelper.accessor('enabled', {
+      header: 'Enabled',
+      cell: ({ row }) => (
+        <Badge variant={row.original.enabled ? 'default' : 'secondary'}>
+          {row.original.enabled ? 'Yes' : 'No'}
+        </Badge>
+      ),
+    }),
+    collectionHelper.accessor((row) => row.fields.length, {
+      id: 'fields',
+      header: 'Fields',
+    }),
+    collectionHelper.display({
+      id: 'actions',
+      header: () => <span className="sr-only">Actions</span>,
+      enableSorting: false,
+      cell: ({ row }) => (
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() =>
+              openCollectionDialog({
+                key: row.original.key,
+                label: row.original.label,
+                routePattern: row.original.routePattern,
+                enabled: row.original.enabled,
+                fields: row.original.fields,
+              })
+            }
+          >
+            <Pencil />
+            Edit
+          </Button>
+        </div>
+      ),
+    }),
+  ])
+
   if (siteQuery.isLoading) {
-    return <TableSkeleton />
+    return (
+      <div className="grid max-w-3xl gap-6">
+        <Skeleton className="h-10 w-64" />
+        <TableSkeleton />
+      </div>
+    )
+  }
+
+  if (siteQuery.isError) {
+    return (
+      <div className="max-w-3xl">
+        <QueryError
+          title="Could not load site"
+          error={siteQuery.error}
+          onRetry={() => siteQuery.refetch()}
+          retrying={siteQuery.isFetching}
+        />
+      </div>
+    )
   }
 
   if (!site) {
-    return <EmptyState title="Site not found" />
+    return (
+      <EmptyState
+        className="max-w-3xl"
+        title="Site not found"
+        description="This site may have been deleted or you no longer have access to it."
+        action={
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => navigate({ to: '/' })}
+          >
+            Back to dashboard
+          </Button>
+        }
+      />
+    )
   }
 
   const manifestKeys = site.lastManifest
     ? Object.keys(site.lastManifest.collections)
     : []
+  const collections: CollectionRow[] =
+    collectionsQuery.data ?? EMPTY_COLLECTIONS
 
   return (
-    <div className="grid gap-6">
+    <div className="grid max-w-3xl gap-6">
+      <PageHeader
+        title="Site settings"
+        description={`Configuration for ${site.name}.`}
+      />
+
       <Card>
         <CardHeader>
           <CardTitle>General</CardTitle>
@@ -204,7 +309,7 @@ function SiteSettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form className="grid max-w-lg gap-4" onSubmit={onGeneral}>
+          <form className="grid gap-4" onSubmit={onGeneral}>
             <FormField label="Name" htmlFor="settings-site-name">
               <Input
                 id="settings-site-name"
@@ -218,13 +323,16 @@ function SiteSettingsPage() {
                 id="settings-production-url"
                 type="url"
                 required
+                placeholder="https://example.com"
                 value={displayUrl}
                 onChange={(event) => setProductionUrl(event.target.value)}
               />
             </FormField>
-            <Button type="submit" disabled={generalMutation.isPending}>
-              {generalMutation.isPending ? 'Saving…' : 'Save general'}
-            </Button>
+            <div>
+              <Button type="submit" disabled={generalMutation.isPending}>
+                {generalMutation.isPending ? 'Saving…' : 'Save changes'}
+              </Button>
+            </div>
           </form>
         </CardContent>
       </Card>
@@ -237,10 +345,10 @@ function SiteSettingsPage() {
             without deploying.
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-4">
-          <form className="grid max-w-lg gap-4" onSubmit={onTarget}>
-            <FormField label="Provider">
-              <Input value="dokploy" readOnly />
+        <CardContent>
+          <form className="grid gap-4" onSubmit={onTarget}>
+            <FormField label="Provider" htmlFor="deployment-provider">
+              <Input id="deployment-provider" value="Dokploy" readOnly />
             </FormField>
             <FormField label="Application ID" htmlFor="application-id">
               <Input
@@ -273,7 +381,7 @@ function SiteSettingsPage() {
                 type="button"
                 variant="outline"
                 disabled={targetMutation.isPending || !site.deploymentTarget}
-                onClick={() => targetMutation.mutate(null)}
+                onClick={() => setClearTargetOpen(true)}
               >
                 Clear target
               </Button>
@@ -286,24 +394,37 @@ function SiteSettingsPage() {
         <CardHeader>
           <CardTitle>Site token</CardTitle>
           <CardDescription>
-            Customer builds use <code>ARECA_SITE_TOKEN</code> and{' '}
+            Customer builds authenticate with <code>ARECA_SITE_TOKEN</code> and{' '}
             <code>ARECA_CMS_URL</code>. Rotating replaces the current token
             immediately.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
           {rotatedToken ? <TokenAlert token={rotatedToken} /> : null}
-          <ConfirmRotate
-            pending={rotateMutation.isPending}
-            onConfirm={async () => {
-              await rotateMutation.mutateAsync()
-            }}
-          />
+          <div>
+            <ConfirmDialog
+              title="Rotate site token?"
+              description="The current token stops working immediately. Any build or pull that still uses the old token will fail until ARECA_SITE_TOKEN is updated with the new one."
+              confirmLabel="Rotate token"
+              variant="destructive"
+              onConfirm={async () => {
+                await rotateMutation.mutateAsync()
+              }}
+            >
+              <Button
+                type="button"
+                variant="outline"
+                disabled={rotateMutation.isPending}
+              >
+                {rotateMutation.isPending ? 'Rotating…' : 'Rotate token'}
+              </Button>
+            </ConfirmDialog>
+          </div>
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader className="flex-row items-start justify-between gap-4">
+        <CardHeader className="flex flex-row items-start justify-between gap-4">
           <div className="grid gap-1.5">
             <CardTitle>Collections</CardTitle>
             <CardDescription>
@@ -315,62 +436,31 @@ function SiteSettingsPage() {
           <Button
             type="button"
             data-testid="add-collection"
-            onClick={() => {
-              setEditingCollection(null)
-              requestAnimationFrame(() => setCollectionOpen(true))
-            }}
+            onClick={() => openCollectionDialog(null)}
           >
+            <Plus />
             Add collection
           </Button>
         </CardHeader>
         <CardContent>
-          {collectionsQuery.isLoading ? (
+          {collectionsQuery.isError ? (
+            <QueryError
+              title="Could not load collections"
+              error={collectionsQuery.error}
+              onRetry={() => collectionsQuery.refetch()}
+              retrying={collectionsQuery.isFetching}
+            />
+          ) : collectionsQuery.isLoading ? (
             <TableSkeleton />
-          ) : collectionsQuery.data?.length ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Key</TableHead>
-                  <TableHead>Label</TableHead>
-                  <TableHead>Route</TableHead>
-                  <TableHead>Enabled</TableHead>
-                  <TableHead>Fields</TableHead>
-                  <TableHead />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {collectionsQuery.data.map((collection) => (
-                  <TableRow key={collection.id}>
-                    <TableCell>{collection.key}</TableCell>
-                    <TableCell>{collection.label}</TableCell>
-                    <TableCell>{collection.routePattern}</TableCell>
-                    <TableCell>{collection.enabled ? 'Yes' : 'No'}</TableCell>
-                    <TableCell>{collection.fields.length}</TableCell>
-                    <TableCell>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setEditingCollection({
-                            key: collection.key,
-                            label: collection.label,
-                            routePattern: collection.routePattern,
-                            enabled: collection.enabled,
-                            fields: collection.fields,
-                          })
-                          requestAnimationFrame(() => setCollectionOpen(true))
-                        }}
-                      >
-                        Edit
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+          ) : collections.length ? (
+            <DataTable
+              columns={collectionColumns}
+              data={collections}
+              caption="Collections"
+            />
           ) : (
             <EmptyState
+              icon={<Layers />}
               title="No collections"
               description="Add a collection or sync a site manifest."
             />
@@ -386,16 +476,24 @@ function SiteSettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Button
-            type="button"
+          <ConfirmDialog
+            title="Delete site?"
+            description={`This permanently deletes "${site.name}" with all of its entries, media references, releases and settings. This cannot be undone.`}
+            confirmLabel="Delete site"
+            confirmText={site.slug}
             variant="destructive"
-            onClick={() => {
-              setDeleteConfirm('')
-              setDeleteOpen(true)
+            onConfirm={async () => {
+              await deleteMutation.mutateAsync()
             }}
           >
-            Delete site
-          </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? 'Deleting…' : 'Delete site'}
+            </Button>
+          </ConfirmDialog>
         </CardContent>
       </Card>
 
@@ -407,77 +505,17 @@ function SiteSettingsPage() {
         onSubmit={(draft) => collectionMutation.mutate(draft)}
       />
 
-      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete site</DialogTitle>
-            <DialogDescription>
-              Type <strong>{site.slug}</strong> to confirm. This cannot be
-              undone.
-            </DialogDescription>
-          </DialogHeader>
-          <FormField label="Site slug" htmlFor="delete-site-slug">
-            <Input
-              id="delete-site-slug"
-              value={deleteConfirm}
-              onChange={(event) => setDeleteConfirm(event.target.value)}
-            />
-          </FormField>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={
-                deleteConfirm !== site.slug || deleteMutation.isPending
-              }
-              onClick={() => deleteMutation.mutate()}
-            >
-              {deleteMutation.isPending ? 'Deleting…' : 'Delete site'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open={clearTargetOpen}
+        onOpenChange={setClearTargetOpen}
+        title="Clear deployment target?"
+        description="Future releases will be marked live without deploying to Dokploy until a new target is saved."
+        confirmLabel="Clear target"
+        variant="destructive"
+        onConfirm={async () => {
+          await targetMutation.mutateAsync(null)
+        }}
+      />
     </div>
-  )
-}
-
-function ConfirmRotate({
-  pending,
-  onConfirm,
-}: {
-  pending: boolean
-  onConfirm: () => void | Promise<void>
-}) {
-  const [open, setOpen] = useState(false)
-
-  return (
-    <>
-      <Button type="button" variant="outline" onClick={() => setOpen(true)}>
-        Rotate token
-      </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Rotate site token</DialogTitle>
-            <DialogDescription>
-              The current token will stop working. Store the new token in
-              ARECA_SITE_TOKEN.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              type="button"
-              disabled={pending}
-              onClick={async () => {
-                await onConfirm()
-                setOpen(false)
-              }}
-            >
-              {pending ? 'Rotating…' : 'Rotate token'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
   )
 }

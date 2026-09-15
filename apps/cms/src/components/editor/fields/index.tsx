@@ -9,7 +9,7 @@ import { NumberFieldInput } from './number'
 import { ReferenceFieldInput } from './reference'
 import { RichtextFieldInput } from './richtext'
 import { SelectFieldInput } from './select'
-import { SlugFieldInput } from './slug'
+import { SLUG_HINT, SlugFieldInput } from './slug'
 import { TextFieldInput } from './text'
 import { TextareaFieldInput } from './textarea'
 
@@ -29,7 +29,7 @@ export function CollectionField({
   organizationId: string
 }) {
   const id = `field-${field.key}`
-  const label = field.required ? `${field.label} *` : field.label
+  const invalid = Boolean(error)
 
   let control: React.ReactNode
   switch (field.type) {
@@ -39,6 +39,7 @@ export function CollectionField({
           id={id}
           value={value}
           onChange={(next) => onChange(next)}
+          invalid={invalid}
         />
       )
       break
@@ -49,6 +50,7 @@ export function CollectionField({
           type="url"
           value={value}
           onChange={(next) => onChange(next)}
+          invalid={invalid}
         />
       )
       break
@@ -67,6 +69,7 @@ export function CollectionField({
           id={id}
           value={value}
           onChange={(next) => onChange(next)}
+          invalid={invalid}
         />
       )
       break
@@ -150,15 +153,20 @@ export function CollectionField({
           id={id}
           value={value}
           onChange={(next) => onChange(next)}
+          invalid={invalid}
         />
       )
   }
 
   return (
-    <FormField label={label} htmlFor={id} error={error}>
-      {field.description ? (
-        <p className="text-sm text-muted-foreground">{field.description}</p>
-      ) : null}
+    <FormField
+      label={field.label}
+      htmlFor={id}
+      required={field.required}
+      description={field.description}
+      hint={field.type === 'slug' ? SLUG_HINT : undefined}
+      error={error}
+    >
       {control}
     </FormField>
   )

@@ -7,8 +7,9 @@ export const queryKeys = {
   ) => ['entries', siteId, collectionKey, filters ?? {}] as const,
   entry: (id: string) => ['entry', id] as const,
   revisions: (entryId: string) => ['revisions', entryId] as const,
-  assets: (organizationId: string, search?: string) =>
-    ['assets', organizationId, search ?? ''] as const,
+  assets: (organizationId: string, search?: string, offset = 0) =>
+    ['assets', organizationId, search ?? '', offset] as const,
+  asset: (id: string) => ['asset', id] as const,
   releaseStatus: (siteId: string) => ['release-status', siteId] as const,
   publications: (siteId: string) => ['publications', siteId] as const,
   buildJobs: (siteId: string) => ['build-jobs', siteId] as const,

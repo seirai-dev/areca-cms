@@ -22,7 +22,10 @@ test('owner can author, publish, and release an article', async ({ page }) => {
   await login(page, 'owner@acme.local')
   await openSite(page, siteName)
 
-  await page.getByTestId('collection-articles').getByRole('link', { name: 'Open' }).click()
+  await page
+    .getByTestId('collection-articles')
+    .getByRole('link', { name: 'Open' })
+    .click()
   await page.getByTestId('new-entry').click()
 
   await page.getByLabel(/Title/).fill(title)
@@ -39,7 +42,9 @@ test('owner can author, publish, and release an article', async ({ page }) => {
     mimeType: 'image/png',
     buffer: TINY_PNG,
   })
-  await expect(page.getByTestId('image-field-thumb')).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByTestId('image-field-thumb')).toBeVisible({
+    timeout: 15_000,
+  })
 
   await page.getByTestId('save-draft').click()
   await waitForSavedDraft(page)
@@ -70,11 +75,19 @@ test('owner can author, publish, and release an article', async ({ page }) => {
     { timeout: 15_000 },
   )
 
-  await page.getByRole('link', { name: 'Content' }).click()
+  await page
+    .getByTestId('site-nav')
+    .getByRole('link', { name: 'Content' })
+    .click()
   await page.getByTestId('publish-site').click()
-  await expect(page.getByTestId('release-live')).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByTestId('release-live')).toBeVisible({
+    timeout: 30_000,
+  })
 
-  await page.getByRole('link', { name: 'Releases' }).click()
+  await page
+    .getByTestId('site-nav')
+    .getByRole('link', { name: 'Releases' })
+    .click()
   await expect(page.getByText('live', { exact: true }).first()).toBeVisible()
   await expect(page.getByRole('cell', { name: 'Acme Owner' })).toBeVisible()
 })
@@ -88,12 +101,20 @@ test('draft save shows field errors for empty title and invalid slug', async ({
 
   await login(page, 'owner@acme.local')
   await openSite(page, siteName)
-  await page.getByTestId('collection-articles').getByRole('link', { name: 'Open' }).click()
+  await page
+    .getByTestId('collection-articles')
+    .getByRole('link', { name: 'Open' })
+    .click()
   await page.getByTestId('new-entry').click()
 
   await page.getByLabel(/Slug/).fill('Hello World')
   await page.getByTestId('save-draft').click()
-  await expect(page.getByRole('alert').filter({ hasText: /Required|Invalid slug/i }).first()).toBeVisible({
+  await expect(
+    page
+      .getByRole('alert')
+      .filter({ hasText: /Required|Invalid slug/i })
+      .first(),
+  ).toBeVisible({
     timeout: 15_000,
   })
 
@@ -106,11 +127,15 @@ test('draft save shows field errors for empty title and invalid slug', async ({
 
   await page.getByLabel(/Title/).fill('')
   await page.getByTestId('save-draft').click()
-  await expect(page.getByRole('alert').filter({ hasText: 'Required' }).first()).toBeVisible({
+  await expect(
+    page.getByRole('alert').filter({ hasText: 'Required' }).first(),
+  ).toBeVisible({
     timeout: 15_000,
   })
 
   await page.getByRole('link', { name: /Back to/ }).click()
+  // Unsaved edits (the cleared title) trigger the leave guard.
+  await page.getByTestId('discard-changes').click()
   await page.getByTestId('new-entry').click()
   await page.getByLabel(/Title/).fill(`Empty body ${suffix}`)
   await page.getByTestId('save-draft').click()
@@ -118,6 +143,9 @@ test('draft save shows field errors for empty title and invalid slug', async ({
   await page.getByTestId('publish-menu').click()
   await page.getByTestId('publish-now').click()
   await expect(
-    page.getByRole('alert').filter({ hasText: /Required|Could not publish/i }).first(),
+    page
+      .getByRole('alert')
+      .filter({ hasText: /Required|Could not publish/i })
+      .first(),
   ).toBeVisible({ timeout: 15_000 })
 })

@@ -17,6 +17,7 @@ import { Route as AppAdminRouteImport } from './routes/_app/admin'
 import { Route as InviteTokenRouteImport } from './routes/invite/$token'
 import { Route as AppAdminIndexRouteImport } from './routes/_app/admin/index'
 import { Route as AppAdminAuditRouteImport } from './routes/_app/admin/audit'
+import { Route as AppAdminBrandingRouteImport } from './routes/_app/admin/branding'
 import { Route as AppAdminUsersRouteImport } from './routes/_app/admin/users'
 import { Route as AppSitesSiteIdRouteImport } from './routes/_app/sites/$siteId'
 import { Route as ApiAssetsUploadRouteImport } from './routes/api/assets/upload'
@@ -31,6 +32,7 @@ import { Route as AppSitesSiteIdIndexRouteImport } from './routes/_app/sites/$si
 import { Route as AppSitesSiteIdMediaRouteImport } from './routes/_app/sites/$siteId/media'
 import { Route as AppSitesSiteIdReleasesRouteImport } from './routes/_app/sites/$siteId/releases'
 import { Route as AppSitesSiteIdSettingsRouteImport } from './routes/_app/sites/$siteId/settings'
+import { Route as ApiAdminBrandingUploadRouteImport } from './routes/api/admin/branding/upload'
 import { Route as ApiAssetsFileSplatRouteImport } from './routes/api/assets/file/$'
 import { Route as ApiSitesSnapshotCurrentRouteImport } from './routes/api/sites/snapshot/current'
 import { Route as AppSitesSiteIdCCollectionKeyRouteImport } from './routes/_app/sites/$siteId/c/$collectionKey'
@@ -75,6 +77,11 @@ const AppAdminIndexRoute = AppAdminIndexRouteImport.update({
 const AppAdminAuditRoute = AppAdminAuditRouteImport.update({
   id: '/audit',
   path: '/audit',
+  getParentRoute: () => AppAdminRoute,
+} as any)
+const AppAdminBrandingRoute = AppAdminBrandingRouteImport.update({
+  id: '/branding',
+  path: '/branding',
   getParentRoute: () => AppAdminRoute,
 } as any)
 const AppAdminUsersRoute = AppAdminUsersRouteImport.update({
@@ -149,6 +156,11 @@ const AppSitesSiteIdSettingsRoute = AppSitesSiteIdSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AppSitesSiteIdRoute,
 } as any)
+const ApiAdminBrandingUploadRoute = ApiAdminBrandingUploadRouteImport.update({
+  id: '/api/admin/branding/upload',
+  path: '/api/admin/branding/upload',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAssetsFileSplatRoute = ApiAssetsFileSplatRouteImport.update({
   id: '/api/assets/file/$',
   path: '/api/assets/file/$',
@@ -191,6 +203,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AppAdminRouteWithChildren
   '/invite/$token': typeof InviteTokenRoute
   '/admin/audit': typeof AppAdminAuditRoute
+  '/admin/branding': typeof AppAdminBrandingRoute
   '/admin/users': typeof AppAdminUsersRoute
   '/sites/$siteId': typeof AppSitesSiteIdRouteWithChildren
   '/api/assets/upload': typeof ApiAssetsUploadRoute
@@ -204,6 +217,7 @@ export interface FileRoutesByFullPath {
   '/sites/$siteId/media': typeof AppSitesSiteIdMediaRoute
   '/sites/$siteId/releases': typeof AppSitesSiteIdReleasesRoute
   '/sites/$siteId/settings': typeof AppSitesSiteIdSettingsRoute
+  '/api/admin/branding/upload': typeof ApiAdminBrandingUploadRoute
   '/api/assets/file/$': typeof ApiAssetsFileSplatRoute
   '/api/sites/snapshot/current': typeof ApiSitesSnapshotCurrentRoute
   '/admin/organizations/': typeof AppAdminOrganizationsIndexRoute
@@ -219,6 +233,7 @@ export interface FileRoutesByTo {
   '/invite/$token': typeof InviteTokenRoute
   '/': typeof AppIndexRoute
   '/admin/audit': typeof AppAdminAuditRoute
+  '/admin/branding': typeof AppAdminBrandingRoute
   '/admin/users': typeof AppAdminUsersRoute
   '/api/assets/upload': typeof ApiAssetsUploadRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -231,6 +246,7 @@ export interface FileRoutesByTo {
   '/sites/$siteId/media': typeof AppSitesSiteIdMediaRoute
   '/sites/$siteId/releases': typeof AppSitesSiteIdReleasesRoute
   '/sites/$siteId/settings': typeof AppSitesSiteIdSettingsRoute
+  '/api/admin/branding/upload': typeof ApiAdminBrandingUploadRoute
   '/api/assets/file/$': typeof ApiAssetsFileSplatRoute
   '/api/sites/snapshot/current': typeof ApiSitesSnapshotCurrentRoute
   '/admin/organizations': typeof AppAdminOrganizationsIndexRoute
@@ -248,6 +264,7 @@ export interface FileRoutesById {
   '/invite/$token': typeof InviteTokenRoute
   '/_app/': typeof AppIndexRoute
   '/_app/admin/audit': typeof AppAdminAuditRoute
+  '/_app/admin/branding': typeof AppAdminBrandingRoute
   '/_app/admin/users': typeof AppAdminUsersRoute
   '/_app/sites/$siteId': typeof AppSitesSiteIdRouteWithChildren
   '/api/assets/upload': typeof ApiAssetsUploadRoute
@@ -261,6 +278,7 @@ export interface FileRoutesById {
   '/_app/sites/$siteId/media': typeof AppSitesSiteIdMediaRoute
   '/_app/sites/$siteId/releases': typeof AppSitesSiteIdReleasesRoute
   '/_app/sites/$siteId/settings': typeof AppSitesSiteIdSettingsRoute
+  '/api/admin/branding/upload': typeof ApiAdminBrandingUploadRoute
   '/api/assets/file/$': typeof ApiAssetsFileSplatRoute
   '/api/sites/snapshot/current': typeof ApiSitesSnapshotCurrentRoute
   '/_app/admin/organizations/': typeof AppAdminOrganizationsIndexRoute
@@ -279,6 +297,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/invite/$token'
     | '/admin/audit'
+    | '/admin/branding'
     | '/admin/users'
     | '/sites/$siteId'
     | '/api/assets/upload'
@@ -292,6 +311,7 @@ export interface FileRouteTypes {
     | '/sites/$siteId/media'
     | '/sites/$siteId/releases'
     | '/sites/$siteId/settings'
+    | '/api/admin/branding/upload'
     | '/api/assets/file/$'
     | '/api/sites/snapshot/current'
     | '/admin/organizations/'
@@ -307,6 +327,7 @@ export interface FileRouteTypes {
     | '/invite/$token'
     | '/'
     | '/admin/audit'
+    | '/admin/branding'
     | '/admin/users'
     | '/api/assets/upload'
     | '/api/auth/$'
@@ -319,6 +340,7 @@ export interface FileRouteTypes {
     | '/sites/$siteId/media'
     | '/sites/$siteId/releases'
     | '/sites/$siteId/settings'
+    | '/api/admin/branding/upload'
     | '/api/assets/file/$'
     | '/api/sites/snapshot/current'
     | '/admin/organizations'
@@ -335,6 +357,7 @@ export interface FileRouteTypes {
     | '/invite/$token'
     | '/_app/'
     | '/_app/admin/audit'
+    | '/_app/admin/branding'
     | '/_app/admin/users'
     | '/_app/sites/$siteId'
     | '/api/assets/upload'
@@ -348,6 +371,7 @@ export interface FileRouteTypes {
     | '/_app/sites/$siteId/media'
     | '/_app/sites/$siteId/releases'
     | '/_app/sites/$siteId/settings'
+    | '/api/admin/branding/upload'
     | '/api/assets/file/$'
     | '/api/sites/snapshot/current'
     | '/_app/admin/organizations/'
@@ -367,6 +391,7 @@ export interface RootRouteChildren {
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiSitesManifestRoute: typeof ApiSitesManifestRoute
   ApiSitesPreviewRoute: typeof ApiSitesPreviewRoute
+  ApiAdminBrandingUploadRoute: typeof ApiAdminBrandingUploadRoute
   ApiAssetsFileSplatRoute: typeof ApiAssetsFileSplatRoute
   ApiSitesSnapshotCurrentRoute: typeof ApiSitesSnapshotCurrentRoute
 }
@@ -427,6 +452,13 @@ declare module '@tanstack/react-router' {
       path: '/audit'
       fullPath: '/admin/audit'
       preLoaderRoute: typeof AppAdminAuditRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
+    '/_app/admin/branding': {
+      id: '/_app/admin/branding'
+      path: '/branding'
+      fullPath: '/admin/branding'
+      preLoaderRoute: typeof AppAdminBrandingRouteImport
       parentRoute: typeof AppAdminRoute
     }
     '/_app/admin/users': {
@@ -527,6 +559,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSitesSiteIdSettingsRouteImport
       parentRoute: typeof AppSitesSiteIdRoute
     }
+    '/api/admin/branding/upload': {
+      id: '/api/admin/branding/upload'
+      path: '/api/admin/branding/upload'
+      fullPath: '/api/admin/branding/upload'
+      preLoaderRoute: typeof ApiAdminBrandingUploadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/assets/file/$': {
       id: '/api/assets/file/$'
       path: '/api/assets/file/$'
@@ -574,6 +613,7 @@ declare module '@tanstack/react-router' {
 
 interface AppAdminRouteChildren {
   AppAdminAuditRoute: typeof AppAdminAuditRoute
+  AppAdminBrandingRoute: typeof AppAdminBrandingRoute
   AppAdminUsersRoute: typeof AppAdminUsersRoute
   AppAdminIndexRoute: typeof AppAdminIndexRoute
   AppAdminOrganizationsOrgIdRoute: typeof AppAdminOrganizationsOrgIdRoute
@@ -582,6 +622,7 @@ interface AppAdminRouteChildren {
 
 const AppAdminRouteChildren: AppAdminRouteChildren = {
   AppAdminAuditRoute: AppAdminAuditRoute,
+  AppAdminBrandingRoute: AppAdminBrandingRoute,
   AppAdminUsersRoute: AppAdminUsersRoute,
   AppAdminIndexRoute: AppAdminIndexRoute,
   AppAdminOrganizationsOrgIdRoute: AppAdminOrganizationsOrgIdRoute,
@@ -660,6 +701,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiSitesManifestRoute: ApiSitesManifestRoute,
   ApiSitesPreviewRoute: ApiSitesPreviewRoute,
+  ApiAdminBrandingUploadRoute: ApiAdminBrandingUploadRoute,
   ApiAssetsFileSplatRoute: ApiAssetsFileSplatRoute,
   ApiSitesSnapshotCurrentRoute: ApiSitesSnapshotCurrentRoute,
 }

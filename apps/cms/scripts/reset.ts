@@ -10,6 +10,7 @@ import {
   account,
   asset,
   auditLog,
+  branding,
   buildJob,
   collection,
   entry,
@@ -26,6 +27,7 @@ import {
 
 const tables = [
   auditLog,
+  branding,
   buildJob,
   publication,
   asset,

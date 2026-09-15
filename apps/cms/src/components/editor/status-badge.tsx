@@ -1,39 +1,78 @@
 import { Badge } from '#/components/ui/badge'
-import type { BuildJobStatus, EntryStatus, PublicationStatus } from '#/lib/types'
+import type {
+  BuildJobStatus,
+  EntryStatus,
+  PublicationStatus,
+} from '#/lib/types'
 
 const entryVariant: Record<
   EntryStatus,
-  'default' | 'secondary' | 'outline' | 'destructive'
+  | 'default'
+  | 'secondary'
+  | 'outline'
+  | 'destructive'
+  | 'success'
+  | 'muted'
+  | 'warning'
 > = {
-  draft: 'secondary',
-  published: 'default',
-  scheduled: 'outline',
-  archived: 'destructive',
+  draft: 'outline',
+  published: 'success',
+  scheduled: 'warning',
+  archived: 'muted',
 }
 
 const publicationVariant: Record<
   PublicationStatus,
-  'default' | 'secondary' | 'outline' | 'destructive'
+  | 'default'
+  | 'secondary'
+  | 'outline'
+  | 'destructive'
+  | 'success'
+  | 'muted'
+  | 'warning'
 > = {
-  pending: 'secondary',
-  building: 'outline',
-  live: 'default',
+  pending: 'outline',
+  building: 'warning',
+  live: 'success',
   failed: 'destructive',
-  superseded: 'secondary',
+  superseded: 'muted',
   rolled_back: 'outline',
+}
+
+const entryLabel: Record<EntryStatus, string> = {
+  draft: 'Draft',
+  published: 'Published',
+  scheduled: 'Scheduled',
+  archived: 'Archived',
+}
+
+const jobLabel: Record<BuildJobStatus, string> = {
+  queued: 'Queued',
+  building: 'Building',
+  validating: 'Validating',
+  deploying: 'Deploying',
+  succeeded: 'Succeeded',
+  failed: 'Failed',
+  cancelled: 'Cancelled',
 }
 
 const jobVariant: Record<
   BuildJobStatus,
-  'default' | 'secondary' | 'outline' | 'destructive'
+  | 'default'
+  | 'secondary'
+  | 'outline'
+  | 'destructive'
+  | 'success'
+  | 'muted'
+  | 'warning'
 > = {
-  queued: 'secondary',
-  building: 'outline',
-  validating: 'outline',
-  deploying: 'outline',
-  succeeded: 'default',
+  queued: 'outline',
+  building: 'warning',
+  validating: 'warning',
+  deploying: 'warning',
+  succeeded: 'success',
   failed: 'destructive',
-  cancelled: 'secondary',
+  cancelled: 'muted',
 }
 
 export function EntryStatusBadge({
@@ -43,8 +82,8 @@ export function EntryStatusBadge({
   status: EntryStatus | 'unsaved'
   testId?: string
 }) {
-  const label = status === 'unsaved' ? 'draft' : status
-  const variant = status === 'unsaved' ? 'secondary' : entryVariant[status]
+  const label = status === 'unsaved' ? 'Draft' : entryLabel[status]
+  const variant = status === 'unsaved' ? 'outline' : entryVariant[status]
   return (
     <Badge variant={variant} data-testid={testId} data-status={status}>
       {label}
@@ -60,12 +99,20 @@ export function PublicationStatusBadge({
   testId?: string
 }) {
   return (
-    <Badge variant={publicationVariant[status]} data-testid={testId} data-status={status}>
+    <Badge
+      variant={publicationVariant[status]}
+      data-testid={testId}
+      data-status={status}
+    >
       {status}
     </Badge>
   )
 }
 
 export function JobStatusBadge({ status }: { status: BuildJobStatus }) {
-  return <Badge variant={jobVariant[status]}>{status}</Badge>
+  return (
+    <Badge variant={jobVariant[status]} data-status={status}>
+      {jobLabel[status]}
+    </Badge>
+  )
 }

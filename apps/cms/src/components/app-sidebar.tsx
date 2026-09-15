@@ -1,16 +1,29 @@
 import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Link, useRouterState } from '@tanstack/react-router'
 import {
   Building2,
+  Check,
+  ChevronsUpDown,
   ClipboardList,
-  Globe,
-  LayoutDashboard,
+  LayoutGrid,
   LogOut,
+  Palette,
   Users,
 } from 'lucide-react'
 
+import { BrandMark } from '#/components/brand-mark'
+import { queryKeys } from '#/components/editor/query-keys'
 import { Avatar, AvatarFallback } from '#/components/ui/avatar'
-import { Button } from '#/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '#/components/ui/dropdown-menu'
 import {
   Sidebar,
   SidebarContent,
@@ -22,8 +35,22 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
+  SidebarRail,
+  useSidebar,
 } from '#/components/ui/sidebar'
 import { authClient } from '#/lib/auth-client'
+import {
+  findSite,
+  groupSitesByOrg,
+  isSectionActive,
+  siteIdFromPath,
+  siteSections,
+} from '#/lib/site-nav'
+import type { MeSite } from '#/lib/site-nav'
+import { listCollectionsFn } from '#/server/fn/content'
 import type { Me } from '#/server/fn/me'
 
 function initials(name: string) {
@@ -32,18 +59,28 @@ function initials(name: string) {
       .split(/\s+/)
       .filter(Boolean)
       .slice(0, 2)
-      .map((part) => part[0]?.toUpperCase() ?? '')
+      .map((part) => part.charAt(0).toUpperCase())
       .join('') || 'U'
   )
 }
 
 export function AppSidebar({ me }: { me: Me }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const { isMobile, setOpenMobile } = useSidebar()
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
     setReady(true)
   }, [])
+
+  // Close the mobile sheet after any navigation.
+  useEffect(() => {
+    if (isMobile) setOpenMobile(false)
+  }, [pathname, isMobile, setOpenMobile])
+
+  const currentSite = findSite(me, siteIdFromPath(pathname))
+  const orgGroups = groupSitesByOrg(me.sites)
+  const multiOrg = orgGroups.length > 1
 
   async function signOut() {
     try {
@@ -54,48 +91,71 @@ export function AppSidebar({ me }: { me: Me }) {
   }
 
   return (
-    <Sidebar>
+    <Sidebar collapsible="icon">
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
+            <SidebarMenuButton size="lg" asChild tooltip="Dashboard">
               <Link to="/">
-                <div className="flex size-8 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
-                  <Globe className="size-4" />
-                </div>
-                <span className="text-base font-semibold">Areca</span>
+                <BrandMark />
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
+          {currentSite ? (
+            <SidebarMenuItem>
+              <SiteSwitcher me={me} current={currentSite} />
+            </SidebarMenuItem>
+          ) : null}
         </SidebarMenu>
       </SidebarHeader>
+
       <SidebarContent>
-        <SidebarGroup data-testid="sites-nav">
-          <SidebarGroupLabel>Sites</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {me.sites.map((site) => (
-                <SidebarMenuItem key={site.id}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={pathname.startsWith(`/sites/${site.id}`)}
-                    tooltip={site.name}
-                  >
-                    <Link to="/sites/$siteId" params={{ siteId: site.id }}>
-                      <LayoutDashboard />
-                      <span>{site.name}</span>
-                      {site.slug !== site.name ? (
-                        <span className="text-muted-foreground">
-                          {site.slug}
-                        </span>
-                      ) : null}
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {currentSite ? (
+          <SiteSectionsGroup me={me} site={currentSite} pathname={pathname} />
+        ) : (
+          <div data-testid="sites-nav">
+            {orgGroups.length === 0 ? (
+              <SidebarGroup>
+                <SidebarGroupLabel>Sites</SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <p className="px-2 text-xs text-muted-foreground">
+                    No sites yet.
+                  </p>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            ) : (
+              orgGroups.map((group) => (
+                <SidebarGroup key={group.id}>
+                  <SidebarGroupLabel title={group.name}>
+                    {multiOrg ? group.name : 'Sites'}
+                  </SidebarGroupLabel>
+                  <SidebarGroupContent>
+                    <SidebarMenu>
+                      {group.sites.map((site) => (
+                        <SidebarMenuItem key={site.id}>
+                          <SidebarMenuButton
+                            asChild
+                            isActive={pathname.startsWith(`/sites/${site.id}`)}
+                            tooltip={site.name}
+                          >
+                            <Link
+                              to="/sites/$siteId"
+                              params={{ siteId: site.id }}
+                            >
+                              <LayoutGrid />
+                              <span>{site.name}</span>
+                            </Link>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      ))}
+                    </SidebarMenu>
+                  </SidebarGroupContent>
+                </SidebarGroup>
+              ))
+            )}
+          </div>
+        )}
+
         {me.user.isAgencyAdmin ? (
           <SidebarGroup data-testid="agency-nav">
             <SidebarGroupLabel>Agency</SidebarGroupLabel>
@@ -105,33 +165,48 @@ export function AppSidebar({ me }: { me: Me }) {
                   <SidebarMenuButton
                     asChild
                     isActive={pathname.startsWith('/admin/organizations')}
+                    tooltip="Organizations"
                   >
-                    <a href="/admin/organizations">
+                    <Link to="/admin/organizations">
                       <Building2 />
                       <span>Organizations</span>
-                    </a>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     asChild
                     isActive={pathname.startsWith('/admin/users')}
+                    tooltip="Users"
                   >
-                    <a href="/admin/users">
+                    <Link to="/admin/users">
                       <Users />
                       <span>Users</span>
-                    </a>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     asChild
                     isActive={pathname.startsWith('/admin/audit')}
+                    tooltip="Audit log"
                   >
-                    <a href="/admin/audit">
+                    <Link to="/admin/audit">
                       <ClipboardList />
-                      <span>Audit</span>
-                    </a>
+                      <span>Audit log</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={pathname.startsWith('/admin/branding')}
+                    tooltip="Branding"
+                  >
+                    <Link to="/admin/branding" data-testid="branding-nav">
+                      <Palette />
+                      <span>Branding</span>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </SidebarMenu>
@@ -139,32 +214,179 @@ export function AppSidebar({ me }: { me: Me }) {
           </SidebarGroup>
         ) : null}
       </SidebarContent>
+
       <SidebarFooter>
-        <div
-          data-testid="user-menu"
-          className="flex items-center gap-2 rounded-md p-2"
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              size="lg"
+              asChild
+              tooltip={`${me.user.name} · ${me.user.email}`}
+              className="cursor-default hover:bg-transparent"
+            >
+              <div data-testid="user-menu">
+                <Avatar className="size-8">
+                  <AvatarFallback>{initials(me.user.name)}</AvatarFallback>
+                </Avatar>
+                <div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
+                  <span className="truncate font-medium">{me.user.name}</span>
+                  <span className="truncate text-xs text-muted-foreground">
+                    {me.user.email}
+                  </span>
+                </div>
+              </div>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              data-testid="sign-out"
+              tooltip="Sign out"
+              disabled={!ready}
+              onClick={() => void signOut()}
+            >
+              <LogOut />
+              <span>Sign out</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
+      <SidebarRail />
+    </Sidebar>
+  )
+}
+
+function SiteSwitcher({ me, current }: { me: Me; current: MeSite }) {
+  const groups = groupSitesByOrg(me.sites)
+  const multiOrg = groups.length > 1
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <SidebarMenuButton
+          size="lg"
+          tooltip={`Site: ${current.name}`}
+          className="data-[state=open]:bg-sidebar-accent"
+          data-testid="site-switcher"
         >
-          <Avatar className="size-8">
-            <AvatarFallback>{initials(me.user.name)}</AvatarFallback>
-          </Avatar>
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
+            <LayoutGrid className="size-4" />
+          </div>
           <div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
-            <span className="truncate font-medium">{me.user.name}</span>
+            <span className="truncate font-medium">{current.name}</span>
             <span className="truncate text-xs text-muted-foreground">
-              {me.user.email}
+              {current.organizationName}
             </span>
           </div>
-        </div>
-        <Button
-          data-testid="sign-out"
-          variant="ghost"
-          className="w-full justify-start"
-          disabled={!ready}
-          onClick={() => void signOut()}
-        >
-          <LogOut />
-          Sign out
-        </Button>
-      </SidebarFooter>
-    </Sidebar>
+          <ChevronsUpDown className="ml-auto size-4 opacity-60" />
+        </SidebarMenuButton>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="start"
+        side="bottom"
+        className="w-(--radix-dropdown-menu-trigger-width) min-w-56"
+      >
+        {groups.map((group) => (
+          <DropdownMenuGroup key={group.id}>
+            {multiOrg ? (
+              <DropdownMenuLabel className="text-xs text-muted-foreground">
+                {group.name}
+              </DropdownMenuLabel>
+            ) : null}
+            {group.sites.map((site) => (
+              <DropdownMenuItem key={site.id} asChild>
+                <Link to="/sites/$siteId" params={{ siteId: site.id }}>
+                  <span className="truncate">{site.name}</span>
+                  {site.id === current.id ? (
+                    <Check className="ml-auto size-4" />
+                  ) : null}
+                </Link>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuGroup>
+        ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link to="/">
+            <LayoutGrid />
+            All sites
+          </Link>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function SiteSectionsGroup({
+  me,
+  site,
+  pathname,
+}: {
+  me: Me
+  site: MeSite
+  pathname: string
+}) {
+  const sections = siteSections(me, site)
+  const collectionsQuery = useQuery({
+    queryKey: queryKeys.collections(site.id),
+    queryFn: () =>
+      listCollectionsFn({ data: { siteId: site.id, enabledOnly: true } }),
+  })
+  const collections = collectionsQuery.data ?? []
+
+  return (
+    <SidebarGroup data-testid="site-nav">
+      <SidebarGroupLabel>{site.name}</SidebarGroupLabel>
+      <SidebarGroupContent>
+        <SidebarMenu>
+          {sections.map((section) => {
+            const active = isSectionActive(section, pathname)
+            const Icon = section.icon
+            return (
+              <SidebarMenuItem key={section.key}>
+                <SidebarMenuButton
+                  asChild
+                  isActive={active}
+                  tooltip={section.label}
+                >
+                  <Link
+                    to={section.href}
+                    data-testid={section.testId}
+                    aria-current={active ? 'page' : undefined}
+                  >
+                    <Icon />
+                    <span>{section.label}</span>
+                  </Link>
+                </SidebarMenuButton>
+                {section.key === 'content' && collections.length > 0 ? (
+                  <SidebarMenuSub>
+                    {collections.map((collection) => {
+                      const href = `/sites/${site.id}/c/${collection.key}`
+                      const subActive =
+                        pathname === href || pathname.startsWith(`${href}/`)
+                      return (
+                        <SidebarMenuSubItem key={collection.id}>
+                          <SidebarMenuSubButton asChild isActive={subActive}>
+                            <Link
+                              to="/sites/$siteId/c/$collectionKey"
+                              params={{
+                                siteId: site.id,
+                                collectionKey: collection.key,
+                              }}
+                              aria-current={subActive ? 'page' : undefined}
+                            >
+                              <span>{collection.label}</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      )
+                    })}
+                  </SidebarMenuSub>
+                ) : null}
+              </SidebarMenuItem>
+            )
+          })}
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
   )
 }

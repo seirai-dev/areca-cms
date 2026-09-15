@@ -69,6 +69,18 @@ Expected: you are signed in and land on `/` (Dashboard). With zero organizations
 
 A second visit to `/setup` redirects to `/login` when you are signed out (“already set up”). If you still have a session you land on the dashboard instead. `/login` and every signed-in page also redirect to `/setup` while the user table is empty.
 
+## 4b. Whitelabel the CMS (optional)
+
+Agency admins can rebrand the whole CMS at **Branding** in the sidebar Agency section. URL: [http://localhost:3000/admin/branding](http://localhost:3000/admin/branding)
+
+- **Name** replaces "Areca" in the sidebar, browser tab, sign-in, setup, and invitation pages.
+- **Logo** and **favicon** are uploaded to the S3 bucket under `branding/` and served through `/api/assets/file/…`.
+- **Accent colour** re-tints the brand palette (buttons, links, active sidebar marker) in light and dark mode; status colours stay green/red.
+- **Font** picks from a curated Google Fonts list, or the system font.
+- **Sender name** is the display name on invitation emails; the address still comes from `SMTP_FROM`.
+
+Settings live in the single-row `branding` table. **Reset to defaults** clears everything and deletes the uploaded images.
+
 ## 5. Create an organization
 
 1. Open **Organizations** in the sidebar Agency section, or click **Create an organization** on the Get started card. URL: [http://localhost:3000/admin/organizations](http://localhost:3000/admin/organizations)

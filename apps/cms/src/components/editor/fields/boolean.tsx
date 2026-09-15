@@ -9,11 +9,13 @@ export function BooleanFieldInput({
   value: unknown
   onChange: (value: boolean) => void
 }) {
+  const checked = value === true
   return (
-    <Switch
-      id={id}
-      checked={value === true}
-      onCheckedChange={onChange}
-    />
+    <div className="flex items-center gap-3">
+      <Switch id={id} checked={checked} onCheckedChange={onChange} />
+      <span className="text-sm text-muted-foreground">
+        {checked ? 'Yes' : 'No'}
+      </span>
+    </div>
   )
 }

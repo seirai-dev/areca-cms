@@ -40,7 +40,10 @@ test('owner can schedule a past article and the worker publishes it', async ({
     { timeout: 20_000 },
   )
 
-  await page.getByRole('link', { name: 'Releases' }).click()
+  await page
+    .getByTestId('site-nav')
+    .getByRole('link', { name: 'Releases' })
+    .click()
   await expect(page.getByTestId('publication-status-live')).toBeVisible({
     timeout: 15_000,
   })

@@ -2,12 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
 import { requireOrgMember, requireUser } from '#/lib/session.server'
-import {
-  deleteAsset,
-  getAsset,
-  listAssets,
-  updateAsset,
-} from '#/server/assets'
+import { deleteAsset, getAsset, listAssets, updateAsset } from '#/server/assets'
 
 export const listAssetsFn = createServerFn({ method: 'GET' })
   .validator(
@@ -25,6 +20,18 @@ export const listAssetsFn = createServerFn({ method: 'GET' })
       limit: data.limit,
       offset: data.offset,
     })
+  })
+
+export const getAssetFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ id: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    await requireUser()
+    const existing = await getAsset(data.id)
+    if (!existing) {
+      return null
+    }
+    await requireOrgMember(existing.organizationId)
+    return existing
   })
 
 export const updateAssetFn = createServerFn({ method: 'POST' })

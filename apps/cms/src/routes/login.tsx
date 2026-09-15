@@ -1,16 +1,11 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState } from 'react'
+import type { FormEvent } from 'react'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 
 import { Alert, AlertDescription } from '#/components/ui/alert'
 import { Button } from '#/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '#/components/ui/card'
 import { Input } from '#/components/ui/input'
+import { BrandMark } from '#/components/brand-mark'
 import { FormField } from '#/components/form-field'
 import { authClient } from '#/lib/auth-client'
 import { safeRedirectPath } from '#/lib/safe-redirect'
@@ -71,12 +66,15 @@ function LoginPage() {
 
   return (
     <div className="flex min-h-svh items-center justify-center p-6">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="text-2xl">Sign in to Areca</CardTitle>
-          <CardDescription>Use your email and password.</CardDescription>
-        </CardHeader>
-        <CardContent>
+      <div className="w-full max-w-sm">
+        <BrandMark className="mb-8" />
+        <div className="mb-6 grid gap-1.5">
+          <h1 className="text-2xl">Sign in</h1>
+          <p className="text-sm text-muted-foreground">
+            Use your email and password.
+          </p>
+        </div>
+        <div>
           <form
             className="grid gap-4"
             method="post"
@@ -114,8 +112,8 @@ function LoginPage() {
               {pending ? 'Signing in…' : 'Sign in'}
             </Button>
           </form>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   )
 }

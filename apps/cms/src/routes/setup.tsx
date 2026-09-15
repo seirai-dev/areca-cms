@@ -1,18 +1,14 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState } from 'react'
+import type { FormEvent } from 'react'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 
 import { Alert, AlertDescription } from '#/components/ui/alert'
 import { Button } from '#/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '#/components/ui/card'
 import { Input } from '#/components/ui/input'
+import { BrandMark } from '#/components/brand-mark'
 import { FormField } from '#/components/form-field'
 import { authClient } from '#/lib/auth-client'
+import { useBranding } from '#/lib/use-branding'
 import { getMeFn } from '#/server/fn/me'
 import { completeSetupFn, getSetupStatusFn } from '#/server/fn/setup'
 
@@ -28,6 +24,7 @@ export const Route = createFileRoute('/setup')({
 })
 
 function SetupPage() {
+  const branding = useBranding()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -67,15 +64,16 @@ function SetupPage() {
 
   return (
     <div className="flex min-h-svh items-center justify-center p-6">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="text-2xl">Set up Areca</CardTitle>
-          <CardDescription>
+      <div className="w-full max-w-sm">
+        <BrandMark className="mb-8" />
+        <div className="mb-6 grid gap-1.5">
+          <h1 className="text-2xl">Set up {branding.appName}</h1>
+          <p className="text-sm text-muted-foreground">
             Create the first agency admin. This can only be done while no
             accounts exist.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+          </p>
+        </div>
+        <div>
           <form
             className="grid gap-4"
             method="post"
@@ -125,8 +123,8 @@ function SetupPage() {
               {pending ? 'Creating admin…' : 'Create admin account'}
             </Button>
           </form>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   )
 }

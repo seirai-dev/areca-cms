@@ -15,6 +15,13 @@
       "when": 1788800976009,
       "tag": "0001_cheerful_tusk",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789503629097,
+      "tag": "0002_rainy_echo",
+      "breakpoints": true
     }
   ]
 }

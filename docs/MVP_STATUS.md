@@ -25,6 +25,7 @@ one exists, otherwise a code-path review.
 | Scheduled publishing | done | `apps/cms/src/server/content/entries.ts` (`scheduleEntry`), `apps/cms/src/server/publishing/scheduler.ts`, `apps/cms/e2e/schedule.spec.ts` | Timezone stored; due drafts are snapshotted; entry becomes `published` only after a successful deploy. |
 | Revision history | done | `apps/cms/src/db/schema.ts` (`entry_revision`), `apps/cms/src/server/content/entries.ts`, `apps/cms/src/components/editor/entry-editor.tsx` | List + restore. Covered by `entries.test.ts`. |
 | Basic media library | done | `apps/cms/src/routes/_app/sites/$siteId/media.tsx`, `apps/cms/src/server/assets/`, `apps/cms/src/routes/api/assets/` | Upload, alt text, type/size limits, dimensions via sharp, delete blocked when in use. |
+| Whitelabel branding | done | `apps/cms/src/lib/branding.ts`, `apps/cms/src/server/admin/branding.ts`, `apps/cms/src/routes/_app/admin/branding.tsx` | Instance-wide name, logo, favicon, accent colour, font, and email sender name. Agency admins edit at **/admin/branding**; the root route loads it for every page. |
 | Audit log | done | `apps/cms/src/db/schema.ts` (`audit_log`), `apps/cms/src/server/audit.ts`, `apps/cms/src/routes/_app/admin/audit.tsx`, `apps/cms/src/routes/_app/orgs/$orgId/audit.tsx` | Written on admin/content/publish actions. Agency sees all events; org owners see their org at **Activity**. |
 
 ## Site integration

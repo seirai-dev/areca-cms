@@ -296,3 +296,23 @@ export const auditLog = pgTable('audit_log', {
   meta: jsonb('meta').$type<AuditMeta>(),
   createdAt: createdAt(),
 })
+
+/**
+ * Instance-wide whitelabel settings. A single row with id `default`; every
+ * nullable column falls back to the built-in Areca branding when unset.
+ */
+export const branding = pgTable('branding', {
+  id: text('id').primaryKey(),
+  appName: text('app_name'),
+  logoKey: text('logo_key'),
+  logoMime: text('logo_mime'),
+  faviconKey: text('favicon_key'),
+  faviconMime: text('favicon_mime'),
+  accentColor: text('accent_color'),
+  font: text('font'),
+  emailFromName: text('email_from_name'),
+  updatedBy: text('updated_by').references(() => user.id, {
+    onDelete: 'set null',
+  }),
+  updatedAt: updatedAt(),
+})

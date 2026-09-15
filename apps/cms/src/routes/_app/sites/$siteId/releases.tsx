@@ -1,6 +1,19 @@
 import { useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
+import {
+  Copy,
+  Hammer,
+  History,
+  RotateCcw,
+  ScrollText,
+  XCircle,
+} from 'lucide-react'
 import { toast } from 'sonner'
 
 import { ConfirmDialog } from '#/components/confirm-dialog'
@@ -16,7 +29,9 @@ import {
   shortId,
 } from '#/components/editor/utils'
 import { EmptyState } from '#/components/empty-state'
+import { ListPagination } from '#/components/list-pagination'
 import { PageHeader } from '#/components/page-header'
+import { QueryError } from '#/components/query-error'
 import { createDataColumns, DataTable } from '#/components/data-table'
 import { Button } from '#/components/ui/button'
 import {
@@ -61,8 +76,15 @@ type JobRow = {
   logs: string | null
 }
 
+const PUBLICATIONS_PAGE_SIZE = 20
 const EMPTY_PUBLICATIONS: PublicationRow[] = []
 const EMPTY_JOBS: JobRow[] = []
+
+function isActiveJob(status: BuildJobStatus) {
+  return ACTIVE_JOB_STATUSES.includes(
+    status as (typeof ACTIVE_JOB_STATUSES)[number],
+  )
+}
 
 function canRollback(row: PublicationRow) {
   return row.wasLive && row.status !== 'live'
@@ -71,12 +93,24 @@ function canRollback(row: PublicationRow) {
 function ReleasesPage() {
   const { siteId } = Route.useParams()
   const queryClient = useQueryClient()
-  const [rollbackId, setRollbackId] = useState<string | null>(null)
+  const [publicationsOffset, setPublicationsOffset] = useState(0)
+  const [rollbackTarget, setRollbackTarget] = useState<PublicationRow | null>(
+    null,
+  )
+  const [cancelTarget, setCancelTarget] = useState<JobRow | null>(null)
   const [logsJobId, setLogsJobId] = useState<string | null>(null)
 
   const publicationsQuery = useQuery({
-    queryKey: queryKeys.publications(siteId),
-    queryFn: () => listPublicationsFn({ data: { siteId, limit: 50, offset: 0 } }),
+    queryKey: [...queryKeys.publications(siteId), publicationsOffset],
+    queryFn: () =>
+      listPublicationsFn({
+        data: {
+          siteId,
+          limit: PUBLICATIONS_PAGE_SIZE + 1,
+          offset: publicationsOffset,
+        },
+      }),
+    placeholderData: keepPreviousData,
     refetchInterval: (query) => {
       const items = query.state.data as PublicationRow[] | undefined
       const busy = items?.some(
@@ -91,33 +125,30 @@ function ReleasesPage() {
     queryFn: () => listBuildJobsFn({ data: { siteId, limit: 50 } }),
     refetchInterval: (query) => {
       const items = query.state.data as JobRow[] | undefined
-      const busy = items?.some((item) =>
-        ACTIVE_JOB_STATUSES.includes(
-          item.status as (typeof ACTIVE_JOB_STATUSES)[number],
-        ),
-      )
+      const busy = items?.some((item) => isActiveJob(item.status))
       return busy ? 2000 : false
     },
   })
 
   const logsQuery = useQuery({
     queryKey: queryKeys.buildJob(logsJobId ?? ''),
-    queryFn: () => getBuildJobFn({ data: { id: logsJobId! } }),
+    queryFn: () => getBuildJobFn({ data: { id: logsJobId ?? '' } }),
     enabled: Boolean(logsJobId),
     refetchInterval: (query) => {
       const status = (query.state.data as JobRow | undefined)?.status
-      return status &&
-        ACTIVE_JOB_STATUSES.includes(status as (typeof ACTIVE_JOB_STATUSES)[number])
-        ? 3000
-        : false
+      return status && isActiveJob(status) ? 3000 : false
     },
   })
 
   async function invalidate() {
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: queryKeys.publications(siteId) }),
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.publications(siteId),
+      }),
       queryClient.invalidateQueries({ queryKey: queryKeys.buildJobs(siteId) }),
-      queryClient.invalidateQueries({ queryKey: queryKeys.releaseStatus(siteId) }),
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.releaseStatus(siteId),
+      }),
     ])
   }
 
@@ -126,9 +157,10 @@ function ReleasesPage() {
       requestRollbackFn({ data: { siteId, publicationId } }),
     onSuccess: async () => {
       toast.success('Rollback requested')
+      setPublicationsOffset(0)
       await invalidate()
     },
-    onError: (error) => toast.error(errorMessage(error, 'Could not rollback')),
+    onError: (error) => toast.error(errorMessage(error, 'Could not roll back')),
   })
 
   const cancelMutation = useMutation({
@@ -137,14 +169,20 @@ function ReleasesPage() {
       toast.success('Job cancelled')
       await invalidate()
     },
-    onError: (error) => toast.error(errorMessage(error, 'Could not cancel')),
+    onError: (error) =>
+      toast.error(errorMessage(error, 'Could not cancel job')),
   })
 
   const pubHelper = createDataColumns<PublicationRow>()
   const publicationColumns = pubHelper.columns([
     pubHelper.accessor('createdAt', {
       header: 'Created',
-      cell: ({ row }) => formatDateTime(row.original.createdAt),
+      sortFn: 'datetime',
+      cell: ({ row }) => (
+        <span className="whitespace-nowrap">
+          {formatDateTime(row.original.createdAt)}
+        </span>
+      ),
     }),
     pubHelper.accessor('status', {
       header: 'Status',
@@ -156,8 +194,12 @@ function ReleasesPage() {
       ),
     }),
     pubHelper.accessor('snapshotHash', {
-      header: 'Hash',
-      cell: ({ row }) => shortId(row.original.snapshotHash),
+      header: 'Snapshot',
+      cell: ({ row }) => (
+        <span className="font-mono text-xs" title={row.original.snapshotHash}>
+          {shortId(row.original.snapshotHash)}
+        </span>
+      ),
     }),
     pubHelper.accessor('requestedByName', {
       header: 'Requested by',
@@ -165,23 +207,34 @@ function ReleasesPage() {
     }),
     pubHelper.accessor('deployedAt', {
       header: 'Deployed',
-      cell: ({ row }) => formatDateTime(row.original.deployedAt),
+      sortFn: 'datetime',
+      cell: ({ row }) => (
+        <span className="whitespace-nowrap text-muted-foreground">
+          {formatDateTime(row.original.deployedAt)}
+        </span>
+      ),
     }),
     pubHelper.display({
       id: 'actions',
-      header: '',
-      cell: ({ row }) =>
-        canRollback(row.original) ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            data-testid="rollback-publication"
-            onClick={() => setRollbackId(row.original.id)}
-          >
-            Rollback
-          </Button>
-        ) : null,
+      header: () => <span className="sr-only">Actions</span>,
+      enableSorting: false,
+      cell: ({ row }) => (
+        <div className="flex justify-end">
+          {canRollback(row.original) ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              data-testid="rollback-publication"
+              disabled={rollbackMutation.isPending}
+              onClick={() => setRollbackTarget(row.original)}
+            >
+              <RotateCcw />
+              Rollback
+            </Button>
+          ) : null}
+        </div>
+      ),
     }),
   ])
 
@@ -189,24 +242,45 @@ function ReleasesPage() {
   const jobColumns = jobHelper.columns([
     jobHelper.accessor('createdAt', {
       header: 'Created',
-      cell: ({ row }) => formatDateTime(row.original.createdAt),
+      sortFn: 'datetime',
+      cell: ({ row }) => (
+        <span className="whitespace-nowrap">
+          {formatDateTime(row.original.createdAt)}
+        </span>
+      ),
     }),
     jobHelper.accessor('status', {
       header: 'Status',
-      cell: ({ row }) => <JobStatusBadge status={row.original.status} />,
+      cell: ({ row }) => (
+        <div className="grid gap-1">
+          <div>
+            <JobStatusBadge status={row.original.status} />
+          </div>
+          {row.original.status === 'failed' && row.original.error ? (
+            <p
+              className="max-w-xs truncate text-xs text-destructive"
+              title={row.original.error}
+            >
+              {row.original.error}
+            </p>
+          ) : null}
+        </div>
+      ),
     }),
     jobHelper.accessor('attempts', { header: 'Attempts' }),
     jobHelper.display({
       id: 'actions',
-      header: '',
+      header: () => <span className="sr-only">Actions</span>,
+      enableSorting: false,
       cell: ({ row }) => (
-        <div className="flex gap-2">
+        <div className="flex justify-end gap-2">
           <Button
             type="button"
             size="sm"
             variant="outline"
             onClick={() => setLogsJobId(row.original.id)}
           >
+            <ScrollText />
             Logs
           </Button>
           {row.original.status === 'queued' ? (
@@ -214,8 +288,11 @@ function ReleasesPage() {
               type="button"
               size="sm"
               variant="ghost"
-              onClick={() => cancelMutation.mutate(row.original.id)}
+              className="text-destructive hover:text-destructive"
+              disabled={cancelMutation.isPending}
+              onClick={() => setCancelTarget(row.original)}
             >
+              <XCircle />
               Cancel
             </Button>
           ) : null}
@@ -224,49 +301,134 @@ function ReleasesPage() {
     }),
   ])
 
-  const publications = (publicationsQuery.data ?? EMPTY_PUBLICATIONS) as PublicationRow[]
-  const jobs = (jobsQuery.data ?? EMPTY_JOBS) as JobRow[]
+  const publicationRows: PublicationRow[] =
+    publicationsQuery.data ?? EMPTY_PUBLICATIONS
+  const publicationsHasMore = publicationRows.length > PUBLICATIONS_PAGE_SIZE
+  const publications = publicationsHasMore
+    ? publicationRows.slice(0, PUBLICATIONS_PAGE_SIZE)
+    : publicationRows
+  const jobs: JobRow[] = jobsQuery.data ?? EMPTY_JOBS
   const logsJob = logsQuery.data as JobRow | undefined
+  const logsText = logsJob?.logs || logsJob?.error || ''
+
+  async function copyLogs() {
+    if (!logsText) return
+    try {
+      await navigator.clipboard.writeText(logsText)
+      toast.success('Logs copied to clipboard')
+    } catch {
+      toast.error('Could not copy logs')
+    }
+  }
 
   return (
-    <div className="grid gap-8">
-      <PageHeader title="Releases" description="Publications and build jobs" />
+    <div className="grid gap-6">
+      <PageHeader
+        title="Releases"
+        description="Every publication of this site and the build jobs that deploy them."
+      />
 
       <section className="grid gap-3">
-        <h2 className="text-lg font-medium">Publications</h2>
-        {publicationsQuery.isLoading ? (
+        <div>
+          <h2 className="text-lg font-medium">Publications</h2>
+          <p className="text-sm text-muted-foreground">
+            Snapshots of the site content. Roll back to any previously live
+            publication.
+          </p>
+        </div>
+        {publicationsQuery.isError ? (
+          <QueryError
+            title="Could not load publications"
+            error={publicationsQuery.error}
+            onRetry={() => publicationsQuery.refetch()}
+            retrying={publicationsQuery.isFetching}
+          />
+        ) : publicationsQuery.isLoading ? (
           <Skeleton className="h-48 w-full" />
         ) : publications.length === 0 ? (
           <EmptyState
-            title="No publications"
+            icon={<History />}
+            title="No publications yet"
             description="Publish the site to create the first release."
           />
         ) : (
-          <DataTable columns={publicationColumns} data={publications} />
+          <>
+            <DataTable
+              columns={publicationColumns}
+              data={publications}
+              caption="Publications"
+            />
+            <ListPagination
+              offset={publicationsOffset}
+              limit={PUBLICATIONS_PAGE_SIZE}
+              count={publications.length}
+              hasMore={publicationsHasMore}
+              onChange={setPublicationsOffset}
+              isFetching={publicationsQuery.isFetching}
+              noun="publications"
+            />
+          </>
         )}
       </section>
 
       <section className="grid gap-3">
-        <h2 className="text-lg font-medium">Build jobs</h2>
-        {jobsQuery.isLoading ? (
+        <div>
+          <h2 className="text-lg font-medium">Build jobs</h2>
+          <p className="text-sm text-muted-foreground">
+            Queued jobs can be cancelled before they start building.
+          </p>
+        </div>
+        {jobsQuery.isError ? (
+          <QueryError
+            title="Could not load build jobs"
+            error={jobsQuery.error}
+            onRetry={() => jobsQuery.refetch()}
+            retrying={jobsQuery.isFetching}
+          />
+        ) : jobsQuery.isLoading ? (
           <Skeleton className="h-48 w-full" />
         ) : jobs.length === 0 ? (
-          <EmptyState title="No build jobs" />
+          <EmptyState
+            icon={<Hammer />}
+            title="No build jobs yet"
+            description="Jobs appear here once the site is published."
+          />
         ) : (
-          <DataTable columns={jobColumns} data={jobs} />
+          <DataTable columns={jobColumns} data={jobs} caption="Build jobs" />
         )}
       </section>
 
       <ConfirmDialog
-        open={rollbackId !== null}
+        open={rollbackTarget !== null}
         onOpenChange={(open) => {
-          if (!open) setRollbackId(null)
+          if (!open) setRollbackTarget(null)
         }}
-        title="Rollback to this publication?"
-        description="A new build job will redeploy this snapshot."
+        title="Roll back to this publication?"
+        description={
+          rollbackTarget
+            ? `The snapshot from ${formatDateTime(rollbackTarget.createdAt)} will be redeployed and replace the current live release. Content published since then will no longer be live until you publish again.`
+            : undefined
+        }
         confirmLabel="Rollback"
+        variant="destructive"
         onConfirm={async () => {
-          if (rollbackId) await rollbackMutation.mutateAsync(rollbackId)
+          if (rollbackTarget)
+            await rollbackMutation.mutateAsync(rollbackTarget.id)
+        }}
+      />
+
+      <ConfirmDialog
+        open={cancelTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setCancelTarget(null)
+        }}
+        title="Cancel this build job?"
+        description="The job will be removed from the queue and the site will not be deployed. You can publish again to start a new build."
+        confirmLabel="Cancel job"
+        cancelLabel="Keep job"
+        variant="destructive"
+        onConfirm={async () => {
+          if (cancelTarget) await cancelMutation.mutateAsync(cancelTarget.id)
         }}
       />
 
@@ -279,17 +441,44 @@ function ReleasesPage() {
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Build logs</DialogTitle>
-            <DialogDescription>
-              {logsJob ? <JobStatusBadge status={logsJob.status} /> : 'Loading…'}
+            <DialogDescription asChild>
+              <div className="flex flex-wrap items-center gap-2">
+                {logsJob ? (
+                  <>
+                    <JobStatusBadge status={logsJob.status} />
+                    <span>
+                      Started {formatDateTime(logsJob.createdAt)} ·{' '}
+                      {logsJob.attempts}{' '}
+                      {logsJob.attempts === 1 ? 'attempt' : 'attempts'}
+                    </span>
+                  </>
+                ) : (
+                  'Loading…'
+                )}
+              </div>
             </DialogDescription>
           </DialogHeader>
           <ScrollArea className="h-80 rounded-md border bg-muted/40 p-3">
-            <pre className="font-mono text-xs whitespace-pre-wrap">
-              {logsQuery.isLoading
-                ? 'Loading…'
-                : logsJob?.logs || logsJob?.error || 'No logs yet.'}
+            <pre className="font-mono text-xs whitespace-pre-wrap break-all">
+              {logsQuery.isError
+                ? errorMessage(logsQuery.error, 'Could not load logs')
+                : logsQuery.isLoading
+                  ? 'Loading…'
+                  : logsText || 'No logs yet.'}
             </pre>
           </ScrollArea>
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!logsText}
+              onClick={copyLogs}
+            >
+              <Copy />
+              Copy logs
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
