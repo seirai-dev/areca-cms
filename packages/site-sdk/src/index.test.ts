@@ -8,8 +8,8 @@ import { createArecaClient } from './client.js'
 import { defineSiteContent, manifestFromConfig } from './config.js'
 import { getPreviewEntry, previewHeaders } from './preview.js'
 import { pullContent, readContent } from './pull.js'
-import { richTextHtml } from './rich-text.js'
-import type { SiteContentConfig, Snapshot, SnapshotEntry } from './types.js'
+import { richTextDocument, richTextHtml, richTextMarkdown } from './rich-text.js'
+import type { RichTextValue, SiteContentConfig, Snapshot, SnapshotEntry } from './types.js'
 
 const sampleConfig: SiteContentConfig = {
   siteKey: 'demo',
@@ -35,7 +35,15 @@ const sampleEntry: SnapshotEntry = {
   publishedAt: '2026-01-02T00:00:00.000Z',
   data: {
     title: 'Hello',
-    body: { json: { type: 'doc' }, html: '<p>Hi</p>', markdown: 'Hi' },
+    body: {
+      json: { type: 'doc' },
+      markdown: 'Hi',
+      document: {
+        type: 'root',
+        children: [{ type: 'paragraph', children: [{ type: 'text', value: 'Hi' }] }],
+      },
+      html: '<p>Hi</p>',
+    },
   },
 }
 
@@ -254,9 +262,27 @@ describe('preview helpers', () => {
   })
 })
 
-describe('richTextHtml', () => {
-  it('returns html or an empty string', () => {
-    expect(richTextHtml({ json: null, html: '<p>Hi</p>', markdown: 'Hi' })).toBe('<p>Hi</p>')
+describe('rich text accessors', () => {
+  const body = sampleEntry.data.body as RichTextValue
+
+  it('returns the document, markdown and html', () => {
+    expect(richTextDocument(body)).toBe(body.document)
+    expect(richTextMarkdown(body)).toBe('Hi')
+    expect(richTextHtml(body)).toBe('<p>Hi</p>')
+  })
+
+  it('parses markdown when a snapshot predates the document field', () => {
+    const legacy = { json: null, markdown: '## Old\n\nBody', html: '' } as unknown as RichTextValue
+    expect(richTextDocument(legacy).children.map((node) => node.type)).toEqual([
+      'heading',
+      'paragraph',
+    ])
+  })
+
+  it('returns empty values for missing rich text', () => {
+    expect(richTextDocument(null)).toEqual({ type: 'root', children: [] })
+    expect(richTextDocument(undefined)).toEqual({ type: 'root', children: [] })
+    expect(richTextMarkdown(null)).toBe('')
     expect(richTextHtml(null)).toBe('')
     expect(richTextHtml(undefined)).toBe('')
   })

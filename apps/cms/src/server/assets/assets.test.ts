@@ -3,15 +3,9 @@ import sharp from 'sharp'
 import { describe, expect, it } from 'vitest'
 
 import { db } from '#/db'
-import {
-  collection,
-  entry,
-  membership,
-  organization,
-  site,
-} from '#/db/schema'
+import { collection, entry, membership, organization, site } from '#/db/schema'
 import { env } from '#/env'
-import { GET } from '#/routes/api/assets/file/$'
+import { GET } from '#/routes/api/assets/file/$prefix/$filename'
 
 import {
   AssetInUseError,
@@ -19,8 +13,18 @@ import {
   deleteAsset,
   listAssets,
   resolveAssetValue,
+  storageKeyFromRequest,
   uploadAsset,
 } from './index.ts'
+
+describe('storageKeyFromRequest', () => {
+  it('reads the full two-segment key from the request pathname', () => {
+    const key =
+      '0a3d59c0-78d9-41be-a114-425fdc9c851c/b0b6e32c-74f3-4641-a2d2-36de7ca73366.png'
+    const request = new Request(`http://localhost/api/assets/file/${key}`)
+    expect(storageKeyFromRequest(request)).toBe(key)
+  })
+})
 
 describe.skipIf(!process.env.DATABASE_URL || !process.env.S3_ENDPOINT)(
   'assets',
@@ -112,8 +116,25 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.S3_ENDPOINT)(
         expect(fileRes.headers.get('Cache-Control')).toBe(
           'public, max-age=31536000, immutable',
         )
+        expect(fileRes.headers.get('Access-Control-Allow-Origin')).toBe('*')
+        expect(fileRes.headers.get('Cross-Origin-Resource-Policy')).toBe(
+          'cross-origin',
+        )
+        expect(fileRes.headers.get('X-Content-Type-Options')).toBe('nosniff')
         const served = Buffer.from(await fileRes.arrayBuffer())
         expect(served.equals(buffer)).toBe(true)
+
+        const [orgId] = uploaded.storageKey.split('/')
+        const fileResFromUrl = await GET({
+          request: new Request(
+            `http://localhost/api/assets/file/${uploaded.storageKey}`,
+          ),
+          params: { _splat: orgId },
+        })
+        expect(fileResFromUrl.status).toBe(200)
+        expect(fileResFromUrl.headers.get('Content-Type')).toMatch(/image\/png/)
+        const servedFromUrl = Buffer.from(await fileResFromUrl.arrayBuffer())
+        expect(servedFromUrl.equals(buffer)).toBe(true)
 
         const [throwaway] = await db
           .insert(entry)

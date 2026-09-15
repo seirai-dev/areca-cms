@@ -9,6 +9,7 @@ import {
   collection,
   entry,
   entryRevision,
+  membership,
   organization,
   publication,
   site,
@@ -27,6 +28,7 @@ import {
   acceptInvitation,
   inviteMember,
   listMembers,
+  listUsers,
   removeMember,
   updateMemberRole,
 } from './members.ts'
@@ -347,6 +349,88 @@ describe.skipIf(!hasDb)('admin', () => {
     }
   })
 
+  it('lists users with memberships grouped and sorted by organization name', async () => {
+    const suffix = crypto.randomUUID()
+    const actor = await createActor(suffix)
+    const [member] = await db
+      .insert(user)
+      .values({
+        id: crypto.randomUUID(),
+        name: `Member ${suffix}`,
+        email: `member-${suffix}@test.local`,
+        emailVerified: true,
+      })
+      .returning()
+    if (!member) throw new Error('Failed to create member')
+
+    const [loner] = await db
+      .insert(user)
+      .values({
+        id: crypto.randomUUID(),
+        name: `Loner ${suffix}`,
+        email: `loner-${suffix}@test.local`,
+        emailVerified: true,
+      })
+      .returning()
+    if (!loner) throw new Error('Failed to create loner')
+
+    const orgIds: string[] = []
+    const userIds = [actor.id, member.id, loner.id]
+
+    try {
+      const zeta = await createOrganization({
+        name: `Zeta Org ${suffix}`,
+        slug: `zeta-org-${suffix}`,
+        actorId: actor.id,
+      })
+      const alpha = await createOrganization({
+        name: `Alpha Org ${suffix}`,
+        slug: `alpha-org-${suffix}`,
+        actorId: actor.id,
+      })
+      orgIds.push(zeta.id, alpha.id)
+
+      await db.insert(membership).values([
+        {
+          userId: member.id,
+          organizationId: zeta.id,
+          role: 'editor',
+        },
+        {
+          userId: member.id,
+          organizationId: alpha.id,
+          role: 'owner',
+        },
+      ])
+
+      const listed = await listUsers()
+      const foundMember = listed.find((row) => row.id === member.id)
+      const foundLoner = listed.find((row) => row.id === loner.id)
+
+      expect(foundMember).toMatchObject({
+        id: member.id,
+        name: member.name,
+        email: member.email,
+        isAgencyAdmin: false,
+      })
+      expect(foundMember?.memberships).toEqual([
+        {
+          organizationId: alpha.id,
+          organizationName: alpha.name,
+          role: 'owner',
+        },
+        {
+          organizationId: zeta.id,
+          organizationName: zeta.name,
+          role: 'editor',
+        },
+      ])
+      expect(foundLoner?.memberships).toEqual([])
+    } finally {
+      await cleanup(orgIds, userIds)
+    }
+  })
+
   it('lists audit log entries with the actor name', async () => {
     const suffix = crypto.randomUUID()
     const actor = await createActor(suffix)
@@ -409,17 +493,19 @@ describe.skipIf(!hasDb)('admin', () => {
       await deleteSite(ctx.site.id)
 
       expect(
-        (
-          await db.select().from(site).where(eq(site.id, ctx.site.id))
-        ).length,
+        (await db.select().from(site).where(eq(site.id, ctx.site.id))).length,
       ).toBe(0)
       expect(
         (
-          await db.select().from(collection).where(eq(collection.siteId, ctx.site.id))
+          await db
+            .select()
+            .from(collection)
+            .where(eq(collection.siteId, ctx.site.id))
         ).length,
       ).toBe(0)
       expect(
-        (await db.select().from(entry).where(eq(entry.siteId, ctx.site.id))).length,
+        (await db.select().from(entry).where(eq(entry.siteId, ctx.site.id)))
+          .length,
       ).toBe(0)
       expect(
         (
@@ -439,7 +525,10 @@ describe.skipIf(!hasDb)('admin', () => {
       ).toBe(0)
       expect(
         (
-          await db.select().from(buildJob).where(eq(buildJob.siteId, ctx.site.id))
+          await db
+            .select()
+            .from(buildJob)
+            .where(eq(buildJob.siteId, ctx.site.id))
         ).length,
       ).toBe(0)
 

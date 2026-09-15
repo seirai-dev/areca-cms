@@ -34,7 +34,8 @@ function serializeInline(nodes: PMNode[] | undefined): string {
 }
 
 function serializeInlineNode(node: PMNode): string {
-  if (node.type === 'hardBreak') return '  \n'
+  // TanStack Markdown only recognises backslash hard breaks.
+  if (node.type === 'hardBreak') return '\\\n'
   if (node.type === 'text') return wrapMarks(node.text ?? '', node.marks)
   if (node.content) return serializeInline(node.content)
   return ''

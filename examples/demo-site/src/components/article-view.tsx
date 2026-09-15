@@ -1,5 +1,5 @@
-import { richTextHtml } from '@areca/site-sdk'
 import type { Article } from '../lib/content.ts'
+import { ArticleBody } from './article-body.tsx'
 
 export function formatArticleDate(value: string | null | undefined): string | null {
   if (!value) return null
@@ -22,7 +22,6 @@ export function ArticleView({
   const published = formatArticleDate(
     article.data.publishedAt ?? article.publishedAt,
   )
-  const html = richTextHtml(article.data.body)
 
   return (
     <article className="mx-auto max-w-3xl px-4 py-12">
@@ -49,10 +48,7 @@ export function ArticleView({
       {article.data.excerpt ? (
         <p className="mt-4 text-lg text-zinc-600">{article.data.excerpt}</p>
       ) : null}
-      <div
-        className="prose prose-zinc mt-8 max-w-none"
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
+      <ArticleBody body={article.data.body} />
     </article>
   )
 }

@@ -253,10 +253,13 @@ pnpm sync-manifest
 5. In the site, **read the pulled files**, never the CMS, on public pages:
 
 ```ts
-import { readContent, richTextHtml } from '@areca/site-sdk'
+import { readContent } from '@areca/site-sdk/pull'
+import { richTextDocument } from '@areca/site-sdk'
+import { Markdown } from '@tanstack/markdown/react'
 
 const articles = readContent('src/generated/content', 'articles')
-// article.data.body → richTextHtml(...)
+// article.data.body → <Markdown components={yourComponents}>{richTextDocument(body)}</Markdown>
+// (TanStack Markdown AST; richTextHtml(body) is the static fallback)
 ```
 
 Wire those entries to your routes (the demo uses `/blog` and `/blog/$slug`). Add a `/__preview/$collection/$slug` route if you want CMS **Preview** (it live-fetches a draft; needs `ARECA_CMS_URL` at runtime). Copy `examples/demo-site/src/routes/[__preview]/$collection/$slug.tsx` if you are on TanStack Start.

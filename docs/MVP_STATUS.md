@@ -43,7 +43,7 @@ one exists, otherwise a code-path review.
 
 | item | status | where | notes |
 | --- | --- | --- | --- |
-| Content snapshot creation | done | `apps/cms/src/server/content/snapshot.ts`, `apps/cms/src/server/publishing/publications.ts` | Immutable JSON + sha256; rich text exported as `{ json, html, markdown }`. |
+| Content snapshot creation | done | `apps/cms/src/server/content/snapshot.ts`, `apps/cms/src/server/publishing/publications.ts` | Immutable JSON + sha256; rich text exported as `{ json, markdown, document, html }` (`document` = TanStack Markdown AST). |
 | Build queue | done | `apps/cms/src/db/schema.ts` (`build_job`), `apps/cms/src/server/publishing/worker.ts` | In-process worker (`WORKER_ENABLED`); one job per site; coalesces queued jobs. |
 | Priority levels | done | `apps/cms/src/server/publishing/publications.ts`, `apps/cms/src/components/editor/release-status-bar.tsx` | Default 0; **Urgent** / rollback = 100. Worker `ORDER BY priority DESC`. |
 | Build logs | done | `apps/cms/src/server/publishing/worker.ts` (`appendLog`), `apps/cms/src/routes/_app/sites/$siteId/releases.tsx` | Timestamped lines; viewable on the Releases page. |

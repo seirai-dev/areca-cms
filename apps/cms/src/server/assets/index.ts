@@ -42,6 +42,18 @@ const EXT_BY_MIME: Record<string, string> = {
   'application/pdf': 'pdf',
 }
 
+const MIME_BY_EXT: Record<string, string> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  gif: 'image/gif',
+  svg: 'image/svg+xml',
+  pdf: 'application/pdf',
+}
+
+const ASSET_FILE_PREFIX = '/api/assets/file/'
+
 const MAX_SIZE_BYTES = 20 * 1024 * 1024
 
 export class AssetValidationError extends Error {
@@ -66,7 +78,9 @@ export async function uploadAsset(input: {
 }): Promise<Asset> {
   const mimeType = input.file.mimeType.toLowerCase()
   if (!ALLOWED_MIMES.has(mimeType)) {
-    throw new AssetValidationError(`Unsupported mime type: ${input.file.mimeType}`)
+    throw new AssetValidationError(
+      `Unsupported mime type: ${input.file.mimeType}`,
+    )
   }
   if (input.file.buffer.byteLength > MAX_SIZE_BYTES) {
     throw new AssetValidationError('File exceeds the 20 MB size limit')
@@ -194,18 +208,62 @@ export async function resolveAssetValue(
   }
 }
 
+export function storageKeyFromRequest(request: Request): string | undefined {
+  const pathname = new URL(request.url).pathname
+  if (!pathname.startsWith(ASSET_FILE_PREFIX)) return undefined
+  const remainder = pathname.slice(ASSET_FILE_PREFIX.length)
+  if (!remainder) return undefined
+  try {
+    return decodeURIComponent(remainder)
+  } catch {
+    return remainder
+  }
+}
+
+function mimeFromExtension(storageKey: string): string | undefined {
+  const dot = storageKey.lastIndexOf('.')
+  if (dot < 0) return undefined
+  return MIME_BY_EXT[storageKey.slice(dot + 1).toLowerCase()]
+}
+
+function realMediaType(value: string | undefined): string | undefined {
+  const mime = value?.split(';')[0]?.trim().toLowerCase()
+  if (!mime) return undefined
+  if (ALLOWED_MIMES.has(mime) || mime.startsWith('image/')) return mime
+  return undefined
+}
+
 export async function streamAssetFile(storageKey: string): Promise<Response> {
   const object = await getStorage().get(storageKey)
   if (!object) {
     return new Response('Not found', { status: 404 })
   }
+
+  const [row] = await db
+    .select({ mimeType: asset.mimeType })
+    .from(asset)
+    .where(eq(asset.storageKey, storageKey))
+    .limit(1)
+
+  const contentType =
+    realMediaType(row?.mimeType) ??
+    realMediaType(object.contentType) ??
+    mimeFromExtension(storageKey) ??
+    'application/octet-stream'
+
   const body = Buffer.isBuffer(object.body)
     ? new Uint8Array(object.body)
     : object.body
-  return new Response(body, {
-    headers: {
-      'Content-Type': object.contentType ?? 'application/octet-stream',
-      'Cache-Control': 'public, max-age=31536000, immutable',
-    },
-  })
+
+  const headers: Record<string, string> = {
+    'Content-Type': contentType,
+    'Cache-Control': 'public, max-age=31536000, immutable',
+    'Access-Control-Allow-Origin': '*',
+    'Cross-Origin-Resource-Policy': 'cross-origin',
+  }
+  if (realMediaType(contentType)) {
+    headers['X-Content-Type-Options'] = 'nosniff'
+  }
+
+  return new Response(body, { headers })
 }

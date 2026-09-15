@@ -379,7 +379,7 @@ export async function setAgencyAdmin(userId: string, isAgencyAdmin: boolean) {
 }
 
 export async function listUsers() {
-  return db
+  const users = await db
     .select({
       id: user.id,
       name: user.name,
@@ -389,4 +389,46 @@ export async function listUsers() {
     })
     .from(user)
     .orderBy(user.email)
+
+  const membershipRows = await db
+    .select({
+      userId: membership.userId,
+      organizationId: membership.organizationId,
+      organizationName: organization.name,
+      role: membership.role,
+    })
+    .from(membership)
+    .innerJoin(organization, eq(membership.organizationId, organization.id))
+
+  const membershipsByUser = new Map<
+    string,
+    Array<{
+      organizationId: string
+      organizationName: string
+      role: MembershipRole
+    }>
+  >()
+
+  for (const row of membershipRows) {
+    const item = {
+      organizationId: row.organizationId,
+      organizationName: row.organizationName,
+      role: row.role,
+    }
+    const list = membershipsByUser.get(row.userId)
+    if (list) {
+      list.push(item)
+    } else {
+      membershipsByUser.set(row.userId, [item])
+    }
+  }
+
+  for (const list of membershipsByUser.values()) {
+    list.sort((a, b) => a.organizationName.localeCompare(b.organizationName))
+  }
+
+  return users.map((row) => ({
+    ...row,
+    memberships: membershipsByUser.get(row.id) ?? [],
+  }))
 }

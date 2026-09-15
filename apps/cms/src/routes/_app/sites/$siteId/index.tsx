@@ -1,14 +1,29 @@
-import { useQueries, useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
+import { useServerFn } from '@tanstack/react-start'
 import { FolderOpen, Plus } from 'lucide-react'
+import { toast } from 'sonner'
 
+import type { CollectionDraft } from '#/components/admin/collection-form-dialog'
+import { CollectionFormDialog } from '#/components/admin/collection-form-dialog'
+import { errorMessage } from '#/components/admin/helpers'
 import { ReleaseStatusBar } from '#/components/editor/release-status-bar'
 import { queryKeys } from '#/components/editor/query-keys'
 import { EmptyState } from '#/components/empty-state'
 import { QueryError } from '#/components/query-error'
 import { Button } from '#/components/ui/button'
 import { Skeleton } from '#/components/ui/skeleton'
-import { listCollectionsFn, listEntriesFn } from '#/server/fn/content'
+import {
+  listCollectionsFn,
+  listEntriesFn,
+  upsertCollectionFn,
+} from '#/server/fn/content'
 
 export const Route = createFileRoute('/_app/sites/$siteId/')({
   component: SiteContentPage,
@@ -17,6 +32,10 @@ export const Route = createFileRoute('/_app/sites/$siteId/')({
 function SiteContentPage() {
   const { siteId } = Route.useParams()
   const { me } = Route.useRouteContext()
+  const queryClient = useQueryClient()
+  const upsertCollection = useServerFn(upsertCollectionFn)
+  const isAgencyAdmin = me.user.isAgencyAdmin
+  const [collectionOpen, setCollectionOpen] = useState(false)
 
   const collectionsQuery = useQuery({
     queryKey: queryKeys.collections(siteId),
@@ -35,6 +54,28 @@ function SiteContentPage() {
     })),
   })
 
+  const collectionMutation = useMutation({
+    mutationFn: (draft: CollectionDraft) =>
+      upsertCollection({
+        data: {
+          siteId,
+          key: draft.key,
+          label: draft.label,
+          routePattern: draft.routePattern,
+          enabled: draft.enabled,
+          fields: draft.fields,
+        },
+      }),
+    onSuccess: async () => {
+      toast.success('Collection saved')
+      setCollectionOpen(false)
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.collections(siteId),
+      })
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  })
+
   return (
     <div
       className="grid gap-8"
@@ -43,7 +84,19 @@ function SiteContentPage() {
     >
       <ReleaseStatusBar siteId={siteId} />
       <section className="grid gap-1">
-        <h2 className="text-lg">Collections</h2>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-lg">Collections</h2>
+          {isAgencyAdmin ? (
+            <Button
+              type="button"
+              data-testid="add-collection"
+              onClick={() => setCollectionOpen(true)}
+            >
+              <Plus />
+              Add collection
+            </Button>
+          ) : null}
+        </div>
         {collectionsQuery.isLoading ? (
           <div className="grid gap-2 border-t pt-3">
             <Skeleton className="h-12" />
@@ -61,17 +114,23 @@ function SiteContentPage() {
             icon={<FolderOpen />}
             title="No collections yet"
             description={
-              me.user.isAgencyAdmin
-                ? 'Sync a manifest from the site project, or add a collection in Settings.'
+              isAgencyAdmin
+                ? 'Sync a manifest from the site project, or add a collection.'
                 : 'Your agency has not set up any content types for this site yet.'
             }
             action={
-              me.user.isAgencyAdmin ? (
-                <Button asChild variant="outline">
-                  <Link to="/sites/$siteId/settings" params={{ siteId }}>
-                    Open settings
-                  </Link>
-                </Button>
+              isAgencyAdmin ? (
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <Button type="button" onClick={() => setCollectionOpen(true)}>
+                    <Plus />
+                    Add collection
+                  </Button>
+                  <Button asChild variant="outline">
+                    <Link to="/sites/$siteId/settings" params={{ siteId }}>
+                      Open settings
+                    </Link>
+                  </Button>
+                </div>
               ) : null
             }
           />
@@ -120,6 +179,15 @@ function SiteContentPage() {
           </ul>
         )}
       </section>
+      {isAgencyAdmin ? (
+        <CollectionFormDialog
+          open={collectionOpen}
+          onOpenChange={setCollectionOpen}
+          initial={null}
+          pending={collectionMutation.isPending}
+          onSubmit={(draft) => collectionMutation.mutate(draft)}
+        />
+      ) : null}
     </div>
   )
 }

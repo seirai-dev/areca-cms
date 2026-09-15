@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { readContent } from '@areca/site-sdk'
+import { readContent } from '@areca/site-sdk/pull'
 import type {
   ImageValue,
   PulledContentManifest,

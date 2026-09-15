@@ -53,7 +53,7 @@ Field def: `{ key, label, type, required?, options? (select), collection? (refer
 ## Publishing flow
 1. Editor clicks Publish (or scheduler fires): entry `publishedData = draftData`, revision recorded.
 2. `createPublication(siteId)`: snapshot = `{ siteId, createdAt, collections: { [key]: Entry[] } }` with every published entry
-   (rich text exported as `{ json, html, markdown }`, image fields resolved to stable asset URLs `/assets/<storageKey>` served by the CMS). Validate snapshot against collection fields; reject on errors.
+   (rich text exported as `{ json, markdown, document, html }` (`document` = TanStack Markdown AST), image fields resolved to stable asset URLs `/assets/<storageKey>` served by the CMS). Validate snapshot against collection fields; reject on errors.
 3. Enqueue `build_job`. Queued (not started) jobs for the same site are cancelled (coalescing) and their publications marked `superseded`.
 4. Worker (in-process `setInterval` loop in the CMS server, one job per site at a time, global concurrency 2):
    `building` → call `DeploymentAdapter.deploy(site)` → poll status until done (timeout) → `healthCheck(url)` → publication `live`,

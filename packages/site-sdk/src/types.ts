@@ -1,3 +1,5 @@
+import type { MarkdownDocument } from '@tanstack/markdown'
+
 export type FieldType =
   | 'text'
   | 'textarea'
@@ -40,10 +42,17 @@ export type SiteManifest = {
   collections: Record<string, CollectionConfig>
 }
 
+/**
+ * Published rich text. `markdown` is the canonical serialization, `document`
+ * is the TanStack Markdown AST parsed from it (render with
+ * `@tanstack/markdown/react` or `renderHtml`), and `html` is a static
+ * fallback rendered from the same AST.
+ */
 export type RichTextValue = {
   json: unknown
-  html: string
   markdown: string
+  document: MarkdownDocument
+  html: string
 }
 
 export type ImageValue = {

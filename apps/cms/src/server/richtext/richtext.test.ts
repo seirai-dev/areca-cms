@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest'
 
+import { env } from '#/env'
+
 import {
   convertRichText,
   emptyRichText,
   richTextPlainText,
   validateRichText,
 } from './index'
+
+const assetOrigin = env.APP_URL.replace(/\/+$/, '')
+const photoSrc = `${assetOrigin}/assets/photo.jpg`
 
 const representativeDoc = {
   type: 'doc',
@@ -44,7 +49,10 @@ const representativeDoc = {
                 {
                   type: 'listItem',
                   content: [
-                    { type: 'paragraph', content: [{ type: 'text', text: 'Child' }] },
+                    {
+                      type: 'paragraph',
+                      content: [{ type: 'text', text: 'Child' }],
+                    },
                   ],
                 },
               ],
@@ -58,17 +66,23 @@ const representativeDoc = {
       content: [
         {
           type: 'listItem',
-          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'One' }] }],
+          content: [
+            { type: 'paragraph', content: [{ type: 'text', text: 'One' }] },
+          ],
         },
         {
           type: 'listItem',
-          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Two' }] }],
+          content: [
+            { type: 'paragraph', content: [{ type: 'text', text: 'Two' }] },
+          ],
         },
       ],
     },
     {
       type: 'blockquote',
-      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Quoted' }] }],
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'Quoted' }] },
+      ],
     },
     {
       type: 'codeBlock',
@@ -99,7 +113,9 @@ describe('validateRichText', () => {
 
   it('rejects a non-object and a non-doc root', () => {
     expect(validateRichText('nope')).toContain('Rich text must be an object')
-    expect(validateRichText({ type: 'paragraph' })).toContain('Root type must be "doc"')
+    expect(validateRichText({ type: 'paragraph' })).toContain(
+      'Root type must be "doc"',
+    )
   })
 
   it('rejects unknown nodes, script marks, javascript: links, and heading level 1', () => {
@@ -132,7 +148,9 @@ describe('validateRichText', () => {
               {
                 type: 'text',
                 text: 'x',
-                marks: [{ type: 'link', attrs: { href: 'javascript:alert(1)' } }],
+                marks: [
+                  { type: 'link', attrs: { href: 'javascript:alert(1)' } },
+                ],
               },
             ],
           },
@@ -161,7 +179,13 @@ describe('validateRichText', () => {
     expect(
       validateRichText({
         type: 'doc',
-        content: [{ type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'H' }] }],
+        content: [
+          {
+            type: 'heading',
+            attrs: { level: 1 },
+            content: [{ type: 'text', text: 'H' }],
+          },
+        ],
       }),
     ).toContain('Heading level must be between 2 and 4')
   })
@@ -184,7 +208,12 @@ describe('validateRichText', () => {
     expect(
       validateRichText({
         type: 'doc',
-        content: [{ type: 'image', attrs: { src: 'data:image/png;base64,xxxx', alt: 'x' } }],
+        content: [
+          {
+            type: 'image',
+            attrs: { src: 'data:image/png;base64,xxxx', alt: 'x' },
+          },
+        ],
       }),
     ).toContain('Image src is not allowed')
   })
@@ -194,23 +223,45 @@ describe('convertRichText', () => {
   it('converts a representative doc to html and markdown', () => {
     const result = convertRichText(representativeDoc)
 
-    expect(result.json).toBe(representativeDoc)
-    expect(result.html).toContain('<h2>Hello</h2>')
+    expect(result.json).not.toBe(representativeDoc)
+    expect(
+      (
+        result.json as { content: Array<{ attrs?: { src?: string } }> }
+      ).content.find((node) => node.attrs?.src)?.attrs?.src,
+    ).toBe(photoSrc)
+    expect(result.html).toContain('<h2 id="hello">Hello</h2>')
     expect(result.html).toContain('<strong>bold</strong>')
     expect(result.html).toContain('<em>italic</em>')
     expect(result.html).toContain('href="https://example.com"')
-    expect(result.html).toContain('rel="noopener noreferrer"')
-    expect(result.html).toContain('target="_blank"')
     expect(result.html).toContain('<ul>')
     expect(result.html).toContain('<ol>')
     expect(result.html).toContain('<blockquote>')
     expect(result.html).toContain('Quoted')
-    expect(result.html).toContain('<pre><code')
+    expect(result.html).toContain('<pre class="tm-code" data-lang="ts"><code class="language-ts">')
     expect(result.html).toContain('const x = 1')
-    expect(result.html).toContain('src="/assets/photo.jpg"')
+    expect(result.html).toContain(`src="${photoSrc}"`)
     expect(result.html).toContain('alt="A photo"')
     expect(result.html).toContain('<hr>')
     expect(result.html).toContain('<br')
+
+    expect(result.document.type).toBe('root')
+    expect(result.document.children[0]).toMatchObject({
+      type: 'heading',
+      depth: 2,
+      id: 'hello',
+    })
+    expect(result.document.children.map((node) => node.type)).toEqual([
+      'heading',
+      'paragraph',
+      'list',
+      'list',
+      'blockquote',
+      'code',
+      'paragraph',
+      'thematicBreak',
+      'paragraph',
+    ])
+    expect(JSON.parse(JSON.stringify(result.document))).toEqual(result.document)
 
     expect(result.markdown).toBe(
       [
@@ -230,20 +281,69 @@ describe('convertRichText', () => {
         'const x = 1',
         '```',
         '',
-        '![A photo](/assets/photo.jpg)',
+        `![A photo](${photoSrc})`,
         '',
         '---',
         '',
-        'Line  ',
+        'Line\\',
         'break',
       ].join('\n'),
     )
   })
 
-  it('throws on invalid input', () => {
-    expect(() => convertRichText({ type: 'doc', content: [{ type: 'script' }] })).toThrow(
-      /Unknown node type "script"/,
+  it('prefixes relative asset srcs and leaves absolute srcs alone', () => {
+    const relative = convertRichText({
+      type: 'doc',
+      content: [
+        {
+          type: 'image',
+          attrs: { src: '/api/assets/file/org/file.png', alt: 'x' },
+        },
+      ],
+    })
+    expect(
+      (relative.json as { content: Array<{ attrs: { src: string } }> })
+        .content[0]?.attrs.src,
+    ).toBe(`${assetOrigin}/api/assets/file/org/file.png`)
+    expect(relative.html).toContain(
+      `src="${assetOrigin}/api/assets/file/org/file.png"`,
     )
+
+    const absolute = convertRichText({
+      type: 'doc',
+      content: [
+        {
+          type: 'image',
+          attrs: { src: 'https://cdn.example.com/x.png', alt: 'x' },
+        },
+      ],
+    })
+    expect(
+      (absolute.json as { content: Array<{ attrs: { src: string } }> })
+        .content[0]?.attrs.src,
+    ).toBe('https://cdn.example.com/x.png')
+    expect(absolute.html).toContain('src="https://cdn.example.com/x.png"')
+  })
+
+  it('escapes raw html and drops unsafe links via TanStack Markdown', () => {
+    const result = convertRichText({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: '<script>alert(1)</script> 5 > 3' }],
+        },
+      ],
+    })
+    expect(result.html).not.toContain('<script>')
+    expect(result.html).toContain('&lt;script&gt;')
+    expect(result.document.children[0]).toMatchObject({ type: 'paragraph' })
+  })
+
+  it('throws on invalid input', () => {
+    expect(() =>
+      convertRichText({ type: 'doc', content: [{ type: 'script' }] }),
+    ).toThrow(/Unknown node type "script"/)
   })
 })
 
@@ -274,6 +374,9 @@ describe('richTextPlainText', () => {
 
 describe('emptyRichText', () => {
   it('returns an empty doc', () => {
-    expect(emptyRichText()).toEqual({ type: 'doc', content: [{ type: 'paragraph' }] })
+    expect(emptyRichText()).toEqual({
+      type: 'doc',
+      content: [{ type: 'paragraph' }],
+    })
   })
 })

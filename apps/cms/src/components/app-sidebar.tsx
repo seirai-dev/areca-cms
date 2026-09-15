@@ -4,6 +4,8 @@ import { Link, useRouterState } from '@tanstack/react-router'
 import {
   Building2,
   Check,
+  ChevronDown,
+  ChevronRight,
   ChevronsUpDown,
   ClipboardList,
   LayoutGrid,
@@ -53,6 +55,8 @@ import type { MeSite } from '#/lib/site-nav'
 import { listCollectionsFn } from '#/server/fn/content'
 import type { Me } from '#/server/fn/me'
 
+const COLLAPSED_ORG_IDS_KEY = 'areca.sidebar.collapsedOrgIds'
+
 function initials(name: string) {
   return (
     name
@@ -64,13 +68,35 @@ function initials(name: string) {
   )
 }
 
+function readCollapsedOrgIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(COLLAPSED_ORG_IDS_KEY)
+    if (!raw) return new Set()
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return new Set()
+    return new Set(parsed.filter((id): id is string => typeof id === 'string'))
+  } catch {
+    return new Set()
+  }
+}
+
+function writeCollapsedOrgIds(ids: Set<string>) {
+  try {
+    localStorage.setItem(COLLAPSED_ORG_IDS_KEY, JSON.stringify([...ids]))
+  } catch {
+    /* localStorage may be unavailable */
+  }
+}
+
 export function AppSidebar({ me }: { me: Me }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const { isMobile, setOpenMobile } = useSidebar()
   const [ready, setReady] = useState(false)
+  const [collapsedOrgIds, setCollapsedOrgIds] = useState(new Set<string>())
 
   useEffect(() => {
     setReady(true)
+    setCollapsedOrgIds(readCollapsedOrgIds())
   }, [])
 
   // Close the mobile sheet after any navigation.
@@ -79,8 +105,19 @@ export function AppSidebar({ me }: { me: Me }) {
   }, [pathname, isMobile, setOpenMobile])
 
   const currentSite = findSite(me, siteIdFromPath(pathname))
+  const currentSiteOrgId = currentSite?.organizationId
   const orgGroups = groupSitesByOrg(me.sites)
   const multiOrg = orgGroups.length > 1
+
+  function toggleOrgCollapsed(orgId: string) {
+    setCollapsedOrgIds((current) => {
+      const next = new Set(current)
+      if (next.has(orgId)) next.delete(orgId)
+      else next.add(orgId)
+      writeCollapsedOrgIds(next)
+      return next
+    })
+  }
 
   async function signOut() {
     try {
@@ -124,34 +161,21 @@ export function AppSidebar({ me }: { me: Me }) {
                 </SidebarGroupContent>
               </SidebarGroup>
             ) : (
-              orgGroups.map((group) => (
-                <SidebarGroup key={group.id}>
-                  <SidebarGroupLabel title={group.name}>
-                    {multiOrg ? group.name : 'Sites'}
-                  </SidebarGroupLabel>
-                  <SidebarGroupContent>
-                    <SidebarMenu>
-                      {group.sites.map((site) => (
-                        <SidebarMenuItem key={site.id}>
-                          <SidebarMenuButton
-                            asChild
-                            isActive={pathname.startsWith(`/sites/${site.id}`)}
-                            tooltip={site.name}
-                          >
-                            <Link
-                              to="/sites/$siteId"
-                              params={{ siteId: site.id }}
-                            >
-                              <LayoutGrid />
-                              <span>{site.name}</span>
-                            </Link>
-                          </SidebarMenuButton>
-                        </SidebarMenuItem>
-                      ))}
-                    </SidebarMenu>
-                  </SidebarGroupContent>
-                </SidebarGroup>
-              ))
+              orgGroups.map((group) => {
+                const expanded =
+                  currentSiteOrgId === group.id ||
+                  !collapsedOrgIds.has(group.id)
+                return (
+                  <OrgSitesGroup
+                    key={group.id}
+                    group={group}
+                    multiOrg={multiOrg}
+                    pathname={pathname}
+                    expanded={expanded}
+                    onToggle={() => toggleOrgCollapsed(group.id)}
+                  />
+                )
+              })
             )}
           </div>
         )}
@@ -252,6 +276,63 @@ export function AppSidebar({ me }: { me: Me }) {
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>
+  )
+}
+
+function OrgSitesGroup({
+  group,
+  multiOrg,
+  pathname,
+  expanded,
+  onToggle,
+}: {
+  group: { id: string; name: string; sites: MeSite[] }
+  multiOrg: boolean
+  pathname: string
+  expanded: boolean
+  onToggle: () => void
+}) {
+  const Chevron = expanded ? ChevronDown : ChevronRight
+
+  return (
+    <SidebarGroup>
+      <SidebarGroupLabel asChild>
+        <button
+          type="button"
+          aria-expanded={expanded}
+          title={group.name}
+          className="w-full cursor-pointer"
+          onClick={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            onToggle()
+          }}
+        >
+          <span className="truncate">{multiOrg ? group.name : 'Sites'}</span>
+          <Chevron className="ml-auto" />
+        </button>
+      </SidebarGroupLabel>
+      {expanded ? (
+        <SidebarGroupContent>
+          <SidebarMenu>
+            {group.sites.map((site) => (
+              <SidebarMenuItem key={site.id}>
+                <SidebarMenuButton
+                  asChild
+                  isActive={pathname.startsWith(`/sites/${site.id}`)}
+                  tooltip={site.name}
+                >
+                  <Link to="/sites/$siteId" params={{ siteId: site.id }}>
+                    <LayoutGrid />
+                    <span>{site.name}</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        </SidebarGroupContent>
+      ) : null}
+    </SidebarGroup>
   )
 }
 

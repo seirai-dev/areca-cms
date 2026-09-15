@@ -259,10 +259,13 @@ If the image host is a LAN IP, `APP_URL` in `apps/cms/.env.local` is not `http:/
 `areca.config.ts` calls `defineSiteContent`. At build / pull time `areca pull` calls `GET /api/sites/snapshot/current` with `Authorization: Bearer <token>` and writes JSON under `src/generated/content`.
 
 ```ts
-import { readContent, richTextHtml } from '@areca/site-sdk'
+import { readContent } from '@areca/site-sdk/pull'
+import { richTextDocument } from '@areca/site-sdk'
+import { Markdown } from '@tanstack/markdown/react'
 
 const articles = readContent('src/generated/content', 'articles')
-// article.data.body → richTextHtml(...)
+// article.data.body → <Markdown components={yourComponents}>{richTextDocument(body)}</Markdown>
+// (TanStack Markdown AST; richTextHtml(body) is the static fallback)
 // article.data.heroImage.url → CMS /api/assets/file/...
 ```
 

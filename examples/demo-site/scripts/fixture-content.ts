@@ -1,5 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { renderHtml } from '@tanstack/markdown/html'
+import { parseMarkdown } from '@tanstack/markdown/parser'
 import type { PulledContentManifest, RichTextValue } from '@areca/site-sdk'
 import { CONTENT_DIR, type Article } from '../src/lib/content.ts'
 
@@ -9,7 +11,9 @@ export const FIXTURE_SLUGS = [
   'berlin-office-opening',
 ] as const
 
-function richText(html: string, markdown: string): RichTextValue {
+/** Mirrors the CMS: markdown is canonical, document and html derive from it. */
+function richText(markdown: string): RichTextValue {
+  const document = parseMarkdown(markdown, { frontmatter: false })
   return {
     json: {
       type: 'doc',
@@ -20,8 +24,9 @@ function richText(html: string, markdown: string): RichTextValue {
         },
       ],
     },
-    html,
     markdown,
+    document,
+    html: renderHtml(document),
   }
 }
 
@@ -37,7 +42,6 @@ export function writeFixtureContent(outDir = CONTENT_DIR): Article[] {
         excerpt:
           'Acme is live. A short tour of how we publish articles from Areca and ship them as static pages.',
         body: richText(
-          '<p>Today we launched <strong>Acme</strong>, a customer site that reads an Areca snapshot at build time and prerenders every article.</p><p>Editors write in the CMS. Visitors never call it.</p>',
           'Today we launched **Acme**, a customer site that reads an Areca snapshot at build time and prerenders every article.\n\nEditors write in the CMS. Visitors never call it.',
         ),
         heroImage: {
@@ -61,7 +65,6 @@ export function writeFixtureContent(outDir = CONTENT_DIR): Article[] {
         excerpt:
           'Faster previews, clearer publication errors, and a health check the CMS can poll after deploy.',
         body: richText(
-          '<h2>What shipped</h2><ul><li>Draft preview URLs that stay <code>noindex</code></li><li>A snapshot pull that fails loudly when nothing is published</li><li>Static HTML for every article slug</li></ul><p>Upgrade notes live with your deployment target.</p>',
           '## What shipped\n\n- Draft preview URLs that stay noindex\n- A snapshot pull that fails loudly when nothing is published\n- Static HTML for every article slug\n\nUpgrade notes live with your deployment target.',
         ),
         heroImage: null,
@@ -79,7 +82,6 @@ export function writeFixtureContent(outDir = CONTENT_DIR): Article[] {
         excerpt:
           'A small studio in Kreuzberg for customer workshops and the next publishing cycle.',
         body: richText(
-          '<p>We opened a Berlin studio this month. Come by for an editor walkthrough or a deploy review.</p><blockquote><p>Same content model. Same build. New timezone.</p></blockquote>',
           'We opened a Berlin studio this month. Come by for an editor walkthrough or a deploy review.\n\n> Same content model. Same build. New timezone.',
         ),
         heroImage: {

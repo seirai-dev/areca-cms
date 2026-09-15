@@ -1,3 +1,5 @@
+import type { MarkdownDocument } from '@tanstack/markdown'
+
 export type FieldType =
   | 'text'
   | 'textarea'
@@ -53,8 +55,10 @@ export type DeploymentTarget = {
 
 export type SnapshotRichText = {
   json: unknown
-  html: string
   markdown: string
+  /** TanStack Markdown AST parsed from `markdown`. */
+  document: MarkdownDocument
+  html: string
 }
 
 export type SnapshotEntry = {

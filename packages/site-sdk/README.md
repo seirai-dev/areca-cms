@@ -56,7 +56,8 @@ The command exits `1` if no publication exists.
 ## 3. Read content in a loader / prerender
 
 ```ts
-import { readContent, richTextHtml } from '@areca/site-sdk'
+import { readContent } from '@areca/site-sdk/pull'
+import { richTextDocument } from '@areca/site-sdk'
 import type { ImageValue, RichTextValue, SnapshotEntry } from '@areca/site-sdk'
 
 type ArticleData = {
@@ -70,10 +71,39 @@ const articles = readContent<SnapshotEntry & { data: ArticleData }>(
   'articles',
 )
 
-export function articleHtml(article: (typeof articles)[number]) {
-  return richTextHtml(article.data.body)
+export function articleDocument(article: (typeof articles)[number]) {
+  return richTextDocument(article.data.body)
 }
 ```
+
+### Rendering rich text
+
+Rich text fields arrive as `{ json, markdown, document, html }`. `document` is a
+[TanStack Markdown](https://tanstack.com/markdown) AST parsed by the CMS from
+`markdown`; render it with `@tanstack/markdown/react` and your own component
+map so the site decides how every element looks:
+
+```tsx
+import { Markdown } from '@tanstack/markdown/react'
+import type { MarkdownComponents } from '@tanstack/markdown/react'
+import { richTextDocument } from '@areca/site-sdk'
+
+const components = {
+  h2: (props) => <h2 {...props} className="mt-10 text-2xl font-semibold" />,
+  a: (props) => <a {...props} rel="noopener noreferrer" target="_blank" />,
+  img: (props) => <img {...props} loading="lazy" className="rounded-xl" />,
+} satisfies MarkdownComponents
+
+export function ArticleBody({ body }: { body: RichTextValue }) {
+  return <Markdown components={components}>{richTextDocument(body)}</Markdown>
+}
+```
+
+Pin `@tanstack/markdown` to the version the CMS uses: the AST is public but
+pre-1.0. `richTextMarkdown()` returns the source if you want to re-parse with
+your own options or extensions, and `richTextHtml()` is a static fallback for
+non-React sites (`renderHtml(richTextDocument(body))` produces the same
+markup).
 
 ## 4. Preview route
 
@@ -81,7 +111,8 @@ CMS preview URLs hit `/__preview/$collection/$slug?token=`. The site fetches dra
 
 ```ts
 import { createFileRoute } from '@tanstack/react-router'
-import { getPreviewEntry, previewHeaders, richTextHtml } from '@areca/site-sdk'
+import { Markdown } from '@tanstack/markdown/react'
+import { getPreviewEntry, previewHeaders, richTextDocument } from '@areca/site-sdk'
 
 export const Route = createFileRoute('/__preview/$collection/$slug')({
   loader: async ({ location }) => {
@@ -95,7 +126,11 @@ export const Route = createFileRoute('/__preview/$collection/$slug')({
 
 function PreviewPage() {
   const { entry } = Route.useLoaderData()
-  return <article dangerouslySetInnerHTML={{ __html: richTextHtml(entry.data.body as never) }} />
+  return (
+    <article>
+      <Markdown components={components}>{richTextDocument(entry.data.body as never)}</Markdown>
+    </article>
+  )
 }
 ```
 
@@ -104,7 +139,8 @@ function PreviewPage() {
 ## Programmatic API
 
 ```ts
-import { createArecaClient, pullContent } from '@areca/site-sdk'
+import { createArecaClient } from '@areca/site-sdk'
+import { pullContent } from '@areca/site-sdk/pull'
 
 const client = createArecaClient() // or { cmsUrl, siteToken }
 await client.syncManifest(config)

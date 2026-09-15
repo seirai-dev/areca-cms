@@ -22,6 +22,8 @@ export function createS3Storage(opts: {
       secretAccessKey: opts.secretKey,
     },
     forcePathStyle: opts.forcePathStyle,
+    requestChecksumCalculation: 'WHEN_REQUIRED',
+    responseChecksumValidation: 'WHEN_REQUIRED',
   })
 
   return {
@@ -59,6 +61,16 @@ export function createS3Storage(opts: {
 }
 
 function isNotFound(err: unknown) {
-  const name = (err as { name?: string } | undefined)?.name
-  return name === 'NoSuchKey' || name === 'NotFound'
+  if (!err || typeof err !== 'object') return false
+  const record = err as {
+    name?: string
+    Code?: string
+    code?: string
+    $metadata?: { httpStatusCode?: number }
+  }
+  if (record.$metadata?.httpStatusCode === 404) return true
+  const codes = [record.name, record.Code, record.code]
+  return codes.some(
+    (code) => code === 'NoSuchKey' || code === 'NotFound' || code === '404',
+  )
 }

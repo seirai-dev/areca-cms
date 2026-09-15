@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "sideEffects": false,
   "bin": {
     "areca": "./dist/cli.js"
   },
@@ -10,6 +11,14 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./pull": {
+      "types": "./dist/pull.d.ts",
+      "import": "./dist/pull.js"
+    },
+    "./rich-text": {
+      "types": "./dist/rich-text.d.ts",
+      "import": "./dist/rich-text.js"
     }
   },
   "files": [
@@ -25,5 +34,8 @@
     "@types/node": "^24.13.3",
     "typescript": "^6.0.2",
     "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "@tanstack/markdown": "0.0.15"
   }
 }
