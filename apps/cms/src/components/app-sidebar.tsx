@@ -52,6 +52,8 @@ import {
   siteSections,
 } from '#/lib/site-nav'
 import type { MeSite } from '#/lib/site-nav'
+import { m } from '#/paraglide/messages'
+import { localizeHref } from '#/paraglide/runtime'
 import { listCollectionsFn } from '#/server/fn/content'
 import type { Me } from '#/server/fn/me'
 
@@ -123,7 +125,7 @@ export function AppSidebar({ me }: { me: Me }) {
     try {
       await authClient.signOut()
     } finally {
-      window.location.assign('/login')
+      window.location.assign(localizeHref('/login'))
     }
   }
 
@@ -132,7 +134,11 @@ export function AppSidebar({ me }: { me: Me }) {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild tooltip="Dashboard">
+            <SidebarMenuButton
+              size="lg"
+              asChild
+              tooltip={m.shell_nav_dashboard()}
+            >
               <Link to="/">
                 <BrandMark />
               </Link>
@@ -153,10 +159,10 @@ export function AppSidebar({ me }: { me: Me }) {
           <div data-testid="sites-nav">
             {orgGroups.length === 0 ? (
               <SidebarGroup>
-                <SidebarGroupLabel>Sites</SidebarGroupLabel>
+                <SidebarGroupLabel>{m.shell_nav_sites()}</SidebarGroupLabel>
                 <SidebarGroupContent>
                   <p className="px-2 text-xs text-muted-foreground">
-                    No sites yet.
+                    {m.shell_nav_no_sites()}
                   </p>
                 </SidebarGroupContent>
               </SidebarGroup>
@@ -182,18 +188,18 @@ export function AppSidebar({ me }: { me: Me }) {
 
         {me.user.isAgencyAdmin ? (
           <SidebarGroup data-testid="agency-nav">
-            <SidebarGroupLabel>Agency</SidebarGroupLabel>
+            <SidebarGroupLabel>{m.shell_nav_agency()}</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     asChild
                     isActive={pathname.startsWith('/admin/organizations')}
-                    tooltip="Organizations"
+                    tooltip={m.shell_nav_organizations()}
                   >
                     <Link to="/admin/organizations">
                       <Building2 />
-                      <span>Organizations</span>
+                      <span>{m.shell_nav_organizations()}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -201,11 +207,11 @@ export function AppSidebar({ me }: { me: Me }) {
                   <SidebarMenuButton
                     asChild
                     isActive={pathname.startsWith('/admin/users')}
-                    tooltip="Users"
+                    tooltip={m.shell_nav_users()}
                   >
                     <Link to="/admin/users">
                       <Users />
-                      <span>Users</span>
+                      <span>{m.shell_nav_users()}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -213,11 +219,11 @@ export function AppSidebar({ me }: { me: Me }) {
                   <SidebarMenuButton
                     asChild
                     isActive={pathname.startsWith('/admin/audit')}
-                    tooltip="Audit log"
+                    tooltip={m.shell_nav_audit_log()}
                   >
                     <Link to="/admin/audit">
                       <ClipboardList />
-                      <span>Audit log</span>
+                      <span>{m.shell_nav_audit_log()}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -225,11 +231,11 @@ export function AppSidebar({ me }: { me: Me }) {
                   <SidebarMenuButton
                     asChild
                     isActive={pathname.startsWith('/admin/branding')}
-                    tooltip="Branding"
+                    tooltip={m.shell_nav_branding()}
                   >
                     <Link to="/admin/branding" data-testid="branding-nav">
                       <Palette />
-                      <span>Branding</span>
+                      <span>{m.shell_nav_branding()}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -245,7 +251,10 @@ export function AppSidebar({ me }: { me: Me }) {
             <SidebarMenuButton
               size="lg"
               asChild
-              tooltip={`${me.user.name} · ${me.user.email}`}
+              tooltip={m.shell_user_tooltip({
+                name: me.user.name,
+                email: me.user.email,
+              })}
               className="cursor-default hover:bg-transparent"
             >
               <div data-testid="user-menu">
@@ -264,12 +273,12 @@ export function AppSidebar({ me }: { me: Me }) {
           <SidebarMenuItem>
             <SidebarMenuButton
               data-testid="sign-out"
-              tooltip="Sign out"
+              tooltip={m.shell_sign_out()}
               disabled={!ready}
               onClick={() => void signOut()}
             >
               <LogOut />
-              <span>Sign out</span>
+              <span>{m.shell_sign_out()}</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
@@ -308,7 +317,9 @@ function OrgSitesGroup({
             onToggle()
           }}
         >
-          <span className="truncate">{multiOrg ? group.name : 'Sites'}</span>
+          <span className="truncate">
+            {multiOrg ? group.name : m.shell_nav_sites()}
+          </span>
           <Chevron className="ml-auto" />
         </button>
       </SidebarGroupLabel>
@@ -345,7 +356,7 @@ function SiteSwitcher({ me, current }: { me: Me; current: MeSite }) {
       <DropdownMenuTrigger asChild>
         <SidebarMenuButton
           size="lg"
-          tooltip={`Site: ${current.name}`}
+          tooltip={m.shell_site_tooltip({ name: current.name })}
           className="data-[state=open]:bg-sidebar-accent"
           data-testid="site-switcher"
         >
@@ -389,7 +400,7 @@ function SiteSwitcher({ me, current }: { me: Me; current: MeSite }) {
         <DropdownMenuItem asChild>
           <Link to="/">
             <LayoutGrid />
-            All sites
+            {m.shell_nav_all_sites()}
           </Link>
         </DropdownMenuItem>
       </DropdownMenuContent>

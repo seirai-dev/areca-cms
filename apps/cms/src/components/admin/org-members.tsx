@@ -30,6 +30,7 @@ import {
   SelectValue,
 } from '#/components/ui/select'
 import type { MembershipRole } from '#/lib/types'
+import { m } from '#/paraglide/messages'
 import {
   inviteMemberFn,
   listInvitationsFn,
@@ -39,16 +40,17 @@ import {
   updateMemberRoleFn,
 } from '#/server/fn/admin'
 
-import { adminQueryKeys, errorMessage, formatDate } from './helpers'
+import {
+  adminQueryKeys,
+  errorMessage,
+  formatDate,
+  membershipRoleLabel,
+  membershipRoleOptionLabel,
+} from './helpers'
 import { TableSkeleton } from './table-skeleton'
 
 type MemberRow = Awaited<ReturnType<typeof listMembersFn>>[number]
 type InvitationRow = Awaited<ReturnType<typeof listInvitationsFn>>[number]
-
-const ROLE_LABELS: Record<MembershipRole, string> = {
-  owner: 'Owner',
-  editor: 'Editor',
-}
 
 const memberHelper = createDataColumns<MemberRow>()
 const invitationHelper = createDataColumns<InvitationRow>()
@@ -56,6 +58,12 @@ const invitationHelper = createDataColumns<InvitationRow>()
 function isExpired(invitation: InvitationRow) {
   const expires = new Date(invitation.expiresAt)
   return !Number.isNaN(expires.getTime()) && expires.getTime() < Date.now()
+}
+
+function roleChangedToast(role: MembershipRole) {
+  return role === 'owner'
+    ? m.admin_members_toast_role_changed_owner()
+    : m.admin_members_toast_role_changed_editor()
 }
 
 export function OrgMembers({ organizationId }: { organizationId: string }) {
@@ -86,7 +94,7 @@ export function OrgMembers({ organizationId }: { organizationId: string }) {
         data: { organizationId, userId: input.userId, role: input.role },
       }),
     onSuccess: async (_result, input) => {
-      toast.success(`Role changed to ${ROLE_LABELS[input.role].toLowerCase()}`)
+      toast.success(roleChangedToast(input.role))
       await queryClient.invalidateQueries({
         queryKey: adminQueryKeys.members(organizationId),
       })
@@ -98,7 +106,7 @@ export function OrgMembers({ organizationId }: { organizationId: string }) {
     mutationFn: (userId: string) =>
       removeMember({ data: { organizationId, userId } }),
     onSuccess: async () => {
-      toast.success('Member removed')
+      toast.success(m.admin_members_toast_removed())
       await queryClient.invalidateQueries({
         queryKey: adminQueryKeys.members(organizationId),
       })
@@ -110,7 +118,7 @@ export function OrgMembers({ organizationId }: { organizationId: string }) {
     mutationFn: () =>
       inviteMember({ data: { organizationId, email: email.trim(), role } }),
     onSuccess: async () => {
-      toast.success('Invitation sent')
+      toast.success(m.admin_members_toast_invited())
       setInviteOpen(false)
       setEmail('')
       setRole('editor')
@@ -124,7 +132,7 @@ export function OrgMembers({ organizationId }: { organizationId: string }) {
   const revokeMutation = useMutation({
     mutationFn: (id: string) => revokeInvitation({ data: { id } }),
     onSuccess: async () => {
-      toast.success('Invitation revoked')
+      toast.success(m.admin_members_toast_revoked())
       await queryClient.invalidateQueries({
         queryKey: adminQueryKeys.invitations(organizationId),
       })
@@ -144,19 +152,19 @@ export function OrgMembers({ organizationId }: { organizationId: string }) {
     () =>
       memberHelper.columns([
         memberHelper.accessor('name', {
-          header: 'Name',
+          header: () => m.admin_name(),
           cell: ({ row }) => (
             <span className="font-medium">{row.original.name}</span>
           ),
         }),
         memberHelper.accessor('email', {
-          header: 'Email',
+          header: () => m.admin_email(),
           cell: ({ row }) => (
             <span className="text-muted-foreground">{row.original.email}</span>
           ),
         }),
         memberHelper.accessor('role', {
-          header: 'Role',
+          header: () => m.admin_role(),
           cell: ({ row }) => {
             const member = row.original
             const busy =
@@ -175,20 +183,26 @@ export function OrgMembers({ organizationId }: { organizationId: string }) {
               >
                 <SelectTrigger
                   className="w-32"
-                  aria-label={`Role for ${member.email}`}
+                  aria-label={m.admin_members_aria_role({
+                    email: member.email,
+                  })}
                 >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="owner">owner</SelectItem>
-                  <SelectItem value="editor">editor</SelectItem>
+                  <SelectItem value="owner">
+                    {membershipRoleOptionLabel('owner')}
+                  </SelectItem>
+                  <SelectItem value="editor">
+                    {membershipRoleOptionLabel('editor')}
+                  </SelectItem>
                 </SelectContent>
               </Select>
             )
           },
         }),
         memberHelper.accessor('createdAt', {
-          header: 'Joined',
+          header: () => m.admin_members_col_joined(),
           sortFn: 'datetime',
           cell: ({ row }) => (
             <span className="whitespace-nowrap text-muted-foreground">
@@ -198,23 +212,25 @@ export function OrgMembers({ organizationId }: { organizationId: string }) {
         }),
         memberHelper.display({
           id: 'actions',
-          header: () => <span className="sr-only">Actions</span>,
+          header: () => <span className="sr-only">{m.admin_actions()}</span>,
           enableSorting: false,
           cell: ({ row }) => {
             const member = row.original
             return (
               <div className="flex justify-end">
                 <ConfirmDialog
-                  title={`Remove ${member.name}?`}
-                  description={`${member.email} will lose access to this organization and its sites. You can invite them again later.`}
-                  confirmLabel="Remove member"
+                  title={m.admin_members_remove_title({ name: member.name })}
+                  description={m.admin_members_remove_description({
+                    email: member.email,
+                  })}
+                  confirmLabel={m.admin_members_remove_label()}
                   variant="destructive"
                   onConfirm={async () => {
                     await removeMutation.mutateAsync(member.userId)
                   }}
                 >
                   <Button type="button" variant="ghost" size="sm">
-                    Remove
+                    {m.admin_remove()}
                   </Button>
                 </ConfirmDialog>
               </div>
@@ -229,22 +245,22 @@ export function OrgMembers({ organizationId }: { organizationId: string }) {
     () =>
       invitationHelper.columns([
         invitationHelper.accessor('email', {
-          header: 'Email',
+          header: () => m.admin_email(),
           cell: ({ row }) => (
             <span className="flex items-center gap-2">
               <span className="font-medium">{row.original.email}</span>
               {isExpired(row.original) ? (
-                <Badge variant="outline">Expired</Badge>
+                <Badge variant="outline">{m.admin_invitations_expired()}</Badge>
               ) : null}
             </span>
           ),
         }),
         invitationHelper.accessor('role', {
-          header: 'Role',
-          cell: ({ row }) => ROLE_LABELS[row.original.role],
+          header: () => m.admin_role(),
+          cell: ({ row }) => membershipRoleLabel(row.original.role),
         }),
         invitationHelper.accessor('createdAt', {
-          header: 'Sent',
+          header: () => m.admin_invitations_col_sent(),
           sortFn: 'datetime',
           cell: ({ row }) => (
             <span className="whitespace-nowrap text-muted-foreground">
@@ -253,7 +269,7 @@ export function OrgMembers({ organizationId }: { organizationId: string }) {
           ),
         }),
         invitationHelper.accessor('expiresAt', {
-          header: 'Expires',
+          header: () => m.admin_invitations_col_expires(),
           sortFn: 'datetime',
           cell: ({ row }) => (
             <span className="whitespace-nowrap text-muted-foreground">
@@ -263,23 +279,25 @@ export function OrgMembers({ organizationId }: { organizationId: string }) {
         }),
         invitationHelper.display({
           id: 'actions',
-          header: () => <span className="sr-only">Actions</span>,
+          header: () => <span className="sr-only">{m.admin_actions()}</span>,
           enableSorting: false,
           cell: ({ row }) => {
             const invitation = row.original
             return (
               <div className="flex justify-end">
                 <ConfirmDialog
-                  title="Revoke invitation?"
-                  description={`The invitation link sent to ${invitation.email} will stop working. You can send a new one at any time.`}
-                  confirmLabel="Revoke invitation"
+                  title={m.admin_invitations_revoke_title()}
+                  description={m.admin_invitations_revoke_description({
+                    email: invitation.email,
+                  })}
+                  confirmLabel={m.admin_invitations_revoke_label()}
                   variant="destructive"
                   onConfirm={async () => {
                     await revokeMutation.mutateAsync(invitation.id)
                   }}
                 >
                   <Button type="button" variant="ghost" size="sm">
-                    Revoke
+                    {m.admin_invitations_revoke()}
                   </Button>
                 </ConfirmDialog>
               </div>
@@ -301,21 +319,21 @@ export function OrgMembers({ organizationId }: { organizationId: string }) {
         <section className="grid gap-4">
           <div className="flex items-center justify-between gap-2">
             <div className="grid gap-1">
-              <h2 className="text-lg font-medium">Members</h2>
+              <h2 className="text-lg font-medium">{m.admin_members()}</h2>
               <p className="text-sm text-muted-foreground">
-                Owners manage the team and settings; editors work on content.
+                {m.admin_members_blurb()}
               </p>
             </div>
             <DialogTrigger asChild>
               <Button type="button" data-testid="invite-member">
                 <UserPlus />
-                Invite
+                {m.admin_members_invite()}
               </Button>
             </DialogTrigger>
           </div>
           {membersQuery.isError ? (
             <QueryError
-              title="Could not load members"
+              title={m.admin_members_load_error()}
               error={membersQuery.error}
               onRetry={() => void membersQuery.refetch()}
               retrying={membersQuery.isFetching}
@@ -325,13 +343,13 @@ export function OrgMembers({ organizationId }: { organizationId: string }) {
           ) : membersQuery.data.length === 0 ? (
             <EmptyState
               icon={<Users />}
-              title="No members yet"
-              description="Invite someone by email. They will join as soon as they accept."
+              title={m.admin_members_empty_title()}
+              description={m.admin_members_empty_description()}
               action={
                 inviteOpen ? undefined : (
                   <Button type="button" onClick={() => setInviteOpen(true)}>
                     <UserPlus />
-                    Invite
+                    {m.admin_members_invite()}
                   </Button>
                 )
               }
@@ -342,21 +360,23 @@ export function OrgMembers({ organizationId }: { organizationId: string }) {
               data={membersQuery.data}
               pageSize={25}
               initialSorting={[{ id: 'name', desc: false }]}
-              caption="Members"
+              caption={m.admin_members_caption()}
             />
           )}
         </section>
 
         <section className="grid gap-4" data-testid="pending-invitations">
           <div className="grid gap-1">
-            <h2 className="text-lg font-medium">Pending invitations</h2>
+            <h2 className="text-lg font-medium">
+              {m.admin_invitations_heading()}
+            </h2>
             <p className="text-sm text-muted-foreground">
-              Invitations stay here until they are accepted or revoked.
+              {m.admin_invitations_blurb()}
             </p>
           </div>
           {invitationsQuery.isError ? (
             <QueryError
-              title="Could not load invitations"
+              title={m.admin_invitations_load_error()}
               error={invitationsQuery.error}
               onRetry={() => void invitationsQuery.refetch()}
               retrying={invitationsQuery.isFetching}
@@ -366,8 +386,8 @@ export function OrgMembers({ organizationId }: { organizationId: string }) {
           ) : pendingInvitations.length === 0 ? (
             <EmptyState
               icon={<MailPlus />}
-              title="No pending invitations"
-              description="Everyone you have invited has already joined."
+              title={m.admin_invitations_empty_title()}
+              description={m.admin_invitations_empty_description()}
             />
           ) : (
             <DataTable
@@ -375,7 +395,7 @@ export function OrgMembers({ organizationId }: { organizationId: string }) {
               data={pendingInvitations}
               pageSize={25}
               initialSorting={[{ id: 'createdAt', desc: true }]}
-              caption="Pending invitations"
+              caption={m.admin_invitations_caption()}
             />
           )}
         </section>
@@ -383,13 +403,12 @@ export function OrgMembers({ organizationId }: { organizationId: string }) {
         <DialogContent>
           <form className="grid gap-4" onSubmit={onInvite}>
             <DialogHeader>
-              <DialogTitle>Invite member</DialogTitle>
+              <DialogTitle>{m.admin_invite_title()}</DialogTitle>
               <DialogDescription>
-                Send an email invitation to join this organization. The link
-                expires after 7 days.
+                {m.admin_invite_description()}
               </DialogDescription>
             </DialogHeader>
-            <FormField label="Email" htmlFor="invite-email">
+            <FormField label={m.admin_email()} htmlFor="invite-email">
               <Input
                 id="invite-email"
                 data-testid="invite-email"
@@ -397,12 +416,12 @@ export function OrgMembers({ organizationId }: { organizationId: string }) {
                 required
                 autoFocus
                 autoComplete="email"
-                placeholder="name@example.com"
+                placeholder={m.admin_invite_placeholder()}
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
               />
             </FormField>
-            <FormField label="Role" htmlFor="invite-role">
+            <FormField label={m.admin_role()} htmlFor="invite-role">
               <Select
                 value={role}
                 onValueChange={(value) => setRole(value as MembershipRole)}
@@ -411,8 +430,12 @@ export function OrgMembers({ organizationId }: { organizationId: string }) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="owner">owner</SelectItem>
-                  <SelectItem value="editor">editor</SelectItem>
+                  <SelectItem value="owner">
+                    {membershipRoleOptionLabel('owner')}
+                  </SelectItem>
+                  <SelectItem value="editor">
+                    {membershipRoleOptionLabel('editor')}
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </FormField>
@@ -423,10 +446,12 @@ export function OrgMembers({ organizationId }: { organizationId: string }) {
                 onClick={() => setInviteOpen(false)}
                 disabled={inviteMutation.isPending}
               >
-                Cancel
+                {m.admin_cancel()}
               </Button>
               <Button type="submit" disabled={inviteMutation.isPending}>
-                {inviteMutation.isPending ? 'Sending…' : 'Send invitation'}
+                {inviteMutation.isPending
+                  ? m.admin_sending()
+                  : m.admin_invite_send()}
               </Button>
             </DialogFooter>
           </form>

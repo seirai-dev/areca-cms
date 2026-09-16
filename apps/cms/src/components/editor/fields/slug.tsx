@@ -1,7 +1,9 @@
 import { Input } from '#/components/ui/input'
+import { m } from '#/paraglide/messages'
 
-export const SLUG_HINT =
-  'Lowercase letters, numbers, and hyphens only (e.g. hello-world). Filled from the title until you edit it.'
+export function slugHint() {
+  return m.editor_slug_hint()
+}
 
 export function SlugFieldInput({
   id,

@@ -5,10 +5,8 @@ import { db } from '#/db'
 import { site } from '#/db/schema'
 import { requireAgencyAdmin, requireOrgMember } from '#/lib/session.server'
 import type { EntryStatus, FieldType } from '#/lib/types'
-import {
-  listCollections,
-  upsertCollection,
-} from '#/server/content/collections'
+import { m } from '#/paraglide/messages'
+import { listCollections, upsertCollection } from '#/server/content/collections'
 import {
   archiveEntry,
   cancelSchedule,
@@ -74,7 +72,7 @@ async function requireSiteAccess(siteId: string) {
     .where(eq(site.id, siteId))
     .limit(1)
   if (!found) {
-    throw new NotFoundError('Site not found')
+    throw new NotFoundError(m.server_site_not_found())
   }
   const session = await requireOrgMember(found.organizationId)
   return { session, site: found }
@@ -83,7 +81,7 @@ async function requireSiteAccess(siteId: string) {
 async function requireEntryAccess(entryId: string) {
   const existing = await getEntry(entryId)
   if (!existing) {
-    throw new NotFoundError('Entry not found')
+    throw new NotFoundError(m.server_entry_not_found())
   }
   const access = await requireSiteAccess(existing.siteId)
   return { ...access, entry: existing }

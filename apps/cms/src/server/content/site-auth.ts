@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { site } from '#/db/schema'
+import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
 
 import { NotFoundError } from './errors.ts'
@@ -34,7 +35,7 @@ export async function rotateSiteToken(siteId: string) {
     .where(eq(site.id, siteId))
     .limit(1)
   if (!existing) {
-    throw new NotFoundError('Site not found')
+    throw new NotFoundError(m.server_site_not_found())
   }
 
   const generated = generateSiteToken()

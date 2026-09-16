@@ -3,6 +3,7 @@ import { and, desc, eq, ilike, or, sql } from 'drizzle-orm'
 import { db } from '#/db'
 import { collection, entry, entryRevision, site } from '#/db/schema'
 import type { EntryData, EntryStatus } from '#/lib/types'
+import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
 
 import { getCollection } from './collections.ts'
@@ -26,7 +27,7 @@ export async function listEntries(
 ) {
   const col = await getCollection(siteId, collectionKey)
   if (!col) {
-    throw new NotFoundError('Collection not found')
+    throw new NotFoundError(m.server_collection_not_found())
   }
 
   const limit = options.limit ?? 50
@@ -38,10 +39,7 @@ export async function listEntries(
   if (options.search) {
     const term = `%${options.search}%`
     filters.push(
-      or(
-        ilike(entry.slug, term),
-        sql`${entry.draftData}::text ilike ${term}`,
-      )!,
+      or(ilike(entry.slug, term), sql`${entry.draftData}::text ilike ${term}`)!,
     )
   }
 
@@ -84,7 +82,7 @@ export async function createEntry(input: {
 }) {
   const ctx = await loadCollectionContext(input.siteId, input.collectionKey)
   if (!ctx.collection.enabled) {
-    throw new NotFoundError('Collection not found')
+    throw new NotFoundError(m.server_collection_not_found())
   }
 
   const parsed = validateEntryData(ctx.collection.fields, input.data, {
@@ -97,7 +95,7 @@ export async function createEntry(input: {
   const slug = resolveSlug(parsed.data, ctx.collection.fields)
   if (!slug || !SLUG_PATTERN.test(slug)) {
     throw new ValidationError([
-      { path: 'slug', message: 'A valid slug is required' },
+      { path: 'slug', message: m.server_valid_slug_required() },
     ])
   }
 
@@ -120,7 +118,7 @@ export async function createEntry(input: {
     .returning()
 
   if (!created) {
-    throw new Error('Failed to create entry')
+    throw new Error(m.server_failed_to_create_entry())
   }
 
   await writeRevision(created.id, parsed.data, input.actorId, 'create')
@@ -153,7 +151,9 @@ export async function updateDraft(
   const nextSlug = resolveSlug(parsed.data, ctx.collection.fields)
   if (nextSlug && nextSlug !== ctx.entry.slug) {
     if (!SLUG_PATTERN.test(nextSlug)) {
-      throw new ValidationError([{ path: 'slug', message: 'Invalid slug' }])
+      throw new ValidationError([
+        { path: 'slug', message: m.server_invalid_slug() },
+      ])
     }
     await assertSlugAvailable(ctx.collection.id, nextSlug, id)
   }
@@ -171,7 +171,7 @@ export async function updateDraft(
     .returning()
 
   if (!updated) {
-    throw new NotFoundError('Entry not found')
+    throw new NotFoundError(m.server_entry_not_found())
   }
 
   await writeRevision(id, parsed.data, actorId, 'update')
@@ -190,7 +190,7 @@ export async function updateDraft(
 export async function listRevisions(entryId: string) {
   const existing = await getEntry(entryId)
   if (!existing) {
-    throw new NotFoundError('Entry not found')
+    throw new NotFoundError(m.server_entry_not_found())
   }
   return db
     .select()
@@ -209,14 +209,11 @@ export async function restoreRevision(
     .select()
     .from(entryRevision)
     .where(
-      and(
-        eq(entryRevision.id, revisionId),
-        eq(entryRevision.entryId, entryId),
-      ),
+      and(eq(entryRevision.id, revisionId), eq(entryRevision.entryId, entryId)),
     )
     .limit(1)
   if (!revision) {
-    throw new NotFoundError('Revision not found')
+    throw new NotFoundError(m.server_revision_not_found())
   }
 
   const nextSlug = resolveSlug(revision.data, ctx.collection.fields)
@@ -237,7 +234,7 @@ export async function restoreRevision(
     .returning()
 
   if (!updated) {
-    throw new NotFoundError('Entry not found')
+    throw new NotFoundError(m.server_entry_not_found())
   }
 
   await writeRevision(entryId, revision.data, actorId, 'restore')
@@ -285,7 +282,7 @@ export async function publishEntry(id: string, actorId: string) {
     .returning()
 
   if (!updated) {
-    throw new NotFoundError('Entry not found')
+    throw new NotFoundError(m.server_entry_not_found())
   }
 
   await writeRevision(id, ctx.entry.draftData, actorId, 'publish')
@@ -319,7 +316,7 @@ export async function unpublishEntry(id: string, actorId: string) {
     .returning()
 
   if (!updated) {
-    throw new NotFoundError('Entry not found')
+    throw new NotFoundError(m.server_entry_not_found())
   }
 
   await writeRevision(id, ctx.entry.draftData, actorId, 'unpublish')
@@ -349,7 +346,7 @@ export async function archiveEntry(id: string, actorId: string) {
     .returning()
 
   if (!updated) {
-    throw new NotFoundError('Entry not found')
+    throw new NotFoundError(m.server_entry_not_found())
   }
 
   await writeRevision(id, ctx.entry.draftData, actorId, 'archive')
@@ -375,12 +372,12 @@ export async function scheduleEntry(
   const when = new Date(scheduledAt)
   if (Number.isNaN(when.getTime())) {
     throw new ValidationError([
-      { path: 'scheduledAt', message: 'Invalid datetime' },
+      { path: 'scheduledAt', message: m.server_invalid_datetime() },
     ])
   }
   if (!timezone) {
     throw new ValidationError([
-      { path: 'timezone', message: 'Timezone is required' },
+      { path: 'timezone', message: m.server_timezone_required() },
     ])
   }
 
@@ -398,7 +395,7 @@ export async function scheduleEntry(
     .returning()
 
   if (!updated) {
-    throw new NotFoundError('Entry not found')
+    throw new NotFoundError(m.server_entry_not_found())
   }
 
   await writeRevision(id, ctx.entry.draftData, actorId, 'schedule')
@@ -418,7 +415,8 @@ export async function scheduleEntry(
 export async function cancelSchedule(id: string, actorId: string) {
   const ctx = await loadEntryContext(id)
   const now = new Date()
-  const nextStatus = ctx.entry.status === 'scheduled' ? 'draft' : ctx.entry.status
+  const nextStatus =
+    ctx.entry.status === 'scheduled' ? 'draft' : ctx.entry.status
   const [updated] = await db
     .update(entry)
     .set({
@@ -432,7 +430,7 @@ export async function cancelSchedule(id: string, actorId: string) {
     .returning()
 
   if (!updated) {
-    throw new NotFoundError('Entry not found')
+    throw new NotFoundError(m.server_entry_not_found())
   }
 
   await writeRevision(id, ctx.entry.draftData, actorId, 'cancel_schedule')
@@ -487,7 +485,7 @@ async function assertSlugAvailable(
     .where(and(eq(entry.collectionId, collectionId), eq(entry.slug, slug)))
     .limit(1)
   if (existing && existing.id !== excludeId) {
-    throw new ConflictError('Slug already exists')
+    throw new ConflictError(m.server_slug_already_exists())
   }
 }
 
@@ -496,10 +494,12 @@ async function loadCollectionContext(siteId: string, collectionKey: string) {
     .select({ collection, site })
     .from(collection)
     .innerJoin(site, eq(collection.siteId, site.id))
-    .where(and(eq(collection.siteId, siteId), eq(collection.key, collectionKey)))
+    .where(
+      and(eq(collection.siteId, siteId), eq(collection.key, collectionKey)),
+    )
     .limit(1)
   if (!row) {
-    throw new NotFoundError('Collection not found')
+    throw new NotFoundError(m.server_collection_not_found())
   }
   return row
 }
@@ -513,7 +513,7 @@ async function loadEntryContext(id: string) {
     .where(eq(entry.id, id))
     .limit(1)
   if (!row) {
-    throw new NotFoundError('Entry not found')
+    throw new NotFoundError(m.server_entry_not_found())
   }
   return row
 }

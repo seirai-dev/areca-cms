@@ -1,6 +1,7 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 
 import { Button } from '#/components/ui/button'
+import { m } from '#/paraglide/messages'
 
 /**
  * Prev/next controls for server-paged lists (limit/offset).
@@ -16,7 +17,7 @@ export function ListPagination({
   hasMore,
   onChange,
   isFetching,
-  noun = 'items',
+  noun = m.shared_items(),
 }: {
   offset: number
   limit: number
@@ -36,7 +37,7 @@ export function ListPagination({
   if (!canPrev && !canNext) {
     return typeof total === 'number' && total > 0 ? (
       <p className="text-sm text-muted-foreground">
-        {total} {noun}
+        {m.shared_total_noun({ total, noun })}
       </p>
     ) : null
   }
@@ -48,8 +49,8 @@ export function ListPagination({
     >
       <p className="text-sm text-muted-foreground">
         {typeof total === 'number'
-          ? `${start}–${end} of ${total} ${noun}`
-          : `${start}–${end}`}
+          ? m.shared_range_of_total({ start, end, total, noun })
+          : m.shared_range({ start, end })}
       </p>
       <div className="flex items-center gap-1">
         <Button
@@ -60,7 +61,7 @@ export function ListPagination({
           onClick={() => onChange(Math.max(0, offset - limit))}
         >
           <ChevronLeft />
-          Previous
+          {m.shared_previous()}
         </Button>
         <Button
           type="button"
@@ -69,7 +70,7 @@ export function ListPagination({
           disabled={!canNext || isFetching}
           onClick={() => onChange(offset + limit)}
         >
-          Next
+          {m.shared_next()}
           <ChevronRight />
         </Button>
       </div>

@@ -1,4 +1,5 @@
-import type { FieldType } from '#/lib/types'
+import type { FieldType, MembershipRole } from '#/lib/types'
+import { m } from '#/paraglide/messages'
 
 export const FIELD_TYPES: FieldType[] = [
   'text',
@@ -14,6 +15,35 @@ export const FIELD_TYPES: FieldType[] = [
   'number',
   'url',
 ]
+
+const FIELD_TYPE_LABELS: Record<FieldType, () => string> = {
+  text: () => m.admin_field_type_text(),
+  textarea: () => m.admin_field_type_textarea(),
+  richtext: () => m.admin_field_type_richtext(),
+  image: () => m.admin_field_type_image(),
+  date: () => m.admin_field_type_date(),
+  datetime: () => m.admin_field_type_datetime(),
+  select: () => m.admin_field_type_select(),
+  reference: () => m.admin_field_type_reference(),
+  slug: () => m.admin_field_type_slug(),
+  boolean: () => m.admin_field_type_boolean(),
+  number: () => m.admin_field_type_number(),
+  url: () => m.admin_field_type_url(),
+}
+
+export function fieldTypeLabel(type: FieldType) {
+  return FIELD_TYPE_LABELS[type]()
+}
+
+export function membershipRoleLabel(role: MembershipRole) {
+  return role === 'owner' ? m.admin_role_owner() : m.admin_role_editor()
+}
+
+export function membershipRoleOptionLabel(role: MembershipRole) {
+  return role === 'owner'
+    ? m.admin_role_owner_option()
+    : m.admin_role_editor_option()
+}
 
 export const adminQueryKeys = {
   organizations: ['organizations'] as const,
@@ -41,7 +71,7 @@ export function errorMessage(err: unknown) {
   ) {
     return err.message
   }
-  return 'Something went wrong'
+  return m.admin_error_generic()
 }
 
 export function suggestSlug(name: string) {
@@ -52,40 +82,43 @@ export function suggestSlug(name: string) {
     .replace(/^-+|-+$/g, '')
 }
 
-const AUDIT_ACTION_LABELS: Record<string, string> = {
-  'organization.create': 'Created organization',
-  'organization.update': 'Updated organization',
-  'site.create': 'Created site',
-  'site.update': 'Updated site',
-  'site.rotate_token': 'Rotated site token',
-  'site.delete': 'Deleted site',
-  'member.invite': 'Sent invitation',
-  'member.update_role': 'Updated member role',
-  'member.remove': 'Removed member',
-  'invitation.revoke': 'Revoked invitation',
-  'invitation.accept': 'Accepted invitation',
-  'entry.create': 'Created entry',
-  'entry.update': 'Updated entry',
-  'entry.restore': 'Restored revision',
-  'entry.publish': 'Published entry',
-  'entry.unpublish': 'Unpublished entry',
-  'entry.archive': 'Archived entry',
-  'entry.schedule': 'Scheduled entry',
-  'entry.cancel_schedule': 'Cancelled schedule',
-  'entry.delete': 'Deleted entry',
-  'manifest.sync': 'Synced manifest',
-  'collection.upsert': 'Saved collection',
-  'publication.requested': 'Requested publication',
-  'publication.rollback_requested': 'Requested rollback',
-  'publication.live': 'Publication went live',
-  'publication.failed': 'Publication failed',
-  'publication.scheduled_failed': 'Scheduled publish failed',
-  'build_job.cancelled': 'Cancelled build job',
+const AUDIT_ACTION_LABELS: Record<string, () => string> = {
+  'organization.create': () => m.admin_audit_action_organization_create(),
+  'organization.update': () => m.admin_audit_action_organization_update(),
+  'site.create': () => m.admin_audit_action_site_create(),
+  'site.update': () => m.admin_audit_action_site_update(),
+  'site.rotate_token': () => m.admin_audit_action_site_rotate_token(),
+  'site.delete': () => m.admin_audit_action_site_delete(),
+  'member.invite': () => m.admin_audit_action_member_invite(),
+  'member.update_role': () => m.admin_audit_action_member_update_role(),
+  'member.remove': () => m.admin_audit_action_member_remove(),
+  'invitation.revoke': () => m.admin_audit_action_invitation_revoke(),
+  'invitation.accept': () => m.admin_audit_action_invitation_accept(),
+  'entry.create': () => m.admin_audit_action_entry_create(),
+  'entry.update': () => m.admin_audit_action_entry_update(),
+  'entry.restore': () => m.admin_audit_action_entry_restore(),
+  'entry.publish': () => m.admin_audit_action_entry_publish(),
+  'entry.unpublish': () => m.admin_audit_action_entry_unpublish(),
+  'entry.archive': () => m.admin_audit_action_entry_archive(),
+  'entry.schedule': () => m.admin_audit_action_entry_schedule(),
+  'entry.cancel_schedule': () => m.admin_audit_action_entry_cancel_schedule(),
+  'entry.delete': () => m.admin_audit_action_entry_delete(),
+  'manifest.sync': () => m.admin_audit_action_manifest_sync(),
+  'collection.upsert': () => m.admin_audit_action_collection_upsert(),
+  'publication.requested': () => m.admin_audit_action_publication_requested(),
+  'publication.rollback_requested': () =>
+    m.admin_audit_action_publication_rollback_requested(),
+  'publication.live': () => m.admin_audit_action_publication_live(),
+  'publication.failed': () => m.admin_audit_action_publication_failed(),
+  'publication.scheduled_failed': () =>
+    m.admin_audit_action_publication_scheduled_failed(),
+  'build_job.cancelled': () => m.admin_audit_action_build_job_cancelled(),
 }
 
 export function formatAuditAction(action: string) {
-  if (AUDIT_ACTION_LABELS[action]) {
-    return AUDIT_ACTION_LABELS[action]
+  const label = AUDIT_ACTION_LABELS[action]
+  if (label) {
+    return label()
   }
   return action.replace(/[._]/g, ' ')
 }

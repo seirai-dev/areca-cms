@@ -6,6 +6,7 @@ import { db } from '#/db'
 import { membership, organization, site } from '#/db/schema'
 import type { MembershipRole } from '#/lib/types'
 import { getSession, requireUser } from '#/lib/session.server'
+import { m } from '#/paraglide/messages'
 import { acceptInvitation, getInvitation } from '#/server/admin/members'
 import { NotFoundError } from '#/server/content/errors'
 
@@ -109,7 +110,7 @@ export const getInvitationFn = createServerFn({ method: 'GET', ...meFn })
   .handler(async ({ data }) => {
     const invite = await getInvitation(data.token)
     if (!invite) {
-      throw new NotFoundError('Invitation not found')
+      throw new NotFoundError(m.server_invitation_not_found())
     }
 
     const [org] = await db
@@ -122,7 +123,7 @@ export const getInvitationFn = createServerFn({ method: 'GET', ...meFn })
       email: invite.email,
       role: invite.role,
       organizationId: invite.organizationId,
-      organizationName: org?.name ?? 'Organization',
+      organizationName: org?.name ?? m.server_organization(),
     }
   })
 

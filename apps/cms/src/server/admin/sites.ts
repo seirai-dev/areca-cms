@@ -14,6 +14,7 @@ import {
   site,
 } from '#/db/schema'
 import type { DeploymentTarget } from '#/lib/types'
+import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
 import { ConflictError, NotFoundError } from '#/server/content/errors'
 import { generateSiteToken } from '#/server/content/site-auth'
@@ -45,11 +46,8 @@ const publicSiteColumns = {
   updatedAt: site.updatedAt,
 }
 
-function toPublicSite(
-  row: InferSelectModel<typeof site>,
-): PublicSite {
-  const { tokenHash: _tokenHash, previewSecret: _previewSecret, ...rest } =
-    row
+function toPublicSite(row: InferSelectModel<typeof site>): PublicSite {
+  const { tokenHash: _tokenHash, previewSecret: _previewSecret, ...rest } = row
   return rest
 }
 
@@ -60,10 +58,7 @@ export async function listSites(organizationId?: string) {
         .from(site)
         .where(eq(site.organizationId, organizationId))
         .orderBy(site.name)
-    : await db
-        .select(publicSiteColumns)
-        .from(site)
-        .orderBy(site.name)
+    : await db.select(publicSiteColumns).from(site).orderBy(site.name)
   return rows
 }
 
@@ -89,7 +84,7 @@ export async function createSite(input: {
     .where(eq(organization.id, input.organizationId))
     .limit(1)
   if (!org) {
-    throw new NotFoundError('Organization not found')
+    throw new NotFoundError(m.server_organization_not_found())
   }
 
   const [slugTaken] = await db
@@ -98,7 +93,7 @@ export async function createSite(input: {
     .where(eq(site.slug, input.slug))
     .limit(1)
   if (slugTaken) {
-    throw new ConflictError('Slug already exists')
+    throw new ConflictError(m.server_slug_already_exists())
   }
 
   const { token, hash } = generateSiteToken()
@@ -116,7 +111,7 @@ export async function createSite(input: {
     })
     .returning()
   if (!created) {
-    throw new Error('Failed to create site')
+    throw new Error(m.server_failed_to_create_site())
   }
 
   await audit({
@@ -146,7 +141,7 @@ export async function updateSite(
     .where(eq(site.id, id))
     .limit(1)
   if (!existing) {
-    throw new NotFoundError('Site not found')
+    throw new NotFoundError(m.server_site_not_found())
   }
 
   const patch: {
@@ -157,9 +152,12 @@ export async function updateSite(
   } = { updatedAt: new Date() }
 
   if (input.name !== undefined) patch.name = input.name
-  if (input.productionUrl !== undefined) patch.productionUrl = input.productionUrl
+  if (input.productionUrl !== undefined)
+    patch.productionUrl = input.productionUrl
   if ('deploymentTarget' in input) {
-    patch.deploymentTarget = deploymentTargetSchema.parse(input.deploymentTarget)
+    patch.deploymentTarget = deploymentTargetSchema.parse(
+      input.deploymentTarget,
+    )
   }
 
   const [updated] = await db
@@ -168,7 +166,7 @@ export async function updateSite(
     .where(eq(site.id, id))
     .returning()
   if (!updated) {
-    throw new NotFoundError('Site not found')
+    throw new NotFoundError(m.server_site_not_found())
   }
 
   await audit({
@@ -189,7 +187,7 @@ export async function rotateSiteTokenAdmin(id: string) {
     .where(eq(site.id, id))
     .limit(1)
   if (!existing) {
-    throw new NotFoundError('Site not found')
+    throw new NotFoundError(m.server_site_not_found())
   }
 
   const generated = generateSiteToken()
@@ -216,7 +214,7 @@ export async function deleteSite(id: string) {
     .where(eq(site.id, id))
     .limit(1)
   if (!existing) {
-    throw new NotFoundError('Site not found')
+    throw new NotFoundError(m.server_site_not_found())
   }
 
   await db.transaction(async (tx) => {

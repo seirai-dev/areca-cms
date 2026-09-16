@@ -2,6 +2,7 @@ import { createFileRoute, redirect } from '@tanstack/react-router'
 
 import { OrgMembers } from '#/components/admin/org-members'
 import { PageHeader } from '#/components/page-header'
+import { m } from '#/paraglide/messages'
 
 export const Route = createFileRoute('/_app/orgs/$orgId/members')({
   beforeLoad: ({ context, params }) => {
@@ -27,11 +28,11 @@ function OrgMembersPage() {
   return (
     <div className="grid gap-6">
       <PageHeader
-        title="Team"
+        title={m.admin_team_title()}
         description={
           membership
-            ? `People who can work on ${membership.organizationName}.`
-            : 'People who can work on this organization.'
+            ? m.admin_team_description({ name: membership.organizationName })
+            : m.admin_team_description_fallback()
         }
       />
       <OrgMembers organizationId={orgId} />

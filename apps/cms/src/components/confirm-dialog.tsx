@@ -14,6 +14,21 @@ import {
 } from '#/components/ui/alert-dialog'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
+import { m } from '#/paraglide/messages'
+
+function typeToConfirmLabel(confirmText: string) {
+  const marker = '\uFFFF'
+  const [before, after] = m
+    .shared_type_to_confirm({ confirmText: marker })
+    .split(marker)
+  return (
+    <>
+      {before}
+      <span className="font-mono font-semibold">{confirmText}</span>
+      {after}
+    </>
+  )
+}
 
 /**
  * Shared confirmation dialog.
@@ -26,8 +41,8 @@ import { Label } from '#/components/ui/label'
 export function ConfirmDialog({
   title,
   description,
-  confirmLabel = 'Confirm',
-  cancelLabel = 'Cancel',
+  confirmLabel = m.shared_confirm(),
+  cancelLabel = m.shared_cancel(),
   variant = 'default',
   confirmText,
   onConfirm,
@@ -87,9 +102,7 @@ export function ConfirmDialog({
         {needsTyping ? (
           <div className="grid gap-2">
             <Label htmlFor="confirm-text">
-              Type{' '}
-              <span className="font-mono font-semibold">{confirmText}</span> to
-              confirm
+              {typeToConfirmLabel(confirmText!)}
             </Label>
             <Input
               id="confirm-text"
@@ -110,7 +123,7 @@ export function ConfirmDialog({
             onClick={handleConfirm}
             data-testid="confirm-action"
           >
-            {pending ? 'Working…' : confirmLabel}
+            {pending ? m.shared_working() : confirmLabel}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

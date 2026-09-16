@@ -3,9 +3,14 @@ import { and, desc, eq, inArray } from 'drizzle-orm'
 import { db } from '#/db'
 import { buildJob, publication, site, user } from '#/db/schema'
 import type { BuildJobStatus } from '#/lib/types'
+import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
 import { buildSnapshot } from '#/server/content/snapshot'
-import { ConflictError, NotFoundError, ValidationError } from '#/server/content/errors'
+import {
+  ConflictError,
+  NotFoundError,
+  ValidationError,
+} from '#/server/content/errors'
 
 export function dbActorId(actorId: string | null | undefined) {
   if (!actorId || actorId === 'system') return null
@@ -15,7 +20,7 @@ export function dbActorId(actorId: string | null | undefined) {
 export async function getSiteOrThrow(siteId: string) {
   const [row] = await db.select().from(site).where(eq(site.id, siteId)).limit(1)
   if (!row) {
-    throw new NotFoundError('Site not found')
+    throw new NotFoundError(m.server_site_not_found())
   }
   return row
 }
@@ -58,7 +63,7 @@ export async function requestPublication(input: {
       .returning()
 
     if (!pub) {
-      throw new Error('Failed to create publication')
+      throw new Error(m.server_failed_to_create_publication())
     }
 
     const queued = await tx
@@ -100,7 +105,7 @@ export async function requestPublication(input: {
       .returning()
 
     if (!job) {
-      throw new Error('Failed to create build job')
+      throw new Error(m.server_failed_to_create_build_job())
     }
 
     return { publication: pub, job }
@@ -136,13 +141,13 @@ export async function requestRollback(input: {
     .limit(1)
 
   if (!pub || pub.siteId !== input.siteId) {
-    throw new NotFoundError('Publication not found')
+    throw new NotFoundError(m.server_publication_not_found())
   }
   if (!pub.wasLive) {
     throw new ValidationError([
       {
         path: 'publicationId',
-        message: 'Publication has not been live',
+        message: m.server_publication_not_live(),
       },
     ])
   }
@@ -157,7 +162,7 @@ export async function requestRollback(input: {
       .returning()
 
     if (!updated) {
-      throw new NotFoundError('Publication not found')
+      throw new NotFoundError(m.server_publication_not_found())
     }
 
     const queued = await tx
@@ -199,7 +204,7 @@ export async function requestRollback(input: {
       .returning()
 
     if (!job) {
-      throw new Error('Failed to create build job')
+      throw new Error(m.server_failed_to_create_build_job())
     }
 
     return { publication: updated, job }
@@ -297,10 +302,10 @@ export async function getBuildJob(id: string) {
 export async function cancelJob(id: string, actorId: string) {
   const job = await getBuildJob(id)
   if (!job) {
-    throw new NotFoundError('Build job not found')
+    throw new NotFoundError(m.server_build_job_not_found())
   }
   if (job.status !== 'queued') {
-    throw new ConflictError('Only queued jobs can be cancelled')
+    throw new ConflictError(m.server_only_queued_jobs_cancel())
   }
 
   const existingSite = await getSiteOrThrow(job.siteId)
@@ -311,7 +316,7 @@ export async function cancelJob(id: string, actorId: string) {
     .returning()
 
   if (!updated) {
-    throw new NotFoundError('Build job not found')
+    throw new NotFoundError(m.server_build_job_not_found())
   }
 
   await db

@@ -30,6 +30,7 @@ import {
 } from '#/components/ui/dialog'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
+import { m } from '#/paraglide/messages'
 import { createOrganizationFn, listOrganizationsFn } from '#/server/fn/admin'
 
 export const Route = createFileRoute('/_app/admin/organizations/')({
@@ -42,7 +43,7 @@ const helper = createDataColumns<OrgRow>()
 
 const columns = helper.columns([
   helper.accessor('name', {
-    header: 'Name',
+    header: () => m.admin_name(),
     cell: ({ row }) => (
       <Link
         to="/admin/organizations/$orgId"
@@ -54,7 +55,7 @@ const columns = helper.columns([
     ),
   }),
   helper.accessor('slug', {
-    header: 'Slug',
+    header: () => m.admin_slug(),
     cell: ({ row }) => (
       <span className="font-mono text-xs text-muted-foreground">
         {row.original.slug}
@@ -62,21 +63,21 @@ const columns = helper.columns([
     ),
   }),
   helper.accessor('siteCount', {
-    header: 'Sites',
+    header: () => m.admin_organizations_col_sites(),
     sortFn: 'basic',
     cell: ({ row }) => (
       <span className="tabular-nums">{row.original.siteCount}</span>
     ),
   }),
   helper.accessor('memberCount', {
-    header: 'Members',
+    header: () => m.admin_organizations_col_members(),
     sortFn: 'basic',
     cell: ({ row }) => (
       <span className="tabular-nums">{row.original.memberCount}</span>
     ),
   }),
   helper.accessor('createdAt', {
-    header: 'Created',
+    header: () => m.admin_organizations_col_created(),
     sortFn: 'datetime',
     cell: ({ row }) => (
       <span className="whitespace-nowrap text-muted-foreground">
@@ -106,7 +107,7 @@ function OrganizationsPage() {
   const createMutation = useMutation({
     mutationFn: () => createOrganization({ data: { name, slug } }),
     onSuccess: async (org) => {
-      toast.success('Organization created')
+      toast.success(m.admin_organizations_toast_created())
       setOpen(false)
       setName('')
       setSlug('')
@@ -155,13 +156,13 @@ function OrganizationsPage() {
         data-ready={orgsQuery.isFetched ? 'true' : 'false'}
       >
         <PageHeader
-          title="Organizations"
-          description="Agency customers and their sites."
+          title={m.admin_organizations_title()}
+          description={m.admin_organizations_description()}
           actions={
             <DialogTrigger asChild>
               <Button type="button" data-testid="new-organization">
                 <Plus />
-                New organization
+                {m.admin_organizations_new()}
               </Button>
             </DialogTrigger>
           }
@@ -169,7 +170,7 @@ function OrganizationsPage() {
 
         {orgsQuery.isError ? (
           <QueryError
-            title="Could not load organizations"
+            title={m.admin_organizations_load_error()}
             error={orgsQuery.error}
             onRetry={() => void orgsQuery.refetch()}
             retrying={orgsQuery.isFetching}
@@ -179,13 +180,13 @@ function OrganizationsPage() {
         ) : orgsQuery.data.length === 0 ? (
           <EmptyState
             icon={<Building2 />}
-            title="No organizations yet"
-            description="Create an organization to start adding sites and inviting members."
+            title={m.admin_organizations_empty_title()}
+            description={m.admin_organizations_empty_description()}
             action={
               open ? undefined : (
                 <Button type="button" onClick={() => setOpen(true)}>
                   <Plus />
-                  New organization
+                  {m.admin_organizations_new()}
                 </Button>
               )
             }
@@ -194,14 +195,14 @@ function OrganizationsPage() {
           <div className="grid gap-4">
             <div className="grid max-w-sm gap-2">
               <Label htmlFor="org-search" className="sr-only">
-                Search organizations
+                {m.admin_organizations_search_label()}
               </Label>
               <div className="relative">
                 <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   id="org-search"
                   type="search"
-                  placeholder="Search by name or slug"
+                  placeholder={m.admin_organizations_search_placeholder()}
                   className="pl-9"
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
@@ -213,8 +214,10 @@ function OrganizationsPage() {
               data={filtered}
               pageSize={25}
               initialSorting={[{ id: 'name', desc: false }]}
-              emptyMessage={`No organizations match “${search.trim()}”.`}
-              caption="Organizations"
+              emptyMessage={m.admin_organizations_empty_filters({
+                search: search.trim(),
+              })}
+              caption={m.admin_organizations_caption()}
             />
           </div>
         )}
@@ -222,13 +225,12 @@ function OrganizationsPage() {
         <DialogContent>
           <form className="grid gap-4" onSubmit={onCreate}>
             <DialogHeader>
-              <DialogTitle>New organization</DialogTitle>
+              <DialogTitle>{m.admin_organizations_dialog_title()}</DialogTitle>
               <DialogDescription>
-                The slug is suggested from the name and must be unique. It is
-                used in URLs and cannot be changed later.
+                {m.admin_organizations_dialog_description()}
               </DialogDescription>
             </DialogHeader>
-            <FormField label="Name" htmlFor="org-name">
+            <FormField label={m.admin_name()} htmlFor="org-name">
               <Input
                 id="org-name"
                 data-testid="org-name"
@@ -239,7 +241,7 @@ function OrganizationsPage() {
                 onChange={(event) => onNameChange(event.target.value)}
               />
             </FormField>
-            <FormField label="Slug" htmlFor="org-slug">
+            <FormField label={m.admin_slug()} htmlFor="org-slug">
               <Input
                 id="org-slug"
                 data-testid="org-slug"
@@ -260,10 +262,12 @@ function OrganizationsPage() {
                 onClick={() => setOpen(false)}
                 disabled={createMutation.isPending}
               >
-                Cancel
+                {m.admin_cancel()}
               </Button>
               <Button type="submit" disabled={createMutation.isPending}>
-                {createMutation.isPending ? 'Creating…' : 'Create organization'}
+                {createMutation.isPending
+                  ? m.admin_creating()
+                  : m.admin_organizations_create()}
               </Button>
             </DialogFooter>
           </form>

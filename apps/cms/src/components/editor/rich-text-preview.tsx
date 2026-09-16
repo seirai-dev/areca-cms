@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { Markdown } from '@tanstack/markdown/react'
 import type { MarkdownComponents } from '@tanstack/markdown/react'
 
+import { m } from '#/paraglide/messages'
 import { serializeMarkdown } from '#/server/richtext/markdown'
 
 /**
@@ -27,7 +28,7 @@ export function RichTextPreview({ value }: { value: unknown }) {
   if (!markdown) {
     return (
       <p className="px-4 py-3 text-sm text-muted-foreground">
-        Nothing to preview yet.
+        {m.editor_nothing_to_preview()}
       </p>
     )
   }

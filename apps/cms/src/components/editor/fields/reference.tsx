@@ -18,6 +18,7 @@ import {
 } from '#/components/ui/popover'
 import { useDebouncedValue } from '#/hooks/use-debounced-value'
 import type { EntryData, Field } from '#/lib/types'
+import { m } from '#/paraglide/messages'
 import { getEntryFn, listEntriesFn } from '#/server/fn/content'
 
 import { queryKeys } from '../query-keys'
@@ -84,9 +85,9 @@ export function ReferenceFieldInput({
     ? entryTitle(selected.draftData, [], selected.slug)
     : selectedId
       ? selectedQuery.isError
-        ? 'Entry no longer exists'
-        : 'Loading…'
-      : 'Select an entry…'
+        ? m.editor_entry_no_longer_exists()
+        : m.editor_loading()
+      : m.editor_select_an_entry()
 
   return (
     <div className="flex items-center gap-2">
@@ -115,7 +116,7 @@ export function ReferenceFieldInput({
         >
           <Command shouldFilter={false}>
             <CommandInput
-              placeholder="Search entries…"
+              placeholder={m.editor_search_entries_placeholder()}
               value={search}
               onValueChange={setSearch}
             />
@@ -123,15 +124,15 @@ export function ReferenceFieldInput({
               {entriesQuery.isLoading ? (
                 <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
                   <Loader2 className="size-4 animate-spin" />
-                  Loading…
+                  {m.editor_loading()}
                 </div>
               ) : entriesQuery.isError ? (
                 <div className="py-6 text-center text-sm text-destructive">
-                  Could not load entries.
+                  {m.editor_could_not_load_entries_period()}
                 </div>
               ) : (
                 <>
-                  <CommandEmpty>No entries found.</CommandEmpty>
+                  <CommandEmpty>{m.editor_no_entries_found()}</CommandEmpty>
                   <CommandGroup>
                     {items.map((item) => (
                       <CommandItem
@@ -158,8 +159,10 @@ export function ReferenceFieldInput({
                   </CommandGroup>
                   {total > items.length ? (
                     <p className="border-t px-3 py-2 text-xs text-muted-foreground">
-                      Showing {items.length} of {total}. Type to narrow the
-                      list.
+                      {m.editor_showing_of_total({
+                        shown: items.length,
+                        total,
+                      })}
                     </p>
                   ) : null}
                 </>
@@ -173,8 +176,8 @@ export function ReferenceFieldInput({
           type="button"
           variant="ghost"
           size="icon-sm"
-          aria-label="Clear selection"
-          title="Clear selection"
+          aria-label={m.editor_clear_selection()}
+          title={m.editor_clear_selection()}
           onClick={() => onChange('')}
         >
           <X />

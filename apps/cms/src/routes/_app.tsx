@@ -2,12 +2,14 @@ import { Outlet, createFileRoute, redirect } from '@tanstack/react-router'
 
 import { AppBreadcrumbs } from '#/components/app-breadcrumbs'
 import { AppSidebar } from '#/components/app-sidebar'
+import { LanguageSwitcher } from '#/components/language-switcher'
 import { Separator } from '#/components/ui/separator'
 import {
   SidebarInset,
   SidebarProvider,
   SidebarTrigger,
 } from '#/components/ui/sidebar'
+import { m } from '#/paraglide/messages'
 import { getMeFn } from '#/server/fn/me'
 import { getSetupStatusFn } from '#/server/fn/setup'
 
@@ -40,12 +42,13 @@ function AppLayout() {
           href="#main-content"
           className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:shadow"
         >
-          Skip to content
+          {m.shell_skip_to_content()}
         </a>
         <header className="sticky top-0 z-30 flex h-(--app-header-h) shrink-0 items-center gap-2 border-b bg-background px-3 sm:px-4">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-1 h-4" />
           <AppBreadcrumbs me={me} />
+          <LanguageSwitcher className="ml-auto" />
         </header>
         <div
           id="main-content"

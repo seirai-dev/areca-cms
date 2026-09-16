@@ -30,6 +30,7 @@ import {
   TableRow,
 } from '#/components/ui/table'
 import { cn } from '#/lib/utils'
+import { m } from '#/paraglide/messages'
 
 const dataTableFeatures = tableFeatures({
   rowSortingFeature,
@@ -62,7 +63,7 @@ export const createDataColumns = <TData extends RowData>() =>
 export function DataTable<TData extends RowData>({
   columns,
   data,
-  emptyMessage = 'No results.',
+  emptyMessage = m.shared_no_results(),
   pageSize,
   initialSorting = [],
   getRowProps,
@@ -176,7 +177,11 @@ export function DataTable<TData extends RowData>({
       {showPager ? (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm text-muted-foreground">
-            Page {pagination.pageIndex + 1} of {pageCount} · {data.length} rows
+            {m.shared_page_of({
+              page: pagination.pageIndex + 1,
+              pageCount,
+              count: data.length,
+            })}
           </p>
           <div className="flex items-center gap-1">
             <Button
@@ -186,7 +191,7 @@ export function DataTable<TData extends RowData>({
               disabled={!table.getCanPreviousPage()}
               onClick={() => table.previousPage()}
             >
-              Previous
+              {m.shared_previous()}
             </Button>
             <Button
               type="button"
@@ -195,7 +200,7 @@ export function DataTable<TData extends RowData>({
               disabled={!table.getCanNextPage()}
               onClick={() => table.nextPage()}
             >
-              Next
+              {m.shared_next()}
             </Button>
           </div>
         </div>

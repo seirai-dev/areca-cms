@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
+import { m } from '#/paraglide/messages'
 import type { Me } from '#/server/fn/me'
 
 export type SiteSection = {
@@ -45,15 +46,20 @@ export function siteSections(me: Me, site: MeSite): SiteSection[] {
   const sections: SiteSection[] = [
     {
       key: 'content',
-      label: 'Content',
+      label: m.shell_nav_content(),
       icon: FileText,
       href: base,
       exact: true,
     },
-    { key: 'media', label: 'Media', icon: Image, href: `${base}/media` },
+    {
+      key: 'media',
+      label: m.shell_nav_media(),
+      icon: Image,
+      href: `${base}/media`,
+    },
     {
       key: 'releases',
-      label: 'Releases',
+      label: m.shell_nav_releases(),
       icon: Rocket,
       href: `${base}/releases`,
     },
@@ -62,7 +68,7 @@ export function siteSections(me: Me, site: MeSite): SiteSection[] {
   if (me.user.isAgencyAdmin) {
     sections.push({
       key: 'team',
-      label: 'Team',
+      label: m.shell_nav_team(),
       icon: Users,
       href: `/admin/organizations/${site.organizationId}`,
       testId: 'team-nav',
@@ -71,14 +77,14 @@ export function siteSections(me: Me, site: MeSite): SiteSection[] {
     sections.push(
       {
         key: 'team',
-        label: 'Team',
+        label: m.shell_nav_team(),
         icon: Users,
         href: `/orgs/${site.organizationId}/members`,
         testId: 'team-nav',
       },
       {
         key: 'activity',
-        label: 'Activity',
+        label: m.shell_nav_activity(),
         icon: Activity,
         href: `/orgs/${site.organizationId}/audit`,
         testId: 'org-audit-nav',
@@ -89,7 +95,7 @@ export function siteSections(me: Me, site: MeSite): SiteSection[] {
   if (me.user.isAgencyAdmin) {
     sections.push({
       key: 'settings',
-      label: 'Settings',
+      label: m.shell_nav_settings(),
       icon: Settings,
       href: `${base}/settings`,
     })

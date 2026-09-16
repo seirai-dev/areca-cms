@@ -6,6 +6,7 @@ import { db } from '#/db'
 import { invitation, membership, organization, user } from '#/db/schema'
 import { env } from '#/env'
 import type { MembershipRole } from '#/lib/types'
+import { m } from '#/paraglide/messages'
 import { getBranding } from '#/server/admin/branding'
 import { audit } from '#/server/audit'
 import { ConflictError, NotFoundError } from '#/server/content/errors'
@@ -53,7 +54,7 @@ export async function updateMemberRole(
     )
     .limit(1)
   if (!existing) {
-    throw new NotFoundError('Member not found')
+    throw new NotFoundError(m.server_member_not_found())
   }
 
   if (existing.role === 'owner' && role !== 'owner') {
@@ -67,7 +68,7 @@ export async function updateMemberRole(
         ),
       )
     if (owners.length <= 1) {
-      throw new ConflictError('Cannot demote the last owner')
+      throw new ConflictError(m.server_cannot_demote_last_owner())
     }
   }
 
@@ -77,7 +78,7 @@ export async function updateMemberRole(
     .where(eq(membership.id, existing.id))
     .returning()
   if (!updated) {
-    throw new NotFoundError('Member not found')
+    throw new NotFoundError(m.server_member_not_found())
   }
 
   await audit({
@@ -103,7 +104,7 @@ export async function removeMember(organizationId: string, userId: string) {
     )
     .limit(1)
   if (!existing) {
-    throw new NotFoundError('Member not found')
+    throw new NotFoundError(m.server_member_not_found())
   }
 
   if (existing.role === 'owner') {
@@ -117,7 +118,7 @@ export async function removeMember(organizationId: string, userId: string) {
         ),
       )
     if (owners.length <= 1) {
-      throw new ConflictError('Cannot remove the last owner')
+      throw new ConflictError(m.server_cannot_remove_last_owner())
     }
   }
 
@@ -148,7 +149,7 @@ export async function inviteMember(input: {
     .where(eq(organization.id, input.organizationId))
     .limit(1)
   if (!org) {
-    throw new NotFoundError('Organization not found')
+    throw new NotFoundError(m.server_organization_not_found())
   }
 
   const email = normalizeEmail(input.email)
@@ -170,7 +171,7 @@ export async function inviteMember(input: {
       )
       .limit(1)
     if (existingMember) {
-      throw new ConflictError('This email is already a member')
+      throw new ConflictError(m.server_email_already_member())
     }
   }
 
@@ -187,7 +188,7 @@ export async function inviteMember(input: {
     )
     .limit(1)
   if (pending) {
-    throw new ConflictError('An invitation is already pending for this email')
+    throw new ConflictError(m.server_invitation_pending())
   }
 
   const token = randomBytes(32).toString('hex')
@@ -204,7 +205,7 @@ export async function inviteMember(input: {
     })
     .returning()
   if (!created) {
-    throw new Error('Failed to create invitation')
+    throw new Error(m.server_failed_to_create_invitation())
   }
 
   const link = `${env.APP_URL}/invite/${token}`
@@ -212,9 +213,9 @@ export async function inviteMember(input: {
   await sendEmail({
     to: input.email,
     fromName: brand.emailFromName ?? brand.appName,
-    subject: `Invitation to ${org.name}`,
-    text: `You have been invited to ${org.name} as ${input.role}.\n\nAccept: ${link}\n\n— ${brand.appName}`,
-    html: `<p>You have been invited to ${org.name} as ${input.role}.</p><p><a href="${link}">Accept invitation</a></p><p style="color:#666;font-size:12px">— ${escapeHtml(brand.appName)}</p>`,
+    subject: m.server_invite_subject({ org: org.name }),
+    text: `${m.server_invite_body({ org: org.name, role: input.role })}\n\n${m.server_invite_accept_text({ link })}\n\n— ${brand.appName}`,
+    html: `<p>${m.server_invite_body({ org: org.name, role: input.role })}</p><p><a href="${link}">${m.server_invite_accept()}</a></p><p style="color:#666;font-size:12px">— ${escapeHtml(brand.appName)}</p>`,
   })
 
   await audit({
@@ -249,7 +250,7 @@ export async function getInvitationById(id: string) {
 export async function revokeInvitation(id: string) {
   const existing = await getInvitationById(id)
   if (!existing) {
-    throw new NotFoundError('Invitation not found')
+    throw new NotFoundError(m.server_invitation_not_found())
   }
 
   await db.delete(invitation).where(eq(invitation.id, id))
@@ -283,7 +284,7 @@ export async function acceptInvitation(input: {
 }) {
   const invite = await getInvitation(input.token)
   if (!invite) {
-    throw new NotFoundError('Invitation not found')
+    throw new NotFoundError(m.server_invitation_not_found())
   }
 
   const [invitee] = await db
@@ -292,10 +293,10 @@ export async function acceptInvitation(input: {
     .where(eq(user.id, input.userId))
     .limit(1)
   if (!invitee) {
-    throw new NotFoundError('User not found')
+    throw new NotFoundError(m.server_user_not_found())
   }
   if (normalizeEmail(invitee.email) !== normalizeEmail(invite.email)) {
-    throw new ConflictError('Signed-in email does not match this invitation')
+    throw new ConflictError(m.server_invite_email_mismatch())
   }
 
   const acceptedAt = new Date()
@@ -358,7 +359,7 @@ export async function setAgencyAdmin(userId: string, isAgencyAdmin: boolean) {
     .where(eq(user.id, userId))
     .limit(1)
   if (!existing) {
-    throw new NotFoundError('User not found')
+    throw new NotFoundError(m.server_user_not_found())
   }
 
   const [updated] = await db
@@ -372,7 +373,7 @@ export async function setAgencyAdmin(userId: string, isAgencyAdmin: boolean) {
       isAgencyAdmin: user.isAgencyAdmin,
     })
   if (!updated) {
-    throw new NotFoundError('User not found')
+    throw new NotFoundError(m.server_user_not_found())
   }
 
   return updated

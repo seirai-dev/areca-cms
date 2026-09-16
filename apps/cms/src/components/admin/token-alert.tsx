@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 
 import { Alert, AlertDescription, AlertTitle } from '#/components/ui/alert'
 import { Button } from '#/components/ui/button'
+import { m } from '#/paraglide/messages'
 
 export function TokenAlert({
   token,
@@ -26,24 +27,23 @@ export function TokenAlert({
     try {
       await navigator.clipboard.writeText(token)
       setCopied(true)
-      toast.success('Token copied')
+      toast.success(m.admin_token_copied())
     } catch {
-      toast.error('Could not copy token. Select it and copy manually.')
+      toast.error(m.admin_token_copy_error())
     }
   }
 
   return (
     <Alert data-testid="site-token-alert">
       <KeyRound />
-      <AlertTitle>Site token — shown only once</AlertTitle>
+      <AlertTitle>{m.admin_token_title()}</AlertTitle>
       <AlertDescription className="grid gap-3">
         <p>
-          Copy this token now and store it as{' '}
+          {m.admin_token_body_before()}{' '}
           <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
             ARECA_SITE_TOKEN
           </code>{' '}
-          in the site&apos;s environment. It cannot be retrieved later; if you
-          lose it, rotate the token from the site settings.
+          {m.admin_token_body_after()}
         </p>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
           <pre className="min-w-0 flex-1 overflow-x-auto rounded-md border bg-muted px-3 py-2 font-mono text-xs leading-relaxed whitespace-pre-wrap break-all select-all">
@@ -55,10 +55,10 @@ export function TokenAlert({
               size="sm"
               variant="outline"
               onClick={() => void copy()}
-              aria-label="Copy site token"
+              aria-label={m.admin_token_copy_aria()}
             >
               {copied ? <Check /> : <Copy />}
-              {copied ? 'Copied' : 'Copy'}
+              {copied ? m.admin_token_copied_label() : m.admin_token_copy()}
             </Button>
             {onDismiss ? (
               <Button
@@ -67,7 +67,7 @@ export function TokenAlert({
                 variant="ghost"
                 onClick={onDismiss}
               >
-                Dismiss
+                {m.admin_token_dismiss()}
               </Button>
             ) : null}
           </div>

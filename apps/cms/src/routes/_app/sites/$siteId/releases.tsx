@@ -44,6 +44,7 @@ import {
 import { ScrollArea } from '#/components/ui/scroll-area'
 import { Skeleton } from '#/components/ui/skeleton'
 import type { BuildJobStatus, PublicationStatus } from '#/lib/types'
+import { m } from '#/paraglide/messages'
 import {
   cancelJobFn,
   getBuildJobFn,
@@ -156,27 +157,28 @@ function ReleasesPage() {
     mutationFn: (publicationId: string) =>
       requestRollbackFn({ data: { siteId, publicationId } }),
     onSuccess: async () => {
-      toast.success('Rollback requested')
+      toast.success(m.sites_rollback_requested())
       setPublicationsOffset(0)
       await invalidate()
     },
-    onError: (error) => toast.error(errorMessage(error, 'Could not roll back')),
+    onError: (error) =>
+      toast.error(errorMessage(error, m.sites_rollback_failed())),
   })
 
   const cancelMutation = useMutation({
     mutationFn: (id: string) => cancelJobFn({ data: { id } }),
     onSuccess: async () => {
-      toast.success('Job cancelled')
+      toast.success(m.sites_job_cancelled())
       await invalidate()
     },
     onError: (error) =>
-      toast.error(errorMessage(error, 'Could not cancel job')),
+      toast.error(errorMessage(error, m.sites_cancel_job_failed())),
   })
 
   const pubHelper = createDataColumns<PublicationRow>()
   const publicationColumns = pubHelper.columns([
     pubHelper.accessor('createdAt', {
-      header: 'Created',
+      header: m.sites_column_created(),
       sortFn: 'datetime',
       cell: ({ row }) => (
         <span className="whitespace-nowrap">
@@ -185,7 +187,7 @@ function ReleasesPage() {
       ),
     }),
     pubHelper.accessor('status', {
-      header: 'Status',
+      header: m.sites_column_status(),
       cell: ({ row }) => (
         <PublicationStatusBadge
           status={row.original.status}
@@ -194,7 +196,7 @@ function ReleasesPage() {
       ),
     }),
     pubHelper.accessor('snapshotHash', {
-      header: 'Snapshot',
+      header: m.sites_column_snapshot(),
       cell: ({ row }) => (
         <span className="font-mono text-xs" title={row.original.snapshotHash}>
           {shortId(row.original.snapshotHash)}
@@ -202,11 +204,11 @@ function ReleasesPage() {
       ),
     }),
     pubHelper.accessor('requestedByName', {
-      header: 'Requested by',
-      cell: ({ row }) => row.original.requestedByName ?? 'System',
+      header: m.sites_column_requested_by(),
+      cell: ({ row }) => row.original.requestedByName ?? m.sites_system(),
     }),
     pubHelper.accessor('deployedAt', {
-      header: 'Deployed',
+      header: m.sites_column_deployed(),
       sortFn: 'datetime',
       cell: ({ row }) => (
         <span className="whitespace-nowrap text-muted-foreground">
@@ -216,7 +218,7 @@ function ReleasesPage() {
     }),
     pubHelper.display({
       id: 'actions',
-      header: () => <span className="sr-only">Actions</span>,
+      header: () => <span className="sr-only">{m.sites_actions()}</span>,
       enableSorting: false,
       cell: ({ row }) => (
         <div className="flex justify-end">
@@ -230,7 +232,7 @@ function ReleasesPage() {
               onClick={() => setRollbackTarget(row.original)}
             >
               <RotateCcw />
-              Rollback
+              {m.sites_rollback()}
             </Button>
           ) : null}
         </div>
@@ -241,7 +243,7 @@ function ReleasesPage() {
   const jobHelper = createDataColumns<JobRow>()
   const jobColumns = jobHelper.columns([
     jobHelper.accessor('createdAt', {
-      header: 'Created',
+      header: m.sites_column_created(),
       sortFn: 'datetime',
       cell: ({ row }) => (
         <span className="whitespace-nowrap">
@@ -250,7 +252,7 @@ function ReleasesPage() {
       ),
     }),
     jobHelper.accessor('status', {
-      header: 'Status',
+      header: m.sites_column_status(),
       cell: ({ row }) => (
         <div className="grid gap-1">
           <div>
@@ -267,10 +269,10 @@ function ReleasesPage() {
         </div>
       ),
     }),
-    jobHelper.accessor('attempts', { header: 'Attempts' }),
+    jobHelper.accessor('attempts', { header: m.sites_column_attempts() }),
     jobHelper.display({
       id: 'actions',
-      header: () => <span className="sr-only">Actions</span>,
+      header: () => <span className="sr-only">{m.sites_actions()}</span>,
       enableSorting: false,
       cell: ({ row }) => (
         <div className="flex justify-end gap-2">
@@ -281,7 +283,7 @@ function ReleasesPage() {
             onClick={() => setLogsJobId(row.original.id)}
           >
             <ScrollText />
-            Logs
+            {m.sites_logs()}
           </Button>
           {row.original.status === 'queued' ? (
             <Button
@@ -293,7 +295,7 @@ function ReleasesPage() {
               onClick={() => setCancelTarget(row.original)}
             >
               <XCircle />
-              Cancel
+              {m.sites_cancel()}
             </Button>
           ) : null}
         </div>
@@ -315,30 +317,29 @@ function ReleasesPage() {
     if (!logsText) return
     try {
       await navigator.clipboard.writeText(logsText)
-      toast.success('Logs copied to clipboard')
+      toast.success(m.sites_logs_copied())
     } catch {
-      toast.error('Could not copy logs')
+      toast.error(m.sites_copy_logs_failed())
     }
   }
 
   return (
     <div className="grid gap-6">
       <PageHeader
-        title="Releases"
-        description="Every publication of this site and the build jobs that deploy them."
+        title={m.sites_nav_releases()}
+        description={m.sites_releases_description()}
       />
 
       <section className="grid gap-3">
         <div>
-          <h2 className="text-lg font-medium">Publications</h2>
+          <h2 className="text-lg font-medium">{m.sites_publications()}</h2>
           <p className="text-sm text-muted-foreground">
-            Snapshots of the site content. Roll back to any previously live
-            publication.
+            {m.sites_publications_description()}
           </p>
         </div>
         {publicationsQuery.isError ? (
           <QueryError
-            title="Could not load publications"
+            title={m.sites_publications_load_error()}
             error={publicationsQuery.error}
             onRetry={() => publicationsQuery.refetch()}
             retrying={publicationsQuery.isFetching}
@@ -348,15 +349,15 @@ function ReleasesPage() {
         ) : publications.length === 0 ? (
           <EmptyState
             icon={<History />}
-            title="No publications yet"
-            description="Publish the site to create the first release."
+            title={m.sites_no_publications_yet()}
+            description={m.sites_no_publications_description()}
           />
         ) : (
           <>
             <DataTable
               columns={publicationColumns}
               data={publications}
-              caption="Publications"
+              caption={m.sites_publications()}
             />
             <ListPagination
               offset={publicationsOffset}
@@ -365,7 +366,7 @@ function ReleasesPage() {
               hasMore={publicationsHasMore}
               onChange={setPublicationsOffset}
               isFetching={publicationsQuery.isFetching}
-              noun="publications"
+              noun={m.sites_publications_noun()}
             />
           </>
         )}
@@ -373,14 +374,14 @@ function ReleasesPage() {
 
       <section className="grid gap-3">
         <div>
-          <h2 className="text-lg font-medium">Build jobs</h2>
+          <h2 className="text-lg font-medium">{m.sites_build_jobs()}</h2>
           <p className="text-sm text-muted-foreground">
-            Queued jobs can be cancelled before they start building.
+            {m.sites_build_jobs_description()}
           </p>
         </div>
         {jobsQuery.isError ? (
           <QueryError
-            title="Could not load build jobs"
+            title={m.sites_build_jobs_load_error()}
             error={jobsQuery.error}
             onRetry={() => jobsQuery.refetch()}
             retrying={jobsQuery.isFetching}
@@ -390,11 +391,15 @@ function ReleasesPage() {
         ) : jobs.length === 0 ? (
           <EmptyState
             icon={<Hammer />}
-            title="No build jobs yet"
-            description="Jobs appear here once the site is published."
+            title={m.sites_no_build_jobs_yet()}
+            description={m.sites_no_build_jobs_description()}
           />
         ) : (
-          <DataTable columns={jobColumns} data={jobs} caption="Build jobs" />
+          <DataTable
+            columns={jobColumns}
+            data={jobs}
+            caption={m.sites_build_jobs()}
+          />
         )}
       </section>
 
@@ -403,13 +408,15 @@ function ReleasesPage() {
         onOpenChange={(open) => {
           if (!open) setRollbackTarget(null)
         }}
-        title="Roll back to this publication?"
+        title={m.sites_rollback_title()}
         description={
           rollbackTarget
-            ? `The snapshot from ${formatDateTime(rollbackTarget.createdAt)} will be redeployed and replace the current live release. Content published since then will no longer be live until you publish again.`
+            ? m.sites_rollback_description({
+                datetime: formatDateTime(rollbackTarget.createdAt),
+              })
             : undefined
         }
-        confirmLabel="Rollback"
+        confirmLabel={m.sites_rollback()}
         variant="destructive"
         onConfirm={async () => {
           if (rollbackTarget)
@@ -422,10 +429,10 @@ function ReleasesPage() {
         onOpenChange={(open) => {
           if (!open) setCancelTarget(null)
         }}
-        title="Cancel this build job?"
-        description="The job will be removed from the queue and the site will not be deployed. You can publish again to start a new build."
-        confirmLabel="Cancel job"
-        cancelLabel="Keep job"
+        title={m.sites_cancel_job_title()}
+        description={m.sites_cancel_job_description()}
+        confirmLabel={m.sites_cancel_job()}
+        cancelLabel={m.sites_keep_job()}
         variant="destructive"
         onConfirm={async () => {
           if (cancelTarget) await cancelMutation.mutateAsync(cancelTarget.id)
@@ -440,20 +447,26 @@ function ReleasesPage() {
       >
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Build logs</DialogTitle>
+            <DialogTitle>{m.sites_build_logs()}</DialogTitle>
             <DialogDescription asChild>
               <div className="flex flex-wrap items-center gap-2">
                 {logsJob ? (
                   <>
                     <JobStatusBadge status={logsJob.status} />
                     <span>
-                      Started {formatDateTime(logsJob.createdAt)} ·{' '}
-                      {logsJob.attempts}{' '}
-                      {logsJob.attempts === 1 ? 'attempt' : 'attempts'}
+                      {logsJob.attempts === 1
+                        ? m.sites_logs_meta_one({
+                            datetime: formatDateTime(logsJob.createdAt),
+                            count: logsJob.attempts,
+                          })
+                        : m.sites_logs_meta_other({
+                            datetime: formatDateTime(logsJob.createdAt),
+                            count: logsJob.attempts,
+                          })}
                     </span>
                   </>
                 ) : (
-                  'Loading…'
+                  m.sites_loading()
                 )}
               </div>
             </DialogDescription>
@@ -461,10 +474,10 @@ function ReleasesPage() {
           <ScrollArea className="h-80 rounded-md border bg-muted/40 p-3">
             <pre className="font-mono text-xs whitespace-pre-wrap break-all">
               {logsQuery.isError
-                ? errorMessage(logsQuery.error, 'Could not load logs')
+                ? errorMessage(logsQuery.error, m.sites_logs_load_error())
                 : logsQuery.isLoading
-                  ? 'Loading…'
-                  : logsText || 'No logs yet.'}
+                  ? m.sites_loading()
+                  : logsText || m.sites_no_logs()}
             </pre>
           </ScrollArea>
           <div className="flex justify-end">
@@ -476,7 +489,7 @@ function ReleasesPage() {
               onClick={copyLogs}
             >
               <Copy />
-              Copy logs
+              {m.sites_copy_logs()}
             </Button>
           </div>
         </DialogContent>

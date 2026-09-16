@@ -19,6 +19,7 @@ import { EmptyState } from '#/components/empty-state'
 import { QueryError } from '#/components/query-error'
 import { Button } from '#/components/ui/button'
 import { Skeleton } from '#/components/ui/skeleton'
+import { m } from '#/paraglide/messages'
 import {
   listCollectionsFn,
   listEntriesFn,
@@ -67,7 +68,7 @@ function SiteContentPage() {
         },
       }),
     onSuccess: async () => {
-      toast.success('Collection saved')
+      toast.success(m.sites_collection_saved())
       setCollectionOpen(false)
       await queryClient.invalidateQueries({
         queryKey: queryKeys.collections(siteId),
@@ -85,7 +86,7 @@ function SiteContentPage() {
       <ReleaseStatusBar siteId={siteId} />
       <section className="grid gap-1">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-lg">Collections</h2>
+          <h2 className="text-lg">{m.sites_collections()}</h2>
           {isAgencyAdmin ? (
             <Button
               type="button"
@@ -93,7 +94,7 @@ function SiteContentPage() {
               onClick={() => setCollectionOpen(true)}
             >
               <Plus />
-              Add collection
+              {m.sites_add_collection()}
             </Button>
           ) : null}
         </div>
@@ -105,29 +106,29 @@ function SiteContentPage() {
         ) : collectionsQuery.isError ? (
           <QueryError
             error={collectionsQuery.error}
-            title="Could not load collections"
+            title={m.sites_collections_load_error()}
             onRetry={() => collectionsQuery.refetch()}
             retrying={collectionsQuery.isFetching}
           />
         ) : collections.length === 0 ? (
           <EmptyState
             icon={<FolderOpen />}
-            title="No collections yet"
+            title={m.sites_no_collections_yet()}
             description={
               isAgencyAdmin
-                ? 'Sync a manifest from the site project, or add a collection.'
-                : 'Your agency has not set up any content types for this site yet.'
+                ? m.sites_no_collections_admin()
+                : m.sites_no_collections_member()
             }
             action={
               isAgencyAdmin ? (
                 <div className="flex flex-wrap items-center justify-center gap-2">
                   <Button type="button" onClick={() => setCollectionOpen(true)}>
                     <Plus />
-                    Add collection
+                    {m.sites_add_collection()}
                   </Button>
                   <Button asChild variant="outline">
                     <Link to="/sites/$siteId/settings" params={{ siteId }}>
-                      Open settings
+                      {m.sites_open_settings()}
                     </Link>
                   </Button>
                 </div>
@@ -148,10 +149,12 @@ function SiteContentPage() {
                     <p className="text-base font-medium">{collection.label}</p>
                     <p className="text-sm text-muted-foreground">
                       {typeof count === 'number'
-                        ? `${count} ${count === 1 ? 'entry' : 'entries'}`
+                        ? count === 1
+                          ? m.sites_entry_count_one({ count })
+                          : m.sites_entry_count_other({ count })
                         : countQueries[index]?.isError
-                          ? 'Count unavailable'
-                          : 'Counting…'}
+                          ? m.sites_count_unavailable()
+                          : m.sites_counting()}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -161,7 +164,7 @@ function SiteContentPage() {
                         params={{ siteId, collectionKey: collection.key }}
                       >
                         <Plus />
-                        New entry
+                        {m.sites_new_entry()}
                       </Link>
                     </Button>
                     <Button asChild size="sm">
@@ -169,7 +172,7 @@ function SiteContentPage() {
                         to="/sites/$siteId/c/$collectionKey"
                         params={{ siteId, collectionKey: collection.key }}
                       >
-                        Open
+                        {m.sites_open()}
                       </Link>
                     </Button>
                   </div>

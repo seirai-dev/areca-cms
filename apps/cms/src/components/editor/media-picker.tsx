@@ -23,6 +23,7 @@ import { Input } from '#/components/ui/input'
 import { Skeleton } from '#/components/ui/skeleton'
 import { useDebouncedValue } from '#/hooks/use-debounced-value'
 import { cn } from '#/lib/utils'
+import { m } from '#/paraglide/messages'
 import { listAssetsFn } from '#/server/fn/assets'
 
 import { queryKeys } from './query-keys'
@@ -54,7 +55,7 @@ export async function uploadAssetFile(
     body,
   })
   if (!response.ok) {
-    throw new Error((await response.text()) || 'Upload failed')
+    throw new Error((await response.text()) || m.editor_upload_failed())
   }
   return (await response.json()) as MediaAsset
 }
@@ -99,11 +100,12 @@ export function MediaPickerDialog({
       await queryClient.invalidateQueries({
         queryKey: ['assets', organizationId],
       })
-      toast.success('Uploaded')
+      toast.success(m.editor_uploaded())
       onSelect(asset)
       onOpenChange(false)
     },
-    onError: (error) => toast.error(errorMessage(error, 'Upload failed')),
+    onError: (error) =>
+      toast.error(errorMessage(error, m.editor_upload_failed())),
   })
 
   const all = (assetsQuery.data ?? []) as MediaAsset[]
@@ -130,18 +132,17 @@ export function MediaPickerDialog({
     >
       <DialogContent className="sm:max-w-3xl" data-testid="media-picker">
         <DialogHeader>
-          <DialogTitle>Choose media</DialogTitle>
+          <DialogTitle>{m.editor_choose_media()}</DialogTitle>
           <DialogDescription>
-            Pick an existing file or upload a new one. You can also drop a file
-            anywhere in this dialog.
+            {m.editor_choose_media_description()}
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Search files…"
-              aria-label="Search files"
+              placeholder={m.editor_search_files_placeholder()}
+              aria-label={m.editor_search_files()}
               value={search}
               onChange={(event) => {
                 setSearch(event.target.value)
@@ -173,7 +174,9 @@ export function MediaPickerDialog({
             ) : (
               <Upload />
             )}
-            {uploadMutation.isPending ? 'Uploading…' : 'Upload'}
+            {uploadMutation.isPending
+              ? m.editor_uploading()
+              : m.editor_upload()}
           </Button>
         </div>
         <div
@@ -197,18 +200,22 @@ export function MediaPickerDialog({
           ) : assetsQuery.isError ? (
             <QueryError
               error={assetsQuery.error}
-              title="Could not load media"
+              title={m.editor_could_not_load_media()}
               onRetry={() => assetsQuery.refetch()}
               retrying={assetsQuery.isFetching}
             />
           ) : assets.length === 0 ? (
             <EmptyState
               icon={<Upload />}
-              title={debouncedSearch ? 'No files match' : 'No files yet'}
+              title={
+                debouncedSearch
+                  ? m.editor_no_files_match()
+                  : m.editor_no_files_yet()
+              }
               description={
                 debouncedSearch
-                  ? 'Try a different search, or upload a new file.'
-                  : 'Upload an image or PDF to get started.'
+                  ? m.editor_try_different_search()
+                  : m.editor_upload_to_get_started()
               }
             />
           ) : (
@@ -236,7 +243,7 @@ export function MediaPickerDialog({
                     <div className="flex aspect-square flex-col items-center justify-center gap-1 bg-muted text-muted-foreground">
                       <FileText className="size-6" />
                       <span className="text-[10px] uppercase">
-                        {asset.mimeType.split('/')[1] ?? 'file'}
+                        {asset.mimeType.split('/')[1] ?? m.editor_file()}
                       </span>
                     </div>
                   )}
@@ -254,7 +261,9 @@ export function MediaPickerDialog({
                     disabled={assetsQuery.isFetching}
                     onClick={() => setPages((n) => n + 1)}
                   >
-                    {assetsQuery.isFetching ? 'Loading…' : 'Load more'}
+                    {assetsQuery.isFetching
+                      ? m.editor_loading()
+                      : m.editor_load_more()}
                   </Button>
                 </div>
               ) : null}
@@ -262,7 +271,7 @@ export function MediaPickerDialog({
           )}
           {dragging ? (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg bg-background/80 text-sm font-medium">
-              Drop to upload
+              {m.editor_drop_to_upload()}
             </div>
           ) : null}
         </div>

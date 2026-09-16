@@ -32,6 +32,7 @@ import {
   normalizeHex,
 } from '#/lib/branding'
 import type { BrandingView, FontKey } from '#/lib/branding'
+import { m } from '#/paraglide/messages'
 import {
   clearBrandingImageFn,
   getBrandingFn,
@@ -56,7 +57,7 @@ async function uploadBrandingImage(kind: ImageKind, file: File) {
     body,
   })
   if (!response.ok) {
-    throw new Error((await response.text()) || 'Upload failed')
+    throw new Error((await response.text()) || m.admin_branding_upload_failed())
   }
   const view: BrandingView = await response.json()
   return view
@@ -106,7 +107,7 @@ function BrandingPage() {
         },
       }),
     onSuccess: async (next) => {
-      toast.success('Branding saved')
+      toast.success(m.admin_branding_toast_saved())
       await applySaved(next)
     },
     onError: (err) => toast.error(errorMessage(err)),
@@ -116,7 +117,11 @@ function BrandingPage() {
     mutationFn: ({ kind, file }: { kind: ImageKind; file: File }) =>
       uploadBrandingImage(kind, file),
     onSuccess: async (next, { kind }) => {
-      toast.success(kind === 'logo' ? 'Logo updated' : 'Favicon updated')
+      toast.success(
+        kind === 'logo'
+          ? m.admin_branding_toast_logo_updated()
+          : m.admin_branding_toast_favicon_updated(),
+      )
       await applySaved(next)
     },
     onError: (err) => toast.error(errorMessage(err)),
@@ -125,7 +130,11 @@ function BrandingPage() {
   const clearMutation = useMutation({
     mutationFn: (kind: ImageKind) => clearImage({ data: { kind } }),
     onSuccess: async (next, kind) => {
-      toast.success(kind === 'logo' ? 'Logo removed' : 'Favicon removed')
+      toast.success(
+        kind === 'logo'
+          ? m.admin_branding_toast_logo_removed()
+          : m.admin_branding_toast_favicon_removed(),
+      )
       await applySaved(next)
     },
     onError: (err) => toast.error(errorMessage(err)),
@@ -134,7 +143,7 @@ function BrandingPage() {
   const resetMutation = useMutation({
     mutationFn: () => resetBranding(),
     onSuccess: async (next) => {
-      toast.success('Branding reset to defaults')
+      toast.success(m.admin_branding_toast_reset())
       await applySaved(next)
     },
     onError: (err) => toast.error(errorMessage(err)),
@@ -144,7 +153,7 @@ function BrandingPage() {
     return (
       <div className="grid gap-6">
         <QueryError
-          title="Could not load branding"
+          title={m.admin_branding_load_error()}
           error={brandingQuery.error}
           onRetry={() => void brandingQuery.refetch()}
           retrying={brandingQuery.isFetching}
@@ -180,7 +189,7 @@ function BrandingPage() {
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (accentInvalid) {
-      toast.error('Accent colour must be a hex value like #1e90ff')
+      toast.error(m.admin_branding_accent_invalid_toast())
       return
     }
     saveMutation.mutate()
@@ -195,13 +204,13 @@ function BrandingPage() {
   return (
     <div className="grid gap-6" data-testid="branding-page" data-ready="true">
       <PageHeader
-        title="Branding"
-        description="Whitelabel this CMS for your agency. Changes apply to everyone, including the sign-in and invitation pages."
+        title={m.admin_branding_title()}
+        description={m.admin_branding_description()}
         actions={
           <ConfirmDialog
-            title="Reset branding?"
-            description="The name, logo, favicon, accent colour, and font go back to the built-in defaults. Uploaded images are deleted."
-            confirmLabel="Reset to defaults"
+            title={m.admin_branding_reset_title()}
+            description={m.admin_branding_reset_description()}
+            confirmLabel={m.admin_branding_reset_label()}
             variant="destructive"
             onConfirm={async () => {
               await resetMutation.mutateAsync()
@@ -214,7 +223,7 @@ function BrandingPage() {
               disabled={busy || !saved.customized}
             >
               <RotateCcw />
-              Reset to defaults
+              {m.admin_branding_reset_label()}
             </Button>
           </ConfirmDialog>
         }
@@ -223,11 +232,13 @@ function BrandingPage() {
       <div className="grid gap-8 lg:grid-cols-[minmax(0,28rem)_minmax(0,1fr)]">
         <form className="grid gap-6" onSubmit={onSubmit}>
           <section className="grid gap-4">
-            <h2 className="text-lg font-medium">Identity</h2>
+            <h2 className="text-lg font-medium">
+              {m.admin_branding_identity()}
+            </h2>
             <FormField
-              label="Name"
+              label={m.admin_name()}
               htmlFor="brand-name"
-              hint={`Shown in the sidebar, browser tab, and emails. Leave blank for “${DEFAULT_APP_NAME}”.`}
+              hint={m.admin_branding_name_hint({ name: DEFAULT_APP_NAME })}
             >
               <Input
                 id="brand-name"
@@ -241,8 +252,8 @@ function BrandingPage() {
 
             <ImageField
               kind="logo"
-              label="Logo"
-              hint="PNG, JPEG, WebP, GIF, or SVG up to 2 MB. Square images look best."
+              label={m.admin_branding_logo()}
+              hint={m.admin_branding_logo_hint()}
               accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
               url={saved.logoUrl}
               busy={busy}
@@ -252,8 +263,8 @@ function BrandingPage() {
 
             <ImageField
               kind="favicon"
-              label="Favicon"
-              hint="PNG, SVG, or ICO up to 2 MB."
+              label={m.admin_branding_favicon()}
+              hint={m.admin_branding_favicon_hint()}
               accept="image/png,image/svg+xml,image/x-icon,image/vnd.microsoft.icon,.ico"
               url={saved.faviconUrl}
               busy={busy}
@@ -265,17 +276,21 @@ function BrandingPage() {
           </section>
 
           <section className="grid gap-4">
-            <h2 className="text-lg font-medium">Appearance</h2>
+            <h2 className="text-lg font-medium">
+              {m.admin_branding_appearance()}
+            </h2>
             <FormField
-              label="Accent colour"
+              label={m.admin_branding_accent()}
               htmlFor="brand-accent"
-              hint="Tints buttons, links, and the active sidebar marker in light and dark mode. Leave blank for the default palette."
-              error={accentInvalid ? 'Use a hex value like #1e90ff' : undefined}
+              hint={m.admin_branding_accent_hint()}
+              error={
+                accentInvalid ? m.admin_branding_accent_error() : undefined
+              }
             >
               <div className="flex items-center gap-2">
                 <input
                   type="color"
-                  aria-label="Pick accent colour"
+                  aria-label={m.admin_branding_accent_pick_aria()}
                   className="size-9 shrink-0 cursor-pointer rounded-md border bg-background p-1"
                   value={accentHex ?? '#3d5a3a'}
                   onChange={(event) => setAccent(event.target.value)}
@@ -294,7 +309,7 @@ function BrandingPage() {
                     type="button"
                     variant="ghost"
                     size="icon"
-                    aria-label="Clear accent colour"
+                    aria-label={m.admin_branding_accent_clear_aria()}
                     onClick={() => setAccent('')}
                   >
                     <X />
@@ -303,7 +318,7 @@ function BrandingPage() {
               </div>
             </FormField>
 
-            <FormField label="Font" htmlFor="brand-font">
+            <FormField label={m.admin_branding_font()} htmlFor="brand-font">
               <Select
                 value={font}
                 onValueChange={(value) => setFont(value as FontKey)}
@@ -314,8 +329,12 @@ function BrandingPage() {
                 <SelectContent>
                   {FONT_KEYS.map((key) => (
                     <SelectItem key={key} value={key}>
-                      {FONTS[key].label}
-                      {key === DEFAULT_FONT ? ' (default)' : ''}
+                      {key === 'system'
+                        ? m.admin_font_system_default()
+                        : FONTS[key].label}
+                      {key === DEFAULT_FONT
+                        ? m.admin_branding_font_default_suffix()
+                        : ''}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -324,11 +343,13 @@ function BrandingPage() {
           </section>
 
           <section className="grid gap-4">
-            <h2 className="text-lg font-medium">Email</h2>
+            <h2 className="text-lg font-medium">
+              {m.admin_branding_email_section()}
+            </h2>
             <FormField
-              label="Sender name"
+              label={m.admin_branding_sender_name()}
               htmlFor="brand-email-from"
-              hint="Display name on invitation emails. Defaults to the app name; the address comes from SMTP_FROM."
+              hint={m.admin_branding_sender_hint()}
             >
               <Input
                 id="brand-email-from"
@@ -347,7 +368,9 @@ function BrandingPage() {
               data-testid="save-branding"
               disabled={busy || !dirty || accentInvalid}
             >
-              {saveMutation.isPending ? 'Saving…' : 'Save branding'}
+              {saveMutation.isPending
+                ? m.admin_saving()
+                : m.admin_branding_save()}
             </Button>
           </div>
         </form>
@@ -397,7 +420,9 @@ function ImageField({
               className="size-10 object-contain"
             />
           ) : (
-            <span className="text-xs text-muted-foreground">None</span>
+            <span className="text-xs text-muted-foreground">
+              {m.admin_none()}
+            </span>
           )}
         </span>
         <input
@@ -416,7 +441,7 @@ function ImageField({
           onClick={() => inputRef.current?.click()}
         >
           <Upload />
-          {url ? 'Replace' : 'Upload'}
+          {url ? m.admin_replace() : m.admin_upload()}
         </Button>
         {url ? (
           <Button
@@ -426,7 +451,7 @@ function ImageField({
             disabled={busy}
             onClick={onClear}
           >
-            Remove
+            {m.admin_remove()}
           </Button>
         ) : null}
       </div>
@@ -438,9 +463,12 @@ function BrandingPreview({ branding }: { branding: BrandingView }) {
   const fontUrl = fontStylesheetUrl(branding.font)
 
   return (
-    <aside className="grid content-start gap-3" aria-label="Preview">
+    <aside
+      className="grid content-start gap-3"
+      aria-label={m.admin_branding_preview_aria()}
+    >
       {fontUrl ? <link rel="stylesheet" href={fontUrl} /> : null}
-      <h2 className="text-lg font-medium">Preview</h2>
+      <h2 className="text-lg font-medium">{m.admin_branding_preview()}</h2>
       <div
         data-testid="branding-preview"
         className="grid gap-5 rounded-md border bg-background p-5"
@@ -452,37 +480,38 @@ function BrandingPreview({ branding }: { branding: BrandingView }) {
         <div className="flex items-center justify-between gap-4">
           <BrandMark branding={branding} />
           <span className="text-xs text-muted-foreground">
-            {FONTS[branding.font].label}
+            {branding.font === 'system'
+              ? m.admin_font_system_default()
+              : FONTS[branding.font].label}
           </span>
         </div>
         <p className="text-sm text-muted-foreground">
-          The quick brown fox jumps over the lazy dog. Links look{' '}
+          {m.admin_branding_pangram_before()}
           <a
             href="#preview"
             className="text-link"
             onClick={(e) => e.preventDefault()}
           >
-            like this
+            {m.admin_branding_pangram_link()}
           </a>
           .
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button">Primary action</Button>
+          <Button type="button">{m.admin_branding_primary_action()}</Button>
           <Button type="button" variant="secondary">
-            Secondary
+            {m.admin_branding_secondary()}
           </Button>
           <Button type="button" variant="outline">
-            Outline
+            {m.admin_branding_outline()}
           </Button>
         </div>
         <div className="flex items-center gap-2 rounded-md bg-sidebar px-3 py-2 text-sm text-sidebar-foreground shadow-[inset_3px_0_0_var(--sidebar-primary)]">
           <BrandLogo branding={branding} className="size-6" />
-          Active sidebar item
+          {m.admin_branding_active_sidebar()}
         </div>
       </div>
       <p className="text-xs text-muted-foreground">
-        Name, colour, and font update live. Logo and favicon apply as soon as
-        they are uploaded.
+        {m.admin_branding_preview_footnote()}
       </p>
     </aside>
   )

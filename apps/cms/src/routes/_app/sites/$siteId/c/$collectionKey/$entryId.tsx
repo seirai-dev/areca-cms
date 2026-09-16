@@ -6,9 +6,12 @@ import { queryKeys } from '#/components/editor/query-keys'
 import { EmptyState } from '#/components/empty-state'
 import { Skeleton } from '#/components/ui/skeleton'
 import type { Field } from '#/lib/types'
+import { m } from '#/paraglide/messages'
 import { listCollectionsFn } from '#/server/fn/content'
 
-export const Route = createFileRoute('/_app/sites/$siteId/c/$collectionKey/$entryId')({
+export const Route = createFileRoute(
+  '/_app/sites/$siteId/c/$collectionKey/$entryId',
+)({
   component: EditEntryPage,
 })
 
@@ -21,14 +24,16 @@ function EditEntryPage() {
     queryFn: () => listCollectionsFn({ data: { siteId } }),
   })
 
-  const collection = collectionsQuery.data?.find((item) => item.key === collectionKey)
+  const collection = collectionsQuery.data?.find(
+    (item) => item.key === collectionKey,
+  )
 
   if (collectionsQuery.isLoading) {
     return <Skeleton className="h-96 w-full" />
   }
 
   if (!collection) {
-    return <EmptyState title="Collection not found" />
+    return <EmptyState title={m.editor_collection_not_found()} />
   }
 
   return (

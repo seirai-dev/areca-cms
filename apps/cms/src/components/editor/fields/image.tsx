@@ -4,6 +4,7 @@ import { ImageIcon } from 'lucide-react'
 
 import { Button } from '#/components/ui/button'
 import { getAssetFn } from '#/server/fn/assets'
+import { m } from '#/paraglide/messages'
 
 import { MediaPickerDialog } from '../media-picker'
 import type { MediaAsset } from '../media-picker'
@@ -61,16 +62,14 @@ export function ImageFieldInput({
                 ) : null}
                 {!asset.altText ? (
                   <p className="text-xs text-muted-foreground">
-                    No alt text yet. Add one in Media for accessibility.
+                    {m.editor_no_alt_text()}
                   </p>
                 ) : null}
               </>
             ) : assetQuery.isLoading ? (
-              <p className="text-muted-foreground">Loading…</p>
+              <p className="text-muted-foreground">{m.editor_loading()}</p>
             ) : (
-              <p className="text-destructive">
-                This image was deleted from the media library.
-              </p>
+              <p className="text-destructive">{m.editor_image_deleted()}</p>
             )}
           </div>
         </div>
@@ -78,11 +77,11 @@ export function ImageFieldInput({
       <div className="flex gap-2">
         <Button type="button" variant="outline" onClick={() => setOpen(true)}>
           <ImageIcon />
-          {assetId ? 'Replace' : 'Choose'}
+          {assetId ? m.editor_replace() : m.editor_choose()}
         </Button>
         {assetId ? (
           <Button type="button" variant="ghost" onClick={() => onChange('')}>
-            Clear
+            {m.editor_clear()}
           </Button>
         ) : null}
       </div>

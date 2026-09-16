@@ -9,7 +9,7 @@ Full background: `PROJECT.md`. This file lists the concrete decisions taken for 
 - KISS / YAGNI. No plugin system, no GraphQL, no visual builder, no multi-framework support.
 - Adapters are plain internal TypeScript interfaces (`DeploymentAdapter`, `AssetStorageAdapter`).
   Core domain code must not import Dokploy or S3 clients directly.
-- Single language content. Paraglide stays for UI strings (en/de) but is not required for new UI; English literals are fine.
+- Single language content. Paraglide stays for UI strings (en/nl/tr) but is not required for new UI; English literals are fine.
 - Always `pnpm`. Windows dev machine (PowerShell): never chain with `&&` in scripts that run on Windows; use separate commands or `;`.
 
 ## Repository layout (pnpm workspace)

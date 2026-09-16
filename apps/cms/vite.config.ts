@@ -37,7 +37,20 @@ const config = defineConfig({
     paraglideVitePlugin({
       project: './project.inlang',
       outdir: './src/paraglide',
-      strategy: ['url', 'baseLocale'],
+      outputStructure: 'message-modules',
+      cookieName: 'PARAGLIDE_LOCALE',
+      strategy: ['url', 'cookie', 'preferredLanguage', 'baseLocale'],
+      urlPatterns: [
+        {
+          pattern: ':protocol://:domain(.*)::port?/:path(.*)?',
+          localized: [
+            ['nl', ':protocol://:domain(.*)::port?/nl/:path(.*)?'],
+            ['tr', ':protocol://:domain(.*)::port?/tr/:path(.*)?'],
+            ['en', ':protocol://:domain(.*)::port?/:path(.*)?'],
+          ],
+        },
+      ],
+      routeStrategies: [{ match: '/api/:path(.*)?', exclude: true }],
     }),
     nitro({ rollupConfig: { external: [/^@sentry\//] } }),
     tailwindcss(),
@@ -49,6 +62,5 @@ const config = defineConfig({
     viteReact(),
   ],
 })
-
 
 export default config

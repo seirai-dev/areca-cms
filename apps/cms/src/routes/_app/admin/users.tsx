@@ -9,6 +9,7 @@ import {
   adminQueryKeys,
   errorMessage,
   formatDate,
+  membershipRoleLabel,
 } from '#/components/admin/helpers'
 import { TableSkeleton } from '#/components/admin/table-skeleton'
 import { ConfirmDialog } from '#/components/confirm-dialog'
@@ -33,7 +34,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '#/components/ui/tooltip'
-import type { MembershipRole } from '#/lib/types'
+import { m } from '#/paraglide/messages'
 import { listUsersFn, setAgencyAdminFn } from '#/server/fn/admin'
 
 export const Route = createFileRoute('/_app/admin/users')({
@@ -42,11 +43,6 @@ export const Route = createFileRoute('/_app/admin/users')({
 
 type UserRow = Awaited<ReturnType<typeof listUsersFn>>[number]
 type RoleFilter = 'all' | 'agency-admin' | 'owner' | 'editor'
-
-const ROLE_LABELS: Record<MembershipRole, string> = {
-  owner: 'Owner',
-  editor: 'Editor',
-}
 
 const helper = createDataColumns<UserRow>()
 
@@ -74,7 +70,9 @@ function UsersPage() {
       setAgencyAdmin({ data: input }),
     onSuccess: async (_result, input) => {
       toast.success(
-        input.isAgencyAdmin ? 'Agency admin granted' : 'Agency admin removed',
+        input.isAgencyAdmin
+          ? m.admin_users_toast_granted()
+          : m.admin_users_toast_removed(),
       )
       setPending(null)
       await queryClient.invalidateQueries({ queryKey: adminQueryKeys.users })
@@ -88,18 +86,18 @@ function UsersPage() {
     () =>
       helper.columns([
         helper.accessor('name', {
-          header: 'Name',
+          header: () => m.admin_name(),
           cell: ({ row }) => (
             <span className="flex items-center gap-2">
               <span className="font-medium">{row.original.name}</span>
               {row.original.id === selfId ? (
-                <Badge variant="secondary">You</Badge>
+                <Badge variant="secondary">{m.admin_you()}</Badge>
               ) : null}
             </span>
           ),
         }),
         helper.accessor('email', {
-          header: 'Email',
+          header: () => m.admin_email(),
           cell: ({ row }) => (
             <span className="text-muted-foreground">{row.original.email}</span>
           ),
@@ -108,12 +106,13 @@ function UsersPage() {
           (row) =>
             row.memberships
               .map(
-                (item) => `${item.organizationName} ${ROLE_LABELS[item.role]}`,
+                (item) =>
+                  `${item.organizationName} ${membershipRoleLabel(item.role)}`,
               )
               .join(', '),
           {
             id: 'organizations',
-            header: 'Organizations',
+            header: () => m.admin_users_col_organizations(),
             cell: ({ row }) => {
               const { memberships } = row.original
               if (memberships.length === 0) {
@@ -123,7 +122,7 @@ function UsersPage() {
                 <div className="flex flex-wrap gap-1">
                   {memberships.map((item) => (
                     <Badge key={item.organizationId} variant="outline">
-                      {item.organizationName} · {ROLE_LABELS[item.role]}
+                      {item.organizationName} · {membershipRoleLabel(item.role)}
                     </Badge>
                   ))}
                 </div>
@@ -132,7 +131,7 @@ function UsersPage() {
           },
         ),
         helper.accessor('createdAt', {
-          header: 'Joined',
+          header: () => m.admin_users_col_joined(),
           sortFn: 'datetime',
           cell: ({ row }) => (
             <span className="whitespace-nowrap text-muted-foreground">
@@ -141,7 +140,7 @@ function UsersPage() {
           ),
         }),
         helper.accessor('isAgencyAdmin', {
-          header: 'Agency admin',
+          header: () => m.admin_users_col_agency_admin(),
           cell: ({ row }) => {
             const user = row.original
             const isSelf = user.id === selfId
@@ -149,7 +148,9 @@ function UsersPage() {
               <Switch
                 checked={user.isAgencyAdmin}
                 disabled={isSelf}
-                aria-label={`Agency admin for ${user.email}`}
+                aria-label={m.admin_users_aria_agency_admin({
+                  email: user.email,
+                })}
                 onCheckedChange={(next) => {
                   if (isSelf) {
                     return
@@ -170,9 +171,7 @@ function UsersPage() {
                     {control}
                   </span>
                 </TooltipTrigger>
-                <TooltipContent>
-                  You can&apos;t change your own access.
-                </TooltipContent>
+                <TooltipContent>{m.admin_users_self_tooltip()}</TooltipContent>
               </Tooltip>
             )
           },
@@ -235,13 +234,13 @@ function UsersPage() {
   return (
     <div className="grid gap-6">
       <PageHeader
-        title="Users"
-        description="Everyone with an account. Agency admins can manage every organization, site, and user."
+        title={m.admin_users_title()}
+        description={m.admin_users_description()}
       />
 
       {usersQuery.isError ? (
         <QueryError
-          title="Could not load users"
+          title={m.admin_users_load_error()}
           error={usersQuery.error}
           onRetry={() => void usersQuery.refetch()}
           retrying={usersQuery.isFetching}
@@ -251,21 +250,21 @@ function UsersPage() {
       ) : usersQuery.data.length === 0 ? (
         <EmptyState
           icon={<Users />}
-          title="No users yet"
-          description="Accounts are created when someone accepts an invitation or signs up."
+          title={m.admin_users_empty_title()}
+          description={m.admin_users_empty_description()}
         />
       ) : (
         <div className="grid gap-4">
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative w-full sm:max-w-xs">
               <Label htmlFor="user-search" className="sr-only">
-                Search users
+                {m.admin_users_search_label()}
               </Label>
               <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 id="user-search"
                 type="search"
-                placeholder="Search by name or email"
+                placeholder={m.admin_users_search_placeholder()}
                 className="pl-9"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
@@ -274,12 +273,16 @@ function UsersPage() {
             <Select value={orgId} onValueChange={setOrgId}>
               <SelectTrigger
                 className="w-48"
-                aria-label="Filter by organization"
+                aria-label={m.admin_users_filter_org_aria()}
               >
-                <SelectValue placeholder="Organization" />
+                <SelectValue
+                  placeholder={m.admin_users_filter_org_placeholder()}
+                />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All organizations</SelectItem>
+                <SelectItem value="all">
+                  {m.admin_users_filter_all_orgs()}
+                </SelectItem>
                 {organizations.map((org) => (
                   <SelectItem key={org.id} value={org.id}>
                     {org.name}
@@ -291,14 +294,27 @@ function UsersPage() {
               value={roleFilter}
               onValueChange={(value) => setRoleFilter(value as RoleFilter)}
             >
-              <SelectTrigger className="w-40" aria-label="Filter by role">
-                <SelectValue placeholder="Role" />
+              <SelectTrigger
+                className="w-40"
+                aria-label={m.admin_users_filter_role_aria()}
+              >
+                <SelectValue
+                  placeholder={m.admin_users_filter_role_placeholder()}
+                />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All roles</SelectItem>
-                <SelectItem value="agency-admin">Agency admin</SelectItem>
-                <SelectItem value="owner">Owner</SelectItem>
-                <SelectItem value="editor">Editor</SelectItem>
+                <SelectItem value="all">
+                  {m.admin_users_filter_all_roles()}
+                </SelectItem>
+                <SelectItem value="agency-admin">
+                  {m.admin_users_filter_agency_admin()}
+                </SelectItem>
+                <SelectItem value="owner">
+                  {membershipRoleLabel('owner')}
+                </SelectItem>
+                <SelectItem value="editor">
+                  {membershipRoleLabel('editor')}
+                </SelectItem>
               </SelectContent>
             </Select>
             {filtersActive ? (
@@ -309,7 +325,7 @@ function UsersPage() {
                 onClick={clearFilters}
               >
                 <X />
-                Clear filters
+                {m.admin_users_clear_filters()}
               </Button>
             ) : null}
           </div>
@@ -318,8 +334,8 @@ function UsersPage() {
             data={filtered}
             pageSize={25}
             initialSorting={[{ id: 'name', desc: false }]}
-            emptyMessage="No users match the current filters."
-            caption="Users"
+            emptyMessage={m.admin_users_empty_filters()}
+            caption={m.admin_users_caption()}
           />
         </div>
       )}
@@ -333,15 +349,21 @@ function UsersPage() {
         }}
         title={
           pending?.next
-            ? `Make ${pending.name} an agency admin?`
-            : `Remove agency admin from ${pending?.name ?? 'this user'}?`
+            ? m.admin_users_confirm_grant_title({ name: pending.name })
+            : m.admin_users_confirm_revoke_title({
+                name: pending?.name ?? m.admin_users_this_user(),
+              })
         }
         description={
           pending?.next
-            ? 'Agency admins can manage every organization, site, and user.'
-            : 'They will lose access to the agency area and every organization they are not a member of.'
+            ? m.admin_users_confirm_grant_description()
+            : m.admin_users_confirm_revoke_description()
         }
-        confirmLabel={pending?.next ? 'Make admin' : 'Remove admin'}
+        confirmLabel={
+          pending?.next
+            ? m.admin_users_confirm_grant_label()
+            : m.admin_users_confirm_revoke_label()
+        }
         variant={pending?.next ? 'default' : 'destructive'}
         onConfirm={async () => {
           if (!pending) {

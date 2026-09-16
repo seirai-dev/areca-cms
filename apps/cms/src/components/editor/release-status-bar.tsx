@@ -14,6 +14,7 @@ import {
   TooltipTrigger,
 } from '#/components/ui/tooltip'
 import type { BuildJobStatus } from '#/lib/types'
+import { m } from '#/paraglide/messages'
 import {
   getSiteReleaseStatusFn,
   listBuildJobsFn,
@@ -21,6 +22,7 @@ import {
 } from '#/server/fn/publishing'
 
 import { queryKeys } from './query-keys'
+import { jobStatusLabel } from './status-badge'
 import {
   ACTIVE_JOB_STATUSES,
   errorMessage,
@@ -48,14 +50,19 @@ type BuildJob = {
   finishedAt: string | Date | null
 }
 
-const JOB_LABEL: Record<BuildJobStatus, string> = {
-  queued: 'Queued',
-  building: 'Building',
-  validating: 'Validating',
-  deploying: 'Deploying',
-  succeeded: 'Succeeded',
-  failed: 'Failed',
-  cancelled: 'Cancelled',
+function releaseInProgressLabel(status: BuildJobStatus) {
+  switch (status) {
+    case 'queued':
+      return m.editor_release_in_progress_queued()
+    case 'building':
+      return m.editor_release_in_progress_building()
+    case 'validating':
+      return m.editor_release_in_progress_validating()
+    case 'deploying':
+      return m.editor_release_in_progress_deploying()
+    default:
+      return m.editor_last_job({ status: jobStatusLabel(status) })
+  }
 }
 
 /**
@@ -93,9 +100,8 @@ export function ReleaseStatusBar({ siteId }: { siteId: string }) {
         return
       }
       setPublishErrors([])
-      toast.success('Publish requested', {
-        description:
-          'The release is being built. This page updates automatically.',
+      toast.success(m.editor_publish_requested(), {
+        description: m.editor_publish_requested_description(),
       })
       await Promise.all([
         queryClient.invalidateQueries({
@@ -110,7 +116,7 @@ export function ReleaseStatusBar({ siteId }: { siteId: string }) {
       ])
     },
     onError: (error) =>
-      toast.error(errorMessage(error, 'Could not publish site')),
+      toast.error(errorMessage(error, m.editor_could_not_publish_site())),
   })
 
   const status = statusQuery.data as ReleaseStatus | undefined
@@ -127,7 +133,7 @@ export function ReleaseStatusBar({ siteId }: { siteId: string }) {
     <section
       className="grid gap-3 border-b pb-5"
       data-testid="release-status"
-      aria-label="Site release status"
+      aria-label={m.editor_site_release_status()}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
@@ -142,21 +148,26 @@ export function ReleaseStatusBar({ siteId }: { siteId: string }) {
           </div>
           <div className="min-w-0 space-y-0.5 text-sm">
             {statusQuery.isLoading ? (
-              <p className="text-muted-foreground">Loading release status…</p>
+              <p className="text-muted-foreground">
+                {m.editor_loading_release_status()}
+              </p>
             ) : statusQuery.isError ? (
-              <p className="text-destructive">Could not load release status.</p>
+              <p className="text-destructive">
+                {m.editor_could_not_load_release_status()}
+              </p>
             ) : status?.live ? (
               <p data-testid="release-live" className="font-medium">
-                Live since{' '}
-                {formatDateTime(
-                  status.live.deployedAt ?? status.live.createdAt,
-                )}
+                {m.editor_live_since({
+                  datetime: formatDateTime(
+                    status.live.deployedAt ?? status.live.createdAt,
+                  ),
+                })}
                 <span className="ml-2 font-mono text-xs font-normal text-muted-foreground">
                   {shortId(status.live.id)}
                 </span>
               </p>
             ) : (
-              <p className="font-medium">Nothing published yet</p>
+              <p className="font-medium">{m.editor_nothing_published_yet()}</p>
             )}
             {status?.activeJob ? (
               <p
@@ -164,13 +175,14 @@ export function ReleaseStatusBar({ siteId }: { siteId: string }) {
                 data-testid="active-job"
               >
                 {jobActive
-                  ? `Release in progress: ${JOB_LABEL[status.activeJob.status].toLowerCase()}…`
-                  : `Last job: ${JOB_LABEL[status.activeJob.status]}`}
+                  ? releaseInProgressLabel(status.activeJob.status)
+                  : m.editor_last_job({
+                      status: jobStatusLabel(status.activeJob.status),
+                    })}
               </p>
             ) : (
               <p className="text-muted-foreground">
-                Publishing builds a snapshot of all published entries and
-                releases it to the live site.
+                {m.editor_publishing_builds_snapshot()}
               </p>
             )}
           </div>
@@ -185,12 +197,12 @@ export function ReleaseStatusBar({ siteId }: { siteId: string }) {
                   onCheckedChange={(checked) => setUrgent(checked === true)}
                 />
                 <Label htmlFor="urgent" className="cursor-pointer">
-                  Urgent
+                  {m.editor_urgent()}
                 </Label>
               </div>
             </TooltipTrigger>
             <TooltipContent side="bottom">
-              Jump the build queue ahead of other sites.
+              {m.editor_urgent_tooltip()}
             </TooltipContent>
           </Tooltip>
           <Button
@@ -204,14 +216,16 @@ export function ReleaseStatusBar({ siteId }: { siteId: string }) {
             ) : (
               <Rocket />
             )}
-            {publishMutation.isPending ? 'Publishing…' : 'Publish site'}
+            {publishMutation.isPending
+              ? m.editor_publishing()
+              : m.editor_publish_site()}
           </Button>
         </div>
       </div>
       {publishErrors.length > 0 ? (
         <Alert variant="destructive">
           <AlertTriangle />
-          <AlertTitle>Fix these before publishing</AlertTitle>
+          <AlertTitle>{m.editor_fix_before_publishing()}</AlertTitle>
           <AlertDescription>
             <ul className="list-disc pl-4">
               {publishErrors.map((item) => (
@@ -224,15 +238,15 @@ export function ReleaseStatusBar({ siteId }: { siteId: string }) {
       {lastFailure && !jobActive ? (
         <Alert variant="destructive">
           <AlertTriangle />
-          <AlertTitle>The last release failed</AlertTitle>
+          <AlertTitle>{m.editor_last_release_failed()}</AlertTitle>
           <AlertDescription>
-            <p>{lastFailure.error ?? 'Build failed'}</p>
+            <p>{lastFailure.error ?? m.editor_build_failed()}</p>
             <Link
               to="/sites/$siteId/releases"
               params={{ siteId }}
               className="mt-1 text-sm underline"
             >
-              View build logs
+              {m.editor_view_build_logs()}
             </Link>
           </AlertDescription>
         </Alert>

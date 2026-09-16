@@ -1,6 +1,8 @@
+import { m } from '#/paraglide/messages'
+
 export class NotFoundError extends Error {
   readonly status = 404
-  constructor(message = 'Not found') {
+  constructor(message = m.server_not_found()) {
     super(message)
     this.name = 'NotFoundError'
   }
@@ -21,7 +23,7 @@ export class ValidationError extends Error {
     const text =
       errors
         .map((e) => (e.path ? `${e.path}: ${e.message}` : e.message))
-        .join('; ') || 'Validation failed'
+        .join('; ') || m.server_validation_failed()
     super(text)
     this.name = 'ValidationError'
     this.errors = errors

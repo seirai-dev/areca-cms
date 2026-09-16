@@ -7,8 +7,11 @@ import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { BrandMark } from '#/components/brand-mark'
 import { FormField } from '#/components/form-field'
+import { AuthShell } from '#/components/language-switcher'
 import { authClient } from '#/lib/auth-client'
 import { safeRedirectPath } from '#/lib/safe-redirect'
+import { m } from '#/paraglide/messages'
+import { localizeHref } from '#/paraglide/runtime'
 import { getMeFn } from '#/server/fn/me'
 import { getSetupStatusFn } from '#/server/fn/setup'
 
@@ -56,22 +59,22 @@ function LoginPage() {
       password,
     })
     if (result.error) {
-      setError(result.error.message ?? 'Could not sign in')
+      setError(result.error.message ?? m.auth_could_not_sign_in())
       setPending(false)
       return
     }
 
-    window.location.assign(safeRedirectPath(redirectTo))
+    window.location.assign(localizeHref(safeRedirectPath(redirectTo)))
   }
 
   return (
-    <div className="flex min-h-svh items-center justify-center p-6">
+    <AuthShell>
       <div className="w-full max-w-sm">
         <BrandMark className="mb-8" />
         <div className="mb-6 grid gap-1.5">
-          <h1 className="text-2xl">Sign in</h1>
+          <h1 className="text-2xl">{m.auth_sign_in()}</h1>
           <p className="text-sm text-muted-foreground">
-            Use your email and password.
+            {m.auth_use_email_and_password()}
           </p>
         </div>
         <div>
@@ -86,7 +89,7 @@ function LoginPage() {
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             ) : null}
-            <FormField label="Email" htmlFor="email">
+            <FormField label={m.auth_email()} htmlFor="email">
               <Input
                 id="email"
                 name="email"
@@ -97,7 +100,7 @@ function LoginPage() {
                 onChange={(event) => setEmail(event.target.value)}
               />
             </FormField>
-            <FormField label="Password" htmlFor="password">
+            <FormField label={m.auth_password()} htmlFor="password">
               <Input
                 id="password"
                 name="password"
@@ -109,11 +112,11 @@ function LoginPage() {
               />
             </FormField>
             <Button type="submit" disabled={!ready || pending}>
-              {pending ? 'Signing in…' : 'Sign in'}
+              {pending ? m.auth_signing_in() : m.auth_sign_in()}
             </Button>
           </form>
         </div>
       </div>
-    </div>
+    </AuthShell>
   )
 }

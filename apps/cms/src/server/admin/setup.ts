@@ -3,6 +3,7 @@ import { eq, sql } from 'drizzle-orm'
 import { db } from '#/db'
 import { user } from '#/db/schema'
 import { auth } from '#/lib/auth'
+import { m } from '#/paraglide/messages'
 import { ConflictError } from '#/server/content/errors'
 
 const SETUP_LOCK_KEY = 87236401
@@ -22,7 +23,7 @@ export async function completeSetup(input: {
 
     const [existing] = await tx.select({ id: user.id }).from(user).limit(1)
     if (existing) {
-      throw new ConflictError('Setup already completed')
+      throw new ConflictError(m.server_setup_already_completed())
     }
 
     const result = await auth.api.signUpEmail({
@@ -33,7 +34,7 @@ export async function completeSetup(input: {
       },
     })
     if (!result.user) {
-      throw new Error('Failed to create user')
+      throw new Error(m.server_failed_to_create_user())
     }
 
     const [updated] = await tx
@@ -47,7 +48,7 @@ export async function completeSetup(input: {
         isAgencyAdmin: user.isAgencyAdmin,
       })
     if (!updated) {
-      throw new Error('Failed to promote the first user to agency admin')
+      throw new Error(m.server_failed_to_promote_admin())
     }
 
     // audit_log.organizationId is required, so skip the setup.completed row.

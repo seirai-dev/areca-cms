@@ -11,6 +11,7 @@ import {
   normalizeHex,
 } from '#/lib/branding'
 import type { BrandingView, FontKey } from '#/lib/branding'
+import { m } from '#/paraglide/messages'
 import { AssetValidationError } from '#/server/assets'
 
 export type BrandingRow = InferSelectModel<typeof branding>
@@ -100,7 +101,7 @@ async function upsertBranding(patch: BrandingPatch, actorId: string) {
     .returning()
   const row = rows.at(0)
   if (!row) {
-    throw new Error('Failed to save branding')
+    throw new Error(m.server_failed_to_save_branding())
   }
   return toBrandingView(row)
 }
@@ -119,7 +120,7 @@ export async function updateBranding(
   if (input.appName !== undefined) {
     const name = input.appName?.trim() ?? ''
     if (name.length > 60) {
-      throw new AssetValidationError('Name must be 60 characters or fewer')
+      throw new AssetValidationError(m.server_name_max_60())
     }
     patch.appName = name && name !== DEFAULT_APP_NAME ? name : null
   }
@@ -130,9 +131,7 @@ export async function updateBranding(
     } else {
       const hex = normalizeHex(input.accentColor)
       if (!hex) {
-        throw new AssetValidationError(
-          'Accent colour must be a hex value like #1e90ff',
-        )
+        throw new AssetValidationError(m.server_accent_hex())
       }
       patch.accentColor = hex
     }
@@ -144,16 +143,14 @@ export async function updateBranding(
     } else if (isFontKey(input.font)) {
       patch.font = input.font
     } else {
-      throw new AssetValidationError('Unknown font')
+      throw new AssetValidationError(m.server_unknown_font())
     }
   }
 
   if (input.emailFromName !== undefined) {
     const name = input.emailFromName?.trim() ?? ''
     if (name.length > 80) {
-      throw new AssetValidationError(
-        'Email sender name must be 80 characters or fewer',
-      )
+      throw new AssetValidationError(m.server_email_sender_max_80())
     }
     patch.emailFromName = name || null
   }
@@ -171,12 +168,12 @@ export async function setBrandingImage(
   if (!ext) {
     throw new AssetValidationError(
       kind === 'logo'
-        ? 'Logo must be a PNG, JPEG, WebP, GIF, or SVG'
-        : 'Favicon must be a PNG, SVG, or ICO',
+        ? m.server_logo_image_types()
+        : m.server_favicon_image_types(),
     )
   }
   if (file.buffer.byteLength > MAX_IMAGE_BYTES) {
-    throw new AssetValidationError('Image exceeds the 2 MB size limit')
+    throw new AssetValidationError(m.server_image_exceeds_2mb())
   }
 
   const previous = await getBrandingRow()

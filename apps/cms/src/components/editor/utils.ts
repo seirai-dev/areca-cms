@@ -1,4 +1,5 @@
 import type { EntryData, EntryStatus, Field } from '#/lib/types'
+import { m } from '#/paraglide/messages'
 
 export function slugify(value: string) {
   return value
@@ -69,7 +70,10 @@ export function defaultFieldValue(field: Field): unknown {
   }
 }
 
-export function initialEntryData(fields: Field[], existing?: EntryData): EntryData {
+export function initialEntryData(
+  fields: Field[],
+  existing?: EntryData,
+): EntryData {
   const data: EntryData = {}
   for (const field of fields) {
     const current = existing?.[field.key]
@@ -93,7 +97,7 @@ export function fieldErrorsFromUnknown(error: unknown): {
   if (Array.isArray(source?.errors)) {
     for (const item of source.errors) {
       const path = item.path ?? ''
-      const message = item.message ?? 'Invalid'
+      const message = item.message ?? m.editor_invalid()
       if (path) fieldErrors[path] = message
       else if (!fieldErrors['']) fieldErrors[''] = message
     }
@@ -111,7 +115,10 @@ export function fieldErrorsFromUnknown(error: unknown): {
     }
   } else {
     return {
-      formError: error instanceof Error ? error.message : 'Something went wrong',
+      formError:
+        error instanceof Error
+          ? error.message
+          : m.editor_something_went_wrong(),
       fieldErrors,
     }
   }
@@ -122,7 +129,10 @@ export function fieldErrorsFromUnknown(error: unknown): {
   }
 }
 
-export function errorMessage(error: unknown, fallback = 'Something went wrong') {
+export function errorMessage(
+  error: unknown,
+  fallback = m.editor_something_went_wrong(),
+) {
   if (error instanceof Error && error.message) return error.message
   if (error && typeof error === 'object' && 'message' in error) {
     const message = (error as { message?: unknown }).message

@@ -9,7 +9,10 @@ import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { BrandMark } from '#/components/brand-mark'
 import { FormField } from '#/components/form-field'
+import { AuthShell } from '#/components/language-switcher'
 import { authClient } from '#/lib/auth-client'
+import { m } from '#/paraglide/messages'
+import { localizeHref } from '#/paraglide/runtime'
 import { acceptInvitationFn, getInvitationFn } from '#/server/fn/me'
 
 export const Route = createFileRoute('/invite/$token')({
@@ -21,23 +24,22 @@ export const Route = createFileRoute('/invite/$token')({
     }
   },
   notFoundComponent: () => (
-    <div className="flex min-h-svh items-center justify-center p-6">
+    <AuthShell>
       <div className="w-full max-w-sm">
         <BrandMark className="mb-8" />
         <div className="mb-6 grid gap-1.5">
-          <h1 className="text-2xl">Invitation not found</h1>
+          <h1 className="text-2xl">{m.auth_invitation_not_found()}</h1>
           <p className="text-sm text-muted-foreground">
-            This invitation link is invalid, has expired, or was already used.
-            Ask the person who invited you to send a new one.
+            {m.auth_invitation_invalid()}
           </p>
         </div>
         <div>
           <Button asChild variant="outline" className="w-full">
-            <Link to="/login">Go to sign in</Link>
+            <Link to="/login">{m.auth_go_to_sign_in()}</Link>
           </Button>
         </div>
       </div>
-    </div>
+    </AuthShell>
   ),
   component: InvitePage,
 })
@@ -55,11 +57,13 @@ function InvitePage() {
   const acceptMutation = useMutation({
     mutationFn: () => acceptInvitation({ data: { token } }),
     onSuccess: () => {
-      window.location.assign('/')
+      window.location.assign(localizeHref('/'))
     },
     onError: (err) => {
       setError(
-        err instanceof Error ? err.message : 'Could not accept invitation',
+        err instanceof Error
+          ? err.message
+          : m.auth_could_not_accept_invitation(),
       )
     },
   })
@@ -76,7 +80,7 @@ function InvitePage() {
     })
 
     if (result.error) {
-      setError(result.error.message ?? 'Could not create account')
+      setError(result.error.message ?? m.auth_could_not_create_account())
       setSigningUp(false)
       return
     }
@@ -86,13 +90,16 @@ function InvitePage() {
   const loggedIn = Boolean(session?.user)
 
   return (
-    <div className="flex min-h-svh items-center justify-center p-6">
+    <AuthShell>
       <div className="w-full max-w-md">
         <BrandMark className="mb-8" />
         <div className="mb-6 grid gap-1.5">
-          <h1 className="text-2xl">Invitation</h1>
+          <h1 className="text-2xl">{m.auth_invitation()}</h1>
           <p className="text-sm text-muted-foreground">
-            Join {invitation.organizationName} as {invitation.role}.
+            {m.auth_join_as_role({
+              organizationName: invitation.organizationName,
+              role: invitation.role,
+            })}
           </p>
         </div>
         <div className="grid gap-4">
@@ -102,18 +109,20 @@ function InvitePage() {
             </Alert>
           ) : null}
           {sessionPending ? (
-            <p className="text-sm text-muted-foreground">Loading session…</p>
+            <p className="text-sm text-muted-foreground">
+              {m.auth_loading_session()}
+            </p>
           ) : loggedIn ? (
             <Button
               disabled={acceptMutation.isPending}
               onClick={() => acceptMutation.mutate()}
             >
-              {acceptMutation.isPending ? 'Accepting…' : 'Accept'}
+              {acceptMutation.isPending ? m.auth_accepting() : m.auth_accept()}
             </Button>
           ) : (
             <>
               <form className="grid gap-4" onSubmit={onSignUp}>
-                <FormField label="Name" htmlFor="name">
+                <FormField label={m.auth_name()} htmlFor="name">
                   <Input
                     id="name"
                     name="name"
@@ -123,7 +132,7 @@ function InvitePage() {
                     onChange={(event) => setName(event.target.value)}
                   />
                 </FormField>
-                <FormField label="Email" htmlFor="email">
+                <FormField label={m.auth_email()} htmlFor="email">
                   <Input
                     id="email"
                     name="email"
@@ -134,7 +143,7 @@ function InvitePage() {
                     value={invitation.email}
                   />
                 </FormField>
-                <FormField label="Password" htmlFor="password">
+                <FormField label={m.auth_password()} htmlFor="password">
                   <Input
                     id="password"
                     name="password"
@@ -147,23 +156,25 @@ function InvitePage() {
                   />
                 </FormField>
                 <Button type="submit" disabled={signingUp}>
-                  {signingUp ? 'Creating account…' : 'Create account'}
+                  {signingUp
+                    ? m.auth_creating_account()
+                    : m.auth_create_account()}
                 </Button>
               </form>
               <p className="text-sm text-muted-foreground">
-                Already have an account?{' '}
+                {m.auth_already_have_account()}{' '}
                 <Link
                   to="/login"
                   search={{ redirect: `/invite/${token}` }}
                   className="underline"
                 >
-                  Sign in
+                  {m.auth_sign_in()}
                 </Link>
               </p>
             </>
           )}
         </div>
       </div>
-    </div>
+    </AuthShell>
   )
 }

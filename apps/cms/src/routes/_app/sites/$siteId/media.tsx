@@ -24,6 +24,7 @@ import { Input } from '#/components/ui/input'
 import { Skeleton } from '#/components/ui/skeleton'
 import { useDebouncedValue } from '#/hooks/use-debounced-value'
 import { cn } from '#/lib/utils'
+import { m } from '#/paraglide/messages'
 import { deleteAssetFn, listAssetsFn, updateAssetFn } from '#/server/fn/assets'
 
 export const Route = createFileRoute('/_app/sites/$siteId/media')({
@@ -37,9 +38,10 @@ const EMPTY_ASSETS: MediaRow[] = []
 
 function formatBytes(bytes: number | undefined) {
   if (typeof bytes !== 'number' || !Number.isFinite(bytes)) return null
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  if (bytes < 1024) return m.sites_bytes({ size: bytes })
+  if (bytes < 1024 * 1024)
+    return m.sites_kb({ size: (bytes / 1024).toFixed(0) })
+  return m.sites_mb({ size: (bytes / (1024 * 1024)).toFixed(1) })
 }
 
 function MediaPage() {
@@ -85,18 +87,23 @@ function MediaPage() {
       return files.length
     },
     onSuccess: async (count) => {
-      toast.success(count === 1 ? 'File uploaded' : `${count} files uploaded`)
+      toast.success(
+        count === 1
+          ? m.sites_file_uploaded()
+          : m.sites_files_uploaded({ count }),
+      )
       setOffset(0)
       await invalidate()
     },
-    onError: (error) => toast.error(errorMessage(error, 'Upload failed')),
+    onError: (error) =>
+      toast.error(errorMessage(error, m.sites_upload_failed())),
   })
 
   const updateMutation = useMutation({
     mutationFn: (input: { id: string; altText: string }) =>
       updateAssetFn({ data: input }),
     onSuccess: async (_result, input) => {
-      toast.success('Alt text saved')
+      toast.success(m.sites_alt_text_saved())
       setAltDrafts((prev) => {
         const next = { ...prev }
         delete next[input.id]
@@ -105,16 +112,17 @@ function MediaPage() {
       await invalidate()
     },
     onError: (error) =>
-      toast.error(errorMessage(error, 'Could not save alt text')),
+      toast.error(errorMessage(error, m.sites_alt_text_save_failed())),
   })
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteAssetFn({ data: { id } }),
     onSuccess: async () => {
-      toast.success('Deleted')
+      toast.success(m.sites_media_deleted())
       await invalidate()
     },
-    onError: (error) => toast.error(errorMessage(error, 'Could not delete')),
+    onError: (error) =>
+      toast.error(errorMessage(error, m.sites_delete_failed())),
   })
 
   function startUpload(files: File[]) {
@@ -155,8 +163,8 @@ function MediaPage() {
   return (
     <div className="grid gap-6">
       <PageHeader
-        title="Media"
-        description="Images and files shared across this organization's sites."
+        title={m.sites_nav_media()}
+        description={m.sites_media_description()}
         actions={
           <Button
             type="button"
@@ -164,7 +172,7 @@ function MediaPage() {
             onClick={() => inputRef.current?.click()}
           >
             <Upload />
-            {uploadMutation.isPending ? 'Uploading…' : 'Upload'}
+            {uploadMutation.isPending ? m.sites_uploading() : m.sites_upload()}
           </Button>
         }
       />
@@ -174,7 +182,7 @@ function MediaPage() {
         accept="image/*,application/pdf"
         multiple
         className="sr-only"
-        aria-label="Upload files"
+        aria-label={m.sites_upload_files()}
         tabIndex={-1}
         onChange={(event) => {
           const files = [...(event.target.files ?? [])]
@@ -186,8 +194,8 @@ function MediaPage() {
       <div className="flex flex-wrap items-center gap-2">
         <Input
           type="search"
-          aria-label="Search media"
-          placeholder="Search by filename…"
+          aria-label={m.sites_search_media()}
+          placeholder={m.sites_search_filename_placeholder()}
           value={search}
           onChange={(event) => {
             setSearch(event.target.value)
@@ -206,7 +214,7 @@ function MediaPage() {
             }}
           >
             <X />
-            Clear search
+            {m.sites_clear_search()}
           </Button>
         ) : null}
       </div>
@@ -226,14 +234,14 @@ function MediaPage() {
           <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-background/80 text-sm font-medium">
             <span className="flex items-center gap-2 rounded-md border bg-card px-4 py-2 shadow-sm">
               <Upload className="size-4" />
-              Drop files to upload
+              {m.sites_drop_files()}
             </span>
           </div>
         ) : null}
 
         {assetsQuery.isError ? (
           <QueryError
-            title="Could not load media"
+            title={m.sites_media_load_error()}
             error={assetsQuery.error}
             onRetry={() => assetsQuery.refetch()}
             retrying={assetsQuery.isFetching}
@@ -248,8 +256,8 @@ function MediaPage() {
           searching ? (
             <EmptyState
               icon={<ImageIcon />}
-              title="No matching files"
-              description={`Nothing matches "${debouncedSearch}".`}
+              title={m.sites_no_matching_files()}
+              description={m.sites_nothing_matches({ search: debouncedSearch })}
               action={
                 <Button
                   type="button"
@@ -259,15 +267,15 @@ function MediaPage() {
                     setOffset(0)
                   }}
                 >
-                  Clear search
+                  {m.sites_clear_search()}
                 </Button>
               }
             />
           ) : (
             <EmptyState
               icon={<ImageIcon />}
-              title="No media yet"
-              description="Use the Upload button or drag and drop images and PDFs here."
+              title={m.sites_no_media_yet()}
+              description={m.sites_no_media_description()}
             />
           )
         ) : (
@@ -306,7 +314,8 @@ function MediaPage() {
                       >
                         <FileText className="size-8" />
                         <span className="text-xs uppercase">
-                          {asset.mimeType.split('/')[1] || 'file'}
+                          {asset.mimeType.split('/')[1] ||
+                            m.sites_file_type_fallback()}
                         </span>
                       </div>
                     )}
@@ -321,8 +330,10 @@ function MediaPage() {
                     </p>
                     <Input
                       value={alt}
-                      placeholder="Alt text"
-                      aria-label={`Alt text for ${asset.originalFilename}`}
+                      placeholder={m.sites_alt_text()}
+                      aria-label={m.sites_alt_text_for({
+                        filename: asset.originalFilename,
+                      })}
                       onChange={(event) =>
                         setAltDrafts((prev) => ({
                           ...prev,
@@ -343,7 +354,7 @@ function MediaPage() {
                       onClick={() => setDeleteTarget(asset)}
                     >
                       <Trash2 />
-                      Delete
+                      {m.sites_delete()}
                     </Button>
                   </div>
                 )
@@ -356,7 +367,7 @@ function MediaPage() {
               hasMore={hasMore}
               onChange={setOffset}
               isFetching={assetsQuery.isFetching}
-              noun="files"
+              noun={m.sites_files_noun()}
             />
           </>
         )}
@@ -367,13 +378,15 @@ function MediaPage() {
         onOpenChange={(open) => {
           if (!open) setDeleteTarget(null)
         }}
-        title="Delete this file?"
+        title={m.sites_delete_file_title()}
         description={
           deleteTarget
-            ? `"${deleteTarget.originalFilename}" will be permanently removed. Files that are still used by an entry cannot be deleted.`
+            ? m.sites_delete_file_description({
+                filename: deleteTarget.originalFilename,
+              })
             : undefined
         }
-        confirmLabel="Delete"
+        confirmLabel={m.sites_delete()}
         variant="destructive"
         onConfirm={async () => {
           if (deleteTarget) await deleteMutation.mutateAsync(deleteTarget.id)

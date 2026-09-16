@@ -20,6 +20,7 @@ import {
   siteIdFromPath,
   siteSections,
 } from '#/lib/site-nav'
+import { m } from '#/paraglide/messages'
 import { getEntryFn, listCollectionsFn } from '#/server/fn/content'
 import type { Me } from '#/server/fn/me'
 
@@ -27,9 +28,10 @@ type Crumb = { label: string; href?: string }
 
 function orgName(me: Me, orgId: string) {
   return (
-    me.memberships.find((m) => m.organizationId === orgId)?.organizationName ??
-    me.sites.find((s) => s.organizationId === orgId)?.organizationName ??
-    'Organization'
+    me.memberships.find((membership) => membership.organizationId === orgId)
+      ?.organizationName ??
+    me.sites.find((site) => site.organizationId === orgId)?.organizationName ??
+    m.shell_breadcrumb_organization()
   )
 }
 
@@ -63,7 +65,7 @@ export function AppBreadcrumbs({ me }: { me: Me }) {
     enabled: Boolean(entryId),
   })
 
-  const crumbs: Crumb[] = [{ label: 'Dashboard', href: '/' }]
+  const crumbs: Crumb[] = [{ label: m.shell_nav_dashboard(), href: '/' }]
 
   if (site) {
     crumbs.push({ label: site.name, href: `/sites/${site.id}` })
@@ -82,37 +84,48 @@ export function AppBreadcrumbs({ me }: { me: Me }) {
         href: `/sites/${site.id}/c/${collectionRef.collectionKey}`,
       })
       if (collectionRef.entryId === 'new') {
-        crumbs.push({ label: 'New entry' })
+        crumbs.push({ label: m.shell_breadcrumb_new_entry() })
       } else if (collectionRef.entryId) {
         const entry = entryQuery.data as
           { slug: string; draftData: EntryData } | undefined
         crumbs.push({
           label: entry
             ? entryTitle(entry.draftData, collection?.fields ?? [], entry.slug)
-            : 'Entry',
+            : m.shell_breadcrumb_entry(),
         })
       }
     }
   } else if (pathname.startsWith('/admin')) {
-    crumbs.push({ label: 'Agency', href: '/admin/organizations' })
+    crumbs.push({
+      label: m.shell_nav_agency(),
+      href: '/admin/organizations',
+    })
     const orgMatch = pathname.match(/^\/admin\/organizations\/([^/]+)/)
     if (orgMatch) {
-      crumbs.push({ label: 'Organizations', href: '/admin/organizations' })
+      crumbs.push({
+        label: m.shell_nav_organizations(),
+        href: '/admin/organizations',
+      })
       crumbs.push({ label: orgName(me, orgMatch[1]) })
     } else if (pathname.startsWith('/admin/organizations')) {
-      crumbs.push({ label: 'Organizations' })
+      crumbs.push({ label: m.shell_nav_organizations() })
     } else if (pathname.startsWith('/admin/users')) {
-      crumbs.push({ label: 'Users' })
+      crumbs.push({ label: m.shell_nav_users() })
     } else if (pathname.startsWith('/admin/audit')) {
-      crumbs.push({ label: 'Audit log' })
+      crumbs.push({ label: m.shell_nav_audit_log() })
     } else if (pathname.startsWith('/admin/branding')) {
-      crumbs.push({ label: 'Branding' })
+      crumbs.push({ label: m.shell_nav_branding() })
     }
   } else {
     const orgMatch = pathname.match(/^\/orgs\/([^/]+)\/(members|audit)/)
     if (orgMatch) {
       crumbs.push({ label: orgName(me, orgMatch[1]) })
-      crumbs.push({ label: orgMatch[2] === 'members' ? 'Team' : 'Activity' })
+      crumbs.push({
+        label:
+          orgMatch[2] === 'members'
+            ? m.shell_nav_team()
+            : m.shell_nav_activity(),
+      })
     }
   }
 

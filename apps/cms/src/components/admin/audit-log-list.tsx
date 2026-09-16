@@ -14,15 +14,13 @@ import { createDataColumns, DataTable } from '#/components/data-table'
 import { EmptyState } from '#/components/empty-state'
 import { ListPagination } from '#/components/list-pagination'
 import { QueryError } from '#/components/query-error'
+import { m } from '#/paraglide/messages'
+import { getLocale } from '#/paraglide/runtime'
 import { listAuditLogFn } from '#/server/fn/admin'
 
 const PAGE_SIZE = 25
 
 type AuditRow = Awaited<ReturnType<typeof listAuditLogFn>>[number]
-
-const relativeFormatter = new Intl.RelativeTimeFormat('en', {
-  numeric: 'auto',
-})
 
 /**
  * "5 minutes ago" for anything in the last day, otherwise the full date.
@@ -39,8 +37,11 @@ function formatRelative(value: Date | string) {
   const hour = 60 * minute
   const day = 24 * hour
   if (abs < minute) {
-    return 'just now'
+    return m.admin_audit_just_now()
   }
+  const relativeFormatter = new Intl.RelativeTimeFormat(getLocale(), {
+    numeric: 'auto',
+  })
   if (abs < hour) {
     return relativeFormatter.format(Math.round(diffMs / minute), 'minute')
   }
@@ -54,7 +55,7 @@ const helper = createDataColumns<AuditRow>()
 
 const columns = helper.columns([
   helper.accessor('createdAt', {
-    header: 'Time',
+    header: () => m.admin_audit_col_time(),
     sortFn: 'datetime',
     cell: ({ row }) => (
       <span
@@ -66,16 +67,16 @@ const columns = helper.columns([
     ),
   }),
   helper.accessor('actorName', {
-    header: 'Actor',
-    cell: ({ row }) => row.original.actorName ?? 'System',
+    header: () => m.admin_audit_col_actor(),
+    cell: ({ row }) => row.original.actorName ?? m.admin_audit_system(),
   }),
   helper.accessor('action', {
-    header: 'Action',
+    header: () => m.admin_audit_col_action(),
     cell: ({ row }) => formatAuditAction(row.original.action),
   }),
   helper.display({
     id: 'target',
-    header: 'Target',
+    header: () => m.admin_audit_col_target(),
     enableSorting: false,
     cell: ({ row }) =>
       formatAuditTarget({
@@ -88,7 +89,7 @@ const columns = helper.columns([
   }),
   helper.display({
     id: 'scope',
-    header: 'Org / site',
+    header: () => m.admin_audit_col_scope(),
     enableSorting: false,
     cell: ({ row }) => (
       <span className="text-muted-foreground">
@@ -118,7 +119,7 @@ export function AuditLogList({ organizationId }: { organizationId?: string }) {
   if (query.isError) {
     return (
       <QueryError
-        title="Could not load the audit log"
+        title={m.admin_audit_load_error()}
         error={query.error}
         onRetry={() => void query.refetch()}
         retrying={query.isFetching}
@@ -137,8 +138,8 @@ export function AuditLogList({ organizationId }: { organizationId?: string }) {
     return (
       <EmptyState
         icon={<ScrollText />}
-        title="No activity yet"
-        description="Actions like creating sites, inviting members, and publishing entries will show up here."
+        title={m.admin_audit_empty_title()}
+        description={m.admin_audit_empty_description()}
       />
     )
   }
@@ -157,8 +158,8 @@ export function AuditLogList({ organizationId }: { organizationId?: string }) {
         <DataTable
           columns={columns}
           data={rows}
-          emptyMessage="No events on this page."
-          caption="Audit log"
+          emptyMessage={m.admin_audit_empty_page()}
+          caption={m.admin_audit_caption()}
         />
       </div>
       <ListPagination
@@ -168,7 +169,7 @@ export function AuditLogList({ organizationId }: { organizationId?: string }) {
         hasMore={hasMore}
         isFetching={query.isFetching}
         onChange={setOffset}
-        noun="events"
+        noun={m.admin_audit_events()}
       />
     </div>
   )

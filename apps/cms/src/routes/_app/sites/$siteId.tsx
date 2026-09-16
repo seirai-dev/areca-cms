@@ -15,7 +15,9 @@ import {
   isEntryEditorPath,
   isSectionActive,
   siteSections,
+  type SiteSection,
 } from '#/lib/site-nav'
+import { m } from '#/paraglide/messages'
 
 export const Route = createFileRoute('/_app/sites/$siteId')({
   beforeLoad: ({ context, params }) => {
@@ -27,17 +29,34 @@ export const Route = createFileRoute('/_app/sites/$siteId')({
   },
   notFoundComponent: () => (
     <EmptyState
-      title="Site not found"
-      description="This site does not exist or you no longer have access to it."
+      title={m.sites_not_found_title()}
+      description={m.sites_not_found_description()}
       action={
         <Button asChild variant="outline">
-          <Link to="/">Back to dashboard</Link>
+          <Link to="/">{m.sites_back_to_dashboard()}</Link>
         </Button>
       }
     />
   ),
   component: SiteLayout,
 })
+
+function siteSectionLabel(key: SiteSection['key']) {
+  switch (key) {
+    case 'content':
+      return m.sites_nav_content()
+    case 'media':
+      return m.sites_nav_media()
+    case 'releases':
+      return m.sites_nav_releases()
+    case 'team':
+      return m.sites_nav_team()
+    case 'activity':
+      return m.sites_nav_activity()
+    case 'settings':
+      return m.sites_nav_settings()
+  }
+}
 
 function SiteLayout() {
   const { site, me } = Route.useRouteContext()
@@ -60,13 +79,13 @@ function SiteLayout() {
             <Button asChild variant="outline" size="sm">
               <a href={site.productionUrl} target="_blank" rel="noreferrer">
                 <ExternalLink />
-                Open live site
+                {m.sites_open_live_site()}
               </a>
             </Button>
           }
         />
         <nav
-          aria-label="Site sections"
+          aria-label={m.sites_sections_label()}
           data-testid="site-tabs"
           className="-mx-4 overflow-x-auto border-b px-4 sm:mx-0 sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
@@ -86,7 +105,7 @@ function SiteLayout() {
                     )}
                   >
                     <section.icon className="size-4" />
-                    {section.label}
+                    {siteSectionLabel(section.key)}
                   </Link>
                 </li>
               )

@@ -3,6 +3,7 @@ import { and, eq, notInArray } from 'drizzle-orm'
 import { db } from '#/db'
 import { collection, site } from '#/db/schema'
 import type { Field, SiteManifest } from '#/lib/types'
+import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
 
 import { NotFoundError } from './errors.ts'
@@ -38,7 +39,7 @@ export async function syncManifest(siteId: string, manifest: SiteManifest) {
     .where(eq(site.id, siteId))
     .limit(1)
   if (!existingSite) {
-    throw new NotFoundError('Site not found')
+    throw new NotFoundError(m.server_site_not_found())
   }
 
   const keys = Object.keys(manifest.collections)
@@ -79,10 +80,7 @@ export async function syncManifest(siteId: string, manifest: SiteManifest) {
         .update(collection)
         .set({ enabled: false, updatedAt: now })
         .where(
-          and(
-            eq(collection.siteId, siteId),
-            notInArray(collection.key, keys),
-          ),
+          and(eq(collection.siteId, siteId), notInArray(collection.key, keys)),
         )
     }
 
@@ -117,7 +115,7 @@ export async function upsertCollection(
     .where(eq(site.id, siteId))
     .limit(1)
   if (!existingSite) {
-    throw new NotFoundError('Site not found')
+    throw new NotFoundError(m.server_site_not_found())
   }
 
   const now = new Date()
@@ -147,7 +145,7 @@ export async function upsertCollection(
 
   const row = await getCollection(siteId, input.key)
   if (!row) {
-    throw new Error('Failed to upsert collection')
+    throw new Error(m.server_failed_to_upsert_collection())
   }
 
   await audit({

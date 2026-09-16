@@ -9,7 +9,7 @@ import { NumberFieldInput } from './number'
 import { ReferenceFieldInput } from './reference'
 import { RichtextFieldInput } from './richtext'
 import { SelectFieldInput } from './select'
-import { SLUG_HINT, SlugFieldInput } from './slug'
+import { slugHint, SlugFieldInput } from './slug'
 import { TextFieldInput } from './text'
 import { TextareaFieldInput } from './textarea'
 
@@ -164,7 +164,7 @@ export function CollectionField({
       htmlFor={id}
       required={field.required}
       description={field.description}
-      hint={field.type === 'slug' ? SLUG_HINT : undefined}
+      hint={field.type === 'slug' ? slugHint() : undefined}
       error={error}
     >
       {control}

@@ -1,4 +1,5 @@
 import { Switch } from '#/components/ui/switch'
+import { m } from '#/paraglide/messages'
 
 export function BooleanFieldInput({
   id,
@@ -14,7 +15,7 @@ export function BooleanFieldInput({
     <div className="flex items-center gap-3">
       <Switch id={id} checked={checked} onCheckedChange={onChange} />
       <span className="text-sm text-muted-foreground">
-        {checked ? 'Yes' : 'No'}
+        {checked ? m.editor_yes() : m.editor_no()}
       </span>
     </div>
   )

@@ -2,6 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
 import { requireAgencyAdmin, requireOrgMember } from '#/lib/session.server'
+import { m } from '#/paraglide/messages'
 import { listAuditLog } from '#/server/admin/audit'
 import {
   getInvitationById,
@@ -37,12 +38,10 @@ const adminFn = { strict: { output: false } as const }
 export const listOrganizationsFn = createServerFn({
   method: 'GET',
   ...adminFn,
-}).handler(
-  async () => {
-    await requireAgencyAdmin()
-    return listOrganizations()
-  },
-)
+}).handler(async () => {
+  await requireAgencyAdmin()
+  return listOrganizations()
+})
 
 export const createOrganizationFn = createServerFn({
   method: 'POST',
@@ -102,7 +101,7 @@ export const getSiteFn = createServerFn({ method: 'GET', ...adminFn })
     await requireAgencyAdmin()
     const found = await getSite(data.id)
     if (!found) {
-      throw new NotFoundError('Site not found')
+      throw new NotFoundError(m.server_site_not_found())
     }
     return found
   })
@@ -229,7 +228,7 @@ export const revokeInvitationFn = createServerFn({
   .handler(async ({ data }) => {
     const existing = await getInvitationById(data.id)
     if (!existing) {
-      throw new NotFoundError('Invitation not found')
+      throw new NotFoundError(m.server_invitation_not_found())
     }
     await requireOrgMember(existing.organizationId, 'owner')
     await revokeInvitation(data.id)

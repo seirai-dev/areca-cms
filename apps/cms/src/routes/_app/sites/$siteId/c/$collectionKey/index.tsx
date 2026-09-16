@@ -4,7 +4,10 @@ import { Link, createFileRoute } from '@tanstack/react-router'
 import { ExternalLink, FileText, MoreHorizontal, Pencil, X } from 'lucide-react'
 
 import { queryKeys } from '#/components/editor/query-keys'
-import { EntryStatusBadge } from '#/components/editor/status-badge'
+import {
+  EntryStatusBadge,
+  entryStatusLabel,
+} from '#/components/editor/status-badge'
 import {
   ENTRY_STATUSES,
   entryTitle,
@@ -33,6 +36,8 @@ import {
 import { Skeleton } from '#/components/ui/skeleton'
 import { useDebouncedValue } from '#/hooks/use-debounced-value'
 import type { EntryData, EntryStatus, Field } from '#/lib/types'
+import { m } from '#/paraglide/messages'
+import { getLocale } from '#/paraglide/runtime'
 import { listCollectionsFn, listEntriesFn } from '#/server/fn/content'
 
 export const Route = createFileRoute('/_app/sites/$siteId/c/$collectionKey/')({
@@ -50,13 +55,6 @@ type EntryRow = {
 
 const PAGE_SIZE = 25
 const EMPTY_ENTRIES: EntryRow[] = []
-
-const STATUS_LABELS: Record<EntryStatus, string> = {
-  draft: 'Draft',
-  published: 'Published',
-  scheduled: 'Scheduled',
-  archived: 'Archived',
-}
 
 function EntriesPage() {
   const { siteId, collectionKey } = Route.useParams()
@@ -103,7 +101,7 @@ function EntriesPage() {
       helper.columns([
         helper.accessor((row) => entryTitle(row.draftData, fields, row.slug), {
           id: 'title',
-          header: 'Title',
+          header: m.editor_title(),
           cell: ({ row }) => (
             <Link
               to="/sites/$siteId/c/$collectionKey/$entryId"
@@ -115,7 +113,7 @@ function EntriesPage() {
           ),
         }),
         helper.accessor('slug', {
-          header: 'Slug',
+          header: m.editor_slug(),
           cell: ({ row }) => (
             <span className="font-mono text-xs text-muted-foreground">
               {row.original.slug}
@@ -123,11 +121,11 @@ function EntriesPage() {
           ),
         }),
         helper.accessor('status', {
-          header: 'Status',
+          header: m.editor_status(),
           cell: ({ row }) => <EntryStatusBadge status={row.original.status} />,
         }),
         helper.accessor('updatedAt', {
-          header: 'Updated',
+          header: m.editor_updated(),
           sortFn: 'datetime',
           cell: ({ row }) => (
             <span className="whitespace-nowrap text-muted-foreground">
@@ -136,7 +134,7 @@ function EntriesPage() {
           ),
         }),
         helper.accessor('scheduledAt', {
-          header: 'Scheduled',
+          header: m.editor_status_scheduled(),
           sortFn: 'datetime',
           cell: ({ row }) => (
             <span className="whitespace-nowrap text-muted-foreground">
@@ -146,7 +144,7 @@ function EntriesPage() {
         }),
         helper.display({
           id: 'actions',
-          header: () => <span className="sr-only">Actions</span>,
+          header: () => <span className="sr-only">{m.editor_actions()}</span>,
           enableSorting: false,
           cell: ({ row }) => {
             const title = entryTitle(
@@ -162,7 +160,7 @@ function EntriesPage() {
                       type="button"
                       variant="ghost"
                       size="icon-sm"
-                      aria-label={`Actions for ${title}`}
+                      aria-label={m.editor_actions_for({ title })}
                     >
                       <MoreHorizontal />
                     </Button>
@@ -178,7 +176,7 @@ function EntriesPage() {
                         }}
                       >
                         <Pencil />
-                        Edit
+                        {m.editor_edit()}
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
@@ -188,7 +186,7 @@ function EntriesPage() {
                         rel="noreferrer"
                       >
                         <ExternalLink />
-                        Open in new tab
+                        {m.editor_open_in_new_tab()}
                       </a>
                     </DropdownMenuItem>
                   </DropdownMenuContent>
@@ -198,7 +196,7 @@ function EntriesPage() {
           },
         }),
       ]),
-    [collectionKey, fields, helper, siteId],
+    [collectionKey, fields, helper, siteId, getLocale()],
   )
 
   const rows: EntryRow[] = entriesQuery.data?.items ?? EMPTY_ENTRIES
@@ -223,7 +221,7 @@ function EntriesPage() {
   if (collectionsQuery.isError) {
     return (
       <QueryError
-        title="Could not load collection"
+        title={m.editor_could_not_load_collection()}
         error={collectionsQuery.error}
         onRetry={() => collectionsQuery.refetch()}
         retrying={collectionsQuery.isFetching}
@@ -235,12 +233,12 @@ function EntriesPage() {
     return (
       <EmptyState
         icon={<FileText />}
-        title="Collection not found"
-        description="This collection is missing or disabled. Check the site settings."
+        title={m.editor_collection_not_found()}
+        description={m.editor_collection_not_found_description()}
         action={
           <Button asChild variant="outline">
             <Link to="/sites/$siteId" params={{ siteId }}>
-              Back to site
+              {m.editor_back_to_site()}
             </Link>
           </Button>
         }
@@ -253,7 +251,7 @@ function EntriesPage() {
       to="/sites/$siteId/c/$collectionKey/new"
       params={{ siteId, collectionKey }}
     >
-      New entry
+      {m.editor_new_entry()}
     </Link>
   )
 
@@ -263,7 +261,9 @@ function EntriesPage() {
         title={collection.label}
         description={
           typeof total === 'number'
-            ? `${total} ${total === 1 ? 'entry' : 'entries'}`
+            ? total === 1
+              ? m.editor_one_entry({ count: total })
+              : m.editor_n_entries({ count: total })
             : undefined
         }
         actions={
@@ -276,8 +276,8 @@ function EntriesPage() {
       <div className="flex flex-wrap items-center gap-2">
         <Input
           type="search"
-          aria-label="Search entries"
-          placeholder="Search entries…"
+          aria-label={m.editor_search_entries()}
+          placeholder={m.editor_search_entries_placeholder()}
           value={search}
           onChange={(event) => {
             setSearch(event.target.value)
@@ -292,14 +292,17 @@ function EntriesPage() {
             setOffset(0)
           }}
         >
-          <SelectTrigger className="w-40" aria-label="Filter by status">
-            <SelectValue placeholder="Status" />
+          <SelectTrigger
+            className="w-40"
+            aria-label={m.editor_filter_by_status()}
+          >
+            <SelectValue placeholder={m.editor_status()} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
+            <SelectItem value="all">{m.editor_all_statuses()}</SelectItem>
             {ENTRY_STATUSES.map((item) => (
               <SelectItem key={item} value={item}>
-                {STATUS_LABELS[item]}
+                {entryStatusLabel(item)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -312,14 +315,14 @@ function EntriesPage() {
             onClick={clearFilters}
           >
             <X />
-            Clear filters
+            {m.editor_clear_filters()}
           </Button>
         ) : null}
       </div>
 
       {entriesQuery.isError ? (
         <QueryError
-          title="Could not load entries"
+          title={m.editor_could_not_load_entries()}
           error={entriesQuery.error}
           onRetry={() => entriesQuery.refetch()}
           retrying={entriesQuery.isFetching}
@@ -330,19 +333,19 @@ function EntriesPage() {
         filtersActive ? (
           <EmptyState
             icon={<FileText />}
-            title="No matching entries"
-            description="Try a different search term or status."
+            title={m.editor_no_matching_entries()}
+            description={m.editor_no_matching_entries_description()}
             action={
               <Button type="button" variant="outline" onClick={clearFilters}>
-                Clear filters
+                {m.editor_clear_filters()}
               </Button>
             }
           />
         ) : (
           <EmptyState
             icon={<FileText />}
-            title="No entries yet"
-            description="Create a draft to get started."
+            title={m.editor_no_entries_yet()}
+            description={m.editor_no_entries_yet_description()}
             action={<Button asChild>{newEntryLink}</Button>}
           />
         )
@@ -355,7 +358,7 @@ function EntriesPage() {
           <DataTable
             columns={columns}
             data={rows}
-            caption={`${collection.label} entries`}
+            caption={m.editor_entries_caption({ name: collection.label })}
           />
           <ListPagination
             offset={offset}
@@ -364,7 +367,7 @@ function EntriesPage() {
             total={total}
             onChange={setOffset}
             isFetching={entriesQuery.isFetching}
-            noun="entries"
+            noun={m.editor_entries()}
           />
         </div>
       )}

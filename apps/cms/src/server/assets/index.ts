@@ -6,6 +6,7 @@ import { getStorage } from '#/adapters'
 import { db } from '#/db'
 import { asset, entry } from '#/db/schema'
 import { env } from '#/env'
+import { m } from '#/paraglide/messages'
 
 export type Asset = InferSelectModel<typeof asset>
 
@@ -65,7 +66,7 @@ export class AssetValidationError extends Error {
 
 export class AssetInUseError extends Error {
   constructor(public readonly usage: number) {
-    super(`Asset is in use by ${usage} entries`)
+    super(m.server_asset_in_use({ usage: String(usage) }))
     this.name = 'AssetInUseError'
   }
 }
@@ -79,11 +80,11 @@ export async function uploadAsset(input: {
   const mimeType = input.file.mimeType.toLowerCase()
   if (!ALLOWED_MIMES.has(mimeType)) {
     throw new AssetValidationError(
-      `Unsupported mime type: ${input.file.mimeType}`,
+      m.server_unsupported_mime_type({ mimeType: input.file.mimeType }),
     )
   }
   if (input.file.buffer.byteLength > MAX_SIZE_BYTES) {
-    throw new AssetValidationError('File exceeds the 20 MB size limit')
+    throw new AssetValidationError(m.server_file_exceeds_20mb())
   }
 
   let width: number | null = null
@@ -115,7 +116,7 @@ export async function uploadAsset(input: {
     .returning()
 
   if (!row) {
-    throw new Error('Failed to insert asset')
+    throw new Error(m.server_failed_to_insert_asset())
   }
   return row
 }
@@ -159,7 +160,7 @@ export async function updateAsset(
     .where(eq(asset.id, id))
     .returning()
   if (!row) {
-    throw new Error('Asset not found')
+    throw new Error(m.server_asset_not_found())
   }
   return row
 }
@@ -180,7 +181,7 @@ export async function assetUsage(id: string): Promise<number> {
 export async function deleteAsset(id: string): Promise<void> {
   const existing = await getAsset(id)
   if (!existing) {
-    throw new Error('Asset not found')
+    throw new Error(m.server_asset_not_found())
   }
   const usage = await assetUsage(id)
   if (usage > 0) {
@@ -236,7 +237,7 @@ function realMediaType(value: string | undefined): string | undefined {
 export async function streamAssetFile(storageKey: string): Promise<Response> {
   const object = await getStorage().get(storageKey)
   if (!object) {
-    return new Response('Not found', { status: 404 })
+    return new Response(m.server_not_found(), { status: 404 })
   }
 
   const [row] = await db

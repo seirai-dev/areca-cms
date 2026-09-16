@@ -7,8 +7,11 @@ import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { BrandMark } from '#/components/brand-mark'
 import { FormField } from '#/components/form-field'
+import { AuthShell } from '#/components/language-switcher'
 import { authClient } from '#/lib/auth-client'
 import { useBranding } from '#/lib/use-branding'
+import { m } from '#/paraglide/messages'
+import { localizeHref } from '#/paraglide/runtime'
 import { getMeFn } from '#/server/fn/me'
 import { completeSetupFn, getSetupStatusFn } from '#/server/fn/setup'
 
@@ -47,30 +50,33 @@ function SetupPage() {
         data: { name, email, password },
       })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not complete setup')
+      setError(
+        err instanceof Error ? err.message : m.auth_could_not_complete_setup(),
+      )
       setPending(false)
       return
     }
 
     const result = await authClient.signIn.email({ email, password })
     if (result.error) {
-      setError(result.error.message ?? 'Account created, but sign-in failed')
+      setError(result.error.message ?? m.auth_account_created_sign_in_failed())
       setPending(false)
       return
     }
 
-    window.location.assign('/')
+    window.location.assign(localizeHref('/'))
   }
 
   return (
-    <div className="flex min-h-svh items-center justify-center p-6">
+    <AuthShell>
       <div className="w-full max-w-sm">
         <BrandMark className="mb-8" />
         <div className="mb-6 grid gap-1.5">
-          <h1 className="text-2xl">Set up {branding.appName}</h1>
+          <h1 className="text-2xl">
+            {m.auth_set_up_app({ appName: branding.appName })}
+          </h1>
           <p className="text-sm text-muted-foreground">
-            Create the first agency admin. This can only be done while no
-            accounts exist.
+            {m.auth_create_first_agency_admin()}
           </p>
         </div>
         <div>
@@ -86,7 +92,7 @@ function SetupPage() {
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             ) : null}
-            <FormField label="Name" htmlFor="name">
+            <FormField label={m.auth_name()} htmlFor="name">
               <Input
                 id="name"
                 name="name"
@@ -96,7 +102,7 @@ function SetupPage() {
                 onChange={(event) => setName(event.target.value)}
               />
             </FormField>
-            <FormField label="Email" htmlFor="email">
+            <FormField label={m.auth_email()} htmlFor="email">
               <Input
                 id="email"
                 name="email"
@@ -107,7 +113,7 @@ function SetupPage() {
                 onChange={(event) => setEmail(event.target.value)}
               />
             </FormField>
-            <FormField label="Password" htmlFor="password">
+            <FormField label={m.auth_password()} htmlFor="password">
               <Input
                 id="password"
                 name="password"
@@ -120,11 +126,13 @@ function SetupPage() {
               />
             </FormField>
             <Button type="submit" disabled={!ready || pending}>
-              {pending ? 'Creating admin…' : 'Create admin account'}
+              {pending
+                ? m.auth_creating_admin()
+                : m.auth_create_admin_account()}
             </Button>
           </form>
         </div>
       </div>
-    </div>
+    </AuthShell>
   )
 }

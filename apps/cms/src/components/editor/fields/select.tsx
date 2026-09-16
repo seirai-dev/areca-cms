@@ -1,4 +1,5 @@
 import type { Field } from '#/lib/types'
+import { m } from '#/paraglide/messages'
 import {
   Select,
   SelectContent,
@@ -22,7 +23,7 @@ export function SelectFieldInput({
   return (
     <Select value={current} onValueChange={onChange}>
       <SelectTrigger className="w-full" id={id ?? `field-${field.key}`}>
-        <SelectValue placeholder="Select…" />
+        <SelectValue placeholder={m.editor_select_placeholder()} />
       </SelectTrigger>
       <SelectContent>
         {(field.options ?? []).map((option) => (

@@ -37,6 +37,7 @@ import {
 } from '#/components/ui/dialog'
 import { Input } from '#/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '#/components/ui/tabs'
+import { m } from '#/paraglide/messages'
 import {
   createSiteFn,
   deleteOrganizationFn,
@@ -58,11 +59,11 @@ const siteHelper = createDataColumns<SiteRow>()
 
 const siteColumns = siteHelper.columns([
   siteHelper.accessor('name', {
-    header: 'Name',
+    header: () => m.admin_name(),
     cell: ({ row }) => <span className="font-medium">{row.original.name}</span>,
   }),
   siteHelper.accessor('slug', {
-    header: 'Slug',
+    header: () => m.admin_slug(),
     cell: ({ row }) => (
       <span className="font-mono text-xs text-muted-foreground">
         {row.original.slug}
@@ -70,7 +71,7 @@ const siteColumns = siteHelper.columns([
     ),
   }),
   siteHelper.accessor('productionUrl', {
-    header: 'Production URL',
+    header: () => m.admin_org_col_production_url(),
     cell: ({ row }) => (
       <a
         href={row.original.productionUrl}
@@ -84,7 +85,7 @@ const siteColumns = siteHelper.columns([
   }),
   siteHelper.display({
     id: 'actions',
-    header: () => <span className="sr-only">Actions</span>,
+    header: () => <span className="sr-only">{m.admin_actions()}</span>,
     enableSorting: false,
     cell: ({ row }) => (
       <div className="flex justify-end">
@@ -93,7 +94,7 @@ const siteColumns = siteHelper.columns([
           params={{ siteId: row.original.id }}
           className={buttonVariants({ variant: 'outline', size: 'sm' })}
         >
-          Settings
+          {m.admin_settings()}
         </Link>
       </div>
     ),
@@ -157,7 +158,7 @@ function OrganizationDetailPage() {
         },
       }),
     onSuccess: async (site) => {
-      toast.success('Site created')
+      toast.success(m.admin_org_toast_site_created())
       sessionStorage.setItem(`areca.site-token.${orgId}`, site.token)
       setCreatedToken(site.token)
       setSiteOpen(false)
@@ -182,7 +183,7 @@ function OrganizationDetailPage() {
     mutationFn: () =>
       updateOrganization({ data: { id: orgId, name: orgName.trim() } }),
     onSuccess: async () => {
-      toast.success('Organization renamed')
+      toast.success(m.admin_org_toast_renamed())
       await Promise.all([
         queryClient.invalidateQueries({
           queryKey: adminQueryKeys.organizations,
@@ -196,7 +197,7 @@ function OrganizationDetailPage() {
   const deleteMutation = useMutation({
     mutationFn: () => deleteOrganization({ data: { id: orgId } }),
     onSuccess: async () => {
-      toast.success('Organization deleted')
+      toast.success(m.admin_org_toast_deleted())
       await queryClient.invalidateQueries({
         queryKey: adminQueryKeys.organizations,
       })
@@ -209,7 +210,7 @@ function OrganizationDetailPage() {
     return (
       <div className="grid gap-6">
         <QueryError
-          title="Could not load this organization"
+          title={m.admin_org_load_error()}
           error={orgsQuery.error}
           onRetry={() => void orgsQuery.refetch()}
           retrying={orgsQuery.isFetching}
@@ -229,14 +230,14 @@ function OrganizationDetailPage() {
   if (!org) {
     return (
       <EmptyState
-        title="Organization not found"
-        description="It may have been deleted, or the link is out of date."
+        title={m.admin_org_not_found_title()}
+        description={m.admin_org_not_found_description()}
         action={
           <Link
             to="/admin/organizations"
             className={buttonVariants({ variant: 'outline' })}
           >
-            Back to organizations
+            {m.admin_org_back()}
           </Link>
         }
       />
@@ -283,25 +284,25 @@ function OrganizationDetailPage() {
 
       <Tabs value={tab} onValueChange={(value) => setTab(value as OrgTab)}>
         <TabsList>
-          <TabsTrigger value="sites">Sites</TabsTrigger>
-          <TabsTrigger value="members">Members</TabsTrigger>
-          <TabsTrigger value="settings">Settings</TabsTrigger>
+          <TabsTrigger value="sites">{m.admin_sites()}</TabsTrigger>
+          <TabsTrigger value="members">{m.admin_members()}</TabsTrigger>
+          <TabsTrigger value="settings">{m.admin_settings()}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="sites" className="grid gap-4 pt-4">
           <Dialog open={siteOpen} onOpenChange={setSiteOpen}>
             <div className="flex items-center justify-between gap-2">
-              <h2 className="text-lg font-medium">Sites</h2>
+              <h2 className="text-lg font-medium">{m.admin_sites()}</h2>
               <DialogTrigger asChild>
                 <Button type="button" data-testid="new-site">
                   <Plus />
-                  New site
+                  {m.admin_org_new_site()}
                 </Button>
               </DialogTrigger>
             </div>
             {sitesQuery.isError ? (
               <QueryError
-                title="Could not load sites"
+                title={m.admin_org_sites_load_error()}
                 error={sitesQuery.error}
                 onRetry={() => void sitesQuery.refetch()}
                 retrying={sitesQuery.isFetching}
@@ -311,13 +312,13 @@ function OrganizationDetailPage() {
             ) : sitesQuery.data.length === 0 ? (
               <EmptyState
                 icon={<Globe />}
-                title="No sites yet"
-                description="Create a site to get a site token for the SDK and start syncing content."
+                title={m.admin_org_sites_empty_title()}
+                description={m.admin_org_sites_empty_description()}
                 action={
                   siteOpen ? undefined : (
                     <Button type="button" onClick={() => setSiteOpen(true)}>
                       <Plus />
-                      New site
+                      {m.admin_org_new_site()}
                     </Button>
                   )
                 }
@@ -328,20 +329,20 @@ function OrganizationDetailPage() {
                 data={sitesQuery.data}
                 pageSize={25}
                 initialSorting={[{ id: 'name', desc: false }]}
-                caption={`Sites in ${org.name}`}
+                caption={m.admin_org_sites_caption({ name: org.name })}
               />
             )}
             <DialogContent>
               <form className="grid gap-4" onSubmit={onCreateSite}>
                 <DialogHeader>
-                  <DialogTitle>New site</DialogTitle>
+                  <DialogTitle>{m.admin_org_new_site_title()}</DialogTitle>
                   <DialogDescription>
-                    The site token is shown once after creation. For the local
-                    demo site use {DEFAULT_PRODUCTION_URL} as the production
-                    URL.
+                    {m.admin_org_new_site_description({
+                      url: DEFAULT_PRODUCTION_URL,
+                    })}
                   </DialogDescription>
                 </DialogHeader>
-                <FormField label="Name" htmlFor="site-name">
+                <FormField label={m.admin_name()} htmlFor="site-name">
                   <Input
                     id="site-name"
                     data-testid="site-name"
@@ -352,7 +353,7 @@ function OrganizationDetailPage() {
                     onChange={(event) => onSiteNameChange(event.target.value)}
                   />
                 </FormField>
-                <FormField label="Slug" htmlFor="site-slug">
+                <FormField label={m.admin_slug()} htmlFor="site-slug">
                   <Input
                     id="site-slug"
                     data-testid="site-slug"
@@ -366,7 +367,10 @@ function OrganizationDetailPage() {
                     }}
                   />
                 </FormField>
-                <FormField label="Production URL" htmlFor="site-production-url">
+                <FormField
+                  label={m.admin_org_production_url()}
+                  htmlFor="site-production-url"
+                >
                   <Input
                     id="site-production-url"
                     data-testid="site-production-url"
@@ -384,10 +388,12 @@ function OrganizationDetailPage() {
                     onClick={() => setSiteOpen(false)}
                     disabled={createSiteMutation.isPending}
                   >
-                    Cancel
+                    {m.admin_cancel()}
                   </Button>
                   <Button type="submit" disabled={createSiteMutation.isPending}>
-                    {createSiteMutation.isPending ? 'Creating…' : 'Create site'}
+                    {createSiteMutation.isPending
+                      ? m.admin_creating()
+                      : m.admin_org_create_site()}
                   </Button>
                 </DialogFooter>
               </form>
@@ -402,13 +408,14 @@ function OrganizationDetailPage() {
         <TabsContent value="settings" className="grid gap-6 pt-4">
           <form className="grid max-w-md gap-4" onSubmit={onRename}>
             <div className="grid gap-1">
-              <h2 className="text-lg font-medium">General</h2>
+              <h2 className="text-lg font-medium">{m.admin_org_general()}</h2>
               <p className="text-sm text-muted-foreground">
-                The slug <span className="font-mono text-xs">{org.slug}</span>{' '}
-                cannot be changed.
+                {m.admin_org_slug_immutable_before()}
+                <span className="font-mono text-xs">{org.slug}</span>
+                {m.admin_org_slug_immutable_after()}
               </p>
             </div>
-            <FormField label="Name" htmlFor="rename-org">
+            <FormField label={m.admin_name()} htmlFor="rename-org">
               <Input
                 id="rename-org"
                 required
@@ -421,17 +428,20 @@ function OrganizationDetailPage() {
                 type="submit"
                 disabled={renameMutation.isPending || !renameDirty}
               >
-                {renameMutation.isPending ? 'Saving…' : 'Save name'}
+                {renameMutation.isPending
+                  ? m.admin_saving()
+                  : m.admin_org_save_name()}
               </Button>
             </div>
           </form>
 
           <section className="grid max-w-md gap-3 border-t border-destructive/40 pt-5">
             <div className="grid gap-1">
-              <h2 className="text-lg font-medium">Danger zone</h2>
+              <h2 className="text-lg font-medium">
+                {m.admin_org_danger_zone()}
+              </h2>
               <p className="text-sm text-muted-foreground">
-                Deleting an organization removes its members and invitations.
-                This cannot be undone.
+                {m.admin_org_danger_description()}
               </p>
             </div>
             {hasSites ? (
@@ -439,23 +449,26 @@ function OrganizationDetailPage() {
                 className="text-sm text-muted-foreground"
                 data-testid="delete-org-blocked"
               >
-                This organization still has {siteCount}{' '}
-                {siteCount === 1 ? 'site' : 'sites'}. Delete them from the{' '}
+                {siteCount === 1
+                  ? m.admin_org_delete_blocked_one_before()
+                  : m.admin_org_delete_blocked_many_before({
+                      count: siteCount,
+                    })}
                 <button
                   type="button"
                   className="font-medium text-foreground underline underline-offset-4"
                   onClick={() => setTab('sites')}
                 >
-                  Sites tab
-                </button>{' '}
-                first.
+                  {m.admin_org_sites_tab()}
+                </button>
+                {m.admin_org_delete_blocked_after()}
               </p>
             ) : null}
             <div>
               <ConfirmDialog
-                title={`Delete ${org.name}?`}
-                description="All members and pending invitations for this organization will be removed. This cannot be undone."
-                confirmLabel="Delete organization"
+                title={m.admin_org_delete_title({ name: org.name })}
+                description={m.admin_org_delete_description()}
+                confirmLabel={m.admin_org_delete_label()}
                 variant="destructive"
                 confirmText={org.slug}
                 onConfirm={async () => {
@@ -468,8 +481,8 @@ function OrganizationDetailPage() {
                   disabled={hasSites || deleteMutation.isPending}
                 >
                   {deleteMutation.isPending
-                    ? 'Deleting…'
-                    : 'Delete organization'}
+                    ? m.admin_deleting()
+                    : m.admin_org_delete_label()}
                 </Button>
               </ConfirmDialog>
             </div>

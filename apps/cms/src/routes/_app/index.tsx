@@ -6,6 +6,7 @@ import { GetStarted } from '#/components/get-started'
 import { PageHeader } from '#/components/page-header'
 import { Button } from '#/components/ui/button'
 import { groupSitesByOrg } from '#/lib/site-nav'
+import { m } from '#/paraglide/messages'
 
 export const Route = createFileRoute('/_app/')({
   component: DashboardPage,
@@ -19,16 +20,20 @@ function DashboardPage() {
   return (
     <div className="grid gap-8">
       <PageHeader
-        title={`Hello, ${me.user.name.split(' ')[0] || me.user.name}`}
+        title={m.sites_dashboard_hello({
+          name: me.user.name.split(' ')[0] || me.user.name,
+        })}
         description={
           me.sites.length === 1
-            ? 'One site is waiting for you.'
-            : `${me.sites.length} sites you can work on.`
+            ? m.sites_dashboard_one_site()
+            : m.sites_dashboard_sites_count({ count: me.sites.length })
         }
         actions={
           me.user.isAgencyAdmin ? (
             <Button asChild variant="outline">
-              <Link to="/admin/organizations">Manage organizations</Link>
+              <Link to="/admin/organizations">
+                {m.sites_dashboard_manage_organizations()}
+              </Link>
             </Button>
           ) : null
         }
@@ -38,16 +43,18 @@ function DashboardPage() {
       ) : me.sites.length === 0 ? (
         <EmptyState
           icon={<LayoutGrid />}
-          title="No sites yet"
+          title={m.sites_dashboard_no_sites_title()}
           description={
             me.user.isAgencyAdmin
-              ? 'Create a site inside an organization to start managing content.'
-              : 'You have not been given access to any sites. Ask your agency contact to invite you.'
+              ? m.sites_dashboard_no_sites_admin()
+              : m.sites_dashboard_no_sites_member()
           }
           action={
             me.user.isAgencyAdmin ? (
               <Button asChild>
-                <Link to="/admin/organizations">Go to organizations</Link>
+                <Link to="/admin/organizations">
+                  {m.sites_dashboard_go_to_organizations()}
+                </Link>
               </Button>
             ) : null
           }
@@ -56,7 +63,9 @@ function DashboardPage() {
         <div className="grid gap-8">
           {groups.map((group) => (
             <section key={group.id} className="grid gap-1">
-              <h2 className="text-lg">{multiOrg ? group.name : 'Sites'}</h2>
+              <h2 className="text-lg">
+                {multiOrg ? group.name : m.sites_dashboard_heading()}
+              </h2>
               <ul className="divide-y border-y">
                 {group.sites.map((site) => (
                   <li key={site.id} className="group relative">
@@ -70,8 +79,15 @@ function DashboardPage() {
                           {site.name}
                         </Link>
                         <p className="text-sm text-muted-foreground">
-                          {multiOrg ? null : `${site.organizationName} — `}
-                          {site.productionUrl.replace(/^https?:\/\//, '')}
+                          {multiOrg
+                            ? site.productionUrl.replace(/^https?:\/\//, '')
+                            : m.sites_dashboard_org_url({
+                                organization: site.organizationName,
+                                url: site.productionUrl.replace(
+                                  /^https?:\/\//,
+                                  '',
+                                ),
+                              })}
                         </p>
                       </div>
                       <a
@@ -79,9 +95,9 @@ function DashboardPage() {
                         target="_blank"
                         rel="noreferrer"
                         className="relative z-10 hidden items-center gap-1 text-sm text-muted-foreground hover:text-foreground sm:inline-flex"
-                        title="Open live site"
+                        title={m.sites_open_live_site()}
                       >
-                        Live site
+                        {m.sites_live_site()}
                         <ArrowUpRight className="size-3.5" />
                       </a>
                       <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />

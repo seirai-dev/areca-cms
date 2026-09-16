@@ -29,6 +29,7 @@ import {
 import { Input } from '#/components/ui/input'
 import { Skeleton } from '#/components/ui/skeleton'
 import type { Field } from '#/lib/types'
+import { m } from '#/paraglide/messages'
 import { listCollectionsFn, upsertCollectionFn } from '#/server/fn/content'
 import {
   deleteSiteFn,
@@ -101,7 +102,7 @@ function SiteSettingsPage() {
         data: { id: siteId, name: displayName, productionUrl: displayUrl },
       }),
     onSuccess: async () => {
-      toast.success('Site updated')
+      toast.success(m.sites_updated())
       setName(null)
       setProductionUrl(null)
       await queryClient.invalidateQueries({
@@ -120,7 +121,7 @@ function SiteSettingsPage() {
       } | null,
     ) => updateSite({ data: { id: siteId, deploymentTarget } }),
     onSuccess: async () => {
-      toast.success('Deployment target updated')
+      toast.success(m.sites_deployment_target_updated())
       setApplicationId(null)
       setHealthCheckUrl(null)
       await queryClient.invalidateQueries({
@@ -133,7 +134,7 @@ function SiteSettingsPage() {
   const rotateMutation = useMutation({
     mutationFn: () => rotateSiteToken({ data: { id: siteId } }),
     onSuccess: (result) => {
-      toast.success('Site token rotated')
+      toast.success(m.sites_token_rotated())
       setRotatedToken(result.token)
     },
     onError: (err) => toast.error(errorMessage(err)),
@@ -152,7 +153,7 @@ function SiteSettingsPage() {
         },
       }),
     onSuccess: async () => {
-      toast.success('Collection saved')
+      toast.success(m.sites_collection_saved())
       setCollectionOpen(false)
       setEditingCollection(null)
       await queryClient.invalidateQueries({
@@ -165,7 +166,7 @@ function SiteSettingsPage() {
   const deleteMutation = useMutation({
     mutationFn: () => deleteSite({ data: { id: siteId } }),
     onSuccess: async () => {
-      toast.success('Site deleted')
+      toast.success(m.sites_deleted())
       await navigate({ to: '/' })
     },
     onError: (err) => toast.error(errorMessage(err)),
@@ -193,33 +194,33 @@ function SiteSettingsPage() {
   const collectionHelper = createDataColumns<CollectionRow>()
   const collectionColumns = collectionHelper.columns([
     collectionHelper.accessor('key', {
-      header: 'Key',
+      header: m.sites_column_key(),
       cell: ({ row }) => (
         <span className="font-mono text-xs">{row.original.key}</span>
       ),
     }),
-    collectionHelper.accessor('label', { header: 'Label' }),
+    collectionHelper.accessor('label', { header: m.sites_column_label() }),
     collectionHelper.accessor('routePattern', {
-      header: 'Route',
+      header: m.sites_column_route(),
       cell: ({ row }) => (
         <span className="font-mono text-xs">{row.original.routePattern}</span>
       ),
     }),
     collectionHelper.accessor('enabled', {
-      header: 'Enabled',
+      header: m.sites_column_enabled(),
       cell: ({ row }) => (
         <Badge variant={row.original.enabled ? 'default' : 'secondary'}>
-          {row.original.enabled ? 'Yes' : 'No'}
+          {row.original.enabled ? m.sites_yes() : m.sites_no()}
         </Badge>
       ),
     }),
     collectionHelper.accessor((row) => row.fields.length, {
       id: 'fields',
-      header: 'Fields',
+      header: m.sites_column_fields(),
     }),
     collectionHelper.display({
       id: 'actions',
-      header: () => <span className="sr-only">Actions</span>,
+      header: () => <span className="sr-only">{m.sites_actions()}</span>,
       enableSorting: false,
       cell: ({ row }) => (
         <div className="flex justify-end">
@@ -238,7 +239,7 @@ function SiteSettingsPage() {
             }
           >
             <Pencil />
-            Edit
+            {m.sites_edit()}
           </Button>
         </div>
       ),
@@ -258,7 +259,7 @@ function SiteSettingsPage() {
     return (
       <div className="max-w-3xl">
         <QueryError
-          title="Could not load site"
+          title={m.sites_load_error()}
           error={siteQuery.error}
           onRetry={() => siteQuery.refetch()}
           retrying={siteQuery.isFetching}
@@ -271,15 +272,15 @@ function SiteSettingsPage() {
     return (
       <EmptyState
         className="max-w-3xl"
-        title="Site not found"
-        description="This site may have been deleted or you no longer have access to it."
+        title={m.sites_not_found_title()}
+        description={m.sites_settings_not_found_description()}
         action={
           <Button
             type="button"
             variant="outline"
             onClick={() => navigate({ to: '/' })}
           >
-            Back to dashboard
+            {m.sites_back_to_dashboard()}
           </Button>
         }
       />
@@ -295,22 +296,23 @@ function SiteSettingsPage() {
   return (
     <div className="grid max-w-3xl gap-6">
       <PageHeader
-        title="Site settings"
-        description={`Configuration for ${site.name}.`}
+        title={m.sites_settings_title()}
+        description={m.sites_settings_description({ name: site.name })}
       />
 
       <Card>
         <CardHeader>
-          <CardTitle>General</CardTitle>
+          <CardTitle>{m.sites_general()}</CardTitle>
           <CardDescription>
-            Production URL is the live site origin (local demo:{' '}
-            <code>http://localhost:3001</code>). Preview opens{' '}
-            <code>/__preview/…</code> on this host.
+            {m.sites_general_description_before()}{' '}
+            <code>http://localhost:3001</code>
+            {m.sites_general_description_mid()} <code>/__preview/…</code>{' '}
+            {m.sites_general_description_after()}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form className="grid gap-4" onSubmit={onGeneral}>
-            <FormField label="Name" htmlFor="settings-site-name">
+            <FormField label={m.sites_name()} htmlFor="settings-site-name">
               <Input
                 id="settings-site-name"
                 required
@@ -318,19 +320,24 @@ function SiteSettingsPage() {
                 onChange={(event) => setName(event.target.value)}
               />
             </FormField>
-            <FormField label="Production URL" htmlFor="settings-production-url">
+            <FormField
+              label={m.sites_production_url()}
+              htmlFor="settings-production-url"
+            >
               <Input
                 id="settings-production-url"
                 type="url"
                 required
-                placeholder="https://example.com"
+                placeholder={m.sites_url_placeholder()}
                 value={displayUrl}
                 onChange={(event) => setProductionUrl(event.target.value)}
               />
             </FormField>
             <div>
               <Button type="submit" disabled={generalMutation.isPending}>
-                {generalMutation.isPending ? 'Saving…' : 'Save changes'}
+                {generalMutation.isPending
+                  ? m.sites_saving()
+                  : m.sites_save_changes()}
               </Button>
             </div>
           </form>
@@ -339,18 +346,20 @@ function SiteSettingsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Deployment target</CardTitle>
+          <CardTitle>{m.sites_deployment_target()}</CardTitle>
           <CardDescription>
-            Provider is Dokploy. Without a target, releases are marked live
-            without deploying.
+            {m.sites_deployment_target_description()}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form className="grid gap-4" onSubmit={onTarget}>
-            <FormField label="Provider" htmlFor="deployment-provider">
+            <FormField label={m.sites_provider()} htmlFor="deployment-provider">
               <Input id="deployment-provider" value="Dokploy" readOnly />
             </FormField>
-            <FormField label="Application ID" htmlFor="application-id">
+            <FormField
+              label={m.sites_application_id()}
+              htmlFor="application-id"
+            >
               <Input
                 id="application-id"
                 data-testid="application-id"
@@ -359,12 +368,15 @@ function SiteSettingsPage() {
                 onChange={(event) => setApplicationId(event.target.value)}
               />
             </FormField>
-            <FormField label="Health check URL" htmlFor="health-check-url">
+            <FormField
+              label={m.sites_health_check_url()}
+              htmlFor="health-check-url"
+            >
               <Input
                 id="health-check-url"
                 data-testid="health-check-url"
                 type="url"
-                placeholder="https://example.com/health"
+                placeholder={m.sites_health_check_placeholder()}
                 value={displayHealth}
                 onChange={(event) => setHealthCheckUrl(event.target.value)}
               />
@@ -375,7 +387,9 @@ function SiteSettingsPage() {
                 data-testid="save-deployment-target"
                 disabled={targetMutation.isPending}
               >
-                {targetMutation.isPending ? 'Saving…' : 'Save target'}
+                {targetMutation.isPending
+                  ? m.sites_saving()
+                  : m.sites_save_target()}
               </Button>
               <Button
                 type="button"
@@ -383,7 +397,7 @@ function SiteSettingsPage() {
                 disabled={targetMutation.isPending || !site.deploymentTarget}
                 onClick={() => setClearTargetOpen(true)}
               >
-                Clear target
+                {m.sites_clear_target()}
               </Button>
             </div>
           </form>
@@ -392,20 +406,20 @@ function SiteSettingsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Site token</CardTitle>
+          <CardTitle>{m.sites_token()}</CardTitle>
           <CardDescription>
-            Customer builds authenticate with <code>ARECA_SITE_TOKEN</code> and{' '}
-            <code>ARECA_CMS_URL</code>. Rotating replaces the current token
-            immediately.
+            {m.sites_token_description_before()} <code>ARECA_SITE_TOKEN</code>{' '}
+            {m.sites_token_description_and()} <code>ARECA_CMS_URL</code>
+            {m.sites_token_description_after()}
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
           {rotatedToken ? <TokenAlert token={rotatedToken} /> : null}
           <div>
             <ConfirmDialog
-              title="Rotate site token?"
-              description="The current token stops working immediately. Any build or pull that still uses the old token will fail until ARECA_SITE_TOKEN is updated with the new one."
-              confirmLabel="Rotate token"
+              title={m.sites_rotate_token_title()}
+              description={m.sites_rotate_token_description()}
+              confirmLabel={m.sites_rotate_token()}
               variant="destructive"
               onConfirm={async () => {
                 await rotateMutation.mutateAsync()
@@ -416,7 +430,9 @@ function SiteSettingsPage() {
                 variant="outline"
                 disabled={rotateMutation.isPending}
               >
-                {rotateMutation.isPending ? 'Rotating…' : 'Rotate token'}
+                {rotateMutation.isPending
+                  ? m.sites_rotating()
+                  : m.sites_rotate_token()}
               </Button>
             </ConfirmDialog>
           </div>
@@ -426,11 +442,23 @@ function SiteSettingsPage() {
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-4">
           <div className="grid gap-1.5">
-            <CardTitle>Collections</CardTitle>
+            <CardTitle>{m.sites_collections()}</CardTitle>
             <CardDescription>
               {site.lastManifest
-                ? `Last manifest synced (${manifestKeys.length} collection${manifestKeys.length === 1 ? '' : 's'}${manifestKeys.length ? `: ${manifestKeys.join(', ')}` : ''}).`
-                : 'No manifest has been synced yet.'}
+                ? manifestKeys.length === 0
+                  ? m.sites_manifest_synced_empty({
+                      count: manifestKeys.length,
+                    })
+                  : manifestKeys.length === 1
+                    ? m.sites_manifest_synced_one({
+                        count: manifestKeys.length,
+                        keys: manifestKeys.join(', '),
+                      })
+                    : m.sites_manifest_synced_other({
+                        count: manifestKeys.length,
+                        keys: manifestKeys.join(', '),
+                      })
+                : m.sites_manifest_none()}
             </CardDescription>
           </div>
           <Button
@@ -439,13 +467,13 @@ function SiteSettingsPage() {
             onClick={() => openCollectionDialog(null)}
           >
             <Plus />
-            Add collection
+            {m.sites_add_collection()}
           </Button>
         </CardHeader>
         <CardContent>
           {collectionsQuery.isError ? (
             <QueryError
-              title="Could not load collections"
+              title={m.sites_collections_load_error()}
               error={collectionsQuery.error}
               onRetry={() => collectionsQuery.refetch()}
               retrying={collectionsQuery.isFetching}
@@ -456,13 +484,13 @@ function SiteSettingsPage() {
             <DataTable
               columns={collectionColumns}
               data={collections}
-              caption="Collections"
+              caption={m.sites_collections()}
             />
           ) : (
             <EmptyState
               icon={<Layers />}
-              title="No collections"
-              description="Add a collection or sync a site manifest."
+              title={m.sites_no_collections()}
+              description={m.sites_no_collections_description()}
             />
           )}
         </CardContent>
@@ -470,16 +498,14 @@ function SiteSettingsPage() {
 
       <Card className="border-destructive/40">
         <CardHeader>
-          <CardTitle>Danger zone</CardTitle>
-          <CardDescription>
-            Permanently delete this site and its content.
-          </CardDescription>
+          <CardTitle>{m.sites_danger_zone()}</CardTitle>
+          <CardDescription>{m.sites_danger_zone_description()}</CardDescription>
         </CardHeader>
         <CardContent>
           <ConfirmDialog
-            title="Delete site?"
-            description={`This permanently deletes "${site.name}" with all of its entries, media references, releases and settings. This cannot be undone.`}
-            confirmLabel="Delete site"
+            title={m.sites_delete_site_title()}
+            description={m.sites_delete_site_description({ name: site.name })}
+            confirmLabel={m.sites_delete_site()}
             confirmText={site.slug}
             variant="destructive"
             onConfirm={async () => {
@@ -491,7 +517,9 @@ function SiteSettingsPage() {
               variant="destructive"
               disabled={deleteMutation.isPending}
             >
-              {deleteMutation.isPending ? 'Deleting…' : 'Delete site'}
+              {deleteMutation.isPending
+                ? m.sites_deleting()
+                : m.sites_delete_site()}
             </Button>
           </ConfirmDialog>
         </CardContent>
@@ -508,9 +536,9 @@ function SiteSettingsPage() {
       <ConfirmDialog
         open={clearTargetOpen}
         onOpenChange={setClearTargetOpen}
-        title="Clear deployment target?"
-        description="Future releases will be marked live without deploying to Dokploy until a new target is saved."
-        confirmLabel="Clear target"
+        title={m.sites_clear_target_title()}
+        description={m.sites_clear_target_description()}
+        confirmLabel={m.sites_clear_target()}
         variant="destructive"
         onConfirm={async () => {
           await targetMutation.mutateAsync(null)

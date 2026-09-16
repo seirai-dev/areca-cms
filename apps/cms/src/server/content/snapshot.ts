@@ -10,6 +10,7 @@ import type {
   Snapshot,
   SnapshotEntry,
 } from '#/lib/types'
+import { m } from '#/paraglide/messages'
 import { resolveAssetValue } from '#/server/assets'
 import { convertRichText, validateRichText } from '#/server/richtext'
 
@@ -29,7 +30,8 @@ type IncludedEntry = {
 export async function buildSnapshot(
   siteId: string,
 ): Promise<
-  { ok: true; snapshot: Snapshot; hash: string } | { ok: false; errors: string[] }
+  | { ok: true; snapshot: Snapshot; hash: string }
+  | { ok: false; errors: string[] }
 > {
   const [existingSite] = await db
     .select()
@@ -37,7 +39,7 @@ export async function buildSnapshot(
     .where(eq(site.id, siteId))
     .limit(1)
   if (!existingSite) {
-    throw new NotFoundError('Site not found')
+    throw new NotFoundError(m.server_site_not_found())
   }
 
   const now = new Date()
@@ -55,10 +57,7 @@ export async function buildSnapshot(
           eq(entry.collectionId, col.id),
           or(
             eq(entry.status, 'published'),
-            and(
-              eq(entry.status, 'scheduled'),
-              lte(entry.scheduledAt, now),
-            ),
+            and(eq(entry.status, 'scheduled'), lte(entry.scheduledAt, now)),
           ),
         ),
       )
@@ -85,7 +84,8 @@ export async function buildSnapshot(
         fields: col.fields,
         row,
         data: parsed.data,
-        publishedAt: row.publishedAt ?? (isScheduledDue ? row.scheduledAt : null),
+        publishedAt:
+          row.publishedAt ?? (isScheduledDue ? row.scheduledAt : null),
       })
     }
   }
@@ -98,9 +98,7 @@ export async function buildSnapshot(
       slugsByCollection.set(item.collectionKey, slugs)
     }
     if (slugs.has(item.row.slug)) {
-      errors.push(
-        `${item.collectionKey}: duplicate slug "${item.row.slug}"`,
-      )
+      errors.push(`${item.collectionKey}: duplicate slug "${item.row.slug}"`)
     }
     slugs.add(item.row.slug)
   }

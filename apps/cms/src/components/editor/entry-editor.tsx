@@ -56,6 +56,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import { useMeasuredHeight } from '#/hooks/use-measured-height'
 import type { EntryData, EntryStatus, Field } from '#/lib/types'
 import { cn } from '#/lib/utils'
+import { m } from '#/paraglide/messages'
+import { getLocale } from '#/paraglide/runtime'
 import {
   archiveEntryFn,
   cancelScheduleFn,
@@ -252,7 +254,7 @@ export function EntryEditor({
         setData(next)
       }
       setSavedSnapshot(serverJson)
-      toast.success('Draft saved')
+      toast.success(m.editor_draft_saved())
       await invalidateEntry(saved.id)
       if (!entryId) {
         bypassBlockerRef.current = true
@@ -266,7 +268,9 @@ export function EntryEditor({
     onError: (error) => {
       const parsed = fieldErrorsFromUnknown(error)
       setFieldErrors(parsed.fieldErrors)
-      setFormError(parsed.formError ?? errorMessage(error, 'Could not save'))
+      setFormError(
+        parsed.formError ?? errorMessage(error, m.editor_could_not_save()),
+      )
     },
   })
 
@@ -287,10 +291,10 @@ export function EntryEditor({
   const publishMutation = useMutation({
     mutationFn: () => publishEntryFn({ data: { id: resolvedId! } }),
     onSuccess: async () => {
-      toast.success('Entry published', {
-        description: 'Publish the site to put it live.',
+      toast.success(m.editor_entry_published(), {
+        description: m.editor_entry_published_description(),
         action: {
-          label: 'Go to site',
+          label: m.editor_go_to_site(),
           onClick: () => {
             void navigate({ to: '/sites/$siteId', params: { siteId } })
           },
@@ -302,7 +306,7 @@ export function EntryEditor({
       const parsed = fieldErrorsFromUnknown(error)
       setFieldErrors(parsed.fieldErrors)
       const message =
-        parsed.formError ?? errorMessage(error, 'Could not publish')
+        parsed.formError ?? errorMessage(error, m.editor_could_not_publish())
       setFormError(message)
       toast.error(message)
     },
@@ -311,19 +315,21 @@ export function EntryEditor({
   const unpublishMutation = useMutation({
     mutationFn: () => unpublishEntryFn({ data: { id: resolvedId! } }),
     onSuccess: async () => {
-      toast.success('Entry unpublished')
+      toast.success(m.editor_entry_unpublished())
       await invalidateEntry(resolvedId!)
     },
-    onError: (error) => toast.error(errorMessage(error, 'Could not unpublish')),
+    onError: (error) =>
+      toast.error(errorMessage(error, m.editor_could_not_unpublish())),
   })
 
   const archiveMutation = useMutation({
     mutationFn: () => archiveEntryFn({ data: { id: resolvedId! } }),
     onSuccess: async () => {
-      toast.success('Entry archived')
+      toast.success(m.editor_entry_archived())
       await invalidateEntry(resolvedId!)
     },
-    onError: (error) => toast.error(errorMessage(error, 'Could not archive')),
+    onError: (error) =>
+      toast.error(errorMessage(error, m.editor_could_not_archive())),
   })
 
   const scheduleMutation = useMutation({
@@ -337,26 +343,27 @@ export function EntryEditor({
       }),
     onSuccess: async () => {
       setScheduleOpen(false)
-      toast.success('Publish scheduled')
+      toast.success(m.editor_publish_scheduled())
       await invalidateEntry(resolvedId!)
     },
-    onError: (error) => toast.error(errorMessage(error, 'Could not schedule')),
+    onError: (error) =>
+      toast.error(errorMessage(error, m.editor_could_not_schedule())),
   })
 
   const cancelScheduleMutation = useMutation({
     mutationFn: () => cancelScheduleFn({ data: { id: resolvedId! } }),
     onSuccess: async () => {
-      toast.success('Schedule cancelled')
+      toast.success(m.editor_schedule_cancelled())
       await invalidateEntry(resolvedId!)
     },
     onError: (error) =>
-      toast.error(errorMessage(error, 'Could not cancel the schedule')),
+      toast.error(errorMessage(error, m.editor_could_not_cancel_schedule())),
   })
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteEntryFn({ data: { id: resolvedId! } }),
     onSuccess: async () => {
-      toast.success('Entry deleted')
+      toast.success(m.editor_entry_deleted())
       await queryClient.invalidateQueries({
         queryKey: ['entries', siteId, collectionKey],
       })
@@ -366,7 +373,8 @@ export function EntryEditor({
         params: { siteId, collectionKey },
       })
     },
-    onError: (error) => toast.error(errorMessage(error, 'Could not delete')),
+    onError: (error) =>
+      toast.error(errorMessage(error, m.editor_could_not_delete())),
   })
 
   const restoreMutation = useMutation({
@@ -375,10 +383,11 @@ export function EntryEditor({
     onSuccess: async () => {
       setRestoreId(null)
       setEditorTab('edit')
-      toast.success('Revision restored')
+      toast.success(m.editor_revision_restored())
       await invalidateEntry(resolvedId!)
     },
-    onError: (error) => toast.error(errorMessage(error, 'Could not restore')),
+    onError: (error) =>
+      toast.error(errorMessage(error, m.editor_could_not_restore())),
   })
 
   const previewQuery = useQuery({
@@ -397,9 +406,9 @@ export function EntryEditor({
   const heading = useMemo(() => {
     const title = titleField ? data[titleField.key] : ''
     if (typeof title === 'string' && title.trim()) return title
-    if (isNew) return 'New entry'
-    return entry?.slug ?? 'Entry'
-  }, [data, entry?.slug, isNew, titleField])
+    if (isNew) return m.editor_new_entry()
+    return entry?.slug ?? m.editor_entry()
+  }, [data, entry?.slug, isNew, titleField, getLocale()])
 
   const [barEl, setBarEl] = useState<HTMLDivElement | null>(null)
   const barHeight = useMeasuredHeight(barEl)
@@ -409,7 +418,7 @@ export function EntryEditor({
       <div className="grid gap-4">
         <QueryError
           error={entryQuery.error}
-          title="Could not load this entry"
+          title={m.editor_could_not_load_entry()}
           onRetry={() => entryQuery.refetch()}
           retrying={entryQuery.isFetching}
         />
@@ -419,7 +428,7 @@ export function EntryEditor({
             params={{ siteId, collectionKey }}
           >
             <ArrowLeft />
-            Back to {collectionLabel}
+            {m.editor_back_to({ name: collectionLabel })}
           </Link>
         </Button>
       </div>
@@ -470,7 +479,7 @@ export function EntryEditor({
         className="inline-flex w-fit items-center gap-1 text-sm text-muted-foreground no-underline hover:text-foreground"
       >
         <ArrowLeft className="size-4" />
-        Back to {collectionLabel}
+        {m.editor_back_to({ name: collectionLabel })}
       </Link>
 
       {/* Sticky action bar: stays visible while scrolling long forms. */}
@@ -490,7 +499,7 @@ export function EntryEditor({
               {saving ? (
                 <span className="inline-flex items-center gap-1">
                   <Loader2 className="size-3 animate-spin" />
-                  Saving…
+                  {m.editor_saving()}
                 </span>
               ) : dirty ? (
                 <span
@@ -498,12 +507,12 @@ export function EntryEditor({
                   data-testid="entry-dirty"
                 >
                   <span className="size-1.5 rounded-full bg-current" />
-                  Unsaved changes
+                  {m.editor_unsaved_changes()}
                 </span>
               ) : isNew ? (
-                <span>Not saved yet</span>
+                <span>{m.editor_not_saved_yet()}</span>
               ) : (
-                <span>All changes saved</span>
+                <span>{m.editor_all_changes_saved()}</span>
               )}
             </p>
           </div>
@@ -514,10 +523,12 @@ export function EntryEditor({
               onClick={() => save()}
               disabled={saving}
               data-testid="save-draft"
-              title={`Save draft (${isMac ? '⌘' : 'Ctrl+'}S)`}
+              title={m.editor_save_draft_shortcut({
+                shortcut: `${isMac ? '⌘' : 'Ctrl+'}S`,
+              })}
             >
               {saving ? <Loader2 className="animate-spin" /> : <Save />}
-              {saving ? 'Saving…' : 'Save draft'}
+              {saving ? m.editor_saving() : m.editor_save_draft()}
             </Button>
             {previewUrl ? (
               <Button asChild variant="outline">
@@ -528,7 +539,7 @@ export function EntryEditor({
                   data-testid="preview-entry"
                 >
                   <ExternalLink />
-                  Preview
+                  {m.editor_preview()}
                 </a>
               </Button>
             ) : (
@@ -537,10 +548,10 @@ export function EntryEditor({
                 variant="outline"
                 disabled
                 data-testid="preview-entry"
-                title={isNew ? 'Save the draft first to preview it' : undefined}
+                title={isNew ? m.editor_preview_save_first() : undefined}
               >
                 <ExternalLink />
-                Preview
+                {m.editor_preview()}
               </Button>
             )}
             <DropdownMenu>
@@ -550,27 +561,27 @@ export function EntryEditor({
                   variant="secondary"
                   data-testid="publish-menu"
                   disabled={isNew}
-                  title={isNew ? 'Save the draft first' : undefined}
+                  title={isNew ? m.editor_save_draft_first() : undefined}
                 >
                   {anyActionPending ? (
                     <Loader2 className="animate-spin" />
                   ) : null}
-                  Publish
+                  {m.editor_publish()}
                   <ChevronDown />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel className="text-xs text-muted-foreground">
                   {dirty
-                    ? 'Save your draft first, then publish.'
-                    : 'Publishing makes the saved draft the live version.'}
+                    ? m.editor_publish_save_first_hint()
+                    : m.editor_publish_makes_live_hint()}
                 </DropdownMenuLabel>
                 <DropdownMenuItem
                   disabled={!actionsReady || publishMutation.isPending}
                   data-testid="publish-now"
                   onSelect={() => publishMutation.mutate()}
                 >
-                  Publish now
+                  {m.editor_publish_now()}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   disabled={!actionsReady}
@@ -582,7 +593,7 @@ export function EntryEditor({
                   }}
                 >
                   <CalendarClock />
-                  Schedule…
+                  {m.editor_schedule_ellipsis()}
                 </DropdownMenuItem>
                 {entry?.status === 'scheduled' ? (
                   <DropdownMenuItem
@@ -590,7 +601,7 @@ export function EntryEditor({
                     data-testid="cancel-schedule"
                     onSelect={() => cancelScheduleMutation.mutate()}
                   >
-                    Cancel schedule
+                    {m.editor_cancel_schedule()}
                   </DropdownMenuItem>
                 ) : null}
                 <DropdownMenuSeparator />
@@ -598,13 +609,13 @@ export function EntryEditor({
                   disabled={!actionsReady || entry?.status !== 'published'}
                   onSelect={() => unpublishMutation.mutate()}
                 >
-                  Unpublish
+                  {m.editor_unpublish()}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   disabled={!actionsReady || entry?.status === 'archived'}
                   onSelect={() => archiveMutation.mutate()}
                 >
-                  Archive
+                  {m.editor_archive()}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
@@ -612,7 +623,7 @@ export function EntryEditor({
                   variant="destructive"
                   onSelect={() => setDeleteOpen(true)}
                 >
-                  Delete…
+                  {m.editor_delete_ellipsis()}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -630,10 +641,10 @@ export function EntryEditor({
 
           <Tabs value={editorTab} onValueChange={setEditorTab}>
             <TabsList>
-              <TabsTrigger value="edit">Edit</TabsTrigger>
+              <TabsTrigger value="edit">{m.editor_edit()}</TabsTrigger>
               <TabsTrigger value="revisions" disabled={isNew}>
                 <History />
-                Revisions
+                {m.editor_revisions()}
                 {revisions.length > 0 ? (
                   <span className="rounded-full bg-muted px-1.5 text-xs text-muted-foreground">
                     {revisions.length}
@@ -660,14 +671,13 @@ export function EntryEditor({
               ) : revisionsQuery.isError ? (
                 <QueryError
                   error={revisionsQuery.error}
-                  title="Could not load revisions"
+                  title={m.editor_could_not_load_revisions()}
                   onRetry={() => revisionsQuery.refetch()}
                   retrying={revisionsQuery.isFetching}
                 />
               ) : revisions.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  No revisions yet. A revision is recorded each time you save or
-                  publish.
+                  {m.editor_no_revisions_yet()}
                 </p>
               ) : (
                 <ul className="grid gap-2">
@@ -681,7 +691,7 @@ export function EntryEditor({
                           {formatDateTime(revision.createdAt)}
                           {index === 0 ? (
                             <span className="ml-2 text-xs font-normal text-muted-foreground">
-                              Latest
+                              {m.editor_latest()}
                             </span>
                           ) : null}
                         </p>
@@ -697,7 +707,7 @@ export function EntryEditor({
                         variant="outline"
                         onClick={() => setRestoreId(revision.id)}
                       >
-                        Restore
+                        {m.editor_restore()}
                       </Button>
                     </li>
                   ))}
@@ -710,13 +720,13 @@ export function EntryEditor({
         <aside
           className="grid gap-4 lg:sticky"
           style={{ top: `calc(var(--app-header-h) + ${barHeight}px + 1.5rem)` }}
-          aria-label="Entry details"
+          aria-label={m.editor_entry_details()}
         >
           <div className="border-t pt-4">
-            <h2 className="mb-3 text-sm font-semibold">Details</h2>
+            <h2 className="mb-3 text-sm font-semibold">{m.editor_details()}</h2>
             <dl className="grid gap-2.5 text-sm">
               <div className="flex items-center justify-between gap-3">
-                <dt className="text-muted-foreground">Status</dt>
+                <dt className="text-muted-foreground">{m.editor_status()}</dt>
                 <dd>
                   <EntryStatusBadge status={persistedStatus} />
                 </dd>
@@ -724,29 +734,35 @@ export function EntryEditor({
               {entry ? (
                 <>
                   <div className="flex items-center justify-between gap-3">
-                    <dt className="text-muted-foreground">Updated</dt>
+                    <dt className="text-muted-foreground">
+                      {m.editor_updated()}
+                    </dt>
                     <dd className="text-right">
                       {formatDateTime(entry.updatedAt)}
                     </dd>
                   </div>
                   <div className="flex items-center justify-between gap-3">
-                    <dt className="text-muted-foreground">Published</dt>
+                    <dt className="text-muted-foreground">
+                      {m.editor_published()}
+                    </dt>
                     <dd className="text-right">
                       {entry.publishedAt
                         ? formatDateTime(entry.publishedAt)
-                        : 'Never'}
+                        : m.editor_never()}
                     </dd>
                   </div>
                   {entry.scheduledAt ? (
                     <div className="flex items-center justify-between gap-3">
-                      <dt className="text-muted-foreground">Scheduled</dt>
+                      <dt className="text-muted-foreground">
+                        {m.editor_status_scheduled()}
+                      </dt>
                       <dd className="text-right">
                         {formatDateTime(entry.scheduledAt)}
                       </dd>
                     </div>
                   ) : null}
                   <div className="flex items-center justify-between gap-3">
-                    <dt className="text-muted-foreground">Slug</dt>
+                    <dt className="text-muted-foreground">{m.editor_slug()}</dt>
                     <dd
                       className="truncate font-mono text-xs"
                       title={entry.slug}
@@ -757,7 +773,7 @@ export function EntryEditor({
                 </>
               ) : (
                 <p className="text-muted-foreground">
-                  Save the draft to enable preview, publishing, and revisions.
+                  {m.editor_save_draft_to_enable()}
                 </p>
               )}
             </dl>
@@ -770,14 +786,14 @@ export function EntryEditor({
                 disabled={cancelScheduleMutation.isPending}
                 onClick={() => cancelScheduleMutation.mutate()}
               >
-                Cancel schedule
+                {m.editor_cancel_schedule()}
               </Button>
             ) : null}
           </div>
           <p className={cn('px-1 text-xs text-muted-foreground')}>
             {entry?.status === 'published'
-              ? 'Saved draft changes are not live until you publish the entry again and then publish the site.'
-              : 'Publishing an entry only affects the next site release. Use “Publish site” on the Content page to deploy.'}
+              ? m.editor_published_draft_hint()
+              : m.editor_unpublished_draft_hint()}
           </p>
         </aside>
       </div>
@@ -785,14 +801,14 @@ export function EntryEditor({
       <Dialog open={scheduleOpen} onOpenChange={setScheduleOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Schedule publish</DialogTitle>
+            <DialogTitle>{m.editor_schedule_publish()}</DialogTitle>
             <DialogDescription>
-              The saved draft is published automatically at this time.
+              {m.editor_schedule_publish_description()}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
             <div className="grid gap-1.5">
-              <Label htmlFor="schedule-at">Publish at</Label>
+              <Label htmlFor="schedule-at">{m.editor_publish_at()}</Label>
               <Input
                 id="schedule-at"
                 type="datetime-local"
@@ -802,7 +818,7 @@ export function EntryEditor({
               />
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="schedule-tz">Time zone</Label>
+              <Label htmlFor="schedule-tz">{m.editor_time_zone()}</Label>
               <Select value={scheduleTz} onValueChange={setScheduleTz}>
                 <SelectTrigger className="w-full" id="schedule-tz">
                   <SelectValue />
@@ -823,7 +839,7 @@ export function EntryEditor({
               variant="outline"
               onClick={() => setScheduleOpen(false)}
             >
-              Cancel
+              {m.editor_cancel()}
             </Button>
             <Button
               type="button"
@@ -831,7 +847,9 @@ export function EntryEditor({
               disabled={!scheduleAt || scheduleMutation.isPending}
               onClick={() => scheduleMutation.mutate()}
             >
-              {scheduleMutation.isPending ? 'Scheduling…' : 'Schedule'}
+              {scheduleMutation.isPending
+                ? m.editor_scheduling()
+                : m.editor_schedule()}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -840,9 +858,9 @@ export function EntryEditor({
       <ConfirmDialog
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
-        title="Delete this entry?"
-        description="The entry and all of its revisions are removed. This cannot be undone."
-        confirmLabel="Delete"
+        title={m.editor_delete_entry_title()}
+        description={m.editor_delete_entry_description()}
+        confirmLabel={m.editor_delete()}
         variant="destructive"
         onConfirm={async () => {
           await deleteMutation.mutateAsync()
@@ -854,9 +872,9 @@ export function EntryEditor({
         onOpenChange={(open) => {
           if (!open) setRestoreId(null)
         }}
-        title="Restore this revision?"
-        description="The current draft is replaced with this revision. Your current draft is kept as a revision, so you can go back."
-        confirmLabel="Restore"
+        title={m.editor_restore_revision_title()}
+        description={m.editor_restore_revision_description()}
+        confirmLabel={m.editor_restore()}
         onConfirm={async () => {
           if (restoreId) await restoreMutation.mutateAsync(restoreId)
         }}
@@ -865,22 +883,23 @@ export function EntryEditor({
       <AlertDialog open={blocker.status === 'blocked'}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Leave without saving?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {m.editor_leave_without_saving()}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              You have unsaved changes to this entry. If you leave now they are
-              lost.
+              {m.editor_leave_without_saving_description()}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => blocker.reset?.()}>
-              Stay
+              {m.editor_stay()}
             </AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
               onClick={() => blocker.proceed?.()}
               data-testid="discard-changes"
             >
-              Discard changes
+              {m.editor_discard_changes()}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

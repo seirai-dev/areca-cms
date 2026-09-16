@@ -37,6 +37,7 @@ import {
 } from '#/components/ui/tooltip'
 import { richTextExtensions } from '#/server/richtext/extensions'
 import { isAllowedLinkHref } from '#/server/richtext/allowlist'
+import { m } from '#/paraglide/messages'
 
 import { MediaPickerDialog } from './media-picker'
 import type { MediaAsset } from './media-picker'
@@ -209,7 +210,7 @@ export function RichTextEditor({
     }
     if (!/^[a-z]+:/i.test(href)) href = `https://${href}`
     if (!isAllowedLinkHref(href)) {
-      setLinkError('Enter a valid http(s) or mailto link.')
+      setLinkError(m.editor_link_invalid())
       return
     }
     const { from, to, empty } = editor.state.selection
@@ -254,17 +255,17 @@ export function RichTextEditor({
         className="sticky z-10 flex flex-wrap items-center gap-0.5 rounded-t-md border-b bg-card/95 p-1 backdrop-blur supports-[backdrop-filter]:bg-card/80"
         style={{ top: 'var(--rich-text-toolbar-top, var(--app-header-h))' }}
         role="toolbar"
-        aria-label="Formatting"
+        aria-label={m.editor_toolbar_formatting()}
       >
         <ToolbarButton
-          label="Paragraph"
+          label={m.editor_toolbar_paragraph()}
           active={state.paragraph}
           onClick={() => chain().setParagraph().run()}
         >
           <Pilcrow />
         </ToolbarButton>
         <ToolbarButton
-          label="Heading 2"
+          label={m.editor_toolbar_heading_2()}
           shortcut={`${mod}⌥2`}
           active={state.h2}
           onClick={() => chain().toggleHeading({ level: 2 }).run()}
@@ -272,7 +273,7 @@ export function RichTextEditor({
           <Heading2 />
         </ToolbarButton>
         <ToolbarButton
-          label="Heading 3"
+          label={m.editor_toolbar_heading_3()}
           shortcut={`${mod}⌥3`}
           active={state.h3}
           onClick={() => chain().toggleHeading({ level: 3 }).run()}
@@ -280,7 +281,7 @@ export function RichTextEditor({
           <Heading3 />
         </ToolbarButton>
         <ToolbarButton
-          label="Heading 4"
+          label={m.editor_toolbar_heading_4()}
           shortcut={`${mod}⌥4`}
           active={state.h4}
           onClick={() => chain().toggleHeading({ level: 4 }).run()}
@@ -289,7 +290,7 @@ export function RichTextEditor({
         </ToolbarButton>
         <ToolbarSeparator />
         <ToolbarButton
-          label="Bold"
+          label={m.editor_toolbar_bold()}
           shortcut={`${mod}B`}
           active={state.bold}
           onClick={() => chain().toggleBold().run()}
@@ -297,7 +298,7 @@ export function RichTextEditor({
           <Bold />
         </ToolbarButton>
         <ToolbarButton
-          label="Italic"
+          label={m.editor_toolbar_italic()}
           shortcut={`${mod}I`}
           active={state.italic}
           onClick={() => chain().toggleItalic().run()}
@@ -307,7 +308,11 @@ export function RichTextEditor({
         <Popover open={linkOpen} onOpenChange={setLinkOpen}>
           <PopoverTrigger asChild>
             <ToolbarButton
-              label={state.link ? 'Edit link' : 'Link'}
+              label={
+                state.link
+                  ? m.editor_toolbar_edit_link()
+                  : m.editor_toolbar_link()
+              }
               shortcut={`${mod}K`}
               active={state.link}
               onClick={openLinkEditor}
@@ -319,7 +324,9 @@ export function RichTextEditor({
           <PopoverContent align="start" className="w-80">
             <form className="grid gap-3" onSubmit={applyLink}>
               <div className="grid gap-1.5">
-                <Label htmlFor="rich-text-link-url">Link URL</Label>
+                <Label htmlFor="rich-text-link-url">
+                  {m.editor_link_url()}
+                </Label>
                 <Input
                   id="rich-text-link-url"
                   autoFocus
@@ -337,7 +344,7 @@ export function RichTextEditor({
                   </p>
                 ) : (
                   <p className="text-xs text-muted-foreground">
-                    Links open in a new tab on the live site.
+                    {m.editor_link_opens_new_tab()}
                   </p>
                 )}
               </div>
@@ -353,13 +360,13 @@ export function RichTextEditor({
                     }}
                   >
                     <Link2Off />
-                    Remove
+                    {m.editor_remove()}
                   </Button>
                 ) : (
                   <span />
                 )}
                 <Button type="submit" size="sm">
-                  {state.link ? 'Update' : 'Add link'}
+                  {state.link ? m.editor_update() : m.editor_add_link()}
                 </Button>
               </div>
             </form>
@@ -367,7 +374,7 @@ export function RichTextEditor({
         </Popover>
         <ToolbarSeparator />
         <ToolbarButton
-          label="Bullet list"
+          label={m.editor_toolbar_bullet_list()}
           shortcut={`${mod}⇧8`}
           active={state.bulletList}
           onClick={() => chain().toggleBulletList().run()}
@@ -375,7 +382,7 @@ export function RichTextEditor({
           <List />
         </ToolbarButton>
         <ToolbarButton
-          label="Numbered list"
+          label={m.editor_toolbar_numbered_list()}
           shortcut={`${mod}⇧7`}
           active={state.orderedList}
           onClick={() => chain().toggleOrderedList().run()}
@@ -383,7 +390,7 @@ export function RichTextEditor({
           <ListOrdered />
         </ToolbarButton>
         <ToolbarButton
-          label="Quote"
+          label={m.editor_toolbar_quote()}
           shortcut={`${mod}⇧B`}
           active={state.blockquote}
           onClick={() => chain().toggleBlockquote().run()}
@@ -391,7 +398,7 @@ export function RichTextEditor({
           <Quote />
         </ToolbarButton>
         <ToolbarButton
-          label="Code block"
+          label={m.editor_toolbar_code_block()}
           shortcut={`${mod}⌥C`}
           active={state.codeBlock}
           onClick={() => chain().toggleCodeBlock().run()}
@@ -399,18 +406,21 @@ export function RichTextEditor({
           <Code />
         </ToolbarButton>
         <ToolbarSeparator />
-        <ToolbarButton label="Insert image" onClick={() => setPickerOpen(true)}>
+        <ToolbarButton
+          label={m.editor_toolbar_insert_image()}
+          onClick={() => setPickerOpen(true)}
+        >
           <ImageIcon />
         </ToolbarButton>
         <ToolbarButton
-          label="Divider"
+          label={m.editor_toolbar_divider()}
           onClick={() => chain().setHorizontalRule().run()}
         >
           <Minus />
         </ToolbarButton>
         <div className="ml-auto flex items-center gap-0.5">
           <ToolbarButton
-            label="Undo"
+            label={m.editor_toolbar_undo()}
             shortcut={`${mod}Z`}
             disabled={!state.canUndo}
             onClick={() => chain().undo().run()}
@@ -418,7 +428,7 @@ export function RichTextEditor({
             <Undo2 />
           </ToolbarButton>
           <ToolbarButton
-            label="Redo"
+            label={m.editor_toolbar_redo()}
             shortcut={`${mod}⇧Z`}
             disabled={!state.canRedo}
             onClick={() => chain().redo().run()}
@@ -434,7 +444,7 @@ export function RichTextEditor({
             aria-hidden="true"
             className="pointer-events-none absolute top-3 left-4 text-sm text-muted-foreground"
           >
-            Start writing…
+            {m.editor_start_writing()}
           </p>
         ) : null}
         <EditorContent editor={editor} />
@@ -450,21 +460,23 @@ export function RichTextEditor({
         className="z-40 flex items-center gap-0.5 rounded-md border bg-popover p-0.5 text-popover-foreground shadow-md"
       >
         <ToolbarButton
-          label="Bold"
+          label={m.editor_toolbar_bold()}
           active={state.bold}
           onClick={() => chain().toggleBold().run()}
         >
           <Bold />
         </ToolbarButton>
         <ToolbarButton
-          label="Italic"
+          label={m.editor_toolbar_italic()}
           active={state.italic}
           onClick={() => chain().toggleItalic().run()}
         >
           <Italic />
         </ToolbarButton>
         <ToolbarButton
-          label={state.link ? 'Edit link' : 'Link'}
+          label={
+            state.link ? m.editor_toolbar_edit_link() : m.editor_toolbar_link()
+          }
           active={state.link}
           onClick={openLinkEditor}
         >
@@ -472,14 +484,14 @@ export function RichTextEditor({
         </ToolbarButton>
         <ToolbarSeparator />
         <ToolbarButton
-          label="Heading 2"
+          label={m.editor_toolbar_heading_2()}
           active={state.h2}
           onClick={() => chain().toggleHeading({ level: 2 }).run()}
         >
           <Heading2 />
         </ToolbarButton>
         <ToolbarButton
-          label="Heading 3"
+          label={m.editor_toolbar_heading_3()}
           active={state.h3}
           onClick={() => chain().toggleHeading({ level: 3 }).run()}
         >

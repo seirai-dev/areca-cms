@@ -2,6 +2,7 @@ import { eq, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { membership, organization, site } from '#/db/schema'
+import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
 import { ConflictError, NotFoundError } from '#/server/content/errors'
 
@@ -55,7 +56,7 @@ export async function createOrganization(input: {
     .where(eq(organization.slug, input.slug))
     .limit(1)
   if (existing) {
-    throw new ConflictError('Slug already exists')
+    throw new ConflictError(m.server_slug_already_exists())
   }
 
   const [created] = await db
@@ -63,7 +64,7 @@ export async function createOrganization(input: {
     .values({ name: input.name, slug: input.slug })
     .returning()
   if (!created) {
-    throw new Error('Failed to create organization')
+    throw new Error(m.server_failed_to_create_organization())
   }
 
   await audit({
@@ -81,7 +82,7 @@ export async function createOrganization(input: {
 export async function updateOrganization(id: string, input: { name: string }) {
   const existing = await getOrganization(id)
   if (!existing) {
-    throw new NotFoundError('Organization not found')
+    throw new NotFoundError(m.server_organization_not_found())
   }
 
   const [updated] = await db
@@ -90,7 +91,7 @@ export async function updateOrganization(id: string, input: { name: string }) {
     .where(eq(organization.id, id))
     .returning()
   if (!updated) {
-    throw new NotFoundError('Organization not found')
+    throw new NotFoundError(m.server_organization_not_found())
   }
 
   await audit({
@@ -106,7 +107,7 @@ export async function updateOrganization(id: string, input: { name: string }) {
 export async function deleteOrganization(id: string) {
   const existing = await getOrganization(id)
   if (!existing) {
-    throw new NotFoundError('Organization not found')
+    throw new NotFoundError(m.server_organization_not_found())
   }
 
   const [siteRow] = await db
@@ -115,7 +116,7 @@ export async function deleteOrganization(id: string) {
     .where(eq(site.organizationId, id))
     .limit(1)
   if (siteRow) {
-    throw new ConflictError('Cannot delete an organization that has sites')
+    throw new ConflictError(m.server_cannot_delete_org_with_sites())
   }
 
   await db.delete(organization).where(eq(organization.id, id))

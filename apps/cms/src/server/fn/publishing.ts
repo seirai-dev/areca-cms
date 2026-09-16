@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { db } from '#/db'
 import { site } from '#/db/schema'
 import { requireOrgMember } from '#/lib/session.server'
+import { m } from '#/paraglide/messages'
 import { NotFoundError } from '#/server/content/errors'
 import {
   cancelJob,
@@ -25,7 +26,7 @@ async function requireSiteAccess(siteId: string) {
     .where(eq(site.id, siteId))
     .limit(1)
   if (!found) {
-    throw new NotFoundError('Site not found')
+    throw new NotFoundError(m.server_site_not_found())
   }
   const session = await requireOrgMember(found.organizationId)
   return { session, site: found }
@@ -34,7 +35,7 @@ async function requireSiteAccess(siteId: string) {
 async function requireJobAccess(jobId: string) {
   const job = await getBuildJob(jobId)
   if (!job) {
-    throw new NotFoundError('Build job not found')
+    throw new NotFoundError(m.server_build_job_not_found())
   }
   const access = await requireSiteAccess(job.siteId)
   return { ...access, job }

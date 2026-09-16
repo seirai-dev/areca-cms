@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { db } from '#/db'
 import { entry } from '#/db/schema'
 import type { EntryData, Field } from '#/lib/types'
+import { m } from '#/paraglide/messages'
 import { validateRichText } from '#/server/richtext'
 
 import { getCollection } from './collections.ts'
@@ -16,8 +17,7 @@ const ISO_DATETIME =
 export type FieldError = { path: string; message: string }
 
 export type ValidateEntryResult =
-  | { ok: true; data: EntryData }
-  | { ok: false; errors: FieldError[] }
+  { ok: true; data: EntryData } | { ok: false; errors: FieldError[] }
 
 export type SchemaMode = 'strict' | 'partial'
 
@@ -35,7 +35,9 @@ export function isEmptyRichText(value: unknown): boolean {
   return content.every((node) => {
     if (!node || typeof node !== 'object' || Array.isArray(node)) return false
     const item = node as { type?: string; content?: unknown[] }
-    return item.type === 'paragraph' && (!item.content || item.content.length === 0)
+    return (
+      item.type === 'paragraph' && (!item.content || item.content.length === 0)
+    )
   })
 }
 
@@ -60,18 +62,18 @@ function schemaForField(field: Field, mode: SchemaMode): z.ZodType {
     case 'text':
     case 'textarea':
       if (field.required) {
-        return z.string().min(1, 'Required')
+        return z.string().min(1, m.server_required())
       }
       return wrap(z.string(), field, mode, true)
     case 'slug':
       if (field.required) {
         return z
           .string()
-          .min(1, 'Required')
-          .regex(SLUG_PATTERN, 'Invalid slug')
+          .min(1, m.server_required())
+          .regex(SLUG_PATTERN, m.server_invalid_slug())
       }
       return wrap(
-        z.string().regex(SLUG_PATTERN, 'Invalid slug'),
+        z.string().regex(SLUG_PATTERN, m.server_invalid_slug()),
         field,
         mode,
         true,
@@ -80,7 +82,7 @@ function schemaForField(field: Field, mode: SchemaMode): z.ZodType {
       const richtext = z.any().superRefine((value, ctx) => {
         if (isEmptyRichText(value)) {
           if (mode === 'strict' && field.required) {
-            ctx.addIssue({ code: 'custom', message: 'Required' })
+            ctx.addIssue({ code: 'custom', message: m.server_required() })
           }
           return
         }
@@ -96,9 +98,7 @@ function schemaForField(field: Field, mode: SchemaMode): z.ZodType {
     case 'image':
     case 'reference':
       return wrap(
-        field.required && mode === 'strict'
-          ? z.string().min(1)
-          : z.string(),
+        field.required && mode === 'strict' ? z.string().min(1) : z.string(),
         field,
         mode,
         true,
@@ -107,7 +107,9 @@ function schemaForField(field: Field, mode: SchemaMode): z.ZodType {
       return wrap(z.iso.date(), field, mode, true)
     case 'datetime':
       return wrap(
-        z.string().refine(isIsoDateTime, { message: 'Invalid datetime' }),
+        z.string().refine(isIsoDateTime, {
+          message: m.server_invalid_datetime(),
+        }),
         field,
         mode,
         true,
@@ -116,11 +118,11 @@ function schemaForField(field: Field, mode: SchemaMode): z.ZodType {
       const options = field.options ?? []
       const selectSchema =
         options.length > 0
-          ? z
-              .string()
-              .refine((value) => options.includes(value), {
-                message: `Must be one of: ${options.join(', ')}`,
-              })
+          ? z.string().refine((value) => options.includes(value), {
+              message: m.server_select_must_be_one_of({
+                options: options.join(', '),
+              }),
+            })
           : z.string()
       return wrap(selectSchema, field, mode, true)
     }
@@ -130,17 +132,22 @@ function schemaForField(field: Field, mode: SchemaMode): z.ZodType {
       return wrap(z.number(), field, mode, false)
     case 'url':
       return wrap(
-        z.string().url().refine(
-          (value) => {
-            try {
-              const parsed = new URL(value)
-              return parsed.protocol === 'http:' || parsed.protocol === 'https:'
-            } catch {
-              return false
-            }
-          },
-          { message: 'Invalid URL' },
-        ),
+        z
+          .string()
+          .url()
+          .refine(
+            (value) => {
+              try {
+                const parsed = new URL(value)
+                return (
+                  parsed.protocol === 'http:' || parsed.protocol === 'https:'
+                )
+              } catch {
+                return false
+              }
+            },
+            { message: m.server_invalid_url() },
+          ),
         field,
         mode,
         true,
@@ -166,7 +173,10 @@ export function validateEntryData(
   options: { mode?: SchemaMode } = {},
 ): ValidateEntryResult {
   if (data == null || typeof data !== 'object' || Array.isArray(data)) {
-    return { ok: false, errors: [{ path: '', message: 'Expected an object' }] }
+    return {
+      ok: false,
+      errors: [{ path: '', message: m.server_expected_object() }],
+    }
   }
 
   const result = buildEntrySchema(fields, options).safeParse(data)
@@ -202,7 +212,7 @@ function validateDateOrder(fields: Field[], data: EntryData): FieldError[] {
     if (Date.parse(value) < Date.parse(other)) {
       errors.push({
         path: field.key,
-        message: `Must be on or after ${field.after}`,
+        message: m.server_must_be_on_or_after({ path: field.after }),
       })
     }
   }
@@ -221,13 +231,16 @@ export async function validateReferences(
     const value = data[field.key]
     if (value == null || value === '') continue
     if (typeof value !== 'string') {
-      errors.push({ path: field.key, message: 'Expected an entry id' })
+      errors.push({
+        path: field.key,
+        message: m.server_expected_entry_id(),
+      })
       continue
     }
     if (!field.collection) {
       errors.push({
         path: field.key,
-        message: 'Reference field is missing a collection',
+        message: m.server_reference_missing_collection(),
       })
       continue
     }
@@ -236,7 +249,9 @@ export async function validateReferences(
     if (!refCollection) {
       errors.push({
         path: field.key,
-        message: `Unknown collection "${field.collection}"`,
+        message: m.server_unknown_collection({
+          collection: field.collection,
+        }),
       })
       continue
     }
@@ -244,19 +259,20 @@ export async function validateReferences(
     const [ref] = await db
       .select({ id: entry.id, status: entry.status })
       .from(entry)
-      .where(
-        and(eq(entry.id, value), eq(entry.collectionId, refCollection.id)),
-      )
+      .where(and(eq(entry.id, value), eq(entry.collectionId, refCollection.id)))
       .limit(1)
 
     if (!ref) {
-      errors.push({ path: field.key, message: 'Referenced entry not found' })
+      errors.push({
+        path: field.key,
+        message: m.server_referenced_entry_not_found(),
+      })
       continue
     }
     if (ref.status !== 'published') {
       errors.push({
         path: field.key,
-        message: 'Referenced entry is not published',
+        message: m.server_referenced_entry_not_published(),
       })
     }
   }
@@ -264,7 +280,10 @@ export async function validateReferences(
   return errors
 }
 
-export function resolveSlug(data: EntryData, fields: Field[]): string | undefined {
+export function resolveSlug(
+  data: EntryData,
+  fields: Field[],
+): string | undefined {
   if (typeof data.slug === 'string' && data.slug.length > 0) {
     return data.slug
   }

@@ -21,8 +21,9 @@ import {
   SelectValue,
 } from '#/components/ui/select'
 import type { Field, FieldType } from '#/lib/types'
+import { m } from '#/paraglide/messages'
 
-import { FIELD_TYPES } from './helpers'
+import { FIELD_TYPES, fieldTypeLabel } from './helpers'
 
 type FieldDraft = {
   key: string
@@ -133,13 +134,15 @@ export function CollectionFormDialog({
         <form className="grid gap-4" onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>
-              {editing ? 'Edit collection' : 'Add collection'}
+              {editing
+                ? m.admin_collection_edit_title()
+                : m.admin_collection_add_title()}
             </DialogTitle>
             <DialogDescription>
-              Collection schemas are agency-owned and used by the site manifest.
+              {m.admin_collection_description()}
             </DialogDescription>
           </DialogHeader>
-          <FormField label="Key" htmlFor="collection-key">
+          <FormField label={m.admin_collection_key()} htmlFor="collection-key">
             <Input
               id="collection-key"
               data-testid="collection-key"
@@ -148,7 +151,10 @@ export function CollectionFormDialog({
               onChange={(event) => setKey(event.target.value)}
             />
           </FormField>
-          <FormField label="Label" htmlFor="collection-label">
+          <FormField
+            label={m.admin_collection_label()}
+            htmlFor="collection-label"
+          >
             <Input
               id="collection-label"
               data-testid="collection-label"
@@ -157,7 +163,10 @@ export function CollectionFormDialog({
               onChange={(event) => setLabel(event.target.value)}
             />
           </FormField>
-          <FormField label="Route pattern" htmlFor="collection-route">
+          <FormField
+            label={m.admin_collection_route()}
+            htmlFor="collection-route"
+          >
             <Input
               id="collection-route"
               data-testid="collection-route"
@@ -172,11 +181,13 @@ export function CollectionFormDialog({
               checked={enabled}
               onCheckedChange={(value) => setEnabled(value === true)}
             />
-            Enabled
+            {m.admin_collection_enabled()}
           </label>
           <div className="grid gap-3">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-medium">Fields</p>
+              <p className="text-sm font-medium">
+                {m.admin_collection_fields()}
+              </p>
               <Button
                 type="button"
                 size="sm"
@@ -186,7 +197,7 @@ export function CollectionFormDialog({
                   setFields((current) => [...current, emptyField()])
                 }
               >
-                Add field
+                {m.admin_collection_add_field()}
               </Button>
             </div>
             {fields.map((field, index) => (
@@ -196,7 +207,10 @@ export function CollectionFormDialog({
                 data-testid={`field-row-${index}`}
               >
                 <div className="grid gap-2 sm:grid-cols-3">
-                  <FormField label="Key" htmlFor={`field-key-${index}`}>
+                  <FormField
+                    label={m.admin_collection_key()}
+                    htmlFor={`field-key-${index}`}
+                  >
                     <Input
                       id={`field-key-${index}`}
                       data-testid={`field-key-${index}`}
@@ -206,7 +220,10 @@ export function CollectionFormDialog({
                       }
                     />
                   </FormField>
-                  <FormField label="Label" htmlFor={`field-label-${index}`}>
+                  <FormField
+                    label={m.admin_collection_label()}
+                    htmlFor={`field-label-${index}`}
+                  >
                     <Input
                       id={`field-label-${index}`}
                       data-testid={`field-label-${index}`}
@@ -216,7 +233,10 @@ export function CollectionFormDialog({
                       }
                     />
                   </FormField>
-                  <FormField label="Type" htmlFor={`field-type-${index}`}>
+                  <FormField
+                    label={m.admin_collection_field_type()}
+                    htmlFor={`field-type-${index}`}
+                  >
                     <Select
                       value={field.type}
                       onValueChange={(value) =>
@@ -233,7 +253,7 @@ export function CollectionFormDialog({
                       <SelectContent>
                         {FIELD_TYPES.map((type) => (
                           <SelectItem key={type} value={type}>
-                            {type}
+                            {fieldTypeLabel(type)}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -247,13 +267,16 @@ export function CollectionFormDialog({
                       updateField(index, { required: value === true })
                     }
                   />
-                  Required
+                  {m.admin_collection_required()}
                 </label>
                 {field.type === 'select' ? (
-                  <FormField label="Options" htmlFor={`field-options-${index}`}>
+                  <FormField
+                    label={m.admin_collection_options()}
+                    htmlFor={`field-options-${index}`}
+                  >
                     <Input
                       id={`field-options-${index}`}
-                      placeholder="draft, published"
+                      placeholder={m.admin_collection_options_placeholder()}
                       value={field.options}
                       onChange={(event) =>
                         updateField(index, { options: event.target.value })
@@ -263,7 +286,7 @@ export function CollectionFormDialog({
                 ) : null}
                 {field.type === 'reference' ? (
                   <FormField
-                    label="Collection"
+                    label={m.admin_collection_field_collection()}
                     htmlFor={`field-collection-${index}`}
                   >
                     <Input
@@ -283,7 +306,7 @@ export function CollectionFormDialog({
                   disabled={fields.length <= 1}
                   title={
                     fields.length <= 1
-                      ? 'A collection needs at least one field'
+                      ? m.admin_collection_min_fields()
                       : undefined
                   }
                   onClick={() =>
@@ -292,7 +315,7 @@ export function CollectionFormDialog({
                     )
                   }
                 >
-                  Remove field
+                  {m.admin_collection_remove_field()}
                 </Button>
               </div>
             ))}
@@ -303,7 +326,7 @@ export function CollectionFormDialog({
               data-testid="save-collection"
               disabled={pending}
             >
-              {pending ? 'Saving…' : 'Save collection'}
+              {pending ? m.admin_saving() : m.admin_collection_save()}
             </Button>
           </DialogFooter>
         </form>

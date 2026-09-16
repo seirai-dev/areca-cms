@@ -1,4 +1,5 @@
 import { Skeleton } from '#/components/ui/skeleton'
+import { m } from '#/paraglide/messages'
 
 /**
  * Placeholder that mirrors the shape of a `DataTable` (header row + body
@@ -16,7 +17,7 @@ export function TableSkeleton({
       className="overflow-hidden rounded-lg border bg-card"
       data-testid="table-skeleton"
       aria-busy="true"
-      aria-label="Loading"
+      aria-label={m.admin_loading()}
     >
       <div
         className="grid gap-4 border-b bg-muted/40 px-4 py-3"
