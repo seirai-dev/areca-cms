@@ -358,8 +358,11 @@ test('03 sync demo-site manifest and inspect collection fields', async ({
     page.getByRole('heading', { name: 'Edit collection' }),
   ).toBeVisible()
   await expect(page.getByTestId('collection-key')).toHaveValue('articles')
-  await expect(page.getByTestId('field-key-0')).toHaveValue('slug')
-  await expect(page.getByTestId('field-key-0')).toBeDisabled()
+  await expect(page.getByTestId('field-row-0')).toHaveAttribute(
+    'data-locked',
+    'true',
+  )
+  await expect(page.getByTestId('field-key-0')).toHaveText('slug')
   await expect(page.getByTestId('field-key-1')).toHaveValue('title')
   await expect(page.getByTestId('field-label-1')).toHaveValue('Title')
   await expect(page.getByTestId('field-key-2')).toHaveValue('excerpt')

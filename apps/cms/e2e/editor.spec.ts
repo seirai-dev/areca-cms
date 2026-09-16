@@ -34,9 +34,23 @@ test('owner can author, publish, and release an article', async ({ page }) => {
   await page.getByTestId('rich-text-editor').click()
   await page.keyboard.type('Hello from the e2e editor')
   await page.getByTestId('rich-text-insert-table').click()
-  await expect(
-    page.getByTestId('rich-text-editor').locator('table'),
-  ).toBeVisible()
+  const editorTable = page.getByTestId('rich-text-editor').locator('table')
+  await expect(editorTable).toBeVisible()
+  await editorTable.locator('th, td').first().click()
+  await expect(editorTable.locator('tr')).toHaveCount(3)
+  await page.getByTestId('rich-text-add-table-row').click()
+  await expect(editorTable.locator('tr')).toHaveCount(4)
+  await editorTable.locator('tr').nth(1).locator('th, td').first().click()
+  await page.getByTestId('rich-text-delete-table-row').click()
+  await expect(editorTable.locator('tr')).toHaveCount(3)
+  await page.getByTestId('rich-text-add-table-column').click()
+  await expect(editorTable.locator('tr').first().locator('th, td')).toHaveCount(
+    4,
+  )
+  await page.getByTestId('rich-text-delete-table-column').click()
+  await expect(editorTable.locator('tr').first().locator('th, td')).toHaveCount(
+    3,
+  )
 
   await page.getByRole('button', { name: 'Choose' }).click()
   await expect(page.getByTestId('media-picker')).toBeVisible()

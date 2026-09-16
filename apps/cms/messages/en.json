@@ -510,6 +510,8 @@
   "editor_toolbar_bullet_list": "Bullet list",
   "editor_toolbar_code_block": "Code block",
   "editor_toolbar_delete_table": "Delete table",
+  "editor_toolbar_delete_table_column": "Delete table column",
+  "editor_toolbar_delete_table_row": "Delete table row",
   "editor_toolbar_divider": "Divider",
   "editor_toolbar_edit_link": "Edit link",
   "editor_toolbar_formatting": "Formatting",

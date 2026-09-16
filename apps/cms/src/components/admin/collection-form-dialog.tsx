@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
+import { Lock } from 'lucide-react'
 
 import { FormField } from '#/components/form-field'
 import {
@@ -12,6 +13,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '#/components/ui/alert-dialog'
+import { Badge } from '#/components/ui/badge'
 import { Button } from '#/components/ui/button'
 import { Checkbox } from '#/components/ui/checkbox'
 import {
@@ -284,13 +286,55 @@ export function CollectionFormDialog({
             </div>
             {fields.map((field, index) => {
               const isSlug = index === 0
+              if (isSlug) {
+                return (
+                  <div
+                    key={index}
+                    className="flex gap-3 rounded-md border bg-muted/40 p-3"
+                    data-testid={`field-row-${index}`}
+                    data-locked="true"
+                  >
+                    <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground">
+                      <Lock className="size-4" aria-hidden="true" />
+                    </div>
+                    <div className="grid min-w-0 flex-1 gap-1.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p
+                          className="text-sm font-medium"
+                          data-testid={`field-label-${index}`}
+                        >
+                          {field.label}
+                        </p>
+                        <Badge variant="outline">
+                          {m.admin_collection_required()}
+                        </Badge>
+                        <Badge
+                          variant="muted"
+                          data-testid={`field-type-${index}`}
+                        >
+                          {fieldTypeLabel(field.type)}
+                        </Badge>
+                      </div>
+                      <p className="text-xs leading-relaxed text-muted-foreground">
+                        {m.admin_collection_slug_field_hint()}
+                      </p>
+                      <p className="font-mono text-xs text-muted-foreground">
+                        {m.admin_collection_key()}{' '}
+                        <span data-testid={`field-key-${index}`}>
+                          {field.key}
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+                )
+              }
               return (
                 <div
                   key={index}
                   className="grid gap-2 rounded-md border p-3"
                   data-testid={`field-row-${index}`}
                 >
-                  <div className="grid gap-2 sm:grid-cols-3">
+                  <div className="grid items-start gap-2 sm:grid-cols-3">
                     <FormField
                       label={m.admin_collection_key()}
                       htmlFor={`field-key-${index}`}
@@ -302,7 +346,6 @@ export function CollectionFormDialog({
                         data-testid={`field-key-${index}`}
                         value={field.key}
                         required
-                        disabled={isSlug}
                         aria-invalid={
                           fieldErrors[index]?.key ? true : undefined
                         }
@@ -325,18 +368,12 @@ export function CollectionFormDialog({
                       htmlFor={`field-label-${index}`}
                       error={fieldErrors[index]?.label}
                       required
-                      hint={
-                        isSlug
-                          ? m.admin_collection_slug_field_hint()
-                          : undefined
-                      }
                     >
                       <Input
                         id={`field-label-${index}`}
                         data-testid={`field-label-${index}`}
                         value={field.label}
                         required
-                        disabled={isSlug}
                         aria-invalid={
                           fieldErrors[index]?.label ? true : undefined
                         }
@@ -360,7 +397,6 @@ export function CollectionFormDialog({
                     >
                       <Select
                         value={field.type}
-                        disabled={isSlug}
                         onValueChange={(value) =>
                           updateField(index, { type: value as FieldType })
                         }
@@ -385,7 +421,6 @@ export function CollectionFormDialog({
                   <label className="flex items-center gap-2 text-sm">
                     <Checkbox
                       checked={field.required}
-                      disabled={isSlug}
                       onCheckedChange={(value) =>
                         updateField(index, { required: value === true })
                       }
@@ -428,13 +463,11 @@ export function CollectionFormDialog({
                     variant="ghost"
                     size="sm"
                     className="justify-self-start"
-                    disabled={isSlug || fields.length <= 1}
+                    disabled={fields.length <= 1}
                     title={
-                      isSlug
-                        ? m.admin_collection_slug_field_hint()
-                        : fields.length <= 1
-                          ? m.admin_collection_min_fields()
-                          : undefined
+                      fields.length <= 1
+                        ? m.admin_collection_min_fields()
+                        : undefined
                     }
                     onClick={() => {
                       setFields((current) =>

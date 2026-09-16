@@ -60,15 +60,18 @@ test('agency admin can create an org, site, collection, and invitation', async (
   await expect(page.getByText('Enter a collection label.')).toBeVisible()
   await expect(page.getByRole('dialog')).toBeVisible()
   await page.getByTestId('collection-label').fill('Pages')
-  await expect(page.getByTestId('field-key-0')).toHaveValue('slug')
-  await expect(page.getByTestId('field-key-0')).toBeDisabled()
-  await expect(page.getByTestId('field-label-0')).toHaveValue('Slug')
-  await expect(page.getByTestId('field-type-0')).toBeDisabled()
+  await expect(page.getByTestId('field-row-0')).toHaveAttribute(
+    'data-locked',
+    'true',
+  )
+  await expect(page.getByTestId('field-key-0')).toHaveText('slug')
+  await expect(page.getByTestId('field-label-0')).toHaveText('Slug')
+  await expect(page.getByTestId('field-type-0')).toHaveText('slug')
   await expect(
     page
       .getByTestId('field-row-0')
       .getByRole('button', { name: 'Remove field' }),
-  ).toBeDisabled()
+  ).toHaveCount(0)
 
   await page.keyboard.press('Escape')
   await expect(

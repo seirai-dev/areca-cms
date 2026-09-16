@@ -21,6 +21,8 @@ import {
   Redo2,
   Rows3,
   Table2,
+  TableColumnsSplit,
+  TableRowsSplit,
   Trash2,
   Undo2,
 } from 'lucide-react'
@@ -108,6 +110,11 @@ const EMPTY_TOOLBAR_STATE = {
   blockquote: false,
   codeBlock: false,
   table: false,
+  canAddRow: false,
+  canAddColumn: false,
+  canDeleteRow: false,
+  canDeleteColumn: false,
+  canDeleteTable: false,
   canUndo: false,
   canRedo: false,
 }
@@ -158,7 +165,7 @@ export function RichTextEditor({
     selector: ({ editor: e }) =>
       e
         ? {
-            isEmpty: e.isEmpty,
+            isEmpty: e.isEmpty && !e.isActive('table') && !e.isActive('image'),
             h2: e.isActive('heading', { level: 2 }),
             h3: e.isActive('heading', { level: 3 }),
             h4: e.isActive('heading', { level: 4 }),
@@ -171,6 +178,11 @@ export function RichTextEditor({
             blockquote: e.isActive('blockquote'),
             codeBlock: e.isActive('codeBlock'),
             table: e.isActive('table'),
+            canAddRow: e.can().addRowAfter(),
+            canAddColumn: e.can().addColumnAfter(),
+            canDeleteRow: e.can().deleteRow(),
+            canDeleteColumn: e.can().deleteColumn(),
+            canDeleteTable: e.can().deleteTable(),
             canUndo: e.can().undo(),
             canRedo: e.can().redo(),
           }
@@ -432,18 +444,40 @@ export function RichTextEditor({
           <>
             <ToolbarButton
               label={m.editor_toolbar_add_table_row()}
+              disabled={!state.canAddRow}
+              data-testid="rich-text-add-table-row"
               onClick={() => chain().addRowAfter().run()}
             >
               <Rows3 />
             </ToolbarButton>
             <ToolbarButton
+              label={m.editor_toolbar_delete_table_row()}
+              disabled={!state.canDeleteRow}
+              data-testid="rich-text-delete-table-row"
+              onClick={() => chain().deleteRow().run()}
+            >
+              <TableRowsSplit />
+            </ToolbarButton>
+            <ToolbarButton
               label={m.editor_toolbar_add_table_column()}
+              disabled={!state.canAddColumn}
+              data-testid="rich-text-add-table-column"
               onClick={() => chain().addColumnAfter().run()}
             >
               <Columns3 />
             </ToolbarButton>
             <ToolbarButton
+              label={m.editor_toolbar_delete_table_column()}
+              disabled={!state.canDeleteColumn}
+              data-testid="rich-text-delete-table-column"
+              onClick={() => chain().deleteColumn().run()}
+            >
+              <TableColumnsSplit />
+            </ToolbarButton>
+            <ToolbarButton
               label={m.editor_toolbar_delete_table()}
+              disabled={!state.canDeleteTable}
+              data-testid="rich-text-delete-table"
               onClick={() => chain().deleteTable().run()}
             >
               <Trash2 />

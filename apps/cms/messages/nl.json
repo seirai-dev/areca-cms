@@ -510,6 +510,8 @@
   "editor_toolbar_bullet_list": "Opsomming",
   "editor_toolbar_code_block": "Codeblok",
   "editor_toolbar_delete_table": "Tabel verwijderen",
+  "editor_toolbar_delete_table_column": "Tabelkolom verwijderen",
+  "editor_toolbar_delete_table_row": "Tabelrij verwijderen",
   "editor_toolbar_divider": "Scheidingslijn",
   "editor_toolbar_edit_link": "Link bewerken",
   "editor_toolbar_formatting": "Opmaak",
