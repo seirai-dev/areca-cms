@@ -17,6 +17,7 @@ import {
 import { BrandMark } from '#/components/brand-mark'
 import { queryKeys } from '#/components/editor/query-keys'
 import { Avatar, AvatarFallback } from '#/components/ui/avatar'
+import { Badge } from '#/components/ui/badge'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -420,8 +421,7 @@ function SiteSectionsGroup({
   const sections = siteSections(me, site)
   const collectionsQuery = useQuery({
     queryKey: queryKeys.collections(site.id),
-    queryFn: () =>
-      listCollectionsFn({ data: { siteId: site.id, enabledOnly: true } }),
+    queryFn: () => listCollectionsFn({ data: { siteId: site.id } }),
   })
   const collections = collectionsQuery.data ?? []
 
@@ -431,7 +431,11 @@ function SiteSectionsGroup({
       <SidebarGroupContent>
         <SidebarMenu>
           {sections.map((section) => {
-            const active = isSectionActive(section, pathname)
+            // Nested collections own the active state; don't also mark Content.
+            const active =
+              section.key === 'content'
+                ? pathname === section.href
+                : isSectionActive(section, pathname)
             const Icon = section.icon
             return (
               <SidebarMenuItem key={section.key}>
@@ -443,6 +447,9 @@ function SiteSectionsGroup({
                   <Link
                     to={section.href}
                     data-testid={section.testId}
+                    activeOptions={
+                      section.key === 'content' ? { exact: true } : undefined
+                    }
                     aria-current={active ? 'page' : undefined}
                   >
                     <Icon />
@@ -457,7 +464,15 @@ function SiteSectionsGroup({
                         pathname === href || pathname.startsWith(`${href}/`)
                       return (
                         <SidebarMenuSubItem key={collection.id}>
-                          <SidebarMenuSubButton asChild isActive={subActive}>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={subActive}
+                            className={
+                              collection.enabled
+                                ? undefined
+                                : 'text-muted-foreground'
+                            }
+                          >
                             <Link
                               to="/sites/$siteId/c/$collectionKey"
                               params={{
@@ -466,7 +481,17 @@ function SiteSectionsGroup({
                               }}
                               aria-current={subActive ? 'page' : undefined}
                             >
-                              <span>{collection.label}</span>
+                              <span className="min-w-0 flex-1 truncate">
+                                {collection.label}
+                              </span>
+                              {!collection.enabled ? (
+                                <Badge
+                                  variant="secondary"
+                                  className="h-5 shrink-0 px-1.5 text-[10px]"
+                                >
+                                  {m.sites_disabled()}
+                                </Badge>
+                              ) : null}
                             </Link>
                           </SidebarMenuSubButton>
                         </SidebarMenuSubItem>

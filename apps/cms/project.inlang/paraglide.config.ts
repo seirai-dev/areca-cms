@@ -10,7 +10,7 @@ import { defineConfig } from '@inlang/paraglide-js'
  */
 export default defineConfig({
   outdir: './src/paraglide',
-  outputStructure: 'message-modules',
+  outputStructure: 'locale-modules',
   cookieName: 'PARAGLIDE_LOCALE',
   strategy: ['url', 'cookie', 'preferredLanguage', 'baseLocale'],
   isServer: 'import.meta.env.SSR',

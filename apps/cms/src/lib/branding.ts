@@ -86,6 +86,43 @@ export function fontStylesheetUrl(font: FontKey): string | null {
     : null
 }
 
+export const BRAND_COLOR_KEYS = [
+  'background',
+  'foreground',
+  'surface',
+  'surfaceForeground',
+  'muted',
+  'mutedForeground',
+  'accent',
+  'accentForeground',
+  'border',
+  'input',
+  'primary',
+  'primaryForeground',
+  'secondary',
+  'secondaryForeground',
+  'link',
+  'ring',
+  'sidebar',
+  'sidebarForeground',
+  'sidebarPrimary',
+  'sidebarPrimaryForeground',
+  'sidebarAccent',
+  'sidebarAccentForeground',
+] as const
+
+export type BrandColorKey = (typeof BRAND_COLOR_KEYS)[number]
+export type BrandColorPalette = Partial<Record<BrandColorKey, string>>
+export type AdvancedBrandColors = {
+  light: BrandColorPalette
+  dark: BrandColorPalette
+}
+
+export const EMPTY_ADVANCED_COLORS: AdvancedBrandColors = {
+  light: {},
+  dark: {},
+}
+
 /** What the client needs to render the brand. Image URLs are site-relative. */
 export type BrandingView = {
   appName: string
@@ -93,6 +130,8 @@ export type BrandingView = {
   faviconUrl: string | null
   faviconMime: string | null
   accentColor: string | null
+  advancedColorsEnabled: boolean
+  advancedColors: AdvancedBrandColors
   font: FontKey
   emailFromName: string | null
   /** True when any field differs from the built-in defaults. */
@@ -105,6 +144,8 @@ export const DEFAULT_BRANDING: BrandingView = {
   faviconUrl: null,
   faviconMime: null,
   accentColor: null,
+  advancedColorsEnabled: false,
+  advancedColors: EMPTY_ADVANCED_COLORS,
   font: DEFAULT_FONT,
   emailFromName: null,
   customized: false,
@@ -120,6 +161,56 @@ export function normalizeHex(value: string): string | null {
     return `#${hex[0]}${hex[0]}${hex[1]}${hex[1]}${hex[2]}${hex[2]}`
   }
   return `#${hex}`
+}
+
+export function normalizeAdvancedColors(value: unknown): AdvancedBrandColors {
+  const input =
+    value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
+
+  function normalizePalette(palette: unknown): BrandColorPalette {
+    if (!palette || typeof palette !== 'object') return {}
+    const source = palette as Record<string, unknown>
+    const normalized: BrandColorPalette = {}
+    for (const key of BRAND_COLOR_KEYS) {
+      const raw = source[key]
+      if (typeof raw !== 'string') continue
+      const hex = normalizeHex(raw)
+      if (hex) normalized[key] = hex
+    }
+    return normalized
+  }
+
+  return {
+    light: normalizePalette(input.light),
+    dark: normalizePalette(input.dark),
+  }
+}
+
+export function hasAdvancedColors(colors: AdvancedBrandColors) {
+  return (
+    Object.keys(colors.light).length > 0 || Object.keys(colors.dark).length > 0
+  )
+}
+
+function hexLuminance(hex: string) {
+  const normalized = normalizeHex(hex)
+  if (!normalized) return null
+  const channels = [1, 3, 5].map((start) => {
+    const channel = parseInt(normalized.slice(start, start + 2), 16) / 255
+    return channel <= 0.04045
+      ? channel / 12.92
+      : ((channel + 0.055) / 1.055) ** 2.4
+  })
+  return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
+}
+
+export function contrastRatio(foreground: string, background: string) {
+  const foregroundLuminance = hexLuminance(foreground)
+  const backgroundLuminance = hexLuminance(background)
+  if (foregroundLuminance === null || backgroundLuminance === null) return null
+  const lighter = Math.max(foregroundLuminance, backgroundLuminance)
+  const darker = Math.min(foregroundLuminance, backgroundLuminance)
+  return (lighter + 0.05) / (darker + 0.05)
 }
 
 // ---------------------------------------------------------------------------
@@ -218,22 +309,80 @@ export function accentVariables(hex: string): Record<string, string> | null {
 
 const DARK_SUCCESS = 'oklab(72.51% -0.087 0.06)'
 
+const ADVANCED_COLOR_VARIABLES: Record<BrandColorKey, readonly string[]> = {
+  background: ['--background'],
+  foreground: ['--foreground'],
+  surface: ['--card', '--popover'],
+  surfaceForeground: ['--card-foreground', '--popover-foreground'],
+  muted: ['--muted'],
+  mutedForeground: ['--muted-foreground'],
+  accent: ['--accent'],
+  accentForeground: ['--accent-foreground'],
+  border: ['--border'],
+  input: ['--input'],
+  primary: ['--primary'],
+  primaryForeground: ['--primary-foreground'],
+  secondary: ['--secondary'],
+  secondaryForeground: ['--secondary-foreground'],
+  link: ['--link'],
+  ring: ['--ring'],
+  sidebar: ['--sidebar'],
+  sidebarForeground: ['--sidebar-foreground'],
+  sidebarPrimary: ['--sidebar-primary'],
+  sidebarPrimaryForeground: ['--sidebar-primary-foreground'],
+  sidebarAccent: ['--sidebar-accent'],
+  sidebarAccentForeground: ['--sidebar-accent-foreground'],
+}
+
+function advancedVariables(palette: BrandColorPalette) {
+  const variables: Record<string, string> = {}
+  for (const key of BRAND_COLOR_KEYS) {
+    const value = palette[key]
+    if (!value) continue
+    for (const variable of ADVANCED_COLOR_VARIABLES[key]) {
+      variables[variable] = value
+    }
+  }
+  return variables
+}
+
+function cssBlock(selector: string, variables: Record<string, string>) {
+  const body = Object.entries(variables)
+    .map(([name, value]) => `${name}:${value}`)
+    .join(';')
+  return body ? `${selector}{${body}}` : ''
+}
+
 /**
  * Inline stylesheet applied in the document head. Both the light `:root`
  * block and the `.dark` block reference the same scale variables, so a single
  * override covers both modes.
  */
-export function brandingCss(view: Pick<BrandingView, 'accentColor' | 'font'>) {
+export function brandingCss(
+  view: Pick<
+    BrandingView,
+    'accentColor' | 'advancedColorsEnabled' | 'advancedColors' | 'font'
+  >,
+) {
   const rules: string[] = []
   if (view.accentColor) {
     const vars = accentVariables(view.accentColor)
     if (vars) {
-      const body = Object.entries(vars)
-        .map(([name, value]) => `${name}:${value}`)
-        .join(';')
-      rules.push(`:root{${body}}`)
+      rules.push(cssBlock(':root', vars))
       rules.push(`.dark{--success:${DARK_SUCCESS}}`)
     }
+  }
+  if (view.advancedColorsEnabled) {
+    const lightRule = cssBlock(
+      ':root:not(.dark)',
+      advancedVariables(view.advancedColors.light),
+    )
+    const darkRule = cssBlock(
+      '.dark',
+      advancedVariables(view.advancedColors.dark),
+    )
+    if (lightRule) rules.push(lightRule)
+    if (darkRule) rules.push(darkRule)
   }
   if (view.font !== DEFAULT_FONT) {
     rules.push(`:root{--font-sans:${FONTS[view.font].family}}`)
@@ -246,18 +395,36 @@ export function brandingCss(view: Pick<BrandingView, 'accentColor' | 'font'>) {
  * tokens are computed on `:root`, so a scoped preview has to redeclare them
  * (light-mode mapping) next to the scale overrides.
  */
-export function accentStyle(hex: string | null): Record<string, string> {
-  if (!hex) return {}
-  const vars = accentVariables(hex)
-  if (!vars) return {}
-  return {
-    ...vars,
-    '--primary': 'var(--color-clay-400)',
-    '--secondary': 'var(--color-moss-900)',
-    '--secondary-foreground': 'var(--color-fern-200)',
-    '--link': 'var(--color-fern-300)',
-    '--ring': 'var(--color-fern-500)',
-    '--sidebar-primary': 'var(--color-fern-300)',
-    '--sidebar-accent': 'var(--color-moss-900)',
+export function brandingPreviewStyle(
+  view: Pick<
+    BrandingView,
+    'accentColor' | 'advancedColorsEnabled' | 'advancedColors'
+  >,
+  mode: keyof AdvancedBrandColors = 'light',
+): Record<string, string> {
+  const style: Record<string, string> = {}
+  if (view.accentColor) {
+    const vars = accentVariables(view.accentColor)
+    if (vars) {
+      Object.assign(style, vars, {
+        '--primary':
+          mode === 'dark' ? 'var(--color-clay-600)' : 'var(--color-clay-400)',
+        '--secondary':
+          mode === 'dark' ? 'var(--color-moss-200)' : 'var(--color-moss-900)',
+        '--secondary-foreground':
+          mode === 'dark' ? 'var(--color-moss-900)' : 'var(--color-fern-200)',
+        '--link':
+          mode === 'dark' ? 'var(--color-fern-600)' : 'var(--color-fern-300)',
+        '--ring': 'var(--color-fern-500)',
+        '--sidebar-primary':
+          mode === 'dark' ? 'var(--color-fern-600)' : 'var(--color-fern-300)',
+        '--sidebar-accent':
+          mode === 'dark' ? 'var(--color-moss-100)' : 'var(--color-moss-900)',
+      })
+    }
   }
+  if (view.advancedColorsEnabled) {
+    Object.assign(style, advancedVariables(view.advancedColors[mode]))
+  }
+  return style
 }

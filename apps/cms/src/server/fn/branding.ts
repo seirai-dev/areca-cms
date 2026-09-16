@@ -2,6 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
 import { requireAgencyAdmin } from '#/lib/session.server'
+import { BRAND_COLOR_KEYS } from '#/lib/branding'
 import {
   clearBrandingImage,
   getBranding,
@@ -10,6 +11,10 @@ import {
 } from '#/server/admin/branding'
 
 const brandingFn = { strict: { output: false } as const }
+const brandColorSchema = z.partialRecord(
+  z.enum(BRAND_COLOR_KEYS),
+  z.string().max(7),
+)
 
 /** Public: the login, setup, and invite pages render the brand before sign-in. */
 export const getBrandingFn = createServerFn({
@@ -25,6 +30,11 @@ export const updateBrandingFn = createServerFn({
     z.object({
       appName: z.string().max(60).nullable().optional(),
       accentColor: z.string().max(7).nullable().optional(),
+      advancedColorsEnabled: z.boolean().optional(),
+      advancedColors: z
+        .object({ light: brandColorSchema, dark: brandColorSchema })
+        .nullable()
+        .optional(),
       font: z.string().max(40).nullable().optional(),
       emailFromName: z.string().max(80).nullable().optional(),
     }),

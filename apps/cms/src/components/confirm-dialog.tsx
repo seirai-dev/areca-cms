@@ -65,6 +65,8 @@ export function ConfirmDialog({
 }) {
   const [pending, setPending] = useState(false)
   const [typed, setTyped] = useState('')
+  const [internalOpen, setInternalOpen] = useState(false)
+  const resolvedOpen = open ?? internalOpen
   const needsTyping = Boolean(confirmText)
   const typedOk = !needsTyping || typed.trim() === confirmText
 
@@ -75,6 +77,7 @@ export function ConfirmDialog({
     try {
       await onConfirm()
     } finally {
+      setInternalOpen(false)
       onOpenChange?.(false)
       setPending(false)
       setTyped('')
@@ -83,9 +86,10 @@ export function ConfirmDialog({
 
   return (
     <AlertDialog
-      open={open}
+      open={resolvedOpen}
       onOpenChange={(next) => {
         if (!next) setTyped('')
+        setInternalOpen(next)
         onOpenChange?.(next)
       }}
     >

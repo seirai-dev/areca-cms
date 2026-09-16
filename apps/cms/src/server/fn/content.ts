@@ -6,7 +6,11 @@ import { site } from '#/db/schema'
 import { requireAgencyAdmin, requireOrgMember } from '#/lib/session.server'
 import type { EntryStatus, FieldType } from '#/lib/types'
 import { m } from '#/paraglide/messages'
-import { listCollections, upsertCollection } from '#/server/content/collections'
+import {
+  deleteCollection,
+  listCollections,
+  upsertCollection,
+} from '#/server/content/collections'
 import {
   archiveEntry,
   cancelSchedule,
@@ -278,4 +282,17 @@ export const upsertCollectionFn = createServerFn({ method: 'POST' })
       fields: data.fields,
       enabled: data.enabled,
     })
+  })
+
+export const deleteCollectionFn = createServerFn({ method: 'POST' })
+  .validator(
+    z.object({
+      siteId: z.string().min(1),
+      key: z.string().min(1),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const session = await requireAgencyAdmin()
+    await deleteCollection(data.siteId, data.key, session.user.id)
+    return { ok: true as const }
   })

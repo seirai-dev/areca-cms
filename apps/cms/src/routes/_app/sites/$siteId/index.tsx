@@ -41,10 +41,11 @@ function SiteContentPage() {
 
   const collectionsQuery = useQuery({
     queryKey: queryKeys.collections(siteId),
-    queryFn: () => listCollectionsFn({ data: { siteId, enabledOnly: true } }),
+    queryFn: () => listCollectionsFn({ data: { siteId } }),
   })
 
-  const collections = collectionsQuery.data ?? []
+  const collections =
+    collectionsQuery.data?.filter((collection) => collection.enabled) ?? []
 
   const countQueries = useQueries({
     queries: collections.map((collection) => ({

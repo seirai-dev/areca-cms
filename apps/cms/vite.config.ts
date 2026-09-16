@@ -1,4 +1,5 @@
-import { defineConfig, type Plugin } from 'vite'
+import { defineConfig } from 'vite'
+import type { Plugin } from 'vite'
 import { devtools } from '@tanstack/devtools-vite'
 import { paraglideVitePlugin } from '@inlang/paraglide-js'
 
@@ -29,7 +30,7 @@ function arecaAssetFileDevPlugin(): Plugin {
   }
 }
 
-const config = defineConfig({
+const config = defineConfig(({ command }) => ({
   resolve: { tsconfigPaths: true },
   plugins: [
     arecaAssetFileDevPlugin(),
@@ -37,7 +38,9 @@ const config = defineConfig({
     paraglideVitePlugin({
       project: './project.inlang',
       outdir: './src/paraglide',
-      outputStructure: 'message-modules',
+      // Fewer modules keep dev hydration fast; production keeps per-message tree-shaking.
+      outputStructure:
+        command === 'serve' ? 'locale-modules' : 'message-modules',
       cookieName: 'PARAGLIDE_LOCALE',
       strategy: ['url', 'cookie', 'preferredLanguage', 'baseLocale'],
       urlPatterns: [
@@ -61,6 +64,6 @@ const config = defineConfig({
     }),
     viteReact(),
   ],
-})
+}))
 
 export default config

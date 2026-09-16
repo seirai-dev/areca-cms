@@ -5,12 +5,21 @@ import { getStorage } from '#/adapters'
 import { db } from '#/db'
 import { branding } from '#/db/schema'
 import {
+  BRAND_COLOR_KEYS,
   DEFAULT_APP_NAME,
   DEFAULT_FONT,
+  EMPTY_ADVANCED_COLORS,
+  hasAdvancedColors,
   isFontKey,
+  normalizeAdvancedColors,
   normalizeHex,
 } from '#/lib/branding'
-import type { BrandingView, FontKey } from '#/lib/branding'
+import type {
+  AdvancedBrandColors,
+  BrandColorPalette,
+  BrandingView,
+  FontKey,
+} from '#/lib/branding'
 import { m } from '#/paraglide/messages'
 import { AssetValidationError } from '#/server/assets'
 
@@ -52,12 +61,17 @@ export async function getBrandingRow(): Promise<BrandingRow | null> {
 
 export function toBrandingView(row: BrandingRow | null): BrandingView {
   const font: FontKey = isFontKey(row?.font) ? row.font : DEFAULT_FONT
+  const advancedColors = row?.advancedColors
+    ? normalizeAdvancedColors(row.advancedColors)
+    : EMPTY_ADVANCED_COLORS
   const view: BrandingView = {
     appName: row?.appName?.trim() || DEFAULT_APP_NAME,
     logoUrl: brandingImageUrl(row?.logoKey),
     faviconUrl: brandingImageUrl(row?.faviconKey),
     faviconMime: row?.faviconMime ?? null,
     accentColor: row?.accentColor ?? null,
+    advancedColorsEnabled: row?.advancedColorsEnabled ?? false,
+    advancedColors,
     font,
     emailFromName: row?.emailFromName?.trim() || null,
     customized: false,
@@ -67,6 +81,8 @@ export function toBrandingView(row: BrandingRow | null): BrandingView {
     view.logoUrl !== null ||
     view.faviconUrl !== null ||
     view.accentColor !== null ||
+    view.advancedColorsEnabled ||
+    hasAdvancedColors(view.advancedColors) ||
     view.font !== DEFAULT_FONT ||
     view.emailFromName !== null
   return view
@@ -85,6 +101,8 @@ type BrandingPatch = Partial<
     | 'faviconKey'
     | 'faviconMime'
     | 'accentColor'
+    | 'advancedColorsEnabled'
+    | 'advancedColors'
     | 'font'
     | 'emailFromName'
   >
@@ -108,6 +126,8 @@ export async function updateBranding(
   input: {
     appName?: string | null
     accentColor?: string | null
+    advancedColorsEnabled?: boolean
+    advancedColors?: AdvancedBrandColors | null
     font?: string | null
     emailFromName?: string | null
   },
@@ -132,6 +152,32 @@ export async function updateBranding(
         throw new AssetValidationError(m.server_accent_hex())
       }
       patch.accentColor = hex
+    }
+  }
+
+  if (input.advancedColorsEnabled !== undefined) {
+    patch.advancedColorsEnabled = input.advancedColorsEnabled
+  }
+
+  if (input.advancedColors !== undefined) {
+    if (input.advancedColors === null) {
+      patch.advancedColors = null
+    } else {
+      const normalized: AdvancedBrandColors = { light: {}, dark: {} }
+      for (const mode of ['light', 'dark'] as const) {
+        const palette: BrandColorPalette = {}
+        for (const key of BRAND_COLOR_KEYS) {
+          const value = input.advancedColors[mode][key]
+          if (!value) continue
+          const hex = normalizeHex(value)
+          if (!hex) {
+            throw new AssetValidationError(m.server_accent_hex())
+          }
+          palette[key] = hex
+        }
+        normalized[mode] = palette
+      }
+      patch.advancedColors = hasAdvancedColors(normalized) ? normalized : null
     }
   }
 
@@ -218,6 +264,8 @@ export async function resetBranding(actorId: string): Promise<BrandingView> {
       faviconKey: null,
       faviconMime: null,
       accentColor: null,
+      advancedColorsEnabled: false,
+      advancedColors: null,
       font: null,
       emailFromName: null,
     },

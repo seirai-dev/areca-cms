@@ -4,10 +4,13 @@ import {
   DEFAULT_BRANDING,
   accentVariables,
   brandingCss,
+  brandingPreviewStyle,
+  contrastRatio,
   fontStylesheetUrl,
   hexToOklch,
   isFontKey,
   normalizeHex,
+  normalizeAdvancedColors,
 } from './branding.ts'
 
 describe('normalizeHex', () => {
@@ -46,8 +49,8 @@ describe('accentVariables', () => {
     expect(vars!['--color-clay-400']).toMatch(/^oklch\(50\.32% /)
     expect(vars!['--color-fern-500']).toMatch(/^oklch\(58\.83% /)
     // moss is the softer tint of the same hue.
-    const fern = vars!['--color-fern-500']!.split(' ')
-    const moss = vars!['--color-moss-500']!.split(' ')
+    const fern = vars!['--color-fern-500'].split(' ')
+    const moss = vars!['--color-moss-500'].split(' ')
     expect(Number(moss[1])).toBeLessThan(Number(fern[1]))
     expect(moss[2]).toBe(fern[2])
   })
@@ -63,10 +66,71 @@ describe('brandingCss', () => {
   })
 
   it('emits a font override and accent block when customised', () => {
-    const css = brandingCss({ accentColor: '#336699', font: 'inter' })
+    const css = brandingCss({
+      ...DEFAULT_BRANDING,
+      accentColor: '#336699',
+      font: 'inter',
+    })
     expect(css).toContain('--color-clay-400:oklch(')
     expect(css).toContain("--font-sans:'Inter'")
     expect(css).toContain('.dark{--success:')
+  })
+
+  it('only emits stored advanced colours while advanced mode is active', () => {
+    const colors = {
+      light: { background: '#ffffff', surface: '#f5f5f5' },
+      dark: { background: '#101010', foreground: '#ffffff' },
+    }
+    const inactive = brandingCss({
+      ...DEFAULT_BRANDING,
+      advancedColors: colors,
+    })
+    expect(inactive).not.toContain('--background:#ffffff')
+
+    const active = brandingCss({
+      ...DEFAULT_BRANDING,
+      advancedColorsEnabled: true,
+      advancedColors: colors,
+    })
+    expect(active).toContain(
+      ':root:not(.dark){--background:#ffffff;--card:#f5f5f5;--popover:#f5f5f5}',
+    )
+    expect(active).toContain('.dark{--background:#101010;--foreground:#ffffff}')
+  })
+
+  it('uses the selected palette in the scoped preview', () => {
+    const style = brandingPreviewStyle(
+      {
+        ...DEFAULT_BRANDING,
+        advancedColorsEnabled: true,
+        advancedColors: {
+          light: {},
+          dark: { surface: '#111111' },
+        },
+      },
+      'dark',
+    )
+    expect(style['--card']).toBe('#111111')
+    expect(style['--popover']).toBe('#111111')
+  })
+})
+
+describe('advanced colours', () => {
+  it('normalizes supported keys and ignores unknown or invalid values', () => {
+    expect(
+      normalizeAdvancedColors({
+        light: { background: '#ABC', madeUp: '#ffffff' },
+        dark: { foreground: 'black', surface: '#123456' },
+      }),
+    ).toEqual({
+      light: { background: '#aabbcc' },
+      dark: { surface: '#123456' },
+    })
+  })
+
+  it('calculates WCAG contrast ratios', () => {
+    expect(contrastRatio('#000000', '#ffffff')).toBeCloseTo(21)
+    expect(contrastRatio('#777777', '#ffffff')).toBeCloseTo(4.48, 1)
   })
 })
 

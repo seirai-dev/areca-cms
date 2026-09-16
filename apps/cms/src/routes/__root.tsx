@@ -13,11 +13,7 @@ import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 import { LanguageSwitcher } from '#/components/language-switcher'
 import { Toaster } from '#/components/ui/sonner'
 import { TooltipProvider } from '#/components/ui/tooltip'
-import {
-  DEFAULT_BRANDING,
-  brandingCss,
-  fontStylesheetUrl,
-} from '#/lib/branding'
+import { DEFAULT_BRANDING, brandingCss } from '#/lib/branding'
 import type { RouterContext } from '#/lib/router-context'
 import { m } from '#/paraglide/messages'
 import { getLocale } from '#/paraglide/runtime'
@@ -45,7 +41,6 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 
   head: ({ loaderData }) => {
     const branding = loaderData ?? DEFAULT_BRANDING
-    const fontUrl = fontStylesheetUrl(branding.font)
     const css = brandingCss(branding)
     return {
       meta: [
@@ -65,7 +60,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
           rel: 'stylesheet',
           href: appCss,
         },
-        ...(fontUrl ? [{ rel: 'stylesheet', href: fontUrl }] : []),
+        // ...(fontUrl ? [{ rel: 'stylesheet', href: fontUrl }] : []),
         ...(branding.faviconUrl
           ? [
               {

@@ -105,6 +105,7 @@ const AUDIT_ACTION_LABELS: Record<string, () => string> = {
   'entry.delete': () => m.admin_audit_action_entry_delete(),
   'manifest.sync': () => m.admin_audit_action_manifest_sync(),
   'collection.upsert': () => m.admin_audit_action_collection_upsert(),
+  'collection.delete': () => m.admin_audit_action_collection_delete(),
   'publication.requested': () => m.admin_audit_action_publication_requested(),
   'publication.rollback_requested': () =>
     m.admin_audit_action_publication_rollback_requested(),

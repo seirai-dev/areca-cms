@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
-import { Layers, Pencil, Plus } from 'lucide-react'
+import { Layers, Pencil, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import type { CollectionDraft } from '#/components/admin/collection-form-dialog'
@@ -12,6 +12,7 @@ import { adminQueryKeys, errorMessage } from '#/components/admin/helpers'
 import { TableSkeleton } from '#/components/admin/table-skeleton'
 import { TokenAlert } from '#/components/admin/token-alert'
 import { ConfirmDialog } from '#/components/confirm-dialog'
+import { queryKeys } from '#/components/editor/query-keys'
 import { createDataColumns, DataTable } from '#/components/data-table'
 import { EmptyState } from '#/components/empty-state'
 import { FormField } from '#/components/form-field'
@@ -30,7 +31,11 @@ import { Input } from '#/components/ui/input'
 import { Skeleton } from '#/components/ui/skeleton'
 import type { Field } from '#/lib/types'
 import { m } from '#/paraglide/messages'
-import { listCollectionsFn, upsertCollectionFn } from '#/server/fn/content'
+import {
+  deleteCollectionFn,
+  listCollectionsFn,
+  upsertCollectionFn,
+} from '#/server/fn/content'
 import {
   deleteSiteFn,
   getSiteFn,
@@ -68,6 +73,7 @@ function SiteSettingsPage() {
   const deleteSite = useServerFn(deleteSiteFn)
   const listCollections = useServerFn(listCollectionsFn)
   const upsertCollection = useServerFn(upsertCollectionFn)
+  const deleteCollection = useServerFn(deleteCollectionFn)
 
   const siteQuery = useQuery({
     queryKey: adminQueryKeys.site(siteId),
@@ -87,6 +93,8 @@ function SiteSettingsPage() {
   const [collectionOpen, setCollectionOpen] = useState(false)
   const [editingCollection, setEditingCollection] =
     useState<CollectionDraft | null>(null)
+  const [deletingCollection, setDeletingCollection] =
+    useState<CollectionRow | null>(null)
   const [clearTargetOpen, setClearTargetOpen] = useState(false)
 
   const displayName = name ?? site?.name ?? ''
@@ -163,6 +171,19 @@ function SiteSettingsPage() {
     onError: (err) => toast.error(errorMessage(err)),
   })
 
+  const deleteCollectionMutation = useMutation({
+    mutationFn: (target: CollectionRow) =>
+      deleteCollection({ data: { siteId, key: target.key } }),
+    onSuccess: async () => {
+      toast.success(m.sites_collection_deleted())
+      setDeletingCollection(null)
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.collections(siteId),
+      })
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  })
+
   const deleteMutation = useMutation({
     mutationFn: () => deleteSite({ data: { id: siteId } }),
     onSuccess: async () => {
@@ -210,7 +231,7 @@ function SiteSettingsPage() {
       header: m.sites_column_enabled(),
       cell: ({ row }) => (
         <Badge variant={row.original.enabled ? 'default' : 'secondary'}>
-          {row.original.enabled ? m.sites_yes() : m.sites_no()}
+          {row.original.enabled ? m.sites_enabled() : m.sites_disabled()}
         </Badge>
       ),
     }),
@@ -223,7 +244,7 @@ function SiteSettingsPage() {
       header: () => <span className="sr-only">{m.sites_actions()}</span>,
       enableSorting: false,
       cell: ({ row }) => (
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-1">
           <Button
             type="button"
             variant="ghost"
@@ -240,6 +261,16 @@ function SiteSettingsPage() {
           >
             <Pencil />
             {m.sites_edit()}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="text-destructive hover:text-destructive"
+            onClick={() => setDeletingCollection(row.original)}
+          >
+            <Trash2 />
+            {m.sites_delete()}
           </Button>
         </div>
       ),
@@ -485,6 +516,11 @@ function SiteSettingsPage() {
               columns={collectionColumns}
               data={collections}
               caption={m.sites_collections()}
+              getRowProps={(collection) => ({
+                className: collection.enabled
+                  ? undefined
+                  : 'bg-muted/30 text-muted-foreground',
+              })}
             />
           ) : (
             <EmptyState
@@ -531,6 +567,29 @@ function SiteSettingsPage() {
         initial={editingCollection}
         pending={collectionMutation.isPending}
         onSubmit={(draft) => collectionMutation.mutate(draft)}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deletingCollection)}
+        onOpenChange={(open) => {
+          if (!open) setDeletingCollection(null)
+        }}
+        title={m.sites_delete_collection_title()}
+        description={
+          deletingCollection
+            ? m.sites_delete_collection_description({
+                label: deletingCollection.label,
+              })
+            : undefined
+        }
+        confirmLabel={m.sites_delete_collection()}
+        confirmText={deletingCollection?.key}
+        variant="destructive"
+        onConfirm={async () => {
+          if (deletingCollection) {
+            await deleteCollectionMutation.mutateAsync(deletingCollection)
+          }
+        }}
       />
 
       <ConfirmDialog

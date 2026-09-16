@@ -21,6 +21,7 @@ import type {
   SiteManifest,
   Snapshot,
 } from '../lib/types.ts'
+import type { AdvancedBrandColors } from '../lib/branding.ts'
 
 const id = () =>
   text('id')
@@ -305,6 +306,10 @@ export const branding = pgTable('branding', {
   faviconKey: text('favicon_key'),
   faviconMime: text('favicon_mime'),
   accentColor: text('accent_color'),
+  advancedColorsEnabled: boolean('advanced_colors_enabled')
+    .notNull()
+    .default(false),
+  advancedColors: jsonb('advanced_colors').$type<AdvancedBrandColors>(),
   font: text('font'),
   emailFromName: text('email_from_name'),
   updatedBy: text('updated_by').references(() => user.id, {

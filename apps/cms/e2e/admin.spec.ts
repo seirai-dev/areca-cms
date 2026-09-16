@@ -16,7 +16,9 @@ test('agency admin can create an org, site, collection, and invitation', async (
 
   await login(page)
   await page.goto('/admin/organizations')
-  await expect(page.getByRole('heading', { name: 'Organizations' })).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Organizations' }),
+  ).toBeVisible()
   await expect(page.getByRole('table')).toBeVisible()
 
   await page.getByTestId('new-organization').click()
@@ -63,10 +65,33 @@ test('agency admin can create an org, site, collection, and invitation', async (
   await page.getByTestId('field-type-1').click()
   await page.getByRole('option', { name: 'richtext' }).click()
   await page.getByTestId('save-collection').click()
-  await expect(page.getByRole('cell', { name: 'pages', exact: true })).toBeVisible(
-    { timeout: 15_000 },
-  )
+  await expect(
+    page.getByRole('cell', { name: 'pages', exact: true }),
+  ).toBeVisible({ timeout: 15_000 })
   await expect(page.getByRole('cell', { name: '2', exact: true })).toBeVisible()
+
+  const collectionRow = page
+    .getByRole('row')
+    .filter({ has: page.getByRole('cell', { name: 'pages', exact: true }) })
+  await collectionRow.getByRole('button', { name: 'Edit' }).click()
+  await page.getByRole('dialog').getByText('Enabled', { exact: true }).click()
+  await page.getByTestId('save-collection').click()
+  await expect(
+    collectionRow.getByText('Disabled', { exact: true }),
+  ).toBeVisible()
+  await expect(
+    page.getByTestId('site-nav').getByText('Disabled', { exact: true }),
+  ).toBeVisible()
+
+  await collectionRow.getByRole('button', { name: 'Delete' }).click()
+  const confirmAction = page.getByTestId('confirm-action')
+  await expect(confirmAction).toBeDisabled()
+  await page.getByTestId('confirm-text').fill('pages')
+  await confirmAction.click()
+  await expect(page.getByText('Collection deleted')).toBeVisible({
+    timeout: 15_000,
+  })
+  await expect(collectionRow).toHaveCount(0)
 
   await page.goto(`/admin/organizations/${orgId}`)
   await page.getByRole('tab', { name: 'Members' }).click()
@@ -88,5 +113,7 @@ test('agency admin can create an org, site, collection, and invitation', async (
   ).toBeVisible({
     timeout: 15_000,
   })
-  await expect(page.getByRole('cell', { name: orgName, exact: true }).first()).toBeVisible()
+  await expect(
+    page.getByRole('cell', { name: orgName, exact: true }).first(),
+  ).toBeVisible()
 })

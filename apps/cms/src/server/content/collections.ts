@@ -159,3 +159,40 @@ export async function upsertCollection(
 
   return row
 }
+
+export async function deleteCollection(
+  siteId: string,
+  key: string,
+  actorId: string,
+) {
+  const existing = (
+    await db
+      .select({
+        id: collection.id,
+        key: collection.key,
+        organizationId: site.organizationId,
+      })
+      .from(collection)
+      .innerJoin(site, eq(collection.siteId, site.id))
+      .where(and(eq(collection.siteId, siteId), eq(collection.key, key)))
+      .limit(1)
+  ).at(0)
+
+  if (!existing) {
+    throw new NotFoundError(m.server_collection_not_found())
+  }
+
+  await audit({
+    organizationId: existing.organizationId,
+    siteId,
+    actorId,
+    action: 'collection.delete',
+    targetType: 'collection',
+    targetId: existing.id,
+    meta: { key: existing.key },
+  })
+
+  // Entries belong to a collection with ON DELETE CASCADE, and entry
+  // revisions cascade from their entry in turn.
+  await db.delete(collection).where(eq(collection.id, existing.id))
+}
