@@ -11,6 +11,10 @@ export const ALLOWED_NODE_TYPES = new Set([
   'image',
   'hardBreak',
   'horizontalRule',
+  'table',
+  'tableRow',
+  'tableHeader',
+  'tableCell',
 ])
 
 export const ALLOWED_MARK_TYPES = new Set(['bold', 'italic', 'link'])

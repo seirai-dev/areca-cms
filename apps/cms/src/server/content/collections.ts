@@ -3,10 +3,11 @@ import { and, eq, notInArray } from 'drizzle-orm'
 import { db } from '#/db'
 import { collection, site } from '#/db/schema'
 import type { Field, SiteManifest } from '#/lib/types'
+import { withRequiredSlugField } from '#/lib/collection-fields'
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
 
-import { NotFoundError } from './errors.ts'
+import { NotFoundError, ValidationError } from './errors.ts'
 
 export async function listCollections(
   siteId: string,
@@ -16,28 +17,32 @@ export async function listCollections(
   if (options.enabledOnly) {
     filters.push(eq(collection.enabled, true))
   }
-  return db
+  const rows = await db
     .select()
     .from(collection)
     .where(and(...filters))
     .orderBy(collection.key)
+  return rows.map((row) => ({
+    ...row,
+    fields: withRequiredSlugField(row.fields),
+  }))
 }
 
 export async function getCollection(siteId: string, key: string) {
-  const [row] = await db
-    .select()
-    .from(collection)
-    .where(and(eq(collection.siteId, siteId), eq(collection.key, key)))
-    .limit(1)
-  return row ?? null
+  const row = (
+    await db
+      .select()
+      .from(collection)
+      .where(and(eq(collection.siteId, siteId), eq(collection.key, key)))
+      .limit(1)
+  ).at(0)
+  return row ? { ...row, fields: withRequiredSlugField(row.fields) } : null
 }
 
 export async function syncManifest(siteId: string, manifest: SiteManifest) {
-  const [existingSite] = await db
-    .select()
-    .from(site)
-    .where(eq(site.id, siteId))
-    .limit(1)
+  const existingSite = (
+    await db.select().from(site).where(eq(site.id, siteId)).limit(1)
+  ).at(0)
   if (!existingSite) {
     throw new NotFoundError(m.server_site_not_found())
   }
@@ -54,7 +59,7 @@ export async function syncManifest(siteId: string, manifest: SiteManifest) {
           key,
           label: def.label ?? key,
           routePattern: def.route,
-          fields: def.fields,
+          fields: withRequiredSlugField(def.fields),
           enabled: true,
           updatedAt: now,
         })
@@ -63,7 +68,7 @@ export async function syncManifest(siteId: string, manifest: SiteManifest) {
           set: {
             label: def.label ?? key,
             routePattern: def.route,
-            fields: def.fields,
+            fields: withRequiredSlugField(def.fields),
             enabled: true,
             updatedAt: now,
           },
@@ -109,11 +114,25 @@ export async function upsertCollection(
     enabled?: boolean
   },
 ) {
-  const [existingSite] = await db
-    .select()
-    .from(site)
-    .where(eq(site.id, siteId))
-    .limit(1)
+  const label = input.label.trim()
+  if (!label) {
+    throw new ValidationError([{ path: 'label', message: m.server_required() }])
+  }
+  const invalidField = input.fields.find(
+    (field) => !field.key.trim() || !field.label.trim(),
+  )
+  if (invalidField) {
+    throw new ValidationError([
+      {
+        path: `fields.${input.fields.indexOf(invalidField)}`,
+        message: m.server_required(),
+      },
+    ])
+  }
+  const fields = withRequiredSlugField(input.fields)
+  const existingSite = (
+    await db.select().from(site).where(eq(site.id, siteId)).limit(1)
+  ).at(0)
   if (!existingSite) {
     throw new NotFoundError(m.server_site_not_found())
   }
@@ -126,18 +145,18 @@ export async function upsertCollection(
     .values({
       siteId,
       key: input.key,
-      label: input.label,
+      label,
       routePattern: input.routePattern,
-      fields: input.fields,
+      fields,
       enabled,
       updatedAt: now,
     })
     .onConflictDoUpdate({
       target: [collection.siteId, collection.key],
       set: {
-        label: input.label,
+        label,
         routePattern: input.routePattern,
-        fields: input.fields,
+        fields,
         enabled,
         updatedAt: now,
       },

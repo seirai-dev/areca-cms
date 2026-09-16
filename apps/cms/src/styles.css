@@ -17,7 +17,8 @@
 */
 @theme inline {
   --font-sans:
-    'Bricolage Grotesque Variable', ui-sans-serif, system-ui, -apple-system, sans-serif;
+    'Bricolage Grotesque Variable', ui-sans-serif, system-ui, -apple-system,
+    sans-serif;
   --font-mono:
     ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
 
@@ -331,6 +332,80 @@
 
 .prose pre {
   border-radius: var(--radius-lg);
+}
+
+.ProseMirror .tableWrapper {
+  margin-block: 1.25rem;
+  overflow-x: auto;
+}
+
+.ProseMirror table {
+  margin: 0;
+}
+
+.ProseMirror th,
+.ProseMirror td {
+  position: relative;
+  min-width: 5rem;
+}
+
+.ProseMirror .selectedCell::after {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: '';
+  background: color-mix(in oklab, var(--primary) 12%, transparent);
+}
+
+.ProseMirror .column-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  bottom: 0;
+  width: 4px;
+  pointer-events: none;
+  background: var(--primary);
+}
+
+.ProseMirror [data-resize-container][data-node='image'] {
+  max-width: 100%;
+  width: fit-content;
+}
+
+.ProseMirror [data-resize-container][data-node='image'] [data-resize-handle] {
+  width: 0.75rem;
+  height: 0.75rem;
+  border: 2px solid var(--primary);
+  border-radius: 9999px;
+  background: var(--background);
+}
+
+.ProseMirror
+  [data-resize-container][data-node='image']
+  [data-resize-handle='top-left'] {
+  cursor: nwse-resize;
+  transform: translate(-50%, -50%);
+}
+
+.ProseMirror
+  [data-resize-container][data-node='image']
+  [data-resize-handle='top-right'] {
+  cursor: nesw-resize;
+  transform: translate(50%, -50%);
+}
+
+.ProseMirror
+  [data-resize-container][data-node='image']
+  [data-resize-handle='bottom-left'] {
+  cursor: nesw-resize;
+  transform: translate(-50%, 50%);
+}
+
+.ProseMirror
+  [data-resize-container][data-node='image']
+  [data-resize-handle='bottom-right'] {
+  cursor: nwse-resize;
+  transform: translate(50%, 50%);
 }
 
 @media (prefers-reduced-motion: reduce) {

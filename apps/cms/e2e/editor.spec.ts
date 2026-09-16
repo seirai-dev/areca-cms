@@ -33,6 +33,10 @@ test('owner can author, publish, and release an article', async ({ page }) => {
 
   await page.getByTestId('rich-text-editor').click()
   await page.keyboard.type('Hello from the e2e editor')
+  await page.getByTestId('rich-text-insert-table').click()
+  await expect(
+    page.getByTestId('rich-text-editor').locator('table'),
+  ).toBeVisible()
 
   await page.getByRole('button', { name: 'Choose' }).click()
   await expect(page.getByTestId('media-picker')).toBeVisible()
@@ -45,6 +49,15 @@ test('owner can author, publish, and release an article', async ({ page }) => {
   await expect(page.getByTestId('image-field-thumb')).toBeVisible({
     timeout: 15_000,
   })
+
+  await page.getByRole('button', { name: 'Insert image' }).click()
+  await expect(page.getByTestId('media-picker')).toBeVisible()
+  await page.getByTestId('media-picker').getByTitle('tiny.png').first().click()
+  const richImage = page
+    .getByTestId('rich-text-editor')
+    .locator("[data-resize-container][data-node='image']")
+  await expect(richImage).toBeVisible()
+  await expect(richImage.locator('[data-resize-handle]')).toHaveCount(4)
 
   await page.getByTestId('save-draft').click()
   await waitForSavedDraft(page)
@@ -62,6 +75,14 @@ test('owner can author, publish, and release an article', async ({ page }) => {
   await expect(page.getByTestId('rich-text-editor')).toContainText(
     'Hello from the e2e editor',
   )
+  await expect(
+    page.getByTestId('rich-text-editor').locator('table'),
+  ).toBeVisible()
+  await expect(
+    page
+      .getByTestId('rich-text-editor')
+      .locator("[data-resize-container][data-node='image']"),
+  ).toBeVisible()
   await expect(page.getByTestId('image-field-thumb')).toBeVisible()
 
   await page.getByTestId('publish-menu').click()

@@ -5,6 +5,7 @@ import { BubbleMenu } from '@tiptap/react/menus'
 import {
   Bold,
   Code,
+  Columns3,
   Heading2,
   Heading3,
   Heading4,
@@ -18,6 +19,9 @@ import {
   Pilcrow,
   Quote,
   Redo2,
+  Rows3,
+  Table2,
+  Trash2,
   Undo2,
 } from 'lucide-react'
 
@@ -103,6 +107,7 @@ const EMPTY_TOOLBAR_STATE = {
   orderedList: false,
   blockquote: false,
   codeBlock: false,
+  table: false,
   canUndo: false,
   canRedo: false,
 }
@@ -137,7 +142,7 @@ export function RichTextEditor({
     editorProps: {
       attributes: {
         class:
-          'prose prose-sm min-h-56 max-w-none px-4 py-3 focus:outline-none [&_img]:h-auto [&_img]:max-w-xs [&_img]:min-h-16 [&_a]:underline',
+          'prose prose-sm min-h-56 max-w-none px-4 py-3 focus:outline-none [&_img]:h-auto [&_img]:max-w-full [&_img]:min-h-16 [&_a]:underline',
         'data-testid': 'rich-text-editor',
       },
     },
@@ -165,6 +170,7 @@ export function RichTextEditor({
             orderedList: e.isActive('orderedList'),
             blockquote: e.isActive('blockquote'),
             codeBlock: e.isActive('codeBlock'),
+            table: e.isActive('table'),
             canUndo: e.can().undo(),
             canRedo: e.can().redo(),
           }
@@ -412,6 +418,38 @@ export function RichTextEditor({
         >
           <ImageIcon />
         </ToolbarButton>
+        <ToolbarButton
+          label={m.editor_toolbar_insert_table()}
+          active={state.table}
+          data-testid="rich-text-insert-table"
+          onClick={() =>
+            chain().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
+          }
+        >
+          <Table2 />
+        </ToolbarButton>
+        {state.table ? (
+          <>
+            <ToolbarButton
+              label={m.editor_toolbar_add_table_row()}
+              onClick={() => chain().addRowAfter().run()}
+            >
+              <Rows3 />
+            </ToolbarButton>
+            <ToolbarButton
+              label={m.editor_toolbar_add_table_column()}
+              onClick={() => chain().addColumnAfter().run()}
+            >
+              <Columns3 />
+            </ToolbarButton>
+            <ToolbarButton
+              label={m.editor_toolbar_delete_table()}
+              onClick={() => chain().deleteTable().run()}
+            >
+              <Trash2 />
+            </ToolbarButton>
+          </>
+        ) : null}
         <ToolbarButton
           label={m.editor_toolbar_divider()}
           onClick={() => chain().setHorizontalRule().run()}

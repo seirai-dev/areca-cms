@@ -49,8 +49,8 @@ const fieldTypes = [
 ] as const satisfies readonly FieldType[]
 
 const fieldSchema = z.object({
-  key: z.string().min(1),
-  label: z.string().min(1),
+  key: z.string().trim().min(1),
+  label: z.string().trim().min(1),
   type: z.enum(fieldTypes),
   required: z.boolean().optional(),
   options: z.array(z.string()).optional(),
@@ -71,11 +71,9 @@ const entryDataSchema = z.record(z.string(), z.unknown())
 const entryFn = { strict: { output: false } as const }
 
 async function requireSiteAccess(siteId: string, role?: 'owner') {
-  const [found] = await db
-    .select()
-    .from(site)
-    .where(eq(site.id, siteId))
-    .limit(1)
+  const found = (
+    await db.select().from(site).where(eq(site.id, siteId)).limit(1)
+  ).at(0)
   if (!found) {
     throw new NotFoundError(m.server_site_not_found())
   }
@@ -267,7 +265,7 @@ export const upsertCollectionFn = createServerFn({ method: 'POST' })
     z.object({
       siteId: z.string().min(1),
       key: z.string().min(1),
-      label: z.string().min(1),
+      label: z.string().trim().min(1),
       routePattern: z.string().min(1),
       fields: z.array(fieldSchema),
       enabled: z.boolean().optional(),

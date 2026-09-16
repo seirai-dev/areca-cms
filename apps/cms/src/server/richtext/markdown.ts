@@ -45,11 +45,18 @@ function serializeList(node: PMNode, ordered: boolean, indent: number): string {
   const items = node.content ?? []
   const start = typeof node.attrs?.start === 'number' ? node.attrs.start : 1
   return items
-    .map((item, index) => serializeListItem(item, ordered, start + index, indent))
+    .map((item, index) =>
+      serializeListItem(item, ordered, start + index, indent),
+    )
     .join('\n')
 }
 
-function serializeListItem(item: PMNode, ordered: boolean, number: number, indent: number): string {
+function serializeListItem(
+  item: PMNode,
+  ordered: boolean,
+  number: number,
+  indent: number,
+): string {
   const marker = ordered ? `${number}. ` : '- '
   const pad = '  '.repeat(indent)
   const children = item.content ?? []
@@ -78,6 +85,34 @@ function serializeListItem(item: PMNode, ordered: boolean, number: number, inden
   return lines.join('\n')
 }
 
+function serializeTableCell(node: PMNode | undefined): string {
+  if (!node) return ''
+  const value = (node.content ?? [])
+    .map((child) => serializeBlock(child))
+    .join(' ')
+  return value.replace(/\|/g, '\\|').replace(/\s*\n\s*/g, ' ')
+}
+
+function serializeTable(node: PMNode): string {
+  const rows = node.content ?? []
+  if (rows.length === 0) return ''
+  const columnCount = Math.max(
+    1,
+    ...rows.map((row) => row.content?.length ?? 0),
+  )
+  const renderRow = (row: PMNode | undefined) => {
+    const cells = Array.from({ length: columnCount }, (_, index) =>
+      serializeTableCell(row?.content?.[index]),
+    )
+    return `| ${cells.join(' | ')} |`
+  }
+  return [
+    renderRow(rows[0]),
+    `| ${Array.from({ length: columnCount }, () => '---').join(' | ')} |`,
+    ...rows.slice(1).map(renderRow),
+  ].join('\n')
+}
+
 function serializeBlock(node: PMNode, indent = 0): string {
   switch (node.type) {
     case 'doc':
@@ -101,8 +136,11 @@ function serializeBlock(node: PMNode, indent = 0): string {
         .join('\n')
     }
     case 'codeBlock': {
-      const language = typeof node.attrs?.language === 'string' ? node.attrs.language : ''
-      const code = (node.content ?? []).map((child) => child.text ?? '').join('')
+      const language =
+        typeof node.attrs?.language === 'string' ? node.attrs.language : ''
+      const code = (node.content ?? [])
+        .map((child) => child.text ?? '')
+        .join('')
       return `\`\`\`${language}\n${code}\n\`\`\``
     }
     case 'bulletList':
@@ -116,6 +154,8 @@ function serializeBlock(node: PMNode, indent = 0): string {
       const src = typeof node.attrs?.src === 'string' ? node.attrs.src : ''
       return `![${alt}](${src})`
     }
+    case 'table':
+      return serializeTable(node)
     default:
       return serializeInline(node.content)
   }
@@ -131,12 +171,15 @@ const BLOCK_JOIN = new Set([
   'bulletList',
   'orderedList',
   'listItem',
+  'table',
+  'tableRow',
 ])
 
 function extractPlain(node: PMNode): string {
   if (node.type === 'text') return node.text ?? ''
   if (node.type === 'hardBreak') return '\n'
-  if (node.type === 'image') return typeof node.attrs?.alt === 'string' ? node.attrs.alt : ''
+  if (node.type === 'image')
+    return typeof node.attrs?.alt === 'string' ? node.attrs.alt : ''
   if (node.type === 'horizontalRule') return ''
   const parts = (node.content ?? []).map(extractPlain)
   if (BLOCK_JOIN.has(node.type)) {

@@ -358,8 +358,10 @@ test('03 sync demo-site manifest and inspect collection fields', async ({
     page.getByRole('heading', { name: 'Edit collection' }),
   ).toBeVisible()
   await expect(page.getByTestId('collection-key')).toHaveValue('articles')
-  await expect(page.getByTestId('field-key-0')).toHaveValue('title')
-  await expect(page.getByTestId('field-label-0')).toHaveValue('Title')
+  await expect(page.getByTestId('field-key-0')).toHaveValue('slug')
+  await expect(page.getByTestId('field-key-0')).toBeDisabled()
+  await expect(page.getByTestId('field-key-1')).toHaveValue('title')
+  await expect(page.getByTestId('field-label-1')).toHaveValue('Title')
   await expect(page.getByTestId('field-key-2')).toHaveValue('excerpt')
   await expect(page.getByTestId('field-key-3')).toHaveValue('body')
   await expect(page.getByTestId('field-key-4')).toHaveValue('heroImage')
@@ -870,7 +872,7 @@ test('09 demo site pull, pages, preview, health', async ({ browser }) => {
     expect(healthBody.publicationId).toBeTruthy()
 
     const previewRes = await page.request.get(state.previewUrl)
-    const robots = previewRes.headers()['x-robots-tag']
+    const robots = previewRes.headers()['x-robots-tag'] as string | undefined
     if (!robots?.includes('noindex')) {
       logIssue({
         area: 'preview',

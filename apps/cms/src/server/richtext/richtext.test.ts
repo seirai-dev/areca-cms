@@ -8,6 +8,7 @@ import {
   richTextPlainText,
   validateRichText,
 } from './index'
+import { richTextExtensions } from './extensions'
 
 const assetOrigin = env.APP_URL.replace(/\/+$/, '')
 const photoSrc = `${assetOrigin}/assets/photo.jpg`
@@ -91,7 +92,12 @@ const representativeDoc = {
     },
     {
       type: 'image',
-      attrs: { src: '/assets/photo.jpg', alt: 'A photo' },
+      attrs: {
+        src: '/assets/photo.jpg',
+        alt: 'A photo',
+        width: 480,
+        height: 320,
+      },
     },
     { type: 'horizontalRule' },
     {
@@ -104,6 +110,20 @@ const representativeDoc = {
     },
   ],
 }
+
+describe('rich text extensions', () => {
+  it('enables user-controlled image resizing', () => {
+    const image = richTextExtensions.find(
+      (extension) => extension.name === 'image',
+    )
+    expect(image?.options.resize).toMatchObject({
+      enabled: true,
+      minWidth: 80,
+      minHeight: 40,
+      alwaysPreserveAspectRatio: true,
+    })
+  })
+})
 
 describe('validateRichText', () => {
   it('accepts a valid document', () => {
@@ -217,6 +237,28 @@ describe('validateRichText', () => {
       }),
     ).toContain('Image src is not allowed')
   })
+
+  it('rejects invalid image dimensions', () => {
+    expect(
+      validateRichText({
+        type: 'doc',
+        content: [
+          {
+            type: 'image',
+            attrs: {
+              src: '/assets/photo.jpg',
+              alt: 'x',
+              width: 0,
+              height: '100',
+            },
+          },
+        ],
+      }),
+    ).toEqual([
+      'Image width must be a positive number',
+      'Image height must be a positive number',
+    ])
+  })
 })
 
 describe('convertRichText', () => {
@@ -237,10 +279,14 @@ describe('convertRichText', () => {
     expect(result.html).toContain('<ol>')
     expect(result.html).toContain('<blockquote>')
     expect(result.html).toContain('Quoted')
-    expect(result.html).toContain('<pre class="tm-code" data-lang="ts"><code class="language-ts">')
+    expect(result.html).toContain(
+      '<pre class="tm-code" data-lang="ts"><code class="language-ts">',
+    )
     expect(result.html).toContain('const x = 1')
     expect(result.html).toContain(`src="${photoSrc}"`)
     expect(result.html).toContain('alt="A photo"')
+    expect(result.html).toContain('width="480"')
+    expect(result.html).toContain('height="320"')
     expect(result.html).toContain('<hr>')
     expect(result.html).toContain('<br')
 
@@ -289,6 +335,87 @@ describe('convertRichText', () => {
         'break',
       ].join('\n'),
     )
+    expect(
+      (
+        result.json as {
+          content: Array<{ attrs?: { width?: number; height?: number } }>
+        }
+      ).content.find((node) => node.attrs?.width)?.attrs,
+    ).toMatchObject({ width: 480, height: 320 })
+  })
+
+  it('converts tables to markdown, document nodes, and html', () => {
+    const result = convertRichText({
+      type: 'doc',
+      content: [
+        {
+          type: 'table',
+          content: [
+            {
+              type: 'tableRow',
+              content: [
+                {
+                  type: 'tableHeader',
+                  content: [
+                    {
+                      type: 'paragraph',
+                      content: [{ type: 'text', text: 'Name' }],
+                    },
+                  ],
+                },
+                {
+                  type: 'tableHeader',
+                  content: [
+                    {
+                      type: 'paragraph',
+                      content: [{ type: 'text', text: 'Role' }],
+                    },
+                  ],
+                },
+              ],
+            },
+            {
+              type: 'tableRow',
+              content: [
+                {
+                  type: 'tableCell',
+                  content: [
+                    {
+                      type: 'paragraph',
+                      content: [{ type: 'text', text: 'Ada' }],
+                    },
+                  ],
+                },
+                {
+                  type: 'tableCell',
+                  content: [
+                    {
+                      type: 'paragraph',
+                      content: [
+                        {
+                          type: 'text',
+                          marks: [{ type: 'bold' }],
+                          text: 'Engineer',
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    })
+
+    expect(result.markdown).toBe(
+      ['| Name | Role |', '| --- | --- |', '| Ada | **Engineer** |'].join('\n'),
+    )
+    expect(result.document.children[0]).toMatchObject({ type: 'table' })
+    expect(result.html).toContain('<table>')
+    expect(result.html).toContain('<th>Name</th>')
+    expect(result.html).toContain('<strong>Engineer</strong>')
+    expect(richTextPlainText(result.json)).toBe('Name\nRole\nAda\nEngineer')
   })
 
   it('prefixes relative asset srcs and leaves absolute srcs alone', () => {

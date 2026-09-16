@@ -55,20 +55,46 @@ test('agency admin can create an org, site, collection, and invitation', async (
 
   await page.getByTestId('add-collection').click()
   await page.getByTestId('collection-key').fill('pages')
-  await page.getByTestId('collection-label').fill('Pages')
   await page.getByTestId('collection-route').fill('/pages/$slug')
-  await page.getByTestId('field-key-0').fill('title')
-  await page.getByTestId('field-label-0').fill('Title')
+  await page.getByTestId('save-collection').click()
+  await expect(page.getByText('Enter a collection label.')).toBeVisible()
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await page.getByTestId('collection-label').fill('Pages')
+  await expect(page.getByTestId('field-key-0')).toHaveValue('slug')
+  await expect(page.getByTestId('field-key-0')).toBeDisabled()
+  await expect(page.getByTestId('field-label-0')).toHaveValue('Slug')
+  await expect(page.getByTestId('field-type-0')).toBeDisabled()
+  await expect(
+    page
+      .getByTestId('field-row-0')
+      .getByRole('button', { name: 'Remove field' }),
+  ).toBeDisabled()
+
+  await page.keyboard.press('Escape')
+  await expect(
+    page
+      .getByRole('alertdialog')
+      .getByRole('heading', { name: 'Unsaved collection changes' }),
+  ).toBeVisible()
+  await page.getByRole('button', { name: 'Keep editing' }).click()
+  await expect(page.getByTestId('collection-label')).toBeVisible()
+
   await page.getByTestId('add-field').click()
-  await page.getByTestId('field-key-1').fill('body')
-  await page.getByTestId('field-label-1').fill('Body')
-  await page.getByTestId('field-type-1').click()
+  await page.getByTestId('field-key-1').fill('title')
+  await page.getByTestId('save-collection').click()
+  await expect(page.getByText('Enter a label for this field.')).toBeVisible()
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await page.getByTestId('field-label-1').fill('Title')
+  await page.getByTestId('add-field').click()
+  await page.getByTestId('field-key-2').fill('body')
+  await page.getByTestId('field-label-2').fill('Body')
+  await page.getByTestId('field-type-2').click()
   await page.getByRole('option', { name: 'richtext' }).click()
   await page.getByTestId('save-collection').click()
   await expect(
     page.getByRole('cell', { name: 'pages', exact: true }),
   ).toBeVisible({ timeout: 15_000 })
-  await expect(page.getByRole('cell', { name: '2', exact: true })).toBeVisible()
+  await expect(page.getByRole('cell', { name: '3', exact: true })).toBeVisible()
 
   const collectionRow = page
     .getByRole('row')

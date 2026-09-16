@@ -1,4 +1,5 @@
-import { expect, type Page } from '@playwright/test'
+import { expect } from '@playwright/test'
+import type { Page } from '@playwright/test'
 
 const password = 'password123'
 
@@ -61,7 +62,10 @@ export async function fillArticleDraft(page: Page, title: string) {
 }
 
 export async function createAndSaveArticle(page: Page, title: string) {
-  await page.getByTestId('collection-articles').getByRole('link', { name: 'Open' }).click()
+  await page
+    .getByTestId('collection-articles')
+    .getByRole('link', { name: 'Open' })
+    .click()
   await page.getByTestId('new-entry').click()
   await fillArticleDraft(page, title)
   await page.getByTestId('save-draft').click()
@@ -100,14 +104,9 @@ export async function createIsolatedAcmeSite(page: Page, suffix: string) {
   await page.getByTestId('collection-key').fill('articles')
   await page.getByTestId('collection-label').fill('Articles')
   await page.getByTestId('collection-route').fill('/blog/$slug')
-  await page.getByTestId('field-key-0').fill('title')
-  await page.getByTestId('field-label-0').fill('Title')
-  await page.getByTestId('field-row-0').getByText('Required').click()
   await page.getByTestId('add-field').click()
-  await page.getByTestId('field-key-1').fill('slug')
-  await page.getByTestId('field-label-1').fill('Slug')
-  await page.getByTestId('field-type-1').click()
-  await page.getByRole('option', { name: 'slug' }).click()
+  await page.getByTestId('field-key-1').fill('title')
+  await page.getByTestId('field-label-1').fill('Title')
   await page.getByTestId('field-row-1').getByText('Required').click()
   await page.getByTestId('add-field').click()
   await page.getByTestId('field-key-2').fill('body')
@@ -121,9 +120,9 @@ export async function createIsolatedAcmeSite(page: Page, suffix: string) {
   await page.getByTestId('field-type-3').click()
   await page.getByRole('option', { name: 'image' }).click()
   await page.getByTestId('save-collection').click()
-  await expect(page.getByRole('cell', { name: 'articles', exact: true })).toBeVisible(
-    { timeout: 15_000 },
-  )
+  await expect(
+    page.getByRole('cell', { name: 'articles', exact: true }),
+  ).toBeVisible({ timeout: 15_000 })
 
   await signOut(page)
   return { siteName, siteSlug, token, productionUrl }

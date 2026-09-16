@@ -10,7 +10,10 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function checkAttrs(attrs: unknown, errors: string[]): Record<string, unknown> | undefined {
+function checkAttrs(
+  attrs: unknown,
+  errors: string[],
+): Record<string, unknown> | undefined {
   if (attrs === undefined) return undefined
   if (!isPlainObject(attrs)) {
     errors.push('Attributes must be an object')
@@ -48,7 +51,9 @@ function walkMark(mark: unknown, errors: string[]): void {
 
 function walkNode(node: unknown, errors: string[], isRoot = false): void {
   if (!isPlainObject(node)) {
-    errors.push(isRoot ? 'Rich text must be an object' : 'Node must be an object')
+    errors.push(
+      isRoot ? 'Rich text must be an object' : 'Node must be an object',
+    )
     return
   }
 
@@ -79,6 +84,16 @@ function walkNode(node: unknown, errors: string[], isRoot = false): void {
     const src = attrs?.src
     if (typeof src !== 'string' || !isAllowedImageSrc(src)) {
       errors.push('Image src is not allowed')
+    }
+    for (const dimension of ['width', 'height'] as const) {
+      const value = attrs?.[dimension]
+      if (
+        value !== undefined &&
+        value !== null &&
+        (typeof value !== 'number' || !Number.isFinite(value) || value <= 0)
+      ) {
+        errors.push(`Image ${dimension} must be a positive number`)
+      }
     }
   }
 

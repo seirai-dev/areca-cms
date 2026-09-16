@@ -1,6 +1,7 @@
 import type { Extensions } from '@tiptap/core'
 import { Image } from '@tiptap/extension-image'
 import { Link } from '@tiptap/extension-link'
+import { TableKit } from '@tiptap/extension-table'
 import { StarterKit } from '@tiptap/starter-kit'
 
 import { isAllowedLinkHref } from './allowlist'
@@ -25,5 +26,18 @@ export const richTextExtensions: Extensions = [
   }),
   Image.configure({
     allowBase64: false,
+    resize: {
+      enabled: true,
+      minWidth: 80,
+      minHeight: 40,
+      alwaysPreserveAspectRatio: true,
+    },
+  }),
+  TableKit.configure({
+    table: {
+      resizable: true,
+      lastColumnResizable: true,
+      allowTableNodeSelection: true,
+    },
   }),
 ]
