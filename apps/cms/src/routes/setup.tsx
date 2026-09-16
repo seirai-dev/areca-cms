@@ -12,6 +12,7 @@ import { authClient } from '#/lib/auth-client'
 import { useBranding } from '#/lib/use-branding'
 import { m } from '#/paraglide/messages'
 import { localizeHref } from '#/paraglide/runtime'
+import { getAuthMethodsFn } from '#/server/fn/auth-methods'
 import { getMeFn } from '#/server/fn/me'
 import { completeSetupFn, getSetupStatusFn } from '#/server/fn/setup'
 
@@ -23,11 +24,13 @@ export const Route = createFileRoute('/setup')({
       throw redirect({ href: me ? '/' : '/login' })
     }
   },
+  loader: async () => getAuthMethodsFn(),
   component: SetupPage,
 })
 
 function SetupPage() {
   const branding = useBranding()
+  const methods = Route.useLoaderData()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -54,6 +57,13 @@ function SetupPage() {
         err instanceof Error ? err.message : m.auth_could_not_complete_setup(),
       )
       setPending(false)
+      return
+    }
+
+    // The admin always gets a password here, but password sign-in may be off
+    // in the environment; in that case send them to the providers instead.
+    if (!methods.emailPassword) {
+      window.location.assign(localizeHref('/login'))
       return
     }
 

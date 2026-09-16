@@ -13,6 +13,28 @@ export const env = createEnv({
     DATABASE_URL: z.string().url(),
     BETTER_AUTH_SECRET: z.string().min(1),
     BETTER_AUTH_URL: z.string().url(),
+    // Set to false to remove the email/password form from sign-in. The
+    // one-time /setup bootstrap always accepts a password regardless.
+    AUTH_EMAIL_PASSWORD_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((value) => value !== 'false'),
+    // Social providers are enabled by supplying both credentials; leave them
+    // unset (or blank) to remove the provider from the sign-in page entirely.
+    GITHUB_CLIENT_ID: z.string().min(1).optional(),
+    GITHUB_CLIENT_SECRET: z.string().min(1).optional(),
+    GOOGLE_CLIENT_ID: z.string().min(1).optional(),
+    GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
+    DISCORD_CLIENT_ID: z.string().min(1).optional(),
+    DISCORD_CLIENT_SECRET: z.string().min(1).optional(),
+    // Microsoft Entra ID SSO (OIDC). Enabled when client id + secret are set.
+    MICROSOFT_SSO_CLIENT_ID: z.string().min(1).optional(),
+    MICROSOFT_SSO_CLIENT_SECRET: z.string().min(1).optional(),
+    // A concrete directory (tenant) id is required: the multi-tenant `common`
+    // endpoint advertises a templated issuer that cannot be validated.
+    MICROSOFT_SSO_TENANT_ID: z.string().min(1).optional(),
+    // Optional email domain so `signIn.sso({ email })` can route to Microsoft.
+    MICROSOFT_SSO_DOMAIN: z.string().min(1).optional(),
     APP_URL: z.string().url(),
     REDIS_URL: z.string().url().default('redis://localhost:6379'),
     RATE_LIMIT_TRUST_PROXY: z

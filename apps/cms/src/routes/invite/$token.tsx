@@ -10,15 +10,25 @@ import { Input } from '#/components/ui/input'
 import { BrandMark } from '#/components/brand-mark'
 import { FormField } from '#/components/form-field'
 import { AuthShell } from '#/components/language-switcher'
+import { AuthDivider, ProviderSignIn } from '#/components/provider-sign-in'
 import { authClient } from '#/lib/auth-client'
 import { m } from '#/paraglide/messages'
 import { localizeHref } from '#/paraglide/runtime'
+import { getAuthMethodsFn } from '#/server/fn/auth-methods'
 import { acceptInvitationFn, getInvitationFn } from '#/server/fn/me'
 
 export const Route = createFileRoute('/invite/$token')({
+  validateSearch: (search: Record<string, unknown>) => ({
+    // Better Auth appends this when a provider round-trip fails.
+    error: typeof search.error === 'string' ? search.error : undefined,
+  }),
   loader: async ({ params }) => {
     try {
-      return await getInvitationFn({ data: { token: params.token } })
+      const [invitation, methods] = await Promise.all([
+        getInvitationFn({ data: { token: params.token } }),
+        getAuthMethodsFn(),
+      ])
+      return { invitation, methods }
     } catch {
       throw notFound()
     }
@@ -45,13 +55,20 @@ export const Route = createFileRoute('/invite/$token')({
 })
 
 function InvitePage() {
-  const invitation = Route.useLoaderData()
+  const { invitation, methods } = Route.useLoaderData()
   const { token } = Route.useParams()
+  const { error: providerError } = Route.useSearch()
   const { data: session, isPending: sessionPending } = authClient.useSession()
   const acceptInvitation = useServerFn(acceptInvitationFn)
   const [name, setName] = useState(invitation.email.split('@')[0] ?? '')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(
+    providerError
+      ? providerError === 'REGISTRATION_NOT_ALLOWED'
+        ? m.auth_registration_not_allowed()
+        : m.auth_could_not_sign_in()
+      : null,
+  )
   const [signingUp, setSigningUp] = useState(false)
 
   const acceptMutation = useMutation({
@@ -121,46 +138,58 @@ function InvitePage() {
             </Button>
           ) : (
             <>
-              <form className="grid gap-4" onSubmit={onSignUp}>
-                <FormField label={m.auth_name()} htmlFor="name">
-                  <Input
-                    id="name"
-                    name="name"
-                    autoComplete="name"
-                    required
-                    value={name}
-                    onChange={(event) => setName(event.target.value)}
-                  />
-                </FormField>
-                <FormField label={m.auth_email()} htmlFor="email">
-                  <Input
-                    id="email"
-                    name="email"
-                    type="email"
-                    autoComplete="email"
-                    required
-                    readOnly
-                    value={invitation.email}
-                  />
-                </FormField>
-                <FormField label={m.auth_password()} htmlFor="password">
-                  <Input
-                    id="password"
-                    name="password"
-                    type="password"
-                    autoComplete="new-password"
-                    required
-                    minLength={8}
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                  />
-                </FormField>
-                <Button type="submit" disabled={signingUp}>
-                  {signingUp
-                    ? m.auth_creating_account()
-                    : m.auth_create_account()}
-                </Button>
-              </form>
+              <ProviderSignIn
+                methods={methods}
+                callbackURL={`/invite/${token}`}
+                errorCallbackURL={`/invite/${token}`}
+              />
+              {methods.emailPassword ? (
+                <>
+                  {methods.socials.length > 0 || methods.sso ? (
+                    <AuthDivider />
+                  ) : null}
+                  <form className="grid gap-4" onSubmit={onSignUp}>
+                    <FormField label={m.auth_name()} htmlFor="name">
+                      <Input
+                        id="name"
+                        name="name"
+                        autoComplete="name"
+                        required
+                        value={name}
+                        onChange={(event) => setName(event.target.value)}
+                      />
+                    </FormField>
+                    <FormField label={m.auth_email()} htmlFor="email">
+                      <Input
+                        id="email"
+                        name="email"
+                        type="email"
+                        autoComplete="email"
+                        required
+                        readOnly
+                        value={invitation.email}
+                      />
+                    </FormField>
+                    <FormField label={m.auth_password()} htmlFor="password">
+                      <Input
+                        id="password"
+                        name="password"
+                        type="password"
+                        autoComplete="new-password"
+                        required
+                        minLength={8}
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                      />
+                    </FormField>
+                    <Button type="submit" disabled={signingUp}>
+                      {signingUp
+                        ? m.auth_creating_account()
+                        : m.auth_create_account()}
+                    </Button>
+                  </form>
+                </>
+              ) : null}
               <p className="text-sm text-muted-foreground">
                 {m.auth_already_have_account()}{' '}
                 <Link

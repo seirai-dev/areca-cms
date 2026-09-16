@@ -81,6 +81,22 @@ Agency admins can rebrand the whole CMS at **Branding** in the sidebar Agency se
 
 Settings live in the single-row `branding` table. **Reset to defaults** clears everything and deletes the uploaded images.
 
+## 4c. Sign-in methods (optional)
+
+Every sign-in method is configured in `apps/cms/.env.local` (see `.env.example`); nothing is stored in the database and no code changes are needed. Restart the CMS after editing.
+
+| Method | Enabled by | Callback URL to register with the provider |
+| --- | --- | --- |
+| Email + password | `AUTH_EMAIL_PASSWORD_ENABLED=true` (default) | — |
+| GitHub | `GITHUB_CLIENT_ID` + `GITHUB_CLIENT_SECRET` | `<BETTER_AUTH_URL>/api/auth/callback/github` |
+| Google | `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` | `<BETTER_AUTH_URL>/api/auth/callback/google` |
+| Discord | `DISCORD_CLIENT_ID` + `DISCORD_CLIENT_SECRET` | `<BETTER_AUTH_URL>/api/auth/callback/discord` |
+| Microsoft SSO (Entra ID) | `MICROSOFT_SSO_CLIENT_ID` + `MICROSOFT_SSO_CLIENT_SECRET` + `MICROSOFT_SSO_TENANT_ID` | `<BETTER_AUTH_URL>/api/auth/sso/callback/microsoft` |
+
+A method that is off never appears on the sign-in or invitation page, and its endpoint is rejected server-side. `MICROSOFT_SSO_TENANT_ID` must be a real directory id: the multi-tenant `common` endpoint advertises a templated issuer that cannot be validated. Entra accounts need a mail address, because the connection reads the `email` claim.
+
+Registration stays invite-only whichever method is used. A provider sign-in succeeds only when the email already has an account — the provider is then linked to it — or has a pending invitation; anyone else gets *This account is not allowed to sign in*. The one-time `/setup` bootstrap always accepts a password, even with `AUTH_EMAIL_PASSWORD_ENABLED=false`, so an instance can never be locked out; with password sign-in off, that first admin then signs in through a provider using the same address.
+
 ## 5. Create an organization
 
 1. Open **Organizations** in the sidebar Agency section, or click **Create an organization** on the Get started card. URL: [http://localhost:3000/admin/organizations](http://localhost:3000/admin/organizations)

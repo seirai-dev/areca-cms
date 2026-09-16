@@ -104,6 +104,21 @@ export const verification = pgTable(
   (t) => [index('verification_identifier_idx').on(t.identifier)],
 )
 
+/**
+ * Required by the Better Auth SSO plugin. Connections themselves come from the
+ * environment (`defaultSSO`), so this table stays empty in normal operation.
+ */
+export const ssoProvider = pgTable('sso_provider', {
+  id: text('id').primaryKey(),
+  issuer: text('issuer').notNull(),
+  oidcConfig: text('oidc_config'),
+  samlConfig: text('saml_config'),
+  userId: text('user_id').references(() => user.id, { onDelete: 'cascade' }),
+  providerId: text('provider_id').notNull().unique(),
+  organizationId: text('organization_id'),
+  domain: text('domain').notNull(),
+})
+
 export const organization = pgTable('organization', {
   id: id(),
   name: text('name').notNull(),
