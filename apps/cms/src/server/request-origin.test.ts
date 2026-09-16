@@ -36,6 +36,21 @@ describe('validateCookieMutationOrigin', () => {
     expect(validateCookieMutationOrigin(bearer)).toBeNull()
   })
 
+  it('allows an explicitly trusted origin when a proxy hides the public host', () => {
+    const request = new Request('http://cms:3000/_server/update', {
+      method: 'POST',
+      headers: {
+        cookie: 'session=test',
+        host: 'cms:3000',
+        origin: 'https://cms.example.test',
+      },
+    })
+
+    expect(
+      validateCookieMutationOrigin(request, ['https://cms.example.test']),
+    ).toBeNull()
+  })
+
   it('leaves Better Auth origin handling untouched', () => {
     const request = new Request('https://cms.example.test/api/auth/sign-in', {
       method: 'POST',

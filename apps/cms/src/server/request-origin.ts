@@ -2,6 +2,7 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 
 export function validateCookieMutationOrigin(
   request: Request,
+  trustedOrigins: readonly string[] = [],
 ): Response | null {
   if (SAFE_METHODS.has(request.method.toUpperCase())) return null
   if (!request.headers.has('cookie')) return null
@@ -14,6 +15,11 @@ export function validateCookieMutationOrigin(
 
   try {
     const originUrl = new URL(origin)
+    const normalizedTrustedOrigins = new Set(
+      trustedOrigins.map((trustedOrigin) => new URL(trustedOrigin).origin),
+    )
+    if (normalizedTrustedOrigins.has(originUrl.origin)) return null
+
     const host = request.headers.get('host')?.trim()
     const forwardedProto = request.headers
       .get('x-forwarded-proto')

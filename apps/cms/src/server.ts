@@ -21,7 +21,10 @@ const startFetch = createStartHandler(defaultStreamHandler)
 // TanStack Router localizes URLs via `rewrite`, so pass the original request.
 // Using the middleware's delocalized request would double-rewrite and loop.
 const fetch: typeof startFetch = async (req, ...args) => {
-  const invalidOrigin = validateCookieMutationOrigin(req)
+  const invalidOrigin = validateCookieMutationOrigin(req, [
+    env.BETTER_AUTH_URL,
+    env.APP_URL,
+  ])
   if (invalidOrigin) return withSecurityHeaders(req, invalidOrigin)
 
   const rateLimited = await enforceCmsRateLimit(req)

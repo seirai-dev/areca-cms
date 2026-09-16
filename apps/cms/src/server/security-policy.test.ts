@@ -65,6 +65,19 @@ describe('security policy', () => {
     ).toBe(403)
   })
 
+  it('accepts configured public origins behind a reverse proxy', () => {
+    expect(
+      validateCookieMutationOrigin(
+        mutationRequest('https://public.example.test', {
+          host: 'cms:3000',
+          'x-forwarded-host': 'public.example.test',
+          'x-forwarded-proto': 'https',
+        }),
+        ['https://public.example.test'],
+      ),
+    ).toBeNull()
+  })
+
   it('rejects missing, malformed, and cross-origin origins', () => {
     expect(validateCookieMutationOrigin(mutationRequest())?.status).toBe(403)
     expect(
