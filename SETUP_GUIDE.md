@@ -200,57 +200,28 @@ The CMS must be reachable from the machine that will pull. Same laptop: `http://
 
 ### In the new project
 
-`@areca/site-sdk` is not on npm yet. Copy `packages/site-sdk` into the new repo (or depend on it with `pnpm add <path-to>/packages/site-sdk`), then `pnpm install`. Fastest path: copy `examples/demo-site` and rename it.
-
-1. Add `areca.config.ts` — this is the schema the CMS will show editors. `siteKey` should match the CMS site slug. Collections and `route`s must match pages you actually render.
-
-```ts
-import { defineSiteContent } from '@areca/site-sdk'
-
-export default defineSiteContent({
-  siteKey: 'my-site',
-  collections: {
-    articles: {
-      route: '/blog/$slug',
-      label: 'Articles',
-      fields: [
-        { key: 'title', label: 'Title', type: 'text', required: true },
-        { key: 'slug', label: 'Slug', type: 'slug', required: true },
-        { key: 'body', label: 'Body', type: 'richtext', required: true },
-      ],
-    },
-  },
-})
-```
-
-2. Gitignored `.env.local`:
-
-```
-ARECA_CMS_URL=http://localhost:3000
-ARECA_SITE_TOKEN=<token from the new CMS site>
-```
-
-3. Scripts (TypeScript config needs `tsx`):
-
-```json
-{
-  "scripts": {
-    "sync-manifest": "node --env-file-if-exists=.env.local --import tsx ./node_modules/@areca/site-sdk/dist/cli.js sync-manifest ./areca.config.ts",
-    "content:pull": "node --env-file-if-exists=.env.local ./node_modules/@areca/site-sdk/dist/cli.js pull --out src/generated/content",
-    "prebuild": "node --env-file-if-exists=.env.local ./node_modules/@areca/site-sdk/dist/cli.js pull --out src/generated/content"
-  }
-}
-```
-
-Gitignore `src/generated/`. Content is pulled, not committed.
-
-4. Push schema, then confirm collections in CMS **Settings**:
+`@areca/site-sdk` is not on npm yet. From the frontend repo (a separate git project):
 
 ```powershell
-pnpm sync-manifest
+pnpm add <path-to>/packages/site-sdk
+pnpm exec areca init
 ```
 
-5. In the site, **read the pulled files**, never the CMS, on public pages:
+Non-interactive: `pnpm exec areca init --cms-url http://localhost:3000 --token <token> --site-key acme-site --yes`. Paste the token you copied from the CMS. `site-key` is the CMS site slug.
+
+Init writes wiring only (`areca.config.ts` with empty collections, `.env.local`, scripts, empty generated manifest). It does not create a CMS site or scaffold routes.
+
+Then:
+
+1. Add collections to `areca.config.ts`. `siteKey` must match the CMS slug. Collection `route`s must match pages you actually render.
+2. `pnpm sync-manifest` — confirm collections in CMS **Settings**.
+3. In the CMS: write entries → **Publish now** → **Publish site** → wait until **live**.
+4. `pnpm content:pull`
+5. `pnpm dev`
+
+Scripts are `areca pull` / `areca sync-manifest` because the CLI loads `.env.local`. Do not add a `prebuild` pull until the first publication exists.
+
+In the site, **read the pulled files**, never the CMS, on public pages:
 
 ```ts
 import { readContent } from '@areca/site-sdk/pull'
@@ -267,7 +238,7 @@ Wire those entries to your routes (the demo uses `/blog` and `/blog/$slug`). Add
 ### Then the same loop as the demo
 
 1. CMS: write entries → **Publish now** → **Publish site** → wait until **live**.
-2. Site: `pnpm content:pull` (dev) or `pnpm build` (prebuild pulls, then prerenders).
+2. Site: `pnpm content:pull` (or rebuild after a pull).
 3. Schema change: edit `areca.config.ts` → `pnpm sync-manifest` → fill new fields in the CMS → publish site → pull again.
 
 Until the new site pulls (or rebuilds), it will not show the new snapshot. Git push of the site repo does not publish content.

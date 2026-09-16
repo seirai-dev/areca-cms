@@ -1,10 +1,45 @@
 # @areca/site-sdk
 
-Tiny library a TanStack Start site uses to declare its content schema, pull a published CMS snapshot at build time, and render draft previews. No React imports — use it from loaders, prerender, or a `prebuild` script.
+Tiny library a TanStack Start (or any Node) site uses to declare its content schema, pull a published CMS snapshot at build time, and render draft previews. No React imports — use it from loaders, prerender, or scripts.
 
-Requires `ARECA_CMS_URL` and `ARECA_SITE_TOKEN` (sent as `Authorization: Bearer <token>`).
+The CMS site must already exist. This package wires an **existing** frontend to that site. It does not scaffold routes or create a CMS site.
 
-## 1. Declare collections
+Requires `ARECA_CMS_URL` and `ARECA_SITE_TOKEN` (sent as `Authorization: Bearer <token>`). The CLI loads `.env.local` then `.env` from the current directory without overriding existing `process.env` keys.
+
+## 1. Init
+
+`@areca/site-sdk` is not on npm yet. From the frontend repo:
+
+```bash
+pnpm add <path-to>/packages/site-sdk
+pnpm exec areca init
+```
+
+Non-interactive / CI:
+
+```bash
+pnpm exec areca init --cms-url http://localhost:3000 --token <token> --site-key acme-site --yes
+```
+
+Init writes frontend wiring only:
+
+- `areca.config.ts` — empty `collections: {}` (fill this in next)
+- `.env.example` and gitignored `.env.local` (`ARECA_CMS_URL`, `ARECA_SITE_TOKEN`)
+- `.gitignore` entries for `.env.local` and generated content
+- `package.json` scripts: `sync-manifest`, `content:pull` (wraps `dev` with `areca run --` if a `dev` script already exists)
+- empty `src/generated/content/manifest.json` so the site can boot before the first CMS publish
+
+Then:
+
+1. Add collections to `areca.config.ts`
+2. `pnpm sync-manifest`
+3. Publish in the CMS
+4. `pnpm content:pull`
+5. `pnpm dev`
+
+Flags: `--cms-url`, `--token`, `--site-key`, `--out` (default `src/generated/content`), `--config` (default `areca.config.ts`), `--yes` / `-y`, `--force` (overwrite `areca.config.ts` / `.env.example`).
+
+## 2. Declare collections
 
 `areca.config.ts`:
 
@@ -27,21 +62,19 @@ export default defineSiteContent({
 })
 ```
 
-Push the schema to the CMS (TypeScript configs need `tsx`):
+Push the schema to the CMS (Node 24 can import `.ts` natively):
 
 ```bash
-pnpm exec tsx ./node_modules/@areca/site-sdk/dist/cli.js sync-manifest ./areca.config.ts
+pnpm sync-manifest
+# or: areca sync-manifest ./areca.config.ts
 ```
 
-A compiled `.js` config can use `areca sync-manifest ./areca.config.js`.
-
-## 2. Pull content at build time
+## 3. Pull content
 
 ```json
 {
   "scripts": {
-    "prebuild": "areca pull",
-    "prebuild:custom": "areca pull --out src/generated/content"
+    "content:pull": "areca pull --out src/generated/content"
   }
 }
 ```
@@ -51,9 +84,9 @@ A compiled `.js` config can use `areca sync-manifest ./areca.config.js`.
 - `src/generated/content/manifest.json` — `publicationId`, `hash`, `createdAt`, collection keys + counts
 - `src/generated/content/<collectionKey>.json` — array of snapshot entries
 
-The command exits `1` if no publication exists.
+The command exits `1` if no publication exists. Do not add a `prebuild` pull until the CMS has published at least once.
 
-## 3. Read content in a loader / prerender
+## 4. Read content in a loader / prerender
 
 ```ts
 import { readContent } from '@areca/site-sdk/pull'
@@ -105,7 +138,7 @@ your own options or extensions, and `richTextHtml()` is a static fallback for
 non-React sites (`renderHtml(richTextDocument(body))` produces the same
 markup).
 
-## 4. Preview route
+## 5. Preview route
 
 CMS preview URLs hit `/__preview/$collection/$slug?token=`. The site fetches draft data live and must not be indexed:
 

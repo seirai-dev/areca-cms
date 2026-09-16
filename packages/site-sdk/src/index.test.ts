@@ -314,8 +314,11 @@ describe('parseArgs', () => {
     })
   })
 
-  it('requires a config path for sync-manifest', () => {
-    expect(parseArgs(['sync-manifest'])).toMatchObject({ command: 'error' })
+  it('defaults sync-manifest path to ./areca.config.ts', () => {
+    expect(parseArgs(['sync-manifest'])).toEqual({
+      command: 'sync-manifest',
+      configPath: './areca.config.ts',
+    })
   })
 
   it('returns help for empty args', () => {

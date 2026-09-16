@@ -36,6 +36,7 @@
     "vitest": "^3.2.4"
   },
   "dependencies": {
+    "@clack/prompts": "^1.8.1",
     "@tanstack/markdown": "0.0.15"
   }
 }
