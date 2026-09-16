@@ -69,7 +69,13 @@ function releaseInProgressLabel(status: BuildJobStatus) {
  * Site-level publish control. Publishing builds a snapshot of every published
  * entry and (when a deployment target is configured) deploys it.
  */
-export function ReleaseStatusBar({ siteId }: { siteId: string }) {
+export function ReleaseStatusBar({
+  siteId,
+  canPublish,
+}: {
+  siteId: string
+  canPublish: boolean
+}) {
   const queryClient = useQueryClient()
   const [urgent, setUrgent] = useState(false)
   const [publishErrors, setPublishErrors] = useState<string[]>([])
@@ -187,40 +193,42 @@ export function ReleaseStatusBar({ siteId }: { siteId: string }) {
             )}
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="urgent"
-                  checked={urgent}
-                  onCheckedChange={(checked) => setUrgent(checked === true)}
-                />
-                <Label htmlFor="urgent" className="cursor-pointer">
-                  {m.editor_urgent()}
-                </Label>
-              </div>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">
-              {m.editor_urgent_tooltip()}
-            </TooltipContent>
-          </Tooltip>
-          <Button
-            type="button"
-            data-testid="publish-site"
-            disabled={publishMutation.isPending}
-            onClick={() => publishMutation.mutate()}
-          >
-            {publishMutation.isPending ? (
-              <Loader2 className="animate-spin" />
-            ) : (
-              <Rocket />
-            )}
-            {publishMutation.isPending
-              ? m.editor_publishing()
-              : m.editor_publish_site()}
-          </Button>
-        </div>
+        {canPublish ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="urgent"
+                    checked={urgent}
+                    onCheckedChange={(checked) => setUrgent(checked === true)}
+                  />
+                  <Label htmlFor="urgent" className="cursor-pointer">
+                    {m.editor_urgent()}
+                  </Label>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {m.editor_urgent_tooltip()}
+              </TooltipContent>
+            </Tooltip>
+            <Button
+              type="button"
+              data-testid="publish-site"
+              disabled={publishMutation.isPending}
+              onClick={() => publishMutation.mutate()}
+            >
+              {publishMutation.isPending ? (
+                <Loader2 className="animate-spin" />
+              ) : (
+                <Rocket />
+              )}
+              {publishMutation.isPending
+                ? m.editor_publishing()
+                : m.editor_publish_site()}
+            </Button>
+          </div>
+        ) : null}
       </div>
       {publishErrors.length > 0 ? (
         <Alert variant="destructive">

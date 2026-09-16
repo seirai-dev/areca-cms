@@ -23,7 +23,6 @@ const ALLOWED_MIMES = new Set([
   'image/png',
   'image/webp',
   'image/gif',
-  'image/svg+xml',
   'application/pdf',
 ])
 
@@ -39,7 +38,6 @@ const EXT_BY_MIME: Record<string, string> = {
   'image/png': 'png',
   'image/webp': 'webp',
   'image/gif': 'gif',
-  'image/svg+xml': 'svg',
   'application/pdf': 'pdf',
 }
 
@@ -49,7 +47,6 @@ const MIME_BY_EXT: Record<string, string> = {
   png: 'image/png',
   webp: 'image/webp',
   gif: 'image/gif',
-  svg: 'image/svg+xml',
   pdf: 'application/pdf',
 }
 

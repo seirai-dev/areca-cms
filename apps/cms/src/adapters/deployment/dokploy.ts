@@ -1,4 +1,13 @@
+import { request as httpRequest } from 'node:http'
+import { request as httpsRequest } from 'node:https'
+import { isIP } from 'node:net'
+
 import type { DeploymentAdapter } from './types'
+import {
+  assertSecureServiceUrl,
+  resolveSafeHealthCheckUrl,
+} from '#/server/http/outbound-url'
+import type { ResolveHost } from '#/server/http/outbound-url'
 
 // Request bodies for later demo-app provisioning: see dokploy-api-notes.md
 //
@@ -15,14 +24,17 @@ export function createDokployAdapter(opts: {
   baseUrl: string
   apiKey: string
   fetch?: FetchFn
+  resolveHost?: ResolveHost
+  allowInsecureHttp?: boolean
+  allowPrivateHealthChecks?: boolean
 }): DeploymentAdapter {
-  const baseUrl = opts.baseUrl.replace(/\/$/, '')
+  const baseUrl = assertSecureServiceUrl(
+    opts.baseUrl,
+    opts.allowInsecureHttp,
+  ).href.replace(/\/$/, '')
   const fetchFn = opts.fetch ?? fetch
 
-  async function request<T>(
-    path: string,
-    init: RequestInit = {},
-  ): Promise<T> {
+  async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const headers: Record<string, string> = {
       'x-api-key': opts.apiKey,
       accept: 'application/json',
@@ -34,17 +46,17 @@ export function createDokployAdapter(opts: {
           ? Object.fromEntries(init.headers.entries())
           : Array.isArray(init.headers)
             ? Object.fromEntries(init.headers)
-            : (init.headers as Record<string, string>)
+            : init.headers
       Object.assign(headers, extra)
     }
 
     const res = await fetchFn(`${baseUrl}${path}`, { ...init, headers })
-    const text = await res.text()
     if (!res.ok) {
       throw new Error(
-        `Dokploy ${init.method ?? 'GET'} ${path} failed: ${res.status}${text ? ` ${text}` : ''}`,
+        `Dokploy ${init.method ?? 'GET'} ${path} failed: ${res.status}`,
       )
     }
+    const text = await res.text()
     if (!text.trim()) return undefined as T
     return JSON.parse(text) as T
   }
@@ -55,17 +67,28 @@ export function createDokployAdapter(opts: {
     )
   }
 
-  async function bustContentCache(applicationId: string, log: (line: string) => void) {
+  async function bustContentCache(
+    applicationId: string,
+    log: (line: string) => void,
+  ) {
     const app = await getApplication(applicationId)
     const snapshotId = `${Date.now()}`
-    const buildArgs = upsertEnvLine(app.buildArgs, 'ARECA_SNAPSHOT_ID', snapshotId)
+    const legacySiteToken = readEnvLine(app.buildArgs, 'ARECA_SITE_TOKEN')
+    const buildArgs = upsertEnvLine(
+      removeEnvLine(app.buildArgs, 'ARECA_SITE_TOKEN'),
+      'ARECA_SNAPSHOT_ID',
+      snapshotId,
+    )
+    const buildSecrets = legacySiteToken
+      ? upsertEnvLine(app.buildSecrets, 'ARECA_SITE_TOKEN', legacySiteToken)
+      : (app.buildSecrets ?? '')
     await request('/api/application.saveEnvironment', {
       method: 'POST',
       body: JSON.stringify({
         applicationId,
         env: app.env ?? '',
         buildArgs,
-        buildSecrets: app.buildSecrets ?? '',
+        buildSecrets,
         createEnvFile: app.createEnvFile ?? false,
       }),
     })
@@ -115,12 +138,9 @@ export function createDokployAdapter(opts: {
 
     async healthCheck(url, { timeoutMs, intervalMs, expectPublicationId }) {
       const deadline = Date.now() + timeoutMs
-      while (true) {
+      for (;;) {
         try {
-          const remaining = Math.max(1, deadline - Date.now())
-          const res = await fetchFn(url, {
-            signal: AbortSignal.timeout(remaining),
-          })
+          const res = await fetchHealthUrl(url, deadline)
           if (res.status === 200) {
             if (!expectPublicationId) return true
             const body = (await res.json()) as { publicationId?: string }
@@ -135,6 +155,81 @@ export function createDokployAdapter(opts: {
       }
     },
   }
+
+  async function fetchHealthUrl(
+    rawUrl: string,
+    deadline: number,
+    redirects = 0,
+  ): Promise<Response> {
+    const resolved = await resolveSafeHealthCheckUrl(rawUrl, {
+      resolve: opts.resolveHost,
+      allowInsecureHttp: opts.allowInsecureHttp,
+      allowPrivateNetwork: opts.allowPrivateHealthChecks,
+    })
+    const { url } = resolved
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) throw new Error('Health-check timeout')
+    const response = opts.fetch
+      ? await fetchFn(url, {
+          redirect: 'manual',
+          signal: AbortSignal.timeout(remaining),
+        })
+      : await pinnedRequest(url, resolved.addresses[0], remaining)
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get('location')
+      if (!location || redirects >= 4) return response
+      return fetchHealthUrl(
+        new URL(location, url).href,
+        deadline,
+        redirects + 1,
+      )
+    }
+    return response
+  }
+}
+
+function pinnedRequest(
+  url: URL,
+  address: string | undefined,
+  timeoutMs: number,
+) {
+  return new Promise<Response>((resolve, reject) => {
+    const transport = url.protocol === 'https:' ? httpsRequest : httpRequest
+    const request = transport(
+      url,
+      {
+        signal: AbortSignal.timeout(timeoutMs),
+        ...(address
+          ? {
+              lookup: (_hostname, _options, callback) =>
+                callback(null, address, isIP(address)),
+            }
+          : {}),
+      },
+      (incoming) => {
+        const chunks: Buffer[] = []
+        let size = 0
+        incoming.on('data', (chunk: Buffer) => {
+          size += chunk.byteLength
+          if (size > 64 * 1024) {
+            request.destroy(new Error('Health-check response is too large'))
+            return
+          }
+          chunks.push(chunk)
+        })
+        incoming.on('end', () => {
+          resolve(
+            new Response(Buffer.concat(chunks), {
+              status: incoming.statusCode ?? 500,
+              headers: incoming.headers as Record<string, string>,
+            }),
+          )
+        })
+      },
+    )
+    request.on('error', reject)
+    request.end()
+  })
 }
 
 interface DokployDeployment {
@@ -164,6 +259,20 @@ function upsertEnvLine(
   return lines.join('\n')
 }
 
+function removeEnvLine(raw: string | null | undefined, key: string) {
+  return (raw ?? '')
+    .split(/\r?\n/)
+    .filter((line) => line.length > 0 && !line.startsWith(`${key}=`))
+    .join('\n')
+}
+
+function readEnvLine(raw: string | null | undefined, key: string) {
+  const line = (raw ?? '')
+    .split(/\r?\n/)
+    .find((candidate) => candidate.startsWith(`${key}=`))
+  return line?.slice(key.length + 1)
+}
+
 function newestDeploymentId(
   app: DokployApplication,
   applicationId: string,
@@ -175,7 +284,7 @@ function newestDeploymentId(
   const newest = [...deployments].sort((a, b) =>
     String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')),
   )[0]
-  return newest?.deploymentId ?? `${applicationId}-${Date.now()}`
+  return newest.deploymentId ?? `${applicationId}-${Date.now()}`
 }
 
 function sleep(ms: number) {

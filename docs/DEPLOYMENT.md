@@ -26,7 +26,8 @@ Required env for `dokploy:setup`: `DOKPLOY_URL`, `DOKPLOY_API_KEY`,
 `DOKPLOY_ENVIRONMENT_ID`, `GIT_URL`, `SSH_KEY_ID`, `SITE_TOKEN`, `CMS_URL`.
 Optional: `APP_NAME` (default `acme-demo-site`), `GIT_BRANCH` (`master`),
 `DOCKERFILE` (`examples/demo-site/Dockerfile`), `PUBLISHED_PORT` (`3101`),
-`TARGET_PORT` (`3000`), `AUTO_DEPLOY` (`false`).
+`TARGET_PORT` (`3000`), `AUTO_DEPLOY` (`false`). Production/shared URLs must
+use HTTPS. For local or LAN-only testing, set `DOKPLOY_ALLOW_INSECURE_HTTP=true`.
 
 ## 1. Git repo + deploy key (one-time)
 
@@ -36,7 +37,8 @@ Optional: `APP_NAME` (default `acme-demo-site`), `GIT_BRANCH` (`master`),
    (from `GET /api/project.all` → `organizationId`). Then `GET /api/sshKey.all` for `sshKeyId`.
 4. Add the **public** key as a read-only GitHub deploy key. Delete the local private key.
 
-Auth is header `x-api-key` (not Bearer). Base `http://<dokploy-host>:3000`.
+Auth is header `x-api-key` (not Bearer). Use an HTTPS Dokploy API URL outside
+explicit local/LAN testing.
 More request shapes: `apps/cms/src/adapters/deployment/dokploy-api-notes.md`.
 
 ## 2. Register the Dokploy application
@@ -46,7 +48,9 @@ More request shapes: `apps/cms/src/adapters/deployment/dokploy-api-notes.md`.
 1. Create the application if the name is new (`POST /api/application.create`).
 2. Save git (`customGitUrl`, branch, `customGitSSHKeyId`).
 3. Set build type `dockerfile` with the given Dockerfile and context.
-4. Write `env` + `buildArgs` (newline-separated `KEY=value`):
+4. Write runtime `env`, non-secret `buildArgs`, and `ARECA_SITE_TOKEN` as a
+   BuildKit build secret. The token is not stored in a Docker `ARG` or image
+   `ENV`; the Dockerfile mounts it only for the content-pull build step.
 
 ```
 PORT=3000
@@ -54,8 +58,10 @@ ARECA_CMS_URL=http://<cms-lan-ip>:3000
 ARECA_SITE_TOKEN=<plain site token>
 ```
 
-The same `ARECA_*` keys go in `buildArgs`, plus `ARECA_SNAPSHOT_ID=0` as a
-placeholder. The CMS adapter rewrites `ARECA_SNAPSHOT_ID` on every deploy.
+Only `ARECA_CMS_URL` and `ARECA_SNAPSHOT_ID=0` go in `buildArgs`.
+`ARECA_SITE_TOKEN` goes in `buildSecrets` and remains in runtime `env` for
+server-rendered previews. The CMS adapter rewrites `ARECA_SNAPSHOT_ID` on every
+deploy.
 
 5. Publish host port (`PUBLISHED_PORT` → `TARGET_PORT`, `publishMode: host`).
 6. Turn off push auto-deploy so only **Publish site** triggers a build.
@@ -64,7 +70,8 @@ placeholder. The CMS adapter rewrites `ARECA_SNAPSHOT_ID` on every deploy.
    `done` while the old container keeps serving.
 
 Health URL for a host-published port is
-`http://<dokploy-host>:<published-port>/api/health`.
+`https://<site-host>/api/health`. Local/LAN HTTP requires the explicit CMS
+`ALLOW_PRIVATE_HEALTH_CHECKS=true` development override.
 
 ## 3. CMS must be reachable from the Dokploy host
 
@@ -87,9 +94,9 @@ On the site (agency admin → Settings, or `updateSite`):
 }
 ```
 
-`productionUrl` = `http://<dokploy-host>:<published-port>`. Sync the site
+`productionUrl` = `https://<site-host>`. Sync the site
 manifest from the customer package (`pnpm sync-manifest` with `ARECA_CMS_URL`
-+ `ARECA_SITE_TOKEN`).
+and `ARECA_SITE_TOKEN`).
 
 ## 5. What **Publish site** does
 
@@ -98,7 +105,7 @@ manifest from the customer package (`pnpm sync-manifest` with `ARECA_CMS_URL`
 3. **Cache bust:** Dokploy cannot pass a per-deploy env var from the worker
    except by rewriting the app config. Before deploy, the adapter writes
    `ARECA_SNAPSHOT_ID=<timestamp>` into `buildArgs`. The demo Dockerfile
-   declares that `ARG` *after* the SDK build and *immediately before*
+   declares that `ARG` _after_ the SDK build and _immediately before_
    `pnpm --filter @areca/demo-site build` (which runs `areca pull`). Changing
    the ARG invalidates only the content-pull layer, so Docker does not reuse a
    cached snapshot from an earlier publication.
@@ -115,16 +122,16 @@ A rollback whose deploy fails stays `failed` but remains eligible because
 
 ## Troubleshooting
 
-| Symptom | What to check |
-| --- | --- |
-| `Unexpected end of JSON input` | `application.deploy` can return an empty 200. Current adapter treats that as success. |
-| Deploy finishes in a few seconds, site still shows old `publicationId` | Docker cached `areca pull`. Confirm `ARECA_SNAPSHOT_ID` is in `buildArgs` and sits **after** the SDK build in the Dockerfile. |
-| Job `failed: Deploy error` / clone errors | Deploy key, `customGitSSHKeyId`, repo URL `git@github.com:…`. |
-| `areca pull` 401 | Site token rotated; update Dokploy `env` + `buildArgs` and the local token you use for `sync-manifest`. |
-| `areca pull` 404 `No publication exists` | Snapshot endpoint only returns the active job's publication or the latest `live`. Publish from the CMS first. |
-| `areca pull` connection refused / timeout | CMS not on `0.0.0.0`, wrong `ARECA_CMS_URL`, or Windows firewall blocking :3000. |
-| `pnpm install --frozen-lockfile` fails | Lockfile out of date vs `package.json`; commit an updated `pnpm-lock.yaml`. |
-| Health check fails | `GET /api/deployment.all?applicationId=` then `GET /api/deployment.readLogs?deploymentId=&tail=200`. Port `3101→3000` `publishMode: host`. |
-| Build succeeds, site still serves old `publicationId` | Swarm kept the old task (`docker.getContainers` image digest unchanged). Set `updateConfigSwarm.Order` to `stop-first` and publish again. |
-| `application.saveGitProdiver` 404 | Typo path on v0.29.12. Use `saveGitProvider`. |
-| `sshKey.create` 400 `organizationId` | Required. Take it from `project.all`. |
+| Symptom                                                                | What to check                                                                                                                              |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Unexpected end of JSON input`                                         | `application.deploy` can return an empty 200. Current adapter treats that as success.                                                      |
+| Deploy finishes in a few seconds, site still shows old `publicationId` | Docker cached `areca pull`. Confirm `ARECA_SNAPSHOT_ID` is in `buildArgs` and sits **after** the SDK build in the Dockerfile.              |
+| Job `failed: Deploy error` / clone errors                              | Deploy key, `customGitSSHKeyId`, repo URL `git@github.com:…`.                                                                              |
+| `areca pull` 401                                                       | Site token rotated; update Dokploy runtime `env` + `buildSecrets` and the local token you use for `sync-manifest`.                         |
+| `areca pull` 404 `No publication exists`                               | Snapshot endpoint only returns the active job's publication or the latest `live`. Publish from the CMS first.                              |
+| `areca pull` connection refused / timeout                              | CMS not on `0.0.0.0`, wrong `ARECA_CMS_URL`, or Windows firewall blocking :3000.                                                           |
+| `pnpm install --frozen-lockfile` fails                                 | Lockfile out of date vs `package.json`; commit an updated `pnpm-lock.yaml`.                                                                |
+| Health check fails                                                     | `GET /api/deployment.all?applicationId=` then `GET /api/deployment.readLogs?deploymentId=&tail=200`. Port `3101→3000` `publishMode: host`. |
+| Build succeeds, site still serves old `publicationId`                  | Swarm kept the old task (`docker.getContainers` image digest unchanged). Set `updateConfigSwarm.Order` to `stop-first` and publish again.  |
+| `application.saveGitProdiver` 404                                      | Typo path on v0.29.12. Use `saveGitProvider`.                                                                                              |
+| `sshKey.create` 400 `organizationId`                                   | Required. Take it from `project.all`.                                                                                                      |

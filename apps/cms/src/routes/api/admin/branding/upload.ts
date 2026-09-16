@@ -4,6 +4,10 @@ import '@tanstack/react-start'
 import { getSession } from '#/lib/session.server'
 import { setBrandingImage } from '#/server/admin/branding'
 import { AssetValidationError } from '#/server/assets'
+import { parseLimitedFormData, UploadTooLargeError } from '#/server/http/upload'
+
+// Allow multipart framing and the `kind` field in addition to the 2 MiB image.
+const MAX_UPLOAD_BODY_BYTES = 2 * 1024 * 1024 + 256 * 1024
 
 export const Route = createFileRoute('/api/admin/branding/upload')({
   server: {
@@ -17,7 +21,15 @@ export const Route = createFileRoute('/api/admin/branding/upload')({
           return new Response('Forbidden', { status: 403 })
         }
 
-        const form = await request.formData()
+        let form: FormData
+        try {
+          form = await parseLimitedFormData(request, MAX_UPLOAD_BODY_BYTES)
+        } catch (error) {
+          if (error instanceof UploadTooLargeError) {
+            return new Response('Image exceeds 2 MB', { status: 413 })
+          }
+          throw error
+        }
         const file = form.get('file')
         const kind = form.get('kind')
 

@@ -489,6 +489,7 @@
   "server_cannot_delete_org_with_sites": "Een organisatie met sites kan niet worden verwijderd",
   "server_cannot_demote_last_owner": "De laatste eigenaar kan niet worden gedegradeerd",
   "server_cannot_remove_last_owner": "De laatste eigenaar kan niet worden verwijderd",
+  "server_cannot_remove_last_agency_admin": "De laatste bureaubeheerder kan niet worden verwijderd",
   "server_collection_not_found": "Collectie niet gevonden",
   "server_email_already_member": "Dit e-mailadres is al lid",
   "server_email_sender_max_80": "De naam van de afzender mag maximaal 80 tekens zijn",

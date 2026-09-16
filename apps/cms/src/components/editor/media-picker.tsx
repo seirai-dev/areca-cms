@@ -154,7 +154,7 @@ export function MediaPickerDialog({
           <input
             ref={inputRef}
             type="file"
-            accept="image/*,application/pdf"
+            accept="image/jpeg,image/png,image/webp,image/gif,application/pdf"
             className="sr-only"
             data-testid="media-upload"
             onChange={(event) => {

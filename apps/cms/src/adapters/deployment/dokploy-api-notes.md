@@ -55,6 +55,9 @@ Nullable extras (`dockerfile`, `dockerContextPath`, …) must still be present (
 
 Required: `{ applicationId, env, buildArgs, buildSecrets, createEnvFile }`
 `env` is a single string (`KEY=value` lines). Others may be `null` but must be present.
+`buildSecrets` is a newline-separated `KEY=value` block. Dokploy exposes each key
+to BuildKit as `--secret id=KEY,env=KEY`; consume it with
+`RUN --mount=type=secret,id=KEY` so it is not recorded in image layers or metadata.
 
 ## domain.create — `POST /api/domain.create`
 

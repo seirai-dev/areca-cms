@@ -44,6 +44,7 @@ import {
 import { ScrollArea } from '#/components/ui/scroll-area'
 import { Skeleton } from '#/components/ui/skeleton'
 import type { BuildJobStatus, PublicationStatus } from '#/lib/types'
+import { canManageSite } from '#/lib/site-nav'
 import { m } from '#/paraglide/messages'
 import {
   cancelJobFn,
@@ -93,6 +94,8 @@ function canRollback(row: PublicationRow) {
 
 function ReleasesPage() {
   const { siteId } = Route.useParams()
+  const { site, me } = Route.useRouteContext()
+  const canManage = canManageSite(me, site.organizationId)
   const queryClient = useQueryClient()
   const [publicationsOffset, setPublicationsOffset] = useState(0)
   const [rollbackTarget, setRollbackTarget] = useState<PublicationRow | null>(
@@ -222,7 +225,7 @@ function ReleasesPage() {
       enableSorting: false,
       cell: ({ row }) => (
         <div className="flex justify-end">
-          {canRollback(row.original) ? (
+          {canManage && canRollback(row.original) ? (
             <Button
               type="button"
               size="sm"
@@ -285,7 +288,7 @@ function ReleasesPage() {
             <ScrollText />
             {m.sites_logs()}
           </Button>
-          {row.original.status === 'queued' ? (
+          {canManage && row.original.status === 'queued' ? (
             <Button
               type="button"
               size="sm"

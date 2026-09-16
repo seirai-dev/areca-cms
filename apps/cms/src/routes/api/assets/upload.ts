@@ -3,12 +3,29 @@ import '@tanstack/react-start'
 
 import { getSession, requireOrgMember } from '#/lib/session.server'
 import { AssetValidationError, uploadAsset } from '#/server/assets'
+import { parseLimitedFormData, UploadTooLargeError } from '#/server/http/upload'
+
+// Allow multipart framing and the small text fields in addition to the 20 MiB file.
+const MAX_UPLOAD_BODY_BYTES = 21 * 1024 * 1024
 
 export const Route = createFileRoute('/api/assets/upload')({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const form = await request.formData()
+        const session = await getSession()
+        if (!session) {
+          return new Response('Unauthorized', { status: 401 })
+        }
+
+        let form: FormData
+        try {
+          form = await parseLimitedFormData(request, MAX_UPLOAD_BODY_BYTES)
+        } catch (error) {
+          if (error instanceof UploadTooLargeError) {
+            return new Response('File exceeds 20 MB', { status: 413 })
+          }
+          throw error
+        }
         const file = form.get('file')
         const organizationId = form.get('organizationId')
         const altText = form.get('altText')
@@ -18,11 +35,6 @@ export const Route = createFileRoute('/api/assets/upload')({
         }
         if (typeof organizationId !== 'string' || !organizationId) {
           return new Response('organizationId is required', { status: 400 })
-        }
-
-        const session = await getSession()
-        if (!session) {
-          return new Response('Unauthorized', { status: 401 })
         }
 
         try {

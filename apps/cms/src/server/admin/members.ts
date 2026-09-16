@@ -13,6 +13,12 @@ import { ConflictError, NotFoundError } from '#/server/content/errors'
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
+export function assertAgencyAdminCanBeRemoved(adminCount: number) {
+  if (adminCount <= 1) {
+    throw new ConflictError(m.server_cannot_remove_last_agency_admin())
+  }
+}
+
 function escapeHtml(value: string) {
   return value
     .replace(/&/g, '&amp;')
@@ -353,30 +359,41 @@ export async function listAgencyAdmins() {
 }
 
 export async function setAgencyAdmin(userId: string, isAgencyAdmin: boolean) {
-  const [existing] = await db
-    .select({ id: user.id })
-    .from(user)
-    .where(eq(user.id, userId))
-    .limit(1)
-  if (!existing) {
-    throw new NotFoundError(m.server_user_not_found())
-  }
+  return db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select({ id: user.id, isAgencyAdmin: user.isAgencyAdmin })
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1)
+    if (!existing) {
+      throw new NotFoundError(m.server_user_not_found())
+    }
 
-  const [updated] = await db
-    .update(user)
-    .set({ isAgencyAdmin, updatedAt: new Date() })
-    .where(eq(user.id, userId))
-    .returning({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      isAgencyAdmin: user.isAgencyAdmin,
-    })
-  if (!updated) {
-    throw new NotFoundError(m.server_user_not_found())
-  }
+    if (existing.isAgencyAdmin && !isAgencyAdmin) {
+      const admins = await tx
+        .select({ id: user.id })
+        .from(user)
+        .where(eq(user.isAgencyAdmin, true))
+        .for('update')
+      assertAgencyAdminCanBeRemoved(admins.length)
+    }
 
-  return updated
+    const [updated] = await tx
+      .update(user)
+      .set({ isAgencyAdmin, updatedAt: new Date() })
+      .where(eq(user.id, userId))
+      .returning({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        isAgencyAdmin: user.isAgencyAdmin,
+      })
+    if (!updated) {
+      throw new NotFoundError(m.server_user_not_found())
+    }
+
+    return updated
+  })
 }
 
 export async function listUsers() {

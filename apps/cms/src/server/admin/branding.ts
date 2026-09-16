@@ -27,11 +27,9 @@ const IMAGE_MIMES: Record<BrandingImageKind, Record<string, string>> = {
     'image/jpeg': 'jpg',
     'image/webp': 'webp',
     'image/gif': 'gif',
-    'image/svg+xml': 'svg',
   },
   favicon: {
     'image/png': 'png',
-    'image/svg+xml': 'svg',
     'image/x-icon': 'ico',
     'image/vnd.microsoft.icon': 'ico',
   },

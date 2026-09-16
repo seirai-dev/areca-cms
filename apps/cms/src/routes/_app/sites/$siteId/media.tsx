@@ -24,6 +24,7 @@ import { Input } from '#/components/ui/input'
 import { Skeleton } from '#/components/ui/skeleton'
 import { useDebouncedValue } from '#/hooks/use-debounced-value'
 import { cn } from '#/lib/utils'
+import { canManageSite } from '#/lib/site-nav'
 import { m } from '#/paraglide/messages'
 import { deleteAssetFn, listAssetsFn, updateAssetFn } from '#/server/fn/assets'
 
@@ -45,8 +46,9 @@ function formatBytes(bytes: number | undefined) {
 }
 
 function MediaPage() {
-  const { site } = Route.useRouteContext()
+  const { site, me } = Route.useRouteContext()
   const organizationId = site.organizationId
+  const canDelete = canManageSite(me, organizationId)
   const queryClient = useQueryClient()
   const inputRef = useRef<HTMLInputElement>(null)
   const dragDepth = useRef(0)
@@ -179,7 +181,7 @@ function MediaPage() {
       <input
         ref={inputRef}
         type="file"
-        accept="image/*,application/pdf"
+        accept="image/jpeg,image/png,image/webp,image/gif,application/pdf"
         multiple
         className="sr-only"
         aria-label={m.sites_upload_files()}
@@ -346,16 +348,18 @@ function MediaPage() {
                         }
                       }}
                     />
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="text-destructive hover:text-destructive"
-                      onClick={() => setDeleteTarget(asset)}
-                    >
-                      <Trash2 />
-                      {m.sites_delete()}
-                    </Button>
+                    {canDelete ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => setDeleteTarget(asset)}
+                      >
+                        <Trash2 />
+                        {m.sites_delete()}
+                      </Button>
+                    ) : null}
                   </div>
                 )
               })}

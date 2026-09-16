@@ -31,17 +31,17 @@ See `.env.example` (copy to gitignored `.env.local`):
 
 ## Scripts
 
-| Script | Purpose |
-| --- | --- |
-| `pnpm dev` | Vite dev server on port 3001 |
-| `pnpm build` | Prebuild (pull or fixture) + Vite/Nitro build with prerender |
-| `pnpm start` | `node .output/server/index.mjs` |
-| `pnpm typecheck` | `tsc --noEmit` |
-| `pnpm test` | Vitest |
+| Script                  | Purpose                                                                      |
+| ----------------------- | ---------------------------------------------------------------------------- |
+| `pnpm dev`              | Vite dev server on port 3001                                                 |
+| `pnpm build`            | Prebuild (pull or fixture) + Vite/Nitro build with prerender                 |
+| `pnpm start`            | `node .output/server/index.mjs`                                              |
+| `pnpm typecheck`        | `tsc --noEmit`                                                               |
+| `pnpm test`             | Vitest                                                                       |
 | `pnpm verify:prerender` | Assert `.output/public/blog/<slug>/index.html` exists for every fixture slug |
-| `pnpm content:fixture` | Write the local snapshot fixture |
-| `pnpm content:pull` | `areca pull --out src/generated/content` |
-| `pnpm sync-manifest` | Sync `areca.config.ts` to the CMS |
+| `pnpm content:fixture`  | Write the local snapshot fixture                                             |
+| `pnpm content:pull`     | `areca pull --out src/generated/content`                                     |
+| `pnpm sync-manifest`    | Sync `areca.config.ts` to the CMS                                            |
 
 ## Preview
 
@@ -52,7 +52,9 @@ Drafts open at `/__preview/$collection/$slug?token=`. The loader calls `getPrevi
 Build context is the **repo root**:
 
 ```bash
-docker build -f examples/demo-site/Dockerfile --build-arg ARECA_CMS_URL=http://host.docker.internal:3000 --build-arg ARECA_SITE_TOKEN=x .
+ARECA_SITE_TOKEN=x docker build -f examples/demo-site/Dockerfile \
+  --build-arg ARECA_CMS_URL=http://host.docker.internal:3000 \
+  --secret id=ARECA_SITE_TOKEN,env=ARECA_SITE_TOKEN .
 ```
 
 Install + `@areca/site-sdk` build run first. `areca pull` then fails if the CMS has no publication — that error is expected.

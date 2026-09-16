@@ -9,6 +9,7 @@ import {
   sortFn_alphanumeric,
   sortFn_basic,
   sortFn_datetime,
+  sortFn_text,
   tableFeatures,
   useTable,
 } from '@tanstack/react-table'
@@ -39,6 +40,7 @@ const dataTableFeatures = tableFeatures({
     alphanumeric: sortFn_alphanumeric,
     basic: sortFn_basic,
     datetime: sortFn_datetime,
+    text: sortFn_text,
   },
   rowPaginationFeature,
   paginatedRowModel: createPaginatedRowModel(),

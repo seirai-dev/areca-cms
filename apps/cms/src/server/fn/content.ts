@@ -22,6 +22,7 @@ import {
   updateDraft,
 } from '#/server/content/entries'
 import { NotFoundError } from '#/server/content/errors'
+import { pageLimitSchema, pageOffsetSchema } from '#/server/pagination'
 import {
   buildPreviewUrl,
   signPreviewToken,
@@ -65,7 +66,7 @@ const entryDataSchema = z.record(z.string(), z.unknown())
 
 const entryFn = { strict: { output: false } as const }
 
-async function requireSiteAccess(siteId: string) {
+async function requireSiteAccess(siteId: string, role?: 'owner') {
   const [found] = await db
     .select()
     .from(site)
@@ -74,16 +75,16 @@ async function requireSiteAccess(siteId: string) {
   if (!found) {
     throw new NotFoundError(m.server_site_not_found())
   }
-  const session = await requireOrgMember(found.organizationId)
+  const session = await requireOrgMember(found.organizationId, role)
   return { session, site: found }
 }
 
-async function requireEntryAccess(entryId: string) {
+async function requireEntryAccess(entryId: string, role?: 'owner') {
   const existing = await getEntry(entryId)
   if (!existing) {
     throw new NotFoundError(m.server_entry_not_found())
   }
-  const access = await requireSiteAccess(existing.siteId)
+  const access = await requireSiteAccess(existing.siteId, role)
   return { ...access, entry: existing }
 }
 
@@ -106,8 +107,8 @@ export const listEntriesFn = createServerFn({ method: 'GET', ...entryFn })
       collectionKey: z.string().min(1),
       status: entryStatusSchema.optional(),
       search: z.string().optional(),
-      limit: z.number().int().min(0).optional(),
-      offset: z.number().int().min(0).optional(),
+      limit: pageLimitSchema.optional(),
+      offset: pageOffsetSchema.optional(),
     }),
   )
   .handler(async ({ data }) => {
@@ -160,21 +161,21 @@ export const updateDraftFn = createServerFn({ method: 'POST', ...entryFn })
 export const publishEntryFn = createServerFn({ method: 'POST', ...entryFn })
   .validator(z.object({ id: z.string().min(1) }))
   .handler(async ({ data }) => {
-    const { session } = await requireEntryAccess(data.id)
+    const { session } = await requireEntryAccess(data.id, 'owner')
     return publishEntry(data.id, session.user.id)
   })
 
 export const unpublishEntryFn = createServerFn({ method: 'POST', ...entryFn })
   .validator(z.object({ id: z.string().min(1) }))
   .handler(async ({ data }) => {
-    const { session } = await requireEntryAccess(data.id)
+    const { session } = await requireEntryAccess(data.id, 'owner')
     return unpublishEntry(data.id, session.user.id)
   })
 
 export const archiveEntryFn = createServerFn({ method: 'POST', ...entryFn })
   .validator(z.object({ id: z.string().min(1) }))
   .handler(async ({ data }) => {
-    const { session } = await requireEntryAccess(data.id)
+    const { session } = await requireEntryAccess(data.id, 'owner')
     return archiveEntry(data.id, session.user.id)
   })
 
@@ -187,7 +188,7 @@ export const scheduleEntryFn = createServerFn({ method: 'POST', ...entryFn })
     }),
   )
   .handler(async ({ data }) => {
-    const { session } = await requireEntryAccess(data.id)
+    const { session } = await requireEntryAccess(data.id, 'owner')
     return scheduleEntry(
       data.id,
       data.scheduledAt,
@@ -199,14 +200,14 @@ export const scheduleEntryFn = createServerFn({ method: 'POST', ...entryFn })
 export const cancelScheduleFn = createServerFn({ method: 'POST', ...entryFn })
   .validator(z.object({ id: z.string().min(1) }))
   .handler(async ({ data }) => {
-    const { session } = await requireEntryAccess(data.id)
+    const { session } = await requireEntryAccess(data.id, 'owner')
     return cancelSchedule(data.id, session.user.id)
   })
 
 export const deleteEntryFn = createServerFn({ method: 'POST' })
   .validator(z.object({ id: z.string().min(1) }))
   .handler(async ({ data }) => {
-    const { session } = await requireEntryAccess(data.id)
+    const { session } = await requireEntryAccess(data.id, 'owner')
     await deleteEntry(data.id, session.user.id)
     return { ok: true as const }
   })
@@ -226,7 +227,7 @@ export const restoreRevisionFn = createServerFn({ method: 'POST', ...entryFn })
     }),
   )
   .handler(async ({ data }) => {
-    const { session } = await requireEntryAccess(data.entryId)
+    const { session } = await requireEntryAccess(data.entryId, 'owner')
     return restoreRevision(data.entryId, data.revisionId, session.user.id)
   })
 

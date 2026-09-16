@@ -1,7 +1,7 @@
 packages:
-  - 'apps/*'
-  - 'packages/*'
-  - 'examples/*'
+  - "apps/*"
+  - "packages/*"
+  - "examples/*"
 
 allowBuilds:
   esbuild: true
@@ -9,3 +9,6 @@ allowBuilds:
   better-sqlite3: true
   unrs-resolver: true
   sharp: true
+
+overrides:
+  "@esbuild-kit/core-utils>esbuild": 0.25.12

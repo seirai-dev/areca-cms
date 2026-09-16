@@ -489,6 +489,7 @@
   "server_cannot_delete_org_with_sites": "Sitesi olan bir organizasyon silinemez",
   "server_cannot_demote_last_owner": "Son sahibin rütbesi düşürülemez",
   "server_cannot_remove_last_owner": "Son sahip kaldırılamaz",
+  "server_cannot_remove_last_agency_admin": "Son ajans yöneticisi kaldırılamaz",
   "server_collection_not_found": "Koleksiyon bulunamadı",
   "server_email_already_member": "Bu e-posta zaten üye",
   "server_email_sender_max_80": "E-posta gönderen adı en fazla 80 karakter olmalıdır",

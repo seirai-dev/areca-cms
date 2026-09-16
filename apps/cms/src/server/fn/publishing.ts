@@ -7,6 +7,7 @@ import { site } from '#/db/schema'
 import { requireOrgMember } from '#/lib/session.server'
 import { m } from '#/paraglide/messages'
 import { NotFoundError } from '#/server/content/errors'
+import { pageLimitSchema, pageOffsetSchema } from '#/server/pagination'
 import {
   cancelJob,
   getBuildJob,
@@ -19,7 +20,7 @@ import {
 
 const loose = { strict: { output: false } as const }
 
-async function requireSiteAccess(siteId: string) {
+async function requireSiteAccess(siteId: string, role?: 'owner') {
   const [found] = await db
     .select()
     .from(site)
@@ -28,16 +29,16 @@ async function requireSiteAccess(siteId: string) {
   if (!found) {
     throw new NotFoundError(m.server_site_not_found())
   }
-  const session = await requireOrgMember(found.organizationId)
+  const session = await requireOrgMember(found.organizationId, role)
   return { session, site: found }
 }
 
-async function requireJobAccess(jobId: string) {
+async function requireJobAccess(jobId: string, role?: 'owner') {
   const job = await getBuildJob(jobId)
   if (!job) {
     throw new NotFoundError(m.server_build_job_not_found())
   }
-  const access = await requireSiteAccess(job.siteId)
+  const access = await requireSiteAccess(job.siteId, role)
   return { ...access, job }
 }
 
@@ -50,7 +51,7 @@ export const requestPublicationFn = createServerFn({ method: 'POST', ...loose })
     }),
   )
   .handler(async ({ data }) => {
-    const { session } = await requireSiteAccess(data.siteId)
+    const { session } = await requireSiteAccess(data.siteId, 'owner')
     return requestPublication({
       siteId: data.siteId,
       actorId: session.user.id,
@@ -67,7 +68,7 @@ export const requestRollbackFn = createServerFn({ method: 'POST', ...loose })
     }),
   )
   .handler(async ({ data }) => {
-    const { session } = await requireSiteAccess(data.siteId)
+    const { session } = await requireSiteAccess(data.siteId, 'owner')
     return requestRollback({
       siteId: data.siteId,
       publicationId: data.publicationId,
@@ -79,8 +80,8 @@ export const listPublicationsFn = createServerFn({ method: 'GET', ...loose })
   .validator(
     z.object({
       siteId: z.string().min(1),
-      limit: z.number().int().min(0).optional(),
-      offset: z.number().int().min(0).optional(),
+      limit: pageLimitSchema.optional(),
+      offset: pageOffsetSchema.optional(),
     }),
   )
   .handler(async ({ data }) => {
@@ -95,7 +96,7 @@ export const listBuildJobsFn = createServerFn({ method: 'GET', ...loose })
   .validator(
     z.object({
       siteId: z.string().min(1),
-      limit: z.number().int().min(0).optional(),
+      limit: pageLimitSchema.optional(),
     }),
   )
   .handler(async ({ data }) => {
@@ -113,7 +114,7 @@ export const getBuildJobFn = createServerFn({ method: 'GET', ...loose })
 export const cancelJobFn = createServerFn({ method: 'POST', ...loose })
   .validator(z.object({ id: z.string().min(1) }))
   .handler(async ({ data }) => {
-    const { session } = await requireJobAccess(data.id)
+    const { session } = await requireJobAccess(data.id, 'owner')
     return cancelJob(data.id, session.user.id)
   })
 

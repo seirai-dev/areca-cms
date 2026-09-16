@@ -14,6 +14,11 @@ export const env = createEnv({
     BETTER_AUTH_SECRET: z.string().min(1),
     BETTER_AUTH_URL: z.string().url(),
     APP_URL: z.string().url(),
+    REDIS_URL: z.string().url().default('redis://localhost:6379'),
+    RATE_LIMIT_TRUST_PROXY: z
+      .enum(['true', 'false'])
+      .optional()
+      .transform((value) => value === 'true'),
     S3_ENDPOINT: z.string().url(),
     S3_REGION: z.string().min(1),
     S3_BUCKET: z.string().min(1),
@@ -25,6 +30,8 @@ export const env = createEnv({
     SMTP_FROM: z.string().min(1),
     DOKPLOY_URL: z.string().url(),
     DOKPLOY_API_KEY: z.string().optional(),
+    DOKPLOY_ALLOW_INSECURE_HTTP: z.enum(['true', 'false']).optional(),
+    ALLOW_PRIVATE_HEALTH_CHECKS: z.enum(['true', 'false']).optional(),
     WORKER_ENABLED: z
       .enum(['true', 'false'])
       .optional()

@@ -254,7 +254,7 @@ function BrandingPage() {
               kind="logo"
               label={m.admin_branding_logo()}
               hint={m.admin_branding_logo_hint()}
-              accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+              accept="image/png,image/jpeg,image/webp,image/gif"
               url={saved.logoUrl}
               busy={busy}
               onPick={(file) => uploadMutation.mutate({ kind: 'logo', file })}
@@ -265,7 +265,7 @@ function BrandingPage() {
               kind="favicon"
               label={m.admin_branding_favicon()}
               hint={m.admin_branding_favicon_hint()}
-              accept="image/png,image/svg+xml,image/x-icon,image/vnd.microsoft.icon,.ico"
+              accept="image/png,image/x-icon,image/vnd.microsoft.icon,.ico"
               url={saved.faviconUrl}
               busy={busy}
               onPick={(file) =>

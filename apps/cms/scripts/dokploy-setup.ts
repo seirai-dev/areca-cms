@@ -20,6 +20,7 @@
  *   PUBLISHED_PORT    default 3101
  *   TARGET_PORT       default 3000
  *   AUTO_DEPLOY       default false
+ *   DOKPLOY_ALLOW_INSECURE_HTTP default false (local/LAN testing only)
  */
 const required = [
   'DOKPLOY_URL',
@@ -55,25 +56,28 @@ const TARGET_PORT = Number(process.env.TARGET_PORT ?? 3000)
 const AUTO_DEPLOY = ['1', 'true', 'yes', 'on'].includes(
   (process.env.AUTO_DEPLOY ?? 'false').trim().toLowerCase(),
 )
+const DOKPLOY_ALLOW_INSECURE_HTTP = ['1', 'true', 'yes', 'on'].includes(
+  (process.env.DOKPLOY_ALLOW_INSECURE_HTTP ?? 'false').trim().toLowerCase(),
+)
+
+assertSecureUrl('DOKPLOY_URL', DOKPLOY_URL)
+assertSecureUrl('CMS_URL', CMS_URL)
 
 type Json = null | boolean | number | string | Json[] | { [key: string]: Json }
 
-async function dokploy<T>(
-  path: string,
-  init: RequestInit = {},
-): Promise<T> {
+async function dokploy<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
     'x-api-key': API_KEY,
     accept: 'application/json',
     ...(init.body ? { 'content-type': 'application/json' } : {}),
   }
   const res = await fetch(`${DOKPLOY_URL}${path}`, { ...init, headers })
-  const text = await res.text()
   if (!res.ok) {
     throw new Error(
-      `Dokploy ${init.method ?? 'GET'} ${path} failed: ${res.status}${text ? ` ${text}` : ''}`,
+      `Dokploy ${init.method ?? 'GET'} ${path} failed: ${res.status}`,
     )
   }
+  const text = await res.text()
   if (!text.trim()) return undefined as T
   return JSON.parse(text) as T
 }
@@ -83,6 +87,7 @@ type DokployApplication = {
   name?: string
   env?: string | null
   buildArgs?: string | null
+  buildSecrets?: string | null
   customGitUrl?: string | null
   customGitSSHKeyId?: string | null
   ports?: Array<{
@@ -102,17 +107,19 @@ type Project = {
 }
 
 function envBlock(): string {
-  return [`PORT=${TARGET_PORT}`, `ARECA_CMS_URL=${CMS_URL}`, `ARECA_SITE_TOKEN=${SITE_TOKEN}`].join(
-    '\n',
-  )
+  return [
+    `PORT=${TARGET_PORT}`,
+    `ARECA_CMS_URL=${CMS_URL}`,
+    `ARECA_SITE_TOKEN=${SITE_TOKEN}`,
+  ].join('\n')
+}
+
+function buildSecretsBlock(): string {
+  return `ARECA_SITE_TOKEN=${SITE_TOKEN}`
 }
 
 function buildArgsBlock(): string {
-  return [
-    `ARECA_CMS_URL=${CMS_URL}`,
-    `ARECA_SITE_TOKEN=${SITE_TOKEN}`,
-    `ARECA_SNAPSHOT_ID=0`,
-  ].join('\n')
+  return [`ARECA_CMS_URL=${CMS_URL}`, `ARECA_SNAPSHOT_ID=0`].join('\n')
 }
 
 async function findExistingApplication(): Promise<string | null> {
@@ -179,7 +186,7 @@ async function main() {
       applicationId,
       env: envBlock(),
       buildArgs: buildArgsBlock(),
-      buildSecrets: '',
+      buildSecrets: buildSecretsBlock(),
       createEnvFile: false,
     }),
   })
@@ -201,7 +208,11 @@ async function main() {
   const app = await dokploy<DokployApplication>(
     `/api/application.one?applicationId=${encodeURIComponent(applicationId)}`,
   )
-  const ports = Array.isArray(app.ports) ? app.ports : app.ports ? [app.ports] : []
+  const ports = Array.isArray(app.ports)
+    ? app.ports
+    : app.ports
+      ? [app.ports]
+      : []
   const existingPort = ports.find(
     (port) =>
       port.publishedPort === PUBLISHED_PORT && port.targetPort === TARGET_PORT,
@@ -233,10 +244,26 @@ async function main() {
     customGitUrl: app.customGitUrl ?? GIT_URL,
     customGitSSHKeyId: app.customGitSSHKeyId ?? SSH_KEY_ID,
     buildArgsStored: Boolean(app.buildArgs?.includes('ARECA_CMS_URL')),
+    siteTokenInBuildArgs: Boolean(app.buildArgs?.includes('ARECA_SITE_TOKEN')),
+    buildSecretConfigured: Boolean(app.buildSecrets),
   }
   console.log(JSON.stringify(result, null, 2))
 }
 
 await main()
+
+function assertSecureUrl(name: string, rawUrl: string) {
+  const url = new URL(rawUrl)
+  const local =
+    url.hostname === 'localhost' || url.hostname.endsWith('.localhost')
+  if (
+    url.protocol !== 'https:' &&
+    !(url.protocol === 'http:' && (local || DOKPLOY_ALLOW_INSECURE_HTTP))
+  ) {
+    throw new Error(
+      `${name} must use HTTPS (set DOKPLOY_ALLOW_INSECURE_HTTP=true only for local/LAN testing)`,
+    )
+  }
+}
 
 export {}

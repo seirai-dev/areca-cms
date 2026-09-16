@@ -8,6 +8,8 @@ export function getDeploymentAdapter() {
     return createDokployAdapter({
       baseUrl: env.DOKPLOY_URL,
       apiKey: env.DOKPLOY_API_KEY,
+      allowInsecureHttp: env.DOKPLOY_ALLOW_INSECURE_HTTP === 'true',
+      allowPrivateHealthChecks: env.ALLOW_PRIVATE_HEALTH_CHECKS === 'true',
     })
   }
   return createMockDeploymentAdapter()

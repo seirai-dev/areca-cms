@@ -124,6 +124,7 @@ export function EntryEditor({
   collectionLabel,
   fields,
   organizationId,
+  canManage,
   entryId,
 }: {
   siteId: string
@@ -131,6 +132,7 @@ export function EntryEditor({
   collectionLabel: string
   fields: Field[]
   organizationId: string
+  canManage: boolean
   entryId?: string
 }) {
   const navigate = useNavigate()
@@ -554,79 +556,83 @@ export function EntryEditor({
                 {m.editor_preview()}
               </Button>
             )}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  data-testid="publish-menu"
-                  disabled={isNew}
-                  title={isNew ? m.editor_save_draft_first() : undefined}
-                >
-                  {anyActionPending ? (
-                    <Loader2 className="animate-spin" />
-                  ) : null}
-                  {m.editor_publish()}
-                  <ChevronDown />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel className="text-xs text-muted-foreground">
-                  {dirty
-                    ? m.editor_publish_save_first_hint()
-                    : m.editor_publish_makes_live_hint()}
-                </DropdownMenuLabel>
-                <DropdownMenuItem
-                  disabled={!actionsReady || publishMutation.isPending}
-                  data-testid="publish-now"
-                  onSelect={() => publishMutation.mutate()}
-                >
-                  {m.editor_publish_now()}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={!actionsReady}
-                  data-testid="schedule-entry"
-                  onSelect={() => {
-                    setScheduleAt(toDatetimeLocalValue(new Date()))
-                    setScheduleTz(browserTimezone())
-                    setScheduleOpen(true)
-                  }}
-                >
-                  <CalendarClock />
-                  {m.editor_schedule_ellipsis()}
-                </DropdownMenuItem>
-                {entry?.status === 'scheduled' ? (
-                  <DropdownMenuItem
-                    disabled={!actionsReady || cancelScheduleMutation.isPending}
-                    data-testid="cancel-schedule"
-                    onSelect={() => cancelScheduleMutation.mutate()}
+            {canManage ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    data-testid="publish-menu"
+                    disabled={isNew}
+                    title={isNew ? m.editor_save_draft_first() : undefined}
                   >
-                    {m.editor_cancel_schedule()}
+                    {anyActionPending ? (
+                      <Loader2 className="animate-spin" />
+                    ) : null}
+                    {m.editor_publish()}
+                    <ChevronDown />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel className="text-xs text-muted-foreground">
+                    {dirty
+                      ? m.editor_publish_save_first_hint()
+                      : m.editor_publish_makes_live_hint()}
+                  </DropdownMenuLabel>
+                  <DropdownMenuItem
+                    disabled={!actionsReady || publishMutation.isPending}
+                    data-testid="publish-now"
+                    onSelect={() => publishMutation.mutate()}
+                  >
+                    {m.editor_publish_now()}
                   </DropdownMenuItem>
-                ) : null}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  disabled={!actionsReady || entry?.status !== 'published'}
-                  onSelect={() => unpublishMutation.mutate()}
-                >
-                  {m.editor_unpublish()}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={!actionsReady || entry?.status === 'archived'}
-                  onSelect={() => archiveMutation.mutate()}
-                >
-                  {m.editor_archive()}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  disabled={!actionsReady}
-                  variant="destructive"
-                  onSelect={() => setDeleteOpen(true)}
-                >
-                  {m.editor_delete_ellipsis()}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  <DropdownMenuItem
+                    disabled={!actionsReady}
+                    data-testid="schedule-entry"
+                    onSelect={() => {
+                      setScheduleAt(toDatetimeLocalValue(new Date()))
+                      setScheduleTz(browserTimezone())
+                      setScheduleOpen(true)
+                    }}
+                  >
+                    <CalendarClock />
+                    {m.editor_schedule_ellipsis()}
+                  </DropdownMenuItem>
+                  {entry?.status === 'scheduled' ? (
+                    <DropdownMenuItem
+                      disabled={
+                        !actionsReady || cancelScheduleMutation.isPending
+                      }
+                      data-testid="cancel-schedule"
+                      onSelect={() => cancelScheduleMutation.mutate()}
+                    >
+                      {m.editor_cancel_schedule()}
+                    </DropdownMenuItem>
+                  ) : null}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    disabled={!actionsReady || entry?.status !== 'published'}
+                    onSelect={() => unpublishMutation.mutate()}
+                  >
+                    {m.editor_unpublish()}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={!actionsReady || entry?.status === 'archived'}
+                    onSelect={() => archiveMutation.mutate()}
+                  >
+                    {m.editor_archive()}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    disabled={!actionsReady}
+                    variant="destructive"
+                    onSelect={() => setDeleteOpen(true)}
+                  >
+                    {m.editor_delete_ellipsis()}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : null}
           </div>
         </div>
       </div>
@@ -701,14 +707,16 @@ export function EntryEditor({
                           </p>
                         ) : null}
                       </div>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setRestoreId(revision.id)}
-                      >
-                        {m.editor_restore()}
-                      </Button>
+                      {canManage ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setRestoreId(revision.id)}
+                        >
+                          {m.editor_restore()}
+                        </Button>
+                      ) : null}
                     </li>
                   ))}
                 </ul>
@@ -777,7 +785,7 @@ export function EntryEditor({
                 </p>
               )}
             </dl>
-            {entry?.status === 'scheduled' ? (
+            {canManage && entry?.status === 'scheduled' ? (
               <Button
                 type="button"
                 variant="outline"

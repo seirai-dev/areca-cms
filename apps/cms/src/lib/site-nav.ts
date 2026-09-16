@@ -37,6 +37,10 @@ export function isOrgOwner(me: Me, organizationId: string) {
   )
 }
 
+export function canManageSite(me: Me, organizationId: string) {
+  return me.user.isAgencyAdmin || isOrgOwner(me, organizationId)
+}
+
 /**
  * Sections available for a site, filtered by what the current user may see.
  * Single source of truth for the sidebar, the in-page tab bar, and breadcrumbs.

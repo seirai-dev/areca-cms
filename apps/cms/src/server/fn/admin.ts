@@ -31,6 +31,7 @@ import {
   updateSite,
 } from '#/server/admin/sites'
 import { NotFoundError } from '#/server/content/errors'
+import { pageLimitSchema, pageOffsetSchema } from '#/server/pagination'
 
 const membershipRoleSchema = z.enum(['owner', 'editor'])
 const adminFn = { strict: { output: false } as const }
@@ -240,8 +241,8 @@ export const listAuditLogFn = createServerFn({ method: 'GET', ...adminFn })
     z.object({
       organizationId: z.string().min(1).optional(),
       siteId: z.string().min(1).optional(),
-      limit: z.number().int().min(1),
-      offset: z.number().int().min(0),
+      limit: pageLimitSchema,
+      offset: pageOffsetSchema,
     }),
   )
   .handler(async ({ data }) => {

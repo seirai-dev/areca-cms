@@ -4,14 +4,15 @@ import { z } from 'zod'
 import { requireOrgMember, requireUser } from '#/lib/session.server'
 import { m } from '#/paraglide/messages'
 import { deleteAsset, getAsset, listAssets, updateAsset } from '#/server/assets'
+import { pageLimitSchema, pageOffsetSchema } from '#/server/pagination'
 
 export const listAssetsFn = createServerFn({ method: 'GET' })
   .validator(
     z.object({
       organizationId: z.string().min(1),
       search: z.string().optional(),
-      limit: z.number().int().min(1),
-      offset: z.number().int().min(0),
+      limit: pageLimitSchema,
+      offset: pageOffsetSchema,
     }),
   )
   .handler(async ({ data }) => {
@@ -64,7 +65,7 @@ export const deleteAssetFn = createServerFn({ method: 'POST' })
     if (!existing) {
       throw new Error(m.server_asset_not_found())
     }
-    await requireOrgMember(existing.organizationId)
+    await requireOrgMember(existing.organizationId, 'owner')
     await deleteAsset(data.id)
     return { ok: true as const }
   })

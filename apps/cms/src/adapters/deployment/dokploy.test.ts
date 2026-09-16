@@ -8,13 +8,10 @@ const target: DeploymentTarget = {
   healthCheckUrl: 'http://site.test',
 }
 
-type Handler = (
-  url: string,
-  init?: RequestInit,
-) => Promise<Response> | Response
+type Handler = (url: string, init?: RequestInit) => Promise<Response> | Response
 
 function fakeFetch(handler: Handler): typeof fetch {
-  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+  return async (input: RequestInfo | URL, init?: RequestInit) => {
     const url =
       typeof input === 'string'
         ? input
@@ -22,7 +19,7 @@ function fakeFetch(handler: Handler): typeof fetch {
           ? input.href
           : input.url
     return handler(url, init)
-  }) as typeof fetch
+  }
 }
 
 function json(data: unknown, status = 200) {
@@ -32,12 +29,39 @@ function json(data: unknown, status = 200) {
   })
 }
 
+const localTestOptions = {
+  allowInsecureHttp: true,
+  resolveHost: async () => ['93.184.216.34'],
+}
+
 describe('createDokployAdapter', () => {
+  it('requires HTTPS for the Dokploy API unless local development is explicit', () => {
+    expect(() =>
+      createDokployAdapter({
+        baseUrl: 'http://dokploy.example.com',
+        apiKey: 'k',
+      }),
+    ).toThrow(/HTTPS/)
+  })
+
+  it('does not expose an upstream error body', async () => {
+    const adapter = createDokployAdapter({
+      baseUrl: 'https://dokploy.example.com',
+      apiKey: 'k',
+      fetch: fakeFetch(() => json({ token: 'must-not-leak' }, 500)),
+    })
+    const error = await adapter.deploy(target, () => {}).catch((cause) => cause)
+    expect(error).toBeInstanceOf(Error)
+    expect((error as Error).message).toContain('failed: 500')
+    expect((error as Error).message).not.toContain('must-not-leak')
+  })
+
   it('POSTs deploy then reads the newest deploymentId', async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = []
     const adapter = createDokployAdapter({
       baseUrl: 'http://dokploy.test',
       apiKey: 'test-key',
+      ...localTestOptions,
       fetch: fakeFetch((url, init) => {
         calls.push({ url, init })
         if (url.endsWith('/api/application.deploy')) return json(true)
@@ -47,7 +71,8 @@ describe('createDokployAdapter', () => {
             applicationId: 'app-1',
             applicationStatus: 'running',
             env: 'PORT=3000',
-            buildArgs: 'ARECA_CMS_URL=http://cms.test',
+            buildArgs:
+              'ARECA_CMS_URL=http://cms.test\nARECA_SITE_TOKEN=legacy-secret',
             buildSecrets: '',
             createEnvFile: false,
             deployments: [
@@ -77,8 +102,11 @@ describe('createDokployAdapter', () => {
     })
     const saved = JSON.parse(String(calls[1]?.init?.body)) as {
       buildArgs: string
+      buildSecrets: string
     }
     expect(saved.buildArgs).toMatch(/ARECA_SNAPSHOT_ID=\d+/)
+    expect(saved.buildArgs).not.toContain('ARECA_SITE_TOKEN')
+    expect(saved.buildSecrets).toBe('ARECA_SITE_TOKEN=legacy-secret')
     expect(logs.length).toBeGreaterThan(0)
   })
 
@@ -86,6 +114,7 @@ describe('createDokployAdapter', () => {
     const adapter = createDokployAdapter({
       baseUrl: 'http://dokploy.test',
       apiKey: 'k',
+      ...localTestOptions,
       fetch: fakeFetch((url) => {
         if (url.endsWith('/api/application.deploy')) {
           return new Response('', { status: 200 })
@@ -97,7 +126,10 @@ describe('createDokployAdapter', () => {
           applicationId: 'app-1',
           applicationStatus: 'running',
           deployments: [
-            { deploymentId: 'dep-empty', createdAt: '2026-01-02T00:00:00.000Z' },
+            {
+              deploymentId: 'dep-empty',
+              createdAt: '2026-01-02T00:00:00.000Z',
+            },
           ],
         })
       }),
@@ -110,6 +142,7 @@ describe('createDokployAdapter', () => {
     const adapter = createDokployAdapter({
       baseUrl: 'http://dokploy.test',
       apiKey: 'k',
+      ...localTestOptions,
       fetch: fakeFetch((url) => {
         if (url.endsWith('/api/application.deploy')) return json(true)
         if (url.endsWith('/api/application.saveEnvironment')) return json(true)
@@ -125,6 +158,7 @@ describe('createDokployAdapter', () => {
     const adapter = createDokployAdapter({
       baseUrl: 'http://dokploy.test',
       apiKey: 'k',
+      ...localTestOptions,
       fetch: fakeFetch(() => {
         polls += 1
         const status = polls < 3 ? 'running' : 'done'
@@ -150,6 +184,7 @@ describe('createDokployAdapter', () => {
     const adapter = createDokployAdapter({
       baseUrl: 'http://dokploy.test',
       apiKey: 'k',
+      ...localTestOptions,
       fetch: fakeFetch(() => json({ applicationStatus: 'error' })),
     })
     const result = await adapter.waitForCompletion(
@@ -166,6 +201,7 @@ describe('createDokployAdapter', () => {
     const adapter = createDokployAdapter({
       baseUrl: 'http://dokploy.test',
       apiKey: 'k',
+      ...localTestOptions,
       fetch: fakeFetch(() => {
         polls += 1
         return json({
@@ -188,6 +224,7 @@ describe('createDokployAdapter', () => {
     const adapter = createDokployAdapter({
       baseUrl: 'http://dokploy.test',
       apiKey: 'k',
+      ...localTestOptions,
       fetch: fakeFetch(() => json({ applicationStatus: 'running' })),
     })
     const result = await adapter.waitForCompletion(
@@ -204,6 +241,7 @@ describe('createDokployAdapter', () => {
     const adapter = createDokployAdapter({
       baseUrl: 'http://dokploy.test',
       apiKey: 'k',
+      ...localTestOptions,
       fetch: fakeFetch(() => {
         attempts += 1
         return new Response('', { status: attempts < 3 ? 503 : 200 })
@@ -222,6 +260,7 @@ describe('createDokployAdapter', () => {
     const adapter = createDokployAdapter({
       baseUrl: 'http://dokploy.test',
       apiKey: 'k',
+      ...localTestOptions,
       fetch: fakeFetch(() => {
         attempts += 1
         const publicationId = attempts < 3 ? 'old' : 'pub-new'
@@ -235,5 +274,29 @@ describe('createDokployAdapter', () => {
     })
     expect(ok).toBe(true)
     expect(attempts).toBeGreaterThanOrEqual(3)
+  })
+
+  it('blocks a redirect to a private health-check target', async () => {
+    let attempts = 0
+    const adapter = createDokployAdapter({
+      baseUrl: 'https://dokploy.example.com',
+      apiKey: 'k',
+      resolveHost: async (hostname) =>
+        hostname === 'public.example' ? ['93.184.216.34'] : ['127.0.0.1'],
+      fetch: fakeFetch(() => {
+        attempts += 1
+        return new Response(null, {
+          status: 302,
+          headers: { location: 'http://127.0.0.1/admin' },
+        })
+      }),
+    })
+
+    const ok = await adapter.healthCheck('https://public.example/health', {
+      timeoutMs: 20,
+      intervalMs: 5,
+    })
+    expect(ok).toBe(false)
+    expect(attempts).toBeGreaterThan(0)
   })
 })

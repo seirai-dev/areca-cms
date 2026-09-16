@@ -8,6 +8,7 @@ import { env } from '#/env'
 import { GET } from '#/routes/api/assets/file/$prefix/$filename'
 
 import {
+  AssetValidationError,
   AssetInUseError,
   assetUrl,
   deleteAsset,
@@ -23,6 +24,22 @@ describe('storageKeyFromRequest', () => {
       '0a3d59c0-78d9-41be-a114-425fdc9c851c/b0b6e32c-74f3-4641-a2d2-36de7ca73366.png'
     const request = new Request(`http://localhost/api/assets/file/${key}`)
     expect(storageKeyFromRequest(request)).toBe(key)
+  })
+})
+
+describe('asset validation', () => {
+  it('rejects SVG before storage or database access', async () => {
+    await expect(
+      uploadAsset({
+        organizationId: 'org',
+        file: {
+          buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>'),
+          filename: 'unsafe.svg',
+          mimeType: 'image/svg+xml',
+        },
+        actorId: 'user',
+      }),
+    ).rejects.toBeInstanceOf(AssetValidationError)
   })
 })
 

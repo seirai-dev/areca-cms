@@ -20,6 +20,7 @@ import { QueryError } from '#/components/query-error'
 import { Button } from '#/components/ui/button'
 import { Skeleton } from '#/components/ui/skeleton'
 import { m } from '#/paraglide/messages'
+import { canManageSite } from '#/lib/site-nav'
 import {
   listCollectionsFn,
   listEntriesFn,
@@ -32,7 +33,7 @@ export const Route = createFileRoute('/_app/sites/$siteId/')({
 
 function SiteContentPage() {
   const { siteId } = Route.useParams()
-  const { me } = Route.useRouteContext()
+  const { me, site } = Route.useRouteContext()
   const queryClient = useQueryClient()
   const upsertCollection = useServerFn(upsertCollectionFn)
   const isAgencyAdmin = me.user.isAgencyAdmin
@@ -83,7 +84,10 @@ function SiteContentPage() {
       data-testid="site-content"
       data-ready={collectionsQuery.isFetched ? 'true' : 'false'}
     >
-      <ReleaseStatusBar siteId={siteId} />
+      <ReleaseStatusBar
+        siteId={siteId}
+        canPublish={canManageSite(me, site.organizationId)}
+      />
       <section className="grid gap-1">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-lg">{m.sites_collections()}</h2>

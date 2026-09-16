@@ -29,7 +29,7 @@ publication marked live
 - `apps/cms` — TanStack Start CMS (UI, API, in-process worker/scheduler)
 - `packages/site-sdk` — `@areca/site-sdk`: schema, `areca pull`, preview helpers
 - `examples/demo-site` — sample TanStack Start customer site
-- `docker-compose.yml` — Postgres, RustFS (S3), Mailpit
+- `docker-compose.yml` — Postgres, Redis, RustFS (S3), Mailpit
 
 ## Quick start
 
@@ -48,6 +48,11 @@ pnpm dev
 ```
 
 CMS: http://localhost:3000. Demo site: `pnpm --filter @areca/demo-site dev` (port 3001).
+
+Redis provides shared rate limits for CMS mutations, uploads, and site-token
+API calls. Requests fail open with a server error log if Redis is unavailable.
+Set `REDIS_URL` in production. Set `RATE_LIMIT_TRUST_PROXY=true` only when the
+fronting proxy replaces client-supplied forwarding headers.
 
 Seeded logins (password `password123`):
 

@@ -22,6 +22,13 @@
       "when": 1789503629097,
       "tag": "0002_rainy_echo",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789559308766,
+      "tag": "0003_chilly_thunderbird",
+      "breakpoints": true
     }
   ]
 }

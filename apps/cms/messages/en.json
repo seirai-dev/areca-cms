@@ -489,6 +489,7 @@
   "server_cannot_delete_org_with_sites": "Cannot delete an organization that has sites",
   "server_cannot_demote_last_owner": "Cannot demote the last owner",
   "server_cannot_remove_last_owner": "Cannot remove the last owner",
+  "server_cannot_remove_last_agency_admin": "Cannot remove the last agency admin",
   "server_collection_not_found": "Collection not found",
   "server_email_already_member": "This email is already a member",
   "server_email_sender_max_80": "Email sender name must be 80 characters or fewer",
