@@ -1,7 +1,7 @@
 import { Markdown } from '@tanstack/markdown/react'
 import type { MarkdownComponents } from '@tanstack/markdown/react'
-import { richTextDocument } from '@areca/site-sdk'
-import type { RichTextValue } from '@areca/site-sdk'
+import { richTextDocument } from '@areca-cms/site-sdk'
+import type { RichTextValue } from '@areca-cms/site-sdk'
 
 /**
  * The site owns how published content looks. The CMS ships a TanStack

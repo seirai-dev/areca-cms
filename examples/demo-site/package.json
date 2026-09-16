@@ -7,9 +7,9 @@
   },
   "scripts": {
     "prebuild": "node --env-file-if-exists=.env.local ./scripts/prebuild.mjs",
-    "content:pull": "node --env-file-if-exists=.env.local ./node_modules/@areca/site-sdk/dist/cli.js pull --out src/generated/content",
+    "content:pull": "node --env-file-if-exists=.env.local ./node_modules/@areca-cms/site-sdk/dist/cli.js pull --out src/generated/content",
     "content:fixture": "tsx ./scripts/fixture-content.ts",
-    "sync-manifest": "node --env-file-if-exists=.env.local --import tsx ./node_modules/@areca/site-sdk/dist/cli.js sync-manifest ./areca.config.ts",
+    "sync-manifest": "node --env-file-if-exists=.env.local --import tsx ./node_modules/@areca-cms/site-sdk/dist/cli.js sync-manifest ./areca.config.ts",
     "dev": "node --env-file-if-exists=.env.local ./node_modules/vite/bin/vite.js dev --port 3001",
     "build": "vite build",
     "start": "node .output/server/index.mjs",
@@ -19,7 +19,7 @@
     "verify:prerender": "tsx ./scripts/verify-prerender.ts"
   },
   "dependencies": {
-    "@areca/site-sdk": "workspace:*",
+    "@areca-cms/site-sdk": "workspace:*",
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/markdown": "0.0.15",
     "@tanstack/react-router": "1.170.36",

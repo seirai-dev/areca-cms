@@ -68,7 +68,7 @@ export type SnapshotEntry = {
   data: Record<string, unknown>
 }
 
-/** Wire contract — matches `@areca/site-sdk` `Snapshot`. */
+/** Wire contract — matches `@areca-cms/site-sdk` `Snapshot`. */
 export type Snapshot = {
   publicationId: string
   siteKey: string

@@ -1,4 +1,4 @@
-# @areca/site-sdk
+# @areca-cms/site-sdk
 
 Tiny library a TanStack Start (or any Node) site uses to declare its content schema, pull a published CMS snapshot at build time, and render draft previews. No React imports — use it from loaders, prerender, or scripts.
 
@@ -8,12 +8,16 @@ Requires `ARECA_CMS_URL` and `ARECA_SITE_TOKEN` (sent as `Authorization: Bearer 
 
 ## 1. Init
 
-`@areca/site-sdk` is not on npm yet. From the frontend repo:
+Install it from npm in the frontend project:
 
 ```bash
-pnpm add <path-to>/packages/site-sdk
+pnpm add @areca-cms/site-sdk
 pnpm exec areca init
 ```
+
+The package is ESM-only and requires Node.js 22.6 or newer. Node 24 LTS is
+recommended because `areca sync-manifest` imports the TypeScript
+`areca.config.ts` file directly.
 
 Non-interactive / CI:
 
@@ -44,7 +48,7 @@ Flags: `--cms-url`, `--token`, `--site-key`, `--out` (default `src/generated/con
 `areca.config.ts`:
 
 ```ts
-import { defineSiteContent } from '@areca/site-sdk'
+import { defineSiteContent } from '@areca-cms/site-sdk'
 
 export default defineSiteContent({
   siteKey: 'demo',
@@ -89,9 +93,9 @@ The command exits `1` if no publication exists. Do not add a `prebuild` pull unt
 ## 4. Read content in a loader / prerender
 
 ```ts
-import { readContent } from '@areca/site-sdk/pull'
-import { richTextDocument } from '@areca/site-sdk'
-import type { ImageValue, RichTextValue, SnapshotEntry } from '@areca/site-sdk'
+import { readContent } from '@areca-cms/site-sdk/pull'
+import { richTextDocument } from '@areca-cms/site-sdk'
+import type { ImageValue, RichTextValue, SnapshotEntry } from '@areca-cms/site-sdk'
 
 type ArticleData = {
   title: string
@@ -119,7 +123,7 @@ map so the site decides how every element looks:
 ```tsx
 import { Markdown } from '@tanstack/markdown/react'
 import type { MarkdownComponents } from '@tanstack/markdown/react'
-import { richTextDocument } from '@areca/site-sdk'
+import { richTextDocument } from '@areca-cms/site-sdk'
 
 const components = {
   h2: (props) => <h2 {...props} className="mt-10 text-2xl font-semibold" />,
@@ -145,7 +149,7 @@ CMS preview URLs hit `/__preview/$collection/$slug?token=`. The site fetches dra
 ```ts
 import { createFileRoute } from '@tanstack/react-router'
 import { Markdown } from '@tanstack/markdown/react'
-import { getPreviewEntry, previewHeaders, richTextDocument } from '@areca/site-sdk'
+import { getPreviewEntry, previewHeaders, richTextDocument } from '@areca-cms/site-sdk'
 
 export const Route = createFileRoute('/__preview/$collection/$slug')({
   loader: async ({ location }) => {
@@ -172,8 +176,8 @@ function PreviewPage() {
 ## Programmatic API
 
 ```ts
-import { createArecaClient } from '@areca/site-sdk'
-import { pullContent } from '@areca/site-sdk/pull'
+import { createArecaClient } from '@areca-cms/site-sdk'
+import { pullContent } from '@areca-cms/site-sdk/pull'
 
 const client = createArecaClient() // or { cmsUrl, siteToken }
 await client.syncManifest(config)

@@ -200,10 +200,10 @@ The CMS must be reachable from the machine that will pull. Same laptop: `http://
 
 ### In the new project
 
-`@areca/site-sdk` is not on npm yet. From the frontend repo (a separate git project):
+From the frontend repo (a separate git project), install the SDK from npm:
 
 ```powershell
-pnpm add <path-to>/packages/site-sdk
+pnpm add @areca-cms/site-sdk
 pnpm exec areca init
 ```
 
@@ -224,8 +224,8 @@ Scripts are `areca pull` / `areca sync-manifest` because the CLI loads `.env.loc
 In the site, **read the pulled files**, never the CMS, on public pages:
 
 ```ts
-import { readContent } from '@areca/site-sdk/pull'
-import { richTextDocument } from '@areca/site-sdk'
+import { readContent } from '@areca-cms/site-sdk/pull'
+import { richTextDocument } from '@areca-cms/site-sdk'
 import { Markdown } from '@tanstack/markdown/react'
 
 const articles = readContent('src/generated/content', 'articles')

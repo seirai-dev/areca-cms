@@ -1,12 +1,12 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { readContent } from '@areca/site-sdk/pull'
+import { readContent } from '@areca-cms/site-sdk/pull'
 import type {
   ImageValue,
   PulledContentManifest,
   RichTextValue,
   SnapshotEntry,
-} from '@areca/site-sdk'
+} from '@areca-cms/site-sdk'
 
 export const CONTENT_DIR = join(process.cwd(), 'src/generated/content')
 

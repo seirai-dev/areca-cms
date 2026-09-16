@@ -57,4 +57,4 @@ ARECA_SITE_TOKEN=x docker build -f examples/demo-site/Dockerfile \
   --secret id=ARECA_SITE_TOKEN,env=ARECA_SITE_TOKEN .
 ```
 
-Install + `@areca/site-sdk` build run first. `areca pull` then fails if the CMS has no publication — that error is expected.
+Install + `@areca-cms/site-sdk` build run first. `areca pull` then fails if the CMS has no publication — that error is expected.

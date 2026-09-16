@@ -15,7 +15,7 @@ Full background: `PROJECT.md`. This file lists the concrete decisions taken for 
 ## Repository layout (pnpm workspace)
 ```
 apps/cms              TanStack Start app: CMS UI + API + in-process worker/scheduler
-packages/site-sdk     @areca/site-sdk: defineSiteContent, fetch snapshot at build time, preview helpers
+packages/site-sdk     @areca-cms/site-sdk: defineSiteContent, fetch snapshot at build time, preview helpers
 examples/demo-site    TanStack Start customer site using the SDK (articles), prerendered, deployed to Dokploy
 docker-compose.yml    postgres:17, rustfs (S3-compatible), mailpit
 ```

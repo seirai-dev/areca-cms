@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 const pkgRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 const outDir = 'src/generated/content'
-const cli = join(pkgRoot, 'node_modules/@areca/site-sdk/dist/cli.js')
+const cli = join(pkgRoot, 'node_modules/@areca-cms/site-sdk/dist/cli.js')
 const hasCmsEnv = Boolean(
   process.env.ARECA_CMS_URL?.trim() && process.env.ARECA_SITE_TOKEN?.trim(),
 )

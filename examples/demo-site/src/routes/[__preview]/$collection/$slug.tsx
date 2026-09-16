@@ -3,7 +3,7 @@ import {
   type ErrorComponentProps,
 } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
-import { getPreviewEntry, previewHeaders } from "@areca/site-sdk";
+import { getPreviewEntry, previewHeaders } from "@areca-cms/site-sdk";
 import { setResponseHeader } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { ArticleView } from "../../../components/article-view.tsx";

@@ -27,7 +27,7 @@ publication marked live
 ## Layout
 
 - `apps/cms` — TanStack Start CMS (UI, API, in-process worker/scheduler)
-- `packages/site-sdk` — `@areca/site-sdk`: schema, `areca pull`, preview helpers
+- `packages/site-sdk` — `@areca-cms/site-sdk`: schema, `areca pull`, preview helpers
 - `examples/demo-site` — sample TanStack Start customer site
 - `docker-compose.yml` — Postgres, Redis, RustFS (S3), Mailpit
 

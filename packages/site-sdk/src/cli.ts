@@ -100,7 +100,7 @@ async function loadConfig(configPath: string, cwd: string): Promise<SiteContentC
     if (abs.endsWith('.ts') || abs.endsWith('.mts') || abs.endsWith('.tsx')) {
       const detail = error instanceof Error ? error.message : String(error)
       throw new Error(
-        `Failed to load TypeScript config ${configPath} via native import (${detail}). Retry with tsx, e.g. pnpm exec tsx ./node_modules/@areca/site-sdk/dist/cli.js sync-manifest ${configPath}`,
+        `Failed to load TypeScript config ${configPath} via native import (${detail}). Retry with tsx, e.g. pnpm exec tsx ./node_modules/@areca-cms/site-sdk/dist/cli.js sync-manifest ${configPath}`,
       )
     }
     throw error

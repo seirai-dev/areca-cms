@@ -1,4 +1,4 @@
-import { defineSiteContent } from '@areca/site-sdk'
+import { defineSiteContent } from '@areca-cms/site-sdk'
 
 export default defineSiteContent({
   siteKey: 'acme-site',

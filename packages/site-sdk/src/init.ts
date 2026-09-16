@@ -208,7 +208,7 @@ function writeArecaConfig(filePath: string, siteKey: string, force: boolean): vo
   if (!force && existsSync(filePath)) return
   writeFileSync(
     filePath,
-    `import { defineSiteContent } from '@areca/site-sdk'\n\nexport default defineSiteContent({\n  siteKey: '${siteKey}',\n  collections: {},\n})\n`,
+    `import { defineSiteContent } from '@areca-cms/site-sdk'\n\nexport default defineSiteContent({\n  siteKey: '${siteKey}',\n  collections: {},\n})\n`,
     'utf8',
   )
 }

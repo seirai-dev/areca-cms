@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { renderHtml } from '@tanstack/markdown/html'
 import { parseMarkdown } from '@tanstack/markdown/parser'
-import type { PulledContentManifest, RichTextValue } from '@areca/site-sdk'
+import type { PulledContentManifest, RichTextValue } from '@areca-cms/site-sdk'
 import { CONTENT_DIR, type Article } from '../src/lib/content.ts'
 
 export const FIXTURE_SLUGS = [

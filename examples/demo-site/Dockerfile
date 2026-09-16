@@ -9,7 +9,7 @@ RUN pnpm install --frozen-lockfile --filter @areca/demo-site...
 FROM deps AS build
 ARG ARECA_CMS_URL
 ENV ARECA_CMS_URL=$ARECA_CMS_URL
-RUN pnpm --filter @areca/site-sdk build
+RUN pnpm --filter @areca-cms/site-sdk build
 # Changing this ARG busts the content-pull layer. Same git + same CMS URL/token
 # would otherwise reuse a cached `areca pull` from a previous publication.
 ARG ARECA_SNAPSHOT_ID=

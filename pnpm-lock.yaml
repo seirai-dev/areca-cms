@@ -237,7 +237,7 @@ importers:
 
   examples/demo-site:
     dependencies:
-      '@areca/site-sdk':
+      '@areca-cms/site-sdk':
         specifier: workspace:*
         version: link:../../packages/site-sdk
       '@tailwindcss/vite':

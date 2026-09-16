@@ -157,7 +157,7 @@ describe('initSite', () => {
       })
 
       expect(readUtf8(join(dir, 'areca.config.ts'))).toBe(
-        `import { defineSiteContent } from '@areca/site-sdk'\n\nexport default defineSiteContent({\n  siteKey: 'acme-site',\n  collections: {},\n})\n`,
+        `import { defineSiteContent } from '@areca-cms/site-sdk'\n\nexport default defineSiteContent({\n  siteKey: 'acme-site',\n  collections: {},\n})\n`,
       )
       expect(readUtf8(join(dir, '.env.example'))).toBe(
         'ARECA_CMS_URL=http://localhost:3000\nARECA_SITE_TOKEN=\n',
