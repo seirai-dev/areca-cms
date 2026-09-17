@@ -2,8 +2,8 @@ import { createFileRoute } from '@tanstack/react-router'
 import '@tanstack/react-start'
 import { z } from 'zod'
 
-import type { FieldType } from '#/lib/types'
-import { syncManifest } from '#/server/content/collections'
+import type { FieldType, SiteManifest } from '#/lib/types'
+import { listCollections, syncManifest } from '#/server/content/collections'
 import { authenticateSite } from '#/server/content/site-auth'
 
 const fieldTypes = [
@@ -43,6 +43,25 @@ const manifestSchema = z.object({
   ),
 })
 
+export async function getSitesManifest(request: Request) {
+  const site = await authenticateSite(request)
+  if (!site) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const rows = await listCollections(site.id, { enabledOnly: true })
+  const collections: SiteManifest['collections'] = {}
+  for (const row of rows) {
+    collections[row.key] = {
+      route: row.routePattern,
+      label: row.label,
+      fields: row.fields,
+    }
+  }
+
+  return Response.json({ collections } satisfies SiteManifest)
+}
+
 export async function postSitesManifest(request: Request) {
   const site = await authenticateSite(request)
   if (!site) {
@@ -74,6 +93,7 @@ export async function postSitesManifest(request: Request) {
 export const Route = createFileRoute('/api/sites/manifest')({
   server: {
     handlers: {
+      GET: ({ request }) => getSitesManifest(request),
       POST: ({ request }) => postSitesManifest(request),
     },
   },

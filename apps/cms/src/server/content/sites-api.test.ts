@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
 import { db } from '#/db'
-import { buildJob, publication } from '#/db/schema'
-import type { Snapshot } from '#/lib/types'
+import { buildJob, collection, publication } from '#/db/schema'
+import type { SiteManifest, Snapshot } from '#/lib/types'
 import { createEntry } from '#/server/content/entries'
 import { signPreviewToken } from '#/server/content/preview-token'
-import { postSitesManifest } from '#/routes/api/sites/manifest'
+import {
+  getSitesManifest,
+  postSitesManifest,
+} from '#/routes/api/sites/manifest'
 import { getSitesPreview } from '#/routes/api/sites/preview'
 import { getSitesSnapshotCurrent } from '#/routes/api/sites/snapshot/current'
 
@@ -162,6 +165,54 @@ describe.skipIf(!hasDb)('site API routes', () => {
       new Request('http://cms.test/api/sites/preview?token=not-a-token'),
     )
     expect(badPreview.status).toBe(401)
+    })
+  })
+
+  it('serves enabled collections from the database over GET', async () => {
+    await withTestSite(async (fixtures) => {
+      const unauthorized = await getSitesManifest(
+        new Request('http://cms.test/api/sites/manifest'),
+      )
+      expect(unauthorized.status).toBe(401)
+      expect(await unauthorized.json()).toEqual({ error: 'Unauthorized' })
+
+      await db.insert(collection).values([
+        {
+          siteId: fixtures.site.id,
+          key: 'articles',
+          label: 'Articles',
+          routePattern: '/blog/$slug',
+          fields: [
+            { key: 'title', label: 'Title', type: 'text', required: true },
+            { key: 'slug', label: 'Slug', type: 'slug', required: true },
+          ],
+          enabled: true,
+        },
+        {
+          siteId: fixtures.site.id,
+          key: 'drafts',
+          label: 'Drafts',
+          routePattern: '/drafts/$slug',
+          fields: [
+            { key: 'title', label: 'Title', type: 'text', required: true },
+          ],
+          enabled: false,
+        },
+      ])
+
+      const response = await getSitesManifest(
+        new Request('http://cms.test/api/sites/manifest', {
+          headers: bearer(fixtures.token),
+        }),
+      )
+      expect(response.status).toBe(200)
+      const json = (await response.json()) as SiteManifest
+      expect(Object.keys(json.collections)).toEqual(['articles'])
+      expect(json.collections.articles.route).toBe('/blog/$slug')
+      expect(json.collections.articles.label).toBe('Articles')
+      expect(
+        json.collections.articles.fields.map((field) => field.key),
+      ).toContain('slug')
     })
   })
 

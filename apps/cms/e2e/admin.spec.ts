@@ -45,6 +45,8 @@ test('agency admin can create an org, site, collection, and invitation', async (
 
   await page.getByRole('link', { name: 'Settings' }).click()
   await expect(page).toHaveURL(/\/sites\/[^/]+\/settings/, { timeout: 15_000 })
+  await expect(page.getByTestId('settings-site-slug')).toHaveValue(siteSlug)
+  await expect(page.getByTestId('site-header-slug')).toHaveText(siteSlug)
 
   await page.getByTestId('application-id').fill(`dokploy-app-${ts}`)
   await page.getByTestId('health-check-url').fill(`${productionUrl}/health`)

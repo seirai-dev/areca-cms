@@ -317,7 +317,7 @@ function patchPackageScripts(pkg: Record<string, unknown>, outDir: string): Reco
       ? { ...(pkg.scripts as Record<string, unknown>) }
       : {}
 
-  setScriptIfEmpty(scripts, 'sync-manifest', 'areca sync-manifest')
+  setScriptIfEmpty(scripts, 'sync-manifest', 'areca manifest push')
   setScriptIfEmpty(scripts, 'content:pull', `areca pull --out ${outDir}`)
 
   const dev = scripts.dev

@@ -123,6 +123,34 @@ describe('createArecaClient', () => {
     expect(calls[0]?.init?.body).toBe(JSON.stringify(manifestFromConfig(sampleConfig)))
   })
 
+  it('fetchManifest GETs the manifest with a bearer token', async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = []
+    globalThis.fetch = async (input, init) => {
+      calls.push({ url: String(input), init })
+      return jsonResponse(manifestFromConfig(sampleConfig))
+    }
+
+    const client = createArecaClient({
+      cmsUrl: 'https://cms.example.com',
+      siteToken: 'site-token',
+    })
+    await expect(client.fetchManifest()).resolves.toEqual(manifestFromConfig(sampleConfig))
+    expect(calls[0]?.url).toBe('https://cms.example.com/api/sites/manifest')
+    expect(calls[0]?.init?.method).toBe('GET')
+    expect(authHeader(calls[0]?.init)).toBe('Bearer site-token')
+  })
+
+  it('fetchManifest throws on 401', async () => {
+    globalThis.fetch = async () => jsonResponse({ error: 'Invalid site token' }, 401)
+    const client = createArecaClient({
+      cmsUrl: 'https://cms.example.com',
+      siteToken: 'bad',
+    })
+    await expect(client.fetchManifest()).rejects.toThrow(
+      /Failed to fetch manifest \(401\): Invalid site token/,
+    )
+  })
+
   it('fetchSnapshot returns the snapshot', async () => {
     globalThis.fetch = async (input) => {
       expect(String(input)).toBe('https://cms.example.com/api/sites/snapshot/current')
@@ -253,6 +281,7 @@ describe('preview helpers', () => {
         token: 'opaque',
         client: {
           syncManifest: vi.fn(),
+          fetchManifest: vi.fn(),
           fetchSnapshot: vi.fn(),
           fetchPreview,
         },
@@ -318,6 +347,53 @@ describe('parseArgs', () => {
     expect(parseArgs(['sync-manifest'])).toEqual({
       command: 'sync-manifest',
       configPath: './areca.config.ts',
+    })
+  })
+
+  it('parses manifest push like sync-manifest', () => {
+    expect(parseArgs(['manifest', 'push'])).toEqual({
+      command: 'sync-manifest',
+      configPath: './areca.config.ts',
+    })
+    expect(parseArgs(['manifest', 'push', './custom.config.ts'])).toEqual({
+      command: 'sync-manifest',
+      configPath: './custom.config.ts',
+    })
+  })
+
+  it('parses manifest pull with defaults and flags', () => {
+    expect(parseArgs(['manifest', 'pull'])).toEqual({
+      command: 'manifest-pull',
+      configPath: './areca.config.ts',
+      yes: false,
+    })
+    expect(parseArgs(['manifest', 'pull', '--config', 'custom.config.ts', '-y'])).toEqual({
+      command: 'manifest-pull',
+      configPath: 'custom.config.ts',
+      yes: true,
+    })
+    expect(parseArgs(['manifest', 'pull', '--yes'])).toMatchObject({
+      command: 'manifest-pull',
+      yes: true,
+    })
+  })
+
+  it('rejects a bad manifest subcommand', () => {
+    expect(parseArgs(['manifest'])).toEqual({
+      command: 'error',
+      message: 'Missing manifest subcommand. Expected push or pull.',
+    })
+    expect(parseArgs(['manifest', 'sync'])).toEqual({
+      command: 'error',
+      message: 'Unknown manifest subcommand: sync',
+    })
+    expect(parseArgs(['manifest', 'pull', '--nope'])).toEqual({
+      command: 'error',
+      message: 'Unknown argument: --nope',
+    })
+    expect(parseArgs(['manifest', 'pull', '--config'])).toEqual({
+      command: 'error',
+      message: 'Missing value for --config',
     })
   })
 

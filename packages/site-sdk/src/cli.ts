@@ -2,13 +2,14 @@
 import { spawn } from 'node:child_process'
 import { realpathSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
 import { parseArgs, usage } from './args.js'
 import { createArecaClient } from './client.js'
 import { loadLocalEnv } from './env.js'
 import { InitCancelledError, initSite } from './init.js'
+import { loadConfig } from './load-config.js'
+import { ManifestPullCancelledError, manifestPull } from './manifest-pull.js'
 import { pullContent } from './pull.js'
-import type { SiteContentConfig } from './types.js'
 
 type RunOptions = {
   cwd?: string
@@ -60,12 +61,29 @@ export async function run(argv: string[], options: RunOptions = {}): Promise<num
       return 0
     }
 
+    if (parsed.command === 'manifest-pull') {
+      const result = await manifestPull({
+        cwd,
+        configPath: parsed.configPath,
+        yes: parsed.yes,
+      })
+      const { added, changed, removed } = result.diff
+      console.log(
+        `Wrote ${result.configPath} with ${result.collections} collection(s) (+${added.length} ~${changed.length} -${removed.length})`,
+      )
+      return 0
+    }
+
     const config = await loadConfig(parsed.configPath, cwd)
     await createArecaClient().syncManifest(config)
     console.log(`Synced manifest from ${parsed.configPath}`)
     return 0
   } catch (error) {
     if (error instanceof InitCancelledError) {
+      return 0
+    }
+    if (error instanceof ManifestPullCancelledError) {
+      console.log('Aborted')
       return 0
     }
     console.error(error instanceof Error ? error.message : error)
@@ -88,29 +106,6 @@ async function runChild(commandArgs: string[], cwd: string): Promise<number> {
       resolve(1)
     })
   })
-}
-
-async function loadConfig(configPath: string, cwd: string): Promise<SiteContentConfig> {
-  const abs = resolve(cwd, configPath)
-  let mod: { default?: SiteContentConfig }
-
-  try {
-    mod = (await import(pathToFileURL(abs).href)) as { default?: SiteContentConfig }
-  } catch (error) {
-    if (abs.endsWith('.ts') || abs.endsWith('.mts') || abs.endsWith('.tsx')) {
-      const detail = error instanceof Error ? error.message : String(error)
-      throw new Error(
-        `Failed to load TypeScript config ${configPath} via native import (${detail}). Retry with tsx, e.g. pnpm exec tsx ./node_modules/@areca-cms/site-sdk/dist/cli.js sync-manifest ${configPath}`,
-      )
-    }
-    throw error
-  }
-
-  if (!mod.default) {
-    throw new Error(`Config module ${configPath} has no default export.`)
-  }
-
-  return mod.default
 }
 
 function isMainModule(): boolean {

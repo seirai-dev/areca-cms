@@ -74,7 +74,20 @@ function SiteLayout() {
       <div className="grid gap-4">
         <PageHeader
           title={site.name}
-          description={site.organizationName}
+          description={
+            <>
+              {site.organizationName}
+              <span className="mx-1.5 text-muted-foreground/60" aria-hidden>
+                ·
+              </span>
+              <code
+                className="font-mono text-[0.85em]"
+                data-testid="site-header-slug"
+              >
+                {site.slug}
+              </code>
+            </>
+          }
           actions={
             <Button asChild variant="outline" size="sm">
               <a href={site.productionUrl} target="_blank" rel="noreferrer">

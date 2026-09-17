@@ -99,6 +99,7 @@ export async function createIsolatedAcmeSite(page: Page, suffix: string) {
     .getByRole('link', { name: 'Settings' })
     .click()
   await expect(page).toHaveURL(/\/sites\/[^/]+\/settings/, { timeout: 15_000 })
+  await expect(page.getByTestId('settings-site-slug')).toHaveValue(siteSlug)
 
   await page.getByTestId('add-collection').click()
   await page.getByTestId('collection-key').fill('articles')

@@ -1,5 +1,5 @@
 import { manifestFromConfig } from './config.js'
-import type { PreviewResult, SiteContentConfig, Snapshot } from './types.js'
+import type { PreviewResult, SiteContentConfig, SiteManifest, Snapshot } from './types.js'
 
 export type ArecaClientOptions = {
   cmsUrl?: string
@@ -8,6 +8,7 @@ export type ArecaClientOptions = {
 
 export type ArecaClient = {
   syncManifest: (config: SiteContentConfig) => Promise<{ ok: true }>
+  fetchManifest: () => Promise<SiteManifest>
   fetchSnapshot: () => Promise<Snapshot>
   fetchPreview: (token: string) => Promise<PreviewResult>
 }
@@ -54,6 +55,19 @@ export function createArecaClient(options: ArecaClientOptions = {}): ArecaClient
       }
 
       return (await res.json()) as { ok: true }
+    },
+
+    async fetchManifest() {
+      const res = await cmsFetch(`${cmsUrl}/api/sites/manifest`, {
+        method: 'GET',
+        headers,
+      })
+
+      if (!res.ok) {
+        throw new Error(await formatHttpError('Failed to fetch manifest', res))
+      }
+
+      return (await res.json()) as SiteManifest
     },
 
     async fetchSnapshot() {

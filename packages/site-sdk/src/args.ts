@@ -1,6 +1,7 @@
 export type ParsedArgs =
   | { command: 'pull'; outDir: string }
   | { command: 'sync-manifest'; configPath: string }
+  | { command: 'manifest-pull'; configPath: string; yes: boolean }
   | {
       command: 'init'
       cmsUrl?: string
@@ -34,6 +35,10 @@ export function parseArgs(argv: string[]): ParsedArgs {
 
   if (command === 'sync-manifest') {
     return parseSyncManifestArgs(rest)
+  }
+
+  if (command === 'manifest') {
+    return parseManifestArgs(rest)
   }
 
   if (command === 'init') {
@@ -74,6 +79,45 @@ function parseSyncManifestArgs(args: string[]): ParsedArgs {
     return { command: 'error', message: `Unknown argument: ${configPath}` }
   }
   return { command: 'sync-manifest', configPath }
+}
+
+function parseManifestArgs(args: string[]): ParsedArgs {
+  const [sub, ...rest] = args
+
+  if (!sub) {
+    return { command: 'error', message: 'Missing manifest subcommand. Expected push or pull.' }
+  }
+  if (sub === 'push') {
+    return parseSyncManifestArgs(rest)
+  }
+  if (sub === 'pull') {
+    return parseManifestPullArgs(rest)
+  }
+
+  return { command: 'error', message: `Unknown manifest subcommand: ${sub}` }
+}
+
+function parseManifestPullArgs(args: string[]): ParsedArgs {
+  let configPath = DEFAULT_SYNC_MANIFEST_PATH
+  let yes = false
+
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i]
+    if (arg === '--config') {
+      const value = readFlagValue(args, i, '--config')
+      if (value.error) return value.error
+      configPath = value.value
+      i += 1
+      continue
+    }
+    if (arg === '--yes' || arg === '-y') {
+      yes = true
+      continue
+    }
+    return { command: 'error', message: `Unknown argument: ${arg}` }
+  }
+
+  return { command: 'manifest-pull', configPath, yes }
 }
 
 function parseInitArgs(args: string[]): ParsedArgs {
@@ -159,7 +203,9 @@ export function usage(): string {
   return `Usage:
   areca init [--cms-url <url>] [--token <token>] [--site-key <key>] [--out ${DEFAULT_PULL_OUT_DIR}] [--config ${DEFAULT_CONFIG_PATH}] [--yes|-y] [--force]
   areca pull [--out ${DEFAULT_PULL_OUT_DIR}]
-  areca sync-manifest [${DEFAULT_SYNC_MANIFEST_PATH}]
+  areca manifest push [${DEFAULT_SYNC_MANIFEST_PATH}]
+  areca manifest pull [--config ${DEFAULT_SYNC_MANIFEST_PATH}] [--yes|-y]
+  areca sync-manifest [${DEFAULT_SYNC_MANIFEST_PATH}]   (deprecated alias for manifest push)
   areca run -- <command>
 
 Environment:

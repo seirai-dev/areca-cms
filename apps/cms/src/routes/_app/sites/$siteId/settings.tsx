@@ -1,9 +1,9 @@
 import type { FormEvent } from 'react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
-import { Layers, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Check, Copy, Layers, Pencil, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import type { CollectionDraft } from '#/components/admin/collection-form-dialog'
@@ -352,6 +352,19 @@ function SiteSettingsPage() {
               />
             </FormField>
             <FormField
+              label={m.sites_slug()}
+              htmlFor="settings-site-slug"
+              hint={
+                <>
+                  {m.sites_slug_hint_before()}{' '}
+                  <code className="font-mono">--site-key</code>{' '}
+                  {m.sites_slug_hint_after()}
+                </>
+              }
+            >
+              <CopyableSlug slug={site.slug} />
+            </FormField>
+            <FormField
               label={m.sites_production_url()}
               htmlFor="settings-production-url"
             >
@@ -603,6 +616,50 @@ function SiteSettingsPage() {
           await targetMutation.mutateAsync(null)
         }}
       />
+    </div>
+  )
+}
+
+function CopyableSlug({ slug }: { slug: string }) {
+  const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    if (!copied) {
+      return
+    }
+    const timer = window.setTimeout(() => setCopied(false), 2000)
+    return () => window.clearTimeout(timer)
+  }, [copied])
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(slug)
+      setCopied(true)
+      toast.success(m.sites_slug_copied())
+    } catch {
+      toast.error(m.sites_slug_copy_error())
+    }
+  }
+
+  return (
+    <div className="flex gap-2">
+      <Input
+        id="settings-site-slug"
+        data-testid="settings-site-slug"
+        readOnly
+        className="font-mono"
+        value={slug}
+        onFocus={(event) => event.currentTarget.select()}
+      />
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => void copy()}
+        aria-label={m.sites_slug_copy_aria()}
+      >
+        {copied ? <Check /> : <Copy />}
+        {copied ? m.sites_slug_copied_label() : m.sites_slug_copy()}
+      </Button>
     </div>
   )
 }

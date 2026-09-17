@@ -16,7 +16,7 @@ pnpm exec areca init
 ```
 
 The package is ESM-only and requires Node.js 22.6 or newer. Node 24 LTS is
-recommended because `areca sync-manifest` imports the TypeScript
+recommended because `areca manifest push` imports the TypeScript
 `areca.config.ts` file directly.
 
 Non-interactive / CI:
@@ -30,7 +30,7 @@ Init writes frontend wiring only:
 - `areca.config.ts` — empty `collections: {}` (fill this in next)
 - `.env.example` and gitignored `.env.local` (`ARECA_CMS_URL`, `ARECA_SITE_TOKEN`)
 - `.gitignore` entries for `.env.local` and generated content
-- `package.json` scripts: `sync-manifest`, `content:pull` (wraps `dev` with `areca run --` if a `dev` script already exists)
+- `package.json` scripts: `sync-manifest` (runs `areca manifest push`), `content:pull` (wraps `dev` with `areca run --` if a `dev` script already exists)
 - empty `src/generated/content/manifest.json` so the site can boot before the first CMS publish
 
 Then:
@@ -70,8 +70,28 @@ Push the schema to the CMS (Node 24 can import `.ts` natively):
 
 ```bash
 pnpm sync-manifest
-# or: areca sync-manifest ./areca.config.ts
+# or: areca manifest push ./areca.config.ts
 ```
+
+### Schema sync both ways
+
+```bash
+areca manifest push [./areca.config.ts]                  # site → CMS
+areca manifest pull [--config ./areca.config.ts] [--yes] # CMS → site
+```
+
+`areca sync-manifest` is the old alias for `areca manifest push` and still
+works.
+
+`manifest pull` fetches the enabled collections from the CMS and **regenerates
+the whole config file** — hand-written comments, helpers, and any formatting in
+`areca.config.ts` are lost. The `siteKey` is preserved from the existing file
+(or `ARECA_SITE_KEY` if there is no file yet; otherwise run `areca init` first).
+
+When the existing config already declares collections, the command prints an
+added / changed / removed summary and asks for confirmation. Pass `--yes` /
+`-y` to skip the prompt — required in CI, where the command errors out instead
+of prompting.
 
 ## 3. Pull content
 
@@ -181,6 +201,7 @@ import { pullContent } from '@areca-cms/site-sdk/pull'
 
 const client = createArecaClient() // or { cmsUrl, siteToken }
 await client.syncManifest(config)
+const manifest = await client.fetchManifest()
 const snapshot = await client.fetchSnapshot()
 await pullContent({ outDir: 'src/generated/content', client })
 ```

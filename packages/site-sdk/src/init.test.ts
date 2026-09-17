@@ -177,7 +177,7 @@ describe('initSite', () => {
       const pkg = JSON.parse(readUtf8(join(dir, 'package.json'))) as {
         scripts: Record<string, string>
       }
-      expect(pkg.scripts['sync-manifest']).toBe('areca sync-manifest')
+      expect(pkg.scripts['sync-manifest']).toBe('areca manifest push')
       expect(pkg.scripts['content:pull']).toBe('areca pull --out src/generated/content')
       expect(pkg.scripts.dev).toBeUndefined()
       expect(pkg.scripts.prebuild).toBeUndefined()
