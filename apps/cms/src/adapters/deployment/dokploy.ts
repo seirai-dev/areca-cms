@@ -20,14 +20,19 @@ import type { ResolveHost } from '#/server/http/outbound-url'
 
 type FetchFn = typeof fetch
 
-export function createDokployAdapter(opts: {
+type DokployConnectionOptions = {
   baseUrl: string
   apiKey: string
   fetch?: FetchFn
-  resolveHost?: ResolveHost
   allowInsecureHttp?: boolean
+}
+
+type DokployAdapterOptions = DokployConnectionOptions & {
+  resolveHost?: ResolveHost
   allowPrivateHealthChecks?: boolean
-}): DeploymentAdapter {
+}
+
+function createDokployRequest(opts: DokployConnectionOptions) {
   const baseUrl = assertSecureServiceUrl(
     opts.baseUrl,
     opts.allowInsecureHttp,
@@ -50,7 +55,12 @@ export function createDokployAdapter(opts: {
       Object.assign(headers, extra)
     }
 
-    const res = await fetchFn(`${baseUrl}${path}`, { ...init, headers })
+    const res = await fetchFn(`${baseUrl}${path}`, {
+      ...init,
+      headers,
+      redirect: 'error',
+      signal: init.signal ?? AbortSignal.timeout(15_000),
+    })
     if (!res.ok) {
       throw new Error(
         `Dokploy ${init.method ?? 'GET'} ${path} failed: ${res.status}`,
@@ -60,6 +70,83 @@ export function createDokployAdapter(opts: {
     if (!text.trim()) return undefined as T
     return JSON.parse(text) as T
   }
+
+  return request
+}
+
+export type DokployApplicationSummary = {
+  applicationId: string
+  name: string
+  appName: string | null
+  applicationStatus: string | null
+}
+
+export async function listDokployApplications(
+  opts: DokployConnectionOptions,
+): Promise<{ applications: DokployApplicationSummary[]; total: number }> {
+  const request = createDokployRequest(opts)
+  const applications: DokployApplicationSummary[] = []
+  let total = 0
+
+  do {
+    const result = await request<unknown>(
+      `/api/application.search?limit=100&offset=${applications.length}`,
+    )
+    if (
+      typeof result !== 'object' ||
+      result === null ||
+      !('items' in result) ||
+      !Array.isArray(result.items) ||
+      !('total' in result) ||
+      typeof result.total !== 'number' ||
+      !Number.isInteger(result.total) ||
+      result.total < 0
+    ) {
+      throw new Error('Dokploy application.search returned an invalid response')
+    }
+    total = result.total
+    for (const item of result.items) {
+      if (
+        typeof item !== 'object' ||
+        item === null ||
+        !('applicationId' in item) ||
+        typeof item.applicationId !== 'string' ||
+        !('name' in item) ||
+        typeof item.name !== 'string'
+      ) {
+        throw new Error(
+          'Dokploy application.search returned an invalid application',
+        )
+      }
+      applications.push({
+        applicationId: item.applicationId,
+        name: item.name,
+        appName:
+          'appName' in item && typeof item.appName === 'string'
+            ? item.appName
+            : null,
+        applicationStatus:
+          'applicationStatus' in item &&
+          typeof item.applicationStatus === 'string'
+            ? item.applicationStatus
+            : null,
+      })
+    }
+    if (result.items.length === 0 && applications.length < total) {
+      throw new Error(
+        'Dokploy application.search returned an incomplete response',
+      )
+    }
+  } while (applications.length < total && applications.length < 1_000)
+
+  return { applications, total }
+}
+
+export function createDokployAdapter(
+  opts: DokployAdapterOptions,
+): DeploymentAdapter {
+  const request = createDokployRequest(opts)
+  const fetchFn = opts.fetch ?? fetch
 
   function getApplication(applicationId: string) {
     return request<DokployApplication>(

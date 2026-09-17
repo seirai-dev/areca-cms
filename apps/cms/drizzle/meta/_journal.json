@@ -43,6 +43,13 @@
       "when": 1789570558811,
       "tag": "0005_cool_morlocks",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789642457115,
+      "tag": "0006_closed_vargas",
+      "breakpoints": true
     }
   ]
 }

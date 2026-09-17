@@ -1,11 +1,24 @@
-import { and, eq, inArray, isNotNull, isNull, lte, ne, or, sql } from 'drizzle-orm'
+import {
+  and,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  lte,
+  ne,
+  or,
+  sql,
+} from 'drizzle-orm'
 
-import { getDeploymentAdapter } from '#/adapters'
-import type { DeploymentAdapter, DeploymentTarget } from '#/adapters/deployment/types'
+import type {
+  DeploymentAdapter,
+  DeploymentTarget,
+} from '#/adapters/deployment/types'
 import { db, pool } from '#/db'
 import { buildJob, entry, publication, site } from '#/db/schema'
 import { env } from '#/env'
 import { audit } from '#/server/audit'
+import { getDeploymentAdapterForOrganization } from '#/server/admin/dokploy-credentials'
 
 import { getPublication } from './publications.ts'
 import { runSchedulerTick } from './scheduler.ts'
@@ -31,7 +44,8 @@ const g = globalThis as typeof globalThis & {
 }
 
 export type ProcessJobDeps = {
-  adapter: DeploymentAdapter
+  adapter?: DeploymentAdapter
+  resolveAdapter?: (organizationId: string) => Promise<DeploymentAdapter>
 }
 
 export async function appendLog(jobId: string, line: string) {
@@ -68,7 +82,7 @@ export async function runOnce(deps?: ProcessJobDeps) {
 
 export async function processJob(
   job: typeof buildJob.$inferSelect,
-  deps: ProcessJobDeps = { adapter: getDeploymentAdapter() },
+  deps: ProcessJobDeps = {},
 ) {
   const logs: Promise<void>[] = []
   const log = (line: string) => {
@@ -147,8 +161,13 @@ export async function processJob(
         applicationId: target.applicationId,
         healthCheckUrl: target.healthCheckUrl ?? '',
       }
-      const { deploymentId } = await deps.adapter.deploy(adapterTarget, log)
-      const wait = await deps.adapter.waitForCompletion(
+      const adapter =
+        deps.adapter ??
+        (await (deps.resolveAdapter ?? getDeploymentAdapterForOrganization)(
+          existingSite.organizationId,
+        ))
+      const { deploymentId } = await adapter.deploy(adapterTarget, log)
+      const wait = await adapter.waitForCompletion(
         adapterTarget,
         deploymentId,
         { timeoutMs: DEPLOY_TIMEOUT_MS, pollMs: DEPLOY_POLL_MS },
@@ -165,7 +184,7 @@ export async function processJob(
       }
       if (target.healthCheckUrl) {
         log(`health check ${target.healthCheckUrl}`)
-        const healthy = await deps.adapter.healthCheck(target.healthCheckUrl, {
+        const healthy = await adapter.healthCheck(target.healthCheckUrl, {
           timeoutMs: HEALTH_TIMEOUT_MS,
           intervalMs: HEALTH_POLL_MS,
           expectPublicationId: pub.id,
@@ -326,7 +345,9 @@ export async function recoverStaleJobs(
   return stale
 }
 
-export function startWorker({ intervalMs = 3000 }: { intervalMs?: number } = {}) {
+export function startWorker({
+  intervalMs = 3000,
+}: { intervalMs?: number } = {}) {
   if (!env.WORKER_ENABLED) return
   if (g.__arecaWorker) return g.__arecaWorker
 

@@ -12,8 +12,9 @@ pnpm --filter @areca/cms dokploy:setup
 ```
 
 The script is idempotent: it looks up an existing app by `APP_NAME` in
-`DOKPLOY_ENVIRONMENT_ID` before creating. Load secrets from
-`apps/cms/.env.local` (gitignored). Do not commit API keys.
+`DOKPLOY_ENVIRONMENT_ID` before creating. Load setup-script secrets from
+`apps/cms/.env.local` (gitignored). Do not commit API keys. Runtime publishing
+credentials are configured per CMS organization.
 
 ## Prerequisites
 
@@ -28,6 +29,12 @@ Optional: `APP_NAME` (default `acme-demo-site`), `GIT_BRANCH` (`master`),
 `DOCKERFILE` (`examples/demo-site/Dockerfile`), `PUBLISHED_PORT` (`3101`),
 `TARGET_PORT` (`3000`), `AUTO_DEPLOY` (`false`). Production/shared URLs must
 use HTTPS. For local or LAN-only testing, set `DOKPLOY_ALLOW_INSECURE_HTTP=true`.
+
+The running CMS requires `DOKPLOY_CREDENTIALS_ENCRYPTION_KEY`, a stable
+base64-encoded 32-byte key (generate one with `openssl rand -base64 32`). Keep
+the same key across replicas and restores; losing it makes stored Dokploy API
+keys unrecoverable. For local development only, the legacy global URL/key can
+be enabled with `DOKPLOY_DEV_FALLBACK_ENABLED=true`.
 
 ## 1. Git repo + deploy key (one-time)
 
@@ -84,7 +91,12 @@ The Docker build calls `GET /api/sites/snapshot/current` on `ARECA_CMS_URL`.
 
 ## 4. CMS site settings
 
-On the site (agency admin → Settings, or `updateSite`):
+As an agency administrator, first save and verify the organization's Dokploy
+URL and API key under **Organization → Settings → Dokploy**. Verification lists
+the applications accessible to the organization-scoped key. The key is never
+shown again after saving.
+
+Then configure the site (agency admin → Settings, or `updateSite`):
 
 ```json
 {

@@ -8,7 +8,7 @@ import {
   useRouter,
 } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
-import { Globe, Plus } from 'lucide-react'
+import { CheckCircle2, Globe, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 
 import {
@@ -26,6 +26,7 @@ import { FormField } from '#/components/form-field'
 import { PageHeader } from '#/components/page-header'
 import { QueryError } from '#/components/query-error'
 import { Button, buttonVariants } from '#/components/ui/button'
+import { Badge } from '#/components/ui/badge'
 import {
   Dialog,
   DialogContent,
@@ -41,9 +42,13 @@ import { m } from '#/paraglide/messages'
 import {
   createSiteFn,
   deleteOrganizationFn,
+  getDokployCredentialStatusFn,
   listOrganizationsFn,
   listSitesFn,
+  removeDokployCredentialsFn,
+  saveDokployCredentialsFn,
   updateOrganizationFn,
+  verifyDokployCredentialsFn,
 } from '#/server/fn/admin'
 
 export const Route = createFileRoute('/_app/admin/organizations/$orgId')({
@@ -111,6 +116,10 @@ function OrganizationDetailPage() {
   const createSite = useServerFn(createSiteFn)
   const updateOrganization = useServerFn(updateOrganizationFn)
   const deleteOrganization = useServerFn(deleteOrganizationFn)
+  const getDokployCredentialStatus = useServerFn(getDokployCredentialStatusFn)
+  const saveDokployCredentials = useServerFn(saveDokployCredentialsFn)
+  const verifyDokployCredentials = useServerFn(verifyDokployCredentialsFn)
+  const removeDokployCredentials = useServerFn(removeDokployCredentialsFn)
 
   const [tab, setTab] = useState<OrgTab>('sites')
   const [siteOpen, setSiteOpen] = useState(false)
@@ -120,6 +129,11 @@ function OrganizationDetailPage() {
   const [productionUrl, setProductionUrl] = useState(DEFAULT_PRODUCTION_URL)
   const [createdToken, setCreatedToken] = useState<string | null>(null)
   const [orgName, setOrgName] = useState('')
+  const [dokployUrl, setDokployUrl] = useState('')
+  const [dokployApiKey, setDokployApiKey] = useState('')
+  const [dokployApplications, setDokployApplications] = useState<
+    Awaited<ReturnType<typeof verifyDokployCredentialsFn>> | undefined
+  >()
 
   useEffect(() => {
     const stored = sessionStorage.getItem(`areca.site-token.${orgId}`)
@@ -136,6 +150,11 @@ function OrganizationDetailPage() {
     queryKey: adminQueryKeys.sites(orgId),
     queryFn: () => listSites({ data: { organizationId: orgId } }),
   })
+  const dokployQuery = useQuery({
+    queryKey: adminQueryKeys.dokployCredentials(orgId),
+    queryFn: () =>
+      getDokployCredentialStatus({ data: { organizationId: orgId } }),
+  })
 
   const org = orgsQuery.data?.find((item) => item.id === orgId)
 
@@ -146,6 +165,13 @@ function OrganizationDetailPage() {
       setOrgName(org.name)
     }
   }, [org])
+
+  useEffect(() => {
+    if (dokployQuery.data) {
+      setDokployUrl(dokployQuery.data.url ?? '')
+      setDokployApiKey('')
+    }
+  }, [dokployQuery.data])
 
   const createSiteMutation = useMutation({
     mutationFn: () =>
@@ -206,6 +232,55 @@ function OrganizationDetailPage() {
     onError: (err) => toast.error(errorMessage(err)),
   })
 
+  const saveDokployMutation = useMutation({
+    mutationFn: () =>
+      saveDokployCredentials({
+        data: {
+          organizationId: orgId,
+          url: dokployUrl.trim(),
+          apiKey: dokployApiKey.trim() || undefined,
+        },
+      }),
+    onSuccess: async (result) => {
+      toast.success(m.admin_org_dokploy_saved())
+      setDokployUrl(result.url)
+      setDokployApiKey('')
+      setDokployApplications({
+        applications: result.applications,
+        total: result.total,
+      })
+      await queryClient.invalidateQueries({
+        queryKey: adminQueryKeys.dokployCredentials(orgId),
+      })
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  })
+
+  const verifyDokployMutation = useMutation({
+    mutationFn: () =>
+      verifyDokployCredentials({ data: { organizationId: orgId } }),
+    onSuccess: (result) => {
+      toast.success(m.admin_org_dokploy_verified())
+      setDokployApplications(result)
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  })
+
+  const removeDokployMutation = useMutation({
+    mutationFn: () =>
+      removeDokployCredentials({ data: { organizationId: orgId } }),
+    onSuccess: async () => {
+      toast.success(m.admin_org_dokploy_removed())
+      setDokployUrl('')
+      setDokployApiKey('')
+      setDokployApplications(undefined)
+      await queryClient.invalidateQueries({
+        queryKey: adminQueryKeys.dokployCredentials(orgId),
+      })
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  })
+
   if (orgsQuery.isError) {
     return (
       <div className="grid gap-6">
@@ -259,6 +334,11 @@ function OrganizationDetailPage() {
   function onRename(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     renameMutation.mutate()
+  }
+
+  function onSaveDokploy(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    saveDokployMutation.mutate()
   }
 
   const siteCount = Math.max(org.siteCount, sitesQuery.data?.length ?? 0)
@@ -434,6 +514,167 @@ function OrganizationDetailPage() {
               </Button>
             </div>
           </form>
+
+          <section className="grid max-w-2xl gap-4 border-t pt-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="grid gap-1">
+                <h2 className="text-lg font-medium">
+                  {m.admin_org_dokploy_title()}
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  {m.admin_org_dokploy_description()}
+                </p>
+              </div>
+              <Badge
+                variant={
+                  dokployQuery.data?.configured ? 'default' : 'secondary'
+                }
+              >
+                {dokployQuery.data?.configured
+                  ? m.admin_org_dokploy_configured()
+                  : m.admin_org_dokploy_not_configured()}
+              </Badge>
+            </div>
+
+            {dokployQuery.isError ? (
+              <QueryError
+                title={m.admin_org_dokploy_load_error()}
+                error={dokployQuery.error}
+                onRetry={() => void dokployQuery.refetch()}
+                retrying={dokployQuery.isFetching}
+              />
+            ) : (
+              <form className="grid gap-4" onSubmit={onSaveDokploy}>
+                <FormField
+                  label={m.admin_org_dokploy_url()}
+                  htmlFor="dokploy-url"
+                >
+                  <Input
+                    id="dokploy-url"
+                    data-testid="dokploy-url"
+                    type="url"
+                    required
+                    placeholder="https://dokploy.example.com"
+                    value={dokployUrl}
+                    onChange={(event) => setDokployUrl(event.target.value)}
+                  />
+                </FormField>
+                <FormField
+                  label={m.admin_org_dokploy_api_key()}
+                  htmlFor="dokploy-api-key"
+                  description={
+                    dokployQuery.data?.configured
+                      ? m.admin_org_dokploy_api_key_replace_hint()
+                      : m.admin_org_dokploy_api_key_new_hint()
+                  }
+                >
+                  <Input
+                    id="dokploy-api-key"
+                    data-testid="dokploy-api-key"
+                    type="password"
+                    required={!dokployQuery.data?.configured}
+                    autoComplete="new-password"
+                    value={dokployApiKey}
+                    onChange={(event) => setDokployApiKey(event.target.value)}
+                  />
+                </FormField>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="submit"
+                    data-testid="save-dokploy-credentials"
+                    disabled={
+                      saveDokployMutation.isPending || dokployQuery.isPending
+                    }
+                  >
+                    {saveDokployMutation.isPending
+                      ? m.admin_saving()
+                      : m.admin_org_dokploy_save()}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    data-testid="verify-dokploy-credentials"
+                    disabled={
+                      !dokployQuery.data?.configured ||
+                      verifyDokployMutation.isPending ||
+                      saveDokployMutation.isPending
+                    }
+                    onClick={() => verifyDokployMutation.mutate()}
+                  >
+                    <CheckCircle2 />
+                    {verifyDokployMutation.isPending
+                      ? m.admin_org_dokploy_verifying()
+                      : m.admin_org_dokploy_verify()}
+                  </Button>
+                  {dokployQuery.data?.configured ? (
+                    <ConfirmDialog
+                      title={m.admin_org_dokploy_remove_title()}
+                      description={m.admin_org_dokploy_remove_description()}
+                      confirmLabel={m.admin_org_dokploy_remove()}
+                      variant="destructive"
+                      onConfirm={async () => {
+                        await removeDokployMutation.mutateAsync()
+                      }}
+                    >
+                      <Button
+                        type="button"
+                        variant="outline"
+                        data-testid="remove-dokploy-credentials"
+                        disabled={removeDokployMutation.isPending}
+                      >
+                        {m.admin_org_dokploy_remove()}
+                      </Button>
+                    </ConfirmDialog>
+                  ) : null}
+                </div>
+              </form>
+            )}
+
+            {dokployApplications ? (
+              <div className="grid gap-2" data-testid="dokploy-applications">
+                <h3 className="font-medium">
+                  {m.admin_org_dokploy_applications({
+                    count: dokployApplications.total,
+                  })}
+                </h3>
+                {dokployApplications.applications.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    {m.admin_org_dokploy_no_applications()}
+                  </p>
+                ) : (
+                  <ul className="divide-y rounded-md border">
+                    {dokployApplications.applications.map((application) => (
+                      <li
+                        key={application.applicationId}
+                        className="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
+                      >
+                        <div>
+                          <p className="font-medium">{application.name}</p>
+                          <code className="text-xs text-muted-foreground">
+                            {application.applicationId}
+                          </code>
+                        </div>
+                        {application.applicationStatus ? (
+                          <Badge variant="outline">
+                            {application.applicationStatus}
+                          </Badge>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {dokployApplications.total >
+                dokployApplications.applications.length ? (
+                  <p className="text-xs text-muted-foreground">
+                    {m.admin_org_dokploy_applications_truncated({
+                      shown: dokployApplications.applications.length,
+                      total: dokployApplications.total,
+                    })}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </section>
 
           <section className="grid max-w-md gap-3 border-t border-destructive/40 pt-5">
             <div className="grid gap-1">

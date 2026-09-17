@@ -7,6 +7,8 @@ export default defineConfig({
     setupFiles: ['./vitest.setup.ts'],
     env: {
       WORKER_ENABLED: 'false',
+      DOKPLOY_CREDENTIALS_ENCRYPTION_KEY:
+        'AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=',
     },
   },
 })

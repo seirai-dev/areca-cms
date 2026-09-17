@@ -5,6 +5,12 @@ import { requireAgencyAdmin, requireOrgMember } from '#/lib/session.server'
 import { m } from '#/paraglide/messages'
 import { listAuditLog } from '#/server/admin/audit'
 import {
+  getDokployCredentialStatus,
+  removeDokployCredentials,
+  saveDokployCredentials,
+  verifyDokployCredentials,
+} from '#/server/admin/dokploy-credentials'
+import {
   getInvitationById,
   inviteMember,
   listInvitations,
@@ -87,6 +93,61 @@ export const deleteOrganizationFn = createServerFn({
     await requireAgencyAdmin()
     await deleteOrganization(data.id)
     return { ok: true as const }
+  })
+
+export const getDokployCredentialStatusFn = createServerFn({
+  method: 'GET',
+  ...adminFn,
+})
+  .validator(z.object({ organizationId: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    await requireAgencyAdmin()
+    return getDokployCredentialStatus(data.organizationId)
+  })
+
+export const saveDokployCredentialsFn = createServerFn({
+  method: 'POST',
+  ...adminFn,
+})
+  .validator(
+    z.object({
+      organizationId: z.string().min(1),
+      url: z.url(),
+      apiKey: z.string().min(1).optional(),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const session = await requireAgencyAdmin()
+    return saveDokployCredentials({
+      ...data,
+      actorId: session.user.id,
+    })
+  })
+
+export const verifyDokployCredentialsFn = createServerFn({
+  method: 'POST',
+  ...adminFn,
+})
+  .validator(z.object({ organizationId: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    const session = await requireAgencyAdmin()
+    return verifyDokployCredentials({
+      organizationId: data.organizationId,
+      actorId: session.user.id,
+    })
+  })
+
+export const removeDokployCredentialsFn = createServerFn({
+  method: 'POST',
+  ...adminFn,
+})
+  .validator(z.object({ organizationId: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    const session = await requireAgencyAdmin()
+    return removeDokployCredentials({
+      organizationId: data.organizationId,
+      actorId: session.user.id,
+    })
   })
 
 export const listSitesFn = createServerFn({ method: 'GET', ...adminFn })

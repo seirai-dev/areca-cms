@@ -127,6 +127,17 @@ export const organization = pgTable('organization', {
   updatedAt: updatedAt(),
 })
 
+/** Server-only deployment credentials. Never include encryptedApiKey in UI DTOs. */
+export const dokployCredential = pgTable('dokploy_credential', {
+  organizationId: text('organization_id')
+    .primaryKey()
+    .references(() => organization.id, { onDelete: 'cascade' }),
+  url: text('url').notNull(),
+  encryptedApiKey: text('encrypted_api_key').notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+})
+
 export const membership = pgTable(
   'membership',
   {

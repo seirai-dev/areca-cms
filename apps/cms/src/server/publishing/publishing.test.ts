@@ -79,6 +79,71 @@ async function seedPublishedEntry(
 }
 
 describe.skipIf(!hasDb)('publishing pipeline', () => {
+  it('resolves deployment credentials by site organization and skips resolution without a target', async () => {
+    await withTestSite(async (ctx) => {
+      await createTestCollection(ctx.site.id)
+      await seedPublishedEntry(ctx.site.id, ctx.actor.id, ctx.suffix, 'resolve')
+
+      const localOnly = await requestPublication({
+        siteId: ctx.site.id,
+        actorId: ctx.actor.id,
+      })
+      expect(localOnly.ok).toBe(true)
+      if (!localOnly.ok) return
+      await processJob(localOnly.job, {
+        resolveAdapter: async () => {
+          throw new Error('resolver should not run')
+        },
+      })
+      expect((await getBuildJob(localOnly.job.id)).status).toBe('succeeded')
+
+      await setDeploymentTarget(ctx.site.id)
+      const deployed = await requestPublication({
+        siteId: ctx.site.id,
+        actorId: ctx.actor.id,
+      })
+      expect(deployed.ok).toBe(true)
+      if (!deployed.ok) return
+      const resolvedOrganizations: string[] = []
+      await processJob(deployed.job, {
+        resolveAdapter: async (organizationId) => {
+          resolvedOrganizations.push(organizationId)
+          return createMockDeploymentAdapter()
+        },
+      })
+      expect(resolvedOrganizations).toEqual([ctx.org.id])
+      expect((await getBuildJob(deployed.job.id)).status).toBe('succeeded')
+    })
+  })
+
+  it('fails a targeted publication when organization credentials are unavailable', async () => {
+    await withTestSite(async (ctx) => {
+      await createTestCollection(ctx.site.id)
+      await setDeploymentTarget(ctx.site.id)
+      await seedPublishedEntry(ctx.site.id, ctx.actor.id, ctx.suffix, 'missing')
+      const requested = await requestPublication({
+        siteId: ctx.site.id,
+        actorId: ctx.actor.id,
+      })
+      expect(requested.ok).toBe(true)
+      if (!requested.ok) return
+
+      await processJob(requested.job, {
+        resolveAdapter: async () => {
+          throw new Error('Dokploy credentials are not configured')
+        },
+      })
+
+      expect((await getBuildJob(requested.job.id)).status).toBe('failed')
+      expect((await getBuildJob(requested.job.id)).error).toMatch(
+        /not configured/,
+      )
+      expect((await getPublication(requested.publication.id)).status).toBe(
+        'failed',
+      )
+    })
+  })
+
   it('requests, coalesces, deploys, promotes scheduled, fails without clobbering live, and rolls back', async () => {
     await withTestSite(async (ctx) => {
       await createTestCollection(ctx.site.id)

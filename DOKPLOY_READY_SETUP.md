@@ -15,10 +15,10 @@ Postgres (internal)
 
 Replace `HOST` with the Dokploy machine’s LAN IP or DNS, e.g. `192.168.0.141`. Do **not** use `localhost` inside env vars — containers cannot see each other’s `localhost`.
 
-| Public URL | What |
-| --- | --- |
-| `http://HOST:3000` | Dokploy |
-| `http://HOST:3100` | CMS |
+| Public URL         | What      |
+| ------------------ | --------- |
+| `http://HOST:3000` | Dokploy   |
+| `http://HOST:3100` | CMS       |
 | `http://HOST:3101` | Live site |
 
 ---
@@ -79,14 +79,14 @@ New application from **Docker image** `axllent/mailpit`.
 
 New **application** from Git (same SSH key + `git@github.com:…` URL).
 
-| Setting | Value |
-| --- | --- |
-| Build type | Dockerfile |
-| Dockerfile | `apps/cms/Dockerfile` |
-| Docker context | `.` |
-| Auto deploy | **on** (git push updates the CMS) |
-| Port | **3100 → 3000**, `publishMode: host` |
-| Swarm update | `stop-first` |
+| Setting        | Value                                |
+| -------------- | ------------------------------------ |
+| Build type     | Dockerfile                           |
+| Dockerfile     | `apps/cms/Dockerfile`                |
+| Docker context | `.`                                  |
+| Auto deploy    | **on** (git push updates the CMS)    |
+| Port           | **3100 → 3000**, `publishMode: host` |
+| Swarm update   | `stop-first`                         |
 
 Environment (runtime, not build args):
 
@@ -106,10 +106,15 @@ S3_FORCE_PATH_STYLE=true
 SMTP_HOST=HOST
 SMTP_PORT=1025
 SMTP_FROM=cms@areca.local
-DOKPLOY_URL=http://HOST:3000
-DOKPLOY_API_KEY=<token from step 1>
+DOKPLOY_CREDENTIALS_ENCRYPTION_KEY=<base64-encoded 32-byte key>
+DOKPLOY_ALLOW_INSECURE_HTTP=true
 WORKER_ENABLED=true
 ```
+
+Generate the encryption key once with `openssl rand -base64 32`. Keep it stable
+across redeployments and backups; losing it makes stored Dokploy API keys
+unrecoverable. `DOKPLOY_ALLOW_INSECURE_HTTP=true` is only appropriate for this
+LAN setup; use HTTPS and omit it for internet-facing production.
 
 Deploy it. On boot the image runs migrations and creates the S3 bucket. Confirm `http://HOST:3100/api/health` returns `{"ok":true,"service":"cms"}`.
 
@@ -168,6 +173,14 @@ pnpm --filter @areca/demo-site sync-manifest
 
 ## 5. Couple the site to Dokploy
 
+CMS → the organization → **Settings** → **Dokploy**:
+
+- Enter the Dokploy URL and API key
+- Save and verify the credentials
+- Confirm the expected application appears in the available applications list
+
+The API key is encrypted in the database and cannot be viewed after saving.
+
 CMS → the site → **Settings** → **Deployment target**:
 
 - Application ID → from step 4
@@ -192,11 +205,12 @@ Path: CMS snapshot → worker → Dokploy `application.deploy` → image build r
 
 ## If it fails
 
-| What you see | Fix |
-| --- | --- |
-| Job succeeds instantly, site unchanged | CMS `DOKPLOY_API_KEY` is empty → deploys are mocked. Set it and redeploy the CMS. |
-| CMS crash loop on boot | Postgres URL / RustFS URL wrong. From the CMS container those hosts are **HOST**, not `localhost`. |
-| Login / cookies broken | `BETTER_AUTH_URL` and `APP_URL` must be exactly `http://HOST:3100`. |
-| `areca pull` timeout / 401 | Site build args `ARECA_CMS_URL` / `ARECA_SITE_TOKEN` must match the live CMS. Re-run `dokploy:setup` after rotating the token. |
-| Clone / SSH errors | Git URL is `git@github.com:…`, deploy key is on that repo. |
-| Images 404 on the site | `APP_URL` must be `http://HOST:3100`, then **Publish site** again so snapshot URLs update. |
+| What you see                              | Fix                                                                                                                            |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Job succeeds instantly, site unchanged    | The site has no deployment target. Save its Dokploy application ID under **Site settings → Deployment target**.                |
+| Job fails with credentials not configured | Save and verify the organization's Dokploy URL and API key under **Organization → Settings → Dokploy**.                        |
+| CMS crash loop on boot                    | Postgres URL / RustFS URL wrong. From the CMS container those hosts are **HOST**, not `localhost`.                             |
+| Login / cookies broken                    | `BETTER_AUTH_URL` and `APP_URL` must be exactly `http://HOST:3100`.                                                            |
+| `areca pull` timeout / 401                | Site build args `ARECA_CMS_URL` / `ARECA_SITE_TOKEN` must match the live CMS. Re-run `dokploy:setup` after rotating the token. |
+| Clone / SSH errors                        | Git URL is `git@github.com:…`, deploy key is on that repo.                                                                     |
+| Images 404 on the site                    | `APP_URL` must be `http://HOST:3100`, then **Publish site** again so snapshot URLs update.                                     |

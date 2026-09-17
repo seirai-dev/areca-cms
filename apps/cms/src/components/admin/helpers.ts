@@ -47,6 +47,8 @@ export function membershipRoleOptionLabel(role: MembershipRole) {
 
 export const adminQueryKeys = {
   organizations: ['organizations'] as const,
+  dokployCredentials: (organizationId: string) =>
+    ['dokploy-credentials', organizationId] as const,
   sites: (organizationId: string) => ['sites', organizationId] as const,
   site: (id: string) => ['site', id] as const,
   members: (organizationId: string) => ['members', organizationId] as const,
@@ -84,6 +86,16 @@ export function suggestSlug(name: string) {
 
 const AUDIT_ACTION_LABELS: Record<string, () => string> = {
   'organization.create': () => m.admin_audit_action_organization_create(),
+  'organization.dokploy_credentials_created': () =>
+    m.admin_audit_action_organization_dokploy_credentials_created(),
+  'organization.dokploy_credentials_removed': () =>
+    m.admin_audit_action_organization_dokploy_credentials_removed(),
+  'organization.dokploy_credentials_updated': () =>
+    m.admin_audit_action_organization_dokploy_credentials_updated(),
+  'organization.dokploy_credentials_validation_failed': () =>
+    m.admin_audit_action_organization_dokploy_credentials_validation_failed(),
+  'organization.dokploy_credentials_verified': () =>
+    m.admin_audit_action_organization_dokploy_credentials_verified(),
   'organization.update': () => m.admin_audit_action_organization_update(),
   'site.create': () => m.admin_audit_action_site_create(),
   'site.update': () => m.admin_audit_action_site_update(),

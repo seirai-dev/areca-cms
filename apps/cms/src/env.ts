@@ -50,8 +50,15 @@ export const env = createEnv({
     SMTP_HOST: z.string().min(1),
     SMTP_PORT: z.coerce.number(),
     SMTP_FROM: z.string().min(1),
-    DOKPLOY_URL: z.string().url(),
+    DOKPLOY_URL: z.string().url().optional(),
     DOKPLOY_API_KEY: z.string().optional(),
+    DOKPLOY_CREDENTIALS_ENCRYPTION_KEY: z
+      .string()
+      .regex(/^[A-Za-z0-9+/]{43}=$/, 'Must be a base64-encoded 32-byte key'),
+    DOKPLOY_DEV_FALLBACK_ENABLED: z
+      .enum(['true', 'false'])
+      .optional()
+      .transform((value) => value === 'true'),
     DOKPLOY_ALLOW_INSECURE_HTTP: z.enum(['true', 'false']).optional(),
     ALLOW_PRIVATE_HEALTH_CHECKS: z.enum(['true', 'false']).optional(),
     WORKER_ENABLED: z

@@ -6,6 +6,7 @@ fetches the pinned snapshot **at build time** and prerenders it. Visitors never 
 Full background: `PROJECT.md`. This file lists the concrete decisions taken for the implementation.
 
 ## Principles
+
 - KISS / YAGNI. No plugin system, no GraphQL, no visual builder, no multi-framework support.
 - Adapters are plain internal TypeScript interfaces (`DeploymentAdapter`, `AssetStorageAdapter`).
   Core domain code must not import Dokploy or S3 clients directly.
@@ -13,6 +14,7 @@ Full background: `PROJECT.md`. This file lists the concrete decisions taken for 
 - Always `pnpm`. Windows dev machine (PowerShell): never chain with `&&` in scripts that run on Windows; use separate commands or `;`.
 
 ## Repository layout (pnpm workspace)
+
 ```
 apps/cms              TanStack Start app: CMS UI + API + in-process worker/scheduler
 packages/site-sdk     @areca-cms/site-sdk: defineSiteContent, fetch snapshot at build time, preview helpers
@@ -21,6 +23,7 @@ docker-compose.yml    postgres:17, rustfs (S3-compatible), mailpit
 ```
 
 ## Stack
+
 - TanStack Start (React 19, Vite 8, TS 6), TanStack Router file routes, TanStack Query, TanStack Form, react-table v9.
 - Drizzle ORM + PostgreSQL (`pg`). Migrations with drizzle-kit in `apps/cms/drizzle`.
 - better-auth (email/password) + its `admin`/`organization` style handled by our own tables (see roles).
@@ -31,7 +34,9 @@ docker-compose.yml    postgres:17, rustfs (S3-compatible), mailpit
 - Email: nodemailer -> Mailpit locally (SMTP env vars).
 
 ## Domain model (tables, all ids are text ulids/uuids)
-- `organization`  (agency customers). `user`, `session`, `account`, `verification` (better-auth).
+
+- `organization` (agency customers). `user`, `session`, `account`, `verification` (better-auth).
+- `dokploy_credential` (organizationId, URL, encrypted API key; server-only and cascade-deleted with the organization).
 - `membership` (userId, organizationId, role: `owner|editor`). Agency staff = `user.isAgencyAdmin = true`; they see everything.
 - `invitation` (email, organizationId, role, token, expiresAt, acceptedAt).
 - `site` (organizationId, name, slug, siteKey/hashed site token for SDK calls, productionUrl, previewSecret,
@@ -51,6 +56,7 @@ Field types: `text | textarea | richtext | image | date | datetime | select | re
 Field def: `{ key, label, type, required?, options? (select), collection? (reference), description?, after? (date/datetime must be on or after this field key) }`.
 
 ## Publishing flow
+
 1. Editor clicks Publish (or scheduler fires): entry `publishedData = draftData`, revision recorded.
 2. `createPublication(siteId)`: snapshot = `{ siteId, createdAt, collections: { [key]: Entry[] } }` with every published entry
    (rich text exported as `{ json, markdown, document, html }` (`document` = TanStack Markdown AST), image fields resolved to stable asset URLs `/assets/<storageKey>` served by the CMS). Validate snapshot against collection fields; reject on errors.
@@ -61,22 +67,28 @@ Field def: `{ key, label, type, required?, options? (select), collection? (refer
 5. Rollback: pick a publication with `wasLive` → new build job with that publication id (becomes `live` again after success). Eligibility is `wasLive`, not current status, so a failed rollback can be retried.
 
 ## Site integration (how the site gets content)
+
 - Dokploy builds the site from its git repo. Build env has `ARECA_CMS_URL`, `ARECA_SITE_TOKEN`.
 - SDK `loadContent()` at build time calls `GET /api/sites/snapshot/current` (site token) which returns the publication marked
   as the one being deployed (`publication.status in (building)` for the running job, else the latest `live`). Result written to
   `src/generated/content/*.json` by a prebuild script `areca pull` and imported statically by the site. Since Dokploy cannot pass a
-  per-deploy env var, the CMS pins the snapshot: the endpoint returns the publication of the *active build job* for that site
+  per-deploy env var, the CMS pins the snapshot: the endpoint returns the publication of the _active build job_ for that site
   (falls back to the latest `live` publication). The build fails loudly if no publication exists.
 - Preview: CMS signs a JWT-like token (HMAC, `previewSecret`, 1h expiry, scoped to site+collection+slug). Site route `/__preview/$collection/$slug?token=`
   calls `GET /api/sites/preview?token=` and renders draft data with the same components; responds with `X-Robots-Tag: noindex`.
 
 ## Dokploy adapter
-- Base URL `DOKPLOY_URL`, header `x-api-key: DOKPLOY_API_KEY` (env only in CMS server).
+
+- Each CMS organization has one Dokploy URL and encrypted API key. The key is encrypted with
+  `DOKPLOY_CREDENTIALS_ENCRYPTION_KEY`, never returned to the browser, and can only be replaced.
+- The worker resolves credentials when a site job starts. Global `DOKPLOY_URL` / `DOKPLOY_API_KEY` values are used only
+  as an explicit non-production fallback with `DOKPLOY_DEV_FALLBACK_ENABLED=true`.
 - `POST /api/application.deploy { applicationId }`, then poll `GET /api/application.one?applicationId=` → `applicationStatus`
   (`running|done|error|idle`). Then GET the site's `healthCheckUrl` expecting 200.
 - Test server: `http://192.168.0.141:3000` (see `.env.example`).
 
 ## Roles
+
 - Agency admin: everything (orgs, sites, collections, users, releases of all sites).
 - Org `owner`: manage members/invitations of their org, edit + publish content.
 - Org `editor`: edit + publish content, no member management.

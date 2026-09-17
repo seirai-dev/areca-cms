@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createDokployAdapter } from './dokploy'
+import { createDokployAdapter, listDokployApplications } from './dokploy'
 import type { DeploymentTarget } from './types'
 
 const target: DeploymentTarget = {
@@ -35,6 +35,49 @@ const localTestOptions = {
 }
 
 describe('createDokployAdapter', () => {
+  it('verifies credentials and paginates organization applications', async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = []
+    const applications = Array.from({ length: 101 }, (_, index) => ({
+      applicationId: `app-${index}`,
+      name: `Application ${index}`,
+      appName: `application-${index}`,
+      applicationStatus: index === 0 ? 'done' : 'idle',
+    }))
+
+    const result = await listDokployApplications({
+      baseUrl: 'https://dokploy.example.com',
+      apiKey: 'organization-key',
+      fetch: fakeFetch((url, init) => {
+        calls.push({ url, init })
+        const offset = Number(new URL(url).searchParams.get('offset'))
+        return json({
+          items: applications.slice(offset, offset + 100),
+          total: 101,
+        })
+      }),
+    })
+
+    expect(result).toEqual({ applications, total: 101 })
+    expect(calls.map((call) => call.url)).toEqual([
+      'https://dokploy.example.com/api/application.search?limit=100&offset=0',
+      'https://dokploy.example.com/api/application.search?limit=100&offset=100',
+    ])
+    expect(calls[0]?.init).toMatchObject({
+      headers: { 'x-api-key': 'organization-key' },
+      redirect: 'error',
+    })
+  })
+
+  it('rejects malformed application search responses', async () => {
+    await expect(
+      listDokployApplications({
+        baseUrl: 'https://dokploy.example.com',
+        apiKey: 'key',
+        fetch: fakeFetch(() => json({})),
+      }),
+    ).rejects.toThrow(/invalid response/)
+  })
+
   it('requires HTTPS for the Dokploy API unless local development is explicit', () => {
     expect(() =>
       createDokployAdapter({
