@@ -135,6 +135,7 @@ export function PublicationStatusBadge({
   return (
     <Badge
       variant={publicationVariant[status]}
+      dot={status === 'live'}
       data-testid={testId}
       data-status={status}
     >

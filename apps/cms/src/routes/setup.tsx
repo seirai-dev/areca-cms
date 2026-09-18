@@ -2,12 +2,11 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 
-import { Alert, AlertDescription } from '#/components/ui/alert'
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
-import { BrandMark } from '#/components/brand-mark'
+import { Spinner } from '#/components/ui/spinner'
 import { FormField } from '#/components/form-field'
-import { AuthShell } from '#/components/language-switcher'
+import { AuthError, AuthHeading, AuthShell } from '#/components/auth-shell'
 import { authClient } from '#/lib/auth-client'
 import { useBranding } from '#/lib/use-branding'
 import { m } from '#/paraglide/messages'
@@ -79,70 +78,64 @@ function SetupPage() {
 
   return (
     <AuthShell>
-      <div className="w-full max-w-sm">
-        <BrandMark className="mb-8" />
-        <div className="mb-6 grid gap-1.5">
-          <h1 className="text-2xl">
-            {m.auth_set_up_app({ appName: branding.appName })}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {m.auth_create_first_agency_admin()}
-          </p>
-        </div>
-        <div>
-          <form
-            className="grid gap-4"
-            method="post"
-            onSubmit={onSubmit}
-            data-testid="setup-form"
-            data-ready={ready ? 'true' : 'false'}
-          >
-            {error ? (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            ) : null}
-            <FormField label={m.auth_name()} htmlFor="name">
-              <Input
-                id="name"
-                name="name"
-                autoComplete="name"
-                required
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-              />
-            </FormField>
-            <FormField label={m.auth_email()} htmlFor="email">
-              <Input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-              />
-            </FormField>
-            <FormField label={m.auth_password()} htmlFor="password">
-              <Input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="new-password"
-                required
-                minLength={8}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-            </FormField>
-            <Button type="submit" disabled={!ready || pending}>
-              {pending
-                ? m.auth_creating_admin()
-                : m.auth_create_admin_account()}
-            </Button>
-          </form>
-        </div>
-      </div>
+      <AuthHeading
+        title={m.auth_set_up_app({ appName: branding.appName })}
+        description={m.auth_create_first_agency_admin()}
+      />
+      <form
+        className="mt-8 grid gap-4"
+        method="post"
+        onSubmit={onSubmit}
+        data-testid="setup-form"
+        data-ready={ready ? 'true' : 'false'}
+      >
+        <FormField label={m.auth_name()} htmlFor="name">
+          <Input
+            id="name"
+            name="name"
+            autoComplete="name"
+            required
+            className="h-10"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
+        </FormField>
+        <FormField label={m.auth_email()} htmlFor="email">
+          <Input
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            required
+            className="h-10"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+        </FormField>
+        <FormField label={m.auth_password()} htmlFor="password">
+          <Input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="new-password"
+            required
+            minLength={8}
+            className="h-10"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+        </FormField>
+        <Button
+          type="submit"
+          size="lg"
+          className="mt-2 w-full"
+          disabled={!ready || pending}
+        >
+          {pending ? <Spinner /> : null}
+          {m.auth_create_admin_account()}
+        </Button>
+        {error ? <AuthError>{error}</AuthError> : null}
+      </form>
     </AuthShell>
   )
 }

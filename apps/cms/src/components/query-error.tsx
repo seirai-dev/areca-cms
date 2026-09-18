@@ -1,8 +1,7 @@
-import { AlertCircle, RotateCw } from 'lucide-react'
-
 import { Alert, AlertDescription, AlertTitle } from '#/components/ui/alert'
 import { Button } from '#/components/ui/button'
 import { m } from '#/paraglide/messages'
+import { WarningCircle, ArrowClockwise } from '@phosphor-icons/react'
 
 function messageFrom(error: unknown) {
   if (error instanceof Error && error.message) return error.message
@@ -31,7 +30,7 @@ export function QueryError({
 }) {
   return (
     <Alert variant="destructive" data-testid="query-error">
-      <AlertCircle />
+      <WarningCircle />
       <AlertTitle>{title}</AlertTitle>
       <AlertDescription>
         <p>{messageFrom(error)}</p>
@@ -44,7 +43,7 @@ export function QueryError({
             onClick={onRetry}
             disabled={retrying}
           >
-            <RotateCw className={retrying ? 'animate-spin' : undefined} />
+            <ArrowClockwise className={retrying ? 'animate-spin' : undefined} />
             {retrying ? m.shared_retrying() : m.shared_retry()}
           </Button>
         ) : null}

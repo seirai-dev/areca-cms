@@ -1,8 +1,7 @@
-import { Leaf } from 'lucide-react'
-
 import { useBranding } from '#/lib/use-branding'
 import type { BrandingView } from '#/lib/branding'
 import { cn } from '#/lib/utils'
+import { Leaf } from '@phosphor-icons/react'
 
 /**
  * Logo tile + app name. Reads the instance branding unless one is passed in
@@ -25,7 +24,7 @@ export function BrandMark({
       <BrandLogo branding={branding} />
       <span
         className={cn(
-          'truncate text-lg font-semibold tracking-tight',
+          'truncate text-ds-heading-5',
           nameClassName,
         )}
       >
@@ -47,7 +46,7 @@ export function BrandLogo({
       <img
         src={branding.logoUrl}
         alt=""
-        className={cn('size-8 shrink-0 rounded-md object-contain', className)}
+        className={cn('size-8 shrink-0 rounded-control object-contain', className)}
       />
     )
   }
@@ -55,7 +54,7 @@ export function BrandLogo({
     <span
       aria-hidden="true"
       className={cn(
-        'flex size-8 shrink-0 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground',
+        'flex size-8 shrink-0 items-center justify-center rounded-control bg-action-primary text-action-primary-text',
         className,
       )}
     >

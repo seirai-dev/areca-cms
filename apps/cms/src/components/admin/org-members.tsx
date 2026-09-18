@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
-import { MailPlus, UserPlus, Users } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { ConfirmDialog } from '#/components/confirm-dialog'
@@ -48,6 +47,7 @@ import {
   membershipRoleOptionLabel,
 } from './helpers'
 import { TableSkeleton } from './table-skeleton'
+import { EnvelopeSimple, UserPlus, Users } from '@phosphor-icons/react'
 
 type MemberRow = Awaited<ReturnType<typeof listMembersFn>>[number]
 type InvitationRow = Awaited<ReturnType<typeof listInvitationsFn>>[number]
@@ -385,7 +385,7 @@ export function OrgMembers({ organizationId }: { organizationId: string }) {
             <TableSkeleton rows={2} columns={5} />
           ) : pendingInvitations.length === 0 ? (
             <EmptyState
-              icon={<MailPlus />}
+              icon={<EnvelopeSimple />}
               title={m.admin_invitations_empty_title()}
               description={m.admin_invitations_empty_description()}
             />

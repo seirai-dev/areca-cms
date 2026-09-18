@@ -1,7 +1,6 @@
-import { ChevronLeft, ChevronRight } from 'lucide-react'
-
 import { Button } from '#/components/ui/button'
 import { m } from '#/paraglide/messages'
+import { CaretLeft, CaretRight } from '@phosphor-icons/react'
 
 /**
  * Prev/next controls for server-paged lists (limit/offset).
@@ -18,6 +17,7 @@ export function ListPagination({
   onChange,
   isFetching,
   noun = m.shared_items(),
+  nounSingular = m.shared_item(),
 }: {
   offset: number
   limit: number
@@ -28,16 +28,19 @@ export function ListPagination({
   onChange: (offset: number) => void
   isFetching?: boolean
   noun?: string
+  /** Used when exactly one row exists, so lists never read "1 entries". */
+  nounSingular?: string
 }) {
   const start = count === 0 ? 0 : offset + 1
   const end = offset + count
   const canPrev = offset > 0
   const canNext = typeof total === 'number' ? end < total : Boolean(hasMore)
+  const totalNoun = total === 1 ? nounSingular : noun
 
   if (!canPrev && !canNext) {
     return typeof total === 'number' && total > 0 ? (
-      <p className="text-sm text-muted-foreground">
-        {m.shared_total_noun({ total, noun })}
+      <p className="text-ds-body-sm text-text-muted">
+        {m.shared_total_noun({ total, noun: totalNoun })}
       </p>
     ) : null
   }
@@ -47,9 +50,9 @@ export function ListPagination({
       className="flex flex-wrap items-center justify-between gap-2"
       data-testid="list-pagination"
     >
-      <p className="text-sm text-muted-foreground">
+      <p className="text-ds-body-sm text-text-muted">
         {typeof total === 'number'
-          ? m.shared_range_of_total({ start, end, total, noun })
+          ? m.shared_range_of_total({ start, end, total, noun: totalNoun })
           : m.shared_range({ start, end })}
       </p>
       <div className="flex items-center gap-1">
@@ -60,7 +63,7 @@ export function ListPagination({
           disabled={!canPrev || isFetching}
           onClick={() => onChange(Math.max(0, offset - limit))}
         >
-          <ChevronLeft />
+          <CaretLeft />
           {m.shared_previous()}
         </Button>
         <Button
@@ -71,7 +74,7 @@ export function ListPagination({
           onClick={() => onChange(offset + limit)}
         >
           {m.shared_next()}
-          <ChevronRight />
+          <CaretRight />
         </Button>
       </div>
     </div>

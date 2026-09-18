@@ -8,7 +8,6 @@ import {
   useRouter,
 } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
-import { CheckCircle2, Globe, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 
 import {
@@ -16,6 +15,7 @@ import {
   errorMessage,
   suggestSlug,
 } from '#/components/admin/helpers'
+import { AuditLogList } from '#/components/admin/audit-log-list'
 import { OrgMembers } from '#/components/admin/org-members'
 import { TableSkeleton } from '#/components/admin/table-skeleton'
 import { TokenAlert } from '#/components/admin/token-alert'
@@ -23,7 +23,9 @@ import { ConfirmDialog } from '#/components/confirm-dialog'
 import { createDataColumns, DataTable } from '#/components/data-table'
 import { EmptyState } from '#/components/empty-state'
 import { FormField } from '#/components/form-field'
-import { PageHeader } from '#/components/page-header'
+import { OrgIdentityStrip } from '#/components/identity-strip'
+import { RelativeTime } from '#/components/timeline'
+import { PageSection, SectionedPage } from '#/components/section-nav'
 import { QueryError } from '#/components/query-error'
 import { Button, buttonVariants } from '#/components/ui/button'
 import { Badge } from '#/components/ui/badge'
@@ -50,13 +52,23 @@ import {
   updateOrganizationFn,
   verifyDokployCredentialsFn,
 } from '#/server/fn/admin'
+import { CheckCircle, Globe, Plus } from '@phosphor-icons/react'
+
+type OrgTab = 'general' | 'members' | 'sites' | 'audit'
+
+const ORG_TABS: OrgTab[] = ['general', 'members', 'sites', 'audit']
 
 export const Route = createFileRoute('/_app/admin/organizations/$orgId')({
+  // The active tab lives in the URL so refreshes and shared links keep it.
+  validateSearch: (search: Record<string, unknown>): { tab?: OrgTab } => ({
+    tab: ORG_TABS.includes(search.tab as OrgTab)
+      ? (search.tab as OrgTab)
+      : undefined,
+  }),
   component: OrganizationDetailPage,
 })
 
 type SiteRow = Awaited<ReturnType<typeof listSitesFn>>[number]
-type OrgTab = 'sites' | 'members' | 'settings'
 
 const DEFAULT_PRODUCTION_URL = 'http://localhost:3001'
 
@@ -65,13 +77,25 @@ const siteHelper = createDataColumns<SiteRow>()
 const siteColumns = siteHelper.columns([
   siteHelper.accessor('name', {
     header: () => m.admin_name(),
-    cell: ({ row }) => <span className="font-medium">{row.original.name}</span>,
+    cell: ({ row }) => (
+      <span className="block max-w-[18rem] truncate text-ds-label-md">
+        {row.original.name}
+      </span>
+    ),
   }),
   siteHelper.accessor('slug', {
     header: () => m.admin_slug(),
     cell: ({ row }) => (
-      <span className="font-mono text-xs text-muted-foreground">
+      <span className="block max-w-[14rem] truncate text-ds-mono-xs text-text-muted">
         {row.original.slug}
+      </span>
+    ),
+  }),
+  siteHelper.accessor('createdAt', {
+    header: () => m.admin_org_sites_created(),
+    cell: ({ row }) => (
+      <span className="whitespace-nowrap text-text-muted">
+        <RelativeTime value={row.original.createdAt} />
       </span>
     ),
   }),
@@ -82,7 +106,7 @@ const siteColumns = siteHelper.columns([
         href={row.original.productionUrl}
         target="_blank"
         rel="noreferrer"
-        className="text-muted-foreground hover:text-foreground hover:underline"
+        className="block max-w-[18rem] truncate text-text-muted hover:text-text-primary hover:underline"
       >
         {row.original.productionUrl}
       </a>
@@ -121,8 +145,18 @@ function OrganizationDetailPage() {
   const verifyDokployCredentials = useServerFn(verifyDokployCredentialsFn)
   const removeDokployCredentials = useServerFn(removeDokployCredentialsFn)
 
-  const [tab, setTab] = useState<OrgTab>('sites')
+  const { tab: searchTab } = Route.useSearch()
+  const tab: OrgTab = searchTab ?? 'general'
+  function setTab(next: OrgTab) {
+    void navigate({
+      to: '/admin/organizations/$orgId',
+      params: { orgId },
+      search: next === 'general' ? {} : { tab: next },
+      replace: true,
+    })
+  }
   const [siteOpen, setSiteOpen] = useState(false)
+  const [siteSearch, setSiteSearch] = useState('')
   const [siteName, setSiteName] = useState('')
   const [siteSlug, setSiteSlug] = useState('')
   const [slugTouched, setSlugTouched] = useState(false)
@@ -150,6 +184,17 @@ function OrganizationDetailPage() {
     queryKey: adminQueryKeys.sites(orgId),
     queryFn: () => listSites({ data: { organizationId: orgId } }),
   })
+  // Long-lived orgs collect dozens of sites, so the table is filtered here
+  // rather than paged through.
+  const siteFilter = siteSearch.trim().toLowerCase()
+  const visibleSites = siteFilter
+    ? (sitesQuery.data ?? []).filter(
+        (row) =>
+          row.name.toLowerCase().includes(siteFilter) ||
+          row.slug.toLowerCase().includes(siteFilter),
+      )
+    : (sitesQuery.data ?? [])
+
   const dokployQuery = useQuery({
     queryKey: adminQueryKeys.dokployCredentials(orgId),
     queryFn: () =>
@@ -351,34 +396,58 @@ function OrganizationDetailPage() {
       data-testid="organization-page"
       data-ready="true"
     >
-      <PageHeader title={org.name} description={org.slug} />
-      {createdToken ? (
-        <TokenAlert
-          token={createdToken}
-          onDismiss={() => {
-            sessionStorage.removeItem(`areca.site-token.${orgId}`)
-            setCreatedToken(null)
-          }}
-        />
-      ) : null}
-
       <Tabs value={tab} onValueChange={(value) => setTab(value as OrgTab)}>
-        <TabsList>
-          <TabsTrigger value="sites">{m.admin_sites()}</TabsTrigger>
-          <TabsTrigger value="members">{m.admin_members()}</TabsTrigger>
-          <TabsTrigger value="settings">{m.admin_settings()}</TabsTrigger>
-        </TabsList>
+        <OrgIdentityStrip
+          name={org.name}
+          slug={org.slug}
+          bleed={false}
+          tabs={
+            <TabsList variant="line" className="h-11 gap-5 border-b-0">
+              <TabsTrigger value="general" className="nav-tab h-11 px-0">
+                {m.admin_org_overview()}
+              </TabsTrigger>
+              <TabsTrigger value="members" className="nav-tab h-11 px-0">
+                {m.admin_members()}
+              </TabsTrigger>
+              <TabsTrigger value="sites" className="nav-tab h-11 px-0">
+                {m.admin_sites()}
+              </TabsTrigger>
+              <TabsTrigger value="audit" className="nav-tab h-11 px-0">
+                {m.admin_audit_activity_title()}
+              </TabsTrigger>
+            </TabsList>
+          }
+        />
+        {createdToken ? (
+          <TokenAlert
+            token={createdToken}
+            onDismiss={() => {
+              sessionStorage.removeItem(`areca.site-token.${orgId}`)
+              setCreatedToken(null)
+            }}
+          />
+        ) : null}
 
         <TabsContent value="sites" className="grid gap-4 pt-4">
           <Dialog open={siteOpen} onOpenChange={setSiteOpen}>
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="text-lg font-medium">{m.admin_sites()}</h2>
-              <DialogTrigger asChild>
-                <Button type="button" data-testid="new-site">
-                  <Plus />
-                  {m.admin_org_new_site()}
-                </Button>
-              </DialogTrigger>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-ds-heading-4">{m.admin_sites()}</h2>
+              <div className="flex items-center gap-2">
+                <Input
+                  data-testid="org-sites-search"
+                  value={siteSearch}
+                  onChange={(event) => setSiteSearch(event.target.value)}
+                  placeholder={m.admin_org_sites_search()}
+                  aria-label={m.admin_org_sites_search()}
+                  className="h-9 w-56"
+                />
+                <DialogTrigger asChild>
+                  <Button type="button" data-testid="new-site">
+                    <Plus />
+                    {m.admin_org_new_site()}
+                  </Button>
+                </DialogTrigger>
+              </div>
             </div>
             {sitesQuery.isError ? (
               <QueryError
@@ -388,7 +457,7 @@ function OrganizationDetailPage() {
                 retrying={sitesQuery.isFetching}
               />
             ) : sitesQuery.isPending ? (
-              <TableSkeleton columns={4} />
+              <TableSkeleton columns={5} />
             ) : sitesQuery.data.length === 0 ? (
               <EmptyState
                 icon={<Globe />}
@@ -406,9 +475,9 @@ function OrganizationDetailPage() {
             ) : (
               <DataTable
                 columns={siteColumns}
-                data={sitesQuery.data}
+                data={visibleSites}
                 pageSize={25}
-                initialSorting={[{ id: 'name', desc: false }]}
+                initialSorting={[{ id: 'createdAt', desc: true }]}
                 caption={m.admin_org_sites_caption({ name: org.name })}
               />
             )}
@@ -485,249 +554,271 @@ function OrganizationDetailPage() {
           <OrgMembers organizationId={orgId} />
         </TabsContent>
 
-        <TabsContent value="settings" className="grid gap-6 pt-4">
-          <form className="grid max-w-md gap-4" onSubmit={onRename}>
-            <div className="grid gap-1">
-              <h2 className="text-lg font-medium">{m.admin_org_general()}</h2>
-              <p className="text-sm text-muted-foreground">
-                {m.admin_org_slug_immutable_before()}
-                <span className="font-mono text-xs">{org.slug}</span>
-                {m.admin_org_slug_immutable_after()}
-              </p>
-            </div>
-            <FormField label={m.admin_name()} htmlFor="rename-org">
-              <Input
-                id="rename-org"
-                required
-                value={orgName}
-                onChange={(event) => setOrgName(event.target.value)}
-              />
-            </FormField>
-            <div>
-              <Button
-                type="submit"
-                disabled={renameMutation.isPending || !renameDirty}
-              >
-                {renameMutation.isPending
-                  ? m.admin_saving()
-                  : m.admin_org_save_name()}
-              </Button>
-            </div>
-          </form>
-
-          <section className="grid max-w-2xl gap-4 border-t pt-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="grid gap-1">
-                <h2 className="text-lg font-medium">
-                  {m.admin_org_dokploy_title()}
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  {m.admin_org_dokploy_description()}
-                </p>
-              </div>
-              <Badge
-                variant={
-                  dokployQuery.data?.configured ? 'default' : 'secondary'
-                }
-              >
-                {dokployQuery.data?.configured
-                  ? m.admin_org_dokploy_configured()
-                  : m.admin_org_dokploy_not_configured()}
-              </Badge>
-            </div>
-
-            {dokployQuery.isError ? (
-              <QueryError
-                title={m.admin_org_dokploy_load_error()}
-                error={dokployQuery.error}
-                onRetry={() => void dokployQuery.refetch()}
-                retrying={dokployQuery.isFetching}
-              />
-            ) : (
-              <form className="grid gap-4" onSubmit={onSaveDokploy}>
-                <FormField
-                  label={m.admin_org_dokploy_url()}
-                  htmlFor="dokploy-url"
-                >
+        <TabsContent value="general" className="pt-4">
+          <SectionedPage
+            links={[
+              { id: 'org-general', label: m.admin_org_general() },
+              { id: 'org-dokploy', label: m.admin_org_dokploy_title() },
+              {
+                id: 'org-danger',
+                label: m.admin_org_danger_zone(),
+                danger: true,
+              },
+            ]}
+          >
+            <PageSection
+              id="org-general"
+              title={m.admin_org_general()}
+              description={
+                <>
+                  {m.admin_org_slug_immutable_before()}
+                  <span className="text-ds-mono-xs">{org.slug}</span>
+                  {m.admin_org_slug_immutable_after()}
+                </>
+              }
+            >
+              <form className="grid max-w-md gap-4" onSubmit={onRename}>
+                <FormField label={m.admin_name()} htmlFor="rename-org">
                   <Input
-                    id="dokploy-url"
-                    data-testid="dokploy-url"
-                    type="url"
+                    id="rename-org"
                     required
-                    placeholder="https://dokploy.example.com"
-                    value={dokployUrl}
-                    onChange={(event) => setDokployUrl(event.target.value)}
+                    value={orgName}
+                    onChange={(event) => setOrgName(event.target.value)}
                   />
                 </FormField>
-                <FormField
-                  label={m.admin_org_dokploy_api_key()}
-                  htmlFor="dokploy-api-key"
-                  description={
-                    dokployQuery.data?.configured
-                      ? m.admin_org_dokploy_api_key_replace_hint()
-                      : m.admin_org_dokploy_api_key_new_hint()
-                  }
-                >
-                  <Input
-                    id="dokploy-api-key"
-                    data-testid="dokploy-api-key"
-                    type="password"
-                    required={!dokployQuery.data?.configured}
-                    autoComplete="new-password"
-                    value={dokployApiKey}
-                    onChange={(event) => setDokployApiKey(event.target.value)}
-                  />
-                </FormField>
-                <div className="flex flex-wrap gap-2">
+                <div>
                   <Button
                     type="submit"
-                    data-testid="save-dokploy-credentials"
-                    disabled={
-                      saveDokployMutation.isPending || dokployQuery.isPending
-                    }
+                    disabled={renameMutation.isPending || !renameDirty}
                   >
-                    {saveDokployMutation.isPending
+                    {renameMutation.isPending
                       ? m.admin_saving()
-                      : m.admin_org_dokploy_save()}
+                      : m.admin_org_save_name()}
                   </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    data-testid="verify-dokploy-credentials"
-                    disabled={
-                      !dokployQuery.data?.configured ||
-                      verifyDokployMutation.isPending ||
-                      saveDokployMutation.isPending
-                    }
-                    onClick={() => verifyDokployMutation.mutate()}
-                  >
-                    <CheckCircle2 />
-                    {verifyDokployMutation.isPending
-                      ? m.admin_org_dokploy_verifying()
-                      : m.admin_org_dokploy_verify()}
-                  </Button>
-                  {dokployQuery.data?.configured ? (
-                    <ConfirmDialog
-                      title={m.admin_org_dokploy_remove_title()}
-                      description={m.admin_org_dokploy_remove_description()}
-                      confirmLabel={m.admin_org_dokploy_remove()}
-                      variant="destructive"
-                      onConfirm={async () => {
-                        await removeDokployMutation.mutateAsync()
-                      }}
+                </div>
+              </form>
+            </PageSection>
+
+            <PageSection
+              id="org-dokploy"
+              title={m.admin_org_dokploy_title()}
+              description={m.admin_org_dokploy_description()}
+            >
+              <div className="max-w-2xl grid gap-4">
+                <Badge
+                  className="w-fit"
+                  variant={
+                    dokployQuery.data?.configured ? 'default' : 'secondary'
+                  }
+                >
+                  {dokployQuery.data?.configured
+                    ? m.admin_org_dokploy_configured()
+                    : m.admin_org_dokploy_not_configured()}
+                </Badge>
+
+                {dokployQuery.isError ? (
+                  <QueryError
+                    title={m.admin_org_dokploy_load_error()}
+                    error={dokployQuery.error}
+                    onRetry={() => void dokployQuery.refetch()}
+                    retrying={dokployQuery.isFetching}
+                  />
+                ) : (
+                  <form className="grid gap-4" onSubmit={onSaveDokploy}>
+                    <FormField
+                      label={m.admin_org_dokploy_url()}
+                      htmlFor="dokploy-url"
                     >
+                      <Input
+                        id="dokploy-url"
+                        data-testid="dokploy-url"
+                        type="url"
+                        required
+                        placeholder="https://dokploy.example.com"
+                        value={dokployUrl}
+                        onChange={(event) => setDokployUrl(event.target.value)}
+                      />
+                    </FormField>
+                    <FormField
+                      label={m.admin_org_dokploy_api_key()}
+                      htmlFor="dokploy-api-key"
+                      description={
+                        dokployQuery.data?.configured
+                          ? m.admin_org_dokploy_api_key_replace_hint()
+                          : m.admin_org_dokploy_api_key_new_hint()
+                      }
+                    >
+                      <Input
+                        id="dokploy-api-key"
+                        data-testid="dokploy-api-key"
+                        type="password"
+                        required={!dokployQuery.data?.configured}
+                        autoComplete="new-password"
+                        value={dokployApiKey}
+                        onChange={(event) =>
+                          setDokployApiKey(event.target.value)
+                        }
+                      />
+                    </FormField>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="submit"
+                        data-testid="save-dokploy-credentials"
+                        disabled={
+                          saveDokployMutation.isPending ||
+                          dokployQuery.isPending
+                        }
+                      >
+                        {saveDokployMutation.isPending
+                          ? m.admin_saving()
+                          : m.admin_org_dokploy_save()}
+                      </Button>
                       <Button
                         type="button"
                         variant="outline"
-                        data-testid="remove-dokploy-credentials"
-                        disabled={removeDokployMutation.isPending}
+                        data-testid="verify-dokploy-credentials"
+                        disabled={
+                          !dokployQuery.data?.configured ||
+                          verifyDokployMutation.isPending ||
+                          saveDokployMutation.isPending
+                        }
+                        onClick={() => verifyDokployMutation.mutate()}
                       >
-                        {m.admin_org_dokploy_remove()}
+                        <CheckCircle />
+                        {verifyDokployMutation.isPending
+                          ? m.admin_org_dokploy_verifying()
+                          : m.admin_org_dokploy_verify()}
                       </Button>
-                    </ConfirmDialog>
-                  ) : null}
-                </div>
-              </form>
-            )}
-
-            {dokployApplications ? (
-              <div className="grid gap-2" data-testid="dokploy-applications">
-                <h3 className="font-medium">
-                  {m.admin_org_dokploy_applications({
-                    count: dokployApplications.total,
-                  })}
-                </h3>
-                {dokployApplications.applications.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    {m.admin_org_dokploy_no_applications()}
-                  </p>
-                ) : (
-                  <ul className="divide-y rounded-md border">
-                    {dokployApplications.applications.map((application) => (
-                      <li
-                        key={application.applicationId}
-                        className="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
-                      >
-                        <div>
-                          <p className="font-medium">{application.name}</p>
-                          <code className="text-xs text-muted-foreground">
-                            {application.applicationId}
-                          </code>
-                        </div>
-                        {application.applicationStatus ? (
-                          <Badge variant="outline">
-                            {application.applicationStatus}
-                          </Badge>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
+                      {dokployQuery.data?.configured ? (
+                        <ConfirmDialog
+                          title={m.admin_org_dokploy_remove_title()}
+                          description={m.admin_org_dokploy_remove_description()}
+                          confirmLabel={m.admin_org_dokploy_remove()}
+                          variant="destructive"
+                          onConfirm={async () => {
+                            await removeDokployMutation.mutateAsync()
+                          }}
+                        >
+                          <Button
+                            type="button"
+                            variant="outline"
+                            data-testid="remove-dokploy-credentials"
+                            disabled={removeDokployMutation.isPending}
+                          >
+                            {m.admin_org_dokploy_remove()}
+                          </Button>
+                        </ConfirmDialog>
+                      ) : null}
+                    </div>
+                  </form>
                 )}
-                {dokployApplications.total >
-                dokployApplications.applications.length ? (
-                  <p className="text-xs text-muted-foreground">
-                    {m.admin_org_dokploy_applications_truncated({
-                      shown: dokployApplications.applications.length,
-                      total: dokployApplications.total,
-                    })}
-                  </p>
+
+                {dokployApplications ? (
+                  <div
+                    className="grid gap-2"
+                    data-testid="dokploy-applications"
+                  >
+                    <h3 className="font-medium">
+                      {m.admin_org_dokploy_applications({
+                        count: dokployApplications.total,
+                      })}
+                    </h3>
+                    {dokployApplications.applications.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        {m.admin_org_dokploy_no_applications()}
+                      </p>
+                    ) : (
+                      <ul className="divide-y rounded-md border">
+                        {dokployApplications.applications.map((application) => (
+                          <li
+                            key={application.applicationId}
+                            className="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
+                          >
+                            <div>
+                              <p className="font-medium">{application.name}</p>
+                              <code className="text-xs text-muted-foreground">
+                                {application.applicationId}
+                              </code>
+                            </div>
+                            {application.applicationStatus ? (
+                              <Badge variant="outline">
+                                {application.applicationStatus}
+                              </Badge>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {dokployApplications.total >
+                    dokployApplications.applications.length ? (
+                      <p className="text-xs text-muted-foreground">
+                        {m.admin_org_dokploy_applications_truncated({
+                          shown: dokployApplications.applications.length,
+                          total: dokployApplications.total,
+                        })}
+                      </p>
+                    ) : null}
+                  </div>
                 ) : null}
               </div>
-            ) : null}
-          </section>
+            </PageSection>
 
-          <section className="grid max-w-md gap-3 border-t border-destructive/40 pt-5">
-            <div className="grid gap-1">
-              <h2 className="text-lg font-medium">
-                {m.admin_org_danger_zone()}
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                {m.admin_org_danger_description()}
-              </p>
-            </div>
-            {hasSites ? (
-              <p
-                className="text-sm text-muted-foreground"
-                data-testid="delete-org-blocked"
-              >
-                {siteCount === 1
-                  ? m.admin_org_delete_blocked_one_before()
-                  : m.admin_org_delete_blocked_many_before({
-                      count: siteCount,
-                    })}
-                <button
-                  type="button"
-                  className="font-medium text-foreground underline underline-offset-4"
-                  onClick={() => setTab('sites')}
-                >
-                  {m.admin_org_sites_tab()}
-                </button>
-                {m.admin_org_delete_blocked_after()}
-              </p>
-            ) : null}
-            <div>
-              <ConfirmDialog
-                title={m.admin_org_delete_title({ name: org.name })}
-                description={m.admin_org_delete_description()}
-                confirmLabel={m.admin_org_delete_label()}
-                variant="destructive"
-                confirmText={org.slug}
-                onConfirm={async () => {
-                  await deleteMutation.mutateAsync()
-                }}
-              >
-                <Button
-                  type="button"
-                  variant="destructive"
-                  disabled={hasSites || deleteMutation.isPending}
-                >
-                  {deleteMutation.isPending
-                    ? m.admin_deleting()
-                    : m.admin_org_delete_label()}
-                </Button>
-              </ConfirmDialog>
-            </div>
-          </section>
+            <PageSection
+              id="org-danger"
+              title={m.admin_org_danger_zone()}
+              description={m.admin_org_danger_description()}
+              danger
+            >
+              <div className="max-w-md grid gap-3">
+                {hasSites ? (
+                  <p
+                    className="text-ds-body-sm text-text-secondary"
+                    data-testid="delete-org-blocked"
+                  >
+                    {siteCount === 1
+                      ? m.admin_org_delete_blocked_one_before()
+                      : m.admin_org_delete_blocked_many_before({
+                          count: siteCount,
+                        })}
+                    <button
+                      type="button"
+                      className="font-medium text-foreground underline underline-offset-4"
+                      onClick={() => setTab('sites')}
+                    >
+                      {m.admin_org_sites_tab()}
+                    </button>
+                    {m.admin_org_delete_blocked_after()}
+                  </p>
+                ) : null}
+                <div>
+                  <ConfirmDialog
+                    title={m.admin_org_delete_title({ name: org.name })}
+                    description={m.admin_org_delete_description()}
+                    confirmLabel={m.admin_org_delete_label()}
+                    variant="destructive"
+                    confirmText={org.slug}
+                    onConfirm={async () => {
+                      await deleteMutation.mutateAsync()
+                    }}
+                  >
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      disabled={hasSites || deleteMutation.isPending}
+                    >
+                      {deleteMutation.isPending
+                        ? m.admin_deleting()
+                        : m.admin_org_delete_label()}
+                    </Button>
+                  </ConfirmDialog>
+                </div>
+              </div>
+            </PageSection>
+          </SectionedPage>
+        </TabsContent>
+
+        <TabsContent value="audit" className="pt-4">
+          <AuditLogList organizationId={orgId} />
         </TabsContent>
       </Tabs>
     </div>

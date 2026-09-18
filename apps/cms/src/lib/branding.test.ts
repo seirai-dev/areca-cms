@@ -42,17 +42,41 @@ describe('hexToOklch', () => {
 })
 
 describe('accentVariables', () => {
-  it('produces the three brand scales with fixed lightness steps', () => {
-    const vars = accentVariables('#1e90ff')
-    expect(vars).not.toBeNull()
-    expect(Object.keys(vars!)).toHaveLength(11 * 3 + 1)
-    expect(vars!['--color-clay-400']).toMatch(/^oklch\(50\.32% /)
-    expect(vars!['--color-fern-500']).toMatch(/^oklch\(58\.83% /)
-    // moss is the softer tint of the same hue.
-    const fern = vars!['--color-fern-500'].split(' ')
-    const moss = vars!['--color-moss-500'].split(' ')
-    expect(Number(moss[1])).toBeLessThan(Number(fern[1]))
-    expect(moss[2]).toBe(fern[2])
+  it('overrides the semantic accent tokens in both modes', () => {
+    const light = accentVariables('#1e90ff', 'light')
+    const dark = accentVariables('#1e90ff', 'dark')
+    expect(light).not.toBeNull()
+    expect(Object.keys(light!).sort()).toEqual([
+      '--color-action-primary',
+      '--color-action-primary-hover',
+      '--color-action-primary-text',
+      '--color-icon-accent',
+      '--color-status-success',
+      '--color-text-accent',
+    ])
+    expect(light!['--color-action-primary']).toMatch(/^oklch\(/)
+    // Hover is a lighter step than the accent itself.
+    const lightness = (value: string) => Number(value.match(/([\d.]+)%/)![1])
+    expect(lightness(light!['--color-action-primary-hover'])).toBeGreaterThan(
+      lightness(light!['--color-action-primary']),
+    )
+    // Accent text darkens in light mode and lightens in dark mode.
+    expect(lightness(light!['--color-text-accent'])).toBeLessThan(
+      lightness(dark!['--color-text-accent']),
+    )
+    // Both modes share the same hue.
+    expect(light!['--color-action-primary'].split(' ')[2]).toBe(
+      dark!['--color-action-primary'].split(' ')[2],
+    )
+  })
+
+  it('picks a readable text colour on the accent', () => {
+    expect(accentVariables('#111111')!['--color-action-primary-text']).toBe(
+      '#ffffff',
+    )
+    expect(accentVariables('#fae884')!['--color-action-primary-text']).toBe(
+      '#111111',
+    )
   })
 
   it('returns null for invalid input', () => {
@@ -69,11 +93,12 @@ describe('brandingCss', () => {
     const css = brandingCss({
       ...DEFAULT_BRANDING,
       accentColor: '#336699',
-      font: 'inter',
+      font: 'dm-sans',
     })
-    expect(css).toContain('--color-clay-400:oklch(')
-    expect(css).toContain("--font-sans:'Inter'")
-    expect(css).toContain('.dark{--success:')
+    expect(css).toContain('--color-action-primary:oklch(')
+    expect(css).toContain("--font-sans:'DM Sans'")
+    expect(css).toContain(':root:not(.dark){--color-action-primary')
+    expect(css).toContain('html.dark{--color-action-primary')
   })
 
   it('only emits stored advanced colours while advanced mode is active', () => {
@@ -85,7 +110,7 @@ describe('brandingCss', () => {
       ...DEFAULT_BRANDING,
       advancedColors: colors,
     })
-    expect(inactive).not.toContain('--background:#ffffff')
+    expect(inactive).not.toContain('--color-background-default:#ffffff')
 
     const active = brandingCss({
       ...DEFAULT_BRANDING,
@@ -93,9 +118,11 @@ describe('brandingCss', () => {
       advancedColors: colors,
     })
     expect(active).toContain(
-      ':root:not(.dark){--background:#ffffff;--card:#f5f5f5;--popover:#f5f5f5}',
+      ':root:not(.dark){--color-background-default:#ffffff;--color-background-surface:#f5f5f5;--color-background-elevated:#f5f5f5}',
     )
-    expect(active).toContain('.dark{--background:#101010;--foreground:#ffffff}')
+    expect(active).toContain(
+      'html.dark{--color-background-default:#101010;--color-text-primary:#ffffff}',
+    )
   })
 
   it('uses the selected palette in the scoped preview', () => {
@@ -110,8 +137,8 @@ describe('brandingCss', () => {
       },
       'dark',
     )
-    expect(style['--card']).toBe('#111111')
-    expect(style['--popover']).toBe('#111111')
+    expect(style['--color-background-surface']).toBe('#111111')
+    expect(style['--color-background-elevated']).toBe('#111111')
   })
 })
 
@@ -136,7 +163,8 @@ describe('advanced colours', () => {
 
 describe('fonts', () => {
   it('has a Google stylesheet for hosted fonts and none for system', () => {
-    expect(fontStylesheetUrl('inter')).toContain('fonts.googleapis.com')
+    expect(fontStylesheetUrl('dm-sans')).toContain('fonts.googleapis.com')
+    expect(fontStylesheetUrl('inter')).toBeNull()
     expect(fontStylesheetUrl('system')).toBeNull()
     expect(isFontKey('inter')).toBe(true)
     expect(isFontKey('comic-sans')).toBe(false)

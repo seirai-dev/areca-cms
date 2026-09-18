@@ -1,7 +1,5 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ImageIcon } from 'lucide-react'
-
 import { Button } from '#/components/ui/button'
 import { getAssetFn } from '#/server/fn/assets'
 import { m } from '#/paraglide/messages'
@@ -10,6 +8,7 @@ import { MediaPickerDialog } from '../media-picker'
 import type { MediaAsset } from '../media-picker'
 import { queryKeys } from '../query-keys'
 import { assetFileUrl } from '../utils'
+import { Image } from '@phosphor-icons/react'
 
 export function ImageFieldInput({
   organizationId,
@@ -43,7 +42,7 @@ export function ImageFieldInput({
             />
           ) : (
             <div className="flex h-28 w-40 items-center justify-center rounded-md border bg-muted text-muted-foreground">
-              <ImageIcon className="size-6" />
+              <Image className="size-6" />
             </div>
           )}
           <div className="min-w-0 text-sm">
@@ -76,7 +75,7 @@ export function ImageFieldInput({
       ) : null}
       <div className="flex gap-2">
         <Button type="button" variant="outline" onClick={() => setOpen(true)}>
-          <ImageIcon />
+          <Image />
           {assetId ? m.editor_replace() : m.editor_choose()}
         </Button>
         {assetId ? (

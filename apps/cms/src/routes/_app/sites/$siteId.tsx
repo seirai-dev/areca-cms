@@ -1,3 +1,4 @@
+import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import {
   Link,
   Outlet,
@@ -5,18 +6,11 @@ import {
   notFound,
   useRouterState,
 } from '@tanstack/react-router'
-import { ExternalLink } from 'lucide-react'
-
 import { EmptyState } from '#/components/empty-state'
-import { PageHeader } from '#/components/page-header'
+import { SiteIdentityStrip } from '#/components/identity-strip'
+import { rememberRecentSite } from '#/components/site-switcher'
 import { Button } from '#/components/ui/button'
-import { cn } from '#/lib/utils'
-import {
-  isEntryEditorPath,
-  isSectionActive,
-  siteSections,
-  type SiteSection,
-} from '#/lib/site-nav'
+import { isEntryEditorPath, siteSections } from '#/lib/site-nav'
 import { m } from '#/paraglide/messages'
 
 export const Route = createFileRoute('/_app/sites/$siteId')({
@@ -41,92 +35,62 @@ export const Route = createFileRoute('/_app/sites/$siteId')({
   component: SiteLayout,
 })
 
-function siteSectionLabel(key: SiteSection['key']) {
-  switch (key) {
-    case 'content':
-      return m.sites_nav_content()
-    case 'media':
-      return m.sites_nav_media()
-    case 'releases':
-      return m.sites_nav_releases()
-    case 'team':
-      return m.sites_nav_team()
-    case 'activity':
-      return m.sites_nav_activity()
-    case 'settings':
-      return m.sites_nav_settings()
-  }
+type SiteFrameValue = {
+  /** True while the identity strip is hidden (the editor toolbar replaces it). */
+  stripHidden: boolean
+  setStripHidden: (hidden: boolean) => void
 }
 
+const SiteFrameContext = createContext<SiteFrameValue | null>(null)
+
+/**
+ * Lets a child route take over the identity strip row. The entry editor calls
+ * `useHideSiteStrip()`; every other route leaves the strip in place.
+ */
+export function useSiteFrame() {
+  return useContext(SiteFrameContext)
+}
+
+export function useHideSiteStrip() {
+  const frame = useSiteFrame()
+  useEffect(() => {
+    frame?.setStripHidden(true)
+    return () => frame?.setStripHidden(false)
+  }, [frame])
+}
+
+/**
+ * Site frame: the identity strip (name, live dot, slug, section tabs) and the
+ * section route below it. Entry editor routes render without the strip.
+ */
 function SiteLayout() {
   const { site, me } = Route.useRouteContext()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const sections = siteSections(me, site)
+  const [optedOut, setOptedOut] = useState(false)
 
-  // The entry editor gets the full page: breadcrumbs carry the context and the
-  // editor has its own back link, so the site header and tabs are hidden.
-  if (isEntryEditorPath(pathname)) {
-    return <Outlet />
-  }
+  useEffect(() => {
+    rememberRecentSite(site.id)
+  }, [site.id])
+
+  const frame = useMemo<SiteFrameValue>(
+    () => ({
+      stripHidden: optedOut || isEntryEditorPath(pathname),
+      setStripHidden: setOptedOut,
+    }),
+    [optedOut, pathname],
+  )
 
   return (
-    <div className="grid gap-6">
-      <div className="grid gap-4">
-        <PageHeader
-          title={site.name}
-          description={
-            <>
-              {site.organizationName}
-              <span className="mx-1.5 text-muted-foreground/60" aria-hidden>
-                ·
-              </span>
-              <code
-                className="font-mono text-[0.85em]"
-                data-testid="site-header-slug"
-              >
-                {site.slug}
-              </code>
-            </>
-          }
-          actions={
-            <Button asChild variant="outline" size="sm">
-              <a href={site.productionUrl} target="_blank" rel="noreferrer">
-                <ExternalLink />
-                {m.sites_open_live_site()}
-              </a>
-            </Button>
-          }
+    <SiteFrameContext.Provider value={frame}>
+      {frame.stripHidden ? null : (
+        <SiteIdentityStrip
+          site={site}
+          sections={sections}
+          pathname={pathname}
         />
-        <nav
-          aria-label={m.sites_sections_label()}
-          data-testid="site-tabs"
-          className="-mx-4 overflow-x-auto border-b px-4 sm:mx-0 sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        >
-          <ul className="-mb-px flex gap-1 text-sm">
-            {sections.map((section) => {
-              const active = isSectionActive(section, pathname)
-              return (
-                <li key={section.key} className="shrink-0">
-                  <Link
-                    to={section.href}
-                    aria-current={active ? 'page' : undefined}
-                    className={cn(
-                      'inline-flex h-10 items-center gap-2 border-b-2 px-3 font-medium whitespace-nowrap no-underline transition-colors hover:no-underline',
-                      active
-                        ? 'border-fern-400 text-foreground'
-                        : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground',
-                    )}
-                  >
-                    <section.icon className="size-4" />
-                    {siteSectionLabel(section.key)}
-                  </Link>
-                </li>
-              )
-            })}
-          </ul>
-        </nav>
-      </div>
+      )}
       <Outlet />
-    </div>
+    </SiteFrameContext.Provider>
   )
 }

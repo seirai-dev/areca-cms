@@ -32,6 +32,7 @@ test('agency admin can create an org, site, collection, and invitation', async (
   const orgId = page.url().split('/').pop()
   expect(orgId).toBeTruthy()
 
+  await page.getByRole('tab', { name: 'Sites' }).click()
   await page.getByTestId('new-site').click()
   await page.getByTestId('site-name').fill(siteName)
   await expect(page.getByTestId('site-slug')).toHaveValue(siteSlug)
@@ -51,10 +52,21 @@ test('agency admin can create an org, site, collection, and invitation', async (
   await page.getByTestId('application-id').fill(`dokploy-app-${ts}`)
   await page.getByTestId('health-check-url').fill(`${productionUrl}/health`)
   await page.getByTestId('save-deployment-target').click()
-  await expect(page.getByText('Deployment target updated')).toBeVisible({
+  await expect(page.getByText('Site updated')).toBeVisible({
     timeout: 15_000,
   })
 
+  // Collections are managed on the site's Content tab.
+  await page
+    .getByTestId('site-nav')
+    .getByRole('link', { name: 'Content' })
+    .click()
+  await expect(page.getByTestId('site-content')).toHaveAttribute(
+    'data-ready',
+    'true',
+    { timeout: 15_000 },
+  )
+  // The collection drawer opens on Settings in create mode.
   await page.getByTestId('add-collection').click()
   await page.getByTestId('collection-key').fill('pages')
   await page.getByTestId('collection-route').fill('/pages/$slug')
@@ -62,6 +74,18 @@ test('agency admin can create an org, site, collection, and invitation', async (
   await expect(page.getByText('Enter a collection label.')).toBeVisible()
   await expect(page.getByRole('dialog')).toBeVisible()
   await page.getByTestId('collection-label').fill('Pages')
+
+  await page.keyboard.press('Escape')
+  await expect(
+    page
+      .getByRole('alertdialog')
+      .getByRole('heading', { name: 'Unsaved collection changes' }),
+  ).toBeVisible()
+  await page.getByRole('button', { name: 'Keep editing' }).click()
+  await expect(page.getByTestId('collection-label')).toBeVisible()
+
+  // Schema lives on the drawer's Fields segment; the slug row is locked.
+  await page.getByRole('tab', { name: 'Fields' }).click()
   await expect(page.getByTestId('field-row-0')).toHaveAttribute(
     'data-locked',
     'true',
@@ -75,46 +99,37 @@ test('agency admin can create an org, site, collection, and invitation', async (
       .getByRole('button', { name: 'Remove field' }),
   ).toHaveCount(0)
 
-  await page.keyboard.press('Escape')
-  await expect(
-    page
-      .getByRole('alertdialog')
-      .getByRole('heading', { name: 'Unsaved collection changes' }),
-  ).toBeVisible()
-  await page.getByRole('button', { name: 'Keep editing' }).click()
-  await expect(page.getByTestId('collection-label')).toBeVisible()
-
   await page.getByTestId('add-field').click()
+  await page.getByTestId('field-type-tile-text').click()
   await page.getByTestId('field-key-1').fill('title')
   await page.getByTestId('save-collection').click()
   await expect(page.getByText('Enter a label for this field.')).toBeVisible()
   await expect(page.getByRole('dialog')).toBeVisible()
   await page.getByTestId('field-label-1').fill('Title')
   await page.getByTestId('add-field').click()
+  await page.getByTestId('field-type-tile-richtext').click()
   await page.getByTestId('field-key-2').fill('body')
   await page.getByTestId('field-label-2').fill('Body')
-  await page.getByTestId('field-type-2').click()
-  await page.getByRole('option', { name: 'richtext' }).click()
   await page.getByTestId('save-collection').click()
-  await expect(
-    page.getByRole('cell', { name: 'pages', exact: true }),
-  ).toBeVisible({ timeout: 15_000 })
-  await expect(page.getByRole('cell', { name: '3', exact: true })).toBeVisible()
 
-  const collectionRow = page
-    .getByRole('row')
-    .filter({ has: page.getByRole('cell', { name: 'pages', exact: true }) })
-  await collectionRow.getByRole('button', { name: 'Edit' }).click()
-  await page.getByRole('dialog').getByText('Enabled', { exact: true }).click()
+  // Saving a new collection closes the drawer and selects it in the rail.
+  const collectionRow = page.getByTestId('collection-pages')
+  await expect(collectionRow).toBeVisible({ timeout: 15_000 })
+  await expect(page).toHaveURL(/\/c\/pages$/, { timeout: 15_000 })
+
+  await collectionRow.getByTestId('collection-menu').click()
+  await page.getByRole('menuitem', { name: 'Settings' }).click()
+  await expect(page.getByTestId('collection-label')).toHaveValue('Pages')
+  await page.getByRole('switch').click()
   await page.getByTestId('save-collection').click()
-  await expect(
-    collectionRow.getByText('Disabled', { exact: true }),
-  ).toBeVisible()
-  await expect(
-    page.getByTestId('site-nav').getByText('Disabled', { exact: true }),
-  ).toBeVisible()
+  await expect(page.getByText('Collection saved')).toBeVisible({
+    timeout: 15_000,
+  })
+  await expect(collectionRow.getByText('Disabled', { exact: true })).toBeVisible(
+    { timeout: 15_000 },
+  )
 
-  await collectionRow.getByRole('button', { name: 'Delete' }).click()
+  await page.getByTestId('delete-collection').click()
   const confirmAction = page.getByTestId('confirm-action')
   await expect(confirmAction).toBeDisabled()
   await page.getByTestId('confirm-text').fill('pages')
@@ -122,6 +137,11 @@ test('agency admin can create an org, site, collection, and invitation', async (
   await expect(page.getByText('Collection deleted')).toBeVisible({
     timeout: 15_000,
   })
+  await expect(page.getByTestId('site-content')).toHaveAttribute(
+    'data-ready',
+    'true',
+    { timeout: 15_000 },
+  )
   await expect(collectionRow).toHaveCount(0)
 
   await page.goto(`/admin/organizations/${orgId}`)
@@ -139,12 +159,10 @@ test('agency admin can create an org, site, collection, and invitation', async (
   ).toBeVisible()
 
   await page.goto('/admin/audit')
-  await expect(
-    page.getByRole('cell', { name: 'Created organization' }).first(),
-  ).toBeVisible({
+  await expect(page.getByText('Created organization').first()).toBeVisible({
     timeout: 15_000,
   })
   await expect(
-    page.getByRole('cell', { name: orgName, exact: true }).first(),
+    page.getByTestId('audit-log').getByText(orgName).first(),
   ).toBeVisible()
 })

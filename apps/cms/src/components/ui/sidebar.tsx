@@ -1,9 +1,9 @@
 'use client'
 
 import * as React from 'react'
-import { cva, type VariantProps } from 'class-variance-authority'
-import { cn } from 'cn'
-import { PanelLeftIcon } from 'lucide-react'
+import { cva } from 'class-variance-authority'
+import type { VariantProps } from 'class-variance-authority'
+import { cn } from '#/lib/utils'
 import { Slot } from 'radix-ui'
 
 import { useIsMobile } from '#/hooks/use-mobile.ts'
@@ -25,6 +25,7 @@ import {
   TooltipTrigger,
 } from '#/components/ui/tooltip.tsx'
 import { m } from '#/paraglide/messages'
+import { SidebarSimple } from '@phosphor-icons/react'
 
 const SIDEBAR_COOKIE_NAME = 'sidebar_state'
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
@@ -276,7 +277,7 @@ function SidebarTrigger({
       }}
       {...props}
     >
-      <PanelLeftIcon />
+      <SidebarSimple />
       <span className="sr-only">{m.ui_toggle_sidebar()}</span>
     </Button>
   )

@@ -40,6 +40,9 @@ test('owner can schedule a past article and the worker publishes it', async ({
     { timeout: 20_000 },
   )
 
+  // The editor replaces the identity strip, so leave it before using the tabs.
+  await page.getByRole('link', { name: /Back to/ }).click()
+  await expect(page.getByTestId('site-nav')).toBeVisible({ timeout: 15_000 })
   await page
     .getByTestId('site-nav')
     .getByRole('link', { name: 'Releases' })

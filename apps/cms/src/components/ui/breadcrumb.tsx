@@ -1,9 +1,9 @@
 import * as React from 'react'
-import { cn } from 'cn'
-import { ChevronRight, MoreHorizontal } from 'lucide-react'
+import { cn } from '#/lib/utils'
 import { Slot } from 'radix-ui'
 
 import { m } from '#/paraglide/messages'
+import { CaretRight, DotsThree } from '@phosphor-icons/react'
 
 function Breadcrumb({ ...props }: React.ComponentProps<'nav'>) {
   return (
@@ -78,7 +78,7 @@ function BreadcrumbSeparator({
       className={cn('[&>svg]:size-3.5', className)}
       {...props}
     >
-      {children ?? <ChevronRight />}
+      {children ?? <CaretRight />}
     </li>
   )
 }
@@ -95,7 +95,7 @@ function BreadcrumbEllipsis({
       className={cn('flex size-9 items-center justify-center', className)}
       {...props}
     >
-      <MoreHorizontal className="size-4" />
+      <DotsThree className="size-4" />
       <span className="sr-only">{m.ui_more()}</span>
     </span>
   )

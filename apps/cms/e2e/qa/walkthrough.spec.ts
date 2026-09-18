@@ -518,7 +518,7 @@ test('04 editor authors articles, persistence, revisions, validation', async ({
   const restoreButtons = page.getByRole('button', { name: 'Restore' })
   await expect(restoreButtons.first()).toBeVisible()
 
-  await page.getByRole('tab', { name: 'Edit' }).click()
+  await page.getByRole('tab', { name: 'Fields' }).click()
   await page.getByLabel(/Title/).fill('Welcome to Acme edited')
   await page.getByTestId('save-draft').click()
   await waitForSavedDraft(page)
@@ -531,7 +531,7 @@ test('04 editor authors articles, persistence, revisions, validation', async ({
   await expect(page.getByText('Revision restored')).toBeVisible({
     timeout: 15_000,
   })
-  await page.getByRole('tab', { name: 'Edit' }).click()
+  await page.getByRole('tab', { name: 'Fields' }).click()
   await expect(page.getByLabel(/Title/)).toHaveValue('Welcome to Acme')
   await screenshot(page, 'revision-restored')
 
@@ -712,6 +712,7 @@ test('07 publish site, logs, rollback as owner', async ({ browser }) => {
   })
   await screenshot(page, 'releases-superseded')
 
+  await page.getByTestId('publication-menu').click()
   await page.getByTestId('rollback-publication').click()
   await page
     .getByRole('alertdialog')

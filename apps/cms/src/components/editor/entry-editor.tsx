@@ -1,19 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useBlocker, useNavigate } from '@tanstack/react-router'
-import {
-  ArrowLeft,
-  CalendarClock,
-  ChevronDown,
-  ExternalLink,
-  History,
-  Loader2,
-  Save,
-} from 'lucide-react'
 import { toast } from 'sonner'
 
 import { ConfirmDialog } from '#/components/confirm-dialog'
 import { QueryError } from '#/components/query-error'
+import { formatRelativeTime } from '#/lib/relative-time'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,14 +26,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '#/components/ui/dialog'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '#/components/ui/dropdown-menu'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import {
@@ -51,11 +35,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '#/components/ui/select'
+import {
+  Sheet,
+  SheetBody,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '#/components/ui/sheet'
 import { Skeleton } from '#/components/ui/skeleton'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import { useMeasuredHeight } from '#/hooks/use-measured-height'
 import type { EntryData, EntryStatus, Field } from '#/lib/types'
-import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 import { getLocale } from '#/paraglide/runtime'
 import {
@@ -72,8 +61,12 @@ import {
   unpublishEntryFn,
   updateDraftFn,
 } from '#/server/fn/content'
+import { ArrowLeft } from '@phosphor-icons/react'
 
-import { CollectionField } from './fields'
+import { EntryCanvas } from './canvas'
+import { EditorToolbar } from './editor-toolbar'
+import { EntryInspector } from './inspector'
+import type { InspectorTab } from './inspector'
 import { queryKeys } from './query-keys'
 import { EntryStatusBadge } from './status-badge'
 import {
@@ -81,7 +74,6 @@ import {
   errorMessage,
   fieldErrorsFromUnknown,
   firstTextField,
-  formatDateTime,
   initialEntryData,
   slugify,
   timezoneOptions,
@@ -98,6 +90,7 @@ type EntryRecord = {
   publishedAt: string | Date | null
   createdAt: string | Date
   updatedAt: string | Date
+  createdBy?: string | null
 }
 
 type RevisionRecord = {
@@ -115,11 +108,9 @@ function payloadFromData(data: EntryData) {
   return next
 }
 
-const isMac =
-  typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
-
 export function EntryEditor({
   siteId,
+  siteName,
   collectionKey,
   collectionLabel,
   fields,
@@ -128,6 +119,7 @@ export function EntryEditor({
   entryId,
 }: {
   siteId: string
+  siteName: string
   collectionKey: string
   collectionLabel: string
   fields: Field[]
@@ -170,7 +162,8 @@ export function EntryEditor({
   const [scheduleTz, setScheduleTz] = useState(browserTimezone)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [restoreId, setRestoreId] = useState<string | null>(null)
-  const [editorTab, setEditorTab] = useState('edit')
+  const [inspectorTab, setInspectorTab] = useState<InspectorTab>('fields')
+  const [inspectorOpen, setInspectorOpen] = useState(false)
 
   const entry = (entryQuery.data ?? null) as EntryRecord | null
 
@@ -186,6 +179,17 @@ export function EntryEditor({
   const dirty = JSON.stringify(data) !== savedSnapshot
   const titleField = firstTextField(fields)
   const slugField = fields.find((field) => field.type === 'slug')
+  // The canvas holds the writing surface; every other field lives in the
+  // inspector's Fields segment.
+  const canvasFields = fields.filter(
+    (field) =>
+      field.key !== titleField?.key &&
+      (field.type === 'richtext' || field.type === 'textarea'),
+  )
+  const panelFields = fields.filter(
+    (field) =>
+      field.key !== titleField?.key && !canvasFields.includes(field),
+  )
 
   // Refs so event handlers and the navigation blocker see the latest values.
   const dataRef = useRef(data)
@@ -220,6 +224,22 @@ export function EntryEditor({
       const next = { ...prev }
       delete next[key]
       return next
+    })
+  }
+
+  /**
+   * Bring the first invalid field into view after a failed save, opening the
+   * inspector segment that holds it when it is not on the canvas.
+   */
+  function revealFirstError(errors: FieldErrorMap) {
+    const first = fields.find((field) => errors[field.key])
+    if (!first) return
+    if (panelFields.includes(first)) {
+      setInspectorTab('fields')
+    }
+    requestAnimationFrame(() => {
+      const node = document.querySelector(`[data-field="${first.key}"]`)
+      node?.scrollIntoView({ block: 'center', behavior: 'smooth' })
     })
   }
 
@@ -273,6 +293,7 @@ export function EntryEditor({
       setFormError(
         parsed.formError ?? errorMessage(error, m.editor_could_not_save()),
       )
+      revealFirstError(parsed.fieldErrors)
     },
   })
 
@@ -311,6 +332,7 @@ export function EntryEditor({
         parsed.formError ?? errorMessage(error, m.editor_could_not_publish())
       setFormError(message)
       toast.error(message)
+      revealFirstError(parsed.fieldErrors)
     },
   })
 
@@ -384,7 +406,7 @@ export function EntryEditor({
       restoreRevisionFn({ data: { entryId: resolvedId!, revisionId } }),
     onSuccess: async () => {
       setRestoreId(null)
-      setEditorTab('edit')
+      setInspectorTab('fields')
       toast.success(m.editor_revision_restored())
       await invalidateEntry(resolvedId!)
     },
@@ -439,12 +461,14 @@ export function EntryEditor({
 
   if (entryId && (entryQuery.isLoading || !entry || hydratedId !== entryId)) {
     return (
-      <div className="grid gap-4">
-        <Skeleton className="h-5 w-40" />
-        <Skeleton className="h-12 w-full" />
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
-          <Skeleton className="h-96 w-full" />
-          <Skeleton className="h-56 w-full" />
+      <div className="grid gap-6">
+        <Skeleton className="h-14 w-full" />
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="mx-auto grid w-full max-w-[760px] gap-6">
+            <Skeleton className="h-10 w-2/3" />
+            <Skeleton className="h-96 w-full" />
+          </div>
+          <Skeleton className="h-72 w-full" />
         </div>
       </div>
     )
@@ -463,348 +487,119 @@ export function EntryEditor({
     archiveMutation.isPending ||
     cancelScheduleMutation.isPending
 
+  const savedLabel = isNew
+    ? canManage
+      ? m.editor_not_saved_yet_publish_hint()
+      : m.editor_not_saved_yet()
+    : entry
+      ? m.editor_saved_relative({ time: formatRelativeTime(entry.updatedAt) })
+      : m.editor_all_changes_saved()
+
+  const renderInspector = (className?: string) => (
+    <EntryInspector
+      className={className}
+      tab={inspectorTab}
+      onTabChange={setInspectorTab}
+      fields={panelFields}
+      data={data}
+      errors={fieldErrors}
+      onChange={updateField}
+      siteId={siteId}
+      organizationId={organizationId}
+      status={persistedStatus}
+      entry={entry}
+      revisions={revisions}
+      revisionsLoading={revisionsQuery.isLoading}
+      revisionsError={revisionsQuery.isError ? revisionsQuery.error : null}
+      onRetryRevisions={() => void revisionsQuery.refetch()}
+      onRestore={setRestoreId}
+      canManage={canManage}
+      isNew={isNew}
+    />
+  )
+
   return (
     <div
-      className="grid gap-5"
       data-testid="entry-editor"
       data-ready={actionsReady ? 'true' : 'false'}
       data-dirty={dirty ? 'true' : 'false'}
       style={
         {
-          '--rich-text-toolbar-top': `calc(var(--app-header-h) + ${barHeight}px)`,
+          '--rich-text-toolbar-top': `calc(var(--navbar-height) + ${barHeight}px)`,
         } as React.CSSProperties
       }
     >
-      <Link
-        to="/sites/$siteId/c/$collectionKey"
-        params={{ siteId, collectionKey }}
-        className="inline-flex w-fit items-center gap-1 text-sm text-muted-foreground no-underline hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" />
-        {m.editor_back_to({ name: collectionLabel })}
-      </Link>
-
-      {/* Sticky action bar: stays visible while scrolling long forms. */}
-      <div
+      <EditorToolbar
         ref={setBarEl}
-        className="sticky top-(--app-header-h) z-20 -mx-4 border-b bg-background px-4 py-3 sm:-mx-6 sm:px-6"
-      >
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-          <div className="min-w-0 flex-1">
-            <h1
-              className="truncate text-xl font-semibold tracking-tight"
-              title={heading}
-            >
-              {heading}
-            </h1>
-            <p className="flex items-center gap-2 text-xs text-muted-foreground">
-              {saving ? (
-                <span className="inline-flex items-center gap-1">
-                  <Loader2 className="size-3 animate-spin" />
-                  {m.editor_saving()}
-                </span>
-              ) : dirty ? (
-                <span
-                  className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-400"
-                  data-testid="entry-dirty"
-                >
-                  <span className="size-1.5 rounded-full bg-current" />
-                  {m.editor_unsaved_changes()}
-                </span>
-              ) : isNew ? (
-                <span>{m.editor_not_saved_yet()}</span>
-              ) : (
-                <span>{m.editor_all_changes_saved()}</span>
-              )}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <EntryStatusBadge status={persistedStatus} testId="entry-status" />
-            <Button
-              type="button"
-              onClick={() => save()}
-              disabled={saving}
-              data-testid="save-draft"
-              title={m.editor_save_draft_shortcut({
-                shortcut: `${isMac ? '⌘' : 'Ctrl+'}S`,
-              })}
-            >
-              {saving ? <Loader2 className="animate-spin" /> : <Save />}
-              {saving ? m.editor_saving() : m.editor_save_draft()}
-            </Button>
-            {previewUrl ? (
-              <Button asChild variant="outline">
-                <a
-                  href={previewUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  data-testid="preview-entry"
-                >
-                  <ExternalLink />
-                  {m.editor_preview()}
-                </a>
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                variant="outline"
-                disabled
-                data-testid="preview-entry"
-                title={isNew ? m.editor_preview_save_first() : undefined}
-              >
-                <ExternalLink />
-                {m.editor_preview()}
-              </Button>
-            )}
-            {canManage ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    data-testid="publish-menu"
-                    disabled={isNew}
-                    title={isNew ? m.editor_save_draft_first() : undefined}
-                  >
-                    {anyActionPending ? (
-                      <Loader2 className="animate-spin" />
-                    ) : null}
-                    {m.editor_publish()}
-                    <ChevronDown />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuLabel className="text-xs text-muted-foreground">
-                    {dirty
-                      ? m.editor_publish_save_first_hint()
-                      : m.editor_publish_makes_live_hint()}
-                  </DropdownMenuLabel>
-                  <DropdownMenuItem
-                    disabled={!actionsReady || publishMutation.isPending}
-                    data-testid="publish-now"
-                    onSelect={() => publishMutation.mutate()}
-                  >
-                    {m.editor_publish_now()}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    disabled={!actionsReady}
-                    data-testid="schedule-entry"
-                    onSelect={() => {
-                      setScheduleAt(toDatetimeLocalValue(new Date()))
-                      setScheduleTz(browserTimezone())
-                      setScheduleOpen(true)
-                    }}
-                  >
-                    <CalendarClock />
-                    {m.editor_schedule_ellipsis()}
-                  </DropdownMenuItem>
-                  {entry?.status === 'scheduled' ? (
-                    <DropdownMenuItem
-                      disabled={
-                        !actionsReady || cancelScheduleMutation.isPending
-                      }
-                      data-testid="cancel-schedule"
-                      onSelect={() => cancelScheduleMutation.mutate()}
-                    >
-                      {m.editor_cancel_schedule()}
-                    </DropdownMenuItem>
-                  ) : null}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    disabled={!actionsReady || entry?.status !== 'published'}
-                    onSelect={() => unpublishMutation.mutate()}
-                  >
-                    {m.editor_unpublish()}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    disabled={!actionsReady || entry?.status === 'archived'}
-                    onSelect={() => archiveMutation.mutate()}
-                  >
-                    {m.editor_archive()}
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    disabled={!actionsReady}
-                    variant="destructive"
-                    onSelect={() => setDeleteOpen(true)}
-                  >
-                    {m.editor_delete_ellipsis()}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : null}
-          </div>
-        </div>
-      </div>
+        siteId={siteId}
+        siteName={siteName}
+        collectionKey={collectionKey}
+        collectionLabel={collectionLabel}
+        title={heading}
+        statusBadge={
+          <EntryStatusBadge status={persistedStatus} testId="entry-status" />
+        }
+        saving={saving}
+        dirty={dirty}
+        isNew={isNew}
+        savedLabel={savedLabel}
+        canManage={canManage}
+        actionsReady={actionsReady}
+        publishPending={anyActionPending}
+        scheduled={entry?.status === 'scheduled'}
+        canUnpublish={entry?.status === 'published'}
+        canArchive={entry?.status !== 'archived'}
+        previewUrl={previewUrl}
+        onSave={() => save()}
+        onPublish={() => publishMutation.mutate()}
+        onSchedule={() => {
+          setScheduleAt(toDatetimeLocalValue(new Date()))
+          setScheduleTz(browserTimezone())
+          setScheduleOpen(true)
+        }}
+        onCancelSchedule={() => cancelScheduleMutation.mutate()}
+        onUnpublish={() => unpublishMutation.mutate()}
+        onArchive={() => archiveMutation.mutate()}
+        onDelete={() => setDeleteOpen(true)}
+        onOpenDetails={() => setInspectorOpen(true)}
+      />
 
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_18rem] xl:grid-cols-[minmax(0,1fr)_20rem]">
-        <div className="grid min-w-0 gap-4">
+      <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="grid min-w-0 gap-6">
           {formError ? (
             <Alert variant="destructive">
               <AlertDescription>{formError}</AlertDescription>
             </Alert>
           ) : null}
-
-          <Tabs value={editorTab} onValueChange={setEditorTab}>
-            <TabsList>
-              <TabsTrigger value="edit">{m.editor_edit()}</TabsTrigger>
-              <TabsTrigger value="revisions" disabled={isNew}>
-                <History />
-                {m.editor_revisions()}
-                {revisions.length > 0 ? (
-                  <span className="rounded-full bg-muted px-1.5 text-xs text-muted-foreground">
-                    {revisions.length}
-                  </span>
-                ) : null}
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent value="edit" className="grid gap-5 pt-3">
-              {fields.map((field) => (
-                <CollectionField
-                  key={field.key}
-                  field={field}
-                  value={data[field.key]}
-                  onChange={(value) => updateField(field.key, value)}
-                  error={fieldErrors[field.key]}
-                  siteId={siteId}
-                  organizationId={organizationId}
-                />
-              ))}
-            </TabsContent>
-            <TabsContent value="revisions" className="pt-3">
-              {revisionsQuery.isLoading ? (
-                <Skeleton className="h-32 w-full" />
-              ) : revisionsQuery.isError ? (
-                <QueryError
-                  error={revisionsQuery.error}
-                  title={m.editor_could_not_load_revisions()}
-                  onRetry={() => revisionsQuery.refetch()}
-                  retrying={revisionsQuery.isFetching}
-                />
-              ) : revisions.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  {m.editor_no_revisions_yet()}
-                </p>
-              ) : (
-                <ul className="grid gap-2">
-                  {revisions.map((revision, index) => (
-                    <li
-                      key={revision.id}
-                      className="flex items-center justify-between gap-3 border-b py-2.5 last:border-b-0"
-                    >
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium">
-                          {formatDateTime(revision.createdAt)}
-                          {index === 0 ? (
-                            <span className="ml-2 text-xs font-normal text-muted-foreground">
-                              {m.editor_latest()}
-                            </span>
-                          ) : null}
-                        </p>
-                        {revision.note ? (
-                          <p className="truncate text-xs text-muted-foreground">
-                            {revision.note}
-                          </p>
-                        ) : null}
-                      </div>
-                      {canManage ? (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setRestoreId(revision.id)}
-                        >
-                          {m.editor_restore()}
-                        </Button>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </TabsContent>
-          </Tabs>
+          <EntryCanvas
+            titleField={titleField}
+            canvasFields={canvasFields}
+            data={data}
+            errors={fieldErrors}
+            onChange={updateField}
+            siteId={siteId}
+            organizationId={organizationId}
+          />
         </div>
 
         <aside
-          className="grid gap-4 lg:sticky"
-          style={{ top: `calc(var(--app-header-h) + ${barHeight}px + 1.5rem)` }}
-          aria-label={m.editor_entry_details()}
+          className="hidden self-start lg:sticky lg:block"
+          style={{ top: `calc(var(--navbar-height) + ${barHeight}px + 1.5rem)` }}
         >
-          <div className="border-t pt-4">
-            <h2 className="mb-3 text-sm font-semibold">{m.editor_details()}</h2>
-            <dl className="grid gap-2.5 text-sm">
-              <div className="flex items-center justify-between gap-3">
-                <dt className="text-muted-foreground">{m.editor_status()}</dt>
-                <dd>
-                  <EntryStatusBadge status={persistedStatus} />
-                </dd>
-              </div>
-              {entry ? (
-                <>
-                  <div className="flex items-center justify-between gap-3">
-                    <dt className="text-muted-foreground">
-                      {m.editor_updated()}
-                    </dt>
-                    <dd className="text-right">
-                      {formatDateTime(entry.updatedAt)}
-                    </dd>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <dt className="text-muted-foreground">
-                      {m.editor_published()}
-                    </dt>
-                    <dd className="text-right">
-                      {entry.publishedAt
-                        ? formatDateTime(entry.publishedAt)
-                        : m.editor_never()}
-                    </dd>
-                  </div>
-                  {entry.scheduledAt ? (
-                    <div className="flex items-center justify-between gap-3">
-                      <dt className="text-muted-foreground">
-                        {m.editor_status_scheduled()}
-                      </dt>
-                      <dd className="text-right">
-                        {formatDateTime(entry.scheduledAt)}
-                      </dd>
-                    </div>
-                  ) : null}
-                  <div className="flex items-center justify-between gap-3">
-                    <dt className="text-muted-foreground">{m.editor_slug()}</dt>
-                    <dd
-                      className="truncate font-mono text-xs"
-                      title={entry.slug}
-                    >
-                      {entry.slug}
-                    </dd>
-                  </div>
-                </>
-              ) : (
-                <p className="text-muted-foreground">
-                  {m.editor_save_draft_to_enable()}
-                </p>
-              )}
-            </dl>
-            {canManage && entry?.status === 'scheduled' ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="mt-3 w-full"
-                disabled={cancelScheduleMutation.isPending}
-                onClick={() => cancelScheduleMutation.mutate()}
-              >
-                {m.editor_cancel_schedule()}
-              </Button>
-            ) : null}
-          </div>
-          <p className={cn('px-1 text-xs text-muted-foreground')}>
-            {entry?.status === 'published'
-              ? m.editor_published_draft_hint()
-              : m.editor_unpublished_draft_hint()}
-          </p>
+          {renderInspector()}
         </aside>
       </div>
+
+      <Sheet open={inspectorOpen} onOpenChange={setInspectorOpen}>
+        <SheetContent side="right" size="sm" className="lg:hidden">
+          <SheetHeader>
+            <SheetTitle>{m.editor_entry_details()}</SheetTitle>
+          </SheetHeader>
+          <SheetBody className="p-4">
+            {renderInspector('border-0 bg-transparent p-0')}
+          </SheetBody>
+        </SheetContent>
+      </Sheet>
 
       <Dialog open={scheduleOpen} onOpenChange={setScheduleOpen}>
         <DialogContent>

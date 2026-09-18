@@ -1,6 +1,3 @@
-import type { ReactNode } from 'react'
-import { Check, Globe } from 'lucide-react'
-
 import { Button } from '#/components/ui/button'
 import {
   DropdownMenu,
@@ -10,7 +7,9 @@ import {
 } from '#/components/ui/dropdown-menu'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
-import { getLocale, locales, setLocale, type Locale } from '#/paraglide/runtime'
+import { getLocale, locales, setLocale } from '#/paraglide/runtime'
+import type { Locale } from '#/paraglide/runtime'
+import { Check, Globe } from '@phosphor-icons/react'
 
 const LOCALE_LABELS = {
   en: 'English',
@@ -18,7 +17,13 @@ const LOCALE_LABELS = {
   tr: 'Türkçe',
 } as const satisfies Record<Locale, string>
 
-export function LanguageSwitcher({ className }: { className?: string }) {
+export function LanguageSwitcher({
+  className,
+  compact = false,
+}: {
+  className?: string
+  compact?: boolean
+}) {
   const locale = getLocale()
 
   return (
@@ -26,13 +31,13 @@ export function LanguageSwitcher({ className }: { className?: string }) {
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
-          size="sm"
+          size={compact ? 'icon-sm' : 'sm'}
           aria-label={m.shell_language()}
           data-testid="language-switcher"
-          className={cn('gap-1.5', className)}
+          className={cn(!compact && 'gap-1.5', className)}
         >
           <Globe />
-          <span>{LOCALE_LABELS[locale]}</span>
+          {compact ? null : <span>{LOCALE_LABELS[locale]}</span>}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
@@ -48,14 +53,5 @@ export function LanguageSwitcher({ className }: { className?: string }) {
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
-  )
-}
-
-export function AuthShell({ children }: { children: ReactNode }) {
-  return (
-    <div className="relative flex min-h-svh items-center justify-center p-6">
-      <LanguageSwitcher className="absolute top-4 right-4" />
-      {children}
-    </div>
   )
 }

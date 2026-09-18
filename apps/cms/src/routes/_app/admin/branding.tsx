@@ -3,20 +3,21 @@ import type { ChangeEvent, FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
-import { AlertTriangle, RotateCcw, Upload, X } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { errorMessage } from '#/components/admin/helpers'
 import { TableSkeleton } from '#/components/admin/table-skeleton'
-import { BrandLogo, BrandMark } from '#/components/brand-mark'
+import { BrandMark } from '#/components/brand-mark'
 import { ConfirmDialog } from '#/components/confirm-dialog'
 import { FormField } from '#/components/form-field'
 import { PageHeader } from '#/components/page-header'
+import { PageSection, SectionedPage } from '#/components/section-nav'
+import { SaveBar } from '#/components/save-bar'
 import { QueryError } from '#/components/query-error'
+import { Badge } from '#/components/ui/badge'
 import { Button } from '#/components/ui/button'
-import { Checkbox } from '#/components/ui/checkbox'
+import { EntityIcon } from '#/components/entity-icon'
 import { Input } from '#/components/ui/input'
-import { Label } from '#/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -24,25 +25,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '#/components/ui/select'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import {
   BRAND_COLOR_KEYS,
+  BRAND_PRESETS,
   DEFAULT_APP_NAME,
   DEFAULT_FONT,
   FONTS,
   FONT_KEYS,
   brandingPreviewStyle,
-  contrastRatio,
   fontStylesheetUrl,
+  matchPreset,
   normalizeHex,
 } from '#/lib/branding'
-import type {
-  AdvancedBrandColors,
-  BrandColorKey,
-  BrandColorPalette,
-  BrandingView,
-  FontKey,
-} from '#/lib/branding'
+import type { AdvancedBrandColors, BrandingView, FontKey } from '#/lib/branding'
 import { m } from '#/paraglide/messages'
 import {
   clearBrandingImageFn,
@@ -50,6 +45,13 @@ import {
   resetBrandingFn,
   updateBrandingFn,
 } from '#/server/fn/branding'
+import {
+  Check,
+  Globe,
+  ArrowCounterClockwise,
+  UploadSimple,
+  X,
+} from '@phosphor-icons/react'
 
 export const Route = createFileRoute('/_app/admin/branding')({
   component: BrandingPage,
@@ -115,7 +117,6 @@ function BrandingPage() {
     light: {},
     dark: {},
   })
-  const [paletteMode, setPaletteMode] = useState<PaletteMode>('light')
 
   // Seed the form from the saved values, and again after each save.
   useEffect(() => {
@@ -210,6 +211,7 @@ function BrandingPage() {
   }
 
   const accentHex = accent.trim() ? normalizeHex(accent) : null
+  const activePreset = matchPreset(accentHex, font)
   const accentInvalid = accent.trim().length > 0 && !accentHex
   const advancedInvalid = BRAND_COLOR_KEYS.some((key) =>
     (['light', 'dark'] as const).some((mode) => {
@@ -252,17 +254,6 @@ function BrandingPage() {
     clearMutation.isPending ||
     resetMutation.isPending
 
-  function setAdvancedColor(
-    mode: PaletteMode,
-    key: BrandColorKey,
-    value: string,
-  ) {
-    setAdvancedColors((current) => ({
-      ...current,
-      [mode]: { ...current[mode], [key]: value },
-    }))
-  }
-
   return (
     <div className="grid gap-6" data-testid="branding-page" data-ready="true">
       <PageHeader
@@ -284,25 +275,27 @@ function BrandingPage() {
               variant="outline"
               disabled={busy || !saved.customized}
             >
-              <RotateCcw />
+              <ArrowCounterClockwise />
               {m.admin_branding_reset_label()}
             </Button>
           </ConfirmDialog>
         }
       />
 
-      <div
-        className={`grid gap-8 ${
-          advancedEnabled
-            ? 'lg:grid-cols-[minmax(0,36rem)_minmax(0,1fr)]'
-            : 'lg:grid-cols-[minmax(0,28rem)_minmax(0,1fr)]'
-        }`}
+      <SectionedPage
+        links={[
+          { id: 'identity', label: m.admin_branding_identity() },
+          { id: 'appearance', label: m.admin_branding_appearance() },
+          { id: 'email', label: m.admin_branding_email_section() },
+        ]}
+        aside={<BrandingPreview branding={preview} />}
       >
-        <form className="grid gap-6" onSubmit={onSubmit}>
-          <section className="grid gap-4">
-            <h2 className="text-lg font-medium">
-              {m.admin_branding_identity()}
-            </h2>
+        <form className="grid gap-8" onSubmit={onSubmit}>
+          <PageSection
+            id="identity"
+            title={m.admin_branding_identity()}
+            description={m.admin_branding_identity_description()}
+          >
             <FormField
               label={m.admin_name()}
               htmlFor="brand-name"
@@ -341,12 +334,61 @@ function BrandingPage() {
               }
               onClear={() => clearMutation.mutate('favicon')}
             />
-          </section>
+          </PageSection>
 
-          <section className="grid gap-4">
-            <h2 className="text-lg font-medium">
-              {m.admin_branding_appearance()}
-            </h2>
+          <PageSection
+            id="appearance"
+            title={m.admin_branding_appearance()}
+            description={m.admin_branding_appearance_description()}
+          >
+            <FormField
+              label={m.admin_branding_preset()}
+              hint={m.admin_branding_preset_hint()}
+            >
+              <div className="flex flex-wrap gap-2" data-testid="brand-presets">
+                {/* Each chip previews its own font, so load them all here. */}
+                {BRAND_PRESETS.map((preset) => {
+                  const url = fontStylesheetUrl(preset.font)
+                  return url ? (
+                    <link key={preset.id} rel="stylesheet" href={url} />
+                  ) : null
+                })}
+                {BRAND_PRESETS.map((preset) => {
+                  const active = activePreset?.id === preset.id
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      data-testid={`brand-preset-${preset.id}`}
+                      aria-pressed={active}
+                      onClick={() => {
+                        setAccent(preset.accent ?? '')
+                        setFont(preset.font)
+                      }}
+                      className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-ds-label-sm transition-colors ${
+                        active
+                          ? 'border-border-strong bg-background-subtle text-text-primary'
+                          : 'border-border-default text-text-secondary hover:bg-surface-state-hover'
+                      }`}
+                    >
+                      <span
+                        aria-hidden
+                        className="size-3.5 rounded-full border border-border-subtle"
+                        style={{
+                          background:
+                            preset.accent ?? 'var(--color-action-primary)',
+                        }}
+                      />
+                      <span style={{ fontFamily: FONTS[preset.font].family }}>
+                        {preset.label}
+                      </span>
+                      {active ? <Check className="size-3.5" /> : null}
+                    </button>
+                  )
+                })}
+              </div>
+            </FormField>
+
             <FormField
               label={m.admin_branding_accent()}
               htmlFor="brand-accent"
@@ -360,14 +402,14 @@ function BrandingPage() {
                   type="color"
                   aria-label={m.admin_branding_accent_pick_aria()}
                   className="size-9 shrink-0 cursor-pointer rounded-md border bg-background p-1"
-                  value={accentHex ?? '#3d5a3a'}
+                  value={accentHex ?? '#39af46'}
                   onChange={(event) => setAccent(event.target.value)}
                 />
                 <Input
                   id="brand-accent"
                   data-testid="brand-accent"
                   className="font-mono"
-                  placeholder="#3d5a3a"
+                  placeholder="#39af46"
                   maxLength={7}
                   value={accent}
                   onChange={(event) => setAccent(event.target.value)}
@@ -409,63 +451,40 @@ function BrandingPage() {
               </Select>
             </FormField>
 
-            <div className="grid gap-3 rounded-md border p-4">
-              <div className="flex items-start gap-3">
-                <Checkbox
-                  id="brand-advanced"
-                  data-testid="brand-advanced"
-                  checked={advancedEnabled}
-                  onCheckedChange={(checked) => {
-                    const enabled = checked === true
-                    setAdvancedEnabled(enabled)
-                    if (!enabled) setPaletteMode('light')
-                  }}
-                />
-                <div className="grid gap-1">
-                  <Label htmlFor="brand-advanced" className="cursor-pointer">
-                    {m.admin_branding_advanced()}
-                  </Label>
-                  <p className="text-xs text-muted-foreground">
-                    {m.admin_branding_advanced_hint()}
-                  </p>
+            {advancedEnabled ? (
+              <div
+                className="grid gap-2 border-t border-border-subtle pt-5"
+                data-testid="brand-legacy-colors"
+              >
+                <p className="text-ds-label-sm text-text-primary">
+                  {m.admin_branding_legacy_title()}
+                </p>
+                <p className="text-ds-body-xs text-text-muted">
+                  {m.admin_branding_legacy_hint()}
+                </p>
+                <div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    data-testid="brand-legacy-clear"
+                    onClick={() => {
+                      setAdvancedEnabled(false)
+                      setAdvancedColors({ light: {}, dark: {} })
+                    }}
+                  >
+                    {m.admin_branding_legacy_clear()}
+                  </Button>
                 </div>
               </div>
+            ) : null}
+          </PageSection>
 
-              {advancedEnabled ? (
-                <Tabs
-                  value={paletteMode}
-                  onValueChange={(value) =>
-                    setPaletteMode(value as PaletteMode)
-                  }
-                >
-                  <TabsList>
-                    <TabsTrigger value="light">
-                      {m.admin_branding_light_palette()}
-                    </TabsTrigger>
-                    <TabsTrigger value="dark">
-                      {m.admin_branding_dark_palette()}
-                    </TabsTrigger>
-                  </TabsList>
-                  {(['light', 'dark'] as const).map((mode) => (
-                    <TabsContent key={mode} value={mode} className="mt-3">
-                      <AdvancedPaletteFields
-                        mode={mode}
-                        colors={advancedColors[mode]}
-                        onChange={(key, value) =>
-                          setAdvancedColor(mode, key, value)
-                        }
-                      />
-                    </TabsContent>
-                  ))}
-                </Tabs>
-              ) : null}
-            </div>
-          </section>
-
-          <section className="grid gap-4">
-            <h2 className="text-lg font-medium">
-              {m.admin_branding_email_section()}
-            </h2>
+          <PageSection
+            id="email"
+            title={m.admin_branding_email_section()}
+            description={m.admin_branding_email_description()}
+          >
             <FormField
               label={m.admin_branding_sender_name()}
               htmlFor="brand-email-from"
@@ -480,224 +499,16 @@ function BrandingPage() {
                 onChange={(event) => setEmailFromName(event.target.value)}
               />
             </FormField>
-          </section>
+          </PageSection>
 
-          <div>
-            <Button
-              type="submit"
-              data-testid="save-branding"
-              disabled={busy || !dirty || accentInvalid || advancedInvalid}
-            >
-              {saveMutation.isPending
-                ? m.admin_saving()
-                : m.admin_branding_save()}
-            </Button>
-          </div>
+          <SaveBar
+            dirty={dirty}
+            saving={saveMutation.isPending}
+            testId="save-branding"
+            label={m.admin_branding_save()}
+          />
         </form>
-
-        <BrandingPreview branding={preview} mode={paletteMode} />
-      </div>
-    </div>
-  )
-}
-
-const COLOR_GROUPS: Array<{
-  title: () => string
-  fields: BrandColorKey[]
-}> = [
-  {
-    title: () => m.admin_branding_group_foundations(),
-    fields: ['background', 'foreground', 'surface', 'surfaceForeground'],
-  },
-  {
-    title: () => m.admin_branding_group_subtle(),
-    fields: [
-      'muted',
-      'mutedForeground',
-      'accent',
-      'accentForeground',
-      'border',
-      'input',
-    ],
-  },
-  {
-    title: () => m.admin_branding_group_actions(),
-    fields: [
-      'primary',
-      'primaryForeground',
-      'secondary',
-      'secondaryForeground',
-      'link',
-      'ring',
-    ],
-  },
-  {
-    title: () => m.admin_branding_group_sidebar(),
-    fields: [
-      'sidebar',
-      'sidebarForeground',
-      'sidebarPrimary',
-      'sidebarPrimaryForeground',
-      'sidebarAccent',
-      'sidebarAccentForeground',
-    ],
-  },
-]
-
-const CONTRAST_PAIRS: Array<readonly [BrandColorKey, BrandColorKey]> = [
-  ['foreground', 'background'],
-  ['surfaceForeground', 'surface'],
-  ['mutedForeground', 'muted'],
-  ['accentForeground', 'accent'],
-  ['primaryForeground', 'primary'],
-  ['secondaryForeground', 'secondary'],
-  ['sidebarForeground', 'sidebar'],
-  ['sidebarPrimaryForeground', 'sidebarPrimary'],
-  ['sidebarAccentForeground', 'sidebarAccent'],
-]
-
-function colorLabel(key: BrandColorKey) {
-  const labels: Record<BrandColorKey, () => string> = {
-    background: m.admin_branding_color_background,
-    foreground: m.admin_branding_color_foreground,
-    surface: m.admin_branding_color_surface,
-    surfaceForeground: m.admin_branding_color_surface_foreground,
-    muted: m.admin_branding_color_muted,
-    mutedForeground: m.admin_branding_color_muted_foreground,
-    accent: m.admin_branding_color_accent,
-    accentForeground: m.admin_branding_color_accent_foreground,
-    border: m.admin_branding_color_border,
-    input: m.admin_branding_color_input,
-    primary: m.admin_branding_color_primary,
-    primaryForeground: m.admin_branding_color_primary_foreground,
-    secondary: m.admin_branding_color_secondary,
-    secondaryForeground: m.admin_branding_color_secondary_foreground,
-    link: m.admin_branding_color_link,
-    ring: m.admin_branding_color_ring,
-    sidebar: m.admin_branding_color_sidebar,
-    sidebarForeground: m.admin_branding_color_sidebar_foreground,
-    sidebarPrimary: m.admin_branding_color_sidebar_primary,
-    sidebarPrimaryForeground: m.admin_branding_color_sidebar_primary_foreground,
-    sidebarAccent: m.admin_branding_color_sidebar_accent,
-    sidebarAccentForeground: m.admin_branding_color_sidebar_accent_foreground,
-  }
-  return labels[key]()
-}
-
-function pickerFallback(mode: PaletteMode, key: BrandColorKey) {
-  if (key.endsWith('Foreground') || key === 'foreground' || key === 'link') {
-    return mode === 'light' ? '#2f2925' : '#eee9e5'
-  }
-  if (key === 'primary' || key === 'sidebarPrimary' || key === 'ring') {
-    return mode === 'light' ? '#3d5a3a' : '#7ca275'
-  }
-  return mode === 'light' ? '#f4efeb' : '#272320'
-}
-
-function AdvancedPaletteFields({
-  mode,
-  colors,
-  onChange,
-}: {
-  mode: PaletteMode
-  colors: BrandColorPalette
-  onChange: (key: BrandColorKey, value: string) => void
-}) {
-  const warnings = CONTRAST_PAIRS.flatMap(([foreground, background]) => {
-    const foregroundValue = colors[foreground]
-    const backgroundValue = colors[background]
-    if (!foregroundValue || !backgroundValue) return []
-    const ratio = contrastRatio(foregroundValue, backgroundValue)
-    return ratio !== null && ratio < 4.5
-      ? [{ foreground, background, ratio }]
-      : []
-  })
-
-  return (
-    <div className="grid gap-5" data-testid={`brand-${mode}-palette`}>
-      <p className="text-xs text-muted-foreground">
-        {m.admin_branding_palette_hint()}
-      </p>
-      {COLOR_GROUPS.map((group) => (
-        <fieldset key={group.title()} className="grid gap-3">
-          <legend className="mb-1 text-sm font-medium">{group.title()}</legend>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {group.fields.map((key) => {
-              const value = colors[key] ?? ''
-              const normalized = value ? normalizeHex(value) : null
-              const invalid = Boolean(value && !normalized)
-              const label = colorLabel(key)
-              return (
-                <FormField
-                  key={key}
-                  label={label}
-                  htmlFor={`brand-${mode}-${key}`}
-                  error={invalid ? m.admin_branding_color_invalid() : undefined}
-                >
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="color"
-                      aria-label={m.admin_branding_color_pick_aria({ label })}
-                      className="size-9 shrink-0 cursor-pointer rounded-md border bg-background p-1"
-                      value={normalized ?? pickerFallback(mode, key)}
-                      onChange={(event) => onChange(key, event.target.value)}
-                    />
-                    <Input
-                      id={`brand-${mode}-${key}`}
-                      data-testid={`brand-${mode}-${key}`}
-                      className="font-mono"
-                      placeholder={m.admin_branding_automatic()}
-                      maxLength={7}
-                      aria-invalid={invalid || undefined}
-                      value={value}
-                      onChange={(event) => onChange(key, event.target.value)}
-                    />
-                    {value ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        aria-label={m.admin_branding_color_clear_aria({
-                          label,
-                        })}
-                        onClick={() => onChange(key, '')}
-                      >
-                        <X />
-                      </Button>
-                    ) : null}
-                  </div>
-                </FormField>
-              )
-            })}
-          </div>
-        </fieldset>
-      ))}
-      {warnings.length > 0 ? (
-        <div
-          className="grid gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-3"
-          role="status"
-          data-testid={`brand-${mode}-contrast-warnings`}
-        >
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <AlertTriangle className="size-4 text-destructive" />
-            {m.admin_branding_contrast_warning_title()}
-          </div>
-          <ul className="grid gap-1 pl-6 text-xs text-muted-foreground">
-            {warnings.map(({ foreground, background, ratio }) => (
-              <li key={`${foreground}-${background}`} className="list-disc">
-                {m.admin_branding_contrast_warning({
-                  foreground: colorLabel(foreground),
-                  background: colorLabel(background),
-                  ratio: ratio.toFixed(2),
-                })}
-              </li>
-            ))}
-          </ul>
-          <p className="text-xs text-muted-foreground">
-            {m.admin_branding_contrast_warning_hint()}
-          </p>
-        </div>
-      ) : null}
+      </SectionedPage>
     </div>
   )
 }
@@ -761,7 +572,7 @@ function ImageField({
           disabled={busy}
           onClick={() => inputRef.current?.click()}
         >
-          <Upload />
+          <UploadSimple />
           {url ? m.admin_replace() : m.admin_upload()}
         </Button>
         {url ? (
@@ -780,13 +591,7 @@ function ImageField({
   )
 }
 
-function BrandingPreview({
-  branding,
-  mode,
-}: {
-  branding: BrandingView
-  mode: PaletteMode
-}) {
+function BrandingPreview({ branding }: { branding: BrandingView }) {
   const fontUrl = fontStylesheetUrl(branding.font)
 
   return (
@@ -795,61 +600,109 @@ function BrandingPreview({
       aria-label={m.admin_branding_preview_aria()}
     >
       {fontUrl ? <link rel="stylesheet" href={fontUrl} /> : null}
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-lg font-medium">{m.admin_branding_preview()}</h2>
-        {branding.advancedColorsEnabled ? (
-          <span className="rounded-full border px-2 py-0.5 text-xs text-muted-foreground">
-            {mode === 'dark'
-              ? m.admin_branding_dark_palette()
-              : m.admin_branding_light_palette()}
-          </span>
-        ) : null}
-      </div>
-      <div
-        data-testid="branding-preview"
-        data-theme={mode}
-        className={`${mode === 'dark' ? 'dark' : ''} grid gap-5 rounded-md border bg-background p-5 text-foreground`}
-        style={{
-          ...brandingPreviewStyle(branding, mode),
-          fontFamily: FONTS[branding.font].family,
-        }}
-      >
-        <div className="flex items-center justify-between gap-4">
-          <BrandMark branding={branding} />
-          <span className="text-xs text-muted-foreground">
-            {branding.font === 'system'
-              ? m.admin_font_system_default()
-              : FONTS[branding.font].label}
-          </span>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          {m.admin_branding_pangram_before()}
-          <a
-            href="#preview"
-            className="text-link"
-            onClick={(e) => e.preventDefault()}
-          >
-            {m.admin_branding_pangram_link()}
-          </a>
-          .
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button type="button">{m.admin_branding_primary_action()}</Button>
-          <Button type="button" variant="secondary">
-            {m.admin_branding_secondary()}
-          </Button>
-          <Button type="button" variant="outline">
-            {m.admin_branding_outline()}
-          </Button>
-        </div>
-        <div className="flex items-center gap-2 rounded-md bg-sidebar px-3 py-2 text-sm text-sidebar-foreground shadow-[inset_3px_0_0_var(--sidebar-primary)]">
-          <BrandLogo branding={branding} className="size-6" />
-          {m.admin_branding_active_sidebar()}
-        </div>
-      </div>
-      <p className="text-xs text-muted-foreground">
+      <h2 className="text-ds-heading-5 text-text-primary">
+        {m.admin_branding_preview()}
+      </h2>
+      <PreviewPanel
+        branding={branding}
+        mode="light"
+        testId="branding-preview"
+      />
+      <PreviewPanel
+        branding={branding}
+        mode="dark"
+        testId="branding-preview-dark"
+      />
+      <p className="text-ds-body-xs text-text-muted">
         {m.admin_branding_preview_footnote()}
       </p>
     </aside>
+  )
+}
+
+/**
+ * One mode of the preview. It renders the real components rather than
+ * look-alikes, so anything the tokens break shows up here first.
+ */
+function PreviewPanel({
+  branding,
+  mode,
+  testId,
+}: {
+  branding: BrandingView
+  mode: PaletteMode
+  testId: string
+}) {
+  return (
+    <div
+      data-testid={testId}
+      data-theme={mode}
+      // `.light` / `.dark` re-declare the whole token set on this element, so
+      // both modes render correctly whatever theme the page itself is in.
+      className={`${mode} grid gap-4 rounded-surface border border-border-default bg-background-default p-4 text-text-primary`}
+      style={{
+        ...brandingPreviewStyle(branding, mode),
+        fontFamily: FONTS[branding.font].family,
+      }}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <BrandMark branding={branding} />
+        <span className="text-ds-label-sm text-text-muted">
+          {mode === 'dark'
+            ? m.admin_branding_dark_palette()
+            : m.admin_branding_light_palette()}
+        </span>
+      </div>
+
+      <div className="flex items-center gap-5 border-b border-border-subtle">
+        <span className="nav-tab h-10" data-state="active">
+          {m.admin_branding_preview_tab_active()}
+        </span>
+        <span className="nav-tab h-10">
+          {m.admin_branding_preview_tab_idle()}
+        </span>
+      </div>
+
+      <p className="text-ds-body-sm text-text-secondary">
+        {m.admin_branding_pangram_before()}
+        <a
+          href="#preview"
+          className="text-text-accent underline underline-offset-4"
+          onClick={(e) => e.preventDefault()}
+        >
+          {m.admin_branding_pangram_link()}
+        </a>
+        .
+      </p>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" size="sm">
+          {m.admin_branding_primary_action()}
+        </Button>
+        <Button type="button" size="sm" variant="secondary">
+          {m.admin_branding_secondary()}
+        </Button>
+        <Button type="button" size="sm" variant="ghost">
+          {m.admin_branding_preview_ghost()}
+        </Button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant="success">{m.admin_branding_preview_badge()}</Badge>
+        <Badge variant="secondary">
+          {m.admin_branding_preview_badge_muted()}
+        </Badge>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <EntityIcon icon={Globe} />
+        <Input
+          readOnly
+          className="h-9"
+          aria-label={m.admin_branding_preview_input()}
+          value={m.admin_branding_preview_input_value()}
+        />
+      </div>
+    </div>
   )
 }

@@ -98,6 +98,8 @@ export function ProviderSignIn({
             key={provider}
             type="button"
             variant="outline"
+            size="lg"
+            className="w-full justify-center"
             disabled={pending !== null}
             data-testid={`sign-in-${provider}`}
             onClick={() => {
@@ -118,6 +120,8 @@ export function ProviderSignIn({
         <Button
           type="button"
           variant="outline"
+          size="lg"
+          className="w-full justify-center"
           disabled={pending !== null}
           data-testid="sign-in-sso"
           onClick={() => {
@@ -133,17 +137,6 @@ export function ProviderSignIn({
           {m.auth_continue_with_microsoft()}
         </Button>
       ) : null}
-    </div>
-  )
-}
-
-/** Separates the provider buttons from the email/password form. */
-export function AuthDivider() {
-  return (
-    <div className="flex items-center gap-3 text-xs text-muted-foreground">
-      <span className="h-px flex-1 bg-border" />
-      {m.auth_or()}
-      <span className="h-px flex-1 bg-border" />
     </div>
   )
 }

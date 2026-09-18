@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '#/components/ui/tabs'
+import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import { m } from '#/paraglide/messages'
 
 import { RichTextEditor } from '../rich-text-editor'
@@ -18,27 +18,32 @@ export function RichtextFieldInput({
   const [mode, setMode] = useState('edit')
 
   return (
-    <Tabs value={mode} onValueChange={setMode} className="gap-2">
-      <TabsList variant="line" className="h-8">
-        <TabsTrigger value="edit">{m.editor_edit()}</TabsTrigger>
-        <TabsTrigger value="preview" data-testid="rich-text-preview-tab">
-          {m.editor_preview()}
-        </TabsTrigger>
-      </TabsList>
-      <TabsContent
-        value="edit"
-        forceMount
-        className="data-[state=inactive]:hidden"
-      >
-        <RichTextEditor
-          value={value}
-          onChange={onChange}
-          organizationId={organizationId}
-        />
-      </TabsContent>
-      <TabsContent value="preview" className="rounded-md border bg-card">
-        <RichTextPreview value={value} />
-      </TabsContent>
-    </Tabs>
+    <RichTextEditor
+      value={value}
+      onChange={onChange}
+      organizationId={organizationId}
+      previewing={mode === 'preview'}
+      preview={
+        <div className="py-4">
+          <RichTextPreview value={value} />
+        </div>
+      }
+      toolbarEnd={
+        <Tabs value={mode} onValueChange={setMode}>
+          <TabsList variant="segmented" className="h-7">
+            <TabsTrigger value="edit" className="px-2.5 text-xs">
+              {m.editor_edit()}
+            </TabsTrigger>
+            <TabsTrigger
+              value="preview"
+              data-testid="rich-text-preview-tab"
+              className="px-2.5 text-xs"
+            >
+              {m.editor_preview()}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      }
+    />
   )
 }

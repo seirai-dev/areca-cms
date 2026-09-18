@@ -1,7 +1,7 @@
-import { and, desc, eq, inArray } from 'drizzle-orm'
+import { and, count, desc, eq, gt, inArray } from 'drizzle-orm'
 
 import { db } from '#/db'
-import { buildJob, publication, site, user } from '#/db/schema'
+import { buildJob, entry, publication, site, user } from '#/db/schema'
 import type { BuildJobStatus } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
@@ -376,8 +376,22 @@ export async function getSiteReleaseStatus(siteId: string) {
         .orderBy(desc(buildJob.priority), desc(buildJob.createdAt))
         .limit(1)
 
+  // Published entries the live snapshot does not include yet. With no live
+  // publication every published entry is pending.
+  const [pending] = await db
+    .select({ count: count() })
+    .from(entry)
+    .where(
+      and(
+        eq(entry.siteId, siteId),
+        eq(entry.status, 'published'),
+        ...(live ? [gt(entry.updatedAt, live.createdAt)] : []),
+      ),
+    )
+
   return {
     live,
     activeJob: activeJob ?? queuedJob ?? null,
+    pendingEntries: Number(pending?.count ?? 0),
   }
 }

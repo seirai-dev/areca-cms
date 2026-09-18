@@ -22,25 +22,29 @@ export function PageHeader({
   size?: 'lg' | 'sm'
   className?: string
 }) {
+  const Heading = size === 'lg' ? 'h1' : 'h2'
   return (
     <div
       className={cn(
-        'flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6',
+        'flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-6',
+        size === 'sm' && 'sm:items-center',
         className,
       )}
     >
       <div className="min-w-0 space-y-1">
-        {eyebrow ? <div className="text-sm">{eyebrow}</div> : null}
-        <h1
+        {eyebrow ? (
+          <div className="text-ds-body-sm text-text-muted">{eyebrow}</div>
+        ) : null}
+        <Heading
           className={cn(
-            'font-semibold tracking-tight text-balance',
-            size === 'lg' ? 'text-3xl' : 'text-lg',
+            'text-balance',
+            size === 'lg' ? 'text-ds-heading-2' : 'text-ds-heading-4',
           )}
         >
           {title}
-        </h1>
+        </Heading>
         {description ? (
-          <p className="text-sm text-muted-foreground sm:text-base">
+          <p className="max-w-[65ch] text-ds-body-sm text-text-secondary">
             {description}
           </p>
         ) : null}

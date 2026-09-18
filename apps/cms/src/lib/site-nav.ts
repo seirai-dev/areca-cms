@@ -1,20 +1,19 @@
+import { m } from '#/paraglide/messages'
+import type { Me } from '#/server/fn/me'
 import {
-  Activity,
+  Pulse,
   FileText,
   Image,
   Rocket,
-  Settings,
+  Gear,
   Users,
-} from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
-
-import { m } from '#/paraglide/messages'
-import type { Me } from '#/server/fn/me'
+} from '@phosphor-icons/react'
+import type { Icon } from '@phosphor-icons/react'
 
 export type SiteSection = {
   key: 'content' | 'media' | 'releases' | 'team' | 'activity' | 'settings'
   label: string
-  icon: LucideIcon
+  icon: Icon
   /** Absolute pathname used for active-state matching and plain hrefs. */
   href: string
   /** Match only when the pathname equals `href` (Content also matches nested entry routes). */
@@ -69,28 +68,20 @@ export function siteSections(me: Me, site: MeSite): SiteSection[] {
     },
   ]
 
-  if (me.user.isAgencyAdmin) {
-    sections.push({
-      key: 'team',
-      label: m.shell_nav_team(),
-      icon: Users,
-      href: `/admin/organizations/${site.organizationId}`,
-      testId: 'team-nav',
-    })
-  } else if (isOrgOwner(me, site.organizationId)) {
+  if (canManageSite(me, site.organizationId)) {
     sections.push(
       {
         key: 'team',
         label: m.shell_nav_team(),
         icon: Users,
-        href: `/orgs/${site.organizationId}/members`,
+        href: `${base}/team`,
         testId: 'team-nav',
       },
       {
         key: 'activity',
         label: m.shell_nav_activity(),
-        icon: Activity,
-        href: `/orgs/${site.organizationId}/audit`,
+        icon: Pulse,
+        href: `${base}/activity`,
         testId: 'org-audit-nav',
       },
     )
@@ -100,7 +91,7 @@ export function siteSections(me: Me, site: MeSite): SiteSection[] {
     sections.push({
       key: 'settings',
       label: m.shell_nav_settings(),
-      icon: Settings,
+      icon: Gear,
       href: `${base}/settings`,
     })
   }

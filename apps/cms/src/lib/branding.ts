@@ -6,16 +6,17 @@
 export const DEFAULT_APP_NAME = 'Areca'
 
 export const FONTS = {
+  // Self-hosted via fontsource; no Google stylesheet needed.
+  inter: {
+    label: 'Inter',
+    family: "'Inter Variable', ui-sans-serif, system-ui, sans-serif",
+    google: null,
+  },
   'bricolage-grotesque': {
     label: 'Bricolage Grotesque',
     family:
-      "'Bricolage Grotesque', ui-sans-serif, system-ui, -apple-system, sans-serif",
-    google: 'Bricolage+Grotesque:opsz,wght@12..96,300..800',
-  },
-  inter: {
-    label: 'Inter',
-    family: "'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif",
-    google: 'Inter:opsz,wght@14..32,300..800',
+      "'Bricolage Grotesque Variable', ui-sans-serif, system-ui, sans-serif",
+    google: null,
   },
   'dm-sans': {
     label: 'DM Sans',
@@ -73,7 +74,7 @@ export type FontKey = keyof typeof FONTS
 
 export const FONT_KEYS = Object.keys(FONTS) as FontKey[]
 
-export const DEFAULT_FONT: FontKey = 'bricolage-grotesque'
+export const DEFAULT_FONT: FontKey = 'inter'
 
 export function isFontKey(value: unknown): value is FontKey {
   return typeof value === 'string' && value in FONTS
@@ -84,6 +85,36 @@ export function fontStylesheetUrl(font: FontKey): string | null {
   return google
     ? `https://fonts.googleapis.com/css2?family=${google}&display=swap`
     : null
+}
+
+/**
+ * One-click looks. Branding is meant to take seconds: pick a preset, optionally
+ * nudge the accent, upload a logo. `accent: null` means the built-in palette.
+ */
+export const BRAND_PRESETS = [
+  { id: 'areca', label: 'Areca', accent: null, font: 'inter' },
+  { id: 'slate', label: 'Slate', accent: '#4f6b8a', font: 'inter' },
+  { id: 'indigo', label: 'Indigo', accent: '#5b5bd6', font: 'dm-sans' },
+  { id: 'plum', label: 'Plum', accent: '#9b4b8f', font: 'bricolage-grotesque' },
+  { id: 'amber', label: 'Amber', accent: '#b5731f', font: 'figtree' },
+  { id: 'ocean', label: 'Ocean', accent: '#1f8a8a', font: 'manrope' },
+] as const satisfies ReadonlyArray<{
+  id: string
+  label: string
+  accent: string | null
+  font: FontKey
+}>
+
+export type BrandPresetId = (typeof BRAND_PRESETS)[number]['id']
+
+/** The preset matching an accent/font pair, or null when the pair is custom. */
+export function matchPreset(accent: string | null, font: FontKey) {
+  const hex = accent ? normalizeHex(accent) : null
+  return (
+    BRAND_PRESETS.find(
+      (preset) => preset.accent === hex && preset.font === font,
+    ) ?? null
+  )
 }
 
 export const BRAND_COLOR_KEYS = [
@@ -285,53 +316,78 @@ export function buildScale(
 }
 
 /**
- * CSS custom properties that re-tint the brand scales from one accent colour.
- * `clay` (primary) and `fern` (accent) take the full chroma; `moss`
- * (secondary) is a softer tint of the same hue. Returns `null` when the hex is
- * invalid so callers fall back to the stylesheet defaults.
+ * The accent colour in the three tones the semantic tokens need: the accent
+ * itself, a lighter hover step, and a mode-appropriate "on text/icon" tone
+ * (darkened in light mode, lightened in dark mode).
  */
-export function accentVariables(hex: string): Record<string, string> | null {
-  const base = hexToOklch(hex)
-  if (!base) return null
-  const strong = buildScale(base)
-  const soft = buildScale(base, { chromaFactor: 0.6 })
-  const vars: Record<string, string> = {}
-  for (const step of SCALE_STEPS) {
-    vars[`--color-clay-${step}`] = strong[step]
-    vars[`--color-fern-${step}`] = strong[step]
-    vars[`--color-moss-${step}`] = soft[step]
-  }
-  // Success stays green regardless of the accent so status colours keep
-  // their meaning.
-  vars['--success'] = 'oklab(45.54% -0.069 0.05)'
-  return vars
+function accentTones(base: Oklch, mode: AccentMode) {
+  const peak = Math.min(MAX_PEAK_CHROMA, Math.max(MIN_PEAK_CHROMA, base.c))
+  const tone = (l: number, chromaFactor = 1) =>
+    `oklch(${fmt(Math.min(0.98, Math.max(0.12, l)) * 100, 2)}% ${fmt(
+      peak * chromaFactor,
+    )} ${fmt(base.h, 2)})`
+
+  const primary = tone(base.l)
+  const hover = tone(base.l + 0.09, 0.92)
+  const onSurface =
+    mode === 'dark' ? tone(Math.max(base.l, 0.72), 0.8) : tone(0.32, 0.85)
+  return { primary, hover, onSurface }
 }
 
-const DARK_SUCCESS = 'oklab(72.51% -0.087 0.06)'
+export type AccentMode = 'light' | 'dark'
+
+/** Black or white, whichever reads better on the accent. */
+export function accentTextColor(hex: string): string {
+  const onWhite = contrastRatio('#ffffff', hex) ?? 1
+  const onInk = contrastRatio('#111111', hex) ?? 1
+  return onInk >= onWhite ? '#111111' : '#ffffff'
+}
+
+/**
+ * CSS custom properties that re-tint the semantic accent tokens from one
+ * accent colour. Returns `null` when the hex is invalid so callers fall back
+ * to the stylesheet defaults.
+ */
+export function accentVariables(
+  hex: string,
+  mode: AccentMode = 'light',
+): Record<string, string> | null {
+  const base = hexToOklch(hex)
+  if (!base) return null
+  const { primary, hover, onSurface } = accentTones(base, mode)
+  return {
+    '--color-action-primary': primary,
+    '--color-action-primary-hover': hover,
+    '--color-action-primary-text': accentTextColor(hex),
+    '--color-text-accent': onSurface,
+    '--color-icon-accent': onSurface,
+    '--color-status-success': mode === 'dark' ? onSurface : primary,
+  }
+}
 
 const ADVANCED_COLOR_VARIABLES: Record<BrandColorKey, readonly string[]> = {
-  background: ['--background'],
-  foreground: ['--foreground'],
-  surface: ['--card', '--popover'],
-  surfaceForeground: ['--card-foreground', '--popover-foreground'],
-  muted: ['--muted'],
-  mutedForeground: ['--muted-foreground'],
-  accent: ['--accent'],
-  accentForeground: ['--accent-foreground'],
-  border: ['--border'],
-  input: ['--input'],
-  primary: ['--primary'],
-  primaryForeground: ['--primary-foreground'],
-  secondary: ['--secondary'],
-  secondaryForeground: ['--secondary-foreground'],
-  link: ['--link'],
-  ring: ['--ring'],
-  sidebar: ['--sidebar'],
-  sidebarForeground: ['--sidebar-foreground'],
-  sidebarPrimary: ['--sidebar-primary'],
-  sidebarPrimaryForeground: ['--sidebar-primary-foreground'],
-  sidebarAccent: ['--sidebar-accent'],
-  sidebarAccentForeground: ['--sidebar-accent-foreground'],
+  background: ['--color-background-default'],
+  foreground: ['--color-text-primary'],
+  surface: ['--color-background-surface', '--color-background-elevated'],
+  surfaceForeground: ['--color-text-primary'],
+  muted: ['--color-background-subtle'],
+  mutedForeground: ['--color-text-muted'],
+  accent: ['--color-surface-state-hover'],
+  accentForeground: ['--color-text-primary'],
+  border: ['--color-border-default'],
+  input: ['--color-border-default'],
+  primary: ['--color-action-primary'],
+  primaryForeground: ['--color-action-primary-text'],
+  secondary: ['--color-action-secondary'],
+  secondaryForeground: ['--color-text-secondary'],
+  link: ['--color-text-accent'],
+  ring: ['--color-border-strong'],
+  sidebar: ['--color-background-surface'],
+  sidebarForeground: ['--color-text-primary'],
+  sidebarPrimary: ['--color-action-primary'],
+  sidebarPrimaryForeground: ['--color-action-primary-text'],
+  sidebarAccent: ['--color-surface-state-hover'],
+  sidebarAccentForeground: ['--color-text-primary'],
 }
 
 function advancedVariables(palette: BrandColorPalette) {
@@ -354,9 +410,9 @@ function cssBlock(selector: string, variables: Record<string, string>) {
 }
 
 /**
- * Inline stylesheet applied in the document head. Both the light `:root`
- * block and the `.dark` block reference the same scale variables, so a single
- * override covers both modes.
+ * Inline stylesheet applied in the document head. Accent and advanced colours
+ * are emitted per mode: `:root:not(.dark)` for light, `html.dark` for dark
+ * (matching the specificity of the dark block in `styles.css`).
  */
 export function brandingCss(
   view: Pick<
@@ -366,11 +422,10 @@ export function brandingCss(
 ) {
   const rules: string[] = []
   if (view.accentColor) {
-    const vars = accentVariables(view.accentColor)
-    if (vars) {
-      rules.push(cssBlock(':root', vars))
-      rules.push(`.dark{--success:${DARK_SUCCESS}}`)
-    }
+    const light = accentVariables(view.accentColor, 'light')
+    const dark = accentVariables(view.accentColor, 'dark')
+    if (light) rules.push(cssBlock(':root:not(.dark)', light))
+    if (dark) rules.push(cssBlock('html.dark', dark))
   }
   if (view.advancedColorsEnabled) {
     const lightRule = cssBlock(
@@ -378,7 +433,7 @@ export function brandingCss(
       advancedVariables(view.advancedColors.light),
     )
     const darkRule = cssBlock(
-      '.dark',
+      'html.dark',
       advancedVariables(view.advancedColors.dark),
     )
     if (lightRule) rules.push(lightRule)
@@ -392,8 +447,8 @@ export function brandingCss(
 
 /**
  * Style object for previewing an accent inside one element. The semantic
- * tokens are computed on `:root`, so a scoped preview has to redeclare them
- * (light-mode mapping) next to the scale overrides.
+ * tokens are declared on `:root` / `html.dark`, so a scoped preview has to
+ * redeclare the accent tokens for the mode being previewed.
  */
 export function brandingPreviewStyle(
   view: Pick<
@@ -404,24 +459,8 @@ export function brandingPreviewStyle(
 ): Record<string, string> {
   const style: Record<string, string> = {}
   if (view.accentColor) {
-    const vars = accentVariables(view.accentColor)
-    if (vars) {
-      Object.assign(style, vars, {
-        '--primary':
-          mode === 'dark' ? 'var(--color-clay-600)' : 'var(--color-clay-400)',
-        '--secondary':
-          mode === 'dark' ? 'var(--color-moss-200)' : 'var(--color-moss-900)',
-        '--secondary-foreground':
-          mode === 'dark' ? 'var(--color-moss-900)' : 'var(--color-fern-200)',
-        '--link':
-          mode === 'dark' ? 'var(--color-fern-600)' : 'var(--color-fern-300)',
-        '--ring': 'var(--color-fern-500)',
-        '--sidebar-primary':
-          mode === 'dark' ? 'var(--color-fern-600)' : 'var(--color-fern-300)',
-        '--sidebar-accent':
-          mode === 'dark' ? 'var(--color-moss-100)' : 'var(--color-moss-900)',
-      })
-    }
+    const vars = accentVariables(view.accentColor, mode)
+    if (vars) Object.assign(style, vars)
   }
   if (view.advancedColorsEnabled) {
     Object.assign(style, advancedVariables(view.advancedColors[mode]))

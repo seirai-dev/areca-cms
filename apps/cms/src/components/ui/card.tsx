@@ -1,18 +1,26 @@
 import * as React from 'react'
-import { cn } from 'cn'
+import { cn } from '#/lib/utils'
 
-function Card({ className, ...props }: React.ComponentProps<'div'>) {
+/**
+ * The one boxed surface in the product: bordered, rounded-xl, no shadow. Used
+ * for overlays, the entry inspector and the release status bar. Page sections
+ * use `Section` instead. `Card` is kept as an alias so existing call sites
+ * keep compiling.
+ */
+function Surface({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
-      data-slot="card"
+      data-slot="surface"
       className={cn(
-        'flex flex-col gap-5 border-t border-border pt-6 text-card-foreground',
+        'flex flex-col gap-5 rounded-surface border border-border-default bg-background-surface p-5 text-text-primary',
         className,
       )}
       {...props}
     />
   )
 }
+
+const Card = Surface
 
 function CardHeader({ className, ...props }: React.ComponentProps<'div'>) {
   return (
@@ -31,7 +39,7 @@ function CardTitle({ className, ...props }: React.ComponentProps<'h3'>) {
   return (
     <h3
       data-slot="card-title"
-      className={cn('text-lg leading-tight font-semibold', className)}
+      className={cn('text-ds-heading-5 text-text-primary', className)}
       {...props}
     />
   )
@@ -41,7 +49,7 @@ function CardDescription({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
       data-slot="card-description"
-      className={cn('text-sm text-muted-foreground', className)}
+      className={cn('text-ds-body-sm text-text-secondary', className)}
       {...props}
     />
   )
@@ -78,6 +86,7 @@ function CardFooter({ className, ...props }: React.ComponentProps<'div'>) {
 
 export {
   Card,
+  Surface,
   CardHeader,
   CardFooter,
   CardTitle,

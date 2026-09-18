@@ -1,106 +1,49 @@
 import { useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
-import { ScrollText } from 'lucide-react'
-
 import {
   adminQueryKeys,
   formatAuditAction,
   formatAuditTarget,
-  formatDate,
 } from '#/components/admin/helpers'
-import { TableSkeleton } from '#/components/admin/table-skeleton'
-import { createDataColumns, DataTable } from '#/components/data-table'
 import { EmptyState } from '#/components/empty-state'
 import { ListPagination } from '#/components/list-pagination'
 import { QueryError } from '#/components/query-error'
+import { Avatar, AvatarFallback } from '#/components/ui/avatar'
+import { Skeleton } from '#/components/ui/skeleton'
+import { absoluteTimeLabel, formatRelativeTime } from '#/lib/relative-time'
 import { m } from '#/paraglide/messages'
 import { getLocale } from '#/paraglide/runtime'
 import { listAuditLogFn } from '#/server/fn/admin'
+import { Scroll } from '@phosphor-icons/react'
 
 const PAGE_SIZE = 25
 
 type AuditRow = Awaited<ReturnType<typeof listAuditLogFn>>[number]
 
-/**
- * "5 minutes ago" for anything in the last day, otherwise the full date.
- * The full timestamp is always available via the cell's `title`.
- */
-function formatRelative(value: Date | string) {
+function dayKey(value: Date | string) {
   const date = typeof value === 'string' ? new Date(value) : value
-  const diffMs = date.getTime() - Date.now()
-  if (Number.isNaN(diffMs)) {
-    return formatDate(value)
-  }
-  const abs = Math.abs(diffMs)
-  const minute = 60_000
-  const hour = 60 * minute
-  const day = 24 * hour
-  if (abs < minute) {
-    return m.admin_audit_just_now()
-  }
-  const relativeFormatter = new Intl.RelativeTimeFormat(getLocale(), {
-    numeric: 'auto',
-  })
-  if (abs < hour) {
-    return relativeFormatter.format(Math.round(diffMs / minute), 'minute')
-  }
-  if (abs < day) {
-    return relativeFormatter.format(Math.round(diffMs / hour), 'hour')
-  }
-  return formatDate(value)
+  return Number.isNaN(date.getTime())
+    ? ''
+    : new Intl.DateTimeFormat(getLocale(), { dateStyle: 'full' }).format(date)
 }
 
-const helper = createDataColumns<AuditRow>()
+function initials(name: string | null) {
+  if (!name) return '·'
+  return (
+    name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part.charAt(0).toUpperCase())
+      .join('') || '?'
+  )
+}
 
-const columns = helper.columns([
-  helper.accessor('createdAt', {
-    header: () => m.admin_audit_col_time(),
-    sortFn: 'datetime',
-    cell: ({ row }) => (
-      <span
-        className="whitespace-nowrap"
-        title={formatDate(row.original.createdAt)}
-      >
-        {formatRelative(row.original.createdAt)}
-      </span>
-    ),
-  }),
-  helper.accessor('actorName', {
-    header: () => m.admin_audit_col_actor(),
-    cell: ({ row }) => row.original.actorName ?? m.admin_audit_system(),
-  }),
-  helper.accessor('action', {
-    header: () => m.admin_audit_col_action(),
-    cell: ({ row }) => formatAuditAction(row.original.action),
-  }),
-  helper.display({
-    id: 'target',
-    header: () => m.admin_audit_col_target(),
-    enableSorting: false,
-    cell: ({ row }) =>
-      formatAuditTarget({
-        targetType: row.original.targetType,
-        targetId: row.original.targetId,
-        organizationName: row.original.organizationName,
-        siteName: row.original.siteName,
-        meta: row.original.meta,
-      }),
-  }),
-  helper.display({
-    id: 'scope',
-    header: () => m.admin_audit_col_scope(),
-    enableSorting: false,
-    cell: ({ row }) => (
-      <span className="text-muted-foreground">
-        {[row.original.organizationName, row.original.siteName]
-          .filter(Boolean)
-          .join(' / ') || '—'}
-      </span>
-    ),
-  }),
-])
-
+/**
+ * Audit events as a timeline grouped by day. Each event shows who did what
+ * to which target, and the scope it happened in.
+ */
 export function AuditLogList({ organizationId }: { organizationId?: string }) {
   const listAuditLog = useServerFn(listAuditLogFn)
   const [offset, setOffset] = useState(0)
@@ -128,7 +71,13 @@ export function AuditLogList({ organizationId }: { organizationId?: string }) {
   }
 
   if (query.isPending) {
-    return <TableSkeleton rows={8} columns={5} />
+    return (
+      <div className="grid gap-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} className="h-10 w-full" />
+        ))}
+      </div>
+    )
   }
 
   const hasMore = query.data.length > PAGE_SIZE
@@ -137,31 +86,88 @@ export function AuditLogList({ organizationId }: { organizationId?: string }) {
   if (rows.length === 0 && offset === 0) {
     return (
       <EmptyState
-        icon={<ScrollText />}
+        icon={<Scroll />}
         title={m.admin_audit_empty_title()}
         description={m.admin_audit_empty_description()}
       />
     )
   }
 
+  const groups: Array<{ day: string; rows: AuditRow[] }> = []
+  for (const row of rows) {
+    const day = dayKey(row.createdAt)
+    const last = groups.at(-1)
+    if (last && last.day === day) last.rows.push(row)
+    else groups.push({ day, rows: [row] })
+  }
+
   return (
     <div
-      className="grid gap-4"
+      className="grid gap-6"
       data-testid="audit-log"
       aria-busy={query.isFetching ? 'true' : undefined}
+      style={{ opacity: query.isFetching ? 0.7 : 1 }}
     >
-      <div
-        className={
-          query.isFetching ? 'opacity-60 transition-opacity' : undefined
-        }
-      >
-        <DataTable
-          columns={columns}
-          data={rows}
-          emptyMessage={m.admin_audit_empty_page()}
-          caption={m.admin_audit_caption()}
-        />
-      </div>
+      {groups.map((group) => (
+        <section key={group.day} className="grid gap-1">
+          <h3 className="text-ds-label-md text-text-secondary">{group.day}</h3>
+          <ol className="grid">
+            {group.rows.map((row) => {
+              const scope = [row.organizationName, row.siteName]
+                .filter(Boolean)
+                .join(' / ')
+              const action = formatAuditAction(row.action)
+              const rawTarget = formatAuditTarget({
+                targetType: row.targetType,
+                targetId: row.targetId,
+                organizationName: row.organizationName,
+                siteName: row.siteName,
+                meta: row.meta,
+              })
+              // Action labels already name the thing ("Published entry"), so
+              // only add the target when it says something more.
+              const namesType = action.toLowerCase().includes(row.targetType)
+              const target = namesType
+                ? rawTarget === row.targetType
+                  ? ''
+                  : rawTarget.replace(new RegExp(`^${row.targetType} `), '')
+                : rawTarget
+              return (
+                <li
+                  key={row.id}
+                  className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-border-subtle py-2 last:border-b-0"
+                >
+                  <Avatar className="size-6">
+                    <AvatarFallback className="text-ds-label-sm">
+                      {initials(row.actorName)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 text-ds-body-sm">
+                    <p className="truncate">
+                      <span className="font-medium text-text-primary">
+                        {row.actorName ?? m.admin_audit_system()}
+                      </span>{' '}
+                      <span className="text-text-secondary">{action}</span>{' '}
+                      <span className="text-text-primary">{target}</span>
+                    </p>
+                    {scope ? (
+                      <p className="truncate text-ds-body-xs text-text-muted">
+                        {scope}
+                      </p>
+                    ) : null}
+                  </div>
+                  <time
+                    className="text-ds-body-xs whitespace-nowrap text-text-muted"
+                    title={absoluteTimeLabel(row.createdAt)}
+                  >
+                    {formatRelativeTime(row.createdAt)}
+                  </time>
+                </li>
+              )
+            })}
+          </ol>
+        </section>
+      ))}
       <ListPagination
         offset={offset}
         limit={PAGE_SIZE}
@@ -170,6 +176,7 @@ export function AuditLogList({ organizationId }: { organizationId?: string }) {
         isFetching={query.isFetching}
         onChange={setOffset}
         noun={m.admin_audit_events()}
+        nounSingular={m.admin_audit_event_noun()}
       />
     </div>
   )

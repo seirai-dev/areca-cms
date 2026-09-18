@@ -2,19 +2,18 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
-import { Search, Users, X } from 'lucide-react'
 import { toast } from 'sonner'
 
 import {
   adminQueryKeys,
   errorMessage,
-  formatDate,
   membershipRoleLabel,
 } from '#/components/admin/helpers'
 import { TableSkeleton } from '#/components/admin/table-skeleton'
 import { ConfirmDialog } from '#/components/confirm-dialog'
 import { createDataColumns, DataTable } from '#/components/data-table'
 import { EmptyState } from '#/components/empty-state'
+import { RelativeTime } from '#/components/timeline'
 import { PageHeader } from '#/components/page-header'
 import { QueryError } from '#/components/query-error'
 import { Badge } from '#/components/ui/badge'
@@ -28,14 +27,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from '#/components/ui/select'
-import { Switch } from '#/components/ui/switch'
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '#/components/ui/tooltip'
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '#/components/ui/dropdown-menu'
+import { Avatar, AvatarFallback } from '#/components/ui/avatar'
 import { m } from '#/paraglide/messages'
 import { listUsersFn, setAgencyAdminFn } from '#/server/fn/admin'
+import {
+  DotsThree,
+  MagnifyingGlass,
+  ShieldCheck,
+  ShieldSlash,
+  Users,
+  X,
+} from '@phosphor-icons/react'
 
 export const Route = createFileRoute('/_app/admin/users')({
   component: UsersPage,
@@ -45,6 +53,17 @@ type UserRow = Awaited<ReturnType<typeof listUsersFn>>[number]
 type RoleFilter = 'all' | 'agency-admin' | 'owner' | 'editor'
 
 const helper = createDataColumns<UserRow>()
+
+function initials(name: string) {
+  return (
+    name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part.charAt(0).toUpperCase())
+      .join('') || 'U'
+  )
+}
 
 function UsersPage() {
   const { me } = Route.useRouteContext()
@@ -88,18 +107,29 @@ function UsersPage() {
         helper.accessor('name', {
           header: () => m.admin_name(),
           cell: ({ row }) => (
-            <span className="flex items-center gap-2">
-              <span className="font-medium">{row.original.name}</span>
-              {row.original.id === selfId ? (
-                <Badge variant="secondary">{m.admin_you()}</Badge>
-              ) : null}
-            </span>
-          ),
-        }),
-        helper.accessor('email', {
-          header: () => m.admin_email(),
-          cell: ({ row }) => (
-            <span className="text-muted-foreground">{row.original.email}</span>
+            <div className="flex min-w-0 items-center gap-3">
+              <Avatar className="size-9 rounded-md">
+                <AvatarFallback className="rounded-md text-xs font-medium">
+                  {initials(row.original.name)}
+                </AvatarFallback>
+              </Avatar>
+              <div className="min-w-0">
+                <p className="flex items-center gap-2 font-medium">
+                  <span className="truncate">{row.original.name}</span>
+                  {row.original.id === selfId ? (
+                    <Badge variant="secondary">{m.admin_you()}</Badge>
+                  ) : null}
+                  {row.original.isAgencyAdmin ? (
+                    <Badge variant="success">
+                      {m.admin_users_filter_agency_admin()}
+                    </Badge>
+                  ) : null}
+                </p>
+                <p className="truncate text-xs text-muted-foreground">
+                  {row.original.email}
+                </p>
+              </div>
+            </div>
           ),
         }),
         helper.accessor(
@@ -122,7 +152,10 @@ function UsersPage() {
                 <div className="flex flex-wrap gap-1">
                   {memberships.map((item) => (
                     <Badge key={item.organizationId} variant="outline">
-                      {item.organizationName} · {membershipRoleLabel(item.role)}
+                      {item.organizationName}
+                      <span className="text-muted-foreground">
+                        {membershipRoleLabel(item.role)}
+                      </span>
                     </Badge>
                   ))}
                 </div>
@@ -134,45 +167,57 @@ function UsersPage() {
           header: () => m.admin_users_col_joined(),
           sortFn: 'datetime',
           cell: ({ row }) => (
-            <span className="whitespace-nowrap text-muted-foreground">
-              {formatDate(row.original.createdAt)}
+            <span className="whitespace-nowrap text-text-muted">
+              <RelativeTime value={row.original.createdAt} />
             </span>
           ),
         }),
-        helper.accessor('isAgencyAdmin', {
-          header: () => m.admin_users_col_agency_admin(),
+        helper.display({
+          id: 'actions',
+          header: () => <span className="sr-only">{m.admin_actions()}</span>,
+          enableSorting: false,
           cell: ({ row }) => {
             const user = row.original
             const isSelf = user.id === selfId
-            const control = (
-              <Switch
-                checked={user.isAgencyAdmin}
-                disabled={isSelf}
-                aria-label={m.admin_users_aria_agency_admin({
-                  email: user.email,
-                })}
-                onCheckedChange={(next) => {
-                  if (isSelf) {
-                    return
-                  }
-                  setPending({ userId: user.id, name: user.name, next })
-                }}
-              />
-            )
-            if (!isSelf) {
-              return control
-            }
             return (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  {/* Disabled controls don't emit pointer events, so the
-                      wrapper carries the tooltip and keyboard focus. */}
-                  <span tabIndex={0} className="inline-flex rounded-full">
-                    {control}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>{m.admin_users_self_tooltip()}</TooltipContent>
-              </Tooltip>
+              <div className="flex justify-end">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={m.admin_users_aria_agency_admin({
+                        email: user.email,
+                      })}
+                    >
+                      <DotsThree />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      disabled={isSelf}
+                      onSelect={() =>
+                        setPending({
+                          userId: user.id,
+                          name: user.name,
+                          next: !user.isAgencyAdmin,
+                        })
+                      }
+                    >
+                      {user.isAgencyAdmin ? <ShieldSlash /> : <ShieldCheck />}
+                      {user.isAgencyAdmin
+                        ? m.admin_users_confirm_revoke_label()
+                        : m.admin_users_confirm_grant_label()}
+                    </DropdownMenuItem>
+                    {isSelf ? (
+                      <p className="px-2 py-1.5 text-xs text-muted-foreground">
+                        {m.admin_users_self_tooltip()}
+                      </p>
+                    ) : null}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             )
           },
         }),
@@ -260,7 +305,7 @@ function UsersPage() {
               <Label htmlFor="user-search" className="sr-only">
                 {m.admin_users_search_label()}
               </Label>
-              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+              <MagnifyingGlass className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 id="user-search"
                 type="search"

@@ -26,13 +26,19 @@ export async function login(page: Page, email = 'admin@areca.local') {
 }
 
 export async function signOut(page: Page) {
+  // The menu only opens once the shell has hydrated, so keep trying.
+  await expect(async () => {
+    await page.getByTestId('user-menu').click()
+    await expect(page.getByTestId('sign-out')).toBeVisible({ timeout: 2_000 })
+  }).toPass({ timeout: 15_000 })
   await expect(page.getByTestId('sign-out')).toBeEnabled()
   await page.getByTestId('sign-out').click()
   await expect(page).toHaveURL(/\/login/, { timeout: 15_000 })
 }
 
 export async function openSite(page: Page, name: string | RegExp) {
-  await page.getByTestId('sites-nav').getByRole('link', { name }).click()
+  await page.getByTestId('sites-nav').click()
+  await page.getByRole('link', { name }).click()
   await expect(page.getByTestId('release-status')).toBeVisible()
 }
 
@@ -80,7 +86,8 @@ export async function createIsolatedAcmeSite(page: Page, suffix: string) {
   await login(page)
   await page.goto('/admin/organizations')
   await page.getByRole('link', { name: 'Acme', exact: true }).click()
-  await expect(page.getByRole('heading', { name: 'Acme' })).toBeVisible()
+  await expect(page.getByTestId('organization-page')).toBeVisible()
+  await page.getByRole('tab', { name: 'Sites' }).click()
 
   await page.getByTestId('new-site').click()
   await page.getByTestId('site-name').fill(siteName)
@@ -93,6 +100,8 @@ export async function createIsolatedAcmeSite(page: Page, suffix: string) {
   const token = (await page.getByTestId('site-token-value').innerText()).trim()
   expect(token).toBeTruthy()
 
+  // Acme collects many e2e sites, so narrow the table down to this one.
+  await page.getByTestId('org-sites-search').fill(siteSlug)
   await page
     .getByRole('row')
     .filter({ hasText: siteSlug })
@@ -101,29 +110,40 @@ export async function createIsolatedAcmeSite(page: Page, suffix: string) {
   await expect(page).toHaveURL(/\/sites\/[^/]+\/settings/, { timeout: 15_000 })
   await expect(page.getByTestId('settings-site-slug')).toHaveValue(siteSlug)
 
+  // Collections are managed on the site's Content tab.
+  await page
+    .getByTestId('site-nav')
+    .getByRole('link', { name: 'Content' })
+    .click()
+  await expect(page.getByTestId('site-content')).toHaveAttribute(
+    'data-ready',
+    'true',
+    { timeout: 15_000 },
+  )
+  // The collection drawer opens on Settings in create mode, then Fields.
   await page.getByTestId('add-collection').click()
   await page.getByTestId('collection-key').fill('articles')
   await page.getByTestId('collection-label').fill('Articles')
   await page.getByTestId('collection-route').fill('/blog/$slug')
+  await page.getByRole('tab', { name: 'Fields' }).click()
   await page.getByTestId('add-field').click()
+  await page.getByTestId('field-type-tile-text').click()
   await page.getByTestId('field-key-1').fill('title')
   await page.getByTestId('field-label-1').fill('Title')
-  await page.getByTestId('field-row-1').getByText('Required').click()
+  await page.getByTestId('field-required-1').click()
   await page.getByTestId('add-field').click()
+  await page.getByTestId('field-type-tile-richtext').click()
   await page.getByTestId('field-key-2').fill('body')
   await page.getByTestId('field-label-2').fill('Body')
-  await page.getByTestId('field-type-2').click()
-  await page.getByRole('option', { name: 'richtext' }).click()
-  await page.getByTestId('field-row-2').getByText('Required').click()
+  await page.getByTestId('field-required-2').click()
   await page.getByTestId('add-field').click()
+  await page.getByTestId('field-type-tile-image').click()
   await page.getByTestId('field-key-3').fill('heroImage')
   await page.getByTestId('field-label-3').fill('Hero image')
-  await page.getByTestId('field-type-3').click()
-  await page.getByRole('option', { name: 'image' }).click()
   await page.getByTestId('save-collection').click()
-  await expect(
-    page.getByRole('cell', { name: 'articles', exact: true }),
-  ).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByTestId('collection-articles')).toBeVisible({
+    timeout: 15_000,
+  })
 
   await signOut(page)
   return { siteName, siteSlug, token, productionUrl }

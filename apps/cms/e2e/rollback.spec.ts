@@ -30,6 +30,10 @@ test('owner can publish twice and rollback the superseded release', async ({
   )
 
   await page
+    .getByRole('link', { name: /Back to/ })
+    .click()
+  await expect(page.getByTestId('site-nav')).toBeVisible({ timeout: 15_000 })
+  await page
     .getByTestId('site-nav')
     .getByRole('link', { name: 'Content' })
     .click()
@@ -60,6 +64,10 @@ test('owner can publish twice and rollback the superseded release', async ({
   )
 
   await page
+    .getByRole('link', { name: /Back to/ })
+    .click()
+  await expect(page.getByTestId('site-nav')).toBeVisible({ timeout: 15_000 })
+  await page
     .getByTestId('site-nav')
     .getByRole('link', { name: 'Content' })
     .click()
@@ -77,6 +85,7 @@ test('owner can publish twice and rollback the superseded release', async ({
   })
   await expect(page.getByTestId('publication-status-superseded')).toHaveCount(1)
 
+  await page.getByTestId('publication-menu').click()
   await page.getByTestId('rollback-publication').click()
   await page
     .getByRole('alertdialog')
@@ -90,5 +99,5 @@ test('owner can publish twice and rollback the superseded release', async ({
     timeout: 30_000,
   })
   await expect(page.getByTestId('publication-status-superseded')).toHaveCount(1)
-  await expect(page.getByTestId('rollback-publication')).toBeVisible()
+  await expect(page.getByTestId('publication-menu')).toBeVisible()
 })

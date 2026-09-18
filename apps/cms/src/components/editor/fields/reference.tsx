@@ -1,7 +1,5 @@
 import { useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { Check, ChevronsUpDown, Loader2, X } from 'lucide-react'
-
 import { Button } from '#/components/ui/button'
 import {
   Command,
@@ -23,6 +21,7 @@ import { getEntryFn, listEntriesFn } from '#/server/fn/content'
 
 import { queryKeys } from '../query-keys'
 import { entryTitle } from '../utils'
+import { Check, CaretUpDown, CircleNotch, X } from '@phosphor-icons/react'
 
 type EntryRow = {
   id: string
@@ -107,7 +106,7 @@ export function ReferenceFieldInput({
             >
               {label}
             </span>
-            <ChevronsUpDown className="opacity-50" />
+            <CaretUpDown className="opacity-50" />
           </Button>
         </PopoverTrigger>
         <PopoverContent
@@ -123,7 +122,7 @@ export function ReferenceFieldInput({
             <CommandList>
               {entriesQuery.isLoading ? (
                 <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
-                  <Loader2 className="size-4 animate-spin" />
+                  <CircleNotch className="size-4 animate-spin" />
                   {m.editor_loading()}
                 </div>
               ) : entriesQuery.isError ? (

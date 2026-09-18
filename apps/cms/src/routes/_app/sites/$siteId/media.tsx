@@ -1,5 +1,5 @@
 import type { DragEvent } from 'react'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   keepPreviousData,
   useMutation,
@@ -7,44 +7,55 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
-import { FileText, ImageIcon, Trash2, Upload, X } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { ConfirmDialog } from '#/components/confirm-dialog'
-import type { MediaAsset } from '#/components/editor/media-picker'
 import { uploadAssetFile } from '#/components/editor/media-picker'
 import { queryKeys } from '#/components/editor/query-keys'
-import { assetFileUrl, errorMessage } from '#/components/editor/utils'
+import { errorMessage } from '#/components/editor/utils'
 import { EmptyState } from '#/components/empty-state'
 import { ListPagination } from '#/components/list-pagination'
+import { AssetPreview } from '#/components/media/asset-panel'
+import { AssetTable } from '#/components/media/asset-table'
+import type { MediaRow } from '#/components/media/types'
 import { PageHeader } from '#/components/page-header'
 import { QueryError } from '#/components/query-error'
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { Skeleton } from '#/components/ui/skeleton'
+import { Spinner } from '#/components/ui/spinner'
 import { useDebouncedValue } from '#/hooks/use-debounced-value'
-import { cn } from '#/lib/utils'
 import { canManageSite } from '#/lib/site-nav'
+import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
-import { deleteAssetFn, listAssetsFn, updateAssetFn } from '#/server/fn/assets'
+import { deleteAssetFn, listAssetsFn } from '#/server/fn/assets'
+import { Image, MagnifyingGlass, UploadSimple, X } from '@phosphor-icons/react'
 
 export const Route = createFileRoute('/_app/sites/$siteId/media')({
   component: MediaPage,
 })
 
-type MediaRow = MediaAsset & { size?: number }
-
 const PAGE_SIZE = 40
 const EMPTY_ASSETS: MediaRow[] = []
 
-function formatBytes(bytes: number | undefined) {
-  if (typeof bytes !== 'number' || !Number.isFinite(bytes)) return null
-  if (bytes < 1024) return m.sites_bytes({ size: bytes })
-  if (bytes < 1024 * 1024)
-    return m.sites_kb({ size: (bytes / 1024).toFixed(0) })
-  return m.sites_mb({ size: (bytes / (1024 * 1024)).toFixed(1) })
+/** True from `lg` up, where the preview panel is a column rather than a drawer. */
+function useIsWide() {
+  const [wide, setWide] = useState(false)
+  useEffect(() => {
+    const mql = window.matchMedia('(min-width: 1024px)')
+    const onChange = () => setWide(mql.matches)
+    onChange()
+    mql.addEventListener('change', onChange)
+    return () => mql.removeEventListener('change', onChange)
+  }, [])
+  return wide
 }
 
+/**
+ * Organization-wide media library: a table of assets with drag-and-drop
+ * upload. Selecting a row opens the preview panel beside the table (a drawer
+ * below `lg`) with the preview, metadata and alt text.
+ */
 function MediaPage() {
   const { site, me } = Route.useRouteContext()
   const organizationId = site.organizationId
@@ -52,13 +63,12 @@ function MediaPage() {
   const queryClient = useQueryClient()
   const inputRef = useRef<HTMLInputElement>(null)
   const dragDepth = useRef(0)
+  const wide = useIsWide()
   const [search, setSearch] = useState('')
   const [offset, setOffset] = useState(0)
   const [dragging, setDragging] = useState(false)
+  const [activeId, setActiveId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<MediaRow | null>(null)
-  const [altDrafts, setAltDrafts] = useState<
-    Record<string, string | undefined>
-  >({})
   const debouncedSearch = useDebouncedValue(search.trim())
 
   const assetsQuery = useQuery({
@@ -101,26 +111,11 @@ function MediaPage() {
       toast.error(errorMessage(error, m.sites_upload_failed())),
   })
 
-  const updateMutation = useMutation({
-    mutationFn: (input: { id: string; altText: string }) =>
-      updateAssetFn({ data: input }),
-    onSuccess: async (_result, input) => {
-      toast.success(m.sites_alt_text_saved())
-      setAltDrafts((prev) => {
-        const next = { ...prev }
-        delete next[input.id]
-        return next
-      })
-      await invalidate()
-    },
-    onError: (error) =>
-      toast.error(errorMessage(error, m.sites_alt_text_save_failed())),
-  })
-
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteAssetFn({ data: { id } }),
     onSuccess: async () => {
       toast.success(m.sites_media_deleted())
+      setActiveId(null)
       await invalidate()
     },
     onError: (error) =>
@@ -161,19 +156,28 @@ function MediaPage() {
   const hasMore = pageRows.length > PAGE_SIZE
   const assets = hasMore ? pageRows.slice(0, PAGE_SIZE) : pageRows
   const searching = debouncedSearch !== ''
+  const active = assets.find((asset) => asset.id === activeId) ?? null
+  const showPanelColumn = wide && active !== null
 
   return (
-    <div className="grid gap-6">
+    <div
+      className="relative grid gap-6"
+      onDragEnter={onDragEnter}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
       <PageHeader
         title={m.sites_nav_media()}
         description={m.sites_media_description()}
         actions={
           <Button
             type="button"
+            data-testid="media-upload"
             disabled={uploadMutation.isPending}
             onClick={() => inputRef.current?.click()}
           >
-            <Upload />
+            {uploadMutation.isPending ? <Spinner /> : <UploadSimple />}
             {uploadMutation.isPending ? m.sites_uploading() : m.sites_upload()}
           </Button>
         }
@@ -193,18 +197,35 @@ function MediaPage() {
         }}
       />
 
+      {dragging ? (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-surface border-2 border-dashed border-action-primary bg-background-default/85">
+          <div className="flex flex-col items-center gap-1 text-center">
+            <UploadSimple className="size-6 text-icon-accent" />
+            <p className="text-ds-heading-5 text-text-primary">
+              {m.media_drop_title()}
+            </p>
+            <p className="text-ds-body-sm text-text-secondary">
+              {m.media_drop_hint()}
+            </p>
+          </div>
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap items-center gap-2">
-        <Input
-          type="search"
-          aria-label={m.sites_search_media()}
-          placeholder={m.sites_search_filename_placeholder()}
-          value={search}
-          onChange={(event) => {
-            setSearch(event.target.value)
-            setOffset(0)
-          }}
-          className="w-full sm:max-w-xs"
-        />
+        <div className="relative w-full sm:max-w-xs">
+          <MagnifyingGlass className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-icon-muted" />
+          <Input
+            type="search"
+            aria-label={m.sites_search_media()}
+            placeholder={m.sites_search_filename_placeholder()}
+            className="pl-9"
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value)
+              setOffset(0)
+            }}
+          />
+        </div>
         {search ? (
           <Button
             type="button"
@@ -223,158 +244,103 @@ function MediaPage() {
 
       <div
         className={cn(
-          'relative grid gap-4 rounded-lg transition-colors',
-          dragging &&
-            'outline-2 outline-dashed outline-offset-8 outline-primary bg-primary/5',
+          'grid items-start gap-8',
+          showPanelColumn && 'lg:grid-cols-[minmax(0,1fr)_360px]',
         )}
-        onDragEnter={onDragEnter}
-        onDragOver={onDragOver}
-        onDragLeave={onDragLeave}
-        onDrop={onDrop}
       >
-        {dragging ? (
-          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-background/80 text-sm font-medium">
-            <span className="flex items-center gap-2 rounded-md border bg-card px-4 py-2 shadow-sm">
-              <Upload className="size-4" />
-              {m.sites_drop_files()}
-            </span>
-          </div>
-        ) : null}
-
-        {assetsQuery.isError ? (
-          <QueryError
-            title={m.sites_media_load_error()}
-            error={assetsQuery.error}
-            onRetry={() => assetsQuery.refetch()}
-            retrying={assetsQuery.isFetching}
-          />
-        ) : assetsQuery.isLoading ? (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <Skeleton key={i} className="aspect-square" />
-            ))}
-          </div>
-        ) : assets.length === 0 ? (
-          searching ? (
-            <EmptyState
-              icon={<ImageIcon />}
-              title={m.sites_no_matching_files()}
-              description={m.sites_nothing_matches({ search: debouncedSearch })}
-              action={
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setSearch('')
-                    setOffset(0)
-                  }}
-                >
-                  {m.sites_clear_search()}
-                </Button>
-              }
+        <div className="grid min-w-0 gap-4">
+          {assetsQuery.isError ? (
+            <QueryError
+              title={m.sites_media_load_error()}
+              error={assetsQuery.error}
+              onRetry={() => assetsQuery.refetch()}
+              retrying={assetsQuery.isFetching}
             />
-          ) : (
-            <EmptyState
-              icon={<ImageIcon />}
-              title={m.sites_no_media_yet()}
-              description={m.sites_no_media_description()}
-            />
-          )
-        ) : (
-          <>
-            <div
-              className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4"
-              aria-busy={assetsQuery.isFetching}
-              style={{ opacity: assetsQuery.isFetching ? 0.7 : 1 }}
-            >
-              {assets.map((asset) => {
-                const alt = altDrafts[asset.id] ?? asset.altText ?? ''
-                const isImage = asset.mimeType.startsWith('image/')
-                const dimensions =
-                  asset.width && asset.height
-                    ? `${asset.width}×${asset.height}`
-                    : null
-                const size = formatBytes(asset.size)
-                const meta = [dimensions, size].filter(Boolean).join(' · ')
-                return (
-                  <div
-                    key={asset.id}
-                    className="grid gap-2"
-                    data-testid={`media-card-${asset.originalFilename}`}
-                  >
-                    {isImage ? (
-                      <img
-                        src={assetFileUrl(asset.storageKey)}
-                        alt={alt}
-                        loading="lazy"
-                        className="aspect-square w-full rounded-md bg-muted object-cover"
-                      />
-                    ) : (
-                      <div
-                        className="flex aspect-square w-full flex-col items-center justify-center gap-2 rounded-md bg-muted text-muted-foreground"
-                        aria-label={asset.originalFilename}
-                      >
-                        <FileText className="size-8" />
-                        <span className="text-xs uppercase">
-                          {asset.mimeType.split('/')[1] ||
-                            m.sites_file_type_fallback()}
-                        </span>
-                      </div>
-                    )}
-                    <p
-                      className="truncate text-sm font-medium"
-                      title={asset.originalFilename}
-                    >
-                      {asset.originalFilename}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {meta || '—'}
-                    </p>
-                    <Input
-                      value={alt}
-                      placeholder={m.sites_alt_text()}
-                      aria-label={m.sites_alt_text_for({
-                        filename: asset.originalFilename,
-                      })}
-                      onChange={(event) =>
-                        setAltDrafts((prev) => ({
-                          ...prev,
-                          [asset.id]: event.target.value,
-                        }))
-                      }
-                      onBlur={() => {
-                        if (alt !== (asset.altText ?? '')) {
-                          updateMutation.mutate({ id: asset.id, altText: alt })
-                        }
-                      }}
-                    />
-                    {canDelete ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => setDeleteTarget(asset)}
-                      >
-                        <Trash2 />
-                        {m.sites_delete()}
-                      </Button>
-                    ) : null}
-                  </div>
-                )
-              })}
+          ) : assetsQuery.isLoading ? (
+            <div className="grid gap-px">
+              <Skeleton className="h-10 w-full" />
+              {Array.from({ length: 8 }).map((_, index) => (
+                <Skeleton key={index} className="h-11 w-full" />
+              ))}
             </div>
-            <ListPagination
-              offset={offset}
-              limit={PAGE_SIZE}
-              count={assets.length}
-              hasMore={hasMore}
-              onChange={setOffset}
-              isFetching={assetsQuery.isFetching}
-              noun={m.sites_files_noun()}
-            />
-          </>
-        )}
+          ) : assets.length === 0 ? (
+            searching ? (
+              <EmptyState
+                icon={<Image weight="duotone" />}
+                title={m.sites_no_matching_files()}
+                description={m.sites_nothing_matches({
+                  search: debouncedSearch,
+                })}
+                action={
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => {
+                      setSearch('')
+                      setOffset(0)
+                    }}
+                  >
+                    {m.sites_clear_search()}
+                  </Button>
+                }
+              />
+            ) : (
+              <EmptyState
+                icon={<Image weight="duotone" />}
+                title={m.sites_no_media_yet()}
+                description={m.sites_no_media_description()}
+                action={
+                  <Button
+                    type="button"
+                    onClick={() => inputRef.current?.click()}
+                  >
+                    <UploadSimple />
+                    {m.sites_upload()}
+                  </Button>
+                }
+              />
+            )
+          ) : (
+            <>
+              <div
+                aria-busy={assetsQuery.isFetching}
+                className={cn(
+                  'transition-opacity',
+                  assetsQuery.isFetching && 'opacity-70',
+                )}
+              >
+                <AssetTable
+                  assets={assets}
+                  activeId={activeId}
+                  onSelect={(asset) =>
+                    setActiveId((current) =>
+                      current === asset.id ? null : asset.id,
+                    )
+                  }
+                />
+              </div>
+              <ListPagination
+                offset={offset}
+                limit={PAGE_SIZE}
+                count={assets.length}
+                hasMore={hasMore}
+                onChange={setOffset}
+                isFetching={assetsQuery.isFetching}
+                noun={m.sites_files_noun()}
+                nounSingular={m.sites_file_noun()}
+              />
+            </>
+          )}
+        </div>
+
+        <AssetPreview
+          asset={active}
+          compact={!wide}
+          canDelete={canDelete}
+          onClose={() => setActiveId(null)}
+          onDelete={() => active && setDeleteTarget(active)}
+          onSaved={invalidate}
+        />
       </div>
 
       <ConfirmDialog

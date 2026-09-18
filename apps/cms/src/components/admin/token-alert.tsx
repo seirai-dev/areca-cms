@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Check, Copy, KeyRound } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Alert, AlertDescription, AlertTitle } from '#/components/ui/alert'
 import { Button } from '#/components/ui/button'
 import { m } from '#/paraglide/messages'
+import { Check, Copy, Key } from '@phosphor-icons/react'
 
 export function TokenAlert({
   token,
@@ -35,7 +35,7 @@ export function TokenAlert({
 
   return (
     <Alert data-testid="site-token-alert">
-      <KeyRound />
+      <Key />
       <AlertTitle>{m.admin_token_title()}</AlertTitle>
       <AlertDescription className="grid gap-3">
         <p>

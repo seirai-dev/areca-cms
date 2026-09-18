@@ -16,7 +16,9 @@ test('site token can sync a manifest and read an empty snapshot', async ({
 
   await login(page)
   await page.goto('/admin/organizations')
-  await expect(page.getByRole('heading', { name: 'Organizations' })).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Organizations' }),
+  ).toBeVisible()
   await expect(page.getByRole('table')).toBeVisible()
 
   await page.getByTestId('new-organization').click()
@@ -28,6 +30,7 @@ test('site token can sync a manifest and read an empty snapshot', async ({
     timeout: 15_000,
   })
 
+  await page.getByRole('tab', { name: 'Sites' }).click()
   await page.getByTestId('new-site').click()
   await page.getByTestId('site-name').fill(siteName)
   await expect(page.getByTestId('site-slug')).toHaveValue(siteSlug)
@@ -65,7 +68,11 @@ test('site token can sync a manifest and read an empty snapshot', async ({
     .getByRole('link', { name: 'Settings' })
     .click()
   await expect(page).toHaveURL(/\/sites\/[^/]+\/settings/, { timeout: 15_000 })
-  await expect(page.getByRole('cell', { name: 'pages', exact: true })).toBeVisible({
+  await page
+    .getByTestId('site-nav')
+    .getByRole('link', { name: 'Content' })
+    .click()
+  await expect(page.getByTestId('collection-pages')).toBeVisible({
     timeout: 15_000,
   })
 

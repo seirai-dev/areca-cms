@@ -20,6 +20,7 @@ import { Route as AppAdminIndexRouteImport } from './routes/_app/admin/index'
 import { Route as AppAdminAuditRouteImport } from './routes/_app/admin/audit'
 import { Route as AppAdminBrandingRouteImport } from './routes/_app/admin/branding'
 import { Route as AppAdminUsersRouteImport } from './routes/_app/admin/users'
+import { Route as AppSitesIndexRouteImport } from './routes/_app/sites/index'
 import { Route as AppSitesSiteIdRouteImport } from './routes/_app/sites/$siteId'
 import { Route as ApiAssetsUploadRouteImport } from './routes/api/assets/upload'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
@@ -30,9 +31,11 @@ import { Route as AppAdminOrganizationsOrgIdRouteImport } from './routes/_app/ad
 import { Route as AppOrgsOrgIdAuditRouteImport } from './routes/_app/orgs/$orgId/audit'
 import { Route as AppOrgsOrgIdMembersRouteImport } from './routes/_app/orgs/$orgId/members'
 import { Route as AppSitesSiteIdIndexRouteImport } from './routes/_app/sites/$siteId/index'
+import { Route as AppSitesSiteIdActivityRouteImport } from './routes/_app/sites/$siteId/activity'
 import { Route as AppSitesSiteIdMediaRouteImport } from './routes/_app/sites/$siteId/media'
 import { Route as AppSitesSiteIdReleasesRouteImport } from './routes/_app/sites/$siteId/releases'
 import { Route as AppSitesSiteIdSettingsRouteImport } from './routes/_app/sites/$siteId/settings'
+import { Route as AppSitesSiteIdTeamRouteImport } from './routes/_app/sites/$siteId/team'
 import { Route as ApiAdminBrandingUploadRouteImport } from './routes/api/admin/branding/upload'
 import { Route as ApiSitesSnapshotCurrentRouteImport } from './routes/api/sites/snapshot/current'
 import { Route as AppSitesSiteIdCCollectionKeyRouteImport } from './routes/_app/sites/$siteId/c/$collectionKey'
@@ -95,6 +98,11 @@ const AppAdminUsersRoute = AppAdminUsersRouteImport.update({
   path: '/users',
   getParentRoute: () => AppAdminRoute,
 } as any)
+const AppSitesIndexRoute = AppSitesIndexRouteImport.update({
+  id: '/sites/',
+  path: '/sites/',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppSitesSiteIdRoute = AppSitesSiteIdRouteImport.update({
   id: '/sites/$siteId',
   path: '/sites/$siteId',
@@ -147,6 +155,11 @@ const AppSitesSiteIdIndexRoute = AppSitesSiteIdIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppSitesSiteIdRoute,
 } as any)
+const AppSitesSiteIdActivityRoute = AppSitesSiteIdActivityRouteImport.update({
+  id: '/activity',
+  path: '/activity',
+  getParentRoute: () => AppSitesSiteIdRoute,
+} as any)
 const AppSitesSiteIdMediaRoute = AppSitesSiteIdMediaRouteImport.update({
   id: '/media',
   path: '/media',
@@ -160,6 +173,11 @@ const AppSitesSiteIdReleasesRoute = AppSitesSiteIdReleasesRouteImport.update({
 const AppSitesSiteIdSettingsRoute = AppSitesSiteIdSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => AppSitesSiteIdRoute,
+} as any)
+const AppSitesSiteIdTeamRoute = AppSitesSiteIdTeamRouteImport.update({
+  id: '/team',
+  path: '/team',
   getParentRoute: () => AppSitesSiteIdRoute,
 } as any)
 const ApiAdminBrandingUploadRoute = ApiAdminBrandingUploadRouteImport.update({
@@ -219,12 +237,15 @@ export interface FileRoutesByFullPath {
   '/api/sites/manifest': typeof ApiSitesManifestRoute
   '/api/sites/preview': typeof ApiSitesPreviewRoute
   '/admin/': typeof AppAdminIndexRoute
+  '/sites/': typeof AppSitesIndexRoute
   '/admin/organizations/$orgId': typeof AppAdminOrganizationsOrgIdRoute
   '/orgs/$orgId/audit': typeof AppOrgsOrgIdAuditRoute
   '/orgs/$orgId/members': typeof AppOrgsOrgIdMembersRoute
+  '/sites/$siteId/activity': typeof AppSitesSiteIdActivityRoute
   '/sites/$siteId/media': typeof AppSitesSiteIdMediaRoute
   '/sites/$siteId/releases': typeof AppSitesSiteIdReleasesRoute
   '/sites/$siteId/settings': typeof AppSitesSiteIdSettingsRoute
+  '/sites/$siteId/team': typeof AppSitesSiteIdTeamRoute
   '/api/admin/branding/upload': typeof ApiAdminBrandingUploadRoute
   '/api/sites/snapshot/current': typeof ApiSitesSnapshotCurrentRoute
   '/admin/organizations/': typeof AppAdminOrganizationsIndexRoute
@@ -249,12 +270,15 @@ export interface FileRoutesByTo {
   '/api/sites/manifest': typeof ApiSitesManifestRoute
   '/api/sites/preview': typeof ApiSitesPreviewRoute
   '/admin': typeof AppAdminIndexRoute
+  '/sites': typeof AppSitesIndexRoute
   '/admin/organizations/$orgId': typeof AppAdminOrganizationsOrgIdRoute
   '/orgs/$orgId/audit': typeof AppOrgsOrgIdAuditRoute
   '/orgs/$orgId/members': typeof AppOrgsOrgIdMembersRoute
+  '/sites/$siteId/activity': typeof AppSitesSiteIdActivityRoute
   '/sites/$siteId/media': typeof AppSitesSiteIdMediaRoute
   '/sites/$siteId/releases': typeof AppSitesSiteIdReleasesRoute
   '/sites/$siteId/settings': typeof AppSitesSiteIdSettingsRoute
+  '/sites/$siteId/team': typeof AppSitesSiteIdTeamRoute
   '/api/admin/branding/upload': typeof ApiAdminBrandingUploadRoute
   '/api/sites/snapshot/current': typeof ApiSitesSnapshotCurrentRoute
   '/admin/organizations': typeof AppAdminOrganizationsIndexRoute
@@ -282,12 +306,15 @@ export interface FileRoutesById {
   '/api/sites/manifest': typeof ApiSitesManifestRoute
   '/api/sites/preview': typeof ApiSitesPreviewRoute
   '/_app/admin/': typeof AppAdminIndexRoute
+  '/_app/sites/': typeof AppSitesIndexRoute
   '/_app/admin/organizations/$orgId': typeof AppAdminOrganizationsOrgIdRoute
   '/_app/orgs/$orgId/audit': typeof AppOrgsOrgIdAuditRoute
   '/_app/orgs/$orgId/members': typeof AppOrgsOrgIdMembersRoute
+  '/_app/sites/$siteId/activity': typeof AppSitesSiteIdActivityRoute
   '/_app/sites/$siteId/media': typeof AppSitesSiteIdMediaRoute
   '/_app/sites/$siteId/releases': typeof AppSitesSiteIdReleasesRoute
   '/_app/sites/$siteId/settings': typeof AppSitesSiteIdSettingsRoute
+  '/_app/sites/$siteId/team': typeof AppSitesSiteIdTeamRoute
   '/api/admin/branding/upload': typeof ApiAdminBrandingUploadRoute
   '/api/sites/snapshot/current': typeof ApiSitesSnapshotCurrentRoute
   '/_app/admin/organizations/': typeof AppAdminOrganizationsIndexRoute
@@ -316,12 +343,15 @@ export interface FileRouteTypes {
     | '/api/sites/manifest'
     | '/api/sites/preview'
     | '/admin/'
+    | '/sites/'
     | '/admin/organizations/$orgId'
     | '/orgs/$orgId/audit'
     | '/orgs/$orgId/members'
+    | '/sites/$siteId/activity'
     | '/sites/$siteId/media'
     | '/sites/$siteId/releases'
     | '/sites/$siteId/settings'
+    | '/sites/$siteId/team'
     | '/api/admin/branding/upload'
     | '/api/sites/snapshot/current'
     | '/admin/organizations/'
@@ -346,12 +376,15 @@ export interface FileRouteTypes {
     | '/api/sites/manifest'
     | '/api/sites/preview'
     | '/admin'
+    | '/sites'
     | '/admin/organizations/$orgId'
     | '/orgs/$orgId/audit'
     | '/orgs/$orgId/members'
+    | '/sites/$siteId/activity'
     | '/sites/$siteId/media'
     | '/sites/$siteId/releases'
     | '/sites/$siteId/settings'
+    | '/sites/$siteId/team'
     | '/api/admin/branding/upload'
     | '/api/sites/snapshot/current'
     | '/admin/organizations'
@@ -378,12 +411,15 @@ export interface FileRouteTypes {
     | '/api/sites/manifest'
     | '/api/sites/preview'
     | '/_app/admin/'
+    | '/_app/sites/'
     | '/_app/admin/organizations/$orgId'
     | '/_app/orgs/$orgId/audit'
     | '/_app/orgs/$orgId/members'
+    | '/_app/sites/$siteId/activity'
     | '/_app/sites/$siteId/media'
     | '/_app/sites/$siteId/releases'
     | '/_app/sites/$siteId/settings'
+    | '/_app/sites/$siteId/team'
     | '/api/admin/branding/upload'
     | '/api/sites/snapshot/current'
     | '/_app/admin/organizations/'
@@ -489,6 +525,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAdminUsersRouteImport
       parentRoute: typeof AppAdminRoute
     }
+    '/_app/sites/': {
+      id: '/_app/sites/'
+      path: '/sites'
+      fullPath: '/sites/'
+      preLoaderRoute: typeof AppSitesIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/sites/$siteId': {
       id: '/_app/sites/$siteId'
       path: '/sites/$siteId'
@@ -559,6 +602,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSitesSiteIdIndexRouteImport
       parentRoute: typeof AppSitesSiteIdRoute
     }
+    '/_app/sites/$siteId/activity': {
+      id: '/_app/sites/$siteId/activity'
+      path: '/activity'
+      fullPath: '/sites/$siteId/activity'
+      preLoaderRoute: typeof AppSitesSiteIdActivityRouteImport
+      parentRoute: typeof AppSitesSiteIdRoute
+    }
     '/_app/sites/$siteId/media': {
       id: '/_app/sites/$siteId/media'
       path: '/media'
@@ -578,6 +628,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/sites/$siteId/settings'
       preLoaderRoute: typeof AppSitesSiteIdSettingsRouteImport
+      parentRoute: typeof AppSitesSiteIdRoute
+    }
+    '/_app/sites/$siteId/team': {
+      id: '/_app/sites/$siteId/team'
+      path: '/team'
+      fullPath: '/sites/$siteId/team'
+      preLoaderRoute: typeof AppSitesSiteIdTeamRouteImport
       parentRoute: typeof AppSitesSiteIdRoute
     }
     '/api/admin/branding/upload': {
@@ -675,17 +732,21 @@ const AppSitesSiteIdCCollectionKeyRouteWithChildren =
   )
 
 interface AppSitesSiteIdRouteChildren {
+  AppSitesSiteIdActivityRoute: typeof AppSitesSiteIdActivityRoute
   AppSitesSiteIdMediaRoute: typeof AppSitesSiteIdMediaRoute
   AppSitesSiteIdReleasesRoute: typeof AppSitesSiteIdReleasesRoute
   AppSitesSiteIdSettingsRoute: typeof AppSitesSiteIdSettingsRoute
+  AppSitesSiteIdTeamRoute: typeof AppSitesSiteIdTeamRoute
   AppSitesSiteIdIndexRoute: typeof AppSitesSiteIdIndexRoute
   AppSitesSiteIdCCollectionKeyRoute: typeof AppSitesSiteIdCCollectionKeyRouteWithChildren
 }
 
 const AppSitesSiteIdRouteChildren: AppSitesSiteIdRouteChildren = {
+  AppSitesSiteIdActivityRoute: AppSitesSiteIdActivityRoute,
   AppSitesSiteIdMediaRoute: AppSitesSiteIdMediaRoute,
   AppSitesSiteIdReleasesRoute: AppSitesSiteIdReleasesRoute,
   AppSitesSiteIdSettingsRoute: AppSitesSiteIdSettingsRoute,
+  AppSitesSiteIdTeamRoute: AppSitesSiteIdTeamRoute,
   AppSitesSiteIdIndexRoute: AppSitesSiteIdIndexRoute,
   AppSitesSiteIdCCollectionKeyRoute:
     AppSitesSiteIdCCollectionKeyRouteWithChildren,
@@ -699,6 +760,7 @@ interface AppRouteChildren {
   AppAdminRoute: typeof AppAdminRouteWithChildren
   AppIndexRoute: typeof AppIndexRoute
   AppSitesSiteIdRoute: typeof AppSitesSiteIdRouteWithChildren
+  AppSitesIndexRoute: typeof AppSitesIndexRoute
   AppOrgsOrgIdAuditRoute: typeof AppOrgsOrgIdAuditRoute
   AppOrgsOrgIdMembersRoute: typeof AppOrgsOrgIdMembersRoute
 }
@@ -707,6 +769,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppAdminRoute: AppAdminRouteWithChildren,
   AppIndexRoute: AppIndexRoute,
   AppSitesSiteIdRoute: AppSitesSiteIdRouteWithChildren,
+  AppSitesIndexRoute: AppSitesIndexRoute,
   AppOrgsOrgIdAuditRoute: AppOrgsOrgIdAuditRoute,
   AppOrgsOrgIdMembersRoute: AppOrgsOrgIdMembersRoute,
 }

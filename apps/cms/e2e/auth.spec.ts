@@ -1,23 +1,26 @@
 import { expect, test } from '@playwright/test'
 
-import { login } from './helpers'
+import { login, openSite, signOut } from './helpers'
 
 test('unauthenticated / redirects to /login', async ({ page }) => {
   await page.goto('/')
   await expect(page).toHaveURL(/\/login/)
 })
 
-test('owner login shows Acme site in the sidebar', async ({ page }) => {
+test('owner login lists the Acme site in the switcher', async ({ page }) => {
   await login(page, 'owner@acme.local')
-  await expect(
-    page.getByTestId('sites-nav').getByRole('link', { name: /acme-site/i }),
-  ).toBeVisible()
+  await page.getByTestId('sites-nav').click()
+  await expect(page.getByRole('link', { name: /acme-site/i })).toBeVisible()
 })
 
 test('agency admin sees the Agency section', async ({ page }) => {
   await login(page, 'admin@areca.local')
   await expect(page.getByTestId('agency-nav')).toBeVisible()
-  await expect(page.getByTestId('agency-nav').getByText('Agency')).toBeVisible()
+  await expect(page.getByTestId('agency-nav')).toHaveText('Agency')
+  await expect(page.getByTestId('agency-nav')).toHaveAttribute(
+    'href',
+    /\/admin\/organizations/,
+  )
 })
 
 test('editor does not see the Agency section', async ({ page }) => {
@@ -27,25 +30,17 @@ test('editor does not see the Agency section', async ({ page }) => {
 
 test('owner sees Team on a site; editor does not', async ({ page }) => {
   await login(page, 'owner@acme.local')
-  await page
-    .getByTestId('sites-nav')
-    .getByRole('link', { name: /acme-site/i })
-    .click()
+  await openSite(page, /acme-site/i)
   await expect(page.getByTestId('team-nav')).toBeVisible()
   await expect(page.getByTestId('team-nav')).toHaveAttribute(
     'href',
-    /\/orgs\/[^/]+\/members/,
+    /\/sites\/[^/]+\/team/,
   )
 
-  await page.getByTestId('sign-out').click()
-  await expect(page).toHaveURL(/\/login/, { timeout: 15_000 })
+  await signOut(page)
 
   await login(page, 'editor@acme.local')
-  await page
-    .getByTestId('sites-nav')
-    .getByRole('link', { name: /acme-site/i })
-    .click()
-  await expect(page.getByTestId('release-status')).toBeVisible()
+  await openSite(page, /acme-site/i)
   await expect(page.getByTestId('team-nav')).toHaveCount(0)
   await expect(page.getByTestId('publish-site')).toHaveCount(0)
 
@@ -60,7 +55,5 @@ test('owner sees Team on a site; editor does not', async ({ page }) => {
 
 test('sign out returns to /login', async ({ page }) => {
   await login(page, 'owner@acme.local')
-  await expect(page.getByTestId('sign-out')).toBeEnabled()
-  await page.getByTestId('sign-out').click()
-  await expect(page).toHaveURL(/\/login/, { timeout: 15_000 })
+  await signOut(page)
 })

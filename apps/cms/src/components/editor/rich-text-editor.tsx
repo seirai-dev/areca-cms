@@ -2,31 +2,6 @@ import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
-import {
-  Bold,
-  Code,
-  Columns3,
-  Heading2,
-  Heading3,
-  Heading4,
-  ImageIcon,
-  Italic,
-  Link2,
-  Link2Off,
-  List,
-  ListOrdered,
-  Minus,
-  Pilcrow,
-  Quote,
-  Redo2,
-  Rows3,
-  Table2,
-  TableColumnsSplit,
-  TableRowsSplit,
-  Trash2,
-  Undo2,
-} from 'lucide-react'
-
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
@@ -48,6 +23,30 @@ import { m } from '#/paraglide/messages'
 import { MediaPickerDialog } from './media-picker'
 import type { MediaAsset } from './media-picker'
 import { assetFileUrl, emptyRichText } from './utils'
+import {
+  TextB,
+  Code,
+  Columns,
+  TextHTwo,
+  TextHThree,
+  TextHFour,
+  Image,
+  TextItalic,
+  Link,
+  LinkBreak,
+  ListBullets,
+  ListNumbers,
+  Minus,
+  Paragraph,
+  Quotes,
+  ArrowUUpRight,
+  Rows,
+  Table,
+  ColumnsPlusRight,
+  RowsPlusBottom,
+  Trash,
+  ArrowUUpLeft,
+} from '@phosphor-icons/react'
 
 const isMac =
   typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
@@ -132,10 +131,18 @@ export function RichTextEditor({
   value,
   onChange,
   organizationId,
+  toolbarEnd,
+  previewing = false,
+  preview,
 }: {
   value: unknown
   onChange: (value: unknown) => void
   organizationId: string
+  /** Rendered at the right end of the toolbar (the Edit | Preview switch). */
+  toolbarEnd?: React.ReactNode
+  /** Show `preview` instead of the editable body; the editor stays mounted. */
+  previewing?: boolean
+  preview?: React.ReactNode
 }) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [linkOpen, setLinkOpen] = useState(false)
@@ -149,7 +156,7 @@ export function RichTextEditor({
     editorProps: {
       attributes: {
         class:
-          'prose prose-sm min-h-56 max-w-none px-4 py-3 focus:outline-none [&_img]:h-auto [&_img]:max-w-full [&_img]:min-h-16 [&_a]:underline',
+          'prose min-h-72 max-w-none py-4 focus:outline-none [&_img]:h-auto [&_img]:max-w-full [&_img]:min-h-16 [&_a]:underline',
         'data-testid': 'rich-text-editor',
       },
     },
@@ -255,9 +262,7 @@ export function RichTextEditor({
   }
 
   if (!editor) {
-    return (
-      <div className="min-h-56 animate-pulse rounded-md border bg-muted/40" />
-    )
+    return <div className="min-h-72 animate-pulse rounded-md bg-muted/40" />
   }
 
   // Until the first transaction the state snapshot can lag behind the editor
@@ -268,9 +273,9 @@ export function RichTextEditor({
   const chain = () => editor.chain().focus()
 
   return (
-    <div className="relative rounded-md border bg-card focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/30">
+    <div className="relative">
       <div
-        className="sticky z-10 flex flex-wrap items-center gap-0.5 rounded-t-md border-b bg-card/95 p-1 backdrop-blur supports-[backdrop-filter]:bg-card/80"
+        className="sticky z-10 flex flex-wrap items-center gap-0.5 border-b border-border-subtle bg-background-default/95 py-1.5 backdrop-blur"
         style={{ top: 'var(--rich-text-toolbar-top, var(--app-header-h))' }}
         role="toolbar"
         aria-label={m.editor_toolbar_formatting()}
@@ -280,7 +285,7 @@ export function RichTextEditor({
           active={state.paragraph}
           onClick={() => chain().setParagraph().run()}
         >
-          <Pilcrow />
+          <Paragraph />
         </ToolbarButton>
         <ToolbarButton
           label={m.editor_toolbar_heading_2()}
@@ -288,7 +293,7 @@ export function RichTextEditor({
           active={state.h2}
           onClick={() => chain().toggleHeading({ level: 2 }).run()}
         >
-          <Heading2 />
+          <TextHTwo />
         </ToolbarButton>
         <ToolbarButton
           label={m.editor_toolbar_heading_3()}
@@ -296,7 +301,7 @@ export function RichTextEditor({
           active={state.h3}
           onClick={() => chain().toggleHeading({ level: 3 }).run()}
         >
-          <Heading3 />
+          <TextHThree />
         </ToolbarButton>
         <ToolbarButton
           label={m.editor_toolbar_heading_4()}
@@ -304,7 +309,7 @@ export function RichTextEditor({
           active={state.h4}
           onClick={() => chain().toggleHeading({ level: 4 }).run()}
         >
-          <Heading4 />
+          <TextHFour />
         </ToolbarButton>
         <ToolbarSeparator />
         <ToolbarButton
@@ -313,7 +318,7 @@ export function RichTextEditor({
           active={state.bold}
           onClick={() => chain().toggleBold().run()}
         >
-          <Bold />
+          <TextB />
         </ToolbarButton>
         <ToolbarButton
           label={m.editor_toolbar_italic()}
@@ -321,7 +326,7 @@ export function RichTextEditor({
           active={state.italic}
           onClick={() => chain().toggleItalic().run()}
         >
-          <Italic />
+          <TextItalic />
         </ToolbarButton>
         <Popover open={linkOpen} onOpenChange={setLinkOpen}>
           <PopoverTrigger asChild>
@@ -336,7 +341,7 @@ export function RichTextEditor({
               onClick={openLinkEditor}
               data-testid="rich-text-link"
             >
-              <Link2 />
+              <Link />
             </ToolbarButton>
           </PopoverTrigger>
           <PopoverContent align="start" className="w-80">
@@ -377,7 +382,7 @@ export function RichTextEditor({
                       setLinkOpen(false)
                     }}
                   >
-                    <Link2Off />
+                    <LinkBreak />
                     {m.editor_remove()}
                   </Button>
                 ) : (
@@ -397,7 +402,7 @@ export function RichTextEditor({
           active={state.bulletList}
           onClick={() => chain().toggleBulletList().run()}
         >
-          <List />
+          <ListBullets />
         </ToolbarButton>
         <ToolbarButton
           label={m.editor_toolbar_numbered_list()}
@@ -405,7 +410,7 @@ export function RichTextEditor({
           active={state.orderedList}
           onClick={() => chain().toggleOrderedList().run()}
         >
-          <ListOrdered />
+          <ListNumbers />
         </ToolbarButton>
         <ToolbarButton
           label={m.editor_toolbar_quote()}
@@ -413,7 +418,7 @@ export function RichTextEditor({
           active={state.blockquote}
           onClick={() => chain().toggleBlockquote().run()}
         >
-          <Quote />
+          <Quotes />
         </ToolbarButton>
         <ToolbarButton
           label={m.editor_toolbar_code_block()}
@@ -428,7 +433,7 @@ export function RichTextEditor({
           label={m.editor_toolbar_insert_image()}
           onClick={() => setPickerOpen(true)}
         >
-          <ImageIcon />
+          <Image />
         </ToolbarButton>
         <ToolbarButton
           label={m.editor_toolbar_insert_table()}
@@ -438,7 +443,7 @@ export function RichTextEditor({
             chain().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
           }
         >
-          <Table2 />
+          <Table />
         </ToolbarButton>
         {state.table ? (
           <>
@@ -448,7 +453,7 @@ export function RichTextEditor({
               data-testid="rich-text-add-table-row"
               onClick={() => chain().addRowAfter().run()}
             >
-              <Rows3 />
+              <Rows />
             </ToolbarButton>
             <ToolbarButton
               label={m.editor_toolbar_delete_table_row()}
@@ -456,7 +461,7 @@ export function RichTextEditor({
               data-testid="rich-text-delete-table-row"
               onClick={() => chain().deleteRow().run()}
             >
-              <TableRowsSplit />
+              <RowsPlusBottom />
             </ToolbarButton>
             <ToolbarButton
               label={m.editor_toolbar_add_table_column()}
@@ -464,7 +469,7 @@ export function RichTextEditor({
               data-testid="rich-text-add-table-column"
               onClick={() => chain().addColumnAfter().run()}
             >
-              <Columns3 />
+              <Columns />
             </ToolbarButton>
             <ToolbarButton
               label={m.editor_toolbar_delete_table_column()}
@@ -472,7 +477,7 @@ export function RichTextEditor({
               data-testid="rich-text-delete-table-column"
               onClick={() => chain().deleteColumn().run()}
             >
-              <TableColumnsSplit />
+              <ColumnsPlusRight />
             </ToolbarButton>
             <ToolbarButton
               label={m.editor_toolbar_delete_table()}
@@ -480,7 +485,7 @@ export function RichTextEditor({
               data-testid="rich-text-delete-table"
               onClick={() => chain().deleteTable().run()}
             >
-              <Trash2 />
+              <Trash />
             </ToolbarButton>
           </>
         ) : null}
@@ -490,14 +495,15 @@ export function RichTextEditor({
         >
           <Minus />
         </ToolbarButton>
-        <div className="ml-auto flex items-center gap-0.5">
+        <div className="ml-auto flex items-center gap-1.5">
+          <div className="flex items-center gap-0.5">
           <ToolbarButton
             label={m.editor_toolbar_undo()}
             shortcut={`${mod}Z`}
             disabled={!state.canUndo}
             onClick={() => chain().undo().run()}
           >
-            <Undo2 />
+            <ArrowUUpLeft />
           </ToolbarButton>
           <ToolbarButton
             label={m.editor_toolbar_redo()}
@@ -505,21 +511,26 @@ export function RichTextEditor({
             disabled={!state.canRedo}
             onClick={() => chain().redo().run()}
           >
-            <Redo2 />
+            <ArrowUUpRight />
           </ToolbarButton>
+          </div>
+          {toolbarEnd}
         </div>
       </div>
 
       <div className="relative">
-        {state.isEmpty ? (
+        {state.isEmpty && !previewing ? (
           <p
             aria-hidden="true"
-            className="pointer-events-none absolute top-3 left-4 text-sm text-muted-foreground"
+            className="pointer-events-none absolute top-4 left-0 text-ds-body-md text-text-disabled"
           >
             {m.editor_start_writing()}
           </p>
         ) : null}
-        <EditorContent editor={editor} />
+        <div className={previewing ? 'hidden' : undefined}>
+          <EditorContent editor={editor} />
+        </div>
+        {previewing ? preview : null}
       </div>
 
       <BubbleMenu
@@ -536,14 +547,14 @@ export function RichTextEditor({
           active={state.bold}
           onClick={() => chain().toggleBold().run()}
         >
-          <Bold />
+          <TextB />
         </ToolbarButton>
         <ToolbarButton
           label={m.editor_toolbar_italic()}
           active={state.italic}
           onClick={() => chain().toggleItalic().run()}
         >
-          <Italic />
+          <TextItalic />
         </ToolbarButton>
         <ToolbarButton
           label={
@@ -552,7 +563,7 @@ export function RichTextEditor({
           active={state.link}
           onClick={openLinkEditor}
         >
-          <Link2 />
+          <Link />
         </ToolbarButton>
         <ToolbarSeparator />
         <ToolbarButton
@@ -560,14 +571,14 @@ export function RichTextEditor({
           active={state.h2}
           onClick={() => chain().toggleHeading({ level: 2 }).run()}
         >
-          <Heading2 />
+          <TextHTwo />
         </ToolbarButton>
         <ToolbarButton
           label={m.editor_toolbar_heading_3()}
           active={state.h3}
           onClick={() => chain().toggleHeading({ level: 3 }).run()}
         >
-          <Heading3 />
+          <TextHThree />
         </ToolbarButton>
       </BubbleMenu>
 

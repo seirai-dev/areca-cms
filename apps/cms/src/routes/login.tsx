@@ -2,13 +2,17 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 
-import { Alert, AlertDescription } from '#/components/ui/alert'
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
-import { BrandMark } from '#/components/brand-mark'
+import { Spinner } from '#/components/ui/spinner'
 import { FormField } from '#/components/form-field'
-import { AuthShell } from '#/components/language-switcher'
-import { AuthDivider, ProviderSignIn } from '#/components/provider-sign-in'
+import {
+  AuthDivider,
+  AuthError,
+  AuthHeading,
+  AuthShell,
+} from '#/components/auth-shell'
+import { ProviderSignIn } from '#/components/provider-sign-in'
 import { authClient } from '#/lib/auth-client'
 import { safeRedirectPath } from '#/lib/safe-redirect'
 import { m } from '#/paraglide/messages'
@@ -92,69 +96,74 @@ function LoginPage() {
     window.location.assign(localizeHref(safeRedirectPath(redirectTo)))
   }
 
+  const providers = methods.socials.length > 0 || Boolean(methods.sso)
+
   return (
     <AuthShell>
-      <div className="w-full max-w-sm">
-        <BrandMark className="mb-8" />
-        <div className="mb-6 grid gap-1.5">
-          <h1 className="text-2xl">{m.auth_sign_in()}</h1>
-          <p className="text-sm text-muted-foreground">
-            {methods.emailPassword
-              ? m.auth_use_email_and_password()
-              : m.auth_use_a_provider()}
-          </p>
-        </div>
-        <div className="grid gap-4">
-          {error ? (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          ) : null}
-          <ProviderSignIn
-            methods={methods}
-            callbackURL={safeRedirectPath(redirectTo)}
-            errorCallbackURL="/login"
-          />
-          {methods.emailPassword ? (
-            <>
-              {methods.socials.length > 0 || methods.sso ? (
-                <AuthDivider />
-              ) : null}
-              <form
-                className="grid gap-4"
-                method="post"
-                onSubmit={onSubmit}
-                data-ready={ready ? 'true' : 'false'}
-              >
-                <FormField label={m.auth_email()} htmlFor="email">
-                  <Input
-                    id="email"
-                    name="email"
-                    type="email"
-                    autoComplete="email"
-                    required
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                  />
-                </FormField>
-                <FormField label={m.auth_password()} htmlFor="password">
-                  <Input
-                    id="password"
-                    name="password"
-                    type="password"
-                    autoComplete="current-password"
-                    required
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                  />
-                </FormField>
-                <Button type="submit" disabled={!ready || pending}>
-                  {pending ? m.auth_signing_in() : m.auth_sign_in()}
-                </Button>
-              </form>
-            </>
-          ) : null}
-        </div>
+      <AuthHeading
+        title={m.auth_sign_in()}
+        description={
+          methods.emailPassword
+            ? m.auth_use_email_and_password()
+            : m.auth_use_a_provider()
+        }
+      />
+      <div className="mt-8 grid gap-6">
+        {methods.emailPassword ? (
+          <form
+            className="grid gap-4"
+            method="post"
+            onSubmit={onSubmit}
+            data-ready={ready ? 'true' : 'false'}
+          >
+            <FormField label={m.auth_email()} htmlFor="email">
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                required
+                className="h-10"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+              />
+            </FormField>
+            <FormField label={m.auth_password()} htmlFor="password">
+              <Input
+                id="password"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                required
+                className="h-10"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+            </FormField>
+            <Button
+              type="submit"
+              size="lg"
+              className="mt-2 w-full"
+              disabled={!ready || pending}
+            >
+              {pending ? <Spinner /> : null}
+              {m.auth_sign_in()}
+            </Button>
+            {error ? <AuthError>{error}</AuthError> : null}
+          </form>
+        ) : error ? (
+          <AuthError>{error}</AuthError>
+        ) : null}
+        {providers ? (
+          <div className="grid gap-4">
+            {methods.emailPassword ? <AuthDivider /> : null}
+            <ProviderSignIn
+              methods={methods}
+              callbackURL={safeRedirectPath(redirectTo)}
+              errorCallbackURL="/login"
+            />
+          </div>
+        ) : null}
       </div>
     </AuthShell>
   )

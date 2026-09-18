@@ -57,21 +57,21 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.S3_ENDPOINT)(
       const [member] = await db
         .select()
         .from(membership)
-        .where(eq(membership.organizationId, org!.id))
+        .where(eq(membership.organizationId, org.id))
         .limit(1)
       expect(member).toBeDefined()
 
       const [orgSite] = await db
         .select()
         .from(site)
-        .where(eq(site.organizationId, org!.id))
+        .where(eq(site.organizationId, org.id))
         .limit(1)
       expect(orgSite).toBeDefined()
 
       const [orgCollection] = await db
         .select()
         .from(collection)
-        .where(eq(collection.siteId, orgSite!.id))
+        .where(eq(collection.siteId, orgSite.id))
         .limit(1)
       expect(orgCollection).toBeDefined()
 
@@ -87,13 +87,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.S3_ENDPOINT)(
         .toBuffer()
 
       const uploaded = await uploadAsset({
-        organizationId: org!.id,
+        organizationId: org.id,
         file: {
           buffer,
           filename: 'red-rect.png',
           mimeType: 'image/png',
         },
-        actorId: member!.userId,
+        actorId: member.userId,
         altText: 'A red rectangle',
       })
 
@@ -101,7 +101,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.S3_ENDPOINT)(
         expect(uploaded.width).toBe(12)
         expect(uploaded.height).toBe(8)
         expect(uploaded.storageKey).toMatch(
-          new RegExp(`^${org!.id}/[0-9a-f-]{36}\\.png$`),
+          new RegExp(`^${org.id}/[0-9a-f-]{36}\\.png$`),
         )
         expect(uploaded.mimeType).toBe('image/png')
 
@@ -115,7 +115,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.S3_ENDPOINT)(
         })
         expect(assetUrl(uploaded)).toBe(resolved!.url)
 
-        const listed = await listAssets(org!.id, {
+        const listed = await listAssets(org.id, {
           search: 'red-rect',
           limit: 20,
           offset: 0,
@@ -156,8 +156,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.S3_ENDPOINT)(
         const [throwaway] = await db
           .insert(entry)
           .values({
-            siteId: orgSite!.id,
-            collectionId: orgCollection!.id,
+            siteId: orgSite.id,
+            collectionId: orgCollection.id,
             slug: `asset-test-${crypto.randomUUID()}`,
             status: 'draft',
             draftData: { heroImage: uploaded.id },
@@ -169,7 +169,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.S3_ENDPOINT)(
           AssetInUseError,
         )
 
-        await db.delete(entry).where(eq(entry.id, throwaway!.id))
+        await db.delete(entry).where(eq(entry.id, throwaway.id))
 
         await deleteAsset(uploaded.id)
         expect(await resolveAssetValue(uploaded.id)).toBeNull()

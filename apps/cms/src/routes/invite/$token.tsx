@@ -4,13 +4,17 @@ import { useMutation } from '@tanstack/react-query'
 import { Link, createFileRoute, notFound } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 
-import { Alert, AlertDescription } from '#/components/ui/alert'
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
-import { BrandMark } from '#/components/brand-mark'
+import { Spinner } from '#/components/ui/spinner'
 import { FormField } from '#/components/form-field'
-import { AuthShell } from '#/components/language-switcher'
-import { AuthDivider, ProviderSignIn } from '#/components/provider-sign-in'
+import {
+  AuthDivider,
+  AuthError,
+  AuthHeading,
+  AuthShell,
+} from '#/components/auth-shell'
+import { ProviderSignIn } from '#/components/provider-sign-in'
 import { authClient } from '#/lib/auth-client'
 import { m } from '#/paraglide/messages'
 import { localizeHref } from '#/paraglide/runtime'
@@ -35,19 +39,14 @@ export const Route = createFileRoute('/invite/$token')({
   },
   notFoundComponent: () => (
     <AuthShell>
-      <div className="w-full max-w-sm">
-        <BrandMark className="mb-8" />
-        <div className="mb-6 grid gap-1.5">
-          <h1 className="text-2xl">{m.auth_invitation_not_found()}</h1>
-          <p className="text-sm text-muted-foreground">
-            {m.auth_invitation_invalid()}
-          </p>
-        </div>
-        <div>
-          <Button asChild variant="outline" className="w-full">
-            <Link to="/login">{m.auth_go_to_sign_in()}</Link>
-          </Button>
-        </div>
+      <AuthHeading
+        title={m.auth_invitation_not_found()}
+        description={m.auth_invitation_invalid()}
+      />
+      <div className="mt-8">
+        <Button asChild variant="outline" size="lg" className="w-full">
+          <Link to="/login">{m.auth_go_to_sign_in()}</Link>
+        </Button>
       </div>
     </AuthShell>
   ),
@@ -106,103 +105,111 @@ function InvitePage() {
 
   const loggedIn = Boolean(session?.user)
 
+  const providers = methods.socials.length > 0 || Boolean(methods.sso)
+
   return (
     <AuthShell>
-      <div className="w-full max-w-md">
-        <BrandMark className="mb-8" />
-        <div className="mb-6 grid gap-1.5">
-          <h1 className="text-2xl">{m.auth_invitation()}</h1>
-          <p className="text-sm text-muted-foreground">
-            {m.auth_join_as_role({
-              organizationName: invitation.organizationName,
-              role: invitation.role,
-            })}
+      <AuthHeading
+        title={m.auth_invitation()}
+        description={m.auth_join_as_role({
+          organizationName: invitation.organizationName,
+          role: invitation.role,
+        })}
+      />
+      <div className="mt-8 grid gap-6">
+        {sessionPending ? (
+          <p className="text-ds-body-sm text-text-muted">
+            {m.auth_loading_session()}
           </p>
-        </div>
-        <div className="grid gap-4">
-          {error ? (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          ) : null}
-          {sessionPending ? (
-            <p className="text-sm text-muted-foreground">
-              {m.auth_loading_session()}
-            </p>
-          ) : loggedIn ? (
+        ) : loggedIn ? (
+          <div className="grid gap-4">
             <Button
+              size="lg"
+              className="w-full"
               disabled={acceptMutation.isPending}
               onClick={() => acceptMutation.mutate()}
             >
-              {acceptMutation.isPending ? m.auth_accepting() : m.auth_accept()}
+              {acceptMutation.isPending ? <Spinner /> : null}
+              {m.auth_accept()}
             </Button>
-          ) : (
-            <>
-              <ProviderSignIn
-                methods={methods}
-                callbackURL={`/invite/${token}`}
-                errorCallbackURL={`/invite/${token}`}
-              />
-              {methods.emailPassword ? (
-                <>
-                  {methods.socials.length > 0 || methods.sso ? (
-                    <AuthDivider />
-                  ) : null}
-                  <form className="grid gap-4" onSubmit={onSignUp}>
-                    <FormField label={m.auth_name()} htmlFor="name">
-                      <Input
-                        id="name"
-                        name="name"
-                        autoComplete="name"
-                        required
-                        value={name}
-                        onChange={(event) => setName(event.target.value)}
-                      />
-                    </FormField>
-                    <FormField label={m.auth_email()} htmlFor="email">
-                      <Input
-                        id="email"
-                        name="email"
-                        type="email"
-                        autoComplete="email"
-                        required
-                        readOnly
-                        value={invitation.email}
-                      />
-                    </FormField>
-                    <FormField label={m.auth_password()} htmlFor="password">
-                      <Input
-                        id="password"
-                        name="password"
-                        type="password"
-                        autoComplete="new-password"
-                        required
-                        minLength={8}
-                        value={password}
-                        onChange={(event) => setPassword(event.target.value)}
-                      />
-                    </FormField>
-                    <Button type="submit" disabled={signingUp}>
-                      {signingUp
-                        ? m.auth_creating_account()
-                        : m.auth_create_account()}
-                    </Button>
-                  </form>
-                </>
-              ) : null}
-              <p className="text-sm text-muted-foreground">
-                {m.auth_already_have_account()}{' '}
-                <Link
-                  to="/login"
-                  search={{ redirect: `/invite/${token}` }}
-                  className="underline"
+            {error ? <AuthError>{error}</AuthError> : null}
+          </div>
+        ) : (
+          <>
+            {methods.emailPassword ? (
+              <form className="grid gap-4" onSubmit={onSignUp}>
+                <FormField label={m.auth_name()} htmlFor="name">
+                  <Input
+                    id="name"
+                    name="name"
+                    autoComplete="name"
+                    required
+                    className="h-10"
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                  />
+                </FormField>
+                <FormField label={m.auth_email()} htmlFor="email">
+                  <Input
+                    id="email"
+                    name="email"
+                    type="email"
+                    autoComplete="email"
+                    required
+                    readOnly
+                    className="h-10"
+                    value={invitation.email}
+                  />
+                </FormField>
+                <FormField label={m.auth_password()} htmlFor="password">
+                  <Input
+                    id="password"
+                    name="password"
+                    type="password"
+                    autoComplete="new-password"
+                    required
+                    minLength={8}
+                    className="h-10"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                  />
+                </FormField>
+                <Button
+                  type="submit"
+                  size="lg"
+                  className="mt-2 w-full"
+                  disabled={signingUp}
                 >
-                  {m.auth_sign_in()}
-                </Link>
-              </p>
-            </>
-          )}
-        </div>
+                  {signingUp ? <Spinner /> : null}
+                  {m.auth_create_account()}
+                </Button>
+                {error ? <AuthError>{error}</AuthError> : null}
+              </form>
+            ) : error ? (
+              <AuthError>{error}</AuthError>
+            ) : null}
+            {providers ? (
+              <div className="grid gap-4">
+                {methods.emailPassword ? <AuthDivider /> : null}
+                <ProviderSignIn
+                  methods={methods}
+                  callbackURL={`/invite/${token}`}
+                  errorCallbackURL={`/invite/${token}`}
+                />
+              </div>
+            ) : null}
+            <p className="text-ds-body-sm text-text-secondary">
+              {m.auth_already_have_account()}{' '}
+              <Link
+                to="/login"
+                search={{ redirect: `/invite/${token}` }}
+                className="text-text-accent underline underline-offset-4"
+              >
+                {m.auth_sign_in()}
+              </Link>
+            </p>
+          </>
+        )}
       </div>
     </AuthShell>
   )

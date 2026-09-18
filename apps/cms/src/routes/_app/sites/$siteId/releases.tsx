@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   keepPreviousData,
   useMutation,
@@ -6,44 +6,37 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
-import {
-  Copy,
-  Hammer,
-  History,
-  RotateCcw,
-  ScrollText,
-  XCircle,
-} from 'lucide-react'
 import { toast } from 'sonner'
 
 import { ConfirmDialog } from '#/components/confirm-dialog'
 import { queryKeys } from '#/components/editor/query-keys'
-import {
-  JobStatusBadge,
-  PublicationStatusBadge,
-} from '#/components/editor/status-badge'
+import { JobStatusBadge } from '#/components/editor/status-badge'
 import {
   ACTIVE_JOB_STATUSES,
   errorMessage,
   formatDateTime,
-  shortId,
 } from '#/components/editor/utils'
 import { EmptyState } from '#/components/empty-state'
 import { ListPagination } from '#/components/list-pagination'
 import { PageHeader } from '#/components/page-header'
 import { QueryError } from '#/components/query-error'
-import { createDataColumns, DataTable } from '#/components/data-table'
+import { BuildJobList } from '#/components/releases/build-job-list'
+import { PublicationTimelineRow } from '#/components/releases/publication-row'
+import type { JobRow, PublicationRow } from '#/components/releases/types'
+import { Timeline } from '#/components/timeline'
 import { Button } from '#/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '#/components/ui/dialog'
 import { ScrollArea } from '#/components/ui/scroll-area'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '#/components/ui/sheet'
 import { Skeleton } from '#/components/ui/skeleton'
-import type { BuildJobStatus, PublicationStatus } from '#/lib/types'
+import { Spinner } from '#/components/ui/spinner'
+import type { BuildJobStatus } from '#/lib/types'
 import { canManageSite } from '#/lib/site-nav'
 import { m } from '#/paraglide/messages'
 import {
@@ -51,32 +44,14 @@ import {
   getBuildJobFn,
   listBuildJobsFn,
   listPublicationsFn,
+  requestPublicationFn,
   requestRollbackFn,
 } from '#/server/fn/publishing'
+import { ClockCounterClockwise, Copy, Rocket } from '@phosphor-icons/react'
 
 export const Route = createFileRoute('/_app/sites/$siteId/releases')({
   component: ReleasesPage,
 })
-
-type PublicationRow = {
-  id: string
-  status: PublicationStatus
-  wasLive: boolean
-  snapshotHash: string
-  requestedBy: string | null
-  requestedByName: string | null
-  createdAt: string | Date
-  deployedAt: string | Date | null
-}
-
-type JobRow = {
-  id: string
-  status: BuildJobStatus
-  attempts: number
-  createdAt: string | Date
-  error: string | null
-  logs: string | null
-}
 
 const PUBLICATIONS_PAGE_SIZE = 20
 const EMPTY_PUBLICATIONS: PublicationRow[] = []
@@ -88,16 +63,18 @@ function isActiveJob(status: BuildJobStatus) {
   )
 }
 
-function canRollback(row: PublicationRow) {
-  return row.wasLive && row.status !== 'live'
-}
-
+/**
+ * Release history as one vertical timeline: every publication is a node, the
+ * live one is marked, and its build jobs live inside the node instead of in a
+ * separate column. Rollback sits on the publication it applies to.
+ */
 function ReleasesPage() {
   const { siteId } = Route.useParams()
   const { site, me } = Route.useRouteContext()
   const canManage = canManageSite(me, site.organizationId)
   const queryClient = useQueryClient()
   const [publicationsOffset, setPublicationsOffset] = useState(0)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
   const [rollbackTarget, setRollbackTarget] = useState<PublicationRow | null>(
     null,
   )
@@ -178,133 +155,19 @@ function ReleasesPage() {
       toast.error(errorMessage(error, m.sites_cancel_job_failed())),
   })
 
-  const pubHelper = createDataColumns<PublicationRow>()
-  const publicationColumns = pubHelper.columns([
-    pubHelper.accessor('createdAt', {
-      header: m.sites_column_created(),
-      sortFn: 'datetime',
-      cell: ({ row }) => (
-        <span className="whitespace-nowrap">
-          {formatDateTime(row.original.createdAt)}
-        </span>
-      ),
-    }),
-    pubHelper.accessor('status', {
-      header: m.sites_column_status(),
-      cell: ({ row }) => (
-        <PublicationStatusBadge
-          status={row.original.status}
-          testId={`publication-status-${row.original.status}`}
-        />
-      ),
-    }),
-    pubHelper.accessor('snapshotHash', {
-      header: m.sites_column_snapshot(),
-      cell: ({ row }) => (
-        <span className="font-mono text-xs" title={row.original.snapshotHash}>
-          {shortId(row.original.snapshotHash)}
-        </span>
-      ),
-    }),
-    pubHelper.accessor('requestedByName', {
-      header: m.sites_column_requested_by(),
-      cell: ({ row }) => row.original.requestedByName ?? m.sites_system(),
-    }),
-    pubHelper.accessor('deployedAt', {
-      header: m.sites_column_deployed(),
-      sortFn: 'datetime',
-      cell: ({ row }) => (
-        <span className="whitespace-nowrap text-muted-foreground">
-          {formatDateTime(row.original.deployedAt)}
-        </span>
-      ),
-    }),
-    pubHelper.display({
-      id: 'actions',
-      header: () => <span className="sr-only">{m.sites_actions()}</span>,
-      enableSorting: false,
-      cell: ({ row }) => (
-        <div className="flex justify-end">
-          {canManage && canRollback(row.original) ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              data-testid="rollback-publication"
-              disabled={rollbackMutation.isPending}
-              onClick={() => setRollbackTarget(row.original)}
-            >
-              <RotateCcw />
-              {m.sites_rollback()}
-            </Button>
-          ) : null}
-        </div>
-      ),
-    }),
-  ])
-
-  const jobHelper = createDataColumns<JobRow>()
-  const jobColumns = jobHelper.columns([
-    jobHelper.accessor('createdAt', {
-      header: m.sites_column_created(),
-      sortFn: 'datetime',
-      cell: ({ row }) => (
-        <span className="whitespace-nowrap">
-          {formatDateTime(row.original.createdAt)}
-        </span>
-      ),
-    }),
-    jobHelper.accessor('status', {
-      header: m.sites_column_status(),
-      cell: ({ row }) => (
-        <div className="grid gap-1">
-          <div>
-            <JobStatusBadge status={row.original.status} />
-          </div>
-          {row.original.status === 'failed' && row.original.error ? (
-            <p
-              className="max-w-xs truncate text-xs text-destructive"
-              title={row.original.error}
-            >
-              {row.original.error}
-            </p>
-          ) : null}
-        </div>
-      ),
-    }),
-    jobHelper.accessor('attempts', { header: m.sites_column_attempts() }),
-    jobHelper.display({
-      id: 'actions',
-      header: () => <span className="sr-only">{m.sites_actions()}</span>,
-      enableSorting: false,
-      cell: ({ row }) => (
-        <div className="flex justify-end gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => setLogsJobId(row.original.id)}
-          >
-            <ScrollText />
-            {m.sites_logs()}
-          </Button>
-          {canManage && row.original.status === 'queued' ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="text-destructive hover:text-destructive"
-              disabled={cancelMutation.isPending}
-              onClick={() => setCancelTarget(row.original)}
-            >
-              <XCircle />
-              {m.sites_cancel()}
-            </Button>
-          ) : null}
-        </div>
-      ),
-    }),
-  ])
+  const publishMutation = useMutation({
+    mutationFn: () => requestPublicationFn({ data: { siteId } }),
+    onSuccess: async (result) => {
+      if ('ok' in result && result.ok === false) {
+        toast.error(m.editor_could_not_publish_site())
+        return
+      }
+      toast.success(m.editor_publish_requested())
+      await invalidate()
+    },
+    onError: (error) =>
+      toast.error(errorMessage(error, m.editor_could_not_publish_site())),
+  })
 
   const publicationRows: PublicationRow[] =
     publicationsQuery.data ?? EMPTY_PUBLICATIONS
@@ -313,6 +176,30 @@ function ReleasesPage() {
     ? publicationRows.slice(0, PUBLICATIONS_PAGE_SIZE)
     : publicationRows
   const jobs: JobRow[] = jobsQuery.data ?? EMPTY_JOBS
+
+  const { jobsByPublication, orphanJobs } = useMemo(() => {
+    const byPublication = new Map<string, JobRow[]>()
+    const visible = new Set(publications.map((row) => row.id))
+    const orphans: JobRow[] = []
+    for (const job of jobs) {
+      const key = job.publicationId
+      if (!key || !visible.has(key)) {
+        orphans.push(job)
+        continue
+      }
+      const list = byPublication.get(key)
+      if (list) list.push(job)
+      else byPublication.set(key, [job])
+    }
+    return { jobsByPublication: byPublication, orphanJobs: orphans }
+  }, [jobs, publications])
+
+  function jobsFor(row: PublicationRow) {
+    const linked = jobsByPublication.get(row.id)
+    if (linked?.length) return linked
+    return row.job ? [row.job] : EMPTY_JOBS
+  }
+
   const logsJob = logsQuery.data as JobRow | undefined
   const logsText = logsJob?.logs || logsJob?.error || ''
 
@@ -333,13 +220,7 @@ function ReleasesPage() {
         description={m.sites_releases_description()}
       />
 
-      <section className="grid gap-3">
-        <div>
-          <h2 className="text-lg font-medium">{m.sites_publications()}</h2>
-          <p className="text-sm text-muted-foreground">
-            {m.sites_publications_description()}
-          </p>
-        </div>
+      <section className="grid gap-4" data-testid="publications">
         {publicationsQuery.isError ? (
           <QueryError
             title={m.sites_publications_load_error()}
@@ -348,20 +229,51 @@ function ReleasesPage() {
             retrying={publicationsQuery.isFetching}
           />
         ) : publicationsQuery.isLoading ? (
-          <Skeleton className="h-48 w-full" />
+          <div className="grid gap-3">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <Skeleton key={index} className="h-16 w-full rounded-surface" />
+            ))}
+          </div>
         ) : publications.length === 0 ? (
           <EmptyState
-            icon={<History />}
+            icon={<ClockCounterClockwise weight="duotone" />}
             title={m.sites_no_publications_yet()}
             description={m.sites_no_publications_description()}
+            action={
+              canManage ? (
+                <Button
+                  type="button"
+                  data-testid="publish-site"
+                  disabled={publishMutation.isPending}
+                  onClick={() => publishMutation.mutate()}
+                >
+                  {publishMutation.isPending ? <Spinner /> : <Rocket />}
+                  {m.editor_publish_site()}
+                </Button>
+              ) : undefined
+            }
           />
         ) : (
           <>
-            <DataTable
-              columns={publicationColumns}
-              data={publications}
-              caption={m.sites_publications()}
-            />
+            <Timeline>
+              {publications.map((row) => (
+                <PublicationTimelineRow
+                  key={row.id}
+                  row={row}
+                  jobs={jobsFor(row)}
+                  expanded={expandedId === row.id}
+                  onToggle={() =>
+                    setExpandedId((current) =>
+                      current === row.id ? null : row.id,
+                    )
+                  }
+                  canManage={canManage}
+                  onRollback={() => setRollbackTarget(row)}
+                  onLogs={(job) => setLogsJobId(job.id)}
+                  onCancel={(job) => setCancelTarget(job)}
+                />
+              ))}
+            </Timeline>
             <ListPagination
               offset={publicationsOffset}
               limit={PUBLICATIONS_PAGE_SIZE}
@@ -370,40 +282,24 @@ function ReleasesPage() {
               onChange={setPublicationsOffset}
               isFetching={publicationsQuery.isFetching}
               noun={m.sites_publications_noun()}
+              nounSingular={m.sites_publication_noun()}
             />
           </>
         )}
-      </section>
 
-      <section className="grid gap-3">
-        <div>
-          <h2 className="text-lg font-medium">{m.sites_build_jobs()}</h2>
-          <p className="text-sm text-muted-foreground">
-            {m.sites_build_jobs_description()}
-          </p>
-        </div>
-        {jobsQuery.isError ? (
-          <QueryError
-            title={m.sites_build_jobs_load_error()}
-            error={jobsQuery.error}
-            onRetry={() => jobsQuery.refetch()}
-            retrying={jobsQuery.isFetching}
-          />
-        ) : jobsQuery.isLoading ? (
-          <Skeleton className="h-48 w-full" />
-        ) : jobs.length === 0 ? (
-          <EmptyState
-            icon={<Hammer />}
-            title={m.sites_no_build_jobs_yet()}
-            description={m.sites_no_build_jobs_description()}
-          />
-        ) : (
-          <DataTable
-            columns={jobColumns}
-            data={jobs}
-            caption={m.sites_build_jobs()}
-          />
-        )}
+        {orphanJobs.length ? (
+          <div className="grid gap-3 border-t border-border-subtle pt-6">
+            <h2 className="text-ds-heading-5 text-text-primary">
+              {m.releases_other_builds()}
+            </h2>
+            <BuildJobList
+              jobs={orphanJobs}
+              canManage={canManage}
+              onLogs={(job) => setLogsJobId(job.id)}
+              onCancel={(job) => setCancelTarget(job)}
+            />
+          </div>
+        ) : null}
       </section>
 
       <ConfirmDialog
@@ -442,16 +338,16 @@ function ReleasesPage() {
         }}
       />
 
-      <Dialog
+      <Sheet
         open={logsJobId !== null}
         onOpenChange={(open) => {
           if (!open) setLogsJobId(null)
         }}
       >
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{m.sites_build_logs()}</DialogTitle>
-            <DialogDescription asChild>
+        <SheetContent size="xl" className="gap-0 p-0">
+          <SheetHeader>
+            <SheetTitle>{m.sites_build_logs()}</SheetTitle>
+            <SheetDescription asChild>
               <div className="flex flex-wrap items-center gap-2">
                 {logsJob ? (
                   <>
@@ -472,10 +368,10 @@ function ReleasesPage() {
                   m.sites_loading()
                 )}
               </div>
-            </DialogDescription>
-          </DialogHeader>
-          <ScrollArea className="h-80 rounded-md border bg-muted/40 p-3">
-            <pre className="font-mono text-xs whitespace-pre-wrap break-all">
+            </SheetDescription>
+          </SheetHeader>
+          <ScrollArea className="min-h-0 flex-1 bg-background-subtle p-5">
+            <pre className="text-ds-mono-xs break-all whitespace-pre-wrap text-text-secondary">
               {logsQuery.isError
                 ? errorMessage(logsQuery.error, m.sites_logs_load_error())
                 : logsQuery.isLoading
@@ -483,10 +379,10 @@ function ReleasesPage() {
                   : logsText || m.sites_no_logs()}
             </pre>
           </ScrollArea>
-          <div className="flex justify-end">
+          <SheetFooter className="flex-row justify-end">
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               size="sm"
               disabled={!logsText}
               onClick={copyLogs}
@@ -494,9 +390,9 @@ function ReleasesPage() {
               <Copy />
               {m.sites_copy_logs()}
             </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }

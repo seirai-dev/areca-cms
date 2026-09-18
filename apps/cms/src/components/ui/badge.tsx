@@ -1,28 +1,33 @@
 import * as React from 'react'
 import { cva } from 'class-variance-authority'
 import type { VariantProps } from 'class-variance-authority'
-import { cn } from 'cn'
+import { cn } from '#/lib/utils'
 import { Slot } from 'radix-ui'
 
 const badgeVariants = cva(
-  'inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border border-transparent px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3',
+  cn(
+    'inline-flex w-fit shrink-0 items-center justify-center gap-1.5 overflow-hidden',
+    'rounded-full border border-transparent px-2 py-0.5',
+    'font-sans text-xs leading-4 font-medium whitespace-nowrap',
+    'transition-colors duration-[120ms] ease-(--motion-ease-standard)',
+    'outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-strong',
+    '[&>svg]:pointer-events-none [&>svg]:size-3',
+  ),
   {
     variants: {
       variant: {
-        default: 'bg-primary text-primary-foreground [a&]:hover:bg-primary/90',
-        secondary:
-          'bg-secondary text-secondary-foreground [a&]:hover:bg-secondary/90',
-        destructive:
-          'bg-destructive text-white focus-visible:ring-destructive/20 dark:bg-destructive/60 dark:focus-visible:ring-destructive/40 [a&]:hover:bg-destructive/90',
+        default: 'bg-action-secondary text-text-primary',
+        secondary: 'bg-action-secondary text-text-primary',
         outline:
-          'border-border text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground',
-        success:
-          'bg-moss-900 text-fern-200 dark:bg-moss-200 dark:text-moss-900',
-        warning:
-          'bg-clay-900 text-clay-300 dark:bg-clay-200 dark:text-clay-800',
-        muted: 'bg-muted text-muted-foreground',
-        ghost: '[a&]:hover:bg-accent [a&]:hover:text-accent-foreground',
-        link: 'text-primary underline-offset-4 [a&]:hover:underline',
+          'border-border-default text-text-primary [a&]:hover:bg-surface-state-hover',
+        success: 'bg-status-success-bg text-text-success',
+        warning: 'bg-status-warning-bg text-text-warning',
+        error: 'bg-status-error-bg text-text-error',
+        destructive: 'bg-status-error-bg text-text-error',
+        info: 'bg-status-info-bg text-text-info',
+        muted: 'bg-background-subtle text-text-muted',
+        ghost: '[a&]:hover:bg-surface-state-hover',
+        link: 'text-text-accent underline-offset-4 [a&]:hover:underline',
       },
     },
     defaultVariants: {
@@ -35,9 +40,15 @@ function Badge({
   className,
   variant = 'default',
   asChild = false,
+  dot = false,
+  children,
   ...props
 }: React.ComponentProps<'span'> &
-  VariantProps<typeof badgeVariants> & { asChild?: boolean }) {
+  VariantProps<typeof badgeVariants> & {
+    asChild?: boolean
+    /** Leading semantic dot; reserved for live/pending states. */
+    dot?: boolean
+  }) {
   const Comp = asChild ? Slot.Root : 'span'
 
   return (
@@ -46,7 +57,15 @@ function Badge({
       data-variant={variant}
       className={cn(badgeVariants({ variant }), className)}
       {...props}
-    />
+    >
+      {dot ? (
+        <span
+          aria-hidden="true"
+          className="size-1.5 shrink-0 rounded-full bg-current"
+        />
+      ) : null}
+      {children}
+    </Comp>
   )
 }
 

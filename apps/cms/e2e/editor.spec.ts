@@ -111,6 +111,10 @@ test('owner can author, publish, and release an article', async ({ page }) => {
   )
 
   await page
+    .getByRole('link', { name: /Back to/ })
+    .click()
+  await expect(page.getByTestId('site-nav')).toBeVisible({ timeout: 15_000 })
+  await page
     .getByTestId('site-nav')
     .getByRole('link', { name: 'Content' })
     .click()
@@ -124,7 +128,7 @@ test('owner can author, publish, and release an article', async ({ page }) => {
     .getByRole('link', { name: 'Releases' })
     .click()
   await expect(page.getByText('live', { exact: true }).first()).toBeVisible()
-  await expect(page.getByRole('cell', { name: 'Acme Owner' })).toBeVisible()
+  await expect(page.getByText('Acme Owner').first()).toBeVisible()
 })
 
 test('draft save shows field errors for empty title and invalid slug', async ({

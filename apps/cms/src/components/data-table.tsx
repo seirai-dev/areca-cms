@@ -19,8 +19,6 @@ import type {
   RowData,
   SortingState,
 } from '@tanstack/react-table'
-import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
-
 import { Button } from '#/components/ui/button'
 import {
   Table,
@@ -32,6 +30,7 @@ import {
 } from '#/components/ui/table'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
+import { ArrowDown, ArrowUp, ArrowsDownUp } from '@phosphor-icons/react'
 
 const dataTableFeatures = tableFeatures({
   rowSortingFeature,
@@ -52,6 +51,21 @@ export const createDataColumns = <TData extends RowData>() =>
   createColumnHelper<DataTableFeatures, TData>()
 
 /**
+ * Columns may carry `meta.className` (for example `hidden md:table-cell`) so a
+ * table can drop its low-priority columns on narrow screens instead of
+ * scrolling sideways.
+ */
+function columnClassName(column: { columnDef: { meta?: unknown } }) {
+  const meta = column.columnDef.meta
+  return meta &&
+    typeof meta === 'object' &&
+    'className' in meta &&
+    typeof meta.className === 'string'
+    ? meta.className
+    : undefined
+}
+
+/**
  * Shared table renderer.
  *
  * - Columns are sortable by clicking the header (client-side). Opt a column
@@ -70,6 +84,7 @@ export function DataTable<TData extends RowData>({
   initialSorting = [],
   getRowProps,
   caption,
+  density = 'default',
 }: {
   columns: Array<ColumnDef<DataTableFeatures, TData>>
   data: Array<TData>
@@ -78,6 +93,8 @@ export function DataTable<TData extends RowData>({
   initialSorting?: SortingState
   getRowProps?: (row: TData) => React.ComponentProps<typeof TableRow>
   caption?: ReactNode
+  /** `compact` drops the row height from 44px to 36px. */
+  density?: 'default' | 'compact'
 }) {
   const [sorting, setSorting] = useState<SortingState>(initialSorting)
   const [pagination, setPagination] = useState<PaginationState>({
@@ -102,14 +119,17 @@ export function DataTable<TData extends RowData>({
 
   return (
     <div className="grid min-w-0 gap-3">
-      <div className="max-w-full overflow-hidden">
+      <div
+        data-density={density}
+        className="group/data-table max-w-full overflow-x-auto"
+      >
         <Table>
           {caption ? <caption className="sr-only">{caption}</caption> : null}
           <TableHeader>
             {table.getHeaderGroups().map((group) => (
               <TableRow
                 key={group.id}
-                className="border-b-2 border-foreground/70 hover:bg-transparent"
+                className="border-b border-border-strong hover:bg-transparent"
               >
                 {group.headers.map((header) => {
                   const canSort = header.column.getCanSort()
@@ -117,6 +137,7 @@ export function DataTable<TData extends RowData>({
                   return (
                     <TableHead
                       key={header.id}
+                      className={columnClassName(header.column)}
                       aria-sort={
                         sorted === 'asc'
                           ? 'ascending'
@@ -129,8 +150,8 @@ export function DataTable<TData extends RowData>({
                         <button
                           type="button"
                           className={cn(
-                            '-ml-2 inline-flex h-8 items-center gap-1 rounded-md px-2 text-left font-medium hover:bg-muted hover:text-foreground',
-                            sorted && 'text-foreground',
+                            '-ml-2 inline-flex h-8 items-center gap-1 rounded-control px-2 text-left hover:text-text-primary',
+                            sorted && 'text-text-primary',
                           )}
                           onClick={header.column.getToggleSortingHandler()}
                         >
@@ -140,7 +161,7 @@ export function DataTable<TData extends RowData>({
                           ) : sorted === 'desc' ? (
                             <ArrowDown className="size-3.5" />
                           ) : (
-                            <ArrowUpDown className="size-3.5 opacity-40" />
+                            <ArrowsDownUp className="size-3.5 opacity-40" />
                           )}
                         </button>
                       ) : (
@@ -157,7 +178,13 @@ export function DataTable<TData extends RowData>({
               rows.map((row) => (
                 <TableRow key={row.id} {...getRowProps?.(row.original)}>
                   {row.getAllCells().map((cell) => (
-                    <TableCell key={cell.id}>
+                    <TableCell
+                      key={cell.id}
+                      className={cn(
+                        density === 'compact' && 'h-9',
+                        columnClassName(cell.column),
+                      )}
+                    >
                       <table.FlexRender cell={cell} />
                     </TableCell>
                   ))}
@@ -167,7 +194,7 @@ export function DataTable<TData extends RowData>({
               <TableRow className="hover:bg-transparent">
                 <TableCell
                   colSpan={columns.length}
-                  className="h-24 text-center text-muted-foreground"
+                  className="h-24 text-center text-text-muted"
                 >
                   {emptyMessage}
                 </TableCell>
@@ -178,7 +205,7 @@ export function DataTable<TData extends RowData>({
       </div>
       {showPager ? (
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm text-muted-foreground">
+          <p className="text-ds-body-sm text-text-muted">
             {m.shared_page_of({
               page: pagination.pageIndex + 1,
               pageCount,

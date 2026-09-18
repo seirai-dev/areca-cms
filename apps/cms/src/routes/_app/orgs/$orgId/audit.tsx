@@ -1,7 +1,7 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 
 import { AuditLogList } from '#/components/admin/audit-log-list'
-import { PageHeader } from '#/components/page-header'
+import { OrgFrame } from '#/components/admin/org-frame'
 import { m } from '#/paraglide/messages'
 
 export const Route = createFileRoute('/_app/orgs/$orgId/audit')({
@@ -26,18 +26,13 @@ function OrgAuditPage() {
   )
 
   return (
-    <div className="grid gap-6">
-      <PageHeader
-        title={m.admin_audit_activity_title()}
-        description={
-          membership
-            ? m.admin_audit_activity_description({
-                name: membership.organizationName,
-              })
-            : m.admin_audit_activity_description_fallback()
-        }
-      />
+    <OrgFrame
+      orgId={orgId}
+      name={membership?.organizationName ?? m.shell_breadcrumb_organization()}
+      slug={membership?.organizationSlug}
+      active="audit"
+    >
       <AuditLogList organizationId={orgId} />
-    </div>
+    </OrgFrame>
   )
 }

@@ -17,3 +17,23 @@ export function useIsMobile() {
 
   return !!isMobile
 }
+
+/**
+ * The shell's own breakpoint: below 900px the navbar collapses (switcher
+ * becomes an icon button, secondary links move into the user menu).
+ */
+const COMPACT_BREAKPOINT = 900
+
+export function useIsCompact() {
+  const [isCompact, setIsCompact] = React.useState(false)
+
+  React.useEffect(() => {
+    const mql = window.matchMedia(`(max-width: ${COMPACT_BREAKPOINT - 1}px)`)
+    const onChange = () => setIsCompact(mql.matches)
+    onChange()
+    mql.addEventListener('change', onChange)
+    return () => mql.removeEventListener('change', onChange)
+  }, [])
+
+  return isCompact
+}

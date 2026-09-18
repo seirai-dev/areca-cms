@@ -1,7 +1,7 @@
 import { and, desc, eq, ilike, or, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
-import { collection, entry, entryRevision, site } from '#/db/schema'
+import { collection, entry, entryRevision, site, user } from '#/db/schema'
 import type { EntryData, EntryStatus } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
@@ -44,13 +44,18 @@ export async function listEntries(
   }
 
   const where = and(...filters)
-  const items = await db
-    .select()
+  const rows = await db
+    .select({ entry, updatedByName: user.name })
     .from(entry)
+    .leftJoin(user, eq(entry.updatedBy, user.id))
     .where(where)
     .orderBy(desc(entry.updatedAt), entry.slug)
     .limit(limit)
     .offset(offset)
+  const items = rows.map((row) => ({
+    ...row.entry,
+    updatedByName: row.updatedByName,
+  }))
 
   const [totalRow] = await db
     .select({ count: sql<number>`count(*)::int` })

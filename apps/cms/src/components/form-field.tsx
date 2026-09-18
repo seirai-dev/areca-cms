@@ -41,20 +41,24 @@ export function FormField({
       <Label htmlFor={htmlFor} className="gap-1">
         {label}
         {required ? (
-          <span aria-hidden="true" className="text-destructive">
+          <span aria-hidden="true" className="text-text-error">
             *
           </span>
         ) : null}
       </Label>
       {description ? (
-        <p className="text-sm text-muted-foreground">{description}</p>
+        <p className="text-ds-body-sm text-text-secondary">{description}</p>
       ) : null}
       {children}
       {hint && !error ? (
-        <p className="text-xs text-muted-foreground">{hint}</p>
+        <p className="text-ds-body-xs text-text-muted">{hint}</p>
       ) : null}
       {error ? (
-        <p id={errorId} className="text-sm text-destructive" role="alert">
+        <p
+          id={errorId}
+          className="text-ds-body-sm text-text-error"
+          role="alert"
+        >
           {error}
         </p>
       ) : null}

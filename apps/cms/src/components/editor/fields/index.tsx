@@ -1,5 +1,6 @@
 import { FormField } from '#/components/form-field'
 import type { Field } from '#/lib/types'
+import { m } from '#/paraglide/messages'
 
 import { BooleanFieldInput } from './boolean'
 import { DateFieldInput } from './date'
@@ -20,6 +21,7 @@ export function CollectionField({
   error,
   siteId,
   organizationId,
+  variant = 'default',
 }: {
   field: Field
   value: unknown
@@ -27,9 +29,15 @@ export function CollectionField({
   error?: string
   siteId: string
   organizationId: string
+  /**
+   * `canvas` renders the field as part of the document body: no box, no label
+   * chrome for rich text, a quiet heading for long text.
+   */
+  variant?: 'default' | 'canvas'
 }) {
   const id = `field-${field.key}`
   const invalid = Boolean(error)
+  const canvas = variant === 'canvas'
 
   let control: React.ReactNode
   switch (field.type) {
@@ -60,6 +68,14 @@ export function CollectionField({
           id={id}
           value={value}
           onChange={(next) => onChange(next)}
+          borderless={canvas}
+          placeholder={
+            canvas
+              ? m.editor_canvas_placeholder({
+                  label: field.label.toLocaleLowerCase(),
+                })
+              : undefined
+          }
         />
       )
       break
@@ -158,8 +174,38 @@ export function CollectionField({
       )
   }
 
+  if (canvas) {
+    return (
+      <div
+        className="grid gap-2"
+        data-field={field.key}
+        data-invalid={error ? 'true' : undefined}
+      >
+        {field.type === 'richtext' ? (
+          <label htmlFor={id} className="sr-only">
+            {field.label}
+          </label>
+        ) : (
+          <label
+            htmlFor={id}
+            className="text-ds-label-sm text-text-muted"
+          >
+            {field.label}
+          </label>
+        )}
+        {control}
+        {error ? (
+          <p className="text-ds-body-sm text-text-error" role="alert">
+            {error}
+          </p>
+        ) : null}
+      </div>
+    )
+  }
+
   return (
     <FormField
+      className="gap-2"
       label={field.label}
       htmlFor={id}
       required={field.required}
@@ -167,7 +213,9 @@ export function CollectionField({
       hint={field.type === 'slug' ? slugHint() : undefined}
       error={error}
     >
-      {control}
+      <div data-field={field.key} className="grid gap-1.5">
+        {control}
+      </div>
     </FormField>
   )
 }

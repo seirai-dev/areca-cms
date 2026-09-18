@@ -3,7 +3,6 @@ import type { FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
-import { Building2, Plus, Search } from 'lucide-react'
 import { toast } from 'sonner'
 
 import {
@@ -32,6 +31,7 @@ import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { m } from '#/paraglide/messages'
 import { createOrganizationFn, listOrganizationsFn } from '#/server/fn/admin'
+import { Buildings, Plus, MagnifyingGlass } from '@phosphor-icons/react'
 
 export const Route = createFileRoute('/_app/admin/organizations/')({
   component: OrganizationsPage,
@@ -179,7 +179,7 @@ function OrganizationsPage() {
           <TableSkeleton columns={5} />
         ) : orgsQuery.data.length === 0 ? (
           <EmptyState
-            icon={<Building2 />}
+            icon={<Buildings />}
             title={m.admin_organizations_empty_title()}
             description={m.admin_organizations_empty_description()}
             action={
@@ -198,7 +198,7 @@ function OrganizationsPage() {
                 {m.admin_organizations_search_label()}
               </Label>
               <div className="relative">
-                <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                <MagnifyingGlass className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   id="org-search"
                   type="search"

@@ -11,6 +11,7 @@ import { TanStackDevtools } from '@tanstack/react-devtools'
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 
 import { LanguageSwitcher } from '#/components/language-switcher'
+import { ThemeProvider } from '#/components/theme'
 import { Toaster } from '#/components/ui/sonner'
 import { TooltipProvider } from '#/components/ui/tooltip'
 import { DEFAULT_BRANDING, brandingCss } from '#/lib/branding'
@@ -77,8 +78,8 @@ export const Route = createRootRouteWithContext<RouterContext>()({
   notFoundComponent: () => (
     <div className="relative flex min-h-svh items-center justify-center p-6">
       <LanguageSwitcher className="absolute top-4 right-4" />
-      <div className="max-w-md text-center">
-        <p className="text-sm font-medium text-muted-foreground">404</p>
+      <div className="max-w-md">
+        <p className="font-mono text-sm text-muted-foreground">404</p>
         <h1 className="mt-1 text-2xl font-semibold tracking-tight">
           {m.shell_not_found_title()}
         </h1>
@@ -104,15 +105,17 @@ function RootComponent() {
 
 function RootDocument({ children }: { children: ReactNode }) {
   return (
-    <html lang={getLocale()}>
+    <html lang={getLocale()} suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>
       <body>
-        <TooltipProvider>
-          {children}
-          <Toaster />
-        </TooltipProvider>
+        <ThemeProvider>
+          <TooltipProvider>
+            {children}
+            <Toaster />
+          </TooltipProvider>
+        </ThemeProvider>
         <TanStackDevtools
           config={{
             position: 'bottom-right',

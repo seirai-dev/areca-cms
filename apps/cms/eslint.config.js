@@ -15,6 +15,12 @@ export default [
     },
   },
   {
-    ignores: ['eslint.config.js', 'prettier.config.js'],
+    // Generated paraglide output and build artefacts are not ours to lint.
+    ignores: [
+      'eslint.config.js',
+      'prettier.config.js',
+      'src/paraglide/**',
+      '.output/**',
+    ],
   },
 ]

@@ -2,7 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
 import { db } from '#/db'
-import { site } from '#/db/schema'
+import { site, user } from '#/db/schema'
 import { requireAgencyAdmin, requireOrgMember } from '#/lib/session.server'
 import type { EntryStatus, FieldType } from '#/lib/types'
 import { m } from '#/paraglide/messages'
@@ -31,7 +31,7 @@ import {
   buildPreviewUrl,
   signPreviewToken,
 } from '#/server/content/preview-token'
-import { eq } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 
 const fieldTypes = [
   'text',
@@ -69,6 +69,21 @@ const entryStatusSchema = z.enum([
 const entryDataSchema = z.record(z.string(), z.unknown())
 
 const entryFn = { strict: { output: false } as const }
+
+/**
+ * Display names for a set of user ids. The UI shows who wrote an entry; the
+ * public API keeps returning raw ids, so the join lives here and not in
+ * `src/server/content`.
+ */
+async function userNames(ids: (string | null | undefined)[]) {
+  const unique = [...new Set(ids.filter((id): id is string => Boolean(id)))]
+  if (unique.length === 0) return new Map<string, string>()
+  const rows = await db
+    .select({ id: user.id, name: user.name, email: user.email })
+    .from(user)
+    .where(inArray(user.id, unique))
+  return new Map(rows.map((row) => [row.id, row.name || row.email]))
+}
 
 async function requireSiteAccess(siteId: string, role?: 'owner') {
   const found = (
@@ -127,7 +142,12 @@ export const getEntryFn = createServerFn({ method: 'GET', ...entryFn })
   .validator(z.object({ id: z.string().min(1) }))
   .handler(async ({ data }) => {
     const { entry } = await requireEntryAccess(data.id)
-    return entry
+    const names = await userNames([entry.createdBy, entry.updatedBy])
+    return {
+      ...entry,
+      createdByName: entry.createdBy ? (names.get(entry.createdBy) ?? null) : null,
+      updatedByName: entry.updatedBy ? (names.get(entry.updatedBy) ?? null) : null,
+    }
   })
 
 export const createEntryFn = createServerFn({ method: 'POST', ...entryFn })
@@ -218,7 +238,12 @@ export const listRevisionsFn = createServerFn({ method: 'GET', ...entryFn })
   .validator(z.object({ entryId: z.string().min(1) }))
   .handler(async ({ data }) => {
     await requireEntryAccess(data.entryId)
-    return listRevisions(data.entryId)
+    const revisions = await listRevisions(data.entryId)
+    const names = await userNames(revisions.map((rev) => rev.createdBy))
+    return revisions.map((rev) => ({
+      ...rev,
+      createdByName: rev.createdBy ? (names.get(rev.createdBy) ?? null) : null,
+    }))
   })
 
 export const restoreRevisionFn = createServerFn({ method: 'POST', ...entryFn })
