@@ -117,7 +117,7 @@ export function ClientDeployment({
       >
         {status.isError ? (
           <QueryError
-            title={m.admin_org_dokploy_load_error()}
+            title={m.agency_dokploy_load_error()}
             error={status.error}
             onRetry={() => void status.refetch()}
             retrying={status.isFetching}

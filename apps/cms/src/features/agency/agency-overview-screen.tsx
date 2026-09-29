@@ -110,7 +110,7 @@ export function AgencyOverviewScreen({ me }: { me: Me }) {
 
       {overview.isError ? (
         <QueryError
-          title={m.home_load_error()}
+          title={m.agency_sites_load_error()}
           error={overview.error}
           onRetry={() => void overview.refetch()}
           retrying={overview.isFetching}
@@ -319,7 +319,7 @@ function RecentActivity() {
   if (activity.isError) {
     return (
       <QueryError
-        title={m.home_activity_load_error()}
+        title={m.agency_activity_load_error()}
         error={activity.error}
         onRetry={() => void activity.refetch()}
         retrying={activity.isFetching}
@@ -476,7 +476,9 @@ function SitesSection({ loading }: { loading: boolean }) {
           )
         }
       >
-        {m.agency_sites_heading({ count: all.length })}
+        {loading
+          ? m.agency_sites_heading_plain()
+          : m.agency_sites_heading({ count: all.length })}
       </SectionHeading>
       {loading ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">

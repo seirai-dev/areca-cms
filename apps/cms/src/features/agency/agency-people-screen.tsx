@@ -141,7 +141,7 @@ export function AgencyPeopleScreen({ me }: { me: Me }) {
 
       {accounts.isError ? (
         <QueryError
-          title={m.admin_users_load_error()}
+          title={m.agency_people_load_error()}
           error={accounts.error}
           onRetry={() => void accounts.refetch()}
           retrying={accounts.isFetching}

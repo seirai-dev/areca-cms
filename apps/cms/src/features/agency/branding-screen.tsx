@@ -122,7 +122,7 @@ export function BrandingScreen() {
 
       {form.query.isError ? (
         <QueryError
-          title={m.admin_branding_load_error()}
+          title={m.agency_branding_load_error()}
           error={form.query.error}
           onRetry={() => void form.query.refetch()}
           retrying={form.query.isFetching}

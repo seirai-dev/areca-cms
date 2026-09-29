@@ -68,7 +68,7 @@ export function ClientScreen({
   if (clients.isError) {
     return (
       <QueryError
-        title={m.admin_org_load_error()}
+        title={m.agency_client_load_error()}
         error={clients.error}
         onRetry={() => void clients.refetch()}
         retrying={clients.isFetching}
@@ -281,7 +281,7 @@ function ClientSites({
 
       {sites.isError ? (
         <QueryError
-          title={m.admin_org_sites_load_error()}
+          title={m.agency_sites_load_error()}
           error={sites.error}
           onRetry={() => void sites.refetch()}
           retrying={sites.isFetching}
