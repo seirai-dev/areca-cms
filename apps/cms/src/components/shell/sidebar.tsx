@@ -42,6 +42,7 @@ import {
   siteNavItems,
 } from '#/lib/site-nav'
 import type { MeSite } from '#/lib/site-nav'
+import type { Field } from '#/lib/types'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 import { listCollectionsFn, listEntriesFn } from '#/server/fn/content'
@@ -52,6 +53,7 @@ export type SidebarCollection = {
   label: string
   routePattern: string
   enabled: boolean
+  fields: Field[]
 }
 
 /** The current site's collections, as the sidebar and mobile sheet list them. */

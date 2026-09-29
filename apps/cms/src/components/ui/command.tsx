@@ -76,7 +76,7 @@ function CommandInput({
   size = 'md',
   trailing,
   ...props
-}: React.ComponentProps<typeof CommandPrimitive.Input> & {
+}: Omit<React.ComponentProps<typeof CommandPrimitive.Input>, 'size'> & {
   size?: 'md' | 'lg'
   trailing?: React.ReactNode
 }) {

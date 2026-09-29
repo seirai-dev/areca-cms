@@ -1,21 +1,14 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { ContentPage } from '#/components/content/content-page'
+import { LegacyCollection } from '#/features/collection/legacy-collection'
 
+/** `/sites/$siteId/c/$collectionKey`: one collection's entries. */
 export const Route = createFileRoute('/_app/sites/$siteId/c/$collectionKey/')({
   component: CollectionPage,
 })
 
-/** Same Content screen as `/sites/$siteId`, with this collection selected. */
 function CollectionPage() {
-  const { siteId, collectionKey } = Route.useParams()
+  const { collectionKey } = Route.useParams()
   const { me, site } = Route.useRouteContext()
-  return (
-    <ContentPage
-      siteId={siteId}
-      organizationId={site.organizationId}
-      me={me}
-      collectionKey={collectionKey}
-    />
-  )
+  return <LegacyCollection me={me} site={site} collectionKey={collectionKey} />
 }

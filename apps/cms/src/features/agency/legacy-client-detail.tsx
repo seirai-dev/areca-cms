@@ -1,12 +1,8 @@
+// LEGACY (phase 1 bridge): replaced in phase 2
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  Link,
-  createFileRoute,
-  useNavigate,
-  useRouter,
-} from '@tanstack/react-router'
+import { Link, useNavigate, useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { toast } from 'sonner'
 
@@ -15,7 +11,6 @@ import {
   errorMessage,
   suggestSlug,
 } from '#/components/admin/helpers'
-import { AuditLogList } from '#/components/admin/audit-log-list'
 import { OrgMembers } from '#/components/admin/org-members'
 import { TableSkeleton } from '#/components/admin/table-skeleton'
 import { TokenAlert } from '#/components/admin/token-alert'
@@ -23,9 +18,9 @@ import { ConfirmDialog } from '#/components/ui/confirm-dialog'
 import { createDataColumns, DataTable } from '#/components/data-table'
 import { EmptyState } from '#/components/ui/empty-state'
 import { FormField } from '#/components/ui/form-field'
-import { OrgIdentityStrip } from '#/components/identity-strip'
+import { PageHeader } from '#/components/ui/page-header'
 import { RelativeTime } from '#/components/ui/timeline'
-import { PageSection, SectionedPage } from '#/components/section-nav'
+import { PageSection } from '#/components/section-nav'
 import { QueryError } from '#/components/ui/query-error'
 import { Button, buttonVariants } from '#/components/ui/button'
 import { Badge } from '#/components/ui/badge'
@@ -54,19 +49,8 @@ import {
 } from '#/server/fn/admin'
 import { CheckCircle, Globe, Plus } from '@phosphor-icons/react'
 
-type OrgTab = 'general' | 'members' | 'sites' | 'audit'
-
-const ORG_TABS: OrgTab[] = ['general', 'members', 'sites', 'audit']
-
-export const Route = createFileRoute('/_app/admin/organizations/$orgId')({
-  // The active tab lives in the URL so refreshes and shared links keep it.
-  validateSearch: (search: Record<string, unknown>): { tab?: OrgTab } => ({
-    tab: ORG_TABS.includes(search.tab as OrgTab)
-      ? (search.tab as OrgTab)
-      : undefined,
-  }),
-  component: OrganizationDetailPage,
-})
+export const CLIENT_TABS = ['sites', 'people', 'deployment', 'settings'] as const
+export type ClientTab = (typeof CLIENT_TABS)[number]
 
 type SiteRow = Awaited<ReturnType<typeof listSitesFn>>[number]
 
@@ -130,8 +114,19 @@ const siteColumns = siteHelper.columns([
   }),
 ])
 
-function OrganizationDetailPage() {
-  const { orgId } = Route.useParams()
+/**
+ * The old organization page, re-tabbed as the Client screen (brief §3.11):
+ * Sites · People · Deployment · Settings.
+ */
+export function LegacyClientDetail({
+  orgId,
+  tab,
+  onTabChange,
+}: {
+  orgId: string
+  tab: ClientTab
+  onTabChange: (tab: ClientTab) => void
+}) {
   const navigate = useNavigate()
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -145,16 +140,6 @@ function OrganizationDetailPage() {
   const verifyDokployCredentials = useServerFn(verifyDokployCredentialsFn)
   const removeDokployCredentials = useServerFn(removeDokployCredentialsFn)
 
-  const { tab: searchTab } = Route.useSearch()
-  const tab: OrgTab = searchTab ?? 'general'
-  function setTab(next: OrgTab) {
-    void navigate({
-      to: '/admin/organizations/$orgId',
-      params: { orgId },
-      search: next === 'general' ? {} : { tab: next },
-      replace: true,
-    })
-  }
   const [siteOpen, setSiteOpen] = useState(false)
   const [siteSearch, setSiteSearch] = useState('')
   const [siteName, setSiteName] = useState('')
@@ -272,7 +257,7 @@ function OrganizationDetailPage() {
       await queryClient.invalidateQueries({
         queryKey: adminQueryKeys.organizations,
       })
-      await navigate({ to: '/admin/organizations' })
+      await navigate({ to: '/agency/clients' })
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
@@ -354,7 +339,7 @@ function OrganizationDetailPage() {
         description={m.admin_org_not_found_description()}
         action={
           <Link
-            to="/admin/organizations"
+            to="/agency/clients"
             className={buttonVariants({ variant: 'outline' })}
           >
             {m.admin_org_back()}
@@ -396,28 +381,34 @@ function OrganizationDetailPage() {
       data-testid="organization-page"
       data-ready="true"
     >
-      <Tabs value={tab} onValueChange={(value) => setTab(value as OrgTab)}>
-        <OrgIdentityStrip
-          name={org.name}
-          slug={org.slug}
-          bleed={false}
-          tabs={
-            <TabsList variant="line" className="h-11 gap-5 border-b-0">
-              <TabsTrigger value="general" className="nav-tab h-11 px-0">
-                {m.admin_org_overview()}
-              </TabsTrigger>
-              <TabsTrigger value="members" className="nav-tab h-11 px-0">
-                {m.admin_members()}
-              </TabsTrigger>
-              <TabsTrigger value="sites" className="nav-tab h-11 px-0">
-                {m.admin_sites()}
-              </TabsTrigger>
-              <TabsTrigger value="audit" className="nav-tab h-11 px-0">
-                {m.admin_audit_activity_title()}
-              </TabsTrigger>
-            </TabsList>
-          }
-        />
+      <PageHeader
+        eyebrow={
+          <Link to="/agency/clients" className="hover:text-text-primary">
+            {m.shell_nav_clients()}
+          </Link>
+        }
+        title={org.name}
+        meta={<span className="font-mono">{org.slug}</span>}
+      />
+      <Tabs
+        value={tab}
+        onValueChange={(value) => onTabChange(value as ClientTab)}
+        className="gap-4"
+      >
+        <TabsList>
+          <TabsTrigger value="sites" data-testid="client-tab-sites">
+            {m.agency_client_tab_sites()}
+          </TabsTrigger>
+          <TabsTrigger value="people" data-testid="client-tab-people">
+            {m.shell_nav_people()}
+          </TabsTrigger>
+          <TabsTrigger value="deployment" data-testid="client-tab-deployment">
+            {m.settings_tab_deployment()}
+          </TabsTrigger>
+          <TabsTrigger value="settings" data-testid="client-tab-settings">
+            {m.shell_nav_settings()}
+          </TabsTrigger>
+        </TabsList>
         {createdToken ? (
           <TokenAlert
             token={createdToken}
@@ -550,22 +541,11 @@ function OrganizationDetailPage() {
           </Dialog>
         </TabsContent>
 
-        <TabsContent value="members" className="pt-4">
+        <TabsContent value="people" className="pt-4">
           <OrgMembers organizationId={orgId} />
         </TabsContent>
 
-        <TabsContent value="general" className="pt-4">
-          <SectionedPage
-            links={[
-              { id: 'org-general', label: m.admin_org_general() },
-              { id: 'org-dokploy', label: m.admin_org_dokploy_title() },
-              {
-                id: 'org-danger',
-                label: m.admin_org_danger_zone(),
-                danger: true,
-              },
-            ]}
-          >
+        <TabsContent value="settings" className="grid gap-2 pt-4">
             <PageSection
               id="org-general"
               title={m.admin_org_general()}
@@ -599,6 +579,60 @@ function OrganizationDetailPage() {
               </form>
             </PageSection>
 
+            <PageSection
+              id="org-danger"
+              title={m.admin_org_danger_zone()}
+              description={m.admin_org_danger_description()}
+              danger
+            >
+              <div className="max-w-md grid gap-3">
+                {hasSites ? (
+                  <p
+                    className="text-ds-body-sm text-text-secondary"
+                    data-testid="delete-org-blocked"
+                  >
+                    {siteCount === 1
+                      ? m.admin_org_delete_blocked_one_before()
+                      : m.admin_org_delete_blocked_many_before({
+                          count: siteCount,
+                        })}
+                    <button
+                      type="button"
+                      className="font-medium text-foreground underline underline-offset-4"
+                      onClick={() => onTabChange('sites')}
+                    >
+                      {m.admin_org_sites_tab()}
+                    </button>
+                    {m.admin_org_delete_blocked_after()}
+                  </p>
+                ) : null}
+                <div>
+                  <ConfirmDialog
+                    title={m.admin_org_delete_title({ name: org.name })}
+                    description={m.admin_org_delete_description()}
+                    confirmLabel={m.admin_org_delete_label()}
+                    variant="destructive"
+                    confirmText={org.slug}
+                    onConfirm={async () => {
+                      await deleteMutation.mutateAsync()
+                    }}
+                  >
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      disabled={hasSites || deleteMutation.isPending}
+                    >
+                      {deleteMutation.isPending
+                        ? m.admin_deleting()
+                        : m.admin_org_delete_label()}
+                    </Button>
+                  </ConfirmDialog>
+                </div>
+              </div>
+            </PageSection>
+        </TabsContent>
+
+        <TabsContent value="deployment" className="grid gap-2 pt-4">
             <PageSection
               id="org-dokploy"
               title={m.admin_org_dokploy_title()}
@@ -762,64 +796,8 @@ function OrganizationDetailPage() {
                 ) : null}
               </div>
             </PageSection>
-
-            <PageSection
-              id="org-danger"
-              title={m.admin_org_danger_zone()}
-              description={m.admin_org_danger_description()}
-              danger
-            >
-              <div className="max-w-md grid gap-3">
-                {hasSites ? (
-                  <p
-                    className="text-ds-body-sm text-text-secondary"
-                    data-testid="delete-org-blocked"
-                  >
-                    {siteCount === 1
-                      ? m.admin_org_delete_blocked_one_before()
-                      : m.admin_org_delete_blocked_many_before({
-                          count: siteCount,
-                        })}
-                    <button
-                      type="button"
-                      className="font-medium text-foreground underline underline-offset-4"
-                      onClick={() => setTab('sites')}
-                    >
-                      {m.admin_org_sites_tab()}
-                    </button>
-                    {m.admin_org_delete_blocked_after()}
-                  </p>
-                ) : null}
-                <div>
-                  <ConfirmDialog
-                    title={m.admin_org_delete_title({ name: org.name })}
-                    description={m.admin_org_delete_description()}
-                    confirmLabel={m.admin_org_delete_label()}
-                    variant="destructive"
-                    confirmText={org.slug}
-                    onConfirm={async () => {
-                      await deleteMutation.mutateAsync()
-                    }}
-                  >
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      disabled={hasSites || deleteMutation.isPending}
-                    >
-                      {deleteMutation.isPending
-                        ? m.admin_deleting()
-                        : m.admin_org_delete_label()}
-                    </Button>
-                  </ConfirmDialog>
-                </div>
-              </div>
-            </PageSection>
-          </SectionedPage>
         </TabsContent>
 
-        <TabsContent value="audit" className="pt-4">
-          <AuditLogList organizationId={orgId} />
-        </TabsContent>
       </Tabs>
     </div>
   )

@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
+import type { NavigateOptions } from '@tanstack/react-router'
 import { useTheme } from 'next-themes'
 import {
   CircleHalf,
@@ -31,8 +32,8 @@ import { Kbd } from '#/components/ui/kbd'
 import { EntryStatusPill } from '#/components/ui/status-pill'
 import { Spinner } from '#/components/ui/spinner'
 import { entryUiStatus } from '#/features/golive/entry-live-state'
-import { useGoLive } from '#/features/golive/use-go-live'
 import { useReleaseStatus } from '#/features/golive/use-release-status'
+import { usePanel } from '#/features/shell/panel'
 import { useDebouncedValue } from '#/hooks/use-debounced-value'
 import { authClient } from '#/lib/auth-client'
 import {
@@ -77,7 +78,7 @@ export function CommandPalette() {
   const inSite = mode !== 'agency' && site ? site : undefined
   const canManage = inSite ? canManageSite(me, inSite.organizationId) : false
   const release = useReleaseStatus(paletteOpen ? inSite?.id : undefined)
-  const goLive = useGoLive(inSite?.id ?? '')
+  const panel = usePanel()
 
   React.useEffect(() => {
     if (!paletteOpen) setSearch('')
@@ -117,8 +118,9 @@ export function CommandPalette() {
     action()
   }
 
-  const go = (options: Parameters<typeof navigate>[0]) =>
+  function go(options: NavigateOptions) {
     run(() => void navigate(options))
+  }
 
   const entryResults = searching
     ? collections.flatMap((collection, index) =>
@@ -260,18 +262,7 @@ export function CommandPalette() {
             <>
               <CommandItem
                 value="action go live publish"
-                onSelect={() =>
-                  run(() => {
-                    void goLive.goLive()
-                    void navigate({
-                      to: '.',
-                      search: ((prev: Record<string, unknown>) => ({
-                        ...prev,
-                        panel: 'golive',
-                      })) as never,
-                    })
-                  })
-                }
+                onSelect={() => run(() => panel.open('golive'))}
               >
                 <RocketLaunch />
                 {m.golive_go_live()}
@@ -301,17 +292,7 @@ export function CommandPalette() {
           {inSite && canManage ? (
             <CommandItem
               value="action open activity"
-              onSelect={() =>
-                run(() =>
-                  void navigate({
-                    to: '.',
-                    search: ((prev: Record<string, unknown>) => ({
-                      ...prev,
-                      panel: 'activity',
-                    })) as never,
-                  }),
-                )
-              }
+              onSelect={() => run(() => panel.open('activity'))}
             >
               <Pulse />
               {m.shell_palette_open_activity()}

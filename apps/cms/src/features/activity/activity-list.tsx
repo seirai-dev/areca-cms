@@ -74,6 +74,8 @@ export function ActivityList({
   siteId,
   pageSize = 25,
   showScope = true,
+  paged = true,
+  grouped = true,
   className,
 }: {
   organizationId?: string
@@ -81,6 +83,10 @@ export function ActivityList({
   pageSize?: number
   /** Show the client / site each event happened in. */
   showScope?: boolean
+  /** "Show more" paging; off for fixed previews (the Overview's last 5). */
+  paged?: boolean
+  /** Day headings ("Today", "Yesterday"). */
+  grouped?: boolean
   className?: string
 }) {
   const listAuditLog = useServerFn(listAuditLogFn)
@@ -106,11 +112,11 @@ export function ActivityList({
     for (const row of rows) {
       const day = dayLabel(row.createdAt)
       const last = out.at(-1)
-      if (last && last.day === day) last.rows.push(row)
+      if (last && (!grouped || last.day === day)) last.rows.push(row)
       else out.push({ day, rows: [row] })
     }
     return out
-  }, [rows])
+  }, [rows, grouped])
 
   if (query.isError) {
     return (
@@ -159,7 +165,9 @@ export function ActivityList({
     >
       {groups.map((group) => (
         <section key={group.day} className="grid gap-3">
-          <h3 className="text-overline text-text-muted">{group.day}</h3>
+          {grouped ? (
+            <h3 className="text-overline text-text-muted">{group.day}</h3>
+          ) : null}
           <Timeline>
             {group.rows.map((row) => {
               const { action, target } = activitySentence(row)
@@ -207,7 +215,7 @@ export function ActivityList({
           </Timeline>
         </section>
       ))}
-      {query.hasNextPage ? (
+      {paged && query.hasNextPage ? (
         <Button
           type="button"
           variant="secondary"

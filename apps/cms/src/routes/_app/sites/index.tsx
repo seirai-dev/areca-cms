@@ -1,8 +1,13 @@
-import { createFileRoute, redirect } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 
-/** The site list lives on the home page now; old links land there. */
+import { SitePicker } from '#/features/sites/site-picker'
+
+/** `/sites`: the site picker (brief §3.2). */
 export const Route = createFileRoute('/_app/sites/')({
-  beforeLoad: () => {
-    throw redirect({ to: '/' })
-  },
+  component: SitesPage,
 })
+
+function SitesPage() {
+  const { me } = Route.useRouteContext()
+  return <SitePicker me={me} />
+}

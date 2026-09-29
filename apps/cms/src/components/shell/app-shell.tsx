@@ -193,6 +193,8 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
             {
               '--shell-sidebar-offset': sidebarOffset,
               '--mobile-tabbar-h': withSidebar && mobile ? '56px' : '0px',
+              // Focus mode has no top bar at any width.
+              ...(mode === 'focus' ? { '--navbar-height': '0px' } : {}),
             } as React.CSSProperties
           }
         >

@@ -1,6 +1,6 @@
+// LEGACY (phase 1 bridge): replaced in phase 2
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { createFileRoute } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { toast } from 'sonner'
 
@@ -35,6 +35,7 @@ import {
 } from '#/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback } from '#/components/ui/avatar'
 import { m } from '#/paraglide/messages'
+import type { Me } from '#/server/fn/me'
 import { listUsersFn, setAgencyAdminFn } from '#/server/fn/admin'
 import {
   DotsThree,
@@ -44,10 +45,6 @@ import {
   Users,
   X,
 } from '@phosphor-icons/react'
-
-export const Route = createFileRoute('/_app/admin/users')({
-  component: UsersPage,
-})
 
 type UserRow = Awaited<ReturnType<typeof listUsersFn>>[number]
 type RoleFilter = 'all' | 'agency-admin' | 'owner' | 'editor'
@@ -65,8 +62,8 @@ function initials(name: string) {
   )
 }
 
-function UsersPage() {
-  const { me } = Route.useRouteContext()
+/** The old users page, titled People until phase 2 rebuilds it. */
+export function LegacyAgencyPeople({ me }: { me: Me }) {
   const queryClient = useQueryClient()
   const listUsers = useServerFn(listUsersFn)
   const setAgencyAdmin = useServerFn(setAgencyAdminFn)
@@ -279,8 +276,8 @@ function UsersPage() {
   return (
     <div className="grid gap-6">
       <PageHeader
-        title={m.admin_users_title()}
-        description={m.admin_users_description()}
+        title={m.shell_nav_people()}
+        description={m.agency_people_description()}
       />
 
       {usersQuery.isError ? (

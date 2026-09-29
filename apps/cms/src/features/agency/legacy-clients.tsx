@@ -1,7 +1,8 @@
+// LEGACY (phase 1 bridge): replaced in phase 2
 import { useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { toast } from 'sonner'
 
@@ -33,10 +34,6 @@ import { m } from '#/paraglide/messages'
 import { createOrganizationFn, listOrganizationsFn } from '#/server/fn/admin'
 import { Buildings, Plus, MagnifyingGlass } from '@phosphor-icons/react'
 
-export const Route = createFileRoute('/_app/admin/organizations/')({
-  component: OrganizationsPage,
-})
-
 type OrgRow = Awaited<ReturnType<typeof listOrganizationsFn>>[number]
 
 const helper = createDataColumns<OrgRow>()
@@ -46,7 +43,7 @@ const columns = helper.columns([
     header: () => m.admin_name(),
     cell: ({ row }) => (
       <Link
-        to="/admin/organizations/$orgId"
+        to="/agency/clients/$orgId"
         params={{ orgId: row.original.id }}
         className="font-medium hover:underline"
       >
@@ -87,7 +84,8 @@ const columns = helper.columns([
   }),
 ])
 
-function OrganizationsPage() {
+/** The old organizations list, titled Clients until phase 2 rebuilds it. */
+export function LegacyClients() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const listOrganizations = useServerFn(listOrganizationsFn)
@@ -116,7 +114,7 @@ function OrganizationsPage() {
         queryKey: adminQueryKeys.organizations,
       })
       await navigate({
-        to: '/admin/organizations/$orgId',
+        to: '/agency/clients/$orgId',
         params: { orgId: org.id },
       })
     },
@@ -156,8 +154,8 @@ function OrganizationsPage() {
         data-ready={orgsQuery.isFetched ? 'true' : 'false'}
       >
         <PageHeader
-          title={m.admin_organizations_title()}
-          description={m.admin_organizations_description()}
+          title={m.shell_nav_clients()}
+          description={m.agency_clients_description()}
           actions={
             <DialogTrigger asChild>
               <Button type="button" data-testid="new-organization">

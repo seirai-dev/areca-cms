@@ -1,7 +1,8 @@
+// LEGACY (phase 1 bridge): replaced in phase 2
 import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { createFileRoute, useRouter } from '@tanstack/react-router'
+import { useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { toast } from 'sonner'
 
@@ -33,6 +34,8 @@ import {
   FONTS,
   FONT_KEYS,
   brandingPreviewStyle,
+  fontEntry,
+  isFontKey,
   fontStylesheetUrl,
   matchPreset,
   normalizeHex,
@@ -52,10 +55,6 @@ import {
   UploadSimple,
   X,
 } from '@phosphor-icons/react'
-
-export const Route = createFileRoute('/_app/admin/branding')({
-  component: BrandingPage,
-})
 
 const brandingQueryKey = ['branding'] as const
 
@@ -94,7 +93,8 @@ async function uploadBrandingImage(kind: ImageKind, file: File) {
   return view
 }
 
-function BrandingPage() {
+/** The old branding page until phase 2 rebuilds it (live preview etc.). */
+export function LegacyBranding() {
   const router = useRouter()
   const queryClient = useQueryClient()
   const getBranding = useServerFn(getBrandingFn)
@@ -124,7 +124,7 @@ function BrandingPage() {
     setAppName(saved.appName === DEFAULT_APP_NAME ? '' : saved.appName)
     setEmailFromName(saved.emailFromName ?? '')
     setAccent(saved.accentColor ?? '')
-    setFont(saved.font)
+    setFont(isFontKey(saved.font) ? saved.font : DEFAULT_FONT)
     setAdvancedEnabled(saved.advancedColorsEnabled)
     setAdvancedColors(cloneAdvancedColors(saved.advancedColors))
   }, [saved])
@@ -642,7 +642,7 @@ function PreviewPanel({
       className={`${mode} grid gap-4 rounded-surface border border-border-default bg-background-default p-4 text-text-primary`}
       style={{
         ...brandingPreviewStyle(branding, mode),
-        fontFamily: FONTS[branding.font].family,
+        fontFamily: fontEntry(branding.font).family,
       }}
     >
       <div className="flex items-center justify-between gap-3">

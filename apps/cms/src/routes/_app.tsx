@@ -1,8 +1,7 @@
 import { Outlet, createFileRoute, redirect } from '@tanstack/react-router'
 
-import { CommandPalette } from '#/components/command-palette'
-import { Navbar } from '#/components/navbar'
-import { m } from '#/paraglide/messages'
+import { AppShell } from '#/components/shell/app-shell'
+import { NotFoundCard } from '#/components/shell/not-found'
 import { getMeFn } from '#/server/fn/me'
 import { getSetupStatusFn } from '#/server/fn/setup'
 
@@ -21,35 +20,16 @@ export const Route = createFileRoute('/_app')({
     }
     return { me }
   },
+  notFoundComponent: () => <NotFoundCard />,
   component: AppLayout,
 })
 
-/**
- * App shell: one navbar, then the page. Identity strips are rendered by the
- * route that owns them (site frame, organization detail), so the frame stays
- * a single column.
- */
+/** Signed-in frame: the shell (sidebar, mobile bars, panels, palette). */
 function AppLayout() {
   const { me } = Route.useRouteContext()
-
   return (
-    <div className="min-h-svh bg-background-default">
-      <a
-        href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-above-overlay focus:rounded-control focus:bg-background-elevated focus:px-3 focus:py-2 focus:text-ds-label-md focus:shadow-lg"
-      >
-        {m.shell_skip_to_content()}
-      </a>
-      <Navbar me={me} />
-      <CommandPalette me={me} />
-      <main
-        id="main-content"
-        className="mx-auto w-full max-w-6xl min-w-0 px-6 py-6"
-      >
-        <div className="animate-ds-enter-rise">
-          <Outlet />
-        </div>
-      </main>
-    </div>
+    <AppShell me={me}>
+      <Outlet />
+    </AppShell>
   )
 }

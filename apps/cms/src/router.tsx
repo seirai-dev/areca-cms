@@ -14,6 +14,9 @@ export function getRouter() {
     scrollRestoration: true,
     defaultPreload: 'intent',
     defaultPreloadStaleTime: 0,
+    // Shared-element morphs (card → editor, site card → overview) and a
+    // soft crossfade between pages (brief §4.5).
+    defaultViewTransition: true,
     rewrite: {
       input: ({ url }) => deLocalizeUrl(url),
       output: ({ url }) => localizeUrl(url),
@@ -28,5 +31,16 @@ export function getRouter() {
 declare module '@tanstack/react-router' {
   interface Register {
     router: ReturnType<typeof getRouter>
+  }
+}
+
+/**
+ * Per-route shell options (read by `AppShell`):
+ * - `shell: 'focus'` renders the page without the sidebar (the editor);
+ * - `shell: 'bare'` renders it with the slim top bar only.
+ */
+declare module '@tanstack/react-router' {
+  interface StaticDataRouteOption {
+    shell?: 'focus' | 'bare'
   }
 }

@@ -1,4 +1,3 @@
-import type * as React from 'react'
 import type { ReactNode, Ref } from 'react'
 import { Link } from '@tanstack/react-router'
 
@@ -224,11 +223,7 @@ export function EditorToolbar({
                 disabled={isNew || !actionsReady}
                 data-testid="publish-now"
                 title={isNew ? m.editor_save_draft_first() : undefined}
-                triggerProps={
-                  {
-                    'data-testid': 'publish-menu',
-                  } as React.ComponentProps<'button'>
-                }
+                triggerProps={{ 'data-testid': 'publish-menu' }}
               >
                 <DropdownMenuContent align="end" className="w-64">
                   <DropdownMenuLabel className="text-ds-body-xs font-normal text-text-muted">

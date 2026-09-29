@@ -188,7 +188,7 @@ function SplitButton({
     menuDisabled?: boolean
     loading?: boolean
     menuProps?: React.ComponentProps<typeof DropdownMenu>
-    triggerProps?: React.ComponentProps<'button'> & Record<string, unknown>
+    triggerProps?: React.ComponentProps<'button'> & { 'data-testid'?: string }
     children: React.ReactNode
   }) {
   const iconSize =

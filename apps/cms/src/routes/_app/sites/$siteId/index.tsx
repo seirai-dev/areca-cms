@@ -1,20 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { ContentPage } from '#/components/content/content-page'
+import { OverviewScreen } from '#/features/overview/overview-screen'
 
+/** `/sites/$siteId`: the site Overview (brief §3.3). */
 export const Route = createFileRoute('/_app/sites/$siteId/')({
-  component: SiteContentPage,
+  component: OverviewPage,
 })
 
-/** `/sites/$siteId` selects the first collection without changing the URL. */
-function SiteContentPage() {
-  const { siteId } = Route.useParams()
-  const { me, site } = Route.useRouteContext()
-  return (
-    <ContentPage
-      siteId={siteId}
-      organizationId={site.organizationId}
-      me={me}
-    />
-  )
+function OverviewPage() {
+  const { site } = Route.useRouteContext()
+  return <OverviewScreen site={site} />
 }

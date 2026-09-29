@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type * as React from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
@@ -101,10 +102,13 @@ export function EntriesPane({
   siteId,
   collection,
   canManage,
+  headerActions,
 }: {
   siteId: string
   collection: PaneCollection
   canManage: boolean
+  /** Extra header controls before "New entry" (the admin ⋯ menu). */
+  headerActions?: React.ReactNode
 }) {
   const collectionKey = collection.key
   const fields = collection.fields
@@ -217,16 +221,27 @@ export function EntriesPane({
 
   return (
     <div className="relative flex min-w-0 flex-col gap-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="truncate text-ds-heading-4 text-text-primary">
+      <div className="mb-2 flex flex-wrap items-end justify-between gap-3">
+        <div className="grid min-w-0 gap-1">
+          <h1 className="truncate text-display text-text-primary">
             {collection.label}
-          </h2>
-          <p className="truncate text-ds-mono-xs text-text-muted">
-            {collection.routePattern}
+          </h1>
+          <p className="truncate text-caption font-normal text-text-muted">
+            {total !== undefined ? (
+              <span className="tnum">
+                {total === 1
+                  ? m.collection_entry_count_one({ count: total })
+                  : m.collection_entry_count_other({ count: total })}
+                {' · '}
+              </span>
+            ) : null}
+            <span className="font-mono">{collection.routePattern}</span>
           </p>
         </div>
-        {newEntryButton('new-entry')}
+        <div className="flex items-center gap-2">
+          {headerActions}
+          {newEntryButton('new-entry')}
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">

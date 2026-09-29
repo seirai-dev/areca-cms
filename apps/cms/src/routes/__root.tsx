@@ -10,13 +10,12 @@ import { TanStackDevtools } from '@tanstack/react-devtools'
 
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 
-import { LanguageSwitcher } from '#/components/language-switcher'
+import { NotFoundCard } from '#/components/shell/not-found'
 import { ThemeProvider } from '#/components/theme'
 import { Toaster } from '#/components/ui/sonner'
 import { TooltipProvider } from '#/components/ui/tooltip'
 import { DEFAULT_BRANDING, brandingCss } from '#/lib/branding'
 import type { RouterContext } from '#/lib/router-context'
-import { m } from '#/paraglide/messages'
 import { getLocale } from '#/paraglide/runtime'
 import { getBrandingFn } from '#/server/fn/branding'
 
@@ -75,26 +74,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       styles: css ? [{ children: css }] : [],
     }
   },
-  notFoundComponent: () => (
-    <div className="relative flex min-h-svh items-center justify-center p-6">
-      <LanguageSwitcher className="absolute top-4 right-4" />
-      <div className="max-w-md">
-        <p className="font-mono text-sm text-muted-foreground">404</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight">
-          {m.shell_not_found_title()}
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          {m.shell_not_found_description()}
-        </p>
-        <a
-          href="/"
-          className="mt-6 inline-flex h-9 items-center rounded-md border bg-background px-4 text-sm font-medium no-underline shadow-xs hover:bg-accent"
-        >
-          {m.shell_not_found_back()}
-        </a>
-      </div>
-    </div>
-  ),
+  notFoundComponent: () => <NotFoundCard fullPage />,
   shellComponent: RootDocument,
   component: RootComponent,
 })

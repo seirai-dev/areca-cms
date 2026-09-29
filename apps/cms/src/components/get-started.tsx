@@ -34,7 +34,7 @@ export function GetStarted({
 }) {
   const orgAction = (label: string) => (
     <Button asChild variant="ghost" size="sm">
-      <Link to="/admin/organizations">{label}</Link>
+      <Link to="/agency/clients">{label}</Link>
     </Button>
   )
 
