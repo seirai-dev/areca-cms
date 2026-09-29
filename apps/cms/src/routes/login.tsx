@@ -40,5 +40,11 @@ export const Route = createFileRoute('/login')({
 function LoginPage() {
   const methods = Route.useLoaderData()
   const { redirect: redirectTo, error } = Route.useSearch()
-  return <LoginScreen methods={methods} redirectTo={redirectTo} providerError={error} />
+  return (
+    <LoginScreen
+      methods={methods}
+      redirectTo={redirectTo}
+      providerError={error}
+    />
+  )
 }

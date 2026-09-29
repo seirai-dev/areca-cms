@@ -18,7 +18,10 @@ function ClientsPage() {
     <ClientsScreen
       createOpen={search.new === 1}
       onCreateOpenChange={(open) =>
-        void navigate({ search: (prev) => ({ ...prev, new: open ? 1 : undefined }), replace: true })
+        void navigate({
+          search: (prev) => ({ ...prev, new: open ? 1 : undefined }),
+          replace: true,
+        })
       }
     />
   )

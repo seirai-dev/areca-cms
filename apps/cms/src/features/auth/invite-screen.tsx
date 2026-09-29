@@ -15,7 +15,11 @@ import { m } from '#/paraglide/messages'
 import { AuthDivider, AuthError, AuthHeading, AuthShell } from './auth-shell'
 import { PasswordInput } from './password-input'
 import { ProviderSignIn } from './provider-buttons'
-import { providerErrorMessage, useHydrated, useInvitation } from './use-auth-forms'
+import {
+  providerErrorMessage,
+  useHydrated,
+  useInvitation,
+} from './use-auth-forms'
 
 type Invitation = {
   email: string
@@ -25,7 +29,9 @@ type Invitation = {
 
 /** "You'll join as an Editor — you can write and edit drafts." */
 function roleLine(role: MembershipRole) {
-  return role === 'owner' ? m.auth_invite_role_owner() : m.auth_invite_role_editor()
+  return role === 'owner'
+    ? m.auth_invite_role_owner()
+    : m.auth_invite_role_editor()
 }
 
 /**
@@ -73,13 +79,19 @@ export function InviteScreen({
       }
     >
       <AuthHeading
-        title={m.auth_invited_you({ organizationName: invitation.organizationName })}
+        title={m.auth_invited_you({
+          organizationName: invitation.organizationName,
+        })}
         description={roleLine(invitation.role)}
       />
 
       <div className="mt-7 grid gap-5" data-testid="invite-card">
         {sessionPending ? (
-          <div className="grid gap-3" aria-busy="true" aria-label={m.auth_loading_session()}>
+          <div
+            className="grid gap-3"
+            aria-busy="true"
+            aria-label={m.auth_loading_session()}
+          >
             <Skeleton className="h-11 w-full" />
             <Skeleton className="h-11 w-full" />
           </div>
@@ -114,7 +126,9 @@ export function InviteScreen({
               onClick={() => void invite.accept()}
               data-testid="accept-invitation"
             >
-              {m.auth_join_org({ organizationName: invitation.organizationName })}
+              {m.auth_join_org({
+                organizationName: invitation.organizationName,
+              })}
             </Button>
           </div>
         ) : (
@@ -128,7 +142,11 @@ export function InviteScreen({
                 onSubmit={(event) => {
                   event.preventDefault()
                   event.stopPropagation()
-                  void invite.signUpAndJoin({ name, email: invitation.email, password })
+                  void invite.signUpAndJoin({
+                    name,
+                    email: invitation.email,
+                    password,
+                  })
                 }}
               >
                 <FormField label={m.auth_email()} htmlFor="email">
@@ -165,7 +183,11 @@ export function InviteScreen({
                     onChange={(event) => setName(event.target.value)}
                   />
                 </FormField>
-                <FormField label={m.auth_password()} htmlFor="password" hint={m.auth_password_hint()}>
+                <FormField
+                  label={m.auth_password()}
+                  htmlFor="password"
+                  hint={m.auth_password_hint()}
+                >
                   <PasswordInput
                     id="password"
                     name="password"
@@ -213,7 +235,10 @@ export function InviteScreen({
 export function InviteInvalid() {
   return (
     <AuthShell showName>
-      <div className="grid justify-items-center gap-5 text-center" data-testid="invite-invalid">
+      <div
+        className="grid justify-items-center gap-5 text-center"
+        data-testid="invite-invalid"
+      >
         <span
           aria-hidden="true"
           className="grid size-14 place-content-center rounded-[18px] bg-background-subtle text-icon-muted ring-8 ring-background-subtle/50"

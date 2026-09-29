@@ -27,13 +27,21 @@ function ClientPage() {
       newSiteOpen={search.new === 1}
       onTabChange={(next) =>
         void navigate({
-          search: (prev) => ({ ...prev, tab: next === 'sites' ? undefined : next, new: undefined }),
+          search: (prev) => ({
+            ...prev,
+            tab: next === 'sites' ? undefined : next,
+            new: undefined,
+          }),
           replace: true,
         })
       }
       onNewSiteOpenChange={(open) =>
         void navigate({
-          search: (prev) => ({ ...prev, tab: undefined, new: open ? 1 : undefined }),
+          search: (prev) => ({
+            ...prev,
+            tab: undefined,
+            new: open ? 1 : undefined,
+          }),
           replace: true,
         })
       }

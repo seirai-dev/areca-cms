@@ -25,7 +25,13 @@ export function SetupScreen({ methods }: { methods: AuthMethods }) {
   const { complete, error, pending } = useCompleteSetup(methods.emailPassword)
 
   return (
-    <AuthShell footer={<span className="text-caption font-normal text-text-muted">{m.auth_setup_footnote()}</span>}>
+    <AuthShell
+      footer={
+        <span className="text-caption font-normal text-text-muted">
+          {m.auth_setup_footnote()}
+        </span>
+      }
+    >
       <AuthHeading
         title={m.auth_welcome_to({ appName: branding.appName })}
         description={m.auth_setup_subtitle()}
@@ -65,7 +71,11 @@ export function SetupScreen({ methods }: { methods: AuthMethods }) {
             onChange={(event) => setEmail(event.target.value)}
           />
         </FormField>
-        <FormField label={m.auth_password()} htmlFor="password" hint={m.auth_password_hint()}>
+        <FormField
+          label={m.auth_password()}
+          htmlFor="password"
+          hint={m.auth_password_hint()}
+        >
           <PasswordInput
             id="password"
             name="password"

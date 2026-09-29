@@ -61,14 +61,18 @@ export function AuthShell({
               <BrandLogo branding={branding} size="lg" />
             </span>
             {showName ? (
-              <span className="text-headline text-text-primary">{branding.appName}</span>
+              <span className="text-headline text-text-primary">
+                {branding.appName}
+              </span>
             ) : null}
           </div>
           <div className="w-full rounded-panel border border-border-default bg-background-surface p-6 shadow-[0_1px_2px_rgb(0_0_0/0.04),0_24px_48px_-24px_rgb(0_0_0/0.12)] sm:p-8">
             {children}
           </div>
           {footer ? (
-            <div className="text-center text-callout text-text-secondary">{footer}</div>
+            <div className="text-center text-callout text-text-secondary">
+              {footer}
+            </div>
           ) : null}
         </div>
       </main>
@@ -90,7 +94,9 @@ export function AuthHeading({
     <div className={cn('grid gap-1.5 text-center', className)}>
       <h1 className="text-title-1 text-balance text-text-primary">{title}</h1>
       {description ? (
-        <p className="text-body text-balance text-text-secondary">{description}</p>
+        <p className="text-body text-balance text-text-secondary">
+          {description}
+        </p>
       ) : null}
     </div>
   )

@@ -32,7 +32,11 @@ export function PasswordInput({
           onClick={() => setVisible((value) => !value)}
           className="absolute top-1/2 right-1.5 grid size-8 -translate-y-1/2 place-content-center rounded-[8px] text-icon-muted transition-colors outline-none hover:bg-surface-state-hover hover:text-text-primary focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-border-focus"
         >
-          {visible ? <EyeSlash className="size-[18px]" /> : <Eye className="size-[18px]" />}
+          {visible ? (
+            <EyeSlash className="size-[18px]" />
+          ) : (
+            <Eye className="size-[18px]" />
+          )}
           <span className="sr-only">{label}</span>
         </button>
       </Hint>

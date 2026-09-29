@@ -36,7 +36,10 @@ function go(path: string) {
 }
 
 /** Email + password sign-in, then on to `redirect` (validated). */
-export function usePasswordSignIn(redirectTo: string | undefined, initialError: string | null) {
+export function usePasswordSignIn(
+  redirectTo: string | undefined,
+  initialError: string | null,
+) {
   const [error, setError] = React.useState<string | null>(initialError)
   const [pending, setPending] = React.useState(false)
 
@@ -64,13 +67,19 @@ export function useCompleteSetup(emailPassword: boolean) {
   const [error, setError] = React.useState<string | null>(null)
   const [pending, setPending] = React.useState(false)
 
-  async function complete(input: { name: string; email: string; password: string }) {
+  async function complete(input: {
+    name: string
+    email: string
+    password: string
+  }) {
     setPending(true)
     setError(null)
     try {
       await completeSetupFn({ data: input })
     } catch (err) {
-      setError(err instanceof Error ? err.message : m.auth_could_not_complete_setup())
+      setError(
+        err instanceof Error ? err.message : m.auth_could_not_complete_setup(),
+      )
       setPending(false)
       return
     }
@@ -100,7 +109,9 @@ export function useCompleteSetup(emailPassword: boolean) {
  */
 export function useInvitation(token: string, initialError: string | null) {
   const [error, setError] = React.useState<string | null>(initialError)
-  const [pending, setPending] = React.useState<'accept' | 'sign-up' | null>(null)
+  const [pending, setPending] = React.useState<'accept' | 'sign-up' | null>(
+    null,
+  )
 
   async function accept(mode: 'accept' | 'sign-up' = 'accept') {
     setPending(mode)
@@ -108,7 +119,11 @@ export function useInvitation(token: string, initialError: string | null) {
     try {
       await acceptInvitationFn({ data: { token } })
     } catch (err) {
-      setError(err instanceof Error ? err.message : m.auth_could_not_accept_invitation())
+      setError(
+        err instanceof Error
+          ? err.message
+          : m.auth_could_not_accept_invitation(),
+      )
       setPending(null)
       return false
     }
@@ -116,7 +131,11 @@ export function useInvitation(token: string, initialError: string | null) {
     return true
   }
 
-  async function signUpAndJoin(input: { name: string; email: string; password: string }) {
+  async function signUpAndJoin(input: {
+    name: string
+    email: string
+    password: string
+  }) {
     setPending('sign-up')
     setError(null)
     const result = await authClient.signUp.email(input)
