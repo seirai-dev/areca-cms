@@ -212,7 +212,7 @@ function FieldListRow({
       dragControls={controls}
       data-testid={`field-row-${index}`}
       data-invalid={invalid ? 'true' : undefined}
-      layout={reduce ? false : 'position'}
+      layout={reduce ? undefined : 'position'}
       whileDrag={
         reduce
           ? undefined

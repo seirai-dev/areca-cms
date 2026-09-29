@@ -3,7 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import type { MeSite } from '#/lib/site-nav'
 import { m } from '#/paraglide/messages'
 
-import { LegacyContentTypes } from './legacy-content-types'
+import { ContentModelTab } from '#/features/content-model/content-model-tab'
 import { LegacySiteSettings } from './legacy-site-settings'
 
 export const SETTINGS_TABS = [
@@ -67,7 +67,7 @@ export function SiteSettingsScreen({
           </TabsContent>
         ))}
         <TabsContent value="content">
-          {tab === 'content' ? <LegacyContentTypes siteId={site.id} /> : null}
+          {tab === 'content' ? <ContentModelTab siteId={site.id} /> : null}
         </TabsContent>
       </Tabs>
     </div>
