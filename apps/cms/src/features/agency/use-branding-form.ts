@@ -47,7 +47,10 @@ async function uploadBrandingImage(kind: ImageKind, file: File) {
   const body = new FormData()
   body.append('file', file)
   body.append('kind', kind)
-  const response = await fetch('/api/admin/branding/upload', { method: 'POST', body })
+  const response = await fetch('/api/admin/branding/upload', {
+    method: 'POST',
+    body,
+  })
   if (!response.ok) {
     throw new Error((await response.text()) || m.admin_branding_upload_failed())
   }
@@ -64,7 +67,10 @@ async function uploadBrandingImage(kind: ImageKind, file: File) {
 export function useBrandingForm() {
   const router = useRouter()
   const queryClient = useQueryClient()
-  const query = useQuery({ queryKey: brandingQueryKey, queryFn: () => getBrandingFn() })
+  const query = useQuery({
+    queryKey: brandingQueryKey,
+    queryFn: () => getBrandingFn(),
+  })
   const saved = query.data
 
   const [appName, setAppName] = React.useState('')
@@ -72,10 +78,11 @@ export function useBrandingForm() {
   const [accent, setAccent] = React.useState('')
   const [font, setFont] = React.useState<FontKey>(DEFAULT_FONT)
   const [advancedEnabled, setAdvancedEnabled] = React.useState(false)
-  const [advancedColors, setAdvancedColors] = React.useState<AdvancedBrandColors>({
-    light: {},
-    dark: {},
-  })
+  const [advancedColors, setAdvancedColors] =
+    React.useState<AdvancedBrandColors>({
+      light: {},
+      dark: {},
+    })
 
   const seed = React.useCallback((view: BrandingView) => {
     setAppName(view.appName === DEFAULT_APP_NAME ? '' : view.appName)
@@ -116,10 +123,13 @@ export function useBrandingForm() {
   })
 
   const upload = useMutation({
-    mutationFn: ({ kind, file }: { kind: ImageKind; file: File }) => uploadBrandingImage(kind, file),
+    mutationFn: ({ kind, file }: { kind: ImageKind; file: File }) =>
+      uploadBrandingImage(kind, file),
     onSuccess: async (next, { kind }) => {
       toast.success(
-        kind === 'logo' ? m.admin_branding_toast_logo_updated() : m.admin_branding_toast_favicon_updated(),
+        kind === 'logo'
+          ? m.admin_branding_toast_logo_updated()
+          : m.admin_branding_toast_favicon_updated(),
       )
       await applySaved(next)
     },
@@ -130,7 +140,9 @@ export function useBrandingForm() {
     mutationFn: (kind: ImageKind) => clearBrandingImageFn({ data: { kind } }),
     onSuccess: async (next, kind) => {
       toast.success(
-        kind === 'logo' ? m.admin_branding_toast_logo_removed() : m.admin_branding_toast_favicon_removed(),
+        kind === 'logo'
+          ? m.admin_branding_toast_logo_removed()
+          : m.admin_branding_toast_favicon_removed(),
       )
       await applySaved(next)
     },
@@ -161,7 +173,8 @@ export function useBrandingForm() {
       (emailFromName.trim() || null) !== saved.emailFromName ||
       (accentHex ?? null) !== saved.accentColor ||
       advancedEnabled !== saved.advancedColorsEnabled ||
-      JSON.stringify(normalizedAdvanced) !== JSON.stringify(normalizedPalette(saved.advancedColors)) ||
+      JSON.stringify(normalizedAdvanced) !==
+        JSON.stringify(normalizedPalette(saved.advancedColors)) ||
       font !== saved.font
     : false
 
@@ -194,7 +207,11 @@ export function useBrandingForm() {
     accentInvalid,
     activePreset: matchPreset(accentHex, font),
     dirty,
-    busy: save.isPending || upload.isPending || clearImage.isPending || reset.isPending,
+    busy:
+      save.isPending ||
+      upload.isPending ||
+      clearImage.isPending ||
+      reset.isPending,
     save,
     submit,
     discard: () => saved && seed(saved),

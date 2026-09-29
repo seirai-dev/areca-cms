@@ -54,7 +54,8 @@ export function useGettingStarted() {
   const now = Date.now()
   const hasPendingInvite = invites.some((result) =>
     (result.data ?? []).some(
-      (invite) => !invite.acceptedAt && new Date(invite.expiresAt).getTime() > now,
+      (invite) =>
+        !invite.acceptedAt && new Date(invite.expiresAt).getTime() > now,
     ),
   )
 
@@ -64,13 +65,20 @@ export function useGettingStarted() {
   const connected = sites.find((site) => site.collections > 0)
 
   const steps: Step[] = [
-    { key: 'client', done: clientRows.length > 0, target: { kind: 'new-client' } },
+    {
+      key: 'client',
+      done: clientRows.length > 0,
+      target: { kind: 'new-client' },
+    },
     {
       key: 'site',
       done: sites.length > 0,
       target:
         clientRows.length > 0
-          ? { kind: 'new-site', orgId: clientRows.length === 1 ? firstClient.id : null }
+          ? {
+              kind: 'new-site',
+              orgId: clientRows.length === 1 ? firstClient.id : null,
+            }
           : null,
     },
     {
@@ -83,17 +91,20 @@ export function useGettingStarted() {
     {
       key: 'invite',
       done: hasMember || hasPendingInvite,
-      target: firstClient
-        ? {
-            kind: 'people',
-            orgId: (sites[0]?.organizationId ?? firstClient.id),
-          }
-        : null,
+      target:
+        clientRows.length > 0
+          ? {
+              kind: 'people',
+              orgId: sites[0]?.organizationId ?? firstClient.id,
+            }
+          : null,
     },
     {
       key: 'live',
       done: sites.some((site) => site.live),
-      target: sites[0] ? { kind: 'go-live', siteId: (connected ?? sites[0]).id } : null,
+      target: sites[0]
+        ? { kind: 'go-live', siteId: (connected ?? sites[0]).id }
+        : null,
     },
   ]
 

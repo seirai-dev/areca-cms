@@ -39,7 +39,10 @@ export function SlugField({
             : 'bg-background-subtle pr-1 pl-3',
         )}
       >
-        <label htmlFor={id} className="shrink-0 text-caption font-normal text-text-muted">
+        <label
+          htmlFor={id}
+          className="shrink-0 text-caption font-normal text-text-muted"
+        >
           {m.agency_slug_label()}
         </label>
         <input
@@ -50,10 +53,11 @@ export function SlugField({
           readOnly={!editing}
           autoComplete="off"
           spellCheck={false}
+          placeholder={m.agency_slug_placeholder()}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           className={cn(
-            'h-8 min-w-0 flex-1 bg-transparent font-mono text-[12.5px] text-text-primary outline-none',
+            'h-8 min-w-0 flex-1 bg-transparent font-mono text-[12.5px] text-text-primary outline-none placeholder:font-sans placeholder:text-text-muted',
             !editing && 'cursor-default text-text-secondary',
           )}
         />

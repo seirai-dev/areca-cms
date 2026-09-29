@@ -1414,6 +1414,7 @@
   "shell_no_content_types": "No content types yet.",
   "shell_not_found_back": "Go to your workspace",
   "shell_not_found_description": "Or you no longer have access to it.",
+  "shell_not_found_go_back": "Go back",
   "shell_not_found_title": "This page doesn't exist",
   "shell_not_live_yet": "Not live yet",
   "shell_palette_content": "Content",

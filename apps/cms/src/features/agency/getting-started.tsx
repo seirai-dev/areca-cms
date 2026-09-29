@@ -13,7 +13,10 @@ import { m } from '#/paraglide/messages'
 import { useGettingStarted } from './use-getting-started'
 import type { Step, StepKey, StepTarget } from './use-getting-started'
 
-const COPY: Record<StepKey, { title: () => string; body: () => string; action: () => string }> = {
+const COPY: Record<
+  StepKey,
+  { title: () => string; body: () => string; action: () => string }
+> = {
   client: {
     title: () => m.agency_step_client_title(),
     body: () => m.agency_step_client_body(),
@@ -59,11 +62,18 @@ function StepLink({
       )
     case 'new-site':
       return target.orgId ? (
-        <Link {...rest} to="/agency/clients/$orgId" params={{ orgId: target.orgId }} search={{ new: 1 }}>
+        <Link
+          {...rest}
+          to="/agency/clients/$orgId"
+          params={{ orgId: target.orgId }}
+          search={{ new: 1 }}
+        >
           {children}
         </Link>
       ) : (
-        <Link {...rest} to="/agency/clients">{children}</Link>
+        <Link {...rest} to="/agency/clients">
+          {children}
+        </Link>
       )
     case 'developer':
       return (
@@ -89,7 +99,12 @@ function StepLink({
       )
     case 'go-live':
       return (
-        <Link {...rest} to="/sites/$siteId" params={{ siteId: target.siteId }} search={{ panel: 'golive' }}>
+        <Link
+          {...rest}
+          to="/sites/$siteId"
+          params={{ siteId: target.siteId }}
+          search={{ panel: 'golive' }}
+        >
           {children}
         </Link>
       )
@@ -107,7 +122,12 @@ export function GettingStarted() {
   const reduce = useReducedMotion()
 
   if (loading) {
-    return <Skeleton className="h-[292px] rounded-card" data-testid="get-started-loading" />
+    return (
+      <Skeleton
+        className="h-[292px] rounded-card"
+        data-testid="get-started-loading"
+      />
+    )
   }
 
   if (complete) {
@@ -119,7 +139,9 @@ export function GettingStarted() {
       >
         <CheckDraw size={20} className="text-icon-success" />
         <p className="min-w-0 text-callout text-text-secondary">
-          <span className="font-medium text-text-primary">{m.agency_checklist_all_set()}</span>
+          <span className="font-medium text-text-primary">
+            {m.agency_checklist_all_set()}
+          </span>
           {' · '}
           {m.agency_checklist_all_set_body()}
         </p>
@@ -130,12 +152,21 @@ export function GettingStarted() {
   const percent = Math.round((doneCount / steps.length) * 100)
 
   return (
-    <Card padded={false} className="gap-0 overflow-hidden" data-testid="get-started">
+    <Card
+      padded={false}
+      className="gap-0 overflow-hidden"
+      data-testid="get-started"
+    >
       <div className="grid gap-3 px-5 pt-5 pb-4">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-          <h2 className="text-title-2 text-text-primary">{m.agency_checklist_title()}</h2>
+          <h2 className="text-title-2 text-text-primary">
+            {m.agency_checklist_title()}
+          </h2>
           <span className="text-callout text-text-secondary tnum">
-            {m.agency_checklist_progress({ done: doneCount, total: steps.length })}
+            {m.agency_checklist_progress({
+              done: doneCount,
+              total: steps.length,
+            })}
           </span>
         </div>
         <div
@@ -156,14 +187,27 @@ export function GettingStarted() {
       </div>
       <ol className="border-t border-border-default">
         {steps.map((step, index) => (
-          <StepRow key={step.key} step={step} index={index} isCurrent={step.key === current} />
+          <StepRow
+            key={step.key}
+            step={step}
+            index={index}
+            isCurrent={step.key === current}
+          />
         ))}
       </ol>
     </Card>
   )
 }
 
-function StepRow({ step, index, isCurrent }: { step: Step; index: number; isCurrent: boolean }) {
+function StepRow({
+  step,
+  index,
+  isCurrent,
+}: {
+  step: Step
+  index: number
+  isCurrent: boolean
+}) {
   const copy = COPY[step.key]
   return (
     <li
@@ -172,7 +216,8 @@ function StepRow({ step, index, isCurrent }: { step: Step; index: number; isCurr
       className={cn(
         'relative flex items-start gap-3.5 px-5 py-3.5',
         'after:absolute after:right-0 after:bottom-0 after:left-[60px] after:h-px after:bg-border-default last:after:hidden',
-        isCurrent && 'bg-[color-mix(in_oklab,var(--color-accent-soft)_35%,transparent)]',
+        isCurrent &&
+          'bg-[color-mix(in_oklab,var(--color-accent-soft)_35%,transparent)]',
       )}
     >
       <span
@@ -196,9 +241,13 @@ function StepRow({ step, index, isCurrent }: { step: Step; index: number; isCurr
           )}
         >
           {copy.title()}
-          {step.done ? <span className="sr-only"> ({m.agency_checklist_done()})</span> : null}
+          {step.done ? (
+            <span className="sr-only"> ({m.agency_checklist_done()})</span>
+          ) : null}
         </p>
-        {isCurrent ? <p className="text-callout text-text-secondary">{copy.body()}</p> : null}
+        {isCurrent ? (
+          <p className="text-callout text-text-secondary">{copy.body()}</p>
+        ) : null}
       </div>
       {step.done ? (
         <span className="pt-0.5 text-caption font-normal text-text-muted">

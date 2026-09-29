@@ -25,14 +25,25 @@ export type AgencySite = {
   organizationName?: string
 }
 
-function Figures({ figures, loading }: { figures: SiteFigures | undefined; loading: boolean }) {
+function Figures({
+  figures,
+  loading,
+}: {
+  figures: SiteFigures | undefined
+  loading: boolean
+}) {
   if (loading || !figures) {
     return <Skeleton className="h-[22px] w-24 rounded-full" />
   }
   return (
     <>
       {figures.live ? (
-        <StatusPill tone="success" icon="live" pulse="none" label={m.shell_status_live()} />
+        <StatusPill
+          tone="success"
+          icon="live"
+          pulse="none"
+          label={m.shell_status_live()}
+        />
       ) : (
         <StatusPill tone="neutral" label={m.shell_not_live_yet()} />
       )}
@@ -52,7 +63,9 @@ function Head({ site, whisper }: { site: AgencySite; whisper: string }) {
     <div className="flex items-start gap-3">
       <SiteTile id={site.id} name={site.name} size="lg" />
       <div className="grid min-w-0 flex-1 gap-0.5 pt-0.5">
-        <span className="truncate text-headline text-text-primary">{site.name}</span>
+        <span className="truncate text-headline text-text-primary">
+          {site.name}
+        </span>
         <span className="truncate text-callout text-text-muted">{whisper}</span>
       </div>
     </div>
@@ -82,7 +95,9 @@ export function AgencySiteCard({
 }) {
   const host = displayHost(site.productionUrl)
   const whisper =
-    showClient && site.organizationName ? `${site.organizationName} · ${host}` : host
+    showClient && site.organizationName
+      ? `${site.organizationName} · ${host}`
+      : host
 
   if (!actions) {
     return (
@@ -92,13 +107,18 @@ export function AgencySiteCard({
         data-testid={`agency-site-${site.slug}`}
         className="block h-full rounded-card outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus"
       >
-        <Card interactive className="h-full min-h-[132px] justify-between gap-5">
+        <Card
+          interactive
+          className="h-full min-h-[132px] justify-between gap-5"
+        >
           <Head site={site} whisper={whisper} />
           <div className="flex flex-wrap items-center gap-2">
             <Figures figures={figures} loading={loading} />
             {figures && !loading ? (
               <span className="ml-auto text-caption font-normal text-text-muted">
-                {m.sites_picker_updated({ time: formatRelativeTime(figures.lastUpdated) })}
+                {m.sites_picker_updated({
+                  time: formatRelativeTime(figures.lastUpdated),
+                })}
               </span>
             ) : null}
           </div>
@@ -108,19 +128,28 @@ export function AgencySiteCard({
   }
 
   return (
-    <Card className="h-full justify-between gap-4" data-testid={`client-site-${site.slug}`}>
+    <Card
+      className="h-full justify-between gap-4"
+      data-testid={`client-site-${site.slug}`}
+    >
       <Head site={site} whisper={whisper} />
       <div className="flex flex-wrap items-center gap-2">
         <Figures figures={figures} loading={loading} />
         {figures && !loading ? (
           <span className="ml-auto text-caption font-normal text-text-muted">
-            {m.sites_picker_updated({ time: formatRelativeTime(figures.lastUpdated) })}
+            {m.sites_picker_updated({
+              time: formatRelativeTime(figures.lastUpdated),
+            })}
           </span>
         ) : null}
       </div>
       <div className="-mx-5 -mb-5 flex items-center gap-1 border-t border-border-default px-3 py-2">
         <Button asChild variant="ghost" size="sm">
-          <Link to="/sites/$siteId" params={{ siteId: site.id }} data-testid={`open-site-${site.slug}`}>
+          <Link
+            to="/sites/$siteId"
+            params={{ siteId: site.id }}
+            data-testid={`open-site-${site.slug}`}
+          >
             {m.agency_site_open()}
             <ArrowRight className="size-3.5" />
           </Link>

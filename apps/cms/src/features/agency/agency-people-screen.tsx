@@ -3,7 +3,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { MagnifyingGlass, Users, X } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
-import { adminQueryKeys, errorMessage, membershipRoleLabel } from '#/components/admin/helpers'
+import {
+  adminQueryKeys,
+  errorMessage,
+  membershipRoleLabel,
+} from '#/components/admin/helpers'
 import { UserAvatar } from '#/components/ui/avatar'
 import { Tag } from '#/components/ui/badge'
 import { Button } from '#/components/ui/button'
@@ -38,7 +42,11 @@ const ALL = 'all'
 /** Filter everyone with an account by name/email, access and client. */
 export function filterAccounts(
   accounts: AccountRow[],
-  { search, role, clientId }: { search: string; role: RoleFilter; clientId: string },
+  {
+    search,
+    role,
+    clientId,
+  }: { search: string; role: RoleFilter; clientId: string },
 ) {
   const needle = search.trim().toLowerCase()
   return accounts.filter((account) => {
@@ -64,14 +72,20 @@ export function filterAccounts(
 function useAgencyPeople() {
   const queryClient = useQueryClient()
   const accounts = useQuery(accountsQuery())
-  const [pending, setPending] = React.useState<{ userId: string; name: string; next: boolean } | null>(
-    null,
-  )
+  const [pending, setPending] = React.useState<{
+    userId: string
+    name: string
+    next: boolean
+  } | null>(null)
   const mutation = useMutation({
     mutationFn: (input: { userId: string; isAgencyAdmin: boolean }) =>
       setAgencyAdminFn({ data: input }),
     onSuccess: async (_result, input) => {
-      toast.success(input.isAgencyAdmin ? m.admin_users_toast_granted() : m.admin_users_toast_removed())
+      toast.success(
+        input.isAgencyAdmin
+          ? m.admin_users_toast_granted()
+          : m.admin_users_toast_removed(),
+      )
       setPending(null)
       await queryClient.invalidateQueries({ queryKey: adminQueryKeys.users })
     },
@@ -94,7 +108,8 @@ export function AgencyPeopleScreen({ me }: { me: Me }) {
   const clients = React.useMemo(() => {
     const byId = new Map<string, string>()
     for (const account of accounts.data ?? []) {
-      for (const item of account.memberships) byId.set(item.organizationId, item.organizationName)
+      for (const item of account.memberships)
+        byId.set(item.organizationId, item.organizationName)
     }
     return [...byId.entries()]
       .map(([id, name]) => ({ id, name }))
@@ -103,12 +118,13 @@ export function AgencyPeopleScreen({ me }: { me: Me }) {
 
   const rows = React.useMemo(
     () =>
-      filterAccounts(accounts.data ?? [], { search, role, clientId }).sort((a, b) =>
-        a.name.localeCompare(b.name),
+      filterAccounts(accounts.data ?? [], { search, role, clientId }).sort(
+        (a, b) => a.name.localeCompare(b.name),
       ),
     [accounts.data, search, role, clientId],
   )
-  const filtersActive = search.trim() !== '' || role !== 'all' || clientId !== ALL
+  const filtersActive =
+    search.trim() !== '' || role !== 'all' || clientId !== ALL
 
   function clear() {
     setSearch('')
@@ -118,7 +134,10 @@ export function AgencyPeopleScreen({ me }: { me: Me }) {
 
   return (
     <div className="grid gap-8" data-testid="agency-people">
-      <PageHeader title={m.shell_nav_people()} description={m.agency_people_description()} />
+      <PageHeader
+        title={m.shell_nav_people()}
+        description={m.agency_people_description()}
+      />
 
       {accounts.isError ? (
         <QueryError
@@ -135,7 +154,10 @@ export function AgencyPeopleScreen({ me }: { me: Me }) {
           </div>
           <div className="overflow-hidden surface-card">
             {Array.from({ length: 5 }).map((_, index) => (
-              <div key={index} className="flex items-center gap-3 border-b border-border-default px-4 py-3.5 last:border-b-0">
+              <div
+                key={index}
+                className="flex items-center gap-3 border-b border-border-default px-4 py-3.5 last:border-b-0"
+              >
                 <Skeleton className="size-10 rounded-full" />
                 <div className="grid flex-1 gap-2">
                   <Skeleton className="h-3.5 w-40" />
@@ -177,10 +199,26 @@ export function AgencyPeopleScreen({ me }: { me: Me }) {
                   value={role}
                   onValueChange={setRole}
                   options={[
-                    { value: 'all', label: m.agency_people_filter_everyone(), testId: 'people-filter-all' },
-                    { value: 'agency-admin', label: m.agency_people_filter_admins(), testId: 'people-filter-agency-admin' },
-                    { value: 'owner', label: m.agency_people_filter_owners(), testId: 'people-filter-owner' },
-                    { value: 'editor', label: m.agency_people_filter_editors(), testId: 'people-filter-editor' },
+                    {
+                      value: 'all',
+                      label: m.agency_people_filter_everyone(),
+                      testId: 'people-filter-all',
+                    },
+                    {
+                      value: 'agency-admin',
+                      label: m.agency_people_filter_admins(),
+                      testId: 'people-filter-agency-admin',
+                    },
+                    {
+                      value: 'owner',
+                      label: m.agency_people_filter_owners(),
+                      testId: 'people-filter-owner',
+                    },
+                    {
+                      value: 'editor',
+                      label: m.agency_people_filter_editors(),
+                      testId: 'people-filter-editor',
+                    },
                   ]}
                 />
               </div>
@@ -193,7 +231,9 @@ export function AgencyPeopleScreen({ me }: { me: Me }) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={ALL}>{m.activity_all_clients()}</SelectItem>
+                  <SelectItem value={ALL}>
+                    {m.activity_all_clients()}
+                  </SelectItem>
                   {clients.map((client) => (
                     <SelectItem key={client.id} value={client.id}>
                       {client.name}
@@ -202,7 +242,13 @@ export function AgencyPeopleScreen({ me }: { me: Me }) {
                 </SelectContent>
               </Select>
               {filtersActive ? (
-                <Button type="button" variant="quiet" size="sm" onClick={clear} data-testid="people-clear-filters">
+                <Button
+                  type="button"
+                  variant="quiet"
+                  size="sm"
+                  onClick={clear}
+                  data-testid="people-clear-filters"
+                >
                   <X />
                   {m.admin_users_clear_filters()}
                 </Button>
@@ -210,8 +256,13 @@ export function AgencyPeopleScreen({ me }: { me: Me }) {
             </div>
           </div>
 
-          <p className="px-1 text-caption font-normal text-text-muted tnum" aria-live="polite">
-            {rows.length === 1 ? m.agency_people_count_one() : m.agency_people_count({ count: rows.length })}
+          <p
+            className="px-1 text-caption font-normal text-text-muted tnum"
+            aria-live="polite"
+          >
+            {rows.length === 1
+              ? m.agency_people_count_one()
+              : m.agency_people_count({ count: rows.length })}
           </p>
 
           {rows.length === 0 ? (
@@ -234,7 +285,9 @@ export function AgencyPeopleScreen({ me }: { me: Me }) {
                   key={account.id}
                   account={account}
                   isSelf={account.id === me.user.id}
-                  onToggle={(next) => setPending({ userId: account.id, name: account.name, next })}
+                  onToggle={(next) =>
+                    setPending({ userId: account.id, name: account.name, next })
+                  }
                 />
               ))}
             </InsetList>
@@ -250,7 +303,9 @@ export function AgencyPeopleScreen({ me }: { me: Me }) {
         title={
           pending?.next
             ? m.admin_users_confirm_grant_title({ name: pending.name })
-            : m.admin_users_confirm_revoke_title({ name: pending?.name ?? m.admin_users_this_user() })
+            : m.admin_users_confirm_revoke_title({
+                name: pending?.name ?? m.admin_users_this_user(),
+              })
         }
         description={
           pending?.next
@@ -258,12 +313,17 @@ export function AgencyPeopleScreen({ me }: { me: Me }) {
             : m.admin_users_confirm_revoke_description()
         }
         confirmLabel={
-          pending?.next ? m.admin_users_confirm_grant_label() : m.admin_users_confirm_revoke_label()
+          pending?.next
+            ? m.admin_users_confirm_grant_label()
+            : m.admin_users_confirm_revoke_label()
         }
         variant={pending?.next ? 'default' : 'destructive'}
         onConfirm={async () => {
           if (!pending) return
-          await mutation.mutateAsync({ userId: pending.userId, isAgencyAdmin: pending.next })
+          await mutation.mutateAsync({
+            userId: pending.userId,
+            isAgencyAdmin: pending.next,
+          })
         }}
         testId="agency-access-confirm"
       />
@@ -304,7 +364,10 @@ function PersonRow({
       }
       subtitle={account.email}
       trailing={
-        <label htmlFor={isSelf ? undefined : switchId} className="flex items-center gap-2.5">
+        <label
+          htmlFor={isSelf ? undefined : switchId}
+          className="flex items-center gap-2.5"
+        >
           <span className="hidden text-callout text-text-secondary md:inline">
             {m.agency_people_access()}
           </span>
@@ -320,7 +383,9 @@ function PersonRow({
     >
       <span className="mt-1 flex flex-wrap items-center gap-1.5">
         {account.memberships.length === 0 ? (
-          <span className="text-caption font-normal text-text-muted">{m.agency_people_no_clients()}</span>
+          <span className="text-caption font-normal text-text-muted">
+            {m.agency_people_no_clients()}
+          </span>
         ) : (
           account.memberships.map((item) => (
             <span
@@ -329,12 +394,14 @@ function PersonRow({
               data-testid="membership-chip"
             >
               {item.organizationName}
-              <span className="text-text-muted">· {membershipRoleLabel(item.role)}</span>
+              <span className="text-text-muted">
+                · {membershipRoleLabel(item.role)}
+              </span>
             </span>
           ))
         )}
         <span className="text-caption font-normal text-text-muted">
-          · {m.agency_people_joined()} <RelativeTime value={account.createdAt} />
+          {m.agency_people_joined()} <RelativeTime value={account.createdAt} />
         </span>
       </span>
     </InsetRow>

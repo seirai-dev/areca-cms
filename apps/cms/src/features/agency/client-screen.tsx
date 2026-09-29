@@ -1,7 +1,13 @@
 import * as React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { ArrowLeft, Globe, MagnifyingGlass, Plus, Pulse } from '@phosphor-icons/react'
+import {
+  ArrowLeft,
+  Globe,
+  MagnifyingGlass,
+  Plus,
+  Pulse,
+} from '@phosphor-icons/react'
 
 import { sitesOverviewQueryOptions } from '#/components/shell/workspace-switcher'
 import { Button } from '#/components/ui/button'
@@ -19,14 +25,23 @@ import { ClientDeployment } from './client-deployment'
 import { ClientSettings } from './client-settings'
 import { ClientTile } from './client-tile'
 import { clientCounts } from './clients-screen'
-import { NewSiteSheet, readPendingToken, writePendingToken } from './new-site-sheet'
+import {
+  NewSiteSheet,
+  readPendingToken,
+  writePendingToken,
+} from './new-site-sheet'
 import type { PendingToken } from './new-site-sheet'
 import { clientSitesQuery, clientsQuery } from './queries'
 import type { ClientRow } from './queries'
 import { AgencySiteCard } from './site-card'
 import type { SiteFigures } from './site-card'
 
-export const CLIENT_TABS = ['sites', 'people', 'deployment', 'settings'] as const
+export const CLIENT_TABS = [
+  'sites',
+  'people',
+  'deployment',
+  'settings',
+] as const
 export type ClientTab = (typeof CLIENT_TABS)[number]
 
 /**
@@ -97,7 +112,11 @@ export function ClientScreen({
   }
 
   return (
-    <div className="grid gap-6" data-testid="organization-page" data-ready="true">
+    <div
+      className="grid gap-6"
+      data-testid="organization-page"
+      data-ready="true"
+    >
       <header className="grid gap-4">
         <Link
           to="/agency/clients"
@@ -110,7 +129,9 @@ export function ClientScreen({
           <div className="flex min-w-0 items-center gap-4">
             <ClientTile id={client.id} name={client.name} size="xl" />
             <div className="grid min-w-0 gap-1">
-              <h1 className="truncate text-display text-text-primary">{client.name}</h1>
+              <h1 className="truncate text-display text-text-primary">
+                {client.name}
+              </h1>
               <p className="flex flex-wrap items-center gap-x-2 text-caption font-normal text-text-muted">
                 <span className="font-mono" data-testid="client-slug">
                   {client.slug}
@@ -120,8 +141,17 @@ export function ClientScreen({
               </p>
             </div>
           </div>
-          <Button asChild variant="secondary" size="sm" className="self-start sm:self-auto">
-            <Link to="/agency/activity" search={{ client: client.id }} data-testid="client-activity">
+          <Button
+            asChild
+            variant="secondary"
+            size="sm"
+            className="self-start sm:self-auto"
+          >
+            <Link
+              to="/agency/activity"
+              search={{ client: client.id }}
+              data-testid="client-activity"
+            >
               <Pulse />
               {m.agency_view_activity()}
             </Link>
@@ -129,7 +159,11 @@ export function ClientScreen({
         </div>
       </header>
 
-      <Tabs value={tab} onValueChange={(value) => onTabChange(value as ClientTab)} className="gap-6">
+      <Tabs
+        value={tab}
+        onValueChange={(value) => onTabChange(value as ClientTab)}
+        className="gap-6"
+      >
         <TabsList>
           <TabsTrigger value="sites" data-testid="client-tab-sites">
             {m.agency_client_tab_sites()}
@@ -153,13 +187,19 @@ export function ClientScreen({
           />
         </TabsContent>
         <TabsContent value="people">
-          <PeopleManager organizationId={client.id} organizationName={client.name} />
+          <PeopleManager
+            organizationId={client.id}
+            organizationName={client.name}
+          />
         </TabsContent>
         <TabsContent value="deployment">
           <ClientDeployment organizationId={client.id} />
         </TabsContent>
         <TabsContent value="settings">
-          <ClientSettings client={client} onShowSites={() => onTabChange('sites')} />
+          <ClientSettings
+            client={client}
+            onShowSites={() => onTabChange('sites')}
+          />
         </TabsContent>
       </Tabs>
     </div>
@@ -201,13 +241,19 @@ function ClientSites({
   const needle = search.trim().toLowerCase()
   const visible = needle
     ? rows.filter((site) =>
-        `${site.name} ${site.slug} ${site.productionUrl}`.toLowerCase().includes(needle),
+        `${site.name} ${site.slug} ${site.productionUrl}`
+          .toLowerCase()
+          .includes(needle),
       )
     : rows
   const empty = sites.isSuccess && rows.length === 0
 
   const newSiteButton = (
-    <Button type="button" data-testid="new-site" onClick={() => onNewSiteOpenChange(true)}>
+    <Button
+      type="button"
+      data-testid="new-site"
+      onClick={() => onNewSiteOpenChange(true)}
+    >
       <Plus />
       {m.agency_new_site()}
     </Button>
@@ -250,7 +296,9 @@ function ClientSites({
           card
           icon={<Globe weight="duotone" />}
           title={m.admin_org_sites_empty_title()}
-          description={m.agency_client_sites_empty_body({ client: client.name })}
+          description={m.agency_client_sites_empty_body({
+            client: client.name,
+          })}
           action={newSiteButton}
         />
       ) : (
@@ -278,7 +326,11 @@ function ClientSites({
               icon={<MagnifyingGlass />}
               title={m.home_no_results_title()}
               action={
-                <Button variant="secondary" size="sm" onClick={() => setSearch('')}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setSearch('')}
+                >
                   {m.sites_clear_search()}
                 </Button>
               }

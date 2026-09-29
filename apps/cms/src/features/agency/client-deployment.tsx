@@ -33,10 +33,14 @@ type Applications = Awaited<ReturnType<typeof verifyDokployCredentialsFn>>
 export function useDokploy(organizationId: string) {
   const queryClient = useQueryClient()
   const status = useQuery(dokployStatusQuery(organizationId))
-  const [applications, setApplications] = React.useState<Applications | undefined>()
+  const [applications, setApplications] = React.useState<
+    Applications | undefined
+  >()
   const [failure, setFailure] = React.useState<string | null>(null)
   const refresh = () =>
-    queryClient.invalidateQueries({ queryKey: adminQueryKeys.dokployCredentials(organizationId) })
+    queryClient.invalidateQueries({
+      queryKey: adminQueryKeys.dokployCredentials(organizationId),
+    })
 
   const save = useMutation({
     mutationFn: (input: { url: string; apiKey?: string }) =>
@@ -44,7 +48,10 @@ export function useDokploy(organizationId: string) {
     onMutate: () => setFailure(null),
     onSuccess: async (result) => {
       toast.success(m.admin_org_dokploy_saved())
-      setApplications({ applications: result.applications, total: result.total })
+      setApplications({
+        applications: result.applications,
+        total: result.total,
+      })
       await refresh()
     },
     onError: (err) => {
@@ -81,8 +88,13 @@ export function useDokploy(organizationId: string) {
 }
 
 /** Client › Deployment (brief §3.11). */
-export function ClientDeployment({ organizationId }: { organizationId: string }) {
-  const { status, applications, failure, save, verify, remove } = useDokploy(organizationId)
+export function ClientDeployment({
+  organizationId,
+}: {
+  organizationId: string
+}) {
+  const { status, applications, failure, save, verify, remove } =
+    useDokploy(organizationId)
   const [url, setUrl] = React.useState('')
   const [apiKey, setApiKey] = React.useState('')
   const configured = Boolean(status.data?.configured)
@@ -122,7 +134,10 @@ export function ClientDeployment({ organizationId }: { organizationId: string })
             data-testid="dokploy-form"
             onSubmit={(event) => {
               event.preventDefault()
-              save.mutate({ url: url.trim(), apiKey: apiKey.trim() || undefined })
+              save.mutate({
+                url: url.trim(),
+                apiKey: apiKey.trim() || undefined,
+              })
             }}
           >
             <div className="flex items-center gap-3">
@@ -130,9 +145,13 @@ export function ClientDeployment({ organizationId }: { organizationId: string })
                 <CloudArrowUp className="size-5" />
               </span>
               <div className="grid min-w-0 flex-1 gap-0.5">
-                <span className="text-headline text-text-primary">Dokploy</span>
+                <span className="text-headline text-text-primary">
+                  {m.agency_dokploy_title()}
+                </span>
                 <span className="truncate text-caption font-normal text-text-muted">
-                  {configured && status.data?.url ? status.data.url : m.agency_dokploy_not_set_up_body()}
+                  {configured && status.data.url
+                    ? status.data.url
+                    : m.agency_dokploy_not_set_up_body()}
                 </span>
               </div>
               {configured ? (
@@ -204,7 +223,10 @@ export function ClientDeployment({ organizationId }: { organizationId: string })
               >
                 {m.agency_dokploy_save()}
               </Button>
-              <Hint label={configured ? '' : m.agency_dokploy_verify_reason()} wrapDisabled={!configured}>
+              <Hint
+                label={configured ? '' : m.agency_dokploy_verify_reason()}
+                wrapDisabled={!configured}
+              >
                 <Button
                   type="button"
                   variant="secondary"
@@ -214,7 +236,9 @@ export function ClientDeployment({ organizationId }: { organizationId: string })
                   onClick={() => verify.mutate()}
                 >
                   {verify.isPending ? null : <CheckCircle />}
-                  {verify.isPending ? m.admin_org_dokploy_verifying() : m.admin_org_dokploy_verify()}
+                  {verify.isPending
+                    ? m.admin_org_dokploy_verifying()
+                    : m.admin_org_dokploy_verify()}
                 </Button>
               </Hint>
               {configured ? (
@@ -273,7 +297,13 @@ export function ClientDeployment({ organizationId }: { organizationId: string })
                       application.applicationStatus ? (
                         <StatusPill
                           size="sm"
-                          tone={application.applicationStatus === 'done' ? 'success' : application.applicationStatus === 'error' ? 'error' : 'neutral'}
+                          tone={
+                            application.applicationStatus === 'done'
+                              ? 'success'
+                              : application.applicationStatus === 'error'
+                                ? 'error'
+                                : 'neutral'
+                          }
                           label={application.applicationStatus}
                         />
                       ) : null

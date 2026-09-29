@@ -11,7 +11,11 @@ import {
 
 import { Button } from '#/components/ui/button'
 import { ConfirmDialog } from '#/components/ui/confirm-dialog'
-import { FloatingBar, FloatingBarDivider, FloatingBarLabel } from '#/components/ui/floating-bar'
+import {
+  FloatingBar,
+  FloatingBarDivider,
+  FloatingBarLabel,
+} from '#/components/ui/floating-bar'
 import { FormField } from '#/components/ui/form-field'
 import { Input } from '#/components/ui/input'
 import { PageHeader } from '#/components/ui/page-header'
@@ -93,7 +97,11 @@ export function BrandingScreen() {
       }}
       testId="reset-branding"
     >
-      <Button type="button" variant="secondary" disabled={form.busy || !saved.customized}>
+      <Button
+        type="button"
+        variant="secondary"
+        disabled={form.busy || !saved.customized}
+      >
         <ArrowCounterClockwise />
         {m.admin_branding_reset_label()}
       </Button>
@@ -101,7 +109,11 @@ export function BrandingScreen() {
   ) : null
 
   return (
-    <div className="grid gap-8" data-testid="branding-page" data-ready={saved ? 'true' : 'false'}>
+    <div
+      className="grid gap-8"
+      data-testid="branding-page"
+      data-ready={saved ? 'true' : 'false'}
+    >
       <PageHeader
         title={m.admin_branding_title()}
         description={m.agency_branding_description()}
@@ -116,7 +128,10 @@ export function BrandingScreen() {
           retrying={form.query.isFetching}
         />
       ) : !saved || !preview ? (
-        <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_440px]" aria-busy="true">
+        <div
+          className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_440px]"
+          aria-busy="true"
+        >
           <div className="grid gap-6">
             <Skeleton className="h-64 rounded-card" />
             <Skeleton className="h-48 rounded-card" />
@@ -174,7 +189,9 @@ export function BrandingScreen() {
                   accept="image/png,image/x-icon,image/vnd.microsoft.icon,.ico"
                   url={saved.faviconUrl}
                   busy={form.busy}
-                  onPick={(file) => form.upload.mutate({ kind: 'favicon', file })}
+                  onPick={(file) =>
+                    form.upload.mutate({ kind: 'favicon', file })
+                  }
                   onClear={() => form.clearImage.mutate('favicon')}
                 />
               </div>
@@ -216,14 +233,23 @@ export function BrandingScreen() {
                             'relative grid size-12 place-content-center rounded-full shadow-[inset_0_0_0_1px_rgb(0_0_0/0.08)] ring-offset-2 ring-offset-background-surface transition-[box-shadow,transform] duration-150 group-hover/swatch:scale-[1.04] motion-reduce:group-hover/swatch:scale-100',
                             active ? 'ring-2 ring-text-primary' : 'ring-0',
                           )}
-                          style={{ background: preset.accent ?? BUILT_IN_ACCENT }}
+                          style={{
+                            background: preset.accent ?? BUILT_IN_ACCENT,
+                          }}
                         >
-                          {active ? <Check weight="bold" className="size-5 text-white" /> : null}
+                          {active ? (
+                            <Check
+                              weight="bold"
+                              className="size-5 text-white"
+                            />
+                          ) : null}
                         </span>
                         <span
                           className={cn(
                             'text-callout',
-                            active ? 'font-medium text-text-primary' : 'text-text-secondary',
+                            active
+                              ? 'font-medium text-text-primary'
+                              : 'text-text-secondary',
                           )}
                           style={{ fontFamily: FONTS[preset.font].family }}
                         >
@@ -233,7 +259,9 @@ export function BrandingScreen() {
                     )
                   })}
                 </div>
-                <p className="text-caption font-normal text-text-muted">{m.admin_branding_preset_hint()}</p>
+                <p className="text-caption font-normal text-text-muted">
+                  {m.admin_branding_preset_hint()}
+                </p>
               </div>
 
               <div className="border-t border-border-default pt-5">
@@ -241,14 +269,20 @@ export function BrandingScreen() {
                   label={m.admin_branding_accent()}
                   htmlFor="brand-accent"
                   hint={m.agency_branding_accent_hint()}
-                  error={form.accentInvalid ? m.admin_branding_accent_error() : undefined}
+                  error={
+                    form.accentInvalid
+                      ? m.admin_branding_accent_error()
+                      : undefined
+                  }
                 >
                   <div className="flex max-w-sm items-center gap-2">
                     <label
                       className="relative size-9 shrink-0 cursor-pointer overflow-hidden rounded-full shadow-[inset_0_0_0_1px_rgb(0_0_0/0.1)]"
                       style={{ background: form.accentHex ?? BUILT_IN_ACCENT }}
                     >
-                      <span className="sr-only">{m.admin_branding_accent_pick_aria()}</span>
+                      <span className="sr-only">
+                        {m.admin_branding_accent_pick_aria()}
+                      </span>
                       <input
                         type="color"
                         aria-label={m.admin_branding_accent_pick_aria()}
@@ -292,7 +326,9 @@ export function BrandingScreen() {
                     <p className="text-[14px] leading-5 font-medium text-text-primary">
                       {m.admin_branding_legacy_title()}
                     </p>
-                    <p className="text-callout text-text-secondary">{m.admin_branding_legacy_hint()}</p>
+                    <p className="text-callout text-text-secondary">
+                      {m.admin_branding_legacy_hint()}
+                    </p>
                   </div>
                   <Button
                     type="button"
@@ -343,10 +379,20 @@ export function BrandingScreen() {
             <BrandingPreview branding={preview} />
           </div>
 
-          <FloatingBar open={form.dirty} label={m.shared_unsaved_changes()} data-testid="branding-save-bar">
+          <FloatingBar
+            open={form.dirty}
+            label={m.shared_unsaved_changes()}
+            data-testid="branding-save-bar"
+          >
             <FloatingBarLabel>{m.shared_unsaved_changes()}</FloatingBarLabel>
             <FloatingBarDivider />
-            <Button type="button" variant="quiet" size="sm" onClick={form.discard} disabled={form.save.isPending}>
+            <Button
+              type="button"
+              variant="quiet"
+              size="sm"
+              onClick={form.discard}
+              disabled={form.save.isPending}
+            >
               {m.settings_discard()}
             </Button>
             <Button
@@ -366,7 +412,13 @@ export function BrandingScreen() {
 }
 
 /** Every font, written in itself; a radio group. */
-function FontList({ value, onChange }: { value: FontKey; onChange: (font: FontKey) => void }) {
+function FontList({
+  value,
+  onChange,
+}: {
+  value: FontKey
+  onChange: (font: FontKey) => void
+}) {
   return (
     <div
       role="radiogroup"
@@ -404,13 +456,22 @@ function FontList({ value, onChange }: { value: FontKey; onChange: (font: FontKe
                 className="truncate text-[15px] leading-5 font-medium text-text-primary"
                 style={{ fontFamily: FONTS[key].family }}
               >
-                {key === 'system' ? m.admin_font_system_default() : FONTS[key].label}
+                {key === 'system'
+                  ? m.admin_font_system_default()
+                  : FONTS[key].label}
               </span>
               {key === DEFAULT_FONT ? (
-                <span className="text-caption font-normal text-text-muted">{m.agency_branding_font_default()}</span>
+                <span className="text-caption font-normal text-text-muted">
+                  {m.agency_branding_font_default()}
+                </span>
               ) : null}
             </span>
-            {selected ? <Check weight="bold" className="size-4 shrink-0 text-icon-accent" /> : null}
+            {selected ? (
+              <Check
+                weight="bold"
+                className="size-4 shrink-0 text-icon-accent"
+              />
+            ) : null}
           </button>
         )
       })}
@@ -440,16 +501,25 @@ function ImageField({
   const inputRef = React.useRef<HTMLInputElement>(null)
   return (
     <div className="grid content-start gap-2">
-      <span className="text-[13px] leading-5 font-medium text-text-primary">{label}</span>
+      <span className="text-[13px] leading-5 font-medium text-text-primary">
+        {label}
+      </span>
       <div className="flex items-center gap-3">
         <span
           className={cn(
             'grid size-14 shrink-0 place-content-center overflow-hidden rounded-[14px]',
-            url ? 'bg-background-subtle' : 'border border-dashed border-border-strong text-icon-muted',
+            url
+              ? 'bg-background-subtle'
+              : 'border border-dashed border-border-strong text-icon-muted',
           )}
         >
           {url ? (
-            <img src={url} alt="" data-testid={`brand-${kind}-preview`} className="size-12 object-contain" />
+            <img
+              src={url}
+              alt=""
+              data-testid={`brand-${kind}-preview`}
+              className="size-12 object-contain"
+            />
           ) : (
             <ImageSquare className="size-5" />
           )}
@@ -480,7 +550,14 @@ function ImageField({
             {url ? m.admin_replace() : m.admin_upload()}
           </Button>
           {url ? (
-            <Button type="button" variant="quiet" size="sm" disabled={busy} onClick={onClear} data-testid={`brand-${kind}-remove`}>
+            <Button
+              type="button"
+              variant="quiet"
+              size="sm"
+              disabled={busy}
+              onClick={onClear}
+              data-testid={`brand-${kind}-remove`}
+            >
               {m.admin_remove()}
             </Button>
           ) : null}

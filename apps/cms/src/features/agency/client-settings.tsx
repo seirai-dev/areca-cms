@@ -22,11 +22,14 @@ function useClientSettings(client: ClientRow) {
   const navigate = useNavigate()
 
   const rename = useMutation({
-    mutationFn: (name: string) => updateOrganizationFn({ data: { id: client.id, name } }),
+    mutationFn: (name: string) =>
+      updateOrganizationFn({ data: { id: client.id, name } }),
     onSuccess: async () => {
       toast.success(m.admin_org_toast_renamed())
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: adminQueryKeys.organizations }),
+        queryClient.invalidateQueries({
+          queryKey: adminQueryKeys.organizations,
+        }),
         queryClient.invalidateQueries({ queryKey: ['sites-overview'] }),
         router.invalidate(),
       ])
@@ -38,7 +41,9 @@ function useClientSettings(client: ClientRow) {
     mutationFn: () => deleteOrganizationFn({ data: { id: client.id } }),
     onSuccess: async () => {
       toast.success(m.agency_client_deleted())
-      await queryClient.invalidateQueries({ queryKey: adminQueryKeys.organizations })
+      await queryClient.invalidateQueries({
+        queryKey: adminQueryKeys.organizations,
+      })
       await navigate({ to: '/agency/clients' })
     },
     onError: (err) => toast.error(errorMessage(err)),
@@ -67,7 +72,10 @@ export function ClientSettings({
 
   return (
     <div className="grid">
-      <SettingsSection title={m.admin_org_general()} description={m.agency_client_general_description()}>
+      <SettingsSection
+        title={m.admin_org_general()}
+        description={m.agency_client_general_description()}
+      >
         <form
           className="grid gap-4"
           onSubmit={(event) => {
@@ -91,7 +99,9 @@ export function ClientSettings({
             <span className="w-fit rounded-[6px] bg-background-subtle px-2 py-1 font-mono text-[12.5px] text-text-secondary">
               {client.slug}
             </span>
-            <span className="text-caption font-normal text-text-muted">{m.agency_slug_locked()}</span>
+            <span className="text-caption font-normal text-text-muted">
+              {m.agency_slug_locked()}
+            </span>
           </div>
           <div className="flex justify-end">
             <Button
@@ -117,10 +127,15 @@ export function ClientSettings({
               {m.agency_delete_client_title()}
             </p>
             {hasSites ? (
-              <p className="text-callout text-text-secondary" data-testid="delete-org-blocked">
+              <p
+                className="text-callout text-text-secondary"
+                data-testid="delete-org-blocked"
+              >
                 {client.siteCount === 1
                   ? m.agency_delete_blocked_one()
-                  : m.agency_delete_blocked_other({ count: client.siteCount })}{' '}
+                  : m.agency_delete_blocked_other({
+                      count: client.siteCount,
+                    })}{' '}
                 <button
                   type="button"
                   onClick={onShowSites}
@@ -130,12 +145,19 @@ export function ClientSettings({
                 </button>
               </p>
             ) : (
-              <p className="text-callout text-text-secondary">{m.admin_org_delete_description()}</p>
+              <p className="text-callout text-text-secondary">
+                {m.admin_org_delete_description()}
+              </p>
             )}
           </div>
           {hasSites ? (
             <Hint label={m.agency_delete_blocked_reason()} wrapDisabled>
-              <Button type="button" variant="destructive" data-testid="delete-org" disabled>
+              <Button
+                type="button"
+                variant="destructive"
+                data-testid="delete-org"
+                disabled
+              >
                 {m.agency_delete_client()}
               </Button>
             </Hint>

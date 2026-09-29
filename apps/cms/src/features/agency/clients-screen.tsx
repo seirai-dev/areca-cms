@@ -4,7 +4,11 @@ import { Link, useNavigate } from '@tanstack/react-router'
 import { Buildings, MagnifyingGlass, Plus } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
-import { adminQueryKeys, errorMessage, suggestSlug } from '#/components/admin/helpers'
+import {
+  adminQueryKeys,
+  errorMessage,
+  suggestSlug,
+} from '#/components/admin/helpers'
 import { Button } from '#/components/ui/button'
 import { EmptyState } from '#/components/ui/empty-state'
 import { FormField } from '#/components/ui/form-field'
@@ -25,9 +29,13 @@ import type { ClientRow } from './queries'
 import { SlugField } from './slug-field'
 
 /** "3 sites · 5 people". */
-export function clientCounts(client: Pick<ClientRow, 'siteCount' | 'memberCount'>) {
+export function clientCounts(
+  client: Pick<ClientRow, 'siteCount' | 'memberCount'>,
+) {
   return [
-    client.siteCount === 1 ? m.agency_count_sites_one() : m.agency_count_sites({ count: client.siteCount }),
+    client.siteCount === 1
+      ? m.agency_count_sites_one()
+      : m.agency_count_sites({ count: client.siteCount }),
     client.memberCount === 1
       ? m.agency_count_people_one()
       : m.agency_count_people({ count: client.memberCount }),
@@ -40,7 +48,8 @@ function addedOn(value: Date | string) {
     date: new Intl.DateTimeFormat(getLocale(), {
       day: 'numeric',
       month: 'short',
-      year: date.getFullYear() === new Date().getFullYear() ? undefined : 'numeric',
+      year:
+        date.getFullYear() === new Date().getFullYear() ? undefined : 'numeric',
     }).format(date),
   })
 }
@@ -62,7 +71,9 @@ export function ClientsScreen({
   const rows = clients.data ?? []
   const needle = search.trim().toLowerCase()
   const visible = needle
-    ? rows.filter((client) => `${client.name} ${client.slug}`.toLowerCase().includes(needle))
+    ? rows.filter((client) =>
+        `${client.name} ${client.slug}`.toLowerCase().includes(needle),
+      )
     : rows
   const empty = clients.isSuccess && rows.length === 0
 
@@ -77,7 +88,11 @@ export function ClientsScreen({
         description={m.agency_clients_description()}
         actions={
           empty ? null : (
-            <Button type="button" data-testid="new-organization" onClick={() => onCreateOpenChange(true)}>
+            <Button
+              type="button"
+              data-testid="new-organization"
+              onClick={() => onCreateOpenChange(true)}
+            >
               <Plus />
               {m.agency_new_client()}
             </Button>
@@ -97,7 +112,10 @@ export function ClientsScreen({
           <Skeleton className="h-9 w-full max-w-sm" />
           <div className="overflow-hidden surface-card">
             {Array.from({ length: 4 }).map((_, index) => (
-              <div key={index} className="flex items-center gap-3 border-b border-border-default px-4 py-3 last:border-b-0">
+              <div
+                key={index}
+                className="flex items-center gap-3 border-b border-border-default px-4 py-3 last:border-b-0"
+              >
                 <Skeleton className="size-10 rounded-[11px]" />
                 <div className="grid flex-1 gap-2">
                   <Skeleton className="h-3.5 w-40" />
@@ -114,7 +132,11 @@ export function ClientsScreen({
           title={m.agency_clients_empty_title()}
           description={m.agency_clients_empty_body()}
           action={
-            <Button type="button" data-testid="new-organization" onClick={() => onCreateOpenChange(true)}>
+            <Button
+              type="button"
+              data-testid="new-organization"
+              onClick={() => onCreateOpenChange(true)}
+            >
               <Plus />
               {m.agency_new_client()}
             </Button>
@@ -143,7 +165,11 @@ export function ClientsScreen({
               title={m.home_no_results_title()}
               description={m.agency_clients_no_match({ search: search.trim() })}
               action={
-                <Button variant="secondary" size="sm" onClick={() => setSearch('')}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setSearch('')}
+                >
                   {m.sites_clear_search()}
                 </Button>
               }
@@ -190,13 +216,19 @@ function useCreateClient(onCreated: () => void) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   return useMutation({
-    mutationFn: (input: { name: string; slug: string }) => createOrganizationFn({ data: input }),
+    mutationFn: (input: { name: string; slug: string }) =>
+      createOrganizationFn({ data: input }),
     onSuccess: async (client) => {
       toast.success(m.agency_client_created())
       onCreated()
-      await queryClient.invalidateQueries({ queryKey: adminQueryKeys.organizations })
+      await queryClient.invalidateQueries({
+        queryKey: adminQueryKeys.organizations,
+      })
       void queryClient.invalidateQueries({ queryKey: ['sites-overview'] })
-      await navigate({ to: '/agency/clients/$orgId', params: { orgId: client.id } })
+      await navigate({
+        to: '/agency/clients/$orgId',
+        params: { orgId: client.id },
+      })
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
@@ -229,10 +261,20 @@ function NewClientSheet({
       data-testid="new-client-sheet"
       footer={
         <div className="flex justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={create.isPending}>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => onOpenChange(false)}
+            disabled={create.isPending}
+          >
             {m.admin_cancel()}
           </Button>
-          <Button type="submit" form="new-client-form" loading={create.isPending} data-testid="create-client">
+          <Button
+            type="submit"
+            form="new-client-form"
+            loading={create.isPending}
+            data-testid="create-client"
+          >
             {m.agency_create_client()}
           </Button>
         </div>

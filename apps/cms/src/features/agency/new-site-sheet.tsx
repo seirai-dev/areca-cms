@@ -3,7 +3,11 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
-import { adminQueryKeys, errorMessage, suggestSlug } from '#/components/admin/helpers'
+import {
+  adminQueryKeys,
+  errorMessage,
+  suggestSlug,
+} from '#/components/admin/helpers'
 import { Button } from '#/components/ui/button'
 import { FormField } from '#/components/ui/form-field'
 import { Input } from '#/components/ui/input'
@@ -48,13 +52,20 @@ function useCreateSite(orgId: string) {
   const queryClient = useQueryClient()
   const router = useRouter()
   return useMutation({
-    mutationFn: (input: { name: string; slug: string; productionUrl: string }) =>
-      createSiteFn({ data: { organizationId: orgId, ...input } }),
+    mutationFn: (input: {
+      name: string
+      slug: string
+      productionUrl: string
+    }) => createSiteFn({ data: { organizationId: orgId, ...input } }),
     onSuccess: async () => {
       toast.success(m.admin_org_toast_site_created())
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: adminQueryKeys.sites(orgId) }),
-        queryClient.invalidateQueries({ queryKey: adminQueryKeys.organizations }),
+        queryClient.invalidateQueries({
+          queryKey: adminQueryKeys.sites(orgId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: adminQueryKeys.organizations,
+        }),
         queryClient.invalidateQueries({ queryKey: ['sites-overview'] }),
         // `me.sites` feeds the sidebar and the switcher.
         router.invalidate(),
@@ -66,7 +77,10 @@ function useCreateSite(orgId: string) {
 
 function StepDots({ step }: { step: 1 | 2 }) {
   return (
-    <div className="flex items-center gap-2 text-caption font-normal text-text-muted" aria-hidden="true">
+    <div
+      className="flex items-center gap-2 text-caption font-normal text-text-muted"
+      aria-hidden="true"
+    >
       {[1, 2].map((value) => (
         <span
           key={value}
@@ -103,7 +117,9 @@ export function NewSiteSheet({
   const [name, setName] = React.useState('')
   const [slug, setSlug] = React.useState('')
   const [slugTouched, setSlugTouched] = React.useState(false)
-  const [productionUrl, setProductionUrl] = React.useState(DEFAULT_PRODUCTION_URL)
+  const [productionUrl, setProductionUrl] = React.useState(
+    DEFAULT_PRODUCTION_URL,
+  )
   const [created, setCreated] = React.useState<PendingToken | null>(null)
   const create = useCreateSite(orgId)
 
@@ -144,10 +160,20 @@ export function NewSiteSheet({
           <div className="flex items-center justify-between gap-2">
             <StepDots step={1} />
             <div className="flex gap-2">
-              <Button type="button" variant="ghost" onClick={() => close(false)} disabled={create.isPending}>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => close(false)}
+                disabled={create.isPending}
+              >
                 {m.admin_cancel()}
               </Button>
-              <Button type="submit" form="new-site-form" loading={create.isPending} data-testid="create-site">
+              <Button
+                type="submit"
+                form="new-site-form"
+                loading={create.isPending}
+                data-testid="create-site"
+              >
                 {m.admin_org_create_site()}
               </Button>
             </div>
@@ -155,7 +181,11 @@ export function NewSiteSheet({
         ) : (
           <div className="flex items-center justify-between gap-2">
             <StepDots step={2} />
-            <Button type="button" onClick={() => close(true)} data-testid="token-saved">
+            <Button
+              type="button"
+              onClick={() => close(true)}
+              data-testid="token-saved"
+            >
               {m.agency_token_saved()}
             </Button>
           </div>
@@ -170,7 +200,11 @@ export function NewSiteSheet({
             event.preventDefault()
             const siteName = name.trim()
             create.mutate(
-              { name: siteName, slug: slug.trim(), productionUrl: productionUrl.trim() },
+              {
+                name: siteName,
+                slug: slug.trim(),
+                productionUrl: productionUrl.trim(),
+              },
               {
                 onSuccess: (site) => {
                   const pending = { siteName, token: site.token }
@@ -225,7 +259,9 @@ export function NewSiteSheet({
       ) : created ? (
         <div className="grid gap-4 pt-2">
           <TokenReveal token={created.token} />
-          <p className="px-1 text-callout text-text-secondary">{m.agency_connect_site_next()}</p>
+          <p className="px-1 text-callout text-text-secondary">
+            {m.agency_connect_site_next()}
+          </p>
         </div>
       ) : null}
     </SlideOver>
