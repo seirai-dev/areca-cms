@@ -22,14 +22,14 @@ export function EntryThumb({ assetId }: { assetId: string | undefined }) {
         src={assetFileUrl(asset.storageKey)}
         alt=""
         loading="lazy"
-        className="size-9 shrink-0 rounded-md border bg-muted object-cover"
+        className="size-9 shrink-0 rounded-[8px] border border-border-default bg-background-subtle object-cover"
       />
     )
   }
   return (
     <span
       aria-hidden="true"
-      className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"
+      className="flex size-9 shrink-0 items-center justify-center rounded-[8px] bg-background-subtle text-icon-muted"
     >
       <FileText className="size-4" />
     </span>

@@ -10,7 +10,11 @@ test('agency admin can whitelabel the CMS and reset it', async ({ page }) => {
 
   await login(page)
   // Workspace switcher → Agency workspace → Branding.
-  await page.getByTestId('sites-nav').click()
+  // The switcher only opens once the shell has hydrated, so keep trying.
+  await expect(async () => {
+    await page.getByTestId('sites-nav').click()
+    await expect(page.getByTestId('agency-nav')).toBeVisible({ timeout: 2_000 })
+  }).toPass({ timeout: 15_000 })
   await page.getByTestId('agency-nav').click()
   await page.getByTestId('branding-nav').click()
   await expect(page).toHaveURL(/\/agency\/branding$/)

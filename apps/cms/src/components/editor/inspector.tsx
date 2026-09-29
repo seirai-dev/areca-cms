@@ -130,7 +130,12 @@ export function EntryInspector({
           <Segment id="details" reduceMotion={reduceMotion}>
             <dl className="grid gap-3">
               <Row label={m.editor_status()}>
-                <EntryStatusBadge status={status} />
+                <EntryStatusBadge
+                  status={status}
+                  siteId={siteId}
+                  updatedAt={entry?.updatedAt}
+                  scheduledAt={entry?.scheduledAt}
+                />
               </Row>
               {entry ? (
                 <>

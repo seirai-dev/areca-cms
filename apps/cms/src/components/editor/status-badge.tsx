@@ -1,26 +1,15 @@
 import { Badge } from '#/components/ui/badge'
+import { StatusPill, formatScheduleShort } from '#/components/ui/status-pill'
+import { entryUiStatus } from '#/features/golive/entry-live-state'
+import { useReleaseStatus } from '#/features/golive/use-release-status'
+import { ENTRY_STATUS } from '#/lib/status'
+import type { EntryUiStatus } from '#/lib/status'
 import type {
   BuildJobStatus,
   EntryStatus,
   PublicationStatus,
 } from '#/lib/types'
 import { m } from '#/paraglide/messages'
-
-const entryVariant: Record<
-  EntryStatus,
-  | 'default'
-  | 'secondary'
-  | 'outline'
-  | 'destructive'
-  | 'success'
-  | 'muted'
-  | 'warning'
-> = {
-  draft: 'outline',
-  published: 'success',
-  scheduled: 'warning',
-  archived: 'muted',
-}
 
 const publicationVariant: Record<
   PublicationStatus,
@@ -109,19 +98,47 @@ export function jobStatusLabel(status: BuildJobStatus) {
   }
 }
 
+/**
+ * LEGACY (phase 1 bridge): the old entry badge now speaks the new vocabulary
+ * (Draft · Ready · Live · Scheduled · Archived, from `lib/status.ts`). Pass
+ * `siteId` and `updatedAt` so a published entry resolves to Ready or Live;
+ * `data-status` keeps the backend status for existing tests.
+ */
 export function EntryStatusBadge({
   status,
   testId,
+  siteId,
+  updatedAt,
+  scheduledAt,
 }: {
   status: EntryStatus | 'unsaved'
   testId?: string
+  siteId?: string
+  updatedAt?: string | Date
+  scheduledAt?: string | Date | null
 }) {
-  const label = entryStatusLabel(status)
-  const variant = status === 'unsaved' ? 'outline' : entryVariant[status]
+  const release = useReleaseStatus(siteId)
+  const ui: EntryUiStatus =
+    status === 'unsaved'
+      ? 'draft'
+      : entryUiStatus(
+          { status, updatedAt: updatedAt ?? new Date(0) },
+          siteId && updatedAt && release.data ? release.live : undefined,
+        )
+  const meta = ENTRY_STATUS[ui]
+  const label =
+    ui === 'scheduled' && scheduledAt
+      ? formatScheduleShort(scheduledAt)
+      : meta.label()
   return (
-    <Badge variant={variant} data-testid={testId} data-status={status}>
-      {label}
-    </Badge>
+    <StatusPill
+      tone={meta.tone}
+      icon={meta.icon}
+      label={label}
+      status={status}
+      data-ui-status={ui}
+      data-testid={testId}
+    />
   )
 }
 

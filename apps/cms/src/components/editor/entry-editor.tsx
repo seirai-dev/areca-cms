@@ -537,7 +537,13 @@ export function EntryEditor({
         collectionLabel={collectionLabel}
         title={heading}
         statusBadge={
-          <EntryStatusBadge status={persistedStatus} testId="entry-status" />
+          <EntryStatusBadge
+            status={persistedStatus}
+            testId="entry-status"
+            siteId={siteId}
+            updatedAt={entry?.updatedAt}
+            scheduledAt={entry?.scheduledAt}
+          />
         }
         saving={saving}
         dirty={dirty}

@@ -16,7 +16,6 @@ import {
 import {
   ENTRY_STATUSES,
   entryTitle,
-  formatDateTime,
 } from '#/components/editor/utils'
 import { EmptyState } from '#/components/ui/empty-state'
 import { ListPagination } from '#/components/list-pagination'
@@ -257,7 +256,9 @@ export function EntriesPane({
             <TabsTrigger value="all">{m.editor_all_statuses()}</TabsTrigger>
             {ENTRY_STATUSES.map((item) => (
               <TabsTrigger key={item} value={item}>
-                {entryStatusLabel(item)}
+                {item === 'published'
+                  ? m.collection_filter_published()
+                  : entryStatusLabel(item)}
               </TabsTrigger>
             ))}
           </TabsList>
@@ -402,14 +403,12 @@ export function EntriesPane({
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="grid gap-1">
-                        <EntryStatusBadge status={row.status} />
-                        {row.scheduledAt ? (
-                          <span className="text-ds-body-xs text-text-muted">
-                            {formatDateTime(row.scheduledAt)}
-                          </span>
-                        ) : null}
-                      </div>
+                      <EntryStatusBadge
+                        status={row.status}
+                        siteId={siteId}
+                        updatedAt={row.updatedAt}
+                        scheduledAt={row.scheduledAt}
+                      />
                     </TableCell>
                     <TableCell className="hidden whitespace-nowrap text-text-muted md:table-cell">
                       <RelativeTime value={row.updatedAt} />

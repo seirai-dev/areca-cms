@@ -431,6 +431,7 @@
   "collection_disabled_banner": "This content type is turned off because it's no longer in the site project. Entries are kept but won't go live.",
   "collection_entry_count_one": "{count} entry",
   "collection_entry_count_other": "{count} entries",
+  "collection_filter_published": "Ready & live",
   "collection_more_actions": "More actions",
   "collection_settings": "Collection settings",
   "content_back_to_fields": "Back to fields",

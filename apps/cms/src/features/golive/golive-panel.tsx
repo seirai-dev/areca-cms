@@ -975,7 +975,7 @@ function BuildLogSheet({ jobId, onClose }: { jobId: string | null; onClose: () =
       bodyClassName="px-0 pb-0"
     >
       <div className="grid h-full grid-rows-[1fr_auto]">
-        <pre className="scroll-quiet min-h-0 overflow-auto bg-background-subtle px-5 py-4 text-mono break-all whitespace-pre-wrap text-text-secondary">
+        <pre className="scroll-quiet min-h-0 overflow-auto bg-background-subtle px-5 py-4 text-mono [overflow-wrap:anywhere] whitespace-pre-wrap text-text-secondary">
           {query.isError
             ? m.sites_logs_load_error()
             : query.isLoading

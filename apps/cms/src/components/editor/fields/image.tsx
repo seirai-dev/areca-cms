@@ -32,20 +32,20 @@ export function ImageFieldInput({
   return (
     <div className="flex flex-col gap-3">
       {assetId ? (
-        <div className="flex items-start gap-3">
+        <div className="grid min-w-0 gap-2">
           {asset ? (
             <img
               src={assetFileUrl(asset.storageKey)}
               alt={asset.altText ?? asset.originalFilename}
-              className="h-28 w-auto max-w-56 rounded-md border object-cover"
+              className="aspect-[16/10] w-full max-w-80 rounded-[10px] border border-border-default bg-background-subtle object-cover"
               data-testid="image-field-thumb"
             />
           ) : (
-            <div className="flex h-28 w-40 items-center justify-center rounded-md border bg-muted text-muted-foreground">
+            <div className="flex aspect-[16/10] w-full max-w-80 items-center justify-center rounded-[10px] border border-border-default bg-background-subtle text-icon-muted">
               <Image className="size-6" />
             </div>
           )}
-          <div className="min-w-0 text-sm">
+          <div className="min-w-0 text-callout">
             {asset ? (
               <>
                 <p

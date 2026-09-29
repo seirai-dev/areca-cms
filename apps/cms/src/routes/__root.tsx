@@ -61,15 +61,13 @@ export const Route = createRootRouteWithContext<RouterContext>()({
           href: appCss,
         },
         // ...(fontUrl ? [{ rel: 'stylesheet', href: fontUrl }] : []),
-        ...(branding.faviconUrl
-          ? [
-              {
-                rel: 'icon',
-                href: branding.faviconUrl,
-                type: branding.faviconMime ?? undefined,
-              },
-            ]
-          : []),
+        branding.faviconUrl
+          ? {
+              rel: 'icon',
+              href: branding.faviconUrl,
+              type: branding.faviconMime ?? undefined,
+            }
+          : { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' },
       ],
       styles: css ? [{ children: css }] : [],
     }
