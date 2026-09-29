@@ -69,9 +69,10 @@ const SOCIALS = {
 >
 
 /**
- * Renders a button per sign-in provider the server reported as enabled. A
- * provider that is off in the environment simply isn't in `methods`, so there
- * is nothing to click and nothing to hide.
+ * One full-width outlined button per sign-in provider the server reported as
+ * enabled, each with its brand glyph (brief §3.1). A provider that is off in
+ * the environment simply isn't in `methods`, so there is nothing to hide.
+ * The glyphs keep their own brand colours: they are logos, not UI colour.
  */
 export function ProviderSignIn({
   methods,
@@ -99,8 +100,9 @@ export function ProviderSignIn({
             type="button"
             variant="outline"
             size="lg"
-            className="w-full justify-center"
-            disabled={pending !== null}
+            className="w-full justify-center gap-2.5"
+            disabled={pending !== null && pending !== provider}
+            loading={pending === provider}
             data-testid={`sign-in-${provider}`}
             onClick={() => {
               setPending(provider)
@@ -111,7 +113,7 @@ export function ProviderSignIn({
               })
             }}
           >
-            <Icon />
+            {pending === provider ? null : <Icon className="size-[18px]" />}
             {label()}
           </Button>
         )
@@ -121,8 +123,9 @@ export function ProviderSignIn({
           type="button"
           variant="outline"
           size="lg"
-          className="w-full justify-center"
-          disabled={pending !== null}
+          className="w-full justify-center gap-2.5"
+          disabled={pending !== null && pending !== 'sso'}
+          loading={pending === 'sso'}
           data-testid="sign-in-sso"
           onClick={() => {
             setPending('sso')
@@ -133,7 +136,7 @@ export function ProviderSignIn({
             })
           }}
         >
-          <MicrosoftIcon />
+          {pending === 'sso' ? null : <MicrosoftIcon className="size-[18px]" />}
           {m.auth_continue_with_microsoft()}
         </Button>
       ) : null}
