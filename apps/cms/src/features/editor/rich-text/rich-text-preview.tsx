@@ -27,7 +27,7 @@ export function RichTextPreview({ value }: { value: unknown }) {
 
   if (!markdown) {
     return (
-      <p className="px-4 py-3 text-sm text-muted-foreground">
+      <p className="py-3 text-body-lg text-text-muted">
         {m.editor_nothing_to_preview()}
       </p>
     )
@@ -35,7 +35,7 @@ export function RichTextPreview({ value }: { value: unknown }) {
 
   return (
     <div
-      className="prose prose-sm max-w-none px-4 py-3 [&_img]:h-auto [&_img]:max-w-xs [&_a]:underline"
+      className="prose max-w-none py-3 text-body-lg [&_img]:h-auto [&_img]:max-w-full [&_img]:rounded-[10px] [&_a]:underline"
       data-testid="rich-text-preview"
     >
       <Markdown components={previewComponents}>{markdown}</Markdown>

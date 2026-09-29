@@ -67,6 +67,10 @@ export function SegmentedControl<T extends string>({
   }
 
   const itemRole = semantics === 'radio' ? 'radio' : 'tab'
+  // With nothing selected (an optional choice), the first segment takes the
+  // tab stop so the group stays keyboard reachable.
+  const hasSelection = options.some((option) => option.value === value)
+  const firstEnabled = options.findIndex((option) => !option.disabled)
 
   return (
     <LayoutGroup id={id}>
@@ -95,7 +99,9 @@ export function SegmentedControl<T extends string>({
               aria-checked={semantics === 'radio' ? selected : undefined}
               aria-selected={semantics === 'tabs' ? selected : undefined}
               aria-label={option.ariaLabel}
-              tabIndex={selected ? 0 : -1}
+              tabIndex={
+                selected || (!hasSelection && index === firstEnabled) ? 0 : -1
+              }
               disabled={option.disabled}
               data-state={selected ? 'on' : 'off'}
               data-testid={option.testId}

@@ -1,15 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { LegacyEditor } from '#/features/editor/legacy-editor'
-
-/** New entry: the editor in focus mode (no sidebar). */
+/**
+ * New entry: the editor in focus mode (no sidebar). The editor itself is
+ * rendered by the collection layout (see `EditorHost`) so it survives the
+ * switch to `/$entryId` after the first autosave.
+ */
 export const Route = createFileRoute('/_app/sites/$siteId/c/$collectionKey/new')({
   staticData: { shell: 'focus' },
-  component: NewEntryPage,
+  component: () => null,
 })
-
-function NewEntryPage() {
-  const { collectionKey } = Route.useParams()
-  const { me, site } = Route.useRouteContext()
-  return <LegacyEditor me={me} site={site} collectionKey={collectionKey} />
-}

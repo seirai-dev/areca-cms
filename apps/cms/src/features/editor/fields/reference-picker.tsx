@@ -1,5 +1,9 @@
-import { useState } from 'react'
+import * as React from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { CaretUpDown, Check, LinkSimple, X } from '@phosphor-icons/react'
+
+import { queryKeys } from '#/components/editor/query-keys'
+import { entryTitle } from '#/components/editor/utils'
 import { Button } from '#/components/ui/button'
 import {
   Command,
@@ -9,19 +13,13 @@ import {
   CommandItem,
   CommandList,
 } from '#/components/ui/command'
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '#/components/ui/popover'
+import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover'
+import { SpinnerRing } from '#/components/ui/status-pill'
 import { useDebouncedValue } from '#/hooks/use-debounced-value'
 import type { EntryData, Field } from '#/lib/types'
+import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 import { getEntryFn, listEntriesFn } from '#/server/fn/content'
-
-import { queryKeys } from '../query-keys'
-import { entryTitle } from '../utils'
-import { Check, CaretUpDown, CircleNotch, X } from '@phosphor-icons/react'
 
 type EntryRow = {
   id: string
@@ -31,24 +29,32 @@ type EntryRow = {
 
 const PAGE = 50
 
-export function ReferenceFieldInput({
+/**
+ * Reference field (brief §3.5): a searchable picker of entries in the target
+ * collection, server-side search so large collections stay usable. Shows the
+ * chosen entry's title even when it is not in the current page.
+ */
+export function ReferencePicker({
+  id,
   siteId,
   field,
   value,
   onChange,
+  invalid,
 }: {
+  id: string
   siteId: string
   field: Field
   value: unknown
   onChange: (value: string) => void
+  invalid?: boolean
 }) {
-  const [open, setOpen] = useState(false)
-  const [search, setSearch] = useState('')
+  const [open, setOpen] = React.useState(false)
+  const [search, setSearch] = React.useState('')
   const debouncedSearch = useDebouncedValue(search, 200)
   const collectionKey = field.collection ?? ''
   const selectedId = typeof value === 'string' && value ? value : ''
 
-  // Server-side search so large collections stay usable.
   const entriesQuery = useQuery({
     queryKey: queryKeys.entries(siteId, collectionKey, {
       search: debouncedSearch,
@@ -72,7 +78,6 @@ export function ReferenceFieldInput({
   const total = entriesQuery.data?.total ?? 0
   const inList = items.find((item) => item.id === selectedId)
 
-  // Resolve the selected entry's title even when it is not in the current page.
   const selectedQuery = useQuery({
     queryKey: queryKeys.entry(selectedId),
     queryFn: () => getEntryFn({ data: { id: selectedId } }),
@@ -89,28 +94,40 @@ export function ReferenceFieldInput({
       : m.editor_select_an_entry()
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1.5">
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
             type="button"
+            id={id}
             variant="outline"
             role="combobox"
             aria-expanded={open}
-            className="min-w-0 flex-1 justify-between font-normal"
+            aria-invalid={invalid || undefined}
+            className="h-9 min-w-0 flex-1 justify-between px-3 font-normal shadow-none"
+            data-testid="reference-picker"
           >
-            <span
-              className={
-                selectedId ? 'truncate' : 'truncate text-muted-foreground'
-              }
-            >
-              {label}
+            <span className="flex min-w-0 items-center gap-2">
+              <LinkSimple
+                className={cn(
+                  'size-4 shrink-0',
+                  selectedId ? 'text-icon-accent' : 'text-icon-muted',
+                )}
+              />
+              <span
+                className={cn(
+                  'truncate',
+                  selectedId ? 'text-text-primary' : 'text-text-muted',
+                )}
+              >
+                {label}
+              </span>
             </span>
-            <CaretUpDown className="opacity-50" />
+            <CaretUpDown className="text-icon-muted" />
           </Button>
         </PopoverTrigger>
         <PopoverContent
-          className="w-(--radix-popover-trigger-width) p-0"
+          className="w-(--radix-popover-trigger-width) min-w-72 p-0"
           align="start"
         >
           <Command shouldFilter={false}>
@@ -121,12 +138,12 @@ export function ReferenceFieldInput({
             />
             <CommandList>
               {entriesQuery.isLoading ? (
-                <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
-                  <CircleNotch className="size-4 animate-spin" />
+                <div className="flex items-center justify-center gap-2 py-6 text-callout text-text-muted">
+                  <SpinnerRing />
                   {m.editor_loading()}
                 </div>
               ) : entriesQuery.isError ? (
-                <div className="py-6 text-center text-sm text-destructive">
+                <div className="py-6 text-center text-callout text-text-error">
                   {m.editor_could_not_load_entries_period()}
                 </div>
               ) : (
@@ -143,25 +160,23 @@ export function ReferenceFieldInput({
                         }}
                       >
                         <Check
-                          className={
-                            item.id === selectedId ? 'opacity-100' : 'opacity-0'
-                          }
+                          className={cn(
+                            'text-icon-accent',
+                            item.id === selectedId ? 'opacity-100' : 'opacity-0',
+                          )}
                         />
                         <span className="truncate">
                           {entryTitle(item.draftData, [], item.slug)}
                         </span>
-                        <span className="ml-auto truncate text-xs text-muted-foreground">
+                        <span className="ml-auto truncate text-mono text-text-muted">
                           {item.slug}
                         </span>
                       </CommandItem>
                     ))}
                   </CommandGroup>
                   {total > items.length ? (
-                    <p className="border-t px-3 py-2 text-xs text-muted-foreground">
-                      {m.editor_showing_of_total({
-                        shown: items.length,
-                        total,
-                      })}
+                    <p className="border-t border-border-default px-3 py-2 text-caption font-normal text-text-muted">
+                      {m.editor_showing_of_total({ shown: items.length, total })}
                     </p>
                   ) : null}
                 </>
@@ -173,7 +188,7 @@ export function ReferenceFieldInput({
       {selectedId ? (
         <Button
           type="button"
-          variant="ghost"
+          variant="quiet"
           size="icon-sm"
           aria-label={m.editor_clear_selection()}
           title={m.editor_clear_selection()}
