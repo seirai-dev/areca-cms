@@ -291,7 +291,7 @@ function EntryEditorView({
           : 'mark'
 
   async function goLiveNow() {
-    const result = await editor.goLiveNow()
+    const result = await editor.goLiveNow().catch(() => null)
     if (result && typeof result === 'object' && 'ok' in result && result.ok === false) {
       panel.open('golive')
     }

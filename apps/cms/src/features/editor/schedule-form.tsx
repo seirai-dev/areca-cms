@@ -113,7 +113,7 @@ export function ScheduleForm({
             data-testid={`schedule-preset-${preset}`}
             onClick={() => applyPreset(preset)}
             className={cn(
-              'h-8 rounded-full border px-3 text-[13px] font-medium transition-colors duration-150',
+              'h-7 rounded-full border px-2.5 text-[12.5px] font-medium transition-colors duration-150',
               'outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus',
               activePreset === preset
                 ? 'border-accent bg-accent-soft text-accent-text'

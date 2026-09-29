@@ -160,7 +160,7 @@ export function EditorTopBar({
   const split = (
     <SplitButton
       size="sm"
-      variant="primary"
+      variant={primary === 'ready' || primary === 'live' ? 'secondary' : 'primary'}
       label={
         <>
           {primaryIcon}

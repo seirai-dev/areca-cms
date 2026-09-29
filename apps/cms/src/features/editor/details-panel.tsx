@@ -32,9 +32,12 @@ function Section({
   testId?: string
 }) {
   return (
-    <section className={cn('grid gap-2', className)} data-testid={testId}>
+    <section
+      className={cn('grid grid-cols-[minmax(0,1fr)] gap-2', className)}
+      data-testid={testId}
+    >
       <h2 className="px-1 text-overline text-text-muted">{title}</h2>
-      <div className="grid gap-4 rounded-card border border-border-default bg-background-surface p-4">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 rounded-card border border-border-default bg-background-surface p-4 shadow-card">
         {children}
       </div>
     </section>
@@ -94,7 +97,7 @@ export function DetailsPanel({
   onCancelSchedule: () => void
 }) {
   return (
-    <div className="grid gap-6" data-testid="entry-details">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-6" data-testid="entry-details">
       {slugField ? (
         <Section title={m.editor_details_page()} testId="details-page">
           <SlugEditor
@@ -185,7 +188,11 @@ function SlugEditor({
     ? routePattern.split('$slug')
     : [`${routePattern.replace(/\/$/, '')}/`, '']
   return (
-    <div className="grid gap-1.5" data-field={field.key} data-invalid={error ? 'true' : undefined}>
+    <div
+      className="grid min-w-0 gap-1.5"
+      data-field={field.key}
+      data-invalid={error ? 'true' : undefined}
+    >
       <div className="flex items-baseline justify-between gap-3">
         <label htmlFor={id} className="text-[13px] leading-[18px] font-medium text-text-primary">
           {field.label}
@@ -215,6 +222,7 @@ function SlugEditor({
         </span>
         <input
           id={id}
+          size={1}
           value={typeof value === 'string' ? value : ''}
           onChange={(event) => onChange(event.target.value)}
           aria-invalid={error ? true : undefined}

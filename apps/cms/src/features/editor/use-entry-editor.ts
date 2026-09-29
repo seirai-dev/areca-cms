@@ -281,14 +281,16 @@ export function useEntryEditor({
     if (first) onRevealRef.current?.(first.key)
   }, [])
 
+  const invalidateGoLiveRef = React.useRef(invalidateGoLive)
+  invalidateGoLiveRef.current = invalidateGoLive
   const invalidateLists = React.useCallback(
     (id?: string) =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: ['entries', siteId, collectionKey] }),
         id ? queryClient.invalidateQueries({ queryKey: queryKeys.revisions(id) }) : null,
-        invalidateGoLive(),
+        invalidateGoLiveRef.current(),
       ]),
-    [queryClient, siteId, collectionKey, invalidateGoLive],
+    [queryClient, siteId, collectionKey],
   )
 
   const saveOnce = React.useCallback(async (): Promise<Outcome> => {
@@ -356,6 +358,8 @@ export function useEntryEditor({
       return runningRef.current
     }
     const loop = (async () => {
+      // Yield first so `runningRef` is set before the loop can finish.
+      await Promise.resolve()
       let outcome: Outcome = 'saved'
       try {
         do {
@@ -384,18 +388,21 @@ export function useEntryEditor({
     return run()
   }, [run])
 
-  // Debounce: save 2s after the last change.
+  const runRef = React.useRef(run)
+  runRef.current = run
+
+  // Debounce: save 2s after the last change (only a change restarts it).
   React.useEffect(() => {
     if (!dirty) return
     if (timerRef.current) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => {
       timerRef.current = null
-      void run()
+      void runRef.current()
     }, AUTOSAVE_DELAY)
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)
     }
-  }, [dataJson, dirty, run])
+  }, [dataJson, dirty])
 
   // Blur of the window or a hidden tab saves at once.
   React.useEffect(() => {

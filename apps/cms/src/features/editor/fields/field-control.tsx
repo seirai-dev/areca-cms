@@ -14,7 +14,6 @@ import {
   toDatetimeLocalValue,
 } from '#/components/editor/utils'
 import type { Field } from '#/lib/types'
-import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
 import { ImageWell } from './image-well'
@@ -228,10 +227,15 @@ export function FieldControl({
   }
 
   return (
-    <div data-field={field.key} className={cn('grid')}>
+    <div data-field={field.key} className="grid grid-cols-[minmax(0,1fr)]">
       <FormField
         label={field.label}
-        htmlFor={field.type === 'select' && (field.options?.length ?? 0) <= 4 ? undefined : id}
+        htmlFor={
+          field.type === 'image' ||
+          (field.type === 'select' && (field.options?.length ?? 0) <= 4)
+            ? undefined
+            : id
+        }
         required={field.required}
         description={field.description}
         error={error}

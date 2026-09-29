@@ -478,7 +478,7 @@ export function RichTextEditor({
     >
       {/* The format bar: a reserved 44px slot that sticks under the top bar. */}
       <div
-        className="sticky top-[var(--editor-bar-h,56px)] z-20 -mx-3 mb-1 flex h-12 items-center"
+        className="sticky top-[var(--editor-bar-h,56px)] z-20 -mx-3 -mt-5 mb-1 flex h-12 items-center"
         data-testid="rich-text-format-bar-slot"
       >
         <div

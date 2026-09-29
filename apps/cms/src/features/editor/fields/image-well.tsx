@@ -35,9 +35,9 @@ export function ImageWell({
   const image = asset?.mimeType.startsWith('image/') ? asset : null
 
   return (
-    <div className="grid gap-2">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-2">
       {assetId ? (
-        <div className="grid gap-2">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-2">
           <button
             type="button"
             id={id}
