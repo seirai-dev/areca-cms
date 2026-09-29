@@ -229,7 +229,8 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
             )}
           >
             <div
-              key={pathname}
+              // Re-run the page fade per page, but never remount the editor.
+              key={mode === 'focus' ? 'focus' : pathname}
               className={cn(
                 'page-enter mx-auto w-full min-w-0',
                 mode === 'focus'

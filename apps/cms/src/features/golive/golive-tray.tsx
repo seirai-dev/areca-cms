@@ -383,7 +383,7 @@ function TrayHeading({ title, subtitle }: { title: string; subtitle?: string }) 
       </span>
       {subtitle ? (
         <span
-          className="truncate text-[12px] leading-4 text-text-muted"
+          className="line-clamp-2 text-[12px] leading-4 text-text-muted"
           data-testid="release-live"
         >
           {subtitle}
