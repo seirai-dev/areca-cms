@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
-import { EmptyState } from '#/components/empty-state'
+import { EmptyState } from '#/components/ui/empty-state'
 import { GetStarted } from '#/components/get-started'
 import {
   NeedsPublishing,
@@ -10,7 +10,7 @@ import {
 } from '#/components/home/activity-rail'
 import { HomeSkeleton } from '#/components/home/home-skeleton'
 import { ListPagination } from '#/components/list-pagination'
-import { QueryError } from '#/components/query-error'
+import { QueryError } from '#/components/ui/query-error'
 import { SitesTable } from '#/components/sites-table'
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'

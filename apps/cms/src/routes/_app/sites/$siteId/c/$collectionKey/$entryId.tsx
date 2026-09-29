@@ -3,7 +3,7 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { EntryEditor } from '#/components/editor/entry-editor'
 import { queryKeys } from '#/components/editor/query-keys'
-import { EmptyState } from '#/components/empty-state'
+import { EmptyState } from '#/components/ui/empty-state'
 import { useHideSiteStrip } from '#/routes/_app/sites/$siteId'
 import { Skeleton } from '#/components/ui/skeleton'
 import { canManageSite } from '#/lib/site-nav'

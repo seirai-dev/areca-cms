@@ -1,7 +1,9 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/typography';
+/* Inter with the optical-size axis: display sizes get Inter Display cuts. */
+@import '@fontsource-variable/inter/opsz.css';
+/* Still selectable in Branding; @font-face only downloads when used. */
 @import '@fontsource-variable/bricolage-grotesque/opsz.css';
-@import '@fontsource-variable/inter/index.css';
 @import '@fontsource/ibm-plex-mono/400.css';
 @import '@fontsource/ibm-plex-mono/500.css';
 
@@ -10,179 +12,180 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ---------------------------------------------------------------------------
-   Design tokens. Three layers:
-     1. primitive ramps (`--color-ds-*`), never used directly in components
-     2. semantic tokens (`--color-text-*`, `--color-background-*`, …) declared
-        light-first here and overridden in `html.dark`
-     3. a shadcn compatibility layer (`bg-background`, `text-muted-foreground`)
-        aliased onto the semantic tokens so existing call sites keep working
+   Areca design tokens (brief §4). Two layers:
+     1. semantic tokens (`--color-text-*`, `--color-background-*`, accent,
+        status, …) declared light-first in `@theme` so Tailwind generates the
+        utilities, then overridden for dark in `html.dark`
+     2. a shadcn compatibility layer (`bg-background`, `text-muted-foreground`)
+        aliased onto the semantic tokens
+
+   Colour rules:
+     - ink (`action-primary`) is the one primary button colour
+     - accent (iris, instance-brandable) marks selection, focus, links,
+       switches, progress and the "Ready" state
+     - never hard-code a colour in a component; branding reaches tokens only
 --------------------------------------------------------------------------- */
 
 @theme {
-  /* 1. Primitive ramps (TanStack design system) */
-  --color-ds-green-100: #d8f0da;
-  --color-ds-green-200: #a2e1a9;
-  --color-ds-green-300: #69bc75;
-  --color-ds-green-400: #39af46;
-  --color-ds-green-500: #1d4226;
-
-  --color-ds-terracotta-100: #f9d8c4;
-  --color-ds-terracotta-200: #edaa8d;
-  --color-ds-terracotta-300: #e06e49;
-  --color-ds-terracotta-400: #d3481b;
-  --color-ds-terracotta-500: #5f1a06;
-
-  --color-ds-blue-100: #d8f0f3;
-  --color-ds-blue-200: #9cd5e2;
-  --color-ds-blue-300: #61adbf;
-  --color-ds-blue-400: #3aa3c4;
-  --color-ds-blue-500: #003e53;
-
-  --color-ds-amber-100: #fef6cc;
-  --color-ds-amber-200: #fae884;
-  --color-ds-amber-300: #f4d648;
-  --color-ds-amber-400: #ffa216;
-  --color-ds-amber-500: #624a00;
-
-  --color-ds-purple-100: #cabfcc;
-  --color-ds-purple-200: #ca8ec5;
-  --color-ds-purple-300: #c56dcf;
-  --color-ds-purple-400: #b64cc7;
-  --color-ds-purple-500: #541f5d;
-
-  --color-ds-neutral-0: #ffffff;
-  --color-ds-neutral-100: #eeebd4;
-  --color-ds-neutral-150: #cec8b2;
-  --color-ds-neutral-200: #aea691;
-  --color-ds-neutral-300: #756c5b;
-  --color-ds-neutral-350: #5a5042;
-  --color-ds-neutral-400: #3e3529;
-  --color-ds-neutral-500: #111111;
-  --color-ds-neutral-tint-100: #e8e7e5;
-  --color-ds-neutral-tint-200: #c5c3bf;
-
-  /* 2. Semantic tokens — light */
-  --color-text-primary: #111111;
-  --color-text-secondary: #3e3529;
-  --color-text-muted: #5a5042;
-  --color-text-disabled: #aea691;
-  --color-text-inverse: #ffffff;
-  --color-text-accent: #1d4226;
-  --color-text-success: #1d4226;
-  --color-text-warning: #624a00;
-  --color-text-error: #5f1a06;
-  --color-text-info: #3aa3c4;
-
-  --color-background-default: #ffffff;
+  /* Neutrals */
+  --color-background-default: #f6f6f4;
   --color-background-surface: #ffffff;
   --color-background-elevated: #ffffff;
-  --color-background-subtle: #f3f1ea;
-  --color-background-inverse: #111111;
-  --color-scrim: rgb(0 0 0 / 0.5);
+  --color-background-subtle: #efefec;
+  --color-background-inverse: #1d1d1f;
+  --color-sidebar: #fbfbfa;
+  --color-scrim: rgb(20 20 22 / 0.28);
 
-  --color-border-default: #d9d4c4;
-  --color-border-strong: #756c5b;
-  --color-border-subtle: #e6e2d5;
-  --color-border-focus: #3e3529;
-  --color-border-error: #d3481b;
-  --color-border-success: #39af46;
+  --color-text-primary: #1d1d1f;
+  --color-text-secondary: #5e5e63;
+  --color-text-muted: #8a8a8e;
+  --color-text-disabled: #b8b8bc;
+  --color-text-inverse: #ffffff;
+  --color-text-accent: #4b49c4;
+  --color-text-success: #177a42;
+  --color-text-warning: #955900;
+  --color-text-error: #c0271d;
+  --color-text-info: #4b49c4;
 
-  --color-icon-default: #111111;
-  --color-icon-accent: #1d4226;
-  --color-icon-muted: #756c5b;
-  --color-icon-success: #39af46;
-  --color-icon-warning: #ffa216;
-  --color-icon-error: #d3481b;
+  --color-border-default: rgb(0 0 0 / 0.08);
+  --color-border-strong: rgb(0 0 0 / 0.14);
+  --color-border-subtle: rgb(0 0 0 / 0.05);
+  --color-border-focus: #5856d6;
+  --color-border-error: #d93025;
+  --color-border-success: #1f9d55;
 
-  --color-action-primary: #39af46;
-  --color-action-primary-hover: #69bc75;
+  --color-icon-default: #5e5e63;
+  --color-icon-accent: #5856d6;
+  --color-icon-muted: #8a8a8e;
+  --color-icon-success: #1f9d55;
+  --color-icon-warning: #c77700;
+  --color-icon-error: #d93025;
+
+  /* Ink: the primary button */
+  --color-action-primary: #1d1d1f;
+  --color-action-primary-hover: #3a3a3d;
   --color-action-primary-text: #ffffff;
-  --color-action-secondary: #eeebd4;
-  --color-action-secondary-hover: #aea691;
-  --color-action-destructive: #d3481b;
-  --color-action-disabled: #aea691;
+  --color-action-secondary: #efefec;
+  --color-action-secondary-hover: #e6e6e2;
+  --color-action-destructive: #d93025;
+  --color-action-destructive-hover: #c0271d;
+  --color-action-disabled: #efefec;
 
-  --color-status-success: #39af46;
-  --color-status-success-bg: #d8f0da;
-  --color-status-warning: #ffa216;
-  --color-status-warning-bg: #fef6cc;
-  --color-status-error: #d3481b;
-  --color-status-error-bg: #f9d8c4;
-  --color-status-info: #3aa3c4;
-  --color-status-info-bg: #d8f0f3;
+  /* Accent: iris (Apple systemIndigo). Instance branding re-tints these. */
+  --color-accent: #5856d6;
+  --color-accent-hover: #4b49c9;
+  --color-accent-soft: rgb(88 86 214 / 0.12);
+  --color-accent-text: #4b49c4;
+  --color-accent-contrast: #ffffff;
 
-  --color-surface-state-hover: #1111110f;
-  --color-surface-state-pressed: #1111111f;
-  --color-input-bg-hover: #11111108;
+  /* Status */
+  --color-status-success: #1f9d55;
+  --color-status-success-bg: rgb(31 157 85 / 0.12);
+  --color-status-warning: #c77700;
+  --color-status-warning-bg: rgb(199 119 0 / 0.12);
+  --color-status-error: #d93025;
+  --color-status-error-bg: rgb(217 48 37 / 0.1);
+  --color-status-info: #5856d6;
+  --color-status-info-bg: rgb(88 86 214 / 0.12);
+  --color-status-neutral: #8a8a8e;
+  --color-status-neutral-bg: rgb(0 0 0 / 0.05);
 
-  /* Auth art: neutral base, green lines. */
-  --color-art-base: #eeebd4;
-  --color-art-line: #39af46;
+  --color-surface-state-hover: rgb(0 0 0 / 0.04);
+  --color-surface-state-pressed: rgb(0 0 0 / 0.07);
+  --color-input-bg-hover: rgb(0 0 0 / 0.02);
+  --color-nav-active: rgb(0 0 0 / 0.05);
 
-  /* 3. Type */
-  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
-  --font-display: 'Bricolage Grotesque Variable', var(--font-sans);
+  /* Segmented controls (Apple's systemFill) */
+  --color-segment-track: rgb(118 118 128 / 0.12);
+  --color-segment-thumb: #ffffff;
+
+  /* Auth art (kept for the auth pages until phase 2 rewrites them). */
+  --color-art-base: #efefec;
+  --color-art-line: #5856d6;
+
+  /* Type */
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system,
+    sans-serif;
+  /* Display used to be Bricolage; the new look is Inter everywhere. */
+  --font-display: var(--font-sans);
   --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  /* 4. Shape */
-  --radius-control: 8px;
-  --radius-surface: 12px;
+  /* Shape */
+  --radius-control: 10px;
+  --radius-card: 16px;
+  --radius-panel: 20px;
+  --radius-thumb: 10px;
+  --radius-pill: 999px;
+  /* LEGACY: `rounded-surface` = card radius; remove in phase 3 */
+  --radius-surface: 16px;
   --radius-sm: 6px;
   --radius-md: 8px;
-  --radius-lg: 8px;
-  --radius-xl: 12px;
-  --radius-2xl: 12px;
+  --radius-lg: 10px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
 
-  /* 5. Elevation */
-  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.03);
+  /* Depth */
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04);
+  --shadow-float: 0 12px 40px -8px rgb(0 0 0 / 0.18);
+  --shadow-raise: 0 8px 24px -8px rgb(0 0 0 / 0.14);
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.04);
   --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.05), 0 1px 2px 0 rgb(0 0 0 / 0.03);
-  --shadow-md:
-    0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -1px rgb(0 0 0 / 0.03);
-  --shadow-lg:
-    0 10px 15px -3px rgb(0 0 0 / 0.05), 0 4px 6px -2px rgb(0 0 0 / 0.03);
-  --shadow-xl:
-    0 20px 25px -5px rgb(0 0 0 / 0.05), 0 10px 10px -5px rgb(0 0 0 / 0.02);
-  --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.2);
+  --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.08);
+  --shadow-lg: var(--shadow-float);
+  --shadow-xl: var(--shadow-float);
+  --shadow-2xl: 0 24px 64px -12px rgb(0 0 0 / 0.28);
 
-  /* 6. Motion */
-  --motion-duration-fast: 180ms;
+  /* Motion */
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-emphasized: cubic-bezier(0.32, 0.72, 0, 1);
+  --motion-duration-fast: 150ms;
+  --motion-duration-base: 180ms;
+  --motion-duration-slow: 250ms;
   --motion-duration-sheet: 280ms;
-  --motion-ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
-  --motion-ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
+  --motion-ease-standard: var(--ease-standard);
+  --motion-ease-sheet: var(--ease-emphasized);
 
-  --animate-dialog-panel-in: dialog-panel-in var(--motion-duration-fast)
-    var(--motion-ease-standard);
+  --animate-dialog-panel-in: dialog-panel-in var(--motion-duration-base)
+    var(--ease-standard);
   --animate-dialog-panel-out: dialog-panel-out var(--motion-duration-fast)
-    var(--motion-ease-standard);
-  --animate-dialog-scrim-in: dialog-scrim-in var(--motion-duration-fast)
-    var(--motion-ease-standard);
+    var(--ease-standard);
+  --animate-dialog-scrim-in: dialog-scrim-in var(--motion-duration-base)
+    var(--ease-standard);
   --animate-dialog-scrim-out: dialog-scrim-out var(--motion-duration-fast)
-    var(--motion-ease-standard);
+    var(--ease-standard);
   --animate-drawer-right-in: drawer-right-in var(--motion-duration-sheet)
-    var(--motion-ease-sheet);
-  --animate-drawer-right-out: drawer-right-out var(--motion-duration-sheet)
-    var(--motion-ease-sheet);
+    var(--ease-emphasized);
+  --animate-drawer-right-out: drawer-right-out var(--motion-duration-base)
+    var(--ease-emphasized);
   --animate-drawer-left-in: drawer-left-in var(--motion-duration-sheet)
-    var(--motion-ease-sheet);
-  --animate-drawer-left-out: drawer-left-out var(--motion-duration-sheet)
-    var(--motion-ease-sheet);
+    var(--ease-emphasized);
+  --animate-drawer-left-out: drawer-left-out var(--motion-duration-base)
+    var(--ease-emphasized);
   --animate-drawer-bottom-in: drawer-bottom-in var(--motion-duration-sheet)
-    var(--motion-ease-sheet);
-  --animate-drawer-bottom-out: drawer-bottom-out var(--motion-duration-sheet)
-    var(--motion-ease-sheet);
-  --animate-ds-enter-rise: ds-enter-rise var(--motion-duration-fast)
-    var(--motion-ease-standard);
-  --animate-ds-pop-in: ds-pop-in var(--motion-duration-fast)
-    var(--motion-ease-standard);
+    var(--ease-emphasized);
+  --animate-drawer-bottom-out: drawer-bottom-out var(--motion-duration-base)
+    var(--ease-emphasized);
+  --animate-enter-rise: enter-rise var(--motion-duration-base)
+    var(--ease-standard);
+  --animate-pop-in: pop-in var(--motion-duration-fast) var(--ease-standard);
+  --animate-shimmer: shimmer 1.6s linear infinite;
+  --animate-live-ping: live-ping 4s var(--ease-standard) infinite;
+  --animate-live-ping-once: live-ping 1.2s var(--ease-standard) 0.2s 1 both;
+  --animate-border-pulse: border-pulse 2.4s ease-in-out infinite;
+  --animate-indeterminate: indeterminate 1.4s var(--ease-standard) infinite;
+  /* LEGACY: remove in phase 3 */
+  --animate-ds-enter-rise: enter-rise var(--motion-duration-base)
+    var(--ease-standard);
+  --animate-ds-pop-in: pop-in var(--motion-duration-fast) var(--ease-standard);
 
   @keyframes dialog-panel-in {
     from {
       opacity: 0;
-      transform: scale(0.96);
+      transform: translateY(6px) scale(0.98);
     }
     to {
       opacity: 1;
-      transform: scale(1);
+      transform: translateY(0) scale(1);
     }
   }
   @keyframes dialog-panel-out {
@@ -192,7 +195,7 @@
     }
     to {
       opacity: 0;
-      transform: scale(0.96);
+      transform: scale(0.98);
     }
   }
   @keyframes dialog-scrim-in {
@@ -259,171 +262,254 @@
       transform: translateY(100%);
     }
   }
-  @keyframes ds-enter-rise {
+  @keyframes enter-rise {
     from {
       opacity: 0;
-      transform: translateY(8px);
+      transform: translateY(4px);
     }
     to {
       opacity: 1;
       transform: translateY(0);
     }
   }
-  @keyframes ds-pop-in {
+  @keyframes pop-in {
     from {
       opacity: 0;
-      transform: scale(0.96);
+      transform: scale(0.97);
     }
     to {
       opacity: 1;
       transform: scale(1);
     }
   }
+  @keyframes shimmer {
+    from {
+      background-position: 200% 0;
+    }
+    to {
+      background-position: -200% 0;
+    }
+  }
+  @keyframes live-ping {
+    0% {
+      transform: scale(1);
+      opacity: 0.55;
+    }
+    30%,
+    100% {
+      transform: scale(2.6);
+      opacity: 0;
+    }
+  }
+  @keyframes border-pulse {
+    0%,
+    100% {
+      box-shadow:
+        0 0 0 1px var(--color-accent-soft),
+        var(--shadow-card);
+    }
+    50% {
+      box-shadow:
+        0 0 0 3px var(--color-accent-soft),
+        var(--shadow-float);
+    }
+  }
+  @keyframes indeterminate {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(250%);
+    }
+  }
 }
 
-/* Semantic tokens — dark. Plain custom properties so `@theme` utilities
-   (which resolve through `var(--color-*)`) pick them up. */
+/* Dark. Plain custom properties so the `@theme` utilities (which resolve
+   through `var(--color-*)`) pick them up. */
 html.dark,
 .dark {
-  --color-text-primary: #ffffff;
-  --color-text-secondary: #cec8b2;
-  --color-text-muted: #aea691;
-  --color-text-disabled: #3e3529;
+  --color-background-default: #0e0e10;
+  --color-background-surface: #18181b;
+  --color-background-elevated: #1f1f23;
+  --color-background-subtle: #232327;
+  --color-background-inverse: #f5f5f7;
+  --color-sidebar: #131315;
+  --color-scrim: rgb(0 0 0 / 0.55);
+
+  --color-text-primary: #f5f5f7;
+  --color-text-secondary: #aeaeb2;
+  --color-text-muted: #7c7c80;
+  --color-text-disabled: #4f4f54;
   --color-text-inverse: #111111;
-  --color-text-accent: #69bc75;
-  --color-text-success: #69bc75;
-  --color-text-warning: #f4d648;
-  --color-text-error: #edaa8d;
-  --color-text-info: #9cd5e2;
+  --color-text-accent: #a5a3ff;
+  --color-text-success: #5fd394;
+  --color-text-warning: #ffb340;
+  --color-text-error: #ff7b72;
+  --color-text-info: #a5a3ff;
 
-  --color-background-default: #111111;
-  --color-background-surface: #1f1f1f;
-  --color-background-elevated: #2b2b2b;
-  --color-background-subtle: #1b1b1b;
-  --color-background-inverse: #ffffff;
-  --color-scrim: rgb(0 0 0 / 0.65);
+  --color-border-default: rgb(255 255 255 / 0.08);
+  --color-border-strong: rgb(255 255 255 / 0.16);
+  --color-border-subtle: rgb(255 255 255 / 0.05);
+  --color-border-focus: #7d7aff;
+  --color-border-error: #ff6961;
+  --color-border-success: #34c77b;
 
-  --color-border-default: #383838;
-  --color-border-strong: #5a5042;
-  --color-border-subtle: #2a2a2a;
-  --color-border-focus: #aea691;
-  --color-border-error: #e06e49;
-  --color-border-success: #69bc75;
+  --color-icon-default: #aeaeb2;
+  --color-icon-accent: #8f8cff;
+  --color-icon-muted: #7c7c80;
+  --color-icon-success: #34c77b;
+  --color-icon-warning: #ff9f0a;
+  --color-icon-error: #ff6961;
 
-  --color-icon-default: #aea691;
-  --color-icon-accent: #69bc75;
-  --color-icon-muted: #756c5b;
-  --color-icon-success: #69bc75;
-  --color-icon-warning: #f4d648;
-  --color-icon-error: #edaa8d;
-
-  --color-action-primary: #39af46;
-  --color-action-primary-hover: #69bc75;
+  --color-action-primary: #f5f5f7;
+  --color-action-primary-hover: #e3e3e8;
   --color-action-primary-text: #111111;
-  --color-action-secondary: #2b2b2b;
-  --color-action-secondary-hover: #3a3a3a;
-  --color-action-destructive: #e06e49;
-  --color-action-disabled: #2b2b2b;
+  --color-action-secondary: #2a2a2e;
+  --color-action-secondary-hover: #333338;
+  --color-action-destructive: #ff6961;
+  --color-action-destructive-hover: #ff7f78;
+  --color-action-disabled: #232327;
 
-  --color-status-success: #69bc75;
-  --color-status-success-bg: #1d4226;
-  --color-status-warning: #f4d648;
-  --color-status-warning-bg: #624a00;
-  --color-status-error: #edaa8d;
-  --color-status-error-bg: #2b1711;
-  --color-status-info: #61adbf;
-  --color-status-info-bg: #003e53;
+  --color-accent: #7d7aff;
+  --color-accent-hover: #9391ff;
+  --color-accent-soft: rgb(125 122 255 / 0.16);
+  --color-accent-text: #a5a3ff;
+  --color-accent-contrast: #ffffff;
 
-  --color-surface-state-hover: #ffffff1f;
-  --color-surface-state-pressed: #ffffff29;
-  --color-input-bg-hover: #ffffff0a;
+  --color-status-success: #34c77b;
+  --color-status-success-bg: rgb(52 199 123 / 0.14);
+  --color-status-warning: #ff9f0a;
+  --color-status-warning-bg: rgb(255 159 10 / 0.14);
+  --color-status-error: #ff6961;
+  --color-status-error-bg: rgb(255 105 97 / 0.14);
+  --color-status-info: #7d7aff;
+  --color-status-info-bg: rgb(125 122 255 / 0.16);
+  --color-status-neutral: #7c7c80;
+  --color-status-neutral-bg: rgb(255 255 255 / 0.06);
 
-  --color-art-base: #111111;
-  --color-art-line: #39af46;
+  --color-surface-state-hover: rgb(255 255 255 / 0.05);
+  --color-surface-state-pressed: rgb(255 255 255 / 0.08);
+  --color-input-bg-hover: rgb(255 255 255 / 0.03);
+  --color-nav-active: rgb(255 255 255 / 0.07);
+  --color-segment-track: rgb(118 118 128 / 0.24);
+  --color-segment-thumb: #56565c;
+
+  --color-art-base: #18181b;
+  --color-art-line: #7d7aff;
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow-float:
+    0 16px 48px -8px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(255 255 255 / 0.04);
+  --shadow-raise: 0 8px 24px -8px rgb(0 0 0 / 0.5);
 
   color-scheme: dark;
 }
 
-/* Light tokens as a real rule as well, so a `.light` subtree inside the dark
-   app (the branding preview) can opt back into the light palette. Each element
-   declares its own custom properties, so the nearest wrapper wins. */
+/* Light tokens as a real rule too, so a `.light` subtree inside the dark app
+   (the branding preview) can opt back into the light palette. */
 :root,
 .light {
-  /* 2. Semantic tokens — light */
-  --color-text-primary: #111111;
-  --color-text-secondary: #3e3529;
-  --color-text-muted: #5a5042;
-  --color-text-disabled: #aea691;
-  --color-text-inverse: #ffffff;
-  --color-text-accent: #1d4226;
-  --color-text-success: #1d4226;
-  --color-text-warning: #624a00;
-  --color-text-error: #5f1a06;
-  --color-text-info: #3aa3c4;
-
-  --color-background-default: #ffffff;
+  --color-background-default: #f6f6f4;
   --color-background-surface: #ffffff;
   --color-background-elevated: #ffffff;
-  --color-background-subtle: #f3f1ea;
-  --color-background-inverse: #111111;
-  --color-scrim: rgb(0 0 0 / 0.5);
+  --color-background-subtle: #efefec;
+  --color-background-inverse: #1d1d1f;
+  --color-sidebar: #fbfbfa;
+  --color-scrim: rgb(20 20 22 / 0.28);
 
-  --color-border-default: #d9d4c4;
-  --color-border-strong: #756c5b;
-  --color-border-subtle: #e6e2d5;
-  --color-border-focus: #3e3529;
-  --color-border-error: #d3481b;
-  --color-border-success: #39af46;
+  --color-text-primary: #1d1d1f;
+  --color-text-secondary: #5e5e63;
+  --color-text-muted: #8a8a8e;
+  --color-text-disabled: #b8b8bc;
+  --color-text-inverse: #ffffff;
+  --color-text-accent: #4b49c4;
+  --color-text-success: #177a42;
+  --color-text-warning: #955900;
+  --color-text-error: #c0271d;
+  --color-text-info: #4b49c4;
 
-  --color-icon-default: #111111;
-  --color-icon-accent: #1d4226;
-  --color-icon-muted: #756c5b;
-  --color-icon-success: #39af46;
-  --color-icon-warning: #ffa216;
-  --color-icon-error: #d3481b;
+  --color-border-default: rgb(0 0 0 / 0.08);
+  --color-border-strong: rgb(0 0 0 / 0.14);
+  --color-border-subtle: rgb(0 0 0 / 0.05);
+  --color-border-focus: #5856d6;
+  --color-border-error: #d93025;
+  --color-border-success: #1f9d55;
 
-  --color-action-primary: #39af46;
-  --color-action-primary-hover: #69bc75;
+  --color-icon-default: #5e5e63;
+  --color-icon-accent: #5856d6;
+  --color-icon-muted: #8a8a8e;
+  --color-icon-success: #1f9d55;
+  --color-icon-warning: #c77700;
+  --color-icon-error: #d93025;
+
+  --color-action-primary: #1d1d1f;
+  --color-action-primary-hover: #3a3a3d;
   --color-action-primary-text: #ffffff;
-  --color-action-secondary: #eeebd4;
-  --color-action-secondary-hover: #aea691;
-  --color-action-destructive: #d3481b;
-  --color-action-disabled: #aea691;
+  --color-action-secondary: #efefec;
+  --color-action-secondary-hover: #e6e6e2;
+  --color-action-destructive: #d93025;
+  --color-action-destructive-hover: #c0271d;
+  --color-action-disabled: #efefec;
 
-  --color-status-success: #39af46;
-  --color-status-success-bg: #d8f0da;
-  --color-status-warning: #ffa216;
-  --color-status-warning-bg: #fef6cc;
-  --color-status-error: #d3481b;
-  --color-status-error-bg: #f9d8c4;
-  --color-status-info: #3aa3c4;
-  --color-status-info-bg: #d8f0f3;
+  --color-accent: #5856d6;
+  --color-accent-hover: #4b49c9;
+  --color-accent-soft: rgb(88 86 214 / 0.12);
+  --color-accent-text: #4b49c4;
+  --color-accent-contrast: #ffffff;
 
-  --color-surface-state-hover: #1111110f;
-  --color-surface-state-pressed: #1111111f;
-  --color-input-bg-hover: #11111108;
+  --color-status-success: #1f9d55;
+  --color-status-success-bg: rgb(31 157 85 / 0.12);
+  --color-status-warning: #c77700;
+  --color-status-warning-bg: rgb(199 119 0 / 0.12);
+  --color-status-error: #d93025;
+  --color-status-error-bg: rgb(217 48 37 / 0.1);
+  --color-status-info: #5856d6;
+  --color-status-info-bg: rgb(88 86 214 / 0.12);
+  --color-status-neutral: #8a8a8e;
+  --color-status-neutral-bg: rgb(0 0 0 / 0.05);
 
-  /* Auth art: neutral base, green lines. */
-  --color-art-base: #eeebd4;
-  --color-art-line: #39af46;
+  --color-surface-state-hover: rgb(0 0 0 / 0.04);
+  --color-surface-state-pressed: rgb(0 0 0 / 0.07);
+  --color-input-bg-hover: rgb(0 0 0 / 0.02);
+  --color-nav-active: rgb(0 0 0 / 0.05);
+  --color-segment-track: rgb(118 118 128 / 0.12);
+  --color-segment-thumb: #ffffff;
+
+  --color-art-base: #efefec;
+  --color-art-line: #5856d6;
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04);
+  --shadow-float: 0 12px 40px -8px rgb(0 0 0 / 0.18);
+  --shadow-raise: 0 8px 24px -8px rgb(0 0 0 / 0.14);
 
   color-scheme: light;
 }
 
 :root {
-  /* Height of the sticky navbar; sticky bars below it offset by this. */
-  --navbar-height: 58px;
+  /* Layout. Desktop has no top bar; the mobile top bar sets its own height. */
+  --sidebar-width: 264px;
+  --sidebar-rail-width: 64px;
+  --navbar-height: 0px;
   --app-header-h: var(--navbar-height);
+  --content-max: 1120px;
   /* Z scale. Nothing else may set a z-index. */
   --z-navbar: 100;
+  --z-floating: 400;
   --z-scrim: 999;
   --z-overlay: 1000;
   --z-above-overlay: 1200;
 }
 
+@media (max-width: 767px) {
+  :root {
+    --navbar-height: 56px;
+  }
+}
+
 /* shadcn compatibility layer: old class names keep resolving. `inline` so the
    alias substitutes the semantic variable at the use site and stays
-   mode-aware. */
+   mode-aware. `accent` is now the real iris token (see above), so it is not
+   aliased here. */
 @theme inline {
   --color-background: var(--color-background-default);
   --color-foreground: var(--color-text-primary);
@@ -437,75 +523,160 @@ html.dark,
   --color-secondary-foreground: var(--color-text-primary);
   --color-muted: var(--color-background-subtle);
   --color-muted-foreground: var(--color-text-muted);
-  --color-accent: var(--color-action-secondary);
-  --color-accent-foreground: var(--color-text-primary);
+  --color-accent-foreground: var(--color-accent-contrast);
   --color-destructive: var(--color-action-destructive);
   --color-destructive-foreground: var(--color-text-inverse);
   --color-border: var(--color-border-default);
   --color-input: var(--color-border-default);
-  --color-ring: var(--color-border-strong);
+  --color-ring: var(--color-border-focus);
   --color-success: var(--color-status-success);
   --color-success-foreground: var(--color-text-inverse);
   --color-warning: var(--color-status-warning);
   --color-link: var(--color-text-accent);
-  --color-sidebar: var(--color-background-surface);
   --color-sidebar-foreground: var(--color-text-primary);
-  --color-sidebar-primary: var(--color-action-primary);
-  --color-sidebar-primary-foreground: var(--color-action-primary-text);
+  --color-sidebar-primary: var(--color-accent);
+  --color-sidebar-primary-foreground: var(--color-accent-contrast);
   --color-sidebar-accent: var(--color-surface-state-hover);
   --color-sidebar-accent-foreground: var(--color-text-primary);
-  --color-sidebar-border: var(--color-border-subtle);
-  --color-sidebar-ring: var(--color-border-strong);
+  --color-sidebar-border: var(--color-border-default);
+  --color-sidebar-ring: var(--color-border-focus);
 }
 
-/* Type scale (TanStack `text-ds-*`). Registered as utilities so the font
-   family travels with the size. */
-@utility text-ds-heading-1 {
-  font-family: var(--font-display);
-  font-size: 36px;
-  line-height: 41px;
+/* ---------------------------------------------------------------------------
+   Type scale (brief §4.2). Registered as utilities so family, size, line
+   height, weight and tracking travel together. `cn()` knows these names
+   (see lib/utils.ts) so they merge with text colours correctly.
+--------------------------------------------------------------------------- */
+@utility text-display {
+  font-family: var(--font-sans);
+  font-size: 32px;
+  line-height: 38px;
+  font-weight: 650;
+  letter-spacing: -0.022em;
+}
+@utility text-title-1 {
+  font-family: var(--font-sans);
+  font-size: 24px;
+  line-height: 30px;
+  font-weight: 600;
+  letter-spacing: -0.018em;
+}
+@utility text-title-2 {
+  font-family: var(--font-sans);
+  font-size: 19px;
+  line-height: 26px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+}
+@utility text-headline {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 600;
+  letter-spacing: -0.006em;
+}
+@utility text-body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 400;
+  letter-spacing: -0.003em;
+}
+@utility text-body-lg {
+  font-family: var(--font-sans);
+  font-size: 17px;
+  line-height: 28px;
+  font-weight: 400;
+  letter-spacing: -0.008em;
+}
+@utility text-callout {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
+}
+@utility text-caption {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 16px;
   font-weight: 500;
+}
+@utility text-overline {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+@utility text-mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 400;
+}
+@utility text-editor-title {
+  font-family: var(--font-sans);
+  font-size: 40px;
+  line-height: 48px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+/* LEGACY: remove in phase 3. The old `text-ds-*` scale mapped onto the new
+   styles so screens that are not rewritten yet keep compiling and look
+   consistent with the new scale. */
+@utility text-ds-heading-1 {
+  font-family: var(--font-sans);
+  font-size: 32px;
+  line-height: 38px;
+  font-weight: 650;
+  letter-spacing: -0.022em;
 }
 @utility text-ds-heading-2 {
-  font-family: var(--font-display);
-  font-size: 28px;
-  line-height: 34px;
-  font-weight: 500;
+  font-family: var(--font-sans);
+  font-size: 32px;
+  line-height: 38px;
+  font-weight: 650;
+  letter-spacing: -0.022em;
 }
 @utility text-ds-heading-3 {
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
   font-size: 24px;
-  line-height: 29px;
-  font-weight: 700;
+  line-height: 30px;
+  font-weight: 600;
+  letter-spacing: -0.018em;
 }
 @utility text-ds-heading-4 {
-  font-family: var(--font-display);
-  font-size: 20px;
-  line-height: 25px;
-  font-weight: 700;
+  font-family: var(--font-sans);
+  font-size: 19px;
+  line-height: 26px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
 }
 @utility text-ds-heading-5 {
-  font-family: var(--font-display);
-  font-size: 16px;
-  line-height: 21px;
-  font-weight: 700;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 600;
+  letter-spacing: -0.006em;
 }
 @utility text-ds-heading-6 {
-  font-family: var(--font-display);
-  font-size: 14px;
+  font-family: var(--font-sans);
+  font-size: 13px;
   line-height: 18px;
-  font-weight: 500;
+  font-weight: 600;
 }
 @utility text-ds-body-lg {
   font-family: var(--font-sans);
-  font-size: 18px;
+  font-size: 17px;
   line-height: 28px;
   font-weight: 400;
 }
 @utility text-ds-body-md {
   font-family: var(--font-sans);
-  font-size: 16px;
-  line-height: 24px;
+  font-size: 15px;
+  line-height: 22px;
   font-weight: 400;
 }
 @utility text-ds-body-sm {
@@ -517,26 +688,25 @@ html.dark,
 @utility text-ds-body-xs {
   font-family: var(--font-sans);
   font-size: 12px;
-  line-height: 17px;
+  line-height: 16px;
   font-weight: 400;
 }
 @utility text-ds-label-md {
   font-family: var(--font-sans);
   font-size: 14px;
-  line-height: 17px;
+  line-height: 20px;
   font-weight: 500;
 }
 @utility text-ds-label-sm {
   font-family: var(--font-sans);
   font-size: 12px;
-  line-height: 14px;
+  line-height: 16px;
   font-weight: 500;
-  letter-spacing: 0.5px;
 }
 @utility text-ds-mono-sm {
   font-family: var(--font-mono);
-  font-size: 14px;
-  line-height: 21px;
+  font-size: 13px;
+  line-height: 18px;
   font-weight: 400;
 }
 @utility text-ds-mono-xs {
@@ -546,17 +716,20 @@ html.dark,
   font-weight: 400;
 }
 @utility text-ds-mono-caps {
-  font-family: var(--font-mono);
-  font-size: 12px;
+  font-family: var(--font-sans);
+  font-size: 11px;
   line-height: 14px;
-  font-weight: 500;
-  letter-spacing: 1.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 /* Z scale utilities. */
 @utility z-navbar {
   z-index: var(--z-navbar);
+}
+@utility z-floating {
+  z-index: var(--z-floating);
 }
 @utility z-scrim {
   z-index: var(--z-scrim);
@@ -566,6 +739,30 @@ html.dark,
 }
 @utility z-above-overlay {
   z-index: var(--z-above-overlay);
+}
+
+/* Shared focus ring: accent, 2px, offset 2px (brief §5.6). */
+@utility focus-ring {
+  outline: none;
+  &:focus-visible {
+    outline: 2px solid var(--color-border-focus);
+    outline-offset: 2px;
+  }
+}
+
+/* Hairline card: surface, 16px, border, near-zero shadow. */
+@utility surface-card {
+  border-radius: var(--radius-card);
+  border: 1px solid var(--color-border-default);
+  background-color: var(--color-background-surface);
+  box-shadow: var(--shadow-card);
+}
+
+/* Anything that floats: popovers, panels, the save pill. */
+@utility surface-float {
+  border: 1px solid var(--color-border-default);
+  background-color: var(--color-background-elevated);
+  box-shadow: var(--shadow-float);
 }
 
 @layer base {
@@ -579,6 +776,11 @@ html.dark,
     min-height: 100%;
   }
 
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+
   body {
     margin: 0;
     background-color: var(--color-background-default);
@@ -587,6 +789,10 @@ html.dark,
     font-size: 14px;
     line-height: 20px;
     font-optical-sizing: auto;
+    /* Inter: straight-sided `l` with tail, open digits read like SF. */
+    font-feature-settings:
+      'cv11' 1,
+      'ss03' 1;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -599,11 +805,10 @@ html.dark,
   h6 {
     font-family: var(--font-display);
     font-optical-sizing: auto;
-    letter-spacing: -0.01em;
     text-wrap: balance;
   }
 
-  /* Links inherit ink by default; green marks links inside content and
+  /* Links inherit ink by default; accent marks links inside content and
      anything opted in with `text-link`. */
   a {
     color: inherit;
@@ -624,13 +829,14 @@ html.dark,
 
   code,
   kbd,
-  pre {
+  pre,
+  samp {
     font-family: var(--font-mono);
   }
 
   code {
     font-size: 0.875em;
-    border-radius: 4px;
+    border-radius: 6px;
     padding: 1px 5px;
     background: var(--color-background-subtle);
   }
@@ -643,18 +849,39 @@ html.dark,
   }
 
   ::selection {
-    background: var(--color-ds-green-200);
-    color: var(--color-ds-neutral-500);
+    background: var(--color-accent-soft);
   }
 
-  .dark ::selection {
-    background: var(--color-ds-green-500);
-    color: #ffffff;
+  /* The accent focus ring everywhere a component does not draw its own. */
+  :focus-visible {
+    outline-color: var(--color-border-focus);
+  }
+
+  /* The page fade is CSS so it can step aside while a router view
+     transition morphs shared elements (the new snapshot must be visible). */
+  .page-enter {
+    animation: enter-rise var(--motion-duration-base) var(--ease-standard);
+  }
+  html:active-view-transition .page-enter {
+    animation: none;
+  }
+
+  /* Router view transitions: a quick crossfade by default; shared elements
+     (`view-transition-name`) morph on top of it. */
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 180ms;
+    animation-timing-function: var(--ease-standard);
   }
 }
 
 @layer components {
-  /* Underline tabs used for site sections and settings groups. */
+  /* Numeric readouts keep tabular figures so columns of numbers align. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* LEGACY: underline tabs, still used by un-rewritten screens; phase 3. */
   .nav-tab {
     position: relative;
     display: inline-flex;
@@ -663,15 +890,13 @@ html.dark,
     gap: 0.5rem;
     padding-inline: 0.125rem;
     font-size: 14px;
-    line-height: 17px;
+    line-height: 20px;
     font-weight: 500;
-    color: var(--color-text-muted);
+    color: var(--color-text-secondary);
     white-space: nowrap;
-    transition: color var(--motion-duration-fast) var(--motion-ease-standard);
+    transition: color var(--motion-duration-fast) var(--ease-standard);
   }
-  .nav-tab:hover {
-    color: var(--color-text-primary);
-  }
+  .nav-tab:hover,
   .nav-tab[aria-current='page'],
   .nav-tab[data-active='true'],
   .nav-tab[data-state='active'] {
@@ -683,9 +908,10 @@ html.dark,
     inset-inline: 0;
     bottom: -1px;
     height: 2px;
-    background: var(--color-action-primary);
+    border-radius: 2px;
+    background: var(--color-text-primary);
     opacity: 0;
-    transition: opacity var(--motion-duration-fast) var(--motion-ease-standard);
+    transition: opacity var(--motion-duration-fast) var(--ease-standard);
   }
   .nav-tab[aria-current='page']::after,
   .nav-tab[data-active='true']::after,
@@ -693,9 +919,18 @@ html.dark,
     opacity: 1;
   }
 
-  /* Numeric readouts keep tabular figures so columns of numbers align. */
-  .tnum {
-    font-variant-numeric: tabular-nums;
+  /* Hide scrollbars on horizontally scrolling strips. */
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Quiet scrollbars for panels and the sidebar. */
+  .scroll-quiet {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border-strong) transparent;
   }
 }
 
@@ -704,13 +939,15 @@ html.dark,
 .prose {
   --tw-prose-body: var(--color-text-primary);
   --tw-prose-headings: var(--color-text-primary);
+  --tw-prose-lead: var(--color-text-secondary);
   --tw-prose-links: var(--color-text-accent);
   --tw-prose-bold: var(--color-text-primary);
   --tw-prose-quotes: var(--color-text-secondary);
-  --tw-prose-quote-borders: var(--color-border-default);
-  --tw-prose-hr: var(--color-border-subtle);
+  --tw-prose-quote-borders: var(--color-border-strong);
+  --tw-prose-hr: var(--color-border-default);
   --tw-prose-bullets: var(--color-icon-muted);
   --tw-prose-counters: var(--color-text-muted);
+  --tw-prose-captions: var(--color-text-muted);
   --tw-prose-code: var(--color-text-primary);
   --tw-prose-pre-bg: var(--color-background-subtle);
   --tw-prose-pre-code: var(--color-text-primary);
@@ -719,7 +956,15 @@ html.dark,
 }
 
 .prose pre {
-  border-radius: var(--radius-surface);
+  border-radius: var(--radius-control);
+}
+
+.prose :where(h1, h2, h3, h4) {
+  letter-spacing: -0.015em;
+}
+
+.ProseMirror {
+  caret-color: var(--color-accent);
 }
 
 .ProseMirror .tableWrapper {
@@ -760,9 +1005,9 @@ html.dark,
   inset: 0;
   pointer-events: none;
   content: '';
-  background: color-mix(in oklab, var(--color-action-primary) 18%, transparent);
+  background: var(--color-accent-soft);
   box-shadow: inset 0 0 0 1px
-    color-mix(in oklab, var(--color-action-primary) 55%, transparent);
+    color-mix(in oklab, var(--color-accent) 55%, transparent);
 }
 
 .ProseMirror .column-resize-handle {
@@ -772,7 +1017,7 @@ html.dark,
   bottom: 0;
   width: 4px;
   pointer-events: none;
-  background: var(--color-action-primary);
+  background: var(--color-accent);
 }
 
 .ProseMirror [data-resize-container][data-node='image'] {
@@ -780,12 +1025,16 @@ html.dark,
   width: fit-content;
 }
 
+.ProseMirror [data-resize-container][data-node='image'] img {
+  border-radius: var(--radius-thumb);
+}
+
 .ProseMirror [data-resize-container][data-node='image'] [data-resize-handle] {
   width: 0.75rem;
   height: 0.75rem;
-  border: 2px solid var(--color-action-primary);
+  border: 2px solid var(--color-accent);
   border-radius: 9999px;
-  background: var(--color-background-default);
+  background: var(--color-background-surface);
 }
 
 .ProseMirror
@@ -816,6 +1065,42 @@ html.dark,
   transform: translate(50%, 50%);
 }
 
+/* Sonner, themed onto the tokens (the old config referenced variables that
+   do not exist, so toasts rendered unstyled in dark mode). */
+[data-sonner-toaster] {
+  --normal-bg: var(--color-background-elevated);
+  --normal-text: var(--color-text-primary);
+  --normal-border: var(--color-border-default);
+  --success-bg: var(--color-background-elevated);
+  --success-text: var(--color-text-primary);
+  --success-border: var(--color-border-default);
+  --error-bg: var(--color-background-elevated);
+  --error-text: var(--color-text-primary);
+  --error-border: var(--color-border-default);
+  --border-radius: 14px;
+  font-family: var(--font-sans);
+}
+
+[data-sonner-toast] {
+  box-shadow: var(--shadow-float) !important;
+}
+
+[data-sonner-toast] [data-icon] {
+  color: var(--color-icon-accent);
+}
+[data-sonner-toast][data-type='success'] [data-icon] {
+  color: var(--color-icon-success);
+}
+[data-sonner-toast][data-type='error'] [data-icon] {
+  color: var(--color-icon-error);
+}
+[data-sonner-toast][data-type='warning'] [data-icon] {
+  color: var(--color-icon-warning);
+}
+[data-sonner-toast] [data-description] {
+  color: var(--color-text-secondary) !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -823,5 +1108,11 @@ html.dark,
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
   }
 }

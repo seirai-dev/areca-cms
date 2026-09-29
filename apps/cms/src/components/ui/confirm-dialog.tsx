@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import type { MouseEvent, ReactNode } from 'react'
 
 import {
@@ -17,14 +17,16 @@ import { Label } from '#/components/ui/label'
 import { m } from '#/paraglide/messages'
 
 function typeToConfirmLabel(confirmText: string) {
-  const marker = '\uFFFF'
+  const marker = '￿'
   const [before, after] = m
     .shared_type_to_confirm({ confirmText: marker })
     .split(marker)
   return (
     <>
       {before}
-      <span className="font-mono font-semibold">{confirmText}</span>
+      <span className="rounded-[5px] bg-background-subtle px-1 font-mono text-[12.5px] font-medium text-text-primary">
+        {confirmText}
+      </span>
       {after}
     </>
   )
@@ -37,6 +39,7 @@ function typeToConfirmLabel(confirmText: string) {
  * - `confirmText` requires the user to type that exact value before the
  *   confirm button enables (use for irreversible deletes).
  * - Works either with a trigger (`children`) or controlled via `open`.
+ * - Test ids: `confirm-text` (the type-to-confirm input), `confirm-action`.
  */
 export function ConfirmDialog({
   title,
@@ -63,6 +66,7 @@ export function ConfirmDialog({
   children?: ReactNode
   testId?: string
 }) {
+  const inputId = useId()
   const [pending, setPending] = useState(false)
   const [typed, setTyped] = useState('')
   const [internalOpen, setInternalOpen] = useState(false)
@@ -105,12 +109,13 @@ export function ConfirmDialog({
         </AlertDialogHeader>
         {needsTyping ? (
           <div className="grid gap-2">
-            <Label htmlFor="confirm-text">
+            <Label htmlFor={inputId} className="block font-normal text-text-secondary">
               {typeToConfirmLabel(confirmText!)}
             </Label>
             <Input
-              id="confirm-text"
+              id={inputId}
               autoComplete="off"
+              spellCheck={false}
               value={typed}
               onChange={(event) => setTyped(event.target.value)}
               data-testid="confirm-text"
@@ -118,11 +123,9 @@ export function ConfirmDialog({
           </div>
         ) : null}
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={pending}>
-            {cancelLabel}
-          </AlertDialogCancel>
+          <AlertDialogCancel disabled={pending}>{cancelLabel}</AlertDialogCancel>
           <AlertDialogAction
-            variant={variant}
+            variant={variant === 'destructive' ? 'destructive' : 'primary'}
             disabled={pending || !typedOk}
             onClick={handleConfirm}
             data-testid="confirm-action"

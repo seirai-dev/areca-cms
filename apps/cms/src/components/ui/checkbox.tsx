@@ -1,9 +1,8 @@
-'use client'
-
 import * as React from 'react'
-import { cn } from '#/lib/utils'
 import { Checkbox as CheckboxPrimitive } from 'radix-ui'
-import { Check } from '@phosphor-icons/react'
+import { Check, Minus } from '@phosphor-icons/react'
+
+import { cn } from '#/lib/utils'
 
 function Checkbox({
   className,
@@ -13,16 +12,26 @@ function Checkbox({
     <CheckboxPrimitive.Root
       data-slot="checkbox"
       className={cn(
-        'peer size-4 shrink-0 rounded-[4px] border border-input shadow-xs transition-shadow outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground dark:bg-input/30 dark:aria-invalid:ring-destructive/40 dark:data-[state=checked]:bg-primary',
+        'peer grid size-[18px] shrink-0 place-content-center rounded-[6px] border border-border-strong bg-background-surface',
+        'transition-[background-color,border-color,transform] duration-150 ease-(--ease-standard) active:scale-95',
+        'outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus',
+        'disabled:cursor-not-allowed disabled:opacity-40',
+        'aria-invalid:border-border-error',
+        'data-[state=checked]:border-accent data-[state=checked]:bg-accent data-[state=checked]:text-accent-contrast',
+        'data-[state=indeterminate]:border-accent data-[state=indeterminate]:bg-accent data-[state=indeterminate]:text-accent-contrast',
         className,
       )}
       {...props}
     >
       <CheckboxPrimitive.Indicator
         data-slot="checkbox-indicator"
-        className="grid place-content-center text-current transition-none"
+        className="grid place-content-center text-current"
       >
-        <Check className="size-3.5" />
+        {props.checked === 'indeterminate' ? (
+          <Minus weight="bold" className="size-3" />
+        ) : (
+          <Check weight="bold" className="size-3" />
+        )}
       </CheckboxPrimitive.Indicator>
     </CheckboxPrimitive.Root>
   )

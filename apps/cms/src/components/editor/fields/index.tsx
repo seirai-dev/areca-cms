@@ -1,4 +1,4 @@
-import { FormField } from '#/components/form-field'
+import { FormField } from '#/components/ui/form-field'
 import type { Field } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 

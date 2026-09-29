@@ -1,7 +1,7 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 
 import { AuditLogList } from '#/components/admin/audit-log-list'
-import { PageHeader } from '#/components/page-header'
+import { PageHeader } from '#/components/ui/page-header'
 import { canManageSite } from '#/lib/site-nav'
 import { m } from '#/paraglide/messages'
 

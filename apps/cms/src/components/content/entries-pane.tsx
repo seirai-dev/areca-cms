@@ -5,7 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { toast } from 'sonner'
 
 import { errorMessage } from '#/components/admin/helpers'
-import { ConfirmDialog } from '#/components/confirm-dialog'
+import { ConfirmDialog } from '#/components/ui/confirm-dialog'
 import { EntryThumb } from '#/components/editor/entry-thumb'
 import { queryKeys } from '#/components/editor/query-keys'
 import {
@@ -17,10 +17,10 @@ import {
   entryTitle,
   formatDateTime,
 } from '#/components/editor/utils'
-import { EmptyState } from '#/components/empty-state'
+import { EmptyState } from '#/components/ui/empty-state'
 import { ListPagination } from '#/components/list-pagination'
-import { QueryError } from '#/components/query-error'
-import { RelativeTime } from '#/components/timeline'
+import { QueryError } from '#/components/ui/query-error'
+import { RelativeTime } from '#/components/ui/timeline'
 import { Avatar, AvatarFallback } from '#/components/ui/avatar'
 import { Button } from '#/components/ui/button'
 import { Checkbox } from '#/components/ui/checkbox'

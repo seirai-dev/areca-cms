@@ -1,33 +1,43 @@
 import { Toaster as Sonner } from 'sonner'
 import type { ToasterProps } from 'sonner'
+import { useTheme } from 'next-themes'
 import {
   CheckCircle,
   Info,
-  CircleNotch,
-  WarningOctagon,
   Warning,
+  WarningOctagon,
 } from '@phosphor-icons/react'
 
+import { Spinner } from '#/components/ui/spinner'
+
+/**
+ * Toasts, themed onto the tokens (see `[data-sonner-toaster]` in styles.css)
+ * and following the resolved theme rather than the OS, so a user who picked
+ * Dark in the account menu gets dark toasts.
+ */
 const Toaster = ({ ...props }: ToasterProps) => {
+  const { resolvedTheme } = useTheme()
   return (
     <Sonner
-      theme="system"
+      theme={resolvedTheme === 'dark' ? 'dark' : 'light'}
       className="toaster group"
+      position="bottom-right"
+      offset={20}
+      mobileOffset={{ bottom: 88 }}
+      gap={10}
       icons={{
-        success: <CheckCircle className="size-4" />,
-        info: <Info className="size-4" />,
-        warning: <Warning className="size-4" />,
-        error: <WarningOctagon className="size-4" />,
-        loading: <CircleNotch className="size-4 animate-spin" />,
+        success: <CheckCircle weight="fill" className="size-[18px]" />,
+        info: <Info weight="fill" className="size-[18px]" />,
+        warning: <Warning weight="fill" className="size-[18px]" />,
+        error: <WarningOctagon weight="fill" className="size-[18px]" />,
+        loading: <Spinner size={16} />,
       }}
-      style={
-        {
-          '--normal-bg': 'var(--popover)',
-          '--normal-text': 'var(--popover-foreground)',
-          '--normal-border': 'var(--border)',
-          '--border-radius': 'var(--radius)',
-        } as React.CSSProperties
-      }
+      toastOptions={{
+        classNames: {
+          toast: 'font-sans! text-[13.5px]!',
+          title: 'font-semibold!',
+        },
+      }}
       {...props}
     />
   )

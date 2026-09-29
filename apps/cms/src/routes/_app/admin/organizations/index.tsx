@@ -13,10 +13,10 @@ import {
 } from '#/components/admin/helpers'
 import { TableSkeleton } from '#/components/admin/table-skeleton'
 import { createDataColumns, DataTable } from '#/components/data-table'
-import { EmptyState } from '#/components/empty-state'
-import { FormField } from '#/components/form-field'
-import { PageHeader } from '#/components/page-header'
-import { QueryError } from '#/components/query-error'
+import { EmptyState } from '#/components/ui/empty-state'
+import { FormField } from '#/components/ui/form-field'
+import { PageHeader } from '#/components/ui/page-header'
+import { QueryError } from '#/components/ui/query-error'
 import { Button } from '#/components/ui/button'
 import {
   Dialog,

@@ -1,5 +1,5 @@
 import { JobStatusBadge } from '#/components/editor/status-badge'
-import { RelativeTime } from '#/components/timeline'
+import { RelativeTime } from '#/components/ui/timeline'
 import { Button } from '#/components/ui/button'
 import { m } from '#/paraglide/messages'
 import { Scroll, XCircle } from '@phosphor-icons/react'

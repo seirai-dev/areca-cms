@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Reorder, useDragControls } from 'motion/react'
 
 import { EntityIcon } from '#/components/entity-icon'
-import { FormField } from '#/components/form-field'
+import { FormField } from '#/components/ui/form-field'
 import { Badge } from '#/components/ui/badge'
 import { Button } from '#/components/ui/button'
 import { Checkbox } from '#/components/ui/checkbox'

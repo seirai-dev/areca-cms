@@ -8,7 +8,7 @@ import {
 import { createFileRoute } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
-import { ConfirmDialog } from '#/components/confirm-dialog'
+import { ConfirmDialog } from '#/components/ui/confirm-dialog'
 import { queryKeys } from '#/components/editor/query-keys'
 import { JobStatusBadge } from '#/components/editor/status-badge'
 import {
@@ -16,14 +16,14 @@ import {
   errorMessage,
   formatDateTime,
 } from '#/components/editor/utils'
-import { EmptyState } from '#/components/empty-state'
+import { EmptyState } from '#/components/ui/empty-state'
 import { ListPagination } from '#/components/list-pagination'
-import { PageHeader } from '#/components/page-header'
-import { QueryError } from '#/components/query-error'
+import { PageHeader } from '#/components/ui/page-header'
+import { QueryError } from '#/components/ui/query-error'
 import { BuildJobList } from '#/components/releases/build-job-list'
 import { PublicationTimelineRow } from '#/components/releases/publication-row'
 import type { JobRow, PublicationRow } from '#/components/releases/types'
-import { Timeline } from '#/components/timeline'
+import { Timeline } from '#/components/ui/timeline'
 import { Button } from '#/components/ui/button'
 import { ScrollArea } from '#/components/ui/scroll-area'
 import {

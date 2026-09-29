@@ -8,8 +8,8 @@ import {
 } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
-import { EmptyState } from '#/components/empty-state'
-import { QueryError } from '#/components/query-error'
+import { EmptyState } from '#/components/ui/empty-state'
+import { QueryError } from '#/components/ui/query-error'
 import { Button } from '#/components/ui/button'
 import {
   Dialog,

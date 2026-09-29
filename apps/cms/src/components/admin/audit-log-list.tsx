@@ -6,9 +6,9 @@ import {
   formatAuditAction,
   formatAuditTarget,
 } from '#/components/admin/helpers'
-import { EmptyState } from '#/components/empty-state'
+import { EmptyState } from '#/components/ui/empty-state'
 import { ListPagination } from '#/components/list-pagination'
-import { QueryError } from '#/components/query-error'
+import { QueryError } from '#/components/ui/query-error'
 import { Avatar, AvatarFallback } from '#/components/ui/avatar'
 import { Skeleton } from '#/components/ui/skeleton'
 import { absoluteTimeLabel, formatRelativeTime } from '#/lib/relative-time'

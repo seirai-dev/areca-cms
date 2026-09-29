@@ -3,8 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useBlocker, useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
-import { ConfirmDialog } from '#/components/confirm-dialog'
-import { QueryError } from '#/components/query-error'
+import { ConfirmDialog } from '#/components/ui/confirm-dialog'
+import { QueryError } from '#/components/ui/query-error'
 import { formatRelativeTime } from '#/lib/relative-time'
 import {
   AlertDialog,

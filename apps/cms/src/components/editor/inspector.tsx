@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { motion, useReducedMotion } from 'motion/react'
 
-import { QueryError } from '#/components/query-error'
-import { RelativeTime, absoluteTimeLabel } from '#/components/timeline'
+import { QueryError } from '#/components/ui/query-error'
+import { RelativeTime, absoluteTimeLabel } from '#/components/ui/timeline'
 import { Avatar, AvatarFallback } from '#/components/ui/avatar'
 import { Button } from '#/components/ui/button'
 import { Skeleton } from '#/components/ui/skeleton'

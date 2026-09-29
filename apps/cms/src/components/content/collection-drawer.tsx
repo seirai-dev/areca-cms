@@ -20,7 +20,7 @@ import type {
   FieldErrors,
 } from '#/components/admin/collection-form'
 import { errorMessage } from '#/components/admin/helpers'
-import { ConfirmDialog } from '#/components/confirm-dialog'
+import { ConfirmDialog } from '#/components/ui/confirm-dialog'
 import { queryKeys } from '#/components/editor/query-keys'
 import {
   AlertDialog,

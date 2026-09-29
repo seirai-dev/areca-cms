@@ -5,7 +5,7 @@ import { createFileRoute, redirect } from '@tanstack/react-router'
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { Spinner } from '#/components/ui/spinner'
-import { FormField } from '#/components/form-field'
+import { FormField } from '#/components/ui/form-field'
 import {
   AuthDivider,
   AuthError,

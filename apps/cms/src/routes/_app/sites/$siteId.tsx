@@ -6,7 +6,7 @@ import {
   notFound,
   useRouterState,
 } from '@tanstack/react-router'
-import { EmptyState } from '#/components/empty-state'
+import { EmptyState } from '#/components/ui/empty-state'
 import { SiteIdentityStrip } from '#/components/identity-strip'
 import { rememberRecentSite } from '#/components/site-switcher'
 import { Button } from '#/components/ui/button'

@@ -3,8 +3,8 @@ import { useMutation } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
 import { assetFileUrl, errorMessage } from '#/components/editor/utils'
-import { FormField } from '#/components/form-field'
-import { RelativeTime } from '#/components/timeline'
+import { FormField } from '#/components/ui/form-field'
+import { RelativeTime } from '#/components/ui/timeline'
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import {

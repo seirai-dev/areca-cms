@@ -1,7 +1,7 @@
 import { Link, createFileRoute, redirect } from '@tanstack/react-router'
 
 import { OrgMembers } from '#/components/admin/org-members'
-import { PageHeader } from '#/components/page-header'
+import { PageHeader } from '#/components/ui/page-header'
 import { canManageSite } from '#/lib/site-nav'
 import { m } from '#/paraglide/messages'
 

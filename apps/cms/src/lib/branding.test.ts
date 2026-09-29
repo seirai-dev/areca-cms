@@ -6,6 +6,7 @@ import {
   brandingCss,
   brandingPreviewStyle,
   contrastRatio,
+  fontEntry,
   fontStylesheetUrl,
   hexToOklch,
   isFontKey,
@@ -42,39 +43,63 @@ describe('hexToOklch', () => {
 })
 
 describe('accentVariables', () => {
-  it('overrides the semantic accent tokens in both modes', () => {
+  const lightness = (value: string) => Number(value.match(/([\d.]+)%/)![1])
+  const hue = (value: string) => value.split(' ')[2]
+
+  it('re-tints the accent tokens, never the ink primary button', () => {
     const light = accentVariables('#1e90ff', 'light')
     const dark = accentVariables('#1e90ff', 'dark')
     expect(light).not.toBeNull()
     expect(Object.keys(light!).sort()).toEqual([
-      '--color-action-primary',
-      '--color-action-primary-hover',
-      '--color-action-primary-text',
+      '--color-accent',
+      '--color-accent-contrast',
+      '--color-accent-hover',
+      '--color-accent-soft',
+      '--color-accent-text',
+      '--color-border-focus',
       '--color-icon-accent',
-      '--color-status-success',
+      '--color-status-info',
+      '--color-status-info-bg',
       '--color-text-accent',
     ])
-    expect(light!['--color-action-primary']).toMatch(/^oklch\(/)
-    // Hover is a lighter step than the accent itself.
-    const lightness = (value: string) => Number(value.match(/([\d.]+)%/)![1])
-    expect(lightness(light!['--color-action-primary-hover'])).toBeGreaterThan(
-      lightness(light!['--color-action-primary']),
+    expect(Object.keys(dark!).sort()).toEqual(Object.keys(light!).sort())
+    for (const key of Object.keys(light!)) {
+      expect(key.startsWith('--color-action-')).toBe(false)
+    }
+    expect(light!['--color-accent']).toMatch(/^oklch\(/)
+    // Focus rings follow the accent.
+    expect(light!['--color-border-focus']).toBe(light!['--color-accent'])
+    // The soft fill is the accent at low alpha.
+    expect(light!['--color-accent-soft']).toMatch(/\/ 0\.12\)$/)
+    expect(dark!['--color-accent-soft']).toMatch(/\/ 0\.16\)$/)
+  })
+
+  it('darkens on hover in light mode and lifts in dark mode', () => {
+    const light = accentVariables('#5856d6', 'light')!
+    const dark = accentVariables('#5856d6', 'dark')!
+    expect(lightness(light['--color-accent-hover'])).toBeLessThan(
+      lightness(light['--color-accent']),
+    )
+    expect(lightness(dark['--color-accent-hover'])).toBeGreaterThan(
+      lightness(dark['--color-accent']),
+    )
+    // Dark mode lifts the accent so it reads on near-black.
+    expect(lightness(dark['--color-accent'])).toBeGreaterThan(
+      lightness(light['--color-accent']),
     )
     // Accent text darkens in light mode and lightens in dark mode.
-    expect(lightness(light!['--color-text-accent'])).toBeLessThan(
-      lightness(dark!['--color-text-accent']),
+    expect(lightness(light['--color-text-accent'])).toBeLessThan(
+      lightness(dark['--color-text-accent']),
     )
     // Both modes share the same hue.
-    expect(light!['--color-action-primary'].split(' ')[2]).toBe(
-      dark!['--color-action-primary'].split(' ')[2],
-    )
+    expect(hue(light['--color-accent'])).toBe(hue(dark['--color-accent']))
   })
 
   it('picks a readable text colour on the accent', () => {
-    expect(accentVariables('#111111')!['--color-action-primary-text']).toBe(
+    expect(accentVariables('#111111')!['--color-accent-contrast']).toBe(
       '#ffffff',
     )
-    expect(accentVariables('#fae884')!['--color-action-primary-text']).toBe(
+    expect(accentVariables('#fae884')!['--color-accent-contrast']).toBe(
       '#111111',
     )
   })
@@ -95,10 +120,11 @@ describe('brandingCss', () => {
       accentColor: '#336699',
       font: 'dm-sans',
     })
-    expect(css).toContain('--color-action-primary:oklch(')
+    expect(css).toContain('--color-accent:oklch(')
+    expect(css).not.toContain('--color-action-primary')
     expect(css).toContain("--font-sans:'DM Sans'")
-    expect(css).toContain(':root:not(.dark){--color-action-primary')
-    expect(css).toContain('html.dark{--color-action-primary')
+    expect(css).toContain(':root:not(.dark){--color-accent:')
+    expect(css).toContain('html.dark{--color-accent:')
   })
 
   it('only emits stored advanced colours while advanced mode is active', () => {
@@ -168,5 +194,13 @@ describe('fonts', () => {
     expect(fontStylesheetUrl('system')).toBeNull()
     expect(isFontKey('inter')).toBe(true)
     expect(isFontKey('comic-sans')).toBe(false)
+  })
+
+  it('falls back to the default font for unknown stored keys', () => {
+    expect(fontStylesheetUrl('comic-sans')).toBeNull()
+    expect(fontEntry('comic-sans').label).toBe('Inter')
+    expect(
+      brandingCss({ ...DEFAULT_BRANDING, font: 'comic-sans' as never }),
+    ).toBe('')
   })
 })

@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { AuditLogList } from '#/components/admin/audit-log-list'
-import { PageHeader } from '#/components/page-header'
+import { PageHeader } from '#/components/ui/page-header'
 import { m } from '#/paraglide/messages'
 
 export const Route = createFileRoute('/_app/admin/audit')({

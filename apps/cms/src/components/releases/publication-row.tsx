@@ -1,8 +1,8 @@
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 
 import { PublicationStatusBadge } from '#/components/editor/status-badge'
-import { RelativeTime, TimelineItem } from '#/components/timeline'
-import type { TimelineTone } from '#/components/timeline'
+import { RelativeTime, TimelineItem } from '#/components/ui/timeline'
+import type { TimelineTone } from '#/components/ui/timeline'
 import { Button } from '#/components/ui/button'
 import {
   DropdownMenu,

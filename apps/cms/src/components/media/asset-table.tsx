@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 
 import { createDataColumns, DataTable } from '#/components/data-table'
 import { assetFileUrl } from '#/components/editor/utils'
-import { RelativeTime } from '#/components/timeline'
+import { RelativeTime } from '#/components/ui/timeline'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 import { getLocale } from '#/paraglide/runtime'
