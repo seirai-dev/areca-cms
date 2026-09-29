@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { LegacyCollection } from '#/features/collection/legacy-collection'
+import { CollectionScreen } from '#/features/collection/collection-screen'
 
 /** `/sites/$siteId/c/$collectionKey`: one collection's entries. */
 export const Route = createFileRoute('/_app/sites/$siteId/c/$collectionKey/')({
@@ -10,5 +10,5 @@ export const Route = createFileRoute('/_app/sites/$siteId/c/$collectionKey/')({
 function CollectionPage() {
   const { collectionKey } = Route.useParams()
   const { me, site } = Route.useRouteContext()
-  return <LegacyCollection me={me} site={site} collectionKey={collectionKey} />
+  return <CollectionScreen me={me} site={site} collectionKey={collectionKey} />
 }
