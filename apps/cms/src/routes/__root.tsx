@@ -99,6 +99,9 @@ function RootDocument({ children }: { children: ReactNode }) {
         <TanStackDevtools
           config={{
             position: 'bottom-right',
+            // Dev only. The floating trigger covered the mobile tab bar and the
+            // account row; open the devtools with their hotkey instead.
+            triggerHidden: true,
           }}
           plugins={[
             {

@@ -44,7 +44,7 @@ export function MobileTopBar() {
       className="sticky top-0 z-navbar flex h-(--navbar-height) items-center gap-1 border-b border-border-default bg-background-default/85 px-2 backdrop-blur-xl backdrop-saturate-150 md:hidden"
     >
       <div className="min-w-0 flex-1">
-        <WorkspaceSwitcher compact />
+        <WorkspaceSwitcher compact testId="sites-nav-mobile" />
       </div>
       {mode === 'site' && site ? <GoLivePill siteId={site.id} /> : null}
       <button
@@ -56,7 +56,7 @@ export function MobileTopBar() {
       >
         <MagnifyingGlass size={20} />
       </button>
-      <AccountMenu variant="avatar" />
+      <AccountMenu variant="avatar" testId="user-menu-mobile" />
     </header>
   )
 }
@@ -163,7 +163,7 @@ export function MobileTabBar() {
         <nav
           aria-label={m.shell_site_navigation()}
           data-testid="mobile-tab-bar"
-          className="fixed inset-x-0 bottom-0 z-navbar flex h-[calc(56px+env(safe-area-inset-bottom))] border-t border-border-default bg-background-default/85 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl backdrop-saturate-150 md:hidden"
+          className="fixed inset-x-0 bottom-0 z-navbar flex h-[calc(56px+env(safe-area-inset-bottom))] border-t border-border-default bg-background-default/96 pb-[env(safe-area-inset-bottom)] backdrop-blur-2xl backdrop-saturate-150 md:hidden"
         >
           <TabLink
             link={{ to: '/sites/$siteId', params: { siteId: site.id } }}
@@ -274,7 +274,7 @@ export function MobileTabBar() {
         <nav
           aria-label={m.shell_agency_navigation()}
           data-testid="mobile-tab-bar"
-          className="fixed inset-x-0 bottom-0 z-navbar flex h-[calc(56px+env(safe-area-inset-bottom))] border-t border-border-default bg-background-default/85 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl backdrop-saturate-150 md:hidden"
+          className="fixed inset-x-0 bottom-0 z-navbar flex h-[calc(56px+env(safe-area-inset-bottom))] border-t border-border-default bg-background-default/96 pb-[env(safe-area-inset-bottom)] backdrop-blur-2xl backdrop-saturate-150 md:hidden"
         >
           <TabLink link={{ to: '/agency' }} icon={House} label={m.shell_nav_overview()} exact />
           <TabLink link={{ to: '/agency/clients' }} icon={Buildings} label={m.shell_nav_clients()} />

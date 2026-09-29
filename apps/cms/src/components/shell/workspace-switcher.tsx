@@ -88,8 +88,15 @@ function SiteLiveLine({ site }: { site: MeSite }) {
  */
 export const WorkspaceCard = React.forwardRef<
   HTMLButtonElement,
-  React.ComponentProps<'button'> & { compact?: boolean; collapsed?: boolean }
->(function WorkspaceCard({ compact = false, collapsed = false, className, ...props }, ref) {
+  React.ComponentProps<'button'> & {
+    compact?: boolean
+    collapsed?: boolean
+    testId?: string
+  }
+>(function WorkspaceCardButton(
+  { compact = false, collapsed = false, testId = 'sites-nav', className, ...props },
+  ref,
+) {
   const { mode, site } = useShell()
   const branding = useBranding()
   const inSite = mode !== 'agency' && site
@@ -99,7 +106,7 @@ export const WorkspaceCard = React.forwardRef<
     <button
       ref={ref}
       type="button"
-      data-testid="sites-nav"
+      data-testid={testId}
       aria-label={m.shell_switcher_label({ name: title })}
       className={cn(
         'group/ws flex min-w-0 items-center gap-2.5 rounded-[12px] text-left outline-none transition-colors',
@@ -275,19 +282,28 @@ export function WorkspaceSwitcher({
   compact = false,
   collapsed = false,
   className,
+  testId,
 }: {
   compact?: boolean
   collapsed?: boolean
   className?: string
+  /** Defaults to `sites-nav`; the mobile top bar passes `sites-nav-mobile`. */
+  testId?: string
 }) {
-  const { switcherOpen, setSwitcherOpen } = useShell()
+  const shell = useShell()
   const mobile = useIsMobile()
+  // Both the sidebar card and the mobile top-bar card are in the DOM (one is
+  // hidden by CSS); only the visible one follows the shared open state.
+  const active = compact ? mobile : !mobile
+  const switcherOpen = active && shell.switcherOpen
+  const setSwitcherOpen = active ? shell.setSwitcherOpen : () => {}
 
   if (mobile) {
     return (
       <>
         <WorkspaceCard
           compact={compact}
+          testId={testId}
           className={className}
           aria-haspopup="dialog"
           aria-expanded={switcherOpen}
@@ -307,7 +323,12 @@ export function WorkspaceSwitcher({
   return (
     <Popover open={switcherOpen} onOpenChange={setSwitcherOpen}>
       <PopoverTrigger asChild>
-        <WorkspaceCard compact={compact} collapsed={collapsed} className={className} />
+        <WorkspaceCard
+          compact={compact}
+          collapsed={collapsed}
+          className={className}
+          testId={testId}
+        />
       </PopoverTrigger>
       <PopoverContent
         align="start"

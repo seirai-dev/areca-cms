@@ -75,7 +75,7 @@ export function StaggerItem({
         ease: EASE_STANDARD,
         delay: Math.min(position, 9) * 0.03,
       }}
-      {...(props as object)}
+      {...(props)}
     >
       {children}
     </Comp>

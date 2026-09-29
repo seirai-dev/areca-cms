@@ -106,7 +106,7 @@ export function CommandPalette() {
               offset: 0,
             },
           })
-        ).items as EntryHit[],
+        ).items,
       enabled: searching && paletteOpen,
       staleTime: 15_000,
     })),
@@ -128,11 +128,25 @@ export function CommandPalette() {
       )
     : []
 
+  // Entry hits arrive after the typed filter has already picked a row; move
+  // the highlight to the first hit when they land (Spotlight behaviour).
+  const [highlighted, setHighlighted] = React.useState('')
+  const firstHit = entryResults[0]
+    ? `entry ${entryResults[0].entry.id}`
+    : undefined
+  React.useEffect(() => {
+    if (firstHit) setHighlighted(firstHit)
+  }, [firstHit])
+
   return (
     <CommandDialog
       open={paletteOpen}
       onOpenChange={setPaletteOpen}
-      commandProps={{ loop: true }}
+      commandProps={{
+        loop: true,
+        value: highlighted,
+        onValueChange: setHighlighted,
+      }}
     >
       <CommandInput
         size="lg"
@@ -161,12 +175,12 @@ export function CommandPalette() {
           <CommandGroup heading={m.shell_palette_entries()}>
             {entryResults.map(({ entry, collection }) => {
               const Icon = collectionIcon(collection.key, collection.label)
-              const title = entryTitle(entry.draftData, collection.fields as Field[], entry.slug)
+              const title = entryTitle(entry.draftData, collection.fields, entry.slug)
               return (
                 <CommandItem
                   key={`${collection.key}-${entry.id}`}
-                  value={`entry ${entry.id} ${title} ${entry.slug}`}
-                  keywords={[needle]}
+                  value={`entry ${entry.id}`}
+                  keywords={[needle, title, entry.slug]}
                   onSelect={() =>
                     go({
                       to: '/sites/$siteId/c/$collectionKey/$entryId',

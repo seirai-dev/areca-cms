@@ -18,7 +18,7 @@ type PanelSearch = z.infer<typeof sitePanelSearchSchema>
 
 export function usePanel() {
   const navigate = useNavigate()
-  const search = useSearch({ strict: false }) as PanelSearch
+  const search = useSearch({ strict: false })
   const panel = search.panel
 
   function open(next: SitePanel, options: { release?: string } = {}) {

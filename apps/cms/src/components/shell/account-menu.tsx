@@ -165,8 +165,11 @@ function AccountMenuBody({ onClose }: { onClose: () => void }) {
  */
 export function AccountMenu({
   variant = 'row',
+  testId = 'user-menu',
 }: {
   variant?: 'row' | 'avatar' | 'rail'
+  /** The mobile top bar passes `user-menu-mobile` (both bars exist in the DOM). */
+  testId?: string
 }) {
   const { me } = useShell()
   const [open, setOpen] = React.useState(false)
@@ -176,7 +179,7 @@ export function AccountMenu({
     variant === 'row' ? (
       <button
         type="button"
-        data-testid="user-menu"
+        data-testid={testId}
         aria-label={m.shell_account_menu({ name: me.user.name })}
         className="group/account flex h-11 w-full min-w-0 items-center gap-2.5 rounded-[10px] px-2 text-left outline-none transition-colors hover:bg-surface-state-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-border-focus data-[state=open]:bg-surface-state-hover"
       >
@@ -192,7 +195,7 @@ export function AccountMenu({
     ) : (
       <button
         type="button"
-        data-testid="user-menu"
+        data-testid={testId}
         aria-label={m.shell_account_menu({ name: me.user.name })}
         className="grid size-10 place-content-center rounded-full outline-none transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus"
       >

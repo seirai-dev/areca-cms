@@ -307,10 +307,10 @@ function AttentionStrip({ site, canPublish }: { site: MeSite; canPublish: boolea
             canPublish={canPublish}
             pending={isPending}
             testId="overview-go-live"
-            className="w-auto"
+            fullWidth={false}
             onGoLive={() => {
               void goLive().then((result) => {
-                if (result && 'ok' in result && result.ok === false) panel.open('golive')
+                if ('ok' in result && result.ok === false) panel.open('golive')
               })
             }}
           />

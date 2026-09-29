@@ -119,7 +119,7 @@ export function LegacyAgencyOverview({ me }: { me: Me }) {
 
   return (
     <div className="grid gap-8 lg:grid-cols-12 lg:gap-10">
-      <section className="grid min-w-0 gap-4 lg:col-span-8">
+      <section className="grid min-w-0 content-start gap-4 lg:col-span-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-display">{m.home_sites_title()}</h1>
           <div className="flex flex-wrap items-center gap-2">

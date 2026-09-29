@@ -67,7 +67,7 @@ export function usePendingEntries({
                 offset: 0,
               },
             })
-          ).items as EntryRow[],
+          ).items,
         enabled,
         staleTime: 5_000,
       })),
@@ -79,7 +79,7 @@ export function usePendingEntries({
 
   const entries: PendingEntry[] = []
   collections.forEach((collection, index) => {
-    const fields = collection.fields as Field[]
+    const fields = collection.fields
     const published = results[index * 2]?.data ?? []
     const scheduled = results[index * 2 + 1]?.data ?? []
     for (const row of published) {

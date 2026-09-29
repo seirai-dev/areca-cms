@@ -77,11 +77,7 @@ function useShellMode(): ShellMode {
 /** Shell-level shortcuts: ⌘K, ⌘., g o/l/p/s, n, / (brief §3.12). */
 function GlobalShortcuts({ value }: { value: ShellValue }) {
   const navigate = useNavigate()
-  const params = useParams({ strict: false }) as {
-    siteId?: string
-    collectionKey?: string
-    entryId?: string
-  }
+  const params = useParams({ strict: false })
   const { mode, site, me } = value
   const inSite = mode !== 'agency' && site
   const inCollectionList =
@@ -148,7 +144,7 @@ function SitePanels({ me, siteId }: { me: Me; siteId: string }) {
  */
 export function AppShell({ me, children }: { me: Me; children: React.ReactNode }) {
   const mode = useShellMode()
-  const params = useParams({ strict: false }) as { siteId?: string }
+  const params = useParams({ strict: false })
   const site = findSite(me, params.siteId)
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const mobile = useIsMobile()

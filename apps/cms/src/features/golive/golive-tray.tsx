@@ -118,6 +118,7 @@ function GoLiveButton({
   size = 'sm',
   className,
   testId = 'publish-site',
+  fullWidth = true,
 }: {
   canPublish: boolean
   onGoLive: () => void
@@ -127,6 +128,7 @@ function GoLiveButton({
   size?: 'sm' | 'md'
   className?: string
   testId?: string
+  fullWidth?: boolean
 }) {
   const button = (
     <Button
@@ -140,7 +142,7 @@ function GoLiveButton({
         event.stopPropagation()
         onGoLive()
       }}
-      className={cn('w-full', className)}
+      className={cn(fullWidth && 'w-full', className)}
     >
       {pending ? null : <RocketLaunch weight="fill" />}
       {label}
@@ -148,7 +150,12 @@ function GoLiveButton({
   )
   if (canPublish) return button
   return (
-    <Hint label={editorPublishReason()} side="top" wrapDisabled className="w-full">
+    <Hint
+      label={editorPublishReason()}
+      side="top"
+      wrapDisabled
+      className={fullWidth ? 'w-full' : undefined}
+    >
       {button}
     </Hint>
   )
@@ -305,7 +312,7 @@ export function GoLiveTray({
                   <GoLiveSteps step={release.step} />
                   <IndeterminateBar />
                 </>
-              ) : state === 'failed' ? (
+              ) : (
                 <>
                   <div className="flex items-start gap-2">
                     <FailedIcon size={16} className="mt-0.5 text-icon-error" />
@@ -327,7 +334,7 @@ export function GoLiveTray({
                     onGoLive={() => void handleGoLive()}
                   />
                 </>
-              ) : null}
+              )}
             </div>
           )}
         </motion.div>
