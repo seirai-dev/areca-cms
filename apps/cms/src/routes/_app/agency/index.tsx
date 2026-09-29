@@ -1,13 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { LegacyAgencyOverview } from '#/features/agency/legacy-agency-overview'
+import { AgencyOverviewScreen } from '#/features/agency/agency-overview-screen'
 
-/** `/agency`: all-sites health and the first-run checklist. */
+/** `/agency`: the first-run checklist and all-sites health. */
 export const Route = createFileRoute('/_app/agency/')({
   component: AgencyOverviewPage,
 })
 
 function AgencyOverviewPage() {
   const { me } = Route.useRouteContext()
-  return <LegacyAgencyOverview me={me} />
+  return <AgencyOverviewScreen me={me} />
 }

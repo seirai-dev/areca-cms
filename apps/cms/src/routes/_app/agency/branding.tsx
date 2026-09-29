@@ -1,8 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { LegacyBranding } from '#/features/agency/legacy-branding'
+import { BrandingScreen } from '#/features/agency/branding-screen'
 
-/** `/agency/branding`: instance name, logo, accent and font. */
+/** `/agency/branding`: instance name, logo, favicon, accent, font, sender. */
 export const Route = createFileRoute('/_app/agency/branding')({
-  component: LegacyBranding,
+  component: BrandingScreen,
 })

@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { LegacyAgencyPeople } from '#/features/agency/legacy-agency-people'
+import { AgencyPeopleScreen } from '#/features/agency/agency-people-screen'
 
 /** `/agency/people`: everyone with an account, and agency access. */
 export const Route = createFileRoute('/_app/agency/people')({
@@ -9,5 +9,5 @@ export const Route = createFileRoute('/_app/agency/people')({
 
 function AgencyPeoplePage() {
   const { me } = Route.useRouteContext()
-  return <LegacyAgencyPeople me={me} />
+  return <AgencyPeopleScreen me={me} />
 }

@@ -8,6 +8,7 @@ import {
   SquaresFour,
 } from '@phosphor-icons/react'
 
+import { adminQueryKeys } from '#/components/admin/helpers'
 import { BrandLogo } from '#/components/brand-mark'
 import { useShell } from '#/components/shell/shell-context'
 import { SiteTile } from '#/components/shell/site-tile'
@@ -32,6 +33,7 @@ import { displayHost, groupSitesByOrg } from '#/lib/site-nav'
 import type { MeSite } from '#/lib/site-nav'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
+import { listOrganizationsFn } from '#/server/fn/admin'
 import { getSitesOverviewFn } from '#/server/fn/overview'
 
 export function sitesOverviewQueryOptions() {
@@ -154,6 +156,11 @@ function SwitcherList({ onDone }: { onDone: () => void }) {
   const navigate = useNavigate()
   const branding = useBranding()
   const liveMap = useSitesLive()
+  const clients = useQuery({
+    queryKey: adminQueryKeys.organizations,
+    queryFn: () => listOrganizationsFn(),
+    enabled: me.user.isAgencyAdmin,
+  })
   const [recent, setRecent] = React.useState<string[]>([])
   React.useEffect(() => setRecent(readRecentSites()), [])
 
@@ -261,7 +268,16 @@ function SwitcherList({ onDone }: { onDone: () => void }) {
               data-testid="switcher-new-site"
               onSelect={() => {
                 onDone()
-                void navigate({ to: '/agency/clients' })
+                // One client: straight into its New site sheet. Otherwise
+                // pick the client first.
+                const only = clients.data?.length === 1 ? clients.data[0] : undefined
+                void (only
+                  ? navigate({
+                      to: '/agency/clients/$orgId',
+                      params: { orgId: only.id },
+                      search: { new: 1 },
+                    })
+                  : navigate({ to: '/agency/clients' }))
               }}
             >
               <Plus />
