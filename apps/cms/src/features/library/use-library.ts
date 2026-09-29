@@ -34,12 +34,16 @@ export function isPdf(asset: { mimeType: string }) {
 export function formatBytes(bytes: number | undefined | null) {
   if (typeof bytes !== 'number' || !Number.isFinite(bytes)) return null
   if (bytes < 1024) return m.sites_bytes({ size: bytes })
-  if (bytes < 1024 * 1024) return m.sites_kb({ size: (bytes / 1024).toFixed(0) })
+  if (bytes < 1024 * 1024)
+    return m.sites_kb({ size: (bytes / 1024).toFixed(0) })
   return m.sites_mb({ size: (bytes / (1024 * 1024)).toFixed(1) })
 }
 
 /** "JPEG", "PNG", "PDF" from a mime type. */
-export function fileKind(asset: { mimeType: string; originalFilename: string }) {
+export function fileKind(asset: {
+  mimeType: string
+  originalFilename: string
+}) {
   const sub = asset.mimeType.split('/')[1]
   if (sub) return sub.replace(/^x-/, '').toUpperCase()
   const dot = asset.originalFilename.lastIndexOf('.')
@@ -67,10 +71,15 @@ export function useLibraryAssets(organizationId: string, search: string) {
         },
       }) as Promise<LibraryAsset[]>,
     getNextPageParam: (lastPage, _pages, lastOffset) =>
-      lastPage.length > LIBRARY_PAGE_SIZE ? lastOffset + LIBRARY_PAGE_SIZE : undefined,
+      lastPage.length > LIBRARY_PAGE_SIZE
+        ? lastOffset + LIBRARY_PAGE_SIZE
+        : undefined,
   })
   const assets = React.useMemo(
-    () => (query.data?.pages ?? []).flatMap((page) => page.slice(0, LIBRARY_PAGE_SIZE)),
+    () =>
+      (query.data?.pages ?? []).flatMap((page) =>
+        page.slice(0, LIBRARY_PAGE_SIZE),
+      ),
     [query.data],
   )
   return { ...query, assets }
@@ -130,7 +139,9 @@ export function useUploadQueue(organizationId: string) {
   const counts = React.useRef({ ok: 0 })
 
   const update = (id: string, patch: Partial<UploadItem>) =>
-    setItems((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)))
+    setItems((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, ...patch } : item)),
+    )
 
   const drop = (id: string) =>
     setItems((prev) => {
@@ -164,8 +175,14 @@ export function useUploadQueue(organizationId: string) {
     counts.current.ok = 0
     running.current = false
     if (ok > 0) {
-      toast.success(ok === 1 ? m.sites_file_uploaded() : m.sites_files_uploaded({ count: ok }))
-      await queryClient.invalidateQueries({ queryKey: ['assets', organizationId] })
+      toast.success(
+        ok === 1
+          ? m.sites_file_uploaded()
+          : m.sites_files_uploaded({ count: ok }),
+      )
+      await queryClient.invalidateQueries({
+        queryKey: ['assets', organizationId],
+      })
     }
     finished.forEach(drop)
   }, [organizationId, queryClient])
@@ -178,13 +195,18 @@ export function useUploadQueue(organizationId: string) {
         item: {
           id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
           name: file.name,
-          preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
+          preview: file.type.startsWith('image/')
+            ? URL.createObjectURL(file)
+            : null,
           progress: 0,
           status: 'queued' as const,
         },
       }))
       queue.current.push(...added)
-      setItems((prev) => [...added.map((entry) => entry.item).reverse(), ...prev])
+      setItems((prev) => [
+        ...added.map((entry) => entry.item).reverse(),
+        ...prev,
+      ])
       void run()
     },
     [run],
@@ -206,7 +228,8 @@ export function useAssetMutations(organizationId: string) {
       toast.success(m.sites_alt_text_saved())
       await invalidate()
     },
-    onError: (error) => toast.error(errorMessage(error, m.sites_alt_text_save_failed())),
+    onError: (error) =>
+      toast.error(errorMessage(error, m.sites_alt_text_save_failed())),
   })
 
   const remove = useMutation({
@@ -216,7 +239,8 @@ export function useAssetMutations(organizationId: string) {
       await invalidate()
     },
     // Keeps the server's message, e.g. "Used by 2 entries" for files in use.
-    onError: (error) => toast.error(errorMessage(error, m.sites_delete_failed())),
+    onError: (error) =>
+      toast.error(errorMessage(error, m.sites_delete_failed())),
   })
 
   return { saveAlt, remove }

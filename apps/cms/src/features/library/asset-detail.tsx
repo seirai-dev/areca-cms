@@ -54,7 +54,10 @@ export function AssetDetail({
       footer={
         current ? (
           <div className="flex flex-wrap items-center gap-2">
-            <Hint label={canDelete ? '' : m.library_delete_reason()} wrapDisabled={!canDelete}>
+            <Hint
+              label={canDelete ? '' : m.library_delete_reason()}
+              wrapDisabled={!canDelete}
+            >
               <Button
                 type="button"
                 variant="quiet"
@@ -70,7 +73,12 @@ export function AssetDetail({
             </Hint>
             <span className="flex-1" />
             <CopyButton
-              value={() => new URL(assetFileUrl(current.storageKey), window.location.origin).toString()}
+              value={() =>
+                new URL(
+                  assetFileUrl(current.storageKey),
+                  window.location.origin,
+                ).toString()
+              }
               label={m.library_copy_link()}
               copiedLabel={m.library_link_copied()}
               variant="secondary"
@@ -94,7 +102,11 @@ export function AssetDetail({
       {current ? (
         <div className="grid gap-6 pt-1">
           <Preview asset={current} />
-          <DescriptionField key={current.id} asset={current} mutations={mutations} />
+          <DescriptionField
+            key={current.id}
+            asset={current}
+            mutations={mutations}
+          />
           <InfoRows asset={current} uploaderName={uploaderName} />
         </div>
       ) : null}
@@ -105,7 +117,9 @@ export function AssetDetail({
         title={m.sites_delete_file_title()}
         description={
           current
-            ? m.sites_delete_file_description({ filename: current.originalFilename })
+            ? m.sites_delete_file_description({
+                filename: current.originalFilename,
+              })
             : undefined
         }
         confirmLabel={m.sites_delete()}
@@ -141,7 +155,9 @@ function Preview({ asset }: { asset: LibraryAsset }) {
           ) : (
             <FileText weight="duotone" className="size-16" />
           )}
-          <span className="text-caption text-text-muted">{fileKind(asset)}</span>
+          <span className="text-caption text-text-muted">
+            {fileKind(asset)}
+          </span>
         </div>
       )}
     </div>
@@ -179,7 +195,10 @@ function DescriptionField({
   return (
     <div className="grid gap-1.5">
       <div className="flex items-center justify-between gap-3">
-        <label htmlFor="asset-alt" className="text-[13px] leading-[18px] font-medium text-text-primary">
+        <label
+          htmlFor="asset-alt"
+          className="text-[13px] leading-[18px] font-medium text-text-primary"
+        >
           {m.library_description_label()}
         </label>
         <span
@@ -190,7 +209,11 @@ function DescriptionField({
           {state === 'saving' ? m.library_saving() : null}
           {state === 'saved' ? (
             <>
-              <CheckDraw size={13} circle={false} className="text-icon-success" />
+              <CheckDraw
+                size={13}
+                circle={false}
+                className="text-icon-success"
+              />
               {m.library_saved()}
             </>
           ) : null}
@@ -249,7 +272,10 @@ function InfoRows({
           className="flex items-baseline justify-between gap-4 border-b border-border-default px-4 py-2.5 last:border-b-0"
         >
           <dt className="text-callout text-text-secondary">{label}</dt>
-          <dd className="min-w-0 truncate text-callout text-text-primary tnum" title={title}>
+          <dd
+            className="min-w-0 truncate text-callout text-text-primary tnum"
+            title={title}
+          >
             {value}
           </dd>
         </div>

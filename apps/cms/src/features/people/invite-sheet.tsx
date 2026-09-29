@@ -1,5 +1,11 @@
 import * as React from 'react'
-import { CheckCircle, PaperPlaneTilt, PencilSimple, Crown, XCircle } from '@phosphor-icons/react'
+import {
+  CheckCircle,
+  PaperPlaneTilt,
+  PencilSimple,
+  Crown,
+  XCircle,
+} from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
 import { Button } from '#/components/ui/button'
@@ -106,7 +112,9 @@ export function InviteSheet({
         onOpenChange(next)
       }}
       title={m.people_invite_people()}
-      description={m.people_invite_sheet_description({ client: organizationName })}
+      description={m.people_invite_sheet_description({
+        client: organizationName,
+      })}
       data-testid="invite-sheet"
       footer={
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -125,7 +133,12 @@ export function InviteSheet({
         </div>
       }
     >
-      <form id={formId} noValidate onSubmit={onSubmit} className="grid gap-6 pt-2">
+      <form
+        id={formId}
+        noValidate
+        onSubmit={onSubmit}
+        className="grid gap-6 pt-2"
+      >
         <FormField
           label={m.people_invite_emails_label()}
           htmlFor="invite-email"
@@ -162,14 +175,25 @@ export function InviteSheet({
             </p>
             <ul className="grid gap-1.5">
               {results.map((item) => (
-                <li key={item.email} className="flex items-start gap-2 text-callout">
+                <li
+                  key={item.email}
+                  className="flex items-start gap-2 text-callout"
+                >
                   {item.ok ? (
-                    <CheckCircle weight="fill" className="mt-0.5 size-4 shrink-0 text-icon-success" />
+                    <CheckCircle
+                      weight="fill"
+                      className="mt-0.5 size-4 shrink-0 text-icon-success"
+                    />
                   ) : (
-                    <XCircle weight="fill" className="mt-0.5 size-4 shrink-0 text-icon-error" />
+                    <XCircle
+                      weight="fill"
+                      className="mt-0.5 size-4 shrink-0 text-icon-error"
+                    />
                   )}
                   <span className="min-w-0">
-                    <span className="font-medium break-all text-text-primary">{item.email}</span>
+                    <span className="font-medium break-all text-text-primary">
+                      {item.email}
+                    </span>
                     <span className="text-text-secondary">
                       {' · '}
                       {item.ok ? m.people_invite_result_sent() : item.error}

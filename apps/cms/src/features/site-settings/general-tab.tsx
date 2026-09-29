@@ -35,7 +35,9 @@ export function GeneralTab({
   const formId = React.useId()
   const [name, setName] = React.useState(site.name)
   const [url, setUrl] = React.useState(site.productionUrl)
-  const [errors, setErrors] = React.useState<{ name?: string; url?: string }>({})
+  const [errors, setErrors] = React.useState<{ name?: string; url?: string }>(
+    {},
+  )
 
   // Follow the server copy until the user starts editing.
   React.useEffect(() => setName(site.name), [site.name])
@@ -58,7 +60,10 @@ export function GeneralTab({
     setErrors(problems)
     if (problems.name || problems.url) return
     try {
-      await settings.update.mutateAsync({ name: next.name, productionUrl: next.url })
+      await settings.update.mutateAsync({
+        name: next.name,
+        productionUrl: next.url,
+      })
       setName(next.name)
       setUrl(next.url)
       toast.success(m.sites_updated())
@@ -74,7 +79,11 @@ export function GeneralTab({
           title={m.settings_general_site_title()}
           description={m.settings_general_site_description()}
         >
-          <FormField label={m.sites_name()} htmlFor="settings-site-name" error={errors.name}>
+          <FormField
+            label={m.sites_name()}
+            htmlFor="settings-site-name"
+            error={errors.name}
+          >
             <Input
               id="settings-site-name"
               data-testid="settings-site-name"
@@ -134,7 +143,11 @@ export function GeneralTab({
               }
             }}
           >
-            <Button type="button" variant="destructive" data-testid="delete-site">
+            <Button
+              type="button"
+              variant="destructive"
+              data-testid="delete-site"
+            >
               <Trash />
               {m.settings_delete_button()}
             </Button>

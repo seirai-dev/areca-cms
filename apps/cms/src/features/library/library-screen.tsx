@@ -73,7 +73,9 @@ export function LibraryScreen({ site, me }: { site: MeSite; me: Me }) {
   })
   const nameOf = React.useCallback(
     (userId: string | null | undefined) =>
-      userId ? members.data?.find((member) => member.userId === userId)?.name : undefined,
+      userId
+        ? members.data?.find((member) => member.userId === userId)?.name
+        : undefined,
     [members.data],
   )
 
@@ -86,7 +88,9 @@ export function LibraryScreen({ site, me }: { site: MeSite; me: Me }) {
     <div className="grid gap-6" data-testid="library-page">
       <PageHeader
         title={m.shell_nav_library()}
-        description={m.library_shared_description({ client: site.organizationName })}
+        description={m.library_shared_description({
+          client: site.organizationName,
+        })}
         meta={
           library.isSuccess && total > 0
             ? library.hasNextPage
@@ -165,7 +169,11 @@ export function LibraryScreen({ site, me }: { site: MeSite; me: Me }) {
             title={m.library_no_results_title({ search: needle })}
             description={m.library_no_results_description()}
             action={
-              <Button type="button" variant="secondary" onClick={() => setSearch('')}>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setSearch('')}
+              >
                 <X />
                 {m.sites_clear_search()}
               </Button>
@@ -177,7 +185,9 @@ export function LibraryScreen({ site, me }: { site: MeSite; me: Me }) {
             card
             icon={<ImagesSquare weight="duotone" />}
             title={m.library_empty_title()}
-            description={m.library_empty_description({ client: site.organizationName })}
+            description={m.library_empty_description({
+              client: site.organizationName,
+            })}
             action={
               <Button type="button" variant="secondary" onClick={openPicker}>
                 <UploadSimple />
@@ -190,7 +200,11 @@ export function LibraryScreen({ site, me }: { site: MeSite; me: Me }) {
       ) : (
         <>
           <ul
-            className={cn(GRID, 'transition-opacity', library.isFetching && !library.isFetchingNextPage && 'opacity-80')}
+            className={cn(
+              GRID,
+              'transition-opacity',
+              library.isFetching && !library.isFetchingNextPage && 'opacity-80',
+            )}
             aria-label={m.library_grid_label()}
             aria-busy={library.isFetching || undefined}
             data-testid="library-grid"
@@ -263,7 +277,9 @@ function AssetTile({
       className="relative"
       initial={reduce ? false : { opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={reduce ? FADE : { ...SPRING_SMALL, delay: Math.min(index, 10) * 0.03 }}
+      transition={
+        reduce ? FADE : { ...SPRING_SMALL, delay: Math.min(index, 10) * 0.03 }
+      }
     >
       <button
         type="button"
@@ -344,10 +360,19 @@ function UploadTile({ item }: { item: UploadItem }) {
       role="status"
     >
       {item.preview ? (
-        <img src={item.preview} alt="" className="size-full object-cover opacity-45 blur-[1px]" />
+        <img
+          src={item.preview}
+          alt=""
+          className="size-full object-cover opacity-45 blur-[1px]"
+        />
       ) : null}
       <div className="absolute inset-0 grid place-content-center justify-items-center gap-2">
-        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
+        <svg
+          width={size}
+          height={size}
+          viewBox={`0 0 ${size} ${size}`}
+          className="-rotate-90"
+        >
           <circle
             cx={size / 2}
             cy={size / 2}
@@ -364,7 +389,9 @@ function UploadTile({ item }: { item: UploadItem }) {
             strokeWidth={stroke}
             strokeLinecap="round"
             strokeDasharray={circumference}
-            strokeDashoffset={circumference * (1 - Math.max(0.04, item.progress))}
+            strokeDashoffset={
+              circumference * (1 - Math.max(0.04, item.progress))
+            }
             className={cn(
               'stroke-accent transition-[stroke-dashoffset] duration-200',
               item.status === 'queued' && 'opacity-0',
@@ -372,7 +399,9 @@ function UploadTile({ item }: { item: UploadItem }) {
           />
         </svg>
         <span className="rounded-full bg-background-surface/85 px-2 py-0.5 text-caption text-text-secondary tnum">
-          {item.status === 'queued' ? m.library_waiting() : `${Math.round(item.progress * 100)}%`}
+          {item.status === 'queued'
+            ? m.library_waiting()
+            : `${Math.round(item.progress * 100)}%`}
         </span>
       </div>
       <span className="absolute inset-x-0 bottom-0 truncate px-2.5 pb-2 text-[12px] leading-4 font-medium text-text-secondary">
@@ -454,7 +483,9 @@ function DropOverlay({ visible }: { visible: boolean }) {
             <span className="grid size-16 place-content-center rounded-[20px] bg-accent text-accent-contrast shadow-float">
               <UploadSimple weight="bold" className="size-7" />
             </span>
-            <p className="text-title-2 text-text-primary">{m.library_drop_overlay_title()}</p>
+            <p className="text-title-2 text-text-primary">
+              {m.library_drop_overlay_title()}
+            </p>
             <p className="max-w-[36ch] text-callout text-text-secondary">
               {m.library_drop_overlay_hint()}
             </p>

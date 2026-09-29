@@ -1,7 +1,13 @@
 import * as React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { MagnifyingGlass, Plus, SquaresFour } from '@phosphor-icons/react'
+import {
+  ArrowRight,
+  Buildings,
+  MagnifyingGlass,
+  Plus,
+  SquaresFour,
+} from '@phosphor-icons/react'
 
 import { SiteTile } from '#/components/shell/site-tile'
 import { sitesOverviewQueryOptions } from '#/components/shell/workspace-switcher'
@@ -62,7 +68,9 @@ export function SitePicker({ me }: { me: Me }) {
           icon={<SquaresFour weight="duotone" />}
           title={m.sites_picker_empty_title()}
           description={
-            isAdmin ? m.sites_picker_empty_admin() : m.sites_picker_empty_member()
+            isAdmin
+              ? m.sites_picker_empty_admin()
+              : m.sites_picker_empty_member()
           }
           action={
             isAdmin ? (
@@ -85,20 +93,31 @@ export function SitePicker({ me }: { me: Me }) {
         title={m.sites_picker_title()}
         description={m.sites_picker_description()}
         actions={
-          me.sites.length > 6 ? (
-            <div className="relative w-full sm:w-64">
-              <MagnifyingGlass className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-icon-muted" />
-              <Input
-                type="search"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder={m.shell_switcher_search()}
-                aria-label={m.shell_switcher_search()}
-                className="pl-9"
-                data-shortcut-search
-              />
-            </div>
-          ) : null
+          <>
+            {isAdmin ? (
+              <Button asChild variant="secondary" data-testid="picker-agency">
+                <Link to="/agency">
+                  <Buildings />
+                  {m.sites_picker_agency()}
+                </Link>
+              </Button>
+            ) : null}
+            {me.sites.length > 6 ? (
+              <div className="relative w-full sm:w-64">
+                <MagnifyingGlass className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-icon-muted" />
+                <Input
+                  type="search"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder={m.shell_switcher_search()}
+                  aria-label={m.shell_switcher_search()}
+                  className="pl-9"
+                  data-shortcut-search
+                  data-testid="picker-search"
+                />
+              </div>
+            ) : null}
+          </>
         }
       />
 
@@ -119,10 +138,26 @@ export function SitePicker({ me }: { me: Me }) {
           title={m.home_no_results_title()}
         />
       ) : (
-        groups.map((group, groupIndex) => (
-          <section key={group.id} className="grid gap-3">
+        groups.map((group) => (
+          <section
+            key={group.id}
+            className="grid gap-3"
+            data-testid={`picker-group-${group.id}`}
+          >
             {group.name ? (
-              <h2 className="px-1 text-overline text-text-muted">{group.name}</h2>
+              <div className="flex items-center justify-between gap-3 px-1">
+                <h2 className="text-overline text-text-muted">{group.name}</h2>
+                {isAdmin ? (
+                  <Link
+                    to="/agency/clients/$orgId"
+                    params={{ orgId: group.id }}
+                    className="inline-flex items-center gap-1 text-caption text-text-muted transition-colors hover:text-text-primary"
+                  >
+                    {m.sites_picker_open_client()}
+                    <ArrowRight className="size-3" />
+                  </Link>
+                ) : null}
+              </div>
             ) : null}
             <Stagger className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {group.sites.map((site) => (
@@ -134,12 +169,14 @@ export function SitePicker({ me }: { me: Me }) {
                   />
                 </StaggerItem>
               ))}
-              {isAdmin && groupIndex === groups.length - 1 ? (
+              {isAdmin && group.id !== 'all' ? (
                 <StaggerItem>
                   <Link
-                    to="/agency/clients"
+                    to="/agency/clients/$orgId"
+                    params={{ orgId: group.id }}
+                    search={{ tab: 'sites', new: 1 }}
                     data-testid="picker-new-site"
-                    className="flex h-full min-h-[132px] flex-col items-center justify-center gap-2 rounded-card border border-dashed border-border-strong text-callout font-medium text-text-secondary transition-colors hover:border-text-muted hover:bg-surface-state-hover hover:text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus"
+                    className="flex h-full min-h-14 flex-row items-center justify-center gap-2 rounded-card sm:min-h-[132px] sm:flex-col border border-dashed border-border-strong text-callout font-medium text-text-secondary transition-colors hover:border-text-muted hover:bg-surface-state-hover hover:text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus"
                   >
                     <span className="grid size-9 place-content-center rounded-full bg-background-subtle">
                       <Plus className="size-4" />
@@ -176,7 +213,9 @@ function SiteCard({
         <div className="flex items-start gap-3">
           <SiteTile id={site.id} name={site.name} size="lg" />
           <div className="grid min-w-0 flex-1 gap-0.5 pt-0.5">
-            <span className="truncate text-headline text-text-primary">{site.name}</span>
+            <span className="truncate text-headline text-text-primary">
+              {site.name}
+            </span>
             <span className="truncate text-callout text-text-muted">
               {displayHost(site.productionUrl)}
             </span>
@@ -188,7 +227,12 @@ function SiteCard({
           ) : (
             <>
               {figures.live ? (
-                <StatusPill tone="success" icon="live" pulse="none" label={m.shell_status_live()} />
+                <StatusPill
+                  tone="success"
+                  icon="live"
+                  pulse="none"
+                  label={m.shell_status_live()}
+                />
               ) : (
                 <StatusPill tone="neutral" label={m.shell_not_live_yet()} />
               )}
@@ -200,7 +244,9 @@ function SiteCard({
                 />
               ) : null}
               <span className="ml-auto text-caption font-normal text-text-muted">
-                {m.sites_picker_updated({ time: formatRelativeTime(figures.lastUpdated) })}
+                {m.sites_picker_updated({
+                  time: formatRelativeTime(figures.lastUpdated),
+                })}
               </span>
             </>
           )}

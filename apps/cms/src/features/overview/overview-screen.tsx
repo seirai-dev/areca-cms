@@ -1,10 +1,11 @@
 import * as React from 'react'
-import { useQueries } from '@tanstack/react-query'
+import { useQueries, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import {
   ArrowUpRight,
   CaretRight,
   Code,
+  PencilSimpleLine,
   Plus,
   RocketLaunch,
   Stack,
@@ -22,6 +23,7 @@ import { Card } from '#/components/ui/card'
 import { EmptyState } from '#/components/ui/empty-state'
 import { InsetList, InsetRow } from '#/components/ui/inset-list'
 import { PageHeader } from '#/components/ui/page-header'
+import { QueryError } from '#/components/ui/query-error'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Stagger, StaggerItem } from '#/components/ui/stagger'
 import {
@@ -62,7 +64,8 @@ type RecentRow = {
 
 /** "Good morning, Kaan" by the local hour. */
 export function greeting(firstName: string, hour = new Date().getHours()) {
-  if (hour < 5 || hour >= 18) return m.overview_greeting_evening({ name: firstName })
+  if (hour < 5 || hour >= 18)
+    return m.overview_greeting_evening({ name: firstName })
   if (hour < 12) return m.overview_greeting_morning({ name: firstName })
   return m.overview_greeting_afternoon({ name: firstName })
 }
@@ -77,7 +80,8 @@ export function OverviewScreen({ site }: { site: MeSite }) {
   const manage = canManageSite(me, site.organizationId)
   const isAdmin = me.user.isAgencyAdmin
   const release = useReleaseStatus(site.id)
-  const { collections, isLoading } = useSiteCollections(site.id, false)
+  const queryClient = useQueryClient()
+  const { collections, isLoading, isError } = useSiteCollections(site.id, false)
   const firstName = me.user.name.split(/\s+/)[0] || me.user.name
   // Greeting depends on the viewer's clock: render it after mount.
   const [hello, setHello] = React.useState<string | null>(null)
@@ -88,7 +92,9 @@ export function OverviewScreen({ site }: { site: MeSite }) {
   return (
     <div className="grid gap-10" data-testid="site-overview">
       <PageHeader
-        title={<span className="inline-block min-h-[38px]">{hello ?? ' '}</span>}
+        title={
+          <span className="inline-block min-h-[38px]">{hello ?? ' '}</span>
+        }
         description={
           <span className="flex flex-wrap items-center gap-x-1.5">
             <span className="text-text-primary">{site.name}</span>
@@ -110,20 +116,47 @@ export function OverviewScreen({ site }: { site: MeSite }) {
         }
       />
 
-      <AttentionStrip site={site} canPublish={manage} />
+      <AttentionStrip
+        site={site}
+        canPublish={manage}
+        collections={collections}
+        myUserId={me.user.id}
+      />
 
-      {isLoading ? (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, index) => (
-            <Skeleton key={index} className="h-[104px] rounded-card" />
-          ))}
+      {isError ? (
+        <QueryError
+          title={m.overview_load_error()}
+          error={null}
+          onRetry={() =>
+            void queryClient.invalidateQueries({
+              queryKey: queryKeys.collections(site.id),
+            })
+          }
+        />
+      ) : isLoading ? (
+        <div className="grid gap-10" data-testid="overview-loading">
+          <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 lg:grid-cols-4">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <Skeleton
+                key={index}
+                className="h-[52px] rounded-card sm:h-[112px]"
+              />
+            ))}
+          </div>
+          <div className="grid gap-2">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <Skeleton key={index} className="h-14 rounded-card" />
+            ))}
+          </div>
         </div>
       ) : collections.length === 0 ? (
         <EmptyState
           card
           icon={<Stack weight="duotone" />}
           title={m.overview_empty_title()}
-          description={isAdmin ? m.overview_empty_admin() : m.overview_empty_member()}
+          description={
+            isAdmin ? m.overview_empty_admin() : m.overview_empty_member()
+          }
           action={
             isAdmin ? (
               <>
@@ -154,28 +187,34 @@ export function OverviewScreen({ site }: { site: MeSite }) {
       ) : (
         <>
           <section className="grid gap-3" aria-labelledby="overview-create">
-            <h2 id="overview-create" className="px-1 text-overline text-text-muted">
+            <h2
+              id="overview-create"
+              className="px-1 text-overline text-text-muted"
+            >
               {m.overview_create()}
             </h2>
-            <Stagger className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+            <Stagger className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 lg:grid-cols-4">
               {collections.map((collection) => {
                 const Icon = collectionIcon(collection.key, collection.label)
                 return (
                   <StaggerItem key={collection.id}>
                     <Link
                       to="/sites/$siteId/c/$collectionKey/new"
-                      params={{ siteId: site.id, collectionKey: collection.key }}
+                      params={{
+                        siteId: site.id,
+                        collectionKey: collection.key,
+                      }}
                       data-testid={`create-${collection.key}`}
-                      className="group/tile flex h-full flex-col gap-3 rounded-card border border-border-default bg-background-surface p-4 shadow-card outline-none transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:border-border-strong hover:shadow-raise focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus motion-reduce:hover:translate-y-0"
+                      className="group/tile flex h-full min-h-11 items-center gap-2.5 rounded-[12px] border border-border-default bg-background-surface px-3 py-2.5 shadow-card outline-none transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:border-border-strong hover:shadow-raise focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus motion-reduce:hover:translate-y-0 sm:flex-col sm:items-start sm:gap-3 sm:rounded-card sm:p-4"
                     >
-                      <span className="grid size-9 place-content-center rounded-[10px] bg-accent-soft text-icon-accent">
-                        <Icon size={18} />
+                      <span className="grid size-7 shrink-0 place-content-center rounded-[8px] bg-accent-soft text-icon-accent sm:size-9 sm:rounded-[10px]">
+                        <Icon className="size-4 sm:size-[18px]" />
                       </span>
-                      <span className="grid gap-0.5">
-                        <span className="text-headline text-text-primary">
+                      <span className="grid min-w-0 gap-0.5">
+                        <span className="truncate text-[14px] leading-5 font-semibold text-text-primary sm:text-headline">
                           {newEntryLabel(collection.label)}
                         </span>
-                        <span className="truncate text-mono text-text-muted">
+                        <span className="truncate text-mono text-text-muted max-sm:hidden">
                           {collection.routePattern}
                         </span>
                       </span>
@@ -193,7 +232,10 @@ export function OverviewScreen({ site }: { site: MeSite }) {
       {manage ? (
         <section className="grid gap-3" aria-labelledby="overview-activity">
           <div className="flex items-center justify-between gap-3 px-1">
-            <h2 id="overview-activity" className="text-overline text-text-muted">
+            <h2
+              id="overview-activity"
+              className="text-overline text-text-muted"
+            >
               {m.activity_title()}
             </h2>
             <SeeAllActivity />
@@ -231,7 +273,17 @@ function SeeAllActivity() {
 }
 
 /** Cards that appear only when something needs you (brief §3.3). */
-function AttentionStrip({ site, canPublish }: { site: MeSite; canPublish: boolean }) {
+function AttentionStrip({
+  site,
+  canPublish,
+  collections,
+  myUserId,
+}: {
+  site: MeSite
+  canPublish: boolean
+  collections: SidebarCollection[]
+  myUserId: string
+}) {
   const release = useReleaseStatus(site.id)
   const panel = usePanel()
   const { goLive, isPending } = useGoLive(site.id)
@@ -249,7 +301,9 @@ function AttentionStrip({ site, canPublish }: { site: MeSite; canPublish: boolea
         <div className="flex items-start gap-3">
           <FailedIcon size={20} className="mt-0.5 text-icon-error" />
           <div className="grid gap-0.5">
-            <p className="text-headline text-text-primary">{m.overview_release_failed()}</p>
+            <p className="text-headline text-text-primary">
+              {m.overview_release_failed()}
+            </p>
             <p className="line-clamp-2 text-callout text-text-secondary">
               {release.lastFailure?.error ?? m.golive_hero_failed()}
             </p>
@@ -261,7 +315,9 @@ function AttentionStrip({ site, canPublish }: { site: MeSite; canPublish: boolea
           size="sm"
           className="justify-self-start"
           onClick={() =>
-            panel.open('golive', { release: release.lastFailure?.publicationId })
+            panel.open('golive', {
+              release: release.lastFailure?.publicationId,
+            })
           }
         >
           {m.golive_see_what_happened()}
@@ -282,9 +338,12 @@ function AttentionStrip({ site, canPublish }: { site: MeSite; canPublish: boolea
               {changesReadyLabel(release.pending)}
             </p>
             {pending.ready.length > 0 ? (
-              <ul className="grid gap-1">
+              <ul className="grid gap-1 max-sm:[&>li:nth-child(n+3)]:hidden">
                 {pending.ready.slice(0, 3).map((entry) => (
-                  <li key={entry.id} className="truncate text-callout text-text-secondary">
+                  <li
+                    key={entry.id}
+                    className="truncate text-callout text-text-secondary"
+                  >
                     <Link
                       to="/sites/$siteId/c/$collectionKey/$entryId"
                       params={{
@@ -314,7 +373,12 @@ function AttentionStrip({ site, canPublish }: { site: MeSite; canPublish: boolea
               })
             }}
           />
-          <Button type="button" variant="ghost" size="sm" onClick={() => panel.open('golive')}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => panel.open('golive')}
+          >
             {m.overview_review_changes()}
             <CaretRight className="size-3" />
           </Button>
@@ -332,7 +396,7 @@ function AttentionStrip({ site, canPublish }: { site: MeSite; canPublish: boolea
             <p className="text-headline text-text-primary tnum">
               {m.overview_scheduled({ count: pending.scheduled.length })}
             </p>
-            <ul className="grid gap-1">
+            <ul className="grid gap-1 max-sm:[&>li:nth-child(n+3)]:hidden">
               {pending.scheduled.slice(0, 3).map((entry) => (
                 <li
                   key={entry.id}
@@ -353,11 +417,56 @@ function AttentionStrip({ site, canPublish }: { site: MeSite; canPublish: boolea
     )
   }
 
+  const drafts = useDraftsWaiting(site.id, collections, myUserId, canPublish)
+  if (drafts.length > 0) {
+    cards.push(
+      <Card key="drafts" className="gap-3" data-testid="attention-drafts">
+        <div className="flex items-start gap-3">
+          <PencilSimpleLine
+            size={20}
+            className="mt-0.5 shrink-0 text-icon-muted"
+          />
+          <div className="grid min-w-0 flex-1 gap-2">
+            <p className="text-headline text-text-primary tnum">
+              {drafts.length === 1
+                ? m.overview_drafts_waiting_one()
+                : m.overview_drafts_waiting_other({ count: drafts.length })}
+            </p>
+            <ul className="grid gap-1.5 max-sm:[&>li:nth-child(n+3)]:hidden">
+              {drafts.slice(0, 3).map((draft) => (
+                <li key={draft.id} className="grid min-w-0">
+                  <Link
+                    to="/sites/$siteId/c/$collectionKey/$entryId"
+                    params={{
+                      siteId: site.id,
+                      collectionKey: draft.collectionKey,
+                      entryId: draft.id,
+                    }}
+                    className="truncate text-callout text-text-secondary hover:text-text-primary hover:underline"
+                  >
+                    {draft.title}
+                  </Link>
+                  <span className="truncate text-caption font-normal text-text-muted">
+                    {m.overview_drafts_by({
+                      name: draft.by,
+                      time: formatRelativeTime(draft.updatedAt),
+                    })}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </Card>,
+    )
+  }
+
   if (cards.length === 0) return null
   return (
     <section
       aria-label={m.overview_attention()}
-      className="grid gap-3 md:grid-cols-2 xl:grid-cols-3"
+      data-testid="attention-strip"
+      className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,280px),1fr))] gap-3"
     >
       {cards}
     </section>
@@ -375,10 +484,18 @@ function RecentlyEdited({
   const release = useReleaseStatus(site.id)
   const results = useQueries({
     queries: collections.map((collection) => ({
-      queryKey: [...queryKeys.entries(site.id, collection.key), 'recent'] as const,
+      queryKey: [
+        ...queryKeys.entries(site.id, collection.key),
+        'recent',
+      ] as const,
       queryFn: () =>
         listEntriesFn({
-          data: { siteId: site.id, collectionKey: collection.key, limit: 8, offset: 0 },
+          data: {
+            siteId: site.id,
+            collectionKey: collection.key,
+            limit: 8,
+            offset: 0,
+          },
         }),
       staleTime: 15_000,
     })),
@@ -395,7 +512,8 @@ function RecentlyEdited({
     )
     .sort(
       (a, b) =>
-        new Date(b.row.updatedAt).getTime() - new Date(a.row.updatedAt).getTime(),
+        new Date(b.row.updatedAt).getTime() -
+        new Date(a.row.updatedAt).getTime(),
     )
     .slice(0, 8)
 
@@ -417,7 +535,10 @@ function RecentlyEdited({
       ) : (
         <InsetList data-testid="recently-edited">
           {rows.map(({ row, collection, fields }) => {
-            const state = entryLiveState(row, release.data ? release.live : undefined)
+            const state = entryLiveState(
+              row,
+              release.data ? release.live : undefined,
+            )
             const imageField = fields.find((field) => field.type === 'image')
             const cover = imageField ? row.draftData[imageField.key] : undefined
             return (
@@ -425,7 +546,9 @@ function RecentlyEdited({
                 key={row.id}
                 asChild
                 leading={
-                  <EntryThumb assetId={typeof cover === 'string' ? cover : undefined} />
+                  <EntryThumb
+                    assetId={typeof cover === 'string' ? cover : undefined}
+                  />
                 }
                 title={entryTitle(row.draftData, fields, row.slug)}
                 subtitle={
@@ -444,14 +567,22 @@ function RecentlyEdited({
                       size="sm"
                     />
                     {row.updatedByName ? (
-                      <UserAvatar name={row.updatedByName} size="sm" className="max-sm:hidden" />
+                      <UserAvatar
+                        name={row.updatedByName}
+                        size="sm"
+                        className="max-sm:hidden"
+                      />
                     ) : null}
                   </>
                 }
               >
                 <Link
                   to="/sites/$siteId/c/$collectionKey/$entryId"
-                  params={{ siteId: site.id, collectionKey: collection.key, entryId: row.id }}
+                  params={{
+                    siteId: site.id,
+                    collectionKey: collection.key,
+                    entryId: row.id,
+                  }}
                 />
               </InsetRow>
             )
@@ -460,4 +591,57 @@ function RecentlyEdited({
       )}
     </section>
   )
+}
+
+/**
+ * Owners and admins: recent drafts written by other people, newest first
+ * (brief §3.3 "Drafts waiting"). One small query per enabled collection.
+ */
+function useDraftsWaiting(
+  siteId: string,
+  collections: SidebarCollection[],
+  myUserId: string,
+  enabled: boolean,
+) {
+  const results = useQueries({
+    queries: collections.map((collection) => ({
+      queryKey: [
+        ...queryKeys.entries(siteId, collection.key, { status: 'draft' }),
+        'overview-drafts',
+      ] as const,
+      queryFn: () =>
+        listEntriesFn({
+          data: {
+            siteId,
+            collectionKey: collection.key,
+            status: 'draft' as const,
+            limit: 10,
+            offset: 0,
+          },
+        }),
+      enabled,
+      staleTime: 30_000,
+    })),
+  })
+  if (!enabled) return []
+  return collections
+    .flatMap((collection, index) =>
+      (
+        (results[index]?.data?.items ?? []) as Array<
+          RecentRow & { updatedBy: string | null }
+        >
+      )
+        .filter((row) => row.updatedBy && row.updatedBy !== myUserId)
+        .map((row) => ({
+          id: row.id,
+          collectionKey: collection.key,
+          title: entryTitle(row.draftData, collection.fields, row.slug),
+          by: row.updatedByName ?? '',
+          updatedAt: row.updatedAt,
+        })),
+    )
+    .sort(
+      (a, b) =>
+        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+    )
 }

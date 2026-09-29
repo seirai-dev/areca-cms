@@ -73,7 +73,9 @@ export function DeveloperTab({
               size="md"
             />
           </div>
-          <p className="text-caption font-normal text-text-muted">{m.settings_site_key_hint()}</p>
+          <p className="text-caption font-normal text-text-muted">
+            {m.settings_site_key_hint()}
+          </p>
         </div>
       </SettingsSection>
 
@@ -126,9 +128,15 @@ export function DeveloperTab({
       >
         <div className="grid gap-4">
           {collections.length > 0 ? (
-            <div className="overflow-hidden surface-card" data-testid="manifest-status">
+            <div
+              className="overflow-hidden surface-card"
+              data-testid="manifest-status"
+            >
               <p className="flex items-center gap-2 border-b border-border-default px-4 py-3 text-[14px] leading-5 font-medium text-text-primary">
-                <Plugs weight="duotone" className="size-[18px] text-icon-success" />
+                <Plugs
+                  weight="duotone"
+                  className="size-[18px] text-icon-success"
+                />
                 {collections.length === 1
                   ? m.settings_manifest_synced_one()
                   : m.settings_manifest_synced({ count: collections.length })}
@@ -155,7 +163,9 @@ export function DeveloperTab({
                       <span className="shrink-0 text-caption font-normal text-text-muted tnum">
                         {collection.fields.length === 1
                           ? m.settings_field_count_one({ count: 1 })
-                          : m.settings_field_count_other({ count: collection.fields.length })}
+                          : m.settings_field_count_other({
+                              count: collection.fields.length,
+                            })}
                       </span>
                     </li>
                   )
@@ -176,7 +186,9 @@ export function DeveloperTab({
 
           <div className="grid gap-1.5">
             <div className="flex items-center justify-between gap-3 px-0.5">
-              <span className="text-caption text-text-muted">{m.settings_quickstart()}</span>
+              <span className="text-caption text-text-muted">
+                {m.settings_quickstart()}
+              </span>
               <CopyButton
                 value={commands}
                 label={m.settings_copy_commands()}

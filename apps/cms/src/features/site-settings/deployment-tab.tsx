@@ -25,7 +25,11 @@ import { m } from '#/paraglide/messages'
 
 import { SettingsSaveBar } from './settings-save-bar'
 import { useDokployApplications } from './use-site-settings'
-import type { DokployApplication, SiteRecord, useSiteSettings } from './use-site-settings'
+import type {
+  DokployApplication,
+  SiteRecord,
+  useSiteSettings,
+} from './use-site-settings'
 
 function isUrl(value: string) {
   try {
@@ -63,7 +67,9 @@ export function DeploymentTab({
   const savedHealth = site.deploymentTarget?.healthCheckUrl ?? ''
   const [appId, setAppId] = React.useState(savedApp)
   const [health, setHealth] = React.useState(savedHealth)
-  const [errors, setErrors] = React.useState<{ app?: string; health?: string }>({})
+  const [errors, setErrors] = React.useState<{ app?: string; health?: string }>(
+    {},
+  )
   const [stopOpen, setStopOpen] = React.useState(false)
 
   React.useEffect(() => setAppId(savedApp), [savedApp])
@@ -73,8 +79,12 @@ export function DeploymentTab({
   const configured = dokploy.status.data?.configured === true
   const client = meSite.organizationName
   const applications = dokploy.applications.data?.applications ?? []
-  const selectedApp = applications.find((app) => app.applicationId === appId.trim())
-  const savedAppInfo = applications.find((app) => app.applicationId === savedApp)
+  const selectedApp = applications.find(
+    (app) => app.applicationId === appId.trim(),
+  )
+  const savedAppInfo = applications.find(
+    (app) => app.applicationId === savedApp,
+  )
 
   function discard() {
     setAppId(savedApp)
@@ -87,7 +97,8 @@ export function DeploymentTab({
     const next = { app: appId.trim(), health: health.trim() }
     const problems: typeof errors = {}
     if (!next.app) problems.app = m.settings_health_needs_app()
-    if (next.health && !isUrl(next.health)) problems.health = m.settings_url_invalid()
+    if (next.health && !isUrl(next.health))
+      problems.health = m.settings_url_invalid()
     setErrors(problems)
     if (problems.app || problems.health) return
     try {
@@ -110,8 +121,14 @@ export function DeploymentTab({
         title={m.settings_provider_title()}
         description={m.settings_provider_description()}
       >
-        <div className="flex flex-wrap items-center gap-3" data-testid="deployment-provider">
-          <InsetIcon tone={configured ? 'accent' : 'neutral'} className="size-10 rounded-[11px]">
+        <div
+          className="flex flex-wrap items-center gap-3"
+          data-testid="deployment-provider"
+        >
+          <InsetIcon
+            tone={configured ? 'accent' : 'neutral'}
+            className="size-10 rounded-[11px]"
+          >
             <CloudArrowUp weight="duotone" />
           </InsetIcon>
           <div className="grid min-w-0 flex-1 gap-0.5">
@@ -154,7 +171,10 @@ export function DeploymentTab({
         >
           {savedApp ? (
             <>
-              <CheckCircle weight="fill" className="size-4 shrink-0 text-icon-success" />
+              <CheckCircle
+                weight="fill"
+                className="size-4 shrink-0 text-icon-success"
+              />
               <span className="min-w-0 truncate">
                 {m.settings_deploy_on({ app: savedAppInfo?.name ?? savedApp })}
               </span>
@@ -185,12 +205,17 @@ export function DeploymentTab({
           ) : null}
 
           <FormField
-            label={configured ? m.settings_app_manual() : m.sites_application_id()}
+            label={
+              configured ? m.settings_app_manual() : m.sites_application_id()
+            }
             htmlFor="application-id"
             hint={errors.app ? undefined : m.settings_app_manual_hint()}
             error={errors.app}
             trailing={
-              appId.trim() && configured && dokploy.applications.isSuccess && !selectedApp ? (
+              appId.trim() &&
+              configured &&
+              dokploy.applications.isSuccess &&
+              !selectedApp ? (
                 <Tag tone="warning">{m.settings_app_unknown()}</Tag>
               ) : undefined
             }
@@ -299,13 +324,19 @@ function ApplicationPicker({
   const needle = search.trim().toLowerCase()
   const visible = needle
     ? applications.filter((app) =>
-        `${app.name} ${app.appName ?? ''} ${app.applicationId}`.toLowerCase().includes(needle),
+        `${app.name} ${app.appName ?? ''} ${app.applicationId}`
+          .toLowerCase()
+          .includes(needle),
       )
     : applications
 
   if (query.isPending) {
     return (
-      <div className="grid gap-2" aria-busy="true" aria-label={m.settings_app_loading()}>
+      <div
+        className="grid gap-2"
+        aria-busy="true"
+        aria-label={m.settings_app_loading()}
+      >
         {Array.from({ length: 3 }).map((_, index) => (
           <Skeleton key={index} className="h-12 rounded-control" />
         ))}
@@ -314,7 +345,10 @@ function ApplicationPicker({
   }
   if (query.isError) {
     return (
-      <p role="alert" className="rounded-control bg-status-error-bg px-3 py-2.5 text-callout text-text-error">
+      <p
+        role="alert"
+        className="rounded-control bg-status-error-bg px-3 py-2.5 text-callout text-text-error"
+      >
         {m.settings_app_load_error({ error: errorMessage(query.error) })}
       </p>
     )
@@ -342,7 +376,9 @@ function ApplicationPicker({
         className="scroll-quiet grid max-h-[288px] overflow-y-auto rounded-control border border-border-default"
       >
         {visible.length === 0 ? (
-          <p className="px-3 py-4 text-center text-callout text-text-muted">{m.settings_app_none()}</p>
+          <p className="px-3 py-4 text-center text-callout text-text-muted">
+            {m.settings_app_none()}
+          </p>
         ) : (
           visible.map((app) => (
             <ApplicationOption
@@ -387,17 +423,27 @@ function ApplicationOption({
         aria-hidden="true"
         className={cn(
           'grid size-[18px] shrink-0 place-content-center rounded-full border',
-          selected ? 'border-accent bg-accent' : 'border-border-strong bg-background-surface',
+          selected
+            ? 'border-accent bg-accent'
+            : 'border-border-strong bg-background-surface',
         )}
       >
-        {selected ? <span className="size-1.5 rounded-full bg-accent-contrast" /> : null}
+        {selected ? (
+          <span className="size-1.5 rounded-full bg-accent-contrast" />
+        ) : null}
       </span>
       <span className="grid min-w-0 flex-1 gap-0.5">
-        <span className="truncate text-[14px] leading-5 font-medium text-text-primary">{app.name}</span>
-        <span className="truncate text-mono text-text-muted">{app.appName ?? app.applicationId}</span>
+        <span className="truncate text-[14px] leading-5 font-medium text-text-primary">
+          {app.name}
+        </span>
+        <span className="truncate text-mono text-text-muted">
+          {app.appName ?? app.applicationId}
+        </span>
       </span>
       {app.applicationStatus ? (
-        <Tag tone={statusTone(app.applicationStatus)}>{app.applicationStatus}</Tag>
+        <Tag tone={statusTone(app.applicationStatus)}>
+          {app.applicationStatus}
+        </Tag>
       ) : null}
     </button>
   )

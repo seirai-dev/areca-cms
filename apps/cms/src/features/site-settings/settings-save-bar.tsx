@@ -24,7 +24,11 @@ export function SettingsSaveBar({
   disabled?: boolean
 }) {
   return (
-    <FloatingBar open={dirty || saving} label={m.settings_unsaved()} data-testid="settings-save-bar">
+    <FloatingBar
+      open={dirty || saving}
+      label={m.settings_unsaved()}
+      data-testid="settings-save-bar"
+    >
       <FloatingBarLabel>{m.settings_unsaved()}</FloatingBarLabel>
       <Button
         type="button"

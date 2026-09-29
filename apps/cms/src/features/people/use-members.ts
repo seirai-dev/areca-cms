@@ -16,7 +16,9 @@ import {
 } from '#/server/fn/admin'
 
 export type MemberRow = Awaited<ReturnType<typeof listMembersFn>>[number]
-export type InvitationRow = Awaited<ReturnType<typeof listInvitationsFn>>[number]
+export type InvitationRow = Awaited<
+  ReturnType<typeof listInvitationsFn>
+>[number]
 
 export type InviteResult = { email: string; ok: boolean; error?: string }
 
@@ -42,7 +44,10 @@ export function isValidEmail(email: string) {
   return EMAIL.test(email)
 }
 
-export function isInvitationExpired(invitation: { expiresAt: Date | string }, now = Date.now()) {
+export function isInvitationExpired(
+  invitation: { expiresAt: Date | string },
+  now = Date.now(),
+) {
   const expires = new Date(invitation.expiresAt).getTime()
   return !Number.isNaN(expires) && expires <= now
 }
@@ -128,7 +133,9 @@ export function useMembers(organizationId: string) {
       for (const [index, email] of input.emails.entries()) {
         input.onProgress?.(index)
         try {
-          await inviteMember({ data: { organizationId, email, role: input.role } })
+          await inviteMember({
+            data: { organizationId, email, role: input.role },
+          })
           results.push({ email, ok: true })
         } catch (error) {
           results.push({ email, ok: false, error: errorMessage(error) })

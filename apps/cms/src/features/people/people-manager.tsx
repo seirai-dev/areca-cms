@@ -82,7 +82,9 @@ export function PeopleManager({
   }
 
   const [rowError, setRowError] = React.useState<RowError | null>(null)
-  const [pendingRole, setPendingRole] = React.useState<Record<string, MembershipRole>>({})
+  const [pendingRole, setPendingRole] = React.useState<
+    Partial<Record<string, MembershipRole>>
+  >({})
   const [demoteSelf, setDemoteSelf] = React.useState<MemberRow | null>(null)
   const [removeTarget, setRemoveTarget] = React.useState<MemberRow | null>(null)
 
@@ -106,7 +108,11 @@ export function PeopleManager({
 
   function onRoleChange(member: MemberRow, role: MembershipRole) {
     if (role === member.role) return
-    if (member.userId === me.user.id && member.role === 'owner' && role === 'editor') {
+    if (
+      member.userId === me.user.id &&
+      member.role === 'owner' &&
+      role === 'editor'
+    ) {
       setDemoteSelf(member)
       return
     }
@@ -171,9 +177,15 @@ export function PeopleManager({
             size="sm"
             icon={<Users weight="duotone" />}
             title={m.people_empty_title()}
-            description={m.people_empty_description({ client: organizationName })}
+            description={m.people_empty_description({
+              client: organizationName,
+            })}
             action={
-              <Button type="button" size="sm" onClick={() => setInviteOpen(true)}>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => setInviteOpen(true)}
+              >
                 <UserPlus />
                 {m.people_invite_people()}
               </Button>
@@ -189,7 +201,9 @@ export function PeopleManager({
                 organizationName={organizationName}
                 role={pendingRole[member.userId] ?? member.role}
                 busy={pendingRole[member.userId] !== undefined}
-                error={rowError?.id === member.userId ? rowError.message : undefined}
+                error={
+                  rowError?.id === member.userId ? rowError.message : undefined
+                }
                 onRoleChange={(role) => onRoleChange(member, role)}
                 onRemove={() => setRemoveTarget(member)}
               />
@@ -217,7 +231,9 @@ export function PeopleManager({
           if (!open) setDemoteSelf(null)
         }}
         title={m.people_demote_self_title()}
-        description={m.people_demote_self_description({ client: organizationName })}
+        description={m.people_demote_self_description({
+          client: organizationName,
+        })}
         confirmLabel={m.people_demote_self_confirm()}
         testId="demote-self-dialog"
         onConfirm={async () => {
@@ -305,7 +321,9 @@ function MemberRowView({
             {isSelf ? <Tag tone="accent">{m.people_you()}</Tag> : null}
           </span>
           {member.name ? (
-            <span className="truncate text-callout text-text-secondary">{member.email}</span>
+            <span className="truncate text-callout text-text-secondary">
+              {member.email}
+            </span>
           ) : null}
         </div>
         <div
@@ -322,8 +340,16 @@ function MemberRowView({
             aria-label={m.admin_members_aria_role({ email: member.email })}
             data-testid={`member-role-${member.email}`}
             options={[
-              { value: 'owner', label: m.people_role_owner(), testId: 'role-owner' },
-              { value: 'editor', label: m.people_role_editor(), testId: 'role-editor' },
+              {
+                value: 'owner',
+                label: m.people_role_owner(),
+                testId: 'role-owner',
+              },
+              {
+                value: 'editor',
+                label: m.people_role_editor(),
+                testId: 'role-editor',
+              },
             ]}
           />
         </div>
@@ -373,14 +399,19 @@ function Invitations({
   rowError: RowError | null
   setRowError: (error: RowError | null) => void
 }) {
-  const [revokeTarget, setRevokeTarget] = React.useState<InvitationRow | null>(null)
+  const [revokeTarget, setRevokeTarget] = React.useState<InvitationRow | null>(
+    null,
+  )
   const [now, setNow] = React.useState<number | null>(null)
   // Relative expiry depends on the viewer's clock: compute after mount.
   React.useEffect(() => setNow(Date.now()), [people.invitations.dataUpdatedAt])
 
   if (people.invitations.isError) {
     return (
-      <InsetGroup title={m.people_invitations_title()} data-testid="pending-invitations">
+      <InsetGroup
+        title={m.people_invitations_title()}
+        data-testid="pending-invitations"
+      >
         <QueryError
           title={m.people_invitations_load_error()}
           error={people.invitations.error}
@@ -412,9 +443,11 @@ function Invitations({
         {people.openInvitations.map((row) => {
           const expired = now !== null && isInvitationExpired(row, now)
           const roleLabel =
-            row.role === 'owner' ? m.people_role_owner() : m.people_role_editor()
+            row.role === 'owner'
+              ? m.people_role_owner()
+              : m.people_role_editor()
           const resending =
-            people.resend.isPending && people.resend.variables?.id === row.id
+            people.resend.isPending && people.resend.variables.id === row.id
           return (
             <li
               key={row.id}
@@ -440,7 +473,9 @@ function Invitations({
                         title={absoluteTimeLabel(row.expiresAt)}
                       >
                         {now !== null
-                          ? m.people_invite_expires({ time: expiresInLabel(row.expiresAt, now) })
+                          ? m.people_invite_expires({
+                              time: expiresInLabel(row.expiresAt, now),
+                            })
                           : null}
                       </span>
                     )}
@@ -489,7 +524,9 @@ function Invitations({
         title={m.admin_invitations_revoke_title()}
         description={
           revokeTarget
-            ? m.admin_invitations_revoke_description({ email: revokeTarget.email })
+            ? m.admin_invitations_revoke_description({
+                email: revokeTarget.email,
+              })
             : undefined
         }
         confirmLabel={m.admin_invitations_revoke_label()}

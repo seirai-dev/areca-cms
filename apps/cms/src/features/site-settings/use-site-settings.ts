@@ -33,7 +33,9 @@ export function useSiteSettings(siteId: string) {
   })
 
   const refresh = React.useCallback(async () => {
-    await queryClient.invalidateQueries({ queryKey: adminQueryKeys.site(siteId) })
+    await queryClient.invalidateQueries({
+      queryKey: adminQueryKeys.site(siteId),
+    })
     // Name and URL also live in `me.sites` (sidebar, switcher).
     await router.invalidate()
   }, [queryClient, router, siteId])
@@ -68,7 +70,10 @@ export function useDokployApplications(organizationId: string) {
     queryFn: () => getStatus({ data: { organizationId } }),
   })
   const applications = useQuery({
-    queryKey: [...adminQueryKeys.dokployCredentials(organizationId), 'applications'],
+    queryKey: [
+      ...adminQueryKeys.dokployCredentials(organizationId),
+      'applications',
+    ],
     queryFn: () => verify({ data: { organizationId } }),
     enabled: status.data?.configured === true,
     staleTime: 60_000,

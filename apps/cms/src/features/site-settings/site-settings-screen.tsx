@@ -44,7 +44,9 @@ export function SiteSettingsScreen({
     content: m.settings_tab_content(),
   }
 
-  const body = (render: (record: NonNullable<typeof settings.site.data>) => React.ReactNode) =>
+  const body = (
+    render: (record: NonNullable<typeof settings.site.data>) => React.ReactNode,
+  ) =>
     settings.site.isError ? (
       <QueryError
         title={m.settings_load_error()}
@@ -76,21 +78,31 @@ export function SiteSettingsScreen({
       >
         <TabsList>
           {SETTINGS_TABS.map((item) => (
-            <TabsTrigger key={item} value={item} data-testid={`settings-tab-${item}`}>
+            <TabsTrigger
+              key={item}
+              value={item}
+              data-testid={`settings-tab-${item}`}
+            >
               {labels[item]}
             </TabsTrigger>
           ))}
         </TabsList>
         <TabsContent value="general">
-          {tab === 'general' ? body((r) => <GeneralTab site={r} settings={settings} />) : null}
+          {tab === 'general'
+            ? body((r) => <GeneralTab site={r} settings={settings} />)
+            : null}
         </TabsContent>
         <TabsContent value="deployment">
           {tab === 'deployment'
-            ? body((r) => <DeploymentTab site={r} meSite={site} settings={settings} />)
+            ? body((r) => (
+                <DeploymentTab site={r} meSite={site} settings={settings} />
+              ))
             : null}
         </TabsContent>
         <TabsContent value="developer">
-          {tab === 'developer' ? body((r) => <DeveloperTab site={r} settings={settings} />) : null}
+          {tab === 'developer'
+            ? body((r) => <DeveloperTab site={r} settings={settings} />)
+            : null}
         </TabsContent>
         <TabsContent value="content">
           {tab === 'content' ? <ContentModelTab siteId={site.id} /> : null}
@@ -102,7 +114,10 @@ export function SiteSettingsScreen({
 
 function SettingsSkeleton() {
   return (
-    <div className="grid gap-4 min-[900px]:grid-cols-[280px_minmax(0,1fr)] min-[900px]:gap-10" aria-hidden="true">
+    <div
+      className="grid gap-4 min-[900px]:grid-cols-[280px_minmax(0,1fr)] min-[900px]:gap-10"
+      aria-hidden="true"
+    >
       <div className="grid content-start gap-2">
         <Skeleton className="h-5 w-32" />
         <Skeleton className="h-4 w-56" />
