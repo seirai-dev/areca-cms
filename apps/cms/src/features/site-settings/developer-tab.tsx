@@ -187,7 +187,7 @@ export function DeveloperTab({
               />
             </div>
             <pre
-              className="scroll-quiet overflow-x-auto rounded-card bg-background-inverse px-4 py-3.5 text-mono whitespace-pre text-text-inverse"
+              className="scroll-quiet overflow-x-auto rounded-card bg-background-inverse px-4 py-3.5 text-mono whitespace-pre text-text-inverse dark:border dark:border-border-default dark:bg-background-subtle dark:text-text-primary"
               data-testid="quickstart-snippet"
             >
               <code>

@@ -233,27 +233,27 @@ export function DeploymentTab({
         </SettingsSection>
       </form>
 
-      <SettingsSection
-        title={m.settings_stop_title()}
-        description={m.settings_stop_description()}
-      >
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-callout text-text-secondary">
-            {savedApp
-              ? m.settings_deploy_on({ app: savedAppInfo?.name ?? savedApp })
-              : m.settings_deploy_off()}
-          </p>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={!site.deploymentTarget || settings.update.isPending}
-            onClick={() => setStopOpen(true)}
-            data-testid="stop-deploying"
-          >
-            {m.settings_stop_button()}
-          </Button>
-        </div>
-      </SettingsSection>
+      {site.deploymentTarget ? (
+        <SettingsSection
+          title={m.settings_stop_title()}
+          description={m.settings_stop_description()}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="min-w-0 text-callout text-text-secondary">
+              {m.settings_deploy_on({ app: savedAppInfo?.name ?? savedApp })}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={settings.update.isPending}
+              onClick={() => setStopOpen(true)}
+              data-testid="stop-deploying"
+            >
+              {m.settings_stop_button()}
+            </Button>
+          </div>
+        </SettingsSection>
+      ) : null}
 
       <ConfirmDialog
         open={stopOpen}

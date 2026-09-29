@@ -98,7 +98,7 @@ export function LibraryScreen({ site, me }: { site: MeSite; me: Me }) {
         }
         actions={
           <>
-            <div className="relative w-full sm:w-60">
+            <div className="relative min-w-0 flex-1 sm:w-60 sm:flex-none">
               <MagnifyingGlass className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-icon-muted" />
               <Input
                 type="search"
@@ -121,7 +121,6 @@ export function LibraryScreen({ site, me }: { site: MeSite; me: Me }) {
               type="button"
               onClick={openPicker}
               data-testid="media-upload-button"
-              className="max-sm:flex-1"
             >
               <UploadSimple />
               {m.sites_upload()}
@@ -292,13 +291,17 @@ function AssetTile({
         ) : (
           <span className="flex size-full flex-col items-center justify-center gap-1.5 bg-background-surface px-3 pb-7">
             {isPdf(asset) ? (
-              <FilePdf weight="duotone" className="size-10 text-icon-error" />
+              <FilePdf weight="duotone" className="size-12 text-icon-error" />
             ) : (
               <FileText weight="duotone" className="size-10 text-icon-muted" />
             )}
-            <span className="text-[11px] leading-none font-semibold tracking-[0.06em] text-text-muted">
-              {isPdf(asset) ? m.library_pdf() : asset.mimeType.split('/')[1]?.toUpperCase()}
-            </span>
+            {isPdf(asset) ? (
+              <span className="sr-only">{m.library_pdf()}</span>
+            ) : (
+              <span className="text-[11px] leading-none font-semibold tracking-[0.06em] text-text-muted">
+                {asset.mimeType.split('/')[1]?.toUpperCase()}
+              </span>
+            )}
           </span>
         )}
         <span

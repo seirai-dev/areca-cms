@@ -59,6 +59,8 @@ export function GeneralTab({
     if (problems.name || problems.url) return
     try {
       await settings.update.mutateAsync({ name: next.name, productionUrl: next.url })
+      setName(next.name)
+      setUrl(next.url)
       toast.success(m.sites_updated())
     } catch (error) {
       toast.error(errorMessage(error))

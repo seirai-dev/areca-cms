@@ -88,7 +88,7 @@ export function TokenReveal({
         <div className="flex items-center gap-2 rounded-control border border-border-default bg-background-surface py-1.5 pr-1.5 pl-3">
           <code
             data-testid="site-token-value"
-            className="min-w-0 flex-1 text-mono break-all text-text-primary select-all"
+            className="min-w-0 flex-1 bg-transparent p-0 text-mono break-all text-text-primary select-all"
           >
             {token}
           </code>
@@ -122,7 +122,7 @@ export function TokenReveal({
         </div>
         <pre
           data-testid="site-token-env"
-          className="scroll-quiet overflow-x-auto rounded-control bg-background-inverse px-3.5 py-3 text-mono whitespace-pre text-text-inverse"
+          className="scroll-quiet overflow-x-auto rounded-control bg-background-inverse px-3.5 py-3 text-mono whitespace-pre text-text-inverse dark:border dark:border-border-default dark:bg-background-subtle dark:text-text-primary"
         >
           <code>
             <span className="opacity-60">ARECA_CMS_URL=</span>
