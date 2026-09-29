@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from '#/components/ui/dropdown-menu'
 import { cn } from '#/lib/utils'
+import { m } from '#/paraglide/messages'
 
 /** Keyboard focus: a 2px accent outline, offset 2px. Pointer focus: nothing. */
 export const FOCUS_RING =
@@ -174,7 +175,7 @@ function SplitButton({
   disabled,
   menuDisabled,
   className,
-  menuLabel = 'More actions',
+  menuLabel = m.ui_more(),
   menuProps,
   triggerProps,
   loading,

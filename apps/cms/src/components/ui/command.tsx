@@ -176,9 +176,9 @@ function CommandItem({
       className={cn(
         'relative flex min-h-10 cursor-default items-center gap-3 rounded-[10px] px-2.5 py-2 text-[14px] outline-hidden select-none',
         'data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-40',
-        'data-[selected=true]:bg-accent data-[selected=true]:text-accent-contrast',
-        'data-[selected=true]:[&_[data-slot=command-meta]]:text-accent-contrast/75',
-        'data-[selected=true]:[&_svg]:text-accent-contrast!',
+        // Soft accent highlight: keeps pills, avatars and site tiles legible.
+        'data-[selected=true]:bg-accent-soft data-[selected=true]:text-text-primary',
+        'data-[selected=true]:[&>svg]:text-icon-accent!',
         "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-[18px] [&_svg:not([class*='text-'])]:text-icon-default",
         className,
       )}

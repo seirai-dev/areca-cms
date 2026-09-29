@@ -22,7 +22,8 @@ export async function login(page: Page, email = 'admin@areca.local') {
     .locator('form[data-ready="true"]')
     .getByRole('button', { name: 'Sign in' })
     .click()
-  await expect(page).toHaveURL('/', { timeout: 15_000 })
+  // `/` resolves to a workspace (last site, only site, Agency or /sites).
+  await expect(page).not.toHaveURL(/\/login/, { timeout: 15_000 })
 }
 
 export async function signOut(page: Page) {

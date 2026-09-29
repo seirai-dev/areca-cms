@@ -49,15 +49,47 @@ function useJustWentLive(state: GoLiveState) {
   return bloom
 }
 
-/** The step line while going live: Queued · Building · Checking · Deploying. */
+/**
+ * The step line while going live: Queued · Building · Checking · Deploying.
+ * `compact` (the sidebar tray) shows four step ticks and the current label.
+ */
 export function GoLiveSteps({
   step,
+  compact = false,
   className,
 }: {
   step: BuildJobStatus | null
+  compact?: boolean
   className?: string
 }) {
-  const current = step ? GO_LIVE_STEPS.indexOf(step) : 0
+  const current = step ? Math.max(0, GO_LIVE_STEPS.indexOf(step)) : 0
+  if (compact) {
+    return (
+      <div
+        className={cn('flex items-center gap-2', className)}
+        role="group"
+        aria-label={m.golive_steps_label()}
+      >
+        <span className="flex items-center gap-1" aria-hidden="true">
+          {GO_LIVE_STEPS.map((item, index) => (
+            <span
+              key={item}
+              className={cn(
+                'h-1 w-3 rounded-full transition-colors duration-300',
+                index <= current ? 'bg-accent' : 'bg-accent-soft',
+              )}
+            />
+          ))}
+        </span>
+        <span className="text-[11.5px] leading-4 font-medium text-accent-text" aria-current="step">
+          {JOB_STATUS[GO_LIVE_STEPS[current]].label()}
+        </span>
+        <span className="ml-auto text-[11.5px] leading-4 text-text-muted tnum">
+          {current + 1}/{GO_LIVE_STEPS.length}
+        </span>
+      </div>
+    )
+  }
   return (
     <ol
       className={cn('flex flex-wrap items-center gap-x-1.5 gap-y-1', className)}
@@ -309,7 +341,7 @@ export function GoLiveTray({
                       {m.golive_going_live()}
                     </span>
                   </div>
-                  <GoLiveSteps step={release.step} />
+                  <GoLiveSteps step={release.step} compact />
                   <IndeterminateBar />
                 </>
               ) : (

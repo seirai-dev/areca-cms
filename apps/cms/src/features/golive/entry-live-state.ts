@@ -84,3 +84,10 @@ export function entryLiveState(entry: EntryLike, live: LiveLike): EntryLiveState
     scheduledAt: entry.scheduledAt ?? null,
   }
 }
+
+/**
+ * Public name for the pure derivation (Phase 2 screens import this):
+ * `deriveEntryLiveStatus(entry, release.live)` → Draft/Ready/Live/Scheduled/
+ * Archived. Same as `entryUiStatus`.
+ */
+export const deriveEntryLiveStatus = entryUiStatus

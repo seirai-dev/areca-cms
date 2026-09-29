@@ -14,8 +14,6 @@ export const sitePanelSearchSchema = z.object({
   release: z.string().optional().catch(undefined),
 })
 
-type PanelSearch = z.infer<typeof sitePanelSearchSchema>
-
 export function usePanel() {
   const navigate = useNavigate()
   const search = useSearch({ strict: false })
@@ -24,21 +22,14 @@ export function usePanel() {
   function open(next: SitePanel, options: { release?: string } = {}) {
     void navigate({
       to: '.',
-      search: ((prev: Record<string, unknown>) => ({
-        ...prev,
-        panel: next,
-        release: options.release,
-      })) as never,
+      search: (prev) => ({ ...prev, panel: next, release: options.release }),
     })
   }
 
   function close() {
     void navigate({
       to: '.',
-      search: ((prev: Record<string, unknown>) => {
-        const { panel: _panel, release: _release, ...rest } = prev
-        return rest
-      }) as never,
+      search: (prev) => ({ ...prev, panel: undefined, release: undefined }),
     })
   }
 

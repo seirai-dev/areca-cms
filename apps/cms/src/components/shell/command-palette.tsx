@@ -44,7 +44,6 @@ import {
   newEntryLabel,
   siteNavItems,
 } from '#/lib/site-nav'
-import type { EntryData, EntryStatus, Field } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 import {
   getLocale,
@@ -56,13 +55,6 @@ import { listCollectionsFn, listEntriesFn } from '#/server/fn/content'
 
 import { LOCALE_LABELS } from './account-menu'
 
-type EntryHit = {
-  id: string
-  slug: string
-  status: EntryStatus
-  draftData: EntryData
-  updatedAt: string | Date
-}
 
 /**
  * Spotlight-style command palette (brief §3.12). ⌘K anywhere. Groups: Search

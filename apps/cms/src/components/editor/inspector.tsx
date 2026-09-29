@@ -109,7 +109,7 @@ export function EntryInspector({
                 {m.editor_panel_empty()}
               </p>
             ) : (
-              <div className="grid gap-5">
+              <div className="grid grid-cols-[minmax(0,1fr)] gap-5">
                 {fields.map((field) => (
                   <CollectionField
                     key={field.key}
