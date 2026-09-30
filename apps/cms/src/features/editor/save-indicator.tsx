@@ -86,9 +86,15 @@ export function SaveIndicator({
       )
   } else if (isNew) {
     key = status === 'blocked' ? 'blocked' : 'new'
-    text = status === 'blocked' ? m.editor_not_saved_add_title() : m.editor_not_saved_yet()
+    text =
+      status === 'blocked'
+        ? m.editor_not_saved_add_title()
+        : m.editor_not_saved_yet()
     icon = (
-      <span aria-hidden="true" className="size-1.5 rounded-full bg-text-disabled" />
+      <span
+        aria-hidden="true"
+        className="size-1.5 rounded-full bg-text-disabled"
+      />
     )
   } else if (fresh) {
     key = 'fresh'
@@ -98,7 +104,9 @@ export function SaveIndicator({
     key = 'ago'
     const at = lastSavedAt ?? updatedAt
     void now
-    text = at ? m.editor_saved_relative({ time: formatRelativeTime(at) }) : m.editor_saved()
+    text = at
+      ? m.editor_saved_relative({ time: formatRelativeTime(at) })
+      : m.editor_saved()
   }
 
   return (

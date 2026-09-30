@@ -66,7 +66,9 @@ function useShellMode(): ShellMode {
       if (matches.some((match) => match.routeId.startsWith('/_app/agency'))) {
         return 'agency'
       }
-      if (matches.some((match) => match.routeId.startsWith('/_app/sites/$siteId'))) {
+      if (
+        matches.some((match) => match.routeId.startsWith('/_app/sites/$siteId'))
+      ) {
         return 'site'
       }
       return 'bare'
@@ -84,36 +86,45 @@ function GlobalShortcuts({ value }: { value: ShellValue }) {
     Boolean(params.collectionKey) && !params.entryId && mode === 'site'
 
   useShortcut('mod+k', () => value.setPaletteOpen(!value.paletteOpen))
-  useShortcut('mod+.', () => window.dispatchEvent(new Event(TOGGLE_DETAILS_EVENT)))
-  useShortcut('g s', () => value.setSwitcherOpen(true), { enabled: mode !== 'focus' })
-  useShortcut(
-    'g o',
-    () => {
-      if (inSite) void navigate({ to: '/sites/$siteId', params: { siteId: inSite.id } })
-      else if (mode === 'agency') void navigate({ to: '/agency' })
-    },
+  useShortcut('mod+.', () =>
+    window.dispatchEvent(new Event(TOGGLE_DETAILS_EVENT)),
   )
+  useShortcut('g s', () => value.setSwitcherOpen(true), {
+    enabled: mode !== 'focus',
+  })
+  useShortcut('g o', () => {
+    if (inSite)
+      void navigate({ to: '/sites/$siteId', params: { siteId: inSite.id } })
+    else if (mode === 'agency') void navigate({ to: '/agency' })
+  })
   useShortcut(
     'g l',
-    () => void navigate({ to: '/sites/$siteId/library', params: { siteId: inSite ? inSite.id : '' } }),
+    () =>
+      void navigate({
+        to: '/sites/$siteId/library',
+        params: { siteId: inSite ? inSite.id : '' },
+      }),
     { enabled: Boolean(inSite) },
   )
-  useShortcut(
-    'g p',
-    () => {
-      if (inSite && canManageSite(me, inSite.organizationId)) {
-        void navigate({ to: '/sites/$siteId/people', params: { siteId: inSite.id } })
-      } else if (mode === 'agency') {
-        void navigate({ to: '/agency/people' })
-      }
-    },
-  )
+  useShortcut('g p', () => {
+    if (inSite && canManageSite(me, inSite.organizationId)) {
+      void navigate({
+        to: '/sites/$siteId/people',
+        params: { siteId: inSite.id },
+      })
+    } else if (mode === 'agency') {
+      void navigate({ to: '/agency/people' })
+    }
+  })
   useShortcut(
     'n',
     () =>
       void navigate({
         to: '/sites/$siteId/c/$collectionKey/new',
-        params: { siteId: params.siteId ?? '', collectionKey: params.collectionKey ?? '' },
+        params: {
+          siteId: params.siteId ?? '',
+          collectionKey: params.collectionKey ?? '',
+        },
       }),
     { enabled: inCollectionList },
   )
@@ -142,11 +153,19 @@ function SitePanels({ me, siteId }: { me: Me; siteId: string }) {
  * the page column. Editor routes (`staticData.shell = 'focus'`) render with
  * no sidebar; the `/sites` picker (`'bare'`) with a slim top bar.
  */
-export function AppShell({ me, children }: { me: Me; children: React.ReactNode }) {
+export function AppShell({
+  me,
+  children,
+}: {
+  me: Me
+  children: React.ReactNode
+}) {
   const mode = useShellMode()
   const params = useParams({ strict: false })
   const site = findSite(me, params.siteId)
-  const pathname = useRouterState({ select: (state) => state.location.pathname })
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  })
   const mobile = useIsMobile()
   const tablet = useIsTablet()
   const [railCollapsed, toggleRail] = useRailPreference()
@@ -176,7 +195,12 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
 
   const withSidebar = mode === 'site' || mode === 'agency'
   const collapsed = tablet && railCollapsed
-  const sidebarOffset = !withSidebar || mobile ? '0px' : collapsed ? 'var(--sidebar-rail-width)' : 'var(--sidebar-width)'
+  const sidebarOffset =
+    !withSidebar || mobile
+      ? '0px'
+      : collapsed
+        ? 'var(--sidebar-rail-width)'
+        : 'var(--sidebar-width)'
 
   return (
     <ShellContext.Provider value={value}>
@@ -225,7 +249,8 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
             className={cn(
               'min-w-0 outline-none',
               'md:pl-(--shell-sidebar-offset) md:transition-[padding] md:duration-200 md:ease-(--ease-standard)',
-              withSidebar && 'pb-[calc(var(--mobile-tabbar-h)+env(safe-area-inset-bottom))]',
+              withSidebar &&
+                'pb-[calc(var(--mobile-tabbar-h)+env(safe-area-inset-bottom))]',
             )}
           >
             <div

@@ -18,12 +18,7 @@ import type { JobRow, ReleaseStatusData } from './queries'
  * - `up-to-date`  live, nothing pending
  */
 export type GoLiveState =
-  | 'loading'
-  | 'going-live'
-  | 'failed'
-  | 'never-live'
-  | 'ready'
-  | 'up-to-date'
+  'loading' | 'going-live' | 'failed' | 'never-live' | 'ready' | 'up-to-date'
 
 export type ReleaseStatus = {
   state: GoLiveState
@@ -58,7 +53,9 @@ export function useReleaseStatus(siteId: string | undefined): ReleaseStatus {
   const latest = jobsQuery.data?.find((job) => job.status !== 'cancelled')
   const lastFailure = latest?.status === 'failed' ? latest : null
   const pending = data?.pendingEntries ?? 0
-  const liveAt = data?.live ? (data.live.deployedAt ?? data.live.createdAt) : null
+  const liveAt = data?.live
+    ? (data.live.deployedAt ?? data.live.createdAt)
+    : null
 
   let state: GoLiveState
   if (!data) state = 'loading'

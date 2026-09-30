@@ -52,7 +52,9 @@ export function FormField({
           ) : null}
         </Label>
         {trailing ? (
-          <span className="text-caption font-normal text-text-muted">{trailing}</span>
+          <span className="text-caption font-normal text-text-muted">
+            {trailing}
+          </span>
         ) : null}
       </div>
       {description ? (

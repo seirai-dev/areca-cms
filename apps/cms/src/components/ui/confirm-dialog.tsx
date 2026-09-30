@@ -109,7 +109,10 @@ export function ConfirmDialog({
         </AlertDialogHeader>
         {needsTyping ? (
           <div className="grid gap-2">
-            <Label htmlFor={inputId} className="block font-normal text-text-secondary">
+            <Label
+              htmlFor={inputId}
+              className="block font-normal text-text-secondary"
+            >
               {typeToConfirmLabel(confirmText!)}
             </Label>
             <Input
@@ -123,7 +126,9 @@ export function ConfirmDialog({
           </div>
         ) : null}
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={pending}>{cancelLabel}</AlertDialogCancel>
+          <AlertDialogCancel disabled={pending}>
+            {cancelLabel}
+          </AlertDialogCancel>
           <AlertDialogAction
             variant={variant === 'destructive' ? 'destructive' : 'primary'}
             disabled={pending || !typedOk}

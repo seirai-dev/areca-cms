@@ -140,7 +140,10 @@ export function EditorTopBar({
         : m.collection_mark_ready()
   const primaryIcon =
     primary === 'live' ? (
-      <span aria-hidden="true" className="size-2 rounded-full bg-status-success" />
+      <span
+        aria-hidden="true"
+        className="size-2 rounded-full bg-status-success"
+      />
     ) : primary === 'ready' ? (
       <span aria-hidden="true" className="size-2 rounded-full bg-accent" />
     ) : (
@@ -160,7 +163,9 @@ export function EditorTopBar({
   const split = (
     <SplitButton
       size="sm"
-      variant={primary === 'ready' || primary === 'live' ? 'secondary' : 'primary'}
+      variant={
+        primary === 'ready' || primary === 'live' ? 'secondary' : 'primary'
+      }
       label={
         <>
           {primaryIcon}
@@ -181,7 +186,9 @@ export function EditorTopBar({
         {primary === 'mark' || primary === 'ready' ? (
           <DropdownMenuItem onSelect={onGoLiveNow} data-testid="go-live-now">
             <RocketLaunch />
-            {primary === 'mark' ? m.editor_mark_ready_go_live() : m.editor_go_live_now()}
+            {primary === 'mark'
+              ? m.editor_mark_ready_go_live()
+              : m.editor_go_live_now()}
           </DropdownMenuItem>
         ) : null}
         <DropdownMenuItem onSelect={onSchedule} data-testid="schedule-entry">
@@ -189,7 +196,10 @@ export function EditorTopBar({
           {m.editor_schedule_ellipsis()}
         </DropdownMenuItem>
         {scheduled ? (
-          <DropdownMenuItem onSelect={onCancelSchedule} data-testid="cancel-schedule">
+          <DropdownMenuItem
+            onSelect={onCancelSchedule}
+            data-testid="cancel-schedule"
+          >
             <CalendarX />
             {m.editor_cancel_schedule()}
           </DropdownMenuItem>
@@ -230,10 +240,15 @@ export function EditorTopBar({
             data-testid="editor-back"
           >
             <ArrowLeft weight="bold" />
-            <span className="hidden max-w-40 truncate sm:inline">{collectionLabel}</span>
+            <span className="hidden max-w-40 truncate sm:inline">
+              {collectionLabel}
+            </span>
           </Link>
         </Button>
-        <span aria-hidden="true" className="hidden h-5 w-px shrink-0 bg-border-default sm:block" />
+        <span
+          aria-hidden="true"
+          className="hidden h-5 w-px shrink-0 bg-border-default sm:block"
+        />
         <div className="flex min-w-0 flex-1 items-center gap-2.5">
           <AnimatePresence initial={false}>
             {showTitle ? (
@@ -297,7 +312,12 @@ export function EditorTopBar({
           </Hint>
           {previewUrl ? (
             <Hint label={m.editor_preview_hint()}>
-              <Button asChild variant="quiet" size="icon-sm" className="hidden sm:inline-flex">
+              <Button
+                asChild
+                variant="quiet"
+                size="icon-sm"
+                className="hidden sm:inline-flex"
+              >
                 <a
                   href={previewUrl}
                   target="_blank"
@@ -310,7 +330,13 @@ export function EditorTopBar({
               </Button>
             </Hint>
           ) : (
-            <Hint label={isNew ? m.editor_preview_save_first_reason() : m.editor_preview_no_slug()}>
+            <Hint
+              label={
+                isNew
+                  ? m.editor_preview_save_first_reason()
+                  : m.editor_preview_no_slug()
+              }
+            >
               <Button
                 type="button"
                 variant="quiet"
@@ -344,7 +370,11 @@ export function EditorTopBar({
               </DropdownMenuItem>
               {previewUrl ? (
                 <DropdownMenuItem asChild className="sm:hidden">
-                  <a href={previewUrl} target="_blank" rel="noopener noreferrer">
+                  <a
+                    href={previewUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
                     <Eye />
                     {m.editor_preview()}
                   </a>
@@ -352,7 +382,9 @@ export function EditorTopBar({
               ) : null}
               <DropdownMenuItem
                 disabled={!entryId}
-                onSelect={() => void copy(window.location.href, m.editor_link_copied())}
+                onSelect={() =>
+                  void copy(window.location.href, m.editor_link_copied())
+                }
                 data-testid="copy-entry-link"
               >
                 <LinkSimple />
@@ -360,7 +392,9 @@ export function EditorTopBar({
               </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={!entryId}
-                onSelect={() => entryId && void copy(entryId, m.editor_id_copied())}
+                onSelect={() =>
+                  entryId && void copy(entryId, m.editor_id_copied())
+                }
                 data-testid="copy-entry-id-menu"
               >
                 <Copy />
@@ -418,7 +452,10 @@ export function EditorTopBar({
 
           <div className="ml-1">
             {primaryReason ? (
-              <Hint label={primaryReason} wrapDisabled={primaryDisabled && !canManage}>
+              <Hint
+                label={primaryReason}
+                wrapDisabled={primaryDisabled && !canManage}
+              >
                 {scheduleAnchor(split)}
               </Hint>
             ) : (
@@ -442,9 +479,15 @@ export function EditorTopBar({
               aria-pressed={detailsOpen}
               onClick={onToggleDetails}
               data-testid="toggle-details"
-              className={cn('ml-1', detailsOpen && 'bg-surface-state-hover text-text-primary')}
+              className={cn(
+                'ml-1',
+                detailsOpen && 'bg-surface-state-hover text-text-primary',
+              )}
             >
-              <SidebarSimple weight={detailsOpen ? 'fill' : 'regular'} className="-scale-x-100" />
+              <SidebarSimple
+                weight={detailsOpen ? 'fill' : 'regular'}
+                className="-scale-x-100"
+              />
             </Button>
           </Hint>
         </div>

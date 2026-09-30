@@ -44,12 +44,19 @@ export function EmptyState({
           aria-hidden="true"
           className={cn(
             'relative mb-3 grid place-content-center rounded-[18px] ring-8',
-            size === 'md' ? 'size-14 [&>svg]:size-7' : 'size-11 rounded-[14px] ring-[6px] [&>svg]:size-5',
-            tone === 'accent' && 'bg-accent-soft text-icon-accent ring-accent-soft/40',
-            tone === 'neutral' && 'bg-background-subtle text-icon-muted ring-background-subtle/50',
-            tone === 'success' && 'bg-status-success-bg text-icon-success ring-status-success-bg/40',
-            tone === 'warning' && 'bg-status-warning-bg text-icon-warning ring-status-warning-bg/40',
-            tone === 'error' && 'bg-status-error-bg text-icon-error ring-status-error-bg/40',
+            size === 'md'
+              ? 'size-14 [&>svg]:size-7'
+              : 'size-11 rounded-[14px] ring-[6px] [&>svg]:size-5',
+            tone === 'accent' &&
+              'bg-accent-soft text-icon-accent ring-accent-soft/40',
+            tone === 'neutral' &&
+              'bg-background-subtle text-icon-muted ring-background-subtle/50',
+            tone === 'success' &&
+              'bg-status-success-bg text-icon-success ring-status-success-bg/40',
+            tone === 'warning' &&
+              'bg-status-warning-bg text-icon-warning ring-status-warning-bg/40',
+            tone === 'error' &&
+              'bg-status-error-bg text-icon-error ring-status-error-bg/40',
           )}
         >
           {icon}
@@ -64,7 +71,9 @@ export function EmptyState({
         {title}
       </p>
       {description ? (
-        <p className="max-w-[46ch] text-body text-text-secondary">{description}</p>
+        <p className="max-w-[46ch] text-body text-text-secondary">
+          {description}
+        </p>
       ) : null}
       {action ? (
         <div className="mt-4 flex flex-wrap items-center justify-center gap-2">

@@ -21,18 +21,26 @@ const user = (isAgencyAdmin: boolean) => ({
 describe('resolveWorkspace', () => {
   it('prefers the last-used site when it is still accessible', () => {
     expect(
-      resolveWorkspace({ user: user(false), sites: [site('a'), site('b')] }, 'b'),
+      resolveWorkspace(
+        { user: user(false), sites: [site('a'), site('b')] },
+        'b',
+      ),
     ).toEqual({ kind: 'site', siteId: 'b' })
   })
 
   it('ignores a stale cookie', () => {
     expect(
-      resolveWorkspace({ user: user(false), sites: [site('a'), site('b')] }, 'gone'),
+      resolveWorkspace(
+        { user: user(false), sites: [site('a'), site('b')] },
+        'gone',
+      ),
     ).toEqual({ kind: 'picker' })
   })
 
   it('opens the only site', () => {
-    expect(resolveWorkspace({ user: user(true), sites: [site('a')] }, null)).toEqual({
+    expect(
+      resolveWorkspace({ user: user(true), sites: [site('a')] }, null),
+    ).toEqual({
       kind: 'site',
       siteId: 'a',
     })
@@ -40,7 +48,10 @@ describe('resolveWorkspace', () => {
 
   it('sends admins with several sites to the agency workspace', () => {
     expect(
-      resolveWorkspace({ user: user(true), sites: [site('a'), site('b')] }, null),
+      resolveWorkspace(
+        { user: user(true), sites: [site('a'), site('b')] },
+        null,
+      ),
     ).toEqual({ kind: 'agency' })
     expect(resolveWorkspace({ user: user(true), sites: [] }, null)).toEqual({
       kind: 'agency',

@@ -81,7 +81,10 @@ export function GoLiveSteps({
             />
           ))}
         </span>
-        <span className="text-[11.5px] leading-4 font-medium text-accent-text" aria-current="step">
+        <span
+          className="text-[11.5px] leading-4 font-medium text-accent-text"
+          aria-current="step"
+        >
           {JOB_STATUS[GO_LIVE_STEPS[current]].label()}
         </span>
         <span className="ml-auto text-[11.5px] leading-4 text-text-muted tnum">
@@ -241,7 +244,8 @@ export function GoLiveTray({
       aria-live="polite"
       className={cn(
         'relative overflow-hidden rounded-[14px]',
-        card && 'border border-border-default bg-background-surface shadow-card',
+        card &&
+          'border border-border-default bg-background-surface shadow-card',
         state === 'going-live' && 'animate-border-pulse border-transparent',
       )}
     >
@@ -289,7 +293,11 @@ export function GoLiveTray({
             <div
               role="button"
               tabIndex={0}
-              onClick={() => panel.open('golive', { release: release.lastFailure?.publicationId })}
+              onClick={() =>
+                panel.open('golive', {
+                  release: release.lastFailure?.publicationId,
+                })
+              }
               onKeyDown={(event) => {
                 if (event.key === 'Enter' || event.key === ' ') {
                   event.preventDefault()
@@ -375,7 +383,13 @@ export function GoLiveTray({
   )
 }
 
-function TrayHeading({ title, subtitle }: { title: string; subtitle?: string }) {
+function TrayHeading({
+  title,
+  subtitle,
+}: {
+  title: string
+  subtitle?: string
+}) {
   return (
     <div className="grid gap-0.5">
       <span className="text-[13.5px] leading-5 font-semibold text-text-primary tnum">

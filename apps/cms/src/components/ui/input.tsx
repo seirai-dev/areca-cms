@@ -31,7 +31,11 @@ function Input({
       data-slot="input"
       className={cn(
         fieldClasses,
-        inputSize === 'sm' ? 'h-[30px] text-[13px]' : inputSize === 'lg' ? 'h-11 text-[15px]' : 'h-9',
+        inputSize === 'sm'
+          ? 'h-[30px] text-[13px]'
+          : inputSize === 'lg'
+            ? 'h-11 text-[15px]'
+            : 'h-9',
         'file:mr-3 file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-[13px] file:font-medium file:text-text-primary',
         '[&::-webkit-search-cancel-button]:appearance-none',
         className,

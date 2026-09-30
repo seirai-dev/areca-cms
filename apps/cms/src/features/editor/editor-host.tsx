@@ -49,7 +49,8 @@ export function EditorHost({
   const newKey = React.useRef('')
   const previous = React.useRef<string | undefined | null>(null)
   // Arriving at "New" (first render, or from an entry) starts a new session.
-  if (!entryId && previous.current !== undefined) newKey.current = `new-${++sessions}`
+  if (!entryId && previous.current !== undefined)
+    newKey.current = `new-${++sessions}`
   previous.current = entryId
   const key = entryId ? (adopted.get(entryId) ?? entryId) : newKey.current
 

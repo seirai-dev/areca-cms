@@ -12,7 +12,9 @@ import { EASE_STANDARD } from '#/lib/motion'
  *     {items.map((item) => <StaggerItem as="li" key={item.id}>…</StaggerItem>)}
  *   </Stagger>
  */
-const StaggerIndex = React.createContext<{ register: () => number } | null>(null)
+const StaggerIndex = React.createContext<{ register: () => number } | null>(
+  null,
+)
 
 export function Stagger({
   as = 'div',
@@ -26,10 +28,7 @@ export function Stagger({
 } & Omit<React.HTMLAttributes<HTMLElement>, 'children'>) {
   const counter = React.useRef(0)
   counter.current = 0
-  const value = React.useMemo(
-    () => ({ register: () => counter.current++ }),
-    [],
-  )
+  const value = React.useMemo(() => ({ register: () => counter.current++ }), [])
   const Comp = as
   return (
     <StaggerIndex.Provider value={value}>
@@ -52,7 +51,10 @@ export function StaggerItem({
   children: React.ReactNode
   /** Explicit position; otherwise render order is used. */
   index?: number
-} & Omit<React.HTMLAttributes<HTMLElement>, 'children' | 'onAnimationStart' | 'onDrag' | 'onDragStart' | 'onDragEnd'>) {
+} & Omit<
+  React.HTMLAttributes<HTMLElement>,
+  'children' | 'onAnimationStart' | 'onDrag' | 'onDragStart' | 'onDragEnd'
+>) {
   const reduce = useReducedMotion()
   const ctx = React.useContext(StaggerIndex)
   const [position] = React.useState(() => index ?? ctx?.register() ?? 0)
@@ -75,7 +77,7 @@ export function StaggerItem({
         ease: EASE_STANDARD,
         delay: Math.min(position, 9) * 0.03,
       }}
-      {...(props)}
+      {...props}
     >
       {children}
     </Comp>

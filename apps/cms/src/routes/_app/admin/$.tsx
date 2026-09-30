@@ -17,8 +17,10 @@ export const Route = createFileRoute('/_app/admin/$')({
     if (section === 'organizations') {
       throw redirect({ to: '/agency/clients', replace: true })
     }
-    if (section === 'users') throw redirect({ to: '/agency/people', replace: true })
-    if (section === 'audit') throw redirect({ to: '/agency/activity', replace: true })
+    if (section === 'users')
+      throw redirect({ to: '/agency/people', replace: true })
+    if (section === 'audit')
+      throw redirect({ to: '/agency/activity', replace: true })
     if (section === 'branding') {
       throw redirect({ to: '/agency/branding', replace: true })
     }

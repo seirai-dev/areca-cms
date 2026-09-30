@@ -1,9 +1,7 @@
 import type { Me } from '#/server/fn/me'
 
 export type WorkspaceTarget =
-  | { kind: 'site'; siteId: string }
-  | { kind: 'agency' }
-  | { kind: 'picker' }
+  { kind: 'site'; siteId: string } | { kind: 'agency' } | { kind: 'picker' }
 
 /**
  * Where `/` sends you (brief §2), pure so it can be tested:

@@ -35,24 +35,60 @@ import type { RevisionRecord } from './use-entry-editor'
 
 const PAGE = 12
 
-function noteMeta(note: string): { title: () => string; icon: React.ReactNode; tone: StatusTone | 'plain' } {
+function noteMeta(note: string): {
+  title: () => string
+  icon: React.ReactNode
+  tone: StatusTone | 'plain'
+} {
   switch (note) {
     case 'create':
-      return { title: () => m.editor_history_created(), icon: <Sparkle weight="fill" />, tone: 'accent' }
+      return {
+        title: () => m.editor_history_created(),
+        icon: <Sparkle weight="fill" />,
+        tone: 'accent',
+      }
     case 'publish':
-      return { title: () => m.editor_history_ready(), icon: <CheckCircle weight="fill" />, tone: 'accent' }
+      return {
+        title: () => m.editor_history_ready(),
+        icon: <CheckCircle weight="fill" />,
+        tone: 'accent',
+      }
     case 'unpublish':
-      return { title: () => m.editor_history_draft(), icon: <ArrowUUpLeft weight="bold" />, tone: 'neutral' }
+      return {
+        title: () => m.editor_history_draft(),
+        icon: <ArrowUUpLeft weight="bold" />,
+        tone: 'neutral',
+      }
     case 'archive':
-      return { title: () => m.editor_history_archived(), icon: <Archive weight="bold" />, tone: 'neutral' }
+      return {
+        title: () => m.editor_history_archived(),
+        icon: <Archive weight="bold" />,
+        tone: 'neutral',
+      }
     case 'schedule':
-      return { title: () => m.editor_history_scheduled(), icon: <ClockIcon size={14} />, tone: 'warning' }
+      return {
+        title: () => m.editor_history_scheduled(),
+        icon: <ClockIcon size={14} />,
+        tone: 'warning',
+      }
     case 'cancel_schedule':
-      return { title: () => m.editor_history_unscheduled(), icon: <CalendarX weight="bold" />, tone: 'neutral' }
+      return {
+        title: () => m.editor_history_unscheduled(),
+        icon: <CalendarX weight="bold" />,
+        tone: 'neutral',
+      }
     case 'restore':
-      return { title: () => m.editor_history_restored(), icon: <ArrowCounterClockwise weight="bold" />, tone: 'success' }
+      return {
+        title: () => m.editor_history_restored(),
+        icon: <ArrowCounterClockwise weight="bold" />,
+        tone: 'success',
+      }
     default:
-      return { title: () => m.editor_history_edited(), icon: <PencilSimple weight="bold" />, tone: 'plain' }
+      return {
+        title: () => m.editor_history_edited(),
+        icon: <PencilSimple weight="bold" />,
+        tone: 'plain',
+      }
   }
 }
 
@@ -96,16 +132,31 @@ export function EntryHistory({
     )
   }
   if (error) {
-    return <QueryError error={error} title={m.editor_could_not_load_revisions()} onRetry={onRetry} />
+    return (
+      <QueryError
+        error={error}
+        title={m.editor_could_not_load_revisions()}
+        onRetry={onRetry}
+      />
+    )
   }
   if (groups.length === 0) {
-    return <p className="text-callout text-text-muted">{m.editor_history_empty()}</p>
+    return (
+      <p className="text-callout text-text-muted">{m.editor_history_empty()}</p>
+    )
   }
 
   const newestId = revisions[0]?.id
 
   return (
-    <div className="grid gap-3" style={{ '--timeline-ring': 'var(--color-background-surface)' } as React.CSSProperties}>
+    <div
+      className="grid gap-3"
+      style={
+        {
+          '--timeline-ring': 'var(--color-background-surface)',
+        } as React.CSSProperties
+      }
+    >
       <Timeline data-testid="entry-history">
         {groups.slice(0, limit).map((group) => (
           <HistoryItem
@@ -151,7 +202,10 @@ function RestoreButton({
     )
   }
   return (
-    <Hint label={canManage ? '' : editorPublishReason()} wrapDisabled={!canManage}>
+    <Hint
+      label={canManage ? '' : editorPublishReason()}
+      wrapDisabled={!canManage}
+    >
       <Button
         type="button"
         size="xs"
@@ -214,15 +268,22 @@ function HistoryItem({
           >
             <CaretDown
               weight="bold"
-              className={cn('size-3 transition-transform duration-150', open ? 'rotate-0' : '-rotate-90')}
+              className={cn(
+                'size-3 transition-transform duration-150',
+                open ? 'rotate-0' : '-rotate-90',
+              )}
             />
-            {open ? m.editor_history_hide_saves() : m.editor_history_show_saves()}
+            {open
+              ? m.editor_history_hide_saves()
+              : m.editor_history_show_saves()}
           </button>
           <AnimatePresence initial={false}>
             {open ? (
               <motion.ol
                 initial={reduce ? { opacity: 0 } : { opacity: 0, height: 0 }}
-                animate={reduce ? { opacity: 1 } : { opacity: 1, height: 'auto' }}
+                animate={
+                  reduce ? { opacity: 1 } : { opacity: 1, height: 'auto' }
+                }
                 exit={reduce ? { opacity: 0 } : { opacity: 0, height: 0 }}
                 transition={{ duration: 0.18, ease: EASE_STANDARD }}
                 className="grid overflow-hidden rounded-[10px] border border-border-default"

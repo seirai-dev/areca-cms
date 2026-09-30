@@ -16,7 +16,9 @@ describe('parseGoLiveError', () => {
   })
 
   it('handles errors without a field', () => {
-    expect(parseGoLiveError('pages/about: missing published data')).toMatchObject({
+    expect(
+      parseGoLiveError('pages/about: missing published data'),
+    ).toMatchObject({
       collection: 'pages',
       slug: 'about',
       field: undefined,

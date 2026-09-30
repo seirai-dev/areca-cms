@@ -13,7 +13,10 @@ export const Route = createFileRoute('/_app/sites/$siteId/settings')({
   }),
   beforeLoad: ({ context, params }) => {
     if (!context.me.user.isAgencyAdmin) {
-      throw redirect({ to: '/sites/$siteId', params: { siteId: params.siteId } })
+      throw redirect({
+        to: '/sites/$siteId',
+        params: { siteId: params.siteId },
+      })
     }
   },
   component: SettingsPage,
@@ -29,7 +32,10 @@ function SettingsPage() {
       tab={tab ?? 'general'}
       onTabChange={(next) =>
         void navigate({
-          search: (prev) => ({ ...prev, tab: next === 'general' ? undefined : next }),
+          search: (prev) => ({
+            ...prev,
+            tab: next === 'general' ? undefined : next,
+          }),
           replace: true,
         })
       }

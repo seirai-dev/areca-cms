@@ -21,7 +21,10 @@ export function Spinner({
       width={size}
       height={size}
       viewBox="0 0 16 16"
-      className={cn('shrink-0 animate-spin text-current motion-reduce:animate-none', className)}
+      className={cn(
+        'shrink-0 animate-spin text-current motion-reduce:animate-none',
+        className,
+      )}
       style={{ animationDuration: '0.8s' }}
     >
       <circle

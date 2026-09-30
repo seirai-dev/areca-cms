@@ -59,7 +59,9 @@ function RadioCard({
       <span className="grid min-w-0 gap-0.5">
         <span className="text-headline text-text-primary">{title}</span>
         {description ? (
-          <span className="text-callout text-text-secondary">{description}</span>
+          <span className="text-callout text-text-secondary">
+            {description}
+          </span>
         ) : null}
       </span>
     </RadioGroupPrimitive.Item>

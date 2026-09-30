@@ -43,8 +43,13 @@ export function QueryError({
         <WarningCircle weight="fill" className="size-[18px]" />
       </span>
       <div className="grid min-w-0 flex-1 gap-0.5">
-        <p className="text-[14px] leading-5 font-medium text-text-primary">{title}</p>
-        <p className="truncate text-caption font-normal text-text-muted" title={messageFrom(error)}>
+        <p className="text-[14px] leading-5 font-medium text-text-primary">
+          {title}
+        </p>
+        <p
+          className="truncate text-caption font-normal text-text-muted"
+          title={messageFrom(error)}
+        >
           {messageFrom(error)}
         </p>
       </div>

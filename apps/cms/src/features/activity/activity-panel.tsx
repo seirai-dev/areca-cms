@@ -38,10 +38,16 @@ export function ActivityPanel({ site }: { site: MeSite }) {
           value={scope}
           onValueChange={setScope}
           options={[
-            { value: 'site', label: m.activity_this_site(), testId: 'activity-scope-site' },
+            {
+              value: 'site',
+              label: m.activity_this_site(),
+              testId: 'activity-scope-site',
+            },
             {
               value: 'client',
-              label: m.activity_all_client_sites({ client: site.organizationName }),
+              label: m.activity_all_client_sites({
+                client: site.organizationName,
+              }),
               testId: 'activity-scope-client',
             },
           ]}

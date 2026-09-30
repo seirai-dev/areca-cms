@@ -72,7 +72,9 @@ export function BrandLogo({
     >
       <Leaf
         weight="fill"
-        className={size === 'sm' ? 'size-3.5' : size === 'lg' ? 'size-6' : 'size-[18px]'}
+        className={
+          size === 'sm' ? 'size-3.5' : size === 'lg' ? 'size-6' : 'size-[18px]'
+        }
       />
     </span>
   )

@@ -30,7 +30,11 @@ function InsetGroup({
   footer?: React.ReactNode
 }) {
   return (
-    <section data-slot="inset-group" className={cn('grid gap-2', className)} {...props}>
+    <section
+      data-slot="inset-group"
+      className={cn('grid gap-2', className)}
+      {...props}
+    >
       {title || actions ? (
         <div className="flex items-end justify-between gap-3 px-1">
           <div className="grid gap-0.5">
@@ -41,12 +45,16 @@ function InsetGroup({
               <p className="text-callout text-text-secondary">{description}</p>
             ) : null}
           </div>
-          {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
+          {actions ? (
+            <div className="flex shrink-0 items-center gap-2">{actions}</div>
+          ) : null}
         </div>
       ) : null}
       {children}
       {footer ? (
-        <p className="px-1 text-caption font-normal text-text-muted">{footer}</p>
+        <p className="px-1 text-caption font-normal text-text-muted">
+          {footer}
+        </p>
       ) : null}
     </section>
   )
@@ -102,7 +110,9 @@ function InsetRow({
           </span>
         ) : null}
         {subtitle ? (
-          <span className="truncate text-callout text-text-secondary">{subtitle}</span>
+          <span className="truncate text-callout text-text-secondary">
+            {subtitle}
+          </span>
         ) : null}
         {extra}
       </span>
@@ -112,7 +122,10 @@ function InsetRow({
         </span>
       ) : null}
       {chevron ? (
-        <CaretRight weight="bold" className="size-3.5 shrink-0 text-icon-muted" />
+        <CaretRight
+          weight="bold"
+          className="size-3.5 shrink-0 text-icon-muted"
+        />
       ) : null}
     </>
   )

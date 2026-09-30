@@ -82,7 +82,9 @@ export function EntryPillView({
       size={size}
       data-ui-status={status}
       data-testid={testId}
-      aria-label={status === 'scheduled' ? `${meta.label()} ${label}` : undefined}
+      aria-label={
+        status === 'scheduled' ? `${meta.label()} ${label}` : undefined
+      }
       className={className}
     >
       {editedSinceReady ? <EditedMarker /> : null}

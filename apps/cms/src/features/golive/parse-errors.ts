@@ -11,7 +11,8 @@ export type GoLiveError = {
   message: string
 }
 
-const ENTRY_ERROR = /^([A-Za-z0-9_-]+)\/([^:]+):\s(?:([A-Za-z0-9_.[\]-]+):\s)?(.+)$/
+const ENTRY_ERROR =
+  /^([A-Za-z0-9_-]+)\/([^:]+):\s(?:([A-Za-z0-9_.[\]-]+):\s)?(.+)$/
 
 export function parseGoLiveError(raw: string): GoLiveError {
   const match = raw.match(ENTRY_ERROR)
