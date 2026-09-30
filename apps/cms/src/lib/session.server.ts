@@ -44,7 +44,7 @@ export async function requireOrgMember(
     return session
   }
 
-  const [member] = await db
+  const rows = await db
     .select()
     .from(membership)
     .where(
@@ -54,6 +54,7 @@ export async function requireOrgMember(
       ),
     )
     .limit(1)
+  const member = rows.at(0)
 
   if (!member) {
     throw new Response('Forbidden', { status: 403 })
