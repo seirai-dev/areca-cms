@@ -17,10 +17,4 @@ export const SPRING_SMALL = {
 
 export const EASE_STANDARD = [0.2, 0.8, 0.2, 1] as const
 
-/** Page content: soft fade plus a 4px rise, 180ms. */
-export const PAGE_TRANSITION = {
-  duration: 0.18,
-  ease: EASE_STANDARD,
-} as const
-
 export const FADE = { duration: 0.15, ease: EASE_STANDARD } as const

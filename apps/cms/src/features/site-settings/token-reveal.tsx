@@ -9,7 +9,7 @@ import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
 /** The two lines a site project needs in `.env.local`. */
-export function tokenEnvSnippet(cmsUrl: string, token: string) {
+function tokenEnvSnippet(cmsUrl: string, token: string) {
   return `ARECA_CMS_URL=${cmsUrl}\nARECA_SITE_TOKEN=${token}`
 }
 

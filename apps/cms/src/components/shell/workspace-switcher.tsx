@@ -1,14 +1,9 @@
 import * as React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
-import {
-  CaretUpDown,
-  Check,
-  Plus,
-  SquaresFour,
-} from '@phosphor-icons/react'
+import { CaretUpDown, Check, Plus, SquaresFour } from '@phosphor-icons/react'
 
-import { adminQueryKeys } from '#/components/admin/helpers'
+import { adminQueryKeys } from '#/lib/admin/helpers'
 import { BrandLogo } from '#/components/brand-mark'
 import { useShell } from '#/components/shell/shell-context'
 import { SiteTile } from '#/components/shell/site-tile'
@@ -22,7 +17,11 @@ import {
   CommandMeta,
   CommandSeparator,
 } from '#/components/ui/command'
-import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '#/components/ui/popover'
 import { Sheet, SheetContent, SheetTitle } from '#/components/ui/sheet'
 import { LiveDot } from '#/components/ui/status-pill'
 import { useReleaseStatus } from '#/features/golive/use-release-status'
@@ -45,7 +44,7 @@ export function sitesOverviewQueryOptions() {
 }
 
 /** Live flags per site id, from the (cached) sites overview. */
-export function useSitesLive(enabled = true) {
+function useSitesLive(enabled = true) {
   const query = useQuery({ ...sitesOverviewQueryOptions(), enabled })
   return React.useMemo(() => {
     const map = new Map<string, { live: boolean; pending: number }>()
@@ -88,7 +87,7 @@ function SiteLiveLine({ site }: { site: MeSite }) {
  * Says where you are. Click = the workspace switcher. `compact` is the
  * mobile top-bar version; `collapsed` the tablet rail.
  */
-export const WorkspaceCard = React.forwardRef<
+const WorkspaceCard = React.forwardRef<
   HTMLButtonElement,
   React.ComponentProps<'button'> & {
     compact?: boolean
@@ -96,13 +95,23 @@ export const WorkspaceCard = React.forwardRef<
     testId?: string
   }
 >(function WorkspaceCardButton(
-  { compact = false, collapsed = false, testId = 'sites-nav', className, ...props },
+  {
+    compact = false,
+    collapsed = false,
+    testId = 'sites-nav',
+    className,
+    ...props
+  },
   ref,
 ) {
   const { mode, site } = useShell()
   const branding = useBranding()
   const inSite = mode !== 'agency' && site
-  const title = inSite ? site.name : mode === 'agency' ? m.shell_agency() : branding.appName
+  const title = inSite
+    ? site.name
+    : mode === 'agency'
+      ? m.shell_agency()
+      : branding.appName
 
   return (
     <button
@@ -113,7 +122,11 @@ export const WorkspaceCard = React.forwardRef<
       className={cn(
         'group/ws flex min-w-0 items-center gap-2.5 rounded-[12px] text-left outline-none transition-colors',
         'hover:bg-surface-state-hover focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-border-focus data-[state=open]:bg-surface-state-hover',
-        compact ? 'h-10 max-w-[60vw] px-1.5' : collapsed ? 'size-11 justify-center' : 'w-full p-2',
+        compact
+          ? 'h-10 max-w-[60vw] px-1.5'
+          : collapsed
+            ? 'size-11 justify-center'
+            : 'w-full p-2',
         className,
       )}
       {...props}
@@ -133,7 +146,9 @@ export const WorkspaceCard = React.forwardRef<
               <SiteLiveLine site={site} />
             ) : (
               <span className="truncate text-[12px] leading-4 text-text-muted">
-                {mode === 'agency' ? branding.appName : m.shell_choose_workspace()}
+                {mode === 'agency'
+                  ? branding.appName
+                  : m.shell_choose_workspace()}
               </span>
             )}
           </span>
@@ -217,7 +232,11 @@ function SwitcherList({ onDone }: { onDone: () => void }) {
         {groups.map((group) => (
           <CommandGroup
             key={group.id}
-            heading={groups.length > 1 || isAdmin ? group.name : m.shell_switcher_sites()}
+            heading={
+              groups.length > 1 || isAdmin
+                ? group.name
+                : m.shell_switcher_sites()
+            }
           >
             {group.sites.map((site) => row(site))}
           </CommandGroup>
@@ -236,7 +255,9 @@ function SwitcherList({ onDone }: { onDone: () => void }) {
               >
                 <BrandLogo branding={branding} size="sm" />
                 <span className="grid min-w-0 flex-1">
-                  <span className="truncate font-medium">{m.shell_agency()}</span>
+                  <span className="truncate font-medium">
+                    {m.shell_agency()}
+                  </span>
                   <span
                     data-slot="command-meta"
                     className="truncate text-[12px] leading-4 text-text-muted"
@@ -244,7 +265,9 @@ function SwitcherList({ onDone }: { onDone: () => void }) {
                     {m.shell_agency_description()}
                   </span>
                 </span>
-                {mode === 'agency' ? <Check weight="bold" className="size-4" /> : null}
+                {mode === 'agency' ? (
+                  <Check weight="bold" className="size-4" />
+                ) : null}
               </CommandItem>
             </CommandGroup>
           </>
@@ -270,7 +293,8 @@ function SwitcherList({ onDone }: { onDone: () => void }) {
                 onDone()
                 // One client: straight into its New site sheet. Otherwise
                 // pick the client first.
-                const only = clients.data?.length === 1 ? clients.data[0] : undefined
+                const only =
+                  clients.data?.length === 1 ? clients.data[0] : undefined
                 void (only
                   ? navigate({
                       to: '/agency/clients/$orgId',
@@ -327,8 +351,14 @@ export function WorkspaceSwitcher({
           onClick={() => setSwitcherOpen(true)}
         />
         <Sheet open={switcherOpen} onOpenChange={setSwitcherOpen}>
-          <SheetContent side="bottom" className="p-2 pt-0" showCloseButton={false}>
-            <SheetTitle className="sr-only">{m.shell_switcher_title()}</SheetTitle>
+          <SheetContent
+            side="bottom"
+            className="p-2 pt-0"
+            showCloseButton={false}
+          >
+            <SheetTitle className="sr-only">
+              {m.shell_switcher_title()}
+            </SheetTitle>
             <SwitcherList onDone={() => setSwitcherOpen(false)} />
           </SheetContent>
         </Sheet>
@@ -401,4 +431,3 @@ export function AllSitesNav({
     </ul>
   )
 }
-

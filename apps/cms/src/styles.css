@@ -12,12 +12,10 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ---------------------------------------------------------------------------
-   Areca design tokens (brief §4). Two layers:
-     1. semantic tokens (`--color-text-*`, `--color-background-*`, accent,
-        status, …) declared light-first in `@theme` so Tailwind generates the
-        utilities, then overridden for dark in `html.dark`
-     2. a shadcn compatibility layer (`bg-background`, `text-muted-foreground`)
-        aliased onto the semantic tokens
+   Areca design tokens (brief §4, docs/DESIGN.md). Semantic tokens
+   (`--color-text-*`, `--color-background-*`, accent, status, …) are declared
+   light-first in `@theme` so Tailwind generates the utilities, then
+   overridden for dark in `html.dark`.
 
    Colour rules:
      - ink (`action-primary`) is the one primary button colour
@@ -45,14 +43,12 @@
   --color-text-success: #177a42;
   --color-text-warning: #955900;
   --color-text-error: #c0271d;
-  --color-text-info: #4b49c4;
 
   --color-border-default: rgb(0 0 0 / 0.08);
   --color-border-strong: rgb(0 0 0 / 0.14);
   --color-border-subtle: rgb(0 0 0 / 0.05);
   --color-border-focus: #5856d6;
   --color-border-error: #d93025;
-  --color-border-success: #1f9d55;
 
   --color-icon-default: #5e5e63;
   --color-icon-accent: #5856d6;
@@ -69,7 +65,6 @@
   --color-action-secondary-hover: #e6e6e2;
   --color-action-destructive: #d93025;
   --color-action-destructive-hover: #c0271d;
-  --color-action-disabled: #efefec;
 
   /* Accent: iris (Apple systemIndigo). Instance branding re-tints these. */
   --color-accent: #5856d6;
@@ -92,20 +87,14 @@
 
   --color-surface-state-hover: rgb(0 0 0 / 0.04);
   --color-surface-state-pressed: rgb(0 0 0 / 0.07);
-  --color-input-bg-hover: rgb(0 0 0 / 0.02);
-  --color-nav-active: rgb(0 0 0 / 0.05);
 
   /* Segmented controls (Apple's systemFill) */
   --color-segment-track: rgb(118 118 128 / 0.12);
   --color-segment-thumb: #ffffff;
 
-  /* Auth art (kept for the auth pages until phase 2 rewrites them). */
-  --color-art-base: #efefec;
-  --color-art-line: #5856d6;
-
   /* Type */
-  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system,
-    sans-serif;
+  --font-sans:
+    'Inter Variable', ui-sans-serif, system-ui, -apple-system, sans-serif;
   /* Display used to be Bricolage; the new look is Inter everywhere. */
   --font-display: var(--font-sans);
   --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -115,35 +104,19 @@
   --radius-card: 16px;
   --radius-panel: 20px;
   --radius-thumb: 10px;
-  --radius-pill: 999px;
-  /* LEGACY: `rounded-surface` = card radius; remove in phase 3 */
-  --radius-surface: 16px;
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 10px;
-  --radius-xl: 16px;
-  --radius-2xl: 20px;
 
   /* Depth */
   --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04);
   --shadow-float: 0 12px 40px -8px rgb(0 0 0 / 0.18);
   --shadow-raise: 0 8px 24px -8px rgb(0 0 0 / 0.14);
-  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.04);
   --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.05), 0 1px 2px 0 rgb(0 0 0 / 0.03);
-  --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.08);
-  --shadow-lg: var(--shadow-float);
-  --shadow-xl: var(--shadow-float);
-  --shadow-2xl: 0 24px 64px -12px rgb(0 0 0 / 0.28);
 
   /* Motion */
   --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-emphasized: cubic-bezier(0.32, 0.72, 0, 1);
   --motion-duration-fast: 150ms;
   --motion-duration-base: 180ms;
-  --motion-duration-slow: 250ms;
   --motion-duration-sheet: 280ms;
-  --motion-ease-standard: var(--ease-standard);
-  --motion-ease-sheet: var(--ease-emphasized);
 
   --animate-dialog-panel-in: dialog-panel-in var(--motion-duration-base)
     var(--ease-standard);
@@ -165,18 +138,12 @@
     var(--ease-emphasized);
   --animate-drawer-bottom-out: drawer-bottom-out var(--motion-duration-base)
     var(--ease-emphasized);
-  --animate-enter-rise: enter-rise var(--motion-duration-base)
-    var(--ease-standard);
   --animate-pop-in: pop-in var(--motion-duration-fast) var(--ease-standard);
   --animate-shimmer: shimmer 1.6s linear infinite;
   --animate-live-ping: live-ping 4s var(--ease-standard) infinite;
   --animate-live-ping-once: live-ping 1.2s var(--ease-standard) 0.2s 1 both;
   --animate-border-pulse: border-pulse 2.4s ease-in-out infinite;
   --animate-indeterminate: indeterminate 1.4s var(--ease-standard) infinite;
-  /* LEGACY: remove in phase 3 */
-  --animate-ds-enter-rise: enter-rise var(--motion-duration-base)
-    var(--ease-standard);
-  --animate-ds-pop-in: pop-in var(--motion-duration-fast) var(--ease-standard);
 
   @keyframes dialog-panel-in {
     from {
@@ -345,14 +312,12 @@ html.dark,
   --color-text-success: #5fd394;
   --color-text-warning: #ffb340;
   --color-text-error: #ff7b72;
-  --color-text-info: #a5a3ff;
 
   --color-border-default: rgb(255 255 255 / 0.08);
   --color-border-strong: rgb(255 255 255 / 0.16);
   --color-border-subtle: rgb(255 255 255 / 0.05);
   --color-border-focus: #7d7aff;
   --color-border-error: #ff6961;
-  --color-border-success: #34c77b;
 
   --color-icon-default: #aeaeb2;
   --color-icon-accent: #8f8cff;
@@ -368,7 +333,6 @@ html.dark,
   --color-action-secondary-hover: #333338;
   --color-action-destructive: #ff6961;
   --color-action-destructive-hover: #ff7f78;
-  --color-action-disabled: #232327;
 
   --color-accent: #7d7aff;
   --color-accent-hover: #9391ff;
@@ -389,13 +353,8 @@ html.dark,
 
   --color-surface-state-hover: rgb(255 255 255 / 0.05);
   --color-surface-state-pressed: rgb(255 255 255 / 0.08);
-  --color-input-bg-hover: rgb(255 255 255 / 0.03);
-  --color-nav-active: rgb(255 255 255 / 0.07);
   --color-segment-track: rgb(118 118 128 / 0.24);
   --color-segment-thumb: #56565c;
-
-  --color-art-base: #18181b;
-  --color-art-line: #7d7aff;
 
   --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3);
   --shadow-float:
@@ -426,14 +385,12 @@ html.dark,
   --color-text-success: #177a42;
   --color-text-warning: #955900;
   --color-text-error: #c0271d;
-  --color-text-info: #4b49c4;
 
   --color-border-default: rgb(0 0 0 / 0.08);
   --color-border-strong: rgb(0 0 0 / 0.14);
   --color-border-subtle: rgb(0 0 0 / 0.05);
   --color-border-focus: #5856d6;
   --color-border-error: #d93025;
-  --color-border-success: #1f9d55;
 
   --color-icon-default: #5e5e63;
   --color-icon-accent: #5856d6;
@@ -449,7 +406,6 @@ html.dark,
   --color-action-secondary-hover: #e6e6e2;
   --color-action-destructive: #d93025;
   --color-action-destructive-hover: #c0271d;
-  --color-action-disabled: #efefec;
 
   --color-accent: #5856d6;
   --color-accent-hover: #4b49c9;
@@ -470,13 +426,8 @@ html.dark,
 
   --color-surface-state-hover: rgb(0 0 0 / 0.04);
   --color-surface-state-pressed: rgb(0 0 0 / 0.07);
-  --color-input-bg-hover: rgb(0 0 0 / 0.02);
-  --color-nav-active: rgb(0 0 0 / 0.05);
   --color-segment-track: rgb(118 118 128 / 0.12);
   --color-segment-thumb: #ffffff;
-
-  --color-art-base: #efefec;
-  --color-art-line: #5856d6;
 
   --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04);
   --shadow-float: 0 12px 40px -8px rgb(0 0 0 / 0.18);
@@ -490,7 +441,6 @@ html.dark,
   --sidebar-width: 264px;
   --sidebar-rail-width: 64px;
   --navbar-height: 0px;
-  --app-header-h: var(--navbar-height);
   --content-max: 1120px;
   /* Z scale. Nothing else may set a z-index. */
   --z-navbar: 100;
@@ -504,42 +454,6 @@ html.dark,
   :root {
     --navbar-height: 56px;
   }
-}
-
-/* shadcn compatibility layer: old class names keep resolving. `inline` so the
-   alias substitutes the semantic variable at the use site and stays
-   mode-aware. `accent` is now the real iris token (see above), so it is not
-   aliased here. */
-@theme inline {
-  --color-background: var(--color-background-default);
-  --color-foreground: var(--color-text-primary);
-  --color-card: var(--color-background-surface);
-  --color-card-foreground: var(--color-text-primary);
-  --color-popover: var(--color-background-elevated);
-  --color-popover-foreground: var(--color-text-primary);
-  --color-primary: var(--color-action-primary);
-  --color-primary-foreground: var(--color-action-primary-text);
-  --color-secondary: var(--color-action-secondary);
-  --color-secondary-foreground: var(--color-text-primary);
-  --color-muted: var(--color-background-subtle);
-  --color-muted-foreground: var(--color-text-muted);
-  --color-accent-foreground: var(--color-accent-contrast);
-  --color-destructive: var(--color-action-destructive);
-  --color-destructive-foreground: var(--color-text-inverse);
-  --color-border: var(--color-border-default);
-  --color-input: var(--color-border-default);
-  --color-ring: var(--color-border-focus);
-  --color-success: var(--color-status-success);
-  --color-success-foreground: var(--color-text-inverse);
-  --color-warning: var(--color-status-warning);
-  --color-link: var(--color-text-accent);
-  --color-sidebar-foreground: var(--color-text-primary);
-  --color-sidebar-primary: var(--color-accent);
-  --color-sidebar-primary-foreground: var(--color-accent-contrast);
-  --color-sidebar-accent: var(--color-surface-state-hover);
-  --color-sidebar-accent-foreground: var(--color-text-primary);
-  --color-sidebar-border: var(--color-border-default);
-  --color-sidebar-ring: var(--color-border-focus);
 }
 
 /* ---------------------------------------------------------------------------
@@ -623,107 +537,6 @@ html.dark,
   letter-spacing: -0.025em;
 }
 
-/* LEGACY: remove in phase 3. The old `text-ds-*` scale mapped onto the new
-   styles so screens that are not rewritten yet keep compiling and look
-   consistent with the new scale. */
-@utility text-ds-heading-1 {
-  font-family: var(--font-sans);
-  font-size: 32px;
-  line-height: 38px;
-  font-weight: 650;
-  letter-spacing: -0.022em;
-}
-@utility text-ds-heading-2 {
-  font-family: var(--font-sans);
-  font-size: 32px;
-  line-height: 38px;
-  font-weight: 650;
-  letter-spacing: -0.022em;
-}
-@utility text-ds-heading-3 {
-  font-family: var(--font-sans);
-  font-size: 24px;
-  line-height: 30px;
-  font-weight: 600;
-  letter-spacing: -0.018em;
-}
-@utility text-ds-heading-4 {
-  font-family: var(--font-sans);
-  font-size: 19px;
-  line-height: 26px;
-  font-weight: 600;
-  letter-spacing: -0.012em;
-}
-@utility text-ds-heading-5 {
-  font-family: var(--font-sans);
-  font-size: 15px;
-  line-height: 22px;
-  font-weight: 600;
-  letter-spacing: -0.006em;
-}
-@utility text-ds-heading-6 {
-  font-family: var(--font-sans);
-  font-size: 13px;
-  line-height: 18px;
-  font-weight: 600;
-}
-@utility text-ds-body-lg {
-  font-family: var(--font-sans);
-  font-size: 17px;
-  line-height: 28px;
-  font-weight: 400;
-}
-@utility text-ds-body-md {
-  font-family: var(--font-sans);
-  font-size: 15px;
-  line-height: 22px;
-  font-weight: 400;
-}
-@utility text-ds-body-sm {
-  font-family: var(--font-sans);
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 400;
-}
-@utility text-ds-body-xs {
-  font-family: var(--font-sans);
-  font-size: 12px;
-  line-height: 16px;
-  font-weight: 400;
-}
-@utility text-ds-label-md {
-  font-family: var(--font-sans);
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 500;
-}
-@utility text-ds-label-sm {
-  font-family: var(--font-sans);
-  font-size: 12px;
-  line-height: 16px;
-  font-weight: 500;
-}
-@utility text-ds-mono-sm {
-  font-family: var(--font-mono);
-  font-size: 13px;
-  line-height: 18px;
-  font-weight: 400;
-}
-@utility text-ds-mono-xs {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 16px;
-  font-weight: 400;
-}
-@utility text-ds-mono-caps {
-  font-family: var(--font-sans);
-  font-size: 11px;
-  line-height: 14px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
 /* Z scale utilities. */
 @utility z-navbar {
   z-index: var(--z-navbar);
@@ -739,15 +552,6 @@ html.dark,
 }
 @utility z-above-overlay {
   z-index: var(--z-above-overlay);
-}
-
-/* Shared focus ring: accent, 2px, offset 2px (brief §5.6). */
-@utility focus-ring {
-  outline: none;
-  &:focus-visible {
-    outline: 2px solid var(--color-border-focus);
-    outline-offset: 2px;
-  }
 }
 
 /* Hairline card: surface, 16px, border, near-zero shadow. */
@@ -767,7 +571,7 @@ html.dark,
 
 @layer base {
   * {
-    @apply border-border;
+    border-color: var(--color-border-default);
   }
 
   html,
@@ -879,44 +683,6 @@ html.dark,
   /* Numeric readouts keep tabular figures so columns of numbers align. */
   .tnum {
     font-variant-numeric: tabular-nums;
-  }
-
-  /* LEGACY: underline tabs, still used by un-rewritten screens; phase 3. */
-  .nav-tab {
-    position: relative;
-    display: inline-flex;
-    height: 2.5rem;
-    align-items: center;
-    gap: 0.5rem;
-    padding-inline: 0.125rem;
-    font-size: 14px;
-    line-height: 20px;
-    font-weight: 500;
-    color: var(--color-text-secondary);
-    white-space: nowrap;
-    transition: color var(--motion-duration-fast) var(--ease-standard);
-  }
-  .nav-tab:hover,
-  .nav-tab[aria-current='page'],
-  .nav-tab[data-active='true'],
-  .nav-tab[data-state='active'] {
-    color: var(--color-text-primary);
-  }
-  .nav-tab::after {
-    content: '';
-    position: absolute;
-    inset-inline: 0;
-    bottom: -1px;
-    height: 2px;
-    border-radius: 2px;
-    background: var(--color-text-primary);
-    opacity: 0;
-    transition: opacity var(--motion-duration-fast) var(--ease-standard);
-  }
-  .nav-tab[aria-current='page']::after,
-  .nav-tab[data-active='true']::after,
-  .nav-tab[data-state='active']::after {
-    opacity: 1;
   }
 
   /* Hide scrollbars on horizontally scrolling strips. */

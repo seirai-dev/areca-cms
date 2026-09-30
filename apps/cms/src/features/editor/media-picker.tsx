@@ -15,8 +15,8 @@ import {
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
-import { queryKeys } from '#/components/editor/query-keys'
-import { assetFileUrl, errorMessage } from '#/components/editor/utils'
+import { queryKeys } from '#/lib/content/query-keys'
+import { assetFileUrl, errorMessage } from '#/lib/content/utils'
 import { Button } from '#/components/ui/button'
 import {
   Dialog,
@@ -153,7 +153,9 @@ export function MediaPickerDialog({
         <div className="grid gap-4 px-6 pt-6">
           <DialogHeader>
             <DialogTitle>{m.editor_media_title()}</DialogTitle>
-            <DialogDescription>{m.editor_media_description()}</DialogDescription>
+            <DialogDescription>
+              {m.editor_media_description()}
+            </DialogDescription>
           </DialogHeader>
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative min-w-0 flex-1">
@@ -173,7 +175,11 @@ export function MediaPickerDialog({
             <input
               ref={inputRef}
               type="file"
-              accept={imagesOnly ? 'image/jpeg,image/png,image/webp,image/gif' : MEDIA_ACCEPT}
+              accept={
+                imagesOnly
+                  ? 'image/jpeg,image/png,image/webp,image/gif'
+                  : MEDIA_ACCEPT
+              }
               className="sr-only"
               tabIndex={-1}
               data-testid="media-upload"
@@ -190,7 +196,9 @@ export function MediaPickerDialog({
               data-testid="media-upload-button"
             >
               {uploadMutation.isPending ? null : <UploadSimple weight="bold" />}
-              {uploadMutation.isPending ? m.editor_uploading() : m.editor_upload()}
+              {uploadMutation.isPending
+                ? m.editor_uploading()
+                : m.editor_upload()}
             </Button>
           </div>
         </div>
@@ -213,7 +221,9 @@ export function MediaPickerDialog({
             <EmptyState
               icon={<ImageSquare weight="duotone" />}
               title={
-                debouncedSearch ? m.editor_no_files_match() : m.editor_no_files_yet()
+                debouncedSearch
+                  ? m.editor_no_files_match()
+                  : m.editor_no_files_yet()
               }
               description={
                 debouncedSearch
@@ -289,7 +299,9 @@ export function MediaPickerDialog({
                 <span className="grid size-14 place-content-center rounded-[18px] bg-accent text-accent-contrast shadow-float">
                   <UploadSimple weight="bold" className="size-6" />
                 </span>
-                <p className="text-headline text-text-primary">{m.editor_drop_to_upload()}</p>
+                <p className="text-headline text-text-primary">
+                  {m.editor_drop_to_upload()}
+                </p>
               </motion.div>
             </motion.div>
           ) : null}
@@ -322,7 +334,9 @@ function PickerTile({
       onClick={onPick}
       initial={reduce ? false : { opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={reduce ? FADE : { ...SPRING_SMALL, delay: Math.min(index, 10) * 0.03 }}
+      transition={
+        reduce ? FADE : { ...SPRING_SMALL, delay: Math.min(index, 10) * 0.03 }
+      }
       className={cn(
         'group/tile relative block aspect-square w-full overflow-hidden rounded-[10px] border border-border-default bg-background-subtle text-left',
         'transition-[box-shadow,transform,border-color] duration-200 ease-(--ease-standard) hover:-translate-y-0.5 hover:border-accent hover:shadow-raise motion-reduce:hover:translate-y-0',

@@ -80,7 +80,11 @@ function UserAvatar({
   title?: string
 }) {
   return (
-    <Avatar size={size} className={className} title={title ?? name ?? undefined}>
+    <Avatar
+      size={size}
+      className={className}
+      title={title ?? name ?? undefined}
+    >
       {image ? <AvatarImage src={image} alt="" /> : null}
       <AvatarFallback>{initials(name)}</AvatarFallback>
     </Avatar>
@@ -113,58 +117,4 @@ function SystemAvatar({
   )
 }
 
-function AvatarBadge({ className, ...props }: React.ComponentProps<'span'>) {
-  return (
-    <span
-      data-slot="avatar-badge"
-      className={cn(
-        'absolute right-0 bottom-0 z-10 inline-flex size-2.5 items-center justify-center rounded-full bg-status-success ring-2 ring-background-surface select-none',
-        className,
-      )}
-      {...props}
-    />
-  )
-}
-
-function AvatarGroup({
-  className,
-  ...props
-}: React.ComponentProps<'div'>) {
-  return (
-    <div
-      data-slot="avatar-group"
-      className={cn(
-        'group/avatar-group flex -space-x-1.5 *:data-[slot=avatar]:ring-2 *:data-[slot=avatar]:ring-background-surface',
-        className,
-      )}
-      {...props}
-    />
-  )
-}
-
-function AvatarGroupCount({
-  className,
-  ...props
-}: React.ComponentProps<'div'>) {
-  return (
-    <div
-      data-slot="avatar-group-count"
-      className={cn(
-        'relative flex size-8 shrink-0 items-center justify-center rounded-full bg-background-subtle text-[11px] font-semibold text-text-secondary ring-2 ring-background-surface',
-        className,
-      )}
-      {...props}
-    />
-  )
-}
-
-export {
-  Avatar,
-  AvatarImage,
-  AvatarFallback,
-  AvatarBadge,
-  AvatarGroup,
-  AvatarGroupCount,
-  UserAvatar,
-  SystemAvatar,
-}
+export { UserAvatar, SystemAvatar }

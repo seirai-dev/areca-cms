@@ -15,18 +15,6 @@ function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
   return <SheetPrimitive.Root data-slot="sheet" {...props} />
 }
 
-function SheetTrigger({
-  ...props
-}: React.ComponentProps<typeof SheetPrimitive.Trigger>) {
-  return <SheetPrimitive.Trigger data-slot="sheet-trigger" {...props} />
-}
-
-function SheetClose({
-  ...props
-}: React.ComponentProps<typeof SheetPrimitive.Close>) {
-  return <SheetPrimitive.Close data-slot="sheet-close" {...props} />
-}
-
 function SheetPortal({
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Portal>) {
@@ -59,7 +47,7 @@ const SHEET_SIZES = {
 } as const
 
 /** Shared close control for sheets, panels and dialogs. */
-export function PanelCloseButton({ className }: { className?: string }) {
+function PanelCloseButton({ className }: { className?: string }) {
   return (
     <SheetPrimitive.Close
       className={cn(
@@ -102,7 +90,8 @@ function SheetContent({
         className={cn(
           'fixed z-overlay flex flex-col overflow-hidden text-text-primary outline-none surface-float',
           'motion-reduce:animate-none',
-          vertical && 'inset-y-0 h-dvh w-full sm:inset-y-2 sm:h-[calc(100dvh-1rem)]',
+          vertical &&
+            'inset-y-0 h-dvh w-full sm:inset-y-2 sm:h-[calc(100dvh-1rem)]',
           side === 'right' &&
             cn(
               'right-0 sm:right-2 sm:rounded-panel',
@@ -143,7 +132,10 @@ function SheetBody({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
       data-slot="sheet-body"
-      className={cn('scroll-quiet min-h-0 flex-1 overflow-y-auto p-5', className)}
+      className={cn(
+        'scroll-quiet min-h-0 flex-1 overflow-y-auto p-5',
+        className,
+      )}
       {...props}
     />
   )
@@ -155,19 +147,6 @@ function SheetHeader({ className, ...props }: React.ComponentProps<'div'>) {
       data-slot="sheet-header"
       className={cn(
         'flex shrink-0 flex-col gap-1 border-b border-border-default px-5 pt-5 pb-4 pr-14',
-        className,
-      )}
-      {...props}
-    />
-  )
-}
-
-function SheetFooter({ className, ...props }: React.ComponentProps<'div'>) {
-  return (
-    <div
-      data-slot="sheet-footer"
-      className={cn(
-        'mt-auto flex shrink-0 flex-col gap-2 border-t border-border-default px-5 py-4',
         className,
       )}
       {...props}
@@ -188,27 +167,4 @@ function SheetTitle({
   )
 }
 
-function SheetDescription({
-  className,
-  ...props
-}: React.ComponentProps<typeof SheetPrimitive.Description>) {
-  return (
-    <SheetPrimitive.Description
-      data-slot="sheet-description"
-      className={cn('text-callout text-text-secondary', className)}
-      {...props}
-    />
-  )
-}
-
-export {
-  Sheet,
-  SheetTrigger,
-  SheetClose,
-  SheetContent,
-  SheetBody,
-  SheetHeader,
-  SheetFooter,
-  SheetTitle,
-  SheetDescription,
-}
+export { Sheet, SheetContent, SheetBody, SheetHeader, SheetTitle }

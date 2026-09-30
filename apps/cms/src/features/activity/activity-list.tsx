@@ -3,7 +3,7 @@ import { useInfiniteQuery } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { Scroll } from '@phosphor-icons/react'
 
-import { formatAuditAction, formatAuditTarget } from '#/components/admin/helpers'
+import { formatAuditAction, formatAuditTarget } from '#/lib/admin/helpers'
 import { SystemAvatar, UserAvatar } from '#/components/ui/avatar'
 import { Button } from '#/components/ui/button'
 import { EmptyState } from '#/components/ui/empty-state'
@@ -17,7 +17,7 @@ import { listAuditLogFn } from '#/server/fn/admin'
 
 export type ActivityRow = Awaited<ReturnType<typeof listAuditLogFn>>[number]
 
-export const activityQueryKey = (organizationId?: string, siteId?: string) =>
+const activityQueryKey = (organizationId?: string, siteId?: string) =>
   ['activity', organizationId ?? 'all', siteId ?? 'all'] as const
 
 function startOfDay(date: Date) {
@@ -25,7 +25,7 @@ function startOfDay(date: Date) {
 }
 
 /** "Today", "Yesterday", then a date (brief §3.7). */
-export function dayLabel(value: Date | string, now = new Date()) {
+function dayLabel(value: Date | string, now = new Date()) {
   const date = value instanceof Date ? value : new Date(value)
   if (Number.isNaN(date.getTime())) return ''
   const diff = Math.round((startOfDay(now) - startOfDay(date)) / 86_400_000)
@@ -96,7 +96,12 @@ export function ActivityList({
     // One extra row tells us whether there is another page.
     queryFn: ({ pageParam }) =>
       listAuditLog({
-        data: { organizationId, siteId, limit: pageSize + 1, offset: pageParam },
+        data: {
+          organizationId,
+          siteId,
+          limit: pageSize + 1,
+          offset: pageParam,
+        },
       }),
     getNextPageParam: (lastPage, pages) =>
       lastPage.length > pageSize ? pages.length * pageSize : undefined,
@@ -182,9 +187,17 @@ export function ActivityList({
                   tone="plain"
                   icon={
                     row.actorName ? (
-                      <UserAvatar name={row.actorName} size="md" className="size-7 text-[10.5px]" />
+                      <UserAvatar
+                        name={row.actorName}
+                        size="md"
+                        className="size-7 text-[10.5px]"
+                      />
                     ) : (
-                      <SystemAvatar size="md" className="size-7" label={m.activity_system()} />
+                      <SystemAvatar
+                        size="md"
+                        className="size-7"
+                        label={m.activity_system()}
+                      />
                     )
                   }
                   title={
@@ -193,7 +206,8 @@ export function ActivityList({
                         {row.actorName ?? m.activity_system()}
                       </span>{' '}
                       <span className="font-normal text-text-secondary">
-                        {action.charAt(0).toLocaleLowerCase(getLocale()) + action.slice(1)}
+                        {action.charAt(0).toLocaleLowerCase(getLocale()) +
+                          action.slice(1)}
                       </span>
                       {target ? (
                         <>
@@ -206,7 +220,9 @@ export function ActivityList({
                   time={<RelativeTime value={row.createdAt} />}
                   meta={
                     showScope && scope ? (
-                      <span className="text-caption font-normal text-text-muted">{scope}</span>
+                      <span className="text-caption font-normal text-text-muted">
+                        {scope}
+                      </span>
                     ) : undefined
                   }
                 />

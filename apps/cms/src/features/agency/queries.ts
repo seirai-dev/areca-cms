@@ -1,6 +1,6 @@
 import { queryOptions } from '@tanstack/react-query'
 
-import { adminQueryKeys } from '#/components/admin/helpers'
+import { adminQueryKeys } from '#/lib/admin/helpers'
 import {
   getDokployCredentialStatusFn,
   listInvitationsFn,

@@ -10,10 +10,10 @@ import {
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
-import { errorMessage } from '#/components/admin/helpers'
+import { errorMessage } from '#/lib/admin/helpers'
 import { useShell } from '#/components/shell/shell-context'
 import { UserAvatar } from '#/components/ui/avatar'
-import { Tag } from '#/components/ui/badge'
+import { Tag } from '#/components/ui/tag'
 import { Button } from '#/components/ui/button'
 import { ConfirmDialog } from '#/components/ui/confirm-dialog'
 import {

@@ -16,8 +16,8 @@ import {
   Trash,
 } from '@phosphor-icons/react'
 
-import { queryKeys } from '#/components/editor/query-keys'
-import { entryTitle } from '#/components/editor/utils'
+import { queryKeys } from '#/lib/content/query-keys'
+import { entryTitle } from '#/lib/content/utils'
 import { useShortcut } from '#/components/shell/shortcuts'
 import { Button } from '#/components/ui/button'
 import { ConfirmDialog } from '#/components/ui/confirm-dialog'
@@ -64,7 +64,11 @@ import {
   useCollectionView,
   useEntryBulkActions,
 } from './use-collection-entries'
-import type { BulkAction, EntryRow, StatusFilter } from './use-collection-entries'
+import type {
+  BulkAction,
+  EntryRow,
+  StatusFilter,
+} from './use-collection-entries'
 
 type CollectionRecord = {
   id: string
@@ -95,9 +99,9 @@ export function CollectionScreen({
     queryKey: queryKeys.collections(site.id),
     queryFn: () => listCollectionsFn({ data: { siteId: site.id } }),
   })
-  const collection = (collectionsQuery.data as CollectionRecord[] | undefined)?.find(
-    (item) => item.key === collectionKey && (item.enabled || isAdmin),
-  )
+  const collection = (
+    collectionsQuery.data as CollectionRecord[] | undefined
+  )?.find((item) => item.key === collectionKey && (item.enabled || isAdmin))
 
   if (collectionsQuery.isError) {
     return (
@@ -174,7 +178,9 @@ function CollectionView({
   )
   const [selectMode, setSelectMode] = React.useState(false)
   const [selected, setSelected] = React.useState<Set<string>>(new Set())
-  const [confirmDelete, setConfirmDelete] = React.useState<string[] | null>(null)
+  const [confirmDelete, setConfirmDelete] = React.useState<string[] | null>(
+    null,
+  )
   const [sheet, setSheet] = React.useState<SchemaSegment | null>(null)
 
   const { query, rows, total } = useCollectionEntries({
@@ -222,10 +228,7 @@ function CollectionView({
       setConfirmDelete(ids)
       return
     }
-    bulk.mutate(
-      { action, ids },
-      { onSuccess: () => setSelected(new Set()) },
-    )
+    bulk.mutate({ action, ids }, { onSuccess: () => setSelected(new Set()) })
   }
 
   function onItemAction(action: BulkAction, row: EntryRow) {
@@ -467,7 +470,11 @@ function CollectionView({
                     siteId={siteId}
                     collectionKey={collection.key}
                     row={row}
-                    title={entryTitle(row.draftData, collection.fields, row.slug)}
+                    title={entryTitle(
+                      row.draftData,
+                      collection.fields,
+                      row.slug,
+                    )}
                     coverAssetId={coverOf(row, imageField)}
                     live={live}
                     canManage={canManage}
@@ -493,7 +500,11 @@ function CollectionView({
                     siteId={siteId}
                     collectionKey={collection.key}
                     row={row}
-                    title={entryTitle(row.draftData, collection.fields, row.slug)}
+                    title={entryTitle(
+                      row.draftData,
+                      collection.fields,
+                      row.slug,
+                    )}
                     coverAssetId={coverOf(row, imageField)}
                     live={live}
                     canManage={canManage}
@@ -555,7 +566,9 @@ function CollectionView({
           testId="bulk-draft"
         >
           <ArrowUUpLeft />
-          <span className="hidden sm:inline">{m.collection_move_to_draft_short()}</span>
+          <span className="hidden sm:inline">
+            {m.collection_move_to_draft_short()}
+          </span>
         </BulkButton>
         <BulkButton
           canManage={canManage}
@@ -588,7 +601,9 @@ function CollectionView({
         title={
           confirmDelete?.length === 1
             ? m.editor_delete_entry_title()
-            : m.editor_delete_entries_title({ count: confirmDelete?.length ?? 0 })
+            : m.editor_delete_entries_title({
+                count: confirmDelete?.length ?? 0,
+              })
         }
         description={
           confirmDelete?.length === 1

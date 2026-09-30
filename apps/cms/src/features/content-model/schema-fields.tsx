@@ -1,12 +1,7 @@
 import { Reorder, useDragControls, useReducedMotion } from 'motion/react'
-import {
-  ArrowLeft,
-  DotsSixVertical,
-  Lock,
-  Trash,
-} from '@phosphor-icons/react'
+import { ArrowLeft, DotsSixVertical, Lock, Trash } from '@phosphor-icons/react'
 
-import { Tag } from '#/components/ui/badge'
+import { Tag } from '#/components/ui/tag'
 import { Button } from '#/components/ui/button'
 import { FormField } from '#/components/ui/form-field'
 import { InsetIcon } from '#/components/ui/inset-list'
@@ -42,7 +37,7 @@ import type { FieldDraft, FieldErrors } from './schema-drafts'
  * Grid of field types: the first step of "Add field" (large tiles with a
  * one-line description) and the type control of an open field (`compact`).
  */
-export function FieldTypeTiles({
+function FieldTypeTiles({
   value,
   onPick,
   compact = false,
@@ -117,13 +112,7 @@ export function FieldTypeTiles({
    Field list
 ------------------------------------------------------------------------- */
 
-function RowText({
-  field,
-  index,
-}: {
-  field: FieldDraft
-  index: number
-}) {
+function RowText({ field, index }: { field: FieldDraft; index: number }) {
   return (
     <span className="grid min-w-0 flex-1 gap-0.5">
       <span
@@ -485,7 +474,9 @@ export function FieldFormPanel({
                 {targets.map((item) => (
                   <SelectItem key={item.key} value={item.key}>
                     <span>{item.label}</span>
-                    <span className="text-mono text-text-muted">{item.key}</span>
+                    <span className="text-mono text-text-muted">
+                      {item.key}
+                    </span>
                   </SelectItem>
                 ))}
               </SelectContent>

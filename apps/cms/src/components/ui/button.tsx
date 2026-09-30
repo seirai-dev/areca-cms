@@ -12,7 +12,7 @@ import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
 /** Keyboard focus: a 2px accent outline, offset 2px. Pointer focus: nothing. */
-export const FOCUS_RING =
+const FOCUS_RING =
   'outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus'
 
 /**
@@ -60,7 +60,8 @@ const buttonVariants = cva(
         default: 'h-9 px-3.5',
         lg: 'h-11 px-5 text-[15px]',
         icon: 'size-9',
-        'icon-xs': "size-7 rounded-[8px] [&_svg:not([class*='size-'])]:size-3.5",
+        'icon-xs':
+          "size-7 rounded-[8px] [&_svg:not([class*='size-'])]:size-3.5",
         'icon-sm': 'size-[30px] rounded-[8px]',
         'icon-md': 'size-9',
         'icon-lg': 'size-11',
@@ -231,5 +232,5 @@ function SplitButton({
   )
 }
 
-export { Button, ButtonGroup, SplitButton, buttonVariants }
+export { Button, SplitButton, buttonVariants }
 export type { ButtonProps }

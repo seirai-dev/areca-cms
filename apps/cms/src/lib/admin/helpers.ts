@@ -16,33 +16,8 @@ export const FIELD_TYPES: FieldType[] = [
   'url',
 ]
 
-const FIELD_TYPE_LABELS: Record<FieldType, () => string> = {
-  text: () => m.admin_field_type_text(),
-  textarea: () => m.admin_field_type_textarea(),
-  richtext: () => m.admin_field_type_richtext(),
-  image: () => m.admin_field_type_image(),
-  date: () => m.admin_field_type_date(),
-  datetime: () => m.admin_field_type_datetime(),
-  select: () => m.admin_field_type_select(),
-  reference: () => m.admin_field_type_reference(),
-  slug: () => m.admin_field_type_slug(),
-  boolean: () => m.admin_field_type_boolean(),
-  number: () => m.admin_field_type_number(),
-  url: () => m.admin_field_type_url(),
-}
-
-export function fieldTypeLabel(type: FieldType) {
-  return FIELD_TYPE_LABELS[type]()
-}
-
 export function membershipRoleLabel(role: MembershipRole) {
   return role === 'owner' ? m.admin_role_owner() : m.admin_role_editor()
-}
-
-export function membershipRoleOptionLabel(role: MembershipRole) {
-  return role === 'owner'
-    ? m.admin_role_owner_option()
-    : m.admin_role_editor_option()
 }
 
 export const adminQueryKeys = {
@@ -84,7 +59,7 @@ export function suggestSlug(name: string) {
     .replace(/^-+|-+$/g, '')
 }
 
-const AUDIT_ACTION_LABELS: Record<string, () => string> = {
+const AUDIT_ACTION_LABELS: Partial<Record<string, () => string>> = {
   'organization.create': () => m.admin_audit_action_organization_create(),
   'organization.dokploy_credentials_created': () =>
     m.admin_audit_action_organization_dokploy_credentials_created(),
@@ -163,15 +138,4 @@ export function formatAuditTarget(row: {
     return row.siteName
   }
   return row.targetType
-}
-
-export function formatDate(value: Date | string | null | undefined) {
-  if (!value) {
-    return '—'
-  }
-  const date = typeof value === 'string' ? new Date(value) : value
-  if (Number.isNaN(date.getTime())) {
-    return '—'
-  }
-  return date.toLocaleString()
 }

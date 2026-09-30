@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
-import { adminQueryKeys, errorMessage } from '#/components/admin/helpers'
+import { adminQueryKeys, errorMessage } from '#/lib/admin/helpers'
 import { Button } from '#/components/ui/button'
 import { ConfirmDialog } from '#/components/ui/confirm-dialog'
 import { FormField } from '#/components/ui/form-field'

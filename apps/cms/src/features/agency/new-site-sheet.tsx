@@ -3,11 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
-import {
-  adminQueryKeys,
-  errorMessage,
-  suggestSlug,
-} from '#/components/admin/helpers'
+import { adminQueryKeys, errorMessage, suggestSlug } from '#/lib/admin/helpers'
 import { Button } from '#/components/ui/button'
 import { FormField } from '#/components/ui/form-field'
 import { Input } from '#/components/ui/input'
@@ -19,7 +15,7 @@ import { createSiteFn } from '#/server/fn/admin'
 
 import { SlugField } from './slug-field'
 
-export const DEFAULT_PRODUCTION_URL = 'http://localhost:3001'
+const DEFAULT_PRODUCTION_URL = 'http://localhost:3001'
 
 /** A token the admin has not confirmed saving yet; survives a reload. */
 export type PendingToken = { siteName: string; token: string }

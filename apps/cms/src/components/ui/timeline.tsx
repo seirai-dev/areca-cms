@@ -4,7 +4,7 @@ import { absoluteTimeLabel, formatRelativeTime } from '#/lib/relative-time'
 import type { StatusTone } from '#/lib/status'
 import { cn } from '#/lib/utils'
 
-export { absoluteTimeLabel, formatRelativeTime }
+export { absoluteTimeLabel }
 
 /**
  * Activity timeline in the style of the "Proposal Activity" reference: round
@@ -17,7 +17,11 @@ export function Timeline({
   ...props
 }: React.ComponentProps<'ol'>) {
   return (
-    <ol data-slot="timeline" className={cn('relative grid', className)} {...props}>
+    <ol
+      data-slot="timeline"
+      className={cn('relative grid', className)}
+      {...props}
+    >
       {children}
     </ol>
   )
@@ -97,7 +101,9 @@ export function TimelineItem({
               ) : null}
             </div>
             {actions ? (
-              <div className="-mt-1 flex shrink-0 items-center gap-1">{actions}</div>
+              <div className="-mt-1 flex shrink-0 items-center gap-1">
+                {actions}
+              </div>
             ) : null}
           </div>
         ) : null}
@@ -117,23 +123,6 @@ export function TimelineCard({
       data-slot="timeline-card"
       className={cn(
         'rounded-[12px] border border-border-default bg-background-surface px-3.5 py-3 text-callout text-text-secondary',
-        className,
-      )}
-      {...props}
-    />
-  )
-}
-
-/** Day heading between timeline groups ("Today", "Yesterday", a date). */
-export function TimelineDay({
-  className,
-  ...props
-}: React.ComponentProps<'h3'>) {
-  return (
-    <h3
-      data-slot="timeline-day"
-      className={cn(
-        'sticky top-0 z-[2] -mx-1 mb-3 bg-[var(--timeline-ring,var(--color-background-elevated))]/95 px-1 py-1 text-overline text-text-muted backdrop-blur',
         className,
       )}
       {...props}

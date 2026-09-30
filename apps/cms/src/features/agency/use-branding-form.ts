@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
-import { errorMessage } from '#/components/admin/helpers'
+import { errorMessage } from '#/lib/admin/helpers'
 import {
   BRAND_COLOR_KEYS,
   DEFAULT_APP_NAME,
@@ -21,7 +21,7 @@ import {
   updateBrandingFn,
 } from '#/server/fn/branding'
 
-export const brandingQueryKey = ['branding'] as const
+const brandingQueryKey = ['branding'] as const
 
 export type ImageKind = 'logo' | 'favicon'
 
@@ -30,7 +30,7 @@ function cloneAdvancedColors(colors: AdvancedBrandColors): AdvancedBrandColors {
 }
 
 /** Keep only valid hex values, normalised. */
-export function normalizedPalette(colors: AdvancedBrandColors) {
+function normalizedPalette(colors: AdvancedBrandColors) {
   const result: AdvancedBrandColors = { light: {}, dark: {} }
   for (const mode of ['light', 'dark'] as const) {
     for (const key of BRAND_COLOR_KEYS) {

@@ -1,7 +1,13 @@
 import * as React from 'react'
-import { ArrowsClockwise, ImageSquare, Plus, Trash, Warning } from '@phosphor-icons/react'
+import {
+  ArrowsClockwise,
+  ImageSquare,
+  Plus,
+  Trash,
+  Warning,
+} from '@phosphor-icons/react'
 
-import { assetFileUrl } from '#/components/editor/utils'
+import { assetFileUrl } from '#/lib/content/utils'
 import { Button } from '#/components/ui/button'
 import { useAsset } from '#/features/collection/entry-cover'
 import { cn } from '#/lib/utils'
@@ -75,9 +81,13 @@ export function ImageWell({
                   ) : null}
                 </>
               ) : assetQuery.isLoading ? (
-                <p className="text-callout text-text-muted">{m.editor_loading()}</p>
+                <p className="text-callout text-text-muted">
+                  {m.editor_loading()}
+                </p>
               ) : (
-                <p className="text-callout text-text-error">{m.editor_image_deleted()}</p>
+                <p className="text-callout text-text-error">
+                  {m.editor_image_deleted()}
+                </p>
               )}
             </div>
             <Button

@@ -3,8 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { ArrowLeft, Stack, WarningCircle } from '@phosphor-icons/react'
 
-import { queryKeys } from '#/components/editor/query-keys'
-import { initialEntryData } from '#/components/editor/utils'
+import { queryKeys } from '#/lib/content/query-keys'
+import { initialEntryData } from '#/lib/content/utils'
 import { TOGGLE_DETAILS_EVENT, useShortcut } from '#/components/shell/shortcuts'
 import {
   AlertDialog,
@@ -79,9 +79,9 @@ export function EditorScreen({
     queryKey: queryKeys.collections(site.id),
     queryFn: () => listCollectionsFn({ data: { siteId: site.id } }),
   })
-  const collection = (collectionsQuery.data as CollectionRecord[] | undefined)?.find(
-    (item) => item.key === collectionKey,
-  )
+  const collection = (
+    collectionsQuery.data as CollectionRecord[] | undefined
+  )?.find((item) => item.key === collectionKey)
 
   if (collectionsQuery.isLoading) return <EditorSkeleton />
   if (collectionsQuery.isError) {
@@ -212,16 +212,23 @@ function EntryEditorView({
   }
 
   function revealField(key: string) {
-    const inPanel = key === slugField?.key || panelFields.some((field) => field.key === key)
+    const inPanel =
+      key === slugField?.key || panelFields.some((field) => field.key === key)
     if (inPanel) openDetails()
     const attempt = (tries: number) => {
-      const node = document.querySelector<HTMLElement>(`[data-field="${CSS.escape(key)}"]`)
+      const node = document.querySelector<HTMLElement>(
+        `[data-field="${CSS.escape(key)}"]`,
+      )
       if (!node) {
         if (tries > 0) window.setTimeout(() => attempt(tries - 1), 120)
         return
       }
       node.scrollIntoView({ block: 'center', behavior: 'smooth' })
-      node.querySelector<HTMLElement>('input, textarea, [contenteditable="true"], button')?.focus({ preventScroll: true })
+      node
+        .querySelector<HTMLElement>(
+          'input, textarea, [contenteditable="true"], button',
+        )
+        ?.focus({ preventScroll: true })
     }
     requestAnimationFrame(() => attempt(5))
   }
@@ -248,7 +255,11 @@ function EntryEditorView({
 
   if (routeEntryId && editor.entryQuery.isError && !entry) {
     return (
-      <div className="mx-auto grid max-w-xl gap-4 py-16" data-testid="entry-editor" data-ready="false">
+      <div
+        className="mx-auto grid max-w-xl gap-4 py-16"
+        data-testid="entry-editor"
+        data-ready="false"
+      >
         <QueryError
           error={editor.entryQuery.error}
           title={m.editor_could_not_load_entry()}
@@ -256,7 +267,10 @@ function EntryEditorView({
           retrying={editor.entryQuery.isFetching}
         />
         <Button asChild variant="secondary" className="w-fit">
-          <Link to="/sites/$siteId/c/$collectionKey" params={{ siteId, collectionKey: collection.key }}>
+          <Link
+            to="/sites/$siteId/c/$collectionKey"
+            params={{ siteId, collectionKey: collection.key }}
+          >
             <ArrowLeft />
             {m.editor_back_to({ name: collection.label })}
           </Link>
@@ -268,7 +282,9 @@ function EntryEditorView({
   if (editor.loading) return <EditorSkeleton />
 
   const title =
-    titleField && typeof data[titleField.key] === 'string' && (data[titleField.key] as string).trim()
+    titleField &&
+    typeof data[titleField.key] === 'string' &&
+    (data[titleField.key] as string).trim()
       ? (data[titleField.key] as string)
       : m.editor_untitled()
   const uiStatus = entry ? entryUiStatus(entry, live) : 'draft'
@@ -277,7 +293,9 @@ function EntryEditorView({
         status: entry.status,
         updatedAt: entry.updatedAt,
         draftData: initialEntryData(fields, entry.draftData),
-        publishedData: entry.publishedData ? initialEntryData(fields, entry.publishedData) : entry.publishedData,
+        publishedData: entry.publishedData
+          ? initialEntryData(fields, entry.publishedData)
+          : entry.publishedData,
       })
     : false
   const primary: PrimaryState = editor.isNew
@@ -292,7 +310,12 @@ function EntryEditorView({
 
   async function goLiveNow() {
     const result = await editor.goLiveNow().catch(() => null)
-    if (result && typeof result === 'object' && 'ok' in result && result.ok === false) {
+    if (
+      result &&
+      typeof result === 'object' &&
+      'ok' in result &&
+      result.ok === false
+    ) {
       panel.open('golive')
     }
   }
@@ -317,7 +340,9 @@ function EntryEditorView({
       canManage={canManage}
       revisions={editor.revisions}
       revisionsLoading={editor.revisionsQuery.isLoading}
-      revisionsError={editor.revisionsQuery.isError ? editor.revisionsQuery.error : null}
+      revisionsError={
+        editor.revisionsQuery.isError ? editor.revisionsQuery.error : null
+      }
       onRetryRevisions={() => void editor.revisionsQuery.refetch()}
       onRestore={setRestoreId}
       onCancelSchedule={editor.cancelSchedule}
@@ -398,8 +423,12 @@ function EntryEditorView({
                 data-testid="schedule-popover"
               >
                 <div className="mb-4 grid gap-0.5">
-                  <p className="text-headline text-text-primary">{m.editor_schedule_title()}</p>
-                  <p className="text-callout text-text-secondary">{m.editor_schedule_description()}</p>
+                  <p className="text-headline text-text-primary">
+                    {m.editor_schedule_title()}
+                  </p>
+                  <p className="text-callout text-text-secondary">
+                    {m.editor_schedule_description()}
+                  </p>
                 </div>
                 {scheduleForm}
               </PopoverContent>
@@ -414,14 +443,20 @@ function EntryEditorView({
           desktop && detailsOpen && 'lg:grid-cols-[minmax(0,1fr)_340px]',
         )}
       >
-        <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6 px-1 pt-4 sm:pt-10" aria-label={m.editor_canvas_label()}>
+        <section
+          className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6 px-1 pt-4 sm:pt-10"
+          aria-label={m.editor_canvas_label()}
+        >
           {hasErrors ? (
             <div
               role="alert"
               data-testid="editor-errors"
               className="mx-auto flex w-full max-w-[720px] items-start gap-3 rounded-card border border-border-error/30 bg-status-error-bg px-4 py-3 text-[14px] leading-5 text-text-primary"
             >
-              <WarningCircle weight="fill" className="mt-0.5 size-4 shrink-0 text-icon-error" />
+              <WarningCircle
+                weight="fill"
+                className="mt-0.5 size-4 shrink-0 text-icon-error"
+              />
               <span className="grid gap-0.5">
                 <span className="font-medium">
                   {editor.errorCount > 0
@@ -431,7 +466,9 @@ function EntryEditorView({
                     : m.editor_save_failed()}
                 </span>
                 {editor.formError ? (
-                  <span className="text-callout text-text-secondary">{editor.formError}</span>
+                  <span className="text-callout text-text-secondary">
+                    {editor.formError}
+                  </span>
                 ) : null}
               </span>
             </div>
@@ -457,7 +494,9 @@ function EntryEditorView({
             organizationId={site.organizationId}
             previewing={previewing}
             titleRef={titleRef}
-            transitionName={editor.entryId ? entryTransitionName(editor.entryId) : undefined}
+            transitionName={
+              editor.entryId ? entryTransitionName(editor.entryId) : undefined
+            }
           />
         </section>
 
@@ -524,7 +563,9 @@ function EntryEditorView({
       <AlertDialog open={editor.blocker.status === 'blocked'}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{m.editor_leave_unsaved_title()}</AlertDialogTitle>
+            <AlertDialogTitle>
+              {m.editor_leave_unsaved_title()}
+            </AlertDialogTitle>
             <AlertDialogDescription>
               {editor.status === 'blocked'
                 ? m.editor_leave_unsaved_new()
@@ -549,9 +590,14 @@ function EntryEditorView({
   )
 }
 
-export function EditorSkeleton() {
+function EditorSkeleton() {
   return (
-    <div className="grid gap-10" data-testid="entry-editor" data-ready="false" aria-busy="true">
+    <div
+      className="grid gap-10"
+      data-testid="entry-editor"
+      data-ready="false"
+      aria-busy="true"
+    >
       <div className="-mx-6 -mt-6 flex h-14 items-center gap-3 border-b border-border-default px-4">
         <Skeleton className="h-6 w-24" />
         <Skeleton className="h-5 w-14 rounded-full" />

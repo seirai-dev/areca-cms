@@ -12,7 +12,7 @@ import {
   WarningCircle,
 } from '@phosphor-icons/react'
 
-import { queryKeys } from '#/components/editor/query-keys'
+import { queryKeys } from '#/lib/content/query-keys'
 import { AccountMenu } from '#/components/shell/account-menu'
 import { NavCount, NavGroupLabel, NavItem } from '#/components/shell/nav-item'
 import { useShell } from '#/components/shell/shell-context'
@@ -20,7 +20,7 @@ import {
   AllSitesNav,
   WorkspaceSwitcher,
 } from '#/components/shell/workspace-switcher'
-import { Tag } from '#/components/ui/badge'
+import { Tag } from '#/components/ui/tag'
 import { Button } from '#/components/ui/button'
 import {
   DropdownMenu,
@@ -57,7 +57,10 @@ export type SidebarCollection = {
 }
 
 /** The current site's collections, as the sidebar and mobile sheet list them. */
-export function useSiteCollections(siteId: string | undefined, isAdmin: boolean) {
+export function useSiteCollections(
+  siteId: string | undefined,
+  isAdmin: boolean,
+) {
   const query = useQuery({
     queryKey: queryKeys.collections(siteId ?? ''),
     queryFn: () => listCollectionsFn({ data: { siteId: siteId! } }),
@@ -73,7 +76,9 @@ export function useSiteCollections(siteId: string | undefined, isAdmin: boolean)
   // Entry counts share the Content screen's cached count query.
   const counts = useQueries({
     queries: sorted.map((collection) => ({
-      queryKey: queryKeys.entries(siteId ?? '', collection.key, { status: 'count' }),
+      queryKey: queryKeys.entries(siteId ?? '', collection.key, {
+        status: 'count',
+      }),
       queryFn: () =>
         listEntriesFn({
           data: {
@@ -139,13 +144,19 @@ function ContentGroup({
 }) {
   const { me } = useShell()
   const isAdmin = me.user.isAgencyAdmin
-  const { collections, counts, isLoading } = useSiteCollections(site.id, isAdmin)
+  const { collections, counts, isLoading } = useSiteCollections(
+    site.id,
+    isAdmin,
+  )
   const creatable = collections.filter((item) => item.enabled)
 
   return (
     <div className="grid gap-0.5">
       {collapsed ? (
-        <div aria-hidden="true" className="mx-auto my-2 h-px w-6 bg-border-default" />
+        <div
+          aria-hidden="true"
+          className="mx-auto my-2 h-px w-6 bg-border-default"
+        />
       ) : (
         <NavGroupLabel
           actions={
@@ -193,15 +204,25 @@ function ContentGroup({
                       <Plus weight="bold" className="size-3.5" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" side="right" className="min-w-52">
+                  <DropdownMenuContent
+                    align="start"
+                    side="right"
+                    className="min-w-52"
+                  >
                     <DropdownMenuLabel>{m.shell_new_menu()}</DropdownMenuLabel>
                     {creatable.map((collection) => {
-                      const Icon = collectionIcon(collection.key, collection.label)
+                      const Icon = collectionIcon(
+                        collection.key,
+                        collection.label,
+                      )
                       return (
                         <DropdownMenuItem key={collection.id} asChild>
                           <Link
                             to="/sites/$siteId/c/$collectionKey/new"
-                            params={{ siteId: site.id, collectionKey: collection.key }}
+                            params={{
+                              siteId: site.id,
+                              collectionKey: collection.key,
+                            }}
                             onClick={onNavigate}
                             data-testid={`new-${collection.key}`}
                           >
@@ -262,7 +283,7 @@ function ContentGroup({
 }
 
 /** Site workspace navigation (desktop sidebar and mobile sheets share it). */
-export function SiteNav({
+function SiteNav({
   site,
   collapsed = false,
   onNavigate,
@@ -283,7 +304,9 @@ export function SiteNav({
         data-testid="site-nav"
         className={cn('grid gap-4', collapsed && 'justify-items-center gap-1')}
       >
-        <div className={cn('grid gap-0.5', collapsed && 'justify-items-center')}>
+        <div
+          className={cn('grid gap-0.5', collapsed && 'justify-items-center')}
+        >
           <NavItem
             link={{ to: overview.to, params: { siteId: site.id } }}
             icon={overview.icon}
@@ -295,10 +318,19 @@ export function SiteNav({
             group={group}
           />
         </div>
-        <ContentGroup site={site} collapsed={collapsed} onNavigate={onNavigate} />
-        <div className={cn('grid gap-0.5', collapsed && 'justify-items-center')}>
+        <ContentGroup
+          site={site}
+          collapsed={collapsed}
+          onNavigate={onNavigate}
+        />
+        <div
+          className={cn('grid gap-0.5', collapsed && 'justify-items-center')}
+        >
           {collapsed ? (
-            <div aria-hidden="true" className="mx-auto my-2 h-px w-6 bg-border-default" />
+            <div
+              aria-hidden="true"
+              className="mx-auto my-2 h-px w-6 bg-border-default"
+            />
           ) : null}
           {rest.map((item) => (
             <NavItem
@@ -319,7 +351,7 @@ export function SiteNav({
 }
 
 /** Agency workspace navigation. */
-export function AgencyNav({
+function AgencyNav({
   collapsed = false,
   onNavigate,
   group = 'sidebar-agency',
@@ -339,7 +371,9 @@ export function AgencyNav({
         data-workspace="agency"
         className={cn('grid gap-4', collapsed && 'justify-items-center gap-1')}
       >
-        <div className={cn('grid gap-0.5', collapsed && 'justify-items-center')}>
+        <div
+          className={cn('grid gap-0.5', collapsed && 'justify-items-center')}
+        >
           {[overview, clients].map((item) => (
             <NavItem
               key={item.key}
@@ -373,10 +407,14 @@ export function AgencyNav({
             >
               {m.shell_nav_all_sites()}
             </NavGroupLabel>
-            {sitesOpen ? <AllSitesNav collapsed={collapsed} onNavigate={onNavigate} /> : null}
+            {sitesOpen ? (
+              <AllSitesNav collapsed={collapsed} onNavigate={onNavigate} />
+            ) : null}
           </div>
         )}
-        <div className={cn('grid gap-0.5', collapsed && 'justify-items-center')}>
+        <div
+          className={cn('grid gap-0.5', collapsed && 'justify-items-center')}
+        >
           {rest.map((item) => (
             <NavItem
               key={item.key}
@@ -402,7 +440,9 @@ export function useFailedSites(sites: MeSite[], enabled: boolean) {
     queries: capped.map((site) => ({ ...latestJobsQuery(site.id), enabled })),
   })
   return capped.filter((_, index) => {
-    const latest = results[index]?.data?.find((job) => job.status !== 'cancelled')
+    const latest = results[index]?.data?.find(
+      (job) => job.status !== 'cancelled',
+    )
     return latest?.status === 'failed'
   })
 }
@@ -438,8 +478,13 @@ function AttentionCard({ collapsed }: { collapsed: boolean }) {
         {m.shell_system()}
       </span>
       <div className="flex items-start gap-2">
-        <WarningCircle weight="fill" className="mt-0.5 size-4 shrink-0 text-icon-error" />
-        <span className="text-[13px] leading-[18px] font-medium text-text-primary">{label}</span>
+        <WarningCircle
+          weight="fill"
+          className="mt-0.5 size-4 shrink-0 text-icon-error"
+        />
+        <span className="text-[13px] leading-[18px] font-medium text-text-primary">
+          {label}
+        </span>
       </div>
       <div className="flex flex-wrap gap-1">
         {failed.slice(0, 3).map((site) => (
@@ -484,7 +529,9 @@ export function Sidebar({
       className={cn(
         'fixed inset-y-0 left-0 z-navbar hidden flex-col border-r border-border-default bg-sidebar md:flex',
         'transition-[width] duration-200 ease-(--ease-standard) motion-reduce:transition-none',
-        collapsed ? 'w-(--sidebar-rail-width) items-center' : 'w-(--sidebar-width)',
+        collapsed
+          ? 'w-(--sidebar-rail-width) items-center'
+          : 'w-(--sidebar-width)',
       )}
     >
       <div className={cn('shrink-0 pt-3', collapsed ? 'px-2' : 'px-3')}>
@@ -505,7 +552,12 @@ export function Sidebar({
           <AgencyNav collapsed={collapsed} />
         ) : null}
       </div>
-      <div className={cn('grid shrink-0 gap-2 pb-3', collapsed ? 'justify-items-center px-2' : 'px-3')}>
+      <div
+        className={cn(
+          'grid shrink-0 gap-2 pb-3',
+          collapsed ? 'justify-items-center px-2' : 'px-3',
+        )}
+      >
         {siteMode ? (
           <GoLiveTray
             siteId={site.id}
@@ -525,13 +577,24 @@ export function Sidebar({
             <AccountMenu variant={collapsed ? 'rail' : 'row'} />
           </div>
           {canCollapse ? (
-            <Hint label={collapsed ? m.shell_expand_sidebar() : m.shell_collapse_sidebar()} side="right">
+            <Hint
+              label={
+                collapsed
+                  ? m.shell_expand_sidebar()
+                  : m.shell_collapse_sidebar()
+              }
+              side="right"
+            >
               <Button
                 type="button"
                 variant="quiet"
                 size="icon-sm"
                 onClick={onToggleCollapsed}
-                aria-label={collapsed ? m.shell_expand_sidebar() : m.shell_collapse_sidebar()}
+                aria-label={
+                  collapsed
+                    ? m.shell_expand_sidebar()
+                    : m.shell_collapse_sidebar()
+                }
                 aria-pressed={!collapsed}
                 data-testid="toggle-sidebar"
               >

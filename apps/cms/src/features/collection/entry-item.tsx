@@ -10,7 +10,7 @@ import {
   Trash,
 } from '@phosphor-icons/react'
 
-import { queryKeys } from '#/components/editor/query-keys'
+import { queryKeys } from '#/lib/content/query-keys'
 import { UserAvatar } from '#/components/ui/avatar'
 import { Button } from '#/components/ui/button'
 import { Checkbox } from '#/components/ui/checkbox'
@@ -96,7 +96,7 @@ function EditorLink({
 }
 
 /** The ⋯ quick menu of a card or row. */
-export function EntryQuickMenu({
+function EntryQuickMenu({
   siteId,
   collectionKey,
   row,
@@ -272,7 +272,8 @@ export function EntryCard(props: EntryItemProps) {
         'transition-[transform,box-shadow,border-color] duration-200 ease-(--ease-standard)',
         'hover:-translate-y-0.5 hover:border-border-strong hover:shadow-raise motion-reduce:hover:translate-y-0',
         'focus-within:border-border-strong',
-        selected && 'border-accent shadow-[0_0_0_1.5px_var(--color-accent)] hover:border-accent',
+        selected &&
+          'border-accent shadow-[0_0_0_1.5px_var(--color-accent)] hover:border-accent',
         muted && 'opacity-75',
       )}
     >
@@ -372,7 +373,11 @@ export function EntryListRow(props: EntryItemProps) {
     >
       {selectMode ? (
         <span className="pl-3">
-          <SelectBox selected={selected} title={title} onToggle={onToggleSelect} />
+          <SelectBox
+            selected={selected}
+            title={title}
+            onToggle={onToggleSelect}
+          />
         </span>
       ) : null}
       {selectMode ? (

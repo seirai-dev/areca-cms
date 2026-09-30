@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { ArrowSquareOut, FilePdf, FileText, Trash } from '@phosphor-icons/react'
 
-import { assetFileUrl } from '#/components/editor/utils'
+import { assetFileUrl } from '#/lib/content/utils'
 import { Button } from '#/components/ui/button'
 import { ConfirmDialog } from '#/components/ui/confirm-dialog'
 import { CopyButton } from '#/components/ui/copy-button'

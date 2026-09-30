@@ -1,7 +1,7 @@
 import { useCallback, useSyncExternalStore } from 'react'
 
 /** Shell breakpoints (brief §2.1). */
-export const BREAKPOINTS = {
+const BREAKPOINTS = {
   /** Below this: top bar + bottom tab bar + sheets. */
   mobile: 768,
   /** Below this (and ≥ mobile): the sidebar can collapse to a 64px rail. */

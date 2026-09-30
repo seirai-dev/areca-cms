@@ -20,7 +20,7 @@ export type RevisionGroup<T extends RevisionLike = RevisionLike> = {
   items: T[]
 }
 
-export const GROUP_WINDOW_MS = 15 * 60 * 1000
+const GROUP_WINDOW_MS = 15 * 60 * 1000
 
 function time(value: string | Date) {
   return value instanceof Date ? value.getTime() : new Date(value).getTime()

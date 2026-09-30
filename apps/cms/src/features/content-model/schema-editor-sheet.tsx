@@ -1,8 +1,14 @@
 import { useQuery } from '@tanstack/react-query'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
-import { Lock, Plus, SlidersHorizontal, Stack, Trash } from '@phosphor-icons/react'
+import {
+  Lock,
+  Plus,
+  SlidersHorizontal,
+  Stack,
+  Trash,
+} from '@phosphor-icons/react'
 
-import { queryKeys } from '#/components/editor/query-keys'
+import { queryKeys } from '#/lib/content/query-keys'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -201,7 +207,9 @@ export function SchemaEditorSheet({
                 <div className="grid gap-0.5">
                   <p className="text-headline text-text-primary tnum">
                     {fieldCount === 1
-                      ? m.admin_collection_field_count_one({ count: fieldCount })
+                      ? m.admin_collection_field_count_one({
+                          count: fieldCount,
+                        })
                       : m.admin_collection_field_count_other({
                           count: fieldCount,
                         })}
@@ -395,16 +403,23 @@ export function SchemaEditorSheet({
         </div>
       </SlideOver>
 
-      <AlertDialog open={editor.discardOpen} onOpenChange={editor.setDiscardOpen}>
+      <AlertDialog
+        open={editor.discardOpen}
+        onOpenChange={editor.setDiscardOpen}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{m.admin_collection_discard_title()}</AlertDialogTitle>
+            <AlertDialogTitle>
+              {m.admin_collection_discard_title()}
+            </AlertDialogTitle>
             <AlertDialogDescription>
               {m.content_schema_discard_description()}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>{m.admin_collection_keep_editing()}</AlertDialogCancel>
+            <AlertDialogCancel>
+              {m.admin_collection_keep_editing()}
+            </AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
               data-testid="discard-collection-changes"

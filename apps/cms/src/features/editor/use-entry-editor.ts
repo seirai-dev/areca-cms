@@ -3,15 +3,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useBlocker } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
-import { queryKeys } from '#/components/editor/query-keys'
+import { queryKeys } from '#/lib/content/query-keys'
 import {
   errorMessage,
   fieldErrorsFromUnknown,
   firstTextField,
   initialEntryData,
   slugify,
-} from '#/components/editor/utils'
-import type { FieldErrorMap } from '#/components/editor/utils'
+} from '#/lib/content/utils'
+import type { FieldErrorMap } from '#/lib/content/utils'
 import { isEditedSinceReady } from '#/features/golive/entry-live-state'
 import { useGoLive, useInvalidateGoLive } from '#/features/golive/use-go-live'
 import type { EntryData, EntryStatus, Field } from '#/lib/types'
@@ -35,9 +35,9 @@ import {
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
 /** Autosave waits this long after the last change (brief §3.5). */
-export const AUTOSAVE_DELAY = 2000
+const AUTOSAVE_DELAY = 2000
 /** Navigation waits at most this long for a pending save. */
-export const LEAVE_WAIT = 3000
+const LEAVE_WAIT = 3000
 
 export type EntryRecord = {
   id: string
@@ -82,7 +82,8 @@ function payloadFromData(data: EntryData) {
   return next
 }
 
-const sleep = (ms: number) => new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), ms))
+const sleep = (ms: number) =>
+  new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), ms))
 
 /**
  * Everything the editor does, without markup (brief §3.5, §5.2):
@@ -158,9 +159,14 @@ export function useEntryEditor({
      Local draft
   ---------------------------------------------------------------------- */
 
-  const [data, setDataState] = React.useState<EntryData>(() => initialEntryData(fields))
+  const [data, setDataState] = React.useState<EntryData>(() =>
+    initialEntryData(fields),
+  )
   const dataRef = React.useRef(data)
-  const initialJson = React.useMemo(() => JSON.stringify(initialEntryData(fields)), [fields])
+  const initialJson = React.useMemo(
+    () => JSON.stringify(initialEntryData(fields)),
+    [fields],
+  )
   const baselineRef = React.useRef(initialJson)
   const [baseline, setBaselineState] = React.useState(initialJson)
   const serverJsonRef = React.useRef<string | null>(null)
@@ -237,7 +243,12 @@ export function useEntryEditor({
       setData(next)
       if (slugField && key === slugField.key) setSlugManual(true)
       setFieldErrors((errors) => {
-        const touched = [key, ...(slugField && key === titleField?.key && !slugManual ? [slugField.key] : [])]
+        const touched = [
+          key,
+          ...(slugField && key === titleField?.key && !slugManual
+            ? [slugField.key]
+            : []),
+        ]
         if (!touched.some((item) => item in errors)) return errors
         const copy = { ...errors }
         for (const item of touched) delete copy[item]
@@ -251,7 +262,10 @@ export function useEntryEditor({
     if (!slugField || !titleField) return
     const title = dataRef.current[titleField.key]
     setSlugManual(false)
-    updateFieldRaw(slugField.key, slugify(typeof title === 'string' ? title : ''))
+    updateFieldRaw(
+      slugField.key,
+      slugify(typeof title === 'string' ? title : ''),
+    )
   }
 
   function updateFieldRaw(key: string, value: unknown) {
@@ -286,8 +300,12 @@ export function useEntryEditor({
   const invalidateLists = React.useCallback(
     (id?: string) =>
       Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['entries', siteId, collectionKey] }),
-        id ? queryClient.invalidateQueries({ queryKey: queryKeys.revisions(id) }) : null,
+        queryClient.invalidateQueries({
+          queryKey: ['entries', siteId, collectionKey],
+        }),
+        id
+          ? queryClient.invalidateQueries({ queryKey: queryKeys.revisions(id) })
+          : null,
         invalidateGoLiveRef.current(),
       ]),
     [queryClient, siteId, collectionKey],
@@ -310,7 +328,9 @@ export function useEntryEditor({
       const saved = (
         id
           ? await updateDraftFn({ data: { id, data: payload } })
-          : await createEntryFn({ data: { siteId, collectionKey, data: payload } })
+          : await createEntryFn({
+              data: { siteId, collectionKey, data: payload },
+            })
       ) as EntryRecord
       serverJsonRef.current = JSON.stringify(
         initialEntryData(fieldsRef.current, saved.draftData),
@@ -320,10 +340,13 @@ export function useEntryEditor({
       setFormError(null)
       setLastSavedAt(new Date())
       setStatus('saved')
-      queryClient.setQueryData(queryKeys.entry(saved.id), (old: EntryRecord | undefined) => ({
-        ...old,
-        ...saved,
-      }))
+      queryClient.setQueryData(
+        queryKeys.entry(saved.id),
+        (old: EntryRecord | undefined) => ({
+          ...old,
+          ...saved,
+        }),
+      )
       void invalidateLists(saved.id)
       if (!id) {
         entryIdRef.current = saved.id
@@ -343,13 +366,23 @@ export function useEntryEditor({
       const hasFieldErrors = Object.keys(parsed.fieldErrors).some(Boolean)
       setFormError(
         parsed.formError ??
-          (hasFieldErrors ? null : errorMessage(error, m.editor_could_not_save())),
+          (hasFieldErrors
+            ? null
+            : errorMessage(error, m.editor_could_not_save())),
       )
       setStatus('failed')
       if (explicitRef.current) reveal(parsed.fieldErrors)
       return 'failed'
     }
-  }, [slugField, siteId, collectionKey, queryClient, setBaseline, invalidateLists, reveal])
+  }, [
+    slugField,
+    siteId,
+    collectionKey,
+    queryClient,
+    setBaseline,
+    invalidateLists,
+    reveal,
+  ])
 
   const requested = () => pendingRef.current
   const run = React.useCallback((): Promise<Outcome> => {
@@ -434,7 +467,8 @@ export function useEntryEditor({
         leavingRef.current = false
       }
     },
-    enableBeforeUnload: () => !bypassRef.current && (isDirtyNow() || Boolean(runningRef.current)),
+    enableBeforeUnload: () =>
+      !bypassRef.current && (isDirtyNow() || Boolean(runningRef.current)),
     withResolver: true,
   })
 
@@ -464,7 +498,9 @@ export function useEntryEditor({
     return null
   }
 
-  function actionError(fallback: ReturnType<typeof m.editor_something_went_wrong>) {
+  function actionError(
+    fallback: ReturnType<typeof m.editor_something_went_wrong>,
+  ) {
     return (error: unknown) => {
       const parsed = fieldErrorsFromUnknown(error)
       if (Object.keys(parsed.fieldErrors).some(Boolean)) {
@@ -484,7 +520,10 @@ export function useEntryEditor({
     },
     onSuccess: async (result) => {
       if (!result) return
-      if (!result.quiet) toast.success(m.editor_marked_ready(), { description: m.editor_marked_ready_description() })
+      if (!result.quiet)
+        toast.success(m.editor_marked_ready(), {
+          description: m.editor_marked_ready_description(),
+        })
       await invalidateEntry(result.id)
     },
     onError: actionError(m.editor_could_not_mark_ready()),
@@ -505,7 +544,11 @@ export function useEntryEditor({
       const id = await ensureSaved()
       if (!id) return null
       await scheduleEntryFn({
-        data: { id, scheduledAt: input.at.toISOString(), timezone: input.timeZone },
+        data: {
+          id,
+          scheduledAt: input.at.toISOString(),
+          timezone: input.timeZone,
+        },
       })
       return id
     },
@@ -563,7 +606,9 @@ export function useEntryEditor({
       bypassRef.current = true
       if (timerRef.current) clearTimeout(timerRef.current)
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['entries', siteId, collectionKey] }),
+        queryClient.invalidateQueries({
+          queryKey: ['entries', siteId, collectionKey],
+        }),
         invalidateGoLive(),
       ])
       await onDeleted?.()
@@ -583,10 +628,13 @@ export function useEntryEditor({
       hydrate(restored, true)
       setFieldErrors({})
       setFormError(null)
-      queryClient.setQueryData(queryKeys.entry(restored.id), (old: EntryRecord | undefined) => ({
-        ...old,
-        ...restored,
-      }))
+      queryClient.setQueryData(
+        queryKeys.entry(restored.id),
+        (old: EntryRecord | undefined) => ({
+          ...old,
+          ...restored,
+        }),
+      )
       toast.success(m.editor_revision_restored())
       await invalidateEntry(restored.id)
     },
@@ -619,7 +667,9 @@ export function useEntryEditor({
     archiveMutation.isPending ||
     deleteMutation.isPending ||
     restoreMutation.isPending
-  const loading = Boolean(routeEntryId) && (entryQuery.isLoading || hydratedId !== routeEntryId)
+  const loading =
+    Boolean(routeEntryId) &&
+    (entryQuery.isLoading || hydratedId !== routeEntryId)
   const ready = Boolean(entry) && hydratedId === entryId && status !== 'saving'
 
   return {
@@ -654,7 +704,8 @@ export function useEntryEditor({
       return result
     },
     goLiveNowPending: goLiveNowMutation.isPending || goLive.isPending,
-    schedule: (at: Date, timeZone: string) => scheduleMutation.mutateAsync({ at, timeZone }),
+    schedule: (at: Date, timeZone: string) =>
+      scheduleMutation.mutateAsync({ at, timeZone }),
     schedulePending: scheduleMutation.isPending,
     cancelSchedule: () => cancelScheduleMutation.mutate(),
     unpublish: () => unpublishMutation.mutate(),

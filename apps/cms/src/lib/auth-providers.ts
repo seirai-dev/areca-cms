@@ -16,7 +16,7 @@ export const SOCIAL_PROVIDER_IDS = ['github', 'google', 'discord'] as const
 export type SocialProviderId = (typeof SOCIAL_PROVIDER_IDS)[number]
 
 /** Provider id used for the Microsoft Entra ID connection registered via SSO. */
-export const MICROSOFT_SSO_PROVIDER_ID = 'microsoft'
+const MICROSOFT_SSO_PROVIDER_ID = 'microsoft'
 
 export type AuthMethods = {
   emailPassword: boolean

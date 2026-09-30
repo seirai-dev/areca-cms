@@ -17,22 +17,6 @@ const TYPE_SCALE = [
   'overline',
   'mono',
   'editor-title',
-  // LEGACY: remove in phase 3
-  'ds-heading-1',
-  'ds-heading-2',
-  'ds-heading-3',
-  'ds-heading-4',
-  'ds-heading-5',
-  'ds-heading-6',
-  'ds-body-lg',
-  'ds-body-md',
-  'ds-body-sm',
-  'ds-body-xs',
-  'ds-label-md',
-  'ds-label-sm',
-  'ds-mono-sm',
-  'ds-mono-xs',
-  'ds-mono-caps',
 ]
 
 export const cn = createCn({
@@ -40,7 +24,7 @@ export const cn = createCn({
     classGroups: {
       'font-size': [{ text: TYPE_SCALE }],
       shadow: [{ shadow: ['card', 'float', 'raise'] }],
-      rounded: [{ rounded: ['control', 'card', 'panel', 'thumb', 'pill', 'surface'] }],
+      rounded: [{ rounded: ['control', 'card', 'panel', 'thumb'] }],
     },
   },
 })

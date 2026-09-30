@@ -2,7 +2,7 @@ import * as React from 'react'
 import { ArrowsClockwise, Plugs, Stack } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
-import { errorMessage } from '#/components/admin/helpers'
+import { errorMessage } from '#/lib/admin/helpers'
 import { Button } from '#/components/ui/button'
 import { ConfirmDialog } from '#/components/ui/confirm-dialog'
 import { CopyButton } from '#/components/ui/copy-button'

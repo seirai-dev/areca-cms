@@ -1,7 +1,7 @@
 import { useQueries, useQuery } from '@tanstack/react-query'
 
-import { queryKeys } from '#/components/editor/query-keys'
-import { entryTitle } from '#/components/editor/utils'
+import { queryKeys } from '#/lib/content/query-keys'
+import { entryTitle } from '#/lib/content/utils'
 import type { EntryData, Field } from '#/lib/types'
 import { listCollectionsFn, listEntriesFn } from '#/server/fn/content'
 

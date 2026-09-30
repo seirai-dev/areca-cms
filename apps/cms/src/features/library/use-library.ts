@@ -6,8 +6,8 @@ import {
 } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
-import type { MediaAsset } from '#/components/editor/media-picker'
-import { errorMessage } from '#/components/editor/utils'
+import type { MediaAsset } from '#/features/editor/media-upload'
+import { errorMessage } from '#/lib/content/utils'
 import { m } from '#/paraglide/messages'
 import { deleteAssetFn, listAssetsFn, updateAssetFn } from '#/server/fn/assets'
 
@@ -18,7 +18,7 @@ export type LibraryAsset = MediaAsset & {
   createdBy?: string | null
 }
 
-export const LIBRARY_PAGE_SIZE = 40
+const LIBRARY_PAGE_SIZE = 40
 export const ACCEPTED_TYPES =
   'image/jpeg,image/png,image/webp,image/gif,application/pdf'
 
@@ -50,7 +50,7 @@ export function fileKind(asset: {
   return dot > 0 ? asset.originalFilename.slice(dot + 1).toUpperCase() : ''
 }
 
-export function libraryQueryKey(organizationId: string, search: string) {
+function libraryQueryKey(organizationId: string, search: string) {
   // Shares the `['assets', organizationId]` prefix with the media picker so
   // one invalidation refreshes both.
   return ['assets', organizationId, 'library', search] as const

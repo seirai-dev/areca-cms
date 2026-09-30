@@ -21,7 +21,11 @@ import {
   DialogTitle,
 } from '#/components/ui/dialog'
 import { Kbd, useModifierKey } from '#/components/ui/kbd'
-import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '#/components/ui/popover'
 import { SegmentedControl } from '#/components/ui/segmented-control'
 import { Sheet, SheetContent, SheetTitle } from '#/components/ui/sheet'
 import { Hint } from '#/components/ui/tooltip'
@@ -29,7 +33,12 @@ import { useIsMobile } from '#/hooks/use-mobile'
 import { authClient } from '#/lib/auth-client'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
-import { getLocale, locales, localizeHref, setLocale } from '#/paraglide/runtime'
+import {
+  getLocale,
+  locales,
+  localizeHref,
+  setLocale,
+} from '#/paraglide/runtime'
 import type { Locale } from '#/paraglide/runtime'
 
 export const LOCALE_LABELS = {
@@ -41,11 +50,12 @@ export const LOCALE_LABELS = {
 type ThemeChoice = 'light' | 'dark' | 'system'
 
 /** Light · Dark · Auto, as a segmented control (test id `theme-toggle`). */
-export function AppearanceControl({ size = 'sm' }: { size?: 'sm' | 'md' }) {
+function AppearanceControl({ size = 'sm' }: { size?: 'sm' | 'md' }) {
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = React.useState(false)
   React.useEffect(() => setMounted(true), [])
-  const value = (mounted ? (theme as ThemeChoice | undefined) : undefined) ?? 'system'
+  const value =
+    (mounted ? (theme as ThemeChoice | undefined) : undefined) ?? 'system'
   return (
     <SegmentedControl<ThemeChoice>
       aria-label={m.shell_appearance()}
@@ -55,9 +65,24 @@ export function AppearanceControl({ size = 'sm' }: { size?: 'sm' | 'md' }) {
       value={value}
       onValueChange={setTheme}
       options={[
-        { value: 'light', label: m.shell_theme_light(), icon: <Sun />, testId: 'theme-light' },
-        { value: 'dark', label: m.shell_theme_dark(), icon: <Moon />, testId: 'theme-dark' },
-        { value: 'system', label: m.shell_theme_auto(), icon: <Monitor />, testId: 'theme-system' },
+        {
+          value: 'light',
+          label: m.shell_theme_light(),
+          icon: <Sun />,
+          testId: 'theme-light',
+        },
+        {
+          value: 'dark',
+          label: m.shell_theme_dark(),
+          icon: <Moon />,
+          testId: 'theme-dark',
+        },
+        {
+          value: 'system',
+          label: m.shell_theme_auto(),
+          icon: <Monitor />,
+          testId: 'theme-system',
+        },
       ]}
     />
   )
@@ -98,7 +123,9 @@ function AccountMenuBody({ onClose }: { onClose: () => void }) {
       </div>
 
       <div className="grid gap-2 border-t border-border-default px-2.5 pt-3 pb-2">
-        <span className="text-overline text-text-muted">{m.shell_appearance()}</span>
+        <span className="text-overline text-text-muted">
+          {m.shell_appearance()}
+        </span>
         <AppearanceControl />
       </div>
 
@@ -108,7 +135,9 @@ function AccountMenuBody({ onClose }: { onClose: () => void }) {
         aria-label={m.shell_language()}
         data-testid="language-switcher"
       >
-        <span className="px-2.5 pb-1 text-overline text-text-muted">{m.shell_language()}</span>
+        <span className="px-2.5 pb-1 text-overline text-text-muted">
+          {m.shell_language()}
+        </span>
         {locales.map((code) => (
           <button
             key={code}
@@ -183,7 +212,11 @@ export function AccountMenu({
         aria-label={m.shell_account_menu({ name: me.user.name })}
         className="group/account flex h-11 w-full min-w-0 items-center gap-2.5 rounded-[10px] px-2 text-left outline-none transition-colors hover:bg-surface-state-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-border-focus data-[state=open]:bg-surface-state-hover"
       >
-        <UserAvatar name={me.user.name} size="sm" className="size-7 text-[11px]" />
+        <UserAvatar
+          name={me.user.name}
+          size="sm"
+          className="size-7 text-[11px]"
+        />
         <span className="min-w-0 flex-1 truncate text-[14px] leading-5 font-medium text-text-primary">
           {me.user.name}
         </span>
@@ -208,7 +241,11 @@ export function AccountMenu({
       <>
         {React.cloneElement(trigger, { onClick: () => setOpen(true) })}
         <Sheet open={open} onOpenChange={setOpen}>
-          <SheetContent side="bottom" className="px-3 pt-1 pb-4" showCloseButton={false}>
+          <SheetContent
+            side="bottom"
+            className="px-3 pt-1 pb-4"
+            showCloseButton={false}
+          >
             <SheetTitle className="sr-only">{m.shell_account()}</SheetTitle>
             <AccountMenuBody onClose={() => setOpen(false)} />
           </SheetContent>
@@ -259,7 +296,9 @@ export function ShortcutsDialog() {
       <DialogContent size="sm" data-testid="shortcuts-dialog">
         <DialogHeader>
           <DialogTitle>{m.shell_keyboard_shortcuts()}</DialogTitle>
-          <DialogDescription>{m.shell_shortcuts_description()}</DialogDescription>
+          <DialogDescription>
+            {m.shell_shortcuts_description()}
+          </DialogDescription>
         </DialogHeader>
         <ul className="-mx-1 grid">
           {SHORTCUT_LIST.map((shortcut) => (
@@ -267,7 +306,9 @@ export function ShortcutsDialog() {
               key={shortcut.id}
               className="flex h-10 items-center justify-between gap-4 border-b border-border-default px-1 last:border-b-0"
             >
-              <span className="text-body text-text-primary">{labels[shortcut.id]}</span>
+              <span className="text-body text-text-primary">
+                {labels[shortcut.id]}
+              </span>
               <span className="flex items-center gap-1">
                 {shortcut.keys.map((key, index) => (
                   <React.Fragment key={`${key}-${index}`}>

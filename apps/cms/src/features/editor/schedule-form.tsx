@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Globe } from '@phosphor-icons/react'
 
-import { browserTimezone, timezoneOptions } from '#/components/editor/utils'
+import { browserTimezone, timezoneOptions } from '#/lib/content/utils'
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
@@ -68,10 +68,12 @@ export function ScheduleForm({
     setTime(wall.time)
   }
 
-  const activePreset = (['tomorrow', 'monday', 'hour'] as const).find((preset) => {
-    const wall = wallTime(presetInstant(preset, timeZone), timeZone)
-    return wall.date === date && wall.time === time
-  })
+  const activePreset = (['tomorrow', 'monday', 'hour'] as const).find(
+    (preset) => {
+      const wall = wallTime(presetInstant(preset, timeZone), timeZone)
+      return wall.date === date && wall.time === time
+    },
+  )
 
   const summary = instant
     ? new Intl.DateTimeFormat(getLocale(), {
@@ -98,7 +100,11 @@ export function ScheduleForm({
         if (instant && !past) onSubmit(instant, timeZone)
       }}
     >
-      <div className="flex flex-wrap gap-1.5" role="group" aria-label={m.editor_schedule_quick()}>
+      <div
+        className="flex flex-wrap gap-1.5"
+        role="group"
+        aria-label={m.editor_schedule_quick()}
+      >
         {(
           [
             ['tomorrow', m.editor_schedule_tomorrow()],
@@ -171,7 +177,11 @@ export function ScheduleForm({
           <div className="grid gap-1.5">
             <Label htmlFor="schedule-tz">{m.editor_time_zone()}</Label>
             <Select value={timeZone} onValueChange={setTimeZone}>
-              <SelectTrigger className="w-full" id="schedule-tz" data-testid="schedule-tz">
+              <SelectTrigger
+                className="w-full"
+                id="schedule-tz"
+                data-testid="schedule-tz"
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

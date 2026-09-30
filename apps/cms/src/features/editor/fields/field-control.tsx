@@ -12,14 +12,14 @@ import { Switch } from '#/components/ui/switch'
 import {
   fromDatetimeLocalValue,
   toDatetimeLocalValue,
-} from '#/components/editor/utils'
+} from '#/lib/content/utils'
 import type { Field } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 
 import { ImageWell } from './image-well'
 import { ReferencePicker } from './reference-picker'
 
-export function fieldId(field: Field) {
+function fieldId(field: Field) {
   return `field-${field.key}`
 }
 
@@ -53,7 +53,11 @@ export function FieldControl({
   if (field.type === 'boolean') {
     const checked = value === true
     return (
-      <div data-field={field.key} data-invalid={invalid ? 'true' : undefined} className="grid gap-1.5">
+      <div
+        data-field={field.key}
+        data-invalid={invalid ? 'true' : undefined}
+        className="grid gap-1.5"
+      >
         <div className="flex items-center justify-between gap-4 rounded-[10px] border border-border-default bg-background-surface px-3 py-2.5">
           <label htmlFor={id} className="grid min-w-0 cursor-pointer gap-0.5">
             <span className="text-[14px] leading-5 font-medium text-text-primary">
@@ -70,7 +74,11 @@ export function FieldControl({
               </span>
             ) : null}
           </label>
-          <Switch id={id} checked={checked} onCheckedChange={(next) => onChange(next)} />
+          <Switch
+            id={id}
+            checked={checked}
+            onCheckedChange={(next) => onChange(next)}
+          />
         </div>
         {error ? (
           <p className="text-callout text-text-error" role="alert">
@@ -113,8 +121,15 @@ export function FieldControl({
             ) : null}
           </div>
         ) : (
-          <Select value={current || undefined} onValueChange={(next) => onChange(next)}>
-            <SelectTrigger id={id} className="w-full" aria-invalid={invalid || undefined}>
+          <Select
+            value={current || undefined}
+            onValueChange={(next) => onChange(next)}
+          >
+            <SelectTrigger
+              id={id}
+              className="w-full"
+              aria-invalid={invalid || undefined}
+            >
               <SelectValue placeholder={m.editor_select_placeholder()} />
             </SelectTrigger>
             <SelectContent>
@@ -184,7 +199,9 @@ export function FieldControl({
           type="datetime-local"
           value={toDatetimeLocalValue(value)}
           aria-invalid={invalid || undefined}
-          onChange={(event) => onChange(fromDatetimeLocalValue(event.target.value))}
+          onChange={(event) =>
+            onChange(fromDatetimeLocalValue(event.target.value))
+          }
         />
       )
       break

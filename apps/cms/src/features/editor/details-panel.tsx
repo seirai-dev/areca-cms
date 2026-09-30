@@ -1,8 +1,8 @@
 import * as React from 'react'
 import { ArrowCounterClockwise, CalendarX } from '@phosphor-icons/react'
 
-import { formatDateTime, slugify } from '#/components/editor/utils'
-import type { FieldErrorMap } from '#/components/editor/utils'
+import { formatDateTime, slugify } from '#/lib/content/utils'
+import type { FieldErrorMap } from '#/lib/content/utils'
 import { UserAvatar } from '#/components/ui/avatar'
 import { CopyButton } from '#/components/ui/copy-button'
 import { Hint } from '#/components/ui/tooltip'
@@ -97,7 +97,10 @@ export function DetailsPanel({
   onCancelSchedule: () => void
 }) {
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)] gap-6" data-testid="entry-details">
+    <div
+      className="grid grid-cols-[minmax(0,1fr)] gap-6"
+      data-testid="entry-details"
+    >
       {slugField ? (
         <Section title={m.editor_details_page()} testId="details-page">
           <SlugEditor
@@ -147,7 +150,9 @@ export function DetailsPanel({
 
       <Section title={m.editor_details_history()} testId="details-history">
         {isNew ? (
-          <p className="text-callout text-text-muted">{m.editor_history_after_first_save()}</p>
+          <p className="text-callout text-text-muted">
+            {m.editor_history_after_first_save()}
+          </p>
         ) : (
           <EntryHistory
             revisions={revisions}
@@ -194,7 +199,10 @@ function SlugEditor({
       data-invalid={error ? 'true' : undefined}
     >
       <div className="flex items-baseline justify-between gap-3">
-        <label htmlFor={id} className="text-[13px] leading-[18px] font-medium text-text-primary">
+        <label
+          htmlFor={id}
+          className="text-[13px] leading-[18px] font-medium text-text-primary"
+        >
           {field.label}
         </label>
         {showReset ? (
@@ -216,7 +224,10 @@ function SlugEditor({
           error ? 'border-border-error' : 'border-border-strong',
         )}
       >
-        <span className="max-w-[55%] shrink-0 truncate text-text-muted" title={`${host}${before}`}>
+        <span
+          className="max-w-[55%] shrink-0 truncate text-text-muted"
+          title={`${host}${before}`}
+        >
           {host}
           {before}
         </span>
@@ -232,20 +243,30 @@ function SlugEditor({
           className="h-full min-w-0 flex-1 bg-transparent text-text-primary outline-none placeholder:text-text-muted"
           placeholder="my-page"
         />
-        {after ? <span className="shrink-0 text-text-muted">{after}</span> : null}
+        {after ? (
+          <span className="shrink-0 text-text-muted">{after}</span>
+        ) : null}
       </div>
       {error ? (
         <p className="text-callout text-text-error" role="alert">
           {error}
         </p>
       ) : (
-        <p className="text-caption font-normal text-text-muted">{m.editor_slug_rules()}</p>
+        <p className="text-caption font-normal text-text-muted">
+          {m.editor_slug_rules()}
+        </p>
       )}
     </div>
   )
 }
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+function Row({
+  label,
+  children,
+}: {
+  label: string
+  children: React.ReactNode
+}) {
   return (
     <div className="flex min-h-6 items-center justify-between gap-3">
       <dt className="text-caption font-normal text-text-muted">{label}</dt>
@@ -277,7 +298,9 @@ function StatusBlock({
           live={live}
           long
         />
-        <p className="text-callout text-text-muted">{m.editor_status_new_hint()}</p>
+        <p className="text-callout text-text-muted">
+          {m.editor_status_new_hint()}
+        </p>
       </div>
     )
   }
@@ -303,7 +326,10 @@ function StatusBlock({
             })}
           </span>
           <span aria-hidden="true">·</span>
-          <Hint label={canManage ? '' : editorPublishReason()} wrapDisabled={!canManage}>
+          <Hint
+            label={canManage ? '' : editorPublishReason()}
+            wrapDisabled={!canManage}
+          >
             <button
               type="button"
               disabled={!canManage}
@@ -327,14 +353,26 @@ function StatusBlock({
           <RelativeTime value={entry.updatedAt} />
         </Row>
         <Row label={m.editor_marked_ready_at()}>
-          {entry.publishedAt ? <RelativeTime value={entry.publishedAt} /> : m.editor_never()}
+          {entry.publishedAt ? (
+            <RelativeTime value={entry.publishedAt} />
+          ) : (
+            m.editor_never()
+          )}
         </Row>
         <Row label={m.editor_author()}>
-          <UserAvatar name={entry.createdByName ?? m.editor_unknown_author()} size="xs" />
-          <span className="truncate">{entry.createdByName?.trim() || m.editor_unknown_author()}</span>
+          <UserAvatar
+            name={entry.createdByName ?? m.editor_unknown_author()}
+            size="xs"
+          />
+          <span className="truncate">
+            {entry.createdByName?.trim() || m.editor_unknown_author()}
+          </span>
         </Row>
         <Row label={m.editor_entry_id()}>
-          <span className="truncate font-mono text-[11.5px] text-text-muted" title={entry.id}>
+          <span
+            className="truncate font-mono text-[11.5px] text-text-muted"
+            title={entry.id}
+          >
             {entry.id.slice(0, 8)}
           </span>
           <CopyButton

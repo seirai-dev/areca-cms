@@ -8,7 +8,7 @@ import { Hint } from '#/components/ui/tooltip'
 import { SPRING_SMALL } from '#/lib/motion'
 import { cn } from '#/lib/utils'
 
-export const NAV_ITEM_CLASS = cn(
+const NAV_ITEM_CLASS = cn(
   'group/nav relative flex h-8 w-full min-w-0 items-center gap-2.5 rounded-[8px] px-2.5 text-[14px] leading-5 select-none',
   'text-text-secondary transition-colors duration-150 ease-(--ease-standard)',
   'hover:bg-surface-state-hover hover:text-text-primary',
@@ -20,7 +20,7 @@ export const NAV_ITEM_CLASS = cn(
  * The active background that glides between nav items (`layoutId`). One per
  * nav container (pass the container's `layoutGroup` id).
  */
-export function NavActiveBackground({ group }: { group: string }) {
+function NavActiveBackground({ group }: { group: string }) {
   const reduce = useReducedMotion()
   if (reduce) {
     return (
@@ -128,7 +128,9 @@ export function NavItem({
 export function NavCount({ value }: { value: number | undefined }) {
   if (value === undefined) return null
   return (
-    <span className="text-[12px] font-normal text-text-muted tnum">{value}</span>
+    <span className="text-[12px] font-normal text-text-muted tnum">
+      {value}
+    </span>
   )
 }
 
@@ -143,7 +145,9 @@ export function NavGroupLabel({
   return (
     <div className="flex h-7 items-center justify-between gap-2 pr-1 pl-2.5">
       <span className="text-overline text-text-muted">{children}</span>
-      {actions ? <span className="flex items-center gap-0.5">{actions}</span> : null}
+      {actions ? (
+        <span className="flex items-center gap-0.5">{actions}</span>
+      ) : null}
     </div>
   )
 }

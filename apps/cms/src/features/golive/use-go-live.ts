@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
-import { queryKeys } from '#/components/editor/query-keys'
-import { errorMessage } from '#/components/editor/utils'
+import { queryKeys } from '#/lib/content/query-keys'
+import { errorMessage } from '#/lib/content/utils'
 import { m } from '#/paraglide/messages'
 import {
   cancelJobFn,
@@ -17,8 +17,12 @@ export function useInvalidateGoLive(siteId: string) {
   const queryClient = useQueryClient()
   return () =>
     Promise.all([
-      queryClient.invalidateQueries({ queryKey: queryKeys.releaseStatus(siteId) }),
-      queryClient.invalidateQueries({ queryKey: queryKeys.publications(siteId) }),
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.releaseStatus(siteId),
+      }),
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.publications(siteId),
+      }),
       queryClient.invalidateQueries({ queryKey: queryKeys.buildJobs(siteId) }),
       queryClient.invalidateQueries({ queryKey: ['golive-pending', siteId] }),
     ])
@@ -63,7 +67,8 @@ export function useGoLive(siteId: string) {
   })
 
   return {
-    goLive: (options?: { urgent?: boolean }) => mutation.mutateAsync(options ?? {}),
+    goLive: (options?: { urgent?: boolean }) =>
+      mutation.mutateAsync(options ?? {}),
     isPending: mutation.isPending,
     errors: errorsQuery.data,
     clearErrors: () => queryClient.setQueryData(errorsKey(siteId), []),

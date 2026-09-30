@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 
-import { adminQueryKeys } from '#/components/admin/helpers'
+import { adminQueryKeys } from '#/lib/admin/helpers'
 import { Card } from '#/components/ui/card'
 import { PageHeader } from '#/components/ui/page-header'
 import {
@@ -41,7 +41,9 @@ export function AgencyActivityScreen({
         actions={
           <Select
             value={clientId ?? ALL}
-            onValueChange={(value) => onClientChange(value === ALL ? undefined : value)}
+            onValueChange={(value) =>
+              onClientChange(value === ALL ? undefined : value)
+            }
           >
             <SelectTrigger
               aria-label={m.activity_filter_client()}

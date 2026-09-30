@@ -34,7 +34,7 @@ export function findSite(me: Me, siteId: string | undefined) {
   return me.sites.find((site) => site.id === siteId)
 }
 
-export function isOrgOwner(me: Me, organizationId: string) {
+function isOrgOwner(me: Me, organizationId: string) {
   return me.memberships.some(
     (membership) =>
       membership.organizationId === organizationId &&
@@ -45,16 +45,6 @@ export function isOrgOwner(me: Me, organizationId: string) {
 /** Owners and agency admins: publish, People, Activity. */
 export function canManageSite(me: Me, organizationId: string) {
   return me.user.isAgencyAdmin || isOrgOwner(me, organizationId)
-}
-
-/** Agency admins only: site Settings and the Agency workspace. */
-export function isAgencyAdmin(me: Me) {
-  return me.user.isAgencyAdmin
-}
-
-export function siteRole(me: Me, organizationId: string): SiteRole {
-  if (me.user.isAgencyAdmin) return 'admin'
-  return isOrgOwner(me, organizationId) ? 'owner' : 'editor'
 }
 
 export function groupSitesByOrg(sites: MeSite[]) {
@@ -247,19 +237,3 @@ export function newEntryLabel(collectionLabel: string) {
 /* -------------------------------------------------------------------------
    Paths (for code outside route components)
 ------------------------------------------------------------------------- */
-
-/** Parse `/sites/:siteId[/...]` and return the site id. */
-export function siteIdFromPath(pathname: string) {
-  const id = pathname.match(/^\/sites\/([^/]+)/)?.[1]
-  return id ? decodeURIComponent(id) : undefined
-}
-
-/** Parse `/sites/:siteId/c/:collectionKey[/...]`. */
-export function collectionFromPath(pathname: string) {
-  const match = pathname.match(/^\/sites\/[^/]+\/c\/([^/]+)(?:\/([^/]+))?/)
-  if (!match) return undefined
-  return {
-    collectionKey: decodeURIComponent(match[1]),
-    entryId: match[2] ? decodeURIComponent(match[2]) : undefined,
-  }
-}

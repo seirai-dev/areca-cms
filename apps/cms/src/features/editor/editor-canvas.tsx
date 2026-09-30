@@ -1,6 +1,6 @@
 import * as React from 'react'
 
-import type { FieldErrorMap } from '#/components/editor/utils'
+import type { FieldErrorMap } from '#/lib/content/utils'
 import type { EntryData, Field } from '#/lib/types'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
@@ -9,7 +9,10 @@ import { RichTextEditor } from './rich-text/rich-text-editor'
 import { RichTextPreview } from './rich-text/rich-text-preview'
 
 /** Grow a textarea with its content. */
-function useAutoGrow(ref: React.RefObject<HTMLTextAreaElement | null>, value: string) {
+function useAutoGrow(
+  ref: React.RefObject<HTMLTextAreaElement | null>,
+  value: string,
+) {
   React.useLayoutEffect(() => {
     const node = ref.current
     if (!node) return
@@ -85,7 +88,11 @@ export function EditorCanvas({
             aria-invalid={errors[titleField.key] ? true : undefined}
             placeholder={m.editor_untitled()}
             className="block w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-editor-title text-balance text-text-primary outline-none placeholder:text-text-disabled"
-            style={transitionName ? { viewTransitionName: transitionName } : undefined}
+            style={
+              transitionName
+                ? { viewTransitionName: transitionName }
+                : undefined
+            }
           />
           {errors[titleField.key] ? (
             <p className="text-callout text-text-error" role="alert">
@@ -129,7 +136,9 @@ export function EditorCanvas({
             />
           )}
           {field.description ? (
-            <p className="text-caption font-normal text-text-muted">{field.description}</p>
+            <p className="text-caption font-normal text-text-muted">
+              {field.description}
+            </p>
           ) : null}
           {errors[field.key] ? (
             <p className="text-callout text-text-error" role="alert">
@@ -177,7 +186,9 @@ function CanvasTextarea({
         value={text}
         onChange={(event) => onChange(event.target.value)}
         aria-invalid={invalid || undefined}
-        placeholder={m.editor_canvas_placeholder({ label: field.label.toLocaleLowerCase() })}
+        placeholder={m.editor_canvas_placeholder({
+          label: field.label.toLocaleLowerCase(),
+        })}
         className={cn(
           'block min-h-7 w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-body-lg text-text-primary outline-none placeholder:text-text-disabled',
         )}

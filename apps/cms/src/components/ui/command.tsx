@@ -54,7 +54,9 @@ function CommandDialog({
             className,
           )}
         >
-          <DialogPrimitive.Title className="sr-only">{title}</DialogPrimitive.Title>
+          <DialogPrimitive.Title className="sr-only">
+            {title}
+          </DialogPrimitive.Title>
           <DialogPrimitive.Description className="sr-only">
             {description}
           </DialogPrimitive.Description>
@@ -98,7 +100,9 @@ function CommandInput({
         data-slot="command-input"
         className={cn(
           'flex w-full bg-transparent outline-hidden placeholder:text-text-muted disabled:cursor-not-allowed disabled:opacity-50',
-          size === 'lg' ? 'h-14 text-[17px] tracking-[-0.01em]' : 'h-11 text-[14px]',
+          size === 'lg'
+            ? 'h-14 text-[17px] tracking-[-0.01em]'
+            : 'h-11 text-[14px]',
           className,
         )}
         {...props}
@@ -192,14 +196,13 @@ function CommandMeta({ className, ...props }: React.ComponentProps<'span'>) {
   return (
     <span
       data-slot="command-meta"
-      className={cn('ml-auto shrink-0 truncate text-callout text-text-muted', className)}
+      className={cn(
+        'ml-auto shrink-0 truncate text-callout text-text-muted',
+        className,
+      )}
       {...props}
     />
   )
-}
-
-function CommandShortcut(props: React.ComponentProps<'span'>) {
-  return <CommandMeta {...props} />
 }
 
 export {
@@ -211,6 +214,5 @@ export {
   CommandGroup,
   CommandItem,
   CommandMeta,
-  CommandShortcut,
   CommandSeparator,
 }

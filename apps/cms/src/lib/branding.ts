@@ -188,7 +188,7 @@ export const DEFAULT_BRANDING: BrandingView = {
   customized: false,
 }
 
-export const HEX_COLOR_RE = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i
+const HEX_COLOR_RE = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i
 
 export function normalizeHex(value: string): string | null {
   const trimmed = value.trim()
@@ -282,43 +282,12 @@ export function hexToOklch(hex: string): Oklch | null {
   return { l: L, c, h: c < 1e-4 ? 0 : h }
 }
 
-/** Lightness of each step, 50 → 950, taken from the built-in clay scale. */
-const STEP_LIGHTNESS = [
-  0.1569, 0.2129, 0.3148, 0.4112, 0.5032, 0.5883, 0.6735, 0.7557, 0.8376,
-  0.9204, 0.9592,
-] as const
-
-/** Chroma relative to the 500 step, from the built-in fern scale. */
-const STEP_CHROMA = [
-  0.15, 0.27, 0.45, 0.65, 0.85, 1, 0.83, 0.58, 0.4, 0.2, 0.12,
-] as const
-
-export const SCALE_STEPS = [
-  50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950,
-] as const
-
 /** Keep derived scales inside a range that still renders on sRGB screens. */
 const MAX_PEAK_CHROMA = 0.16
 const MIN_PEAK_CHROMA = 0.04
 
 function fmt(value: number, digits = 4) {
   return Number(value.toFixed(digits)).toString()
-}
-
-export function buildScale(
-  base: Oklch,
-  opts: { chromaFactor?: number } = {},
-): Record<(typeof SCALE_STEPS)[number], string> {
-  const peak =
-    Math.min(MAX_PEAK_CHROMA, Math.max(MIN_PEAK_CHROMA, base.c)) *
-    (opts.chromaFactor ?? 1)
-  const out = {} as Record<(typeof SCALE_STEPS)[number], string>
-  SCALE_STEPS.forEach((step, index) => {
-    const l = STEP_LIGHTNESS[index]
-    const c = peak * STEP_CHROMA[index]
-    out[step] = `oklch(${fmt(l * 100, 2)}% ${fmt(c)} ${fmt(base.h, 2)})`
-  })
-  return out
 }
 
 /**
@@ -359,7 +328,7 @@ function accentTones(base: Oklch, mode: AccentMode) {
 export type AccentMode = 'light' | 'dark'
 
 /** Black or white, whichever reads better on the accent. */
-export function accentTextColor(hex: string): string {
+function accentTextColor(hex: string): string {
   const onWhite = contrastRatio('#ffffff', hex) ?? 1
   const onInk = contrastRatio('#111111', hex) ?? 1
   return onInk >= onWhite ? '#111111' : '#ffffff'

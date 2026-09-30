@@ -3,8 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 import { FileText } from '@phosphor-icons/react'
 
 import type { MediaAsset } from '#/features/editor/media-upload'
-import { queryKeys } from '#/components/editor/query-keys'
-import { assetFileUrl } from '#/components/editor/utils'
+import { queryKeys } from '#/lib/content/query-keys'
+import { assetFileUrl } from '#/lib/content/utils'
 import { cn } from '#/lib/utils'
 import { getAssetFn } from '#/server/fn/assets'
 
@@ -55,7 +55,9 @@ function LetterTile({
           {letter}
         </span>
       ) : (
-        <FileText className={large ? 'size-8 opacity-60' : 'size-4 opacity-70'} />
+        <FileText
+          className={large ? 'size-8 opacity-60' : 'size-4 opacity-70'}
+        />
       )}
     </span>
   )
@@ -74,7 +76,8 @@ export function EntryCover({
   const assetQuery = useAsset(assetId)
   const asset = (assetQuery.data ?? null) as MediaAsset | null
   const [broken, setBroken] = useState(false)
-  const image = asset && asset.mimeType.startsWith('image/') && !broken ? asset : null
+  const image =
+    asset && asset.mimeType.startsWith('image/') && !broken ? asset : null
   return (
     <div
       className={cn(
@@ -134,7 +137,10 @@ export function EntryThumb({
   }
   if (title) {
     return (
-      <LetterTile title={title} className={cn(box, 'shrink-0 rounded-[8px]', className)} />
+      <LetterTile
+        title={title}
+        className={cn(box, 'shrink-0 rounded-[8px]', className)}
+      />
     )
   }
   return (

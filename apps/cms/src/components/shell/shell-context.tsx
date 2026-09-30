@@ -30,8 +30,3 @@ export function useShell() {
   if (!value) throw new Error('useShell must be used inside <AppShell>')
   return value
 }
-
-/** Same as `useShell` but returns null outside the shell (auth pages). */
-export function useOptionalShell() {
-  return React.useContext(ShellContext)
-}

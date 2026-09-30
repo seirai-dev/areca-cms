@@ -5,9 +5,9 @@ import { useServerFn } from '@tanstack/react-start'
 import { CaretRight, Plus, Stack } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
-import { errorMessage } from '#/components/admin/helpers'
-import { queryKeys } from '#/components/editor/query-keys'
-import { Tag } from '#/components/ui/badge'
+import { errorMessage } from '#/lib/admin/helpers'
+import { queryKeys } from '#/lib/content/query-keys'
+import { Tag } from '#/components/ui/tag'
 import { Button } from '#/components/ui/button'
 import { EmptyState } from '#/components/ui/empty-state'
 import { InsetGroup, InsetIcon } from '#/components/ui/inset-list'
@@ -175,12 +175,17 @@ function ContentTypeRow({
       ),
     onError: (error, _enabled, context) => {
       if (context?.previous) {
-        queryClient.setQueryData(queryKeys.collections(siteId), context.previous)
+        queryClient.setQueryData(
+          queryKeys.collections(siteId),
+          context.previous,
+        )
       }
       toast.error(errorMessage(error))
     },
     onSettled: () =>
-      queryClient.invalidateQueries({ queryKey: queryKeys.collections(siteId) }),
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.collections(siteId),
+      }),
   })
 
   return (
@@ -203,7 +208,9 @@ function ContentTypeRow({
               <span
                 className={cn(
                   'truncate text-[14px] leading-5 font-medium',
-                  collection.enabled ? 'text-text-primary' : 'text-text-secondary',
+                  collection.enabled
+                    ? 'text-text-primary'
+                    : 'text-text-secondary',
                 )}
               >
                 {collection.label}
@@ -230,7 +237,9 @@ function ContentTypeRow({
           checked={collection.enabled}
           disabled={toggle.isPending}
           onCheckedChange={(value) => toggle.mutate(value)}
-          aria-label={m.content_model_enabled_label({ label: collection.label })}
+          aria-label={m.content_model_enabled_label({
+            label: collection.label,
+          })}
           title={
             collection.enabled
               ? m.content_model_switch_off_hint()

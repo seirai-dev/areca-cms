@@ -7,9 +7,9 @@ import {
   adminQueryKeys,
   errorMessage,
   membershipRoleLabel,
-} from '#/components/admin/helpers'
+} from '#/lib/admin/helpers'
 import { UserAvatar } from '#/components/ui/avatar'
-import { Tag } from '#/components/ui/badge'
+import { Tag } from '#/components/ui/tag'
 import { Button } from '#/components/ui/button'
 import { ConfirmDialog } from '#/components/ui/confirm-dialog'
 import { EmptyState } from '#/components/ui/empty-state'

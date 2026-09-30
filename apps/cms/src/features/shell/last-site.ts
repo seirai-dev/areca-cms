@@ -12,12 +12,12 @@ import { getCookie } from '@tanstack/react-start/server'
  * UI support only; it stores ids the user can already see.
  */
 
-export const LAST_SITE_COOKIE = 'areca.lastSite'
+const LAST_SITE_COOKIE = 'areca.lastSite'
 const RECENT_KEY = 'areca.recentSites'
 const RECENT_MAX = 5
 const ONE_YEAR = 60 * 60 * 24 * 365
 
-export const getLastSiteCookieFn = createServerFn({ method: 'GET' }).handler(
+const getLastSiteCookieFn = createServerFn({ method: 'GET' }).handler(
   () => getCookie(LAST_SITE_COOKIE) ?? null,
 )
 
@@ -62,10 +62,10 @@ export function rememberSite(siteId: string) {
     /* cookies unavailable */
   }
   try {
-    const next = [siteId, ...readRecentSites().filter((id) => id !== siteId)].slice(
-      0,
-      RECENT_MAX,
-    )
+    const next = [
+      siteId,
+      ...readRecentSites().filter((id) => id !== siteId),
+    ].slice(0, RECENT_MAX)
     localStorage.setItem(RECENT_KEY, JSON.stringify(next))
   } catch {
     /* localStorage unavailable */

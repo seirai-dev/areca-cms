@@ -50,12 +50,12 @@ export function PageHeader({
           {title}
         </Heading>
         {description ? (
-          <p className="max-w-[65ch] text-[15px] leading-[22px] text-text-secondary">
+          <div className="max-w-[65ch] text-[15px] leading-[22px] text-text-secondary">
             {description}
-          </p>
+          </div>
         ) : null}
         {meta ? (
-          <p className="text-caption font-normal text-text-muted">{meta}</p>
+          <div className="text-caption font-normal text-text-muted">{meta}</div>
         ) : null}
       </div>
       {actions ? (

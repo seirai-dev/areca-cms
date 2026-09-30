@@ -6,7 +6,7 @@ import { z } from 'zod'
  * `?panel=activity` on any `/sites/$siteId/**` route. `release` scrolls the
  * Go‑live panel to one release ("See what happened").
  */
-export const SITE_PANELS = ['golive', 'activity'] as const
+const SITE_PANELS = ['golive', 'activity'] as const
 export type SitePanel = (typeof SITE_PANELS)[number]
 
 export const sitePanelSearchSchema = z.object({

@@ -52,49 +52,13 @@ export function SettingsSection({
         <div
           className={cn(
             'grid min-w-0 gap-5 p-5 surface-card',
-            danger && 'border-[color-mix(in_oklab,var(--color-status-error)_30%,transparent)]',
+            danger &&
+              'border-[color-mix(in_oklab,var(--color-status-error)_30%,transparent)]',
           )}
         >
           {children}
         </div>
       )}
     </section>
-  )
-}
-
-/** A row inside a settings card: label + help on the left, control right. */
-export function SettingsRow({
-  label,
-  description,
-  htmlFor,
-  children,
-  className,
-}: {
-  label: React.ReactNode
-  description?: React.ReactNode
-  htmlFor?: string
-  children: React.ReactNode
-  className?: string
-}) {
-  return (
-    <div
-      className={cn(
-        'flex flex-wrap items-center justify-between gap-x-6 gap-y-2',
-        className,
-      )}
-    >
-      <div className="grid min-w-0 flex-1 gap-0.5">
-        <label
-          htmlFor={htmlFor}
-          className="text-[14px] leading-5 font-medium text-text-primary"
-        >
-          {label}
-        </label>
-        {description ? (
-          <p className="text-callout text-text-secondary">{description}</p>
-        ) : null}
-      </div>
-      <div className="flex shrink-0 items-center gap-2">{children}</div>
-    </div>
   )
 }

@@ -1,6 +1,6 @@
 import { queryOptions } from '@tanstack/react-query'
 
-import { queryKeys } from '#/components/editor/query-keys'
+import { queryKeys } from '#/lib/content/query-keys'
 import { isActiveJobStatus } from '#/lib/status'
 import type { BuildJobStatus, PublicationStatus } from '#/lib/types'
 import {
@@ -60,8 +60,7 @@ export function releaseStatusQuery(siteId: string) {
     queryKey: queryKeys.releaseStatus(siteId),
     queryFn: async () =>
       (await getSiteReleaseStatusFn({ data: { siteId } })) as ReleaseStatusData,
-    refetchInterval: (query) =>
-      query.state.data?.activeJob ? 5000 : false,
+    refetchInterval: (query) => (query.state.data?.activeJob ? 5000 : false),
     staleTime: 10_000,
   })
 }

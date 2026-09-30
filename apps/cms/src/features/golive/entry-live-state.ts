@@ -12,9 +12,7 @@ export type EntryLike = {
 }
 
 type LiveLike =
-  | Pick<NonNullable<ReleaseStatusData['live']>, 'createdAt'>
-  | null
-  | undefined
+  Pick<NonNullable<ReleaseStatusData['live']>, 'createdAt'> | null | undefined
 
 function time(value: string | Date) {
   return value instanceof Date ? value.getTime() : new Date(value).getTime()
@@ -77,17 +75,13 @@ export type EntryLiveState = {
   scheduledAt: string | Date | null
 }
 
-export function entryLiveState(entry: EntryLike, live: LiveLike): EntryLiveState {
+export function entryLiveState(
+  entry: EntryLike,
+  live: LiveLike,
+): EntryLiveState {
   return {
     status: entryUiStatus(entry, live),
     editedSinceReady: isEditedSinceReady(entry),
     scheduledAt: entry.scheduledAt ?? null,
   }
 }
-
-/**
- * Public name for the pure derivation (Phase 2 screens import this):
- * `deriveEntryLiveStatus(entry, release.live)` → Draft/Ready/Live/Scheduled/
- * Archived. Same as `entryUiStatus`.
- */
-export const deriveEntryLiveStatus = entryUiStatus

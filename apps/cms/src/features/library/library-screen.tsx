@@ -10,8 +10,8 @@ import {
   X,
 } from '@phosphor-icons/react'
 
-import { adminQueryKeys } from '#/components/admin/helpers'
-import { assetFileUrl } from '#/components/editor/utils'
+import { adminQueryKeys } from '#/lib/admin/helpers'
+import { assetFileUrl } from '#/lib/content/utils'
 import { Button } from '#/components/ui/button'
 import { EmptyState } from '#/components/ui/empty-state'
 import { Input } from '#/components/ui/input'

@@ -14,7 +14,7 @@ import {
 } from '@phosphor-icons/react'
 import type { Icon as IconComponent } from '@phosphor-icons/react'
 
-import { FIELD_TYPES } from '#/components/admin/helpers'
+import { FIELD_TYPES } from '#/lib/admin/helpers'
 import {
   REQUIRED_SLUG_FIELD,
   withRequiredSlugField,
@@ -70,7 +70,9 @@ export const FIELD_TYPE_ICONS: Record<FieldType, IconComponent> = {
 }
 
 /** Types offered when adding a field (the slug field is built in). */
-export const PICKABLE_FIELD_TYPES = FIELD_TYPES.filter((type) => type !== 'slug')
+export const PICKABLE_FIELD_TYPES = FIELD_TYPES.filter(
+  (type) => type !== 'slug',
+)
 
 /** Human name of a field type ("Short text", "Image"…). */
 export function fieldTypeName(type: FieldType) {
@@ -177,7 +179,7 @@ export function emptyFieldDraft(type: FieldType = 'text'): FieldDraft {
   }
 }
 
-export function toFieldDraft(field: Field): FieldDraft {
+function toFieldDraft(field: Field): FieldDraft {
   return {
     id: nextDraftId(),
     key: field.key,

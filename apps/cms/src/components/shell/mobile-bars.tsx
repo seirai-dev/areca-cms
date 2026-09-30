@@ -19,12 +19,21 @@ import type { Icon } from '@phosphor-icons/react'
 
 import { AccountMenu } from '#/components/shell/account-menu'
 import { useShell } from '#/components/shell/shell-context'
-import { AllSitesNav, WorkspaceSwitcher } from '#/components/shell/workspace-switcher'
+import {
+  AllSitesNav,
+  WorkspaceSwitcher,
+} from '#/components/shell/workspace-switcher'
 import { useSiteCollections } from '#/components/shell/sidebar'
 import { NavCount } from '#/components/shell/nav-item'
 import { InsetIcon, InsetList, InsetRow } from '#/components/ui/inset-list'
-import { Sheet, SheetBody, SheetContent, SheetHeader, SheetTitle } from '#/components/ui/sheet'
-import { Tag } from '#/components/ui/badge'
+import {
+  Sheet,
+  SheetBody,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '#/components/ui/sheet'
+import { Tag } from '#/components/ui/tag'
 import { GoLivePill } from '#/features/golive/golive-tray'
 import { usePanel } from '#/features/shell/panel'
 import { canManageSite, collectionIcon } from '#/lib/site-nav'
@@ -150,7 +159,9 @@ export function MobileTabBar() {
   const { me, mode, site } = useShell()
   const panel = usePanel()
   const [sheet, setSheet] = React.useState<'content' | 'more' | null>(null)
-  const pathname = useRouterState({ select: (state) => state.location.pathname })
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  })
   const close = () => setSheet(null)
 
   React.useEffect(() => setSheet(null), [pathname])
@@ -192,7 +203,10 @@ export function MobileTabBar() {
           />
         </nav>
 
-        <Sheet open={sheet === 'content'} onOpenChange={(open) => !open && close()}>
+        <Sheet
+          open={sheet === 'content'}
+          onOpenChange={(open) => !open && close()}
+        >
           <SheetContent side="bottom" className="max-h-[80dvh]">
             <SheetHeader className="border-b-0 pb-2">
               <SheetTitle>{m.shell_nav_content()}</SheetTitle>
@@ -203,7 +217,10 @@ export function MobileTabBar() {
           </SheetContent>
         </Sheet>
 
-        <Sheet open={sheet === 'more'} onOpenChange={(open) => !open && close()}>
+        <Sheet
+          open={sheet === 'more'}
+          onOpenChange={(open) => !open && close()}
+        >
           <SheetContent side="bottom">
             <SheetHeader className="border-b-0 pb-2">
               <SheetTitle>{m.shell_more()}</SheetTitle>
@@ -212,7 +229,10 @@ export function MobileTabBar() {
               <InsetList>
                 {manage ? (
                   <SheetRowLink
-                    link={{ to: '/sites/$siteId/people', params: { siteId: site.id } }}
+                    link={{
+                      to: '/sites/$siteId/people',
+                      params: { siteId: site.id },
+                    }}
                     icon={<Users />}
                     label={m.shell_nav_people()}
                     onClick={close}
@@ -220,7 +240,10 @@ export function MobileTabBar() {
                 ) : null}
                 {me.user.isAgencyAdmin ? (
                   <SheetRowLink
-                    link={{ to: '/sites/$siteId/settings', params: { siteId: site.id } }}
+                    link={{
+                      to: '/sites/$siteId/settings',
+                      params: { siteId: site.id },
+                    }}
                     icon={<Gear />}
                     label={m.shell_nav_settings()}
                     onClick={close}
@@ -230,7 +253,11 @@ export function MobileTabBar() {
                   <InsetRow
                     asChild
                     chevron
-                    leading={<InsetIcon><Pulse /></InsetIcon>}
+                    leading={
+                      <InsetIcon>
+                        <Pulse />
+                      </InsetIcon>
+                    }
                     title={m.shell_nav_activity()}
                   >
                     <button
@@ -276,9 +303,22 @@ export function MobileTabBar() {
           data-testid="mobile-tab-bar"
           className="fixed inset-x-0 bottom-0 z-navbar flex h-[calc(56px+env(safe-area-inset-bottom))] border-t border-border-default bg-background-default/96 pb-[env(safe-area-inset-bottom)] backdrop-blur-2xl backdrop-saturate-150 md:hidden"
         >
-          <TabLink link={{ to: '/agency' }} icon={House} label={m.shell_nav_overview()} exact />
-          <TabLink link={{ to: '/agency/clients' }} icon={Buildings} label={m.shell_nav_clients()} />
-          <TabLink link={{ to: '/agency/people' }} icon={UsersThree} label={m.shell_nav_people()} />
+          <TabLink
+            link={{ to: '/agency' }}
+            icon={House}
+            label={m.shell_nav_overview()}
+            exact
+          />
+          <TabLink
+            link={{ to: '/agency/clients' }}
+            icon={Buildings}
+            label={m.shell_nav_clients()}
+          />
+          <TabLink
+            link={{ to: '/agency/people' }}
+            icon={UsersThree}
+            label={m.shell_nav_people()}
+          />
           <TabButton
             icon={DotsThreeCircle}
             label={m.shell_more()}
@@ -287,18 +327,33 @@ export function MobileTabBar() {
             testId="mobile-more"
           />
         </nav>
-        <Sheet open={sheet === 'more'} onOpenChange={(open) => !open && close()}>
+        <Sheet
+          open={sheet === 'more'}
+          onOpenChange={(open) => !open && close()}
+        >
           <SheetContent side="bottom" className="max-h-[85dvh]">
             <SheetHeader className="border-b-0 pb-2">
               <SheetTitle>{m.shell_more()}</SheetTitle>
             </SheetHeader>
             <SheetBody className="grid gap-5 pt-0">
               <InsetList>
-                <SheetRowLink link={{ to: '/agency/activity' }} icon={<Pulse />} label={m.shell_nav_activity()} onClick={close} />
-                <SheetRowLink link={{ to: '/agency/branding' }} icon={<Palette />} label={m.shell_nav_branding()} onClick={close} />
+                <SheetRowLink
+                  link={{ to: '/agency/activity' }}
+                  icon={<Pulse />}
+                  label={m.shell_nav_activity()}
+                  onClick={close}
+                />
+                <SheetRowLink
+                  link={{ to: '/agency/branding' }}
+                  icon={<Palette />}
+                  label={m.shell_nav_branding()}
+                  onClick={close}
+                />
               </InsetList>
               <div className="grid gap-1">
-                <span className="px-1 text-overline text-text-muted">{m.shell_nav_all_sites()}</span>
+                <span className="px-1 text-overline text-text-muted">
+                  {m.shell_nav_all_sites()}
+                </span>
                 <AllSitesNav collapsed={false} onNavigate={close} />
               </div>
             </SheetBody>
@@ -319,10 +374,17 @@ function MobileCollections({
   onNavigate: () => void
 }) {
   const { me } = useShell()
-  const { collections, counts, isLoading } = useSiteCollections(siteId, me.user.isAgencyAdmin)
+  const { collections, counts, isLoading } = useSiteCollections(
+    siteId,
+    me.user.isAgencyAdmin,
+  )
   if (isLoading) return null
   if (collections.length === 0) {
-    return <p className="py-6 text-center text-callout text-text-secondary">{m.shell_no_content_types()}</p>
+    return (
+      <p className="py-6 text-center text-callout text-text-secondary">
+        {m.shell_no_content_types()}
+      </p>
+    )
   }
   return (
     <InsetList>

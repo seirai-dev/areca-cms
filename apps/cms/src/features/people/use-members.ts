@@ -2,7 +2,7 @@ import * as React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 
-import { adminQueryKeys, errorMessage } from '#/components/admin/helpers'
+import { adminQueryKeys, errorMessage } from '#/lib/admin/helpers'
 import type { MembershipRole } from '#/lib/types'
 import { getLocale } from '#/paraglide/runtime'
 import { m } from '#/paraglide/messages'

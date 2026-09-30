@@ -30,15 +30,8 @@ type StatusMeta = {
 }
 
 /** UI entry status (brief §1.2): Draft → Ready → Live, plus Scheduled/Archived. */
-export type EntryUiStatus = 'draft' | 'ready' | 'live' | 'scheduled' | 'archived'
-
-export const ENTRY_UI_STATUSES: readonly EntryUiStatus[] = [
-  'draft',
-  'ready',
-  'live',
-  'scheduled',
-  'archived',
-]
+export type EntryUiStatus =
+  'draft' | 'ready' | 'live' | 'scheduled' | 'archived'
 
 export const ENTRY_STATUS: Record<
   EntryUiStatus,
@@ -176,8 +169,4 @@ export const GO_LIVE_STEPS: readonly BuildJobStatus[] = [
 
 export function isActiveJobStatus(status: BuildJobStatus) {
   return JOB_STATUS[status].active
-}
-
-export function isBusyPublicationStatus(status: PublicationStatus) {
-  return status === 'pending' || status === 'building'
 }

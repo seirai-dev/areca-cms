@@ -8,11 +8,7 @@ import {
   Prohibit,
 } from '@phosphor-icons/react'
 
-import {
-  ENTRY_STATUS,
-  JOB_STATUS,
-  PUBLICATION_STATUS,
-} from '#/lib/status'
+import { ENTRY_STATUS, JOB_STATUS, PUBLICATION_STATUS } from '#/lib/status'
 import type { EntryUiStatus, StatusIconKind, StatusTone } from '#/lib/status'
 import type { BuildJobStatus, PublicationStatus } from '#/lib/types'
 import { SPRING_SMALL } from '#/lib/motion'
@@ -21,7 +17,7 @@ import { m } from '#/paraglide/messages'
 
 import { Hint } from './tooltip'
 
-export const TONE_TEXT: Record<StatusTone, string> = {
+const TONE_TEXT: Record<StatusTone, string> = {
   neutral: 'text-icon-muted',
   accent: 'text-icon-accent',
   success: 'text-icon-success',
@@ -29,7 +25,7 @@ export const TONE_TEXT: Record<StatusTone, string> = {
   error: 'text-icon-error',
 }
 
-export const TONE_PILL: Record<StatusTone, string> = {
+const TONE_PILL: Record<StatusTone, string> = {
   neutral: 'bg-status-neutral-bg text-text-secondary',
   accent: 'bg-accent-soft text-accent-text',
   success: 'bg-status-success-bg text-text-success',
@@ -37,7 +33,7 @@ export const TONE_PILL: Record<StatusTone, string> = {
   error: 'bg-status-error-bg text-text-error',
 }
 
-export const TONE_FILL: Record<StatusTone, string> = {
+const TONE_FILL: Record<StatusTone, string> = {
   neutral: 'bg-status-neutral',
   accent: 'bg-accent',
   success: 'bg-status-success',
@@ -96,7 +92,10 @@ export function SpinnerRing({
       width={size}
       height={size}
       viewBox="0 0 16 16"
-      className={cn('shrink-0 animate-spin motion-reduce:animate-none', className)}
+      className={cn(
+        'shrink-0 animate-spin motion-reduce:animate-none',
+        className,
+      )}
       style={{ animationDuration: '0.9s' }}
     >
       <circle
@@ -246,15 +245,25 @@ export function StatusIcon({
   className?: string
 }) {
   const color = TONE_TEXT[tone]
-  const phosphor = { size, weight: 'bold' as const, className: cn('shrink-0', color, className) }
+  const phosphor = {
+    size,
+    weight: 'bold' as const,
+    className: cn('shrink-0', color, className),
+  }
   switch (kind) {
     case 'live':
-      return <LiveDot pulse={pulse ?? 'once'} tone={tone} className={className} />
+      return (
+        <LiveDot pulse={pulse ?? 'once'} tone={tone} className={className} />
+      )
     case 'dot':
       return (
         <span
           aria-hidden="true"
-          className={cn('size-2 shrink-0 rounded-full', TONE_FILL[tone], className)}
+          className={cn(
+            'size-2 shrink-0 rounded-full',
+            TONE_FILL[tone],
+            className,
+          )}
         />
       )
     case 'spinner':
@@ -330,10 +339,15 @@ export function StatusPill({
           cn(
             'rounded-full',
             TONE_PILL[tone],
-            size === 'sm' ? 'h-5 px-1.5 text-[11.5px]' : 'h-[22px] px-2 text-[12px]',
+            size === 'sm'
+              ? 'h-5 px-1.5 text-[11.5px]'
+              : 'h-[22px] px-2 text-[12px]',
           ),
         variant === 'plain' &&
-          cn('text-text-secondary', size === 'sm' ? 'text-[12px]' : 'text-[13px]'),
+          cn(
+            'text-text-secondary',
+            size === 'sm' ? 'text-[12px]' : 'text-[13px]',
+          ),
         className,
       )}
       {...props}
@@ -359,9 +373,7 @@ export function formatScheduleShort(value: Date | string, locale?: string) {
   const now = new Date()
   const withinWeek = Math.abs(date.getTime() - now.getTime()) < 6 * 86_400_000
   return new Intl.DateTimeFormat(locale, {
-    ...(withinWeek
-      ? { weekday: 'short' }
-      : { day: 'numeric', month: 'short' }),
+    ...(withinWeek ? { weekday: 'short' } : { day: 'numeric', month: 'short' }),
     hour: 'numeric',
     minute: '2-digit',
   }).format(date)
@@ -403,7 +415,9 @@ export function EntryStatusPill({
       size={size}
       variant={variant}
       data-testid={testId}
-      aria-label={status === 'scheduled' ? `${meta.label()} ${label}` : undefined}
+      aria-label={
+        status === 'scheduled' ? `${meta.label()} ${label}` : undefined
+      }
       className={className}
     >
       {editedSinceReady ? <EditedMarker /> : null}

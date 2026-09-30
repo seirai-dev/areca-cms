@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle, CloudArrowUp, Trash } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
-import { adminQueryKeys, errorMessage } from '#/components/admin/helpers'
+import { adminQueryKeys, errorMessage } from '#/lib/admin/helpers'
 import { Button } from '#/components/ui/button'
 import { ConfirmDialog } from '#/components/ui/confirm-dialog'
 import { FormField } from '#/components/ui/form-field'
@@ -30,7 +30,7 @@ type Applications = Awaited<ReturnType<typeof verifyDokployCredentialsFn>>
  * and the applications the credentials can see. Toasts as before; the last
  * failure also stays inline so the admin can read it.
  */
-export function useDokploy(organizationId: string) {
+function useDokploy(organizationId: string) {
   const queryClient = useQueryClient()
   const status = useQuery(dokployStatusQuery(organizationId))
   const [applications, setApplications] = React.useState<

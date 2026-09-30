@@ -7,8 +7,8 @@ import {
 } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
-import { queryKeys } from '#/components/editor/query-keys'
-import { errorMessage } from '#/components/editor/utils'
+import { queryKeys } from '#/lib/content/query-keys'
+import { errorMessage } from '#/lib/content/utils'
 import { useInvalidateGoLive } from '#/features/golive/use-go-live'
 import type { EntryData, EntryStatus } from '#/lib/types'
 import { m } from '#/paraglide/messages'
@@ -19,17 +19,9 @@ import {
   unpublishEntryFn,
 } from '#/server/fn/content'
 
-export const PAGE_SIZE = 25
+const PAGE_SIZE = 25
 
 export type StatusFilter = 'all' | EntryStatus
-
-export const STATUS_FILTERS: readonly StatusFilter[] = [
-  'all',
-  'draft',
-  'published',
-  'scheduled',
-  'archived',
-]
 
 export type EntryRow = {
   id: string
@@ -85,8 +77,7 @@ export function useCollectionEntries({
   })
 
   const rows = React.useMemo(
-    () =>
-      (query.data?.pages.flatMap((page) => page.items) ?? []) as EntryRow[],
+    () => (query.data?.pages.flatMap((page) => page.items) ?? []) as EntryRow[],
     [query.data],
   )
   const total = query.data?.pages[0]?.total

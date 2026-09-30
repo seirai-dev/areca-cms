@@ -31,7 +31,7 @@ import {
 } from '@phosphor-icons/react'
 import type { Icon as IconComponent } from '@phosphor-icons/react'
 
-import { assetFileUrl, emptyRichText } from '#/components/editor/utils'
+import { assetFileUrl, emptyRichText } from '#/lib/content/utils'
 import { Button } from '#/components/ui/button'
 import {
   DropdownMenu,
@@ -44,7 +44,11 @@ import {
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { Popover, PopoverAnchor, PopoverContent } from '#/components/ui/popover'
-import { Tooltip, TooltipContent, TooltipTrigger } from '#/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '#/components/ui/tooltip'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 import { isAllowedLinkHref } from '#/server/richtext/allowlist'
@@ -197,7 +201,9 @@ export function RichTextEditor({
   const [slash, setSlash] = React.useState<SlashState | null>(null)
   const [slashIndex, setSlashIndex] = React.useState(0)
   const slashQueryRef = React.useRef<string | null>(null)
-  const slashKeyRef = React.useRef<(event: KeyboardEvent) => boolean>(() => false)
+  const slashKeyRef = React.useRef<(event: KeyboardEvent) => boolean>(
+    () => false,
+  )
 
   const menuOpenChange = React.useCallback((open: boolean) => {
     setOpenMenus((count) => Math.max(0, count + (open ? 1 : -1)))
@@ -264,12 +270,21 @@ export function RichTextEditor({
     if (!editor) return
     const update = () => {
       const { $from, empty } = editor.state.selection
-      if (!empty || !editor.isFocused || $from.parent.type.name !== 'paragraph') {
+      if (
+        !empty ||
+        !editor.isFocused ||
+        $from.parent.type.name !== 'paragraph'
+      ) {
         slashQueryRef.current = null
         setSlash(null)
         return
       }
-      const text = $from.parent.textBetween(0, $from.parentOffset, undefined, '￼')
+      const text = $from.parent.textBetween(
+        0,
+        $from.parentOffset,
+        undefined,
+        '￼',
+      )
       const match = /^\/([\p{L}\d ]{0,24})$/u.exec(text)
       if (!match) {
         slashQueryRef.current = null
@@ -345,7 +360,11 @@ export function RichTextEditor({
         icon: Table,
         keywords: 'table grid rows columns',
         run: (e) =>
-          e.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(),
+          e
+            .chain()
+            .focus()
+            .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+            .run(),
       },
       {
         id: 'divider',
@@ -394,7 +413,11 @@ export function RichTextEditor({
   const runSlash = React.useCallback(
     (command: Command) => {
       if (!editor || !slash) return
-      editor.chain().focus().deleteRange({ from: slash.from, to: slash.to }).run()
+      editor
+        .chain()
+        .focus()
+        .deleteRange({ from: slash.from, to: slash.to })
+        .run()
       setSlash(null)
       command.run(editor)
     },
@@ -408,7 +431,9 @@ export function RichTextEditor({
       return true
     }
     if (event.key === 'ArrowUp') {
-      setSlashIndex((index) => (index - 1 + slashMatches.length) % slashMatches.length)
+      setSlashIndex(
+        (index) => (index - 1 + slashMatches.length) % slashMatches.length,
+      )
       return true
     }
     if (event.key === 'Enter' || event.key === 'Tab') {
@@ -473,7 +498,8 @@ export function RichTextEditor({
   const barVisible =
     !previewing && (focused || openMenus > 0 || linkOpen || pickerOpen)
   const blocks = blockCommands()
-  const activeBlock = blocks.find((block) => block.id === state.block) ?? blocks[0]
+  const activeBlock =
+    blocks.find((block) => block.id === state.block) ?? blocks[0]
 
   return (
     <div
@@ -540,7 +566,9 @@ export function RichTextEditor({
                   <block.icon />
                   {block.label()}
                   {block.shortcut ? (
-                    <DropdownMenuShortcut>{block.shortcut(mod)}</DropdownMenuShortcut>
+                    <DropdownMenuShortcut>
+                      {block.shortcut(mod)}
+                    </DropdownMenuShortcut>
                   ) : null}
                 </DropdownMenuItem>
               ))}
@@ -573,7 +601,11 @@ export function RichTextEditor({
             <PopoverAnchor asChild>
               <span className="inline-flex">
                 <BarButton
-                  label={state.link ? m.editor_toolbar_edit_link() : m.editor_toolbar_link()}
+                  label={
+                    state.link
+                      ? m.editor_toolbar_edit_link()
+                      : m.editor_toolbar_link()
+                  }
                   active={state.link}
                   onClick={openLinkEditor}
                   data-testid="rich-text-link"
@@ -592,7 +624,9 @@ export function RichTextEditor({
             >
               <form className="grid gap-3" onSubmit={applyLink}>
                 <div className="grid gap-1.5">
-                  <Label htmlFor="rich-text-link-url">{m.editor_link_url()}</Label>
+                  <Label htmlFor="rich-text-link-url">
+                    {m.editor_link_url()}
+                  </Label>
                   <Input
                     id="rich-text-link-url"
                     placeholder="https://example.com"
@@ -811,7 +845,9 @@ export function RichTextEditor({
           <TextItalic weight="bold" />
         </BarButton>
         <BarButton
-          label={state.link ? m.editor_toolbar_edit_link() : m.editor_toolbar_link()}
+          label={
+            state.link ? m.editor_toolbar_edit_link() : m.editor_toolbar_link()
+          }
           active={state.link}
           onClick={openLinkEditor}
         >
@@ -903,7 +939,9 @@ function SlashMenu({
           onClick={() => onPick(item)}
           className={cn(
             'flex w-full items-center gap-2.5 rounded-[8px] px-2.5 py-1.5 text-left text-[14px] leading-5',
-            index === active ? 'bg-surface-state-hover text-text-primary' : 'text-text-primary',
+            index === active
+              ? 'bg-surface-state-hover text-text-primary'
+              : 'text-text-primary',
           )}
         >
           <span className="grid size-7 place-content-center rounded-[7px] border border-border-default bg-background-surface text-icon-default">
@@ -917,7 +955,12 @@ function SlashMenu({
 }
 
 function BarDivider() {
-  return <span aria-hidden="true" className="mx-1 h-5 w-px shrink-0 bg-border-default" />
+  return (
+    <span
+      aria-hidden="true"
+      className="mx-1 h-5 w-px shrink-0 bg-border-default"
+    />
+  )
 }
 
 function BarButton({
@@ -959,7 +1002,9 @@ function BarButton({
       </TooltipTrigger>
       <TooltipContent side="bottom">
         {label}
-        {shortcut ? <span className="ml-1.5 opacity-60">{shortcut}</span> : null}
+        {shortcut ? (
+          <span className="ml-1.5 opacity-60">{shortcut}</span>
+        ) : null}
       </TooltipContent>
     </Tooltip>
   )

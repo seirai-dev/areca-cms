@@ -1,4 +1,4 @@
-import type { EntryData, EntryStatus, Field } from '#/lib/types'
+import type { EntryData, Field } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 
 export function slugify(value: string) {
@@ -57,7 +57,7 @@ export function emptyRichText() {
   return { type: 'doc' as const, content: [{ type: 'paragraph' as const }] }
 }
 
-export function defaultFieldValue(field: Field): unknown {
+function defaultFieldValue(field: Field): unknown {
   switch (field.type) {
     case 'boolean':
       return false
@@ -89,10 +89,13 @@ export function fieldErrorsFromUnknown(error: unknown): {
   fieldErrors: FieldErrorMap
 } {
   const fieldErrors: FieldErrorMap = {}
-  const source = error as {
-    errors?: Array<{ path?: string; message?: string }>
-    message?: string
-  }
+  const source = error as
+    | {
+        errors?: Array<{ path?: string; message?: string }>
+        message?: string
+      }
+    | null
+    | undefined
 
   if (Array.isArray(source?.errors)) {
     for (const item of source.errors) {
@@ -141,13 +144,6 @@ export function errorMessage(
   return fallback
 }
 
-export const ENTRY_STATUSES: EntryStatus[] = [
-  'draft',
-  'published',
-  'scheduled',
-  'archived',
-]
-
 export function browserTimezone() {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
@@ -156,7 +152,7 @@ export function browserTimezone() {
   }
 }
 
-export const COMMON_TIMEZONES = [
+const COMMON_TIMEZONES = [
   'UTC',
   'Europe/Berlin',
   'Europe/London',
@@ -176,10 +172,3 @@ export function timezoneOptions() {
   const set = new Set([current, ...COMMON_TIMEZONES])
   return [...set]
 }
-
-export const ACTIVE_JOB_STATUSES = [
-  'queued',
-  'building',
-  'validating',
-  'deploying',
-] as const

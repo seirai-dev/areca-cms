@@ -11,9 +11,9 @@ import {
   Stack,
 } from '@phosphor-icons/react'
 
-import { queryKeys } from '#/components/editor/query-keys'
-import { EntryThumb } from '#/components/editor/entry-thumb'
-import { entryTitle } from '#/components/editor/utils'
+import { queryKeys } from '#/lib/content/query-keys'
+import { EntryThumb } from '#/features/collection/entry-cover'
+import { entryTitle } from '#/lib/content/utils'
 import { useShell } from '#/components/shell/shell-context'
 import { useSiteCollections } from '#/components/shell/sidebar'
 import type { SidebarCollection } from '#/components/shell/sidebar'
@@ -63,7 +63,7 @@ type RecentRow = {
 }
 
 /** "Good morning, Kaan" by the local hour. */
-export function greeting(firstName: string, hour = new Date().getHours()) {
+function greeting(firstName: string, hour = new Date().getHours()) {
   if (hour < 5 || hour >= 18)
     return m.overview_greeting_evening({ name: firstName })
   if (hour < 12) return m.overview_greeting_morning({ name: firstName })

@@ -2,8 +2,8 @@ import * as React from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { CaretUpDown, Check, LinkSimple, X } from '@phosphor-icons/react'
 
-import { queryKeys } from '#/components/editor/query-keys'
-import { entryTitle } from '#/components/editor/utils'
+import { queryKeys } from '#/lib/content/query-keys'
+import { entryTitle } from '#/lib/content/utils'
 import { Button } from '#/components/ui/button'
 import {
   Command,
@@ -13,13 +13,21 @@ import {
   CommandItem,
   CommandList,
 } from '#/components/ui/command'
-import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '#/components/ui/popover'
 import { SpinnerRing } from '#/components/ui/status-pill'
 import { useDebouncedValue } from '#/hooks/use-debounced-value'
 import type { EntryData, Field } from '#/lib/types'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
-import { getEntryFn, listCollectionsFn, listEntriesFn } from '#/server/fn/content'
+import {
+  getEntryFn,
+  listCollectionsFn,
+  listEntriesFn,
+} from '#/server/fn/content'
 
 type EntryRow = {
   id: string
@@ -60,7 +68,8 @@ export function ReferencePicker({
     staleTime: 60_000,
   })
   const targetFields: Field[] =
-    collectionsQuery.data?.find((item) => item.key === collectionKey)?.fields ?? []
+    collectionsQuery.data?.find((item) => item.key === collectionKey)?.fields ??
+    []
 
   const entriesQuery = useQuery({
     queryKey: queryKeys.entries(siteId, collectionKey, {
@@ -169,7 +178,9 @@ export function ReferencePicker({
                         <Check
                           className={cn(
                             'text-icon-accent',
-                            item.id === selectedId ? 'opacity-100' : 'opacity-0',
+                            item.id === selectedId
+                              ? 'opacity-100'
+                              : 'opacity-0',
                           )}
                         />
                         <span className="truncate">
@@ -183,7 +194,10 @@ export function ReferencePicker({
                   </CommandGroup>
                   {total > items.length ? (
                     <p className="border-t border-border-default px-3 py-2 text-caption font-normal text-text-muted">
-                      {m.editor_showing_of_total({ shown: items.length, total })}
+                      {m.editor_showing_of_total({
+                        shown: items.length,
+                        total,
+                      })}
                     </p>
                   ) : null}
                 </>

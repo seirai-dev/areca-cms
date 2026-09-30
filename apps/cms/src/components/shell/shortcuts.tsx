@@ -23,7 +23,7 @@ const RegistryContext = React.createContext<{
 
 let nextId = 0
 
-export function isTypingTarget(target: EventTarget | null) {
+function isTypingTarget(target: EventTarget | null) {
   const element = target as HTMLElement | null
   if (!element || typeof element.tagName !== 'string') return false
   if (element.isContentEditable) return true
@@ -41,9 +41,7 @@ export function isTypingTarget(target: EventTarget | null) {
       'color',
     ].includes(type)
   }
-  return Boolean(
-    element.closest('[contenteditable="true"], [role="textbox"]'),
-  )
+  return Boolean(element.closest('[contenteditable="true"], [role="textbox"]'))
 }
 
 function normalize(combo: string) {
@@ -119,7 +117,9 @@ export function ShortcutsProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   return (
-    <RegistryContext.Provider value={value}>{children}</RegistryContext.Provider>
+    <RegistryContext.Provider value={value}>
+      {children}
+    </RegistryContext.Provider>
   )
 }
 

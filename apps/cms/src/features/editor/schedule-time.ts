@@ -77,14 +77,9 @@ export function presetInstant(
   let add = 1
   if (preset === 'monday') {
     const weekday = base.getUTCDay() // 0 Sunday … 6 Saturday
-    add = ((8 - weekday) % 7) || 7
+    add = (8 - weekday) % 7 || 7
   }
   base.setUTCDate(base.getUTCDate() + add)
   const day = `${base.getUTCFullYear()}-${pad(base.getUTCMonth() + 1)}-${pad(base.getUTCDate())}`
   return zonedToInstant(day, '09:00', timeZone)!
-}
-
-/** A friendly default: tomorrow 9:00. */
-export function defaultScheduleInstant(timeZone: string, now = new Date()) {
-  return presetInstant('tomorrow', timeZone, now)
 }

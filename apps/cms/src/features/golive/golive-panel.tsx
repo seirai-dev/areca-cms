@@ -14,7 +14,7 @@ import {
   XCircle,
 } from '@phosphor-icons/react'
 
-import { formatDateTime, shortId } from '#/components/editor/utils'
+import { formatDateTime, shortId } from '#/lib/content/utils'
 import { Button } from '#/components/ui/button'
 import { ConfirmDialog } from '#/components/ui/confirm-dialog'
 import { CopyButton } from '#/components/ui/copy-button'
@@ -63,7 +63,12 @@ import {
 } from './golive-tray'
 import { parseGoLiveError } from './parse-errors'
 import type { GoLiveError } from './parse-errors'
-import { PUBLICATIONS_PAGE_SIZE, buildJobQuery, jobsQuery, publicationsQuery } from './queries'
+import {
+  PUBLICATIONS_PAGE_SIZE,
+  buildJobQuery,
+  jobsQuery,
+  publicationsQuery,
+} from './queries'
 import type { JobRow, PublicationRow } from './queries'
 import { useCancelJob, useGoLive, useRollback } from './use-go-live'
 import { usePendingEntries } from './use-pending-entries'
@@ -205,7 +210,11 @@ function GoLivePanelBody({
               aria-label={m.golive_urgent()}
             />
           </label>
-          <Hint label={canPublish ? null : editorPublishReason()} wrapDisabled={!canPublish} className="w-full">
+          <Hint
+            label={canPublish ? null : editorPublishReason()}
+            wrapDisabled={!canPublish}
+            className="w-full"
+          >
             <Button
               type="button"
               size="lg"
@@ -242,7 +251,13 @@ function GoLivePanelBody({
    Status hero
 ------------------------------------------------------------------------- */
 
-function StatusHero({ site, release }: { site: MeSite; release: ReleaseStatus }) {
+function StatusHero({
+  site,
+  release,
+}: {
+  site: MeSite
+  release: ReleaseStatus
+}) {
   const reduce = useReducedMotion()
   const { state, pending } = release
 
@@ -278,7 +293,10 @@ function StatusHero({ site, release }: { site: MeSite; release: ReleaseStatus })
       tone = 'bg-status-error-bg text-icon-error'
       sentence = m.golive_hero_failed()
       detail = release.lastFailure?.error ? (
-        <p className="line-clamp-3 text-callout text-text-secondary" title={release.lastFailure.error}>
+        <p
+          className="line-clamp-3 text-callout text-text-secondary"
+          title={release.lastFailure.error}
+        >
           {release.lastFailure.error}
         </p>
       ) : null
@@ -288,11 +306,16 @@ function StatusHero({ site, release }: { site: MeSite; release: ReleaseStatus })
       tone = 'bg-accent-soft text-icon-accent'
       sentence =
         pending > 0
-          ? m.golive_hero_not_live_ready({ site: site.name, changes: changesReadyLabel(pending).toLowerCase() })
+          ? m.golive_hero_not_live_ready({
+              site: site.name,
+              changes: changesReadyLabel(pending).toLowerCase(),
+            })
           : m.golive_hero_not_live({ site: site.name })
       detail =
         pending > 0 ? null : (
-          <p className="text-callout text-text-secondary">{m.golive_never_live_hint()}</p>
+          <p className="text-callout text-text-secondary">
+            {m.golive_never_live_hint()}
+          </p>
         )
       break
     case 'ready':
@@ -311,14 +334,22 @@ function StatusHero({ site, release }: { site: MeSite; release: ReleaseStatus })
   }
 
   return (
-    <div className="grid gap-3 px-5 pt-2 pb-6" aria-live="polite" data-testid="golive-hero" data-state={state}>
+    <div
+      className="grid gap-3 px-5 pt-2 pb-6"
+      aria-live="polite"
+      data-testid="golive-hero"
+      data-state={state}
+    >
       <div className="flex items-start gap-4">
         <motion.span
           key={state}
           initial={reduce ? false : { scale: 0.85, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ duration: 0.25, ease: EASE_STANDARD }}
-          className={cn('grid size-12 shrink-0 place-content-center rounded-[14px]', tone)}
+          className={cn(
+            'grid size-12 shrink-0 place-content-center rounded-[14px]',
+            tone,
+          )}
         >
           {icon}
         </motion.span>
@@ -332,14 +363,18 @@ function StatusHero({ site, release }: { site: MeSite; release: ReleaseStatus })
               data-testid="release-live"
             >
               <LiveDot pulse="none" />
-              {m.golive_live_since({ time: formatRelativeTime(release.liveSince) })}
+              {m.golive_live_since({
+                time: formatRelativeTime(release.liveSince),
+              })}
               <a
                 href={site.productionUrl}
                 target="_blank"
                 rel="noreferrer"
                 className="truncate text-text-accent hover:underline"
               >
-                {site.productionUrl.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+                {site.productionUrl
+                  .replace(/^https?:\/\//, '')
+                  .replace(/\/$/, '')}
               </a>
             </p>
           ) : null}
@@ -388,7 +423,13 @@ function WhatsChanging({
   )
 }
 
-function PendingRow({ siteId, entry }: { siteId: string; entry: PendingEntry }) {
+function PendingRow({
+  siteId,
+  entry,
+}: {
+  siteId: string
+  entry: PendingEntry
+}) {
   return (
     <Link
       to="/sites/$siteId/c/$collectionKey/$entryId"
@@ -410,7 +451,9 @@ function PendingRow({ siteId, entry }: { siteId: string; entry: PendingEntry }) 
           {entry.collectionLabel}
           {' · '}
           {entry.kind === 'scheduled' && entry.scheduledAt
-            ? m.golive_scheduled_for({ time: formatScheduleShort(entry.scheduledAt) })
+            ? m.golive_scheduled_for({
+                time: formatScheduleShort(entry.scheduledAt),
+              })
             : entry.updatedByName
               ? m.golive_edited_by({
                   time: formatRelativeTime(entry.updatedAt),
@@ -491,7 +534,11 @@ function ErrorItem({ siteId, error }: { siteId: string; error: GoLiveError }) {
           found ? (
             <Link
               to="/sites/$siteId/c/$collectionKey/$entryId"
-              params={{ siteId, collectionKey: error.collection!, entryId: found.id }}
+              params={{
+                siteId,
+                collectionKey: error.collection!,
+                entryId: found.id,
+              }}
               className="font-medium text-text-accent hover:underline"
             >
               {error.slug}
@@ -531,8 +578,11 @@ function ReleaseHistory({
   focusRelease?: string
 }) {
   const [pages, setPages] = React.useState(1)
-  const [expanded, setExpanded] = React.useState<string | null>(focusRelease ?? null)
-  const [restoreTarget, setRestoreTarget] = React.useState<PublicationRow | null>(null)
+  const [expanded, setExpanded] = React.useState<string | null>(
+    focusRelease ?? null,
+  )
+  const [restoreTarget, setRestoreTarget] =
+    React.useState<PublicationRow | null>(null)
   const [cancelTarget, setCancelTarget] = React.useState<JobRow | null>(null)
   const [logJobId, setLogJobId] = React.useState<string | null>(null)
   const [othersOpen, setOthersOpen] = React.useState(false)
@@ -599,7 +649,9 @@ function ReleaseHistory({
           ))}
         </div>
       ) : rows.length === 0 ? (
-        <p className="text-callout text-text-secondary">{m.golive_no_releases()}</p>
+        <p className="text-callout text-text-secondary">
+          {m.golive_no_releases()}
+        </p>
       ) : (
         <>
           <Timeline data-testid="publications">
@@ -614,7 +666,9 @@ function ReleaseHistory({
                   canManage={canManage}
                   expanded={expanded === row.id}
                   onToggle={() =>
-                    setExpanded((current) => (current === row.id ? null : row.id))
+                    setExpanded((current) =>
+                      current === row.id ? null : row.id,
+                    )
                   }
                   onRestore={() => setRestoreTarget(row)}
                   onLog={(job) => setLogJobId(job.id)}
@@ -649,7 +703,10 @@ function ReleaseHistory({
           >
             <CaretDown
               weight="bold"
-              className={cn('size-3 transition-transform', !othersOpen && '-rotate-90')}
+              className={cn(
+                'size-3 transition-transform',
+                !othersOpen && '-rotate-90',
+              )}
             />
             {m.releases_other_builds()}
             <span className="text-text-muted tnum">{others.length}</span>
@@ -731,7 +788,9 @@ function ReleaseItem({
       data-testid={`publication-${row.status}`}
       data-release-id={row.id}
       tone={meta.tone}
-      icon={<StatusIcon kind={meta.icon} tone={meta.tone} size={14} pulse="none" />}
+      icon={
+        <StatusIcon kind={meta.icon} tone={meta.tone} size={14} pulse="none" />
+      }
       title={
         <span className="inline-flex items-center gap-2">
           {meta.title()}
@@ -742,7 +801,10 @@ function ReleaseItem({
               testId={`publication-status-${row.status}`}
             />
           ) : (
-            <span className="sr-only" data-testid={`publication-status-${row.status}`}>
+            <span
+              className="sr-only"
+              data-testid={`publication-status-${row.status}`}
+            >
               {meta.label()}
             </span>
           )}
@@ -831,7 +893,10 @@ function ReleaseItem({
                   </span>
                 </div>
                 {restorable ? (
-                  <Hint label={canManage ? null : editorPublishReason()} wrapDisabled={!canManage}>
+                  <Hint
+                    label={canManage ? null : editorPublishReason()}
+                    wrapDisabled={!canManage}
+                  >
                     <Button
                       type="button"
                       variant="secondary"
@@ -846,7 +911,12 @@ function ReleaseItem({
                     </Button>
                   </Hint>
                 ) : null}
-                <JobList jobs={jobs} canManage={canManage} onLog={onLog} onCancel={onCancel} />
+                <JobList
+                  jobs={jobs}
+                  canManage={canManage}
+                  onLog={onLog}
+                  onCancel={onCancel}
+                />
               </TimelineCard>
             </motion.div>
           ) : null}
@@ -862,7 +932,9 @@ function duration(job: JobRow) {
   const end = job.finishedAt ? new Date(job.finishedAt).getTime() : Date.now()
   const seconds = Math.round((end - start) / 1000)
   if (!Number.isFinite(seconds) || seconds < 0) return null
-  return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`
+  return seconds < 60
+    ? `${seconds}s`
+    : `${Math.floor(seconds / 60)}m ${seconds % 60}s`
 }
 
 /** Build steps behind a release: status, duration, attempts, log, cancel. */
@@ -878,7 +950,11 @@ function JobList({
   onCancel: (job: JobRow) => void
 }) {
   if (jobs.length === 0) {
-    return <p className="text-caption font-normal text-text-muted">{m.releases_no_jobs()}</p>
+    return (
+      <p className="text-caption font-normal text-text-muted">
+        {m.releases_no_jobs()}
+      </p>
+    )
   }
   return (
     <ul className="grid gap-1" data-testid="build-jobs">
@@ -913,7 +989,10 @@ function JobList({
                 {m.golive_view_log()}
               </Button>
               {job.status === 'queued' ? (
-                <Hint label={canManage ? null : editorPublishReason()} wrapDisabled={!canManage}>
+                <Hint
+                  label={canManage ? null : editorPublishReason()}
+                  wrapDisabled={!canManage}
+                >
                   <Button
                     type="button"
                     size="xs"
@@ -930,7 +1009,9 @@ function JobList({
               ) : null}
             </span>
             {job.status === 'failed' && job.error ? (
-              <p className="w-full text-caption font-normal text-text-error">{job.error}</p>
+              <p className="w-full text-caption font-normal text-text-error">
+                {job.error}
+              </p>
             ) : null}
           </li>
         )
@@ -940,8 +1021,17 @@ function JobList({
 }
 
 /** Nested sheet with the monospaced build log; refreshes while active. */
-function BuildLogSheet({ jobId, onClose }: { jobId: string | null; onClose: () => void }) {
-  const query = useQuery({ ...buildJobQuery(jobId ?? ''), enabled: Boolean(jobId) })
+function BuildLogSheet({
+  jobId,
+  onClose,
+}: {
+  jobId: string | null
+  onClose: () => void
+}) {
+  const query = useQuery({
+    ...buildJobQuery(jobId ?? ''),
+    enabled: Boolean(jobId),
+  })
   const job = query.data
   const text = job?.logs || job?.error || ''
   const live = job ? isActiveJobStatus(job.status) : false
@@ -992,4 +1082,3 @@ function BuildLogSheet({ jobId, onClose }: { jobId: string | null; onClose: () =
     </SlideOver>
   )
 }
-

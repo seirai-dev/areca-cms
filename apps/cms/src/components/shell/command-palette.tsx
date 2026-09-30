@@ -15,8 +15,8 @@ import {
   UserPlus,
 } from '@phosphor-icons/react'
 
-import { queryKeys } from '#/components/editor/query-keys'
-import { entryTitle } from '#/components/editor/utils'
+import { queryKeys } from '#/lib/content/query-keys'
+import { entryTitle } from '#/lib/content/utils'
 import { useShell } from '#/components/shell/shell-context'
 import { SiteTile } from '#/components/shell/site-tile'
 import {
@@ -54,7 +54,6 @@ import {
 import { listCollectionsFn, listEntriesFn } from '#/server/fn/content'
 
 import { LOCALE_LABELS } from './account-menu'
-
 
 /**
  * Spotlight-style command palette (brief §3.12). ⌘K anywhere. Groups: Search
@@ -167,7 +166,11 @@ export function CommandPalette() {
           <CommandGroup heading={m.shell_palette_entries()}>
             {entryResults.map(({ entry, collection }) => {
               const Icon = collectionIcon(collection.key, collection.label)
-              const title = entryTitle(entry.draftData, collection.fields, entry.slug)
+              const title = entryTitle(
+                entry.draftData,
+                collection.fields,
+                entry.slug,
+              )
               return (
                 <CommandItem
                   key={`${collection.key}-${entry.id}`}
@@ -187,13 +190,19 @@ export function CommandPalette() {
                   <Icon />
                   <span className="grid min-w-0 flex-1">
                     <span className="truncate">{title}</span>
-                    <span data-slot="command-meta" className="truncate text-[12px] leading-4 text-text-muted">
+                    <span
+                      data-slot="command-meta"
+                      className="truncate text-[12px] leading-4 text-text-muted"
+                    >
                       {collection.label}
                     </span>
                   </span>
                   <EntryStatusPill
                     size="sm"
-                    status={entryUiStatus(entry, release.data ? release.live : undefined)}
+                    status={entryUiStatus(
+                      entry,
+                      release.data ? release.live : undefined,
+                    )}
                   />
                 </CommandItem>
               )
@@ -207,7 +216,9 @@ export function CommandPalette() {
               <CommandItem
                 key={item.key}
                 value={`go ${item.label}`}
-                onSelect={() => go({ to: item.to, params: { siteId: inSite.id } })}
+                onSelect={() =>
+                  go({ to: item.to, params: { siteId: inSite.id } })
+                }
               >
                 <item.icon />
                 {item.label}
@@ -230,7 +241,10 @@ export function CommandPalette() {
                   onSelect={() =>
                     go({
                       to: '/sites/$siteId/c/$collectionKey',
-                      params: { siteId: inSite.id, collectionKey: collection.key },
+                      params: {
+                        siteId: inSite.id,
+                        collectionKey: collection.key,
+                      },
                     })
                   }
                 >
@@ -252,7 +266,10 @@ export function CommandPalette() {
                 onSelect={() =>
                   go({
                     to: '/sites/$siteId/c/$collectionKey/new',
-                    params: { siteId: inSite.id, collectionKey: collection.key },
+                    params: {
+                      siteId: inSite.id,
+                      collectionKey: collection.key,
+                    },
                   })
                 }
               >
@@ -276,7 +293,10 @@ export function CommandPalette() {
               <CommandItem
                 value="action invite people"
                 onSelect={() =>
-                  go({ to: '/sites/$siteId/people', params: { siteId: inSite.id } })
+                  go({
+                    to: '/sites/$siteId/people',
+                    params: { siteId: inSite.id },
+                  })
                 }
               >
                 <UserPlus />
@@ -288,7 +308,10 @@ export function CommandPalette() {
             <CommandItem
               value="action upload library"
               onSelect={() =>
-                go({ to: '/sites/$siteId/library', params: { siteId: inSite.id } })
+                go({
+                  to: '/sites/$siteId/library',
+                  params: { siteId: inSite.id },
+                })
               }
             >
               <UploadSimple />
@@ -348,11 +371,15 @@ export function CommandPalette() {
                 <CommandItem
                   key={item.id}
                   value={`site ${item.name} ${item.organizationName} ${item.slug}`}
-                  onSelect={() => go({ to: '/sites/$siteId', params: { siteId: item.id } })}
+                  onSelect={() =>
+                    go({ to: '/sites/$siteId', params: { siteId: item.id } })
+                  }
                 >
                   <SiteTile id={item.id} name={item.name} size="xs" />
                   <span className="min-w-0 flex-1 truncate">{item.name}</span>
-                  <CommandMeta>{displayHost(item.productionUrl) || item.organizationName}</CommandMeta>
+                  <CommandMeta>
+                    {displayHost(item.productionUrl) || item.organizationName}
+                  </CommandMeta>
                 </CommandItem>
               ))}
           </CommandGroup>
@@ -386,10 +413,11 @@ export function CommandPalette() {
         </span>
         <span className="ml-auto flex items-center gap-1.5">
           <MagnifyingGlass className="size-3.5" />
-          {inSite ? m.shell_palette_hint_scope({ site: inSite.name }) : m.shell_agency()}
+          {inSite
+            ? m.shell_palette_hint_scope({ site: inSite.name })
+            : m.shell_agency()}
         </span>
       </div>
     </CommandDialog>
   )
 }
-
