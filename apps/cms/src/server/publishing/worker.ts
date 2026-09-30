@@ -229,7 +229,8 @@ export async function processJob(
           publishedAt: now,
           scheduledAt: null,
           scheduleTimezone: null,
-          updatedAt: now,
+          // Not an edit: keep `updatedAt`, otherwise the entry reads as
+          // changed after this (now live) release and stays "ready".
         })
         .where(
           and(
