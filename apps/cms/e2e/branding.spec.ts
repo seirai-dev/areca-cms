@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-import { TINY_PNG, hydrated, login, signOut } from './helpers'
+import { TINY_PNG, hydrated, login, openAgency, signOut } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -10,12 +10,7 @@ test('agency admin can whitelabel the CMS and reset it', async ({ page }) => {
 
   await login(page)
   // Workspace switcher → Agency workspace → Branding.
-  // The switcher only opens once the shell has hydrated, so keep trying.
-  await expect(async () => {
-    await page.getByTestId('sites-nav').click()
-    await expect(page.getByTestId('agency-nav')).toBeVisible({ timeout: 2_000 })
-  }).toPass({ timeout: 15_000 })
-  await page.getByTestId('agency-nav').click()
+  await openAgency(page)
   await page.getByTestId('branding-nav').click()
   await expect(page).toHaveURL(/\/agency\/branding$/)
   await expect(page.getByTestId('branding-page')).toBeVisible()

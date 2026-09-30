@@ -33,7 +33,7 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   // Every test signs in and hydrates several heavy screens on a dev server.
-  timeout: 90_000,
+  timeout: 120_000,
   expect: { timeout: 15_000 },
   globalSetup: './e2e/global-setup.ts',
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
