@@ -127,11 +127,18 @@ export function useEntryBulkActions(siteId: string, collectionKey: string) {
     },
     onSuccess: async (result, input) => {
       if (result.failed > 0) {
-        if (result.done === 0 && input.ids.length === 1) {
-          toast.error(errorMessage(result.lastError))
+        const reason = errorMessage(result.lastError)
+        if (result.done === 0) {
+          toast.error(
+            input.ids.length === 1
+              ? m.collection_bulk_failed_one()
+              : m.collection_bulk_failed_other({ count: input.ids.length }),
+            { description: reason },
+          )
         } else {
           toast.warning(
             m.editor_bulk_partial({ done: result.done, failed: result.failed }),
+            { description: reason },
           )
         }
       } else {

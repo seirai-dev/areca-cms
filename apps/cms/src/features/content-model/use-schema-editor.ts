@@ -119,7 +119,6 @@ export function useSchemaEditor({
       }),
     )
     // Only a new open or another collection resets the form.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, collection?.key])
 
   const current = fingerprint({ key, label, routePattern, enabled, fields })
