@@ -422,11 +422,23 @@ export async function backToCollection(page: Page) {
   await hydrated(page, page.getByTestId('site-content'))
 }
 
-/** Tray → Go live (sidebar); waits until the site is up to date. */
+/**
+ * Tray → Go live (sidebar); waits until the site is up to date. Clicks again
+ * only while the tray still offers Go live (a click lost to a re-render, or
+ * a rate-limited request: parallel workers share the seeded owner).
+ */
 export async function goLiveFromTray(page: Page) {
   const tray = page.getByTestId('release-status')
   await expect(tray).toHaveAttribute('data-state', /ready|never-live/)
-  await tray.getByTestId('publish-site').click()
+  await expect(async () => {
+    const state = await tray.getAttribute('data-state')
+    if (state === 'ready' || state === 'never-live') {
+      await tray.getByTestId('publish-site').click({ timeout: 5_000 })
+    }
+    await expect(tray).toHaveAttribute('data-state', /going-live|up-to-date/, {
+      timeout: 10_000,
+    })
+  }).toPass({ timeout: 90_000, intervals: [2_000, 5_000] })
   await expect(tray).toHaveAttribute('data-state', 'up-to-date', {
     timeout: 45_000,
   })

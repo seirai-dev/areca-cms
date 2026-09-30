@@ -410,6 +410,7 @@ test('09 on a phone', async ({ browser }) => {
   watchErrors(page, 'phone')
   await signIn(page, OWNER)
   await expect(page.getByTestId('mobile-tab-bar')).toBeVisible()
+  await hydrated(page)
   await screenshot(page, 'phone-overview')
   await page.getByTestId('mobile-content').click()
   await expect(page.getByRole('dialog', { name: 'Content' })).toBeVisible()
