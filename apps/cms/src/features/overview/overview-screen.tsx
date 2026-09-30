@@ -102,6 +102,8 @@ export function OverviewScreen({ site }: { site: MeSite }) {
                 {m.overview_live_at({ host })}
                 <ArrowUpRight className="size-3.5" />
               </a>
+            ) : release.state === 'loading' ? (
+              <Skeleton className="inline-block h-3.5 w-28" />
             ) : (
               <span>{m.shell_not_live_yet()}</span>
             )}

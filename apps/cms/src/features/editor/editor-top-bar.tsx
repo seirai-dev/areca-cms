@@ -147,7 +147,7 @@ export function EditorTopBar({
     ) : primary === 'ready' ? (
       <span aria-hidden="true" className="size-2 rounded-full bg-accent" />
     ) : (
-      <CheckCircle weight="bold" />
+      <CheckCircle weight="bold" className="max-sm:hidden" />
     )
   const primaryDisabled = !canManage || busy || primary !== 'mark'
   const primaryReason = !canManage
@@ -169,7 +169,7 @@ export function EditorTopBar({
       label={
         <>
           {primaryIcon}
-          <span className="hidden sm:inline">{primaryLabel}</span>
+          <span>{primaryLabel}</span>
         </>
       }
       loading={primaryPending}
@@ -265,14 +265,23 @@ export function EditorTopBar({
               </motion.span>
             ) : null}
           </AnimatePresence>
-          <EntryPillView
-            status={uiStatus}
-            backendStatus={backendStatus}
-            scheduledAt={scheduledAt}
-            editedSinceReady={editedSinceReady}
-            size="sm"
-            testId="entry-status"
-          />
+          {/* On phones the primary button already says Ready / Live; keep
+              the pill for the states it does not name. */}
+          <span
+            className={cn(
+              'flex min-w-0',
+              (primary === 'ready' || primary === 'live') && 'max-sm:hidden',
+            )}
+          >
+            <EntryPillView
+              status={uiStatus}
+              backendStatus={backendStatus}
+              scheduledAt={scheduledAt}
+              editedSinceReady={editedSinceReady}
+              size="sm"
+              testId="entry-status"
+            />
+          </span>
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
