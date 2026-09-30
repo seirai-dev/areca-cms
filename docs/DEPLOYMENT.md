@@ -71,7 +71,7 @@ server-rendered previews. The CMS adapter rewrites `ARECA_SNAPSHOT_ID` on every
 deploy.
 
 5. Publish host port (`PUBLISHED_PORT` → `TARGET_PORT`, `publishMode: host`).
-6. Turn off push auto-deploy so only **Publish site** triggers a build.
+6. Turn off push auto-deploy so only **Go live** in the CMS triggers a build.
 7. Set Swarm `updateConfigSwarm.Order = "stop-first"`. The default
    `start-first` cannot bind the same host port; Dokploy still marks the deploy
    `done` while the old container keeps serving.
@@ -92,11 +92,14 @@ The Docker build calls `GET /api/sites/snapshot/current` on `ARECA_CMS_URL`.
 ## 4. CMS site settings
 
 As an agency administrator, first save and verify the organization's Dokploy
-URL and API key under **Organization → Settings → Dokploy**. Verification lists
+URL and API key under **Agency → Clients → {client} → Deployment** (**Save and
+verify**). Verification lists
 the applications accessible to the organization-scoped key. The key is never
 shown again after saving.
 
-Then configure the site (agency admin → Settings, or `updateSite`):
+Then configure the site in **Settings › Deployment** (agency admins): pick the
+application from the verified list (or type its ID) and set the health check
+URL. The stored target is equivalent to (`updateSite`):
 
 ```json
 {
@@ -110,7 +113,10 @@ Then configure the site (agency admin → Settings, or `updateSite`):
 manifest from the customer package (`pnpm sync-manifest` with `ARECA_CMS_URL`
 and `ARECA_SITE_TOKEN`).
 
-## 5. What **Publish site** does
+## 5. What **Go live** does
+
+**Go live** is in the Go-live tray at the bottom of the sidebar (and the
+Go-live panel, `?panel=golive`). Owners and agency admins can use it.
 
 1. CMS writes an immutable publication snapshot and enqueues a `build_job`.
 2. Worker sets the publication to `building` and calls `POST /api/application.deploy`.

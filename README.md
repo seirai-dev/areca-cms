@@ -1,6 +1,8 @@
 # Areca
 
-Areca is a **build-time CMS** for agency-managed sites. Editors author content in the CMS. Publishing writes an immutable snapshot, a build job deploys the customer's TanStack Start site via Dokploy, and the site pulls that pinned snapshot **at build time**. Visitors never call the CMS.
+Areca is a **build-time CMS** for agency-managed sites. Editors write drafts in the CMS; owners mark them **ready** and press **Go live**. Going live writes an immutable snapshot, a build job deploys the customer's TanStack Start site via Dokploy, and the site pulls that pinned snapshot **at build time**. Visitors never call the CMS.
+
+![The site Overview](docs/screenshots/overview-light.png)
 
 ```text
 CMS (author + validate)
@@ -23,6 +25,13 @@ health check
       ▼
 publication marked live
 ```
+
+## The CMS at a glance
+
+- **Workspaces.** Everyone works inside a site workspace ("Acme Website"): Overview, the site's content types, Library, People (owners) and Settings (agency admins). Agency admins also get the **Agency** workspace: clients, all sites, people, activity and branding. The workspace card at the top of the sidebar switches between them; ⌘K opens the command palette.
+- **Draft → Ready → Live.** Drafts save themselves as you type. **Mark as ready** queues an entry for the next release; the **Go-live tray** at the bottom of the sidebar shows what is waiting and runs **Go live**. Releases, build logs and rollback live in the Go-live panel.
+- **Roles.** Editors write and edit drafts; owners also mark as ready, schedule, archive, delete, go live and manage people; agency admins can do everything, including site settings and content types.
+- Light and dark themes, English/Dutch/Turkish UI, whitelabel branding (name, logo, accent, font). The design system is documented in [`docs/DESIGN.md`](docs/DESIGN.md).
 
 ## Layout
 
@@ -81,6 +90,8 @@ pnpm -r typecheck
 ## Docs
 
 - [`docs/ONBOARDING.md`](docs/ONBOARDING.md) — empty CMS → first admin → demo site
+- [`docs/DESIGN.md`](docs/DESIGN.md) — design system: tokens, type, primitives, patterns, checklist
+- [`docs/design/brief.md`](docs/design/brief.md) — the UI/UX redo specification and its deviations
 - [`docs/DECISIONS.md`](docs/DECISIONS.md) — architecture decisions
 - [`docs/MVP_STATUS.md`](docs/MVP_STATUS.md) — Suggested MVP audit
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — Dokploy customer-site deploy

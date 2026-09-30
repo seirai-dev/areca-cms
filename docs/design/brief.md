@@ -1,6 +1,6 @@
 # Areca CMS — design brief (full UI/UX redo, 2026)
 
-Status: **binding specification** for the `feat/full-ui-redo` rebuild. Every screen in `apps/cms` follows this document. Where older code, comments, `docs/DESIGN.md` or memory disagree, this document wins. Backend behaviour (server functions, permissions, DB) does **not** change; this is a presentation and interaction rebuild.
+Status: **Implemented on `feat/full-ui-redo`.** This was the binding specification for the rebuild of `apps/cms`; the few places where the build differs are listed under [Deviations from this brief](#deviations-from-this-brief) at the end. The living design-system guide is [`docs/DESIGN.md`](../DESIGN.md). Backend behaviour (server functions, permissions, DB) did **not** change; this was a presentation and interaction rebuild.
 
 ---
 
@@ -636,3 +636,20 @@ The editor title input is 40/48, 700, -0.025em. Keep the `text-ds-*` utility mec
 7. **Both themes, all breakpoints.** Check every screen in light and dark, at 1440, 1024, 768 and 390px wide.
 8. **No hard-coded colours** in components. Use tokens only, so that branding reaches everything.
 9. **Performance:** no per-row queries for large lists without caching. Reuse query keys. Polling only happens while something is active.
+
+---
+
+## Deviations from this brief
+
+Decided during implementation; the code and `docs/DESIGN.md` follow these.
+
+| Brief | Built | Why |
+|---|---|---|
+| §3.4 filter "Ready/Live" | The status filter reads **Ready & live** | Both states share the server status `published`; the label says so plainly. |
+| §3.3 "Drafts waiting" for owners only | Shown to **owners and agency admins** | Admins review drafts too; the card only lists drafts by other people. |
+| §3.11 Client page shows its activity | Client activity lives at **`/agency/activity?client=<id>`** | One activity page with a client filter instead of a second copy; the client page links to it. |
+| §3.12 palette "Go live" runs the release | Palette **Go live opens the Go-live panel** | Going live from a keystroke needs the "what's changing" context and the Urgent switch first. |
+| §3.5 new-entry autosave does a `replace` navigation | Editor routes render through an **`EditorHost` in the collection layout** | New and existing entries share one mounted editor, so the first save swaps the URL without remounting (no lost focus, caret or scroll). |
+| §3.5 "Keep every current … shortcut" | The rich-text **link popover has no ⌘K** | ⌘K belongs to the command palette everywhere; nothing advertises ⌘K for links. |
+| §3.1 "brand logo tile and app name sit above the card" | The auth lockup is the **logo tile only** | The card's own heading already names the app ("Sign in to Areca"). |
+| §3.1 "Signed in: a single Join button" | The invite button is named **"Join {Org}"** | Says what happens; the heading is "{Org} invited you". |
