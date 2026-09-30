@@ -8,6 +8,7 @@ import {
   createIsolatedAcmeSite,
   entryIdFromUrl,
   goLiveFromTray,
+  hydrated,
   login,
   markAsReady,
   openCollection,
@@ -131,6 +132,7 @@ test('owner writes an article in focus mode, marks it ready and goes live', asyn
 
   /* Everything survives a reload. */
   await page.reload()
+  await hydrated(page, titleInput(page))
   await expect(page.getByTestId('entry-editor')).toHaveAttribute(
     'data-ready',
     'true',

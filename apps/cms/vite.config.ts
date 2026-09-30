@@ -32,6 +32,11 @@ function arecaAssetFileDevPlugin(): Plugin {
 
 const config = defineConfig(({ command }) => ({
   resolve: { tsconfigPaths: true },
+  server: {
+    // E2E runs set this so edits elsewhere in the working tree never reload
+    // pages mid-test (scripts/e2e-isolated.mjs, playwright.config.ts).
+    hmr: process.env.VITE_DISABLE_HMR === 'true' ? false : undefined,
+  },
   plugins: [
     arecaAssetFileDevPlugin(),
     devtools(),

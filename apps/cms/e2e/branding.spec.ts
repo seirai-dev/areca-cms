@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-import { TINY_PNG, login, signOut } from './helpers'
+import { TINY_PNG, hydrated, login, signOut } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -82,6 +82,7 @@ test('agency admin can whitelabel the CMS and reset it', async ({ page }) => {
   // Reset restores the defaults.
   await login(page)
   await page.goto('/agency/branding')
+  await hydrated(page)
   await page.getByRole('button', { name: 'Reset to defaults' }).click()
   await page
     .getByTestId('reset-branding')

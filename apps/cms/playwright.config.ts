@@ -76,6 +76,8 @@ export default defineConfig({
         timeout: 180_000,
         stdout: 'ignore',
         stderr: 'pipe',
+        // No hot reloads mid-test when files change (see vite.config.ts).
+        env: { VITE_DISABLE_HMR: 'true' },
       }
     : undefined,
 })

@@ -28,6 +28,32 @@ export const TINY_PNG = Buffer.from(
 )
 
 /* ------------------------------------------------------------------------
+   Hydration
+------------------------------------------------------------------------ */
+
+/**
+ * Waits until React has hydrated `target` (it attaches its internal props to
+ * the DOM node). Server-rendered markup is visible several seconds before
+ * that on the dev server, and events fired earlier (clicks on buttons, file
+ * inputs) are lost. Call after `goto`/`reload` before interacting.
+ */
+export async function hydrated(page: Page, target?: Locator) {
+  const node = target ?? page.locator('#main-content')
+  await expect
+    .poll(
+      () =>
+        node
+          .first()
+          .evaluate((el) =>
+            Object.keys(el).some((key) => key.startsWith('__reactProps')),
+          )
+          .catch(() => false),
+      { timeout: 60_000, message: 'page hydrated' },
+    )
+    .toBe(true)
+}
+
+/* ------------------------------------------------------------------------
    Auth and shell
 ------------------------------------------------------------------------ */
 
@@ -42,11 +68,11 @@ export async function authForm(page: Page) {
   return form
 }
 
-export async function login(page: Page, email = ADMIN) {
+export async function login(page: Page, email = ADMIN, password = PASSWORD) {
   await page.goto('/login')
   const form = await authForm(page)
   await page.getByLabel('Email').fill(email)
-  await page.getByLabel('Password').fill(PASSWORD)
+  await page.getByLabel('Password').fill(password)
   await form.getByRole('button', { name: 'Sign in' }).click()
   // `/` resolves to a workspace (last site, only site, Agency or /sites).
   await expect(page).not.toHaveURL(/\/login/, { timeout: 30_000 })
@@ -109,7 +135,8 @@ export async function openSite(page: Page, slug: string) {
   }
   await expect(page).toHaveURL(/\/sites\/[^/?]+(?:\?.*)?$/)
   await expect(page.getByTestId('site-overview')).toBeVisible()
-  await expect(page.getByTestId('release-status')).toBeVisible()
+  // The sidebar (and its tray) is hidden on phones but still hydrates.
+  await hydrated(page, page.getByTestId('sidebar'))
   return siteIdFromUrl(page)
 }
 
@@ -125,6 +152,7 @@ export async function openAgency(page: Page) {
   await page.getByTestId('agency-nav').click()
   await expect(page).toHaveURL(/\/agency$/)
   await expect(page.getByTestId('agency-overview')).toBeVisible()
+  await hydrated(page, page.getByTestId('sidebar'))
 }
 
 /** A collection from the sidebar's CONTENT group. */
@@ -135,6 +163,7 @@ export async function openCollection(page: Page, key = 'articles') {
     'data-ready',
     'true',
   )
+  await hydrated(page, page.getByTestId('site-content'))
 }
 
 /** The Go‑live panel, opened from the sidebar tray. */
@@ -194,6 +223,7 @@ export async function expectToast(page: Page, text: string | RegExp) {
 export async function openClient(page: Page, name: string, slug: string) {
   await page.goto('/agency/clients')
   await expect(page.getByTestId('organizations-page')).toBeVisible()
+  await hydrated(page)
   await page.getByLabel('Search clients').fill(name)
   await page.getByTestId(`client-row-${slug}`).click()
   await expect(page.getByTestId('organization-page')).toBeVisible()
@@ -323,6 +353,7 @@ export async function startNewEntry(page: Page) {
   // `data-ready` flips once an existing entry is loaded; a new one has none.
   await expect(page.getByTestId('editor-canvas')).toBeVisible()
   await expect(titleInput(page)).toBeEditable()
+  await hydrated(page, titleInput(page))
   await expect(saveStatus(page)).toHaveText(/Not saved yet/)
 }
 
@@ -388,6 +419,7 @@ export async function backToCollection(page: Page) {
     'data-ready',
     'true',
   )
+  await hydrated(page, page.getByTestId('site-content'))
 }
 
 /** Tray → Go live (sidebar); waits until the site is up to date. */
@@ -403,4 +435,38 @@ export async function goLiveFromTray(page: Page) {
 /** Rows of the Go‑live panel's releases timeline. */
 export function releases(panel: Locator) {
   return panel.getByTestId('publications')
+}
+
+/* ------------------------------------------------------------------------
+   Mail (Mailpit)
+------------------------------------------------------------------------ */
+
+const MAILPIT = process.env.MAILPIT_URL ?? 'http://localhost:8025'
+
+type MailpitMessage = { ID: string; Subject: string; To: Array<{ Address?: string }> }
+
+/** The invitation link e-mailed to `email` (polls Mailpit). */
+export async function waitForInviteLink(email: string, timeout = 30_000) {
+  const deadline = Date.now() + timeout
+  while (Date.now() < deadline) {
+    const list = await fetch(
+      `${MAILPIT}/api/v1/search?query=${encodeURIComponent(`to:"${email}"`)}`,
+    )
+    if (list.ok) {
+      const body = (await list.json()) as { messages?: MailpitMessage[] }
+      const match = (body.messages ?? []).find((msg) =>
+        msg.Subject.startsWith('Invitation to'),
+      )
+      if (match) {
+        const detail = await fetch(`${MAILPIT}/api/v1/message/${match.ID}`)
+        const full = (await detail.json()) as { HTML?: string; Text?: string }
+        const href = `${full.Text ?? ''} ${full.HTML ?? ''}`.match(
+          /https?:\/\/[^\s"'<>]+\/invite\/[A-Za-z0-9_-]+/,
+        )?.[0]
+        if (href) return href
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500))
+  }
+  throw new Error(`No invitation e-mail for ${email} in Mailpit`)
 }
