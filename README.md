@@ -76,6 +76,8 @@ pnpm test:e2e
 pnpm -r typecheck
 ```
 
+`pnpm test:e2e` runs against `PLAYWRIGHT_BASE_URL` (default `http://localhost:3000`) and its setup spec **wipes the database and the upload bucket**. To keep your dev data, run the suite on an isolated stack instead: `pnpm --filter @areca/cms test:e2e:isolated` (and `test:e2e:qa:isolated` for the screenshot walkthrough). It uses the `areca_e2e` database, the `areca-e2e` bucket and Redis DB 1 on port 3100, creating and migrating them as needed (see `apps/cms/scripts/e2e-isolated.mjs`). `PW_CHROMIUM_PATH` points Playwright at a local Chromium; `QA_SCREENSHOT_DIR` sets where the walkthrough saves screenshots.
+
 ## Docs
 
 - [`docs/ONBOARDING.md`](docs/ONBOARDING.md) — empty CMS → first admin → demo site
