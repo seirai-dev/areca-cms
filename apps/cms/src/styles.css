@@ -91,6 +91,7 @@
   /* Segmented controls (Apple's systemFill) */
   --color-segment-track: rgb(118 118 128 / 0.12);
   --color-segment-thumb: #ffffff;
+  --color-segment-edge: rgb(0 0 0 / 0.05);
 
   /* Type */
   --font-sans:
@@ -354,7 +355,8 @@ html.dark,
   --color-surface-state-hover: rgb(255 255 255 / 0.05);
   --color-surface-state-pressed: rgb(255 255 255 / 0.08);
   --color-segment-track: rgb(118 118 128 / 0.24);
-  --color-segment-thumb: #56565c;
+  --color-segment-thumb: #636369;
+  --color-segment-edge: rgb(255 255 255 / 0.14);
 
   --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3);
   --shadow-float:
@@ -428,6 +430,7 @@ html.dark,
   --color-surface-state-pressed: rgb(0 0 0 / 0.07);
   --color-segment-track: rgb(118 118 128 / 0.12);
   --color-segment-thumb: #ffffff;
+  --color-segment-edge: rgb(0 0 0 / 0.05);
 
   --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04);
   --shadow-float: 0 12px 40px -8px rgb(0 0 0 / 0.18);

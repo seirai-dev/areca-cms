@@ -5,7 +5,6 @@ import { cn } from '#/lib/utils'
 /**
  * Card: surface, 16px radius, hairline border, near-zero shadow, 20px padding
  * (brief §2.2, §4.3). `interactive` adds the hover lift used by grid cards.
- * `Surface` is the legacy name, kept so old screens compile.
  */
 function Card({
   className,

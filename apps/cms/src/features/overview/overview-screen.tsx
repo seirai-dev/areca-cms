@@ -20,6 +20,7 @@ import type { SidebarCollection } from '#/components/shell/sidebar'
 import { UserAvatar } from '#/components/ui/avatar'
 import { Button } from '#/components/ui/button'
 import { Card } from '#/components/ui/card'
+import { greeting, greetingName } from '#/features/overview/greeting'
 import { EmptyState } from '#/components/ui/empty-state'
 import { InsetList, InsetRow } from '#/components/ui/inset-list'
 import { PageHeader } from '#/components/ui/page-header'
@@ -62,14 +63,6 @@ type RecentRow = {
   updatedByName: string | null
 }
 
-/** "Good morning, Kaan" by the local hour. */
-function greeting(firstName: string, hour = new Date().getHours()) {
-  if (hour < 5 || hour >= 18)
-    return m.overview_greeting_evening({ name: firstName })
-  if (hour < 12) return m.overview_greeting_morning({ name: firstName })
-  return m.overview_greeting_afternoon({ name: firstName })
-}
-
 /**
  * Site Overview (brief §3.3), phase 1: greeting, the attention strip, create
  * tiles, recently edited and recent activity. Phase 2 completes it (owner
@@ -82,10 +75,10 @@ export function OverviewScreen({ site }: { site: MeSite }) {
   const release = useReleaseStatus(site.id)
   const queryClient = useQueryClient()
   const { collections, isLoading, isError } = useSiteCollections(site.id, false)
-  const firstName = me.user.name.split(/\s+/)[0] || me.user.name
+  const name = greetingName(me.user.name, [site.organizationName, site.name])
   // Greeting depends on the viewer's clock: render it after mount.
   const [hello, setHello] = React.useState<string | null>(null)
-  React.useEffect(() => setHello(greeting(firstName)), [firstName])
+  React.useEffect(() => setHello(greeting(name)), [name])
 
   const host = displayHost(site.productionUrl)
 
@@ -272,6 +265,9 @@ function SeeAllActivity() {
   )
 }
 
+/** Tighter on phones so two attention cards fit above the fold. */
+const ATTENTION_CARD = 'gap-3 max-sm:gap-2.5 max-sm:p-4'
+
 /** Cards that appear only when something needs you (brief §3.3). */
 function AttentionStrip({
   site,
@@ -297,7 +293,11 @@ function AttentionStrip({
 
   if (release.state === 'failed') {
     cards.push(
-      <Card key="failed" className="gap-3" data-testid="attention-failed">
+      <Card
+        key="failed"
+        className={ATTENTION_CARD}
+        data-testid="attention-failed"
+      >
         <div className="flex items-start gap-3">
           <FailedIcon size={20} className="mt-0.5 text-icon-error" />
           <div className="grid gap-0.5">
@@ -328,7 +328,11 @@ function AttentionStrip({
 
   if (release.pending > 0 && release.state !== 'going-live') {
     cards.push(
-      <Card key="ready" className="gap-3" data-testid="attention-ready">
+      <Card
+        key="ready"
+        className={ATTENTION_CARD}
+        data-testid="attention-ready"
+      >
         <div className="flex items-start gap-3">
           <span className="mt-0.5 grid size-5 place-content-center rounded-full bg-accent-soft">
             <RocketLaunch weight="fill" className="size-3 text-icon-accent" />
@@ -389,7 +393,11 @@ function AttentionStrip({
 
   if (pending.scheduled.length > 0) {
     cards.push(
-      <Card key="scheduled" className="gap-3" data-testid="attention-scheduled">
+      <Card
+        key="scheduled"
+        className={ATTENTION_CARD}
+        data-testid="attention-scheduled"
+      >
         <div className="flex items-start gap-3">
           <ClockIcon size={20} className="mt-0.5 text-icon-warning" />
           <div className="grid min-w-0 flex-1 gap-2">
@@ -420,7 +428,11 @@ function AttentionStrip({
   const drafts = useDraftsWaiting(site.id, collections, myUserId, canPublish)
   if (drafts.length > 0) {
     cards.push(
-      <Card key="drafts" className="gap-3" data-testid="attention-drafts">
+      <Card
+        key="drafts"
+        className={ATTENTION_CARD}
+        data-testid="attention-drafts"
+      >
         <div className="flex items-start gap-3">
           <PencilSimpleLine
             size={20}
@@ -466,7 +478,7 @@ function AttentionStrip({
     <section
       aria-label={m.overview_attention()}
       data-testid="attention-strip"
-      className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,280px),1fr))] gap-3"
+      className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,280px),1fr))] gap-2.5 sm:gap-3"
     >
       {cards}
     </section>

@@ -102,7 +102,7 @@ function TabsTrigger({
           ? 'h-11 px-0.5'
           : cn(
               'z-0 h-full flex-1 rounded-[8px] px-3',
-              'data-[state=active]:bg-segment-thumb data-[state=active]:shadow-[0_1px_2px_rgb(0_0_0/0.1),0_0_0_0.5px_rgb(0_0_0/0.04)]',
+              'data-[state=active]:bg-segment-thumb data-[state=active]:shadow-[0_1px_2px_rgb(0_0_0/0.1),0_0_0_0.5px_var(--color-segment-edge)]',
             ),
         className,
       )}

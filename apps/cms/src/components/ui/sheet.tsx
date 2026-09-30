@@ -61,22 +61,17 @@ function PanelCloseButton({ className }: { className?: string }) {
   )
 }
 
-/**
- * `anchor` is kept for API compatibility; the shell has no top navbar on
- * desktop, so side drawers always use the full viewport height (inset 8px).
- */
+/** Side drawers use the full viewport height (inset 8px). */
 function SheetContent({
   className,
   children,
   side = 'right',
   size = 'md',
-  anchor: _anchor = 'navbar',
   showCloseButton = true,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: 'top' | 'right' | 'bottom' | 'left'
   size?: keyof typeof SHEET_SIZES
-  anchor?: 'navbar' | 'viewport'
   showCloseButton?: boolean
 }) {
   const vertical = side === 'right' || side === 'left'

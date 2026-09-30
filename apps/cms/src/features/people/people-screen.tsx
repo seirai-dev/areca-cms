@@ -1,4 +1,3 @@
-import * as React from 'react'
 import { Link } from '@tanstack/react-router'
 import { ArrowUpRight, UserPlus } from '@phosphor-icons/react'
 
@@ -15,8 +14,18 @@ import { PeopleManager } from './people-manager'
  * header owning the one primary action, "Invite people". Admins also get a
  * quiet link to the client in the Agency workspace.
  */
-export function PeopleScreen({ site, me }: { site: MeSite; me: Me }) {
-  const [inviteOpen, setInviteOpen] = React.useState(false)
+export function PeopleScreen({
+  site,
+  me,
+  inviteOpen,
+  onInviteOpenChange: setInviteOpen,
+}: {
+  site: MeSite
+  me: Me
+  /** Driven by `?invite=1` so the command palette can open the sheet. */
+  inviteOpen: boolean
+  onInviteOpenChange: (open: boolean) => void
+}) {
   return (
     <div className="grid gap-8" data-testid="people-page">
       <PageHeader

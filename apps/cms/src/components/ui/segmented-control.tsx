@@ -53,7 +53,9 @@ export function SegmentedControl<T extends string>({
 
   function move(from: number, delta: number | 'first' | 'last') {
     if (enabled.length === 0) return
-    const current = enabled.findIndex((option) => option.value === options[from]?.value)
+    const current = enabled.findIndex(
+      (option) => option.value === options[from]?.value,
+    )
     const nextIndex =
       delta === 'first'
         ? 0
@@ -110,7 +112,10 @@ export function SegmentedControl<T extends string>({
                 if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
                   event.preventDefault()
                   move(index, 1)
-                } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+                } else if (
+                  event.key === 'ArrowLeft' ||
+                  event.key === 'ArrowUp'
+                ) {
                   event.preventDefault()
                   move(index, -1)
                 } else if (event.key === 'Home') {
@@ -139,20 +144,22 @@ export function SegmentedControl<T extends string>({
                 reduce ? (
                   <span
                     aria-hidden="true"
-                    className="absolute inset-0 -z-0 rounded-[8px] bg-segment-thumb shadow-[0_1px_2px_rgb(0_0_0/0.1),0_0_0_0.5px_rgb(0_0_0/0.05)]"
+                    className="absolute inset-0 -z-0 rounded-[8px] bg-segment-thumb shadow-[0_1px_2px_rgb(0_0_0/0.1),0_0_0_0.5px_var(--color-segment-edge)]"
                   />
                 ) : (
                   <motion.span
                     aria-hidden="true"
                     layoutId="segment-thumb"
                     transition={SPRING_SMALL}
-                    className="absolute inset-0 -z-0 rounded-[8px] bg-segment-thumb shadow-[0_1px_2px_rgb(0_0_0/0.1),0_0_0_0.5px_rgb(0_0_0/0.05)]"
+                    className="absolute inset-0 -z-0 rounded-[8px] bg-segment-thumb shadow-[0_1px_2px_rgb(0_0_0/0.1),0_0_0_0.5px_var(--color-segment-edge)]"
                   />
                 )
               ) : null}
               <span className="relative z-[1] inline-flex min-w-0 items-center gap-1.5">
                 {option.icon}
-                {iconOnly ? null : <span className="truncate">{option.label}</span>}
+                {iconOnly ? null : (
+                  <span className="truncate">{option.label}</span>
+                )}
               </span>
             </button>
           )

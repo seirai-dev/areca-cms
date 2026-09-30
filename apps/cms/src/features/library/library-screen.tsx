@@ -83,6 +83,18 @@ export function LibraryScreen({ site, me }: { site: MeSite; me: Me }) {
   const openPicker = () => inputRef.current?.click()
   const searching = needle !== ''
   const total = library.assets.length
+  // One quiet hint in the header instead of a warning dot on every tile.
+  const missingAlt = library.assets.filter(
+    (asset) => isImage(asset) && !asset.altText?.trim(),
+  )
+  const [onlyMissingAlt, setOnlyMissingAlt] = React.useState(false)
+  const filteringAlt = onlyMissingAlt && missingAlt.length > 0
+  const visibleAssets = filteringAlt ? missingAlt : library.assets
+  const countLabel = library.hasNextPage
+    ? m.library_count_more({ count: total })
+    : total === 1
+      ? m.library_count_one()
+      : m.library_count_other({ count: total })
 
   return (
     <div className="grid gap-6" data-testid="library-page">
@@ -92,13 +104,35 @@ export function LibraryScreen({ site, me }: { site: MeSite; me: Me }) {
           client: site.organizationName,
         })}
         meta={
-          library.isSuccess && total > 0
-            ? library.hasNextPage
-              ? m.library_count_more({ count: total })
-              : total === 1
-                ? m.library_count_one()
-                : m.library_count_other({ count: total })
-            : undefined
+          library.isSuccess && total > 0 ? (
+            <span className="inline-flex flex-wrap items-center gap-x-1.5">
+              <span className="tnum">{countLabel}</span>
+              {missingAlt.length > 0 ? (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <button
+                    type="button"
+                    onClick={() => setOnlyMissingAlt((value) => !value)}
+                    aria-pressed={filteringAlt}
+                    className="inline-flex items-center gap-1.5 rounded-[4px] text-text-secondary tnum outline-none hover:text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus aria-pressed:text-text-warning"
+                    data-testid="library-missing-alt-filter"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="size-1.5 rounded-full bg-status-warning"
+                    />
+                    {filteringAlt
+                      ? m.library_missing_alt_show_all()
+                      : missingAlt.length === 1
+                        ? m.library_missing_alt_one()
+                        : m.library_missing_alt_other({
+                            count: missingAlt.length,
+                          })}
+                  </button>
+                </>
+              ) : null}
+            </span>
+          ) : undefined
         }
         actions={
           <>
@@ -158,7 +192,7 @@ export function LibraryScreen({ site, me }: { site: MeSite; me: Me }) {
       ) : library.isPending ? (
         <div className={GRID} aria-hidden="true">
           {Array.from({ length: 12 }).map((_, index) => (
-            <Skeleton key={index} className="aspect-square rounded-[10px]" />
+            <Skeleton key={index} className="aspect-square rounded-thumb" />
           ))}
         </div>
       ) : total === 0 && uploads.items.length === 0 ? (
@@ -214,11 +248,12 @@ export function LibraryScreen({ site, me }: { site: MeSite; me: Me }) {
                 <UploadTile item={item} />
               </li>
             ))}
-            {library.assets.map((asset, index) => (
+            {visibleAssets.map((asset, index) => (
               <li key={asset.id}>
                 <AssetTile
                   asset={asset}
                   index={index}
+                  showAltHint={filteringAlt}
                   selected={detailOpen && asset.id === activeId}
                   onOpen={() => {
                     setActiveId(asset.id)
@@ -228,7 +263,7 @@ export function LibraryScreen({ site, me }: { site: MeSite; me: Me }) {
               </li>
             ))}
           </ul>
-          {library.hasNextPage ? (
+          {library.hasNextPage && !filteringAlt ? (
             <div className="flex justify-center">
               <Button
                 type="button"
@@ -263,11 +298,14 @@ function AssetTile({
   index,
   selected,
   onOpen,
+  showAltHint = false,
 }: {
   asset: LibraryAsset
   index: number
   selected: boolean
   onOpen: () => void
+  /** Keep the "No description" dot visible (the header filter is on). */
+  showAltHint?: boolean
 }) {
   const reduce = useReducedMotion()
   const image = isImage(asset)
@@ -290,10 +328,14 @@ function AssetTile({
         data-testid={`media-card-${asset.originalFilename}`}
         data-selected={selected || undefined}
         className={cn(
-          'group/tile relative block aspect-square w-full overflow-hidden rounded-[10px] border border-border-default bg-background-subtle text-left',
+          'group/tile relative block aspect-square w-full overflow-hidden rounded-thumb bg-background-subtle text-left',
+          // The hairline sits above the picture so image and file tiles share
+          // one edge in both themes.
+          'after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:border after:border-border-default',
           'transition-[box-shadow,transform,border-color] duration-200 ease-(--ease-standard) hover:-translate-y-0.5 hover:shadow-raise motion-reduce:hover:translate-y-0',
           'outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus',
-          selected && 'border-accent shadow-[0_0_0_2px_var(--color-accent)]',
+          selected &&
+            'shadow-[0_0_0_2px_var(--color-accent)] after:border-accent',
         )}
       >
         {image ? (
@@ -330,18 +372,24 @@ function AssetTile({
         >
           {asset.originalFilename}
         </span>
+        {missingAlt ? (
+          <Hint label={m.library_no_description()} side="top">
+            <span
+              className={cn(
+                'absolute top-2 right-2 grid size-3.5 place-content-center rounded-full bg-background-surface/90 transition-opacity duration-150',
+                // Quiet by default; shown on hover/focus and while the header's
+                // "need a description" filter is on.
+                !showAltHint &&
+                  'opacity-0 group-hover/tile:opacity-100 group-focus-visible/tile:opacity-100',
+              )}
+              data-testid="media-missing-alt"
+            >
+              <span className="size-1.5 rounded-full bg-status-warning" />
+              <span className="sr-only">{m.library_no_description()}</span>
+            </span>
+          </Hint>
+        ) : null}
       </button>
-      {missingAlt ? (
-        <Hint label={m.library_no_description()} side="top">
-          <span
-            className="absolute top-2 right-2 grid size-4 place-content-center rounded-full bg-background-surface/90 shadow-card"
-            data-testid="media-missing-alt"
-          >
-            <span className="size-2 rounded-full bg-status-warning" />
-            <span className="sr-only">{m.library_no_description()}</span>
-          </span>
-        </Hint>
-      ) : null}
     </motion.div>
   )
 }
@@ -354,7 +402,7 @@ function UploadTile({ item }: { item: UploadItem }) {
   const circumference = 2 * Math.PI * radius
   return (
     <div
-      className="relative aspect-square overflow-hidden rounded-[10px] border border-dashed border-border-strong bg-background-subtle"
+      className="relative aspect-square overflow-hidden rounded-thumb border border-dashed border-border-strong bg-background-subtle"
       data-testid="media-upload-tile"
       aria-label={item.name}
       role="status"

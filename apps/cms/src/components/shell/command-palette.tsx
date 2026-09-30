@@ -296,6 +296,7 @@ export function CommandPalette() {
                   go({
                     to: '/sites/$siteId/people',
                     params: { siteId: inSite.id },
+                    search: { invite: 1 },
                   })
                 }
               >
