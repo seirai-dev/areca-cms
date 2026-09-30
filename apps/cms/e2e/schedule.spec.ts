@@ -6,6 +6,7 @@ import {
   createArticle,
   createIsolatedAcmeSite,
   expectToast,
+  hydrated,
   login,
   openCollection,
   openGoLivePanel,
@@ -79,15 +80,20 @@ test('owner schedules an article from the popover and the worker makes it live',
     'scheduled',
   )
 
-  // The worker publishes it when due and requests a release.
-  await expect(async () => {
-    await page.getByTestId('status-filter-all').click()
-    await expect(row.getByTestId('entry-status')).toHaveAttribute(
-      'data-status',
-      'published',
-      { timeout: 5_000 },
-    )
-  }).toPass({ timeout: 180_000, intervals: [5_000] })
+  // The editor watches a scheduled entry; the worker publishes it when due
+  // and requests a release.
+  await row.getByRole('link').first().click()
+  await expect(page.getByTestId('entry-editor')).toHaveAttribute('data-ready', 'true')
+  await expect(page.getByTestId('entry-status')).toHaveAttribute(
+    'data-status',
+    'published',
+    { timeout: 180_000 },
+  )
+  await backToCollection(page)
+  // The list does not poll; a reload shows the new state.
+  await page.reload()
+  await hydrated(page, page.getByTestId('site-content'))
+  await page.getByTestId('status-filter-all').click()
   await expect(page.getByTestId('release-status')).toHaveAttribute(
     'data-state',
     'up-to-date',
