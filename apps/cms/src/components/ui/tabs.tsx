@@ -2,7 +2,7 @@ import * as React from 'react'
 import { cva } from 'class-variance-authority'
 import type { VariantProps } from 'class-variance-authority'
 import { Tabs as TabsPrimitive } from 'radix-ui'
-import { motion, useReducedMotion } from 'motion/react'
+import { LayoutGroup, motion, useReducedMotion } from 'motion/react'
 
 import { SPRING_SMALL } from '#/lib/motion'
 import { cn } from '#/lib/utils'
@@ -16,25 +16,43 @@ import { cn } from '#/lib/utils'
 
 const TabsVariantContext = React.createContext<'line' | 'segmented'>('line')
 const TabsIdContext = React.createContext<string>('tabs')
+/** The selected value, so only the active trigger mounts the indicator (a
+ *  shared `layoutId` on every trigger left the visible one at opacity 0). */
+const TabsValueContext = React.createContext<string | undefined>(undefined)
 
 function Tabs({
   className,
   orientation = 'horizontal',
+  value,
+  defaultValue,
+  onValueChange,
   ...props
 }: React.ComponentProps<typeof TabsPrimitive.Root>) {
   const id = React.useId()
+  const [uncontrolled, setUncontrolled] = React.useState(defaultValue)
+  const current = value ?? uncontrolled
   return (
     <TabsIdContext.Provider value={id}>
-      <TabsPrimitive.Root
-        data-slot="tabs"
-        data-orientation={orientation}
-        orientation={orientation}
-        className={cn(
-          'group/tabs flex min-w-0 gap-2 data-[orientation=horizontal]:flex-col',
-          className,
-        )}
-        {...props}
-      />
+      <TabsValueContext.Provider value={current}>
+        <LayoutGroup id={id}>
+          <TabsPrimitive.Root
+            data-slot="tabs"
+            data-orientation={orientation}
+            orientation={orientation}
+            className={cn(
+              'group/tabs flex min-w-0 gap-2 data-[orientation=horizontal]:flex-col',
+              className,
+            )}
+            value={value}
+            defaultValue={defaultValue}
+            onValueChange={(next) => {
+              setUncontrolled(next)
+              onValueChange?.(next)
+            }}
+            {...props}
+          />
+        </LayoutGroup>
+      </TabsValueContext.Provider>
     </TabsIdContext.Provider>
   )
 }
@@ -84,6 +102,7 @@ function TabsTrigger({
 }: React.ComponentProps<typeof TabsPrimitive.Trigger>) {
   const variant = React.useContext(TabsVariantContext)
   const groupId = React.useContext(TabsIdContext)
+  const selected = React.useContext(TabsValueContext) === props.value
   const reduceMotion = useReducedMotion()
 
   return (
@@ -108,10 +127,10 @@ function TabsTrigger({
       {...props}
     >
       {children}
-      {variant === 'line' ? (
+      {variant === 'line' && selected ? (
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 group-data-[state=inactive]/trigger:hidden"
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5"
         >
           {reduceMotion ? (
             <span className="block h-full w-full rounded-full bg-text-primary" />
