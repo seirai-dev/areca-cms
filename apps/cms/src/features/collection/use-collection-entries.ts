@@ -11,6 +11,12 @@ import { queryKeys } from '#/lib/content/query-keys'
 import { errorMessage } from '#/lib/content/utils'
 import { useInvalidateGoLive } from '#/features/golive/use-go-live'
 import type { EntryData, EntryStatus } from '#/lib/types'
+import {
+  DUE_POLL_MS,
+  nextPollStart,
+  scheduledTimes,
+  shouldPollScheduled,
+} from './scheduled-poll'
 import { m } from '#/paraglide/messages'
 import {
   deleteEntryFn,
@@ -74,6 +80,13 @@ export function useCollectionEntries({
       return loaded < last.total ? loaded : undefined
     },
     placeholderData: keepPreviousData,
+    // A scheduled entry goes live on the server; refresh the list while one
+    // is due (or less than a minute away) and stop once none is.
+    refetchInterval: (q) => {
+      const pages = q.state.data?.pages ?? []
+      const times = scheduledTimes(pages.flatMap((page) => page.items))
+      return shouldPollScheduled(times) ? DUE_POLL_MS : false
+    },
   })
 
   const rows = React.useMemo(
@@ -81,6 +94,36 @@ export function useCollectionEntries({
     [query.data],
   )
   const total = query.data?.pages[0]?.total
+
+  // Re-render when the next scheduled time enters the polling window, so the
+  // interval above is evaluated again (it is otherwise only checked after a
+  // fetch).
+  const [tick, setTick] = React.useState(0)
+  const pollStart = nextPollStart(scheduledTimes(rows))
+  React.useEffect(() => {
+    if (pollStart === null) return
+    const wait = pollStart - Date.now()
+    const timer = setTimeout(
+      () => setTick((n) => n + 1),
+      Math.min(Math.max(wait, 0) + 50, 2_147_483_647),
+    )
+    return () => clearTimeout(timer)
+  }, [pollStart, tick])
+
+  // When a scheduled entry leaves that state, the site has a new change
+  // ready (or live): refresh the Go-live tray too.
+  const invalidateGoLive = useInvalidateGoLive(siteId)
+  const scheduledIds = rows
+    .filter((row) => row.status === 'scheduled')
+    .map((row) => row.id)
+    .join(',')
+  const previousScheduled = React.useRef(scheduledIds)
+  React.useEffect(() => {
+    const before = previousScheduled.current.split(',').filter(Boolean)
+    previousScheduled.current = scheduledIds
+    const now = new Set(scheduledIds.split(','))
+    if (before.some((id) => !now.has(id))) void invalidateGoLive()
+  }, [scheduledIds])
 
   return { query, rows, total }
 }
