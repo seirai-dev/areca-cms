@@ -190,6 +190,9 @@ test('02 client, site and content model', async ({ page }) => {
   await expect(page.getByTestId('collection-drawer')).toBeHidden()
 
   await openAgency(page)
+  // The manifest arrived out of band; load the overview fresh.
+  await page.reload()
+  await hydrated(page)
   await expect(page.getByTestId('get-started-client')).toHaveAttribute('data-done', 'true')
   await expect(page.getByTestId('get-started-site')).toHaveAttribute('data-done', 'true')
   await expect(page.getByTestId('get-started-connect')).toHaveAttribute('data-done', 'true')
@@ -340,6 +343,8 @@ test('06 restore an earlier release', async ({ page }) => {
     'publication-live',
     { timeout: 45_000 },
   )
+  // The later edit stays ready to go live again.
+  await expect(page.getByTestId('release-status')).toHaveAttribute('data-state', 'ready')
   await screenshot(page, 'golive-restored')
 })
 

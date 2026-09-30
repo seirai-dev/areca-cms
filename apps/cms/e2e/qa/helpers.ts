@@ -71,6 +71,10 @@ export function watchErrors(page: Page, area: string) {
     const text = message.text()
     // Expected noise: failed sign-in attempts, aborted fetches on navigation.
     if (/401|Failed to load resource|AbortError/i.test(text)) return
-    logIssue({ area, severity: 'functional', note: `console error: ${text.slice(0, 300)}` })
+    // Keep the first line plus React's +/- diff lines (hydration mismatches).
+    const lines = text.split('\n')
+    const diff = lines.filter((line) => /^\s*[+-] /.test(line)).slice(0, 8)
+    const note = [lines[0].slice(0, 200), ...diff.map((line) => line.trim().slice(0, 160))].join(' | ')
+    logIssue({ area, severity: 'functional', note: `console error: ${note}` })
   })
 }

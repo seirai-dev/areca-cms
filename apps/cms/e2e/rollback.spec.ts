@@ -88,4 +88,8 @@ test('owner restores a replaced release from the Go-live panel', async ({
   await expect(
     panel.locator(`[data-release-id="${liveId}"]`).getByTestId('publication-menu'),
   ).toBeVisible()
+  // Changes made ready since then stay ready for the next Go live.
+  const tray = page.getByTestId('release-status')
+  await expect(tray).toHaveAttribute('data-state', 'ready')
+  await expect(tray).toContainText('1 change ready')
 })

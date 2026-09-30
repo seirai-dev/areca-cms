@@ -68,8 +68,8 @@ const env = {
   BETTER_AUTH_URL: origin,
   APP_URL: origin,
   PLAYWRIGHT_BASE_URL: origin,
-  // No hot reloads while tests run (see vite.config.ts).
-  VITE_DISABLE_HMR: 'true',
+  // A frozen dev server: no watcher, no hot reloads (see vite.config.ts).
+  VITE_FREEZE: 'true',
 }
 
 async function ensureDatabase() {

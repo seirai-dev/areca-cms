@@ -32,11 +32,13 @@ function arecaAssetFileDevPlugin(): Plugin {
 
 const config = defineConfig(({ command }) => ({
   resolve: { tsconfigPaths: true },
-  server: {
-    // E2E runs set this so edits elsewhere in the working tree never reload
-    // pages mid-test (scripts/e2e-isolated.mjs, playwright.config.ts).
-    hmr: process.env.VITE_DISABLE_HMR === 'true' ? false : undefined,
-  },
+  // E2E runs (scripts/e2e-isolated.mjs, playwright.config.ts) set
+  // VITE_FREEZE=true: no file watching and no HMR, so the server keeps
+  // serving the code as it was at start and edits elsewhere in the working
+  // tree never reload pages or mix old server modules with new client ones
+  // mid-test. Restart the server to pick up changes.
+  server:
+    process.env.VITE_FREEZE === 'true' ? { hmr: false, watch: null } : undefined,
   plugins: [
     arecaAssetFileDevPlugin(),
     devtools(),
