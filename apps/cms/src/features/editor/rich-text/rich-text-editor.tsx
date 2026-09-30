@@ -279,13 +279,24 @@ export function RichTextEditor({
       const coords = editor.view.coordsAtPos($from.pos)
       if (slashQueryRef.current !== match[1]) setSlashIndex(0)
       slashQueryRef.current = match[1]
-      setSlash({
+      const next = {
         query: match[1],
         from: $from.start(),
         to: $from.pos,
         left: coords.left,
         top: coords.bottom,
-      })
+      }
+      // Bail out when nothing moved: option updates also fire transactions.
+      setSlash((current) =>
+        current &&
+        current.query === next.query &&
+        current.from === next.from &&
+        current.to === next.to &&
+        current.left === next.left &&
+        current.top === next.top
+          ? current
+          : next,
+      )
     }
     const hide = () => setSlash(null)
     editor.on('transaction', update)

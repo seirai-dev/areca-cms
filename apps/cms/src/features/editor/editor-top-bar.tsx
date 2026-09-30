@@ -214,7 +214,7 @@ export function EditorTopBar({
   return (
     <header
       data-testid="editor-toolbar"
-      className="sticky top-0 z-navbar -mx-4 -mt-6 mb-6 border-b border-border-default bg-background-default/85 backdrop-blur-xl md:-mx-6"
+      className="sticky top-0 z-navbar -mx-6 -mt-6 mb-6 border-b border-border-default bg-background-default/85 backdrop-blur-xl md:-mx-6"
     >
       <div className="flex h-14 items-center gap-2 px-3 md:px-4">
         <Button
@@ -400,6 +400,7 @@ export function EditorTopBar({
               </DropdownMenuItem>
               <DropdownMenuItem
                 variant="destructive"
+                className="data-[disabled]:text-text-disabled! data-[disabled]:*:[svg]:text-text-disabled!"
                 disabled={!canManage || busy || !entryId}
                 onSelect={onDelete}
                 data-testid="delete-entry"

@@ -310,11 +310,14 @@ function CollectionView({
               variant={selectMode ? 'secondary' : 'quiet'}
               aria-pressed={selectMode}
               data-testid="select-mode"
+              className="max-sm:w-9 max-sm:px-0"
               onClick={() => (selectMode ? exitSelect() : setSelectMode(true))}
               disabled={rows.length === 0}
             >
               <CheckSquare />
-              {selectMode ? m.collection_done() : m.collection_select()}
+              <span className="sr-only sm:not-sr-only">
+                {selectMode ? m.collection_done() : m.collection_select()}
+              </span>
             </Button>
             {isAdmin ? (
               <DropdownMenu>

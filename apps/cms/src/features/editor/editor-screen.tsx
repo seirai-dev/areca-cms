@@ -410,11 +410,11 @@ function EntryEditorView({
 
       <div
         className={cn(
-          'grid items-start gap-10 pb-24',
+          'grid grid-cols-[minmax(0,1fr)] items-start gap-10 pb-24',
           desktop && detailsOpen && 'lg:grid-cols-[minmax(0,1fr)_340px]',
         )}
       >
-        <section className="grid min-w-0 gap-6 px-1 pt-4 sm:pt-10" aria-label={m.editor_canvas_label()}>
+        <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6 px-1 pt-4 sm:pt-10" aria-label={m.editor_canvas_label()}>
           {hasErrors ? (
             <div
               role="alert"
@@ -552,7 +552,7 @@ function EntryEditorView({
 export function EditorSkeleton() {
   return (
     <div className="grid gap-10" data-testid="entry-editor" data-ready="false" aria-busy="true">
-      <div className="-mx-4 -mt-6 flex h-14 items-center gap-3 border-b border-border-default px-4 md:-mx-6">
+      <div className="-mx-6 -mt-6 flex h-14 items-center gap-3 border-b border-border-default px-4">
         <Skeleton className="h-6 w-24" />
         <Skeleton className="h-5 w-14 rounded-full" />
         <span className="flex-1" />

@@ -52,7 +52,10 @@ export function EditorCanvas({
   useAutoGrow(titleRef, titleValue)
 
   return (
-    <div className="mx-auto grid w-full max-w-[720px] min-w-0 gap-8" data-testid="editor-canvas">
+    <div
+      className="mx-auto grid w-full max-w-[720px] min-w-0 grid-cols-[minmax(0,1fr)] gap-7"
+      data-testid="editor-canvas"
+    >
       {titleField ? (
         <div
           className="grid gap-1.5"
@@ -170,13 +173,13 @@ function CanvasTextarea({
           if (innerRef) innerRef.current = node
         }}
         id={`field-${field.key}`}
-        rows={2}
+        rows={1}
         value={text}
         onChange={(event) => onChange(event.target.value)}
         aria-invalid={invalid || undefined}
         placeholder={m.editor_canvas_placeholder({ label: field.label.toLocaleLowerCase() })}
         className={cn(
-          'block min-h-14 w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-body-lg text-text-primary outline-none placeholder:text-text-disabled',
+          'block min-h-7 w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-body-lg text-text-primary outline-none placeholder:text-text-disabled',
         )}
       />
     </>

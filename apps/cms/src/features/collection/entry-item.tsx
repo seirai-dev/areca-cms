@@ -177,6 +177,7 @@ export function EntryQuickMenu({
         ) : null}
         <DropdownMenuItem
           variant="destructive"
+          className="data-[disabled]:text-text-disabled! data-[disabled]:*:[svg]:text-text-disabled!"
           disabled={!canManage}
           onSelect={() => onAction('delete', row)}
         >
