@@ -12,7 +12,6 @@ import {
 import { useFailedSites } from '#/components/shell/sidebar'
 import { SiteTile } from '#/components/shell/site-tile'
 import { sitesOverviewQueryOptions } from '#/components/shell/workspace-switcher'
-import { SystemAvatar, UserAvatar } from '#/components/ui/avatar'
 import { Button } from '#/components/ui/button'
 import { Card } from '#/components/ui/card'
 import { EmptyState } from '#/components/ui/empty-state'
@@ -27,8 +26,12 @@ import {
   FailedIcon,
   formatScheduleShort,
 } from '#/components/ui/status-pill'
-import { RelativeTime, Timeline, TimelineItem } from '#/components/ui/timeline'
-import { activitySentence } from '#/features/activity/activity-list'
+import { Timeline } from '#/components/ui/timeline'
+import {
+  ActivityTimelineItem,
+  useActivityEntries,
+} from '#/features/activity/activity-item'
+import { collapseRepeats } from '#/features/activity/activity-sentence'
 import type { ActivityRow } from '#/features/activity/activity-list'
 import { m } from '#/paraglide/messages'
 import { getLocale } from '#/paraglide/runtime'
@@ -308,6 +311,8 @@ function Scheduled() {
 
 function RecentActivity() {
   const activity = useQuery(homeActivityQuery())
+  const rows = (activity.data?.activity ?? []) as unknown as ActivityRow[]
+  const entries = useActivityEntries(rows)
   if (activity.isError) {
     return (
       <QueryError
@@ -318,7 +323,6 @@ function RecentActivity() {
       />
     )
   }
-  const rows = (activity.data?.activity ?? []) as unknown as ActivityRow[]
   return (
     <section
       className="grid content-start gap-3"
@@ -365,55 +369,18 @@ function RecentActivity() {
               } as React.CSSProperties
             }
           >
-            {rows.map((row) => {
-              const { action, target } = activitySentence(row)
-              const scope = [row.organizationName, row.siteName]
-                .filter((part) => part && part !== target)
-                .join(' · ')
-              return (
-                <TimelineItem
-                  key={row.id}
-                  tone="plain"
-                  icon={
-                    row.actorName ? (
-                      <UserAvatar
-                        name={row.actorName}
-                        size="md"
-                        className="size-7 text-[10.5px]"
-                      />
-                    ) : (
-                      <SystemAvatar
-                        size="md"
-                        className="size-7"
-                        label={m.activity_system()}
-                      />
-                    )
-                  }
-                  title={
-                    <span>
-                      <span className="text-text-primary">
-                        {row.actorName ?? m.activity_system()}
-                      </span>{' '}
-                      <span className="font-normal text-text-secondary">
-                        {action.charAt(0).toLocaleLowerCase(getLocale()) +
-                          action.slice(1)}
-                      </span>
-                      {target ? (
-                        <span className="text-text-primary"> {target}</span>
-                      ) : null}
-                    </span>
-                  }
-                  time={<RelativeTime value={row.createdAt} />}
-                  meta={
-                    scope ? (
-                      <span className="text-caption font-normal text-text-muted">
-                        {scope}
-                      </span>
-                    ) : undefined
-                  }
-                />
-              )
-            })}
+            {collapseRepeats(rows).map(({ row, count }) => (
+              <ActivityTimelineItem
+                key={row.id}
+                row={row}
+                count={count}
+                entry={entries.get(row.targetId)}
+                testId="home-activity-item"
+                scope={[row.organizationName, row.siteName]
+                  .filter(Boolean)
+                  .join(' · ')}
+              />
+            ))}
           </Timeline>
         )}
       </Card>

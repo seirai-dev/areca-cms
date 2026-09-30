@@ -216,7 +216,7 @@ test('agency admin sets up a client, a site, its content model and invites peopl
   await expect(
     log
       .getByTestId('activity-item')
-      .filter({ hasText: 'Created organization' })
+      .filter({ hasText: 'added the client' })
       .first(),
   ).toBeVisible()
   await expect(

@@ -3,17 +3,18 @@ import { useInfiniteQuery } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { Scroll } from '@phosphor-icons/react'
 
-import { formatAuditAction, formatAuditTarget } from '#/lib/admin/helpers'
-import { SystemAvatar, UserAvatar } from '#/components/ui/avatar'
 import { Button } from '#/components/ui/button'
 import { EmptyState } from '#/components/ui/empty-state'
 import { QueryError } from '#/components/ui/query-error'
 import { Skeleton } from '#/components/ui/skeleton'
-import { RelativeTime, Timeline, TimelineItem } from '#/components/ui/timeline'
+import { Timeline } from '#/components/ui/timeline'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 import { getLocale } from '#/paraglide/runtime'
 import { listAuditLogFn } from '#/server/fn/admin'
+import { ActivityTimelineItem, useActivityEntries } from './activity-item'
+import { collapseRepeats } from './activity-sentence'
+import type { ActivityGroup } from './activity-sentence'
 
 export type ActivityRow = Awaited<ReturnType<typeof listAuditLogFn>>[number]
 
@@ -40,26 +41,6 @@ function dayLabel(value: Date | string, now = new Date()) {
 }
 
 /** The sentence for one event: action plus what it touched. */
-export function activitySentence(row: ActivityRow) {
-  const action = formatAuditAction(row.action)
-  const rawTarget = formatAuditTarget({
-    targetType: row.targetType,
-    targetId: row.targetId,
-    organizationName: row.organizationName,
-    siteName: row.siteName,
-    meta: row.meta,
-  })
-  // Action labels already name the thing ("Published entry"), so only add
-  // the target when it says something more.
-  const namesType = action.toLowerCase().includes(row.targetType)
-  const target = namesType
-    ? rawTarget === row.targetType
-      ? ''
-      : rawTarget.replace(new RegExp(`^${row.targetType} `), '')
-    : rawTarget
-  return { action, target }
-}
-
 /**
  * The activity timeline (brief §3.7): grouped by day, an avatar per actor (a
  * System glyph for actorless events), the action sentence, the target, the
@@ -112,13 +93,18 @@ export function ActivityList({
     [query.data, pageSize],
   )
 
+  const entries = useActivityEntries(rows)
+
   const groups = React.useMemo(() => {
-    const out: Array<{ day: string; rows: ActivityRow[] }> = []
-    for (const row of rows) {
-      const day = dayLabel(row.createdAt)
+    const out: Array<{
+      day: string
+      rows: Array<ActivityGroup<ActivityRow>>
+    }> = []
+    for (const group of collapseRepeats(rows)) {
+      const day = dayLabel(group.row.createdAt)
       const last = out.at(-1)
-      if (last && (!grouped || last.day === day)) last.rows.push(row)
-      else out.push({ day, rows: [row] })
+      if (last && (!grouped || last.day === day)) last.rows.push(group)
+      else out.push({ day, rows: [group] })
     }
     return out
   }, [rows, grouped])
@@ -174,60 +160,21 @@ export function ActivityList({
             <h3 className="text-overline text-text-muted">{group.day}</h3>
           ) : null}
           <Timeline>
-            {group.rows.map((row) => {
-              const { action, target } = activitySentence(row)
-              const scope = [row.organizationName, row.siteName]
-                .filter(Boolean)
-                .join(' · ')
-              return (
-                <TimelineItem
-                  key={row.id}
-                  data-testid="activity-item"
-                  data-action={row.action}
-                  tone="plain"
-                  icon={
-                    row.actorName ? (
-                      <UserAvatar
-                        name={row.actorName}
-                        size="md"
-                        className="size-7 text-[10.5px]"
-                      />
-                    ) : (
-                      <SystemAvatar
-                        size="md"
-                        className="size-7"
-                        label={m.activity_system()}
-                      />
-                    )
-                  }
-                  title={
-                    <span>
-                      <span className="text-text-primary">
-                        {row.actorName ?? m.activity_system()}
-                      </span>{' '}
-                      <span className="font-normal text-text-secondary">
-                        {action.charAt(0).toLocaleLowerCase(getLocale()) +
-                          action.slice(1)}
-                      </span>
-                      {target ? (
-                        <>
-                          {' '}
-                          <span className="text-text-primary">{target}</span>
-                        </>
-                      ) : null}
-                    </span>
-                  }
-                  time={<RelativeTime value={row.createdAt} />}
-                  meta={
-                    showScope && scope ? (
-                      <span className="text-caption font-normal text-text-muted">
-                        {scope}
-                      </span>
-                    ) : undefined
-                  }
-                />
-              )
-            })}
+            {group.rows.map(({ row, count }) => (
+              <ActivityTimelineItem
+                key={row.id}
+                row={row}
+                count={count}
+                entry={entries.get(row.targetId)}
+                scope={
+                  showScope
+                    ? [row.organizationName, row.siteName]
+                        .filter(Boolean)
+                        .join(' · ')
+                    : null
+                }
+              />
+            ))}
           </Timeline>
         </section>
       ))}
