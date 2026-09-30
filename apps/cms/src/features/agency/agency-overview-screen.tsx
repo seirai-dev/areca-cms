@@ -34,6 +34,8 @@ import { m } from '#/paraglide/messages'
 import { getLocale } from '#/paraglide/runtime'
 import type { Me } from '#/server/fn/me'
 
+import { greeting, greetingName } from '#/features/overview/greeting'
+
 import { GettingStarted } from './getting-started'
 import { clientsQuery, homeActivityQuery } from './queries'
 import { AgencySiteCard } from './site-card'
@@ -41,17 +43,7 @@ import { AgencySiteCard } from './site-card'
 /** "Good morning, Kaan" by the viewer's clock (rendered after mount). */
 function useGreeting(name: string) {
   const [hello, setHello] = React.useState<string | null>(null)
-  React.useEffect(() => {
-    const first = name.split(/\s+/)[0] || name
-    const hour = new Date().getHours()
-    setHello(
-      hour < 5 || hour >= 18
-        ? m.overview_greeting_evening({ name: first })
-        : hour < 12
-          ? m.overview_greeting_morning({ name: first })
-          : m.overview_greeting_afternoon({ name: first }),
-    )
-  }, [name])
+  React.useEffect(() => setHello(greeting(greetingName(name))), [name])
   return hello
 }
 

@@ -122,7 +122,7 @@ export function TokenReveal({
         </div>
         <pre
           data-testid="site-token-env"
-          className="scroll-quiet overflow-x-auto rounded-control bg-background-inverse px-3.5 py-3 text-mono whitespace-pre text-text-inverse dark:border dark:border-border-default dark:bg-background-subtle dark:text-text-primary"
+          className="rounded-control bg-background-inverse px-3.5 py-3 text-mono whitespace-pre-wrap text-text-inverse [overflow-wrap:anywhere] dark:border dark:border-border-default dark:bg-background-subtle dark:text-text-primary"
         >
           <code>
             <span className="opacity-60">ARECA_CMS_URL=</span>

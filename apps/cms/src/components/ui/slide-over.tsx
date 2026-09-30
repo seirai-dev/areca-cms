@@ -3,6 +3,7 @@ import { Dialog as DialogPrimitive } from 'radix-ui'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { X } from '@phosphor-icons/react'
 
+import { useRegisterOverlay } from '#/components/ui/overlay-registry'
 import { useIsMobile } from '#/hooks/use-mobile'
 import { FADE, SPRING_PANEL } from '#/lib/motion'
 import { cn } from '#/lib/utils'
@@ -13,6 +14,9 @@ const WIDTHS = {
   lg: 'sm:w-[560px]',
   xl: 'sm:w-[720px]',
 } as const
+
+/** Panel width plus its 8px inset, for keeping toasts clear of it. */
+const FOOTPRINT = { md: 488, lg: 568, xl: 728 } as const
 
 /**
  * Right slide-over panel (brief §2, §3.6, §3.7): 480px, inset 8px from the
@@ -35,6 +39,7 @@ export function SlideOver({
   bodyRef,
   children,
   hideTitle = false,
+  fit = false,
   ...props
 }: {
   open: boolean
@@ -55,10 +60,19 @@ export function SlideOver({
   children?: React.ReactNode
   /** Keep the title for screen readers only. */
   hideTitle?: boolean
+  /** As a phone bottom sheet, size to the content instead of full height. */
+  fit?: boolean
   'data-testid'?: string
 }) {
   const mobile = useIsMobile()
   const reduce = useReducedMotion()
+  useRegisterOverlay(
+    open
+      ? mobile
+        ? { kind: 'sheet' }
+        : { kind: 'panel', width: FOOTPRINT[size] }
+      : null,
+  )
 
   const hidden = reduce
     ? { opacity: 0 }
@@ -91,7 +105,10 @@ export function SlideOver({
                 className={cn(
                   'fixed z-overlay flex flex-col overflow-hidden text-text-primary outline-none surface-float',
                   mobile
-                    ? 'inset-x-0 top-3 bottom-0 rounded-t-panel pb-[env(safe-area-inset-bottom)]'
+                    ? cn(
+                        'inset-x-0 bottom-0 rounded-t-panel pb-[env(safe-area-inset-bottom)]',
+                        fit ? 'max-h-[calc(100dvh-0.75rem)]' : 'top-3',
+                      )
                     : cn(
                         'top-2 right-2 bottom-2 w-[calc(100vw-1rem)] rounded-panel',
                         WIDTHS[size],

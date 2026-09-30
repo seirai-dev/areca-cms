@@ -111,6 +111,16 @@ export function formatAuditAction(action: string) {
   return action.replace(/[._]/g, ' ')
 }
 
+/**
+ * A slug as a readable title when no real title is at hand:
+ * "poster-series-for-the-autumn-campaign" → "Poster series for the autumn
+ * campaign".
+ */
+export function humanizeSlug(slug: string) {
+  const words = slug.replace(/[-_]+/g, ' ').trim()
+  return words.charAt(0).toUpperCase() + words.slice(1)
+}
+
 export function formatAuditTarget(row: {
   targetType: string
   targetId: string
@@ -123,7 +133,7 @@ export function formatAuditTarget(row: {
       ? (row.meta as Record<string, unknown>)
       : null
   if (typeof meta?.slug === 'string' && meta.slug) {
-    return `${row.targetType} “${meta.slug}”`
+    return `${row.targetType} “${humanizeSlug(meta.slug)}”`
   }
   if (typeof meta?.email === 'string' && meta.email) {
     return `${row.targetType} ${meta.email}`

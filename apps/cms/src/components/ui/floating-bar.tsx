@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 
+import { useRegisterOverlay } from '#/components/ui/overlay-registry'
 import { FADE, SPRING_PANEL } from '#/lib/motion'
 import { cn } from '#/lib/utils'
 
@@ -25,6 +26,7 @@ export function FloatingBar({
   'data-testid'?: string
 }) {
   const reduce = useReducedMotion()
+  useRegisterOverlay(open ? { kind: 'bar' } : null)
   return (
     <AnimatePresence>
       {open ? (

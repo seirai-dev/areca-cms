@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
+import { Link, useRouterState } from '@tanstack/react-router'
 import { LayoutGroup } from 'motion/react'
 import {
   DotsThree,
@@ -447,11 +447,17 @@ export function useFailedSites(sites: MeSite[], enabled: boolean) {
   })
 }
 
-/** Agency "System" card: only when something needs attention. */
+/**
+ * Agency "System" card: only when something needs attention, and not on the
+ * Agency overview, whose own "Needs attention" section already lists it.
+ */
 function AttentionCard({ collapsed }: { collapsed: boolean }) {
   const { me } = useShell()
   const failed = useFailedSites(me.sites, true)
-  if (failed.length === 0) return null
+  const onOverview = useRouterState({
+    select: (state) => state.location.pathname.replace(/\/$/, '') === '/agency',
+  })
+  if (failed.length === 0 || onOverview) return null
   const label =
     failed.length === 1
       ? m.shell_attention_failed_one({ site: failed[0].name })

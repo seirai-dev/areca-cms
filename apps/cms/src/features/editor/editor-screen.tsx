@@ -530,6 +530,7 @@ function EntryEditorView({
           title={m.editor_schedule_title()}
           description={m.editor_schedule_description()}
           data-testid="schedule-sheet"
+          fit
         >
           {scheduleForm}
         </SlideOver>
