@@ -35,9 +35,6 @@ const buttonVariants = cva(
       variant: {
         primary:
           'bg-action-primary text-action-primary-text shadow-[0_1px_2px_rgb(0_0_0/0.12),inset_0_1px_0_rgb(255_255_255/0.08)] hover:bg-action-primary-hover',
-        /** LEGACY alias of `primary`. */
-        default:
-          'bg-action-primary text-action-primary-text shadow-[0_1px_2px_rgb(0_0_0/0.12),inset_0_1px_0_rgb(255_255_255/0.08)] hover:bg-action-primary-hover',
         accent:
           'bg-accent text-accent-contrast shadow-[0_1px_2px_rgb(0_0_0/0.12)] hover:bg-accent-hover',
         secondary:
@@ -56,8 +53,6 @@ const buttonVariants = cva(
         xs: "h-7 gap-1.5 rounded-[8px] px-2.5 text-[12.5px] [&_svg:not([class*='size-'])]:size-3.5",
         sm: 'h-[30px] gap-1.5 rounded-[8px] px-3 text-[13px]',
         md: 'h-9 px-3.5',
-        /** LEGACY alias of `md`. */
-        default: 'h-9 px-3.5',
         lg: 'h-11 px-5 text-[15px]',
         icon: 'size-9',
         'icon-xs':

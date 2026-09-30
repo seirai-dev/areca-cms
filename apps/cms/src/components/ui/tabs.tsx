@@ -47,9 +47,6 @@ const tabsListVariants = cva(
         line: 'no-scrollbar relative h-11 max-w-full gap-6 overflow-x-auto border-b border-border-default',
         segmented:
           'h-9 gap-0.5 rounded-control bg-segment-track p-[2px] text-text-secondary',
-        /** LEGACY alias of `segmented`. */
-        default:
-          'h-9 gap-0.5 rounded-control bg-segment-track p-[2px] text-text-secondary',
       },
     },
     defaultVariants: {
