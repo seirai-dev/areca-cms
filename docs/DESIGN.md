@@ -79,7 +79,7 @@ There is one scale. The old `text-ds-*` utilities are gone.
 - **Borders** are 1px hairlines in `border-default`. Library tiles draw theirs as an overlay above the image so image and file tiles share one edge.
 - **Depth:** `shadow-card` (`0 1px 2px` at 4%) for cards; `shadow-raise` for hover lifts; `shadow-float` (`0 12px 40px -8px` at 18%, stronger in dark) plus a hairline for anything floating (popovers, panels, the tray while going live, floating bars, toasts). The `surface-card` and `surface-float` utilities bundle border, background and shadow.
 - **Spacing** is 4-based. Page gutters 32px desktop / 16px mobile; content column max 1120px (`--content-max`); card padding 20px (16px in tight mobile cards); inset rows 52–60px with 16px padding.
-- **Control heights:** 36px default (`md`), 30px small (`sm`), 28px extra small (`xs`), 44px large (`lg`, auth and mobile primary). Touch targets on phones are at least 44px.
+- **Control heights:** 36px default (`md`), 30px small (`sm`), 28px extra small (`xs`), 44px large (`lg`, auth and mobile primary). Touch targets on phones are at least 44px: `Button` and `SegmentedControl` segments carry the `touch-target` utility (`styles.css`), which on `pointer: coarse` adds an invisible hit area of at least 44×44px without changing how the control looks. Give any other small, positioned tap target the same utility.
 - **Z scale** (`z-navbar`, `z-floating`, `z-scrim`, `z-overlay`, `z-above-overlay`): nothing else sets a z-index.
 - **Icons:** Phosphor, `regular` weight, 18px in navigation and 16px inline; the active nav item uses `fill` in the accent. Collections get an icon by key (`collectionIcon` in `lib/site-nav.ts`): article/blog/post → Article, page → File, job/vacanc → Briefcase, event → Calendar, product → Tag, team/person → User, else Stack.
 
@@ -217,7 +217,11 @@ When a role cannot do something, the control stays **visible but disabled**, wit
 - **Load errors:** `QueryError` inline where the content would be ("Couldn't load {thing}" + **Try again**). Toasts are for confirmations, not failures that need a decision.
 - **404:** a centred card, "This page doesn't exist", "Go to your workspace".
 
-### 8.6 Hints instead of noise
+### 8.6 Activity sentences
+
+Every activity surface (Overview, the Activity panel, Agency overview and Agency › Activity) renders rows through `ActivityTimelineItem` (`features/activity/activity-item.tsx`), with the words from `features/activity/activity-sentence.ts`: one sentence per action in the §9 vocabulary ("Sanne marked “Spring launch” as ready", "moved … back to draft", "Acme Website went live"), the entry title (looked up through the editor's `['entry', id]` cache and linked to the editor; the slug, humanised, for deleted entries), site events told without an actor, consecutive repeats folded into one row ("4 saves"), and the scope as "Acme Website" rather than "Acme · Acme Website". New audit actions get a sentence there; nothing shows a raw action key.
+
+### 8.7 Hints instead of noise
 
 Repeat warnings on every item turn into one quiet summary that filters. Example: the Library shows "18 need a description" in the header meta; the per-tile amber dot appears on hover and while that filter is on.
 
