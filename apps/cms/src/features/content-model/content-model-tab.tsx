@@ -15,7 +15,6 @@ import { QueryError } from '#/components/ui/query-error'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Stagger, StaggerItem } from '#/components/ui/stagger'
 import { Switch } from '#/components/ui/switch'
-import { Hint } from '#/components/ui/tooltip'
 import { collectionIcon } from '#/lib/site-nav'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
@@ -227,21 +226,18 @@ function ContentTypeRow({
             className="hidden size-3.5 shrink-0 text-icon-muted sm:block"
           />
         </button>
-        <Hint
-          label={
+        <Switch
+          checked={collection.enabled}
+          disabled={toggle.isPending}
+          onCheckedChange={(value) => toggle.mutate(value)}
+          aria-label={m.content_model_enabled_label({ label: collection.label })}
+          title={
             collection.enabled
               ? m.content_model_switch_off_hint()
               : m.content_model_switch_on_hint()
           }
-        >
-          <Switch
-            checked={collection.enabled}
-            disabled={toggle.isPending}
-            onCheckedChange={(value) => toggle.mutate(value)}
-            aria-label={m.content_model_enabled_label({ label: collection.label })}
-            data-testid={`content-type-enabled-${collection.key}`}
-          />
-        </Hint>
+          data-testid={`content-type-enabled-${collection.key}`}
+        />
       </div>
     </StaggerItem>
   )

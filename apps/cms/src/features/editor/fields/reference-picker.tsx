@@ -19,7 +19,7 @@ import { useDebouncedValue } from '#/hooks/use-debounced-value'
 import type { EntryData, Field } from '#/lib/types'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
-import { getEntryFn, listEntriesFn } from '#/server/fn/content'
+import { getEntryFn, listCollectionsFn, listEntriesFn } from '#/server/fn/content'
 
 type EntryRow = {
   id: string
@@ -54,6 +54,13 @@ export function ReferencePicker({
   const debouncedSearch = useDebouncedValue(search, 200)
   const collectionKey = field.collection ?? ''
   const selectedId = typeof value === 'string' && value ? value : ''
+  const collectionsQuery = useQuery({
+    queryKey: queryKeys.collections(siteId),
+    queryFn: () => listCollectionsFn({ data: { siteId } }),
+    staleTime: 60_000,
+  })
+  const targetFields: Field[] =
+    collectionsQuery.data?.find((item) => item.key === collectionKey)?.fields ?? []
 
   const entriesQuery = useQuery({
     queryKey: queryKeys.entries(siteId, collectionKey, {
@@ -86,7 +93,7 @@ export function ReferencePicker({
   const selected = inList ?? selectedQuery.data
 
   const label = selected
-    ? entryTitle(selected.draftData, [], selected.slug)
+    ? entryTitle(selected.draftData, targetFields, selected.slug)
     : selectedId
       ? selectedQuery.isError
         ? m.editor_entry_no_longer_exists()
@@ -166,7 +173,7 @@ export function ReferencePicker({
                           )}
                         />
                         <span className="truncate">
-                          {entryTitle(item.draftData, [], item.slug)}
+                          {entryTitle(item.draftData, targetFields, item.slug)}
                         </span>
                         <span className="ml-auto truncate text-mono text-text-muted">
                           {item.slug}

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { FileText } from '@phosphor-icons/react'
 
@@ -72,7 +73,8 @@ export function EntryCover({
 }) {
   const assetQuery = useAsset(assetId)
   const asset = (assetQuery.data ?? null) as MediaAsset | null
-  const image = asset && asset.mimeType.startsWith('image/') ? asset : null
+  const [broken, setBroken] = useState(false)
+  const image = asset && asset.mimeType.startsWith('image/') && !broken ? asset : null
   return (
     <div
       className={cn(
@@ -85,6 +87,7 @@ export function EntryCover({
           src={assetFileUrl(image.storageKey)}
           alt=""
           loading="lazy"
+          onError={() => setBroken(true)}
           className="absolute inset-0 size-full object-cover transition-transform duration-500 ease-(--ease-standard) group-hover:scale-[1.02] motion-reduce:transition-none"
         />
       ) : assetId && assetQuery.isLoading ? null : (
@@ -111,13 +114,15 @@ export function EntryThumb({
 }) {
   const assetQuery = useAsset(assetId)
   const asset = (assetQuery.data ?? null) as MediaAsset | null
+  const [broken, setBroken] = useState(false)
   const box = size === 32 ? 'size-8' : size === 40 ? 'size-10' : 'size-9'
 
-  if (asset && asset.mimeType.startsWith('image/')) {
+  if (asset && asset.mimeType.startsWith('image/') && !broken) {
     return (
       <img
         src={assetFileUrl(asset.storageKey)}
         alt=""
+        onError={() => setBroken(true)}
         loading="lazy"
         className={cn(
           box,
