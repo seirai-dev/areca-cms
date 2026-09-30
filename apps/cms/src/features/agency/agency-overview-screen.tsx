@@ -31,7 +31,10 @@ import {
   ActivityTimelineItem,
   useActivityEntries,
 } from '#/features/activity/activity-item'
-import { collapseRepeats } from '#/features/activity/activity-sentence'
+import {
+  activityScope,
+  collapseRepeats,
+} from '#/features/activity/activity-sentence'
 import type { ActivityRow } from '#/features/activity/activity-list'
 import { m } from '#/paraglide/messages'
 import { getLocale } from '#/paraglide/runtime'
@@ -376,9 +379,7 @@ function RecentActivity() {
                 count={count}
                 entry={entries.get(row.targetId)}
                 testId="home-activity-item"
-                scope={[row.organizationName, row.siteName]
-                  .filter(Boolean)
-                  .join(' · ')}
+                scope={activityScope(row)}
               />
             ))}
           </Timeline>

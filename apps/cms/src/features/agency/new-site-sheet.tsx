@@ -15,7 +15,9 @@ import { createSiteFn } from '#/server/fn/admin'
 
 import { SlugField } from './slug-field'
 
-const DEFAULT_PRODUCTION_URL = 'http://localhost:3001'
+/** The local demo site, suggested only while developing. */
+const DEMO_SITE_URL = 'http://localhost:3001'
+const DEFAULT_PRODUCTION_URL = import.meta.env.DEV ? DEMO_SITE_URL : ''
 
 /** A token the admin has not confirmed saving yet; survives a reload. */
 export type PendingToken = { siteName: string; token: string }
@@ -239,7 +241,11 @@ export function NewSiteSheet({
           <FormField
             label={m.admin_org_production_url()}
             htmlFor="site-production-url"
-            hint={m.agency_site_url_hint({ url: DEFAULT_PRODUCTION_URL })}
+            hint={
+              import.meta.env.DEV
+                ? m.agency_site_url_hint({ url: DEMO_SITE_URL })
+                : m.settings_production_url_hint()
+            }
           >
             <Input
               id="site-production-url"

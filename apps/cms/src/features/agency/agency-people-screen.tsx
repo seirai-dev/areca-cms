@@ -366,9 +366,11 @@ function PersonRow({
       trailing={
         <label
           htmlFor={isSelf ? undefined : switchId}
-          className="flex items-center gap-2.5"
+          className="flex flex-col-reverse items-center gap-1 md:flex-row md:gap-2.5"
         >
-          <span className="hidden text-callout text-text-secondary md:inline">
+          {/* Phones show the label under the switch, so it is never a
+              switch without a name. */}
+          <span className="text-[11px] leading-4 font-medium whitespace-nowrap text-text-muted md:text-callout md:font-normal md:text-text-secondary">
             {m.agency_people_access()}
           </span>
           {isSelf ? (

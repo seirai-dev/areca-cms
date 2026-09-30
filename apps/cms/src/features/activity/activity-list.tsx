@@ -13,7 +13,7 @@ import { m } from '#/paraglide/messages'
 import { getLocale } from '#/paraglide/runtime'
 import { listAuditLogFn } from '#/server/fn/admin'
 import { ActivityTimelineItem, useActivityEntries } from './activity-item'
-import { collapseRepeats } from './activity-sentence'
+import { activityScope, collapseRepeats } from './activity-sentence'
 import type { ActivityGroup } from './activity-sentence'
 
 export type ActivityRow = Awaited<ReturnType<typeof listAuditLogFn>>[number]
@@ -166,13 +166,7 @@ export function ActivityList({
                 row={row}
                 count={count}
                 entry={entries.get(row.targetId)}
-                scope={
-                  showScope
-                    ? [row.organizationName, row.siteName]
-                        .filter(Boolean)
-                        .join(' · ')
-                    : null
-                }
+                scope={showScope ? activityScope(row) : null}
               />
             ))}
           </Timeline>

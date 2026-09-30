@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  activityScope,
   activityText,
   collapseRepeats,
   entryTargetIds,
-  type ActivityLike,
 } from './activity-sentence'
+import type { ActivityLike } from './activity-sentence'
 
 function row(partial: Partial<ActivityLike>): ActivityLike {
   return {
@@ -106,5 +107,22 @@ describe('entryTargetIds', () => {
         row({ targetType: 'site', targetId: 's1' }),
       ]),
     ).toEqual(['e1'])
+  })
+})
+
+describe('activityScope', () => {
+  it('drops the client when the site name already says it', () => {
+    expect(
+      activityScope({ organizationName: 'Acme', siteName: 'Acme Website' }),
+    ).toBe('Acme Website')
+    expect(
+      activityScope({
+        organizationName: 'Northwind Studio',
+        siteName: 'Northwind Journal',
+      }),
+    ).toBe('Northwind Studio · Northwind Journal')
+    expect(activityScope({ organizationName: 'Acme', siteName: null })).toBe(
+      'Acme',
+    )
   })
 })

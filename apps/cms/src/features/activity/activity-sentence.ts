@@ -266,3 +266,18 @@ export function entryTargetIds(rows: ReadonlyArray<ActivityLike>) {
   }
   return [...ids]
 }
+
+/** Where an event happened: "Northwind Studio · Journal", or just the site
+ *  when its name already says the client ("Acme Website", not "Acme · Acme
+ *  Website"). */
+export function activityScope(row: {
+  organizationName: string | null
+  siteName: string | null
+}) {
+  const org = row.organizationName?.trim()
+  const site = row.siteName?.trim()
+  if (org && site && site.toLowerCase().startsWith(org.toLowerCase())) {
+    return site
+  }
+  return [org, site].filter(Boolean).join(' · ')
+}
