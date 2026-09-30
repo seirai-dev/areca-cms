@@ -166,6 +166,7 @@ export function SchemaEditorSheet({
                 type="button"
                 data-testid="save-collection"
                 loading={editor.saving}
+                disabled={!editor.dirty && !editor.creating}
                 onClick={editor.save}
               >
                 {editor.saving
@@ -386,9 +387,9 @@ export function SchemaEditorSheet({
                     </p>
                     <Button
                       type="button"
-                      variant="destructive"
+                      variant="outline"
                       size="sm"
-                      className="shrink-0"
+                      className="shrink-0 text-text-error hover:bg-status-error-bg hover:text-text-error"
                       data-testid="delete-collection"
                       onClick={() => editor.setDeleteOpen(true)}
                     >

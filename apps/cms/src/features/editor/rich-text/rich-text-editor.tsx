@@ -65,6 +65,18 @@ function useMod() {
   return mod
 }
 
+/** Shortcut labels are written with Apple glyphs; spell them out elsewhere
+ *  ("Ctrl+Alt+2", not "Ctrl+⌥2"). Only rendered in menus and tooltips. */
+function displayShortcut(shortcut: string) {
+  if (
+    typeof navigator !== 'undefined' &&
+    /Mac|iPhone|iPad/.test(navigator.platform)
+  ) {
+    return shortcut
+  }
+  return shortcut.replace(/⌥/g, 'Alt+').replace(/⇧/g, 'Shift+')
+}
+
 const EMPTY_STATE = {
   isEmpty: true,
   block: 'paragraph' as BlockType,
@@ -567,7 +579,7 @@ export function RichTextEditor({
                   {block.label()}
                   {block.shortcut ? (
                     <DropdownMenuShortcut>
-                      {block.shortcut(mod)}
+                      {displayShortcut(block.shortcut(mod))}
                     </DropdownMenuShortcut>
                   ) : null}
                 </DropdownMenuItem>
@@ -1003,7 +1015,7 @@ function BarButton({
       <TooltipContent side="bottom">
         {label}
         {shortcut ? (
-          <span className="ml-1.5 opacity-60">{shortcut}</span>
+          <span className="ml-1.5 opacity-60">{displayShortcut(shortcut)}</span>
         ) : null}
       </TooltipContent>
     </Tooltip>

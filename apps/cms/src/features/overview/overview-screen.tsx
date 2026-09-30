@@ -306,9 +306,17 @@ function AttentionStrip({
             <p className="text-headline text-text-primary">
               {m.overview_release_failed()}
             </p>
-            <p className="line-clamp-2 text-callout text-text-secondary">
-              {release.lastFailure?.error ?? m.golive_hero_failed()}
+            <p className="text-callout text-text-secondary">
+              {m.overview_release_failed_body()}
             </p>
+            {release.lastFailure?.error ? (
+              <p
+                className="line-clamp-1 text-caption font-normal text-text-muted"
+                title={release.lastFailure.error}
+              >
+                {release.lastFailure.error}
+              </p>
+            ) : null}
           </div>
         </div>
         <Button

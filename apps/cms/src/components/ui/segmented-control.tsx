@@ -127,7 +127,7 @@ export function SegmentedControl<T extends string>({
                 }
               }}
               className={cn(
-                'relative inline-flex h-full min-w-0 items-center justify-center gap-1.5 rounded-[8px] font-medium whitespace-nowrap select-none',
+                'relative inline-flex h-full min-w-0 items-center justify-center gap-1.5 rounded-[8px] font-medium whitespace-nowrap select-none touch-target',
                 'transition-colors duration-150 ease-(--ease-standard)',
                 'outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-border-focus',
                 'disabled:pointer-events-none disabled:opacity-40',

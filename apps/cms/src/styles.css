@@ -885,3 +885,16 @@ html.dark,
     animation: none !important;
   }
 }
+
+/* Touch targets (brief §4.3): on touch screens small controls keep their
+   look but get an invisible hit area of at least 44 × 44px. The host must be
+   positioned (Button and segments are `relative`). */
+@utility touch-target {
+  @media (pointer: coarse) {
+    &::after {
+      content: '';
+      position: absolute;
+      inset: min(0px, calc((100% - 44px) / 2));
+    }
+  }
+}

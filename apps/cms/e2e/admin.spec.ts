@@ -59,7 +59,9 @@ test('agency admin sets up a client, a site, its content model and invites peopl
     'aria-selected',
     'true',
   )
-  await expect(page.getByTestId('settings-site-name')).toHaveValue(site.siteName)
+  await expect(page.getByTestId('settings-site-name')).toHaveValue(
+    site.siteName,
+  )
 
   await page.getByRole('tab', { name: 'Deployment' }).click()
   await expect(page).toHaveURL(/[?&]tab=deployment/)
@@ -98,7 +100,9 @@ test('agency admin sets up a client, a site, its content model and invites peopl
   )
   await page.getByTestId('collection-route').fill('/pages/$slug')
   await page.getByTestId('save-collection').click()
-  await expect(drawer.getByText('Enter a collection label.')).toBeVisible()
+  await expect(
+    drawer.getByText('Enter a name for the content type.'),
+  ).toBeVisible()
   await page.getByTestId('collection-label').fill('Pages')
   // The key follows the label while it is new.
   await expect(page.getByTestId('collection-key')).toHaveValue('pages')
@@ -107,7 +111,7 @@ test('agency admin sets up a client, a site, its content model and invites peopl
   await page.keyboard.press('Escape')
   const discard = page.getByRole('alertdialog')
   await expect(
-    discard.getByRole('heading', { name: 'Unsaved collection changes' }),
+    discard.getByRole('heading', { name: 'Unsaved content type changes' }),
   ).toBeVisible()
   await discard.getByRole('button', { name: 'Keep editing' }).click()
   await expect(discard).toBeHidden()
@@ -144,11 +148,13 @@ test('agency admin sets up a client, a site, its content model and invites peopl
   await expect(page.getByTestId('field-key-2')).toHaveText('body')
 
   await page.getByTestId('save-collection').click()
-  await expectToast(page, 'Collection saved')
+  await expectToast(page, 'Content type saved')
   // Creating a content type opens its (empty) collection.
   await expect(page).toHaveURL(/\/c\/pages$/)
   await expect(page.getByTestId('collection-empty')).toBeVisible()
-  const sidebarPages = page.getByTestId('sidebar').getByTestId('collection-pages')
+  const sidebarPages = page
+    .getByTestId('sidebar')
+    .getByTestId('collection-pages')
   await expect(sidebarPages).toBeVisible()
 
   // Turn it off from the Content tab; the sidebar greys it with "Off".
@@ -177,7 +183,7 @@ test('agency admin sets up a client, a site, its content model and invites peopl
   await expect(confirmAction).toBeDisabled()
   await page.getByTestId('confirm-text').fill('pages')
   await confirmAction.click()
-  await expectToast(page, 'Collection deleted')
+  await expectToast(page, 'Content type deleted')
   await expect(row).toHaveCount(0)
   await expect(sidebarPages).toHaveCount(0)
 

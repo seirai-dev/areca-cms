@@ -21,7 +21,7 @@ const FOCUS_RING =
  */
 const buttonVariants = cva(
   cn(
-    'relative inline-flex shrink-0 items-center justify-center gap-2 rounded-control select-none',
+    'relative inline-flex shrink-0 items-center justify-center gap-2 rounded-control select-none touch-target',
     'font-sans text-[14px] leading-5 font-medium tracking-[-0.003em] whitespace-nowrap',
     'transition-[background-color,color,box-shadow,transform,opacity] duration-150 ease-(--ease-standard)',
     'active:scale-[0.98]',

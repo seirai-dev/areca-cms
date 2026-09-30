@@ -154,7 +154,8 @@ export function ClientSettings({
             <Hint label={m.agency_delete_blocked_reason()} wrapDisabled>
               <Button
                 type="button"
-                variant="destructive"
+                variant="outline"
+                className="text-text-error hover:bg-status-error-bg hover:text-text-error"
                 data-testid="delete-org"
                 disabled
               >
@@ -174,7 +175,8 @@ export function ClientSettings({
             >
               <Button
                 type="button"
-                variant="destructive"
+                variant="outline"
+                className="text-text-error hover:bg-status-error-bg hover:text-text-error"
                 data-testid="delete-org"
                 loading={remove.isPending}
               >

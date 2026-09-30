@@ -291,7 +291,9 @@ function StatusHero({
     case 'failed':
       icon = <FailedIcon size={24} />
       tone = 'bg-status-error-bg text-icon-error'
-      sentence = m.golive_hero_failed()
+      sentence = release.live
+        ? m.golive_hero_failed()
+        : m.golive_hero_failed_never_live()
       detail = release.lastFailure?.error ? (
         <p
           className="line-clamp-3 text-callout text-text-secondary"

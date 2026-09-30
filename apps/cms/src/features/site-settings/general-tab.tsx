@@ -145,7 +145,8 @@ export function GeneralTab({
           >
             <Button
               type="button"
-              variant="destructive"
+              variant="outline"
+              className="text-text-error hover:bg-status-error-bg hover:text-text-error"
               data-testid="delete-site"
             >
               <Trash />

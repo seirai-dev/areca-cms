@@ -44,7 +44,9 @@ const tabsListVariants = cva(
   {
     variants: {
       variant: {
-        line: 'no-scrollbar relative h-11 max-w-full gap-6 overflow-x-auto border-b border-border-default',
+        // The hairline is an inset shadow so the indicator can sit on it inside
+        // the scroll box (a border would push it outside and clip it).
+        line: 'no-scrollbar relative h-11 max-w-full gap-6 overflow-x-auto shadow-[inset_0_-1px_0_var(--color-border-default)]',
         segmented:
           'h-9 gap-0.5 rounded-control bg-segment-track p-[2px] text-text-secondary',
       },
@@ -109,7 +111,7 @@ function TabsTrigger({
       {variant === 'line' ? (
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 -bottom-px h-0.5 group-data-[state=inactive]/trigger:hidden"
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 group-data-[state=inactive]/trigger:hidden"
         >
           {reduceMotion ? (
             <span className="block h-full w-full rounded-full bg-text-primary" />
