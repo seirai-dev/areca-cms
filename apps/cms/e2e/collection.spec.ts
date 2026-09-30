@@ -147,7 +147,7 @@ test('collection: view toggle, status filter and select-mode bulk actions', asyn
   await expect(entry(page, draftA)).toBeVisible()
   await expect(entry(page, ready)).toBeVisible()
   await expect(page.getByTestId('site-content')).toContainText('2 entries')
-  await page.keyboard.press('Escape')
+  await page.getByTestId('bulk-done').click()
   await expect(bar).toBeHidden()
 })
 
@@ -157,12 +157,18 @@ test('editors can select entries but bulk actions are disabled with the reason',
   await login(page, EDITOR)
   await openSite(page, ACME_SITE)
   await openCollection(page, 'articles')
+  // Editors write drafts; Select needs at least one entry.
+  const title = `Editor draft ${uniqueSuffix()}`
+  await createArticle(page, title)
+  await backToCollection(page)
   await page.getByTestId('select-mode').click()
+  await page.getByRole('button', { name: `Select ${title}`, exact: true }).click()
   const bar = page.getByTestId('bulk-actions')
   await expect(bar).toBeVisible()
   for (const id of ['bulk-ready', 'bulk-draft', 'bulk-delete']) {
     await expect(bar.getByTestId(id)).toBeDisabled()
   }
+  await expect(bar).toContainText('1 selected')
   await expectDisabledWithReason(page, bar.getByTestId('bulk-ready'))
   await bar.getByTestId('bulk-done').click()
   await expect(bar).toBeHidden()
