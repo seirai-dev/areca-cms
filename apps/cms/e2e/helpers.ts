@@ -1,4 +1,4 @@
-import { expect } from '@playwright/test'
+import { expect, request as playwrightRequest } from '@playwright/test'
 import type { APIRequestContext, Locator, Page } from '@playwright/test'
 
 export const PASSWORD = 'password123'
@@ -91,13 +91,22 @@ export async function openSwitcher(page: Page) {
   return list
 }
 
-/** Opens a site workspace through the switcher, by its slug. */
+/**
+ * Opens a site workspace by its slug: from the `/sites` picker when that is
+ * where we are (several sites, no last site yet), otherwise through the
+ * sidebar's workspace switcher.
+ */
 export async function openSite(page: Page, slug: string) {
-  await openSwitcher(page)
-  // Search only exists with more than six sites.
-  const search = page.getByPlaceholder('Search sites…')
-  if (await search.isVisible()) await search.fill(slug)
-  await page.getByTestId(`switch-site-${slug}`).click()
+  if (/\/sites\/?(?:[?#].*)?$/.test(new URL(page.url()).pathname)) {
+    await expect(page.getByTestId('sites-page')).toBeVisible()
+    // Every card is a link, so this also works before hydration.
+    await page.getByTestId(`site-card-${slug}`).click()
+  } else {
+    await openSwitcher(page)
+    const search = page.getByPlaceholder('Search sites…')
+    if (await search.isVisible()) await search.fill(slug)
+    await page.getByTestId(`switch-site-${slug}`).click()
+  }
   await expect(page).toHaveURL(/\/sites\/[^/?]+(?:\?.*)?$/)
   await expect(page.getByTestId('site-overview')).toBeVisible()
   await expect(page.getByTestId('release-status')).toBeVisible()
@@ -249,13 +258,21 @@ export const ARTICLES_MANIFEST = {
   },
 }
 
-/** Pushes a manifest with the site token, as `areca manifest push` does. */
+/**
+ * Pushes a manifest with the site token, as `areca manifest push` does. Use
+ * a cookie-less request context (the `request` fixture, or omit it): the
+ * CMS rejects cookie-bearing POSTs without an Origin (CSRF guard).
+ */
 export async function pushManifest(
-  request: APIRequestContext,
+  request: APIRequestContext | string,
   token: string,
   manifest: object = ARTICLES_MANIFEST,
 ) {
-  const response = await request.post('/api/sites/manifest', {
+  const context =
+    typeof request === 'string'
+      ? await playwrightRequest.newContext({ baseURL: request })
+      : request
+  const response = await context.post('/api/sites/manifest', {
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
@@ -263,6 +280,7 @@ export async function pushManifest(
     data: manifest,
   })
   expect(response.status(), await response.text()).toBe(200)
+  if (typeof request === 'string') await context.dispose()
 }
 
 /**
@@ -276,7 +294,7 @@ export async function createIsolatedAcmeSite(
   await login(page, ADMIN)
   await openClient(page, 'Acme', 'acme')
   const site = await createSiteOnClientPage(page, suffix)
-  await pushManifest(page.request, site.token)
+  await pushManifest(new URL(page.url()).origin, site.token)
   await signOut(page)
   return site
 }
