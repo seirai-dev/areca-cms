@@ -245,8 +245,13 @@ function HistoryItem({
       icon={meta.icon}
       tone={meta.tone}
       title={title}
-      time={<RelativeTime value={latest.createdAt} />}
-      meta={author}
+      // Time and author share one quiet line, so every item has the same
+      // shape in the narrow details panel.
+      meta={
+        <span className="text-caption font-normal text-text-muted">
+          <RelativeTime value={latest.createdAt} /> · {author}
+        </span>
+      }
       data-testid="history-item"
       data-note={group.note}
       actions={

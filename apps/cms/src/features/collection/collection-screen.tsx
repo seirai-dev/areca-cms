@@ -404,7 +404,11 @@ function CollectionView({
             tone="neutral"
             icon={<MagnifyingGlass weight="duotone" />}
             title={m.collection_nothing_matches()}
-            description={m.collection_nothing_matches_description()}
+            description={
+              search
+                ? m.collection_nothing_matches_description()
+                : m.collection_nothing_matches_status()
+            }
             data-testid="collection-empty-filtered"
             action={
               <Button

@@ -392,6 +392,7 @@
   "collection_move_to_draft_short": "Move to draft",
   "collection_nothing_matches": "Nothing matches",
   "collection_nothing_matches_description": "Try another word, or show every status.",
+  "collection_nothing_matches_status": "Nothing here has this status yet. Show every status to see all entries.",
   "collection_open": "Open",
   "collection_search": "Search {name}",
   "collection_select": "Select",
