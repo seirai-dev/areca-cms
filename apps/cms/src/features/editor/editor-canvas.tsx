@@ -58,7 +58,7 @@ export function EditorCanvas({
     >
       {titleField ? (
         <div
-          className="grid gap-1.5"
+          className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1.5"
           data-field={titleField.key}
           data-invalid={errors[titleField.key] ? 'true' : undefined}
         >
@@ -98,7 +98,7 @@ export function EditorCanvas({
       {canvasFields.map((field, index) => (
         <div
           key={field.key}
-          className="grid gap-1"
+          className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1"
           data-field={field.key}
           data-invalid={errors[field.key] ? 'true' : undefined}
           data-canvas-body={index === 0 ? '' : undefined}

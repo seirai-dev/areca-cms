@@ -478,7 +478,7 @@ export function RichTextEditor({
   return (
     <div
       ref={wrapperRef}
-      className="relative"
+      className="relative min-w-0"
       data-invalid={invalid ? 'true' : undefined}
       onFocus={() => setFocused(true)}
       onBlur={(event) => {
