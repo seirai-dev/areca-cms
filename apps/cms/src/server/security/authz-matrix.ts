@@ -693,6 +693,13 @@ export const ROWS: Row[] = [
     policy: 'org-editor',
     prepare: (w) => ({ data: { siteId: w.X.site.id } }),
   },
+  {
+    name: 'listPendingReleaseChangesFn',
+    hidden: true,
+    fn: publishingFns.listPendingReleaseChangesFn,
+    policy: 'org-editor',
+    prepare: (w) => ({ data: { siteId: w.X.site.id } }),
+  },
 
   // ----------------------------------------------------------- branding.ts
   {

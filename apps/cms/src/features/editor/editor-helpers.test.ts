@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { isPastInstant } from '#/lib/schedule-time'
 import { groupRevisions } from './revision-groups'
 import { presetInstant, wallTime, zonedToInstant } from './schedule-time'
 
@@ -69,6 +70,28 @@ describe('schedule time', () => {
       zonedToInstant('2026-01-15', '09:00', 'America/New_York')?.toISOString(),
     ).toBe('2026-01-15T14:00:00.000Z')
     expect(zonedToInstant('', '09:00', 'UTC')).toBeNull()
+    expect(zonedToInstant('2026-07-01', '09:00', 'UTC')?.toISOString()).toBe(
+      '2026-07-01T09:00:00.000Z',
+    )
+    expect(zonedToInstant('2026-07-01', '09:00', '')).toBeNull()
+    expect(zonedToInstant('2026-07-01', '09:00', 'Not/AZone')).toBeNull()
+  })
+
+  it('rejects a DST gap (spring-forward missing wall time)', () => {
+    expect(zonedToInstant('2026-03-29', '02:30', 'Europe/Amsterdam')).toBeNull()
+  })
+
+  it('picks the later offset at a DST fold (fall-back duplicated wall time)', () => {
+    expect(
+      zonedToInstant('2026-10-25', '02:30', 'Europe/Amsterdam')?.toISOString(),
+    ).toBe('2026-10-25T01:30:00.000Z')
+  })
+
+  it('allows 30s of past skew and rejects older instants', () => {
+    const now = new Date('2026-06-01T12:00:00.000Z')
+    expect(isPastInstant(new Date(now.getTime() - 30_000), now)).toBe(false)
+    expect(isPastInstant(new Date(now.getTime() - 61_000), now)).toBe(true)
+    expect(isPastInstant(new Date(now.getTime() + 5_000), now)).toBe(false)
   })
 
   it('computes the quick chips', () => {

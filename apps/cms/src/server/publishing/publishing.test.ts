@@ -1,10 +1,16 @@
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
 import { createMockDeploymentAdapter } from '#/adapters/deployment/mock'
 import type { DeploymentAdapter } from '#/adapters/deployment/types'
 import { db, pool } from '#/db'
-import { buildJob, site } from '#/db/schema'
+import {
+  auditLog,
+  buildJob,
+  publication,
+  schedulerBackoff,
+  site,
+} from '#/db/schema'
 import {
   createEntry,
   getEntry,
@@ -14,6 +20,7 @@ import {
 } from '#/server/content/entries'
 import {
   createTestCollection,
+  dueScheduleIso,
   sampleRichText,
   withTestSite,
 } from '#/server/content/test-utils'
@@ -181,12 +188,7 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
         },
         actorId: ctx.actor.id,
       })
-      await scheduleEntry(
-        scheduled.id,
-        '2020-01-01T00:00:00.000Z',
-        'UTC',
-        ctx.actor.id,
-      )
+      await scheduleEntry(scheduled.id, dueScheduleIso(), 'UTC', ctx.actor.id)
 
       const first = await requestPublication({
         siteId: ctx.site.id,
@@ -354,17 +356,31 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
         },
         actorId: ctx.actor.id,
       })
-      await scheduleEntry(
-        scheduled.id,
-        '2020-01-01T00:00:00.000Z',
-        'UTC',
-        ctx.actor.id,
-      )
+      await scheduleEntry(scheduled.id, dueScheduleIso(), 'UTC', ctx.actor.id)
 
       await runSchedulerTick()
       const jobs = await listBuildJobs(ctx.site.id, { limit: 10 })
       expect(jobs).toHaveLength(1)
       expect(jobs[0]?.status).toBe('queued')
+      const queued = await getPublication(jobs[0]!.publicationId)
+      expect(queued).not.toBeNull()
+      expect(queued!.requestedBy).toBeNull()
+      const [requested] = await db
+        .select()
+        .from(auditLog)
+        .where(
+          and(
+            eq(auditLog.targetId, queued!.id),
+            eq(auditLog.action, 'publication.requested'),
+          ),
+        )
+      expect(requested?.actorId).toBe(ctx.actor.id)
+      expect(requested?.meta).toEqual(
+        expect.objectContaining({
+          note: 'scheduled',
+          scheduledBy: [ctx.actor.id],
+        }),
+      )
     })
   })
 
@@ -520,12 +536,7 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
         },
         actorId: ctx.actor.id,
       })
-      await scheduleEntry(
-        scheduled.id,
-        '2020-01-01T00:00:00.000Z',
-        'UTC',
-        ctx.actor.id,
-      )
+      await scheduleEntry(scheduled.id, dueScheduleIso(), 'UTC', ctx.actor.id)
       const requested = await requestPublication({
         siteId: ctx.site.id,
         actorId: ctx.actor.id,
@@ -551,12 +562,7 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
         },
         actorId: ctx.actor.id,
       })
-      await scheduleEntry(
-        late.id,
-        '2020-01-01T00:00:00.000Z',
-        'UTC',
-        ctx.actor.id,
-      )
+      await scheduleEntry(late.id, dueScheduleIso(), 'UTC', ctx.actor.id)
       await processJob(requested.job, {
         adapter: createMockDeploymentAdapter(),
       })
@@ -684,12 +690,7 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
         },
         actorId: ctx.actor.id,
       })
-      await scheduleEntry(
-        scheduled.id,
-        '2020-01-01T00:00:00.000Z',
-        'UTC',
-        ctx.actor.id,
-      )
+      await scheduleEntry(scheduled.id, dueScheduleIso(), 'UTC', ctx.actor.id)
       const requested = await requestPublication({
         siteId: ctx.site.id,
         actorId: ctx.actor.id,
@@ -707,7 +708,7 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
       )
       const rescheduled = await scheduleEntry(
         scheduled.id,
-        '2020-01-01T00:00:00.000Z',
+        dueScheduleIso(),
         'UTC',
         ctx.actor.id,
       )
@@ -763,6 +764,92 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
         await connection.query('ROLLBACK')
         connection.release()
       }
+    })
+  })
+
+  it('keeps scheduler backoff in the database across resetSchedulerAttempts', async () => {
+    await withTestSite(async (ctx) => {
+      await createTestCollection(ctx.site.id)
+      const scheduled = await createEntry({
+        siteId: ctx.site.id,
+        collectionKey: 'articles',
+        data: {
+          title: 'Due',
+          slug: `backoff-${ctx.suffix}`,
+          body: sampleRichText,
+        },
+        actorId: ctx.actor.id,
+      })
+      await scheduleEntry(scheduled.id, dueScheduleIso(), 'UTC', ctx.actor.id)
+
+      await runSchedulerTick()
+      const [row] = await db
+        .select()
+        .from(schedulerBackoff)
+        .where(eq(schedulerBackoff.siteId, ctx.site.id))
+        .limit(1)
+      expect(row).toBeDefined()
+      expect(row?.lastError).toBeTruthy()
+      expect(await listBuildJobs(ctx.site.id)).toHaveLength(0)
+      const [failed] = await db
+        .select()
+        .from(auditLog)
+        .where(
+          and(
+            eq(auditLog.siteId, ctx.site.id),
+            eq(auditLog.action, 'publication.scheduled_failed'),
+          ),
+        )
+      expect(failed?.actorId).toBe(ctx.actor.id)
+      expect(failed?.meta).toEqual(
+        expect.objectContaining({ scheduledBy: [ctx.actor.id] }),
+      )
+
+      resetSchedulerAttempts()
+      await runSchedulerTick()
+      expect(await listBuildJobs(ctx.site.id)).toHaveLength(0)
+      const [still] = await db
+        .select()
+        .from(schedulerBackoff)
+        .where(eq(schedulerBackoff.siteId, ctx.site.id))
+        .limit(1)
+      expect(still?.lastAttemptAt.getTime()).toBe(row!.lastAttemptAt.getTime())
+    })
+  })
+
+  it('does not fail a demo job if completion audit throws', async () => {
+    await withTestSite(async (ctx) => {
+      await createTestCollection(ctx.site.id)
+      await seedPublishedEntry(ctx.site.id, ctx.actor.id, ctx.suffix, 'audit')
+      await db
+        .update(site)
+        .set({ publishingMode: 'demo', deploymentTarget: null })
+        .where(eq(site.id, ctx.site.id))
+      const requested = await requestPublication({
+        siteId: ctx.site.id,
+        actorId: ctx.actor.id,
+      })
+      expect(requested.ok).toBe(true)
+      if (!requested.ok) return
+      await processJob(requested.job, {
+        audit: async () => {
+          throw new Error('audit unavailable')
+        },
+      })
+      expect((await getBuildJob(requested.job.id)).status).toBe('succeeded')
+      expect((await getPublication(requested.publication.id))?.status).toBe(
+        'demo',
+      )
+      const [failed] = await db
+        .select()
+        .from(publication)
+        .where(
+          and(
+            eq(publication.id, requested.publication.id),
+            eq(publication.status, 'failed'),
+          ),
+        )
+      expect(failed).toBeUndefined()
     })
   })
 })

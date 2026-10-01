@@ -1,22 +1,25 @@
 import type { EntryUiStatus } from '#/lib/status'
 import type { EntryStatus } from '#/lib/types'
 
-import type { ReleaseStatusData } from './queries'
-
 export type EntryLike = {
+  id?: string
   status: EntryStatus
   updatedAt: string | Date
   scheduledAt?: string | Date | null
   draftData?: unknown
   publishedData?: unknown
+  publishedSlug?: string | null
+  slug?: string
 }
 
-type LiveLike =
-  Pick<NonNullable<ReleaseStatusData['live']>, 'createdAt'> | null | undefined
-
-function time(value: string | Date) {
-  return value instanceof Date ? value.getTime() : new Date(value).getTime()
-}
+export type LiveMembership =
+  | {
+      liveEntryIds: readonly string[]
+      liveSlugsByEntryId: Readonly<Record<string, string>>
+      pendingEntryIds?: readonly string[]
+    }
+  | null
+  | undefined
 
 /** Order-insensitive JSON for comparing draft and published data. */
 function stable(value: unknown): string {
@@ -33,17 +36,25 @@ function stable(value: unknown): string {
   return JSON.stringify(value ?? null)
 }
 
+function approvedSlug(entry: EntryLike) {
+  return entry.publishedSlug ?? entry.slug ?? null
+}
+
 /**
  * Draft → Ready → Live (brief §1.2), from backend truth:
  *
  * - draft/scheduled/archived map straight through;
- * - published is **Ready** while nothing is live, or when the entry changed
- *   after the live release was created; otherwise **Live**.
+ * - published is **Ready** when nothing is live, or the live snapshot does
+ *   not contain this entry id with the same approved slug, or the approved
+ *   version is still pending (add/update); otherwise **Live**.
  *
- * `live` is the site's live publication (from `useReleaseStatus`). While it
- * is still loading (`undefined`), published entries read as Live.
+ * `live` is snapshot membership from `useReleaseStatus`. While it is still
+ * loading (`undefined`), published entries read as Live.
  */
-export function entryUiStatus(entry: EntryLike, live: LiveLike): EntryUiStatus {
+export function entryUiStatus(
+  entry: EntryLike,
+  live: LiveMembership,
+): EntryUiStatus {
   switch (entry.status) {
     case 'draft':
       return 'draft'
@@ -54,7 +65,13 @@ export function entryUiStatus(entry: EntryLike, live: LiveLike): EntryUiStatus {
     case 'published': {
       if (live === undefined) return 'live'
       if (live === null) return 'ready'
-      return time(entry.updatedAt) > time(live.createdAt) ? 'ready' : 'live'
+      if (!entry.id || !live.liveEntryIds.includes(entry.id)) return 'ready'
+      const slug = approvedSlug(entry)
+      if (slug != null && live.liveSlugsByEntryId[entry.id] !== slug) {
+        return 'ready'
+      }
+      if (live.pendingEntryIds?.includes(entry.id)) return 'ready'
+      return 'live'
     }
   }
 }
@@ -77,7 +94,7 @@ export type EntryLiveState = {
 
 export function entryLiveState(
   entry: EntryLike,
-  live: LiveLike,
+  live: LiveMembership,
 ): EntryLiveState {
   return {
     status: entryUiStatus(entry, live),

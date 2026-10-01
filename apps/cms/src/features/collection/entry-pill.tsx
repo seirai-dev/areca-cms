@@ -4,8 +4,10 @@ import {
   formatScheduleShort,
 } from '#/components/ui/status-pill'
 import { entryLiveState } from '#/features/golive/entry-live-state'
-import type { EntryLike } from '#/features/golive/entry-live-state'
-import type { ReleaseStatusData } from '#/features/golive/queries'
+import type {
+  EntryLike,
+  LiveMembership,
+} from '#/features/golive/entry-live-state'
 import { ENTRY_STATUS } from '#/lib/status'
 import type { EntryUiStatus } from '#/lib/status'
 
@@ -15,7 +17,7 @@ import type { EntryUiStatus } from '#/lib/status'
  * "Edited since ready" dot. `data-status` keeps the backend status (the
  * test contract); `data-ui-status` carries the UI status.
  *
- * `live` is `useReleaseStatus(siteId).data?.live` (undefined while loading).
+ * `live` is snapshot membership from `useReleaseStatus` (undefined while loading).
  */
 export function EntryPill({
   entry,
@@ -26,7 +28,7 @@ export function EntryPill({
   className,
 }: {
   entry: EntryLike
-  live: ReleaseStatusData['live'] | undefined
+  live: LiveMembership
   long?: boolean
   size?: 'sm' | 'md'
   testId?: string

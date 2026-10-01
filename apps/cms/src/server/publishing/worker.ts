@@ -64,6 +64,7 @@ const g = globalThis as typeof globalThis & {
 export type ProcessJobDeps = {
   adapter?: DeploymentAdapter
   resolveAdapter?: (organizationId: string) => Promise<DeploymentAdapter>
+  audit?: typeof audit
 }
 
 /** Per-job build log cap (characters). The tail is kept when exceeded. */
@@ -334,6 +335,7 @@ export async function processJob(
         })
         .where(eq(buildJob.id, job.id))
       for (const selected of pub.entryVersions) {
+        if (!selected.scheduledVersion) continue
         await tx
           .update(entry)
           .set({
@@ -343,6 +345,7 @@ export async function processJob(
             publishedAt: now,
             scheduledAt: null,
             scheduleTimezone: null,
+            scheduledBy: null,
             scheduledData: null,
             scheduledSlug: null,
             scheduledVersion: null,
@@ -363,15 +366,23 @@ export async function processJob(
         ? 'Demo publication ready (not production live)'
         : 'publication live',
     )
-    await audit({
-      organizationId: existingSite.organizationId,
-      siteId: job.siteId,
-      actorId: pub.requestedBy,
-      action: demo ? 'publication.demo' : 'publication.live',
-      targetType: 'publication',
-      targetId: pub.id,
-      meta: { jobId: job.id },
-    })
+    try {
+      await (deps.audit ?? audit)({
+        organizationId: existingSite.organizationId,
+        siteId: job.siteId,
+        actorId: pub.requestedBy,
+        action: demo ? 'publication.demo' : 'publication.live',
+        targetType: 'publication',
+        targetId: pub.id,
+        meta: { jobId: job.id },
+      })
+    } catch (error) {
+      logger.error('completion audit failed', {
+        jobId: job.id,
+        publicationId: pub.id,
+        err: error,
+      })
+    }
   } catch (error) {
     const message = redactString(
       error instanceof Error ? error.message : String(error),

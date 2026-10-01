@@ -116,3 +116,8 @@ export async function withTestSite(
     await cleanupTestSite(ctx)
   }
 }
+
+/** Instant within the 60s schedule skew so tests can enqueue already-due work. */
+export function dueScheduleIso() {
+  return new Date(Date.now() - 30_000).toISOString()
+}

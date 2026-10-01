@@ -30,6 +30,9 @@ export type ReleaseStatusData = {
     error: string | null
   } | null
   pendingEntries: number
+  liveEntryIds?: string[]
+  liveSlugsByEntryId?: Record<string, string>
+  pendingEntryIds?: string[]
 }
 
 export type JobRow = {

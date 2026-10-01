@@ -260,6 +260,9 @@ export const entry = pgTable(
     scheduledVersion: text('scheduled_version'),
     scheduledAt: timestamptz('scheduled_at'),
     scheduleTimezone: text('schedule_timezone'),
+    scheduledBy: text('scheduled_by').references(() => user.id, {
+      onDelete: 'set null',
+    }),
     publishedAt: timestamptz('published_at'),
     createdBy: text('created_by').references(() => user.id, {
       onDelete: 'set null',
@@ -423,5 +426,14 @@ export const branding = pgTable('branding', {
 export const storageObjectDeletion = pgTable('storage_object_deletion', {
   storageKey: text('storage_key').primaryKey(),
   createdAt: createdAt(),
+  lastError: text('last_error'),
+})
+
+/** Per-site scheduler retry cooldown. Survives process restart. */
+export const schedulerBackoff = pgTable('scheduler_backoff', {
+  siteId: text('site_id')
+    .primaryKey()
+    .references(() => site.id, { onDelete: 'cascade' }),
+  lastAttemptAt: timestamptz('last_attempt_at').notNull(),
   lastError: text('last_error'),
 })

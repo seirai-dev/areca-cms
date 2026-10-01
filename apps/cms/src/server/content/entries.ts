@@ -1,8 +1,13 @@
 import { randomUUID } from 'node:crypto'
-import { and, desc, eq, ilike, or, sql } from 'drizzle-orm'
+import { and, desc, eq, ilike, isNotNull, lte, or, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { collection, entry, entryRevision, site, user } from '#/db/schema'
+import {
+  isIanaTimeZone,
+  isPastInstant,
+  parseOffsetInstant,
+} from '#/lib/schedule-time'
 import type { EntryData, EntryStatus } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
@@ -25,6 +30,8 @@ export async function listEntries(
   collectionKey: string,
   options: {
     status?: EntryStatus
+    /** Eligible snapshot/publish targets only; do not combine with `status`. */
+    referenceTargets?: boolean
     search?: string
     limit?: number
     offset?: number
@@ -38,7 +45,23 @@ export async function listEntries(
   const limit = options.limit ?? 50
   const offset = options.offset ?? 0
   const filters = [eq(entry.siteId, siteId), eq(entry.collectionId, col.id)]
-  if (options.status) {
+  if (options.referenceTargets) {
+    const now = new Date()
+    filters.push(
+      or(
+        eq(entry.status, 'published'),
+        and(
+          eq(entry.status, 'scheduled'),
+          or(isNotNull(entry.publishedData), isNotNull(entry.publishedSlug))!,
+        ),
+        and(
+          eq(entry.status, 'scheduled'),
+          isNotNull(entry.scheduledAt),
+          lte(entry.scheduledAt, now),
+        ),
+      )!,
+    )
+  } else if (options.status) {
     filters.push(eq(entry.status, options.status))
   }
   if (options.search) {
@@ -262,10 +285,7 @@ export async function restoreRevision(
   }
 
   // Drop keys the schema no longer declares so legacy data does not return.
-  const restoredData = pickDeclaredFields(
-    ctx.collection.fields,
-    revision.data,
-  )
+  const restoredData = pickDeclaredFields(ctx.collection.fields, revision.data)
 
   const nextSlug = resolveSlug(restoredData, ctx.collection.fields)
   if (nextSlug && nextSlug !== ctx.entry.slug) {
@@ -359,6 +379,7 @@ export async function publishEntry(id: string, actorId: string) {
         scheduledVersion: null,
         scheduledAt: null,
         scheduleTimezone: null,
+        scheduledBy: null,
         updatedBy: actorId,
         updatedAt: now,
       })
@@ -405,6 +426,7 @@ export async function unpublishEntry(id: string, actorId: string) {
       scheduledVersion: null,
       scheduledAt: null,
       scheduleTimezone: null,
+      scheduledBy: null,
       updatedBy: actorId,
       updatedAt: now,
     })
@@ -465,15 +487,25 @@ export async function scheduleEntry(
   actorId: string,
 ) {
   const ctx = await loadEntryContext(id)
-  const when = new Date(scheduledAt)
-  if (Number.isNaN(when.getTime())) {
+  if (!timezone) {
+    throw new ValidationError([
+      { path: 'timezone', message: m.server_timezone_required() },
+    ])
+  }
+  if (!isIanaTimeZone(timezone)) {
+    throw new ValidationError([
+      { path: 'timezone', message: m.server_invalid_timezone() },
+    ])
+  }
+  const when = parseOffsetInstant(scheduledAt)
+  if (!when) {
     throw new ValidationError([
       { path: 'scheduledAt', message: m.server_invalid_datetime() },
     ])
   }
-  if (!timezone) {
+  if (isPastInstant(when)) {
     throw new ValidationError([
-      { path: 'timezone', message: m.server_timezone_required() },
+      { path: 'scheduledAt', message: m.server_schedule_in_past() },
     ])
   }
 
@@ -502,6 +534,7 @@ export async function scheduleEntry(
         scheduledVersion: randomUUID(),
         scheduledAt: when,
         scheduleTimezone: timezone,
+        scheduledBy: actorId,
         updatedBy: actorId,
         updatedAt: now,
       })
@@ -552,6 +585,7 @@ export async function cancelSchedule(id: string, actorId: string) {
       scheduledVersion: null,
       scheduledAt: null,
       scheduleTimezone: null,
+      scheduledBy: null,
       updatedBy: actorId,
       updatedAt: now,
     })

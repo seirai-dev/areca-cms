@@ -8,7 +8,7 @@ import { CopyButton } from '#/components/ui/copy-button'
 import { Hint } from '#/components/ui/tooltip'
 import { RelativeTime } from '#/components/ui/timeline'
 import { EntryPill } from '#/features/collection/entry-pill'
-import type { ReleaseStatusData } from '#/features/golive/queries'
+import type { LiveMembership } from '#/features/golive/entry-live-state'
 import { editorPublishReason } from '#/features/golive/golive-tray'
 import { displayHost } from '#/lib/site-nav'
 import type { EntryData, Field } from '#/lib/types'
@@ -86,7 +86,7 @@ export function DetailsPanel({
   slugManual: boolean
   onResetSlug: () => void
   entry: EntryRecord | null
-  live: ReleaseStatusData['live'] | undefined
+  live: LiveMembership
   isNew: boolean
   canManage: boolean
   revisions: RevisionRecord[]
@@ -285,7 +285,7 @@ function StatusBlock({
   onCancelSchedule,
 }: {
   entry: EntryRecord | null
-  live: ReleaseStatusData['live'] | undefined
+  live: LiveMembership
   isNew: boolean
   canManage: boolean
   onCancelSchedule: () => void

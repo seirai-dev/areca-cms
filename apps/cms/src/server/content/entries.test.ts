@@ -87,6 +87,7 @@ describe.skipIf(!hasDb)('entries', () => {
       )
       expect(scheduled.status).toBe('scheduled')
       expect(scheduled.scheduleTimezone).toBe('Europe/Berlin')
+      expect(scheduled.scheduledBy).toBe(ctx.actor.id)
       expect(scheduled.scheduledAt?.toISOString()).toBe(
         new Date(scheduledAt).toISOString(),
       )

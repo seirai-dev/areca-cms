@@ -42,6 +42,7 @@ import {
   unpublishEntry,
   updateDraft,
 } from '#/server/content/entries'
+import { listInboundReferences } from '#/server/content/inbound-references'
 import { NotFoundError } from '#/server/content/errors'
 import { pageLimitSchema, pageOffsetSchema } from '#/server/pagination'
 import {
@@ -166,6 +167,7 @@ export const listEntriesFn = createServerFn({ method: 'GET', ...entryFn })
       siteId: z.string().min(1).max(ID_MAX_LENGTH),
       collectionKey: z.string().min(1).max(ID_MAX_LENGTH),
       status: entryStatusSchema.optional(),
+      referenceTargets: z.boolean().optional(),
       search: z.string().max(SEARCH_MAX_LENGTH).optional(),
       limit: pageLimitSchema.optional(),
       offset: pageOffsetSchema.optional(),
@@ -175,10 +177,21 @@ export const listEntriesFn = createServerFn({ method: 'GET', ...entryFn })
     await requireSiteAccess(data.siteId)
     return listEntries(data.siteId, data.collectionKey, {
       status: data.status,
+      referenceTargets: data.referenceTargets,
       search: data.search,
       limit: data.limit,
       offset: data.offset,
     })
+  })
+
+export const listInboundReferencesFn = createServerFn({
+  method: 'GET',
+  ...entryFn,
+})
+  .validator(z.object({ id: z.string().min(1).max(ID_MAX_LENGTH) }))
+  .handler(async ({ data }) => {
+    await requireEntryAccess(data.id)
+    return listInboundReferences(data.id)
   })
 
 export const getEntryFn = createServerFn({ method: 'GET', ...entryFn })

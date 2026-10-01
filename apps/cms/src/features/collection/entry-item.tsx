@@ -25,7 +25,7 @@ import {
 import { RelativeTime } from '#/components/ui/timeline'
 import { editorPublishReason } from '#/features/golive/golive-tray'
 import { isEditedSinceReady } from '#/features/golive/entry-live-state'
-import type { ReleaseStatusData } from '#/features/golive/queries'
+import type { LiveMembership } from '#/features/golive/entry-live-state'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
@@ -39,7 +39,7 @@ export type EntryItemProps = {
   row: EntryRow
   title: string
   coverAssetId: string | undefined
-  live: ReleaseStatusData['live'] | undefined
+  live: LiveMembership
   canManage: boolean
   selectMode: boolean
   selected: boolean

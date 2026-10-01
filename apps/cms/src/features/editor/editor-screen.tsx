@@ -36,7 +36,7 @@ import type { MeSite } from '#/lib/site-nav'
 import type { Field } from '#/lib/types'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
-import { listCollectionsFn } from '#/server/fn/content'
+import { listCollectionsFn, listInboundReferencesFn } from '#/server/fn/content'
 import type { Me } from '#/server/fn/me'
 
 import { DetailsPanel } from './details-panel'
@@ -164,7 +164,7 @@ function EntryEditorView({
   const siteId = site.id
   const canManage = canManageSite(me, site.organizationId)
   const release = useReleaseStatus(siteId)
-  const live = release.data ? release.live : undefined
+  const live = release.liveMembership
   const panel = usePanel()
   const desktop = useMediaQuery('(min-width: 1024px)')
   const mobile = useIsMobile()
@@ -189,6 +189,12 @@ function EntryEditorView({
     onRevealError: (key) => revealField(key),
   })
   const { entry, data, titleField, slugField } = editor
+  const inboundQuery = useQuery({
+    queryKey: queryKeys.inboundReferences(editor.entryId ?? ''),
+    queryFn: () => listInboundReferencesFn({ data: { id: editor.entryId! } }),
+    enabled: deleteOpen && Boolean(editor.entryId),
+  })
+  const inboundTitles = (inboundQuery.data ?? []).map((row) => row.title)
 
   const canvasFields = fields.filter(
     (field) =>
@@ -589,7 +595,15 @@ function EntryEditorView({
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
         title={m.editor_delete_entry_title()}
-        description={m.editor_delete_entry_description()}
+        description={
+          inboundTitles.length > 0
+            ? `${m.editor_delete_entry_description()} ${m.editor_delete_entry_inbound(
+                {
+                  titles: inboundTitles.join(', '),
+                },
+              )}`
+            : m.editor_delete_entry_description()
+        }
         confirmLabel={m.editor_delete()}
         variant="destructive"
         onConfirm={async () => {

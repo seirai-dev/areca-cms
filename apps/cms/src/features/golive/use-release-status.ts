@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { isActiveJobStatus } from '#/lib/status'
 import type { BuildJobStatus } from '#/lib/types'
 
+import type { LiveMembership } from './entry-live-state'
 import { latestJobsQuery, releaseStatusQuery } from './queries'
 import type { JobRow, ReleaseStatusData } from './queries'
 
@@ -14,8 +15,8 @@ import type { JobRow, ReleaseStatusData } from './queries'
  * - `going-live`  a build job is queued or running (`step` says which)
  * - `failed`      the newest build job failed
  * - `never-live`  nothing has ever gone live
- * - `ready`       published entries the live snapshot does not include
- * - `up-to-date`  live, nothing pending
+ * - `ready`       approved snapshot differs from live (adds, updates, removals)
+ * - `up-to-date`  live matches the approved candidate
  */
 export type GoLiveState =
   'loading' | 'going-live' | 'failed' | 'never-live' | 'ready' | 'up-to-date'
@@ -24,7 +25,7 @@ export type ReleaseStatus = {
   state: GoLiveState
   data: ReleaseStatusData | undefined
   live: ReleaseStatusData['live']
-  /** Entries marked ready that are not live yet. */
+  /** Approved snapshot changes that are not live yet (adds + updates + removals). */
   pending: number
   /** The running step while going live. */
   step: BuildJobStatus | null
@@ -34,6 +35,8 @@ export type ReleaseStatus = {
   isError: boolean
   error: unknown
   refetch: () => void
+  /** Live/demo snapshot membership for Ready vs Live. Undefined while loading. */
+  liveMembership: LiveMembership
 }
 
 export function useReleaseStatus(siteId: string | undefined): ReleaseStatus {
@@ -57,6 +60,19 @@ export function useReleaseStatus(siteId: string | undefined): ReleaseStatus {
     ? (data.live.deployedAt ?? data.live.createdAt)
     : null
 
+  const hasBaseline = Boolean(
+    data?.live || (data?.publishingMode === 'demo' && data.demo),
+  )
+  const liveMembership: LiveMembership = !data
+    ? undefined
+    : hasBaseline
+      ? {
+          liveEntryIds: data.liveEntryIds ?? [],
+          liveSlugsByEntryId: data.liveSlugsByEntryId ?? {},
+          pendingEntryIds: data.pendingEntryIds ?? [],
+        }
+      : null
+
   let state: GoLiveState
   if (!data) state = 'loading'
   else if (active) state = 'going-live'
@@ -76,5 +92,6 @@ export function useReleaseStatus(siteId: string | undefined): ReleaseStatus {
     isError: statusQuery.isError,
     error: statusQuery.error,
     refetch: () => void statusQuery.refetch(),
+    liveMembership,
   }
 }

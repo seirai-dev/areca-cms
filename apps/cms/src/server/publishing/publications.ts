@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gt, inArray } from 'drizzle-orm'
+import { and, desc, eq, inArray, lte } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { buildJob, entry, publication, site, user } from '#/db/schema'
@@ -12,6 +12,7 @@ import {
   NotFoundError,
   ValidationError,
 } from '#/server/content/errors'
+import { diffApprovedRelease } from '#/server/publishing/release-diff'
 
 export function dbActorId(actorId: string | null | undefined) {
   if (!actorId || actorId === 'system') return null
@@ -26,11 +27,16 @@ export async function getSiteOrThrow(siteId: string) {
   return row
 }
 
+function uniqueActorIds(ids: Array<string | null | undefined>) {
+  return [...new Set(ids.filter((id): id is string => Boolean(id)))]
+}
+
 export async function requestPublication(input: {
   siteId: string
   actorId: string
   priority?: number
   note?: string
+  scheduledBy?: string[]
 }): Promise<
   | {
       ok: true
@@ -131,10 +137,27 @@ export async function requestPublication(input: {
   })
 
   if (!created.ok) return created
+  const isScheduler = input.note === 'scheduled' || input.actorId === 'system'
+  let scheduledBy = uniqueActorIds(input.scheduledBy ?? [])
+  if (isScheduler && scheduledBy.length === 0) {
+    const owners = await db
+      .select({ scheduledBy: entry.scheduledBy })
+      .from(entry)
+      .where(
+        and(
+          eq(entry.siteId, input.siteId),
+          eq(entry.status, 'scheduled'),
+          lte(entry.scheduledAt, new Date()),
+        ),
+      )
+    scheduledBy = uniqueActorIds(owners.map((row) => row.scheduledBy))
+  }
+  const auditActor =
+    isScheduler && scheduledBy.length === 1 ? scheduledBy[0]! : actorId
   await audit({
     organizationId: existingSite.organizationId,
     siteId: input.siteId,
-    actorId,
+    actorId: auditActor,
     action: 'publication.requested',
     targetType: 'publication',
     targetId: created.publication.id,
@@ -142,6 +165,10 @@ export async function requestPublication(input: {
       jobId: created.job.id,
       priority,
       note: input.note ?? null,
+      ...(scheduledBy.length > 0 ? { scheduledBy } : {}),
+      ...(isScheduler && scheduledBy.length > 1
+        ? { approvers: scheduledBy }
+        : {}),
     },
   })
 
@@ -387,6 +414,16 @@ export async function getLivePublication(siteId: string) {
   return row ?? null
 }
 
+export async function getDemoPublication(siteId: string) {
+  const [row] = await db
+    .select()
+    .from(publication)
+    .where(and(eq(publication.siteId, siteId), eq(publication.status, 'demo')))
+    .orderBy(desc(publication.createdAt))
+    .limit(1)
+  return row ?? null
+}
+
 const ACTIVE_JOB_STATUSES: BuildJobStatus[] = [
   'building',
   'validating',
@@ -394,7 +431,9 @@ const ACTIVE_JOB_STATUSES: BuildJobStatus[] = [
 ]
 
 export async function getSiteReleaseStatus(siteId: string) {
+  const existingSite = await getSiteOrThrow(siteId)
   const live = await getLivePublication(siteId)
+  const demo = await getDemoPublication(siteId)
   const [activeJob] = await db
     .select()
     .from(buildJob)
@@ -416,34 +455,16 @@ export async function getSiteReleaseStatus(siteId: string) {
         .orderBy(desc(buildJob.priority), desc(buildJob.createdAt))
         .limit(1)
 
-  // Published entries the live snapshot does not include yet. With no live
-  // publication every published entry is pending.
-  const [pending] = await db
-    .select({ count: count() })
-    .from(entry)
-    .where(
-      and(
-        eq(entry.siteId, siteId),
-        eq(entry.status, 'published'),
-        ...(live ? [gt(entry.updatedAt, live.createdAt)] : []),
-      ),
-    )
+  const diff = await diffApprovedRelease(siteId)
 
   return {
     live,
-    publishingMode: (await getSiteOrThrow(siteId)).publishingMode,
-    demo:
-      (
-        await db
-          .select()
-          .from(publication)
-          .where(
-            and(eq(publication.siteId, siteId), eq(publication.status, 'demo')),
-          )
-          .orderBy(desc(publication.createdAt))
-          .limit(1)
-      )[0] ?? null,
+    publishingMode: existingSite.publishingMode,
+    demo,
     activeJob: activeJob ?? queuedJob ?? null,
-    pendingEntries: Number(pending?.count ?? 0),
+    pendingEntries: diff.pendingCount,
+    liveEntryIds: diff.liveEntryIds,
+    liveSlugsByEntryId: diff.liveSlugsByEntryId,
+    pendingEntryIds: [...diff.adds, ...diff.updates].map((item) => item.id),
   }
 }

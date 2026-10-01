@@ -1,17 +1,22 @@
 import { useId } from 'react'
 import type { ReactNode } from 'react'
 
+import {
+  fieldAria,
+  joinDescribedBy,
+  withFieldAria,
+} from '#/components/ui/field-aria'
 import { Label } from '#/components/ui/label'
 import { cn } from '#/lib/utils'
 
 /**
  * Label + control + help text + error, laid out consistently across the app.
  *
- * - `required` adds a quiet asterisk (visual only; put `required` on the
- *   control itself).
+ * - `required` adds a quiet asterisk (visual) and `aria-required` on the control.
  * - `description` renders between label and control; `hint` renders below
  *   the control as a whisper (format rules).
- * - `error` renders below with `role="alert"`.
+ * - `error` renders below with `role="alert"` and is referenced from the
+ *   control via `aria-describedby`.
  */
 export function FormField({
   label,
@@ -35,7 +40,15 @@ export function FormField({
   className?: string
   children: ReactNode
 }) {
-  const errorId = useId()
+  const generatedId = useId()
+  const errorId = htmlFor ? `${htmlFor}-error` : generatedId
+  const descriptionId = htmlFor
+    ? `${htmlFor}-description`
+    : `${generatedId}-description`
+  const describedBy = joinDescribedBy(
+    description ? descriptionId : undefined,
+    error ? errorId : undefined,
+  )
 
   return (
     <div
@@ -58,9 +71,18 @@ export function FormField({
         ) : null}
       </div>
       {description ? (
-        <p className="text-callout text-text-secondary">{description}</p>
+        <p id={descriptionId} className="text-callout text-text-secondary">
+          {description}
+        </p>
       ) : null}
-      {children}
+      {withFieldAria(
+        children,
+        fieldAria({
+          invalid: Boolean(error),
+          required,
+          describedBy,
+        }),
+      )}
       {hint && !error ? (
         <p className="text-caption font-normal text-text-muted">{hint}</p>
       ) : null}

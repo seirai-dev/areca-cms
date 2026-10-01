@@ -17,6 +17,7 @@ import {
   requestPublication,
   requestRollback,
 } from '#/server/publishing/publications'
+import { listPendingReleaseChanges } from '#/server/publishing/release-diff'
 
 const loose = { strict: { output: false } as const }
 
@@ -144,4 +145,14 @@ export const getSiteReleaseStatusFn = createServerFn({
   .handler(async ({ data }) => {
     await requireSiteAccess(data.siteId)
     return getSiteReleaseStatus(data.siteId)
+  })
+
+export const listPendingReleaseChangesFn = createServerFn({
+  method: 'GET',
+  ...loose,
+})
+  .validator(z.object({ siteId: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    await requireSiteAccess(data.siteId)
+    return listPendingReleaseChanges(data.siteId)
   })

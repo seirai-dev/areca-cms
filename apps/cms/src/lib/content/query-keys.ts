@@ -3,8 +3,15 @@ export const queryKeys = {
   entries: (
     siteId: string,
     collectionKey: string,
-    filters?: { status?: string; search?: string },
+    filters?: {
+      status?: string
+      search?: string
+      referenceTargets?: boolean
+      offset?: number
+    },
   ) => ['entries', siteId, collectionKey, filters ?? {}] as const,
+  inboundReferences: (entryId: string) =>
+    ['inbound-references', entryId] as const,
   entry: (id: string) => ['entry', id] as const,
   revisions: (entryId: string) => ['revisions', entryId] as const,
   assets: (organizationId: string, search?: string, offset = 0) =>

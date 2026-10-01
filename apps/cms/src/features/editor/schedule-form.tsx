@@ -60,6 +60,7 @@ export function ScheduleForm({
   const instant = zonedToInstant(date, time, timeZone)
   const past = instant ? instant.getTime() <= Date.now() : false
   const invalid = !instant || past
+  const invalidReason = !instant ? 'gap' : past ? 'past' : null
 
   function applyPreset(preset: SchedulePreset) {
     const at = presetInstant(preset, timeZone)
@@ -222,7 +223,9 @@ export function ScheduleForm({
         <ClockIcon size={15} className="mt-px text-icon-warning" />
         <span>
           {touched && invalid
-            ? m.editor_schedule_in_future()
+            ? invalidReason === 'gap'
+              ? m.editor_schedule_invalid_time()
+              : m.editor_schedule_in_future()
             : summary
               ? m.editor_schedule_summary({ when: summary })
               : m.editor_schedule_pick()}

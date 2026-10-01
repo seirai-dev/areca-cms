@@ -8,6 +8,7 @@ import {
   ClockCountdown,
   DotsThree,
   Lightning,
+  Minus,
   RocketLaunch,
   Scroll,
   WarningCircle,
@@ -154,7 +155,6 @@ function GoLivePanelBody({
   const [urgent, setUrgent] = React.useState(false)
   const pending = usePendingEntries({
     siteId: site.id,
-    liveCreatedAt: release.live?.createdAt,
     enabled: release.state !== 'loading',
   })
 
@@ -428,7 +428,7 @@ function WhatsChanging({
   }
   return (
     <ul className="-mx-2 grid" data-testid="golive-changes">
-      {pending.entries.slice(0, 50).map((entry) => (
+      {pending.entries.map((entry) => (
         <li key={`${entry.kind}-${entry.id}`}>
           <PendingRow siteId={siteId} entry={entry} />
         </li>
@@ -444,19 +444,32 @@ function PendingRow({
   siteId: string
   entry: PendingEntry
 }) {
-  return (
-    <Link
-      to="/sites/$siteId/c/$collectionKey/$entryId"
-      params={{ siteId, collectionKey: entry.collectionKey, entryId: entry.id }}
-      className="group/row flex min-h-11 items-center gap-3 rounded-[10px] px-2 py-1.5 outline-none transition-colors hover:bg-surface-state-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-border-focus"
-    >
-      <span className="grid size-6 shrink-0 place-content-center">
-        {entry.kind === 'scheduled' ? (
-          <ClockIcon size={16} className="text-icon-warning" />
-        ) : (
-          <span className="size-2 rounded-full bg-accent" />
-        )}
-      </span>
+  const meta =
+    entry.kind === 'scheduled' && entry.scheduledAt
+      ? m.golive_scheduled_for({
+          time: formatScheduleShort(entry.scheduledAt),
+        })
+      : entry.kind === 'removal'
+        ? m.golive_will_leave_live()
+        : entry.updatedByName
+          ? m.golive_edited_by({
+              time: formatRelativeTime(entry.updatedAt),
+              name: entry.updatedByName,
+            })
+          : m.golive_edited({ time: formatRelativeTime(entry.updatedAt) })
+
+  const icon =
+    entry.kind === 'scheduled' ? (
+      <ClockIcon size={16} className="text-icon-warning" />
+    ) : entry.kind === 'removal' ? (
+      <Minus className="size-3.5 text-icon-muted" />
+    ) : (
+      <span className="size-2 rounded-full bg-accent" />
+    )
+
+  const body = (
+    <>
+      <span className="grid size-6 shrink-0 place-content-center">{icon}</span>
       <span className="grid min-w-0 flex-1">
         <span className="truncate text-[14px] leading-5 font-medium text-text-primary">
           {entry.title}
@@ -464,18 +477,26 @@ function PendingRow({
         <span className="truncate text-[12px] leading-4 text-text-muted">
           {entry.collectionLabel}
           {' · '}
-          {entry.kind === 'scheduled' && entry.scheduledAt
-            ? m.golive_scheduled_for({
-                time: formatScheduleShort(entry.scheduledAt),
-              })
-            : entry.updatedByName
-              ? m.golive_edited_by({
-                  time: formatRelativeTime(entry.updatedAt),
-                  name: entry.updatedByName,
-                })
-              : m.golive_edited({ time: formatRelativeTime(entry.updatedAt) })}
+          {meta}
         </span>
       </span>
+    </>
+  )
+
+  const className =
+    'group/row flex min-h-11 items-center gap-3 rounded-[10px] px-2 py-1.5 outline-none transition-colors hover:bg-surface-state-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-border-focus'
+
+  if (!entry.exists) {
+    return <div className={className}>{body}</div>
+  }
+
+  return (
+    <Link
+      to="/sites/$siteId/c/$collectionKey/$entryId"
+      params={{ siteId, collectionKey: entry.collectionKey, entryId: entry.id }}
+      className={className}
+    >
+      {body}
     </Link>
   )
 }

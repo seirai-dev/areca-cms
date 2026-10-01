@@ -14,6 +14,7 @@ import {
 import { buildSnapshot, buildPreviewEntry } from './snapshot.ts'
 import {
   createTestCollection,
+  dueScheduleIso,
   sampleRichText,
   withTestSite,
 } from './test-utils.ts'
@@ -59,12 +60,7 @@ describe.skipIf(!hasDb)('buildSnapshot', () => {
         },
         actorId: ctx.actor.id,
       })
-      await scheduleEntry(
-        scheduled.id,
-        '2020-01-01T00:00:00.000Z',
-        'UTC',
-        ctx.actor.id,
-      )
+      await scheduleEntry(scheduled.id, dueScheduleIso(), 'UTC', ctx.actor.id)
 
       const first = await buildSnapshot(ctx.site.id)
       const second = await buildSnapshot(ctx.site.id)
