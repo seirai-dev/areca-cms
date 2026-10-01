@@ -1,0 +1,90 @@
+name: areca-demo
+
+services:
+  cms:
+    image: ${CMS_IMAGE:-ghcr.io/ekozf/areca-cms:latest}
+    restart: unless-stopped
+    init: true
+    ports:
+      - "127.0.0.1:${CMS_PORT:-3000}:3000"
+    environment:
+      DATABASE_URL: postgres://areca:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/areca
+      REDIS_URL: redis://redis:6379
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Set BETTER_AUTH_SECRET in .env}
+      BETTER_AUTH_URL: ${CMS_URL:-http://localhost:3000}
+      APP_URL: ${CMS_URL:-http://localhost:3000}
+      DOKPLOY_CREDENTIALS_ENCRYPTION_KEY: ${DOKPLOY_CREDENTIALS_ENCRYPTION_KEY:?Set DOKPLOY_CREDENTIALS_ENCRYPTION_KEY in .env}
+      S3_ENDPOINT: http://rustfs:9000
+      S3_REGION: us-east-1
+      S3_BUCKET: areca
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-areca-demo}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:?Set S3_SECRET_KEY in .env}
+      S3_FORCE_PATH_STYLE: "true"
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_FROM: cms@areca.local
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rustfs:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: areca
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: areca
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U areca -d areca"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  rustfs:
+    image: rustfs/rustfs:latest
+    restart: unless-stopped
+    environment:
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:-areca-demo}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY:?Set S3_SECRET_KEY in .env}
+    command: ["/data"]
+    ports:
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - rustfs_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/health"]
+      interval: 5s
+      timeout: 5s
+      start_period: 20s
+      retries: 20
+
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8025:8025"
+
+volumes:
+  postgres_data:
+  redis_data:
+  rustfs_data:

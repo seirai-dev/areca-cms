@@ -40,6 +40,10 @@ publication marked live
 - `examples/demo-site` — sample TanStack Start customer site
 - `docker-compose.yml` — Postgres, Redis, RustFS (S3), Mailpit
 
+## Run with Docker
+
+For a complete stack using the published CMS image, see [`docker/README.md`](docker/README.md).
+
 ## Quick start
 
 Empty CMS (recommended first time): see [`docs/ONBOARDING.md`](docs/ONBOARDING.md).
