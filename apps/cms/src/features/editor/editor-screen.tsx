@@ -43,6 +43,7 @@ import { DetailsPanel } from './details-panel'
 import { EditorCanvas } from './editor-canvas'
 import { EditorTopBar } from './editor-top-bar'
 import type { PrimaryState } from './editor-top-bar'
+import { ScheduledVersion } from './scheduled-version'
 import { ScheduleForm } from './schedule-form'
 import { useEntryEditor } from './use-entry-editor'
 
@@ -447,6 +448,54 @@ function EntryEditorView({
           className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6 px-1 pt-4 sm:pt-10"
           aria-label={m.editor_canvas_label()}
         >
+          {editor.conflict || editor.recoveredDraft ? (
+            <div
+              role="alert"
+              className="mx-auto grid w-full max-w-[720px] gap-3 rounded-card border border-border-error/30 p-4"
+            >
+              <p>
+                {editor.conflict
+                  ? 'Another user changed this draft. Your changes are kept in this browser.'
+                  : 'A recoverable draft is saved in this browser.'}
+              </p>
+              <div className="flex flex-wrap gap-4">
+                <button
+                  type="button"
+                  className="underline"
+                  onClick={() => void editor.reloadServerDraft()}
+                >
+                  Reload server draft
+                </button>
+                <button
+                  type="button"
+                  className="underline"
+                  onClick={() => void editor.reapplyRecoveredDraft()}
+                >
+                  Reapply recovered draft to latest version
+                </button>
+                {!editor.conflict && (
+                  <button
+                    type="button"
+                    className="underline"
+                    onClick={editor.discardRecoveredDraft}
+                  >
+                    Discard recovered draft
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : null}
+          {entry?.status === 'scheduled' &&
+          entry.scheduledData &&
+          entry.scheduledSlug ? (
+            <ScheduledVersion
+              fields={fields}
+              data={entry.scheduledData}
+              slug={entry.scheduledSlug}
+              siteId={siteId}
+              organizationId={site.organizationId}
+            />
+          ) : null}
           {hasErrors ? (
             <div
               role="alert"

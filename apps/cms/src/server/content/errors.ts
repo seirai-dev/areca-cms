@@ -1,6 +1,7 @@
 import { m } from '#/paraglide/messages'
+import { AppError } from '#/server/http/app-error'
 
-export class NotFoundError extends Error {
+export class NotFoundError extends AppError {
   readonly status = 404
   constructor(message = m.server_not_found()) {
     super(message)
@@ -8,7 +9,15 @@ export class NotFoundError extends Error {
   }
 }
 
-export class ConflictError extends Error {
+export class ForbiddenError extends AppError {
+  readonly status = 403
+  constructor(message: string) {
+    super(message)
+    this.name = 'ForbiddenError'
+  }
+}
+
+export class ConflictError extends AppError {
   readonly status = 409
   constructor(message: string) {
     super(message)
@@ -16,7 +25,7 @@ export class ConflictError extends Error {
   }
 }
 
-export class ValidationError extends Error {
+export class ValidationError extends AppError {
   readonly status = 400
   readonly errors: { path: string; message: string }[]
   constructor(errors: { path: string; message: string }[]) {

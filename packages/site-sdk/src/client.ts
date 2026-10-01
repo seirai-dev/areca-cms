@@ -4,6 +4,7 @@ import type { PreviewResult, SiteContentConfig, SiteManifest, Snapshot } from '.
 export type ArecaClientOptions = {
   cmsUrl?: string
   siteToken?: string
+  schemaToken?: string
 }
 
 export type ArecaClient = {
@@ -45,6 +46,7 @@ export function createArecaClient(options: ArecaClientOptions = {}): ArecaClient
         method: 'POST',
         headers: {
           ...headers,
+          Authorization: `Bearer ${requiredValue(options.schemaToken ?? process.env.ARECA_SCHEMA_TOKEN, 'ARECA_SCHEMA_TOKEN', 'schemaToken')}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(manifestFromConfig(config)),
@@ -106,11 +108,7 @@ export function createArecaClient(options: ArecaClientOptions = {}): ArecaClient
   }
 }
 
-function requiredValue(
-  value: string | undefined,
-  envName: string,
-  optionName: string,
-): string {
+function requiredValue(value: string | undefined, envName: string, optionName: string): string {
   const trimmed = value?.trim()
   if (!trimmed) {
     throw new Error(

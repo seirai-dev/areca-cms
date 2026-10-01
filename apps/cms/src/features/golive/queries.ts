@@ -17,6 +17,8 @@ import {
  */
 
 export type ReleaseStatusData = {
+  publishingMode?: 'production' | 'demo'
+  demo?: { id: string; createdAt: string | Date } | null
   live: {
     id: string
     createdAt: string | Date

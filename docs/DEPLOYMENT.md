@@ -80,6 +80,25 @@ Health URL for a host-published port is
 `https://<site-host>/api/health`. Local/LAN HTTP requires the explicit CMS
 `ALLOW_PRIVATE_HEALTH_CHECKS=true` development override.
 
+## First-run setup and admin security
+
+A fresh CMS has no users, so `/setup` is protected by a **setup token**. Set
+`SETUP_TOKEN` (at least 16 characters) in the CMS environment, or leave it unset
+and the CMS generates a random token, printing it once to stdout
+(`[setup] First-run setup token: ...`) the first time a page is loaded while no
+user exists; a generated token changes on every restart. Enter it on `/setup`.
+A wrong or missing token is refused with a generic error, and once an account
+exists the token is no longer used.
+
+Agency admins must enable two-factor authentication (TOTP, with backup codes)
+before they can use any admin feature; the first admin is sent to **Account and
+security** right after setup. Deleting a client, saving or removing Dokploy
+credentials, creating a site or rotating its tokens, and granting or removing
+agency access additionally require a code entered in the last 10 minutes; the CMS
+asks for one when needed. `ADMIN_MFA_REQUIRED=false` turns the requirement off
+(for throwaway dev stacks only). Note that SSO and social sign-ins skip the CMS's
+own two-factor prompt and rely on the identity provider's MFA.
+
 ## 3. CMS must be reachable from the Dokploy host
 
 The Docker build calls `GET /api/sites/snapshot/current` on `ARECA_CMS_URL`.
@@ -134,9 +153,120 @@ Go-live panel, `?panel=golive`). Owners and agency admins can use it.
 6. Publication becomes `live` (`wasLive=true`); the previous live one is
    `superseded`.
 
-Rollback re-enqueues a publication that `wasLive` and repeats the same deploy.
-A rollback whose deploy fails stays `failed` but remains eligible because
-`wasLive` is sticky.
+Rollback creates a new publication containing the selected previously live snapshot,
+then deploys and verifies that new publication ID. Its scheduling membership is
+empty, so it cannot promote unrelated due entries. A failed rollback leaves the
+previous live publication and its rollback eligibility intact.
+
+Sites default to **Production** mode. A production publication requires both a
+Dokploy application and an HTTP(S) health URL. The health response must contain
+`{ ok: true, publicationId }` with the exact requested publication ID; a generic
+HTTP 200 is insufficient. Missing configuration rejects publishing, and failed
+verification leaves the previous release live.
+
+For a site intentionally used without deployment, an agency admin can select
+**Demo** in Settings → Deployment. Demo publications are visibly labeled, use
+status `demo`, never set `wasLive` or `deployedAt`, and never count as production
+live or become rollback targets. The site's build token can pull the latest demo
+snapshot for local demonstration. Configure a deployment target and health URL
+and switch to Production before releasing a production site.
+
+The queue locks each site when enqueueing or claiming work and enforces one
+queued and one active job per site in PostgreSQL. Claimed jobs carry a 60-second
+lease, renewed every 15 seconds. Recovery runs periodically, independently of
+long deployment polling. Expired jobs fail and cannot subsequently mark a
+publication live; request a fresh publication to retry. Scheduling retries due
+entries automatically after recovery.
+
+## Media privacy
+
+**Uploaded assets are public by design.** Sites are static builds that embed
+image and file URLs, so a browser (and the site's build) must be able to fetch
+them without signing in. The CMS therefore serves every upload from
+`/api/assets/file/<organization-id>/<random-id>.<ext>` with no authentication,
+and with `Access-Control-Allow-Origin: *` and `Cross-Origin-Resource-Policy:
+cross-origin`.
+
+- Anyone who has or guesses a URL can read the file. The random key is not
+  access control; URLs leak through page source, referrers, browser history,
+  caches and shared links.
+- **Assets attached to drafts, unpublished entries and archived content are
+  public too.** Draft *content* is protected by sign-in and preview tokens, but
+  its images are not. Do not upload embargoed or confidential material, and do
+  not rely on removing an entry to retract a file that has already been shared:
+  deleting the asset (see [asset retention](ASSET_RETENTION.md)) is the only way
+  to make its URL stop working.
+- The S3 bucket itself should stay private and unreachable from the internet.
+  Only the CMS reads it, and it is what enforces the URL space above.
+
+To put a CDN in front, point it at the CMS origin and cache only
+`/api/assets/file/*` (keys are immutable: a replaced image gets a new key).
+Forward nothing but the path, ignore cookies and `Authorization` on that path so
+cached responses are never user specific, and respect the origin's
+`Cache-Control` headers. Do not cache other `/api/*` or app routes. Keep
+`APP_URL` on the CMS origin unless you also rewrite asset URLs; assets stored
+with the CMS host in their URLs keep that host.
+
+If a deployment ever needs private media (for example per-user downloads), that
+is a product change (authenticated or signed URLs plus build-time handling), not
+a configuration switch.
+
+## Secret handling
+
+What is secret, and where it lives:
+
+| Secret | Where | Notes |
+| --- | --- | --- |
+| `BETTER_AUTH_SECRET` | CMS environment | Signs sessions and cookies. |
+| `DATABASE_URL`, `REDIS_URL` | CMS environment | Contain passwords. |
+| `S3_ACCESS_KEY` / `S3_SECRET_KEY` | CMS environment | Full access to every upload. |
+| `SMTP_*`, OAuth/SSO client secrets | CMS environment | |
+| `DOKPLOY_CREDENTIALS_ENCRYPTION_KEY` | CMS environment | Encrypts each organization's Dokploy API key at rest. Back it up with the database ([RECOVERY.md](../docker/RECOVERY.md)). |
+| Dokploy API keys | Database, encrypted | Entered per organization in the CMS. |
+| Site build token, schema-write token | Site settings > Developer (agency administrators) | `ARECA_SITE_TOKEN` is read-only and used by `areca pull`; `ARECA_SCHEMA_TOKEN` allows `areca manifest push` and belongs only in the schema-authoring environment, never in build secrets. |
+| Deploy keys | Dokploy | Never commit them. |
+
+Only `.env.example` files with placeholders are tracked in git. Real values live
+in the host's environment, a secrets manager, or gitignored `.env` /
+`.env.local` files.
+
+CI enforces this on every pull request and before any image is published
+(`.github/workflows/ci.yml`):
+
+- **Secret scan:** gitleaks over the full git history using `.gitleaks.toml`.
+  Add an allowlist entry there only for a specific fixture file, never for a
+  real credential.
+- **Client bundle scan:** the CMS is built with dummy values and
+  `apps/cms/scripts/scan-client-bundle.mjs` fails if the browser assets contain
+  server-only variable names or values, connection strings, private keys or
+  `pg` imports. Run it locally with `pnpm --filter @areca/cms build` then
+  `pnpm --filter @areca/cms scan:client`.
+
+If a secret is ever committed, rotate it first (below); rewriting history is
+secondary because clones and caches may already hold it.
+
+Rotation:
+
+- **`BETTER_AUTH_SECRET`:** generate a new value (`openssl rand -hex 32`),
+  update the environment and restart every CMS instance together. All sessions
+  end and everyone signs in again. Rotate in a maintenance window if multi-factor
+  authentication is enabled: authenticator data protected by this secret may no
+  longer verify, so confirm an administrator can still sign in (and has recovery
+  codes) before relying on it.
+- **Site build token / schema-write token:** *Settings > Developer > Rotate
+  token…*. The old token stops working immediately; update `ARECA_SITE_TOKEN`
+  (and `ARECA_SCHEMA_TOKEN`) in the site's Dokploy env/build secrets and in local
+  `.env.local` files.
+- **Database, Redis, S3, SMTP credentials:** change them on the service, then
+  update the CMS environment and restart. Rotate S3 keys without touching the
+  stored objects.
+- **Dokploy API key:** create a new key in Dokploy, replace it in the
+  organization's CMS settings, revoke the old one.
+- **`DOKPLOY_CREDENTIALS_ENCRYPTION_KEY`:** there is no re-encryption tool.
+  Changing the value makes every saved Dokploy API key undecryptable, so after
+  switching you must re-enter each organization's key. Keep the old key until
+  that is done, and never change it during an upgrade or restore (a restore
+  needs the key the data was encrypted with).
 
 ## Troubleshooting
 

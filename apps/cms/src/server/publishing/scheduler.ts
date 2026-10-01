@@ -3,8 +3,11 @@ import { and, eq, inArray, lte } from 'drizzle-orm'
 import { db } from '#/db'
 import { buildJob, entry, site } from '#/db/schema'
 import { audit } from '#/server/audit'
+import { createLogger } from '#/server/log'
 
 import { requestPublication } from './publications.ts'
+
+const log = createLogger('scheduler')
 
 const RETRY_AFTER_MS = 10 * 60 * 1000
 const BLOCKING_JOB_STATUSES = [
@@ -25,9 +28,7 @@ export async function runSchedulerTick() {
   const due = await db
     .selectDistinct({ siteId: entry.siteId })
     .from(entry)
-    .where(
-      and(eq(entry.status, 'scheduled'), lte(entry.scheduledAt, now)),
-    )
+    .where(and(eq(entry.status, 'scheduled'), lte(entry.scheduledAt, now)))
 
   for (const { siteId } of due) {
     const prev = lastAttempt.get(siteId)
@@ -78,7 +79,7 @@ export async function runSchedulerTick() {
       })
     } catch (error) {
       lastAttempt.set(siteId, now.getTime())
-      console.error('[areca] scheduler tick failed for site', siteId, error)
+      log.error('scheduler tick failed for site', { siteId, err: error })
     }
   }
 }

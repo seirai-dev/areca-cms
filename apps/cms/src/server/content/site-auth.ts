@@ -14,7 +14,10 @@ export function generateSiteToken() {
   return { token, hash }
 }
 
-export async function authenticateSite(request: Request) {
+export async function authenticateSite(
+  request: Request,
+  privilege: 'build' | 'schema' = 'build',
+) {
   const header = request.headers.get('Authorization')
   if (!header?.startsWith('Bearer ')) return null
   const token = header.slice('Bearer '.length).trim()
@@ -23,7 +26,9 @@ export async function authenticateSite(request: Request) {
   const [found] = await db
     .select()
     .from(site)
-    .where(eq(site.tokenHash, hash))
+    .where(
+      eq(privilege === 'schema' ? site.schemaTokenHash : site.tokenHash, hash),
+    )
     .limit(1)
   return found ?? null
 }

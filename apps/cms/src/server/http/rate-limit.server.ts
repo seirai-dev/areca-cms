@@ -2,9 +2,12 @@ import { createClient } from 'redis'
 
 import { env } from '#/env'
 import { auth } from '#/lib/auth'
+import { createLogger } from '#/server/log'
 
 import type { RateLimitStore } from './rate-limit.ts'
 import { enforceRequestRateLimit } from './rate-limit.ts'
+
+const log = createLogger('rate-limit')
 
 const redis = createClient({
   url: env.REDIS_URL,
@@ -47,6 +50,6 @@ export function enforceCmsRateLimit(request: Request) {
       return session?.user.id ?? null
     },
     // Do not log the Redis error object: connection errors may contain a URL.
-    logError: (message) => console.error(message),
+    logError: (message) => log.error(message),
   })
 }

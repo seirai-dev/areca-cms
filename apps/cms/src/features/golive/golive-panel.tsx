@@ -160,7 +160,19 @@ function GoLivePanelBody({
 
   return (
     <div className="grid divide-y divide-border-default">
-      <StatusHero site={site} release={release} />
+      {release.data?.publishingMode === 'demo' ? (
+        <Section>
+          <p data-testid="demo-publication-label" role="status">
+            Demo mode ·{' '}
+            {release.data.demo
+              ? 'Demo publication ready'
+              : 'No demo publication yet'}{' '}
+            · Never production live
+          </p>
+        </Section>
+      ) : (
+        <StatusHero site={site} release={release} />
+      )}
 
       {errors.length > 0 ? (
         <Section>

@@ -8,6 +8,7 @@ import {
   errorMessage,
   membershipRoleLabel,
 } from '#/lib/admin/helpers'
+import { useStepUp } from '#/features/security/step-up'
 import { UserAvatar } from '#/components/ui/avatar'
 import { Tag } from '#/components/ui/tag'
 import { Button } from '#/components/ui/button'
@@ -72,6 +73,7 @@ export function filterAccounts(
 function useAgencyPeople() {
   const queryClient = useQueryClient()
   const accounts = useQuery(accountsQuery())
+  const stepUp = useStepUp()
   const [pending, setPending] = React.useState<{
     userId: string
     name: string
@@ -79,7 +81,7 @@ function useAgencyPeople() {
   } | null>(null)
   const mutation = useMutation({
     mutationFn: (input: { userId: string; isAgencyAdmin: boolean }) =>
-      setAgencyAdminFn({ data: input }),
+      stepUp.run(() => setAgencyAdminFn({ data: input })),
     onSuccess: async (_result, input) => {
       toast.success(
         input.isAgencyAdmin

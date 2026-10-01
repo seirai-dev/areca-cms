@@ -1,0 +1,139 @@
+import { describe, expect, it } from 'vitest'
+
+import type { ReadinessReport } from './health'
+import { handleMetricsRequest, renderPrometheus, tokenMatches } from './metrics'
+import type { MetricsSnapshot } from './metrics'
+
+const readiness: ReadinessReport = {
+  ok: false,
+  checks: {
+    db: { ok: true, ms: 1 },
+    storage: { ok: false, ms: 1, reason: 'x' },
+    redis: { ok: true, degraded: true, ms: 1 },
+    worker: { ok: true, ms: 0 },
+    queue: { ok: true, ms: 1 },
+  },
+}
+
+const snapshot: MetricsSnapshot = {
+  jobsByStatus: {
+    queued: 2,
+    building: 1,
+    deploying: 1,
+    failed: 5,
+    succeeded: 9,
+  },
+  publicationsByStatus: { live: 3, failed: 1 },
+  oldestQueuedAgeSeconds: 42.5,
+  scheduledOverdue: 4,
+  workerEnabled: true,
+  workerTickAgeSeconds: 1.5,
+  schedulerTickAgeSeconds: 7,
+  readiness,
+  uptimeSeconds: 100,
+  memory: { rss: 1, heapUsed: 2, heapTotal: 3, external: 4 },
+}
+
+describe('renderPrometheus', () => {
+  const text = renderPrometheus(snapshot)
+
+  it('emits HELP/TYPE headers and labelled samples', () => {
+    expect(text).toContain('# HELP areca_build_jobs Build jobs by status.')
+    expect(text).toContain('# TYPE areca_build_jobs gauge')
+    expect(text).toContain('areca_build_jobs{status="queued"} 2')
+    expect(text).toContain('areca_build_jobs{status="cancelled"} 0')
+    expect(text).toContain('areca_build_jobs_failed_total 5')
+    expect(text).toContain('# TYPE areca_build_jobs_failed_total counter')
+    expect(text).toContain('areca_build_jobs_active 2')
+    expect(text).toContain('areca_build_jobs_oldest_queued_age_seconds 42.5')
+    expect(text).toContain('areca_publications{status="live"} 3')
+    expect(text).toContain('areca_publications{status="rolled_back"} 0')
+    expect(text).toContain('areca_scheduled_entries_overdue 4')
+    expect(text).toContain('areca_worker_last_tick_age_seconds 1.5')
+    expect(text).toContain('areca_scheduler_last_tick_age_seconds 7')
+    expect(text).toContain('areca_readiness_check_up{check="db"} 1')
+    expect(text).toContain('areca_readiness_check_up{check="storage"} 0')
+    expect(text).toContain('areca_readiness_check_up{check="redis"} 0')
+    expect(text).toContain('areca_ready 0')
+    expect(text).toContain('areca_process_uptime_seconds 100')
+    expect(text).toContain('areca_process_memory_bytes{kind="rss"} 1')
+  })
+
+  it('ends with a newline and every line is valid exposition syntax', () => {
+    expect(text.endsWith('\n')).toBe(true)
+    for (const line of text.trim().split('\n')) {
+      expect(line).toMatch(
+        /^(# (HELP|TYPE) [a-z_]+ .+|[a-z_]+(\{[a-z_]+="[^"]*"(,[a-z_]+="[^"]*")*\})? -?[0-9.]+(e[+-]?\d+)?)$/,
+      )
+    }
+  })
+
+  it('omits tick ages when loops are disabled', () => {
+    const out = renderPrometheus({
+      ...snapshot,
+      workerEnabled: false,
+      workerTickAgeSeconds: null,
+      schedulerTickAgeSeconds: null,
+    })
+    expect(out).not.toContain('areca_worker_last_tick_age_seconds')
+    expect(out).toContain('areca_worker_enabled 0')
+  })
+})
+
+describe('handleMetricsRequest', () => {
+  const collect = async () => snapshot
+  const req = (auth?: string) =>
+    new Request('http://cms.test/api/metrics', {
+      headers: auth ? { authorization: auth } : {},
+    })
+  const token = 'metrics-token-0123456789'
+
+  it('is 404 when METRICS_TOKEN is unset', async () => {
+    const res = await handleMetricsRequest(req(`Bearer ${token}`), {
+      token: undefined,
+      collect,
+    })
+    expect(res.status).toBe(404)
+  })
+
+  it('is 401 without or with a wrong bearer token', async () => {
+    for (const header of [
+      undefined,
+      'Bearer nope',
+      `Basic ${token}`,
+      'Bearer ',
+    ]) {
+      const res = await handleMetricsRequest(req(header), { token, collect })
+      expect(res.status).toBe(401)
+      expect(res.headers.get('WWW-Authenticate')).toBe('Bearer')
+      expect(await res.text()).not.toContain('areca_')
+    }
+  })
+
+  it('serves Prometheus text with the right token', async () => {
+    const res = await handleMetricsRequest(req(`Bearer ${token}`), {
+      token,
+      collect,
+    })
+    expect(res.status).toBe(200)
+    expect(res.headers.get('Content-Type')).toContain('text/plain')
+    expect(res.headers.get('Cache-Control')).toBe('no-store')
+    expect(await res.text()).toContain('areca_build_jobs{status="queued"} 2')
+  })
+
+  it('returns 503 without details when collection fails', async () => {
+    const res = await handleMetricsRequest(req(`Bearer ${token}`), {
+      token,
+      collect: async () => {
+        throw new Error('postgres://u:p@h/db exploded')
+      },
+    })
+    expect(res.status).toBe(503)
+    expect(await res.text()).toBe('Metrics unavailable')
+  })
+
+  it('compares tokens in constant time-safe fashion', () => {
+    expect(tokenMatches('a', 'a')).toBe(true)
+    expect(tokenMatches('a', 'ab')).toBe(false)
+  })
+})

@@ -4,6 +4,7 @@ import {
   PaperPlaneTilt,
   PencilSimple,
   Crown,
+  Warning,
   XCircle,
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
@@ -74,7 +75,8 @@ export function InviteSheet({
     })
     setProgress(null)
     const sent = outcome.filter((item) => item.ok)
-    const failed = outcome.filter((item) => !item.ok)
+    // Created-but-undelivered invitations are resent from the list, not retyped.
+    const failed = outcome.filter((item) => !item.ok && !item.created)
     if (sent.length > 0) {
       toast.success(
         sent.length === 1
@@ -82,7 +84,7 @@ export function InviteSheet({
           : m.people_invite_sent_many({ count: sent.length }),
       )
     }
-    if (failed.length === 0) {
+    if (failed.length === 0 && outcome.every((item) => item.ok)) {
       reset()
       onOpenChange(false)
       return
@@ -184,6 +186,11 @@ export function InviteSheet({
                       weight="fill"
                       className="mt-0.5 size-4 shrink-0 text-icon-success"
                     />
+                  ) : item.created ? (
+                    <Warning
+                      weight="fill"
+                      className="mt-0.5 size-4 shrink-0 text-icon-warning"
+                    />
                   ) : (
                     <XCircle
                       weight="fill"
@@ -196,7 +203,11 @@ export function InviteSheet({
                     </span>
                     <span className="text-text-secondary">
                       {' · '}
-                      {item.ok ? m.people_invite_result_sent() : item.error}
+                      {item.ok
+                        ? m.people_invite_result_sent()
+                        : item.created
+                          ? m.people_invite_result_created_not_sent()
+                          : item.error}
                     </span>
                   </span>
                 </li>

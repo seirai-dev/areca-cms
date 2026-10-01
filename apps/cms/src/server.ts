@@ -9,11 +9,23 @@ import { env } from '#/env'
 import { paraglideMiddleware } from '#/paraglide/server.js'
 import { enforceCmsRateLimit } from '#/server/http/rate-limit.server'
 import { withSecurityHeaders } from '#/server/http/security-headers'
+import { getSetupStatus } from '#/server/admin/setup'
+import { createLogger } from '#/server/log'
 import { startWorker } from '#/server/publishing/worker'
 import { validateCookieMutationOrigin } from '#/server/request-origin'
 
 if (env.WORKER_ENABLED && process.env.npm_lifecycle_event !== 'build') {
   startWorker()
+}
+
+// Print the generated first-run setup token at boot instead of on the first
+// page visit. Non-fatal: the setup page still resolves it on demand.
+if (process.env.npm_lifecycle_event !== 'build') {
+  void getSetupStatus().catch((error) =>
+    createLogger('setup').warn('could not check setup status at boot', {
+      err: error,
+    }),
+  )
 }
 
 const startFetch = createStartHandler(defaultStreamHandler)

@@ -9,8 +9,12 @@ import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
 /** The two lines a site project needs in `.env.local`. */
-function tokenEnvSnippet(cmsUrl: string, token: string) {
-  return `ARECA_CMS_URL=${cmsUrl}\nARECA_SITE_TOKEN=${token}`
+function tokenEnvSnippet(
+  cmsUrl: string,
+  token: string,
+  privilege: 'build' | 'schema',
+) {
+  return `ARECA_CMS_URL=${cmsUrl}\n${privilege === 'schema' ? 'ARECA_SCHEMA_TOKEN' : 'ARECA_SITE_TOKEN'}=${token}`
 }
 
 /** The CMS origin as the site project should call it (client only). */
@@ -33,12 +37,14 @@ function useCmsUrl(explicit?: string) {
  */
 export function TokenReveal({
   token,
+  privilege = 'build',
   cmsUrl,
   onDismiss,
   dismissLabel,
   className,
 }: {
   token: string
+  privilege?: 'build' | 'schema'
   /** Defaults to this CMS's origin. */
   cmsUrl?: string
   /** Shows a quiet "I've saved it" button when set. */
@@ -48,7 +54,7 @@ export function TokenReveal({
 }) {
   const reduce = useReducedMotion()
   const url = useCmsUrl(cmsUrl)
-  const snippet = tokenEnvSnippet(url, token)
+  const snippet = tokenEnvSnippet(url, token, privilege)
 
   return (
     <motion.div
@@ -128,7 +134,11 @@ export function TokenReveal({
             <span className="opacity-60">ARECA_CMS_URL=</span>
             {url}
             {'\n'}
-            <span className="opacity-60">ARECA_SITE_TOKEN=</span>
+            <span className="opacity-60">
+              {privilege === 'schema'
+                ? 'ARECA_SCHEMA_TOKEN='
+                : 'ARECA_SITE_TOKEN='}
+            </span>
             {token}
           </code>
         </pre>

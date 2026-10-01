@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 
+import { useStepUp } from '#/features/security/step-up'
 import { adminQueryKeys } from '#/lib/admin/helpers'
 import {
   deleteSiteFn,
@@ -26,6 +27,7 @@ export function useSiteSettings(siteId: string) {
   const updateSite = useServerFn(updateSiteFn)
   const rotateSiteToken = useServerFn(rotateSiteTokenFn)
   const deleteSite = useServerFn(deleteSiteFn)
+  const stepUp = useStepUp()
 
   const site = useQuery({
     queryKey: adminQueryKeys.site(siteId),
@@ -47,11 +49,12 @@ export function useSiteSettings(siteId: string) {
   })
 
   const rotate = useMutation({
-    mutationFn: () => rotateSiteToken({ data: { id: siteId } }),
+    mutationFn: (privilege: 'build' | 'schema' = 'build') =>
+      stepUp.run(() => rotateSiteToken({ data: { id: siteId, privilege } })),
   })
 
   const remove = useMutation({
-    mutationFn: () => deleteSite({ data: { id: siteId } }),
+    mutationFn: () => stepUp.run(() => deleteSite({ data: { id: siteId } })),
   })
 
   return { site, update, rotate, remove }

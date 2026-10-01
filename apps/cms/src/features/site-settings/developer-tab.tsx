@@ -35,6 +35,7 @@ export function DeveloperTab({
   settings: ReturnType<typeof useSiteSettings>
 }) {
   const [token, setToken] = React.useState<string | null>(null)
+  const [schemaToken, setSchemaToken] = React.useState<string | null>(null)
   const origin = useOrigin()
   const commands = [
     'npm install @areca-cms/site-sdk',
@@ -81,7 +82,7 @@ export function DeveloperTab({
 
       <SettingsSection
         id="token"
-        title={m.settings_token_title()}
+        title="Build token (read only)"
         description={m.settings_token_description()}
       >
         {token ? (
@@ -99,7 +100,7 @@ export function DeveloperTab({
               testId="rotate-token-dialog"
               onConfirm={async () => {
                 try {
-                  const result = await settings.rotate.mutateAsync()
+                  const result = await settings.rotate.mutateAsync('build')
                   toast.success(m.sites_token_rotated())
                   setToken(result.token)
                 } catch (error) {
@@ -118,6 +119,38 @@ export function DeveloperTab({
               </Button>
             </ConfirmDialog>
           </div>
+        )}
+      </SettingsSection>
+
+      <SettingsSection
+        title="Schema-write token"
+        description="Use only for manifest updates. Never add this token to website builds."
+      >
+        {schemaToken ? (
+          <TokenReveal
+            token={schemaToken}
+            privilege="schema"
+            onDismiss={() => setSchemaToken(null)}
+          />
+        ) : (
+          <ConfirmDialog
+            title="Rotate schema-write token?"
+            description="Existing schema integrations will need the new token."
+            confirmLabel="Rotate schema token"
+            variant="destructive"
+            onConfirm={async () => {
+              try {
+                const result = await settings.rotate.mutateAsync('schema')
+                setSchemaToken(result.token)
+              } catch (error) {
+                toast.error(errorMessage(error))
+              }
+            }}
+          >
+            <Button variant="outline" loading={settings.rotate.isPending}>
+              Rotate schema token
+            </Button>
+          </ConfirmDialog>
         )}
       </SettingsSection>
 

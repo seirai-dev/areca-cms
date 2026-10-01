@@ -22,6 +22,8 @@ import type {
 } from '#/lib/branding'
 import { m } from '#/paraglide/messages'
 import { AssetValidationError } from '#/server/assets'
+import { audit } from '#/server/audit'
+import { createLogger } from '#/server/log'
 
 export type BrandingRow = InferSelectModel<typeof branding>
 
@@ -108,18 +110,35 @@ type BrandingPatch = Partial<
   >
 >
 
-async function upsertBranding(patch: BrandingPatch, actorId: string) {
+async function upsertBranding(
+  patch: BrandingPatch,
+  actorId: string,
+  event: { action: string; meta?: Record<string, unknown> },
+) {
   const values = { ...patch, updatedBy: actorId, updatedAt: new Date() }
-  const rows = await db
-    .insert(branding)
-    .values({ id: BRANDING_ID, ...values })
-    .onConflictDoUpdate({ target: branding.id, set: values })
-    .returning()
-  const row = rows.at(0)
-  if (!row) {
-    throw new Error(m.server_failed_to_save_branding())
-  }
-  return toBrandingView(row)
+  return db.transaction(async (tx) => {
+    const rows = await tx
+      .insert(branding)
+      .values({ id: BRANDING_ID, ...values })
+      .onConflictDoUpdate({ target: branding.id, set: values })
+      .returning()
+    const row = rows.at(0)
+    if (!row) {
+      throw new Error(m.server_failed_to_save_branding())
+    }
+    await audit(
+      {
+        organizationId: null,
+        actorId,
+        action: event.action,
+        targetType: 'branding',
+        targetId: BRANDING_ID,
+        meta: event.meta,
+      },
+      tx,
+    )
+    return toBrandingView(row)
+  })
 }
 
 export async function updateBranding(
@@ -199,7 +218,10 @@ export async function updateBranding(
     patch.emailFromName = name || null
   }
 
-  return upsertBranding(patch, actorId)
+  return upsertBranding(patch, actorId, {
+    action: 'branding.update',
+    meta: { fields: Object.keys(patch) },
+  })
 }
 
 export async function setBrandingImage(
@@ -229,6 +251,7 @@ export async function setBrandingImage(
       ? { logoKey: storageKey, logoMime: mimeType }
       : { faviconKey: storageKey, faviconMime: mimeType },
     actorId,
+    { action: 'branding.image_set', meta: { kind } },
   )
 
   await deleteImageQuietly(
@@ -247,6 +270,7 @@ export async function clearBrandingImage(
       ? { logoKey: null, logoMime: null }
       : { faviconKey: null, faviconMime: null },
     actorId,
+    { action: 'branding.image_clear', meta: { kind } },
   )
   await deleteImageQuietly(
     kind === 'logo' ? previous?.logoKey : previous?.faviconKey,
@@ -270,17 +294,20 @@ export async function resetBranding(actorId: string): Promise<BrandingView> {
       emailFromName: null,
     },
     actorId,
+    { action: 'branding.reset' },
   )
   await deleteImageQuietly(previous?.logoKey)
   await deleteImageQuietly(previous?.faviconKey)
   return view
 }
 
+const log = createLogger('branding')
+
 async function deleteImageQuietly(key: string | null | undefined) {
   if (!key) return
   try {
     await getStorage().delete(key)
   } catch (err) {
-    console.warn(`[areca] could not delete branding image ${key}`, err)
+    log.warn('could not delete branding image', { key, err })
   }
 }

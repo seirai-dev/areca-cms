@@ -1,0 +1,24 @@
+# Secret scanning policy. CI runs gitleaks over full git history
+# (.github/workflows/ci.yml). Keep allowlists narrow: prefer a path for a
+# specific fixture file over a broad rule or regex.
+title = "Areca CMS gitleaks config"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Placeholder values in committed example env files"
+paths = [
+  '''(^|/)\.env\.example$''',
+]
+
+[[allowlists]]
+description = "Test fixtures with deliberately fake credentials"
+paths = [
+  # Fixed dummy DOKPLOY_CREDENTIALS_ENCRYPTION_KEY used by the unit tests.
+  '''(^|/)apps/cms/vitest\.config\.ts$''',
+  # Fake secrets used to prove log redaction works.
+  '''(^|/)apps/cms/src/server/log\.test\.ts$''',
+  # Fake private-key header / connection strings proving the scanner matches.
+  '''(^|/)apps/cms/scripts/scan-client-bundle\.test\.mjs$''',
+]

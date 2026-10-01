@@ -10,8 +10,52 @@ import { m } from '#/paraglide/messages'
 import { getBranding } from '#/server/admin/branding'
 import { audit } from '#/server/audit'
 import { ConflictError, NotFoundError } from '#/server/content/errors'
+import { AppError } from '#/server/http/app-error'
+import { createLogger } from '#/server/log'
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000
+
+const log = createLogger('members')
+
+/**
+ * The invitation row exists (and can be resent or revoked) but the email did
+ * not go out. A distinct 502 so the UI can tell it from a validation failure.
+ */
+export class InvitationDeliveryError extends AppError {
+  readonly status = 502
+  constructor(message = m.server_invitation_email_failed()) {
+    super(message)
+    this.name = 'InvitationDeliveryError'
+  }
+}
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
+
+/**
+ * Serialises every owner-changing operation of one organization: concurrent
+ * demotions/removals queue on the organization row, so the owner count read
+ * afterwards is never stale.
+ */
+async function lockOrganization(tx: Tx, organizationId: string) {
+  await tx
+    .select({ id: organization.id })
+    .from(organization)
+    .where(eq(organization.id, organizationId))
+    .for('update')
+}
+
+async function countOwners(tx: Tx, organizationId: string) {
+  const owners = await tx
+    .select({ id: membership.id })
+    .from(membership)
+    .where(
+      and(
+        eq(membership.organizationId, organizationId),
+        eq(membership.role, 'owner'),
+      ),
+    )
+  return owners.length
+}
 
 export function assertAgencyAdminCanBeRemoved(adminCount: number) {
   if (adminCount <= 1) {
@@ -48,94 +92,95 @@ export async function updateMemberRole(
   organizationId: string,
   userId: string,
   role: MembershipRole,
+  actorId: string,
 ) {
-  const [existing] = await db
-    .select()
-    .from(membership)
-    .where(
-      and(
-        eq(membership.organizationId, organizationId),
-        eq(membership.userId, userId),
-      ),
-    )
-    .limit(1)
-  if (!existing) {
-    throw new NotFoundError(m.server_member_not_found())
-  }
-
-  if (existing.role === 'owner' && role !== 'owner') {
-    const owners = await db
-      .select({ id: membership.id })
+  return db.transaction(async (tx) => {
+    await lockOrganization(tx, organizationId)
+    const [existing] = await tx
+      .select()
       .from(membership)
       .where(
         and(
           eq(membership.organizationId, organizationId),
-          eq(membership.role, 'owner'),
+          eq(membership.userId, userId),
         ),
       )
-    if (owners.length <= 1) {
-      throw new ConflictError(m.server_cannot_demote_last_owner())
+      .limit(1)
+    if (!existing) {
+      throw new NotFoundError(m.server_member_not_found())
     }
-  }
 
-  const [updated] = await db
-    .update(membership)
-    .set({ role })
-    .where(eq(membership.id, existing.id))
-    .returning()
-  if (!updated) {
-    throw new NotFoundError(m.server_member_not_found())
-  }
+    if (existing.role === 'owner' && role !== 'owner') {
+      if ((await countOwners(tx, organizationId)) <= 1) {
+        throw new ConflictError(m.server_cannot_demote_last_owner())
+      }
+    }
 
-  await audit({
-    organizationId,
-    action: 'member.update_role',
-    targetType: 'membership',
-    targetId: existing.id,
-    meta: { userId, role },
+    const [updated] = await tx
+      .update(membership)
+      .set({ role })
+      .where(eq(membership.id, existing.id))
+      .returning()
+    if (!updated) {
+      throw new NotFoundError(m.server_member_not_found())
+    }
+
+    await audit(
+      {
+        organizationId,
+        actorId,
+        action: 'member.update_role',
+        targetType: 'membership',
+        targetId: existing.id,
+        meta: { userId, role, previousRole: existing.role },
+      },
+      tx,
+    )
+
+    return updated
   })
-
-  return updated
 }
 
-export async function removeMember(organizationId: string, userId: string) {
-  const [existing] = await db
-    .select()
-    .from(membership)
-    .where(
-      and(
-        eq(membership.organizationId, organizationId),
-        eq(membership.userId, userId),
-      ),
-    )
-    .limit(1)
-  if (!existing) {
-    throw new NotFoundError(m.server_member_not_found())
-  }
-
-  if (existing.role === 'owner') {
-    const owners = await db
-      .select({ id: membership.id })
+export async function removeMember(
+  organizationId: string,
+  userId: string,
+  actorId: string,
+) {
+  await db.transaction(async (tx) => {
+    await lockOrganization(tx, organizationId)
+    const [existing] = await tx
+      .select()
       .from(membership)
       .where(
         and(
           eq(membership.organizationId, organizationId),
-          eq(membership.role, 'owner'),
+          eq(membership.userId, userId),
         ),
       )
-    if (owners.length <= 1) {
-      throw new ConflictError(m.server_cannot_remove_last_owner())
+      .limit(1)
+    if (!existing) {
+      throw new NotFoundError(m.server_member_not_found())
     }
-  }
 
-  await db.delete(membership).where(eq(membership.id, existing.id))
+    if (existing.role === 'owner') {
+      if ((await countOwners(tx, organizationId)) <= 1) {
+        throw new ConflictError(m.server_cannot_remove_last_owner())
+      }
+    }
 
-  await audit({
-    organizationId,
-    action: 'member.remove',
-    targetType: 'membership',
-    targetId: existing.id,
-    meta: { userId },
+    await tx.delete(membership).where(eq(membership.id, existing.id))
+
+    await audit(
+      {
+        organizationId,
+        actorId,
+        action: 'member.remove',
+        targetType: 'membership',
+        targetId: existing.id,
+        meta: { userId },
+      },
+      tx,
+    )
   })
 }
 
@@ -197,48 +242,113 @@ export async function inviteMember(input: {
     throw new ConflictError(m.server_invitation_pending())
   }
 
-  const token = randomBytes(32).toString('hex')
+  const token = newInvitationToken()
   const expiresAt = new Date(Date.now() + INVITE_TTL_MS)
 
-  const [created] = await db
-    .insert(invitation)
-    .values({
-      email,
-      organizationId: input.organizationId,
-      role: input.role,
-      token,
-      expiresAt,
+  // Created as "failed" until SMTP accepts the message, so a crash between
+  // the insert and the send leaves a row that can be resent, not a ghost.
+  const created = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .insert(invitation)
+      .values({
+        email,
+        organizationId: input.organizationId,
+        role: input.role,
+        token,
+        expiresAt,
+        deliveryStatus: 'failed',
+      })
+      .returning()
+    if (!row) {
+      throw new Error(m.server_failed_to_create_invitation())
+    }
+    await audit(
+      {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        action: 'member.invite',
+        targetType: 'invitation',
+        targetId: row.id,
+        meta: { email, role: input.role },
+      },
+      tx,
+    )
+    return row
+  })
+
+  return deliverInvitation(created, org.name, input.email)
+}
+
+function newInvitationToken() {
+  return randomBytes(32).toString('hex')
+}
+
+/**
+ * Sends the invitation email and records the outcome on the row. On failure
+ * the row is kept (marked failed) and an InvitationDeliveryError is thrown.
+ */
+async function deliverInvitation(
+  row: typeof invitation.$inferSelect,
+  organizationName: string,
+  to: string,
+) {
+  try {
+    const link = `${env.APP_URL}/invite/${row.token}`
+    const brand = await getBranding()
+    await sendEmail({
+      to,
+      fromName: brand.emailFromName ?? brand.appName,
+      subject: m.server_invite_subject({ org: organizationName }),
+      text: `${m.server_invite_body({ org: organizationName, role: row.role })}\n\n${m.server_invite_accept_text({ link })}\n\n— ${brand.appName}`,
+      html: `<p>${m.server_invite_body({ org: organizationName, role: row.role })}</p><p><a href="${link}">${m.server_invite_accept()}</a></p><p style="color:#666;font-size:12px">— ${escapeHtml(brand.appName)}</p>`,
     })
-    .returning()
-  if (!created) {
-    throw new Error(m.server_failed_to_create_invitation())
+  } catch (error) {
+    log.error('invitation email failed', {
+      invitationId: row.id,
+      organizationId: row.organizationId,
+      err: error,
+    })
+    await db
+      .update(invitation)
+      .set({
+        deliveryStatus: 'failed',
+        lastDeliveryError: describeDeliveryError(error),
+      })
+      .where(eq(invitation.id, row.id))
+    throw new InvitationDeliveryError()
   }
 
-  const link = `${env.APP_URL}/invite/${token}`
-  const brand = await getBranding()
-  await sendEmail({
-    to: input.email,
-    fromName: brand.emailFromName ?? brand.appName,
-    subject: m.server_invite_subject({ org: org.name }),
-    text: `${m.server_invite_body({ org: org.name, role: input.role })}\n\n${m.server_invite_accept_text({ link })}\n\n— ${brand.appName}`,
-    html: `<p>${m.server_invite_body({ org: org.name, role: input.role })}</p><p><a href="${link}">${m.server_invite_accept()}</a></p><p style="color:#666;font-size:12px">— ${escapeHtml(brand.appName)}</p>`,
-  })
+  const [sent] = await db
+    .update(invitation)
+    .set({
+      deliveryStatus: 'sent',
+      lastDeliveryError: null,
+      lastSentAt: new Date(),
+    })
+    .where(eq(invitation.id, row.id))
+    .returning()
+  return sent ?? row
+}
 
-  await audit({
-    organizationId: input.organizationId,
-    actorId: input.actorId,
-    action: 'member.invite',
-    targetType: 'invitation',
-    targetId: created.id,
-    meta: { email, role: input.role },
-  })
-
-  return created
+function describeDeliveryError(error: unknown) {
+  const text = error instanceof Error ? error.message : String(error)
+  return text.split('\n')[0].slice(0, 200)
 }
 
 export async function listInvitations(organizationId: string) {
   return db
-    .select()
+    .select({
+      id: invitation.id,
+      email: invitation.email,
+      organizationId: invitation.organizationId,
+      role: invitation.role,
+      token: invitation.token,
+      expiresAt: invitation.expiresAt,
+      acceptedAt: invitation.acceptedAt,
+      deliveryStatus: invitation.deliveryStatus,
+      lastSentAt: invitation.lastSentAt,
+      createdAt: invitation.createdAt,
+    })
     .from(invitation)
     .where(eq(invitation.organizationId, organizationId))
     .orderBy(invitation.createdAt)
@@ -253,20 +363,97 @@ export async function getInvitationById(id: string) {
   return row ?? null
 }
 
-export async function revokeInvitation(id: string) {
+export async function revokeInvitation(id: string, actorId: string) {
   const existing = await getInvitationById(id)
   if (!existing) {
     throw new NotFoundError(m.server_invitation_not_found())
   }
 
-  await db.delete(invitation).where(eq(invitation.id, id))
-
-  await audit({
-    organizationId: existing.organizationId,
-    action: 'invitation.revoke',
-    targetType: 'invitation',
-    targetId: id,
+  await db.transaction(async (tx) => {
+    await tx.delete(invitation).where(eq(invitation.id, id))
+    await audit(
+      {
+        organizationId: existing.organizationId,
+        actorId,
+        action: 'invitation.revoke',
+        targetType: 'invitation',
+        targetId: id,
+        meta: { email: existing.email },
+      },
+      tx,
+    )
   })
+}
+
+/**
+ * Sends the invitation again with a fresh token and a fresh expiry (works for
+ * expired and delivery-failed invitations). The previous link stops working.
+ */
+export async function resendInvitation(id: string, actorId: string) {
+  const { row, organizationName } = await db.transaction(async (tx) => {
+    const [locked] = await tx
+      .select()
+      .from(invitation)
+      .where(eq(invitation.id, id))
+      .for('update')
+    if (!locked) {
+      throw new NotFoundError(m.server_invitation_not_found())
+    }
+    if (locked.acceptedAt) {
+      throw new ConflictError(m.server_invitation_already_accepted())
+    }
+
+    const [org] = await tx
+      .select({ name: organization.name })
+      .from(organization)
+      .where(eq(organization.id, locked.organizationId))
+      .limit(1)
+    if (!org) {
+      throw new NotFoundError(m.server_organization_not_found())
+    }
+
+    const [alreadyMember] = await tx
+      .select({ id: membership.id })
+      .from(membership)
+      .innerJoin(user, eq(membership.userId, user.id))
+      .where(
+        and(
+          eq(membership.organizationId, locked.organizationId),
+          eq(user.email, locked.email),
+        ),
+      )
+      .limit(1)
+    if (alreadyMember) {
+      throw new ConflictError(m.server_email_already_member())
+    }
+
+    const [updated] = await tx
+      .update(invitation)
+      .set({
+        token: newInvitationToken(),
+        expiresAt: new Date(Date.now() + INVITE_TTL_MS),
+        deliveryStatus: 'failed',
+      })
+      .where(eq(invitation.id, id))
+      .returning()
+    if (!updated) {
+      throw new NotFoundError(m.server_invitation_not_found())
+    }
+    await audit(
+      {
+        organizationId: locked.organizationId,
+        actorId,
+        action: 'invitation.resend',
+        targetType: 'invitation',
+        targetId: id,
+        meta: { email: locked.email },
+      },
+      tx,
+    )
+    return { row: updated, organizationName: org.name }
+  })
+
+  return deliverInvitation(row, organizationName, row.email)
 }
 
 export async function getInvitation(token: string) {
@@ -331,15 +518,18 @@ export async function acceptInvitation(input: {
       .update(invitation)
       .set({ acceptedAt })
       .where(eq(invitation.id, invite.id))
-  })
 
-  await audit({
-    organizationId: invite.organizationId,
-    actorId: input.userId,
-    action: 'invitation.accept',
-    targetType: 'invitation',
-    targetId: invite.id,
-    meta: { userId: input.userId },
+    await audit(
+      {
+        organizationId: invite.organizationId,
+        actorId: input.userId,
+        action: 'invitation.accept',
+        targetType: 'invitation',
+        targetId: invite.id,
+        meta: { userId: input.userId },
+      },
+      tx,
+    )
   })
 
   return { organizationId: invite.organizationId, role: invite.role }
@@ -358,7 +548,11 @@ export async function listAgencyAdmins() {
     .orderBy(user.email)
 }
 
-export async function setAgencyAdmin(userId: string, isAgencyAdmin: boolean) {
+export async function setAgencyAdmin(
+  userId: string,
+  isAgencyAdmin: boolean,
+  actorId: string,
+) {
   return db.transaction(async (tx) => {
     const [existing] = await tx
       .select({ id: user.id, isAgencyAdmin: user.isAgencyAdmin })
@@ -390,6 +584,19 @@ export async function setAgencyAdmin(userId: string, isAgencyAdmin: boolean) {
       })
     if (!updated) {
       throw new NotFoundError(m.server_user_not_found())
+    }
+
+    if (existing.isAgencyAdmin !== isAgencyAdmin) {
+      await audit(
+        {
+          organizationId: null,
+          actorId,
+          action: isAgencyAdmin ? 'agency_admin.grant' : 'agency_admin.revoke',
+          targetType: 'user',
+          targetId: userId,
+        },
+        tx,
+      )
     }
 
     return updated

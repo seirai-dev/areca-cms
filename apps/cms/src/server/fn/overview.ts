@@ -10,7 +10,7 @@ import {
   publication,
   site,
 } from '#/db/schema'
-import { requireUser } from '#/lib/session.server'
+import { assertAdminMfa, requireUser } from '#/lib/session.server'
 
 const loose = { strict: { output: false } as const }
 
@@ -38,6 +38,7 @@ export const getSitesOverviewFn = createServerFn({
   ...loose,
 }).handler(async () => {
   const session = await requireUser()
+  if (session.user.isAgencyAdmin) assertAdminMfa(session.user)
   const orgIds = await accessibleOrgIds(
     session.user.id,
     Boolean(session.user.isAgencyAdmin),

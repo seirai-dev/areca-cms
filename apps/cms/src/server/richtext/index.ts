@@ -2,6 +2,7 @@ import type { JSONContent } from '@tiptap/core'
 import type { MarkdownDocument } from '@tanstack/markdown'
 
 import { env } from '#/env'
+import { ValidationError } from '#/server/content/errors'
 
 import { parseRichTextDocument, renderRichTextHtml } from './document'
 import { serializeMarkdown } from './markdown'
@@ -86,7 +87,9 @@ export function convertRichText(json: unknown): {
 } {
   const errors = validateRichText(json)
   if (errors.length > 0) {
-    throw new Error(errors.join('\n'))
+    throw new ValidationError(
+      errors.map((message) => ({ path: 'richtext', message })),
+    )
   }
 
   const rewritten = structuredClone(json) as JSONContent

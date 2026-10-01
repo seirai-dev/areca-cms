@@ -11,6 +11,7 @@ import {
   listInvitationsFn,
   listMembersFn,
   removeMemberFn,
+  resendInvitationFn,
   revokeInvitationFn,
   updateMemberRoleFn,
 } from '#/server/fn/admin'
@@ -20,7 +21,13 @@ export type InvitationRow = Awaited<
   ReturnType<typeof listInvitationsFn>
 >[number]
 
-export type InviteResult = { email: string; ok: boolean; error?: string }
+export type InviteResult = {
+  email: string
+  ok: boolean
+  error?: string
+  /** The invitation exists but its email was not delivered: resend, don't retype. */
+  created?: boolean
+}
 
 const DAY = 86_400_000
 const EMAIL = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/
@@ -78,6 +85,7 @@ export function useMembers(organizationId: string) {
   const removeMember = useServerFn(removeMemberFn)
   const inviteMember = useServerFn(inviteMemberFn)
   const revokeInvitation = useServerFn(revokeInvitationFn)
+  const resendInvitation = useServerFn(resendInvitationFn)
 
   const members = useQuery({
     queryKey: adminQueryKeys.members(organizationId),
@@ -138,7 +146,13 @@ export function useMembers(organizationId: string) {
           })
           results.push({ email, ok: true })
         } catch (error) {
-          results.push({ email, ok: false, error: errorMessage(error) })
+          const message = errorMessage(error)
+          results.push({
+            email,
+            ok: false,
+            error: message,
+            created: message === m.server_invitation_email_failed(),
+          })
         }
       }
       return results
@@ -146,14 +160,10 @@ export function useMembers(organizationId: string) {
     onSettled: refreshInvitations,
   })
 
-  /** Re-invite an expired address, then drop the stale row. */
+  /** Sends the invitation again (new link, new expiry). */
   const resend = useMutation({
-    mutationFn: async (row: InvitationRow) => {
-      await inviteMember({
-        data: { organizationId, email: row.email, role: row.role },
-      })
-      await revokeInvitation({ data: { id: row.id } }).catch(() => undefined)
-    },
+    mutationFn: (row: InvitationRow) =>
+      resendInvitation({ data: { id: row.id } }),
     onSettled: refreshInvitations,
   })
 

@@ -66,7 +66,10 @@ describe('parseArgs init / run / sync-manifest', () => {
   })
 
   it('accepts --yes', () => {
-    expect(parseArgs(['init', '--yes'])).toMatchObject({ command: 'init', yes: true })
+    expect(parseArgs(['init', '--yes'])).toMatchObject({
+      command: 'init',
+      yes: true,
+    })
   })
 
   it('requires a value for --cms-url', () => {
@@ -160,7 +163,7 @@ describe('initSite', () => {
         `import { defineSiteContent } from '@areca-cms/site-sdk'\n\nexport default defineSiteContent({\n  siteKey: 'acme-site',\n  collections: {},\n})\n`,
       )
       expect(readUtf8(join(dir, '.env.example'))).toBe(
-        'ARECA_CMS_URL=http://localhost:3000\nARECA_SITE_TOKEN=\n',
+        'ARECA_CMS_URL=http://localhost:3000\nARECA_SITE_TOKEN=\nARECA_SCHEMA_TOKEN=\n',
       )
       expect(readUtf8(join(dir, '.env.local'))).toBe(
         'ARECA_CMS_URL=http://localhost:3000\nARECA_SITE_TOKEN=site-token\n',
@@ -261,7 +264,11 @@ describe('initSite', () => {
 
   it('does not duplicate gitignore lines', async () => {
     const dir = makeSiteDir()
-    writeFileSync(join(dir, '.gitignore'), 'node_modules/\n.env.local\nsrc/generated/content/\n', 'utf8')
+    writeFileSync(
+      join(dir, '.gitignore'),
+      'node_modules/\n.env.local\nsrc/generated/content/\n',
+      'utf8',
+    )
     try {
       await initSite({
         cwd: dir,
@@ -546,7 +553,10 @@ describe('run init', () => {
     const dir = makeSiteDir()
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     const tty = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY')
-    Object.defineProperty(process.stdin, 'isTTY', { configurable: true, value: false })
+    Object.defineProperty(process.stdin, 'isTTY', {
+      configurable: true,
+      value: false,
+    })
     try {
       await expect(run(['init'], { cwd: dir })).resolves.toBe(1)
       expect(err.mock.calls.flat().join(' ')).toMatch(/Missing --cms-url/)

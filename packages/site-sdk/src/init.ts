@@ -1,19 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import {
-  cancel,
-  intro,
-  isCancel,
-  note,
-  outro,
-  password,
-  spinner,
-  text,
-} from '@clack/prompts'
-import {
-  DEFAULT_CONFIG_PATH,
-  DEFAULT_PULL_OUT_DIR,
-} from './args.js'
+import { cancel, intro, isCancel, note, outro, password, spinner, text } from '@clack/prompts'
+import { DEFAULT_CONFIG_PATH, DEFAULT_PULL_OUT_DIR } from './args.js'
 import { parseEnvAssignment } from './env.js'
 import type { PulledContentManifest } from './types.js'
 
@@ -73,7 +61,7 @@ export async function initSite(options: InitSiteOptions): Promise<void> {
   spin?.stop('Wrote Areca files')
 
   const nextSteps =
-    'Add collections to areca.config.ts → pnpm sync-manifest → publish in CMS → pnpm content:pull → pnpm dev'
+    'Set ARECA_SCHEMA_TOKEN from Settings > Developer (keep it out of builds) → add collections to areca.config.ts → pnpm sync-manifest → publish in CMS → pnpm content:pull → pnpm dev'
   if (interactive) {
     outro(nextSteps)
   } else {
@@ -215,7 +203,11 @@ function writeArecaConfig(filePath: string, siteKey: string, force: boolean): vo
 
 function writeEnvExample(filePath: string, cmsUrl: string, force: boolean): void {
   if (!force && existsSync(filePath)) return
-  writeFileSync(filePath, `ARECA_CMS_URL=${cmsUrl}\nARECA_SITE_TOKEN=\n`, 'utf8')
+  writeFileSync(
+    filePath,
+    `ARECA_CMS_URL=${cmsUrl}\nARECA_SITE_TOKEN=\nARECA_SCHEMA_TOKEN=\n`,
+    'utf8',
+  )
 }
 
 function upsertEnvLocal(filePath: string, updates: Record<string, string>): void {
@@ -311,7 +303,10 @@ function readPackageJson(filePath: string): Record<string, unknown> {
   return parsed as Record<string, unknown>
 }
 
-function patchPackageScripts(pkg: Record<string, unknown>, outDir: string): Record<string, unknown> {
+function patchPackageScripts(
+  pkg: Record<string, unknown>,
+  outDir: string,
+): Record<string, unknown> {
   const scripts =
     pkg.scripts && typeof pkg.scripts === 'object' && !Array.isArray(pkg.scripts)
       ? { ...(pkg.scripts as Record<string, unknown>) }

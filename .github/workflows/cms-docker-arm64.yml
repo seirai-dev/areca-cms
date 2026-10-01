@@ -1,7 +1,8 @@
 name: CMS Docker ARM64
 
+# Reusable only: cms-docker-amd64.yml calls this after CI passes. It has no
+# direct trigger so images cannot be published without CI.
 on:
-  workflow_dispatch:
   workflow_call:
     outputs:
       digest:
@@ -42,7 +43,7 @@ jobs:
           push: true
           tags: |
             ${{ steps.image.outputs.name }}:sha-${{ github.sha }}-arm64
-            ${{ github.ref == 'refs/heads/main' && format('{0}:latest-arm64', steps.image.outputs.name) || '' }}
+            ${{ github.ref == 'refs/heads/master' && format('{0}:latest-arm64', steps.image.outputs.name) || '' }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}

@@ -1,3 +1,4 @@
+import { archiveDeletedContent } from './deletion-archive'
 import { and, eq, notInArray } from 'drizzle-orm'
 
 import { db } from '#/db'
@@ -5,6 +6,7 @@ import { collection, site } from '#/db/schema'
 import type { Field, SiteManifest } from '#/lib/types'
 import { withRequiredSlugField } from '#/lib/collection-fields'
 import { m } from '#/paraglide/messages'
+import { isSafeIdentifier } from '#/lib/content-identifiers'
 import { audit } from '#/server/audit'
 
 import { NotFoundError, ValidationError } from './errors.ts'
@@ -12,12 +14,13 @@ import { NotFoundError, ValidationError } from './errors.ts'
 export async function listCollections(
   siteId: string,
   options: { enabledOnly?: boolean } = {},
+  connection: Pick<typeof db, 'select'> = db,
 ) {
   const filters = [eq(collection.siteId, siteId)]
   if (options.enabledOnly) {
     filters.push(eq(collection.enabled, true))
   }
-  const rows = await db
+  const rows = await connection
     .select()
     .from(collection)
     .where(and(...filters))
@@ -40,6 +43,12 @@ export async function getCollection(siteId: string, key: string) {
 }
 
 export async function syncManifest(siteId: string, manifest: SiteManifest) {
+  validateCollectionDefinitions(
+    Object.entries(manifest.collections).map(([key, def]) => ({
+      key,
+      fields: def.fields,
+    })),
+  )
   const existingSite = (
     await db.select().from(site).where(eq(site.id, siteId)).limit(1)
   ).at(0)
@@ -114,6 +123,7 @@ export async function upsertCollection(
     enabled?: boolean
   },
 ) {
+  validateCollectionDefinitions([input])
   const label = input.label.trim()
   if (!label) {
     throw new ValidationError([{ path: 'label', message: m.server_required() }])
@@ -211,7 +221,40 @@ export async function deleteCollection(
     meta: { key: existing.key },
   })
 
-  // Entries belong to a collection with ON DELETE CASCADE, and entry
-  // revisions cascade from their entry in turn.
-  await db.delete(collection).where(eq(collection.id, existing.id))
+  await db.transaction(async (tx) => {
+    await archiveDeletedContent(
+      tx,
+      existing.organizationId,
+      'collection',
+      existing.id,
+    )
+    await tx.delete(collection).where(eq(collection.id, existing.id))
+  })
+}
+
+function validateCollectionDefinitions(
+  defs: { key: string; fields: Field[] }[],
+) {
+  const issues: { path: string; message: string }[] = []
+  for (const def of defs) {
+    if (!isSafeIdentifier(def.key))
+      issues.push({ path: def.key, message: 'Unsafe collection identifier' })
+    const keys = new Set<string>()
+    for (const field of def.fields) {
+      if (!isSafeIdentifier(field.key) || keys.has(field.key))
+        issues.push({
+          path: `${def.key}.${field.key}`,
+          message: 'Unsafe or duplicate field identifier',
+        })
+      keys.add(field.key)
+      for (const reference of [field.collection, field.after]) {
+        if (reference !== undefined && !isSafeIdentifier(reference))
+          issues.push({
+            path: `${def.key}.${field.key}`,
+            message: 'Unsafe field reference identifier',
+          })
+      }
+    }
+  }
+  if (issues.length) throw new ValidationError(issues)
 }

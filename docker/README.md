@@ -13,8 +13,12 @@ cp .env.example .env
 docker compose up -d --wait
 ```
 
-Open <http://localhost:3000/setup> to create the first administrator. The database
-starts empty; no demo accounts are seeded. Startup automatically applies migrations
+Open <http://localhost:3000/setup> to create the first administrator. The setup
+form asks for a setup token: set `SETUP_TOKEN` (16+ characters) in `.env`, or
+leave it unset and read the generated token from `docker compose logs cms`
+(printed once, the first time the CMS is opened while no account exists). The
+first administrator is then asked to turn on two-factor authentication.
+The database starts empty; no demo accounts are seeded. Startup automatically applies migrations
 and creates the `areca` bucket. Mailpit is at <http://localhost:8025> and the RustFS
 console at <http://localhost:9001> (use the S3 credentials from `.env`).
 
@@ -53,8 +57,9 @@ context. Dependency layers are reused across source changes. The runtime runs as
 
 Two workflows build natively on `ubuntu-24.04` (AMD64) and `ubuntu-24.04-arm`
 (ARM64), using separate GitHub Actions BuildKit caches. The AMD64 release workflow
-runs on matching pushes to `main` and calls the reusable ARM64 workflow in parallel.
-It only publishes a shared manifest after both builds succeed, using their exact
+runs on matching pushes to `master`. It first calls the CI workflow (typecheck,
+unit tests, secret scan and client bundle scan); only if that passes does it build,
+in parallel, AMD64 and the reusable ARM64 workflow. It only publishes a shared manifest after both builds succeed, using their exact
 digests so architectures always come from the same commit.
 
 Matching paths include `apps/cms/**`, root dependency configuration, the Docker
@@ -72,8 +77,8 @@ Tags under `ghcr.io/ekozf/areca-cms`:
 
 | Tag                                                          | Content                                      |
 | ------------------------------------------------------------ | -------------------------------------------- |
-| `latest`                                                     | Both architectures, updated only from `main` |
-| `latest-amd64`, `latest-arm64`                               | Architecture-specific images from `main`     |
+| `latest`                                                     | Both architectures, updated only from `master` |
+| `latest-amd64`, `latest-arm64`                               | Architecture-specific images from `master`   |
 | `sha-<full-commit-sha>`                                      | Both architectures for that commit           |
 | `sha-<full-commit-sha>-amd64`, `sha-<full-commit-sha>-arm64` | A specific commit and architecture           |
 
@@ -86,3 +91,11 @@ the OCI source label.
 After the first publish, open the repository's **Packages** entry, then **Package
 settings → Change visibility → Public** to allow visitors to pull without login.
 [GitHub defaults new container packages to private](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
+
+`latest` is for trying the demo. For anything that matters, set `CMS_IMAGE` to a
+`sha-<full-commit-sha>` tag or an image digest so restarts never pick up a new
+release unannounced. The third-party images in `compose.yml` use explicit version
+tags. See [../docs/UPGRADES.md](../docs/UPGRADES.md) for the upgrade and rollback
+procedure.
+
+Backup, isolated restore and versioned organization transfer: [RECOVERY.md](RECOVERY.md).

@@ -1,14 +1,4 @@
-import {
-  and,
-  eq,
-  inArray,
-  isNotNull,
-  isNull,
-  lte,
-  ne,
-  or,
-  sql,
-} from 'drizzle-orm'
+import { and, eq, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm'
 
 import type {
   DeploymentAdapter,
@@ -18,14 +8,38 @@ import { db, pool } from '#/db'
 import { buildJob, entry, publication, site } from '#/db/schema'
 import { env } from '#/env'
 import { audit } from '#/server/audit'
+import {
+  markLoopsStarted,
+  markLoopsStopped,
+  recordTick,
+} from '#/server/ops/heartbeat'
+import { createLogger, redactString } from '#/server/log'
+
+import { installShutdownHandlers } from './shutdown.ts'
 import { getDeploymentAdapterForOrganization } from '#/server/admin/dokploy-credentials'
 
 import { getPublication } from './publications.ts'
 import { runSchedulerTick } from './scheduler.ts'
 
-const CLAIM_SQL = `
-UPDATE build_job SET status='building', started_at=now(), attempts=attempts+1 WHERE id = (SELECT id FROM build_job WHERE status='queued' AND site_id NOT IN (SELECT site_id FROM build_job WHERE status IN ('building','validating','deploying')) ORDER BY priority DESC, created_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING *
+export const CLAIM_SQL = `
+WITH candidate_site AS (
+  SELECT s.id FROM site s
+  WHERE EXISTS (SELECT 1 FROM build_job q WHERE q.site_id=s.id AND q.status='queued')
+    AND NOT EXISTS (SELECT 1 FROM build_job a WHERE a.site_id=s.id AND a.status IN ('building','validating','deploying'))
+  ORDER BY (SELECT max(priority) FROM build_job q WHERE q.site_id=s.id AND q.status='queued') DESC, s.id
+  LIMIT 1 FOR UPDATE OF s SKIP LOCKED
+), candidate_job AS (
+  SELECT j.id FROM build_job j JOIN candidate_site s ON s.id=j.site_id
+  WHERE j.status='queued' ORDER BY j.priority DESC, j.created_at ASC LIMIT 1 FOR UPDATE OF j SKIP LOCKED
+)
+UPDATE build_job SET status='building', started_at=now(), lease_expires_at=now()+interval '60 seconds', attempts=attempts+1
+WHERE id=(SELECT id FROM candidate_job) RETURNING *
 `
+
+const logger = createLogger('worker')
+
+const LEASE_MS = 60_000
+const HEARTBEAT_MS = 15_000
 
 const DEPLOY_TIMEOUT_MS = 15 * 60 * 1000
 const DEPLOY_POLL_MS = 5000
@@ -36,7 +50,11 @@ const STALE_JOB_STATUSES = ['building', 'validating', 'deploying'] as const
 
 type WorkerState = {
   timer: ReturnType<typeof setInterval>
+  recoveryTimer: ReturnType<typeof setInterval>
+  schedulerTimer: ReturnType<typeof setInterval>
+  pool?: JobPool
   ticking: boolean
+  schedulerTicking: boolean
 }
 
 const g = globalThis as typeof globalThis & {
@@ -48,16 +66,31 @@ export type ProcessJobDeps = {
   resolveAdapter?: (organizationId: string) => Promise<DeploymentAdapter>
 }
 
+/** Per-job build log cap (characters). The tail is kept when exceeded. */
+export const MAX_JOB_LOG_CHARS = 256 * 1024
+/** A single log line is cut to this length before it is appended. */
+export const MAX_JOB_LOG_LINE_CHARS = 8 * 1024
+export const LOG_TRUNCATED_MARKER = '[truncated]\n'
+
 export async function appendLog(jobId: string, line: string) {
-  const stamped = `[${new Date().toISOString()}] ${line}`
-  const [row] = await db
-    .select({ logs: buildJob.logs })
-    .from(buildJob)
-    .where(eq(buildJob.id, jobId))
-    .limit(1)
+  const text = redactString(line)
+  const bounded =
+    text.length > MAX_JOB_LOG_LINE_CHARS
+      ? `${text.slice(0, MAX_JOB_LOG_LINE_CHARS)}…[line truncated]`
+      : text
+  const stamped = `[${new Date().toISOString()}] ${bounded}\n`
+  // Done in SQL so concurrent appenders never race a read-modify-write. When
+  // the result would exceed the cap, keep the newest MAX chars (marker
+  // included) behind a single leading marker; an existing marker is always
+  // shifted out because the cut removes at least marker-length characters.
+  const combined = sql`coalesce(${buildJob.logs}, '') || ${stamped}::text`
   await db
     .update(buildJob)
-    .set({ logs: `${row?.logs ?? ''}${stamped}\n` })
+    .set({
+      logs: sql`CASE WHEN char_length(${combined}) > ${MAX_JOB_LOG_CHARS}
+        THEN ${LOG_TRUNCATED_MARKER}::text || right(${combined}, ${MAX_JOB_LOG_CHARS - LOG_TRUNCATED_MARKER.length})
+        ELSE ${combined} END`,
+    })
     .where(eq(buildJob.id, jobId))
 }
 
@@ -84,11 +117,68 @@ export async function processJob(
   job: typeof buildJob.$inferSelect,
   deps: ProcessJobDeps = {},
 ) {
+  if (job.status === 'queued') {
+    const claimed = await db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT id FROM site WHERE id=${job.siteId} FOR UPDATE`,
+      )
+      const [active] = await tx
+        .select()
+        .from(buildJob)
+        .where(
+          and(
+            eq(buildJob.siteId, job.siteId),
+            inArray(buildJob.status, ['building', 'validating', 'deploying']),
+          ),
+        )
+        .limit(1)
+      if (active) return null
+      return (
+        (
+          await tx
+            .update(buildJob)
+            .set({
+              status: 'building',
+              startedAt: new Date(),
+              leaseExpiresAt: new Date(Date.now() + LEASE_MS),
+              attempts: sql`${buildJob.attempts}+1`,
+            })
+            .where(and(eq(buildJob.id, job.id), eq(buildJob.status, 'queued')))
+            .returning()
+        )[0] ?? null
+      )
+    })
+    if (!claimed) return
+    job = claimed
+  }
+  const fence = and(
+    eq(buildJob.id, job.id),
+    eq(buildJob.attempts, job.attempts),
+    inArray(buildJob.status, ['building', 'validating', 'deploying']),
+    sql`${buildJob.leaseExpiresAt} > now()`,
+  )
+  const heartbeat = setInterval(() => {
+    void db
+      .update(buildJob)
+      .set({ leaseExpiresAt: new Date(Date.now() + LEASE_MS) })
+      .where(fence)
+      .catch((error) =>
+        logger.error('lease renewal failed', { jobId: job.id, err: error }),
+      )
+  }, HEARTBEAT_MS)
+  const transition = async (status: 'validating' | 'deploying') => {
+    const [owned] = await db
+      .update(buildJob)
+      .set({ status })
+      .where(fence)
+      .returning({ id: buildJob.id })
+    if (!owned) throw new Error('Publication worker lease lost')
+  }
   const logs: Promise<void>[] = []
   const log = (line: string) => {
     logs.push(
       appendLog(job.id, line).catch((error) => {
-        console.error('[areca] appendLog failed', error)
+        logger.error('appendLog failed', { jobId: job.id, err: error })
       }),
     )
   }
@@ -115,16 +205,21 @@ export async function processJob(
       return
     }
 
-    await db
-      .update(publication)
-      .set({ status: 'building' })
-      .where(eq(publication.id, pub.id))
+    await db.transaction(async (tx) => {
+      const [owned] = await tx
+        .select()
+        .from(buildJob)
+        .where(fence)
+        .for('update')
+      if (!owned) throw new Error('Publication worker lease lost')
+      await tx
+        .update(publication)
+        .set({ status: 'building' })
+        .where(eq(publication.id, pub.id))
+    })
     log('publication building')
 
-    await db
-      .update(buildJob)
-      .set({ status: 'validating' })
-      .where(eq(buildJob.id, job.id))
+    await transition('validating')
     log('validating snapshot')
 
     if (!pub.snapshot || !pub.snapshotHash) {
@@ -146,16 +241,18 @@ export async function processJob(
       return
     }
 
-    await db
-      .update(buildJob)
-      .set({ status: 'deploying' })
-      .where(eq(buildJob.id, job.id))
+    await transition('deploying')
     log('deploying')
 
     const target = existingSite.deploymentTarget
-    if (!target) {
-      log('no deployment target configured, marking live without deploy')
+    const demo = pub.publishingMode === 'demo'
+    if (demo) {
+      log('Demo publication: no production deployment or live verification')
     } else {
+      if (!target?.applicationId || !target.healthCheckUrl)
+        throw new Error(
+          'Production publishing requires a deployment target and publication-aware health URL',
+        )
       const adapterTarget: DeploymentTarget = {
         provider: 'dokploy',
         applicationId: target.applicationId,
@@ -203,56 +300,87 @@ export async function processJob(
 
     const now = new Date()
     await db.transaction(async (tx) => {
+      const [owned] = await tx
+        .select()
+        .from(buildJob)
+        .where(fence)
+        .for('update')
+      if (!owned) throw new Error('Publication worker lease lost')
       await tx
         .update(publication)
         .set({ status: 'superseded' })
         .where(
           and(
             eq(publication.siteId, job.siteId),
-            eq(publication.status, 'live'),
+            eq(publication.status, demo ? 'demo' : 'live'),
             ne(publication.id, pub.id),
           ),
         )
       await tx
         .update(publication)
-        .set({ status: 'live', deployedAt: now, wasLive: true })
+        .set({
+          status: demo ? 'demo' : 'live',
+          deployedAt: demo ? null : now,
+          wasLive: !demo,
+        })
         .where(eq(publication.id, pub.id))
       await tx
         .update(buildJob)
-        .set({ status: 'succeeded', finishedAt: now, error: null })
-        .where(eq(buildJob.id, job.id))
-      await tx
-        .update(entry)
         .set({
-          status: 'published',
-          publishedData: sql`${entry.draftData}`,
-          publishedAt: now,
-          scheduledAt: null,
-          scheduleTimezone: null,
-          // Not an edit: keep `updatedAt`, otherwise the entry reads as
-          // changed after this (now live) release and stays "ready".
+          status: 'succeeded',
+          finishedAt: now,
+          error: null,
+          leaseExpiresAt: null,
         })
-        .where(
-          and(
-            eq(entry.siteId, job.siteId),
-            eq(entry.status, 'scheduled'),
-            lte(entry.scheduledAt, now),
-          ),
-        )
+        .where(eq(buildJob.id, job.id))
+      for (const selected of pub.entryVersions) {
+        await tx
+          .update(entry)
+          .set({
+            status: 'published',
+            publishedData: sql`${entry.scheduledData}`,
+            publishedSlug: sql`${entry.scheduledSlug}`,
+            publishedAt: now,
+            scheduledAt: null,
+            scheduleTimezone: null,
+            scheduledData: null,
+            scheduledSlug: null,
+            scheduledVersion: null,
+          })
+          .where(
+            and(
+              eq(entry.siteId, job.siteId),
+              eq(entry.id, selected.entryId),
+              eq(entry.scheduledVersion, selected.scheduledVersion),
+              eq(entry.status, 'scheduled'),
+            ),
+          )
+      }
     })
 
-    log('publication live')
+    log(
+      demo
+        ? 'Demo publication ready (not production live)'
+        : 'publication live',
+    )
     await audit({
       organizationId: existingSite.organizationId,
       siteId: job.siteId,
       actorId: pub.requestedBy,
-      action: 'publication.live',
+      action: demo ? 'publication.demo' : 'publication.live',
       targetType: 'publication',
       targetId: pub.id,
       meta: { jobId: job.id },
     })
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
+    const message = redactString(
+      error instanceof Error ? error.message : String(error),
+    )
+    logger.error('job failed', {
+      jobId: job.id,
+      siteId: job.siteId,
+      err: error,
+    })
     try {
       const [existingSite] = await db
         .select({ organizationId: site.organizationId })
@@ -266,9 +394,13 @@ export async function processJob(
         existingSite?.organizationId ?? null,
       )
     } catch (failError) {
-      console.error('[areca] processJob failed to record failure', failError)
+      logger.error('processJob failed to record failure', {
+        jobId: job.id,
+        err: failError,
+      })
     }
   } finally {
+    clearInterval(heartbeat)
     await Promise.allSettled(logs)
   }
 }
@@ -279,15 +411,28 @@ async function failJob(
   error: string,
   organizationId: string | null,
 ) {
+  error = redactString(error)
   const now = new Date()
-  await db
-    .update(buildJob)
-    .set({ status: 'failed', error, finishedAt: now })
-    .where(eq(buildJob.id, job.id))
-  await db
-    .update(publication)
-    .set({ status: 'failed' })
-    .where(eq(publication.id, publicationId))
+  const recorded = await db.transaction(async (tx) => {
+    const [failed] = await tx
+      .update(buildJob)
+      .set({ status: 'failed', error, finishedAt: now, leaseExpiresAt: null })
+      .where(
+        and(
+          eq(buildJob.id, job.id),
+          eq(buildJob.attempts, job.attempts),
+          inArray(buildJob.status, ['building', 'validating', 'deploying']),
+        ),
+      )
+      .returning()
+    if (!failed) return false
+    await tx
+      .update(publication)
+      .set({ status: 'failed' })
+      .where(eq(publication.id, publicationId))
+    return true
+  })
+  if (!recorded) return
   await appendLog(job.id, `failed: ${error}`)
   if (organizationId) {
     await audit({
@@ -302,12 +447,84 @@ async function failJob(
   }
 }
 
-async function tick() {
-  try {
-    await Promise.all([runOnce(), runOnce()])
-    await runSchedulerTick()
-  } catch (error) {
-    console.error('[areca] publishing worker tick failed', error)
+export type JobPool = {
+  /** Claims jobs until the concurrency cap is reached or the queue is empty. */
+  fill: () => Promise<void>
+  inFlight: () => number
+  /** Stops claiming and waits (bounded) for running jobs. True if all finished. */
+  drain: (timeoutMs?: number) => Promise<boolean>
+}
+
+/**
+ * Runs claimed jobs as tracked in-flight promises. `fill` only awaits claims,
+ * never a job, so a slow deployment for one site cannot delay claiming work for
+ * other sites. Per-site serialization stays in the database (claim SQL,
+ * partial unique indexes, leases).
+ */
+export function createJobPool({
+  concurrency,
+  claim,
+  run,
+}: {
+  concurrency: number
+  claim: () => Promise<typeof buildJob.$inferSelect | null>
+  run: (job: typeof buildJob.$inferSelect) => Promise<unknown>
+}): JobPool {
+  const running = new Set<Promise<void>>()
+  let filling: Promise<void> | null = null
+  let stopped = false
+
+  const fillOnce = async () => {
+    while (!stopped && running.size < concurrency) {
+      let job: typeof buildJob.$inferSelect | null
+      try {
+        job = await claim()
+      } catch (error) {
+        logger.error('claiming job failed', { err: error })
+        return
+      }
+      if (!job) return
+      const task: Promise<void> = Promise.resolve()
+        .then(async () => {
+          await run(job)
+        })
+        .catch((error) =>
+          logger.error('job run failed', { jobId: job.id, err: error }),
+        )
+        .finally(() => {
+          running.delete(task)
+          // A slot freed up: pick up queued work without waiting for the timer.
+          void fill()
+        })
+      running.add(task)
+    }
+  }
+  const fill = () => {
+    filling ??= fillOnce().finally(() => {
+      filling = null
+    })
+    return filling
+  }
+
+  return {
+    fill,
+    inFlight: () => running.size,
+    async drain(timeoutMs = 30_000) {
+      stopped = true
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const timeout = new Promise<'timeout'>((resolve) => {
+        timer = setTimeout(() => resolve('timeout'), timeoutMs)
+      })
+      try {
+        const result = await Promise.race([
+          Promise.allSettled([...running, filling]).then(() => 'done' as const),
+          timeout,
+        ])
+        return result === 'done'
+      } finally {
+        clearTimeout(timer)
+      }
+    },
   }
 }
 
@@ -316,34 +533,143 @@ export async function recoverStaleJobs(
   now = new Date(),
 ) {
   const cutoff = new Date(now.getTime() - olderThanMs)
-  const stale = await db
-    .select()
-    .from(buildJob)
-    .where(
-      and(
-        inArray(buildJob.status, [...STALE_JOB_STATUSES]),
-        or(
-          and(isNotNull(buildJob.startedAt), lte(buildJob.startedAt, cutoff)),
-          and(isNull(buildJob.startedAt), lte(buildJob.createdAt, cutoff)),
+  // Lock and fence in one transaction. A heartbeat cannot resurrect an expired lease.
+  return db.transaction(async (tx) => {
+    const stale = await tx
+      .select()
+      .from(buildJob)
+      .where(
+        and(
+          inArray(buildJob.status, [...STALE_JOB_STATUSES]),
+          or(
+            lte(buildJob.leaseExpiresAt, now),
+            and(
+              isNull(buildJob.leaseExpiresAt),
+              or(
+                lte(buildJob.startedAt, cutoff),
+                and(
+                  isNull(buildJob.startedAt),
+                  lte(buildJob.createdAt, cutoff),
+                ),
+              ),
+            ),
+          ),
         ),
-      ),
-    )
+      )
+      .for('update', { skipLocked: true })
+    for (const job of stale) {
+      await tx
+        .update(buildJob)
+        .set({
+          status: 'failed',
+          finishedAt: now,
+          error: 'Worker lease expired; retry publication',
+          leaseExpiresAt: null,
+        })
+        .where(
+          and(eq(buildJob.id, job.id), eq(buildJob.attempts, job.attempts)),
+        )
+      await tx
+        .update(publication)
+        .set({ status: 'failed' })
+        .where(eq(publication.id, job.publicationId))
+    }
+    return stale
+  })
+}
 
-  for (const job of stale) {
-    const [existingSite] = await db
-      .select({ organizationId: site.organizationId })
-      .from(site)
-      .where(eq(site.id, job.siteId))
-      .limit(1)
-    await failJob(
-      job,
-      job.publicationId,
-      'worker restarted',
-      existingSite?.organizationId ?? null,
-    )
-  }
+export type WorkerLoopDeps = {
+  /** Claims queued jobs and starts them; must return without awaiting them. */
+  processJobs: () => Promise<unknown>
+  recover: () => Promise<unknown>
+  /** Enqueues due scheduled publications. */
+  schedule: () => Promise<unknown>
+}
 
-  return stale
+/**
+ * Three independent timers, each with its own in-flight guard, so a slow
+ * deployment (up to DEPLOY_TIMEOUT_MS) never delays recovery or the
+ * scheduling of due entries for other sites:
+ * - jobs: claims and runs queued jobs
+ * - recovery: fails jobs whose lease expired
+ * - scheduler: turns due scheduled entries into publications
+ */
+export function startWorkerLoops(
+  deps: WorkerLoopDeps,
+  {
+    intervalMs = 3000,
+    schedulerIntervalMs = Math.min(intervalMs, 15_000),
+  } = {},
+): WorkerState {
+  markLoopsStarted()
+  const state = {
+    ticking: true,
+    schedulerTicking: false,
+  } as WorkerState
+  let recovering = false
+
+  state.recoveryTimer = setInterval(
+    () => {
+      if (recovering) return
+      recovering = true
+      void deps
+        .recover()
+        .catch((error) =>
+          logger.error('periodic recovery failed', { err: error }),
+        )
+        .finally(() => {
+          recovering = false
+        })
+    },
+    Math.min(intervalMs, 15_000),
+  )
+  state.timer = setInterval(() => {
+    // The timer firing proves the event loop is alive even while a long
+    // deployment keeps the previous tick in flight.
+    recordTick('worker')
+    if (state.ticking) return
+    state.ticking = true
+    void deps
+      .processJobs()
+      .catch((error) => logger.error('worker tick failed', { err: error }))
+      .finally(() => {
+        state.ticking = false
+      })
+  }, intervalMs)
+  state.schedulerTimer = setInterval(() => {
+    if (state.schedulerTicking) return
+    state.schedulerTicking = true
+    void deps
+      .schedule()
+      .then(() => recordTick('scheduler'))
+      .catch((error) => logger.error('scheduler tick failed', { err: error }))
+      .finally(() => {
+        state.schedulerTicking = false
+      })
+  }, schedulerIntervalMs)
+
+  // Boot: recover once, then start processing and scheduling immediately.
+  void deps
+    .recover()
+    .catch((error) => logger.error('stale job recovery failed', { err: error }))
+    .finally(() => {
+      recordTick('worker')
+      void deps
+        .processJobs()
+        .catch((error) => logger.error('worker tick failed', { err: error }))
+        .finally(() => {
+          state.ticking = false
+        })
+    })
+  state.schedulerTicking = true
+  void deps
+    .schedule()
+    .then(() => recordTick('scheduler'))
+    .catch((error) => logger.error('scheduler tick failed', { err: error }))
+    .finally(() => {
+      state.schedulerTicking = false
+    })
+  return state
 }
 
 export function startWorker({
@@ -352,32 +678,56 @@ export function startWorker({
   if (!env.WORKER_ENABLED) return
   if (g.__arecaWorker) return g.__arecaWorker
 
-  console.log(`[areca] publishing worker started (interval ${intervalMs}ms)`)
-  const state: WorkerState = {
-    timer: setInterval(() => {
-      if (state.ticking) return
-      state.ticking = true
-      void tick().finally(() => {
-        state.ticking = false
-      })
-    }, intervalMs),
-    ticking: true,
-  }
+  const pool = createJobPool({
+    concurrency: env.WORKER_CONCURRENCY,
+    claim: claimNextJob,
+    run: (job) => processJob(job),
+  })
+  logger.info('publishing worker started', {
+    intervalMs,
+    concurrency: env.WORKER_CONCURRENCY,
+  })
+  const state = startWorkerLoops(
+    {
+      processJobs: pool.fill,
+      recover: () => recoverStaleJobs(),
+      schedule: () => runSchedulerTick(),
+    },
+    { intervalMs },
+  )
+  state.pool = pool
   g.__arecaWorker = state
-  void recoverStaleJobs()
-    .catch((error) => {
-      console.error('[areca] stale job recovery failed', error)
-    })
-    .finally(() => {
-      state.ticking = false
-      void tick()
-    })
+  installShutdownHandlers({
+    stop: () => stopWorker({ drainTimeoutMs: env.WORKER_DRAIN_TIMEOUT_MS }),
+    exit: (code) => process.exit(code),
+  })
   return state
 }
 
-export function stopWorker() {
+/**
+ * Stops the timers, stops claiming, and waits up to `drainTimeoutMs` for
+ * in-flight jobs. Jobs still running afterwards keep their lease and are
+ * recovered by the next process if it never finishes them.
+ */
+export async function stopWorker({
+  drainTimeoutMs = 30_000,
+}: { drainTimeoutMs?: number } = {}) {
   const state = g.__arecaWorker
-  if (!state) return
-  clearInterval(state.timer)
+  if (!state) return true
+  stopWorkerLoops(state)
   g.__arecaWorker = undefined
+  const drained = (await state.pool?.drain(drainTimeoutMs)) ?? true
+  if (!drained) {
+    logger.warn('worker stopped with jobs still in flight', {
+      inFlight: state.pool?.inFlight(),
+    })
+  }
+  return drained
+}
+
+export function stopWorkerLoops(state: WorkerState) {
+  clearInterval(state.timer)
+  clearInterval(state.recoveryTimer)
+  clearInterval(state.schedulerTimer)
+  markLoopsStopped()
 }

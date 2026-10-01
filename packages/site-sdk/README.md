@@ -48,22 +48,22 @@ Flags: `--cms-url`, `--token`, `--site-key`, `--out` (default `src/generated/con
 `areca.config.ts`:
 
 ```ts
-import { defineSiteContent } from '@areca-cms/site-sdk'
+import { defineSiteContent } from "@areca-cms/site-sdk";
 
 export default defineSiteContent({
-  siteKey: 'demo',
+  siteKey: "demo",
   collections: {
     articles: {
-      route: '/blog/$slug',
-      label: 'Articles',
+      route: "/blog/$slug",
+      label: "Articles",
       fields: [
-        { key: 'title', label: 'Title', type: 'text', required: true },
-        { key: 'body', label: 'Body', type: 'richtext' },
-        { key: 'cover', label: 'Cover', type: 'image' },
+        { key: "title", label: "Title", type: "text", required: true },
+        { key: "body", label: "Body", type: "richtext" },
+        { key: "cover", label: "Cover", type: "image" },
       ],
     },
   },
-})
+});
 ```
 
 Push the schema to the CMS (Node 24 can import `.ts` natively):
@@ -113,23 +113,27 @@ The command exits `1` if no publication exists. Do not add a `prebuild` pull unt
 ## 4. Read content in a loader / prerender
 
 ```ts
-import { readContent } from '@areca-cms/site-sdk/pull'
-import { richTextDocument } from '@areca-cms/site-sdk'
-import type { ImageValue, RichTextValue, SnapshotEntry } from '@areca-cms/site-sdk'
+import { readContent } from "@areca-cms/site-sdk/pull";
+import { richTextDocument } from "@areca-cms/site-sdk";
+import type {
+  ImageValue,
+  RichTextValue,
+  SnapshotEntry,
+} from "@areca-cms/site-sdk";
 
 type ArticleData = {
-  title: string
-  body: RichTextValue
-  cover: ImageValue | null
-}
+  title: string;
+  body: RichTextValue;
+  cover: ImageValue | null;
+};
 
 const articles = readContent<SnapshotEntry & { data: ArticleData }>(
-  'src/generated/content',
-  'articles',
-)
+  "src/generated/content",
+  "articles",
+);
 
 export function articleDocument(article: (typeof articles)[number]) {
-  return richTextDocument(article.data.body)
+  return richTextDocument(article.data.body);
 }
 ```
 
@@ -141,18 +145,18 @@ Rich text fields arrive as `{ json, markdown, document, html }`. `document` is a
 map so the site decides how every element looks:
 
 ```tsx
-import { Markdown } from '@tanstack/markdown/react'
-import type { MarkdownComponents } from '@tanstack/markdown/react'
-import { richTextDocument } from '@areca-cms/site-sdk'
+import { Markdown } from "@tanstack/markdown/react";
+import type { MarkdownComponents } from "@tanstack/markdown/react";
+import { richTextDocument } from "@areca-cms/site-sdk";
 
 const components = {
   h2: (props) => <h2 {...props} className="mt-10 text-2xl font-semibold" />,
   a: (props) => <a {...props} rel="noopener noreferrer" target="_blank" />,
   img: (props) => <img {...props} loading="lazy" className="rounded-xl" />,
-} satisfies MarkdownComponents
+} satisfies MarkdownComponents;
 
 export function ArticleBody({ body }: { body: RichTextValue }) {
-  return <Markdown components={components}>{richTextDocument(body)}</Markdown>
+  return <Markdown components={components}>{richTextDocument(body)}</Markdown>;
 }
 ```
 
@@ -196,12 +200,18 @@ function PreviewPage() {
 ## Programmatic API
 
 ```ts
-import { createArecaClient } from '@areca-cms/site-sdk'
-import { pullContent } from '@areca-cms/site-sdk/pull'
+import { createArecaClient } from "@areca-cms/site-sdk";
+import { pullContent } from "@areca-cms/site-sdk/pull";
 
-const client = createArecaClient() // or { cmsUrl, siteToken }
-await client.syncManifest(config)
-const manifest = await client.fetchManifest()
-const snapshot = await client.fetchSnapshot()
-await pullContent({ outDir: 'src/generated/content', client })
+const client = createArecaClient(); // or { cmsUrl, siteToken }
+await client.syncManifest(config);
+const manifest = await client.fetchManifest();
+const snapshot = await client.fetchSnapshot();
+await pullContent({ outDir: "src/generated/content", client });
 ```
+
+### Token privileges and upgrade
+
+`ARECA_SITE_TOKEN` is read-only (snapshot, preview, manifest GET). Manifest POST now requires a separate `ARECA_SCHEMA_TOKEN`, or `createArecaClient({ schemaToken })`. Existing site tokens immediately lose schema-write permission after migration. An agency administrator can rotate/reveal the schema token in Site settings → Developer. Set it only in the local schema-authoring environment; keep it out of Docker build secrets and deployment environments. `areca init` creates a blank schema-token entry in `.env.example`; configure it before `areca manifest push`. Build integrations including the demo site continue using only `ARECA_SITE_TOKEN`.
+
+Collection and field keys must begin with an ASCII letter and contain at most 64 ASCII letters, digits, `_` or `-`. Prototype, Windows device and `manifest` names are reserved (case insensitive). Invalid existing keys must be renamed by an administrator before syncing or pulling. Pull independently rejects unsafe names and symlink destinations before writing collection JSON.

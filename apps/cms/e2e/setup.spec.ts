@@ -43,6 +43,9 @@ test('an empty CMS welcomes the first admin and lands in the Agency checklist', 
   await page.getByLabel('Email').fill(ADMIN)
   const password = page.getByLabel('Password')
   await password.fill(PASSWORD)
+  await page
+    .getByLabel('Setup token')
+    .fill(process.env.SETUP_TOKEN ?? 'e2e-setup-token-0123456789')
   // The eye toggles the password's visibility.
   await expect(password).toHaveAttribute('type', 'password')
   await page.getByTestId('password-visibility').click()

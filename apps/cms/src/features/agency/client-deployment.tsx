@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle, CloudArrowUp, Trash } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
+import { useStepUp } from '#/features/security/step-up'
 import { adminQueryKeys, errorMessage } from '#/lib/admin/helpers'
 import { Button } from '#/components/ui/button'
 import { ConfirmDialog } from '#/components/ui/confirm-dialog'
@@ -32,6 +33,7 @@ type Applications = Awaited<ReturnType<typeof verifyDokployCredentialsFn>>
  */
 function useDokploy(organizationId: string) {
   const queryClient = useQueryClient()
+  const stepUp = useStepUp()
   const status = useQuery(dokployStatusQuery(organizationId))
   const [applications, setApplications] = React.useState<
     Applications | undefined
@@ -44,7 +46,9 @@ function useDokploy(organizationId: string) {
 
   const save = useMutation({
     mutationFn: (input: { url: string; apiKey?: string }) =>
-      saveDokployCredentialsFn({ data: { organizationId, ...input } }),
+      stepUp.run(() =>
+        saveDokployCredentialsFn({ data: { organizationId, ...input } }),
+      ),
     onMutate: () => setFailure(null),
     onSuccess: async (result) => {
       toast.success(m.admin_org_dokploy_saved())
@@ -74,7 +78,10 @@ function useDokploy(organizationId: string) {
   })
 
   const remove = useMutation({
-    mutationFn: () => removeDokployCredentialsFn({ data: { organizationId } }),
+    mutationFn: () =>
+      stepUp.run(() =>
+        removeDokployCredentialsFn({ data: { organizationId } }),
+      ),
     onSuccess: async () => {
       toast.success(m.admin_org_dokploy_removed())
       setApplications(undefined)

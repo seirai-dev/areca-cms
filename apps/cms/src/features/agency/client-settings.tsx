@@ -10,6 +10,7 @@ import { FormField } from '#/components/ui/form-field'
 import { Input } from '#/components/ui/input'
 import { SettingsSection } from '#/components/ui/settings-section'
 import { Hint } from '#/components/ui/tooltip'
+import { useStepUp } from '#/features/security/step-up'
 import { m } from '#/paraglide/messages'
 import { deleteOrganizationFn, updateOrganizationFn } from '#/server/fn/admin'
 
@@ -20,6 +21,7 @@ function useClientSettings(client: ClientRow) {
   const queryClient = useQueryClient()
   const router = useRouter()
   const navigate = useNavigate()
+  const stepUp = useStepUp()
 
   const rename = useMutation({
     mutationFn: (name: string) =>
@@ -38,7 +40,8 @@ function useClientSettings(client: ClientRow) {
   })
 
   const remove = useMutation({
-    mutationFn: () => deleteOrganizationFn({ data: { id: client.id } }),
+    mutationFn: () =>
+      stepUp.run(() => deleteOrganizationFn({ data: { id: client.id } })),
     onSuccess: async () => {
       toast.success(m.agency_client_deleted())
       await queryClient.invalidateQueries({

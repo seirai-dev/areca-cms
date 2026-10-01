@@ -5,6 +5,7 @@ import { buildJob, entry, publication, site, user } from '#/db/schema'
 import type { BuildJobStatus } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
+import { assetMutationLock } from '#/server/assets/usage'
 import { buildSnapshot } from '#/server/content/snapshot'
 import {
   ConflictError,
@@ -39,17 +40,33 @@ export async function requestPublication(input: {
   | { ok: false; errors: string[] }
 > {
   const existingSite = await getSiteOrThrow(input.siteId)
-  const built = await buildSnapshot(input.siteId)
-  if (!built.ok) {
-    return { ok: false, errors: built.errors }
-  }
-
   const publicationId = crypto.randomUUID()
-  const snapshot = { ...built.snapshot, publicationId }
   const actorId = dbActorId(input.actorId)
   const priority = input.priority ?? 0
 
   const created = await db.transaction(async (tx) => {
+    const [lockedSite] = await tx
+      .select()
+      .from(site)
+      .where(eq(site.id, input.siteId))
+      .for('update')
+    if (!lockedSite) throw new NotFoundError(m.server_site_not_found())
+    if (
+      lockedSite.publishingMode !== 'demo' &&
+      (!lockedSite.deploymentTarget?.applicationId ||
+        !lockedSite.deploymentTarget.healthCheckUrl)
+    ) {
+      return {
+        ok: false as const,
+        errors: [
+          'Production publishing requires a deployment target and a publication-aware health URL.',
+        ],
+      }
+    }
+    await assetMutationLock(tx, lockedSite.organizationId)
+    const built = await buildSnapshot(input.siteId, tx)
+    if (!built.ok) return { ok: false as const, errors: built.errors }
+    const snapshot = { ...built.snapshot, publicationId }
     const [pub] = await tx
       .insert(publication)
       .values({
@@ -57,6 +74,8 @@ export async function requestPublication(input: {
         siteId: input.siteId,
         snapshot,
         snapshotHash: built.hash,
+        entryVersions: built.entryVersions,
+        publishingMode: lockedSite.publishingMode,
         requestedBy: actorId,
         status: 'pending',
       })
@@ -108,9 +127,10 @@ export async function requestPublication(input: {
       throw new Error(m.server_failed_to_create_build_job())
     }
 
-    return { publication: pub, job }
+    return { ok: true as const, publication: pub, job }
   })
 
+  if (!created.ok) return created
   await audit({
     organizationId: existingSite.organizationId,
     siteId: input.siteId,
@@ -125,7 +145,7 @@ export async function requestPublication(input: {
     },
   })
 
-  return { ok: true, ...created }
+  return created
 }
 
 export async function requestRollback(input: {
@@ -155,15 +175,35 @@ export async function requestRollback(input: {
   const actorId = dbActorId(input.actorId)
 
   const created = await db.transaction(async (tx) => {
+    const [lockedSite] = await tx
+      .select()
+      .from(site)
+      .where(eq(site.id, input.siteId))
+      .for('update')
+    if (!lockedSite) throw new NotFoundError(m.server_site_not_found())
+    if (
+      lockedSite.publishingMode !== 'demo' &&
+      (!lockedSite.deploymentTarget?.applicationId ||
+        !lockedSite.deploymentTarget.healthCheckUrl)
+    )
+      throw new ConflictError(
+        'Production publishing requires a deployment target and publication-aware health URL',
+      )
+    const rollbackId = crypto.randomUUID()
     const [updated] = await tx
-      .update(publication)
-      .set({ status: 'pending', deployedAt: null })
-      .where(eq(publication.id, pub.id))
+      .insert(publication)
+      .values({
+        siteId: input.siteId,
+        id: rollbackId,
+        snapshot: { ...pub.snapshot, publicationId: rollbackId },
+        snapshotHash: pub.snapshotHash,
+        requestedBy: actorId,
+        publishingMode: lockedSite.publishingMode,
+        entryVersions: [],
+        status: 'pending',
+      })
       .returning()
-
-    if (!updated) {
-      throw new NotFoundError(m.server_publication_not_found())
-    }
+    if (!updated) throw new NotFoundError(m.server_publication_not_found())
 
     const queued = await tx
       .select()
@@ -312,7 +352,7 @@ export async function cancelJob(id: string, actorId: string) {
   const [updated] = await db
     .update(buildJob)
     .set({ status: 'cancelled', finishedAt: new Date() })
-    .where(eq(buildJob.id, id))
+    .where(and(eq(buildJob.id, id), eq(buildJob.status, 'queued')))
     .returning()
 
   if (!updated) {
@@ -391,6 +431,18 @@ export async function getSiteReleaseStatus(siteId: string) {
 
   return {
     live,
+    publishingMode: (await getSiteOrThrow(siteId)).publishingMode,
+    demo:
+      (
+        await db
+          .select()
+          .from(publication)
+          .where(
+            and(eq(publication.siteId, siteId), eq(publication.status, 'demo')),
+          )
+          .orderBy(desc(publication.createdAt))
+          .limit(1)
+      )[0] ?? null,
     activeJob: activeJob ?? queuedJob ?? null,
     pendingEntries: Number(pending?.count ?? 0),
   }

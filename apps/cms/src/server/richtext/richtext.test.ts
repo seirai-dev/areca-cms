@@ -1,3 +1,4 @@
+import { ValidationError } from '#/server/content/errors'
 import { describe, expect, it } from 'vitest'
 
 import { env } from '#/env'
@@ -471,6 +472,15 @@ describe('convertRichText', () => {
     expect(() =>
       convertRichText({ type: 'doc', content: [{ type: 'script' }] }),
     ).toThrow(/Unknown node type "script"/)
+  })
+
+  it('throws a typed ValidationError that reaches the UI', () => {
+    try {
+      convertRichText({ type: 'doc', content: [{ type: 'script' }] })
+      expect.unreachable()
+    } catch (error) {
+      expect(error).toBeInstanceOf(ValidationError)
+    }
   })
 })
 

@@ -77,7 +77,12 @@ export default defineConfig({
         stdout: 'ignore',
         stderr: 'pipe',
         // A frozen dev server: no watcher, no hot reloads (see vite.config.ts).
-        env: { VITE_FREEZE: 'true' },
+        env: {
+          VITE_FREEZE: 'true',
+          // Setup spec token; the seeded admins have no two-factor enrolled.
+          SETUP_TOKEN: process.env.SETUP_TOKEN ?? 'e2e-setup-token-0123456789',
+          ADMIN_MFA_REQUIRED: 'false',
+        },
       }
     : undefined,
 })

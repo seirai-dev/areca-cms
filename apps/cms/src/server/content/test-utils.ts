@@ -52,6 +52,7 @@ export async function createTestSite() {
   if (!actor) throw new Error('Failed to create user')
 
   const rawToken = randomBytes(32).toString('hex')
+  const schemaToken = randomBytes(32).toString('hex')
   const previewSecret = randomBytes(32).toString('hex')
   const [createdSite] = await db
     .insert(site)
@@ -60,6 +61,7 @@ export async function createTestSite() {
       name: `Test Site ${suffix}`,
       slug: `test-site-${suffix}`,
       tokenHash: createHash('sha256').update(rawToken).digest('hex'),
+      schemaTokenHash: createHash('sha256').update(schemaToken).digest('hex'),
       productionUrl: 'http://localhost:3999',
       previewSecret,
     })
@@ -71,6 +73,7 @@ export async function createTestSite() {
     actor,
     site: createdSite,
     token: rawToken,
+    schemaToken,
     previewSecret,
     suffix,
   }

@@ -8,6 +8,7 @@ import { Button } from '#/components/ui/button'
 import { FormField } from '#/components/ui/form-field'
 import { Input } from '#/components/ui/input'
 import { SlideOver } from '#/components/ui/slide-over'
+import { useStepUp } from '#/features/security/step-up'
 import { TokenReveal } from '#/features/site-settings/token-reveal'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
@@ -49,12 +50,16 @@ export function writePendingToken(orgId: string, value: PendingToken | null) {
 function useCreateSite(orgId: string) {
   const queryClient = useQueryClient()
   const router = useRouter()
+  const stepUp = useStepUp()
   return useMutation({
     mutationFn: (input: {
       name: string
       slug: string
       productionUrl: string
-    }) => createSiteFn({ data: { organizationId: orgId, ...input } }),
+    }) =>
+      stepUp.run(() =>
+        createSiteFn({ data: { organizationId: orgId, ...input } }),
+      ),
     onSuccess: async () => {
       toast.success(m.admin_org_toast_site_created())
       await Promise.all([

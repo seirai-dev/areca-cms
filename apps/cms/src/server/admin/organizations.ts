@@ -1,8 +1,16 @@
 import { eq, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
-import { membership, organization, site } from '#/db/schema'
+import {
+  asset,
+  membership,
+  organization,
+  site,
+  storageObjectDeletion,
+} from '#/db/schema'
 import { m } from '#/paraglide/messages'
+import { assetMutationLock } from '#/server/assets/usage'
+import { drainStorageObjectDeletions } from '#/server/assets'
 import { audit } from '#/server/audit'
 import { ConflictError, NotFoundError } from '#/server/content/errors'
 
@@ -59,52 +67,68 @@ export async function createOrganization(input: {
     throw new ConflictError(m.server_slug_already_exists())
   }
 
-  const [created] = await db
-    .insert(organization)
-    .values({ name: input.name, slug: input.slug })
-    .returning()
-  if (!created) {
-    throw new Error(m.server_failed_to_create_organization())
-  }
+  return db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(organization)
+      .values({ name: input.name, slug: input.slug })
+      .returning()
+    if (!created) {
+      throw new Error(m.server_failed_to_create_organization())
+    }
 
-  await audit({
-    organizationId: created.id,
-    actorId: input.actorId,
-    action: 'organization.create',
-    targetType: 'organization',
-    targetId: created.id,
-    meta: { slug: created.slug },
+    await audit(
+      {
+        organizationId: created.id,
+        actorId: input.actorId,
+        action: 'organization.create',
+        targetType: 'organization',
+        targetId: created.id,
+        meta: { slug: created.slug },
+      },
+      tx,
+    )
+
+    return created
   })
-
-  return created
 }
 
-export async function updateOrganization(id: string, input: { name: string }) {
+export async function updateOrganization(
+  id: string,
+  input: { name: string },
+  actorId: string,
+) {
   const existing = await getOrganization(id)
   if (!existing) {
     throw new NotFoundError(m.server_organization_not_found())
   }
 
-  const [updated] = await db
-    .update(organization)
-    .set({ name: input.name, updatedAt: new Date() })
-    .where(eq(organization.id, id))
-    .returning()
-  if (!updated) {
-    throw new NotFoundError(m.server_organization_not_found())
-  }
+  return db.transaction(async (tx) => {
+    const [updated] = await tx
+      .update(organization)
+      .set({ name: input.name, updatedAt: new Date() })
+      .where(eq(organization.id, id))
+      .returning()
+    if (!updated) {
+      throw new NotFoundError(m.server_organization_not_found())
+    }
 
-  await audit({
-    organizationId: id,
-    action: 'organization.update',
-    targetType: 'organization',
-    targetId: id,
+    await audit(
+      {
+        organizationId: id,
+        actorId,
+        action: 'organization.update',
+        targetType: 'organization',
+        targetId: id,
+        meta: { name: input.name, previousName: existing.name },
+      },
+      tx,
+    )
+
+    return updated
   })
-
-  return updated
 }
 
-export async function deleteOrganization(id: string) {
+export async function deleteOrganization(id: string, actorId: string) {
   const existing = await getOrganization(id)
   if (!existing) {
     throw new NotFoundError(m.server_organization_not_found())
@@ -119,5 +143,31 @@ export async function deleteOrganization(id: string) {
     throw new ConflictError(m.server_cannot_delete_org_with_sites())
   }
 
-  await db.delete(organization).where(eq(organization.id, id))
+  await db.transaction(async (tx) => {
+    await assetMutationLock(tx, id)
+    const objects = await tx
+      .select({ storageKey: asset.storageKey })
+      .from(asset)
+      .where(eq(asset.organizationId, id))
+    if (objects.length)
+      await tx
+        .insert(storageObjectDeletion)
+        .values(objects)
+        .onConflictDoNothing()
+    await tx.delete(organization).where(eq(organization.id, id))
+    // The organization's own audit rows cascade away with it, so the deletion
+    // is recorded at instance level.
+    await audit(
+      {
+        organizationId: null,
+        actorId,
+        action: 'organization.delete',
+        targetType: 'organization',
+        targetId: id,
+        meta: { name: existing.name, slug: existing.slug },
+      },
+      tx,
+    )
+  })
+  await drainStorageObjectDeletions()
 }

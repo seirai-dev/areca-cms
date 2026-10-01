@@ -97,6 +97,10 @@ pnpm -r typecheck
 - [`docs/DESIGN.md`](docs/DESIGN.md) — design system: tokens, type, primitives, patterns, checklist
 - [`docs/design/brief.md`](docs/design/brief.md) — the UI/UX redo specification and its deviations
 - [`docs/DECISIONS.md`](docs/DECISIONS.md) — architecture decisions
+- [`docs/UPGRADES.md`](docs/UPGRADES.md) — upgrades, migrations, rollback and staging checklist
+- [`docs/OPERATIONS.md`](docs/OPERATIONS.md) — health checks, logs and day-to-day operation
+- [`docker/RECOVERY.md`](docker/RECOVERY.md) — backup, restore and organization export/import
+- [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — Dokploy deployment, media privacy and secret handling
 - [`docs/MVP_STATUS.md`](docs/MVP_STATUS.md) — Suggested MVP audit
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — Dokploy customer-site deploy
 - [`PROJECT.md`](PROJECT.md) — original design notes

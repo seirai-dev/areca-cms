@@ -1,4 +1,5 @@
 import type { FieldType, MembershipRole } from '#/lib/types'
+import { stripSecurityCode } from '#/lib/security-errors'
 import { m } from '#/paraglide/messages'
 
 export const FIELD_TYPES: FieldType[] = [
@@ -37,7 +38,7 @@ export const adminQueryKeys = {
 
 export function errorMessage(err: unknown) {
   if (err instanceof Error && err.message) {
-    return err.message
+    return stripSecurityCode(err.message)
   }
   if (
     typeof err === 'object' &&

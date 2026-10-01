@@ -225,6 +225,30 @@ export function GoLiveTray({
     if (result && 'ok' in result && result.ok === false) panel.open('golive')
   }
 
+  if (release.data?.publishingMode === 'demo') {
+    return (
+      <div
+        data-testid="release-status"
+        data-state="demo"
+        className="grid gap-2 rounded-control border border-border-default p-3"
+      >
+        <button type="button" onClick={() => panel.open('golive')}>
+          Demo mode · {release.data.demo ? 'Demo ready' : 'Not published'} ·
+          Never production live
+        </button>
+        {canPublish ? (
+          <button
+            type="button"
+            disabled={isPending || Boolean(release.data.activeJob)}
+            onClick={() => void handleGoLive()}
+          >
+            Publish demo
+          </button>
+        ) : null}
+      </div>
+    )
+  }
+
   if (collapsed) {
     return (
       <TrayRailButton release={release} onOpen={() => panel.open('golive')} />

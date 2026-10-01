@@ -13,8 +13,9 @@ import { useCompleteSetup, useHydrated } from './use-auth-forms'
 
 /**
  * `/setup` (brief §3.1): "Welcome to {app}" / "Create the first admin
- * account." Name, email, password with a show/hide eye, "Create admin
- * account". Only reachable while no accounts exist.
+ * account." Name, email, password with a show/hide eye, the setup token
+ * (from `SETUP_TOKEN` or the server log), "Create admin account". Only
+ * reachable while no accounts exist.
  */
 export function SetupScreen({ methods }: { methods: AuthMethods }) {
   const branding = useBranding()
@@ -22,6 +23,7 @@ export function SetupScreen({ methods }: { methods: AuthMethods }) {
   const [name, setName] = React.useState('')
   const [email, setEmail] = React.useState('')
   const [password, setPassword] = React.useState('')
+  const [setupToken, setSetupToken] = React.useState('')
   const { complete, error, pending } = useCompleteSetup(methods.emailPassword)
 
   return (
@@ -44,7 +46,7 @@ export function SetupScreen({ methods }: { methods: AuthMethods }) {
         onSubmit={(event) => {
           event.preventDefault()
           event.stopPropagation()
-          void complete({ name, email, password })
+          void complete({ name, email, password, setupToken })
         }}
       >
         <FormField label={m.auth_name()} htmlFor="name">
@@ -85,6 +87,23 @@ export function SetupScreen({ methods }: { methods: AuthMethods }) {
             minLength={8}
             value={password}
             onChange={(event) => setPassword(event.target.value)}
+          />
+        </FormField>
+        <FormField
+          label={m.auth_setup_token()}
+          htmlFor="setup-token"
+          hint={m.auth_setup_token_hint()}
+        >
+          <Input
+            id="setup-token"
+            name="setupToken"
+            inputSize="lg"
+            autoComplete="off"
+            autoCapitalize="none"
+            spellCheck={false}
+            required
+            value={setupToken}
+            onChange={(event) => setSetupToken(event.target.value)}
           />
         </FormField>
         {error ? <AuthError>{error}</AuthError> : null}

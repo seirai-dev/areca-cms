@@ -4,7 +4,7 @@ import { z } from 'zod'
 
 import { db } from '#/db'
 import { site } from '#/db/schema'
-import { requireOrgMember } from '#/lib/session.server'
+import { requireOrgMemberOrNotFound, requireUser } from '#/lib/session.server'
 import { m } from '#/paraglide/messages'
 import { NotFoundError } from '#/server/content/errors'
 import { pageLimitSchema, pageOffsetSchema } from '#/server/pagination'
@@ -20,25 +20,43 @@ import {
 
 const loose = { strict: { output: false } as const }
 
-async function requireSiteAccess(siteId: string, role?: 'owner') {
+async function requireSiteAccess(
+  siteId: string,
+  role?: 'owner',
+  notFoundMessage: () => ReturnType<
+    typeof m.server_site_not_found
+  > = m.server_site_not_found,
+) {
+  // Authenticate first; a missing site and a site the caller cannot access
+  // look identical (NotFound), so other tenants' ids cannot be probed.
+  await requireUser()
   const [found] = await db
     .select()
     .from(site)
     .where(eq(site.id, siteId))
     .limit(1)
   if (!found) {
-    throw new NotFoundError(m.server_site_not_found())
+    throw new NotFoundError(notFoundMessage())
   }
-  const session = await requireOrgMember(found.organizationId, role)
+  const session = await requireOrgMemberOrNotFound(
+    found.organizationId,
+    role,
+    () => new NotFoundError(notFoundMessage()),
+  )
   return { session, site: found }
 }
 
 async function requireJobAccess(jobId: string, role?: 'owner') {
+  await requireUser()
   const job = await getBuildJob(jobId)
   if (!job) {
     throw new NotFoundError(m.server_build_job_not_found())
   }
-  const access = await requireSiteAccess(job.siteId, role)
+  const access = await requireSiteAccess(
+    job.siteId,
+    role,
+    m.server_build_job_not_found,
+  )
   return { ...access, job }
 }
 

@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import '@tanstack/react-start'
 
+import { securityErrorCode } from '#/lib/security-errors'
 import { getSession, requireOrgMember } from '#/lib/session.server'
 import { AssetValidationError, uploadAsset } from '#/server/assets'
 import { parseLimitedFormData, UploadTooLargeError } from '#/server/http/upload'
@@ -41,6 +42,10 @@ export const Route = createFileRoute('/api/assets/upload')({
           await requireOrgMember(organizationId)
         } catch (err) {
           if (err instanceof Response) return err
+          // An agency admin without two-factor: a 403 carrying the code, the
+          // same shape as the branding upload, not an unhandled 500.
+          const code = securityErrorCode(err)
+          if (code) return new Response(code, { status: 403 })
           throw err
         }
 

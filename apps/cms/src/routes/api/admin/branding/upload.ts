@@ -1,6 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 import '@tanstack/react-start'
 
+import { env } from '#/env'
+import { MFA_REQUIRED } from '#/lib/security-errors'
 import { getSession } from '#/lib/session.server'
 import { setBrandingImage } from '#/server/admin/branding'
 import { AssetValidationError } from '#/server/assets'
@@ -19,6 +21,9 @@ export const Route = createFileRoute('/api/admin/branding/upload')({
         }
         if (!session.user.isAgencyAdmin) {
           return new Response('Forbidden', { status: 403 })
+        }
+        if (!session.user.twoFactorEnabled && env.ADMIN_MFA_REQUIRED) {
+          return new Response(MFA_REQUIRED, { status: 403 })
         }
 
         let form: FormData

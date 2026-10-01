@@ -2,7 +2,7 @@ name: CMS Docker AMD64 and multi-platform release
 
 on:
   push:
-    branches: [main]
+    branches: [master]
     paths:
       - "apps/cms/**"
       - "package.json"
@@ -24,7 +24,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Nothing is built or pushed until typecheck, unit tests, secret scanning and
+  # the client-bundle scan pass.
+  ci:
+    uses: ./.github/workflows/ci.yml
+
   amd64:
+    needs: [ci]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     outputs:
@@ -53,7 +59,7 @@ jobs:
           push: true
           tags: |
             ${{ steps.image.outputs.name }}:sha-${{ github.sha }}-amd64
-            ${{ github.ref == 'refs/heads/main' && format('{0}:latest-amd64', steps.image.outputs.name) || '' }}
+            ${{ github.ref == 'refs/heads/master' && format('{0}:latest-amd64', steps.image.outputs.name) || '' }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -61,6 +67,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=cms-amd64
 
   arm64:
+    needs: [ci]
     uses: ./.github/workflows/cms-docker-arm64.yml
 
   publish:
@@ -83,7 +90,7 @@ jobs:
           REF: ${{ github.ref }}
         run: |
           tags=(--tag "$IMAGE:sha-$COMMIT")
-          if [[ "$REF" == refs/heads/main ]]; then
+          if [[ "$REF" == refs/heads/master ]]; then
             tags+=(--tag "$IMAGE:latest")
           fi
           docker buildx imagetools create "${tags[@]}" \

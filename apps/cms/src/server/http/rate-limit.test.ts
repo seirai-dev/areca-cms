@@ -124,4 +124,35 @@ describe('request rate limiting', () => {
       error,
     )
   })
+
+  it('never limits GET /api/health or /api/health/ready', async () => {
+    const store = countingStore()
+    const deps = dependencies(store)
+    for (const path of ['/api/health', '/api/health/ready', '/api/health/']) {
+      for (let i = 0; i < 500; i += 1) {
+        expect(
+          await enforceRequestRateLimit(
+            new Request(`https://cms.test${path}`),
+            deps,
+          ),
+        ).toBeNull()
+      }
+    }
+    expect(store.keys).toHaveLength(0)
+  })
+
+  it('keeps /api/metrics rate limited per client to stop token guessing', async () => {
+    const store = countingStore()
+    const deps = dependencies(store)
+    const request = new Request('https://cms.test/api/metrics', {
+      headers: { authorization: 'Bearer guess' },
+    })
+    for (let i = 0; i < 60; i += 1) {
+      expect(await enforceRequestRateLimit(request, deps)).toBeNull()
+    }
+    const blocked = await enforceRequestRateLimit(request, deps)
+    expect(blocked?.status).toBe(429)
+    expect(store.keys.every((key) => key.includes(':metrics:'))).toBe(true)
+    expect(deps.resolveUserId).not.toHaveBeenCalled()
+  })
 })

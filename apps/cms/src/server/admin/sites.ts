@@ -1,3 +1,4 @@
+import { archiveDeletedContent } from '#/server/content/deletion-archive'
 import { randomBytes } from 'node:crypto'
 import { eq, inArray } from 'drizzle-orm'
 import type { InferSelectModel } from 'drizzle-orm'
@@ -24,14 +25,20 @@ export const deploymentTargetSchema: z.ZodType<DeploymentTarget | null> =
     z.object({
       provider: z.literal('dokploy'),
       applicationId: z.string().min(1),
-      healthCheckUrl: z.string().url().optional(),
+      healthCheckUrl: z
+        .string()
+        .url()
+        .refine(
+          (value) => ['http:', 'https:'].includes(new URL(value).protocol),
+          'Health URL must use HTTP or HTTPS',
+        ),
     }),
     z.null(),
   ])
 
 export type PublicSite = Omit<
   InferSelectModel<typeof site>,
-  'tokenHash' | 'previewSecret'
+  'tokenHash' | 'schemaTokenHash' | 'previewSecret'
 >
 
 const publicSiteColumns = {
@@ -40,6 +47,7 @@ const publicSiteColumns = {
   name: site.name,
   slug: site.slug,
   productionUrl: site.productionUrl,
+  publishingMode: site.publishingMode,
   deploymentTarget: site.deploymentTarget,
   lastManifest: site.lastManifest,
   createdAt: site.createdAt,
@@ -47,7 +55,12 @@ const publicSiteColumns = {
 }
 
 function toPublicSite(row: InferSelectModel<typeof site>): PublicSite {
-  const { tokenHash: _tokenHash, previewSecret: _previewSecret, ...rest } = row
+  const {
+    tokenHash: _tokenHash,
+    schemaTokenHash: _schemaTokenHash,
+    previewSecret: _previewSecret,
+    ...rest
+  } = row
   return rest
 }
 
@@ -97,34 +110,47 @@ export async function createSite(input: {
   }
 
   const { token, hash } = generateSiteToken()
+  const schemaToken = generateSiteToken()
   const previewSecret = randomBytes(32).toString('hex')
 
-  const [created] = await db
-    .insert(site)
-    .values({
-      organizationId: input.organizationId,
-      name: input.name,
-      slug: input.slug,
-      tokenHash: hash,
-      productionUrl: input.productionUrl,
-      previewSecret,
-    })
-    .returning()
-  if (!created) {
-    throw new Error(m.server_failed_to_create_site())
-  }
+  const created = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .insert(site)
+      .values({
+        organizationId: input.organizationId,
+        name: input.name,
+        slug: input.slug,
+        tokenHash: hash,
+        schemaTokenHash: schemaToken.hash,
+        productionUrl: input.productionUrl,
+        previewSecret,
+      })
+      .returning()
+    if (!row) {
+      throw new Error(m.server_failed_to_create_site())
+    }
 
-  await audit({
-    organizationId: input.organizationId,
-    siteId: created.id,
-    actorId: input.actorId,
-    action: 'site.create',
-    targetType: 'site',
-    targetId: created.id,
-    meta: { slug: created.slug },
+    await audit(
+      {
+        organizationId: input.organizationId,
+        siteId: row.id,
+        actorId: input.actorId,
+        action: 'site.create',
+        targetType: 'site',
+        targetId: row.id,
+        meta: { slug: row.slug },
+      },
+      tx,
+    )
+    return row
   })
 
-  return { ...toPublicSite(created), token, previewSecret }
+  return {
+    ...toPublicSite(created),
+    token,
+    schemaToken: schemaToken.token,
+    previewSecret,
+  }
 }
 
 export async function updateSite(
@@ -132,8 +158,10 @@ export async function updateSite(
   input: {
     name?: string
     productionUrl?: string
+    publishingMode?: 'production' | 'demo'
     deploymentTarget?: DeploymentTarget | null
   },
+  actorId: string,
 ) {
   const [existing] = await db
     .select()
@@ -147,10 +175,15 @@ export async function updateSite(
   const patch: {
     name?: string
     productionUrl?: string
+    publishingMode?: 'production' | 'demo'
     deploymentTarget?: DeploymentTarget | null
     updatedAt: Date
   } = { updatedAt: new Date() }
 
+  if (input.publishingMode !== undefined)
+    patch.publishingMode = z
+      .enum(['production', 'demo'])
+      .parse(input.publishingMode)
   if (input.name !== undefined) patch.name = input.name
   if (input.productionUrl !== undefined)
     patch.productionUrl = input.productionUrl
@@ -160,27 +193,55 @@ export async function updateSite(
     )
   }
 
-  const [updated] = await db
-    .update(site)
-    .set(patch)
-    .where(eq(site.id, id))
-    .returning()
-  if (!updated) {
-    throw new NotFoundError(m.server_site_not_found())
-  }
+  const changed = (Object.keys(patch) as (keyof typeof patch)[]).filter(
+    (key) => key !== 'updatedAt',
+  )
+  const updated = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .update(site)
+      .set(patch)
+      .where(eq(site.id, id))
+      .returning()
+    if (!row) {
+      throw new NotFoundError(m.server_site_not_found())
+    }
 
-  await audit({
-    organizationId: existing.organizationId,
-    siteId: id,
-    action: 'site.update',
-    targetType: 'site',
-    targetId: id,
+    await audit(
+      {
+        organizationId: existing.organizationId,
+        siteId: id,
+        actorId,
+        action: 'site.update',
+        targetType: 'site',
+        targetId: id,
+        meta: {
+          fields: changed,
+          ...(patch.publishingMode !== undefined
+            ? {
+                publishingMode: patch.publishingMode,
+                previousPublishingMode: existing.publishingMode,
+              }
+            : {}),
+          ...('deploymentTarget' in patch
+            ? {
+                deploymentTarget: patch.deploymentTarget?.applicationId ?? null,
+              }
+            : {}),
+        },
+      },
+      tx,
+    )
+    return row
   })
 
   return toPublicSite(updated)
 }
 
-export async function rotateSiteTokenAdmin(id: string) {
+export async function rotateSiteTokenAdmin(
+  id: string,
+  privilege: 'build' | 'schema' = 'build',
+  actorId: string,
+) {
   const [existing] = await db
     .select()
     .from(site)
@@ -191,23 +252,37 @@ export async function rotateSiteTokenAdmin(id: string) {
   }
 
   const generated = generateSiteToken()
-  await db
-    .update(site)
-    .set({ tokenHash: generated.hash, updatedAt: new Date() })
-    .where(eq(site.id, id))
+  await db.transaction(async (tx) => {
+    await tx
+      .update(site)
+      .set({
+        ...(privilege === 'schema'
+          ? { schemaTokenHash: generated.hash }
+          : { tokenHash: generated.hash }),
+        updatedAt: new Date(),
+      })
+      .where(eq(site.id, id))
 
-  await audit({
-    organizationId: existing.organizationId,
-    siteId: id,
-    action: 'site.rotate_token',
-    targetType: 'site',
-    targetId: id,
+    await audit(
+      {
+        organizationId: existing.organizationId,
+        siteId: id,
+        actorId,
+        action:
+          privilege === 'schema'
+            ? 'site.rotate_schema_token'
+            : 'site.rotate_token',
+        targetType: 'site',
+        targetId: id,
+      },
+      tx,
+    )
   })
 
   return { token: generated.token }
 }
 
-export async function deleteSite(id: string) {
+export async function deleteSite(id: string, actorId: string) {
   const [existing] = await db
     .select()
     .from(site)
@@ -218,6 +293,7 @@ export async function deleteSite(id: string) {
   }
 
   await db.transaction(async (tx) => {
+    await archiveDeletedContent(tx, existing.organizationId, 'site', id)
     const entryRows = await tx
       .select({ id: entry.id })
       .from(entry)
@@ -232,14 +308,19 @@ export async function deleteSite(id: string) {
     await tx.delete(collection).where(eq(collection.siteId, id))
     await tx.delete(buildJob).where(eq(buildJob.siteId, id))
     await tx.delete(publication).where(eq(publication.siteId, id))
+    // Written before the delete: audit_log.site_id is set null afterwards.
+    await audit(
+      {
+        organizationId: existing.organizationId,
+        siteId: id,
+        actorId,
+        action: 'site.delete',
+        targetType: 'site',
+        targetId: id,
+        meta: { slug: existing.slug },
+      },
+      tx,
+    )
     await tx.delete(site).where(eq(site.id, id))
-  })
-
-  await audit({
-    organizationId: existing.organizationId,
-    actorId: null,
-    action: 'site.delete',
-    targetType: 'site',
-    targetId: id,
   })
 }

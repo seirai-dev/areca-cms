@@ -10,15 +10,26 @@ import {
   verifyPreviewToken,
 } from '#/server/content/preview-token'
 
+// Preview payloads are draft content behind a signed, expiring token: never let
+// a browser, proxy or CDN store any response from this route (401/404 included).
+const PREVIEW_HEADERS = {
+  'Cache-Control': 'no-store, private',
+  'X-Robots-Tag': 'noindex',
+}
+
+function previewJson(body: unknown, status = 200) {
+  return Response.json(body, { status, headers: PREVIEW_HEADERS })
+}
+
 export async function getSitesPreview(request: Request) {
   const token = new URL(request.url).searchParams.get('token')
   if (!token) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 })
+    return previewJson({ error: 'Unauthorized' }, 401)
   }
 
   const decoded = decodePreviewToken(token)
   if (!decoded) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 })
+    return previewJson({ error: 'Unauthorized' }, 401)
   }
 
   const [found] = await db
@@ -27,12 +38,12 @@ export async function getSitesPreview(request: Request) {
     .where(eq(site.id, decoded.siteId))
     .limit(1)
   if (!found) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 })
+    return previewJson({ error: 'Unauthorized' }, 401)
   }
 
   const payload = verifyPreviewToken(token, found.previewSecret)
   if (!payload) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 })
+    return previewJson({ error: 'Unauthorized' }, 401)
   }
 
   const entry = await buildPreviewEntry(
@@ -41,13 +52,14 @@ export async function getSitesPreview(request: Request) {
     payload.slug,
   )
   if (!entry) {
-    return Response.json({ error: 'Not found' }, { status: 404 })
+    return previewJson({ error: 'Not found' }, 404)
   }
 
-  return Response.json(
-    { collection: payload.collection, slug: payload.slug, entry },
-    { headers: { 'X-Robots-Tag': 'noindex' } },
-  )
+  return previewJson({
+    collection: payload.collection,
+    slug: payload.slug,
+    entry,
+  })
 }
 
 export const Route = createFileRoute('/api/sites/preview')({

@@ -16,6 +16,7 @@ export const completeSetupFn = createServerFn({ method: 'POST', ...setupFn })
       name: z.string().min(1),
       email: z.email(),
       password: z.string().min(8),
+      setupToken: z.string().min(1),
     }),
   )
   .handler(async ({ data }) => completeSetup(data))

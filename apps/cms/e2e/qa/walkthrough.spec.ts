@@ -131,6 +131,9 @@ test('01 agency setup', async ({ page }) => {
   await page.getByLabel('Name').fill('QA Admin')
   await page.getByLabel('Email').fill(ADMIN)
   await page.getByLabel('Password').fill(QA_PASSWORD)
+  await page
+    .getByLabel('Setup token')
+    .fill(process.env.SETUP_TOKEN ?? 'e2e-setup-token-0123456789')
   await form.getByRole('button', { name: 'Create admin account' }).click()
   await expect(page).toHaveURL(/\/agency$/)
   await expect(page.getByTestId('get-started')).toBeVisible()

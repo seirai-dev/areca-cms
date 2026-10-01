@@ -35,13 +35,18 @@ function go(path: string) {
   window.location.assign(localizeHref(path))
 }
 
-/** Email + password sign-in, then on to `redirect` (validated). */
+/**
+ * Email + password sign-in, then on to `redirect` (validated). Accounts with
+ * two-factor answer with a challenge instead of a session: `challenge` flips
+ * on and the screen asks for a code (`verifyTwoFactor`).
+ */
 export function usePasswordSignIn(
   redirectTo: string | undefined,
   initialError: string | null,
 ) {
   const [error, setError] = React.useState<string | null>(initialError)
   const [pending, setPending] = React.useState(false)
+  const [challenge, setChallenge] = React.useState(false)
 
   async function signIn(email: string, password: string) {
     setPending(true)
@@ -52,10 +57,43 @@ export function usePasswordSignIn(
       setPending(false)
       return
     }
+    if (result.data && 'twoFactorRedirect' in result.data) {
+      setChallenge(true)
+      setPending(false)
+      return
+    }
     go(safeRedirectPath(redirectTo))
   }
 
-  return { signIn, error, pending }
+  async function verifyTwoFactor(code: string, kind: 'totp' | 'backup') {
+    setPending(true)
+    setError(null)
+    const trimmed = code.replace(/\s+/g, '')
+    const result =
+      kind === 'totp'
+        ? await authClient.twoFactor.verifyTotp({ code: trimmed })
+        : await authClient.twoFactor.verifyBackupCode({ code: trimmed })
+    if (result.error) {
+      setError(result.error.message ?? m.auth_two_factor_invalid_code())
+      setPending(false)
+      return
+    }
+    go(safeRedirectPath(redirectTo))
+  }
+
+  function cancelChallenge() {
+    setChallenge(false)
+    setError(null)
+  }
+
+  return {
+    signIn,
+    verifyTwoFactor,
+    cancelChallenge,
+    challenge,
+    error,
+    pending,
+  }
 }
 
 /**
@@ -71,6 +109,7 @@ export function useCompleteSetup(emailPassword: boolean) {
     name: string
     email: string
     password: string
+    setupToken: string
   }) {
     setPending(true)
     setError(null)

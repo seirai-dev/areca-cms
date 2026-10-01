@@ -1,4 +1,6 @@
-export class UploadTooLargeError extends Error {
+import { AppError } from './app-error'
+
+export class UploadTooLargeError extends AppError {
   constructor() {
     super('Upload too large')
     this.name = 'UploadTooLargeError'
