@@ -1,7 +1,9 @@
 import * as React from 'react'
-import { cn } from '#/lib/utils'
 import { Switch as SwitchPrimitive } from 'radix-ui'
 
+import { cn } from '#/lib/utils'
+
+/** iOS-style switch: accent track when on, white thumb with a soft shadow. */
 function Switch({
   className,
   size = 'default',
@@ -14,7 +16,12 @@ function Switch({
       data-slot="switch"
       data-size={size}
       className={cn(
-        'peer group/switch inline-flex shrink-0 items-center rounded-full border shadow-xs transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 data-[size=default]:h-[1.15rem] data-[size=default]:w-8 data-[size=sm]:h-3.5 data-[size=sm]:w-6 data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=unchecked]:border-border data-[state=unchecked]:bg-muted-foreground/35 dark:data-[state=unchecked]:bg-muted-foreground/45',
+        'peer group/switch relative inline-flex shrink-0 cursor-pointer items-center rounded-full p-[2px]',
+        'transition-colors duration-200 ease-(--ease-standard)',
+        'outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus',
+        'disabled:cursor-not-allowed disabled:opacity-40',
+        'data-[size=default]:h-6 data-[size=default]:w-[42px] data-[size=sm]:h-[18px] data-[size=sm]:w-8',
+        'data-[state=checked]:bg-accent data-[state=unchecked]:bg-[color-mix(in_oklab,var(--color-text-primary)_16%,transparent)]',
         className,
       )}
       {...props}
@@ -22,7 +29,11 @@ function Switch({
       <SwitchPrimitive.Thumb
         data-slot="switch-thumb"
         className={cn(
-          'pointer-events-none block rounded-full bg-background ring-0 transition-transform group-data-[size=default]/switch:size-4 group-data-[size=sm]/switch:size-3 data-[state=checked]:translate-x-[calc(100%-2px)] data-[state=unchecked]:translate-x-0 dark:data-[state=checked]:bg-primary-foreground dark:data-[state=unchecked]:bg-foreground',
+          'pointer-events-none block rounded-full bg-white shadow-[0_1px_3px_rgb(0_0_0/0.2),0_0_0_0.5px_rgb(0_0_0/0.04)]',
+          'transition-transform duration-200 ease-[cubic-bezier(0.3,1.4,0.5,1)]',
+          'group-data-[size=default]/switch:size-5 group-data-[size=sm]/switch:size-3.5',
+          'data-[state=unchecked]:translate-x-0',
+          'group-data-[size=default]/switch:data-[state=checked]:translate-x-[18px] group-data-[size=sm]/switch:data-[state=checked]:translate-x-[14px]',
         )}
       />
     </SwitchPrimitive.Root>

@@ -57,7 +57,7 @@ Field def: `{ key, label, type, required?, options? (select), collection? (refer
 
 ## Publishing flow
 
-1. Editor clicks Publish (or scheduler fires): entry `publishedData = draftData`, revision recorded.
+1. An owner or agency admin clicks **Mark as ready** (`publishEntryFn`), or the scheduler fires: entry `publishedData = draftData`, revision recorded. **Go live** (`requestPublicationFn`, owners and admins) then runs steps 2–4 for the whole site.
 2. `createPublication(siteId)`: snapshot = `{ siteId, createdAt, collections: { [key]: Entry[] } }` with every published entry
    (rich text exported as `{ json, markdown, document, html }` (`document` = TanStack Markdown AST), image fields resolved to stable asset URLs `/assets/<storageKey>` served by the CMS). Validate snapshot against collection fields; reject on errors.
 3. Enqueue `build_job`. Queued (not started) jobs for the same site are cancelled (coalescing) and their publications marked `superseded`.
@@ -89,6 +89,12 @@ Field def: `{ key, label, type, required?, options? (select), collection? (refer
 
 ## Roles
 
-- Agency admin: everything (orgs, sites, collections, users, releases of all sites).
-- Org `owner`: manage members/invitations of their org, edit + publish content.
-- Org `editor`: edit + publish content, no member management.
+Enforced server-side (`requireOrgMember` / `requireEntryAccess(…, 'owner')`); the UI mirrors it by showing
+publish-type controls disabled with the reason ("Only owners can publish…").
+
+- Agency admin: everything (clients, sites, content types, people, site settings, releases of all sites).
+- Org `owner`: everything in their client's sites: create and edit drafts, **Mark as ready**, move back to draft,
+  schedule / cancel schedule, archive, delete, restore revisions, **Go live**, roll back, cancel builds, delete Library
+  files; manage members and invitations; read the client's activity.
+- Org `editor`: create entries, edit and save drafts, preview, upload and describe Library files. Editors **cannot**
+  mark as ready (publish), schedule, archive, delete, restore or go live, and have no People, Settings or Activity.

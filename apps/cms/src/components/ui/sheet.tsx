@@ -1,24 +1,18 @@
 import * as React from 'react'
-import { cn } from '#/lib/utils'
 import { Dialog as SheetPrimitive } from 'radix-ui'
-
-import { m } from '#/paraglide/messages'
 import { X } from '@phosphor-icons/react'
 
+import { cn } from '#/lib/utils'
+import { m } from '#/paraglide/messages'
+
+/**
+ * Radix-driven drawer with CSS keyframes. New screens use `SlideOver`
+ * (spring, bottom sheet on mobile); `Sheet` stays for the schema editor,
+ * pickers and screens that are not rewritten yet. Same look: inset panel,
+ * 20px outer radius, hairline, float shadow.
+ */
 function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
   return <SheetPrimitive.Root data-slot="sheet" {...props} />
-}
-
-function SheetTrigger({
-  ...props
-}: React.ComponentProps<typeof SheetPrimitive.Trigger>) {
-  return <SheetPrimitive.Trigger data-slot="sheet-trigger" {...props} />
-}
-
-function SheetClose({
-  ...props
-}: React.ComponentProps<typeof SheetPrimitive.Close>) {
-  return <SheetPrimitive.Close data-slot="sheet-close" {...props} />
 }
 
 function SheetPortal({
@@ -35,7 +29,7 @@ function SheetOverlay({
     <SheetPrimitive.Overlay
       data-slot="sheet-overlay"
       className={cn(
-        'fixed inset-0 z-scrim bg-scrim backdrop-blur-[2px]',
+        'fixed inset-0 z-scrim bg-scrim',
         'data-[state=open]:animate-dialog-scrim-in data-[state=closed]:animate-dialog-scrim-out',
         className,
       )}
@@ -46,34 +40,41 @@ function SheetOverlay({
 
 const SHEET_SIZES = {
   sm: 'sm:max-w-sm',
-  md: 'sm:max-w-md',
-  lg: 'sm:max-w-xl',
+  md: 'sm:max-w-[480px]',
+  lg: 'sm:max-w-[640px]',
   xl: 'sm:max-w-3xl',
   full: 'sm:max-w-none',
 } as const
 
-/**
- * `anchor="navbar"` keeps a side drawer below the sticky navbar (reading
- * `--navbar-height`, 58px by default); `anchor="viewport"` covers the full
- * height. Top and bottom drawers ignore the anchor.
- */
+/** Shared close control for sheets, panels and dialogs. */
+function PanelCloseButton({ className }: { className?: string }) {
+  return (
+    <SheetPrimitive.Close
+      className={cn(
+        'inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-background-subtle text-icon-muted transition-colors outline-none hover:bg-action-secondary-hover hover:text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus',
+        className,
+      )}
+    >
+      <X weight="bold" className="size-3.5" />
+      <span className="sr-only">{m.ui_close()}</span>
+    </SheetPrimitive.Close>
+  )
+}
+
+/** Side drawers use the full viewport height (inset 8px). */
 function SheetContent({
   className,
   children,
   side = 'right',
   size = 'md',
-  anchor = 'navbar',
   showCloseButton = true,
-  style,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: 'top' | 'right' | 'bottom' | 'left'
   size?: keyof typeof SHEET_SIZES
-  anchor?: 'navbar' | 'viewport'
   showCloseButton?: boolean
 }) {
   const vertical = side === 'right' || side === 'left'
-  const anchored = vertical && anchor === 'navbar'
 
   return (
     <SheetPortal>
@@ -81,49 +82,41 @@ function SheetContent({
       <SheetPrimitive.Content
         data-slot="sheet-content"
         data-side={side}
-        data-anchor={anchor}
-        style={
-          anchored
-            ? {
-                top: 'var(--navbar-height, 58px)',
-                height: 'calc(100dvh - var(--navbar-height, 58px))',
-                ...style,
-              }
-            : style
-        }
         className={cn(
-          'fixed z-overlay flex flex-col bg-background-elevated text-text-primary shadow-2xl',
+          'fixed z-overlay flex flex-col overflow-hidden text-text-primary outline-none surface-float',
           'motion-reduce:animate-none',
-          vertical && 'w-full',
+          vertical &&
+            'inset-y-0 h-dvh w-full sm:inset-y-2 sm:h-[calc(100dvh-1rem)]',
           side === 'right' &&
             cn(
-              'right-0 border-l border-border-default',
-              !anchored && 'inset-y-0 h-full',
+              'right-0 sm:right-2 sm:rounded-panel',
               SHEET_SIZES[size],
               'data-[state=open]:animate-drawer-right-in data-[state=closed]:animate-drawer-right-out',
             ),
           side === 'left' &&
             cn(
-              'left-0 border-r border-border-default',
-              !anchored && 'inset-y-0 h-full',
+              'left-0 sm:left-2 sm:rounded-panel',
               SHEET_SIZES[size],
               'data-[state=open]:animate-drawer-left-in data-[state=closed]:animate-drawer-left-out',
             ),
           side === 'top' &&
-            'inset-x-0 top-0 h-auto rounded-b-surface border-b border-border-default data-[state=open]:animate-drawer-bottom-in data-[state=closed]:animate-drawer-bottom-out',
+            'inset-x-0 top-0 h-auto rounded-b-panel data-[state=open]:animate-drawer-bottom-in data-[state=closed]:animate-drawer-bottom-out',
           side === 'bottom' &&
-            'inset-x-0 bottom-0 h-auto rounded-t-surface border-t border-border-default data-[state=open]:animate-drawer-bottom-in data-[state=closed]:animate-drawer-bottom-out',
+            'inset-x-0 bottom-0 h-auto max-h-[92dvh] rounded-t-panel pb-[env(safe-area-inset-bottom)] data-[state=open]:animate-drawer-bottom-in data-[state=closed]:animate-drawer-bottom-out',
           className,
         )}
         {...props}
       >
+        {side === 'bottom' ? (
+          <span
+            aria-hidden="true"
+            className="mx-auto mt-2 h-1 w-9 shrink-0 rounded-full bg-border-strong"
+          />
+        ) : null}
         {children}
-        {showCloseButton && (
-          <SheetPrimitive.Close className="absolute top-4 right-4 inline-flex size-7 items-center justify-center rounded-control text-icon-muted transition-colors outline-none hover:bg-surface-state-hover hover:text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-strong disabled:pointer-events-none">
-            <X className="size-4" />
-            <span className="sr-only">{m.ui_close()}</span>
-          </SheetPrimitive.Close>
-        )}
+        {showCloseButton ? (
+          <PanelCloseButton className="absolute top-4 right-4" />
+        ) : null}
       </SheetPrimitive.Content>
     </SheetPortal>
   )
@@ -134,7 +127,10 @@ function SheetBody({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
       data-slot="sheet-body"
-      className={cn('min-h-0 flex-1 overflow-y-auto p-5', className)}
+      className={cn(
+        'scroll-quiet min-h-0 flex-1 overflow-y-auto p-5',
+        className,
+      )}
       {...props}
     />
   )
@@ -145,20 +141,7 @@ function SheetHeader({ className, ...props }: React.ComponentProps<'div'>) {
     <div
       data-slot="sheet-header"
       className={cn(
-        'flex shrink-0 flex-col gap-1.5 border-b border-border-subtle p-5',
-        className,
-      )}
-      {...props}
-    />
-  )
-}
-
-function SheetFooter({ className, ...props }: React.ComponentProps<'div'>) {
-  return (
-    <div
-      data-slot="sheet-footer"
-      className={cn(
-        'mt-auto flex shrink-0 flex-col gap-2 border-t border-border-subtle p-5',
+        'flex shrink-0 flex-col gap-1 border-b border-border-default px-5 pt-5 pb-4 pr-14',
         className,
       )}
       {...props}
@@ -173,33 +156,10 @@ function SheetTitle({
   return (
     <SheetPrimitive.Title
       data-slot="sheet-title"
-      className={cn('text-ds-heading-5 text-text-primary', className)}
+      className={cn('text-title-2 text-text-primary', className)}
       {...props}
     />
   )
 }
 
-function SheetDescription({
-  className,
-  ...props
-}: React.ComponentProps<typeof SheetPrimitive.Description>) {
-  return (
-    <SheetPrimitive.Description
-      data-slot="sheet-description"
-      className={cn('text-ds-body-sm text-text-secondary', className)}
-      {...props}
-    />
-  )
-}
-
-export {
-  Sheet,
-  SheetTrigger,
-  SheetClose,
-  SheetContent,
-  SheetBody,
-  SheetHeader,
-  SheetFooter,
-  SheetTitle,
-  SheetDescription,
-}
+export { Sheet, SheetContent, SheetBody, SheetHeader, SheetTitle }

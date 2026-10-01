@@ -90,13 +90,16 @@ type DokployApplication = {
   buildSecrets?: string | null
   customGitUrl?: string | null
   customGitSSHKeyId?: string | null
-  ports?: Array<{
-    portId: string
-    publishedPort: number
-    targetPort: number
-    protocol?: string
-    publishMode?: string
-  }>
+  // Some Dokploy versions return a single port object instead of a list.
+  ports?: DokployPort[] | DokployPort | null
+}
+
+type DokployPort = {
+  portId: string
+  publishedPort: number
+  targetPort: number
+  protocol?: string
+  publishMode?: string
 }
 
 type Project = {

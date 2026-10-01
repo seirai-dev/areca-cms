@@ -2,15 +2,10 @@ import { createHash, randomBytes } from 'node:crypto'
 import { eq } from 'drizzle-orm'
 
 import { db, pool } from '#/db'
-import {
-  collection,
-  membership,
-  organization,
-  site,
-  user,
-} from '#/db/schema'
+import { collection, invitation, organization, site, user } from '#/db/schema'
 import { auth } from '#/lib/auth'
-import type { Field } from '#/lib/types'
+import type { Field, MembershipRole } from '#/lib/types'
+import { acceptInvitation } from '#/server/admin/members'
 
 const ADMIN_EMAIL = 'admin@areca.local'
 const PASSWORD = 'password123'
@@ -40,6 +35,31 @@ async function signUp(name: string, email: string) {
   return result.user
 }
 
+/**
+ * Registration is invite-only (see `server/auth/registration-gate.ts`), so the
+ * seed goes through the same door as a real person: it creates a pending
+ * invitation, signs the user up (the gate lets the invited email in) and then
+ * accepts the invitation, which adds the membership.
+ */
+async function inviteAndSignUp(input: {
+  name: string
+  email: string
+  organizationId: string
+  role: MembershipRole
+}) {
+  const token = randomBytes(32).toString('hex')
+  await db.insert(invitation).values({
+    email: input.email,
+    organizationId: input.organizationId,
+    role: input.role,
+    token,
+    expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+  })
+  const created = await signUp(input.name, input.email)
+  await acceptInvitation({ token, userId: created.id })
+  return created
+}
+
 async function main() {
   const [existingAdmin] = await db
     .select({ id: user.id })
@@ -58,9 +78,6 @@ async function main() {
     .set({ isAgencyAdmin: true })
     .where(eq(user.id, admin.id))
 
-  const owner = await signUp('Acme Owner', 'owner@acme.local')
-  const editor = await signUp('Acme Editor', 'editor@acme.local')
-
   const [org] = await db
     .insert(organization)
     .values({ name: 'Acme', slug: 'acme' })
@@ -70,10 +87,18 @@ async function main() {
     throw new Error('Failed to create organization')
   }
 
-  await db.insert(membership).values([
-    { userId: owner.id, organizationId: org.id, role: 'owner' },
-    { userId: editor.id, organizationId: org.id, role: 'editor' },
-  ])
+  await inviteAndSignUp({
+    name: 'Acme Owner',
+    email: 'owner@acme.local',
+    organizationId: org.id,
+    role: 'owner',
+  })
+  await inviteAndSignUp({
+    name: 'Acme Editor',
+    email: 'editor@acme.local',
+    organizationId: org.id,
+    role: 'editor',
+  })
 
   const siteToken = randomBytes(32).toString('hex')
   const tokenHash = createHash('sha256').update(siteToken).digest('hex')

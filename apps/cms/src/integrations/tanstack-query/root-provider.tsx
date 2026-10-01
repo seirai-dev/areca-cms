@@ -10,4 +10,3 @@ export function getContext() {
     me: null as Me | null,
   }
 }
-export default function TanstackQueryProvider() {}

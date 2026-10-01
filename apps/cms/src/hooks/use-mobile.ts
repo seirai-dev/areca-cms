@@ -1,39 +1,41 @@
-import * as React from "react"
+import { useCallback, useSyncExternalStore } from 'react'
 
-const MOBILE_BREAKPOINT = 768
-
-export function useIsMobile() {
-  const [isMobile, setIsMobile] = React.useState<boolean | undefined>(undefined)
-
-  React.useEffect(() => {
-    const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)
-    const onChange = () => {
-      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
-    }
-    mql.addEventListener("change", onChange)
-    setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
-    return () => mql.removeEventListener("change", onChange)
-  }, [])
-
-  return !!isMobile
-}
+/** Shell breakpoints (brief §2.1). */
+const BREAKPOINTS = {
+  /** Below this: top bar + bottom tab bar + sheets. */
+  mobile: 768,
+  /** Below this (and ≥ mobile): the sidebar can collapse to a 64px rail. */
+  desktop: 1024,
+} as const
 
 /**
- * The shell's own breakpoint: below 900px the navbar collapses (switcher
- * becomes an icon button, secondary links move into the user menu).
+ * SSR-safe media query. The server snapshot is `false`, so markup that
+ * depends on it should also be correct at the desktop default.
  */
-const COMPACT_BREAKPOINT = 900
+export function useMediaQuery(query: string) {
+  const subscribe = useCallback(
+    (onChange: () => void) => {
+      const mql = window.matchMedia(query)
+      mql.addEventListener('change', onChange)
+      return () => mql.removeEventListener('change', onChange)
+    },
+    [query],
+  )
+  return useSyncExternalStore(
+    subscribe,
+    () => window.matchMedia(query).matches,
+    () => false,
+  )
+}
 
-export function useIsCompact() {
-  const [isCompact, setIsCompact] = React.useState(false)
+/** Below 768px. */
+export function useIsMobile() {
+  return useMediaQuery(`(max-width: ${BREAKPOINTS.mobile - 1}px)`)
+}
 
-  React.useEffect(() => {
-    const mql = window.matchMedia(`(max-width: ${COMPACT_BREAKPOINT - 1}px)`)
-    const onChange = () => setIsCompact(mql.matches)
-    onChange()
-    mql.addEventListener('change', onChange)
-    return () => mql.removeEventListener('change', onChange)
-  }, [])
-
-  return isCompact
+/** 768–1023px: the collapsible-rail range. */
+export function useIsTablet() {
+  return useMediaQuery(
+    `(min-width: ${BREAKPOINTS.mobile}px) and (max-width: ${BREAKPOINTS.desktop - 1}px)`,
+  )
 }

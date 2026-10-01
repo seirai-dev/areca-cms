@@ -1,6 +1,6 @@
 # First-run onboarding
 
-This is the from-zero walkthrough: empty CMS → first agency admin → organization + site → connect `examples/demo-site` → author articles → publish → pull content and preview locally.
+This is the from-zero walkthrough: empty CMS → first agency admin → Agency workspace → client → site (token) → site settings → connect `examples/demo-site` → invite people → author articles → Mark as ready → Go live → pull content and preview locally.
 
 Button labels, URLs, and commands below match the UI as of this guide. PowerShell-friendly: do not chain with `&&`; run commands separately (or join with `;`).
 
@@ -58,26 +58,34 @@ If you already had a session cookie from a previous admin, sign out first or use
 
 URL: [http://localhost:3000/setup](http://localhost:3000/setup)
 
-Page title: **Set up Areca**.
+Page title: **Welcome to Areca** — *Create the first admin account.*
 
-1. **Name** — e.g. `Agency Admin`
+1. **Name** — e.g. `Kaan Kaya`
 2. **Email** — e.g. `admin@areca.local`
-3. **Password** — at least 8 characters (e.g. `password123`)
+3. **Password** — at least 8 characters (e.g. `password123`; the eye icon shows it)
 4. Click **Create admin account**
 
-Expected: you are signed in and land on `/` (Dashboard). With zero organizations the **Get started** card lists the remaining steps.
+Expected: you are signed in and land in the **Agency workspace** (`/agency`). While the instance is empty the **Get your agency ready** checklist lists five steps, each with a direct action: *Create a client*, *Add a site*, *Connect the site project*, *Invite the client*, *Go live*. It collapses to **All set** once they are done.
 
-A second visit to `/setup` redirects to `/login` when you are signed out (“already set up”). If you still have a session you land on the dashboard instead. `/login` and every signed-in page also redirect to `/setup` while the user table is empty.
+A second visit to `/setup` redirects to `/login` when you are signed out (“already set up”). If you still have a session you land in your workspace instead. `/login` and every signed-in page also redirect to `/setup` while the user table is empty.
+
+### Finding your way around
+
+- The **workspace card** at the top of the sidebar says where you are (*Agency*, or a site such as *Acme Website*). Click it to switch workspace: recent sites, all sites grouped by client, the Agency workspace and **New site…**.
+- **Search** (⌘K / Ctrl K) opens the command palette: go to pages, create entries, Go live, Invite people, Upload, switch appearance or language, sign out.
+- The **account row** at the bottom holds Appearance (Light · Dark · Auto), Language, **Keyboard shortcuts…** and **Sign out**.
+- On phones the sidebar becomes a top bar plus a bottom tab bar (**Overview · Content · Library · More**).
 
 ## 4b. Whitelabel the CMS (optional)
 
-Agency admins can rebrand the whole CMS at **Branding** in the sidebar Agency section. URL: [http://localhost:3000/admin/branding](http://localhost:3000/admin/branding)
+Agency admins can rebrand the whole CMS at **Agency › Branding**. URL: [http://localhost:3000/agency/branding](http://localhost:3000/agency/branding)
 
 - **Name** replaces "Areca" in the sidebar, browser tab, sign-in, setup, and invitation pages.
 - **Logo** and **favicon** are uploaded to the S3 bucket under `branding/` and served through `/api/assets/file/…`.
-- **Accent colour** re-tints the brand palette (buttons, links, active sidebar marker) in light and dark mode; status colours stay green/red.
-- **Font** picks from a curated Google Fonts list, or the system font.
+- **Colour**: pick a preset or your own **accent**. The accent re-tints selection, focus rings, links, switches, progress and the "Ready" state in light and dark mode. Primary buttons stay ink (near-black / near-white); status colours stay green/orange/red.
+- **Typography** picks from a curated font list (rendered in each font), or the system font.
 - **Sender name** is the display name on invitation emails; the address still comes from `SMTP_FROM`.
+- The live preview on the right shows the sidebar, a card and a button in light and dark side by side. Changes save from the floating **Save** pill.
 
 Settings live in the single-row `branding` table. **Reset to defaults** clears everything and deletes the uploaded images.
 
@@ -97,64 +105,40 @@ A method that is off never appears on the sign-in or invitation page, and its en
 
 Registration stays invite-only whichever method is used. A provider sign-in succeeds only when the email already has an account — the provider is then linked to it — or has a pending invitation; anyone else gets *This account is not allowed to sign in*. The one-time `/setup` bootstrap always accepts a password, even with `AUTH_EMAIL_PASSWORD_ENABLED=false`, so an instance can never be locked out; with password sign-in off, that first admin then signs in through a provider using the same address.
 
-## 5. Create an organization
+## 5. Create a client
 
-1. Open **Organizations** in the sidebar Agency section, or click **Create an organization** on the Get started card. URL: [http://localhost:3000/admin/organizations](http://localhost:3000/admin/organizations)
-2. Click **New organization**
-3. **Name**: `Acme` — **Slug** fills as `acme`
-4. Click **Create organization**
+A **client** is a company you build and run sites for (the database calls it an organization).
 
-Expected: you land on `/admin/organizations/<id>` with heading **Acme**.
+1. In the Agency sidebar open **Clients** (or click **New client** on the checklist). URL: [http://localhost:3000/agency/clients](http://localhost:3000/agency/clients)
+2. Click **New client**
+3. **Name**: `Acme` — the slug is suggested as `acme` (shown as a whisper; **Edit** to change it now, it can't be changed later)
+4. Click **Create client**
 
-## 6. Invite an org owner or editor (optional)
+Expected: toast **Client created** and you land on the client page `/agency/clients/<id>` with heading **Acme** and tabs **Sites · People · Deployment · Settings**.
 
-On the organization page open the **Members** tab.
+## 6. Add a site and save its token (once)
 
-1. Click **Invite**
-2. **Email**: e.g. `owner@acme.local`
-3. **Role**: `owner` or `editor`
-4. Click **Send invitation**
+On the client page, **Sites** tab:
 
-Expected: toast **Invitation sent**. The address appears under **Pending invitations**.
-
-Open Mailpit at [http://localhost:8025](http://localhost:8025). The message subject is `Invitation to Acme`. The body has **Accept invitation** → `/invite/<token>`.
-
-On the invite page:
-
-- If you are not signed in: **Name**, read-only **Email**, **Password** (min 8) → **Create account**, then **Accept**
-- If you are already signed in as that email: **Accept**
-
-After accept you go to `/`.
-
-### What each role can do
-
-| Role | Can do |
-| --- | --- |
-| **Agency admin** (`isAgencyAdmin`) | Everything: orgs, sites, collections, tokens, users, all releases |
-| **Owner** | Manage members/invitations of their org; edit + publish content; see Team / Activity |
-| **Editor** | Edit + publish content only (no member management, no Agency sidebar) |
-
-Agency admins are not org members by default; they still see every site.
-
-## 7. Create a site and copy the token (once)
-
-Still on the Acme org page, **Sites** tab:
-
-1. Click **New site**
-2. **Name**: `Acme Site` — **Slug** becomes `acme-site`
-3. **Production URL**: `http://localhost:3001` (default for local demo; Preview opens this origin)
+1. Click **New site** — a two-step sheet opens
+2. **Site name**: `Acme Website` — the site key (slug) becomes `acme-website`
+3. **Production URL**: `http://localhost:3001` (the default; previews open on this address too)
 4. Click **Create site**
 
-Expected: toast **Site created**. An alert **Store this site token** shows the hex token and a **Copy** button.
+Expected: toast **Site created**, then step 2, **Connect your site**: the site token with **Copy token**, and an **Environment** snippet (`ARECA_CMS_URL=…`, `ARECA_SITE_TOKEN=…`) with **Copy snippet**.
 
-**Copy it now.** It is not shown again. Put it in `examples/demo-site/.env.local` as `ARECA_SITE_TOKEN`. Rotating the token in **Settings** invalidates the old one immediately (local `.env.local` and any Dokploy build args).
+**Copy it now.** It is not shown again. Put it in `examples/demo-site/.env.local` (section 8), then click **I've saved it**. Rotating the token later (**Settings › Developer › Rotate token…**) invalidates the old one immediately (local `.env.local` and any Dokploy build args).
 
-Open **Settings** on the site row (or `/sites/<id>/settings`):
+Each site card on the Sites tab has **Open** (into the site workspace) and **Settings**.
 
-- **Production URL** — live origin; Preview uses `<productionUrl>/__preview/<collection>/<slug>?token=`
-- **Deployment target** — optional. Provider is Dokploy. Leave empty for local: **Publish site** marks the release **live** without deploying
-- **Site token** — rotate only if leaked
-- **Collections** — filled by `pnpm sync-manifest` (or **Add collection** by hand). Until then the site dashboard says there are no collections and points you at `pnpm sync-manifest`
+## 7. Site settings (agency admins)
+
+Open the site (sidebar **All sites**, the workspace switcher, or **Open** on the card), then **Settings** in the sidebar (`/sites/<id>/settings`). Tabs:
+
+- **General** — name and **Production URL** (where the live site is; Preview opens `<productionUrl>/__preview/<collection>/<slug>?token=`). **Delete site…** sits in the danger zone.
+- **Deployment** — optional. Provider is Dokploy: pick the application from the client's verified Dokploy list (or type its ID) and set the health check URL. Leave it empty for local work: **Go live** then just marks the release **live** without deploying. **Stop deploying…** clears it again.
+- **Developer** — the site key with a copy button, **Rotate token…**, the **Site project** status (content types synced from the project's `areca.config`) and a **Quick start** snippet.
+- **Content** — the content types (collections): label, key, route, field count and an On/Off switch. **New content type** (or clicking a row) opens the schema editor; content types normally arrive from `sync-manifest` (section 8). Until there are any, the site Overview says *This site has no content types yet*.
 
 ## 8. Connect the demo site
 
@@ -180,45 +164,89 @@ Scripts load `.env.local` automatically (`node --env-file-if-exists=.env.local`)
 pnpm --filter @areca/demo-site sync-manifest
 ```
 
-Expected: the command exits 0. On **Site settings → Collections** you see key `articles`, label **Articles**, route `/blog/$slug`.
+Expected: the command exits 0. **Settings › Content** lists key `articles`, label **Articles**, route `/blog/$slug`, and **Settings › Developer** reports *1 content type synced from the site project*. The site sidebar's **CONTENT** section now shows **Articles**.
 
 `pnpm content:fixture` is the **no-CMS fallback only**. `prebuild` / `content:pull` do **not** fall back to the fixture when `ARECA_CMS_URL` and `ARECA_SITE_TOKEN` are set — a failed pull exits non-zero.
 
 The demo-site **Dockerfile is unchanged**: Dokploy still passes `ARECA_CMS_URL` / `ARECA_SITE_TOKEN` as build args.
 
-## 9. Author articles
+## 9. Invite the client's people
 
-Open the site from the sidebar (or `/sites/<id>`). Click **Open** on **Articles**, then **New**.
+Owners and agency admins can invite. Either:
 
-| Field | Notes |
+- In the site: **People** in the sidebar (`/sites/<id>/people`), or ⌘K → **Invite people**
+- In the Agency workspace: **Clients › Acme › People**
+
+Then:
+
+1. Click **Invite people**
+2. **Email addresses**: e.g. `owner@acme.local` (several addresses separated by commas are fine)
+3. **They'll join as**: **Editor** — *Can write and edit drafts.* or **Owner** — *Can also make changes live and manage people.*
+4. Click **Send invitation**
+
+Expected: the address appears under **Invitations** (*Expires in 7 days*, **Revoke**). Everyone in a client can open all of that client's sites.
+
+Open Mailpit at [http://localhost:8025](http://localhost:8025). The message subject is `Invitation to Acme`; its link opens `/invite/<token>`, headed **Acme invited you** with the role explained in plain words:
+
+- Signed out: **Name** and **Password** (the email is locked to the invitation) → **Create account and join**. The invitation is accepted automatically; there is no second click. Provider buttons work too.
+- Already signed in as that email: **Join Acme**.
+- Expired or used: *This link no longer works* with a way back to sign-in.
+
+Members are managed on the same People screen: the **Owner | Editor** switch per person (demoting yourself asks first; the last owner can't be demoted) and **⋯ › Remove from Acme…**. Agency admins manage agency access for everyone at **Agency › People**.
+
+### What each role can do
+
+| Role | Can do |
 | --- | --- |
-| **Title \*** | Text. Typing it also fills **Slug** until you edit the slug |
-| **Slug \*** | `lowercase-letters-numbers-and-hyphens` only (`hello-world`). Unique per collection |
-| **Excerpt** | Plain textarea |
-| **Body \*** | Rich text. Toolbar: Heading 2/3/4, Bold, Italic, Link, Bullet list, Ordered list, Quote, Code block, Image (media library), Horizontal rule, Undo, Redo |
-| **Hero image** | **Choose** → **Choose media** → **Upload** or pick an existing file |
-| **Published at** | Datetime (optional metadata; not the same as clicking Publish) |
-| **Category** | `news` or `updates` |
+| **Agency admin** (`isAgencyAdmin`) | Everything: the Agency workspace (clients, sites, people, activity, branding), site **Settings** (general, deployment, developer, content types), plus everything an owner can do in every site |
+| **Owner** | Everything in their client's sites: write drafts, **Mark as ready**, move back to draft, schedule, archive, delete, restore revisions, **Go live** and roll back, delete Library files; **People** (members and invitations) and **Activity** |
+| **Editor** | Create entries, edit and save drafts, preview, upload and describe Library files. Editors **cannot** mark as ready, schedule, archive, delete, restore or go live — those controls stay visible but disabled, with the reason (*Only owners can publish…*). No People, Settings or Activity |
 
-**Save draft** persists without going live. Status badge: `draft` / `published` / `scheduled` / `archived`.
+Agency admins are not client members by default; they still see every site.
 
-Create three articles (give one a hero image via **Choose** → **Upload**). Example titles: `Welcome to Acme`, `Shipping the first release`, `How preview works`.
+## 10. Author articles
 
-## 10. Draft vs publish vs schedule
+In the site workspace the sidebar's **CONTENT** section lists every content type with its entry count. Open **Articles** (`/sites/<id>/c/articles`), then **New article** (or `n`; the Overview's **Create** tiles and the sidebar **+** do the same).
 
-On the entry:
+The editor is a focus page: the sidebar tucks away, a slim top bar holds **← Articles**, the save status, **Preview**, **⋯** and the **Mark as ready** split button, and **▥** (⌘.) toggles the **Details** panel.
 
-- **Save draft** — writes `draftData` only
-- **Publish → Publish now** — copies draft to published. Toast: **Published. Remember to Publish site to deploy.** Visitors still do not see it until you **Publish site** and the site pulls the snapshot
-- **Publish → Schedule…** — picks a local datetime + timezone. The in-process worker publishes when due
-- **Unpublish** / **Archive** / **Delete** — in the same **Publish** menu
+| Field | Where | Notes |
+| --- | --- | --- |
+| **Title \*** | Canvas, the big "Untitled" line | Typing it also fills the slug until you edit the slug |
+| **Excerpt**, **Body \*** | Canvas | Rich text: a format bar appears while the body has focus (Paragraph/Heading 2–4/Quote/Code, Bold, Italic, Link, lists, **Insert** › Image · Table · Divider, undo/redo); `/` opens the slash menu |
+| **Slug** | Details › Page | `lowercase-letters-numbers-and-hyphens` only; unique per collection; **Reset from title** while it is manual |
+| **Hero image** | Details › Fields | **Choose** opens the Library picker (upload, search, drop anywhere); add a description (alt text) |
+| **Published at**, **Category** | Details › Fields | Optional metadata; not the same as going live |
 
-A **draft** is CMS-only. **Preview** (next section) renders that draft on the customer site without publishing.
+There is no Save-then-leave step: a draft **saves itself** 2 seconds after the last change (also on ⌘S, the quiet **Save** button, leaving the tab or navigating away). A new entry has no server row until the title produces a slug — the status reads *Not saved yet — add a title* — then it becomes `/c/articles/<id>` without losing your place.
 
-## 11. Preview a draft
+Create three articles (give one a hero image). Example titles: `Welcome to Acme`, `Shipping the first release`, `How preview works`.
 
-1. Save a draft (or leave one unpublished)
-2. Click **Preview** (enabled once the entry has a slug)
+## 11. Draft → Ready → Live
+
+One vocabulary everywhere (status pills, filters, the editor, the Go-live panel):
+
+| Status | Meaning |
+| --- | --- |
+| **Draft** | Only in the CMS |
+| **Ready** | Marked as ready, waiting for the next **Go live** |
+| **Live** | In the live snapshot |
+| **Scheduled** | Goes live by itself at the chosen time |
+| **Archived** | Kept, but not on the site |
+
+On an entry (owners and agency admins):
+
+- **Mark as ready** — copies the draft to the published version (`publishEntryFn`). Visitors still do not see it until the site goes live.
+- **▾ › Mark as ready & go live now** — both steps at once.
+- **▾ › Schedule…** — quick chips (*Tomorrow 9:00*, *Monday 9:00*, *In 1 hour*), date, time and timezone → **Schedule**. The in-process worker publishes when due; **Cancel schedule** undoes it.
+- **⋯** — **Move back to draft**, **Archive**, **Delete…**, copy link / ID, **Preview formatting**.
+- **Details › History** — revisions grouped by author; **Restore** an earlier one.
+
+Collections also support **Select** (Photos-style) for bulk **Mark as ready**, **Move to draft** and **Delete**.
+
+## 12. Preview a draft
+
+Click **Preview** (the eye icon; enabled once the entry is saved and has a slug).
 
 Expected URL:
 
@@ -226,30 +254,32 @@ Expected URL:
 http://localhost:3001/__preview/articles/<slug>?token=<signed>
 ```
 
-The demo-site process must be running (`pnpm --filter @areca/demo-site dev`) and `.env.local` must have `ARECA_CMS_URL`. The page shows **PREVIEW - draft content** and must not be indexed (`X-Robots-Tag: noindex, nofollow`).
+The demo-site process must be running (`pnpm --filter @areca/demo-site dev`) and its `.env.local` must have `ARECA_CMS_URL`. The page shows **PREVIEW - draft content** and must not be indexed (`X-Robots-Tag: noindex, nofollow`).
 
-If Preview is disabled, save once so a slug exists.
+## 12b. Go live and releases
 
-## 12. Publish site and Releases
+The **Go-live tray** at the bottom of the site sidebar always shows the publishing state: *Not live yet*, *3 changes ready* (with **Go live**), *Going live…* (Queued → Building → Checking → Deploying), *Up to date*, or *Last release failed* (**See what happened**). On phones it is the small pill in the top bar.
 
-On the site dashboard (`/sites/<id>`), the bar has **Publish site** (optional **Urgent** checkbox).
+1. Mark each article as ready
+2. Click **Go live** in the tray (or on the Overview's *changes ready* card)
 
-1. Publish each article first (**Publish now**)
-2. Click **Publish site**
+Expected: the tray shows *Going live…*. With **no deployment target** the worker log says `no deployment target configured, marking live without deploy` and the tray settles on **Live · Up to date**.
 
-Expected: toast **Publish requested**. With **no deployment target**, the worker log is `no deployment target configured, marking live without deploy`. The bar shows **Live publication …**.
+Click the tray (or open `/sites/<id>?panel=golive`) for the **Go-live panel**:
 
-Open **Releases** (`/sites/<id>/releases`):
+- The status sentence and **What's changing** (the ready entries, each linking to its editor)
+- **Urgent — skip the queue** and **Go live**; validation problems appear as a *Fix these first* checklist linked to the entries
+- **Releases**, a timeline of every release: *Went live*, *Failed*, *Replaced*, *Waiting…*. **Details** shows the snapshot hash and build steps with **View log** (auto-refreshing) and **Cancel** for queued jobs; earlier live releases offer **Restore this version** (rollback). **Show older** pages back.
 
-| Publication status | Meaning |
+| Publication status | Shown as |
 | --- | --- |
-| `pending` / `building` | Snapshot created, job running |
-| `live` | Current snapshot sites should pull |
-| `failed` | Job failed; previous live (if any) stays |
-| `superseded` | Replaced by a newer live publication |
-| `rolled_back` | An older `wasLive` snapshot was re-enqueued |
+| `pending` / `building` | Waiting… / Going live |
+| `live` | Went live (current) |
+| `failed` | Failed — the previous live release stays |
+| `superseded` | Replaced by a newer release |
+| `rolled_back` | An earlier release was restored |
 
-Each **Build job** has **Logs**. **Rollback** is offered on publications that `wasLive` and are not currently `live`.
+Owners and admins can open **Activity** (the Overview's **See all activity**, ⌘K → **Open activity**, **More** on phones, or `?panel=activity`) for the site's audit trail; agency admins see everything at **Agency › Activity** (`/agency/activity?client=` filters by client).
 
 ## 13. Pull content and run the demo site
 
@@ -266,7 +296,7 @@ Open [http://localhost:3001/blog](http://localhost:3001/blog). You should see th
 http://localhost:3000/api/assets/file/<storageKey>
 ```
 
-If the image host is a LAN IP, `APP_URL` in `apps/cms/.env.local` is not `http://localhost:3000` — fix it and **Publish site** again so the snapshot URLs update, then re-pull.
+If the image host is a LAN IP, `APP_URL` in `apps/cms/.env.local` is not `http://localhost:3000` — fix it and **Go live** again so the snapshot URLs update, then re-pull.
 
 `pnpm dev` on the demo site serves the **pulled** files (not the fixture) after a successful pull.
 
@@ -299,15 +329,15 @@ Important after a **db:reset**:
 2. Update Dokploy `env` + `buildArgs` (`ARECA_SITE_TOKEN`, `ARECA_CMS_URL`) — `pnpm --filter @areca/cms dokploy:setup` or edit the app in the Dokploy UI
 3. `APP_URL` (CMS) and `ARECA_CMS_URL` (site build) must be **LAN-reachable** from the Dokploy host, not `localhost`
 4. Listen on all interfaces: `pnpm --filter @areca/cms dev:lan`
-5. Set a deployment target on the site (application id + health check URL) so **Publish site** actually deploys
+5. Set a deployment target on the site (application id + health check URL) (**Settings › Deployment**) so **Go live** actually deploys
 
 ## Troubleshooting
 
 | Symptom | What to do |
 | --- | --- |
-| `areca pull` 404 / `No publication exists` | Publish at least one entry, then **Publish site**, wait until status is **live**, pull again |
+| `areca pull` 404 / `No publication exists` | Mark at least one entry as ready, then **Go live**, wait until the tray says **Up to date**, pull again |
 | `areca pull` 401 | Wrong or rotated token. Copy the current token into `.env.local` (and Dokploy build args) |
-| Images 404 or wrong host | `APP_URL` must be `http://localhost:3000` for local; republish the site so snapshot URLs refresh |
+| Images 404 or wrong host | `APP_URL` must be `http://localhost:3000` for local; **Go live** again so snapshot URLs refresh |
 | `/setup` says already set up / redirects to `/login` | A user already exists. `pnpm db:reset` to start empty, or sign in at `/login` |
 | Worker not running / publication stuck `pending` | `WORKER_ENABLED` must not be `false` in `apps/cms/.env.local`. Restart `pnpm --filter @areca/cms dev`. Logs should include `[areca] publishing worker started` |
 | Invite mail missing | Mailpit at http://localhost:8025. Check `SMTP_HOST=localhost` and `SMTP_PORT=1025` |

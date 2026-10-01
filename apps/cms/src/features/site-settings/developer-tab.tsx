@@ -1,0 +1,222 @@
+import * as React from 'react'
+import { ArrowsClockwise, Plugs, Stack } from '@phosphor-icons/react'
+import { toast } from 'sonner'
+
+import { errorMessage } from '#/lib/admin/helpers'
+import { Button } from '#/components/ui/button'
+import { ConfirmDialog } from '#/components/ui/confirm-dialog'
+import { CopyButton } from '#/components/ui/copy-button'
+import { EmptyState } from '#/components/ui/empty-state'
+import { InsetIcon } from '#/components/ui/inset-list'
+import { Input } from '#/components/ui/input'
+import { SettingsSection } from '#/components/ui/settings-section'
+import { collectionIcon } from '#/lib/site-nav'
+import { m } from '#/paraglide/messages'
+
+import { TokenReveal } from './token-reveal'
+import type { SiteRecord, useSiteSettings } from './use-site-settings'
+
+function useOrigin() {
+  const [origin, setOrigin] = React.useState('')
+  React.useEffect(() => setOrigin(window.location.origin), [])
+  return origin
+}
+
+/**
+ * Settings › Developer (brief §3.10): the site key, token rotation with a
+ * one-time reveal, and what the site project last synced (`lastManifest`)
+ * with a quick-start snippet.
+ */
+export function DeveloperTab({
+  site,
+  settings,
+}: {
+  site: SiteRecord
+  settings: ReturnType<typeof useSiteSettings>
+}) {
+  const [token, setToken] = React.useState<string | null>(null)
+  const origin = useOrigin()
+  const commands = [
+    'npm install @areca-cms/site-sdk',
+    `npx areca init --cms-url ${origin || 'https://cms.example.com'} --site-key ${site.slug}`,
+    'npx areca manifest push',
+  ].join('\n')
+
+  const collections = Object.entries(site.lastManifest?.collections ?? {})
+
+  return (
+    <div data-testid="settings-developer">
+      <SettingsSection
+        title={m.settings_site_key_title()}
+        description={m.settings_site_key_description()}
+      >
+        <div className="grid gap-1.5">
+          <label htmlFor="settings-site-slug" className="sr-only">
+            {m.settings_site_key_title()}
+          </label>
+          <div className="flex items-center gap-2">
+            <Input
+              id="settings-site-slug"
+              data-testid="settings-site-slug"
+              readOnly
+              value={site.slug}
+              className="font-mono text-[13px]"
+              onFocus={(event) => event.currentTarget.select()}
+            />
+            <CopyButton
+              value={site.slug}
+              label={m.sites_slug_copy()}
+              copiedLabel={m.sites_slug_copied_label()}
+              toastMessage={m.sites_slug_copied()}
+              aria-label={m.sites_slug_copy_aria()}
+              variant="secondary"
+              size="md"
+            />
+          </div>
+          <p className="text-caption font-normal text-text-muted">
+            {m.settings_site_key_hint()}
+          </p>
+        </div>
+      </SettingsSection>
+
+      <SettingsSection
+        id="token"
+        title={m.settings_token_title()}
+        description={m.settings_token_description()}
+      >
+        {token ? (
+          <TokenReveal token={token} onDismiss={() => setToken(null)} />
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <p className="max-w-[52ch] text-callout text-text-secondary">
+              {m.settings_token_body()}
+            </p>
+            <ConfirmDialog
+              title={m.sites_rotate_token_title()}
+              description={m.sites_rotate_token_description()}
+              confirmLabel={m.sites_rotate_token()}
+              variant="destructive"
+              testId="rotate-token-dialog"
+              onConfirm={async () => {
+                try {
+                  const result = await settings.rotate.mutateAsync()
+                  toast.success(m.sites_token_rotated())
+                  setToken(result.token)
+                } catch (error) {
+                  toast.error(errorMessage(error))
+                }
+              }}
+            >
+              <Button
+                type="button"
+                variant="outline"
+                loading={settings.rotate.isPending}
+                data-testid="rotate-token"
+              >
+                {settings.rotate.isPending ? null : <ArrowsClockwise />}
+                {m.settings_rotate_button()}
+              </Button>
+            </ConfirmDialog>
+          </div>
+        )}
+      </SettingsSection>
+
+      <SettingsSection
+        title={m.settings_manifest_title()}
+        description={m.settings_manifest_description()}
+        bare
+      >
+        <div className="grid gap-4">
+          {collections.length > 0 ? (
+            <div
+              className="overflow-hidden surface-card"
+              data-testid="manifest-status"
+            >
+              <p className="flex items-center gap-2 border-b border-border-default px-4 py-3 text-[14px] leading-5 font-medium text-text-primary">
+                <Plugs
+                  weight="duotone"
+                  className="size-[18px] text-icon-success"
+                />
+                {collections.length === 1
+                  ? m.settings_manifest_synced_one()
+                  : m.settings_manifest_synced({ count: collections.length })}
+              </p>
+              <ul>
+                {collections.map(([key, collection]) => {
+                  const Icon = collectionIcon(key, collection.label)
+                  return (
+                    <li
+                      key={key}
+                      className="flex items-center gap-3 border-b border-border-default px-4 py-2.5 last:border-b-0"
+                    >
+                      <InsetIcon tone="accent">
+                        <Icon />
+                      </InsetIcon>
+                      <span className="grid min-w-0 flex-1 gap-0.5">
+                        <span className="truncate text-[14px] leading-5 font-medium text-text-primary">
+                          {collection.label ?? key}
+                        </span>
+                        <span className="truncate text-mono text-text-muted">
+                          {key} · {collection.route}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-caption font-normal text-text-muted tnum">
+                        {collection.fields.length === 1
+                          ? m.settings_field_count_one({ count: 1 })
+                          : m.settings_field_count_other({
+                              count: collection.fields.length,
+                            })}
+                      </span>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          ) : (
+            <EmptyState
+              card
+              size="sm"
+              tone="neutral"
+              icon={<Stack weight="duotone" />}
+              title={m.settings_manifest_none()}
+              description={m.settings_manifest_none_body()}
+              data-testid="manifest-status"
+            />
+          )}
+
+          <div className="grid gap-1.5">
+            <div className="flex items-center justify-between gap-3 px-0.5">
+              <span className="text-caption text-text-muted">
+                {m.settings_quickstart()}
+              </span>
+              <CopyButton
+                value={commands}
+                label={m.settings_copy_commands()}
+                toastMessage={m.settings_commands_copied()}
+                variant="quiet"
+                size="xs"
+                data-testid="copy-quickstart"
+              />
+            </div>
+            <pre
+              className="scroll-quiet overflow-x-auto rounded-card bg-background-inverse px-4 py-3.5 text-mono whitespace-pre text-text-inverse dark:border dark:border-border-default dark:bg-background-subtle dark:text-text-primary"
+              data-testid="quickstart-snippet"
+            >
+              <code>
+                {commands.split('\n').map((line) => (
+                  <span key={line} className="block">
+                    <span className="opacity-50 select-none">$ </span>
+                    {line}
+                  </span>
+                ))}
+              </code>
+            </pre>
+            <p className="px-0.5 text-caption font-normal text-text-muted">
+              {m.settings_quickstart_hint()}
+            </p>
+          </div>
+        </div>
+      </SettingsSection>
+    </div>
+  )
+}

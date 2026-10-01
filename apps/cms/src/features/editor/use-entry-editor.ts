@@ -1,0 +1,723 @@
+import * as React from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useBlocker } from '@tanstack/react-router'
+import { toast } from 'sonner'
+
+import { queryKeys } from '#/lib/content/query-keys'
+import {
+  errorMessage,
+  fieldErrorsFromUnknown,
+  firstTextField,
+  initialEntryData,
+  slugify,
+} from '#/lib/content/utils'
+import type { FieldErrorMap } from '#/lib/content/utils'
+import { isEditedSinceReady } from '#/features/golive/entry-live-state'
+import { useGoLive, useInvalidateGoLive } from '#/features/golive/use-go-live'
+import type { EntryData, EntryStatus, Field } from '#/lib/types'
+import { m } from '#/paraglide/messages'
+import {
+  archiveEntryFn,
+  cancelScheduleFn,
+  createEntryFn,
+  deleteEntryFn,
+  getEntryFn,
+  getPreviewUrlFn,
+  listRevisionsFn,
+  publishEntryFn,
+  restoreRevisionFn,
+  scheduleEntryFn,
+  unpublishEntryFn,
+  updateDraftFn,
+} from '#/server/fn/content'
+
+/** Same rule as the server's `SLUG_PATTERN`. */
+const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+
+/** Autosave waits this long after the last change (brief §3.5). */
+const AUTOSAVE_DELAY = 2000
+/** Navigation waits at most this long for a pending save. */
+const LEAVE_WAIT = 3000
+
+export type EntryRecord = {
+  id: string
+  slug: string
+  status: EntryStatus
+  draftData: EntryData
+  publishedData?: EntryData | null
+  scheduledAt: string | Date | null
+  scheduleTimezone?: string | null
+  publishedAt: string | Date | null
+  createdAt: string | Date
+  updatedAt: string | Date
+  createdBy?: string | null
+  createdByName?: string | null
+  updatedByName?: string | null
+}
+
+export type RevisionRecord = {
+  id: string
+  createdAt: string | Date
+  note: string | null
+  createdBy?: string | null
+  createdByName?: string | null
+}
+
+/**
+ * - `idle`    nothing saved in this session yet
+ * - `saving`  a save is in flight
+ * - `saved`   the last save succeeded
+ * - `failed`  the last save failed (validation or network)
+ * - `blocked` a new entry cannot be created yet: it has no valid slug
+ */
+export type SaveStatus = 'idle' | 'saving' | 'saved' | 'failed' | 'blocked'
+type Outcome = 'saved' | 'failed' | 'blocked'
+
+function payloadFromData(data: EntryData) {
+  const next: EntryData = {}
+  for (const [key, value] of Object.entries(data)) {
+    if (value === undefined) continue
+    next[key] = value
+  }
+  return next
+}
+
+const sleep = (ms: number) =>
+  new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), ms))
+
+/**
+ * Everything the editor does, without markup (brief §3.5, §5.2):
+ *
+ * - loads the entry, its revisions and the signed preview URL;
+ * - keeps the local draft, the slug-follows-title rule and field errors;
+ * - **autosave**: 2s after the last change, on window blur / tab hide,
+ *   before navigation (up to 3s) and on ⌘S; one save in flight, edits made
+ *   meanwhile are kept and saved next; a new entry is created on the first
+ *   save that has a valid slug;
+ * - the entry actions (mark as ready, go live now, schedule, cancel, move
+ *   back to draft, archive, delete, restore), each flushing the draft first.
+ */
+export function useEntryEditor({
+  siteId,
+  collectionKey,
+  fields,
+  entryId: routeEntryId,
+  onCreated,
+  onDeleted,
+  onRevealError,
+}: {
+  siteId: string
+  collectionKey: string
+  fields: Field[]
+  entryId?: string
+  /** A new entry got its server row; the host swaps the URL. */
+  onCreated?: (id: string) => Promise<unknown> | void
+  onDeleted?: () => Promise<unknown> | void
+  /** Bring a field with an error into view. */
+  onRevealError?: (fieldKey: string) => void
+}) {
+  const queryClient = useQueryClient()
+  const invalidateGoLive = useInvalidateGoLive(siteId)
+  const goLive = useGoLive(siteId)
+
+  const [createdId, setCreatedId] = React.useState<string | undefined>()
+  const entryId = routeEntryId ?? createdId
+  const entryIdRef = React.useRef(entryId)
+  entryIdRef.current = entryId
+
+  const titleField = firstTextField(fields)
+  const slugField = fields.find((field) => field.type === 'slug')
+
+  const entryQuery = useQuery({
+    queryKey: queryKeys.entry(entryId ?? 'new'),
+    queryFn: () => getEntryFn({ data: { id: entryId! } }),
+    enabled: Boolean(entryId),
+    refetchInterval: (query) => {
+      const data = query.state.data as EntryRecord | undefined
+      return data?.status === 'scheduled' ? 2000 : false
+    },
+  })
+  const entry = (entryQuery.data ?? null) as EntryRecord | null
+
+  const revisionsQuery = useQuery({
+    queryKey: queryKeys.revisions(entryId ?? ''),
+    queryFn: () => listRevisionsFn({ data: { entryId: entryId! } }),
+    enabled: Boolean(entryId),
+  })
+
+  const previewQuery = useQuery({
+    queryKey: queryKeys.previewUrl(siteId, collectionKey, entry?.slug ?? ''),
+    queryFn: () =>
+      getPreviewUrlFn({
+        data: { siteId, collection: collectionKey, slug: entry!.slug },
+      }),
+    enabled: Boolean(entry?.slug),
+    staleTime: 5 * 60 * 1000,
+  })
+
+  /* ----------------------------------------------------------------------
+     Local draft
+  ---------------------------------------------------------------------- */
+
+  const [data, setDataState] = React.useState<EntryData>(() =>
+    initialEntryData(fields),
+  )
+  const dataRef = React.useRef(data)
+  const initialJson = React.useMemo(
+    () => JSON.stringify(initialEntryData(fields)),
+    [fields],
+  )
+  const baselineRef = React.useRef(initialJson)
+  const [baseline, setBaselineState] = React.useState(initialJson)
+  const serverJsonRef = React.useRef<string | null>(null)
+  const [hydratedId, setHydratedId] = React.useState<string | undefined>()
+  const [slugManual, setSlugManual] = React.useState(false)
+  const [fieldErrors, setFieldErrors] = React.useState<FieldErrorMap>({})
+  const [formError, setFormError] = React.useState<string | null>(null)
+  const [status, setStatus] = React.useState<SaveStatus>('idle')
+  const [lastSavedAt, setLastSavedAt] = React.useState<Date | null>(null)
+
+  const setData = React.useCallback((next: EntryData) => {
+    dataRef.current = next
+    setDataState(next)
+  }, [])
+  const setBaseline = React.useCallback((json: string) => {
+    baselineRef.current = json
+    setBaselineState(json)
+  }, [])
+  const isDirtyNow = React.useCallback(
+    () => JSON.stringify(dataRef.current) !== baselineRef.current,
+    [],
+  )
+
+  const dataJson = JSON.stringify(data)
+  const dirty = dataJson !== baseline
+
+  /** Take the server's draft, unless local edits are still unsaved. */
+  const hydrate = React.useCallback(
+    (record: EntryRecord, force: boolean) => {
+      const next = initialEntryData(fields, record.draftData)
+      const json = JSON.stringify(next)
+      if (!force && json === serverJsonRef.current) return
+      serverJsonRef.current = json
+      if (force || !isDirtyNow()) {
+        setData(next)
+        setBaseline(json)
+      }
+    },
+    [fields, isDirtyNow, setData, setBaseline],
+  )
+
+  React.useEffect(() => {
+    if (!entry) return
+    if (hydratedId !== entry.id) {
+      hydrate(entry, true)
+      // A never-published draft whose slug still matches its title keeps
+      // following the title; anything else keeps its address.
+      const title = titleField ? entry.draftData[titleField.key] : undefined
+      const follows =
+        entry.status === 'draft' &&
+        !entry.publishedAt &&
+        typeof title === 'string' &&
+        slugify(title) === entry.slug
+      setSlugManual(!follows)
+      setHydratedId(entry.id)
+      return
+    }
+    hydrate(entry, false)
+  }, [entry, hydratedId, hydrate, titleField])
+
+  const updateField = React.useCallback(
+    (key: string, value: unknown) => {
+      const prev = dataRef.current
+      const next = { ...prev, [key]: value }
+      if (
+        !slugManual &&
+        slugField &&
+        titleField &&
+        key === titleField.key &&
+        typeof value === 'string'
+      ) {
+        next[slugField.key] = slugify(value)
+      }
+      setData(next)
+      if (slugField && key === slugField.key) setSlugManual(true)
+      setFieldErrors((errors) => {
+        const touched = [
+          key,
+          ...(slugField && key === titleField?.key && !slugManual
+            ? [slugField.key]
+            : []),
+        ]
+        if (!touched.some((item) => item in errors)) return errors
+        const copy = { ...errors }
+        for (const item of touched) delete copy[item]
+        return copy
+      })
+    },
+    [slugManual, slugField, titleField, setData],
+  )
+
+  function resetSlugFromTitle() {
+    if (!slugField || !titleField) return
+    const title = dataRef.current[titleField.key]
+    setSlugManual(false)
+    updateFieldRaw(
+      slugField.key,
+      slugify(typeof title === 'string' ? title : ''),
+    )
+  }
+
+  function updateFieldRaw(key: string, value: unknown) {
+    setData({ ...dataRef.current, [key]: value })
+  }
+
+  /* ----------------------------------------------------------------------
+     Autosave
+  ---------------------------------------------------------------------- */
+
+  const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  const runningRef = React.useRef<Promise<Outcome> | null>(null)
+  const pendingRef = React.useRef(false)
+  /** The running save was asked for (⌘S, Save, an action), not a timer. */
+  const explicitRef = React.useRef(false)
+  const leavingRef = React.useRef(false)
+  const bypassRef = React.useRef(false)
+  const fieldsRef = React.useRef(fields)
+  fieldsRef.current = fields
+  const onCreatedRef = React.useRef(onCreated)
+  onCreatedRef.current = onCreated
+  const onRevealRef = React.useRef(onRevealError)
+  onRevealRef.current = onRevealError
+
+  const reveal = React.useCallback((errors: FieldErrorMap) => {
+    const first = fieldsRef.current.find((field) => errors[field.key])
+    if (first) onRevealRef.current?.(first.key)
+  }, [])
+
+  const invalidateGoLiveRef = React.useRef(invalidateGoLive)
+  invalidateGoLiveRef.current = invalidateGoLive
+  const invalidateLists = React.useCallback(
+    (id?: string) =>
+      Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ['entries', siteId, collectionKey],
+        }),
+        id
+          ? queryClient.invalidateQueries({ queryKey: queryKeys.revisions(id) })
+          : null,
+        invalidateGoLiveRef.current(),
+      ]),
+    [queryClient, siteId, collectionKey],
+  )
+
+  const saveOnce = React.useCallback(async (): Promise<Outcome> => {
+    const snapshot = dataRef.current
+    const submitted = JSON.stringify(snapshot)
+    const id = entryIdRef.current
+    if (!id) {
+      const slug = slugField ? snapshot[slugField.key] : undefined
+      if (typeof slug !== 'string' || !SLUG_PATTERN.test(slug)) {
+        setStatus('blocked')
+        return 'blocked'
+      }
+    }
+    setStatus('saving')
+    try {
+      const payload = payloadFromData(snapshot)
+      const saved = (
+        id
+          ? await updateDraftFn({ data: { id, data: payload } })
+          : await createEntryFn({
+              data: { siteId, collectionKey, data: payload },
+            })
+      ) as EntryRecord
+      serverJsonRef.current = JSON.stringify(
+        initialEntryData(fieldsRef.current, saved.draftData),
+      )
+      setBaseline(submitted)
+      setFieldErrors({})
+      setFormError(null)
+      setLastSavedAt(new Date())
+      setStatus('saved')
+      queryClient.setQueryData(
+        queryKeys.entry(saved.id),
+        (old: EntryRecord | undefined) => ({
+          ...old,
+          ...saved,
+        }),
+      )
+      void invalidateLists(saved.id)
+      if (!id) {
+        entryIdRef.current = saved.id
+        setCreatedId(saved.id)
+        setHydratedId(saved.id)
+        if (!leavingRef.current) {
+          bypassRef.current = true
+          void Promise.resolve(onCreatedRef.current?.(saved.id)).finally(() => {
+            bypassRef.current = false
+          })
+        }
+      }
+      return 'saved'
+    } catch (error) {
+      const parsed = fieldErrorsFromUnknown(error)
+      setFieldErrors(parsed.fieldErrors)
+      const hasFieldErrors = Object.keys(parsed.fieldErrors).some(Boolean)
+      setFormError(
+        parsed.formError ??
+          (hasFieldErrors
+            ? null
+            : errorMessage(error, m.editor_could_not_save())),
+      )
+      setStatus('failed')
+      if (explicitRef.current) reveal(parsed.fieldErrors)
+      return 'failed'
+    }
+  }, [
+    slugField,
+    siteId,
+    collectionKey,
+    queryClient,
+    setBaseline,
+    invalidateLists,
+    reveal,
+  ])
+
+  const requested = () => pendingRef.current
+  const run = React.useCallback((): Promise<Outcome> => {
+    if (runningRef.current) {
+      pendingRef.current = true
+      return runningRef.current
+    }
+    const loop = (async () => {
+      // Yield first so `runningRef` is set before the loop can finish.
+      await Promise.resolve()
+      let outcome: Outcome = 'saved'
+      try {
+        do {
+          pendingRef.current = false
+          if (!isDirtyNow()) break
+          outcome = await saveOnce()
+          if (outcome !== 'saved') break
+        } while (requested() && isDirtyNow())
+      } finally {
+        runningRef.current = null
+        explicitRef.current = false
+      }
+      return outcome
+    })()
+    runningRef.current = loop
+    return loop
+  }, [isDirtyNow, saveOnce])
+
+  /** Save now (⌘S, Save, before actions and navigation). */
+  const flush = React.useCallback((): Promise<Outcome> => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+    explicitRef.current = true
+    return run()
+  }, [run])
+
+  const runRef = React.useRef(run)
+  runRef.current = run
+
+  // Debounce: save 2s after the last change (only a change restarts it).
+  React.useEffect(() => {
+    if (!dirty) return
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null
+      void runRef.current()
+    }, AUTOSAVE_DELAY)
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+    }
+  }, [dataJson, dirty])
+
+  // Blur of the window or a hidden tab saves at once.
+  React.useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState === 'hidden' && isDirtyNow()) void flush()
+    }
+    const onBlur = () => {
+      if (isDirtyNow()) void flush()
+    }
+    document.addEventListener('visibilitychange', onHide)
+    window.addEventListener('blur', onBlur)
+    return () => {
+      document.removeEventListener('visibilitychange', onHide)
+      window.removeEventListener('blur', onBlur)
+    }
+  }, [flush, isDirtyNow])
+
+  // Leaving: wait (max 3s) for the save; ask only when it could not save.
+  const blocker = useBlocker({
+    shouldBlockFn: async ({ current, next }) => {
+      if (bypassRef.current) return false
+      if (current.pathname === next.pathname) return false
+      if (!isDirtyNow() && !runningRef.current) return false
+      leavingRef.current = true
+      try {
+        const outcome = await Promise.race([flush(), sleep(LEAVE_WAIT)])
+        return outcome === 'failed' || outcome === 'blocked'
+      } finally {
+        leavingRef.current = false
+      }
+    },
+    enableBeforeUnload: () =>
+      !bypassRef.current && (isDirtyNow() || Boolean(runningRef.current)),
+    withResolver: true,
+  })
+
+  /* ----------------------------------------------------------------------
+     Actions
+  ---------------------------------------------------------------------- */
+
+  const invalidateEntry = React.useCallback(
+    async (id: string) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.entry(id) }),
+        invalidateLists(id),
+      ])
+    },
+    [queryClient, invalidateLists],
+  )
+
+  /** Flush before an action; false (with a toast) when it could not save. */
+  async function ensureSaved() {
+    const outcome = await flush()
+    if (outcome === 'saved' && entryIdRef.current) return entryIdRef.current
+    toast.error(
+      outcome === 'blocked'
+        ? m.editor_add_title_first()
+        : m.editor_fix_fields_first(),
+    )
+    return null
+  }
+
+  function actionError(
+    fallback: ReturnType<typeof m.editor_something_went_wrong>,
+  ) {
+    return (error: unknown) => {
+      const parsed = fieldErrorsFromUnknown(error)
+      if (Object.keys(parsed.fieldErrors).some(Boolean)) {
+        setFieldErrors(parsed.fieldErrors)
+        reveal(parsed.fieldErrors)
+      }
+      toast.error(parsed.formError ?? errorMessage(error, fallback))
+    }
+  }
+
+  const markReadyMutation = useMutation({
+    mutationFn: async (options: { quiet?: boolean } = {}) => {
+      const id = await ensureSaved()
+      if (!id) return null
+      await publishEntryFn({ data: { id } })
+      return { id, quiet: options.quiet }
+    },
+    onSuccess: async (result) => {
+      if (!result) return
+      if (!result.quiet)
+        toast.success(m.editor_marked_ready(), {
+          description: m.editor_marked_ready_description(),
+        })
+      await invalidateEntry(result.id)
+    },
+    onError: actionError(m.editor_could_not_mark_ready()),
+  })
+
+  const goLiveNowMutation = useMutation({
+    mutationFn: async (markFirst: boolean) => {
+      if (markFirst) {
+        const marked = await markReadyMutation.mutateAsync({ quiet: true })
+        if (!marked) return null
+      }
+      return goLive.goLive()
+    },
+  })
+
+  const scheduleMutation = useMutation({
+    mutationFn: async (input: { at: Date; timeZone: string }) => {
+      const id = await ensureSaved()
+      if (!id) return null
+      await scheduleEntryFn({
+        data: {
+          id,
+          scheduledAt: input.at.toISOString(),
+          timezone: input.timeZone,
+        },
+      })
+      return id
+    },
+    onSuccess: async (id) => {
+      if (!id) return
+      toast.success(m.editor_scheduled_toast())
+      await invalidateEntry(id)
+    },
+    onError: actionError(m.editor_could_not_schedule()),
+  })
+
+  const cancelScheduleMutation = useMutation({
+    mutationFn: () => cancelScheduleFn({ data: { id: entryIdRef.current! } }),
+    onSuccess: async () => {
+      toast.success(m.editor_schedule_cancelled())
+      await invalidateEntry(entryIdRef.current!)
+    },
+    onError: actionError(m.editor_could_not_cancel_schedule()),
+  })
+
+  const unpublishMutation = useMutation({
+    mutationFn: async () => {
+      const id = await ensureSaved()
+      if (!id) return null
+      await unpublishEntryFn({ data: { id } })
+      return id
+    },
+    onSuccess: async (id) => {
+      if (!id) return
+      toast.success(m.editor_moved_to_draft())
+      await invalidateEntry(id)
+    },
+    onError: actionError(m.editor_could_not_unpublish()),
+  })
+
+  const archiveMutation = useMutation({
+    mutationFn: async () => {
+      const id = await ensureSaved()
+      if (!id) return null
+      await archiveEntryFn({ data: { id } })
+      return id
+    },
+    onSuccess: async (id) => {
+      if (!id) return
+      toast.success(m.editor_entry_archived())
+      await invalidateEntry(id)
+    },
+    onError: actionError(m.editor_could_not_archive()),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteEntryFn({ data: { id: entryIdRef.current! } }),
+    onSuccess: async () => {
+      toast.success(m.editor_entry_deleted())
+      bypassRef.current = true
+      if (timerRef.current) clearTimeout(timerRef.current)
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ['entries', siteId, collectionKey],
+        }),
+        invalidateGoLive(),
+      ])
+      await onDeleted?.()
+    },
+    onError: actionError(m.editor_could_not_delete()),
+  })
+
+  const restoreMutation = useMutation({
+    mutationFn: async (revisionId: string) => {
+      await flush()
+      const restored: EntryRecord = await restoreRevisionFn({
+        data: { entryId: entryIdRef.current!, revisionId },
+      })
+      return restored
+    },
+    onSuccess: async (restored) => {
+      hydrate(restored, true)
+      setFieldErrors({})
+      setFormError(null)
+      queryClient.setQueryData(
+        queryKeys.entry(restored.id),
+        (old: EntryRecord | undefined) => ({
+          ...old,
+          ...restored,
+        }),
+      )
+      toast.success(m.editor_revision_restored())
+      await invalidateEntry(restored.id)
+    },
+    onError: actionError(m.editor_could_not_restore()),
+  })
+
+  /* ----------------------------------------------------------------------
+     Derived state
+  ---------------------------------------------------------------------- */
+
+  const isNew = !entryId
+  const errorCount = Object.keys(fieldErrors).filter(Boolean).length
+  const markable = entry
+    ? entry.status !== 'published' ||
+      isEditedSinceReady({
+        status: entry.status,
+        updatedAt: entry.updatedAt,
+        draftData: initialEntryData(fields, data),
+        publishedData: entry.publishedData
+          ? initialEntryData(fields, entry.publishedData)
+          : entry.publishedData,
+      })
+    : true
+  const busy =
+    markReadyMutation.isPending ||
+    goLiveNowMutation.isPending ||
+    scheduleMutation.isPending ||
+    cancelScheduleMutation.isPending ||
+    unpublishMutation.isPending ||
+    archiveMutation.isPending ||
+    deleteMutation.isPending ||
+    restoreMutation.isPending
+  const loading =
+    Boolean(routeEntryId) &&
+    (entryQuery.isLoading || hydratedId !== routeEntryId)
+  const ready = Boolean(entry) && hydratedId === entryId && status !== 'saving'
+
+  return {
+    entryId,
+    isNew,
+    entry,
+    entryQuery,
+    loading,
+    ready,
+    revisions: (revisionsQuery.data ?? []) as RevisionRecord[],
+    revisionsQuery,
+    previewUrl: previewQuery.data?.url,
+    titleField,
+    slugField,
+    data,
+    updateField,
+    slugManual,
+    resetSlugFromTitle,
+    fieldErrors,
+    errorCount,
+    formError,
+    dirty,
+    status,
+    lastSavedAt,
+    save: flush,
+    markable,
+    busy,
+    markReady: () => markReadyMutation.mutate({}),
+    markReadyPending: markReadyMutation.isPending,
+    goLiveNow: async () => {
+      const result = await goLiveNowMutation.mutateAsync(markable)
+      return result
+    },
+    goLiveNowPending: goLiveNowMutation.isPending || goLive.isPending,
+    schedule: (at: Date, timeZone: string) =>
+      scheduleMutation.mutateAsync({ at, timeZone }),
+    schedulePending: scheduleMutation.isPending,
+    cancelSchedule: () => cancelScheduleMutation.mutate(),
+    unpublish: () => unpublishMutation.mutate(),
+    archive: () => archiveMutation.mutate(),
+    remove: () => deleteMutation.mutateAsync(),
+    restore: (revisionId: string) => restoreMutation.mutateAsync(revisionId),
+    blocker,
+    leaveAnyway: () => {
+      bypassRef.current = true
+      blocker.proceed?.()
+    },
+  }
+}
+
+export type EntryEditorState = ReturnType<typeof useEntryEditor>

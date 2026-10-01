@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-import { TINY_PNG, login, signOut } from './helpers'
+import { TINY_PNG, hydrated, login, openAgency, signOut } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -9,9 +9,10 @@ test('agency admin can whitelabel the CMS and reset it', async ({ page }) => {
   const name = `Acme Studio ${Date.now()}`
 
   await login(page)
-  await page.getByTestId('agency-nav').click()
+  // Workspace switcher → Agency workspace → Branding.
+  await openAgency(page)
   await page.getByTestId('branding-nav').click()
-  await expect(page).toHaveURL(/\/admin\/branding$/)
+  await expect(page).toHaveURL(/\/agency\/branding$/)
   await expect(page.getByTestId('branding-page')).toBeVisible()
   await expect(page.getByTestId('brand-legacy-colors')).toHaveCount(0)
 
@@ -35,17 +36,25 @@ test('agency admin can whitelabel the CMS and reset it', async ({ page }) => {
   await expect(page.getByText('Branding saved')).toBeVisible()
 
   // The sidebar, tab title, and accent stylesheet update without a reload.
-  await expect(page.getByTestId('navbar')).toContainText(name)
+  // Branding drives the accent tokens, never the ink primary button.
+  await expect(page.getByTestId('sidebar')).toContainText(name)
   await expect(page).toHaveTitle(name)
   await expect
     .poll(() =>
       page.evaluate(() =>
         getComputedStyle(document.documentElement)
-          .getPropertyValue('--color-action-primary-hover')
+          .getPropertyValue('--color-accent')
           .trim(),
       ),
     )
     .toMatch(/^oklch\(/)
+  expect(
+    await page.evaluate(() =>
+      getComputedStyle(document.documentElement)
+        .getPropertyValue('--color-action-primary')
+        .trim(),
+    ),
+  ).not.toMatch(/^oklch\(/)
   // Logo upload swaps the leaf tile for the image.
   await page.getByTestId('brand-logo-input').setInputFiles({
     name: 'logo.png',
@@ -56,7 +65,7 @@ test('agency admin can whitelabel the CMS and reset it', async ({ page }) => {
   await expect(page.getByTestId('brand-logo-preview')).toBeVisible()
   await expect(
     page
-      .getByTestId('navbar')
+      .getByTestId('sidebar')
       .locator('img[src*="/api/assets/file/branding/logo-"]'),
   ).toBeVisible()
 
@@ -67,14 +76,15 @@ test('agency admin can whitelabel the CMS and reset it', async ({ page }) => {
 
   // Reset restores the defaults.
   await login(page)
-  await page.goto('/admin/branding')
+  await page.goto('/agency/branding')
+  await hydrated(page)
   await page.getByRole('button', { name: 'Reset to defaults' }).click()
   await page
     .getByTestId('reset-branding')
     .getByRole('button', { name: 'Reset to defaults' })
     .click()
   await expect(page.getByText('Branding reset to defaults')).toBeVisible()
-  await expect(page.getByTestId('navbar')).toContainText('Areca')
+  await expect(page.getByTestId('sidebar')).toContainText('Areca')
   await expect(page).toHaveTitle('Areca')
   await expect(page.getByTestId('brand-name')).toHaveValue('')
   await expect(page.getByTestId('brand-legacy-colors')).toHaveCount(0)

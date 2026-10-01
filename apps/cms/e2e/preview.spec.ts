@@ -1,25 +1,42 @@
 import { expect, test } from '@playwright/test'
 
 import {
-  createAndSaveArticle,
+  ACME_SITE,
+  OWNER,
+  expectDisabledWithReason,
   login,
+  openCollection,
   openSite,
+  startNewEntry,
   uniqueSuffix,
+  waitForSaved,
+  writeArticle,
 } from './helpers'
 
-test('preview token returns draft data; tampered token is 401', async ({
+test('preview needs a saved entry; its signed URL serves the draft and rejects tampering', async ({
   page,
   request,
 }) => {
-  test.setTimeout(90_000)
   const title = `E2E Preview ${uniqueSuffix()}`
 
-  await login(page, 'owner@acme.local')
-  await openSite(page, /acme-site/i)
-  await createAndSaveArticle(page, title)
+  await login(page, OWNER)
+  await openSite(page, ACME_SITE)
+  await openCollection(page, 'articles')
+  await startNewEntry(page)
+
+  // Nothing to preview until the entry exists.
+  await expectDisabledWithReason(
+    page,
+    page.getByTestId('preview-entry'),
+    'Preview works once the entry is saved.',
+  )
+
+  await writeArticle(page, title)
+  await waitForSaved(page)
 
   const preview = page.getByTestId('preview-entry')
-  await expect(preview).toHaveAttribute('href', /[?&]token=/, { timeout: 15_000 })
+  await expect(preview).toHaveAttribute('href', /[?&]token=/)
+  await expect(preview).toHaveAttribute('target', '_blank')
   const href = (await preview.getAttribute('href')) ?? ''
   const token = new URL(href).searchParams.get('token')
   expect(token).toBeTruthy()

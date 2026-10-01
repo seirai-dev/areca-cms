@@ -80,8 +80,13 @@ export function isFontKey(value: unknown): value is FontKey {
   return typeof value === 'string' && value in FONTS
 }
 
-export function fontStylesheetUrl(font: FontKey): string | null {
-  const google = FONTS[font].google
+/** The font entry for a key, falling back to the default for unknown keys. */
+export function fontEntry(font: string | null | undefined) {
+  return isFontKey(font) ? FONTS[font] : FONTS[DEFAULT_FONT]
+}
+
+export function fontStylesheetUrl(font: FontKey | string): string | null {
+  const google = fontEntry(font).google
   return google
     ? `https://fonts.googleapis.com/css2?family=${google}&display=swap`
     : null
@@ -89,7 +94,8 @@ export function fontStylesheetUrl(font: FontKey): string | null {
 
 /**
  * One-click looks. Branding is meant to take seconds: pick a preset, optionally
- * nudge the accent, upload a logo. `accent: null` means the built-in palette.
+ * nudge the accent, upload a logo. `accent: null` means the built-in palette:
+ * iris (#5856D6 light / #7D7AFF dark) with Inter.
  */
 export const BRAND_PRESETS = [
   { id: 'areca', label: 'Areca', accent: null, font: 'inter' },
@@ -182,7 +188,7 @@ export const DEFAULT_BRANDING: BrandingView = {
   customized: false,
 }
 
-export const HEX_COLOR_RE = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i
+const HEX_COLOR_RE = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i
 
 export function normalizeHex(value: string): string | null {
   const trimmed = value.trim()
@@ -276,21 +282,6 @@ export function hexToOklch(hex: string): Oklch | null {
   return { l: L, c, h: c < 1e-4 ? 0 : h }
 }
 
-/** Lightness of each step, 50 → 950, taken from the built-in clay scale. */
-const STEP_LIGHTNESS = [
-  0.1569, 0.2129, 0.3148, 0.4112, 0.5032, 0.5883, 0.6735, 0.7557, 0.8376,
-  0.9204, 0.9592,
-] as const
-
-/** Chroma relative to the 500 step, from the built-in fern scale. */
-const STEP_CHROMA = [
-  0.15, 0.27, 0.45, 0.65, 0.85, 1, 0.83, 0.58, 0.4, 0.2, 0.12,
-] as const
-
-export const SCALE_STEPS = [
-  50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950,
-] as const
-
 /** Keep derived scales inside a range that still renders on sRGB screens. */
 const MAX_PEAK_CHROMA = 0.16
 const MIN_PEAK_CHROMA = 0.04
@@ -299,54 +290,55 @@ function fmt(value: number, digits = 4) {
   return Number(value.toFixed(digits)).toString()
 }
 
-export function buildScale(
-  base: Oklch,
-  opts: { chromaFactor?: number } = {},
-): Record<(typeof SCALE_STEPS)[number], string> {
-  const peak =
-    Math.min(MAX_PEAK_CHROMA, Math.max(MIN_PEAK_CHROMA, base.c)) *
-    (opts.chromaFactor ?? 1)
-  const out = {} as Record<(typeof SCALE_STEPS)[number], string>
-  SCALE_STEPS.forEach((step, index) => {
-    const l = STEP_LIGHTNESS[index]
-    const c = peak * STEP_CHROMA[index]
-    out[step] = `oklch(${fmt(l * 100, 2)}% ${fmt(c)} ${fmt(base.h, 2)})`
-  })
-  return out
-}
-
 /**
- * The accent colour in the three tones the semantic tokens need: the accent
- * itself, a lighter hover step, and a mode-appropriate "on text/icon" tone
- * (darkened in light mode, lightened in dark mode).
+ * The accent colour in the tones the semantic accent tokens need, per mode.
+ * Light mode keeps the picked lightness; dark mode lifts it so the accent
+ * still reads on near-black (iris #5856D6 → #7D7AFF is the reference pair).
  */
 function accentTones(base: Oklch, mode: AccentMode) {
   const peak = Math.min(MAX_PEAK_CHROMA, Math.max(MIN_PEAK_CHROMA, base.c))
-  const tone = (l: number, chromaFactor = 1) =>
-    `oklch(${fmt(Math.min(0.98, Math.max(0.12, l)) * 100, 2)}% ${fmt(
-      peak * chromaFactor,
-    )} ${fmt(base.h, 2)})`
+  const clampL = (l: number) => Math.min(0.97, Math.max(0.12, l))
+  const tone = (l: number, chromaFactor = 1, alpha?: number) =>
+    `oklch(${fmt(clampL(l) * 100, 2)}% ${fmt(peak * chromaFactor)} ${fmt(
+      base.h,
+      2,
+    )}${alpha === undefined ? '' : ` / ${alpha}`})`
 
-  const primary = tone(base.l)
-  const hover = tone(base.l + 0.09, 0.92)
-  const onSurface =
-    mode === 'dark' ? tone(Math.max(base.l, 0.72), 0.8) : tone(0.32, 0.85)
-  return { primary, hover, onSurface }
+  if (mode === 'dark') {
+    const l = Math.min(0.85, Math.max(base.l + 0.1, 0.6))
+    return {
+      accent: tone(l),
+      hover: tone(l + 0.07, 0.95),
+      soft: tone(l, 1, 0.16),
+      text: tone(Math.max(l + 0.12, 0.76), 0.8),
+      icon: tone(Math.max(l + 0.04, 0.66), 0.95),
+      lightness: l,
+    }
+  }
+  return {
+    accent: tone(base.l),
+    hover: tone(base.l - 0.06, 1.02),
+    soft: tone(base.l, 1, 0.12),
+    text: tone(Math.min(base.l, 0.5), 0.95),
+    icon: tone(base.l),
+    lightness: base.l,
+  }
 }
 
 export type AccentMode = 'light' | 'dark'
 
 /** Black or white, whichever reads better on the accent. */
-export function accentTextColor(hex: string): string {
+function accentTextColor(hex: string): string {
   const onWhite = contrastRatio('#ffffff', hex) ?? 1
   const onInk = contrastRatio('#111111', hex) ?? 1
   return onInk >= onWhite ? '#111111' : '#ffffff'
 }
 
 /**
- * CSS custom properties that re-tint the semantic accent tokens from one
- * accent colour. Returns `null` when the hex is invalid so callers fall back
- * to the stylesheet defaults.
+ * CSS custom properties that re-tint the accent tokens from one brand colour
+ * (brief §4.1). Instance branding drives the accent (selection, focus, links,
+ * switches, progress, "Ready"), never the ink primary button. Returns `null`
+ * when the hex is invalid so callers fall back to the stylesheet defaults.
  */
 export function accentVariables(
   hex: string,
@@ -354,14 +346,21 @@ export function accentVariables(
 ): Record<string, string> | null {
   const base = hexToOklch(hex)
   if (!base) return null
-  const { primary, hover, onSurface } = accentTones(base, mode)
+  const tones = accentTones(base, mode)
   return {
-    '--color-action-primary': primary,
-    '--color-action-primary-hover': hover,
-    '--color-action-primary-text': accentTextColor(hex),
-    '--color-text-accent': onSurface,
-    '--color-icon-accent': onSurface,
-    '--color-status-success': mode === 'dark' ? onSurface : primary,
+    '--color-accent': tones.accent,
+    '--color-accent-hover': tones.hover,
+    '--color-accent-soft': tones.soft,
+    '--color-accent-text': tones.text,
+    '--color-accent-contrast':
+      mode === 'dark' && tones.lightness > 0.72
+        ? '#111111'
+        : accentTextColor(hex),
+    '--color-text-accent': tones.text,
+    '--color-icon-accent': tones.icon,
+    '--color-border-focus': tones.accent,
+    '--color-status-info': tones.accent,
+    '--color-status-info-bg': tones.soft,
   }
 }
 
@@ -381,11 +380,11 @@ const ADVANCED_COLOR_VARIABLES: Record<BrandColorKey, readonly string[]> = {
   secondary: ['--color-action-secondary'],
   secondaryForeground: ['--color-text-secondary'],
   link: ['--color-text-accent'],
-  ring: ['--color-border-strong'],
-  sidebar: ['--color-background-surface'],
+  ring: ['--color-border-focus'],
+  sidebar: ['--color-sidebar'],
   sidebarForeground: ['--color-text-primary'],
-  sidebarPrimary: ['--color-action-primary'],
-  sidebarPrimaryForeground: ['--color-action-primary-text'],
+  sidebarPrimary: ['--color-accent'],
+  sidebarPrimaryForeground: ['--color-accent-contrast'],
   sidebarAccent: ['--color-surface-state-hover'],
   sidebarAccentForeground: ['--color-text-primary'],
 }
@@ -439,7 +438,7 @@ export function brandingCss(
     if (lightRule) rules.push(lightRule)
     if (darkRule) rules.push(darkRule)
   }
-  if (view.font !== DEFAULT_FONT) {
+  if (isFontKey(view.font) && view.font !== DEFAULT_FONT) {
     rules.push(`:root{--font-sans:${FONTS[view.font].family}}`)
   }
   return rules.join('\n')
