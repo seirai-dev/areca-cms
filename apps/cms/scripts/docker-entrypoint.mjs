@@ -11,6 +11,8 @@ import { drizzle } from 'drizzle-orm/node-postgres'
 import { migrate } from 'drizzle-orm/node-postgres/migrator'
 import { Pool } from 'pg'
 
+import { withMigrationLock } from './lib/migration-lock.mjs'
+
 const appDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 const databaseUrl = process.env.DATABASE_URL
 const bucket = process.env.S3_BUCKET
@@ -40,11 +42,19 @@ async function waitForPostgres() {
 }
 
 async function runMigrations() {
-  const pool = new Pool({ connectionString: databaseUrl })
-  const db = drizzle(pool)
-  await migrate(db, { migrationsFolder: join(appDir, 'drizzle') })
-  await pool.end()
-  console.log('database migrations applied')
+  // The advisory lock holds one connection; migrate() uses another.
+  const pool = new Pool({ connectionString: databaseUrl, max: 2 })
+  try {
+    // Only one instance migrates at a time; the others wait, then find
+    // nothing left to apply.
+    await withMigrationLock(pool, async () => {
+      const db = drizzle(pool)
+      await migrate(db, { migrationsFolder: join(appDir, 'drizzle') })
+    })
+    console.log('database migrations applied')
+  } finally {
+    await pool.end()
+  }
 }
 
 async function ensureBucket() {
@@ -76,6 +86,24 @@ const child = spawn(process.execPath, [join(appDir, '.output/server/index.mjs')]
   env: process.env,
   stdio: 'inherit',
 })
+
+// The server entry (and with it the publishing worker, scheduler and the
+// first-run setup token) loads on the first request, so make one ourselves
+// once the child listens instead of waiting for a user. Best effort only.
+async function warmUp() {
+  const url = `http://127.0.0.1:${process.env.PORT ?? 3000}/api/health`
+  for (let attempt = 1; attempt <= 60; attempt += 1) {
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(2000) })
+      if (response.ok) return
+    } catch {
+      // not listening yet
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500))
+  }
+  console.log('warm-up request to /api/health did not succeed; continuing')
+}
+void warmUp()
 
 function shutdown(signal) {
   if (!child.killed) child.kill(signal)

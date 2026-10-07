@@ -1,11 +1,19 @@
+import { Link } from '@tanstack/react-router'
 import { ArrowClockwise, WarningCircle } from '@phosphor-icons/react'
 
 import { Button } from '#/components/ui/button'
+import {
+  MFA_REQUIRED,
+  securityErrorCode,
+  stripSecurityCode,
+} from '#/lib/security-errors'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
 function messageFrom(error: unknown) {
-  if (error instanceof Error && error.message) return error.message
+  if (error instanceof Error && error.message) {
+    return stripSecurityCode(error.message)
+  }
   if (error && typeof error === 'object' && 'message' in error) {
     const message = (error as { message?: unknown }).message
     if (typeof message === 'string' && message) return message
@@ -30,6 +38,9 @@ export function QueryError({
   retrying?: boolean
   className?: string
 }) {
+  // An agency admin who has not enrolled in two-factor gets a way forward
+  // instead of a generic failure.
+  const mfaRequired = securityErrorCode(error) === MFA_REQUIRED
   return (
     <div
       role="alert"
@@ -44,7 +55,7 @@ export function QueryError({
       </span>
       <div className="grid min-w-0 flex-1 gap-0.5">
         <p className="text-[14px] leading-5 font-medium text-text-primary">
-          {title}
+          {mfaRequired ? m.account_mfa_required_title() : title}
         </p>
         <p
           className="truncate text-caption font-normal text-text-muted"
@@ -53,7 +64,13 @@ export function QueryError({
           {messageFrom(error)}
         </p>
       </div>
-      {onRetry ? (
+      {mfaRequired ? (
+        <Button asChild variant="secondary" size="sm">
+          <Link to="/account" data-testid="mfa-setup-link">
+            {m.account_mfa_required_action()}
+          </Link>
+        </Button>
+      ) : onRetry ? (
         <Button
           type="button"
           variant="secondary"

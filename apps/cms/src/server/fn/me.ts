@@ -4,6 +4,7 @@ import { z } from 'zod'
 
 import { db } from '#/db'
 import { membership, organization, site } from '#/db/schema'
+import { env } from '#/env'
 import type { MembershipRole } from '#/lib/types'
 import { getSession, requireUser } from '#/lib/session.server'
 import { m } from '#/paraglide/messages'
@@ -18,7 +19,10 @@ export type Me = {
     name: string
     email: string
     isAgencyAdmin: boolean
+    twoFactorEnabled: boolean
   }
+  /** An agency admin who must enrol in two-factor before using the app. */
+  mfaEnrolmentRequired: boolean
   memberships: Array<{
     organizationId: string
     organizationName: string
@@ -48,6 +52,7 @@ export const getMeFn = createServerFn({ method: 'GET', ...meFn }).handler(
       name: session.user.name,
       email: session.user.email,
       isAgencyAdmin: Boolean(session.user.isAgencyAdmin),
+      twoFactorEnabled: Boolean(session.user.twoFactorEnabled),
     }
 
     const memberships = await db
@@ -101,7 +106,18 @@ export const getMeFn = createServerFn({ method: 'GET', ...meFn }).handler(
         )
       : memberships.length
 
-    return { user: currentUser, memberships, sites, organizationCount }
+    const mfaEnrolmentRequired =
+      env.ADMIN_MFA_REQUIRED &&
+      currentUser.isAgencyAdmin &&
+      !currentUser.twoFactorEnabled
+
+    return {
+      user: currentUser,
+      mfaEnrolmentRequired,
+      memberships,
+      sites,
+      organizationCount,
+    }
   },
 )
 

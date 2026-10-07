@@ -1,18 +1,28 @@
-import { and, desc, eq, ilike, or, sql } from 'drizzle-orm'
+import { randomUUID } from 'node:crypto'
+import { and, desc, eq, ilike, isNotNull, lte, or, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { collection, entry, entryRevision, site, user } from '#/db/schema'
+import {
+  isIanaTimeZone,
+  isPastInstant,
+  parseOffsetInstant,
+} from '#/lib/schedule-time'
 import type { EntryData, EntryStatus } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
+import { assetMutationLock } from '#/server/assets/usage'
 
+import { archiveDeletedContent } from './deletion-archive'
 import { getCollection } from './collections.ts'
 import { ConflictError, NotFoundError, ValidationError } from './errors.ts'
 import {
   resolveSlug,
   SLUG_PATTERN,
+  pickDeclaredFields,
   validateEntryData,
   validateReferences,
+  validateContentOwnership,
 } from './validation.ts'
 
 export async function listEntries(
@@ -20,6 +30,8 @@ export async function listEntries(
   collectionKey: string,
   options: {
     status?: EntryStatus
+    /** Eligible snapshot/publish targets only; do not combine with `status`. */
+    referenceTargets?: boolean
     search?: string
     limit?: number
     offset?: number
@@ -33,7 +45,23 @@ export async function listEntries(
   const limit = options.limit ?? 50
   const offset = options.offset ?? 0
   const filters = [eq(entry.siteId, siteId), eq(entry.collectionId, col.id)]
-  if (options.status) {
+  if (options.referenceTargets) {
+    const now = new Date()
+    filters.push(
+      or(
+        eq(entry.status, 'published'),
+        and(
+          eq(entry.status, 'scheduled'),
+          or(isNotNull(entry.publishedData), isNotNull(entry.publishedSlug))!,
+        ),
+        and(
+          eq(entry.status, 'scheduled'),
+          isNotNull(entry.scheduledAt),
+          lte(entry.scheduledAt, now),
+        ),
+      )!,
+    )
+  } else if (options.status) {
     filters.push(eq(entry.status, options.status))
   }
   if (options.search) {
@@ -92,6 +120,7 @@ export async function createEntry(input: {
 
   const parsed = validateEntryData(ctx.collection.fields, input.data, {
     mode: 'partial',
+    write: true,
   })
   if (!parsed.ok) {
     throw new ValidationError(parsed.errors)
@@ -106,48 +135,64 @@ export async function createEntry(input: {
 
   await assertSlugAvailable(ctx.collection.id, slug)
 
-  const now = new Date()
-  const [created] = await db
-    .insert(entry)
-    .values({
-      siteId: input.siteId,
-      collectionId: ctx.collection.id,
-      slug,
-      status: 'draft',
-      draftData: parsed.data,
-      createdBy: input.actorId,
-      updatedBy: input.actorId,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .returning()
+  return db.transaction(async (tx) => {
+    await assetMutationLock(tx, ctx.site.organizationId)
+    const ownershipErrors = await validateContentOwnership(
+      ctx.site.id,
+      ctx.site.organizationId,
+      ctx.collection.fields,
+      parsed.data,
+      tx,
+    )
+    if (ownershipErrors.length) throw new ValidationError(ownershipErrors)
+    const now = new Date()
+    const [created] = await tx
+      .insert(entry)
+      .values({
+        siteId: input.siteId,
+        collectionId: ctx.collection.id,
+        slug,
+        status: 'draft',
+        draftData: parsed.data,
+        createdBy: input.actorId,
+        updatedBy: input.actorId,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
 
-  if (!created) {
-    throw new Error(m.server_failed_to_create_entry())
-  }
+    if (!created) {
+      throw new Error(m.server_failed_to_create_entry())
+    }
 
-  await writeRevision(created.id, parsed.data, input.actorId, 'create')
-  await audit({
-    organizationId: ctx.site.organizationId,
-    siteId: input.siteId,
-    actorId: input.actorId,
-    action: 'entry.create',
-    targetType: 'entry',
-    targetId: created.id,
-    meta: { collectionKey: input.collectionKey, slug },
+    await writeRevision(created.id, parsed.data, input.actorId, 'create', tx)
+    await audit(
+      {
+        organizationId: ctx.site.organizationId,
+        siteId: input.siteId,
+        actorId: input.actorId,
+        action: 'entry.create',
+        targetType: 'entry',
+        targetId: created.id,
+        meta: { collectionKey: input.collectionKey, slug },
+      },
+      tx,
+    )
+
+    return { ...created, collectionKey: ctx.collection.key }
   })
-
-  return { ...created, collectionKey: ctx.collection.key }
 }
 
 export async function updateDraft(
   id: string,
   data: EntryData,
   actorId: string,
+  expectedVersion: number,
 ) {
   const ctx = await loadEntryContext(id)
   const parsed = validateEntryData(ctx.collection.fields, data, {
     mode: 'partial',
+    write: true,
   })
   if (!parsed.ok) {
     throw new ValidationError(parsed.errors)
@@ -163,33 +208,50 @@ export async function updateDraft(
     await assertSlugAvailable(ctx.collection.id, nextSlug, id)
   }
 
-  const now = new Date()
-  const [updated] = await db
-    .update(entry)
-    .set({
-      draftData: parsed.data,
-      slug: nextSlug ?? ctx.entry.slug,
-      updatedBy: actorId,
-      updatedAt: now,
-    })
-    .where(eq(entry.id, id))
-    .returning()
+  return db.transaction(async (tx) => {
+    await assetMutationLock(tx, ctx.site.organizationId)
+    const ownershipErrors = await validateContentOwnership(
+      ctx.site.id,
+      ctx.site.organizationId,
+      ctx.collection.fields,
+      parsed.data,
+      tx,
+    )
+    if (ownershipErrors.length) throw new ValidationError(ownershipErrors)
+    const now = new Date()
+    const [updated] = await tx
+      .update(entry)
+      .set({
+        draftVersion: sql`${entry.draftVersion} + 1`,
+        draftData: parsed.data,
+        slug: nextSlug ?? ctx.entry.slug,
+        updatedBy: actorId,
+        updatedAt: now,
+      })
+      .where(and(eq(entry.id, id), eq(entry.draftVersion, expectedVersion)))
+      .returning()
 
-  if (!updated) {
-    throw new NotFoundError(m.server_entry_not_found())
-  }
+    if (!updated) {
+      throw new ConflictError(
+        'DRAFT_CONFLICT: This entry changed on the server. Reload or explicitly reapply your recovered draft.',
+      )
+    }
 
-  await writeRevision(id, parsed.data, actorId, 'update')
-  await audit({
-    organizationId: ctx.site.organizationId,
-    siteId: ctx.site.id,
-    actorId,
-    action: 'entry.update',
-    targetType: 'entry',
-    targetId: id,
+    await writeRevision(id, parsed.data, actorId, 'update', tx)
+    await audit(
+      {
+        organizationId: ctx.site.organizationId,
+        siteId: ctx.site.id,
+        actorId,
+        action: 'entry.update',
+        targetType: 'entry',
+        targetId: id,
+      },
+      tx,
+    )
+
+    return { ...updated, collectionKey: ctx.collection.key }
   })
-
-  return { ...updated, collectionKey: ctx.collection.key }
 }
 
 export async function listRevisions(entryId: string) {
@@ -208,6 +270,7 @@ export async function restoreRevision(
   entryId: string,
   revisionId: string,
   actorId: string,
+  expectedVersion: number,
 ) {
   const ctx = await loadEntryContext(entryId)
   const [revision] = await db
@@ -221,39 +284,61 @@ export async function restoreRevision(
     throw new NotFoundError(m.server_revision_not_found())
   }
 
-  const nextSlug = resolveSlug(revision.data, ctx.collection.fields)
+  // Drop keys the schema no longer declares so legacy data does not return.
+  const restoredData = pickDeclaredFields(ctx.collection.fields, revision.data)
+
+  const nextSlug = resolveSlug(restoredData, ctx.collection.fields)
   if (nextSlug && nextSlug !== ctx.entry.slug) {
     await assertSlugAvailable(ctx.collection.id, nextSlug, entryId)
   }
 
-  const now = new Date()
-  const [updated] = await db
-    .update(entry)
-    .set({
-      draftData: revision.data,
-      slug: nextSlug ?? ctx.entry.slug,
-      updatedBy: actorId,
-      updatedAt: now,
-    })
-    .where(eq(entry.id, entryId))
-    .returning()
+  return db.transaction(async (tx) => {
+    await assetMutationLock(tx, ctx.site.organizationId)
+    const ownershipErrors = await validateContentOwnership(
+      ctx.site.id,
+      ctx.site.organizationId,
+      ctx.collection.fields,
+      restoredData,
+      tx,
+    )
+    if (ownershipErrors.length) throw new ValidationError(ownershipErrors)
+    const now = new Date()
+    const [updated] = await tx
+      .update(entry)
+      .set({
+        draftVersion: sql`${entry.draftVersion} + 1`,
+        draftData: restoredData,
+        slug: nextSlug ?? ctx.entry.slug,
+        updatedBy: actorId,
+        updatedAt: now,
+      })
+      .where(
+        and(eq(entry.id, entryId), eq(entry.draftVersion, expectedVersion)),
+      )
+      .returning()
 
-  if (!updated) {
-    throw new NotFoundError(m.server_entry_not_found())
-  }
+    if (!updated) {
+      throw new ConflictError(
+        'DRAFT_CONFLICT: This entry changed on the server.',
+      )
+    }
 
-  await writeRevision(entryId, revision.data, actorId, 'restore')
-  await audit({
-    organizationId: ctx.site.organizationId,
-    siteId: ctx.site.id,
-    actorId,
-    action: 'entry.restore',
-    targetType: 'entry',
-    targetId: entryId,
-    meta: { revisionId },
+    await writeRevision(entryId, restoredData, actorId, 'restore', tx)
+    await audit(
+      {
+        organizationId: ctx.site.organizationId,
+        siteId: ctx.site.id,
+        actorId,
+        action: 'entry.restore',
+        targetType: 'entry',
+        targetId: entryId,
+        meta: { revisionId },
+      },
+      tx,
+    )
+
+    return { ...updated, collectionKey: ctx.collection.key }
   })
-
-  return { ...updated, collectionKey: ctx.collection.key }
 }
 
 export async function publishEntry(id: string, actorId: string) {
@@ -271,36 +356,59 @@ export async function publishEntry(id: string, actorId: string) {
     throw new ValidationError(refErrors)
   }
 
-  const now = new Date()
-  const [updated] = await db
-    .update(entry)
-    .set({
-      status: 'published',
-      publishedData: ctx.entry.draftData,
-      publishedAt: now,
-      scheduledAt: null,
-      scheduleTimezone: null,
-      updatedBy: actorId,
-      updatedAt: now,
-    })
-    .where(eq(entry.id, id))
-    .returning()
+  return db.transaction(async (tx) => {
+    await assetMutationLock(tx, ctx.site.organizationId)
+    const ownershipErrors = await validateContentOwnership(
+      ctx.site.id,
+      ctx.site.organizationId,
+      ctx.collection.fields,
+      ctx.entry.draftData,
+      tx,
+    )
+    if (ownershipErrors.length) throw new ValidationError(ownershipErrors)
+    const now = new Date()
+    const [updated] = await tx
+      .update(entry)
+      .set({
+        status: 'published',
+        publishedData: parsed.data,
+        publishedSlug: ctx.entry.slug,
+        publishedAt: now,
+        scheduledData: null,
+        scheduledSlug: null,
+        scheduledVersion: null,
+        scheduledAt: null,
+        scheduleTimezone: null,
+        scheduledBy: null,
+        updatedBy: actorId,
+        updatedAt: now,
+      })
+      .where(
+        and(eq(entry.id, id), eq(entry.draftVersion, ctx.entry.draftVersion)),
+      )
+      .returning()
 
-  if (!updated) {
-    throw new NotFoundError(m.server_entry_not_found())
-  }
+    if (!updated) {
+      throw new ConflictError(
+        'DRAFT_CONFLICT: Draft changed while approving. Reload and review it.',
+      )
+    }
 
-  await writeRevision(id, ctx.entry.draftData, actorId, 'publish')
-  await audit({
-    organizationId: ctx.site.organizationId,
-    siteId: ctx.site.id,
-    actorId,
-    action: 'entry.publish',
-    targetType: 'entry',
-    targetId: id,
+    await writeRevision(id, ctx.entry.draftData, actorId, 'publish', tx)
+    await audit(
+      {
+        organizationId: ctx.site.organizationId,
+        siteId: ctx.site.id,
+        actorId,
+        action: 'entry.publish',
+        targetType: 'entry',
+        targetId: id,
+      },
+      tx,
+    )
+
+    return { ...updated, collectionKey: ctx.collection.key }
   })
-
-  return { ...updated, collectionKey: ctx.collection.key }
 }
 
 export async function unpublishEntry(id: string, actorId: string) {
@@ -311,9 +419,14 @@ export async function unpublishEntry(id: string, actorId: string) {
     .set({
       status: 'draft',
       publishedData: null,
+      publishedSlug: null,
       publishedAt: null,
+      scheduledData: null,
+      scheduledSlug: null,
+      scheduledVersion: null,
       scheduledAt: null,
       scheduleTimezone: null,
+      scheduledBy: null,
       updatedBy: actorId,
       updatedAt: now,
     })
@@ -374,60 +487,105 @@ export async function scheduleEntry(
   actorId: string,
 ) {
   const ctx = await loadEntryContext(id)
-  const when = new Date(scheduledAt)
-  if (Number.isNaN(when.getTime())) {
-    throw new ValidationError([
-      { path: 'scheduledAt', message: m.server_invalid_datetime() },
-    ])
-  }
   if (!timezone) {
     throw new ValidationError([
       { path: 'timezone', message: m.server_timezone_required() },
     ])
   }
-
-  const now = new Date()
-  const [updated] = await db
-    .update(entry)
-    .set({
-      status: 'scheduled',
-      scheduledAt: when,
-      scheduleTimezone: timezone,
-      updatedBy: actorId,
-      updatedAt: now,
-    })
-    .where(eq(entry.id, id))
-    .returning()
-
-  if (!updated) {
-    throw new NotFoundError(m.server_entry_not_found())
+  if (!isIanaTimeZone(timezone)) {
+    throw new ValidationError([
+      { path: 'timezone', message: m.server_invalid_timezone() },
+    ])
+  }
+  const when = parseOffsetInstant(scheduledAt)
+  if (!when) {
+    throw new ValidationError([
+      { path: 'scheduledAt', message: m.server_invalid_datetime() },
+    ])
+  }
+  if (isPastInstant(when)) {
+    throw new ValidationError([
+      { path: 'scheduledAt', message: m.server_schedule_in_past() },
+    ])
   }
 
-  await writeRevision(id, ctx.entry.draftData, actorId, 'schedule')
-  await audit({
-    organizationId: ctx.site.organizationId,
-    siteId: ctx.site.id,
-    actorId,
-    action: 'entry.schedule',
-    targetType: 'entry',
-    targetId: id,
-    meta: { scheduledAt, timezone },
-  })
+  return db.transaction(async (tx) => {
+    await assetMutationLock(tx, ctx.site.organizationId)
+    const ownershipErrors = await validateContentOwnership(
+      ctx.site.id,
+      ctx.site.organizationId,
+      ctx.collection.fields,
+      ctx.entry.draftData,
+      tx,
+    )
+    if (ownershipErrors.length) throw new ValidationError(ownershipErrors)
+    const validated = validateEntryData(
+      ctx.collection.fields,
+      ctx.entry.draftData,
+    )
+    if (!validated.ok) throw new ValidationError(validated.errors)
+    const now = new Date()
+    const [updated] = await tx
+      .update(entry)
+      .set({
+        status: 'scheduled',
+        scheduledData: validated.data,
+        scheduledSlug: ctx.entry.slug,
+        scheduledVersion: randomUUID(),
+        scheduledAt: when,
+        scheduleTimezone: timezone,
+        scheduledBy: actorId,
+        updatedBy: actorId,
+        updatedAt: now,
+      })
+      .where(
+        and(eq(entry.id, id), eq(entry.draftVersion, ctx.entry.draftVersion)),
+      )
+      .returning()
 
-  return { ...updated, collectionKey: ctx.collection.key }
+    if (!updated) {
+      throw new ConflictError(
+        'DRAFT_CONFLICT: Draft changed while approving. Reload and review it.',
+      )
+    }
+
+    await writeRevision(id, ctx.entry.draftData, actorId, 'schedule', tx)
+    await audit(
+      {
+        organizationId: ctx.site.organizationId,
+        siteId: ctx.site.id,
+        actorId,
+        action: 'entry.schedule',
+        targetType: 'entry',
+        targetId: id,
+        meta: { scheduledAt, timezone },
+      },
+      tx,
+    )
+
+    return { ...updated, collectionKey: ctx.collection.key }
+  })
 }
 
 export async function cancelSchedule(id: string, actorId: string) {
   const ctx = await loadEntryContext(id)
   const now = new Date()
   const nextStatus =
-    ctx.entry.status === 'scheduled' ? 'draft' : ctx.entry.status
+    ctx.entry.status === 'scheduled'
+      ? ctx.entry.publishedData
+        ? 'published'
+        : 'draft'
+      : ctx.entry.status
   const [updated] = await db
     .update(entry)
     .set({
       status: nextStatus,
+      scheduledData: null,
+      scheduledSlug: null,
+      scheduledVersion: null,
       scheduledAt: null,
       scheduleTimezone: null,
+      scheduledBy: null,
       updatedBy: actorId,
       updatedAt: now,
     })
@@ -453,16 +611,22 @@ export async function cancelSchedule(id: string, actorId: string) {
 
 export async function deleteEntry(id: string, actorId: string) {
   const ctx = await loadEntryContext(id)
-  await audit({
-    organizationId: ctx.site.organizationId,
-    siteId: ctx.site.id,
-    actorId,
-    action: 'entry.delete',
-    targetType: 'entry',
-    targetId: id,
-    meta: { slug: ctx.entry.slug },
+  return db.transaction(async (tx) => {
+    await archiveDeletedContent(tx, ctx.site.organizationId, 'entry', id)
+    await audit(
+      {
+        organizationId: ctx.site.organizationId,
+        siteId: ctx.site.id,
+        actorId,
+        action: 'entry.delete',
+        targetType: 'entry',
+        targetId: id,
+        meta: { slug: ctx.entry.slug },
+      },
+      tx,
+    )
+    await tx.delete(entry).where(eq(entry.id, id))
   })
-  await db.delete(entry).where(eq(entry.id, id))
 }
 
 async function writeRevision(
@@ -470,8 +634,9 @@ async function writeRevision(
   data: EntryData,
   actorId: string,
   note: string,
+  connection: Pick<typeof db, 'insert'> = db,
 ) {
-  await db.insert(entryRevision).values({
+  await connection.insert(entryRevision).values({
     entryId,
     data,
     createdBy: actorId,

@@ -105,7 +105,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.S3_ENDPOINT)(
         )
         expect(uploaded.mimeType).toBe('image/png')
 
-        const resolved = await resolveAssetValue(uploaded.id)
+        const resolved = await resolveAssetValue(uploaded.id, org.id)
         expect(resolved).toEqual({
           url: `${env.APP_URL}/api/assets/file/${uploaded.storageKey}`,
           width: 12,
@@ -165,14 +165,14 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.S3_ENDPOINT)(
           .returning()
         expect(throwaway).toBeDefined()
 
-        await expect(deleteAsset(uploaded.id)).rejects.toBeInstanceOf(
+        await expect(deleteAsset(uploaded.id, org.id)).rejects.toBeInstanceOf(
           AssetInUseError,
         )
 
         await db.delete(entry).where(eq(entry.id, throwaway.id))
 
-        await deleteAsset(uploaded.id)
-        expect(await resolveAssetValue(uploaded.id)).toBeNull()
+        await deleteAsset(uploaded.id, org.id)
+        expect(await resolveAssetValue(uploaded.id, org.id)).toBeNull()
 
         const missing = await GET({
           request: new Request(
@@ -183,7 +183,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.S3_ENDPOINT)(
         expect(missing.status).toBe(404)
       } catch (err) {
         try {
-          await deleteAsset(uploaded.id)
+          await deleteAsset(uploaded.id, org.id)
         } catch {
           // already deleted or still referenced
         }

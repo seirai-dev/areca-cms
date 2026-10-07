@@ -2,30 +2,86 @@ import { describe, expect, it } from 'vitest'
 
 import { entryUiStatus, isEditedSinceReady } from './entry-live-state'
 
-const live = { createdAt: '2026-01-10T10:00:00Z' }
+const live = {
+  liveEntryIds: ['live-1'],
+  liveSlugsByEntryId: { 'live-1': 'hello' },
+  pendingEntryIds: [] as string[],
+}
 
 describe('entryUiStatus', () => {
   it('maps draft, scheduled and archived straight through', () => {
     for (const status of ['draft', 'scheduled', 'archived'] as const) {
-      expect(entryUiStatus({ status, updatedAt: '2026-01-01' }, live)).toBe(
-        status,
-      )
+      expect(
+        entryUiStatus({ id: 'live-1', status, updatedAt: '2026-01-01' }, live),
+      ).toBe(status)
     }
   })
 
-  it('is Ready when changed after the live release', () => {
+  it('is Ready when the live snapshot does not contain the entry', () => {
     expect(
       entryUiStatus(
-        { status: 'published', updatedAt: '2026-01-11T00:00:00Z' },
+        {
+          id: 'new-1',
+          status: 'published',
+          publishedSlug: 'fresh',
+          updatedAt: '2026-01-01T00:00:00Z',
+        },
         live,
       ),
     ).toBe('ready')
   })
 
-  it('is Live when the live release includes it', () => {
+  it('is Ready when the approved slug no longer matches the live snapshot', () => {
     expect(
       entryUiStatus(
-        { status: 'published', updatedAt: '2026-01-09T00:00:00Z' },
+        {
+          id: 'live-1',
+          status: 'published',
+          publishedSlug: 'renamed',
+          updatedAt: '2026-01-01T00:00:00Z',
+        },
+        live,
+      ),
+    ).toBe('ready')
+  })
+
+  it('is Ready when the approved version is pending against live', () => {
+    expect(
+      entryUiStatus(
+        {
+          id: 'live-1',
+          status: 'published',
+          publishedSlug: 'hello',
+          updatedAt: '2026-01-01T00:00:00Z',
+        },
+        { ...live, pendingEntryIds: ['live-1'] },
+      ),
+    ).toBe('ready')
+  })
+
+  it('is Live when the live snapshot contains this id with the approved slug', () => {
+    expect(
+      entryUiStatus(
+        {
+          id: 'live-1',
+          status: 'published',
+          publishedSlug: 'hello',
+          updatedAt: '2026-01-11T00:00:00Z',
+        },
+        live,
+      ),
+    ).toBe('live')
+  })
+
+  it('does not use updatedAt to decide Ready vs Live', () => {
+    expect(
+      entryUiStatus(
+        {
+          id: 'live-1',
+          status: 'published',
+          publishedSlug: 'hello',
+          updatedAt: '2099-01-01T00:00:00Z',
+        },
         live,
       ),
     ).toBe('live')
@@ -33,7 +89,10 @@ describe('entryUiStatus', () => {
 
   it('is Ready when nothing is live yet', () => {
     expect(
-      entryUiStatus({ status: 'published', updatedAt: '2026-01-09' }, null),
+      entryUiStatus(
+        { id: 'live-1', status: 'published', updatedAt: '2026-01-09' },
+        null,
+      ),
     ).toBe('ready')
   })
 })

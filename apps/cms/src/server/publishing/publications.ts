@@ -1,16 +1,25 @@
-import { and, count, desc, eq, gt, inArray } from 'drizzle-orm'
+import { and, desc, eq, inArray, lte, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
-import { buildJob, entry, publication, site, user } from '#/db/schema'
+import {
+  buildJob,
+  entry,
+  publication,
+  publicationRequest,
+  site,
+  user,
+} from '#/db/schema'
 import type { BuildJobStatus } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
+import { assetMutationLock } from '#/server/assets/usage'
 import { buildSnapshot } from '#/server/content/snapshot'
 import {
   ConflictError,
   NotFoundError,
   ValidationError,
 } from '#/server/content/errors'
+import { diffApprovedRelease } from '#/server/publishing/release-diff'
 
 export function dbActorId(actorId: string | null | undefined) {
   if (!actorId || actorId === 'system') return null
@@ -25,11 +34,99 @@ export async function getSiteOrThrow(siteId: string) {
   return row
 }
 
+function uniqueActorIds(ids: Array<string | null | undefined>) {
+  return [...new Set(ids.filter((id): id is string => Boolean(id)))]
+}
+
+type RequestTx = Parameters<Parameters<typeof db.transaction>[0]>[0]
+type RequestIdentity = { siteId: string; actorId: string; requestKey?: string }
+
+async function replayRequest(
+  tx: RequestTx,
+  input: RequestIdentity,
+  operation: 'publish' | 'rollback',
+  payload: string,
+) {
+  if (!input.requestKey) return null
+  // Lock the key globally as well as the site, so cross-scope reuse is rejected
+  // deterministically instead of racing the unique constraint.
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(hashtextextended(${input.requestKey}, 1))`,
+  )
+  const previousRows = await tx
+    .select()
+    .from(publicationRequest)
+    .where(eq(publicationRequest.id, input.requestKey))
+  const previous = previousRows.at(0)
+  if (!previous) return null
+  if (
+    previous.siteId !== input.siteId ||
+    previous.actorId !== input.actorId ||
+    previous.operation !== operation ||
+    previous.payload !== payload
+  ) {
+    throw new ConflictError(
+      'Request key was already used for a different publishing request',
+    )
+  }
+  const publications = await tx
+    .select()
+    .from(publication)
+    .where(eq(publication.id, previous.publicationId))
+  const jobs = await tx
+    .select()
+    .from(buildJob)
+    .where(eq(buildJob.id, previous.jobId))
+  const pub = publications.at(0)
+  const job = jobs.at(0)
+  if (!pub || !job)
+    throw new ConflictError(
+      'Original publishing request is no longer available',
+    )
+  return { publication: pub, job }
+}
+
+async function rememberRequest(
+  tx: RequestTx,
+  input: RequestIdentity,
+  operation: 'publish' | 'rollback',
+  payload: string,
+  pubId: string,
+  jobId: string,
+) {
+  if (!input.requestKey) return
+  await tx.insert(publicationRequest).values({
+    id: input.requestKey,
+    siteId: input.siteId,
+    actorId: input.actorId,
+    operation,
+    payload,
+    publicationId: pubId,
+    jobId,
+  })
+}
+
+async function assertDispatchResolved(tx: RequestTx, siteId: string) {
+  const uncertainJobs = await tx
+    .select({ id: buildJob.id })
+    .from(buildJob)
+    .where(
+      and(eq(buildJob.siteId, siteId), eq(buildJob.dispatchUncertain, true)),
+    )
+    .limit(1)
+  if (uncertainJobs.length > 0)
+    throw new ConflictError(
+      'An earlier deployment has an uncertain outcome; reconcile it before publishing again',
+    )
+}
+
 export async function requestPublication(input: {
   siteId: string
   actorId: string
+  requestKey?: string
   priority?: number
   note?: string
+  scheduledBy?: string[]
 }): Promise<
   | {
       ok: true
@@ -38,18 +135,41 @@ export async function requestPublication(input: {
     }
   | { ok: false; errors: string[] }
 > {
-  const existingSite = await getSiteOrThrow(input.siteId)
-  const built = await buildSnapshot(input.siteId)
-  if (!built.ok) {
-    return { ok: false, errors: built.errors }
-  }
-
+  const payload = JSON.stringify({
+    priority: input.priority ?? 0,
+    note: input.note ?? null,
+    scheduledBy: uniqueActorIds(input.scheduledBy ?? []).sort(),
+  })
   const publicationId = crypto.randomUUID()
-  const snapshot = { ...built.snapshot, publicationId }
   const actorId = dbActorId(input.actorId)
   const priority = input.priority ?? 0
 
-  const created = await db.transaction(async (tx) => {
+  return db.transaction(async (tx) => {
+    const replay = await replayRequest(tx, input, 'publish', payload)
+    if (replay) return { ok: true as const, ...replay }
+    const [lockedSite] = await tx
+      .select()
+      .from(site)
+      .where(eq(site.id, input.siteId))
+      .for('update')
+    if (!lockedSite) throw new NotFoundError(m.server_site_not_found())
+    if (
+      lockedSite.publishingMode !== 'demo' &&
+      (!lockedSite.deploymentTarget?.applicationId ||
+        !lockedSite.deploymentTarget.healthCheckUrl)
+    ) {
+      return {
+        ok: false as const,
+        errors: [
+          'Production publishing requires a deployment target and a publication-aware health URL.',
+        ],
+      }
+    }
+    await assertDispatchResolved(tx, input.siteId)
+    await assetMutationLock(tx, lockedSite.organizationId)
+    const built = await buildSnapshot(input.siteId, tx)
+    if (!built.ok) return { ok: false as const, errors: built.errors }
+    const snapshot = { ...built.snapshot, publicationId }
     const [pub] = await tx
       .insert(publication)
       .values({
@@ -57,6 +177,8 @@ export async function requestPublication(input: {
         siteId: input.siteId,
         snapshot,
         snapshotHash: built.hash,
+        entryVersions: built.entryVersions,
+        publishingMode: lockedSite.publishingMode,
         requestedBy: actorId,
         status: 'pending',
       })
@@ -108,62 +230,108 @@ export async function requestPublication(input: {
       throw new Error(m.server_failed_to_create_build_job())
     }
 
-    return { publication: pub, job }
-  })
+    const isScheduler = input.note === 'scheduled' || input.actorId === 'system'
+    let scheduledBy = uniqueActorIds(input.scheduledBy ?? [])
+    if (isScheduler && scheduledBy.length === 0) {
+      const owners = await tx
+        .select({ scheduledBy: entry.scheduledBy })
+        .from(entry)
+        .where(
+          and(
+            eq(entry.siteId, input.siteId),
+            eq(entry.status, 'scheduled'),
+            lte(entry.scheduledAt, new Date()),
+          ),
+        )
+      scheduledBy = uniqueActorIds(owners.map((row) => row.scheduledBy))
+    }
+    const auditActor =
+      isScheduler && scheduledBy.length === 1 ? scheduledBy[0] : actorId
+    await audit(
+      {
+        organizationId: lockedSite.organizationId,
+        siteId: input.siteId,
+        actorId: auditActor,
+        action: 'publication.requested',
+        targetType: 'publication',
+        targetId: pub.id,
+        meta: {
+          jobId: job.id,
+          priority,
+          note: input.note ?? null,
+          ...(scheduledBy.length > 0 ? { scheduledBy } : {}),
+          ...(isScheduler && scheduledBy.length > 1
+            ? { approvers: scheduledBy }
+            : {}),
+        },
+      },
+      tx,
+    )
 
-  await audit({
-    organizationId: existingSite.organizationId,
-    siteId: input.siteId,
-    actorId,
-    action: 'publication.requested',
-    targetType: 'publication',
-    targetId: created.publication.id,
-    meta: {
-      jobId: created.job.id,
-      priority,
-      note: input.note ?? null,
-    },
+    await rememberRequest(tx, input, 'publish', payload, pub.id, job.id)
+    return { ok: true as const, publication: pub, job }
   })
-
-  return { ok: true, ...created }
 }
 
 export async function requestRollback(input: {
   siteId: string
   publicationId: string
   actorId: string
+  requestKey?: string
 }) {
-  const existingSite = await getSiteOrThrow(input.siteId)
-  const [pub] = await db
-    .select()
-    .from(publication)
-    .where(eq(publication.id, input.publicationId))
-    .limit(1)
-
-  if (!pub || pub.siteId !== input.siteId) {
-    throw new NotFoundError(m.server_publication_not_found())
-  }
-  if (!pub.wasLive) {
-    throw new ValidationError([
-      {
-        path: 'publicationId',
-        message: m.server_publication_not_live(),
-      },
-    ])
-  }
-
+  const payload = JSON.stringify({ publicationId: input.publicationId })
   const actorId = dbActorId(input.actorId)
+  return db.transaction(async (tx) => {
+    const replay = await replayRequest(tx, input, 'rollback', payload)
+    if (replay) return replay
+    const [pub] = await tx
+      .select()
+      .from(publication)
+      .where(eq(publication.id, input.publicationId))
+      .limit(1)
 
-  const created = await db.transaction(async (tx) => {
-    const [updated] = await tx
-      .update(publication)
-      .set({ status: 'pending', deployedAt: null })
-      .where(eq(publication.id, pub.id))
-      .returning()
-
-    if (!updated) {
+    if (!pub || pub.siteId !== input.siteId) {
       throw new NotFoundError(m.server_publication_not_found())
     }
+    if (!pub.wasLive) {
+      throw new ValidationError([
+        {
+          path: 'publicationId',
+          message: m.server_publication_not_live(),
+        },
+      ])
+    }
+
+    const [lockedSite] = await tx
+      .select()
+      .from(site)
+      .where(eq(site.id, input.siteId))
+      .for('update')
+    if (!lockedSite) throw new NotFoundError(m.server_site_not_found())
+    if (
+      lockedSite.publishingMode !== 'demo' &&
+      (!lockedSite.deploymentTarget?.applicationId ||
+        !lockedSite.deploymentTarget.healthCheckUrl)
+    )
+      throw new ConflictError(
+        'Production publishing requires a deployment target and publication-aware health URL',
+      )
+    await assertDispatchResolved(tx, input.siteId)
+    const rollbackId = crypto.randomUUID()
+    const [updated] = await tx
+      .insert(publication)
+      .values({
+        siteId: input.siteId,
+        id: rollbackId,
+        snapshot: { ...pub.snapshot, publicationId: rollbackId },
+        snapshotHash: pub.snapshotHash,
+        requestedBy: actorId,
+        publishingMode: lockedSite.publishingMode,
+        entryVersions: [],
+        status: 'pending',
+      })
+      .returning()
+    if (!updated) throw new NotFoundError(m.server_publication_not_found())
 
     const queued = await tx
       .select()
@@ -207,20 +375,21 @@ export async function requestRollback(input: {
       throw new Error(m.server_failed_to_create_build_job())
     }
 
+    await audit(
+      {
+        organizationId: lockedSite.organizationId,
+        siteId: input.siteId,
+        actorId,
+        action: 'publication.rollback_requested',
+        targetType: 'publication',
+        targetId: updated.id,
+        meta: { jobId: job.id },
+      },
+      tx,
+    )
+    await rememberRequest(tx, input, 'rollback', payload, updated.id, job.id)
     return { publication: updated, job }
   })
-
-  await audit({
-    organizationId: existingSite.organizationId,
-    siteId: input.siteId,
-    actorId,
-    action: 'publication.rollback_requested',
-    targetType: 'publication',
-    targetId: created.publication.id,
-    meta: { jobId: created.job.id },
-  })
-
-  return created
 }
 
 export async function listPublications(
@@ -304,6 +473,10 @@ export async function cancelJob(id: string, actorId: string) {
   if (!job) {
     throw new NotFoundError(m.server_build_job_not_found())
   }
+  if (job.dispatchUncertain)
+    throw new ConflictError(
+      'Reconcile the uncertain deployment before cancelling',
+    )
   if (job.status !== 'queued') {
     throw new ConflictError(m.server_only_queued_jobs_cancel())
   }
@@ -312,7 +485,13 @@ export async function cancelJob(id: string, actorId: string) {
   const [updated] = await db
     .update(buildJob)
     .set({ status: 'cancelled', finishedAt: new Date() })
-    .where(eq(buildJob.id, id))
+    .where(
+      and(
+        eq(buildJob.id, id),
+        eq(buildJob.status, 'queued'),
+        eq(buildJob.dispatchUncertain, false),
+      ),
+    )
     .returning()
 
   if (!updated) {
@@ -347,6 +526,16 @@ export async function getLivePublication(siteId: string) {
   return row ?? null
 }
 
+export async function getDemoPublication(siteId: string) {
+  const [row] = await db
+    .select()
+    .from(publication)
+    .where(and(eq(publication.siteId, siteId), eq(publication.status, 'demo')))
+    .orderBy(desc(publication.createdAt))
+    .limit(1)
+  return row ?? null
+}
+
 const ACTIVE_JOB_STATUSES: BuildJobStatus[] = [
   'building',
   'validating',
@@ -354,7 +543,9 @@ const ACTIVE_JOB_STATUSES: BuildJobStatus[] = [
 ]
 
 export async function getSiteReleaseStatus(siteId: string) {
+  const existingSite = await getSiteOrThrow(siteId)
   const live = await getLivePublication(siteId)
+  const demo = await getDemoPublication(siteId)
   const [activeJob] = await db
     .select()
     .from(buildJob)
@@ -376,22 +567,16 @@ export async function getSiteReleaseStatus(siteId: string) {
         .orderBy(desc(buildJob.priority), desc(buildJob.createdAt))
         .limit(1)
 
-  // Published entries the live snapshot does not include yet. With no live
-  // publication every published entry is pending.
-  const [pending] = await db
-    .select({ count: count() })
-    .from(entry)
-    .where(
-      and(
-        eq(entry.siteId, siteId),
-        eq(entry.status, 'published'),
-        ...(live ? [gt(entry.updatedAt, live.createdAt)] : []),
-      ),
-    )
+  const diff = await diffApprovedRelease(siteId)
 
   return {
     live,
+    publishingMode: existingSite.publishingMode,
+    demo,
     activeJob: activeJob ?? queuedJob ?? null,
-    pendingEntries: Number(pending?.count ?? 0),
+    pendingEntries: diff.pendingCount,
+    liveEntryIds: diff.liveEntryIds,
+    liveSlugsByEntryId: diff.liveSlugsByEntryId,
+    pendingEntryIds: [...diff.adds, ...diff.updates].map((item) => item.id),
   }
 }

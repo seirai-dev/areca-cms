@@ -1,12 +1,25 @@
-import { and, desc, eq, ilike, or, sql } from 'drizzle-orm'
-import type { InferSelectModel } from 'drizzle-orm'
+import { and, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm'
+import type { AnyColumn, InferSelectModel, SQL } from 'drizzle-orm'
 import sharp from 'sharp'
 
 import { getStorage } from '#/adapters'
 import { db } from '#/db'
-import { asset, entry } from '#/db/schema'
+import {
+  asset,
+  deletedContentArchive,
+  entry,
+  entryRevision,
+  publication,
+  site,
+  storageObjectDeletion,
+} from '#/db/schema'
 import { env } from '#/env'
 import { m } from '#/paraglide/messages'
+import { NotFoundError } from '#/server/content/errors'
+import { AppError } from '#/server/http/app-error'
+
+import { assetMutationLock, referencesAsset } from './usage'
+import type { AssetTransaction } from './usage'
 
 export type Asset = InferSelectModel<typeof asset>
 
@@ -54,14 +67,14 @@ const ASSET_FILE_PREFIX = '/api/assets/file/'
 
 const MAX_SIZE_BYTES = 20 * 1024 * 1024
 
-export class AssetValidationError extends Error {
+export class AssetValidationError extends AppError {
   constructor(message: string) {
     super(message)
     this.name = 'AssetValidationError'
   }
 }
 
-export class AssetInUseError extends Error {
+export class AssetInUseError extends AppError {
   constructor(public readonly usage: number) {
     super(m.server_asset_in_use({ usage: String(usage) }))
     this.name = 'AssetInUseError'
@@ -97,25 +110,44 @@ export async function uploadAsset(input: {
   const storage = getStorage()
   await storage.put(storageKey, input.file.buffer, mimeType)
 
-  const [row] = await db
-    .insert(asset)
-    .values({
-      organizationId: input.organizationId,
-      storageKey,
-      originalFilename: input.file.filename,
-      mimeType,
-      size: input.file.buffer.byteLength,
-      width,
-      height,
-      altText: input.altText,
-      createdBy: input.actorId,
+  try {
+    return await db.transaction(async (tx) => {
+      await assetMutationLock(tx, input.organizationId)
+      const [row] = await tx
+        .insert(asset)
+        .values({
+          organizationId: input.organizationId,
+          storageKey,
+          originalFilename: input.file.filename,
+          mimeType,
+          size: input.file.buffer.byteLength,
+          width,
+          height,
+          altText: input.altText,
+          createdBy: input.actorId,
+        })
+        .returning()
+      if (!row) throw new Error(m.server_failed_to_insert_asset())
+      return row
     })
-    .returning()
-
-  if (!row) {
-    throw new Error(m.server_failed_to_insert_asset())
+  } catch (error) {
+    try {
+      await storage.delete(storageKey)
+    } catch (cleanupError) {
+      // If the database is reachable again, persist cleanup for the operator retry.
+      try {
+        await db
+          .insert(storageObjectDeletion)
+          .values({ storageKey })
+          .onConflictDoNothing()
+      } catch {}
+      throw new AggregateError(
+        [error, cleanupError],
+        `Upload failed; object cleanup required: ${storageKey}`,
+      )
+    }
+    throw error
   }
-  return row
 }
 
 export async function listAssets(
@@ -142,61 +174,189 @@ export async function listAssets(
     .offset(opts.offset)
 }
 
-export async function getAsset(id: string): Promise<Asset | undefined> {
-  const [row] = await db.select().from(asset).where(eq(asset.id, id)).limit(1)
+export async function getAsset(
+  id: string,
+  organizationId: string,
+  connection: Pick<typeof db, 'select'> = db,
+): Promise<Asset | undefined> {
+  const [row] = await connection
+    .select()
+    .from(asset)
+    .where(and(eq(asset.id, id), eq(asset.organizationId, organizationId)))
+    .limit(1)
   return row
 }
 
 export async function updateAsset(
   id: string,
   patch: { altText: string },
+  organizationId: string,
 ): Promise<Asset> {
   const [row] = await db
     .update(asset)
     .set({ altText: patch.altText })
-    .where(eq(asset.id, id))
+    .where(and(eq(asset.id, id), eq(asset.organizationId, organizationId)))
     .returning()
   if (!row) {
-    throw new Error(m.server_asset_not_found())
+    throw new NotFoundError(m.server_asset_not_found())
   }
   return row
 }
 
-export async function assetUsage(id: string): Promise<number> {
-  const pattern = `%${id}%`
-  const [row] = await db
-    .select({
-      count: sql<number>`cast(count(*) as int)`,
-    })
-    .from(entry)
-    .where(
-      sql`${entry.draftData}::text LIKE ${pattern} OR ${entry.publishedData}::text LIKE ${pattern}`,
-    )
-  return Number(row?.count ?? 0)
+/**
+ * SQL pre-filter for `referencesAsset`: keeps every row that could reference the
+ * asset so only those rows are transferred and walked in memory. It is a strict
+ * superset of the exact check:
+ *  - exact ids, storage keys and `/api/assets/file/<key>` URLs all contain the
+ *    asset id or the final path segment of the storage key;
+ *  - values that only match after URL parsing or percent-decoding contain a
+ *    `%` (decodeURIComponent) or, for stripped tab/newline, a JSON backslash.
+ * If the key tail has unexpected characters the filter degrades to "all rows".
+ */
+function mayReferenceAsset(
+  existing: Pick<Asset, 'id' | 'storageKey'>,
+  columns: AnyColumn[],
+): SQL {
+  const tail = existing.storageKey.slice(
+    existing.storageKey.lastIndexOf('/') + 1,
+  )
+  if (
+    !/^[A-Za-z0-9._-]+$/.test(tail) ||
+    !/^[A-Za-z0-9._-]+$/.test(existing.id)
+  ) {
+    return sql`true`
+  }
+  // One regex per column: the jsonb -> text conversion is the expensive part.
+  const escape = (value: string) => value.replace(/[.]/g, '\\.')
+  const pattern = `${escape(existing.id)}|${escape(tail)}|%|\\\\`
+  const conditions = columns.map((column) => sql`${column}::text ~ ${pattern}`)
+  return or(...conditions) as SQL
 }
 
-export async function deleteAsset(id: string): Promise<void> {
-  const existing = await getAsset(id)
-  if (!existing) {
-    throw new Error(m.server_asset_not_found())
+async function retainedAssetUsage(
+  tx: AssetTransaction,
+  existing: Asset,
+): Promise<number> {
+  const organizationId = existing.organizationId
+  const entries = await tx
+    .select({
+      draft: entry.draftData,
+      published: entry.publishedData,
+      scheduled: entry.scheduledData,
+    })
+    .from(entry)
+    .innerJoin(site, eq(site.id, entry.siteId))
+    .where(
+      and(
+        eq(site.organizationId, organizationId),
+        mayReferenceAsset(existing, [
+          entry.draftData,
+          entry.publishedData,
+          entry.scheduledData,
+        ]),
+      ),
+    )
+  const revisions = await tx
+    .select({ data: entryRevision.data })
+    .from(entryRevision)
+    .innerJoin(entry, eq(entry.id, entryRevision.entryId))
+    .innerJoin(site, eq(site.id, entry.siteId))
+    .where(
+      and(
+        eq(site.organizationId, organizationId),
+        mayReferenceAsset(existing, [entryRevision.data]),
+      ),
+    )
+  const publications = await tx
+    .select({ snapshot: publication.snapshot })
+    .from(publication)
+    .innerJoin(site, eq(site.id, publication.siteId))
+    .where(
+      and(
+        eq(site.organizationId, organizationId),
+        mayReferenceAsset(existing, [publication.snapshot]),
+      ),
+    )
+  const archives = await tx
+    .select({ data: deletedContentArchive.data })
+    .from(deletedContentArchive)
+    .where(
+      and(
+        eq(deletedContentArchive.organizationId, organizationId),
+        mayReferenceAsset(existing, [deletedContentArchive.data]),
+      ),
+    )
+  return [...entries, ...revisions, ...publications, ...archives].filter(
+    (row) => referencesAsset(row, existing),
+  ).length
+}
+
+export async function assetUsage(
+  id: string,
+  organizationId: string,
+): Promise<number> {
+  return db.transaction(async (tx) => {
+    await assetMutationLock(tx, organizationId)
+    const [existing] = await tx
+      .select()
+      .from(asset)
+      .where(and(eq(asset.id, id), eq(asset.organizationId, organizationId)))
+    return existing ? retainedAssetUsage(tx, existing) : 0
+  })
+}
+
+/** Rows are removed first; the durable cleanup record keeps failed object deletes retryable. */
+export async function deleteAsset(
+  id: string,
+  organizationId: string,
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    await assetMutationLock(tx, organizationId)
+    const [existing] = await tx
+      .select()
+      .from(asset)
+      .where(and(eq(asset.id, id), eq(asset.organizationId, organizationId)))
+    if (!existing) throw new NotFoundError(m.server_asset_not_found())
+    const usage = await retainedAssetUsage(tx, existing)
+    if (usage > 0) throw new AssetInUseError(usage)
+    await tx
+      .insert(storageObjectDeletion)
+      .values({ storageKey: existing.storageKey })
+      .onConflictDoNothing()
+    await tx.delete(asset).where(eq(asset.id, id))
+  })
+  await drainStorageObjectDeletions()
+}
+
+export async function drainStorageObjectDeletions(
+  limit = 100,
+): Promise<number> {
+  const pending = await db.select().from(storageObjectDeletion).limit(limit)
+  let removed = 0
+  for (const item of pending) {
+    try {
+      await getStorage().delete(item.storageKey)
+      await db
+        .delete(storageObjectDeletion)
+        .where(eq(storageObjectDeletion.storageKey, item.storageKey))
+      removed++
+    } catch (error) {
+      await db
+        .update(storageObjectDeletion)
+        .set({
+          lastError: error instanceof Error ? error.message : String(error),
+        })
+        .where(eq(storageObjectDeletion.storageKey, item.storageKey))
+    }
   }
-  const usage = await assetUsage(id)
-  if (usage > 0) {
-    throw new AssetInUseError(usage)
-  }
-  await getStorage().delete(existing.storageKey)
-  await db.delete(asset).where(eq(asset.id, id))
+  return removed
 }
 
 export function assetUrl(assetRow: Pick<Asset, 'storageKey'>): string {
   return `${env.APP_URL}/api/assets/file/${assetRow.storageKey}`
 }
 
-export async function resolveAssetValue(
-  assetId: string,
-): Promise<ResolvedAssetValue | null> {
-  const row = await getAsset(assetId)
-  if (!row) return null
+function toResolvedAssetValue(row: Asset): ResolvedAssetValue {
   return {
     url: assetUrl(row),
     width: row.width,
@@ -204,6 +364,66 @@ export async function resolveAssetValue(
     alt: row.altText ?? '',
     mimeType: row.mimeType,
   }
+}
+
+export async function resolveAssetValue(
+  assetId: string,
+  organizationId: string,
+  connection: Pick<typeof db, 'select'> = db,
+): Promise<ResolvedAssetValue | null> {
+  const row = await getAsset(assetId, organizationId, connection)
+  return row ? toResolvedAssetValue(row) : null
+}
+
+/**
+ * Organization-scoped assets loaded in bulk, so a snapshot build resolves
+ * thousands of references from memory instead of issuing one query each.
+ */
+export type AssetLookup = {
+  byId: Map<string, Asset>
+  byStorageKey: Map<string, Asset>
+}
+
+// Keep each statement well below PostgreSQL's 65,535 bind-parameter limit.
+const LOOKUP_CHUNK = 5000
+
+export async function loadAssetLookup(
+  organizationId: string,
+  refs: { ids: Iterable<string>; storageKeys: Iterable<string> },
+  connection: Pick<typeof db, 'select'> = db,
+): Promise<AssetLookup> {
+  const lookup: AssetLookup = { byId: new Map(), byStorageKey: new Map() }
+  const fetch = async (
+    column: typeof asset.id | typeof asset.storageKey,
+    values: string[],
+  ) => {
+    for (let i = 0; i < values.length; i += LOOKUP_CHUNK) {
+      const rows = await connection
+        .select()
+        .from(asset)
+        .where(
+          and(
+            eq(asset.organizationId, organizationId),
+            inArray(column, values.slice(i, i + LOOKUP_CHUNK)),
+          ),
+        )
+      for (const row of rows) {
+        lookup.byId.set(row.id, row)
+        lookup.byStorageKey.set(row.storageKey, row)
+      }
+    }
+  }
+  await fetch(asset.id, [...new Set(refs.ids)])
+  await fetch(asset.storageKey, [...new Set(refs.storageKeys)])
+  return lookup
+}
+
+export function resolveAssetFromLookup(
+  lookup: AssetLookup,
+  assetId: string,
+): ResolvedAssetValue | null {
+  const row = lookup.byId.get(assetId)
+  return row ? toResolvedAssetValue(row) : null
 }
 
 export function storageKeyFromRequest(request: Request): string | undefined {

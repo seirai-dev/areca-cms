@@ -36,13 +36,14 @@ import type { MeSite } from '#/lib/site-nav'
 import type { Field } from '#/lib/types'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
-import { listCollectionsFn } from '#/server/fn/content'
+import { listCollectionsFn, listInboundReferencesFn } from '#/server/fn/content'
 import type { Me } from '#/server/fn/me'
 
 import { DetailsPanel } from './details-panel'
 import { EditorCanvas } from './editor-canvas'
 import { EditorTopBar } from './editor-top-bar'
 import type { PrimaryState } from './editor-top-bar'
+import { ScheduledVersion } from './scheduled-version'
 import { ScheduleForm } from './schedule-form'
 import { useEntryEditor } from './use-entry-editor'
 
@@ -163,7 +164,7 @@ function EntryEditorView({
   const siteId = site.id
   const canManage = canManageSite(me, site.organizationId)
   const release = useReleaseStatus(siteId)
-  const live = release.data ? release.live : undefined
+  const live = release.liveMembership
   const panel = usePanel()
   const desktop = useMediaQuery('(min-width: 1024px)')
   const mobile = useIsMobile()
@@ -188,6 +189,12 @@ function EntryEditorView({
     onRevealError: (key) => revealField(key),
   })
   const { entry, data, titleField, slugField } = editor
+  const inboundQuery = useQuery({
+    queryKey: queryKeys.inboundReferences(editor.entryId ?? ''),
+    queryFn: () => listInboundReferencesFn({ data: { id: editor.entryId! } }),
+    enabled: deleteOpen && Boolean(editor.entryId),
+  })
+  const inboundTitles = (inboundQuery.data ?? []).map((row) => row.title)
 
   const canvasFields = fields.filter(
     (field) =>
@@ -447,6 +454,54 @@ function EntryEditorView({
           className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6 px-1 pt-4 sm:pt-10"
           aria-label={m.editor_canvas_label()}
         >
+          {editor.conflict || editor.recoveredDraft ? (
+            <div
+              role="alert"
+              className="mx-auto grid w-full max-w-[720px] gap-3 rounded-card border border-border-error/30 p-4"
+            >
+              <p>
+                {editor.conflict
+                  ? 'Another user changed this draft. Your changes are kept in this browser.'
+                  : 'A recoverable draft is saved in this browser.'}
+              </p>
+              <div className="flex flex-wrap gap-4">
+                <button
+                  type="button"
+                  className="underline"
+                  onClick={() => void editor.reloadServerDraft()}
+                >
+                  Reload server draft
+                </button>
+                <button
+                  type="button"
+                  className="underline"
+                  onClick={() => void editor.reapplyRecoveredDraft()}
+                >
+                  Reapply recovered draft to latest version
+                </button>
+                {!editor.conflict && (
+                  <button
+                    type="button"
+                    className="underline"
+                    onClick={editor.discardRecoveredDraft}
+                  >
+                    Discard recovered draft
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : null}
+          {entry?.status === 'scheduled' &&
+          entry.scheduledData &&
+          entry.scheduledSlug ? (
+            <ScheduledVersion
+              fields={fields}
+              data={entry.scheduledData}
+              slug={entry.scheduledSlug}
+              siteId={siteId}
+              organizationId={site.organizationId}
+            />
+          ) : null}
           {hasErrors ? (
             <div
               role="alert"
@@ -540,7 +595,15 @@ function EntryEditorView({
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
         title={m.editor_delete_entry_title()}
-        description={m.editor_delete_entry_description()}
+        description={
+          inboundTitles.length > 0
+            ? `${m.editor_delete_entry_description()} ${m.editor_delete_entry_inbound(
+                {
+                  titles: inboundTitles.join(', '),
+                },
+              )}`
+            : m.editor_delete_entry_description()
+        }
         confirmLabel={m.editor_delete()}
         variant="destructive"
         onConfirm={async () => {

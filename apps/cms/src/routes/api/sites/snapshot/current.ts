@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import '@tanstack/react-start'
-import { and, desc, eq, inArray } from 'drizzle-orm'
+import { and, desc, eq, inArray, or } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { buildJob, publication } from '#/db/schema'
@@ -9,10 +9,15 @@ import { authenticateSite } from '#/server/content/site-auth'
 
 const ACTIVE_JOB_STATUSES = ['building', 'validating', 'deploying'] as const
 
+const NO_STORE = { 'Cache-Control': 'no-store' }
+
 export async function getSitesSnapshotCurrent(request: Request) {
   const site = await authenticateSite(request)
   if (!site) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 })
+    return Response.json(
+      { error: 'Unauthorized' },
+      { status: 401, headers: NO_STORE },
+    )
   }
 
   const [activeJob] = await db
@@ -21,7 +26,10 @@ export async function getSitesSnapshotCurrent(request: Request) {
     .where(
       and(
         eq(buildJob.siteId, site.id),
-        inArray(buildJob.status, [...ACTIVE_JOB_STATUSES]),
+        or(
+          inArray(buildJob.status, [...ACTIVE_JOB_STATUSES]),
+          eq(buildJob.dispatchUncertain, true),
+        ),
       ),
     )
     .orderBy(desc(buildJob.startedAt), desc(buildJob.createdAt))
@@ -47,7 +55,13 @@ export async function getSitesSnapshotCurrent(request: Request) {
       .select()
       .from(publication)
       .where(
-        and(eq(publication.siteId, site.id), eq(publication.status, 'live')),
+        and(
+          eq(publication.siteId, site.id),
+          eq(
+            publication.status,
+            site.publishingMode === 'demo' ? 'demo' : 'live',
+          ),
+        ),
       )
       .orderBy(desc(publication.createdAt))
       .limit(1)
@@ -55,7 +69,10 @@ export async function getSitesSnapshotCurrent(request: Request) {
   }
 
   if (!pub) {
-    return Response.json({ error: 'No publication exists' }, { status: 404 })
+    return Response.json(
+      { error: 'No publication exists' },
+      { status: 404, headers: NO_STORE },
+    )
   }
 
   const snapshot: Snapshot = {
@@ -63,7 +80,7 @@ export async function getSitesSnapshotCurrent(request: Request) {
     publicationId: pub.id,
   }
 
-  return Response.json(snapshot)
+  return Response.json(snapshot, { headers: NO_STORE })
 }
 
 export const Route = createFileRoute('/api/sites/snapshot/current')({

@@ -1,5 +1,5 @@
 import { createServerFn } from '@tanstack/react-start'
-import { and, desc, eq, gt, inArray, max, or, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, max, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
 import {
@@ -10,7 +10,8 @@ import {
   publication,
   site,
 } from '#/db/schema'
-import { requireUser } from '#/lib/session.server'
+import { assertAdminMfa, requireUser } from '#/lib/session.server'
+import { diffApprovedRelease } from '#/server/publishing/release-diff'
 
 const loose = { strict: { output: false } as const }
 
@@ -38,6 +39,7 @@ export const getSitesOverviewFn = createServerFn({
   ...loose,
 }).handler(async () => {
   const session = await requireUser()
+  if (session.user.isAgencyAdmin) assertAdminMfa(session.user)
   const orgIds = await accessibleOrgIds(
     session.user.id,
     Boolean(session.user.isAgencyAdmin),
@@ -115,33 +117,16 @@ export const getSitesOverviewFn = createServerFn({
     if (!liveSince.has(row.siteId)) liveSince.set(row.siteId, row.createdAt)
   }
 
-  // Published entries the live snapshot does not include yet, for every site
-  // in one grouped query. Sites without a live publication count all of them.
-  const withoutLive = siteIds.filter((id) => !liveSince.has(id))
-  const pendingScopes = [
-    ...(withoutLive.length > 0 ? [inArray(entry.siteId, withoutLive)] : []),
-    ...[...liveSince.entries()].map(([siteId, createdAt]) =>
-      and(eq(entry.siteId, siteId), gt(entry.updatedAt, createdAt)),
-    ),
-  ]
-  const pendingCounts = await db
-    .select({
-      siteId: entry.siteId,
-      count: sql<number>`cast(count(*) as int)`,
-    })
-    .from(entry)
-    .where(
-      and(
-        inArray(entry.siteId, siteIds),
-        eq(entry.status, 'published'),
-        or(...pendingScopes),
-      ),
-    )
-    .groupBy(entry.siteId)
+  const pendingPairs = await Promise.all(
+    siteIds.map(async (siteId) => {
+      const diff = await diffApprovedRelease(siteId)
+      return [siteId, diff.pendingCount] as const
+    }),
+  )
 
   const byCollection = new Map(collectionCounts.map((r) => [r.siteId, r]))
   const byEntry = new Map(entryCounts.map((r) => [r.siteId, r]))
-  const byPending = new Map(pendingCounts.map((r) => [r.siteId, r.count]))
+  const byPending = new Map(pendingPairs)
   const live = new Set(liveSince.keys())
 
   const organizations = orgIds

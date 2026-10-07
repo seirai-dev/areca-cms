@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { Link } from '@tanstack/react-router'
 import { useTheme } from 'next-themes'
 import {
   Check,
@@ -6,6 +7,7 @@ import {
   Keyboard,
   Monitor,
   Moon,
+  ShieldCheck,
   SignOut,
   Sun,
 } from '@phosphor-icons/react'
@@ -159,6 +161,15 @@ function AccountMenuBody({ onClose }: { onClose: () => void }) {
       </div>
 
       <div className="grid gap-0.5 border-t border-border-default pt-2">
+        <Link
+          to="/account"
+          className={MENU_ROW}
+          data-testid="open-account"
+          onClick={onClose}
+        >
+          <ShieldCheck />
+          <span className="flex-1">{m.shell_account_security()}</span>
+        </Link>
         <button
           type="button"
           className={MENU_ROW}

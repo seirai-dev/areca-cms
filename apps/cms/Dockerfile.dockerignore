@@ -1,0 +1,19 @@
+# Allow only the CMS and dependency configuration into the build context.
+**
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!apps/
+!apps/cms/
+!apps/cms/**
+**/node_modules
+**/.env*
+**/.output
+**/.docker
+**/.nitro
+**/.tanstack
+**/dist
+**/playwright-report
+**/test-results
+**/src/paraglide
+**/src/generated

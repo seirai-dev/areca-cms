@@ -62,7 +62,7 @@ Field def: `{ key, label, type, required?, options? (select), collection? (refer
    (rich text exported as `{ json, markdown, document, html }` (`document` = TanStack Markdown AST), image fields resolved to stable asset URLs `/assets/<storageKey>` served by the CMS). Validate snapshot against collection fields; reject on errors.
 3. Enqueue `build_job`. Queued (not started) jobs for the same site are cancelled (coalescing) and their publications marked `superseded`.
 4. Worker (in-process `setInterval` loop in the CMS server, one job per site at a time, global concurrency 2):
-   `building` → call `DeploymentAdapter.deploy(site)` → poll status until done (timeout) → `healthCheck(url)` → publication `live`,
+   `building` → persist dispatch intent → call `DeploymentAdapter.deploy(target, log, context)` → poll the matching deployment until done (timeout) → `healthCheck(url)` → publication `live`,
    previous live publication → `superseded`; entries with status `scheduled` whose time passed → `published`. On failure: job `failed`, publication `failed`, previous stays live.
 5. Rollback: pick a publication with `wasLive` → new build job with that publication id (becomes `live` again after success). Eligibility is `wasLive`, not current status, so a failed rollback can be retried.
 
@@ -71,9 +71,10 @@ Field def: `{ key, label, type, required?, options? (select), collection? (refer
 - Dokploy builds the site from its git repo. Build env has `ARECA_CMS_URL`, `ARECA_SITE_TOKEN`.
 - SDK `loadContent()` at build time calls `GET /api/sites/snapshot/current` (site token) which returns the publication marked
   as the one being deployed (`publication.status in (building)` for the running job, else the latest `live`). Result written to
-  `src/generated/content/*.json` by a prebuild script `areca pull` and imported statically by the site. Since Dokploy cannot pass a
-  per-deploy env var, the CMS pins the snapshot: the endpoint returns the publication of the _active build job_ for that site
-  (falls back to the latest `live` publication). The build fails loudly if no publication exists.
+  `src/generated/content/*.json` by a prebuild script `areca pull` and imported statically by the site. The adapter sets
+  `ARECA_SNAPSHOT_ID` to the publication ID before deployment. The CMS also pins the snapshot: the endpoint returns the publication
+  of the _active build job_ or unresolved dispatch for that site (falls back to the latest `live` publication).
+  The build fails loudly if no publication exists.
 - Preview: CMS signs a JWT-like token (HMAC, `previewSecret`, 1h expiry, scoped to site+collection+slug). Site route `/__preview/$collection/$slug?token=`
   calls `GET /api/sites/preview?token=` and renders draft data with the same components; responds with `X-Robots-Tag: noindex`.
 
@@ -83,8 +84,12 @@ Field def: `{ key, label, type, required?, options? (select), collection? (refer
   `DOKPLOY_CREDENTIALS_ENCRYPTION_KEY`, never returned to the browser, and can only be replaced.
 - The worker resolves credentials when a site job starts. Global `DOKPLOY_URL` / `DOKPLOY_API_KEY` values are used only
   as an explicit non-production fallback with `DOKPLOY_DEV_FALLBACK_ENABLED=true`.
-- `POST /api/application.deploy { applicationId }`, then poll `GET /api/application.one?applicationId=` → `applicationStatus`
-  (`running|done|error|idle`). Then GET the site's `healthCheckUrl` expecting 200.
+- `POST /api/application.deploy` carries `applicationId`, a stable job title and publication/hash description. Poll
+  `GET /api/application.one?applicationId=` for that tagged deployment's ID and status, then GET the site's
+  `healthCheckUrl` expecting 200 and the publication ID. A lost deploy response is reconciled, never blindly redispatched.
+- Publish/rollback requests retain a UUID idempotency key across lost responses. Safe adapter reads and identical environment
+  writes have bounded retries; uncertain dispatches block subsequent site work until reconciled or explicitly resolved.
+  See [integration reliability](INTEGRATIONS.md) for the recovery contract.
 - Test server: `http://192.168.0.141:3000` (see `.env.example`).
 
 ## Roles

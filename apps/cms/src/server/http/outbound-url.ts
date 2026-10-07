@@ -1,9 +1,11 @@
 import { isIP } from 'node:net'
 import { lookup } from 'node:dns/promises'
 
+import { AppError } from './app-error'
+
 export type ResolveHost = (hostname: string) => Promise<string[]>
 
-export class UnsafeOutboundUrlError extends Error {
+export class UnsafeOutboundUrlError extends AppError {
   constructor(message: string) {
     super(message)
     this.name = 'UnsafeOutboundUrlError'

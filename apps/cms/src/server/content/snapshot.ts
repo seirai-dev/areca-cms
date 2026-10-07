@@ -1,5 +1,10 @@
+import {
+  richTextAssetRefs,
+  richTextAssetsAuthorized,
+  richTextAssetsAuthorizedFrom,
+} from '#/server/assets/richtext-ownership'
 import { createHash } from 'node:crypto'
-import { and, eq, lte, or } from 'drizzle-orm'
+import { and, eq, or } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { collection, entry, site } from '#/db/schema'
@@ -11,11 +16,16 @@ import type {
   SnapshotEntry,
 } from '#/lib/types'
 import { m } from '#/paraglide/messages'
-import { resolveAssetValue } from '#/server/assets'
+import {
+  loadAssetLookup,
+  resolveAssetFromLookup,
+  resolveAssetValue,
+} from '#/server/assets'
+import type { AssetLookup } from '#/server/assets'
 import { convertRichText, validateRichText } from '#/server/richtext'
 
 import { getCollection, listCollections } from './collections.ts'
-import { NotFoundError } from './errors.ts'
+import { NotFoundError, ValidationError } from './errors.ts'
 import { validateEntryData } from './validation.ts'
 
 type IncludedEntry = {
@@ -24,16 +34,23 @@ type IncludedEntry = {
   fields: Field[]
   row: typeof entry.$inferSelect
   data: EntryData
+  slug: string
   publishedAt: Date | null
 }
 
 export async function buildSnapshot(
   siteId: string,
+  connection: Pick<typeof db, 'select'> = db,
 ): Promise<
-  | { ok: true; snapshot: Snapshot; hash: string }
+  | {
+      ok: true
+      snapshot: Snapshot
+      hash: string
+      entryVersions: { entryId: string; scheduledVersion: string }[]
+    }
   | { ok: false; errors: string[] }
 > {
-  const [existingSite] = await db
+  const [existingSite] = await connection
     .select()
     .from(site)
     .where(eq(site.id, siteId))
@@ -43,28 +60,43 @@ export async function buildSnapshot(
   }
 
   const now = new Date()
-  const enabled = await listCollections(siteId, { enabledOnly: true })
+  const enabled = await listCollections(
+    siteId,
+    { enabledOnly: true },
+    connection,
+  )
   const errors: string[] = []
+  const entryVersions: { entryId: string; scheduledVersion: string }[] = []
   const included: IncludedEntry[] = []
 
   for (const col of enabled) {
-    const rows = await db
+    const rows = await connection
       .select()
       .from(entry)
       .where(
         and(
           eq(entry.siteId, siteId),
           eq(entry.collectionId, col.id),
-          or(
-            eq(entry.status, 'published'),
-            and(eq(entry.status, 'scheduled'), lte(entry.scheduledAt, now)),
-          ),
+          or(eq(entry.status, 'published'), eq(entry.status, 'scheduled')),
         ),
       )
 
     for (const row of rows) {
-      const isScheduledDue = row.status === 'scheduled'
-      const data = isScheduledDue ? row.draftData : row.publishedData
+      const isScheduledDue =
+        row.status === 'scheduled' &&
+        row.scheduledAt != null &&
+        row.scheduledAt <= now
+      const data = isScheduledDue ? row.scheduledData : row.publishedData
+      const slug = isScheduledDue ? row.scheduledSlug : row.publishedSlug
+      if (!isScheduledDue && row.status === 'scheduled' && !data) continue
+      if (!slug) {
+        errors.push(`${col.key}/${row.id}: missing approved slug`)
+        continue
+      }
+      if (isScheduledDue && !row.scheduledVersion) {
+        errors.push(`${col.key}/${row.id}: missing scheduled version`)
+        continue
+      }
       if (data == null) {
         errors.push(`${col.key}/${row.slug}: missing published data`)
         continue
@@ -78,14 +110,19 @@ export async function buildSnapshot(
         }
         continue
       }
+      if (isScheduledDue)
+        entryVersions.push({
+          entryId: row.id,
+          scheduledVersion: row.scheduledVersion!,
+        })
       included.push({
+        slug,
         collectionKey: col.key,
         routePattern: col.routePattern,
         fields: col.fields,
         row,
         data: parsed.data,
-        publishedAt:
-          row.publishedAt ?? (isScheduledDue ? row.scheduledAt : null),
+        publishedAt: isScheduledDue ? row.scheduledAt : row.publishedAt,
       })
     }
   }
@@ -97,10 +134,10 @@ export async function buildSnapshot(
       slugs = new Set()
       slugsByCollection.set(item.collectionKey, slugs)
     }
-    if (slugs.has(item.row.slug)) {
-      errors.push(`${item.collectionKey}: duplicate slug "${item.row.slug}"`)
+    if (slugs.has(item.slug)) {
+      errors.push(`${item.collectionKey}: duplicate slug "${item.slug}"`)
     }
-    slugs.add(item.row.slug)
+    slugs.add(item.slug)
   }
 
   const slugsByRoute = new Map<string, Map<string, string>>()
@@ -110,19 +147,43 @@ export async function buildSnapshot(
       bySlug = new Map()
       slugsByRoute.set(item.routePattern, bySlug)
     }
-    const owner = bySlug.get(item.row.slug)
+    const owner = bySlug.get(item.slug)
     if (owner && owner !== item.collectionKey) {
       errors.push(
-        `Route collision: ${item.routePattern} slug "${item.row.slug}" used by ${owner} and ${item.collectionKey}`,
+        `Route collision: ${item.routePattern} slug "${item.slug}" used by ${owner} and ${item.collectionKey}`,
       )
     }
-    bySlug.set(item.row.slug, item.collectionKey)
+    bySlug.set(item.slug, item.collectionKey)
   }
 
   const includedById = new Map<string, IncludedEntry>()
   for (const item of included) {
     includedById.set(item.row.id, item)
   }
+
+  // One batched lookup replaces a query per embedded/linked asset.
+  const assetIds = new Set<string>()
+  const assetKeys = new Set<string>()
+  for (const item of included) {
+    for (const field of item.fields) {
+      const value = item.data[field.key]
+      if (field.type === 'richtext') {
+        for (const key of richTextAssetRefs(value).storageKeys)
+          assetKeys.add(key)
+      } else if (
+        field.type === 'image' &&
+        typeof value === 'string' &&
+        value !== ''
+      ) {
+        assetIds.add(value)
+      }
+    }
+  }
+  const assets = await loadAssetLookup(
+    existingSite.organizationId,
+    { ids: assetIds, storageKeys: assetKeys },
+    connection,
+  )
 
   for (const item of included) {
     for (const field of item.fields) {
@@ -131,38 +192,45 @@ export async function buildSnapshot(
       if (value == null || value === '') continue
       if (typeof value !== 'string') {
         errors.push(
-          `${item.collectionKey}/${item.row.slug}: ${field.key}: expected an entry id`,
+          `${item.collectionKey}/${item.slug}: ${field.key}: expected an entry id`,
         )
         continue
       }
       const target = includedById.get(value)
       if (!target) {
         errors.push(
-          `${item.collectionKey}/${item.row.slug}: ${field.key}: referenced entry is not in the snapshot`,
+          `${item.collectionKey}/${item.slug}: ${field.key}: referenced entry is not in the snapshot`,
         )
         continue
       }
       if (field.collection && target.collectionKey !== field.collection) {
         errors.push(
-          `${item.collectionKey}/${item.row.slug}: ${field.key}: referenced entry is not in "${field.collection}"`,
+          `${item.collectionKey}/${item.slug}: ${field.key}: referenced entry is not in "${field.collection}"`,
         )
       }
     }
 
     for (const field of item.fields) {
+      if (
+        field.type === 'richtext' &&
+        !richTextAssetsAuthorizedFrom(item.data[field.key], assets)
+      ) {
+        errors.push(
+          `${item.collectionKey}/${item.slug}: ${field.key}: embedded asset not found in this organization`,
+        )
+      }
       if (field.type !== 'image') continue
       const value = item.data[field.key]
       if (value == null || value === '') continue
       if (typeof value !== 'string') {
         errors.push(
-          `${item.collectionKey}/${item.row.slug}: ${field.key}: expected an asset id`,
+          `${item.collectionKey}/${item.slug}: ${field.key}: expected an asset id`,
         )
         continue
       }
-      const resolved = await resolveAssetValue(value)
-      if (!resolved) {
+      if (!resolveAssetFromLookup(assets, value)) {
         errors.push(
-          `${item.collectionKey}/${item.row.slug}: ${field.key}: asset not found`,
+          `${item.collectionKey}/${item.slug}: ${field.key}: asset not found`,
         )
       }
     }
@@ -181,10 +249,14 @@ export async function buildSnapshot(
     for (const item of items) {
       converted.push({
         id: item.row.id,
-        slug: item.row.slug,
+        slug: item.slug,
         publishedAt: item.publishedAt?.toISOString() ?? null,
         data: await convertFields(item.fields, item.data, {
           includedById,
+          connection,
+          assets,
+          siteId,
+          organizationId: existingSite.organizationId,
           strict: true,
         }),
       })
@@ -201,7 +273,7 @@ export async function buildSnapshot(
     collections,
   }
 
-  return { ok: true, snapshot, hash }
+  return { ok: true, snapshot, hash, entryVersions }
 }
 
 export async function buildPreviewEntry(
@@ -210,7 +282,12 @@ export async function buildPreviewEntry(
   slug: string,
 ): Promise<SnapshotEntry | null> {
   const col = await getCollection(siteId, collectionKey)
-  if (!col) return null
+  const [existingSite] = await db
+    .select()
+    .from(site)
+    .where(eq(site.id, siteId))
+    .limit(1)
+  if (!col || !existingSite) return null
 
   const [row] = await db
     .select()
@@ -221,6 +298,8 @@ export async function buildPreviewEntry(
 
   const data = await convertFields(col.fields, row.draftData, {
     includedById: new Map(),
+    siteId,
+    organizationId: existingSite.organizationId,
     strict: false,
   })
 
@@ -236,7 +315,7 @@ function compareSnapshotEntries(a: IncludedEntry, b: IncludedEntry) {
   const aAt = a.publishedAt?.toISOString() ?? ''
   const bAt = b.publishedAt?.toISOString() ?? ''
   if (aAt !== bAt) return bAt.localeCompare(aAt)
-  return a.row.slug.localeCompare(b.row.slug)
+  return a.slug.localeCompare(b.slug)
 }
 
 async function convertFields(
@@ -244,6 +323,11 @@ async function convertFields(
   data: EntryData,
   options: {
     includedById: Map<string, IncludedEntry>
+    siteId: string
+    connection?: Pick<typeof db, 'select'>
+    /** Preloaded assets (snapshot builds); otherwise each asset is queried. */
+    assets?: AssetLookup
+    organizationId: string
     strict: boolean
   },
 ): Promise<Record<string, unknown>> {
@@ -252,6 +336,24 @@ async function convertFields(
   for (const field of fields) {
     const value = data[field.key]
     if (field.type === 'richtext') {
+      const authorized = options.assets
+        ? richTextAssetsAuthorizedFrom(value, options.assets)
+        : await richTextAssetsAuthorized(
+            value,
+            options.organizationId,
+            options.connection,
+          )
+      if (!authorized) {
+        if (options.strict)
+          throw new ValidationError([
+            {
+              path: field.key,
+              message: 'Embedded asset not found in this organization',
+            },
+          ])
+        out[field.key] = null
+        continue
+      }
       if (value == null || value === '') {
         out[field.key] = value
         continue
@@ -271,11 +373,21 @@ async function convertFields(
         out[field.key] = value ?? null
         continue
       }
-      const resolved = await resolveAssetValue(value)
+      const resolved = options.assets
+        ? resolveAssetFromLookup(options.assets, value)
+        : await resolveAssetValue(
+            value,
+            options.organizationId,
+            options.connection,
+          )
       if (resolved) {
         out[field.key] = resolved
       } else if (options.strict) {
-        throw new Error(`asset not found: ${value}`)
+        throw new ValidationError([
+          { path: field.key, message: `asset not found: ${value}` },
+        ])
+      } else {
+        out[field.key] = null
       }
       continue
     }
@@ -289,13 +401,14 @@ async function convertFields(
       if (target) {
         const ref: ReferenceValue = {
           collection: target.collectionKey,
-          slug: target.row.slug,
+          slug: target.slug,
           id: target.row.id,
         }
         out[field.key] = ref
         continue
       }
-      if (!options.strict) {
+      out[field.key] = null
+      if (!options.strict && field.collection) {
         const [refRow] = await db
           .select({
             id: entry.id,
@@ -304,7 +417,15 @@ async function convertFields(
           })
           .from(entry)
           .innerJoin(collection, eq(entry.collectionId, collection.id))
-          .where(eq(entry.id, value))
+          .where(
+            and(
+              eq(entry.id, value),
+              eq(entry.siteId, options.siteId),
+              ...(field.collection
+                ? [eq(collection.key, field.collection)]
+                : []),
+            ),
+          )
           .limit(1)
         if (refRow) {
           out[field.key] = {

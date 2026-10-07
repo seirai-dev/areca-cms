@@ -199,10 +199,7 @@ export function CommandPalette() {
                   </span>
                   <EntryStatusPill
                     size="sm"
-                    status={entryUiStatus(
-                      entry,
-                      release.data ? release.live : undefined,
-                    )}
+                    status={entryUiStatus(entry, release.liveMembership)}
                   />
                 </CommandItem>
               )

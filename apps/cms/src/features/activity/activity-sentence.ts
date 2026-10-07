@@ -15,6 +15,7 @@ export type ActivityLike = {
   targetId: string
   actorId: string | null
   actorName: string | null
+  organizationId?: string | null
   organizationName: string | null
   siteName: string | null
   meta: unknown
@@ -65,6 +66,15 @@ const SENTENCES: Partial<Record<string, Sentence>> = {
   'member.update_role': (target) => m.activity_member_update_role({ target }),
   'member.remove': (target) => m.activity_member_remove({ target }),
   'invitation.revoke': () => m.activity_invitation_revoke(),
+  'invitation.resend': () => m.activity_invitation_resend(),
+  'setup.completed': () => m.activity_setup_completed(),
+  'agency_admin.grant': () => m.activity_agency_admin_grant(),
+  'agency_admin.revoke': () => m.activity_agency_admin_revoke(),
+  'branding.update': () => m.activity_branding_update(),
+  'branding.image_set': () => m.activity_branding_image_set(),
+  'branding.image_clear': () => m.activity_branding_image_clear(),
+  'branding.reset': () => m.activity_branding_reset(),
+  'organization.delete': () => m.activity_organization_delete(),
   'invitation.accept': (target) => m.activity_invitation_accept({ target }),
   'manifest.sync': () => m.activity_manifest_sync(),
   'collection.upsert': (target) => m.activity_collection_upsert({ target }),
@@ -273,9 +283,14 @@ export function entryTargetIds(rows: ReadonlyArray<ActivityLike>) {
 export function activityScope(row: {
   organizationName: string | null
   siteName: string | null
+  /** Explicit null marks an instance-level event (no organization). */
+  organizationId?: string | null
 }) {
   const org = row.organizationName?.trim()
   const site = row.siteName?.trim()
+  if (row.organizationId === null && !org && !site) {
+    return m.activity_scope_instance()
+  }
   if (org && site && site.toLowerCase().startsWith(org.toLowerCase())) {
     return site
   }

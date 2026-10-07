@@ -8,6 +8,7 @@ import {
   ClockCountdown,
   DotsThree,
   Lightning,
+  Minus,
   RocketLaunch,
   Scroll,
   WarningCircle,
@@ -15,6 +16,8 @@ import {
 } from '@phosphor-icons/react'
 
 import { formatDateTime, shortId } from '#/lib/content/utils'
+import { authClient } from '#/lib/auth-client'
+import { Input } from '#/components/ui/input'
 import { Button } from '#/components/ui/button'
 import { ConfirmDialog } from '#/components/ui/confirm-dialog'
 import { CopyButton } from '#/components/ui/copy-button'
@@ -70,7 +73,13 @@ import {
   publicationsQuery,
 } from './queries'
 import type { JobRow, PublicationRow } from './queries'
-import { useCancelJob, useGoLive, useRollback } from './use-go-live'
+import {
+  useCancelJob,
+  useGoLive,
+  useRollback,
+  useReconcileDeployment,
+  useResolveUncertainDeployment,
+} from './use-go-live'
 import { usePendingEntries } from './use-pending-entries'
 import type { PendingEntry } from './use-pending-entries'
 import { useReleaseStatus } from './use-release-status'
@@ -154,13 +163,24 @@ function GoLivePanelBody({
   const [urgent, setUrgent] = React.useState(false)
   const pending = usePendingEntries({
     siteId: site.id,
-    liveCreatedAt: release.live?.createdAt,
     enabled: release.state !== 'loading',
   })
 
   return (
     <div className="grid divide-y divide-border-default">
-      <StatusHero site={site} release={release} />
+      {release.data?.publishingMode === 'demo' ? (
+        <Section>
+          <p data-testid="demo-publication-label" role="status">
+            Demo mode ·{' '}
+            {release.data.demo
+              ? 'Demo publication ready'
+              : 'No demo publication yet'}{' '}
+            · Never production live
+          </p>
+        </Section>
+      ) : (
+        <StatusHero site={site} release={release} />
+      )}
 
       {errors.length > 0 ? (
         <Section>
@@ -416,7 +436,7 @@ function WhatsChanging({
   }
   return (
     <ul className="-mx-2 grid" data-testid="golive-changes">
-      {pending.entries.slice(0, 50).map((entry) => (
+      {pending.entries.map((entry) => (
         <li key={`${entry.kind}-${entry.id}`}>
           <PendingRow siteId={siteId} entry={entry} />
         </li>
@@ -432,19 +452,32 @@ function PendingRow({
   siteId: string
   entry: PendingEntry
 }) {
-  return (
-    <Link
-      to="/sites/$siteId/c/$collectionKey/$entryId"
-      params={{ siteId, collectionKey: entry.collectionKey, entryId: entry.id }}
-      className="group/row flex min-h-11 items-center gap-3 rounded-[10px] px-2 py-1.5 outline-none transition-colors hover:bg-surface-state-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-border-focus"
-    >
-      <span className="grid size-6 shrink-0 place-content-center">
-        {entry.kind === 'scheduled' ? (
-          <ClockIcon size={16} className="text-icon-warning" />
-        ) : (
-          <span className="size-2 rounded-full bg-accent" />
-        )}
-      </span>
+  const meta =
+    entry.kind === 'scheduled' && entry.scheduledAt
+      ? m.golive_scheduled_for({
+          time: formatScheduleShort(entry.scheduledAt),
+        })
+      : entry.kind === 'removal'
+        ? m.golive_will_leave_live()
+        : entry.updatedByName
+          ? m.golive_edited_by({
+              time: formatRelativeTime(entry.updatedAt),
+              name: entry.updatedByName,
+            })
+          : m.golive_edited({ time: formatRelativeTime(entry.updatedAt) })
+
+  const icon =
+    entry.kind === 'scheduled' ? (
+      <ClockIcon size={16} className="text-icon-warning" />
+    ) : entry.kind === 'removal' ? (
+      <Minus className="size-3.5 text-icon-muted" />
+    ) : (
+      <span className="size-2 rounded-full bg-accent" />
+    )
+
+  const body = (
+    <>
+      <span className="grid size-6 shrink-0 place-content-center">{icon}</span>
       <span className="grid min-w-0 flex-1">
         <span className="truncate text-[14px] leading-5 font-medium text-text-primary">
           {entry.title}
@@ -452,18 +485,26 @@ function PendingRow({
         <span className="truncate text-[12px] leading-4 text-text-muted">
           {entry.collectionLabel}
           {' · '}
-          {entry.kind === 'scheduled' && entry.scheduledAt
-            ? m.golive_scheduled_for({
-                time: formatScheduleShort(entry.scheduledAt),
-              })
-            : entry.updatedByName
-              ? m.golive_edited_by({
-                  time: formatRelativeTime(entry.updatedAt),
-                  name: entry.updatedByName,
-                })
-              : m.golive_edited({ time: formatRelativeTime(entry.updatedAt) })}
+          {meta}
         </span>
       </span>
+    </>
+  )
+
+  const className =
+    'group/row flex min-h-11 items-center gap-3 rounded-[10px] px-2 py-1.5 outline-none transition-colors hover:bg-surface-state-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-border-focus'
+
+  if (!entry.exists) {
+    return <div className={className}>{body}</div>
+  }
+
+  return (
+    <Link
+      to="/sites/$siteId/c/$collectionKey/$entryId"
+      params={{ siteId, collectionKey: entry.collectionKey, entryId: entry.id }}
+      className={className}
+    >
+      {body}
     </Link>
   )
 }
@@ -596,6 +637,13 @@ function ReleaseHistory({
   const jobs = useQuery(jobsQuery(siteId))
   const rollback = useRollback(siteId)
   const cancelJob = useCancelJob(siteId)
+  const reconcile = useReconcileDeployment(siteId)
+  const resolveUncertain = useResolveUncertainDeployment(siteId)
+  const isAgencyAdmin =
+    authClient.useSession().data?.user.isAgencyAdmin === true
+  const [resolutionReasons, setResolutionReasons] = React.useState<
+    Record<string, string>
+  >({})
 
   const limit = PUBLICATIONS_PAGE_SIZE * pages
   const rows = (publications.data ?? []).slice(0, limit)
@@ -631,6 +679,71 @@ function ReleaseHistory({
 
   return (
     <Section title={m.golive_releases()} className="pb-8">
+      {(jobs.data ?? [])
+        .filter((job) => job.dispatchUncertain)
+        .map((job) => (
+          <div
+            key={job.id}
+            className="grid gap-2 rounded-[10px] bg-background-subtle p-3"
+          >
+            <p className="text-callout text-text-secondary">
+              {m.golive_deployment_uncertain()}
+            </p>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={!canManage}
+              loading={reconcile.isPending}
+              onClick={() => reconcile.mutate(job.id)}
+              data-testid="reconcile-deployment"
+            >
+              {m.golive_reconcile_deployment()}
+            </Button>
+            {isAgencyAdmin ? (
+              <div className="grid gap-2">
+                <Input
+                  aria-label={m.golive_resolution_reason()}
+                  placeholder={m.golive_resolution_reason()}
+                  value={resolutionReasons[job.id] ?? ''}
+                  onChange={(event) =>
+                    setResolutionReasons((previous) => ({
+                      ...previous,
+                      [job.id]: event.target.value,
+                    }))
+                  }
+                />
+                <ConfirmDialog
+                  title={m.golive_resolve_uncertain()}
+                  description={m.golive_resolve_uncertain_confirmation()}
+                  confirmText={job.id}
+                  confirmLabel={m.golive_resolve_uncertain()}
+                  variant="destructive"
+                  onConfirm={() =>
+                    resolveUncertain
+                      .mutateAsync({
+                        id: job.id,
+                        reason: resolutionReasons[job.id] ?? '',
+                      })
+                      .then(() => undefined)
+                  }
+                >
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    disabled={
+                      (resolutionReasons[job.id] ?? '').trim().length < 10 ||
+                      job.status !== 'failed'
+                    }
+                  >
+                    {m.golive_resolve_uncertain()}
+                  </Button>
+                </ConfirmDialog>
+              </div>
+            ) : null}
+          </div>
+        ))}
       {publications.isError ? (
         <QueryError
           title={m.golive_releases_load_error()}

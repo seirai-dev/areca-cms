@@ -31,7 +31,13 @@ export type MembershipRole = 'owner' | 'editor'
 export type EntryStatus = 'draft' | 'published' | 'scheduled' | 'archived'
 
 export type PublicationStatus =
-  'pending' | 'building' | 'live' | 'failed' | 'superseded' | 'rolled_back'
+  | 'pending'
+  | 'building'
+  | 'demo'
+  | 'live'
+  | 'failed'
+  | 'superseded'
+  | 'rolled_back'
 
 export type BuildJobStatus =
   | 'queued'

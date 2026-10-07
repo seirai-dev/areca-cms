@@ -1,7 +1,13 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
-import { requireAgencyAdmin, requireOrgMember } from '#/lib/session.server'
+import {
+  requireAgencyAdmin,
+  requireFreshAgencyAdmin,
+  requireOrgMember,
+  requireOrgMemberOrNotFound,
+  requireUser,
+} from '#/lib/session.server'
 import { m } from '#/paraglide/messages'
 import { listAuditLog } from '#/server/admin/audit'
 import {
@@ -17,6 +23,7 @@ import {
   listMembers,
   listUsers,
   removeMember,
+  resendInvitation,
   revokeInvitation,
   setAgencyAdmin,
   updateMemberRole,
@@ -80,8 +87,8 @@ export const updateOrganizationFn = createServerFn({
     }),
   )
   .handler(async ({ data }) => {
-    await requireAgencyAdmin()
-    return updateOrganization(data.id, { name: data.name })
+    const session = await requireAgencyAdmin()
+    return updateOrganization(data.id, { name: data.name }, session.user.id)
   })
 
 export const deleteOrganizationFn = createServerFn({
@@ -90,8 +97,8 @@ export const deleteOrganizationFn = createServerFn({
 })
   .validator(z.object({ id: z.string().min(1) }))
   .handler(async ({ data }) => {
-    await requireAgencyAdmin()
-    await deleteOrganization(data.id)
+    const session = await requireFreshAgencyAdmin()
+    await deleteOrganization(data.id, session.user.id)
     return { ok: true as const }
   })
 
@@ -117,7 +124,7 @@ export const saveDokployCredentialsFn = createServerFn({
     }),
   )
   .handler(async ({ data }) => {
-    const session = await requireAgencyAdmin()
+    const session = await requireFreshAgencyAdmin()
     return saveDokployCredentials({
       ...data,
       actorId: session.user.id,
@@ -143,7 +150,7 @@ export const removeDokployCredentialsFn = createServerFn({
 })
   .validator(z.object({ organizationId: z.string().min(1) }))
   .handler(async ({ data }) => {
-    const session = await requireAgencyAdmin()
+    const session = await requireFreshAgencyAdmin()
     return removeDokployCredentials({
       organizationId: data.organizationId,
       actorId: session.user.id,
@@ -178,7 +185,7 @@ export const createSiteFn = createServerFn({ method: 'POST', ...adminFn })
     }),
   )
   .handler(async ({ data }) => {
-    const session = await requireAgencyAdmin()
+    const session = await requireFreshAgencyAdmin()
     return createSite({
       organizationId: data.organizationId,
       name: data.name,
@@ -194,30 +201,36 @@ export const updateSiteFn = createServerFn({ method: 'POST', ...adminFn })
       id: z.string().min(1),
       name: z.string().min(1).optional(),
       productionUrl: z.string().url().optional(),
+      publishingMode: z.enum(['production', 'demo']).optional(),
       deploymentTarget: deploymentTargetSchema.optional(),
     }),
   )
   .handler(async ({ data }) => {
-    await requireAgencyAdmin()
+    const session = await requireAgencyAdmin()
     const { id, ...patch } = data
-    return updateSite(id, patch)
+    return updateSite(id, patch, session.user.id)
   })
 
 export const rotateSiteTokenFn = createServerFn({
   method: 'POST',
   ...adminFn,
 })
-  .validator(z.object({ id: z.string().min(1) }))
+  .validator(
+    z.object({
+      id: z.string().min(1),
+      privilege: z.enum(['build', 'schema']).default('build'),
+    }),
+  )
   .handler(async ({ data }) => {
-    await requireAgencyAdmin()
-    return rotateSiteTokenAdmin(data.id)
+    const session = await requireFreshAgencyAdmin()
+    return rotateSiteTokenAdmin(data.id, data.privilege, session.user.id)
   })
 
 export const deleteSiteFn = createServerFn({ method: 'POST', ...adminFn })
   .validator(z.object({ id: z.string().min(1) }))
   .handler(async ({ data }) => {
-    await requireAgencyAdmin()
-    await deleteSite(data.id)
+    const session = await requireFreshAgencyAdmin()
+    await deleteSite(data.id, session.user.id)
     return { ok: true as const }
   })
 
@@ -240,8 +253,13 @@ export const updateMemberRoleFn = createServerFn({
     }),
   )
   .handler(async ({ data }) => {
-    await requireOrgMember(data.organizationId, 'owner')
-    return updateMemberRole(data.organizationId, data.userId, data.role)
+    const session = await requireOrgMember(data.organizationId, 'owner')
+    return updateMemberRole(
+      data.organizationId,
+      data.userId,
+      data.role,
+      session.user.id,
+    )
   })
 
 export const removeMemberFn = createServerFn({ method: 'POST', ...adminFn })
@@ -252,8 +270,8 @@ export const removeMemberFn = createServerFn({ method: 'POST', ...adminFn })
     }),
   )
   .handler(async ({ data }) => {
-    await requireOrgMember(data.organizationId, 'owner')
-    await removeMember(data.organizationId, data.userId)
+    const session = await requireOrgMember(data.organizationId, 'owner')
+    await removeMember(data.organizationId, data.userId, session.user.id)
     return { ok: true as const }
   })
 
@@ -288,12 +306,37 @@ export const revokeInvitationFn = createServerFn({
 })
   .validator(z.object({ id: z.string().min(1) }))
   .handler(async ({ data }) => {
+    await requireUser()
     const existing = await getInvitationById(data.id)
     if (!existing) {
       throw new NotFoundError(m.server_invitation_not_found())
     }
-    await requireOrgMember(existing.organizationId, 'owner')
-    await revokeInvitation(data.id)
+    const session = await requireOrgMemberOrNotFound(
+      existing.organizationId,
+      'owner',
+      () => new NotFoundError(m.server_invitation_not_found()),
+    )
+    await revokeInvitation(data.id, session.user.id)
+    return { ok: true as const }
+  })
+
+export const resendInvitationFn = createServerFn({
+  method: 'POST',
+  ...adminFn,
+})
+  .validator(z.object({ id: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    await requireUser()
+    const existing = await getInvitationById(data.id)
+    if (!existing) {
+      throw new NotFoundError(m.server_invitation_not_found())
+    }
+    const session = await requireOrgMemberOrNotFound(
+      existing.organizationId,
+      'owner',
+      () => new NotFoundError(m.server_invitation_not_found()),
+    )
+    await resendInvitation(data.id, session.user.id)
     return { ok: true as const }
   })
 
@@ -323,8 +366,8 @@ export const setAgencyAdminFn = createServerFn({ method: 'POST', ...adminFn })
     }),
   )
   .handler(async ({ data }) => {
-    await requireAgencyAdmin()
-    return setAgencyAdmin(data.userId, data.isAgencyAdmin)
+    const session = await requireFreshAgencyAdmin()
+    return setAgencyAdmin(data.userId, data.isAgencyAdmin, session.user.id)
   })
 
 export const listUsersFn = createServerFn({

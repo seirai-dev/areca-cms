@@ -16,6 +16,7 @@ const user = (isAgencyAdmin: boolean) => ({
   name: 'U',
   email: 'u@example.com',
   isAgencyAdmin,
+  twoFactorEnabled: false,
 })
 
 describe('resolveWorkspace', () => {

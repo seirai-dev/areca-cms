@@ -2,6 +2,7 @@ import * as React from 'react'
 import { useNavigate, useRouter } from '@tanstack/react-router'
 import {
   ArrowClockwise,
+  Link as LinkIcon,
   DotsThree,
   EnvelopeSimple,
   UserMinus,
@@ -433,6 +434,17 @@ function Invitations({
     }
   }
 
+  async function copyLink(row: InvitationRow) {
+    try {
+      await navigator.clipboard.writeText(
+        `${window.location.origin}/invite/${row.token}`,
+      )
+      toast.success(m.people_invite_link_copied())
+    } catch {
+      toast.error(m.ui_copy_failed())
+    }
+  }
+
   return (
     <InsetGroup
       title={m.people_invitations_title()}
@@ -446,6 +458,7 @@ function Invitations({
             row.role === 'owner'
               ? m.people_role_owner()
               : m.people_role_editor()
+          const undelivered = row.deliveryStatus === 'failed'
           const resending =
             people.resend.isPending && people.resend.variables.id === row.id
           return (
@@ -465,6 +478,11 @@ function Invitations({
                   <span className="flex min-w-0 items-center gap-1.5 text-callout text-text-secondary">
                     <span>{roleLabel}</span>
                     <span aria-hidden="true">·</span>
+                    {undelivered ? (
+                      <Tag tone="warning" data-testid="invitation-undelivered">
+                        {m.people_invite_email_failed()}
+                      </Tag>
+                    ) : null}
                     {expired ? (
                       <Tag tone="warning">{m.people_invite_expired()}</Tag>
                     ) : (
@@ -487,7 +505,19 @@ function Invitations({
                   ) : null}
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
-                  {expired ? (
+                  {undelivered && !expired ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => void copyLink(row)}
+                      data-testid="invitation-copy-link"
+                    >
+                      <LinkIcon />
+                      {m.people_invite_copy_link()}
+                    </Button>
+                  ) : null}
+                  {expired || undelivered ? (
                     <Button
                       type="button"
                       size="sm"

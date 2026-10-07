@@ -1,3 +1,4 @@
+import { fieldAria, joinDescribedBy } from '#/components/ui/field-aria'
 import { FormField } from '#/components/ui/form-field'
 import { Input } from '#/components/ui/input'
 import { SegmentedControl } from '#/components/ui/segmented-control'
@@ -9,6 +10,7 @@ import {
   SelectValue,
 } from '#/components/ui/select'
 import { Switch } from '#/components/ui/switch'
+import { Textarea } from '#/components/ui/textarea'
 import {
   fromDatetimeLocalValue,
   toDatetimeLocalValue,
@@ -52,6 +54,7 @@ export function FieldControl({
 
   if (field.type === 'boolean') {
     const checked = value === true
+    const errorId = `${id}-error`
     return (
       <div
         data-field={field.key}
@@ -78,10 +81,15 @@ export function FieldControl({
             id={id}
             checked={checked}
             onCheckedChange={(next) => onChange(next)}
+            {...fieldAria({
+              invalid,
+              required: field.required,
+              describedBy: error ? errorId : undefined,
+            })}
           />
         </div>
         {error ? (
-          <p className="text-callout text-text-error" role="alert">
+          <p id={errorId} className="text-callout text-text-error" role="alert">
             {error}
           </p>
         ) : null}
@@ -96,7 +104,7 @@ export function FieldControl({
       const current = typeof value === 'string' && value ? value : ''
       control =
         options.length > 0 && options.length <= 4 ? (
-          <div className="grid gap-1">
+          <div className="grid gap-1" role="group">
             <SegmentedControl
               fullWidth
               size="sm"
@@ -128,7 +136,14 @@ export function FieldControl({
             <SelectTrigger
               id={id}
               className="w-full"
-              aria-invalid={invalid || undefined}
+              {...fieldAria({
+                invalid,
+                required: field.required,
+                describedBy: joinDescribedBy(
+                  field.description ? `${id}-description` : undefined,
+                  error ? `${id}-error` : undefined,
+                ),
+              })}
             >
               <SelectValue placeholder={m.editor_select_placeholder()} />
             </SelectTrigger>
@@ -145,24 +160,38 @@ export function FieldControl({
     }
     case 'image':
       control = (
-        <ImageWell
-          id={id}
-          organizationId={organizationId}
-          value={value}
-          onChange={onChange}
-          invalid={invalid}
-        />
+        <div role="group">
+          <ImageWell
+            id={id}
+            organizationId={organizationId}
+            value={value}
+            onChange={onChange}
+            invalid={invalid}
+          />
+        </div>
       )
       break
     case 'reference':
       control = (
-        <ReferencePicker
+        <div role="group">
+          <ReferencePicker
+            id={id}
+            siteId={siteId}
+            field={field}
+            value={value}
+            onChange={onChange}
+            invalid={invalid}
+          />
+        </div>
+      )
+      break
+    case 'textarea':
+      control = (
+        <Textarea
           id={id}
-          siteId={siteId}
-          field={field}
-          value={value}
-          onChange={onChange}
-          invalid={invalid}
+          value={text(value)}
+          aria-invalid={invalid || undefined}
+          onChange={(event) => onChange(event.target.value)}
         />
       )
       break

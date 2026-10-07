@@ -11,6 +11,7 @@ import { m } from '#/paraglide/messages'
 import { AuthDivider, AuthError, AuthHeading, AuthShell } from './auth-shell'
 import { PasswordInput } from './password-input'
 import { ProviderSignIn } from './provider-buttons'
+import { TwoFactorChallenge } from './two-factor-challenge'
 import {
   providerErrorMessage,
   useHydrated,
@@ -35,11 +36,35 @@ export function LoginScreen({
   const ready = useHydrated()
   const [email, setEmail] = React.useState('')
   const [password, setPassword] = React.useState('')
-  const { signIn, error, pending } = usePasswordSignIn(
-    redirectTo,
-    providerErrorMessage(providerError),
-  )
+  const {
+    signIn,
+    verifyTwoFactor,
+    cancelChallenge,
+    challenge,
+    error,
+    pending,
+  } = usePasswordSignIn(redirectTo, providerErrorMessage(providerError))
   const hasProviders = methods.socials.length > 0 || Boolean(methods.sso)
+
+  if (challenge) {
+    return (
+      <AuthShell>
+        <AuthHeading
+          title={m.auth_two_factor_title()}
+          description={m.auth_two_factor_subtitle()}
+        />
+        <div className="mt-7">
+          <TwoFactorChallenge
+            ready={ready}
+            error={error}
+            pending={pending}
+            onSubmit={(code, kind) => void verifyTwoFactor(code, kind)}
+            onCancel={cancelChallenge}
+          />
+        </div>
+      </AuthShell>
+    )
+  }
 
   return (
     <AuthShell>

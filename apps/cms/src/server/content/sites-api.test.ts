@@ -25,146 +25,206 @@ function bearer(token: string) {
 }
 
 describe.skipIf(!hasDb)('site API routes', () => {
-  it('syncs a manifest, serves the current snapshot, and returns a preview', async () => {
+  it('separates build and schema tokens and rejects unsafe identifiers', async () => {
     await withTestSite(async (fixtures) => {
-    await createTestCollection(fixtures.site.id)
-
-    const unauthorized = await postSitesManifest(
-      new Request('http://cms.test/api/sites/manifest', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ collections: {} }),
-      }),
-    )
-    expect(unauthorized.status).toBe(401)
-
-    const badBody = await postSitesManifest(
-      new Request('http://cms.test/api/sites/manifest', {
-        method: 'POST',
-        headers: { ...bearer(fixtures.token), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nope: true }),
-      }),
-    )
-    expect(badBody.status).toBe(400)
-    const badJson = (await badBody.json()) as { issues?: unknown }
-    expect(badJson.issues).toBeDefined()
-
-    const synced = await postSitesManifest(
-      new Request('http://cms.test/api/sites/manifest', {
-        method: 'POST',
-        headers: { ...bearer(fixtures.token), 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          collections: {
+      const post = (token: string, collections: unknown) =>
+        postSitesManifest(
+          new Request('http://cms.test/api/sites/manifest', {
+            method: 'POST',
+            headers: { ...bearer(token), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ collections }),
+          }),
+        )
+      expect((await post(fixtures.token, {})).status).toBe(401)
+      expect(
+        (
+          await getSitesSnapshotCurrent(
+            new Request('http://cms.test/api/sites/snapshot/current', {
+              headers: bearer(fixtures.schemaToken),
+            }),
+          )
+        ).status,
+      ).toBe(401)
+      for (const key of ['../escape', 'manifest', '__proto__', 'CON'])
+        expect(
+          (
+            await post(fixtures.schemaToken, {
+              [key]: { route: '/x', fields: [] },
+            })
+          ).status,
+        ).toBe(400)
+      expect(
+        (
+          await post(fixtures.schemaToken, {
             articles: {
-              route: '/blog/$slug',
-              label: 'Articles',
+              route: '/x',
               fields: [
-                { key: 'title', label: 'Title', type: 'text', required: true },
-                { key: 'slug', label: 'Slug', type: 'slug', required: true },
-                { key: 'body', label: 'Body', type: 'richtext', required: true },
+                { key: 'title', label: 'A', type: 'text' },
+                { key: 'title', label: 'B', type: 'text' },
               ],
             },
-          },
+          })
+        ).status,
+      ).toBe(400)
+    })
+  })
+
+  it('syncs a manifest, serves the current snapshot, and returns a preview', async () => {
+    await withTestSite(async (fixtures) => {
+      await createTestCollection(fixtures.site.id)
+
+      const unauthorized = await postSitesManifest(
+        new Request('http://cms.test/api/sites/manifest', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ collections: {} }),
         }),
-      }),
-    )
-    expect(synced.status).toBe(200)
-    expect(await synced.json()).toEqual({ ok: true })
+      )
+      expect(unauthorized.status).toBe(401)
 
-    const missing = await getSitesSnapshotCurrent(
-      new Request('http://cms.test/api/sites/snapshot/current', {
-        headers: bearer(fixtures.token),
-      }),
-    )
-    expect(missing.status).toBe(404)
+      const badBody = await postSitesManifest(
+        new Request('http://cms.test/api/sites/manifest', {
+          method: 'POST',
+          headers: {
+            ...bearer(fixtures.schemaToken),
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ nope: true }),
+        }),
+      )
+      expect(badBody.status).toBe(400)
+      const badJson = (await badBody.json()) as { issues?: unknown }
+      expect(badJson.issues).toBeDefined()
 
-    const snapshot: Snapshot = {
-      publicationId: '',
-      siteKey: fixtures.site.slug,
-      createdAt: '2026-01-01T00:00:00.000Z',
-      hash: 'hash-live',
-      collections: { articles: [] },
-    }
+      const synced = await postSitesManifest(
+        new Request('http://cms.test/api/sites/manifest', {
+          method: 'POST',
+          headers: {
+            ...bearer(fixtures.schemaToken),
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            collections: {
+              articles: {
+                route: '/blog/$slug',
+                label: 'Articles',
+                fields: [
+                  {
+                    key: 'title',
+                    label: 'Title',
+                    type: 'text',
+                    required: true,
+                  },
+                  { key: 'slug', label: 'Slug', type: 'slug', required: true },
+                  {
+                    key: 'body',
+                    label: 'Body',
+                    type: 'richtext',
+                    required: true,
+                  },
+                ],
+              },
+            },
+          }),
+        }),
+      )
+      expect(synced.status).toBe(200)
+      expect(await synced.json()).toEqual({ ok: true })
 
-    const [livePub] = await db
-      .insert(publication)
-      .values({
+      const missing = await getSitesSnapshotCurrent(
+        new Request('http://cms.test/api/sites/snapshot/current', {
+          headers: bearer(fixtures.token),
+        }),
+      )
+      expect(missing.status).toBe(404)
+
+      const snapshot: Snapshot = {
+        publicationId: '',
+        siteKey: fixtures.site.slug,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        hash: 'hash-live',
+        collections: { articles: [] },
+      }
+
+      const [livePub] = await db
+        .insert(publication)
+        .values({
+          siteId: fixtures.site.id,
+          snapshot,
+          snapshotHash: 'hash-live',
+          status: 'live',
+        })
+        .returning()
+
+      const buildingSnapshot: Snapshot = {
+        ...snapshot,
+        hash: 'hash-building',
+      }
+      const [buildingPub] = await db
+        .insert(publication)
+        .values({
+          siteId: fixtures.site.id,
+          snapshot: buildingSnapshot,
+          snapshotHash: 'hash-building',
+          status: 'building',
+        })
+        .returning()
+
+      await db.insert(buildJob).values({
         siteId: fixtures.site.id,
-        snapshot,
-        snapshotHash: 'hash-live',
-        status: 'live',
+        publicationId: buildingPub!.id,
+        status: 'deploying',
       })
-      .returning()
 
-    const buildingSnapshot: Snapshot = {
-      ...snapshot,
-      hash: 'hash-building',
-    }
-    const [buildingPub] = await db
-      .insert(publication)
-      .values({
+      const current = await getSitesSnapshotCurrent(
+        new Request('http://cms.test/api/sites/snapshot/current', {
+          headers: bearer(fixtures.token),
+        }),
+      )
+      expect(current.status).toBe(200)
+      const currentJson = (await current.json()) as Snapshot
+      expect(currentJson.publicationId).toBe(buildingPub!.id)
+      expect(currentJson.hash).toBe('hash-building')
+      expect(currentJson.publicationId).not.toBe(livePub!.id)
+
+      const created = await createEntry({
         siteId: fixtures.site.id,
-        snapshot: buildingSnapshot,
-        snapshotHash: 'hash-building',
-        status: 'building',
+        collectionKey: 'articles',
+        data: {
+          title: 'Draft preview',
+          slug: `preview-${fixtures.suffix}`,
+          body: sampleRichText,
+        },
+        actorId: fixtures.actor.id,
       })
-      .returning()
 
-    await db.insert(buildJob).values({
-      siteId: fixtures.site.id,
-      publicationId: buildingPub!.id,
-      status: 'deploying',
-    })
+      const token = signPreviewToken({
+        siteId: fixtures.site.id,
+        collection: 'articles',
+        slug: created.slug,
+        secret: fixtures.previewSecret,
+      })
 
-    const current = await getSitesSnapshotCurrent(
-      new Request('http://cms.test/api/sites/snapshot/current', {
-        headers: bearer(fixtures.token),
-      }),
-    )
-    expect(current.status).toBe(200)
-    const currentJson = (await current.json()) as Snapshot
-    expect(currentJson.publicationId).toBe(buildingPub!.id)
-    expect(currentJson.hash).toBe('hash-building')
-    expect(currentJson.publicationId).not.toBe(livePub!.id)
+      const preview = await getSitesPreview(
+        new Request(
+          `http://cms.test/api/sites/preview?token=${encodeURIComponent(token)}`,
+        ),
+      )
+      expect(preview.status).toBe(200)
+      expect(preview.headers.get('X-Robots-Tag')).toBe('noindex')
+      const previewJson = (await preview.json()) as {
+        collection: string
+        slug: string
+        entry: { id: string }
+      }
+      expect(previewJson.collection).toBe('articles')
+      expect(previewJson.slug).toBe(created.slug)
+      expect(previewJson.entry.id).toBe(created.id)
 
-    const created = await createEntry({
-      siteId: fixtures.site.id,
-      collectionKey: 'articles',
-      data: {
-        title: 'Draft preview',
-        slug: `preview-${fixtures.suffix}`,
-        body: sampleRichText,
-      },
-      actorId: fixtures.actor.id,
-    })
-
-    const token = signPreviewToken({
-      siteId: fixtures.site.id,
-      collection: 'articles',
-      slug: created.slug,
-      secret: fixtures.previewSecret,
-    })
-
-    const preview = await getSitesPreview(
-      new Request(
-        `http://cms.test/api/sites/preview?token=${encodeURIComponent(token)}`,
-      ),
-    )
-    expect(preview.status).toBe(200)
-    expect(preview.headers.get('X-Robots-Tag')).toBe('noindex')
-    const previewJson = (await preview.json()) as {
-      collection: string
-      slug: string
-      entry: { id: string }
-    }
-    expect(previewJson.collection).toBe('articles')
-    expect(previewJson.slug).toBe(created.slug)
-    expect(previewJson.entry.id).toBe(created.id)
-
-    const badPreview = await getSitesPreview(
-      new Request('http://cms.test/api/sites/preview?token=not-a-token'),
-    )
-    expect(badPreview.status).toBe(401)
+      const badPreview = await getSitesPreview(
+        new Request('http://cms.test/api/sites/preview?token=not-a-token'),
+      )
+      expect(badPreview.status).toBe(401)
     })
   })
 

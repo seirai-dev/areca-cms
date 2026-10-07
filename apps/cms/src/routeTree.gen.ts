@@ -13,8 +13,10 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as SetupRouteImport } from './routes/setup'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
+import { Route as AppAccountRouteImport } from './routes/_app/account'
 import { Route as AppAgencyRouteImport } from './routes/_app/agency'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
+import { Route as ApiMetricsRouteImport } from './routes/api/metrics'
 import { Route as InviteTokenRouteImport } from './routes/invite/$token'
 import { Route as AppAdminIndexRouteImport } from './routes/_app/admin/index'
 import { Route as AppAdminSplatRouteImport } from './routes/_app/admin/$'
@@ -26,6 +28,7 @@ import { Route as AppSitesIndexRouteImport } from './routes/_app/sites/index'
 import { Route as AppSitesSiteIdRouteImport } from './routes/_app/sites/$siteId'
 import { Route as ApiAssetsUploadRouteImport } from './routes/api/assets/upload'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiHealthReadyRouteImport } from './routes/api/health.ready'
 import { Route as ApiSitesManifestRouteImport } from './routes/api/sites/manifest'
 import { Route as ApiSitesPreviewRouteImport } from './routes/api/sites/preview'
 import { Route as AppAgencyClientsIndexRouteImport } from './routes/_app/agency/clients/index'
@@ -67,6 +70,11 @@ const AppIndexRoute = AppIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAccountRoute = AppAccountRouteImport.update({
+  id: '/account',
+  path: '/account',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppAgencyRoute = AppAgencyRouteImport.update({
   id: '/agency',
   path: '/agency',
@@ -75,6 +83,11 @@ const AppAgencyRoute = AppAgencyRouteImport.update({
 const ApiHealthRoute = ApiHealthRouteImport.update({
   id: '/api/health',
   path: '/api/health',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMetricsRoute = ApiMetricsRouteImport.update({
+  id: '/api/metrics',
+  path: '/api/metrics',
   getParentRoute: () => rootRouteImport,
 } as any)
 const InviteTokenRoute = InviteTokenRouteImport.update({
@@ -131,6 +144,11 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
+} as any)
+const ApiHealthReadyRoute = ApiHealthReadyRouteImport.update({
+  id: '/ready',
+  path: '/ready',
+  getParentRoute: () => ApiHealthRoute,
 } as any)
 const ApiSitesManifestRoute = ApiSitesManifestRouteImport.update({
   id: '/api/sites/manifest',
@@ -247,8 +265,10 @@ export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/login': typeof LoginRoute
   '/setup': typeof SetupRoute
+  '/account': typeof AppAccountRoute
   '/agency': typeof AppAgencyRouteWithChildren
-  '/api/health': typeof ApiHealthRoute
+  '/api/health': typeof ApiHealthRouteWithChildren
+  '/api/metrics': typeof ApiMetricsRoute
   '/invite/$token': typeof InviteTokenRoute
   '/admin/$': typeof AppAdminSplatRoute
   '/agency/activity': typeof AppAgencyActivityRoute
@@ -257,6 +277,7 @@ export interface FileRoutesByFullPath {
   '/sites/$siteId': typeof AppSitesSiteIdRouteWithChildren
   '/api/assets/upload': typeof ApiAssetsUploadRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/health/ready': typeof ApiHealthReadyRoute
   '/api/sites/manifest': typeof ApiSitesManifestRoute
   '/api/sites/preview': typeof ApiSitesPreviewRoute
   '/admin/': typeof AppAdminIndexRoute
@@ -285,7 +306,9 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/setup': typeof SetupRoute
-  '/api/health': typeof ApiHealthRoute
+  '/account': typeof AppAccountRoute
+  '/api/health': typeof ApiHealthRouteWithChildren
+  '/api/metrics': typeof ApiMetricsRoute
   '/invite/$token': typeof InviteTokenRoute
   '/': typeof AppIndexRoute
   '/admin/$': typeof AppAdminSplatRoute
@@ -294,6 +317,7 @@ export interface FileRoutesByTo {
   '/agency/people': typeof AppAgencyPeopleRoute
   '/api/assets/upload': typeof ApiAssetsUploadRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/health/ready': typeof ApiHealthReadyRoute
   '/api/sites/manifest': typeof ApiSitesManifestRoute
   '/api/sites/preview': typeof ApiSitesPreviewRoute
   '/admin': typeof AppAdminIndexRoute
@@ -323,8 +347,10 @@ export interface FileRoutesById {
   '/_app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
   '/setup': typeof SetupRoute
+  '/_app/account': typeof AppAccountRoute
   '/_app/agency': typeof AppAgencyRouteWithChildren
-  '/api/health': typeof ApiHealthRoute
+  '/api/health': typeof ApiHealthRouteWithChildren
+  '/api/metrics': typeof ApiMetricsRoute
   '/invite/$token': typeof InviteTokenRoute
   '/_app/': typeof AppIndexRoute
   '/_app/admin/$': typeof AppAdminSplatRoute
@@ -334,6 +360,7 @@ export interface FileRoutesById {
   '/_app/sites/$siteId': typeof AppSitesSiteIdRouteWithChildren
   '/api/assets/upload': typeof ApiAssetsUploadRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/health/ready': typeof ApiHealthReadyRoute
   '/api/sites/manifest': typeof ApiSitesManifestRoute
   '/api/sites/preview': typeof ApiSitesPreviewRoute
   '/_app/admin/': typeof AppAdminIndexRoute
@@ -365,8 +392,10 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/setup'
+    | '/account'
     | '/agency'
     | '/api/health'
+    | '/api/metrics'
     | '/invite/$token'
     | '/admin/$'
     | '/agency/activity'
@@ -375,6 +404,7 @@ export interface FileRouteTypes {
     | '/sites/$siteId'
     | '/api/assets/upload'
     | '/api/auth/$'
+    | '/api/health/ready'
     | '/api/sites/manifest'
     | '/api/sites/preview'
     | '/admin/'
@@ -403,7 +433,9 @@ export interface FileRouteTypes {
   to:
     | '/login'
     | '/setup'
+    | '/account'
     | '/api/health'
+    | '/api/metrics'
     | '/invite/$token'
     | '/'
     | '/admin/$'
@@ -412,6 +444,7 @@ export interface FileRouteTypes {
     | '/agency/people'
     | '/api/assets/upload'
     | '/api/auth/$'
+    | '/api/health/ready'
     | '/api/sites/manifest'
     | '/api/sites/preview'
     | '/admin'
@@ -440,8 +473,10 @@ export interface FileRouteTypes {
     | '/_app'
     | '/login'
     | '/setup'
+    | '/_app/account'
     | '/_app/agency'
     | '/api/health'
+    | '/api/metrics'
     | '/invite/$token'
     | '/_app/'
     | '/_app/admin/$'
@@ -451,6 +486,7 @@ export interface FileRouteTypes {
     | '/_app/sites/$siteId'
     | '/api/assets/upload'
     | '/api/auth/$'
+    | '/api/health/ready'
     | '/api/sites/manifest'
     | '/api/sites/preview'
     | '/_app/admin/'
@@ -481,7 +517,8 @@ export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRoute
   SetupRoute: typeof SetupRoute
-  ApiHealthRoute: typeof ApiHealthRoute
+  ApiHealthRoute: typeof ApiHealthRouteWithChildren
+  ApiMetricsRoute: typeof ApiMetricsRoute
   InviteTokenRoute: typeof InviteTokenRoute
   ApiAssetsUploadRoute: typeof ApiAssetsUploadRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
@@ -522,6 +559,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/account': {
+      id: '/_app/account'
+      path: '/account'
+      fullPath: '/account'
+      preLoaderRoute: typeof AppAccountRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/agency': {
       id: '/_app/agency'
       path: '/agency'
@@ -534,6 +578,13 @@ declare module '@tanstack/react-router' {
       path: '/api/health'
       fullPath: '/api/health'
       preLoaderRoute: typeof ApiHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/metrics': {
+      id: '/api/metrics'
+      path: '/api/metrics'
+      fullPath: '/api/metrics'
+      preLoaderRoute: typeof ApiMetricsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/invite/$token': {
@@ -612,6 +663,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/auth/$'
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/api/health/ready': {
+      id: '/api/health/ready'
+      path: '/ready'
+      fullPath: '/api/health/ready'
+      preLoaderRoute: typeof ApiHealthReadyRouteImport
+      parentRoute: typeof ApiHealthRoute
     }
     '/api/sites/manifest': {
       id: '/api/sites/manifest'
@@ -835,6 +893,7 @@ const AppSitesSiteIdRouteWithChildren = AppSitesSiteIdRoute._addFileChildren(
 )
 
 interface AppRouteChildren {
+  AppAccountRoute: typeof AppAccountRoute
   AppAgencyRoute: typeof AppAgencyRouteWithChildren
   AppIndexRoute: typeof AppIndexRoute
   AppAdminSplatRoute: typeof AppAdminSplatRoute
@@ -846,6 +905,7 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppAccountRoute: AppAccountRoute,
   AppAgencyRoute: AppAgencyRouteWithChildren,
   AppIndexRoute: AppIndexRoute,
   AppAdminSplatRoute: AppAdminSplatRoute,
@@ -858,11 +918,24 @@ const AppRouteChildren: AppRouteChildren = {
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
+interface ApiHealthRouteChildren {
+  ApiHealthReadyRoute: typeof ApiHealthReadyRoute
+}
+
+const ApiHealthRouteChildren: ApiHealthRouteChildren = {
+  ApiHealthReadyRoute: ApiHealthReadyRoute,
+}
+
+const ApiHealthRouteWithChildren = ApiHealthRoute._addFileChildren(
+  ApiHealthRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRoute,
   SetupRoute: SetupRoute,
-  ApiHealthRoute: ApiHealthRoute,
+  ApiHealthRoute: ApiHealthRouteWithChildren,
+  ApiMetricsRoute: ApiMetricsRoute,
   InviteTokenRoute: InviteTokenRoute,
   ApiAssetsUploadRoute: ApiAssetsUploadRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,

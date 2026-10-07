@@ -21,7 +21,17 @@ Expected 200 body includes:
 
 - `applicationStatus`: `idle` | `running` | `done` | `error`
 - `deployments[]` (relation): `{ deploymentId, createdAt, status, title, ... }`
-  Newest = highest `createdAt`. If `deployments` is missing/empty, fallback `{applicationId}-{timestamp}`.
+  CMS dispatches use title `areca:<build-job-id>` and description
+  `publication=<publication-id> snapshot=<snapshot-hash>`. Only a unique exact
+  title/description match establishes acceptance; missing records stay uncertain.
+  Polling uses that deployment's status, never application-wide status or newest
+  record. There is no fabricated deployment ID fallback.
+
+Confirmed in the pinned [v0.29.12 application router](https://github.com/Dokploy/dokploy/blob/v0.29.12/apps/dokploy/server/api/routers/application.ts#L667-L709):
+`application.deploy` carries title/description into the queued deployment and
+returns no deployment ID. An error response can follow queue acceptance (for
+example, an audit failure), so even a deployment POST 5xx must be reconciled.
+The CMS never automatically repeats this POST.
 
 ## application.create — `POST /api/application.create`
 

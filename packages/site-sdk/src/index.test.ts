@@ -100,7 +100,9 @@ describe('createArecaClient', () => {
     delete process.env.ARECA_SITE_TOKEN
 
     expect(() => createArecaClient()).toThrow(/ARECA_CMS_URL/)
-    expect(() => createArecaClient({ cmsUrl: 'https://cms.example.com' })).toThrow(/ARECA_SITE_TOKEN/)
+    expect(() => createArecaClient({ cmsUrl: 'https://cms.example.com' })).toThrow(
+      /ARECA_SITE_TOKEN/,
+    )
   })
 
   it('syncManifest posts the manifest with a bearer token', async () => {
@@ -113,13 +115,16 @@ describe('createArecaClient', () => {
     const client = createArecaClient({
       cmsUrl: 'https://cms.example.com/',
       siteToken: 'site-token',
+      schemaToken: 'schema-token',
     })
-    await expect(client.syncManifest(sampleConfig)).resolves.toEqual({ ok: true })
+    await expect(client.syncManifest(sampleConfig)).resolves.toEqual({
+      ok: true,
+    })
 
     expect(calls).toHaveLength(1)
     expect(calls[0]?.url).toBe('https://cms.example.com/api/sites/manifest')
     expect(calls[0]?.init?.method).toBe('POST')
-    expect(authHeader(calls[0]?.init)).toBe('Bearer site-token')
+    expect(authHeader(calls[0]?.init)).toBe('Bearer schema-token')
     expect(calls[0]?.init?.body).toBe(JSON.stringify(manifestFromConfig(sampleConfig)))
   })
 
@@ -189,7 +194,11 @@ describe('createArecaClient', () => {
   })
 
   it('fetchPreview requests the token query and returns the entry', async () => {
-    const preview = { collection: 'articles', slug: 'hello', entry: sampleEntry }
+    const preview = {
+      collection: 'articles',
+      slug: 'hello',
+      entry: sampleEntry,
+    }
     globalThis.fetch = async (input) => {
       expect(String(input)).toBe('https://cms.example.com/api/sites/preview?token=opaque-token')
       return jsonResponse(preview)
@@ -235,7 +244,10 @@ describe('pullContent / readContent', () => {
 
       const snapshot = await pullContent({
         outDir,
-        client: createArecaClient({ cmsUrl: 'https://cms.example.com', siteToken: 't' }),
+        client: createArecaClient({
+          cmsUrl: 'https://cms.example.com',
+          siteToken: 't',
+        }),
       })
       expect(snapshot).toEqual(sampleSnapshot)
 
@@ -252,6 +264,11 @@ describe('pullContent / readContent', () => {
     } finally {
       rmSync(outDir, { recursive: true, force: true })
     }
+  })
+
+  it('readContent throws a clear error when the output directory is missing', () => {
+    const outDir = join(tmpdir(), 'areca-site-sdk-does-not-exist')
+    expect(() => readContent(outDir, 'articles')).toThrow(/areca pull/)
   })
 
   it('readContent throws a clear error when the collection file is missing', () => {
@@ -273,7 +290,11 @@ describe('preview helpers', () => {
   })
 
   it('getPreviewEntry delegates to the client', async () => {
-    const preview = { collection: 'articles', slug: 'hello', entry: sampleEntry }
+    const preview = {
+      collection: 'articles',
+      slug: 'hello',
+      entry: sampleEntry,
+    }
     const fetchPreview = vi.fn().mockResolvedValue(preview)
 
     await expect(
@@ -301,7 +322,11 @@ describe('rich text accessors', () => {
   })
 
   it('parses markdown when a snapshot predates the document field', () => {
-    const legacy = { json: null, markdown: '## Old\n\nBody', html: '' } as unknown as RichTextValue
+    const legacy = {
+      json: null,
+      markdown: '## Old\n\nBody',
+      html: '',
+    } as unknown as RichTextValue
     expect(richTextDocument(legacy).children.map((node) => node.type)).toEqual([
       'heading',
       'paragraph',
@@ -319,7 +344,10 @@ describe('rich text accessors', () => {
 
 describe('parseArgs', () => {
   it('defaults pull output to src/generated/content', () => {
-    expect(parseArgs(['pull'])).toEqual({ command: 'pull', outDir: 'src/generated/content' })
+    expect(parseArgs(['pull'])).toEqual({
+      command: 'pull',
+      outDir: 'src/generated/content',
+    })
   })
 
   it('parses --out for pull', () => {
@@ -403,7 +431,10 @@ describe('parseArgs', () => {
   })
 
   it('rejects unknown commands', () => {
-    expect(parseArgs(['deploy'])).toEqual({ command: 'error', message: 'Unknown command: deploy' })
+    expect(parseArgs(['deploy'])).toEqual({
+      command: 'error',
+      message: 'Unknown command: deploy',
+    })
   })
 })
 

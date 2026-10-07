@@ -65,6 +65,10 @@ export function DeploymentTab({
   const dokploy = useDokployApplications(site.organizationId)
   const savedApp = site.deploymentTarget?.applicationId ?? ''
   const savedHealth = site.deploymentTarget?.healthCheckUrl ?? ''
+  const [mode, setMode] = React.useState<'production' | 'demo'>(
+    site.publishingMode,
+  )
+  React.useEffect(() => setMode(site.publishingMode), [site.publishingMode])
   const [appId, setAppId] = React.useState(savedApp)
   const [health, setHealth] = React.useState(savedHealth)
   const [errors, setErrors] = React.useState<{ app?: string; health?: string }>(
@@ -75,7 +79,10 @@ export function DeploymentTab({
   React.useEffect(() => setAppId(savedApp), [savedApp])
   React.useEffect(() => setHealth(savedHealth), [savedHealth])
 
-  const dirty = appId.trim() !== savedApp || health.trim() !== savedHealth
+  const dirty =
+    mode !== site.publishingMode ||
+    appId.trim() !== savedApp ||
+    health.trim() !== savedHealth
   const configured = dokploy.status.data?.configured === true
   const client = meSite.organizationName
   const applications = dokploy.applications.data?.applications ?? []
@@ -87,6 +94,7 @@ export function DeploymentTab({
   )
 
   function discard() {
+    setMode(site.publishingMode)
     setAppId(savedApp)
     setHealth(savedHealth)
     setErrors({})
@@ -96,18 +104,26 @@ export function DeploymentTab({
     event.preventDefault()
     const next = { app: appId.trim(), health: health.trim() }
     const problems: typeof errors = {}
-    if (!next.app) problems.app = m.settings_health_needs_app()
-    if (next.health && !isUrl(next.health))
+    if (mode === 'production' && !next.app)
+      problems.app = m.settings_health_needs_app()
+    if (
+      (mode === 'production' && !next.health) ||
+      (next.health && !isUrl(next.health))
+    )
       problems.health = m.settings_url_invalid()
     setErrors(problems)
     if (problems.app || problems.health) return
     try {
       await settings.update.mutateAsync({
-        deploymentTarget: {
-          provider: 'dokploy',
-          applicationId: next.app,
-          healthCheckUrl: next.health || undefined,
-        },
+        publishingMode: mode,
+        deploymentTarget:
+          next.app && next.health
+            ? {
+                provider: 'dokploy',
+                applicationId: next.app,
+                healthCheckUrl: next.health,
+              }
+            : null,
       })
       toast.success(m.sites_deployment_target_updated())
     } catch (error) {
@@ -117,6 +133,27 @@ export function DeploymentTab({
 
   return (
     <div data-testid="settings-deployment">
+      <SettingsSection
+        title="Publishing mode"
+        description="Production releases require deployment and verification of the publication ID. Demo releases never claim to be production live."
+      >
+        <label htmlFor="publishing-mode">Mode</label>
+        <select
+          id="publishing-mode"
+          data-testid="publishing-mode"
+          value={mode}
+          onChange={(event) =>
+            setMode(event.target.value as 'production' | 'demo')
+          }
+          className="rounded-control border border-border-default p-2"
+        >
+          <option value="production">Production</option>
+          <option value="demo">Demo — no production deployment</option>
+        </select>
+        {site.publishingMode === 'demo' ? (
+          <Tag tone="warning">Demo mode · never production live</Tag>
+        ) : null}
+      </SettingsSection>
       <SettingsSection
         title={m.settings_provider_title()}
         description={m.settings_provider_description()}

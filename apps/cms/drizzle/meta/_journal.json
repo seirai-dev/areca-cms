@@ -50,6 +50,69 @@
       "when": 1789642457115,
       "tag": "0006_closed_vargas",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790857664509,
+      "tag": "0007_bouncy_ikaris",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790858156810,
+      "tag": "0008_bored_romulus",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790861066502,
+      "tag": "0009_hot_squirrel_girl",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790861891919,
+      "tag": "0010_audit_log_instance_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790861895332,
+      "tag": "0011_invitation_delivery_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790861902225,
+      "tag": "0012_was_live_correction",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790864384324,
+      "tag": "0013_workable_doctor_doom",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1790881040628,
+      "tag": "0014_fluffy_nemesis",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1790881050503,
+      "tag": "0015_unique_tarantula",
+      "breakpoints": true
     }
   ]
 }

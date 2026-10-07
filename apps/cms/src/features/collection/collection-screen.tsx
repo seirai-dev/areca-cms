@@ -166,7 +166,7 @@ function CollectionView({
   const canManage = canManageSite(me, site.organizationId)
   const imageField = collection.fields.find((field) => field.type === 'image')
   const release = useReleaseStatus(siteId)
-  const live = release.data ? release.live : undefined
+  const live = release.liveMembership
 
   const [status, setStatus] = React.useState<StatusFilter>('all')
   const [searchInput, setSearchInput] = React.useState('')

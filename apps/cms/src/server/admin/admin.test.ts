@@ -118,7 +118,7 @@ describe.skipIf(!hasDb)('admin', () => {
         slug: `empty-org-${suffix}`,
         actorId: actor.id,
       })
-      await deleteOrganization(empty.id)
+      await deleteOrganization(empty.id, actor.id)
       const afterDelete = await listOrganizations()
       expect(afterDelete.find((org) => org.id === empty.id)).toBeUndefined()
 
@@ -134,7 +134,7 @@ describe.skipIf(!hasDb)('admin', () => {
       const afterSite = await listOrganizations()
       expect(afterSite.find((org) => org.id === created.id)?.siteCount).toBe(1)
 
-      await expect(deleteOrganization(created.id)).rejects.toThrow(
+      await expect(deleteOrganization(created.id, actor.id)).rejects.toThrow(
         'Cannot delete an organization that has sites',
       )
     } finally {
@@ -176,7 +176,7 @@ describe.skipIf(!hasDb)('admin', () => {
         createHash('sha256').update(created.token).digest('hex'),
       )
 
-      const rotated = await rotateSiteTokenAdmin(created.id)
+      const rotated = await rotateSiteTokenAdmin(created.id, 'build', actor.id)
       expect(rotated.token).not.toBe(created.token)
 
       const [afterRotate] = await db
@@ -189,13 +189,17 @@ describe.skipIf(!hasDb)('admin', () => {
       )
       expect(afterRotate?.tokenHash).not.toBe(stored?.tokenHash)
 
-      const updated = await updateSite(created.id, {
-        deploymentTarget: {
-          provider: 'dokploy',
-          applicationId: 'app-1',
-          healthCheckUrl: 'https://token.example.test/health',
+      const updated = await updateSite(
+        created.id,
+        {
+          deploymentTarget: {
+            provider: 'dokploy',
+            applicationId: 'app-1',
+            healthCheckUrl: 'https://token.example.test/health',
+          },
         },
-      })
+        actor.id,
+      )
       expect(updated.deploymentTarget).toEqual({
         provider: 'dokploy',
         applicationId: 'app-1',
@@ -203,12 +207,16 @@ describe.skipIf(!hasDb)('admin', () => {
       })
 
       await expect(
-        updateSite(created.id, {
-          deploymentTarget: {
-            provider: 'vercel',
-            applicationId: 'nope',
-          } as never,
-        }),
+        updateSite(
+          created.id,
+          {
+            deploymentTarget: {
+              provider: 'vercel',
+              applicationId: 'nope',
+            } as never,
+          },
+          actor.id,
+        ),
       ).rejects.toThrow()
     } finally {
       await cleanup(orgIds, userIds)
@@ -265,11 +273,11 @@ describe.skipIf(!hasDb)('admin', () => {
         ]),
       )
 
-      await expect(removeMember(org.id, invitee.id)).rejects.toThrow(
+      await expect(removeMember(org.id, invitee.id, actor.id)).rejects.toThrow(
         'Cannot remove the last owner',
       )
       await expect(
-        updateMemberRole(org.id, invitee.id, 'editor'),
+        updateMemberRole(org.id, invitee.id, 'editor', actor.id),
       ).rejects.toThrow('Cannot demote the last owner')
     } finally {
       await cleanup(orgIds, userIds)
@@ -471,6 +479,7 @@ describe.skipIf(!hasDb)('admin', () => {
 
   it('cascades site-scoped rows when deleting a site', async () => {
     await withTestSite(async (ctx) => {
+      await updateSite(ctx.site.id, { publishingMode: 'demo' }, ctx.actor.id)
       await createTestCollection(ctx.site.id)
       const created = await createEntry({
         siteId: ctx.site.id,
@@ -490,7 +499,7 @@ describe.skipIf(!hasDb)('admin', () => {
       expect(requested.ok).toBe(true)
 
       const entryId = created.id
-      await deleteSite(ctx.site.id)
+      await deleteSite(ctx.site.id, ctx.actor.id)
 
       expect(
         (await db.select().from(site).where(eq(site.id, ctx.site.id))).length,

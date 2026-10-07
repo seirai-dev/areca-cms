@@ -70,6 +70,9 @@ const env = {
   PLAYWRIGHT_BASE_URL: origin,
   // A frozen dev server: no watcher, no hot reloads (see vite.config.ts).
   VITE_FREEZE: 'true',
+  // The setup spec types this token; the seeded admin has no two-factor.
+  SETUP_TOKEN: process.env.SETUP_TOKEN ?? 'e2e-setup-token-0123456789',
+  ADMIN_MFA_REQUIRED: 'false',
 }
 
 async function ensureDatabase() {

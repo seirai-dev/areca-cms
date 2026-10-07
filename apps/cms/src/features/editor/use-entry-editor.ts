@@ -3,6 +3,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useBlocker } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
+import {
+  persistDraft,
+  readRecoveredDraft,
+  shouldKeepEditorOpen,
+} from './draft-recovery'
+import { authClient } from '#/lib/auth-client'
 import { queryKeys } from '#/lib/content/query-keys'
 import {
   errorMessage,
@@ -43,6 +49,9 @@ export type EntryRecord = {
   id: string
   slug: string
   status: EntryStatus
+  draftVersion: number
+  scheduledSlug?: string | null
+  scheduledData?: EntryData | null
   draftData: EntryData
   publishedData?: EntryData | null
   scheduledAt: string | Date | null
@@ -116,6 +125,8 @@ export function useEntryEditor({
   /** Bring a field with an error into view. */
   onRevealError?: (fieldKey: string) => void
 }) {
+  const sessionQuery = authClient.useSession()
+  const recoveryUserId = sessionQuery.data?.user.id
   const queryClient = useQueryClient()
   const invalidateGoLive = useInvalidateGoLive(siteId)
   const goLive = useGoLive(siteId)
@@ -175,6 +186,15 @@ export function useEntryEditor({
   const [fieldErrors, setFieldErrors] = React.useState<FieldErrorMap>({})
   const [formError, setFormError] = React.useState<string | null>(null)
   const [status, setStatus] = React.useState<SaveStatus>('idle')
+  const versionRef = React.useRef<number>(1)
+  const conflictRef = React.useRef(false)
+  const [conflict, setConflict] = React.useState(false)
+  const [recoveredDraft, setRecoveredDraft] = React.useState<EntryData | null>(
+    null,
+  )
+  const recoveryKey = `areca:draft:${recoveryUserId ?? 'pending'}:${siteId}:${collectionKey}:${entryId ?? 'new'}`
+  const recoveryKeyRef = React.useRef(recoveryKey)
+  recoveryKeyRef.current = recoveryKey
   const [lastSavedAt, setLastSavedAt] = React.useState<Date | null>(null)
 
   const setData = React.useCallback((next: EntryData) => {
@@ -193,6 +213,25 @@ export function useEntryEditor({
   const dataJson = JSON.stringify(data)
   const dirty = dataJson !== baseline
 
+  React.useEffect(() => {
+    if (!dirty || !recoveryUserId || (entryId && hydratedId !== entryId)) return
+    try {
+      persistDraft(localStorage, recoveryKey, data, versionRef.current)
+    } catch {
+      setFormError(
+        'Browser-local draft recovery is unavailable. Keep this page open until your changes save.',
+      )
+    }
+  }, [dataJson, dirty, recoveryKey, recoveryUserId, entryId, hydratedId])
+
+  React.useEffect(() => {
+    setRecoveredDraft(null)
+    if (!recoveryUserId || (entryId && hydratedId !== entryId)) return
+    const recovery = readRecoveredDraft(localStorage, recoveryKey)
+    if (recovery && JSON.stringify(recovery) !== baselineRef.current)
+      setRecoveredDraft(recovery)
+  }, [recoveryKey, recoveryUserId, entryId, hydratedId])
+
   /** Take the server's draft, unless local edits are still unsaved. */
   const hydrate = React.useCallback(
     (record: EntryRecord, force: boolean) => {
@@ -201,6 +240,7 @@ export function useEntryEditor({
       if (!force && json === serverJsonRef.current) return
       serverJsonRef.current = json
       if (force || !isDirtyNow()) {
+        versionRef.current = record.draftVersion
         setData(next)
         setBaseline(json)
       }
@@ -212,6 +252,8 @@ export function useEntryEditor({
     if (!entry) return
     if (hydratedId !== entry.id) {
       hydrate(entry, true)
+      conflictRef.current = false
+      setConflict(false)
       // A never-published draft whose slug still matches its title keeps
       // following the title; anything else keeps its address.
       const title = titleField ? entry.draftData[titleField.key] : undefined
@@ -241,6 +283,18 @@ export function useEntryEditor({
         next[slugField.key] = slugify(value)
       }
       setData(next)
+      try {
+        persistDraft(
+          localStorage,
+          recoveryKeyRef.current,
+          next,
+          versionRef.current,
+        )
+      } catch {
+        setFormError(
+          'Browser-local draft recovery is unavailable. Keep this page open until your changes save.',
+        )
+      }
       if (slugField && key === slugField.key) setSlugManual(true)
       setFieldErrors((errors) => {
         const touched = [
@@ -269,7 +323,20 @@ export function useEntryEditor({
   }
 
   function updateFieldRaw(key: string, value: unknown) {
-    setData({ ...dataRef.current, [key]: value })
+    const next = { ...dataRef.current, [key]: value }
+    setData(next)
+    try {
+      persistDraft(
+        localStorage,
+        recoveryKeyRef.current,
+        next,
+        versionRef.current,
+      )
+    } catch {
+      setFormError(
+        'Browser-local draft recovery is unavailable. Keep this page open until your changes save.',
+      )
+    }
   }
 
   /* ----------------------------------------------------------------------
@@ -312,6 +379,7 @@ export function useEntryEditor({
   )
 
   const saveOnce = React.useCallback(async (): Promise<Outcome> => {
+    if (conflictRef.current) return 'failed'
     const snapshot = dataRef.current
     const submitted = JSON.stringify(snapshot)
     const id = entryIdRef.current
@@ -327,15 +395,26 @@ export function useEntryEditor({
       const payload = payloadFromData(snapshot)
       const saved = (
         id
-          ? await updateDraftFn({ data: { id, data: payload } })
+          ? await updateDraftFn({
+              data: { id, data: payload, expectedVersion: versionRef.current },
+            })
           : await createEntryFn({
               data: { siteId, collectionKey, data: payload },
             })
       ) as EntryRecord
+      versionRef.current = saved.draftVersion
       serverJsonRef.current = JSON.stringify(
         initialEntryData(fieldsRef.current, saved.draftData),
       )
       setBaseline(submitted)
+      if (JSON.stringify(dataRef.current) === submitted) {
+        try {
+          localStorage.removeItem(recoveryKeyRef.current)
+        } catch {
+          /* best effort */
+        }
+        setRecoveredDraft(null)
+      }
       setFieldErrors({})
       setFormError(null)
       setLastSavedAt(new Date())
@@ -361,6 +440,15 @@ export function useEntryEditor({
       }
       return 'saved'
     } catch (error) {
+      if (
+        errorMessage(error, m.editor_could_not_save()).includes(
+          'DRAFT_CONFLICT',
+        )
+      ) {
+        conflictRef.current = true
+        setConflict(true)
+        setRecoveredDraft(dataRef.current)
+      }
       const parsed = fieldErrorsFromUnknown(error)
       setFieldErrors(parsed.fieldErrors)
       const hasFieldErrors = Object.keys(parsed.fieldErrors).some(Boolean)
@@ -462,7 +550,7 @@ export function useEntryEditor({
       leavingRef.current = true
       try {
         const outcome = await Promise.race([flush(), sleep(LEAVE_WAIT)])
-        return outcome === 'failed' || outcome === 'blocked'
+        return shouldKeepEditorOpen(outcome, isDirtyNow())
       } finally {
         leavingRef.current = false
       }
@@ -618,9 +706,15 @@ export function useEntryEditor({
 
   const restoreMutation = useMutation({
     mutationFn: async (revisionId: string) => {
-      await flush()
+      const id = await ensureSaved()
+      if (!id)
+        throw new Error('Save or resolve your draft conflict before restoring.')
       const restored: EntryRecord = await restoreRevisionFn({
-        data: { entryId: entryIdRef.current!, revisionId },
+        data: {
+          entryId: entryIdRef.current!,
+          revisionId,
+          expectedVersion: versionRef.current,
+        },
       })
       return restored
     },
@@ -672,7 +766,40 @@ export function useEntryEditor({
     (entryQuery.isLoading || hydratedId !== routeEntryId)
   const ready = Boolean(entry) && hydratedId === entryId && status !== 'saving'
 
+  async function resolveDraftConflict(reapply: boolean) {
+    const recovery = recoveredDraft ?? (isDirtyNow() ? dataRef.current : null)
+    if (entryIdRef.current) {
+      const latest = (await getEntryFn({
+        data: { id: entryIdRef.current },
+      })) as EntryRecord
+      hydrate(latest, true)
+      queryClient.setQueryData(queryKeys.entry(latest.id), latest)
+    }
+    conflictRef.current = false
+    setConflict(false)
+    setFormError(null)
+    setStatus('idle')
+    if (reapply && recovery) {
+      setData(recovery)
+      setRecoveredDraft(null)
+    } else {
+      setRecoveredDraft(recovery)
+    }
+  }
+
   return {
+    conflict,
+    recoveredDraft,
+    reloadServerDraft: () => resolveDraftConflict(false),
+    reapplyRecoveredDraft: () => resolveDraftConflict(true),
+    discardRecoveredDraft: () => {
+      setRecoveredDraft(null)
+      try {
+        localStorage.removeItem(recoveryKey)
+      } catch {
+        /* best effort */
+      }
+    },
     entryId,
     isNew,
     entry,

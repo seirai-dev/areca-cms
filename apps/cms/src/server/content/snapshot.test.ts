@@ -2,17 +2,19 @@ import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
 import { db } from '#/db'
-import { entry } from '#/db/schema'
+import { asset, entry } from '#/db/schema'
 import type { Field } from '#/lib/types'
 
 import {
   createEntry,
   publishEntry,
   scheduleEntry,
+  updateDraft,
 } from './entries.ts'
-import { buildSnapshot } from './snapshot.ts'
+import { buildSnapshot, buildPreviewEntry } from './snapshot.ts'
 import {
   createTestCollection,
+  dueScheduleIso,
   sampleRichText,
   withTestSite,
 } from './test-utils.ts'
@@ -58,12 +60,7 @@ describe.skipIf(!hasDb)('buildSnapshot', () => {
         },
         actorId: ctx.actor.id,
       })
-      await scheduleEntry(
-        scheduled.id,
-        '2020-01-01T00:00:00.000Z',
-        'UTC',
-        ctx.actor.id,
-      )
+      await scheduleEntry(scheduled.id, dueScheduleIso(), 'UTC', ctx.actor.id)
 
       const first = await buildSnapshot(ctx.site.id)
       const second = await buildSnapshot(ctx.site.id)
@@ -168,6 +165,7 @@ describe.skipIf(!hasDb)('buildSnapshot', () => {
         .update(entry)
         .set({
           status: 'published',
+          publishedSlug: article.slug,
           publishedData: articleData,
           publishedAt: new Date(),
         })
@@ -206,11 +204,19 @@ describe.skipIf(!hasDb)('buildSnapshot', () => {
           title: 'Missing hero',
           slug: `missing-hero-${ctx.suffix}`,
           body: sampleRichText,
-          heroImage: 'asset_does_not_exist',
         },
         actorId: ctx.actor.id,
       })
       await publishEntry(created.id, ctx.actor.id)
+      await db
+        .update(entry)
+        .set({
+          publishedData: {
+            ...created.draftData,
+            heroImage: 'asset_does_not_exist',
+          },
+        })
+        .where(eq(entry.id, created.id))
 
       const result = await buildSnapshot(ctx.site.id)
       expect(result.ok).toBe(false)
@@ -219,5 +225,242 @@ describe.skipIf(!hasDb)('buildSnapshot', () => {
         true,
       )
     })
+  })
+  it('keeps approved slug isolated and preserves the previous version until frozen schedule is due', async () => {
+    await withTestSite(async (ctx) => {
+      await createTestCollection(ctx.site.id)
+      const original = await createEntry({
+        siteId: ctx.site.id,
+        collectionKey: 'articles',
+        data: {
+          title: 'Approved',
+          slug: `old-${ctx.suffix}`,
+          body: sampleRichText,
+        },
+        actorId: ctx.actor.id,
+      })
+      await publishEntry(original.id, ctx.actor.id)
+      const edited = await updateDraft(
+        original.id,
+        {
+          ...original.draftData,
+          title: 'Scheduled',
+          slug: `scheduled-${ctx.suffix}`,
+        },
+        ctx.actor.id,
+        original.draftVersion,
+      )
+      const unchanged = await buildSnapshot(ctx.site.id)
+      expect(
+        unchanged.ok && unchanged.snapshot.collections.articles[0]?.slug,
+      ).toBe(original.slug)
+      const scheduled = await scheduleEntry(
+        original.id,
+        '2099-01-01T00:00:00Z',
+        'UTC',
+        ctx.actor.id,
+      )
+      await updateDraft(
+        original.id,
+        {
+          ...edited.draftData,
+          title: 'Unapproved',
+          slug: `draft-${ctx.suffix}`,
+        },
+        ctx.actor.id,
+        edited.draftVersion,
+      )
+      const before = await buildSnapshot(ctx.site.id)
+      expect(
+        before.ok && before.snapshot.collections.articles[0]?.data.title,
+      ).toBe('Approved')
+      expect(before.ok && before.entryVersions).toEqual([])
+      await db
+        .update(entry)
+        .set({ scheduledAt: new Date('2020-01-01') })
+        .where(eq(entry.id, original.id))
+      const due = await buildSnapshot(ctx.site.id)
+      expect(due.ok && due.snapshot.collections.articles[0]?.slug).toBe(
+        edited.slug,
+      )
+      expect(due.ok && due.snapshot.collections.articles[0]?.data.title).toBe(
+        'Scheduled',
+      )
+      expect(due.ok && due.entryVersions).toEqual([
+        { entryId: original.id, scheduledVersion: scheduled.scheduledVersion },
+      ])
+    })
+  })
+
+  it('rejects cross-site reference writes and suppresses legacy cross-site preview references', async () => {
+    await withTestSite(async (first) =>
+      withTestSite(async (second) => {
+        await createTestCollection(first.site.id, { fields: articleWithAuthor })
+        await createTestCollection(second.site.id, {
+          key: 'authors',
+          fields: authorFields,
+        })
+        const foreign = await createEntry({
+          siteId: second.site.id,
+          collectionKey: 'authors',
+          data: { name: 'Foreign', slug: `foreign-${second.suffix}` },
+          actorId: second.actor.id,
+        })
+        const data = {
+          title: 'Article',
+          slug: `safe-${first.suffix}`,
+          body: sampleRichText,
+          author: foreign.id,
+        }
+        await expect(
+          createEntry({
+            siteId: first.site.id,
+            collectionKey: 'articles',
+            data,
+            actorId: first.actor.id,
+          }),
+        ).rejects.toThrow()
+        const safe = await createEntry({
+          siteId: first.site.id,
+          collectionKey: 'articles',
+          data: { ...data, author: null },
+          actorId: first.actor.id,
+        })
+        await db
+          .update(entry)
+          .set({ draftData: data })
+          .where(eq(entry.id, safe.id))
+        const preview = await buildPreviewEntry(
+          first.site.id,
+          'articles',
+          safe.slug,
+        )
+        expect(preview?.data.author).toBeNull()
+      }),
+    )
+  })
+  it('rejects foreign asset IDs on write and suppresses legacy foreign asset preview conversion', async () => {
+    await withTestSite(async (first) =>
+      withTestSite(async (second) => {
+        await createTestCollection(first.site.id)
+        const [foreign] = await db
+          .insert(asset)
+          .values({
+            organizationId: second.org.id,
+            storageKey: `${second.org.id}/foreign.png`,
+            originalFilename: 'foreign.png',
+            mimeType: 'image/png',
+            size: 1,
+          })
+          .returning()
+        const data = {
+          title: 'Article',
+          slug: `asset-${first.suffix}`,
+          body: sampleRichText,
+          heroImage: foreign!.id,
+        }
+        await expect(
+          createEntry({
+            siteId: first.site.id,
+            collectionKey: 'articles',
+            data,
+            actorId: first.actor.id,
+          }),
+        ).rejects.toThrow('Asset not found')
+        const safe = await createEntry({
+          siteId: first.site.id,
+          collectionKey: 'articles',
+          data: { ...data, heroImage: null },
+          actorId: first.actor.id,
+        })
+        await db
+          .update(entry)
+          .set({ draftData: data })
+          .where(eq(entry.id, safe.id))
+        const preview = await buildPreviewEntry(
+          first.site.id,
+          'articles',
+          safe.slug,
+        )
+        expect(preview?.data.heroImage).toBeNull()
+        await db
+          .update(entry)
+          .set({
+            status: 'published',
+            publishedData: data,
+            publishedSlug: safe.slug,
+          })
+          .where(eq(entry.id, safe.id))
+        const snapshot = await buildSnapshot(first.site.id)
+        expect(snapshot.ok).toBe(false)
+      }),
+    )
+  })
+  it('rejects and suppresses cross-tenant rich-text asset URLs in writes and legacy content', async () => {
+    await withTestSite(async (first) =>
+      withTestSite(async (second) => {
+        await createTestCollection(first.site.id)
+        const [foreign] = await db
+          .insert(asset)
+          .values({
+            organizationId: second.org.id,
+            storageKey: `${second.org.id}/embedded.png`,
+            originalFilename: 'embedded.png',
+            mimeType: 'image/png',
+            size: 1,
+          })
+          .returning()
+        const body = {
+          type: 'doc',
+          content: [
+            {
+              type: 'image',
+              attrs: {
+                src: `/api/assets/file/${foreign!.storageKey}`,
+                alt: 'Foreign',
+              },
+            },
+          ],
+        }
+        const data = { title: 'Article', slug: `rich-${first.suffix}`, body }
+        await expect(
+          createEntry({
+            siteId: first.site.id,
+            collectionKey: 'articles',
+            data,
+            actorId: first.actor.id,
+          }),
+        ).rejects.toThrow('Embedded asset not found')
+        const safe = await createEntry({
+          siteId: first.site.id,
+          collectionKey: 'articles',
+          data: { ...data, body: sampleRichText },
+          actorId: first.actor.id,
+        })
+        await expect(
+          updateDraft(safe.id, data, first.actor.id, safe.draftVersion),
+        ).rejects.toThrow('Embedded asset not found')
+        await db
+          .update(entry)
+          .set({ draftData: data })
+          .where(eq(entry.id, safe.id))
+        const preview = await buildPreviewEntry(
+          first.site.id,
+          'articles',
+          safe.slug,
+        )
+        expect(preview?.data.body).toBeNull()
+        await db
+          .update(entry)
+          .set({
+            status: 'published',
+            publishedData: data,
+            publishedSlug: safe.slug,
+          })
+          .where(eq(entry.id, safe.id))
+        const snapshot = await buildSnapshot(first.site.id)
+        expect(snapshot.ok).toBe(false)
+      }),
+    )
   })
 })

@@ -10,7 +10,11 @@ import { dokployCredential, organization } from '#/db/schema'
 import { env } from '#/env'
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
-import { NotFoundError } from '#/server/content/errors'
+import {
+  ConflictError,
+  NotFoundError,
+  ValidationError,
+} from '#/server/content/errors'
 import { assertSecureServiceUrl } from '#/server/http/outbound-url'
 import {
   decryptSecret,
@@ -86,7 +90,9 @@ export async function saveDokployCredentials(input: {
   const url = normalizeUrl(input.url)
   const enteredApiKey = input.apiKey?.trim()
   if (!existing && !enteredApiKey) {
-    throw new Error('A Dokploy API key is required')
+    throw new ValidationError([
+      { path: 'apiKey', message: 'A Dokploy API key is required' },
+    ])
   }
   const apiKey = enteredApiKey || (existing ? decryptApiKey(existing) : '')
 
@@ -116,30 +122,37 @@ export async function saveDokployCredentials(input: {
   } else if (existing) {
     encryptedApiKey = existing.encryptedApiKey
   } else {
-    throw new Error('A Dokploy API key is required')
+    throw new ValidationError([
+      { path: 'apiKey', message: 'A Dokploy API key is required' },
+    ])
   }
 
-  await db
-    .insert(dokployCredential)
-    .values({
-      organizationId: input.organizationId,
-      url,
-      encryptedApiKey,
-    })
-    .onConflictDoUpdate({
-      target: dokployCredential.organizationId,
-      set: { url, encryptedApiKey, updatedAt: new Date() },
-    })
+  await db.transaction(async (tx) => {
+    await tx
+      .insert(dokployCredential)
+      .values({
+        organizationId: input.organizationId,
+        url,
+        encryptedApiKey,
+      })
+      .onConflictDoUpdate({
+        target: dokployCredential.organizationId,
+        set: { url, encryptedApiKey, updatedAt: new Date() },
+      })
 
-  await audit({
-    organizationId: input.organizationId,
-    actorId: input.actorId,
-    action: existing
-      ? 'organization.dokploy_credentials_updated'
-      : 'organization.dokploy_credentials_created',
-    targetType: 'organization',
-    targetId: input.organizationId,
-    meta: { apiKeyReplaced: Boolean(enteredApiKey) },
+    await audit(
+      {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        action: existing
+          ? 'organization.dokploy_credentials_updated'
+          : 'organization.dokploy_credentials_created',
+        targetType: 'organization',
+        targetId: input.organizationId,
+        meta: { apiKeyReplaced: Boolean(enteredApiKey) },
+      },
+      tx,
+    )
   })
 
   return {
@@ -156,7 +169,7 @@ export async function verifyDokployCredentials(input: {
 }) {
   await requireOrganization(input.organizationId)
   const row = await getStoredCredential(input.organizationId)
-  if (!row) throw new Error('Dokploy credentials are not configured')
+  if (!row) throw new ConflictError('Dokploy credentials are not configured')
 
   try {
     const result = await listDokployApplications(
@@ -188,19 +201,24 @@ export async function removeDokployCredentials(input: {
   actorId: string
 }) {
   await requireOrganization(input.organizationId)
-  const removed = await db
-    .delete(dokployCredential)
-    .where(eq(dokployCredential.organizationId, input.organizationId))
-    .returning({ organizationId: dokployCredential.organizationId })
-  if (removed.length === 0) {
-    throw new Error('Dokploy credentials are not configured')
-  }
-  await audit({
-    organizationId: input.organizationId,
-    actorId: input.actorId,
-    action: 'organization.dokploy_credentials_removed',
-    targetType: 'organization',
-    targetId: input.organizationId,
+  await db.transaction(async (tx) => {
+    const removed = await tx
+      .delete(dokployCredential)
+      .where(eq(dokployCredential.organizationId, input.organizationId))
+      .returning({ organizationId: dokployCredential.organizationId })
+    if (removed.length === 0) {
+      throw new ConflictError('Dokploy credentials are not configured')
+    }
+    await audit(
+      {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        action: 'organization.dokploy_credentials_removed',
+        targetType: 'organization',
+        targetId: input.organizationId,
+      },
+      tx,
+    )
   })
   return { ok: true as const }
 }
@@ -228,7 +246,7 @@ export async function getDeploymentAdapterForOrganization(
     })
   }
 
-  throw new Error(
+  throw new ConflictError(
     'Dokploy credentials are not configured for this organization',
   )
 }

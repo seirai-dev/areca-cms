@@ -1,5 +1,6 @@
 import * as React from 'react'
 
+import { fieldAria, joinDescribedBy } from '#/components/ui/field-aria'
 import type { FieldErrorMap } from '#/lib/content/utils'
 import type { EntryData, Field } from '#/lib/types'
 import { cn } from '#/lib/utils'
@@ -85,7 +86,13 @@ export function EditorCanvas({
                 body?.focus()
               }
             }}
-            aria-invalid={errors[titleField.key] ? true : undefined}
+            {...fieldAria({
+              invalid: Boolean(errors[titleField.key]),
+              required: titleField.required,
+              describedBy: errors[titleField.key]
+                ? `field-${titleField.key}-error`
+                : undefined,
+            })}
             placeholder={m.editor_untitled()}
             className="block w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-editor-title text-balance text-text-primary outline-none placeholder:text-text-disabled"
             style={
@@ -95,58 +102,88 @@ export function EditorCanvas({
             }
           />
           {errors[titleField.key] ? (
-            <p className="text-callout text-text-error" role="alert">
+            <p
+              id={`field-${titleField.key}-error`}
+              className="text-callout text-text-error"
+              role="alert"
+            >
               {errors[titleField.key]}
             </p>
           ) : null}
         </div>
       ) : null}
 
-      {canvasFields.map((field, index) => (
-        <div
-          key={field.key}
-          className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1"
-          data-field={field.key}
-          data-invalid={errors[field.key] ? 'true' : undefined}
-          data-canvas-body={index === 0 ? '' : undefined}
-        >
-          {field.type === 'richtext' ? (
-            <>
-              <label htmlFor={`field-${field.key}`} className="sr-only">
-                {field.label}
-              </label>
-              <RichTextEditor
-                id={`field-${field.key}`}
-                label={field.label}
+      {canvasFields.map((field, index) => {
+        const errorId = `field-${field.key}-error`
+        const descriptionId = `field-${field.key}-description`
+        const describedBy = joinDescribedBy(
+          field.description ? descriptionId : undefined,
+          errors[field.key] ? errorId : undefined,
+        )
+        return (
+          <div
+            key={field.key}
+            className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1"
+            data-field={field.key}
+            data-invalid={errors[field.key] ? 'true' : undefined}
+            data-canvas-body={index === 0 ? '' : undefined}
+            {...(field.type === 'richtext'
+              ? {
+                  role: 'group' as const,
+                  ...fieldAria({
+                    invalid: Boolean(errors[field.key]),
+                    required: field.required,
+                    describedBy,
+                  }),
+                }
+              : {})}
+          >
+            {field.type === 'richtext' ? (
+              <>
+                <label htmlFor={`field-${field.key}`} className="sr-only">
+                  {field.label}
+                </label>
+                <RichTextEditor
+                  id={`field-${field.key}`}
+                  label={field.label}
+                  value={data[field.key]}
+                  onChange={(value) => onChange(field.key, value)}
+                  organizationId={organizationId}
+                  invalid={Boolean(errors[field.key])}
+                  previewing={previewing}
+                  preview={<RichTextPreview value={data[field.key]} />}
+                />
+              </>
+            ) : (
+              <CanvasTextarea
+                field={field}
                 value={data[field.key]}
                 onChange={(value) => onChange(field.key, value)}
-                organizationId={organizationId}
                 invalid={Boolean(errors[field.key])}
-                previewing={previewing}
-                preview={<RichTextPreview value={data[field.key]} />}
+                describedBy={describedBy}
+                innerRef={index === 0 ? firstBodyRef : undefined}
               />
-            </>
-          ) : (
-            <CanvasTextarea
-              field={field}
-              value={data[field.key]}
-              onChange={(value) => onChange(field.key, value)}
-              invalid={Boolean(errors[field.key])}
-              innerRef={index === 0 ? firstBodyRef : undefined}
-            />
-          )}
-          {field.description ? (
-            <p className="text-caption font-normal text-text-muted">
-              {field.description}
-            </p>
-          ) : null}
-          {errors[field.key] ? (
-            <p className="text-callout text-text-error" role="alert">
-              {errors[field.key]}
-            </p>
-          ) : null}
-        </div>
-      ))}
+            )}
+            {field.description ? (
+              <p
+                id={descriptionId}
+                className="text-caption font-normal text-text-muted"
+              >
+                {field.description}
+              </p>
+            ) : null}
+            {errors[field.key] ? (
+              <p
+                id={errorId}
+                className="text-callout text-text-error"
+                role="alert"
+              >
+                {errors[field.key]}
+              </p>
+            ) : null}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -156,12 +193,14 @@ function CanvasTextarea({
   value,
   onChange,
   invalid,
+  describedBy,
   innerRef,
 }: {
   field: Field
   value: unknown
   onChange: (value: string) => void
   invalid: boolean
+  describedBy?: string
   innerRef?: React.RefObject<HTMLElement | null>
 }) {
   const ref = React.useRef<HTMLTextAreaElement>(null)
@@ -185,7 +224,11 @@ function CanvasTextarea({
         rows={1}
         value={text}
         onChange={(event) => onChange(event.target.value)}
-        aria-invalid={invalid || undefined}
+        {...fieldAria({
+          invalid,
+          required: field.required,
+          describedBy,
+        })}
         placeholder={m.editor_canvas_placeholder({
           label: field.label.toLocaleLowerCase(),
         })}

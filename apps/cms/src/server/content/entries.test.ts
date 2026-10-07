@@ -12,7 +12,7 @@ import {
   scheduleEntry,
   updateDraft,
 } from './entries.ts'
-import { ValidationError } from './errors.ts'
+import { ConflictError, ValidationError } from './errors.ts'
 import {
   createTestCollection,
   sampleRichText,
@@ -53,6 +53,7 @@ describe.skipIf(!hasDb)('entries', () => {
           category: 'news',
         },
         ctx.actor.id,
+        created.draftVersion,
       )
       expect(updated.draftData.title).toBe('Hello world')
 
@@ -72,6 +73,7 @@ describe.skipIf(!hasDb)('entries', () => {
         created.id,
         createRevision!.id,
         ctx.actor.id,
+        updated.draftVersion,
       )
       expect(restored.draftData.title).toBe('Hello')
       expect(restored.status).toBe('published')
@@ -85,6 +87,7 @@ describe.skipIf(!hasDb)('entries', () => {
       )
       expect(scheduled.status).toBe('scheduled')
       expect(scheduled.scheduleTimezone).toBe('Europe/Berlin')
+      expect(scheduled.scheduledBy).toBe(ctx.actor.id)
       expect(scheduled.scheduledAt?.toISOString()).toBe(
         new Date(scheduledAt).toISOString(),
       )
@@ -142,6 +145,71 @@ describe.skipIf(!hasDb)('entries', () => {
       await expect(
         publishEntry(created.id, ctx.actor.id),
       ).rejects.toBeInstanceOf(ValidationError)
+    })
+  })
+  it('rejects stale concurrent draft writes without replacing the saved draft', async () => {
+    await withTestSite(async (ctx) => {
+      await createTestCollection(ctx.site.id)
+      const created = await createEntry({
+        siteId: ctx.site.id,
+        collectionKey: 'articles',
+        data: {
+          title: 'Original',
+          slug: `conflict-${ctx.suffix}`,
+          body: sampleRichText,
+        },
+        actorId: ctx.actor.id,
+      })
+      const first = await updateDraft(
+        created.id,
+        { ...created.draftData, title: 'First writer' },
+        ctx.actor.id,
+        created.draftVersion,
+      )
+      await expect(
+        updateDraft(
+          created.id,
+          { ...created.draftData, title: 'Stale writer' },
+          ctx.actor.id,
+          created.draftVersion,
+        ),
+      ).rejects.toBeInstanceOf(ConflictError)
+      expect(first.draftVersion).toBe(created.draftVersion + 1)
+      const revisions = await listRevisions(created.id)
+      expect(revisions.filter((row) => row.note === 'update')).toHaveLength(1)
+    })
+  })
+
+  it('drops undeclared legacy keys when restoring a revision', async () => {
+    await withTestSite(async (ctx) => {
+      await createTestCollection(ctx.site.id)
+      const slug = `legacy-${ctx.suffix}`
+      const created = await createEntry({
+        siteId: ctx.site.id,
+        collectionKey: 'articles',
+        data: { title: 'Now', slug, body: sampleRichText },
+        actorId: ctx.actor.id,
+      })
+      const [revision] = await db
+        .insert(entryRevision)
+        .values({
+          entryId: created.id,
+          data: { title: 'Old', slug, removedField: 'stale' },
+          createdBy: ctx.actor.id,
+          note: 'legacy',
+        })
+        .returning()
+      const restored = await restoreRevision(
+        created.id,
+        revision!.id,
+        ctx.actor.id,
+        created.draftVersion,
+      )
+      expect(restored.draftData).toEqual({ title: 'Old', slug })
+      const latest = (await listRevisions(created.id)).find(
+        (row) => row.note === 'restore',
+      )
+      expect(latest?.data).toEqual({ title: 'Old', slug })
     })
   })
 })

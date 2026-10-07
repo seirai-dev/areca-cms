@@ -20,6 +20,12 @@ export interface RequestRateLimitDependencies {
 const MUTATION_RULE = { limit: 60, windowSeconds: 60 } as const
 const UPLOAD_RULE = { limit: 10, windowSeconds: 60 } as const
 const SITE_API_RULE = { limit: 300, windowSeconds: 60 } as const
+// Throttles bearer-token guessing against /api/metrics; a scraper needs ~4/min.
+const METRICS_RULE = { limit: 60, windowSeconds: 60 } as const
+
+// Liveness/readiness probes must never be throttled (orchestrators poll often
+// and a 429 would look like an outage).
+const PROBE_PATHS = new Set(['/api/health', '/api/health/ready'])
 
 const SITE_TOKEN_PATHS = new Set([
   '/api/sites/manifest',
@@ -92,6 +98,32 @@ export async function enforceRequestRateLimit(
     url.pathname.length > 1 ? url.pathname.replace(/\/+$/, '') : url.pathname
 
   if (path === '/api/auth' || path.startsWith('/api/auth/')) return null
+
+  const method = request.method.toUpperCase()
+  if (PROBE_PATHS.has(path) && (method === 'GET' || method === 'HEAD')) {
+    return null
+  }
+
+  if (path === '/api/metrics') {
+    try {
+      const allowed = await consume(
+        dependencies.store,
+        'metrics',
+        `ip:${getClientIp(request, dependencies.trustProxy)}`,
+        METRICS_RULE,
+        dependencies.now?.() ?? Date.now(),
+      )
+      return allowed
+        ? null
+        : tooManyRequests(METRICS_RULE, dependencies.now?.() ?? Date.now())
+    } catch (error) {
+      dependencies.logError?.(
+        'Rate limiting unavailable; request allowed',
+        error,
+      )
+      return null
+    }
+  }
 
   const isSiteApi = SITE_TOKEN_PATHS.has(path)
   const isUpload =

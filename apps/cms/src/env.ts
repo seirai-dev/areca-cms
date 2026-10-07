@@ -35,6 +35,15 @@ export const env = createEnv({
     MICROSOFT_SSO_TENANT_ID: z.string().min(1).optional(),
     // Optional email domain so `signIn.sso({ email })` can route to Microsoft.
     MICROSOFT_SSO_DOMAIN: z.string().min(1).optional(),
+    // First-run protection: /setup requires this token. When unset and the
+    // instance has no users yet, one is generated per process and logged.
+    SETUP_TOKEN: z.string().min(16).optional(),
+    // Agency admins must enrol in two-factor authentication to use admin
+    // functions. Set to false only for isolated e2e/dev stacks.
+    ADMIN_MFA_REQUIRED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((value) => value !== 'false'),
     APP_URL: z.string().url(),
     REDIS_URL: z.string().url().default('redis://localhost:6379'),
     RATE_LIMIT_TRUST_PROXY: z
@@ -65,6 +74,29 @@ export const env = createEnv({
       .enum(['true', 'false'])
       .optional()
       .transform((value) => value !== 'false'),
+    // Max build jobs processed at once by this process (different sites).
+    WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(16).default(2),
+    // On SIGTERM/SIGINT, how long to wait for running build jobs. Keep below
+    // the container stop timeout (Docker default 10s).
+    WORKER_DRAIN_TIMEOUT_MS: z.coerce.number().int().min(0).default(8_000),
+    // Operations: /api/metrics is 404 unless a bearer token is configured.
+    METRICS_TOKEN: z.string().min(16).optional(),
+    // Postgres deadlines (ms). 0 disables the respective timeout.
+    DB_CONNECT_TIMEOUT_MS: z.coerce.number().int().min(0).default(5_000),
+    DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(0).default(15_000),
+    DB_IDLE_IN_TX_TIMEOUT_MS: z.coerce.number().int().min(0).default(30_000),
+    // Readiness (/api/health/ready) thresholds.
+    READINESS_TIMEOUT_MS: z.coerce.number().int().min(100).default(3_000),
+    READINESS_MAX_QUEUE_AGE_SECONDS: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .default(15 * 60),
+    READINESS_MAX_TICK_AGE_SECONDS: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .default(5 * 60),
   },
 
   /**

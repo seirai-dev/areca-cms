@@ -73,6 +73,12 @@ export const PUBLICATION_STATUS: Record<
   PublicationStatus,
   StatusMeta & { title: () => string }
 > = {
+  demo: {
+    label: () => 'Demo ready',
+    title: () => 'Demo publication — not production live',
+    tone: 'warning',
+    icon: 'box',
+  },
   pending: {
     label: () => m.golive_pub_pending(),
     title: () => m.golive_title_pending(),

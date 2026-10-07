@@ -1,0 +1,143 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  # Called by cms-docker-amd64.yml so images only publish after CI passes.
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  # Keep in step with apps/cms/Dockerfile (NODE_VERSION / PNPM_VERSION).
+  NODE_VERSION: 24.21.0
+  PNPM_VERSION: 12.8.1
+
+jobs:
+  test:
+    name: Typecheck and unit tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      # Integration suites (PostgreSQL, S3, SMTP) are not run in CI; see
+      # integrationSuites in apps/cms/vitest.config.ts.
+      SKIP_INTEGRATION_TESTS: "true"
+      # Dummy values so modules that read env at import time load. They point
+      # at nothing and are not secrets.
+      DATABASE_URL: postgres://ci:ci@127.0.0.1:1/ci
+      REDIS_URL: redis://127.0.0.1:1
+      BETTER_AUTH_SECRET: ci-dummy-auth-secret-not-real
+      BETTER_AUTH_URL: http://localhost:3000
+      APP_URL: http://localhost:3000
+      S3_ENDPOINT: http://127.0.0.1:1
+      S3_REGION: us-east-1
+      S3_BUCKET: ci
+      S3_ACCESS_KEY: ci-access
+      S3_SECRET_KEY: ci-dummy-storage-secret
+      SMTP_HOST: 127.0.0.1
+      SMTP_PORT: "1025"
+      SMTP_FROM: ci@example.test
+      DOKPLOY_CREDENTIALS_ENCRYPTION_KEY: AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm install --global "pnpm@${PNPM_VERSION}"
+      - id: store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6.1.0
+        with:
+          path: ${{ steps.store.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-store-${{ runner.os }}-
+      - run: pnpm install --frozen-lockfile
+
+      - name: Site SDK typecheck, test, build
+        run: |
+          pnpm --filter @areca-cms/site-sdk typecheck
+          pnpm --filter @areca-cms/site-sdk test
+          pnpm --filter @areca-cms/site-sdk build
+      - name: CMS typecheck
+        run: pnpm --filter @areca/cms typecheck
+      - name: CMS unit tests
+        run: pnpm --filter @areca/cms test
+      - name: CMS script tests (scanner, transfer tooling)
+        run: pnpm --filter @areca/cms test:scripts
+      - name: Docker recovery tooling tests
+        run: node --test docker/*.test.mjs
+      - name: Demo site typecheck and tests
+        run: |
+          pnpm --filter @areca/demo-site typecheck
+          pnpm --filter @areca/demo-site test
+
+  secret-scan:
+    name: Secret scan (git history)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GITLEAKS_VERSION: 8.30.1
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # The pinned binary needs no license key, unlike gitleaks-action for orgs.
+      - name: Install gitleaks
+        run: |
+          curl -fsSL -o gitleaks.tgz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tgz" | sha256sum --check
+          tar -xzf gitleaks.tgz gitleaks
+          sudo install gitleaks /usr/local/bin/gitleaks
+      - name: Scan full history
+        run: gitleaks git . --config .gitleaks.toml --redact --verbose --no-banner
+
+  client-bundle:
+    name: Client bundle secret scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      # The build must not need real services. These dummy values are also what
+      # the scanner searches for in the output: any of them appearing in client
+      # assets means a server value was bundled.
+      SKIP_ENV_VALIDATION: "true"
+      DATABASE_URL: postgres://ci:ci-db-password@127.0.0.1:1/ci
+      REDIS_URL: redis://127.0.0.1:1
+      BETTER_AUTH_SECRET: ci-dummy-auth-secret-not-real
+      BETTER_AUTH_URL: http://localhost:3000
+      APP_URL: http://localhost:3000
+      S3_ENDPOINT: http://127.0.0.1:1
+      S3_REGION: us-east-1
+      S3_BUCKET: ci
+      S3_ACCESS_KEY: ci-access-key-value
+      S3_SECRET_KEY: ci-dummy-storage-secret
+      SMTP_HOST: smtp.ci.example.test
+      SMTP_PORT: "1025"
+      SMTP_FROM: ci@example.test
+      DOKPLOY_URL: http://dokploy.ci.example.test
+      DOKPLOY_API_KEY: ci-dummy-dokploy-api-key
+      DOKPLOY_CREDENTIALS_ENCRYPTION_KEY: AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=
+      SETUP_TOKEN: ci-dummy-setup-token-value
+      METRICS_TOKEN: ci-dummy-metrics-token-value
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm install --global "pnpm@${PNPM_VERSION}"
+      - id: store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6.1.0
+        with:
+          path: ${{ steps.store.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-store-${{ runner.os }}-
+      - run: pnpm install --frozen-lockfile
+      - name: Build CMS
+        run: pnpm --filter @areca/cms build
+      - name: Scan client assets
+        run: pnpm --filter @areca/cms scan:client
