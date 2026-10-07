@@ -2,7 +2,9 @@ import { request as httpRequest } from 'node:http'
 import { request as httpsRequest } from 'node:https'
 import { isIP } from 'node:net'
 
-import type { DeploymentAdapter } from './types'
+import { DeploymentNotDispatchedError, DeploymentUncertainError } from './types'
+import type { DeploymentAdapter, DeploymentContext } from './types'
+import { collectSecretValues, redactString } from '#/server/log'
 import {
   assertSecureServiceUrl,
   resolveSafeHealthCheckUrl,
@@ -30,6 +32,17 @@ type DokployConnectionOptions = {
 type DokployAdapterOptions = DokployConnectionOptions & {
   resolveHost?: ResolveHost
   allowPrivateHealthChecks?: boolean
+  reconciliationTimeoutMs?: number
+  reconciliationPollMs?: number
+}
+
+class DokployHttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message)
+  }
 }
 
 function createDokployRequest(opts: DokployConnectionOptions) {
@@ -55,20 +68,40 @@ function createDokployRequest(opts: DokployConnectionOptions) {
       Object.assign(headers, extra)
     }
 
-    const res = await fetchFn(`${baseUrl}${path}`, {
-      ...init,
-      headers,
-      redirect: 'error',
-      signal: init.signal ?? AbortSignal.timeout(15_000),
-    })
-    if (!res.ok) {
+    let res: Response
+    try {
+      res = await fetchFn(`${baseUrl}${path}`, {
+        ...init,
+        headers,
+        redirect: 'error',
+        signal: init.signal ?? AbortSignal.timeout(15_000),
+      })
+    } catch (error) {
       throw new Error(
-        `Dokploy ${init.method ?? 'GET'} ${path} failed: ${res.status}`,
+        redactString(error instanceof Error ? error.message : String(error), [
+          ...collectSecretValues(),
+          opts.apiKey,
+        ]),
       )
     }
-    const text = await res.text()
-    if (!text.trim()) return undefined as T
-    return JSON.parse(text) as T
+    if (!res.ok) {
+      throw new DokployHttpError(
+        `Dokploy ${init.method ?? 'GET'} ${path} failed: ${res.status}`,
+        res.status,
+      )
+    }
+    try {
+      const text = await res.text()
+      if (!text.trim()) return undefined as T
+      return JSON.parse(text) as T
+    } catch (error) {
+      const message = redactString(
+        error instanceof Error ? error.message : String(error),
+        [...collectSecretValues(), opts.apiKey],
+      )
+      if (error instanceof SyntaxError) throw new SyntaxError(message)
+      throw new Error(message)
+    }
   }
 
   return request
@@ -149,17 +182,20 @@ export function createDokployAdapter(
   const fetchFn = opts.fetch ?? fetch
 
   function getApplication(applicationId: string) {
-    return request<DokployApplication>(
-      `/api/application.one?applicationId=${encodeURIComponent(applicationId)}`,
+    return retrySafe(() =>
+      request<DokployApplication>(
+        `/api/application.one?applicationId=${encodeURIComponent(applicationId)}`,
+      ),
     )
   }
 
   async function bustContentCache(
     applicationId: string,
     log: (line: string) => void,
+    context: DeploymentContext,
   ) {
     const app = await getApplication(applicationId)
-    const snapshotId = `${Date.now()}`
+    const snapshotId = context.publicationId
     const legacySiteToken = readEnvLine(app.buildArgs, 'ARECA_SITE_TOKEN')
     const buildArgs = upsertEnvLine(
       removeEnvLine(app.buildArgs, 'ARECA_SITE_TOKEN'),
@@ -169,57 +205,94 @@ export function createDokployAdapter(
     const buildSecrets = legacySiteToken
       ? upsertEnvLine(app.buildSecrets, 'ARECA_SITE_TOKEN', legacySiteToken)
       : (app.buildSecrets ?? '')
-    await request('/api/application.saveEnvironment', {
-      method: 'POST',
-      body: JSON.stringify({
-        applicationId,
-        env: app.env ?? '',
-        buildArgs,
-        buildSecrets,
-        createEnvFile: app.createEnvFile ?? false,
+    await retrySafe(() =>
+      request('/api/application.saveEnvironment', {
+        method: 'POST',
+        body: JSON.stringify({
+          applicationId,
+          env: app.env ?? '',
+          buildArgs,
+          buildSecrets,
+          createEnvFile: app.createEnvFile ?? false,
+        }),
       }),
-    })
+    )
     log(`build arg ARECA_SNAPSHOT_ID=${snapshotId}`)
   }
 
   return {
-    async deploy(target, log) {
-      log(`Deploying ${target.applicationId}`)
-      await bustContentCache(target.applicationId, log)
-      await request('/api/application.deploy', {
-        method: 'POST',
-        body: JSON.stringify({ applicationId: target.applicationId }),
-      })
-      const app = await getApplication(target.applicationId)
-      return { deploymentId: newestDeploymentId(app, target.applicationId) }
+    async deploy(target, log, context) {
+      log(
+        `Deploying application=${target.applicationId} job=${context.jobId} publication=${context.publicationId} snapshot=${context.snapshotHash}`,
+      )
+      try {
+        await bustContentCache(target.applicationId, log, context)
+      } catch (error) {
+        throw new DeploymentNotDispatchedError(
+          error instanceof Error ? error.message : String(error),
+        )
+      }
+      try {
+        // This POST is deliberately never retried: a lost response or even an
+        // upstream 5xx can follow enqueueing the deployment.
+        await request('/api/application.deploy', {
+          method: 'POST',
+          body: JSON.stringify({
+            applicationId: target.applicationId,
+            ...dispatchIdentity(context),
+          }),
+        })
+      } catch (error) {
+        if (
+          error instanceof DokployHttpError &&
+          [400, 401, 403, 404, 422].includes(error.status)
+        ) {
+          throw new DeploymentNotDispatchedError(error.message)
+        }
+        log(
+          'Deploy response uncertain; reconciling the same dispatch before proceeding',
+        )
+      }
+      const found = await reconcile(target.applicationId, context)
+      if (!found)
+        throw new DeploymentUncertainError(
+          `Deployment acceptance unknown for job=${context.jobId} publication=${context.publicationId}; reconcile manually, do not redeploy`,
+        )
+      log(`upstream deployment=${found.deploymentId}`)
+      return found
+    },
+
+    async reconcile(target, context, log) {
+      const found = await reconcile(target.applicationId, context)
+      log(
+        found
+          ? `Reconciled upstream deployment=${found.deploymentId}`
+          : `No matching dispatch job=${context.jobId}; acceptance remains unknown`,
+      )
+      return found
     },
 
     async waitForCompletion(target, deploymentId, { timeoutMs, pollMs }, log) {
-      const started = Date.now()
-      const deadline = started + timeoutMs
+      const deadline = Date.now() + timeoutMs
       let lastStatus: string | undefined
-      let seenRunning = false
-
       while (Date.now() < deadline) {
         const app = await getApplication(target.applicationId)
         const deployment = app.deployments?.find(
           (item) => item.deploymentId === deploymentId,
         )
-        const status = deployment?.status ?? app.applicationStatus
-        if (status === 'running') seenRunning = true
+        const status = deployment?.status
         if (status !== lastStatus) {
-          log(`applicationStatus: ${status}`)
+          log(`deployment=${deploymentId} status=${status ?? 'unknown'}`)
           lastStatus = status
         }
         if (status === 'error') return 'error'
-        if (status === 'done' && (deployment || seenRunning)) return 'done'
-        if (status === 'idle' && Date.now() - started >= 30_000) return 'error'
-
+        if (status === 'done') return 'done'
+        // Application-wide status belongs to no particular dispatch. Missing
+        // deployment records are uncertain, never evidence of success/failure.
         const wait = Math.min(pollMs, deadline - Date.now())
         if (wait <= 0) break
         await sleep(wait)
       }
-
       return 'timeout'
     },
 
@@ -241,6 +314,32 @@ export function createDokployAdapter(
         await sleep(wait)
       }
     },
+  }
+
+  async function reconcile(applicationId: string, context: DeploymentContext) {
+    const deadline = Date.now() + (opts.reconciliationTimeoutMs ?? 30_000)
+    const identity = dispatchIdentity(context)
+    for (;;) {
+      const app = await getApplication(applicationId)
+      const matches =
+        app.deployments?.filter(
+          (item) =>
+            item.title === identity.title &&
+            item.description === identity.description,
+        ) ?? []
+      if (matches.length > 1)
+        throw new DeploymentUncertainError(
+          `Multiple upstream deployments match job=${context.jobId}; manual investigation required`,
+        )
+      const id = matches[0]?.deploymentId
+      if (id) return { deploymentId: id }
+      const wait = Math.min(
+        opts.reconciliationPollMs ?? 1000,
+        deadline - Date.now(),
+      )
+      if (wait <= 0) return null
+      await sleep(wait)
+    }
   }
 
   async function fetchHealthUrl(
@@ -321,6 +420,8 @@ function pinnedRequest(
 
 interface DokployDeployment {
   deploymentId?: string
+  title?: string
+  description?: string
   createdAt?: string
   status?: string
 }
@@ -360,18 +461,29 @@ function readEnvLine(raw: string | null | undefined, key: string) {
   return line?.slice(key.length + 1)
 }
 
-function newestDeploymentId(
-  app: DokployApplication,
-  applicationId: string,
-): string {
-  const deployments = app.deployments
-  if (!Array.isArray(deployments) || deployments.length === 0) {
-    return `${applicationId}-${Date.now()}`
+function dispatchIdentity(context: DeploymentContext) {
+  return {
+    title: `areca:${context.jobId}`,
+    description: `publication=${context.publicationId} snapshot=${context.snapshotHash}`,
   }
-  const newest = [...deployments].sort((a, b) =>
-    String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')),
-  )[0]
-  return newest.deploymentId ?? `${applicationId}-${Date.now()}`
+}
+
+/** Bounded retry only for read operations or an identical idempotent write. */
+async function retrySafe<T>(operation: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await operation()
+    } catch (error) {
+      if (
+        attempt >= 2 ||
+        (error instanceof DokployHttpError &&
+          ![408, 429, 500, 502, 503, 504].includes(error.status)) ||
+        error instanceof SyntaxError
+      )
+        throw error
+      await sleep(100 * 2 ** attempt)
+    }
+  }
 }
 
 function sleep(ms: number) {

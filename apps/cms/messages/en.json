@@ -1230,5 +1230,10 @@
   "ui_copy": "Copy",
   "ui_copy_failed": "Couldn't copy to the clipboard",
   "ui_more": "More",
-  "ui_try_again": "Try again"
+  "ui_try_again": "Try again",
+  "golive_deployment_uncertain": "The deployment outcome is unknown. Check its status before publishing again. If no matching deployment can be found, publishing stays blocked.",
+  "golive_reconcile_deployment": "Check deployment status",
+  "golive_resolution_reason": "Record how you verified the upstream deployment was stopped",
+  "golive_resolve_uncertain": "Release publishing block",
+  "golive_resolve_uncertain_confirmation": "Confirm that all possibly running or queued upstream deployments for this request have been stopped or cancelled. This releases the publishing block without deploying again."
 }

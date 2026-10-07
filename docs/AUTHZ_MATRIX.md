@@ -92,6 +92,8 @@ unchanged (each row carries a side-effect probe).
 | `listBuildJobsFn` | `publishing.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
 | `getBuildJobFn` | `publishing.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
 | `cancelJobFn` | `publishing.ts` | `org-owner` | org owner, agency admin (MFA) |
+| `reconcileDeploymentJobFn` | `publishing.ts` | `org-owner` | org owner, agency admin (MFA) |
+| `resolveUncertainDeploymentJobFn` | `publishing.ts` | `agency` | agency admin (MFA); reason and upstream-stop confirmation required |
 | `getSiteReleaseStatusFn` | `publishing.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
 | `getBrandingFn` | `branding.ts` | `public` | anyone |
 | `updateBrandingFn` | `branding.ts` | `agency` | agency admin (MFA) |

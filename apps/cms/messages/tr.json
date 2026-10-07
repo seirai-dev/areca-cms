@@ -1230,5 +1230,10 @@
   "ui_copy": "Copy",
   "ui_copy_failed": "Couldn't copy to the clipboard",
   "ui_more": "Daha fazla",
-  "ui_try_again": "Try again"
+  "ui_try_again": "Try again",
+  "golive_deployment_uncertain": "Dağıtım sonucu bilinmiyor. Yeniden yayımlamadan önce durumunu kontrol edin. Eşleşen dağıtım bulunamazsa yayımlama engellenmeye devam eder.",
+  "golive_reconcile_deployment": "Dağıtım durumunu kontrol et",
+  "golive_resolution_reason": "Dağıtımın durdurulduğunu nasıl doğruladığınızı kaydedin",
+  "golive_resolve_uncertain": "Yayımlama engelini kaldır",
+  "golive_resolve_uncertain_confirmation": "Bu istek için çalışan veya sırada bekleyen tüm olası dağıtımların durdurulduğunu ya da iptal edildiğini onaylayın. Bu işlem yeniden dağıtım yapmadan yayımlama engelini kaldırır."
 }

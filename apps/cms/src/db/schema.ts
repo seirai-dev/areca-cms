@@ -365,6 +365,10 @@ export const buildJob = pgTable(
     priority: integer('priority').notNull().default(0),
     status: text('status').$type<BuildJobStatus>().notNull().default('queued'),
     attempts: integer('attempts').notNull().default(0),
+    dispatchStartedAt: timestamptz('dispatch_started_at'),
+    dispatchTarget: jsonb('dispatch_target').$type<DeploymentTarget>(),
+    upstreamDeploymentId: text('upstream_deployment_id'),
+    dispatchUncertain: boolean('dispatch_uncertain').notNull().default(false),
     leaseExpiresAt: timestamptz('lease_expires_at'),
     startedAt: timestamptz('started_at'),
     finishedAt: timestamptz('finished_at'),
@@ -382,6 +386,24 @@ export const buildJob = pgTable(
       .where(sql`${t.status} IN ('building', 'validating', 'deploying')`),
   ],
 )
+
+/** Durable successful mutation identities; replay never enqueues or coalesces. */
+export const publicationRequest = pgTable('publication_request', {
+  id: text('id').primaryKey(),
+  siteId: text('site_id')
+    .notNull()
+    .references(() => site.id, { onDelete: 'cascade' }),
+  actorId: text('actor_id').notNull(),
+  operation: text('operation').$type<'publish' | 'rollback'>().notNull(),
+  payload: text('payload').notNull(),
+  publicationId: text('publication_id')
+    .notNull()
+    .references(() => publication.id, { onDelete: 'cascade' }),
+  jobId: text('job_id')
+    .notNull()
+    .references(() => buildJob.id, { onDelete: 'cascade' }),
+  createdAt: createdAt(),
+})
 
 export const auditLog = pgTable('audit_log', {
   id: id(),

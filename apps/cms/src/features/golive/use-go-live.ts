@@ -1,11 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
+import { authClient } from '#/lib/auth-client'
+import { publishingRequestIdentity } from './request-identity'
+
 import { queryKeys } from '#/lib/content/query-keys'
 import { errorMessage } from '#/lib/content/utils'
 import { m } from '#/paraglide/messages'
 import {
   cancelJobFn,
+  reconcileDeploymentJobFn,
+  resolveUncertainDeploymentJobFn,
   requestPublicationFn,
   requestRollbackFn,
 } from '#/server/fn/publishing'
@@ -35,6 +40,7 @@ export function useInvalidateGoLive(siteId: string) {
  */
 export function useGoLive(siteId: string) {
   const queryClient = useQueryClient()
+  const actorId = authClient.useSession().data?.user.id
   const invalidate = useInvalidateGoLive(siteId)
 
   const errorsQuery = useQuery({
@@ -47,10 +53,22 @@ export function useGoLive(siteId: string) {
 
   const mutation = useMutation({
     mutationKey: ['go-live', siteId],
-    mutationFn: (options: { urgent?: boolean } = {}) =>
-      requestPublicationFn({
-        data: { siteId, priority: options.urgent ? 100 : undefined },
-      }),
+    mutationFn: async (options: { urgent?: boolean } = {}) => {
+      if (!actorId) throw new Error('Sign in before publishing')
+      const priority = options.urgent ? 100 : 0
+      const identity = publishingRequestIdentity(
+        actorId,
+        siteId,
+        'publish',
+        JSON.stringify({ priority }),
+        window.localStorage,
+      )
+      const result = await requestPublicationFn({
+        data: { siteId, priority, requestKey: identity.key },
+      })
+      identity.complete()
+      return result
+    },
     onSuccess: async (result) => {
       if ('ok' in result && result.ok === false) {
         queryClient.setQueryData(errorsKey(siteId), result.errors)
@@ -77,10 +95,25 @@ export function useGoLive(siteId: string) {
 
 /** Restore a previously live release ("Restore this version"). */
 export function useRollback(siteId: string) {
+  const actorId = authClient.useSession().data?.user.id
   const invalidate = useInvalidateGoLive(siteId)
   return useMutation({
-    mutationFn: (publicationId: string) =>
-      requestRollbackFn({ data: { siteId, publicationId } }),
+    mutationFn: async (publicationId: string) => {
+      if (!actorId) throw new Error('Sign in before restoring a release')
+      const identity = publishingRequestIdentity(
+        actorId,
+        siteId,
+        'rollback',
+        JSON.stringify({ publicationId }),
+        window.localStorage,
+      )
+      const result = await requestRollbackFn({
+        data: { siteId, publicationId, requestKey: identity.key },
+      })
+      identity.complete()
+      if ('ok' in result) throw new Error(result.errors.join('; '))
+      return result
+    },
     onSuccess: async () => {
       toast.success(m.golive_toast_restore_started())
       await invalidate()
@@ -101,5 +134,34 @@ export function useCancelJob(siteId: string) {
     },
     onError: (error) =>
       toast.error(errorMessage(error, m.sites_cancel_job_failed())),
+  })
+}
+
+/** Reconcile the original deployment without dispatching another build. */
+export function useReconcileDeployment(siteId: string) {
+  const invalidate = useInvalidateGoLive(siteId)
+  return useMutation({
+    mutationFn: (jobId: string) =>
+      reconcileDeploymentJobFn({ data: { id: jobId } }),
+    onSuccess: async () => {
+      await invalidate()
+    },
+    onError: (error) =>
+      toast.error(errorMessage(error, m.golive_toast_failed())),
+  })
+}
+
+export function useResolveUncertainDeployment(siteId: string) {
+  const invalidate = useInvalidateGoLive(siteId)
+  return useMutation({
+    mutationFn: (input: { id: string; reason: string }) =>
+      resolveUncertainDeploymentJobFn({
+        data: { ...input, upstreamStopped: true },
+      }),
+    onSuccess: async () => {
+      await invalidate()
+    },
+    onError: (error) =>
+      toast.error(errorMessage(error, m.golive_toast_failed())),
   })
 }

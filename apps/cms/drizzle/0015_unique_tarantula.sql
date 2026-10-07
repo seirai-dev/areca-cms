@@ -1,0 +1,1 @@
+ALTER TABLE "build_job" ADD COLUMN "dispatch_target" jsonb;

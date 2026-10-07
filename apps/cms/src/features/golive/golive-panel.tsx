@@ -16,6 +16,8 @@ import {
 } from '@phosphor-icons/react'
 
 import { formatDateTime, shortId } from '#/lib/content/utils'
+import { authClient } from '#/lib/auth-client'
+import { Input } from '#/components/ui/input'
 import { Button } from '#/components/ui/button'
 import { ConfirmDialog } from '#/components/ui/confirm-dialog'
 import { CopyButton } from '#/components/ui/copy-button'
@@ -71,7 +73,13 @@ import {
   publicationsQuery,
 } from './queries'
 import type { JobRow, PublicationRow } from './queries'
-import { useCancelJob, useGoLive, useRollback } from './use-go-live'
+import {
+  useCancelJob,
+  useGoLive,
+  useRollback,
+  useReconcileDeployment,
+  useResolveUncertainDeployment,
+} from './use-go-live'
 import { usePendingEntries } from './use-pending-entries'
 import type { PendingEntry } from './use-pending-entries'
 import { useReleaseStatus } from './use-release-status'
@@ -629,6 +637,13 @@ function ReleaseHistory({
   const jobs = useQuery(jobsQuery(siteId))
   const rollback = useRollback(siteId)
   const cancelJob = useCancelJob(siteId)
+  const reconcile = useReconcileDeployment(siteId)
+  const resolveUncertain = useResolveUncertainDeployment(siteId)
+  const isAgencyAdmin =
+    authClient.useSession().data?.user.isAgencyAdmin === true
+  const [resolutionReasons, setResolutionReasons] = React.useState<
+    Record<string, string>
+  >({})
 
   const limit = PUBLICATIONS_PAGE_SIZE * pages
   const rows = (publications.data ?? []).slice(0, limit)
@@ -664,6 +679,71 @@ function ReleaseHistory({
 
   return (
     <Section title={m.golive_releases()} className="pb-8">
+      {(jobs.data ?? [])
+        .filter((job) => job.dispatchUncertain)
+        .map((job) => (
+          <div
+            key={job.id}
+            className="grid gap-2 rounded-[10px] bg-background-subtle p-3"
+          >
+            <p className="text-callout text-text-secondary">
+              {m.golive_deployment_uncertain()}
+            </p>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={!canManage}
+              loading={reconcile.isPending}
+              onClick={() => reconcile.mutate(job.id)}
+              data-testid="reconcile-deployment"
+            >
+              {m.golive_reconcile_deployment()}
+            </Button>
+            {isAgencyAdmin ? (
+              <div className="grid gap-2">
+                <Input
+                  aria-label={m.golive_resolution_reason()}
+                  placeholder={m.golive_resolution_reason()}
+                  value={resolutionReasons[job.id] ?? ''}
+                  onChange={(event) =>
+                    setResolutionReasons((previous) => ({
+                      ...previous,
+                      [job.id]: event.target.value,
+                    }))
+                  }
+                />
+                <ConfirmDialog
+                  title={m.golive_resolve_uncertain()}
+                  description={m.golive_resolve_uncertain_confirmation()}
+                  confirmText={job.id}
+                  confirmLabel={m.golive_resolve_uncertain()}
+                  variant="destructive"
+                  onConfirm={() =>
+                    resolveUncertain
+                      .mutateAsync({
+                        id: job.id,
+                        reason: resolutionReasons[job.id] ?? '',
+                      })
+                      .then(() => undefined)
+                  }
+                >
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    disabled={
+                      (resolutionReasons[job.id] ?? '').trim().length < 10 ||
+                      job.status !== 'failed'
+                    }
+                  >
+                    {m.golive_resolve_uncertain()}
+                  </Button>
+                </ConfirmDialog>
+              </div>
+            ) : null}
+          </div>
+        ))}
       {publications.isError ? (
         <QueryError
           title={m.golive_releases_load_error()}

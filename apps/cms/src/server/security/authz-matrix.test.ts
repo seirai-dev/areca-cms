@@ -201,9 +201,14 @@ describe.skipIf(!runnable)(
         ],
         ['getBuildJob', publishingFns.getBuildJobFn, { id: w.Y.job.id }],
         [
+          'reconcileDeployment',
+          publishingFns.reconcileDeploymentJobFn,
+          { id: w.Y.job.id },
+        ],
+        [
           'requestPublication',
           publishingFns.requestPublicationFn,
-          { siteId: w.Y.site.id },
+          { siteId: w.Y.site.id, requestKey: crypto.randomUUID() },
         ],
       ]
       for (const [label, fn, data] of attempts) {
@@ -332,7 +337,11 @@ describe.skipIf(!runnable)(
         .where(eq(buildJob.siteId, mine.id))
       const out = await call(
         publishingFns.requestRollbackFn,
-        { siteId: mine.id, publicationId: w.Y.publication.id },
+        {
+          siteId: mine.id,
+          publicationId: w.Y.publication.id,
+          requestKey: crypto.randomUUID(),
+        },
         'ownerX',
       )
       expect(classify(out.error)).toBe('not-found')

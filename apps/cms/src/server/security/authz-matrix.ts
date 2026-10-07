@@ -628,7 +628,7 @@ export const ROWS: Row[] = [
     prepare: async (w) => {
       const s = await w.fresh.site('X')
       return {
-        data: { siteId: s.id },
+        data: { siteId: s.id, requestKey: crypto.randomUUID() },
         untouched: absent(publication, eq(publication.siteId, s.id)),
       }
     },
@@ -642,7 +642,11 @@ export const ROWS: Row[] = [
       const s = await w.fresh.site('X')
       const p = await w.fresh.publication(s.id, `rb-${uniq()}`, 'superseded')
       return {
-        data: { siteId: s.id, publicationId: p.id },
+        data: {
+          siteId: s.id,
+          publicationId: p.id,
+          requestKey: crypto.randomUUID(),
+        },
         untouched: absent(buildJob, eq(buildJob.siteId, s.id)),
       }
     },
@@ -682,6 +686,61 @@ export const ROWS: Row[] = [
         untouched: exists(
           buildJob,
           and(eq(buildJob.id, j.id), eq(buildJob.status, 'queued')),
+        ),
+      }
+    },
+  },
+  {
+    name: 'reconcileDeploymentJobFn',
+    hidden: true,
+    fn: publishingFns.reconcileDeploymentJobFn,
+    policy: 'org-owner',
+    prepare: async (w) => {
+      const s = await w.fresh.site('X')
+      const p = await w.fresh.publication(
+        s.id,
+        `reconcile-${uniq()}`,
+        'superseded',
+      )
+      const j = await w.fresh.job(s.id, p.id, 'succeeded')
+      await db
+        .update(buildJob)
+        .set({ status: 'failed', dispatchUncertain: true })
+        .where(eq(buildJob.id, j.id))
+      return {
+        data: { id: j.id },
+        untouched: exists(
+          buildJob,
+          and(eq(buildJob.id, j.id), eq(buildJob.attempts, 0)),
+        ),
+      }
+    },
+  },
+  {
+    name: 'resolveUncertainDeploymentJobFn',
+    fn: publishingFns.resolveUncertainDeploymentJobFn,
+    policy: 'agency',
+    prepare: async (w) => {
+      const s = await w.fresh.site('X')
+      const p = await w.fresh.publication(
+        s.id,
+        `resolve-${uniq()}`,
+        'superseded',
+      )
+      const j = await w.fresh.job(s.id, p.id, 'succeeded')
+      await db
+        .update(buildJob)
+        .set({ status: 'failed', dispatchUncertain: true })
+        .where(eq(buildJob.id, j.id))
+      return {
+        data: {
+          id: j.id,
+          reason: 'Verified upstream stopped and queue drained',
+          upstreamStopped: true,
+        },
+        untouched: exists(
+          buildJob,
+          and(eq(buildJob.id, j.id), eq(buildJob.dispatchUncertain, true)),
         ),
       }
     },

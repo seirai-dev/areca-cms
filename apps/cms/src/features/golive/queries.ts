@@ -40,6 +40,7 @@ export type JobRow = {
   publicationId?: string
   status: BuildJobStatus
   attempts: number
+  dispatchUncertain?: boolean
   priority?: number
   createdAt: string | Date
   startedAt?: string | Date | null

@@ -2,6 +2,16 @@ import { describe, expect, it } from 'vitest'
 import { createDokployAdapter, listDokployApplications } from './dokploy'
 import type { DeploymentTarget } from './types'
 
+const context = {
+  jobId: 'job-1',
+  publicationId: 'pub-1',
+  snapshotHash: 'hash-1',
+}
+const identity = {
+  title: 'areca:job-1',
+  description: 'publication=pub-1 snapshot=hash-1',
+}
+
 const target: DeploymentTarget = {
   provider: 'dokploy',
   applicationId: 'app-1',
@@ -30,6 +40,7 @@ function json(data: unknown, status = 200) {
 }
 
 const localTestOptions = {
+  reconciliationTimeoutMs: 0,
   allowInsecureHttp: true,
   resolveHost: async () => ['93.184.216.34'],
 }
@@ -93,13 +104,15 @@ describe('createDokployAdapter', () => {
       apiKey: 'k',
       fetch: fakeFetch(() => json({ token: 'must-not-leak' }, 500)),
     })
-    const error = await adapter.deploy(target, () => {}).catch((cause) => cause)
+    const error = await adapter
+      .deploy(target, () => {}, context)
+      .catch((cause) => cause)
     expect(error).toBeInstanceOf(Error)
     expect((error as Error).message).toContain('failed: 500')
     expect((error as Error).message).not.toContain('must-not-leak')
   })
 
-  it('POSTs deploy then reads the newest deploymentId', async () => {
+  it('POSTs immutable identity then reads only its exact deploymentId', async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = []
     const adapter = createDokployAdapter({
       baseUrl: 'http://dokploy.test',
@@ -120,7 +133,15 @@ describe('createDokployAdapter', () => {
             createEnvFile: false,
             deployments: [
               { deploymentId: 'old', createdAt: '2026-01-01T00:00:00.000Z' },
-              { deploymentId: 'new', createdAt: '2026-01-02T00:00:00.000Z' },
+              {
+                deploymentId: 'new',
+                createdAt: '2026-01-02T00:00:00.000Z',
+                ...identity,
+              },
+              {
+                deploymentId: 'newer-unrelated',
+                createdAt: '2026-01-03T00:00:00.000Z',
+              },
             ],
           })
         }
@@ -129,7 +150,11 @@ describe('createDokployAdapter', () => {
     })
 
     const logs: string[] = []
-    const result = await adapter.deploy(target, (line) => logs.push(line))
+    const result = await adapter.deploy(
+      target,
+      (line) => logs.push(line),
+      context,
+    )
 
     expect(result.deploymentId).toBe('new')
     expect(calls.map((call) => call.url)).toEqual([
@@ -142,12 +167,13 @@ describe('createDokployAdapter', () => {
     expect(calls[2]?.init?.headers).toMatchObject({ 'x-api-key': 'test-key' })
     expect(JSON.parse(String(calls[2]?.init?.body))).toEqual({
       applicationId: 'app-1',
+      ...identity,
     })
     const saved = JSON.parse(String(calls[1]?.init?.body)) as {
       buildArgs: string
       buildSecrets: string
     }
-    expect(saved.buildArgs).toMatch(/ARECA_SNAPSHOT_ID=\d+/)
+    expect(saved.buildArgs).toContain('ARECA_SNAPSHOT_ID=pub-1')
     expect(saved.buildArgs).not.toContain('ARECA_SITE_TOKEN')
     expect(saved.buildSecrets).toBe('ARECA_SITE_TOKEN=legacy-secret')
     expect(logs.length).toBeGreaterThan(0)
@@ -171,17 +197,18 @@ describe('createDokployAdapter', () => {
           deployments: [
             {
               deploymentId: 'dep-empty',
+              ...identity,
               createdAt: '2026-01-02T00:00:00.000Z',
             },
           ],
         })
       }),
     })
-    const result = await adapter.deploy(target, () => {})
+    const result = await adapter.deploy(target, () => {}, context)
     expect(result.deploymentId).toBe('dep-empty')
   })
 
-  it('uses applicationId + timestamp when deployments is missing', async () => {
+  it('quarantines missing deployment identity instead of fabricating an ID', async () => {
     const adapter = createDokployAdapter({
       baseUrl: 'http://dokploy.test',
       apiKey: 'k',
@@ -192,11 +219,12 @@ describe('createDokployAdapter', () => {
         return json({ applicationId: 'app-1', applicationStatus: 'running' })
       }),
     })
-    const result = await adapter.deploy(target, () => {})
-    expect(result.deploymentId).toMatch(/^app-1-\d+$/)
+    await expect(adapter.deploy(target, () => {}, context)).rejects.toThrow(
+      /acceptance unknown/,
+    )
   })
 
-  it('polls until applicationStatus is done', async () => {
+  it('polls the exact deployment until done', async () => {
     let polls = 0
     const adapter = createDokployAdapter({
       baseUrl: 'http://dokploy.test',
@@ -205,7 +233,10 @@ describe('createDokployAdapter', () => {
       fetch: fakeFetch(() => {
         polls += 1
         const status = polls < 3 ? 'running' : 'done'
-        return json({ applicationStatus: status, deployments: [] })
+        return json({
+          applicationStatus: 'error',
+          deployments: [{ deploymentId: 'dep-1', status }],
+        })
       }),
     })
 
@@ -219,16 +250,21 @@ describe('createDokployAdapter', () => {
 
     expect(result).toBe('done')
     expect(polls).toBeGreaterThanOrEqual(3)
-    expect(logs).toContain('applicationStatus: running')
-    expect(logs).toContain('applicationStatus: done')
+    expect(logs).toContain('deployment=dep-1 status=running')
+    expect(logs).toContain('deployment=dep-1 status=done')
   })
 
-  it('returns error when applicationStatus is error', async () => {
+  it('returns error only when the exact deployment is error', async () => {
     const adapter = createDokployAdapter({
       baseUrl: 'http://dokploy.test',
       apiKey: 'k',
       ...localTestOptions,
-      fetch: fakeFetch(() => json({ applicationStatus: 'error' })),
+      fetch: fakeFetch(() =>
+        json({
+          applicationStatus: 'done',
+          deployments: [{ deploymentId: 'dep-1', status: 'error' }],
+        }),
+      ),
     })
     const result = await adapter.waitForCompletion(
       target,
@@ -277,6 +313,178 @@ describe('createDokployAdapter', () => {
       () => {},
     )
     expect(result).toBe('timeout')
+  })
+
+  it('reconciles a lost accepted response without repeating deploy POST', async () => {
+    let posts = 0
+    const adapter = createDokployAdapter({
+      baseUrl: 'https://dokploy.test',
+      apiKey: 'private-database-key',
+      reconciliationTimeoutMs: 0,
+      fetch: fakeFetch((url) => {
+        if (url.endsWith('/api/application.deploy')) {
+          posts++
+          throw new Error('private-database-key lost response')
+        }
+        if (url.endsWith('/api/application.saveEnvironment')) return json(true)
+        return json({
+          deployments: posts ? [{ deploymentId: 'accepted', ...identity }] : [],
+        })
+      }),
+    })
+    expect(await adapter.deploy(target, () => {}, context)).toEqual({
+      deploymentId: 'accepted',
+    })
+    expect(posts).toBe(1)
+  })
+
+  it('retries transient preparation failures within a bounded budget', async () => {
+    let reads = 0
+    let saves = 0
+    let posts = 0
+    const adapter = createDokployAdapter({
+      baseUrl: 'https://dokploy.test',
+      apiKey: 'key',
+      reconciliationTimeoutMs: 0,
+      fetch: fakeFetch((url) => {
+        if (url.endsWith('/api/application.deploy')) {
+          posts++
+          return json(true)
+        }
+        if (url.endsWith('/api/application.saveEnvironment')) {
+          saves++
+          return json(true, saves < 3 ? 503 : 200)
+        }
+        reads++
+        if (reads < 3) return json({}, 503)
+        return json({
+          deployments: [{ deploymentId: 'accepted', ...identity }],
+        })
+      }),
+    })
+    await expect(adapter.deploy(target, () => {}, context)).resolves.toEqual({
+      deploymentId: 'accepted',
+    })
+    expect(reads).toBe(4)
+    expect(saves).toBe(3)
+    expect(posts).toBe(1)
+  })
+
+  it('stops after three transient preparation attempts without dispatching', async () => {
+    let requests = 0
+    const adapter = createDokployAdapter({
+      baseUrl: 'https://dokploy.test',
+      apiKey: 'key',
+      fetch: fakeFetch(() => {
+        requests++
+        return json({}, 503)
+      }),
+    })
+    await expect(adapter.deploy(target, () => {}, context)).rejects.toThrow(
+      'failed: 503',
+    )
+    expect(requests).toBe(3)
+  })
+
+  it('scrubs organization credentials from fetch and malformed JSON errors', async () => {
+    const secret = 'decrypted-organization-key'
+    for (const handler of [
+      () => {
+        throw new Error(`network error ${secret}`)
+      },
+      () => new Response(`not JSON ${secret}`, { status: 200 }),
+    ]) {
+      const adapter = createDokployAdapter({
+        baseUrl: 'https://dokploy.test',
+        apiKey: secret,
+        fetch: fakeFetch(handler),
+      })
+      const error = await adapter
+        .deploy(target, () => {}, context)
+        .catch((cause) => cause)
+      expect(error).toBeInstanceOf(Error)
+      expect(error.message).not.toContain(secret)
+    }
+  })
+
+  it('does not retry permanent auth failure or send a deployment', async () => {
+    let requests = 0
+    const adapter = createDokployAdapter({
+      baseUrl: 'https://dokploy.test',
+      apiKey: 'key',
+      fetch: fakeFetch(() => {
+        requests++
+        return json({}, 401)
+      }),
+    })
+    await expect(adapter.deploy(target, () => {}, context)).rejects.toThrow(
+      'failed: 401',
+    )
+    expect(requests).toBe(1)
+  })
+
+  it('does not retry a deploy 5xx and leaves unmatched acceptance uncertain', async () => {
+    let posts = 0
+    const adapter = createDokployAdapter({
+      baseUrl: 'https://dokploy.test',
+      apiKey: 'key',
+      reconciliationTimeoutMs: 0,
+      fetch: fakeFetch((url) => {
+        if (url.endsWith('/api/application.deploy')) {
+          posts++
+          return json({}, 500)
+        }
+        if (url.endsWith('/api/application.saveEnvironment')) return json(true)
+        return json({
+          deployments: [
+            { deploymentId: 'someone-else', title: 'Manual deployment' },
+          ],
+        })
+      }),
+    })
+    await expect(adapter.deploy(target, () => {}, context)).rejects.toThrow(
+      /acceptance unknown/,
+    )
+    expect(posts).toBe(1)
+  })
+
+  it('does not use application status when the exact deployment is missing', async () => {
+    const adapter = createDokployAdapter({
+      baseUrl: 'https://dokploy.test',
+      apiKey: 'key',
+      fetch: fakeFetch(() =>
+        json({
+          applicationStatus: 'done',
+          deployments: [{ deploymentId: 'another', status: 'done' }],
+        }),
+      ),
+    })
+    expect(
+      await adapter.waitForCompletion(
+        target,
+        'missing',
+        { timeoutMs: 20, pollMs: 5 },
+        () => {},
+      ),
+    ).toBe('timeout')
+  })
+
+  it('refuses multiple matching deployment identities', async () => {
+    const adapter = createDokployAdapter({
+      baseUrl: 'https://dokploy.test',
+      apiKey: 'key',
+      fetch: fakeFetch(() =>
+        json({
+          deployments: [
+            { deploymentId: 'one', ...identity },
+            { deploymentId: 'two', ...identity },
+          ],
+        }),
+      ),
+    })
+    await expect(adapter.reconcile!(target, context, () => {})).rejects.toThrow(
+      /Multiple/,
+    )
   })
 
   it('retries healthCheck until 200', async () => {

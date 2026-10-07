@@ -1230,5 +1230,10 @@
   "ui_copy": "Copy",
   "ui_copy_failed": "Couldn't copy to the clipboard",
   "ui_more": "Meer",
-  "ui_try_again": "Try again"
+  "ui_try_again": "Try again",
+  "golive_deployment_uncertain": "De uitkomst van de deployment is onbekend. Controleer de status voordat je opnieuw publiceert. Als er geen bijbehorende deployment wordt gevonden, blijft publiceren geblokkeerd.",
+  "golive_reconcile_deployment": "Deploymentstatus controleren",
+  "golive_resolution_reason": "Noteer hoe je hebt gecontroleerd dat de deployment is gestopt",
+  "golive_resolve_uncertain": "Publicatieblokkade opheffen",
+  "golive_resolve_uncertain_confirmation": "Bevestig dat alle mogelijk actieve of wachtende deployments voor dit verzoek zijn gestopt of geannuleerd. Dit heft de publicatieblokkade op zonder opnieuw te deployen."
 }

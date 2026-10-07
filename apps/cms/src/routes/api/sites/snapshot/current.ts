@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import '@tanstack/react-start'
-import { and, desc, eq, inArray } from 'drizzle-orm'
+import { and, desc, eq, inArray, or } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { buildJob, publication } from '#/db/schema'
@@ -14,7 +14,10 @@ const NO_STORE = { 'Cache-Control': 'no-store' }
 export async function getSitesSnapshotCurrent(request: Request) {
   const site = await authenticateSite(request)
   if (!site) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401, headers: NO_STORE })
+    return Response.json(
+      { error: 'Unauthorized' },
+      { status: 401, headers: NO_STORE },
+    )
   }
 
   const [activeJob] = await db
@@ -23,7 +26,10 @@ export async function getSitesSnapshotCurrent(request: Request) {
     .where(
       and(
         eq(buildJob.siteId, site.id),
-        inArray(buildJob.status, [...ACTIVE_JOB_STATUSES]),
+        or(
+          inArray(buildJob.status, [...ACTIVE_JOB_STATUSES]),
+          eq(buildJob.dispatchUncertain, true),
+        ),
       ),
     )
     .orderBy(desc(buildJob.startedAt), desc(buildJob.createdAt))

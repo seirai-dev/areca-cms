@@ -11,7 +11,7 @@ import { getBranding } from '#/server/admin/branding'
 import { audit } from '#/server/audit'
 import { ConflictError, NotFoundError } from '#/server/content/errors'
 import { AppError } from '#/server/http/app-error'
-import { createLogger } from '#/server/log'
+import { collectSecretValues, createLogger, redactError } from '#/server/log'
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
@@ -303,16 +303,18 @@ async function deliverInvitation(
       html: `<p>${m.server_invite_body({ org: organizationName, role: row.role })}</p><p><a href="${link}">${m.server_invite_accept()}</a></p><p style="color:#666;font-size:12px">— ${escapeHtml(brand.appName)}</p>`,
     })
   } catch (error) {
+    // SMTP failures can echo the message body, including its bearer link.
+    const safeError = redactError(error, [...collectSecretValues(), row.token])
     log.error('invitation email failed', {
       invitationId: row.id,
       organizationId: row.organizationId,
-      err: error,
+      err: safeError,
     })
     await db
       .update(invitation)
       .set({
         deliveryStatus: 'failed',
-        lastDeliveryError: describeDeliveryError(error),
+        lastDeliveryError: safeError.message.split('\n')[0].slice(0, 200),
       })
       .where(eq(invitation.id, row.id))
     throw new InvitationDeliveryError()
@@ -328,11 +330,6 @@ async function deliverInvitation(
     .where(eq(invitation.id, row.id))
     .returning()
   return sent ?? row
-}
-
-function describeDeliveryError(error: unknown) {
-  const text = error instanceof Error ? error.message : String(error)
-  return text.split('\n')[0].slice(0, 200)
 }
 
 export async function listInvitations(organizationId: string) {

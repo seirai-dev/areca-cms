@@ -1,31 +1,43 @@
 import { eq, inArray } from 'drizzle-orm'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mail = vi.hoisted(() => ({ fail: false, sent: [] as string[] }))
-vi.mock('#/adapters/email', () => ({
-  sendEmail: vi.fn(async (opts: { to: string; text: string }) => {
-    if (mail.fail)
-      throw new Error('connect ECONNREFUSED smtp.internal:25\nstack')
-    mail.sent.push(opts.text)
-  }),
-}))
-
 import { db } from '#/db'
 import { auditLog, invitation, organization, user } from '#/db/schema'
-import { ConflictError } from '#/server/content/errors'
+import { ConflictError, NotFoundError } from '#/server/content/errors'
+import { setLogSink } from '#/server/log'
 
 import {
   InvitationDeliveryError,
+  acceptInvitation,
+  getInvitation,
   inviteMember,
   listInvitations,
   resendInvitation,
   revokeInvitation,
 } from './members.ts'
 
+const mail = vi.hoisted(() => ({
+  fail: false,
+  echoFailure: false,
+  sent: [] as string[],
+}))
+vi.mock('#/adapters/email', () => ({
+  sendEmail: vi.fn(async (opts: { to: string; text: string }) => {
+    if (mail.echoFailure)
+      throw new Error(
+        `SMTP_PASSWORD=smtp-test-secret ${opts.text.match(/https?:\/\/\S+\/invite\/\w+/)?.[0]}\n${opts.text}`,
+      )
+    if (mail.fail)
+      throw new Error('connect ECONNREFUSED smtp.internal:25\nstack')
+    mail.sent.push(opts.text)
+  }),
+}))
+
 const hasDb = Boolean(process.env.DATABASE_URL)
 
 beforeEach(() => {
   mail.fail = false
+  mail.echoFailure = false
   mail.sent = []
 })
 
@@ -102,6 +114,7 @@ describe.skipIf(!hasDb)('invitation delivery failures', () => {
         .where(eq(invitation.id, row!.id))
       expect(afterFailedResend?.token).not.toBe(row!.token)
       expect(afterFailedResend?.deliveryStatus).toBe('failed')
+      expect(await getInvitation(row!.token)).toBeNull()
 
       // Expire it, then resend with SMTP healthy: fresh expiry, sent.
       await db
@@ -148,6 +161,10 @@ describe.skipIf(!hasDb)('invitation delivery failures', () => {
       const [row] = await listInvitations(f.org.id)
       await revokeInvitation(row!.id, f.actor.id)
       expect(await listInvitations(f.org.id)).toHaveLength(0)
+      expect(await getInvitation(row!.token)).toBeNull()
+      await expect(
+        resendInvitation(row!.id, f.actor.id),
+      ).rejects.toBeInstanceOf(NotFoundError)
 
       mail.fail = false
       const ok = await inviteMember({
@@ -166,6 +183,82 @@ describe.skipIf(!hasDb)('invitation delivery failures', () => {
       )
     } finally {
       await f.cleanup()
+    }
+  })
+
+  it('redacts SMTP errors that echo credentials and invitation bearer links', async () => {
+    const f = await fixture()
+    const lines: string[] = []
+    const previousLevel = process.env.LOG_LEVEL
+    const restore = setLogSink((_level, line) => lines.push(line))
+    process.env.LOG_LEVEL = 'error'
+    try {
+      mail.echoFailure = true
+      await expect(
+        inviteMember({
+          organizationId: f.org.id,
+          email: f.email,
+          role: 'editor',
+          actorId: f.actor.id,
+        }),
+      ).rejects.toBeInstanceOf(InvitationDeliveryError)
+      const [row] = await db
+        .select()
+        .from(invitation)
+        .where(eq(invitation.organizationId, f.org.id))
+      expect(row).toBeTruthy()
+      expect(row.lastDeliveryError).not.toContain('smtp-test-secret')
+      expect(row.lastDeliveryError).not.toContain(row.token)
+      expect(row.lastDeliveryError!.length).toBeLessThanOrEqual(200)
+      expect(lines).toHaveLength(1)
+      expect(lines[0]).not.toContain(row.token)
+      expect(lines[0]).not.toContain('smtp-test-secret')
+      expect(lines[0]).toContain('[redacted]')
+    } finally {
+      restore()
+      process.env.LOG_LEVEL = previousLevel
+      await f.cleanup()
+    }
+  })
+
+  it('only accepts a recovered link for its intended email address', async () => {
+    const f = await fixture()
+    let guestId: string | undefined
+    try {
+      const initial = await inviteMember({
+        organizationId: f.org.id,
+        email: f.email,
+        role: 'editor',
+        actorId: f.actor.id,
+      })
+      const resent = await resendInvitation(initial.id, f.actor.id)
+      await expect(
+        acceptInvitation({ token: initial.token, userId: f.actor.id }),
+      ).rejects.toBeInstanceOf(NotFoundError)
+      await expect(
+        acceptInvitation({ token: resent.token, userId: f.actor.id }),
+      ).rejects.toBeInstanceOf(ConflictError)
+      expect(await getInvitation(resent.token)).toBeTruthy()
+      const [guest] = await db
+        .insert(user)
+        .values({
+          id: crypto.randomUUID(),
+          name: 'Guest',
+          email: f.email,
+          emailVerified: true,
+        })
+        .returning()
+      guestId = guest.id
+      await expect(
+        acceptInvitation({ token: resent.token, userId: guestId }),
+      ).resolves.toEqual({ organizationId: f.org.id, role: 'editor' })
+      expect(await getInvitation(resent.token)).toBeNull()
+      await expect(
+        resendInvitation(initial.id, f.actor.id),
+      ).rejects.toBeInstanceOf(ConflictError)
+    } finally {
+      await f.cleanup()
+      if (guestId) await db.delete(user).where(eq(user.id, guestId))
     }
   })
 })

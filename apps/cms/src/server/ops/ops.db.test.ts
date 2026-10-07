@@ -105,6 +105,21 @@ describe.skipIf(!hasDb)('bounded build logs', () => {
       expect(Number(length.rows[0]!.n)).toBeLessThanOrEqual(MAX_JOB_LOG_CHARS)
     })
   })
+
+  it('retains every concurrent append while below the cap', async () => {
+    await withJob('queued', async ({ jobId }) => {
+      const messages = Array.from(
+        { length: 60 },
+        (_, i) => `concurrent-line-${i}`,
+      )
+      await Promise.all(messages.map((line) => appendLog(jobId, line)))
+      const lines = (await logsOf(jobId)).trimEnd().split('\n')
+      expect(lines).toHaveLength(messages.length)
+      expect(
+        lines.map((line) => line.slice(line.indexOf('] ') + 2)).sort(),
+      ).toEqual(messages.sort())
+    })
+  })
 })
 
 describe.skipIf(!hasDb)('queue stats and metrics against the database', () => {
