@@ -55,7 +55,8 @@ export type PendingReleaseChange = {
   exists: boolean
 }
 
-type IndexedEntry = ReleaseDiffEntry & { seo?: SnapshotEntry['seo'] }
+type IndexedEntry = ReleaseDiffEntry &
+  Pick<SnapshotEntry, 'seo' | 'publishedAt'>
 
 /** Order-insensitive JSON; same rule as `entry-live-state` `stable()`. */
 export function stableJson(value: unknown): string {
@@ -82,14 +83,19 @@ function seoFingerprint(seo: SnapshotEntry['seo']) {
   return stableJson({
     ...seo,
     openGraph: { ...seo.openGraph, publishedTime: null, modifiedTime: null },
-    jsonLd: seo.jsonLd.map(
-      ({ datePublished: _p, dateModified: _m, ...rest }) => rest,
-    ),
+    jsonLd: seo.jsonLd.map((node, index) => {
+      // The resolver puts the generated main node first; later nodes may
+      // contain editor-supplied dates that are meaningful content changes.
+      if (index !== 0) return node
+      const { datePublished: _p, dateModified: _m, ...rest } = node
+      return rest
+    }),
   })
 }
 
 function withoutSeoKey({
   seo: _seo,
+  publishedAt: _publishedAt,
   ...rest
 }: IndexedEntry): ReleaseDiffEntry {
   return rest
@@ -97,9 +103,14 @@ function withoutSeoKey({
 
 function changed(next: IndexedEntry, prev: IndexedEntry) {
   if (fingerprint(next) !== fingerprint(prev)) return true
-  // Publications built before SEO existed carry no `seo`: not a change.
   const a = seoFingerprint(next.seo)
   const b = seoFingerprint(prev.seo)
+  // Adding resolved defaults to an untouched legacy entry is not a change.
+  // Re-approval advances publishedAt, so its SEO must be released even when
+  // the live baseline predates SEO and has no metadata to compare.
+  if (a !== null && b === null) {
+    return next.publishedAt !== prev.publishedAt
+  }
   return a !== null && b !== null && a !== b
 }
 
@@ -131,6 +142,7 @@ function indexCollections(
         collectionKey,
         data: item.data,
         seo: item.seo,
+        publishedAt: item.publishedAt,
       })
     }
   }
@@ -140,7 +152,8 @@ function indexCollections(
 /**
  * Diff two snapshot `collections` maps by entry id.
  * Missing in live = add; missing in candidate = removal; same id but slug
- * or stable(data) differs = update. `publishedAt` is ignored.
+ * or stable(data)/SEO differs = update. `publishedAt` only distinguishes
+ * re-approved entries from untouched entries when live SEO is missing.
  */
 export function diffSnapshotCollections(
   candidate: Record<string, SnapshotEntry[]> | null | undefined,

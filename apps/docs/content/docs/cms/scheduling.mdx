@@ -47,7 +47,7 @@ Areca checks for due schedules every 15 seconds or less. When a scheduled time h
 A scheduled Go live works like any other Go live:
 
 - It publishes every ready change on the site, not only the scheduled entry. See [Going live](/docs/cms/going-live).
-- The scheduled version of the entry goes live only if the release succeeds. If the release fails, the live site keeps its previous content, and the entry stays scheduled. Open the Go live panel to see what went wrong. Areca then retries after about ten minutes.
+- The scheduled version of the entry goes live only if the release succeeds. If the release fails, the live site keeps its previous content, and the entry stays scheduled. Open the Go live panel to see what went wrong. Areca retries automatically.
 - If another release is already running for the site, Areca waits and starts the scheduled release afterwards.
 
 ## The scheduled version

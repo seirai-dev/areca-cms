@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { SnapshotEntry } from '#/lib/types'
+import { resolveEntrySeo } from '#/lib/seo'
 
 import {
   diffSnapshotCollections,
@@ -17,7 +18,97 @@ function snap(
   return { id, slug, publishedAt, data }
 }
 
+function seoSnap(
+  publishedAt = '2026-01-01T00:00:00.000Z',
+  customJsonLd?: Record<string, unknown>,
+): SnapshotEntry {
+  return {
+    ...snap('a', 'hello', { title: 'Hello' }, publishedAt),
+    seo: resolveEntrySeo({
+      seo: {
+        title: 'SEO title',
+        jsonLd: customJsonLd ? JSON.stringify(customJsonLd) : undefined,
+        faq: [{ question: 'Question?', answer: 'Answer.' }],
+      },
+      title: 'Hello',
+      fallbackDescription: null,
+      url: 'https://example.test/hello',
+      site: { name: 'Example', url: 'https://example.test' },
+      ogImage: null,
+      heroImage: null,
+      datePublished: publishedAt,
+      dateModified: publishedAt,
+    }),
+  }
+}
+
 describe('diffSnapshotCollections', () => {
+  it('ignores resolved SEO defaults for untouched legacy entries', () => {
+    const candidate = seoSnap()
+    const legacy = snap('a', 'hello', { title: 'Hello' })
+    expect(
+      diffSnapshotCollections({ articles: [candidate] }, { articles: [legacy] })
+        .updates,
+    ).toEqual([])
+  })
+
+  it('includes newly approved SEO when the live baseline predates SEO', () => {
+    const candidate = seoSnap('2026-02-01T00:00:00.000Z')
+    const legacy = snap('a', 'hello', { title: 'Hello' })
+    expect(
+      diffSnapshotCollections({ articles: [candidate] }, { articles: [legacy] })
+        .updates,
+    ).toEqual([
+      {
+        id: 'a',
+        slug: 'hello',
+        collectionKey: 'articles',
+        data: { title: 'Hello' },
+      },
+    ])
+  })
+
+  it('ignores generated publish dates when both snapshots have SEO', () => {
+    expect(
+      diffSnapshotCollections(
+        { articles: [seoSnap('2026-02-01T00:00:00.000Z')] },
+        { articles: [seoSnap()] },
+      ).updates,
+    ).toEqual([])
+  })
+
+  it('includes SEO-only edits when both snapshots have SEO', () => {
+    const candidate = seoSnap()
+    candidate.seo = { ...candidate.seo!, title: 'Changed SEO title' }
+    expect(
+      diffSnapshotCollections(
+        { articles: [candidate] },
+        { articles: [seoSnap()] },
+      ).updates.map((item) => item.id),
+    ).toEqual(['a'])
+  })
+
+  it.each(['datePublished', 'dateModified'])(
+    'preserves editor-supplied JSON-LD %s changes',
+    (field) => {
+      const custom = {
+        '@type': 'Article',
+        datePublished: '2020-01-01',
+        dateModified: '2020-01-02',
+      }
+      expect(
+        diffSnapshotCollections(
+          {
+            articles: [
+              seoSnap(undefined, { ...custom, [field]: '2026-02-01' }),
+            ],
+          },
+          { articles: [seoSnap(undefined, custom)] },
+        ).updates.map((item) => item.id),
+      ).toEqual(['a'])
+    },
+  )
+
   it('treats candidate-only entries as adds', () => {
     const { adds, updates, removals } = diffSnapshotCollections(
       { articles: [snap('a', 'hello', { title: 'Hello' })] },
