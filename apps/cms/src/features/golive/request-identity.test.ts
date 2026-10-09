@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { publishingRequestIdentity } from './request-identity'
 
 function storage() {
@@ -15,6 +15,51 @@ function storage() {
 }
 
 describe('publishing request identity', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it.each(['publish', 'rollback'] as const)(
+    'creates and persists a v4 UUID for %s without crypto.randomUUID',
+    async (operation) => {
+      const site = crypto.randomUUID()
+      const disk = storage()
+      vi.stubGlobal('crypto', {
+        getRandomValues: crypto.getRandomValues.bind(crypto),
+      })
+
+      const first = publishingRequestIdentity(
+        'actor',
+        site,
+        operation,
+        'normal',
+        disk,
+      )
+      expect(first.key).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      )
+
+      vi.resetModules()
+      const reloaded = await import('./request-identity')
+      const retry = reloaded.publishingRequestIdentity(
+        'actor',
+        site,
+        operation,
+        'normal',
+        disk,
+      )
+      expect(retry.key).toBe(first.key)
+      retry.complete()
+      expect(
+        reloaded.publishingRequestIdentity(
+          'actor',
+          site,
+          operation,
+          'normal',
+          disk,
+        ).key,
+      ).not.toBe(first.key)
+    },
+  )
+
   it('reuses a persisted key for a lost response and rotates only after completion', () => {
     const disk = storage()
     const site = crypto.randomUUID()

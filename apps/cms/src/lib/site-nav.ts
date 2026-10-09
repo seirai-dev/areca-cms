@@ -9,6 +9,7 @@ import {
   ImageSquare,
   Palette,
   Pulse,
+  Sparkle,
   Stack,
   Tag,
   User,
@@ -141,7 +142,7 @@ export function siteNavItems(me: Me, site: MeSite): SiteNavItem[] {
 ------------------------------------------------------------------------- */
 
 export type AgencyNavItem = {
-  key: 'overview' | 'clients' | 'people' | 'activity' | 'branding'
+  key: 'overview' | 'clients' | 'people' | 'activity' | 'branding' | 'ai'
   label: string
   icon: Icon
   to:
@@ -150,6 +151,7 @@ export type AgencyNavItem = {
     | '/agency/people'
     | '/agency/activity'
     | '/agency/branding'
+    | '/agency/ai'
   exact?: boolean
   testId?: string
 }
@@ -191,6 +193,13 @@ export function agencyNavItems(): AgencyNavItem[] {
       icon: Palette,
       to: '/agency/branding',
       testId: 'branding-nav',
+    },
+    {
+      key: 'ai',
+      label: m.shell_nav_ai(),
+      icon: Sparkle,
+      to: '/agency/ai',
+      testId: 'agency-ai-nav',
     },
   ]
 }

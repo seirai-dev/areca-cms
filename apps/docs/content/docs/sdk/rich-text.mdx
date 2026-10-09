@@ -1,0 +1,112 @@
+---
+title: Rendering rich text
+description: Render Areca rich text with the SDK's document, Markdown and HTML helpers, and style every element with your own React components.
+---
+
+Rich text fields arrive in a snapshot as a `RichTextValue` object. The SDK gives you three helpers for it: `richTextDocument` returns a parsed document for a TanStack Markdown renderer, `richTextMarkdown` returns the Markdown source, and `richTextHtml` returns a static HTML string. For a React site, use `richTextDocument` with the `Markdown` component. This lets you control how every element looks.
+
+## Install the renderer
+
+The SDK does not render anything itself. Install the TanStack Markdown renderer alongside it, at the same version the SDK pins. The document format is pre-1.0, so the renderer and the SDK must agree.
+
+<Tabs items={['pnpm', 'npm']}>
+  <Tab value="pnpm">`pnpm add @tanstack/markdown@0.0.15`</Tab>
+  <Tab value="npm">`npm install @tanstack/markdown@0.0.15`</Tab>
+</Tabs>
+
+## The rich text value
+
+Each rich text field in a snapshot has four properties:
+
+| Property | Type | What it is |
+| --- | --- | --- |
+| `markdown` | `string` | The canonical Markdown source. Use it when you need to re-parse with your own options. |
+| `document` | `MarkdownDocument` | The Markdown parsed into a tree. This is what you render. |
+| `html` | `string` | A static HTML rendering of the same tree. |
+| `json` | `unknown` | The editor's internal format. Do not render it. |
+
+## Helpers
+
+All three helpers accept `RichTextValue | null | undefined`, so you can pass a field without checking it first.
+
+| Helper | Returns | Empty or missing value |
+| --- | --- | --- |
+| `richTextDocument(value)` | `MarkdownDocument` | An empty document (`{ type: 'root', children: [] }`) |
+| `richTextMarkdown(value)` | `string` | `''` |
+| `richTextHtml(value)` | `string` | `''` |
+
+`richTextDocument` also handles older snapshots. Publications made before the CMS sent `document` carry only `markdown`. In that case the helper parses the Markdown for you, so older content keeps rendering.
+
+Import the helpers from the `rich-text` entry point:
+
+```ts title="app/lib/rich-text.ts"
+import { richTextDocument, richTextHtml, richTextMarkdown } from '@areca-cms/site-sdk/rich-text'
+```
+
+The main `@areca-cms/site-sdk` entry point exports the same functions.
+
+## Render with React
+
+Pass the document to `Markdown` from `@tanstack/markdown/react`. The example below styles a small set of elements and leaves the rest as the renderer's defaults.
+
+```tsx title="components/article-body.tsx"
+import { Markdown } from '@tanstack/markdown/react'
+import type { MarkdownComponents } from '@tanstack/markdown/react'
+import { richTextDocument } from '@areca-cms/site-sdk/rich-text'
+import type { RichTextValue } from '@areca-cms/site-sdk'
+
+const components = {
+  h2(props) {
+    return <h2 {...props} className="mt-12 text-2xl font-semibold" />
+  },
+  p(props) {
+    return <p {...props} className="mt-5 text-lg leading-8" />
+  },
+  a(props) {
+    const external = /^https?:\/\//i.test(props.href ?? '')
+    return (
+      <a
+        {...props}
+        rel={external ? 'noopener noreferrer' : props.rel}
+        target={external ? '_blank' : props.target}
+      />
+    )
+  },
+  img(props) {
+    return <img {...props} loading="lazy" className="h-auto w-full rounded-xl" />
+  },
+} satisfies MarkdownComponents
+
+export function ArticleBody({ body }: { body: RichTextValue | null | undefined }) {
+  return <Markdown components={components}>{richTextDocument(body)}</Markdown>
+}
+```
+
+### The components map
+
+`components` is an object whose keys are HTML element names (`h1` to `h6`, `p`, `a`, `img`, `ul`, `ol`, `li`, `blockquote`, `pre`, `code`, `hr`, and so on). Each value is a React component that receives the element's props and children. Spread the props, add your classes or wrappers, and you have full control over the output. Any element you leave out uses the renderer's default.
+
+Use `satisfies MarkdownComponents`, as shown above, so TypeScript checks the element names and props.
+
+## Static HTML
+
+If you are not using React, use `richTextHtml` to insert the static HTML:
+
+```ts
+const html = richTextHtml(article.data.body)
+```
+
+The HTML is generated from the same tree as `document`, so the two always match. It does not go through your components map, so you cannot restyle elements with it. Prefer `richTextDocument` with a renderer whenever you can.
+
+## Safety
+
+- **Editors choose from a fixed set of formatting.** The body can hold headings, lists, block quotes, code blocks, tables, images, bold, italic and links. It cannot hold arbitrary HTML, so there is no `<script>` tag to pass through.
+- **Only render `document`, `markdown` or `html`.** Never render the `json` property. It is the editor's internal format and is not meant for the page.
+- **Check link targets if you need stricter rules.** The SDK does not rewrite or filter link addresses in rich text. Links can be `http`, `https` or `mailto`, and your `a` component receives the `href` as written. If you only accept `https` or relative links, enforce that in your component.
+- **Keep the renderer version in step with the SDK.** A renderer at a different version may not understand the document tree. Upgrade the SDK and the renderer together.
+
+## Related
+
+- [SEO helpers](/docs/sdk/seo) for head tags and JSON-LD from the same entry.
+- [Reading content](/docs/sdk/reading-content) for how to get the entry that holds the rich text field.
+- [Field types](/docs/sdk/field-types) for the `richtext` field and its settings.

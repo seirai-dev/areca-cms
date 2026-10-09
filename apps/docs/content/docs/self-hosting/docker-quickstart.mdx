@@ -1,0 +1,193 @@
+---
+title: Docker quickstart
+description: Start the Areca CMS and its services with Docker Compose on your own machine, then open the setup page to create the first admin.
+---
+
+This guide starts the full Areca stack on one machine with Docker Compose: the CMS, PostgreSQL, Redis, S3-compatible storage (RustFS) and a test email inbox (Mailpit). It takes about ten minutes. Use it to try Areca or to rehearse a deployment. It uses demo values, so do not expose it to the internet. When you are ready for a real server, follow the [production setup](/docs/self-hosting/production) page.
+
+<Callout type="warn" title="Demo stack, not production">
+The stack starts with placeholder values and an inbox that does not send real email. Replace every secret before you use the stack for anything you care about.
+</Callout>
+
+## Before you start
+
+You need:
+
+- **Docker** with Compose v2. Run `docker compose version` to check. The older `docker-compose` command is not used here.
+- **openssl**, to generate secrets. It is included on macOS and most Linux distributions.
+- **Free host ports** 3000, 8025 and 9001. The stack binds them to `127.0.0.1`, so other machines cannot reach them.
+- The **`docker` directory** of the Areca repository, which contains `compose.yml` and `.env.example`.
+
+## Install the stack
+
+<Steps>
+<Step>
+
+**Prepare the directory.** From the repository root, go to the `docker` directory and copy the example environment file to `.env`:
+
+```sh title="docker/"
+cd docker
+cp .env.example .env
+```
+
+Compose reads `.env` from the same directory as `compose.yml` and fills in the `${...}` values. Never commit `.env`. The repository ignores it by default.
+
+</Step>
+<Step>
+
+**Generate secrets.** Replace the example values in `.env` with new ones. The example values are for trying the stack only.
+
+```sh
+openssl rand -hex 32       # BETTER_AUTH_SECRET
+openssl rand -base64 32    # DOKPLOY_CREDENTIALS_ENCRYPTION_KEY
+openssl rand -hex 24       # POSTGRES_PASSWORD
+openssl rand -hex 24       # S3_SECRET_KEY
+```
+
+Use the output of each command as the value for the variable named in the comment. Then set `S3_ACCESS_KEY` to a value other than `areca-demo`.
+
+| Variable | Purpose |
+| --- | --- |
+| `BETTER_AUTH_SECRET` | Signs sign-in sessions. Changing it signs everyone out. |
+| `DOKPLOY_CREDENTIALS_ENCRYPTION_KEY` | Encrypts saved Dokploy API keys in the database. You need this key even if you do not use Dokploy yet. Losing it makes those saved keys unreadable. |
+| `POSTGRES_PASSWORD` | Password for the database user. |
+| `S3_ACCESS_KEY`, `S3_SECRET_KEY` | Credentials for the file storage. |
+
+<Callout type="warn" title="Keep the encryption key safe">
+The `.env.example` file contains a placeholder `DOKPLOY_CREDENTIALS_ENCRYPTION_KEY` made of zero bytes. It has the correct format, so the CMS starts with it, but anyone can read it. Replace it, and store the new value with your backups. See [configuration](/docs/self-hosting/configuration#required-secrets) for details.
+</Callout>
+
+</Step>
+<Step>
+
+**Review the settings.** Open `.env` and check these values:
+
+| Variable | Example | What to set |
+| --- | --- | --- |
+| `CMS_URL` | `http://localhost:3000` | The address you type in the browser. Keep it as is for this local stack. |
+| `CMS_PORT` | `3000` | The host port for the CMS. Change it only if port 3000 is in use. If you change it, update `CMS_URL` to match. |
+| `CMS_IMAGE` | `ghcr.io/ekozf/areca-cms:latest` | The CMS image. `latest` is fine for trying the stack. |
+| `SETUP_TOKEN` | blank | Optional. If you set it, enter this value on the setup page. If you leave it blank, the CMS prints a token in its log (see [create the first admin](#create-the-first-admin)). |
+
+The file also has optional operations settings that you can leave commented out. The full list is in the [configuration reference](/docs/self-hosting/configuration).
+
+If you want to test sign-in with a provider such as GitHub or Google, you must add its settings to `compose.yml`. The Compose file does not pass them through from `.env`. See [production setup](/docs/self-hosting/production#only-listed-variables-reach-the-container).
+
+</Step>
+<Step>
+
+**Start the stack.**
+
+```sh
+docker compose up -d --wait
+```
+
+The first run downloads the images, which takes a few minutes. `--wait` returns when every service is running and healthy. The CMS is healthy after its startup checks pass, so this can take up to a minute.
+
+Check that all services are up:
+
+```sh
+docker compose ps
+```
+
+You should see `cms`, `postgres`, `redis`, `rustfs` and `mailpit` with a running state. `cms`, `postgres`, `redis` and `rustfs` should show `healthy`.
+
+</Step>
+</Steps>
+
+### What happens on first start
+
+You do not need a separate setup step for the database or the storage bucket. When the CMS container starts, it does the following in order:
+
+1. Waits for PostgreSQL to accept connections.
+2. Applies any pending database migrations. On a new database, this creates all tables.
+3. Creates the `areca` bucket in the storage service if it does not exist.
+4. Starts the web server, the publish worker and the scheduler.
+
+Check the log to confirm:
+
+```sh
+docker compose logs cms
+```
+
+You should see `database migrations applied` and either `created bucket: areca` or `bucket already exists: areca`.
+
+## Create the first admin
+
+<Steps>
+<Step>
+
+**Open the setup page.** Open [http://localhost:3000/setup](http://localhost:3000/setup) in your browser. This page appears only while the database has no users. The database starts empty, and no demo accounts are created.
+
+</Step>
+<Step>
+
+**Get the setup token.** The setup page asks for a setup token. Where you find it depends on how you configured the stack:
+
+- **If you set `SETUP_TOKEN` in `.env`,** use that value.
+- **If you left it blank,** the CMS generated a token and printed it in its log. Read it with:
+
+  ```sh
+  docker compose logs cms | grep "First-run setup token"
+  ```
+
+  The line looks like `[setup] First-run setup token: <token>`. Copy the token after the colon. A new token is generated each time the CMS restarts while no user exists, so read the latest line.
+
+The token protects the setup page until the first admin exists. Do not share it.
+
+</Step>
+<Step>
+
+**Fill in the form.**
+
+1. **Setup token**: the value from the previous step.
+2. **Name**: the admin's display name.
+3. **Email**: the admin's email address. Use a real address if you plan to sign in with a provider later.
+4. **Password**: at least 8 characters.
+
+Click **Create admin account**. You are signed in, and the CMS asks you to set up two-factor authentication. For the full steps, see [first-run setup](/docs/self-hosting/first-run).
+
+</Step>
+</Steps>
+
+## Find the other services
+
+These consoles are bound to `127.0.0.1` on the host.
+
+| Service | Address | Sign in with |
+| --- | --- | --- |
+| Mailpit (test inbox for invitation emails) | [http://localhost:8025](http://localhost:8025) | No sign-in |
+| RustFS console (file storage) | [http://localhost:9001](http://localhost:9001) | `S3_ACCESS_KEY` and `S3_SECRET_KEY` from `.env` |
+
+Invitation emails appear in Mailpit, not in a real inbox. PostgreSQL and Redis are not published to the host, so you reach them only from other containers in the stack.
+
+## Day-to-day commands
+
+Run these from the `docker` directory.
+
+```sh
+docker compose logs -f cms          # follow the CMS log
+docker compose up -d --wait         # apply .env changes (recreates changed containers)
+docker compose pull && docker compose up -d --wait   # update to the newest image for your tag
+docker compose down                 # stop the stack and keep all data
+```
+
+<Callout type="warn" title="This deletes all data">
+`docker compose down --volumes` removes the database, Redis data and uploaded files. Run it only when you want to erase the instance. Plain `docker compose down` keeps the data in named volumes.
+</Callout>
+
+## Build the image yourself
+
+If you have changed the code, build the CMS image from the repository root and point the stack at it:
+
+```sh
+docker build -f apps/cms/Dockerfile -t areca-cms:local .
+cd docker
+CMS_IMAGE=areca-cms:local docker compose up -d --wait
+```
+
+## Next steps
+
+- Harden the stack for a real server with the [production setup](/docs/self-hosting/production) checklist.
+- Create your first client and site with [first-run setup](/docs/self-hosting/first-run).
+- Look up any variable in the [configuration reference](/docs/self-hosting/configuration).

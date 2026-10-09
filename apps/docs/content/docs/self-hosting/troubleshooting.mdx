@@ -1,0 +1,278 @@
+---
+title: Self-hosting troubleshooting
+description: Find the cause of common operator problems, from containers that will not start to failed deployments, health checks and rate limiting.
+---
+
+Most operator problems show up in three places: the CMS container log, the readiness endpoint, and the Go-live panel of the release that failed. Start with the log, and find the symptom below that matches the first error you see.
+
+```sh title="Read the CMS log"
+docker compose logs -f cms
+```
+
+Check the readiness endpoint with `curl -s http://127.0.0.1:3000/api/health/ready`, or the port you publish. It reports the state of each dependency. See [health checks](#health-check-failures) below for what each check means.
+
+When you ask for help, include the exact error, the release or job ID, and the time it happened. Never include passwords, tokens, preview links with tokens, recovery codes or provider keys.
+
+## Container does not start
+
+<Accordions>
+<Accordion title="Compose stops before any container starts, with a message such as Set POSTGRES_PASSWORD in .env">
+**Cause:** A required variable is missing from `docker/.env`. The Compose file requires `POSTGRES_PASSWORD`, `BETTER_AUTH_SECRET`, `DOKPLOY_CREDENTIALS_ENCRYPTION_KEY` and `S3_SECRET_KEY`.
+
+**Fix:** Add the missing value, then run `docker compose up -d --wait` again. Generate the secrets with `openssl rand -hex 32` for `BETTER_AUTH_SECRET`, and `openssl rand -base64 32` for the encryption key. See [configuration](/docs/self-hosting/configuration).
+</Accordion>
+<Accordion title="The CMS log says DATABASE_URL is required or S3_BUCKET is required">
+**Cause:** The startup script checks these two variables before it does anything else. The container was started without them. With the stock Compose file, this happens only if the `cms` service's `environment` block was changed, or the image was started outside Compose.
+
+**Fix:** Start the stack from the `docker` directory with `docker compose up -d --wait`. If you edited `compose.yml`, check that the `cms` service still passes `DATABASE_URL` and `S3_BUCKET`.
+</Accordion>
+<Accordion title="The log repeats waiting for postgres and ends with Postgres did not become ready">
+**Cause:** The CMS cannot connect to PostgreSQL after about 60 seconds. Either the database is not running, or the password in `DATABASE_URL` does not match the database's password.
+
+**Fix:** Run `docker compose ps` and check that `postgres` is healthy. Check its log with `docker compose logs postgres`. If the database was created with a different password, set `POSTGRES_PASSWORD` back to the original value. Changing it on an existing volume does not change the database password.
+</Accordion>
+<Accordion title="The CMS keeps restarting">
+**Cause:** The startup script exits on an error. The first error in the log is the real cause. The most common ones are a failed migration, described below, or an environment validation error.
+
+**Fix:** Find the first error in `docker compose logs cms`, and follow the matching section. Do not change a database value to get past an error without knowing what it is for.
+</Accordion>
+<Accordion title="Port 3000 is already in use">
+**Cause:** Another process listens on the port the CMS publishes on `127.0.0.1`.
+
+**Fix:** Set `CMS_PORT` to a free port. If you open the CMS locally on that port, set `CMS_URL` to match, or sign-in will fail with an origin error.
+</Accordion>
+</Accordions>
+
+## Environment validation errors
+
+The CMS checks every setting when it starts. A setting that is missing or malformed stops the server with a message that names the variable. Fix the value, and restart the container. Changes to the environment take effect only after a restart.
+
+<Accordions>
+<Accordion title="BETTER_AUTH_URL or APP_URL is rejected">
+**Cause:** The value is not a complete URL. It must include the scheme, such as `https://`, and the host.
+
+**Fix:** Set both to the public address of the CMS, for example `https://cms.example.com`. Behind a reverse proxy, use the public HTTPS address, not the local one.
+</Accordion>
+<Accordion title="DOKPLOY_CREDENTIALS_ENCRYPTION_KEY is rejected">
+**Cause:** The key must be a base64 encoding of 32 random bytes. It is 44 characters long and ends with `=`.
+
+**Fix:** Generate a new key only on a new instance. If the instance already has data, use the key that was in use before. A different key makes saved deployment credentials unreadable. See [configuration](/docs/self-hosting/configuration).
+</Accordion>
+<Accordion title="SETUP_TOKEN or METRICS_TOKEN is too short">
+**Cause:** Both values must be at least 16 characters. A value that is set but empty counts as not set, so an empty `SETUP_TOKEN=` is fine.
+
+**Fix:** Use at least 16 characters, for example from `openssl rand -hex 32`, or remove the line.
+</Accordion>
+<Accordion title="A setting in .env has no effect">
+**Cause:** The bundled Compose file passes only the variables it lists in the CMS service's `environment` block to the container. Variables such as `WORKER_CONCURRENCY`, `WORKER_ENABLED`, `LOG_LEVEL` and `RATE_LIMIT_TRUST_PROXY` are not in that list, so setting them in `.env` does nothing.
+
+**Fix:** Add the variable to the `environment` block of the `cms` service, or to a Compose override file, and restart the stack. See [capacity and sizing](/docs/self-hosting/capacity#tuning-settings).
+</Accordion>
+</Accordions>
+
+## Migrations
+
+<Accordions>
+<Accordion title="The log shows a migration error and the CMS does not start">
+**Cause:** A database migration failed. The container stops before the server starts.
+
+**Fix:** Do not keep restarting the container, because each attempt runs the same migration again. Read the error and check the release notes for the version you are installing. A failed migration can leave the database partly changed. If you cannot confirm that nothing was applied, restore the pre-upgrade backup. See [upgrading](/docs/self-hosting/upgrades) and [backup and recovery](/docs/self-hosting/backup-and-recovery).
+</Accordion>
+<Accordion title="A second container waits for a long time and then starts">
+**Cause:** Only one container can run migrations at a time. The others wait for the lock for up to 10 minutes, and then find nothing left to apply.
+
+**Fix:** Usually nothing. If the first container is stuck, check its log, and stop the extra containers before you start the upgrade again.
+</Accordion>
+<Accordion title="An older image fails after a newer one ran against the same database">
+**Cause:** The database has been migrated by a newer release, and the older image does not match its schema. Migrations do not go backwards.
+
+**Fix:** Start the newer image again, or restore the backup taken before the upgrade and run the older image against that copy. Never point an older image at a database that a newer image has migrated.
+</Accordion>
+</Accordions>
+
+## Sign-in and access
+
+<Accordions>
+<Accordion title="Sign-in fails with Invalid origin">
+**Cause:** The address in your browser does not match `BETTER_AUTH_URL` or `APP_URL`. A common case is opening the CMS by a LAN IP address or a different host name than the one configured.
+
+**Fix:** Open the CMS at the canonical address, and set `BETTER_AUTH_URL` and `APP_URL` to that same origin, including the scheme. Restart the CMS after you change them.
+</Accordion>
+<Accordion title="/setup redirects to sign-in">
+**Cause:** The instance already has a user. Setup runs only once, while there are no accounts.
+
+**Fix:** Sign in with an existing account. Do not reset the database to solve a sign-in problem. Resetting it deletes all data.
+</Accordion>
+<Accordion title="Setup asks for a token that you do not have">
+**Cause:** While no account exists, the CMS generates a setup token and writes it to the container log at start-up. A restart creates a new token. Setting `SETUP_TOKEN` replaces the generated token with a fixed one.
+
+**Fix:** Run `docker compose logs cms` and find the most recent `First-run setup token` line. Or set `SETUP_TOKEN` to a value of at least 16 characters, restart the container, and use that value.
+</Accordion>
+<Accordion title="Access is blocked until two-factor authentication is set up">
+**Cause:** Agency admins must set up an authenticator app by default. The CMS restricts their access until they do.
+
+**Fix:** Complete the setup in the account page. Do not turn off the requirement on a shared instance. The setting `ADMIN_MFA_REQUIRED=false` is only for isolated development and test stacks. See [two-factor and step-up](/docs/security/two-factor-and-step-up).
+</Accordion>
+<Accordion title="Single sign-on fails with a callback or redirect error">
+**Cause:** The provider's app is configured with a different callback address. The callback must be `<BETTER_AUTH_URL>/api/auth/callback/<provider>`, or `/api/auth/sso/callback/microsoft` for Microsoft Entra ID. For Entra ID, the tenant ID must be a specific ID, because `common` is not supported.
+
+**Fix:** Set `BETTER_AUTH_URL` to the public address, make the provider's callback match it exactly, and restart the CMS. See [authentication](/docs/self-hosting/authentication).
+</Accordion>
+</Accordions>
+
+## Email
+
+<Accordions>
+<Accordion title="Invitation emails do not arrive">
+**Cause:** The CMS cannot send mail to the SMTP relay, or the relay rejects it. The CMS connects with `SMTP_HOST`, `SMTP_PORT` and `SMTP_FROM` only. It does not send a username or password.
+
+**Fix:** Check the CMS log for mail errors. Confirm that the relay accepts unauthenticated mail from the CMS host, and that `SMTP_FROM` is allowed to send. For a local stack, open Mailpit at `http://localhost:8025`, which catches every message. See [storage and email](/docs/self-hosting/storage-and-email).
+</Accordion>
+<Accordion title="Invitation links point to the wrong host">
+**Cause:** `APP_URL` is set to another address than the one people use.
+
+**Fix:** Set `APP_URL` to the public address of the CMS, and restart.
+</Accordion>
+</Accordions>
+
+## S3 storage
+
+<Accordions>
+<Accordion title="The CMS fails to start with a storage or bucket error">
+**Cause:** The startup script could not check or create the bucket. The endpoint may be wrong, the credentials may be wrong, or the account may not be allowed to create buckets.
+
+**Fix:** Check `S3_ENDPOINT`, `S3_ACCESS_KEY` and `S3_SECRET_KEY`. For RustFS, MinIO and other path-style services, set `S3_FORCE_PATH_STYLE=true`. Creating a missing bucket needs permission to create buckets, so check that the account has it.
+</Accordion>
+<Accordion title="Readiness reports the storage check as failed">
+**Cause:** The CMS cannot reach the bucket within the readiness timeout, or the bucket does not exist.
+
+**Fix:** Test the endpoint from the CMS host, check the credentials, and confirm the bucket name in `S3_BUCKET`. The readiness response gives a short reason. The CMS log has the full error.
+</Accordion>
+<Accordion title="Uploaded images are broken on the live site">
+**Cause:** Images point to an address that the site cannot reach, usually because `APP_URL` is wrong. Existing releases keep the addresses they were published with.
+
+**Fix:** Correct `APP_URL` and restart. Then create a new release, so the site gets the corrected addresses.
+</Accordion>
+<Accordion title="Deleted files are still in the bucket">
+**Cause:** Removing a file from storage is queued, and it is retried later. A failed removal stays queued.
+
+**Fix:** Run the cleanup command, and repeat it until no removals are pending. See [asset retention](/docs/self-hosting/asset-retention#run-the-cleanup).
+</Accordion>
+<Accordion title="The bundled Compose file still uses demo storage credentials">
+**Cause:** If `S3_ACCESS_KEY` is not set in `.env`, the Compose file uses the demo value `areca-demo`.
+
+**Fix:** Set `S3_ACCESS_KEY` and `S3_SECRET_KEY` in `.env` to unique values before you use the instance for real content. The Compose file gives the storage service the same credentials.
+</Accordion>
+</Accordions>
+
+## Publishing and the worker
+
+<Accordions>
+<Accordion title="A release stays queued">
+**Cause:** One of these is true:
+
+- The worker is switched off. `WORKER_ENABLED=false` stops it.
+- The worker has stopped. Its log shows errors, or the readiness check fails for the worker.
+- Another job for the same site is still active or uncertain, and blocks the new one.
+- The database is unreachable.
+
+**Fix:** Check the worker log first. Then check the readiness endpoint, which reports the age of the oldest queued job. Once the blocking job finishes or is resolved, the queued release starts. Do not delete job records by hand.
+</Accordion>
+<Accordion title="Scheduled entries are not published on time">
+**Cause:** The scheduler runs in the same process as the worker, so it stops when the worker stops.
+
+**Fix:** Check that the worker is enabled and that the readiness check passes for the scheduler. The metric `areca_scheduled_entries_overdue` counts entries that are past their time and still not published. See [operations](/docs/self-hosting/operations).
+</Accordion>
+<Accordion title="A build for one site waits while other sites build">
+**Cause:** Each process runs at most `WORKER_CONCURRENCY` jobs at once, which is 2 by default. Only one job runs per site, so a second build for the same site waits for the first one to finish.
+
+**Fix:** This is expected when many sites publish at once. If the queue stays long, see [capacity and sizing](/docs/self-hosting/capacity#tuning-settings) before you raise `WORKER_CONCURRENCY`.
+</Accordion>
+</Accordions>
+
+## Deployments
+
+<Accordions>
+<Accordion title="Go live fails with Dokploy credentials are not configured">
+**Cause:** Production publishing needs a deployment target, and the client has no Dokploy connection saved, or the site has no target.
+
+**Fix:** Save the connection for the client, and set the site's deployment target. If the site should not deploy to a server, use the demo workflow instead. See [deployments](/docs/cms/deployments).
+</Accordion>
+<Accordion title="The deployment succeeds but the health check fails">
+**Cause:** The website's health endpoint did not return JSON with the publication ID of the release being built. Common causes are a wrong host name, a TLS problem, a route that does not reach the website, or a build that did not pin the snapshot.
+
+**Fix:** Open the health URL in a browser. Check that it returns the publication ID of the release. Read the deployment log in the Go-live panel for the release, and the website's own build log. See [go-live builds](/docs/sdk/go-live-builds).
+</Accordion>
+<Accordion title="The deployment outcome is uncertain">
+**Cause:** The CMS sent the deployment, but did not get a clear result back, for example because the connection dropped.
+
+**Fix:** Check the deployment in Dokploy first, and confirm what is running. Then follow [uncertain deployments](/docs/self-hosting/publishing-pipeline#uncertain-deployments). Do not redeploy again and again, and do not delete job rows, because that can leave the release in an unknown state.
+</Accordion>
+<Accordion title="The website builds but still shows the old content">
+**Cause:** The build used a cached content pull, or the orchestrator kept the previous container running.
+
+**Fix:** Confirm the snapshot ID is passed to the build and declared before the content pull in the Dockerfile, so Docker does not reuse the old layer. Check that the Dokploy update order is stop-first. See [deployment targets](/docs/self-hosting/deployment-targets#how-the-snapshot-reaches-the-build) and [go-live builds](/docs/sdk/go-live-builds).
+</Accordion>
+<Accordion title="The content pull works on your laptop but not in the build">
+**Cause:** Inside a build container, `localhost` points to the container, not to the CMS.
+
+**Fix:** Set the CMS address to one the build host can reach, and make sure the build has the site token and network access to the CMS.
+</Accordion>
+<Accordion title="A saved provider key cannot be read">
+**Cause:** The encryption key does not match the one used to save the credential. This happens after a restore with the wrong key, or after the key was changed.
+
+**Fix:** Restore the original key that matches the database backup. If that is not possible, enter the provider credential again. See [configuration](/docs/self-hosting/configuration).
+</Accordion>
+</Accordions>
+
+## Health check failures
+
+Three endpoints report the state of the CMS. `/api/health` only tells you that the process is answering. `/api/health/ready` checks its dependencies. `/api/metrics` gives numbers for monitoring, and needs a bearer token.
+
+<Accordions>
+<Accordion title="Readiness returns 503 with a failing check">
+**Cause:** At least one check failed. Each check means something specific:
+
+| Check | Fails when |
+| --- | --- |
+| `db` | The database does not answer a simple query in time. |
+| `storage` | The bucket cannot be checked in time. |
+| `redis` | Redis does not answer. This is reported as degraded, and does not fail readiness. |
+| `worker` | The worker is enabled but has not ticked for `READINESS_MAX_TICK_AGE_SECONDS`, which is 300 by default. |
+| `queue` | The oldest queued job is older than `READINESS_MAX_QUEUE_AGE_SECONDS`, which is 900 by default, or a job lease expired, or the scheduler has stopped ticking. |
+
+**Fix:** Start with the check that failed, and follow the matching section above. Readiness responses carry only short reasons. The full errors are in the log.
+</Accordion>
+<Accordion title="Docker marks the container unhealthy">
+**Cause:** The image's health check calls `/api/health` every 30 seconds, and the check failed three times in a row. The CMS process is not answering.
+
+**Fix:** Read the log for the process. Docker does not restart an unhealthy container by itself, so restart it once you know the cause. `docker compose up -d --wait` also fails if the container does not become healthy within its start-up period.
+</Accordion>
+<Accordion title="The metrics endpoint returns 404 or 401">
+**Cause:** A `404` means `METRICS_TOKEN` is not set. A `401` means the bearer token in the request does not match.
+
+**Fix:** Set `METRICS_TOKEN` to at least 16 characters, restart, and send it as `Authorization: Bearer <token>`. The metrics endpoint allows 60 requests per minute from each client address.
+</Accordion>
+</Accordions>
+
+## Rate limiting
+
+<Accordions>
+<Accordion title="Users receive too many requests errors">
+**Cause:** The CMS returns HTTP 429 when a client sends more requests than the limit allows.
+
+**Fix:** Check whether many people share one address. Without `RATE_LIMIT_TRUST_PROXY=true`, the CMS cannot tell anonymous clients apart, so they all count against one shared limit. If the CMS sits behind a reverse proxy that replaces the forwarding headers, set `RATE_LIMIT_TRUST_PROXY=true`. Never set it when clients can reach the CMS without the proxy, because clients could then send their own address. See [rate limits](/docs/security/rate-limits).
+</Accordion>
+<Accordion title="Rate limiting seems to have stopped working">
+**Cause:** Redis is unreachable. Rate limiting fails open, so requests are allowed through, and the log records the error.
+
+**Fix:** Restore Redis, then check the `redis` entry in the readiness response. An alert on `areca_readiness_check_up` for `redis` helps you notice sooner. See [operations](/docs/self-hosting/operations).
+</Accordion>
+</Accordions>
+
+## Related
+
+- [Operations](/docs/self-hosting/operations) for health checks, metrics, logs and worker behaviour.
+- [Upgrading](/docs/self-hosting/upgrades) if the problem started after an upgrade.
+- [Backup and recovery](/docs/self-hosting/backup-and-recovery) if you need to restore.
+- [Security overview](/docs/security) for roles, secrets and rate limits.

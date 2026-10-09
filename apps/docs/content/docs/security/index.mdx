@@ -1,0 +1,64 @@
+---
+title: Security overview
+description: How Areca controls access, protects tokens and stored keys, and limits abuse, with links to the detailed security pages.
+---
+
+Areca holds unpublished client content, publishes it to live websites, and stores keys for deployment and AI services. This section explains how it protects those things, what you must configure yourself, and where the limits are.
+
+The most important rule is that **access is enforced on the server**. The interface hides actions you cannot take, but hiding is not what stops you. Every request is checked against who you are, which role you have and which client the data belongs to.
+
+## The security model
+
+- **Server-enforced authorization.** Each request is checked against the signed-in user, their role and their client before any data is read or changed. A denied request returns no data and changes nothing. See [roles and permissions](/docs/security/roles-and-permissions).
+- **Two-factor authentication for agency admins.** Agency admins must set up an authenticator app before they can use admin functions. This is on by default. See [two-factor authentication and step-up](/docs/security/two-factor-and-step-up).
+- **Step-up checks.** The most sensitive actions, such as deleting a client or a site, rotating a site token, or changing a stored API key, need a recent sign-in or a recent authenticator code. A session is recent for 10 minutes after it starts or after a code is confirmed. When it is not, Areca asks for a code.
+- **Scoped tokens.** Each site project has a read-only site token and a separate schema-write token. Preview links are signed and expire after one hour. See [tokens](/docs/security/tokens).
+- **Encrypted stored keys.** Deployment and AI API keys are encrypted at rest with a key you supply. Site tokens are stored only as hashes. See [secrets and encryption](/docs/security/secrets).
+- **Rate limits.** Writes, uploads, site API calls, AI suggestions, and metrics requests are limited, and repeated wrong two-factor codes lock step-up. See [rate limits](/docs/security/rate-limits).
+- **Errors that reveal little.** Unexpected server errors return a generic message with a reference ID, and the details stay in the server log. A request for an object in another client gets the same answer as a request for an object that does not exist.
+- **Tested rules.** The authorization rules are written as a matrix and checked automatically against a real database, covering every server action and API route. See the [permissions matrix](/docs/security/permissions-matrix).
+
+## What you need to know
+
+<Callout type="warn" title="Uploaded files are public">
+
+Library files are served from a URL that needs no sign-in. Anyone who has the URL can open the file, including files attached to drafts. Do not upload confidential material to the Library.
+
+</Callout>
+
+- **Social and single sign-on skip the authenticator code.** Signing in with GitHub, Google, Discord, or Microsoft does not ask for a code. An agency admin who signs in that way is still checked for two-factor status, but the code itself is not requested.
+- **Your instance, your keys.** You generate and keep the secrets that protect sessions and stored keys. Losing an encryption key means re-entering the keys it protected. See [secrets and encryption](/docs/security/secrets).
+- **Backups are your responsibility.** Areca does not schedule backups. A backup contains the encrypted keys and the database, so protect it as you would the live system. See [backup and recovery](/docs/self-hosting/backup-and-recovery).
+- **Rate limits need Redis, except sign-in limits.** The request limits store their counters in Redis. If Redis is unavailable, they are not enforced, and the server logs an error instead of rejecting requests. The sign-in and two-factor limits are kept in memory by each CMS instance, so they work without Redis but are not shared between instances.
+
+## Find your topic
+
+<Cards>
+  <Card title="Roles and permissions" href="/docs/security/roles-and-permissions">
+    What an agency admin, client owner and client editor can do.
+  </Card>
+  <Card title="Permissions matrix" href="/docs/security/permissions-matrix">
+    Every action, grouped by area, with the roles that can perform it.
+  </Card>
+  <Card title="Two-factor and step-up" href="/docs/security/two-factor-and-step-up">
+    Setting up the authenticator app, the 10-minute re-check and the lockout.
+  </Card>
+  <Card title="Tokens" href="/docs/security/tokens">
+    Site, schema-write, preview and setup tokens, and what to do if one leaks.
+  </Card>
+  <Card title="Secrets and encryption" href="/docs/security/secrets">
+    The secrets you provide, how stored keys are encrypted, and how to rotate them.
+  </Card>
+  <Card title="Rate limits" href="/docs/security/rate-limits">
+    Every limit, what it applies to, and the response you receive.
+  </Card>
+  <Card title="AI data handling" href="/docs/security/ai-data-handling">
+    What content leaves your instance for SEO suggestions and alt text, and how to turn it off.
+  </Card>
+</Cards>
+
+## Related
+
+- [Self-hosting configuration](/docs/self-hosting/configuration) lists every environment variable mentioned in this section.
+- [Authentication](/docs/self-hosting/authentication) covers sign-in methods and their setup.
+- [Library](/docs/cms/library) explains how files are uploaded and shared.

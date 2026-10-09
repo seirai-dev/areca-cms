@@ -1,0 +1,211 @@
+---
+title: Errors and limits
+description: What each SDK and CLI error message means, how HTTP errors and 429 rate limits are reported, the API error format, and the site API limits.
+---
+
+This page explains the errors you can see from the SDK and the `areca` command, and the limits that apply to the site API. Use it when a command fails or a request is refused.
+
+The CLI prints each error message to stderr and exits with code `1`. The SDK throws an `Error` with the same message. Messages are shown exactly as the code produces them. Values in angle brackets, such as `<key>`, are replaced with your values.
+
+## Identifier rules
+
+Collection keys and field keys are identifiers. The SDK checks them before it sends anything to the CMS or writes any file.
+
+An identifier must:
+
+- Start with an ASCII letter.
+- Contain only ASCII letters, digits, `_` and `-`.
+- Be 64 characters or fewer.
+- Not be a reserved name. The check ignores case, so `MANIFEST` and `Con` are also rejected.
+
+Reserved names are `__proto__`, `prototype`, `constructor`, `manifest`, `con`, `prn`, `aux`, `nul`, `com1` to `com9`, and `lpt1` to `lpt9`.
+
+The same rule applies to a field's `collection` and `after` values.
+
+| Message | Meaning | What to do |
+| --- | --- | --- |
+| `Unsafe collection or field identifier: <value>` | The value breaks the rules above. | Rename the key in your config and push again. See [renaming keys](/docs/sdk/defining-content#identifiers). |
+| `Duplicate field identifier: <key>` | Two fields in one collection have the same key. | Rename one of them. |
+
+These errors appear from `areca manifest push` and `areca manifest pull`, and from `areca pull` and `readContent` when a collection key in the content is not safe. A collection key that is not safe is refused before any file is written.
+
+## Output path errors
+
+`areca pull`, `pullContent` and `readContent` check that each collection file stays inside the output folder and is not a symbolic link.
+
+| Message | Meaning | What to do |
+| --- | --- | --- |
+| `Output path escapes content directory` | A file path would leave the output folder. | Check the output folder and the collection keys. |
+| `Content output must not be a symbolic link` | A collection file in the output folder is a symlink. The SDK refuses to follow it, so a link cannot send data to another file. | Delete the symlink and run the command again. |
+
+A failed `areca pull` can leave the folder partly updated. See [`areca pull`](/docs/sdk/cli#areca-pull).
+
+## Configuration errors
+
+These errors appear when a required setting is missing.
+
+| Message | Where it comes from | What to do |
+| --- | --- | --- |
+| `Missing ARECA_CMS_URL. Set the ARECA_CMS_URL environment variable or pass cmsUrl to createArecaClient().` | Any command that calls the CMS, and `createArecaClient` | Set `ARECA_CMS_URL` in `.env.local`. |
+| `Missing ARECA_SITE_TOKEN. Set the ARECA_SITE_TOKEN environment variable or pass siteToken to createArecaClient().` | Any command that calls the CMS, and `createArecaClient` | Set `ARECA_SITE_TOKEN`. |
+| `Missing ARECA_SCHEMA_TOKEN. Set the ARECA_SCHEMA_TOKEN environment variable or pass schemaToken to createArecaClient().` | `syncManifest`, which is `areca manifest push` | Set `ARECA_SCHEMA_TOKEN`. The site token is never used in its place. |
+| `Config module <path> has no default export.` | The config file does not export a default value | Add `export default defineSiteContent({ ... })`. |
+| `Failed to load TypeScript config <path> via native import (...)` | Node could not load the TypeScript config | Follow the suggested `tsx` command in the message. See [`areca manifest push`](/docs/sdk/cli#areca-manifest-push). |
+
+Environment variables are read from `.env.local` and `.env`, and from the shell. See [CLI reference](/docs/sdk/cli#global-behavior) for the precedence rules.
+
+## Setup errors
+
+These errors come from `areca init`.
+
+| Message | Meaning | What to do |
+| --- | --- | --- |
+| `Missing --cms-url, --token. Pass --cms-url, --token, and --site-key, or run areca init in a terminal to enter them interactively.` | You used `--yes`, or no terminal is attached, and a required value is missing. The message lists only the flags that are missing. | Pass the flags, or run `areca init` in a terminal. |
+| `Invalid CMS URL: <value>. Enter a valid URL` | The URL cannot be parsed. | Use a full URL, such as `https://cms.example.com`. |
+| `Invalid CMS URL: <value>. Enter a valid http(s) URL` | The URL uses a scheme other than `http` or `https`. | Use `http://` or `https://`. |
+| `Invalid site key: <value>. Use a lowercase slug like acme-site (letters, numbers, hyphens)` | The site key does not match the pattern. | Use lowercase letters, digits and single hyphens. Copy the key from the CMS. |
+| `No package.json found. Run areca init from the site root.` | `init` ran in a folder without `package.json`. | Run `init` in your site project's root. |
+| `Invalid JSON in package.json.` or `Invalid package.json. Expected a JSON object.` | `package.json` is not a valid JSON object. | Fix the file. Nothing is written until it is valid. |
+
+When you cancel the interactive `init` prompts, the command prints `Operation cancelled.` and exits with `0`.
+
+## Publication and site key errors
+
+### No publication
+
+```text
+No publication exists for this site. Publish content in the CMS before running areca pull.
+```
+
+This appears when the site has never gone live, or the CMS returns a 404 for the snapshot. The CMS's own message, `No publication exists`, is added after it when present. Publish the site in the CMS, then run `areca pull` again.
+
+### Missing site key
+
+```text
+No siteKey found. <path> does not exist and ARECA_SITE_KEY is not set. Run areca init first.
+```
+
+This comes from `areca manifest pull` when the config file is missing, or has no `siteKey`, and `ARECA_SITE_KEY` is not set. Run `areca init`, or set `ARECA_SITE_KEY`.
+
+### Manifest overwrite
+
+```text
+<path> already defines 2 collection(s). Re-run with --yes to overwrite it.
+```
+
+`areca manifest pull` refuses to overwrite a config that defines collections when it cannot ask you. Re-run with `--yes`, or run the command in a terminal and confirm the prompt.
+
+## Failed to reach CMS
+
+```text
+Failed to reach CMS at https://cms.example.com. fetch failed. If the CMS is up, publish content before running areca pull.
+```
+
+The request never got an HTTP response. The message includes the CMS URL and the network error. Check the following:
+
+- The `ARECA_CMS_URL` value, including the protocol and port.
+- That the CMS is running and reachable from this machine.
+- Any proxy or VPN in the way.
+
+The last sentence is the same for every command, so it can be misleading. A failed `areca manifest push` has nothing to do with publishing.
+
+## HTTP errors
+
+When the CMS responds with an error status, the SDK throws a message in this form:
+
+```text
+<action> (<status>): <CMS error message>
+```
+
+If the CMS response has no JSON error message, the message ends after the status, for example `Failed to fetch snapshot (500)`.
+
+The actions are `Failed to sync manifest`, `Failed to fetch manifest`, `Failed to fetch snapshot` and `Failed to fetch preview`.
+
+| Status | Example message | Meaning | What to do |
+| --- | --- | --- | --- |
+| `401` | `Failed to fetch manifest (401): Unauthorized` | The token is missing, wrong, or was rotated. For a preview, the token is invalid or has expired. | Check `ARECA_SITE_TOKEN`. If it was rotated, copy the new token into `.env.local`. For a preview, open the link again. |
+| `404` | `No publication exists for this site...` (snapshot) | No publication exists. | See [No publication](#no-publication). |
+| `404` | `Failed to fetch preview (404): Not found` | The entry or collection no longer exists. | Open the preview again from the CMS. |
+| `413` | `Failed to sync manifest (413): Manifest is larger than 262144 bytes` | The content definitions are too large. | Split or shorten the definitions. See [Payload limits](#payload-limits). |
+| `429` | `Failed to fetch snapshot (429): Too many requests` | Rate limit reached. | Wait, then try again. See [Rate limits and 429 responses](#rate-limits-and-429-responses). |
+| `5xx` | `Failed to fetch snapshot (503)` | The CMS had a server-side problem. | Check the CMS's health with `/api/health/ready`, and try again. |
+
+### Rate limits and 429 responses
+
+When you exceed the site API limit, the CMS returns `429`. It also sends a `Retry-After` header with the number of seconds until the window resets. The SDK formats the message, for example `Failed to fetch manifest (429): Too many requests`.
+
+The SDK does not retry, and it does not read `Retry-After`. Its errors contain only the message text. If your build needs to retry, catch the error in your code and wait before you call again. To use the exact `Retry-After` value, call the [HTTP API](/docs/sdk/http-api#rate-limits) directly.
+
+```ts
+import type { ArecaClient } from '@areca-cms/site-sdk'
+
+// The SDK does not retry. This helper retries a 429 after a fixed 60 seconds,
+// which matches the length of the rate-limit window.
+async function fetchSnapshotWithRetry(client: ArecaClient, attempts = 3) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await client.fetchSnapshot()
+    } catch (error) {
+      const rateLimited = error instanceof Error && error.message.includes('(429)')
+      if (!rateLimited || attempt >= attempts) throw error
+      await new Promise((resolve) => setTimeout(resolve, 60_000))
+    }
+  }
+}
+```
+
+## API error body
+
+The CMS returns errors as JSON with an `error` string:
+
+```json
+{ "error": "Unauthorized" }
+```
+
+Some `400` responses also have an `issues` value that lists the problems in the request:
+
+```json
+{
+  "error": "Invalid body",
+  "issues": [
+    { "code": "invalid_type", "path": ["collections", "articles", "fields", 0, "label"], "message": "Invalid input" }
+  ]
+}
+```
+
+The SDK reads only the `error` string. It does not show `issues`. To see them, call the [HTTP API](/docs/sdk/http-api) directly. The text of each issue depends on the problem.
+
+Responses that are not JSON have no message, so the SDK shows only the status.
+
+## Site API limits
+
+These limits apply to the site API that your build calls.
+
+| Limit | Value | Applies to |
+| --- | --- | --- |
+| Requests per minute per token | 300 | `GET /api/sites/manifest`, `POST /api/sites/manifest`, `GET /api/sites/snapshot/current` |
+| Requests counted per IP address | Used when a request has no bearer token | Same endpoints |
+| Readiness and liveness probes | Not limited | `/api/health` and `/api/health/ready` |
+| Preview requests | Not limited by the site API limit | `GET /api/sites/preview` |
+| Public file requests | Not limited by the site API limit | `GET /api/assets/file/...` |
+
+When a limit is reached, the response is `429` with `Retry-After`. See [Rate limits](/docs/security/rate-limits) for every limit in the CMS, and for how the limits are counted.
+
+## Payload limits
+
+| Limit | Value |
+| --- | --- |
+| Manifest body | 256 KiB |
+| Collections per site | 100 |
+| Fields per collection | 100 |
+| Route pattern | 500 characters |
+| Entry data, all fields together | 1 MiB |
+
+Field-level limits, such as the 1,000-character limit for short text, are listed in [Field types](/docs/sdk/field-types#limits-at-a-glance).
+
+## Related
+
+- [CLI reference](/docs/sdk/cli) lists the commands and the exit codes.
+- [JavaScript API reference](/docs/sdk/client) lists the functions that throw these errors.
+- [HTTP API](/docs/sdk/http-api) lists the responses for each endpoint.
+- [Rate limits](/docs/security/rate-limits) lists every limit in the CMS.

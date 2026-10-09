@@ -13,6 +13,7 @@ import {
   TEXT_MAX_LENGTH,
   URL_MAX_LENGTH,
 } from '#/lib/content-limits'
+import { SEO_KEY, entrySeoSchema, readEntrySeo } from '#/lib/seo'
 import type { EntryData, Field } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 import { validateRichText } from '#/server/richtext'
@@ -197,7 +198,9 @@ export function findUnknownKeys(
   data: Record<string, unknown>,
 ): string[] {
   const declared = new Set(fields.map((field) => field.key))
-  return Object.keys(data).filter((key) => !declared.has(key))
+  return Object.keys(data).filter(
+    (key) => key !== SEO_KEY && !declared.has(key),
+  )
 }
 
 /**
@@ -213,6 +216,9 @@ export function pickDeclaredFields(
     if (Object.prototype.hasOwnProperty.call(data, field.key)) {
       out[field.key] = data[field.key] as EntryData[string]
     }
+  }
+  if (Object.prototype.hasOwnProperty.call(data, SEO_KEY)) {
+    out[SEO_KEY] = data[SEO_KEY]
   }
   return out
 }
@@ -270,18 +276,30 @@ export function validateEntryData(
     }
   }
 
+  const record = data as Record<string, unknown>
+  const hasSeo = record[SEO_KEY] != null
   const result = buildEntrySchema(fields, options).safeParse(data)
-  if (!result.success) {
+  const seoResult = hasSeo ? entrySeoSchema.safeParse(record[SEO_KEY]) : null
+  if (!result.success || (seoResult && !seoResult.success)) {
     return {
       ok: false,
-      errors: result.error.issues.map((issue) => ({
-        path: issue.path.join('.'),
-        message: issue.message,
-      })),
+      errors: [
+        ...(result.success ? [] : result.error.issues).map((issue) => ({
+          path: issue.path.join('.'),
+          message: issue.message,
+        })),
+        ...(seoResult && !seoResult.success ? seoResult.error.issues : []).map(
+          (issue) => ({
+            path: [SEO_KEY, ...issue.path].join('.'),
+            message: issue.message,
+          }),
+        ),
+      ],
     }
   }
 
   const parsed = result.data as EntryData
+  if (seoResult?.success) parsed[SEO_KEY] = seoResult.data
   const dateErrors = validateDateOrder(fields, parsed)
   if (dateErrors.length > 0) {
     return { ok: false, errors: dateErrors }
@@ -394,6 +412,21 @@ export async function validateContentOwnership(
   connection: Pick<typeof db, 'select'> = db,
 ) {
   const errors: FieldError[] = []
+  const ogImage = readEntrySeo(data).ogImage
+  if (ogImage) {
+    const [found] = await connection
+      .select({ id: asset.id })
+      .from(asset)
+      .where(
+        and(eq(asset.id, ogImage), eq(asset.organizationId, organizationId)),
+      )
+      .limit(1)
+    if (!found)
+      errors.push({
+        path: `${SEO_KEY}.ogImage`,
+        message: 'Asset not found in this organization',
+      })
+  }
   for (const field of fields) {
     const value = data[field.key]
     if (

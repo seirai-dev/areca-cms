@@ -1,0 +1,29 @@
+{
+  "title": "CMS guide",
+  "description": "Writing, reviewing and publishing content",
+  "icon": "BookOpen",
+  "root": true,
+  "pages": [
+    "index",
+    "---For editors---",
+    "workspace",
+    "writing-entries",
+    "statuses-and-review",
+    "preview",
+    "scheduling",
+    "going-live",
+    "library",
+    "seo-and-ai",
+    "history-and-activity",
+    "account",
+    "---For agency admins---",
+    "clients-and-sites",
+    "site-settings",
+    "content-types",
+    "people-and-invitations",
+    "deployments",
+    "branding",
+    "ai-settings",
+    "..."
+  ]
+}

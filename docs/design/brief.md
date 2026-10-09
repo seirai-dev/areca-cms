@@ -50,7 +50,7 @@ The **Go‑live tray** at the bottom of the sidebar always shows the site's publ
 ### 1.3 Roles, as the UI shows them
 - **Editor**: writes drafts. Publish-type controls are **visible but disabled**, with a tooltip or inline reason: "Only owners can publish. Your changes are saved as a draft and an owner can make them live." This follows the product decision *show disabled with reason*. People and Settings nav items are hidden for editors (they have no view permission there).
 - **Owner**: everything in their client's sites, plus People.
-- **Agency admin**: everything, plus the Agency workspace, plus site Settings (general, deployment, developer, content model).
+- **Agency admin**: everything, plus the Agency workspace, plus site Settings (general, deployment, developer, AI, content model).
 
 ---
 
@@ -69,13 +69,14 @@ The old structure (top navbar, site tabs, `/admin/*`, `/orgs/*`, the Releases pa
 | `/sites/$siteId/c/$collectionKey/$entryId` | **Editor** | member |
 | `/sites/$siteId/library` | **Library** (media) | member |
 | `/sites/$siteId/people` | **People** (members + invitations) | owner/admin |
-| `/sites/$siteId/settings` | **Site settings**, horizontal tabs `?tab=general|deployment|developer|content` | admin |
+| `/sites/$siteId/settings` | **Site settings**, horizontal tabs `?tab=general|deployment|developer|ai|content` | admin |
 | `/agency` | **Agency overview**: all-sites health plus first-run checklist | admin |
 | `/agency/clients` | **Clients** list | admin |
 | `/agency/clients/$orgId` | **Client** detail, tabs `?tab=sites|people|deployment|settings` | admin |
 | `/agency/people` | **People with accounts** (users, agency access) | admin |
 | `/agency/activity` | **Activity**: global audit | admin |
 | `/agency/branding` | **Branding** | admin |
+| `/agency/ai` | **AI settings** for SEO suggestions | admin |
 
 Overlays, addressable by search param so they can be deep-linked:
 - `?panel=golive` on any `/sites/$siteId/**` route opens the **Go‑live panel**.
@@ -411,7 +412,7 @@ The sidebar **tucks away**: the editor route renders without the app sidebar, as
 - Admins also get a link: "Manage {client} in Agency ↗".
 
 ### 3.10 Site settings `/sites/$siteId/settings` (agency admins)
-- Horizontal underline tabs, sliding indicator, `role="tab"`: **General · Deployment · Developer · Content**.
+- Horizontal underline tabs, sliding indicator, `role="tab"`: **General · Deployment · Developer · AI · Content**.
 - **General**:
   - Name.
   - Production URL, with the helper "Where the live site is. Previews open on this address too."
@@ -426,6 +427,8 @@ The sidebar **tucks away**: the editor route renders without the app sidebar, as
   - The site key (slug) with a copy button.
   - The **site token**: "Rotate token…", then a one-time reveal card with copy and an env snippet (`ARECA_CMS_URL=…`, `ARECA_SITE_TOKEN=…`).
   - **Manifest status**: the last-synced collections from `lastManifest` if available, with a quick-start snippet (`areca manifest push`).
+- **AI**:
+  - A site-specific instruction prompt appended to the shared agency AI prompt. Agency AI configuration is maintained at `/agency/ai`.
 - **Content**:
   - A list of collections (content types). Each shows its label, key, route, field count and an On/Off switch.
   - "New content type" opens the **schema editor sheet**. Row click opens that sheet too.

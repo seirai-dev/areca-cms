@@ -1,0 +1,250 @@
+---
+title: Production setup
+description: Prepare an Areca CMS deployment for real use, covering HTTPS, public URLs, locked-down ports, real services, backups and dev-only switches.
+---
+
+Use this checklist after the [Docker quickstart](/docs/self-hosting/docker-quickstart) works on your machine. The Compose file is built for local trials. It uses demo credentials, a test inbox, and a CMS that is reachable only from the host. A production instance needs HTTPS, real URLs, real secrets and services, and a backup plan.
+
+Work through the sections in order:
+
+1. [Put the CMS behind HTTPS](#put-the-cms-behind-https)
+2. [Set the public URLs](#set-the-public-urls)
+3. [Keep the CMS bound to localhost](#keep-the-cms-bound-to-localhost)
+4. [Replace the demo services](#replace-the-demo-services)
+5. [Only listed variables reach the container](#only-listed-variables-reach-the-container)
+6. [Run a single CMS replica](#run-a-single-cms-replica)
+7. [Allow the Dokploy host to connect](#allow-the-dokploy-host-to-connect)
+8. [Turn off dev-only switches](#turn-off-dev-only-switches)
+9. [Protect the secrets and back up the instance](#protect-the-secrets-and-back-up-the-instance)
+10. [Watch the health endpoints](#watch-the-health-endpoints)
+
+## Put the CMS behind HTTPS
+
+The CMS listens on plain HTTP inside the container. Put a reverse proxy in front of it on the same host to terminate TLS and serve your public domain. The proxy forwards to `127.0.0.1:3000`, the address the Compose file binds to.
+
+The proxy must do three things:
+
+- Forward the original `Host` header. Sign-in and form submissions are checked against `BETTER_AUTH_URL` and `APP_URL`, so a request that arrives under another address is blocked.
+- Send `X-Forwarded-Proto` so the CMS knows the request came in over HTTPS.
+- **Replace** `X-Forwarded-For` with the real client address instead of adding to it. When `RATE_LIMIT_TRUST_PROXY` is on, the CMS takes the client address from the first value in that header, and falls back to `X-Real-IP` or `CF-Connecting-IP`. If the proxy appends to the header, a visitor can send a fake first value and dodge the limit.
+
+**Caddy** does all of this with automatic certificates:
+
+```caddyfile title="Caddyfile"
+cms.example.com {
+    reverse_proxy 127.0.0.1:3000 {
+        header_up Host {host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+}
+```
+
+**nginx** needs an existing certificate, which you point to with `ssl_certificate` and `ssl_certificate_key`:
+
+```nginx title="/etc/nginx/conf.d/areca-cms.conf"
+server {
+    listen 443 ssl;
+    server_name cms.example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/cms.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/cms.example.com/privkey.pem;
+
+    # Uploads can be up to 20 MiB; nginx rejects larger bodies by default at 1 MB.
+    client_max_body_size 25m;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+Once the proxy is in front of the CMS, set `RATE_LIMIT_TRUST_PROXY=true` so rate limits apply per visitor. Without it, the CMS sees only the proxy's address, and all anonymous visitors share one rate-limit bucket. The stock Compose file does not pass this variable, so add it as described in [only listed variables reach the container](#only-listed-variables-reach-the-container). For the limits themselves, see [rate limits](/docs/security/rate-limits).
+
+## Set the public URLs
+
+Three variables must match the address people use:
+
+| Variable | Compose default | Production value | Why it matters |
+| --- | --- | --- | --- |
+| `CMS_URL` in `.env` | `http://localhost:3000` | `https://cms.example.com` | Feeds `BETTER_AUTH_URL` and `APP_URL` in the Compose file. |
+| `BETTER_AUTH_URL` | `${CMS_URL}` | `https://cms.example.com` | Used for sign-in callbacks and social or SSO login redirects. A mismatch breaks sign-in. |
+| `APP_URL` | `${CMS_URL}` | `https://cms.example.com` | Used in invitation links and uploaded file URLs. Browsers and the Dokploy host must be able to reach it. |
+
+Set `CMS_URL` in `.env` to the public HTTPS address, and the Compose file passes it to both variables. Do not use `localhost` or a private LAN address for `APP_URL`. A site build on the Dokploy host would fetch content from its own `localhost`, which fails.
+
+Uploaded files are served from the CMS at `/api/assets/file/...` and their URLs contain `APP_URL`. Existing published releases keep the URLs they were built with. After you change `APP_URL`, go live again so new releases use the new address.
+
+## Keep the CMS bound to localhost
+
+The Compose file publishes the CMS port as `127.0.0.1:${CMS_PORT}:3000`. Only processes on the same host can connect to it, which is what you want when the proxy runs on that host. The Compose file also binds the storage console and the Mailpit inbox to `127.0.0.1`.
+
+For production:
+
+- **Keep the proxy on the same host** and leave the binding as it is. This is the simplest and safest setup.
+- **If the proxy runs on a different machine,** change the host side of the CMS port mapping to this host's private network address, and restrict that port with a firewall so only the proxy can reach it. Do not change it to `0.0.0.0` without a firewall.
+- **Remove the `rustfs` and `mailpit` port mappings** from your production copy, and remove the `mailpit` service entirely (see the next section). The database, Redis and the S3 API have no host ports in the Compose file, so keep it that way.
+
+On the public internet, expose only the proxy: port 443 for HTTPS, and port 80 if your certificate setup needs it for challenges and redirects.
+
+## Replace the demo services
+
+The Compose file hard-codes several connections for the local stack. Production needs real values for all of them:
+
+| Setting in `compose.yml` | Local value | Replace with |
+| --- | --- | --- |
+| `S3_ENDPOINT` | `http://rustfs:9000` | The URL of your S3-compatible storage |
+| `S3_REGION` | `us-east-1` | Your bucket's region |
+| `S3_BUCKET` | `areca` | A private bucket reserved for Areca |
+| `S3_ACCESS_KEY`, `S3_SECRET_KEY` | from `.env` | Credentials with access to that bucket only |
+| `S3_FORCE_PATH_STYLE` | `"true"` | `"true"` for MinIO and RustFS, `"false"` for AWS S3 and most hosted services |
+| `SMTP_HOST`, `SMTP_PORT` | `mailpit`, `1025` | Your mail relay's host and port |
+| `SMTP_FROM` | `cms@areca.local` | A sender address on a domain you control |
+
+Mailpit does not send email. It captures messages so you can read them. In production, invitations must reach real inboxes, so point `SMTP_HOST` at your relay and remove the `mailpit` service and its entry in the `cms` service's `depends_on` list.
+
+If you use external storage, also remove the `rustfs` service, its `rustfs_data` volume and its entry in `depends_on`. The same applies to `postgres` and `redis` if you run them as managed services, but then the CMS needs the matching `DATABASE_URL` and `REDIS_URL` values.
+
+The current mail adapter connects without a username or password, so use a relay that accepts mail only from this host's network. Do not point Areca at an open relay on the internet. See [storage and email](/docs/self-hosting/storage-and-email) for the details.
+
+The bucket must stay private. The CMS reads and writes it, and serves uploaded files to visitors itself. Do not make the bucket public. Anything uploaded to the Library is public by design, so do not upload confidential files. See [asset retention](/docs/self-hosting/asset-retention) for how deleted files are handled.
+
+Keep the database and Redis volumes on disks you back up. The Compose file stores them in named volumes called `postgres_data` and `redis_data`.
+
+## Only listed variables reach the container
+
+Docker Compose reads `.env` only to fill in the `${...}` placeholders inside `compose.yml`. It passes a variable to the CMS container only if the `cms` service lists it under `environment`. Setting a variable in `.env` is not enough.
+
+This catches many operators out. For example, this line in `.env` does nothing:
+
+```sh
+WORKER_CONCURRENCY=4   # not passed to the container
+```
+
+The Compose file currently passes these optional settings to the CMS: `AI_SETTINGS_ENCRYPTION_KEY`, `SETUP_TOKEN`, `METRICS_TOKEN` and the database and readiness timeouts. These settings are **not** passed, so setting them in `.env` has no effect:
+
+- `WORKER_ENABLED`, `WORKER_CONCURRENCY`, `WORKER_DRAIN_TIMEOUT_MS`
+- `LOG_LEVEL`
+- `ADMIN_MFA_REQUIRED`, `AUTH_EMAIL_PASSWORD_ENABLED`
+- `RATE_LIMIT_TRUST_PROXY`
+- The GitHub, Google, Discord and Microsoft sign-in settings
+- The Dokploy settings, including `DOKPLOY_URL` and `DOKPLOY_API_KEY`
+
+To pass one, add it to the `cms` service's `environment` list in your production copy of `compose.yml`. For example:
+
+```yaml title="docker/compose.yml (cms service, production copy)"
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      RATE_LIMIT_TRUST_PROXY: "true"
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+```
+
+Use `${NAME:-}` for optional values so an unset value stays blank and the CMS treats it as not set. Keep the variable names in the list in sync with the [configuration reference](/docs/self-hosting/configuration).
+
+## Run a single CMS replica
+
+Run one CMS container. Do not use `docker compose up --scale cms=2` or add a second CMS to scale traffic.
+
+The CMS was sized and tested for one replica. The publish worker and the scheduler run inside each CMS process, and the project has not tested several processes against one database. The [capacity](/docs/self-hosting/capacity) page lists the supported limits.
+
+If you need more capacity, first tune the single instance: give the container more memory, reduce retained publications and review the benchmark. Scaling out is not a supported setup today.
+
+## Allow the Dokploy host to connect
+
+The Dokploy host builds customer sites and runs their health checks, so it must reach the CMS, and the CMS must reach it back. Everything except browser traffic goes over HTTPS.
+
+| From | To | Used for |
+| --- | --- | --- |
+| Browsers | CMS, at `https://cms.example.com` | Editing, previews and sign-in |
+| Dokploy host | CMS, at `APP_URL` | The site build fetches the content snapshot, and each site fetches its uploaded images |
+| CMS | Dokploy API, at `DOKPLOY_URL` or the URL saved for the client | Deploying, reading deployment status and logs |
+| CMS | Site health URL, such as `https://<site-host>/api/health` | Confirming that the new release is live before the CMS marks it live |
+| CMS | SMTP relay | Invitation emails |
+| CMS | S3-compatible storage | Uploaded files and branding |
+| CMS | OpenRouter, `openrouter.ai` | Only if you use AI SEO suggestions |
+
+Check these before the first go-live:
+
+- The CMS public address resolves to the proxy and returns a valid certificate.
+- The Dokploy host can open `https://cms.example.com/api/health` and get a successful response.
+- The site health URL is a public HTTPS address. The CMS refuses private-address health checks unless the dev-only switch is on, so do not work around this by enabling that switch in production.
+
+The [deployment targets](/docs/self-hosting/deployment-targets) page explains how to connect Dokploy and set the health URL for each site.
+
+## Turn off dev-only switches
+
+Some settings exist only so a local or LAN test setup can talk to Dokploy. Keep all of them off on a public instance:
+
+| Variable | Effect | Production value |
+| --- | --- | --- |
+| `DOKPLOY_ALLOW_INSECURE_HTTP` | Allows plain `http://` Dokploy API URLs. | Unset. Use an `https://` Dokploy URL. |
+| `ALLOW_PRIVATE_HEALTH_CHECKS` | Allows health checks against private or local addresses. | Unset. Use a public HTTPS health URL. |
+| `DOKPLOY_DEV_FALLBACK_ENABLED` | Enables a legacy server-wide Dokploy connection. The production image ignores it, but do not set it. | Unset or `false` |
+| `ADMIN_MFA_REQUIRED` | Requires two-factor authentication for admins. Defaults to `true`. | `true`, or unset |
+
+The Compose file passes none of these to the container, so they stay off unless you add them yourself.
+
+<Callout type="warn" title="Do not copy the CMS example environment file">
+The CMS development example, `apps/cms/.env.example`, has `DOKPLOY_ALLOW_INSECURE_HTTP=true` and `ALLOW_PRIVATE_HEALTH_CHECKS=true` uncommented. Those values are for local development only. Use `docker/.env.example` for Docker deployments, and do not copy the CMS file into production.
+</Callout>
+
+## Protect the secrets and back up the instance
+
+Keep `docker/.env` readable only by the account that runs Docker, and never commit it. Store a copy in a secrets manager or another encrypted location. The [secrets](/docs/security/secrets) page lists every secret and where it lives.
+
+Keep these values stable, because the data depends on them:
+
+- `DOKPLOY_CREDENTIALS_ENCRYPTION_KEY` decrypts the Dokploy API keys stored in the database. Changing or losing it means every saved key must be re-entered.
+- `BETTER_AUTH_SECRET` signs sign-in sessions. Changing it signs everyone out and can break two-factor sign-in for existing admins.
+- `AI_SETTINGS_ENCRYPTION_KEY`, if you set it, decrypts the saved OpenRouter key.
+
+### What a backup contains
+
+A complete backup has four parts: the PostgreSQL database, the S3 bucket with the uploaded files, the environment file with its encryption keys, and the image versions. A database dump alone is not enough. It does not include uploaded files, and saved Dokploy credentials cannot be decrypted without the encryption key. The [backup and recovery](/docs/self-hosting/backup-and-recovery) page lists each part.
+
+The repository includes a backup helper that captures all four. It needs Node on the host and runs from the repository root. The project name `areca-demo` comes from the `name:` field at the top of `compose.yml`:
+
+```sh
+node docker/recovery.mjs backup areca-demo docker/.env /secure/backups/areca-2026-10-01
+```
+
+The helper stops every service in the project while it copies the volumes, so plan a short outage. When it finishes, start the stack again with your usual `docker compose up -d --wait` command. The backup folder contains your secrets in plain form, so move it to encrypted storage that is not on the CMS host.
+
+Choose a backup schedule that suits your data, and take a backup before every upgrade. Test a restore into a separate project before you rely on it. The [backup and recovery](/docs/self-hosting/backup-and-recovery) page covers the restore steps.
+
+<Callout type="warn" title="A backup is only useful if it restores">
+Run a restore into a new project with empty volumes at least once, and check that you can sign in, open a draft and see an uploaded file. Do this before you need it.
+</Callout>
+
+## Watch the health endpoints
+
+The CMS exposes three endpoints you can monitor:
+
+| Endpoint | Use |
+| --- | --- |
+| `GET /api/health` | Liveness. Returns `200` while the process is running. The image's built-in health check uses it. |
+| `GET /api/health/ready` | Readiness. Returns `503` when the database, storage or background queue is failing. |
+| `GET /api/metrics` | Prometheus metrics. Requires `Authorization: Bearer <METRICS_TOKEN>`. Returns `404` when `METRICS_TOKEN` is not set. |
+
+Set `METRICS_TOKEN` in `.env` to enable metrics. The Compose file already passes it. See [operations](/docs/self-hosting/operations) for the metrics list and example alerts.
+
+## Pin the image version
+
+Set `CMS_IMAGE` in `.env` to a commit tag or a digest, not `latest`:
+
+```sh
+CMS_IMAGE=ghcr.io/ekozf/areca-cms:sha-<full-commit-sha>
+```
+
+A pinned image means a restart never installs a new release by accident. Record the tag before and after each upgrade, because it is your rollback target. See [upgrades](/docs/self-hosting/upgrades).
+
+## Related
+
+- [Configuration reference](/docs/self-hosting/configuration) for every variable
+- [First-run setup](/docs/self-hosting/first-run) for the first admin account
+- [Security overview](/docs/security) for roles, two-factor authentication and rate limits
+- [Troubleshooting](/docs/self-hosting/troubleshooting) when something does not connect

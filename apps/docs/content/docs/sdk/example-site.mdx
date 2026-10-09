@@ -1,0 +1,273 @@
+---
+title: Example site walkthrough
+description: Tour the demo site in the examples/demo-site folder, from its content schema and pull step to rendered articles, the preview route and the health check.
+---
+
+The demo site is a complete TanStack Start website that uses the SDK. It is a fictional news blog for "Acme", with a home page, a blog listing and one page per article. It pulls a published snapshot at build time, prerenders every page, renders rich text, and has a preview route for drafts and a health check. Read it alongside the other SDK guides: each part of the demo links to the page that explains it.
+
+The demo lives in the `examples/demo-site` folder of the Areca repository. It is a reference for your own project, not a template you must copy.
+
+## Framework and tools
+
+| Part | Choice |
+| --- | --- |
+| Framework | TanStack Start with TanStack Router and React 19 |
+| Server | Nitro, built to `.output/server/index.mjs` |
+| Styling | Tailwind CSS |
+| Rich text | `@tanstack/markdown` with the React `Markdown` component |
+| Validation | Zod, for server function inputs |
+| Tests | Vitest |
+
+## File layout
+
+<Files>
+  <Folder name="examples/demo-site" defaultOpen>
+    <File name="areca.config.ts" />
+    <File name="Dockerfile" />
+    <File name="vite.config.ts" />
+    <Folder name="scripts" defaultOpen>
+      <File name="prebuild.mjs" />
+      <File name="fixture-content.ts" />
+      <File name="verify-prerender.ts" />
+    </Folder>
+    <Folder name="src" defaultOpen>
+      <Folder name="generated/content" defaultOpen>
+        <File name="manifest.json" />
+        <File name="articles.json" />
+      </Folder>
+      <Folder name="lib" defaultOpen>
+        <File name="content.ts" />
+        <File name="queries.ts" />
+      </Folder>
+      <Folder name="components" defaultOpen>
+        <File name="article-body.tsx" />
+        <File name="article-view.tsx" />
+        <File name="site-chrome.tsx" />
+      </Folder>
+      <Folder name="routes" defaultOpen>
+        <File name="__root.tsx" />
+        <File name="index.tsx" />
+        <File name="blog/index.tsx" />
+        <File name="blog/$slug.tsx" />
+        <File name="api/health.ts" />
+        <File name="[__preview]/$collection/$slug.tsx" />
+      </Folder>
+    </Folder>
+  </Folder>
+</Files>
+
+Three groups matter most:
+
+- **`areca.config.ts`** describes the content schema that you push to the CMS.
+- **`src/generated/content/`** holds the snapshot that `areca pull` writes. The site reads only these files at build time.
+- **`src/routes/`** holds the pages, the health check and the preview route.
+
+## Define the content
+
+`areca.config.ts` uses `defineSiteContent` to describe one collection, `articles`. Each field has a key, a label and a type:
+
+```ts title="areca.config.ts"
+import { defineSiteContent } from '@areca-cms/site-sdk'
+
+export default defineSiteContent({
+  siteKey: 'acme-site',
+  collections: {
+    articles: {
+      route: '/blog/$slug',
+      label: 'Articles',
+      fields: [
+        { key: 'title', label: 'Title', type: 'text', required: true },
+        { key: 'slug', label: 'Slug', type: 'slug', required: true },
+        { key: 'excerpt', label: 'Excerpt', type: 'textarea' },
+        { key: 'body', label: 'Body', type: 'richtext', required: true },
+        { key: 'heroImage', label: 'Hero image', type: 'image' },
+        { key: 'publishedAt', label: 'Published at', type: 'datetime' },
+        { key: 'category', label: 'Category', type: 'select', options: ['news', 'updates'] },
+      ],
+    },
+  },
+})
+```
+
+To send changes to the CMS, run the `sync-manifest` script. It needs the schema token in `.env.local`. See [Defining content](/docs/sdk/defining-content) and [Schema sync](/docs/sdk/schema-sync). Routine builds do not need the schema token.
+
+## Pull the snapshot
+
+The `content:pull` script runs the SDK's CLI and writes the snapshot into `src/generated/content`:
+
+```bash
+pnpm --filter @areca/demo-site content:pull
+```
+
+The `prebuild` script, which runs before `build`, decides where the content comes from:
+
+- If `ARECA_CMS_URL` and `ARECA_SITE_TOKEN` are set, it always pulls from the CMS. A failed pull fails the build. It never falls back to old files.
+- If they are not set, and content already exists in `src/generated/content`, it reuses that content.
+- Otherwise it stops with a message that tells you how to pull or create fixture content.
+
+For the pull options, see [Pulling content](/docs/sdk/pulling-content).
+
+## Read the content
+
+`src/lib/content.ts` reads the snapshot with `readContent` from the `pull` entry point, types the records, and exposes four functions:
+
+| Function | What it does |
+| --- | --- |
+| `getArticles()` | Returns all articles, sorted newest first by `publishedAt` |
+| `getArticle(slug)` | Returns one article, or `undefined` |
+| `getManifest()` | Reads `manifest.json`, which holds the `publicationId` |
+| `listPrerenderPages()` | Lists `/`, `/blog` and every `/blog/<slug>` for prerendering |
+
+`src/lib/queries.ts` wraps the first three in TanStack server functions: `loadArticles`, `loadArticle` and `loadManifest`. Route loaders call those functions, not the content functions directly:
+
+```ts
+const article = await loadArticle({ data: { slug: params.slug } })
+```
+
+See [Reading content](/docs/sdk/reading-content) for the full reading API.
+
+## Render articles
+
+`/blog/$slug` loads one article in its loader and throws `notFound()` when the slug is unknown. Its `head()` sets the page title and, when there is one, the description from the excerpt. The demo does not call `seoHead`; see [SEO helpers](/docs/sdk/seo) for the full version.
+
+The page renders `ArticleView`, which shows the hero image, the category and date, the title, the excerpt and the body. The body goes through `ArticleBody`:
+
+```tsx title="src/components/article-body.tsx (excerpt)"
+import { Markdown } from '@tanstack/markdown/react'
+import { richTextDocument } from '@areca-cms/site-sdk'
+
+export function ArticleBody({ body }) {
+  return <Markdown components={articleComponents}>{richTextDocument(body)}</Markdown>
+}
+```
+
+`articleComponents` is defined in the same file. It is an object with one React component for each element, such as `h2`, `p`, `a` and `img`. The site owns the look of every element, so the CMS never sends markup. The external-link rule in the `a` component adds `rel="noopener noreferrer"` and `target="_blank"`. See [Rendering rich text](/docs/sdk/rich-text).
+
+## Prerender the pages
+
+`vite.config.ts` turns on TanStack Start's prerendering. It lists the pages from `listPrerenderPages()`, follows links, fails the build on any error, and skips `/__preview` and `/api`. The relevant part of the file looks like this:
+
+```ts title="vite.config.ts (excerpt)"
+tanstackStart({
+  prerender: {
+    enabled: true,
+    crawlLinks: true,
+    failOnError: true,
+    filter: (page) =>
+      !page.path.startsWith('/__preview') && !page.path.startsWith('/api'),
+  },
+  pages: listPrerenderPages(),
+})
+```
+
+Published articles are plain HTML files after the build. The `verify:prerender` script checks that each article has its file.
+
+## The preview route
+
+`src/routes/[__preview]/$collection/$slug.tsx` handles the URL that the CMS opens for a draft. Its server function calls `getPreviewEntry` with the token from the query string, and sets the `previewHeaders()` on the response. The page then shows a banner and the same `ArticleView` as published articles. Errors show a message. The route is excluded from prerendering.
+
+For the full pattern, including headers, security and error handling, see [Draft preview](/docs/sdk/preview).
+
+## The health check
+
+`src/routes/api/health.ts` returns the `publicationId` from the manifest as JSON, with status `200`. If the manifest is missing, it returns `503`. The CMS uses this URL after a deploy. See [Building during Go live](/docs/sdk/go-live-builds).
+
+```bash
+curl http://localhost:3001/api/health
+```
+
+## Run it locally against a CMS
+
+You need a running CMS, a site with at least one published release, and that site's token.
+
+<Steps>
+<Step>
+
+**Start the CMS.** From the Areca repository root, run `pnpm --filter @areca/cms dev`. It listens on `http://localhost:3000`.
+
+</Step>
+<Step>
+
+**Copy the site token.** Open the site in the CMS, open the **Developer** tab of the site settings, and copy the site token. It is shown only once when you create or rotate it. If you lost it, rotate it.
+
+</Step>
+<Step>
+
+**Create `.env.local`.** In `examples/demo-site`, copy `.env.example` to `.env.local`, then set both values:
+
+```dotenv title="examples/demo-site/.env.local"
+ARECA_CMS_URL=http://localhost:3000
+ARECA_SITE_TOKEN=<your-site-token>
+```
+
+The file is ignored by git. Do not commit it.
+
+</Step>
+<Step>
+
+**Pull the snapshot.** From the repository root:
+
+```bash
+pnpm --filter @areca/demo-site content:pull
+```
+
+This fails with a publish-first message if the site has no published release.
+
+</Step>
+<Step>
+
+**Start the site.** Run the dev server, which listens on `http://localhost:3001`:
+
+```bash
+pnpm --filter @areca/demo-site dev
+```
+
+</Step>
+</Steps>
+
+To preview drafts locally, set the site's production URL in the CMS to `http://localhost:3001`. Preview links are built from that URL, so **Preview** will open the local demo.
+
+### Run without a CMS
+
+To work on the site's pages without a CMS, write the checked-in sample content and start the dev server:
+
+```bash
+pnpm --filter @areca/demo-site content:fixture
+pnpm --filter @areca/demo-site dev
+```
+
+The sample content has three articles. Preview and the live pull need a CMS, so they do not work in this mode.
+
+## Scripts
+
+| Command | Purpose |
+| --- | --- |
+| `pnpm --filter @areca/demo-site dev` | Run the dev server on port 3001 |
+| `pnpm --filter @areca/demo-site build` | Pull (when configured), then build the production output |
+| `pnpm --filter @areca/demo-site start` | Serve the built output on port 3000 |
+| `pnpm --filter @areca/demo-site content:pull` | Pull the published snapshot into `src/generated/content` |
+| `pnpm --filter @areca/demo-site content:fixture` | Write the sample content |
+| `pnpm --filter @areca/demo-site sync-manifest` | Send the schema in `areca.config.ts` to the CMS. Needs `ARECA_SCHEMA_TOKEN`. |
+| `pnpm --filter @areca/demo-site typecheck` | Check the TypeScript types |
+| `pnpm --filter @areca/demo-site test` | Run the unit tests |
+| `pnpm --filter @areca/demo-site verify:prerender` | Check that each article was prerendered |
+
+## Docker
+
+The demo has its own Dockerfile. It follows the same pattern as the [Go live build guide](/docs/sdk/go-live-builds): the snapshot ID is a build argument, and the site token is a BuildKit secret. Run the build from the repository root, because the Dockerfile copies the SDK package from there:
+
+```bash title="From the repository root"
+docker build -f examples/demo-site/Dockerfile \
+  --build-arg ARECA_CMS_URL=http://host.docker.internal:3000 \
+  --build-arg ARECA_SNAPSHOT_ID=local-test \
+  --secret id=ARECA_SITE_TOKEN,env=ARECA_SITE_TOKEN \
+  -t areca-demo-site .
+```
+
+Set `ARECA_SITE_TOKEN` in your shell before you run it. Use the CMS address that the build container can reach. On Docker Desktop, `host.docker.internal` points at your machine.
+
+## Related
+
+- [Installation](/docs/sdk/installation) for adding the SDK to your own project.
+- [Defining content](/docs/sdk/defining-content) for writing the schema.
+- [CLI reference](/docs/sdk/cli) for every `areca` command.

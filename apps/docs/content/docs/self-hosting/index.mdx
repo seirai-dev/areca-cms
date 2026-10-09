@@ -1,0 +1,140 @@
+---
+title: Self-hosting overview
+description: Learn the parts of an Areca deployment, what each one needs, and where to start with the Docker installation.
+---
+
+Self-hosting means you run the Areca CMS on your own infrastructure, with your own database, file storage and email. The CMS ships as a Docker image, and the repository includes a Docker Compose file that starts the CMS with its supporting services. This section covers installing that stack, running it safely in production and operating it over time.
+
+If you only want to write content or connect a website, you do not need this section. Ask the person who runs your agency's Areca instance for your sign-in details instead.
+
+## How a deployment fits together
+
+A typical deployment has one CMS container and four supporting services. A fifth system, your Dokploy host, builds and runs the customer websites.
+
+```text
+            editors and admins (browser)
+                       |
+                 HTTPS reverse proxy
+                       |
+   +-------------------v--------------------+        +-------------------+
+   | CMS container                          |  HTTPS | Dokploy host      |
+   |  - web app and API                     +------->| builds and runs   |
+   |  - publish worker and scheduler        |<-------+ customer websites |
+   +--+----------+-----------+----------+---+        +-------------------+
+      |          |           |          |
+      v          v           v          v
+  PostgreSQL   Redis     S3-compatible  SMTP relay
+  (data)       (rate      storage        (invitation
+               limits)    (uploads,      email)
+                          branding)
+```
+
+| Part | Role | Included in the Docker Compose file |
+| --- | --- | --- |
+| **CMS container** | Serves the editor, the API and the site-facing endpoints. The same process runs the publish worker and the scheduler that publishes entries at their scheduled time. | Yes (`cms`) |
+| **PostgreSQL** | Stores everything except uploaded files: clients, sites, entries, revisions, releases and audit history. | Yes (`postgres`) |
+| **Redis** | Holds the shared counters for request rate limits, so limits apply across requests. Nothing else depends on it. If Redis is unavailable, rate limiting fails open and the readiness check reports Redis as degraded, without failing. | Yes (`redis`) |
+| **S3-compatible storage** | Holds uploaded files in the Library and the branding images. The CMS reads and writes this bucket and serves files to browsers and site builds. | Yes, as RustFS (`rustfs`). Any S3-compatible service can replace it. |
+| **Email (SMTP)** | Sends invitation emails. The CMS connects to your relay with the host, port and sender you configure. | No. The Compose file sends mail to Mailpit, a test inbox. |
+| **Dokploy host** | Clones each customer site from git, builds it with Docker and runs it. The CMS then checks the site's health URL before it marks the release live. | No. It is a separate server or Dokploy installation you operate. |
+
+Areca stores the website content as immutable snapshots. When an editor goes live, the CMS pins the content, Dokploy builds the site from that snapshot, and the CMS checks the new site before it marks the release live. The [publishing pipeline](/docs/self-hosting/publishing-pipeline) page covers the details.
+
+### What the CMS needs from its neighbours
+
+- **Browsers** reach the CMS over HTTPS through your reverse proxy.
+- **The Dokploy host** must reach the CMS over HTTPS at its public address. Site builds fetch the content snapshot during the build, and visitors' browsers fetch uploaded images from the CMS.
+- **The CMS** must reach the Dokploy API and each site's health-check URL over HTTPS, your SMTP relay, the S3 endpoint and, only if you use [AI settings](/docs/cms/ai-settings), the OpenRouter API.
+- **Nothing outside the host** should reach PostgreSQL, Redis or the S3 API directly. The Compose file does not publish their ports. Only the CMS, the storage console and the Mailpit inbox get host ports, and those are bound to `127.0.0.1`.
+
+The [production setup](/docs/self-hosting/production) page explains how to make these connections reachable and locked down.
+
+## Requirements
+
+### Software
+
+| Component | Requirement |
+| --- | --- |
+| Docker | Docker Engine or Docker Desktop with Compose v2 (`docker compose`, not the older `docker-compose`). |
+| CPU architecture | AMD64 or ARM64. The published image covers both, and Docker picks the right one. |
+| Node.js | Not needed to run the Docker stack, because the image bundles its own runtime. Install Node on the host only if you run the backup helper. |
+| Reverse proxy | Required in production for HTTPS. Caddy and nginx both work. |
+| Dokploy | Required only if you publish customer websites through Dokploy. The deployment guide was checked against Dokploy v0.29.12. |
+
+The Compose file pins these service versions:
+
+| Service | Image |
+| --- | --- |
+| PostgreSQL | `postgres:17-alpine` |
+| Redis | `redis:8-alpine` |
+| RustFS (S3-compatible storage) | `rustfs/rustfs:1.0.0` |
+| Mailpit (test email inbox) | `axllent/mailpit:v1.31.3` |
+
+The CMS image is built on Node 24.21.0.
+
+### Hardware
+
+The project does not publish a tested minimum. The sizing benchmark measured the largest supported site (2,000 entries) with a Node heap that needed roughly 200 MB while building a snapshot and a peak resident memory of about 700 to 830 MB. Uploads are held in memory while they are processed, and each file can be up to 20 MiB. These numbers are the basis for the guidance below, not a guarantee.
+
+Plan for at least 2 CPU cores and 4 GB of RAM for the whole stack, and give the CMS container enough memory to keep Node's heap comfortably above 1 GB. Storage grows with content: revision history is not pruned, and each publication stores a full copy of the site snapshot. Read the [capacity](/docs/self-hosting/capacity) page before you size disks for a busy instance.
+
+### Supported scale
+
+The supported envelope is one CMS replica, up to 50 sites, up to 2,000 entries per site and up to 10,000 assets per organization. See [capacity and reliability targets](/docs/self-hosting/capacity) for the full table and the reasons for the single-replica limit.
+
+## Image tags and registry
+
+The CMS image is published to the GitHub Container Registry at `ghcr.io/ekozf/areca-cms`. The Compose file reads the image name from `CMS_IMAGE` and uses `latest` when you do not set it.
+
+The available tags, which one to pin in production, and how to record the tag you run for rollback are described on the [upgrades](/docs/self-hosting/upgrades#choose-an-image-tag) page. In short: use `latest` only to try Areca, and pin a `sha-<full-commit-sha>` tag or an image digest in production.
+
+<Callout type="warn" title="Make the package public">
+GitHub creates new container packages as private. Open the package settings for `areca-cms` and change its visibility to public, or your server cannot pull the image without a login.
+</Callout>
+
+## Choose your path
+
+<Steps>
+<Step>
+
+**Try it locally.** Start the full stack on one machine with demo values, sign in and explore. Do not expose this setup to the internet.
+
+</Step>
+<Step>
+
+**Set it up for production.** Put the CMS behind HTTPS, use real secrets, a real mail relay and a pinned image. Then connect Dokploy.
+
+</Step>
+<Step>
+
+**Create the first admin.** Complete the one-time setup page, turn on two-factor authentication and set up the agency.
+
+</Step>
+<Step>
+
+**Operate it.** Back up the instance, upgrade with a rollback plan and monitor health.
+
+</Step>
+</Steps>
+
+<Cards>
+  <Card title="Docker quickstart" href="/docs/self-hosting/docker-quickstart">
+    Start the Docker Compose stack on your machine, with generated secrets and a local setup page.
+  </Card>
+  <Card title="Production setup" href="/docs/self-hosting/production">
+    The checklist for HTTPS, public URLs, locked-down ports, backups and dev-only switches.
+  </Card>
+  <Card title="First-run setup" href="/docs/self-hosting/first-run">
+    Create the first agency admin, turn on two-factor authentication and set up your first client.
+  </Card>
+  <Card title="Configuration reference" href="/docs/self-hosting/configuration">
+    Every environment variable and Compose setting, grouped by purpose, with defaults.
+  </Card>
+</Cards>
+
+## Related
+
+- [Introduction](/docs)
+- [How Areca works](/docs/concepts) for the content model behind releases
+- [Security overview](/docs/security) for roles, two-factor authentication and secrets
+- [Troubleshooting](/docs/troubleshooting) for problems that cut across sections

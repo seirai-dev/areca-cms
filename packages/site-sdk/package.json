@@ -39,6 +39,10 @@
       "types": "./dist/rich-text.d.ts",
       "import": "./dist/rich-text.js"
     },
+    "./seo": {
+      "types": "./dist/seo.d.ts",
+      "import": "./dist/seo.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [

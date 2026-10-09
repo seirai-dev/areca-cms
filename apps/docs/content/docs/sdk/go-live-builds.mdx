@@ -1,0 +1,141 @@
+---
+title: Building during Go live
+description: What your website build must do when Areca deploys it on Go live, including the snapshot build argument, the pull step, the Dockerfile and the health check.
+---
+
+When an editor selects **Go live**, Areca creates an immutable publication, starts a build of your website, deploys the result and checks it before the release counts as live. Your site needs to cooperate with this in three places: the build must pull the publication it is given, the Docker build must rebuild when the publication changes, and the running site must report which publication it serves at a health URL.
+
+This page is for the developer who owns the site's Dockerfile and health route. For the operator side, including how the deployment target is connected in the CMS, see [Deployment targets](/docs/self-hosting/deployment-targets).
+
+## What Areca sends to the build
+
+Areca's Dokploy integration sets these values on your application before each deploy.
+
+| Setting | Kind | Set by Areca | Your site uses it for |
+| --- | --- | --- | --- |
+| `ARECA_CMS_URL` | Build argument | No, you set it once | Telling `areca pull` where the CMS is |
+| `ARECA_SNAPSHOT_ID` | Build argument | Yes, on every deploy | Changing the Docker layer that pulls content, so Docker never reuses an older pull |
+| `ARECA_SITE_TOKEN` | BuildKit secret | No, you set it once | Authenticating `areca pull` during the build |
+| `ARECA_SITE_TOKEN` and `ARECA_CMS_URL` | Runtime environment | No, you set it once | Only needed if the running site serves [draft previews](/docs/sdk/preview) |
+
+`ARECA_SNAPSHOT_ID` holds the publication ID. The SDK does not read it. Its only job is to change the Docker build input, so a rebuild cannot reuse a cached pull from an earlier publication. Your Dockerfile must declare it as an `ARG`, as shown below.
+
+<Callout type="warn" title="Keep the site token out of build arguments">
+
+Build arguments and `ENV` lines are stored in the image history, so anyone with the image can read them. Pass `ARECA_SITE_TOKEN` as a BuildKit secret only. Do not declare it with `ARG` or `ENV` in the Dockerfile.
+
+</Callout>
+
+## What the pull receives
+
+`areca pull` calls the CMS endpoint `GET /api/sites/snapshot/current` with your site token. The CMS decides which publication to return:
+
+- While a release is deploying, it returns that release's publication, to any caller that holds a valid site token.
+- Otherwise, it returns the live publication.
+
+So a Go-live build receives the release being built, not whatever is live at that moment. If there is no publication at all, the pull fails with `No publication exists for this site`. Publish content in the CMS first.
+
+The pull writes `manifest.json` (which holds the `publicationId`) and one JSON file per collection into the directory you give it. The demo site uses `src/generated/content`.
+
+## The Dockerfile
+
+The example below is a generic Node site built with pnpm, using Nitro output as the demo does. Adjust the paths and the build command to your project. The order matters:
+
+1. Install dependencies first, so that layer is cached.
+2. Declare `ARECA_SNAPSHOT_ID` after installing and before the pull. A changed value invalidates only the pull and the build after it.
+3. Mount the site token as a secret for the pull step only.
+
+```dockerfile title="Dockerfile"
+FROM node:24-alpine AS deps
+WORKDIR /app
+RUN corepack enable
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+
+FROM deps AS build
+ARG ARECA_CMS_URL
+ENV ARECA_CMS_URL=$ARECA_CMS_URL
+COPY . .
+# Changing this value rebuilds the layers below. Areca sets it to the publication ID.
+ARG ARECA_SNAPSHOT_ID=
+RUN --mount=type=secret,id=ARECA_SITE_TOKEN,required=true \
+    ARECA_SITE_TOKEN="$(cat /run/secrets/ARECA_SITE_TOKEN)" \
+    pnpm exec areca pull --out src/generated/content \
+    && pnpm build
+
+FROM node:24-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=3000
+COPY --from=build /app/.output ./.output
+COPY --from=build /app/src/generated ./src/generated
+EXPOSE 3000
+CMD ["node", ".output/server/index.mjs"]
+```
+
+Things to check in your own Dockerfile:
+
+- `areca` must be installed in the project, so `pnpm exec areca` finds it. The SDK package provides the `areca` command.
+- The runner stage does not inherit `ENV` from the build stage. Copy only what the server needs.
+- If you serve previews, the runner stage needs `ARECA_CMS_URL` and `ARECA_SITE_TOKEN` at runtime. Set them as runtime environment variables in the deployment, not as build arguments.
+- To test a build by hand, pass any value: `docker build --build-arg ARECA_SNAPSHOT_ID=test-1 --build-arg ARECA_CMS_URL=https://cms.example.com --secret id=ARECA_SITE_TOKEN,env=ARECA_SITE_TOKEN .`
+
+The site serves the snapshot it built. Visitor requests do not call the CMS.
+
+## The health URL
+
+Production sites must have a health check URL. Areca requests it after the deploy finishes, and the release counts as live only when the response matches the publication. Demo sites skip the deploy and the health check. The health check requires:
+
+- An HTTP status of `200`.
+- A JSON body with a `publicationId` equal to the publication that was deployed.
+
+```json
+{ "ok": true, "publicationId": "the-publication-id" }
+```
+
+Areca polls the URL every 5 seconds for up to 2 minutes. If the response never matches, the Go-live job fails with `Health check failed`.
+
+The site must return the publication ID from the content it was built with, not from anything else. The demo reads it from the pulled manifest:
+
+```ts title="src/routes/api/health.ts"
+import { createFileRoute } from '@tanstack/react-router'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
+export const Route = createFileRoute('/api/health')({
+  server: {
+    handlers: {
+      GET: () => {
+        try {
+          const manifest = JSON.parse(
+            readFileSync(join(process.cwd(), 'src/generated/content/manifest.json'), 'utf8'),
+          )
+          return Response.json({ ok: true, publicationId: manifest.publicationId })
+        } catch {
+          return Response.json({ ok: false, error: 'Content manifest missing' }, { status: 503 })
+        }
+      },
+    },
+  },
+})
+```
+
+Keep the route public, and do not require a login or a token for it. Do not return content or the site token from it.
+
+Set the URL in the CMS, on the **Deployment** tab of the site settings, in the **Health check URL** field. The CMS labels this field optional, but Go live is blocked in Production mode until it is set. Use an address the CMS can reach. For the rules on HTTP and private addresses, see [Deployment targets](/docs/self-hosting/deployment-targets).
+
+## Troubleshooting
+
+| Symptom | Likely cause |
+| --- | --- |
+| The deploy finishes quickly, but the site still shows older content | Docker reused the pull layer. Check that `ARG ARECA_SNAPSHOT_ID` comes after the install step and before the pull. |
+| `No publication exists for this site` during the build | Nothing has been published yet. Publish in the CMS, then retry. |
+| `Health check failed` | The URL does not return `200`, or its `publicationId` does not match. Open the URL yourself and compare the value with the release in the CMS. |
+| The build cannot read the token | The secret is missing from the build configuration, or the Dockerfile's `--mount` id does not match. The id is `ARECA_SITE_TOKEN`. |
+
+## Related
+
+- [Deployment targets](/docs/self-hosting/deployment-targets) for connecting the Dokploy application to the CMS.
+- [Pulling content](/docs/sdk/pulling-content) for the pull command and its output.
+- [Draft preview](/docs/sdk/preview) for the runtime variables previews need.
+- [Example site](/docs/sdk/example-site) for a complete working build.

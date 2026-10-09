@@ -217,6 +217,8 @@ export const site = pgTable('site', {
     .default('production'),
   deploymentTarget: jsonb('deployment_target').$type<DeploymentTarget | null>(),
   lastManifest: jsonb('last_manifest').$type<SiteManifest | null>(),
+  /** Extra instructions appended to the AI SEO system prompt for this site. */
+  aiPrompt: text('ai_prompt'),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 })
@@ -438,6 +440,22 @@ export const branding = pgTable('branding', {
   advancedColors: jsonb('advanced_colors').$type<AdvancedBrandColors>(),
   font: text('font'),
   emailFromName: text('email_from_name'),
+  updatedBy: text('updated_by').references(() => user.id, {
+    onDelete: 'set null',
+  }),
+  updatedAt: updatedAt(),
+})
+
+/**
+ * Instance-wide AI (OpenRouter) settings. A single row with id `default`.
+ * Server-only: never include encryptedApiKey in UI DTOs.
+ */
+export const aiSettings = pgTable('ai_settings', {
+  id: text('id').primaryKey(),
+  encryptedApiKey: text('encrypted_api_key'),
+  model: text('model'),
+  /** Null means the built-in default prompt. */
+  systemPrompt: text('system_prompt'),
   updatedBy: text('updated_by').references(() => user.id, {
     onDelete: 'set null',
   }),

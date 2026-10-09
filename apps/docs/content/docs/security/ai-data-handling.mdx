@@ -1,0 +1,90 @@
+---
+title: AI data handling
+description: What content Areca sends to OpenRouter for SEO suggestions and alt text, when it is sent, who can trigger it, how the key is stored, and how to turn it off.
+---
+
+Areca can use an AI model, through [OpenRouter](https://openrouter.ai), to suggest SEO fields for an entry and alt text for its images. This page describes exactly what leaves your instance, when, and who controls it, so you can decide whether to enable it and tell your editors what to expect.
+
+AI is optional. Until an agency admin saves an OpenRouter key, nothing is sent anywhere, and editors do not see the AI actions.
+
+## When content is sent
+
+Content is sent only when someone selects **Generate with AI** in the SEO suggestions dialog of an entry. Areca never sends content in the background, on save, or on publish.
+
+Suggestions are not applied automatically. The dialog lists each suggestion, and only the ones you select are saved when you select the **Apply** button, which shows how many you selected. Alt text is saved to the Library file it describes.
+
+## Who can trigger it
+
+Any signed-in member who can edit the client's content can generate suggestions:
+
+- client editors,
+- client owners,
+- agency admins.
+
+People outside the client cannot. This means **a client editor can send an entry's content to OpenRouter without an agency admin's approval.** If you need approval for AI use, turn AI off for the instance; there is no per-client or per-editor switch. See [turning AI off](#turn-ai-off).
+
+## What is sent
+
+For the entry you are working on, Areca sends:
+
+- The site's name and production URL.
+- The name of the content type, and the public page URL when the content type has a route.
+- The entry's title and its other text, choice, link, date, number and yes/no field values. Each value is cut at 4,000 characters.
+- The entry's body, converted to Markdown, up to 40,000 characters in total across all rich-text fields. Longer text is cut.
+- Any SEO values already filled in: the SEO title, meta description, focus keyphrase and summary.
+- Up to four images used by the entry: its image fields, its social sharing image, and images placed in the body. Each image is resized to at most 1,024 pixels on its longest side and converted to JPEG. Images are sent only when the chosen model accepts images. Each image's file name and current alt text are sent as text in every case.
+- The site's own AI instructions, if the site has any, and the instance's system prompt. The system prompt is the built-in default unless an agency admin changed it.
+
+## What is not sent
+
+- Other entries, other content types, and other sites.
+- Other clients' data, or any information about users, such as names, email addresses or roles.
+- The OpenRouter key, Areca's encryption keys, and site tokens.
+- Library files that the entry does not use.
+
+## Where it goes
+
+Requests go to OpenRouter. OpenRouter forwards each request to the model provider that serves the model you chose on the AI page. How those parties handle the data is governed by their terms, not by Areca. Read OpenRouter's terms and the terms of the model provider you choose before you enable AI for content that is confidential or personal.
+
+Agency admins choose the model. Areca lists only models that can return structured output, and it marks which ones accept images.
+
+## How the key is stored
+
+An agency admin enters the OpenRouter key on the AI page. Before saving, Areca checks the key with OpenRouter. If the key is accepted, Areca encrypts it with `AI_SETTINGS_ENCRYPTION_KEY` and stores only the encrypted form. The key is never shown again, and the interface shows only that a key is saved.
+
+- Saving a new key or removing the saved one requires a fresh authenticator code. See [two-factor authentication and step-up](/docs/security/two-factor-and-step-up).
+- You cannot save a key until `AI_SETTINGS_ENCRYPTION_KEY` is set on the server. See [secrets and encryption](/docs/security/secrets).
+- If the encryption key changes, the saved key cannot be read, and AI suggestions stop until the key is entered again.
+
+## What is logged
+
+Each generation adds an entry to the activity log. It records the content type, the model used, whether images were included, and the token counts and cost reported by OpenRouter. It does not record the text that was sent.
+
+## Limits
+
+Each user can generate 30 suggestions per hour. See [rate limits](/docs/security/rate-limits#ai-suggestions).
+
+## Turn AI off
+
+There are two ways to turn AI off for the whole instance. Each one stops every editor from generating suggestions.
+
+<Steps>
+<Step>
+
+**Remove the saved key.** Open **AI**, select **Remove key**, and confirm with a fresh authenticator code. Editors no longer see the AI actions.
+
+</Step>
+<Step>
+
+**Leave the encryption key unset.** Without `AI_SETTINGS_ENCRYPTION_KEY`, Areca cannot save or use an OpenRouter key, so AI stays off. Unset the variable and restart the CMS if you want this to be permanent.
+
+</Step>
+</Steps>
+
+Removing the key does not delete the other AI settings, such as the model and system prompt. You can turn AI back on by entering a key again.
+
+## Related
+
+- [Permissions matrix](/docs/security/permissions-matrix#ai)
+- [Using AI for SEO and alt text](/docs/cms/seo-and-ai) explains how editors use the suggestions.
+- [AI settings](/docs/cms/ai-settings) explains the AI page for agency admins.

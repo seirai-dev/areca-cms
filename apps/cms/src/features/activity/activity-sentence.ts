@@ -38,6 +38,8 @@ const SENTENCES: Partial<Record<string, Sentence>> = {
   'entry.cancel_schedule': (target) =>
     m.activity_entry_cancel_schedule({ target }),
   'entry.delete': (target) => m.activity_entry_delete({ target }),
+  'entry.ai_seo_generate': (target) =>
+    m.activity_entry_ai_seo_generate({ target }),
   'publication.requested': () => m.activity_publication_requested(),
   'publication.rollback_requested': () =>
     m.activity_publication_rollback_requested(),
@@ -74,6 +76,7 @@ const SENTENCES: Partial<Record<string, Sentence>> = {
   'branding.image_set': () => m.activity_branding_image_set(),
   'branding.image_clear': () => m.activity_branding_image_clear(),
   'branding.reset': () => m.activity_branding_reset(),
+  'ai.settings_update': () => m.activity_ai_settings_update(),
   'organization.delete': () => m.activity_organization_delete(),
   'invitation.accept': (target) => m.activity_invitation_accept({ target }),
   'manifest.sync': () => m.activity_manifest_sync(),

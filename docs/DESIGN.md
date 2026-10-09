@@ -179,8 +179,8 @@ Everyone works **inside a workspace**: a **site** ("Acme Website") or, for agenc
 | `/sites/$siteId/c/$collectionKey` (`/new`, `/$entryId`) | Collection, Editor | member |
 | `/sites/$siteId/library` | Library | member |
 | `/sites/$siteId/people` (`?invite=1`) | People | owner, admin |
-| `/sites/$siteId/settings?tab=general\|deployment\|developer\|content` | Site settings | admin |
-| `/agency`, `/agency/clients`, `/agency/clients/$orgId?tab=…`, `/agency/people`, `/agency/activity?client=`, `/agency/branding` | Agency workspace | admin |
+| `/sites/$siteId/settings?tab=general\|deployment\|developer\|ai\|content` | Site settings | admin |
+| `/agency`, `/agency/clients`, `/agency/clients/$orgId?tab=…`, `/agency/people`, `/agency/activity?client=`, `/agency/branding`, `/agency/ai` | Agency workspace | admin |
 
 `?panel=golive` and `?panel=activity` on any `/sites/$siteId/**` route open the Go-live and Activity panels. Old URLs (`/admin/*`, `/orgs/*`, `/sites/$id/{media,releases,team,activity}`) redirect in thin route files.
 

@@ -9,9 +9,16 @@ From this directory:
 ```sh
 cp .env.example .env
 # Edit .env: generate BETTER_AUTH_SECRET with openssl rand -hex 32
-# and DOKPLOY_CREDENTIALS_ENCRYPTION_KEY with openssl rand -base64 32.
+# and DOKPLOY_CREDENTIALS_ENCRYPTION_KEY with openssl rand -base64 32;
+# replace the demo database and S3 credentials too.
 docker compose up -d --wait
 ```
+
+The values in `.env.example` are for trying the local demo. Replace them before
+using a shared or public instance. Keep `DOKPLOY_CREDENTIALS_ENCRYPTION_KEY`
+stable and backed up with PostgreSQL; it is required even if you do not use
+Dokploy yet. If you enable AI settings, also generate and retain
+`AI_SETTINGS_ENCRYPTION_KEY`. See [CMS configuration](../docs/CONFIGURATION.md).
 
 Open <http://localhost:3000/setup> to create the first administrator. The setup
 form asks for a setup token: set `SETUP_TOKEN` (16+ characters) in `.env`, or
@@ -22,11 +29,13 @@ The database starts empty; no demo accounts are seeded. Startup automatically ap
 and creates the `areca` bucket. Mailpit is at <http://localhost:8025> and the RustFS
 console at <http://localhost:9001> (use the S3 credentials from `.env`).
 
-The example binds web ports to localhost and keeps database, Redis, and S3 API
-ports internal. For a different CMS port, update both `CMS_PORT` and `CMS_URL`.
-For public hosting, configure your reverse proxy, external URL, real SMTP, and
-unique credentials. Keep the encryption key stable so saved Dokploy credentials
-remain readable. Do not commit `.env`.
+The example binds the CMS, RustFS console, and Mailpit UI to localhost and keeps
+database, Redis, and the S3 API ports internal. For a different CMS port, update
+both `CMS_PORT` and `CMS_URL`. For public hosting, configure a reverse proxy,
+public `CMS_URL`, real SMTP, and unique service credentials; consult
+[deployment](../docs/DEPLOYMENT.md). Agency administrators need TOTP by default.
+For first-run setup, the CMS generates a one-time setup token and prints it to
+the CMS log unless `SETUP_TOKEN` is set. Do not commit `.env`.
 
 ```sh
 docker compose logs -f cms

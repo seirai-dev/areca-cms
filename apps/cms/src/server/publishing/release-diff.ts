@@ -55,7 +55,7 @@ export type PendingReleaseChange = {
   exists: boolean
 }
 
-type IndexedEntry = ReleaseDiffEntry
+type IndexedEntry = ReleaseDiffEntry & { seo?: SnapshotEntry['seo'] }
 
 /** Order-insensitive JSON; same rule as `entry-live-state` `stable()`. */
 export function stableJson(value: unknown): string {
@@ -74,6 +74,33 @@ export function stableJson(value: unknown): string {
 
 function fingerprint(entry: Pick<SnapshotEntry, 'id' | 'slug' | 'data'>) {
   return `${entry.id}\0${entry.slug}\0${stableJson(entry.data)}`
+}
+
+/** Resolved SEO minus the publish dates, which follow `publishedAt`. */
+function seoFingerprint(seo: SnapshotEntry['seo']) {
+  if (!seo) return null
+  return stableJson({
+    ...seo,
+    openGraph: { ...seo.openGraph, publishedTime: null, modifiedTime: null },
+    jsonLd: seo.jsonLd.map(
+      ({ datePublished: _p, dateModified: _m, ...rest }) => rest,
+    ),
+  })
+}
+
+function withoutSeoKey({
+  seo: _seo,
+  ...rest
+}: IndexedEntry): ReleaseDiffEntry {
+  return rest
+}
+
+function changed(next: IndexedEntry, prev: IndexedEntry) {
+  if (fingerprint(next) !== fingerprint(prev)) return true
+  // Publications built before SEO existed carry no `seo`: not a change.
+  const a = seoFingerprint(next.seo)
+  const b = seoFingerprint(prev.seo)
+  return a !== null && b !== null && a !== b
 }
 
 /**
@@ -103,6 +130,7 @@ function indexCollections(
         slug: item.slug,
         collectionKey,
         data: item.data,
+        seo: item.seo,
       })
     }
   }
@@ -127,13 +155,13 @@ export function diffSnapshotCollections(
   for (const [id, item] of next) {
     const existing = prev.get(id)
     if (!existing) {
-      adds.push(item)
+      adds.push(withoutSeoKey(item))
       continue
     }
-    if (fingerprint(item) !== fingerprint(existing)) updates.push(item)
+    if (changed(item, existing)) updates.push(withoutSeoKey(item))
   }
   for (const [id, item] of prev) {
-    if (!next.has(id)) removals.push(item)
+    if (!next.has(id)) removals.push(withoutSeoKey(item))
   }
 
   return { adds, updates, removals }

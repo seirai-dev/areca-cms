@@ -1,0 +1,350 @@
+---
+title: HTTP API
+description: The CMS endpoints a website calls with its site token, plus public file and health endpoints, with auth, parameters, responses, caching and status codes.
+---
+
+Most sites should use the [SDK](/docs/sdk/client), which makes these requests for you. Use the HTTP API directly when your build or server runs in a language or tool the SDK does not cover. This page lists every endpoint a website calls. It does not list the internal endpoints the CMS uses for its own screens.
+
+All site endpoints live under your CMS's base URL, for example `https://cms.example.com`. Requests and responses use JSON, except for public files.
+
+## Authentication
+
+Site endpoints take a bearer token in the `Authorization` header:
+
+```http
+Authorization: Bearer <token>
+```
+
+| Credential | Used for | Where you get it |
+| --- | --- | --- |
+| Site token | Reading the manifest and the snapshot | **Settings › Developer** in the CMS |
+| Schema token | Pushing the manifest (`POST /api/sites/manifest`) | **Settings › Developer** in the CMS |
+| Preview token | Fetching one draft entry | The preview link the CMS creates. Pass it as the `token` query parameter. |
+
+Rotating a token replaces it immediately, and the old one stops working. The CMS shows a site token only once. If you lose it, rotate it.
+
+<Callout type="warn" title="Keep tokens on the server">
+
+Send the site token and schema token only from server or build code. Never put them in browser JavaScript, a public repository or a log. Keep the schema token out of your deploy environment.
+
+</Callout>
+
+For how tokens are stored and rotated, see [Tokens](/docs/security/tokens).
+
+## Endpoints at a glance
+
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| `GET` | `/api/sites/manifest` | Site token | Read the site's content definitions. |
+| `POST` | `/api/sites/manifest` | Schema token | Replace the site's content definitions. |
+| `GET` | `/api/sites/snapshot/current` | Site token | Read the current publication. |
+| `GET` | `/api/sites/preview?token=...` | Preview token | Read one draft entry. |
+| `GET` | `/api/assets/file/...` | None | Serve a Library file. |
+| `GET` | `/api/health` | None | Liveness check. |
+| `GET` | `/api/health/ready` | None | Readiness check. |
+
+The `/api/sites/` endpoints all return `Cache-Control: no-store`, and they are rate limited. See [Rate limits](#rate-limits).
+
+## GET /api/sites/manifest
+
+Returns the enabled collections for the site. Use it to see what the CMS has, for example to check that your config matches.
+
+**Request**
+
+| Part | Value |
+| --- | --- |
+| Headers | `Authorization: Bearer <site token>`, `Accept: application/json` |
+| Parameters | None |
+
+**Response: 200**
+
+```json
+{
+  "collections": {
+    "articles": {
+      "route": "/blog/$slug",
+      "label": "Articles",
+      "fields": [
+        { "key": "slug", "label": "Slug", "type": "slug", "required": true },
+        { "key": "title", "label": "Title", "type": "text", "required": true },
+        { "key": "body", "label": "Body", "type": "richtext", "required": true }
+      ]
+    }
+  }
+}
+```
+
+Only enabled collections are listed. Each collection's `fields` always starts with the built-in `slug` field. Field objects use the same properties as in [Field types](/docs/sdk/field-types).
+
+**Errors**
+
+| Status | Body | Cause |
+| --- | --- | --- |
+| `401` | `{ "error": "Unauthorized" }` | The token is missing or unknown. |
+| `429` | `{ "error": "Too many requests" }` | Rate limit reached. See [Rate limits](#rate-limits). |
+
+## POST /api/sites/manifest
+
+Replaces the site's content definitions with the collections in the body. This is what `areca manifest push` sends. Use the schema token, not the site token.
+
+**Request**
+
+| Part | Value |
+| --- | --- |
+| Headers | `Authorization: Bearer <schema token>`, `Content-Type: application/json` |
+| Body | `{ "collections": { ... } }`, up to 256 KiB |
+
+Each collection has a `route`, an optional `label`, and a `fields` array. Each field has a `key`, `label` and `type`, plus the optional settings in [Field types](/docs/sdk/field-types). The request is rejected if it has any property the CMS does not know.
+
+The body is limited to 100 collections per site and 100 fields per collection. Every collection key and field key must be a safe identifier. See [identifier rules](/docs/sdk/errors-and-limits#identifier-rules).
+
+```json
+{
+  "collections": {
+    "articles": {
+      "route": "/blog/$slug",
+      "label": "Articles",
+      "fields": [
+        { "key": "title", "label": "Title", "type": "text", "required": true }
+      ]
+    }
+  }
+}
+```
+
+**Response: 200**
+
+```json
+{ "ok": true }
+```
+
+Collections that are not in the body are turned off, not deleted. See [`areca manifest push`](/docs/sdk/cli#areca-manifest-push).
+
+**Errors**
+
+| Status | Body | Cause |
+| --- | --- | --- |
+| `400` | `{ "error": "Invalid body", "issues": [{ "message": "Expected JSON" }] }` | The body is not valid JSON. |
+| `400` | `{ "error": "Invalid body", "issues": [...] }` | The body does not match the schema. `issues` lists each problem with a path and message. |
+| `400` | `{ "error": "Invalid collection identifier" }` | A collection key is not a safe identifier. |
+| `400` | `{ "error": "A manifest can have at most 100 collections" }` | Too many collections. |
+| `400` | `{ "error": "Invalid identifiers", "issues": "<message>" }` | A field key or identifier was rejected. |
+| `401` | `{ "error": "Unauthorized" }` | The schema token is missing or unknown. |
+| `413` | `{ "error": "Manifest is larger than 262144 bytes" }` | The body is over 256 KiB. |
+| `429` | `{ "error": "Too many requests" }` | Rate limit reached. |
+
+## GET /api/sites/snapshot/current
+
+Returns the publication your site builds from. This is the endpoint behind `areca pull` and `fetchSnapshot()`.
+
+The CMS chooses the publication in this order:
+
+1. The publication of a build that is running or deploying for the site.
+2. Otherwise, the live publication.
+3. For a site in Demo mode, the demo publication.
+
+**Request**
+
+| Part | Value |
+| --- | --- |
+| Headers | `Authorization: Bearer <site token>` |
+| Parameters | None |
+
+**Response: 200**
+
+```json
+{
+  "publicationId": "pub_1",
+  "siteKey": "acme-site",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "hash": "abc123",
+  "collections": {
+    "articles": [
+      {
+        "id": "ent_1",
+        "slug": "hello-world",
+        "publishedAt": "2026-01-01T00:00:00.000Z",
+        "data": {
+          "slug": "hello-world",
+          "title": "Hello world",
+          "heroImage": {
+            "url": "https://cms.example.com/api/assets/file/<folder>/<file>.png",
+            "width": 1200,
+            "height": 630,
+            "alt": "A cover photo",
+            "mimeType": "image/png"
+          },
+          "body": {
+            "json": { "type": "doc", "content": [] },
+            "markdown": "Hello.",
+            "document": { "type": "root", "children": [] },
+            "html": "<p>Hello.</p>"
+          },
+          "related": { "collection": "pages", "slug": "about", "id": "ent_2" }
+        }
+      }
+    ]
+  }
+}
+```
+
+Each entry also has an `seo` object, which is omitted above for brevity. Snapshots from older CMS versions do not include it. The shape of each value type is in [Field types](/docs/sdk/field-types). The top-level fields are described in the [JavaScript API reference](/docs/sdk/client#types).
+
+**Errors**
+
+| Status | Body | Cause |
+| --- | --- | --- |
+| `401` | `{ "error": "Unauthorized" }` | The token is missing or unknown. |
+| `404` | `{ "error": "No publication exists" }` | The site has never gone live. Publish in the CMS first. |
+| `429` | `{ "error": "Too many requests" }` | Rate limit reached. |
+
+## GET /api/sites/preview
+
+Returns one draft entry, so you can preview it on your site before it goes live. Editors start a preview from the CMS. Read [Preview](/docs/cms/preview) for the editor's side.
+
+**Request**
+
+| Part | Value |
+| --- | --- |
+| Query | `token`: the signed preview token from the link. Required. |
+| Headers | Optional. The route checks only the token. The SDK also sends the site token as a bearer header. |
+
+The preview token is signed and expires after one hour. Do not create tokens yourself, and do not log them.
+
+**Response: 200**
+
+```json
+{
+  "collection": "articles",
+  "slug": "draft-post",
+  "entry": {
+    "id": "ent_9",
+    "slug": "draft-post",
+    "publishedAt": null,
+    "data": { "slug": "draft-post", "title": "Draft post" }
+  }
+}
+```
+
+The `entry` is the draft version, with the same value shapes as a snapshot entry.
+
+**Errors**
+
+| Status | Body | Cause |
+| --- | --- | --- |
+| `401` | `{ "error": "Unauthorized" }` | The token is missing, malformed, has a bad signature, has expired, or belongs to a site that no longer exists. |
+| `404` | `{ "error": "Not found" }` | The collection or entry no longer exists. |
+
+**Headers**
+
+| Header | Value |
+| --- | --- |
+| `Cache-Control` | `no-store, private` |
+| `X-Robots-Tag` | `noindex` |
+
+These headers are set on every response from this endpoint, including errors. Your site's preview page should also send `noindex` and `no-store` on the HTML it renders. [`previewHeaders()`](/docs/sdk/client#previewheaders) returns the values to use.
+
+## GET `/api/assets/file/{folder}/{file}`
+
+Serves a file from the Library, such as an image or a PDF. The `url` in an `image` value points here. Use the URL from the content data rather than building the path yourself.
+
+**Request**
+
+| Part | Value |
+| --- | --- |
+| Headers | None. The endpoint is public. |
+| Path | `folder` and `file`, as they appear in the `url`. |
+
+**Response: 200** returns the file's bytes, with its stored content type. For example, `image/png` for a PNG.
+
+**Headers**
+
+| Header | Value |
+| --- | --- |
+| `Content-Type` | The file's type, such as `image/jpeg` or `application/pdf`. |
+| `Cache-Control` | `public, max-age=31536000, immutable` |
+| `Access-Control-Allow-Origin` | `*` |
+| `Cross-Origin-Resource-Policy` | `cross-origin` |
+| `X-Content-Type-Options` | `nosniff`, for images and PDFs |
+
+The `immutable` header tells browsers and CDNs that the file never changes at this URL, so they can cache it for a year.
+
+**Preflight:** `OPTIONS` returns `204` with `Access-Control-Allow-Origin: *`, `Access-Control-Allow-Methods: GET, OPTIONS` and `Cross-Origin-Resource-Policy: cross-origin`.
+
+**Errors**
+
+| Status | Body | Cause |
+| --- | --- | --- |
+| `404` | `Not found` (plain text) | No file exists at that path. |
+
+## GET /api/health
+
+A liveness check. It confirms the CMS process is running and answers HTTP. It does not check the database.
+
+**Response: 200**
+
+```json
+{ "ok": true, "service": "cms" }
+```
+
+## GET /api/health/ready
+
+A readiness check. It checks the database, object storage, Redis, the background worker and the job queue.
+
+**Response: 200** when every required check passes, or **503** when one fails.
+
+```json
+{
+  "ok": true,
+  "checks": {
+    "db": { "ok": true, "ms": 4 },
+    "storage": { "ok": true, "ms": 12 },
+    "redis": { "ok": true, "ms": 2 },
+    "worker": { "ok": true, "ms": 1 },
+    "queue": { "ok": true, "ms": 1 }
+  }
+}
+```
+
+Each check has `ok` and `ms`. A failed check can carry a short `reason`. Redis is reported with `degraded: true` when it is down, but it does not make the overall `ok` false, because the CMS keeps running without it.
+
+**Header:** `Cache-Control: no-store`.
+
+Use these endpoints for load balancer or orchestrator probes. Probe requests are not rate limited.
+
+## Rate limits
+
+The site endpoints for the manifest and the snapshot share one limit: **300 requests per minute per token**. The token is the bearer token of the request. Requests with no bearer token are counted per client IP address. Behind a reverse proxy, the operator must enable proxy trust for that to work. Otherwise, all such requests share one bucket.
+
+When the limit is reached, the CMS returns `429`:
+
+```http
+HTTP/1.1 429 Too Many Requests
+RateLimit-Limit: 300
+RateLimit-Remaining: 0
+RateLimit-Reset: 42
+Retry-After: 42
+Content-Type: application/json
+
+{ "error": "Too many requests" }
+```
+
+`Retry-After` and `RateLimit-Reset` give the number of seconds until the window resets. The SDK does not retry. It throws an error that includes the status. See [Errors and limits](/docs/sdk/errors-and-limits#http-errors) for how to handle `429`.
+
+The preview endpoint and public files are not in this bucket. For the full set of limits, see [Rate limits](/docs/security/rate-limits).
+
+## Example
+
+Read the current snapshot with `curl`:
+
+```bash
+curl -H "Authorization: Bearer $ARECA_SITE_TOKEN" \
+  https://cms.example.com/api/sites/snapshot/current
+```
+
+## Related
+
+- [JavaScript API reference](/docs/sdk/client) wraps these endpoints.
+- [Errors and limits](/docs/sdk/errors-and-limits) explains each error message.
+- [Rate limits](/docs/security/rate-limits) lists every limit in the CMS.
+- [Tokens](/docs/security/tokens) explains how site and schema tokens work.

@@ -1,0 +1,134 @@
+---
+title: Rate limits
+description: Every rate limit in Areca, what it applies to, how it is keyed, the 429 response, and the settings that affect it.
+---
+
+Areca limits how often some requests can be repeated, to slow down brute-force attempts, runaway scripts and expensive calls. This page lists every limit, what it counts, and what a blocked request receives.
+
+The numbers are fixed in the software. No environment variable changes them. You can only change where the counters are stored and how the client's address is read.
+
+## Summary
+
+| Limit | Applies to | Allowed | Counted per |
+| --- | --- | --- | --- |
+| [Writes](#writes) | Any request that changes data (not GET, HEAD or OPTIONS) | 60 per minute | Signed-in user, or IP address when anonymous |
+| [Uploads](#uploads) | Library and branding uploads | 10 per minute | Signed-in user, or IP address |
+| [Site API](#site-api) | Site project reads and schema pushes | 300 per minute | Bearer token, or IP address without a token |
+| [Metrics](#metrics) | The metrics endpoint | 60 per minute | IP address |
+| [AI suggestions](#ai-suggestions) | Generating SEO suggestions and alt text | 30 per hour | Signed-in user |
+| [Two-factor codes](#two-factor-codes) | Wrong codes at step-up | 5 wrong codes, then 15 minutes locked | Signed-in user |
+| [Sign-in and two-factor endpoints](#sign-in-and-two-factor-endpoints) | Authentication requests | 3 to 100 per 10 seconds, or 3 per 60 seconds, depending on the endpoint | IP address and endpoint |
+
+## Writes
+
+Every request that is not a read (GET, HEAD or OPTIONS) counts against this limit. Most actions you take in the interface, such as saving a draft or marking an entry as ready, are sent as writes.
+
+- **Allowed:** 60 requests per minute.
+- **Counted per:** the signed-in user. Anonymous requests are counted per IP address.
+- **Not counted:** the health endpoints `/api/health` and `/api/health/ready`, which monitoring tools call often. Requests to the authentication endpoints under `/api/auth` are handled by a separate limit; see [sign-in and two-factor endpoints](#sign-in-and-two-factor-endpoints).
+
+A person working quickly in the editor is unlikely to reach 60 writes in a minute. A script or a stuck browser tab can.
+
+## Uploads
+
+Uploads to the Library and the branding upload have their own, tighter limit. A request to these endpoints counts only against the upload limit, not against the writes limit.
+
+- **Allowed:** 10 uploads per minute.
+- **Counted per:** the signed-in user, or IP address when anonymous.
+
+## Site API
+
+The site project uses these endpoints to read its content types and the published content during builds. The limit applies to:
+
+- `GET` and `POST` on `/api/sites/manifest`,
+- `GET` on `/api/sites/snapshot/current`.
+
+- **Allowed:** 300 requests per minute.
+- **Counted per:** the bearer token in the request. Requests without a token count per IP address.
+
+A busy build pipeline with several sites sharing an IP address can still stay within the limit, because each site has its own token and its own count.
+
+## Metrics
+
+The metrics endpoint is off until you set `METRICS_TOKEN`. Its limit exists so that someone guessing the token cannot try many values quickly.
+
+- **Allowed:** 60 requests per minute.
+- **Counted per:** IP address.
+
+A metrics scraper needs only a few requests per minute.
+
+## AI suggestions
+
+Generating SEO suggestions and alt text calls a paid AI service, so each user is limited separately.
+
+- **Allowed:** 30 generations per user per hour.
+- **Window:** the hour is a fixed clock hour, so the count resets at the start of the next hour.
+- **When blocked:** the suggestion dialog shows "You have reached the hourly limit for AI suggestions. Try again later." Wait until the next hour starts.
+
+See [AI data handling](/docs/security/ai-data-handling).
+
+## Two-factor codes
+
+This limit applies to the authenticator code that is requested for a sensitive action, which is called step-up. It counts wrong codes, not requests.
+
+- **Allowed:** 5 wrong codes in a row for a user.
+- **When blocked:** the user is locked out of step-up for 15 minutes, and the dialog shows "Too many wrong codes. Try again in a few minutes." Codes are not checked during the lock. A correct code entered before the lock starts clears the count.
+- **Counted per:** the user, across all their sessions.
+
+See [two-factor authentication and step-up](/docs/security/two-factor-and-step-up#lockout-after-wrong-codes).
+
+## Sign-in and two-factor endpoints
+
+Requests to `/api/auth`, which cover sign-in, sessions, provider callbacks and two-factor enrollment and verification, are not counted by the writes limit. The authentication library applies its own limits to them, per IP address and endpoint. These counters are kept in memory by each CMS instance, not in Redis:
+
+- Two-factor endpoints (`/two-factor/...`) allow 3 requests per 10 seconds.
+- Sign-in and sign-up, including sign-in with a provider, and the change-password and change-email endpoints allow 3 requests per 10 seconds.
+- Password reset, verification email and email code requests allow 3 requests per 60 seconds.
+- Other authentication endpoints allow 100 requests per 10 seconds.
+
+These are the authentication library's built-in limits. They apply in production builds, where the library enables rate limiting by default.
+
+## Responses
+
+A request over a limit receives status **429** with this body:
+
+```json title="Response body"
+{ "error": "Too many requests" }
+```
+
+It also receives these headers:
+
+| Header | Value |
+| --- | --- |
+| `RateLimit-Limit` | The allowed number for the limit. |
+| `RateLimit-Remaining` | Always `0` in a blocked response. |
+| `RateLimit-Reset` | Seconds until the current window ends. |
+| `Retry-After` | The same number of seconds. Wait at least this long before retrying. |
+
+Windows are fixed: a per-minute limit resets at the start of the next minute, so `Retry-After` is never longer than the window.
+
+## Configuration
+
+These settings affect how limits behave. The numbers themselves cannot be changed.
+
+| Setting | Default | Effect |
+| --- | --- | --- |
+| `REDIS_URL` | `redis://localhost:6379` | Where the counters are stored. Use the Redis instance your deployment runs. |
+| `RATE_LIMIT_TRUST_PROXY` | `false` | Whether Areca reads the client's address from forwarding headers. |
+
+### `RATE_LIMIT_TRUST_PROXY`
+
+Without a trusted address, Areca cannot tell anonymous clients apart. Every anonymous request then counts against one shared bucket, so one client can block the others.
+
+Set `RATE_LIMIT_TRUST_PROXY=true` only when the CMS runs behind a reverse proxy or load balancer that sets `X-Forwarded-For`, `X-Real-IP` or `CF-Connecting-IP` itself. Areca uses the address from these headers as given. If clients can reach the CMS directly, or your proxy passes headers through unchanged, a client can send its own header and choose its address, which lets it avoid its limit.
+
+### Redis outages
+
+If Redis cannot be reached, Areca allows the request and logs an error. Limits are not enforced until Redis returns. Monitor the error log, and treat a Redis outage as a reason to check for abuse.
+
+## Related
+
+- [Permissions matrix](/docs/security/permissions-matrix)
+- [Tokens](/docs/security/tokens)
+- [Two-factor authentication and step-up](/docs/security/two-factor-and-step-up)
+- [Configuration](/docs/self-hosting/configuration) lists `REDIS_URL` and the other settings.

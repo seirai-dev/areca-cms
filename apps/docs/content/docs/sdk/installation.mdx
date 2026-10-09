@@ -1,0 +1,168 @@
+---
+title: Installation and setup
+description: Install the site SDK, run areca init, and set the environment variables that connect your website to its Areca site.
+---
+
+This guide connects a website project to an existing Areca site. You need the site's key and site token from the CMS, and a `package.json` at the root of the website project.
+
+Get the site token from the CMS. Open the site's **Settings** and go to the **Developer** tab. The token is shown when the site is created or when you rotate it, and it is shown only once. If you lose it, rotate it from the same tab.
+
+<Steps>
+<Step>
+
+**Install the package.**
+
+<Tabs items={['pnpm', 'npm', 'yarn']}>
+  <Tab value="pnpm">
+
+```bash
+pnpm add @areca-cms/site-sdk
+```
+
+  </Tab>
+  <Tab value="npm">
+
+```bash
+npm install @areca-cms/site-sdk
+```
+
+  </Tab>
+  <Tab value="yarn">
+
+```bash
+yarn add @areca-cms/site-sdk
+```
+
+  </Tab>
+</Tabs>
+
+</Step>
+<Step>
+
+**Run `areca init`.** The command asks for three values and writes the files described below.
+
+<Tabs items={['pnpm', 'npm', 'yarn']}>
+  <Tab value="pnpm">
+
+```bash
+pnpm exec areca init
+```
+
+  </Tab>
+  <Tab value="npm">
+
+```bash
+npx areca init
+```
+
+  </Tab>
+  <Tab value="yarn">
+
+```bash
+yarn areca init
+```
+
+  </Tab>
+</Tabs>
+
+Enter the values when prompted:
+
+- **CMS URL:** the address of your CMS, such as `https://cms.example.com`. The prompt suggests `http://localhost:3000` for local development.
+- **Site token:** the token from the Developer tab. The prompt hides what you type.
+- **Site key:** the lowercase key shown on the Developer tab, such as `acme-site`. Use letters, numbers and hyphens.
+
+</Step>
+<Step>
+
+**Add the schema token.** Init does not write it. On the Developer tab, find the **Schema-write token** section. Add the token to `.env.local` as `ARECA_SCHEMA_TOKEN=`. Only the schema push needs it.
+
+</Step>
+<Step>
+
+**Define your content.** Add your collections to `areca.config.ts`, then push them with `areca manifest push`. See [Defining your content](/docs/sdk/defining-content) and [Syncing the schema](/docs/sdk/schema-sync).
+
+</Step>
+</Steps>
+
+![The Developer tab in site settings, with the site key and token controls](/screenshots/current-developer-settings.png)
+
+## Non-interactive setup
+
+For scripted setup, pass all three values as flags and add `--yes` to skip the prompts. If a value is missing, init stops with an error that names it.
+
+```bash
+pnpm exec areca init \
+  --cms-url https://cms.example.com \
+  --token "$ARECA_SITE_TOKEN" \
+  --site-key acme-site \
+  --yes
+```
+
+The `--token` flag puts the token in your shell history and the process list. On a developer machine, prefer the interactive prompt.
+
+## What `areca init` writes
+
+Init creates or updates these files in the website project:
+
+| File | What it contains |
+| --- | --- |
+| `areca.config.ts` | A `defineSiteContent` call with your site key and an empty `collections` object. Existing files are not overwritten unless you pass `--force`. |
+| `.env.example` | `ARECA_CMS_URL`, `ARECA_SITE_TOKEN` and `ARECA_SCHEMA_TOKEN` with empty token values. It contains no secrets, so you can commit it as a template. Existing files are not overwritten unless you pass `--force`. |
+| `.env.local` | `ARECA_CMS_URL` and `ARECA_SITE_TOKEN`. Existing lines for these keys are updated, and other lines are kept. |
+| `.gitignore` | Adds `.env.local` and the generated content directory, `src/generated/content/`, if they are not already listed. |
+| `src/generated/content/manifest.json` | An empty placeholder manifest. Run `areca pull` to replace it with published content. |
+| `package.json` | Adds a `sync-manifest` script (`areca manifest push`) and a `content:pull` script (`areca pull`), unless those scripts already exist. If you have a `dev` script that does not load env files, init wraps it in `areca run --`. |
+
+Init does not add `.env` to `.gitignore`. Add it yourself if you keep secrets there.
+
+The `--out` and `--config` flags change the generated directory and the config path. The defaults are `src/generated/content` and `areca.config.ts`.
+
+## Environment variables
+
+The CLI reads these variables from the environment. It also loads `.env.local`, then `.env`, from the directory where you run it. Values already set in the environment take precedence over both files.
+
+| Variable | Used by | Notes |
+| --- | --- | --- |
+| `ARECA_CMS_URL` | Every command and every client | The CMS base URL. Trailing slashes are removed. |
+| `ARECA_SITE_TOKEN` | `areca pull`, `areca manifest pull`, `areca manifest push`, and the SDK client | The read token. The client needs it to start, so `areca manifest push` also needs it. |
+| `ARECA_SCHEMA_TOKEN` | `areca manifest push`, `areca sync-manifest` and `syncManifest()` | The schema-write token. Use it only where you push the schema. |
+| `ARECA_SITE_KEY` | `areca manifest pull` | Used only when your config file does not exist yet, so the command can write one. |
+
+The SDK reads `process.env` directly. It does not load `.env` files on its own. If your framework's dev server or build needs these values, load the env files first. If your `dev` script does not already load them, `areca init` wraps it in `areca run --`. See [running commands with env files](/docs/sdk/pulling-content#running-commands-with-env-files) for how `areca run` works.
+
+The env file parser is simple. Write plain `KEY=value` lines. It does not support an `export` prefix or inline comments, and it strips matching quotes around a value. An empty value in `.env.local` also blocks the same key from `.env`, because the variable is then set to an empty string.
+
+## Keep tokens on the server
+
+The site token and the schema token are secrets.
+
+- **Never expose them to the browser.** Do not give them a public prefix such as `VITE_` or `NEXT_PUBLIC_`, because those prefixes put the value in the browser bundle.
+- **Keep `.env.local` out of Git.** Init adds it to `.gitignore`. Check that it stays there.
+- **Keep the schema token in the authoring environment only.** Builds and content pulls need the site token. Only the step that pushes the schema needs the schema token.
+
+<Callout type="warn" title="Protect the schema token">
+The schema token can replace your site's content model. A push disables any collection you leave out of the config. Store it like a deploy key, and never add it to website build settings.
+</Callout>
+
+## Restrict the file permissions
+
+Init writes `.env.local` with your system's default file permissions. On macOS and Linux, other users on the same machine may be able to read it. Restrict it to your own user after init:
+
+```bash
+chmod 600 .env.local
+```
+
+Run the same command on any other env file that holds a token.
+
+## Rotating tokens
+
+You can rotate either token from the site's **Settings**, on the **Developer** tab:
+
+- **Site token:** use **Rotate token…**. The old token stops working immediately. Any build or pull that still uses it fails until you update `ARECA_SITE_TOKEN`.
+- **Schema token:** use **Rotate schema token**. Update `ARECA_SCHEMA_TOKEN` in your authoring environment afterwards.
+
+## Next steps
+
+- [Defining your content](/docs/sdk/defining-content): write the collections and fields for your site.
+- [Syncing the schema](/docs/sdk/schema-sync): push the content model to the CMS.
+- [Pulling content at build time](/docs/sdk/pulling-content): download published content before the build runs.

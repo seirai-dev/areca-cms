@@ -1,0 +1,118 @@
+---
+title: Storage and email
+description: Configure S3-compatible storage for uploads, serve assets through a CDN, and send invitation email through SMTP.
+---
+
+Areca needs two outside services. An S3-compatible bucket stores uploaded images and files, and an SMTP relay sends invitation emails. Both are set with environment variables and are required at startup. This page explains how each one is used, and how to check that it works. For every variable, see [configuration](/docs/self-hosting/configuration).
+
+## S3-compatible storage
+
+Every uploaded asset and branding file is stored in one bucket. The CMS reads and writes the bucket with the access key you provide. Browsers never connect to the bucket directly.
+
+| Variable | What it is |
+| --- | --- |
+| `S3_ENDPOINT` | The full URL of the storage API, for example `https://s3.eu-central-1.example.com` or `http://rustfs:9000` in the Docker Compose stack. |
+| `S3_REGION` | The region name the provider expects. Use the value from your provider's documentation. |
+| `S3_BUCKET` | The bucket name. Areca uses this bucket only. |
+| `S3_ACCESS_KEY` and `S3_SECRET_KEY` | Credentials with read, write and delete access to the bucket. |
+| `S3_FORCE_PATH_STYLE` | Set to `true` for servers that need path-style URLs, such as MinIO and RustFS. The default is `false`. |
+
+### Create the bucket
+
+The bucket must exist before the CMS starts. You have two options:
+
+- **Docker image.** The container entrypoint checks for the bucket on every start and creates it if it is missing. You do not need to do anything extra.
+- **Running from source.** Run the bucket script from the repository root, with the storage variables in `apps/cms/.env.local`:
+
+```bash title="Terminal"
+pnpm --filter @areca/cms s3:init
+```
+
+The script checks for the bucket and creates it if it is missing. It is safe to run more than once.
+
+<Callout type="warn" title="The access key can read every upload">
+
+The S3 key pair has full access to every stored file. Keep it in your secrets store or host environment, not in the repository. Rotate it at the provider and update the CMS environment. Rotating the key does not touch the stored objects.
+</Callout>
+
+## Public assets and the CDN
+
+Uploaded files are public. The CMS serves each one at a URL under `/api/assets/file/` without asking for a sign-in. The URL contains a random ID, so anyone who has the link can open the file. Links also appear in page source, referrer headers and shared links.
+
+This applies to assets attached to drafts, unpublished entries and archived content, not only to live pages. Draft text is protected by sign-in and preview tokens, but its images are not. Do not upload embargoed or confidential material.
+
+Keep the S3 bucket private. The CMS is the only thing that should reach it.
+
+To serve assets through a CDN:
+
+- Point the CDN at the CMS origin, not at the bucket.
+- Cache only the `/api/assets/file/` path. Do not cache other `/api/` routes or the application's pages, because those depend on sign-in.
+- Forward only the path. Ignore cookies and the `Authorization` header on asset requests.
+- Respect the `Cache-Control` header from the origin. The CMS sends `public, max-age=31536000, immutable` for assets, because each file name is unique.
+
+Keep `APP_URL` set to the CMS origin, not the CDN, unless your CDN rewrites asset URLs.
+
+Assets stay in storage while any draft, revision, release or archive still refers to them. Read [asset retention](/docs/self-hosting/asset-retention) before you remove files.
+
+## Email (SMTP)
+
+The CMS sends one kind of email: invitations to join an organization. It uses three variables:
+
+| Variable | What it is |
+| --- | --- |
+| `SMTP_HOST` | The hostname of your relay. |
+| `SMTP_PORT` | The port, for example `587` for a submission relay. |
+| `SMTP_FROM` | The sender address, for example `cms@agency.example`. Use an address on a domain you control. |
+
+The mail adapter connects without SMTP user name or password. It opens a plain connection and upgrades to TLS only if the relay offers STARTTLS. Use a relay that the CMS host can reach on a private network, and do not expose an unauthenticated relay to the internet.
+
+If you set a sender name in the [branding](/docs/cms/branding) settings, it is shown as the display name in the From header.
+
+### How invitations are sent
+
+Sending is part of the invitation request. The invitation is saved first, so if the relay is down, the invitation still exists. The person who sent it is told that the email could not be sent, and can use **Send again** or **Copy link** from the People list. See [people and invitations](/docs/cms/people-and-invitations).
+
+Areca does not retry failed emails in the background. A delivery status of "sent" means the relay accepted the message. It does not confirm that the message reached an inbox.
+
+Each **Send again** rotates the invitation link, so the old link stops working.
+
+## Test delivery
+
+Test email before you invite real clients:
+
+<Steps>
+<Step>
+
+**Set the SMTP variables.** For a local stack, the Docker Compose file points the CMS at a Mailpit container on port `1025`. Mailpit's inbox is at `http://localhost:8025`.
+
+</Step>
+<Step>
+
+**Restart the CMS.** Environment changes apply only after a restart.
+
+</Step>
+<Step>
+
+**Invite a test address.** Use an address you control, and invite it from the People list.
+
+</Step>
+<Step>
+
+**Check the inbox.** Open the message, and check that the link opens the invitation page.
+
+</Step>
+<Step>
+
+**Check the logs if it fails.** A failed send is logged with the message `invitation email failed`. The log does not include the invitation link.
+
+</Step>
+</Steps>
+
+Also check the storage path. Upload a small image in the CMS, and confirm that it loads from `/api/assets/file/` on your public CMS address.
+
+## Related
+
+- [Configuration](/docs/self-hosting/configuration): every storage and email variable.
+- [Asset retention](/docs/self-hosting/asset-retention): when stored files are removed.
+- [Production](/docs/self-hosting/production): the checklist before you go live.
+- [Troubleshooting](/docs/self-hosting/troubleshooting): common storage and email errors.

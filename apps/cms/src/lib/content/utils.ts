@@ -1,3 +1,4 @@
+import { SEO_KEY } from '#/lib/seo'
 import type { EntryData, Field } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 
@@ -79,6 +80,8 @@ export function initialEntryData(
     const current = existing?.[field.key]
     data[field.key] = current === undefined ? defaultFieldValue(field) : current
   }
+  // The built-in SEO block rides along with the declared fields.
+  if (existing?.[SEO_KEY] != null) data[SEO_KEY] = existing[SEO_KEY]
   return data
 }
 

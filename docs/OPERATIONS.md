@@ -1,7 +1,8 @@
 # Operations
 
 Runtime behaviour operators need: health, metrics, logs, deadlines and what the
-UI is allowed to see when something breaks.
+UI is allowed to see when something breaks. For service URLs and the complete
+environment-variable reference, see [CMS configuration](CONFIGURATION.md).
 
 ## Endpoints
 
@@ -184,6 +185,13 @@ legitimately needs longer must open a transaction and run
 are logged (`component: "db"`) instead of crashing the process.
 
 ## Worker and scheduler
+
+Publication behavior follows each site's deployment mode. **Production**
+publishing requires a configured Dokploy application and publication-aware
+health URL; a missing target is a configuration error, not a successful
+no-deploy release. **Demo** publications intentionally skip external deployment
+and remain labeled demo, never counting as production live releases. See
+[deployment](DEPLOYMENT.md) for setup and verification.
 
 Three independent timers, each with its own in-flight guard: job claiming,
 stale-lease recovery, and scheduling of due entries. Claimed jobs run as

@@ -17,8 +17,9 @@ them.
 | Editor list/search endpoints     | p95 < 500 ms                                        |
 | Upload size                      | 20 MiB per file (enforced in the route and service) |
 
-Visitors never hit the CMS database: sites consume a published snapshot at build
-time, so read traffic on the CMS is editor traffic only.
+Normal content pages consume a published snapshot at build time. CMS traffic
+also includes SDK pulls, draft previews, operations checks, and public asset
+requests; these should be included when sizing the CMS and storage.
 
 ## Benchmark methodology
 

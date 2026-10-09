@@ -15,6 +15,7 @@ import {
   asset,
   buildJob,
   collection,
+  aiSettings,
   dokployCredential,
   entry,
   entryRevision,
@@ -26,6 +27,7 @@ import {
   user,
 } from '#/db/schema'
 import * as adminFns from '#/server/fn/admin'
+import * as aiFns from '#/server/fn/ai'
 import * as assetFns from '#/server/fn/assets'
 import * as authMethodFns from '#/server/fn/auth-methods'
 import * as brandingFns from '#/server/fn/branding'
@@ -787,6 +789,57 @@ export const ROWS: Row[] = [
     prepare: () => ({ data: undefined }),
   },
 
+  // ---------------------------------------------------------------- ai.ts
+  {
+    name: 'getAiSettingsFn',
+    fn: aiFns.getAiSettingsFn,
+    policy: 'agency',
+    prepare: () => ({ data: undefined }),
+  },
+  {
+    name: 'saveAiSettingsFn',
+    fn: aiFns.saveAiSettingsFn,
+    policy: 'agency',
+    note: 'Model/prompt edits; saving or removing the API key needs a fresh second factor (agency-fresh).',
+    prepare: () => {
+      const model = `authz/${uniq()}`
+      return {
+        data: { model },
+        untouched: absent(aiSettings, eq(aiSettings.model, model)),
+      }
+    },
+  },
+  {
+    name: 'listAiModelsFn',
+    fn: aiFns.listAiModelsFn,
+    policy: 'agency',
+    tolerant: true,
+    note: 'Fetches the public OpenRouter catalogue; network failures are not authorization outcomes.',
+    prepare: () => ({ data: undefined }),
+  },
+  {
+    name: 'getAiAvailabilityFn',
+    fn: aiFns.getAiAvailabilityFn,
+    policy: 'user',
+    note: 'Only a boolean; reveals nothing about the key, model or prompt.',
+    prepare: () => ({ data: undefined }),
+  },
+  {
+    name: 'generateEntrySeoFn',
+    hidden: true,
+    fn: aiFns.generateEntrySeoFn,
+    policy: 'org-editor',
+    tolerant: true,
+    note: 'Allowed callers get "AI is not set up" (no key in the test world); denied callers must not reach the provider.',
+    prepare: (w) => ({
+      data: {
+        siteId: w.X.site.id,
+        collectionKey: 'articles',
+        data: { title: 'AI', slug: `ai-${uniq()}` },
+      },
+    }),
+  },
+
   // ------------------------------------------------- security/auth/setup/me
   {
     name: 'verifyStepUpFn',
@@ -884,6 +937,7 @@ export const ROWS: Row[] = [
 
 export const ALL_FN_MODULES = {
   admin: adminFns,
+  ai: aiFns,
   assets: assetFns,
   'auth-methods': authMethodFns,
   branding: brandingFns,

@@ -303,9 +303,12 @@ export function useEntryEditor({
             ? [slugField.key]
             : []),
         ]
-        if (!touched.some((item) => item in errors)) return errors
+        const stale = Object.keys(errors).filter((path) =>
+          touched.some((item) => path === item || path.startsWith(`${item}.`)),
+        )
+        if (stale.length === 0) return errors
         const copy = { ...errors }
-        for (const item of touched) delete copy[item]
+        for (const item of stale) delete copy[item]
         return copy
       })
     },

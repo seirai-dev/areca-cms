@@ -22,6 +22,7 @@ import { Route as AppAdminIndexRouteImport } from './routes/_app/admin/index'
 import { Route as AppAdminSplatRouteImport } from './routes/_app/admin/$'
 import { Route as AppAgencyIndexRouteImport } from './routes/_app/agency/index'
 import { Route as AppAgencyActivityRouteImport } from './routes/_app/agency/activity'
+import { Route as AppAgencyAiRouteImport } from './routes/_app/agency/ai'
 import { Route as AppAgencyBrandingRouteImport } from './routes/_app/agency/branding'
 import { Route as AppAgencyPeopleRouteImport } from './routes/_app/agency/people'
 import { Route as AppSitesIndexRouteImport } from './routes/_app/sites/index'
@@ -113,6 +114,11 @@ const AppAgencyIndexRoute = AppAgencyIndexRouteImport.update({
 const AppAgencyActivityRoute = AppAgencyActivityRouteImport.update({
   id: '/activity',
   path: '/activity',
+  getParentRoute: () => AppAgencyRoute,
+} as any)
+const AppAgencyAiRoute = AppAgencyAiRouteImport.update({
+  id: '/ai',
+  path: '/ai',
   getParentRoute: () => AppAgencyRoute,
 } as any)
 const AppAgencyBrandingRoute = AppAgencyBrandingRouteImport.update({
@@ -272,6 +278,7 @@ export interface FileRoutesByFullPath {
   '/invite/$token': typeof InviteTokenRoute
   '/admin/$': typeof AppAdminSplatRoute
   '/agency/activity': typeof AppAgencyActivityRoute
+  '/agency/ai': typeof AppAgencyAiRoute
   '/agency/branding': typeof AppAgencyBrandingRoute
   '/agency/people': typeof AppAgencyPeopleRoute
   '/sites/$siteId': typeof AppSitesSiteIdRouteWithChildren
@@ -313,6 +320,7 @@ export interface FileRoutesByTo {
   '/': typeof AppIndexRoute
   '/admin/$': typeof AppAdminSplatRoute
   '/agency/activity': typeof AppAgencyActivityRoute
+  '/agency/ai': typeof AppAgencyAiRoute
   '/agency/branding': typeof AppAgencyBrandingRoute
   '/agency/people': typeof AppAgencyPeopleRoute
   '/api/assets/upload': typeof ApiAssetsUploadRoute
@@ -355,6 +363,7 @@ export interface FileRoutesById {
   '/_app/': typeof AppIndexRoute
   '/_app/admin/$': typeof AppAdminSplatRoute
   '/_app/agency/activity': typeof AppAgencyActivityRoute
+  '/_app/agency/ai': typeof AppAgencyAiRoute
   '/_app/agency/branding': typeof AppAgencyBrandingRoute
   '/_app/agency/people': typeof AppAgencyPeopleRoute
   '/_app/sites/$siteId': typeof AppSitesSiteIdRouteWithChildren
@@ -399,6 +408,7 @@ export interface FileRouteTypes {
     | '/invite/$token'
     | '/admin/$'
     | '/agency/activity'
+    | '/agency/ai'
     | '/agency/branding'
     | '/agency/people'
     | '/sites/$siteId'
@@ -440,6 +450,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin/$'
     | '/agency/activity'
+    | '/agency/ai'
     | '/agency/branding'
     | '/agency/people'
     | '/api/assets/upload'
@@ -481,6 +492,7 @@ export interface FileRouteTypes {
     | '/_app/'
     | '/_app/admin/$'
     | '/_app/agency/activity'
+    | '/_app/agency/ai'
     | '/_app/agency/branding'
     | '/_app/agency/people'
     | '/_app/sites/$siteId'
@@ -620,6 +632,13 @@ declare module '@tanstack/react-router' {
       path: '/activity'
       fullPath: '/agency/activity'
       preLoaderRoute: typeof AppAgencyActivityRouteImport
+      parentRoute: typeof AppAgencyRoute
+    }
+    '/_app/agency/ai': {
+      id: '/_app/agency/ai'
+      path: '/ai'
+      fullPath: '/agency/ai'
+      preLoaderRoute: typeof AppAgencyAiRouteImport
       parentRoute: typeof AppAgencyRoute
     }
     '/_app/agency/branding': {
@@ -823,6 +842,7 @@ declare module '@tanstack/react-router' {
 
 interface AppAgencyRouteChildren {
   AppAgencyActivityRoute: typeof AppAgencyActivityRoute
+  AppAgencyAiRoute: typeof AppAgencyAiRoute
   AppAgencyBrandingRoute: typeof AppAgencyBrandingRoute
   AppAgencyPeopleRoute: typeof AppAgencyPeopleRoute
   AppAgencyIndexRoute: typeof AppAgencyIndexRoute
@@ -832,6 +852,7 @@ interface AppAgencyRouteChildren {
 
 const AppAgencyRouteChildren: AppAgencyRouteChildren = {
   AppAgencyActivityRoute: AppAgencyActivityRoute,
+  AppAgencyAiRoute: AppAgencyAiRoute,
   AppAgencyBrandingRoute: AppAgencyBrandingRoute,
   AppAgencyPeopleRoute: AppAgencyPeopleRoute,
   AppAgencyIndexRoute: AppAgencyIndexRoute,

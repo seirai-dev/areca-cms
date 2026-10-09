@@ -1,0 +1,109 @@
+---
+title: Tokens
+description: The site, schema-write, preview, setup, metrics and invitation tokens, what each one can do, where to store it, and how to rotate it after a leak.
+---
+
+Areca uses several tokens. Each one grants one specific ability, so a leaked token exposes less than a password would. This page lists them, explains how they are stored, and gives the steps to take when one leaks.
+
+## Overview
+
+| Token | What it allows | Lifetime | Where it lives | Rotate |
+| --- | --- | --- | --- | --- |
+| Site token | Read a site's content types and published content | Until rotated | Site project environment and build secrets, as `ARECA_SITE_TOKEN` | Developer tab in Settings, then Rotate token… |
+| Schema-write token | Push a site's content types | Until rotated | Schema authoring environment only, as `ARECA_SCHEMA_TOKEN` | Developer tab in Settings, then Rotate schema token |
+| Preview token | Read one draft entry on a site's preview | One hour | Inside the preview link | Expires by itself |
+| Setup token | Create the first agency admin | Until first setup completes | The `SETUP_TOKEN` setting, or the server log | Set a new value and restart |
+| Metrics token | Read the Prometheus metrics endpoint | Until changed | The `METRICS_TOKEN` setting and your monitoring tool | Change the setting and restart |
+| Invitation link | Join a client with the role in the invitation | Seven days | The invitation link you send | Revoke or resend the invitation |
+
+## Site and schema-write tokens
+
+Each site has two tokens for its site project. Both are created with the site and are shown once.
+
+- **Site token** (`ARECA_SITE_TOKEN`). The site project uses it to read content types and the latest published content when it builds. It cannot change anything. Keep it in the environment of your deployment and in the build secrets, and in `.env.local` for local development.
+- **Schema-write token** (`ARECA_SCHEMA_TOKEN`). The site project uses it only to push its content types to Areca. It is more powerful than the site token, so keep it out of production builds. Use it only in the environment where you define content types.
+
+Each token works only for its own site. A token for one site cannot read or change another.
+
+### Storage and visibility
+
+Areca generates each token as 32 random bytes and stores only a SHA-256 hash of it. This has two consequences:
+
+- **You cannot see a token again after it is shown.** Areca cannot recover it either. If you lose a token, rotate it.
+- **The database holds no usable site tokens.** A hash cannot be turned back into a token.
+
+### Rotate a token
+
+<Steps>
+<Step>
+
+**Open the site's settings.** Open the site, then **Settings**, then the **Developer** tab.
+
+</Step>
+<Step>
+
+**Rotate the token.** Select **Rotate token…** for the site token, or **Rotate schema token** for the schema-write token. Confirm the dialog. Rotating requires a fresh authenticator code. See [two-factor authentication and step-up](/docs/security/two-factor-and-step-up).
+
+</Step>
+<Step>
+
+**Save the new token.** Areca shows the new token once, with a snippet for `.env.local`. Copy it before you select **I've saved it**.
+
+</Step>
+<Step>
+
+**Update every place that uses it.** Put the new value in the site project's environment and build secrets, and in any local `.env.local`. Redeploy so that builds use it.
+
+</Step>
+</Steps>
+
+The old token stops working immediately. A build or pull that still uses it fails with an authorization error until you update it.
+
+## Preview tokens
+
+When an editor opens a preview of a draft, Areca creates a preview link for that one entry. The link includes a token that:
+
+- names the site, the content type and the entry's slug,
+- expires one hour after it was created,
+- is signed with a secret that belongs to the site, so it cannot be changed without detection.
+
+Preview tokens are not stored. Areca cannot revoke one early. If you need to stop a leaked preview link, wait for it to expire, which takes at most one hour. Preview links are for review, not for sharing with the public.
+
+## Setup token
+
+The setup token protects the first-run page at `/setup`, which creates the first agency admin. It is needed only while the instance has no users.
+
+- If you set `SETUP_TOKEN`, use a value of at least 16 characters. That value is used.
+- If you do not set it, Areca generates a random token the first time it checks for one while the instance has no users, and writes it to the server log. The token stays the same until the server restarts, and a restart before setup is complete creates a new one. Use the most recent value in the log.
+
+Once the first admin exists, the setup token is no longer used. Complete setup promptly after installing, and do not expose `/setup` to the internet before then. See [first run](/docs/self-hosting/first-run).
+
+## Metrics token
+
+The `/api/metrics` endpoint is off until you set `METRICS_TOKEN` to a value of at least 16 characters. Until then it returns 404. Once the token is set, scrapers send it as a bearer token, and requests with a missing or wrong token get a 401 response. The endpoint is limited per IP address; see [rate limits](/docs/security/rate-limits#metrics).
+
+## Invitation links
+
+Each invitation has a link that is valid for seven days and can be used once to join. Owners see pending invitations and can copy, resend or revoke them on the People page. Resending issues a new link with a new expiry, so the old link stops working. See [people and invitations](/docs/cms/people-and-invitations).
+
+## If a token leaks
+
+Act on the token that leaked. The first step is always the same: stop the token from working.
+
+| Leaked token | What to do |
+| --- | --- |
+| Site token | Rotate it on the Developer tab. Update the site project's environment and build secrets, then redeploy. Check the activity log for the site's token rotations and for any unexpected builds. |
+| Schema-write token | Rotate the schema-write token. Push the content types again from the new environment. |
+| Preview link | Nothing to revoke. The link stops working within one hour, but until then it shows the draft to anyone who has it. |
+| Setup token, before setup is done | Finish setup at once. Then check the People page for agency admins you did not create, remove their agency admin status, and check the activity log. |
+| Metrics token | Change `METRICS_TOKEN`, restart the CMS, and update your monitoring tool. |
+| Invitation link | Revoke the invitation and send a new one. |
+
+If a token was in a Git commit, a log, or a shared chat, treat it as leaked. Rotating removes the risk of further use; it does not remove the token from history, so rotate even if you think nobody saw it.
+
+## Related
+
+- [Secrets and encryption](/docs/security/secrets)
+- [Two-factor authentication and step-up](/docs/security/two-factor-and-step-up)
+- [Site settings](/docs/cms/site-settings)
+- [Preview](/docs/sdk/preview) explains how the site project renders previews.

@@ -10,7 +10,8 @@ require an identified product need before adding another adapter or event system
 Each release has a publication ID, immutable snapshot and snapshot hash. A build
 job identifies that publication and its site; logs and publication audit metadata
 include the job ID. The SDK's current snapshot endpoint uses the publication
-pinned to the site's active job, falling back to the live release. The worker
+pinned to the site's active or uncertain job, falling back to the latest
+successful live release in Production mode or demo publication in Demo mode. The worker
 checks the site's reported publication ID before marking a deployment live.
 
 Publish and rollback RPCs require a UUID `requestKey`. Retrying the same key,

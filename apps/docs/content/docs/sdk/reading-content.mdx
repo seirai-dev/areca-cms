@@ -1,0 +1,210 @@
+---
+title: Reading content
+description: Read pulled entries with readContent, type them to your schema, resolve references and images, and fetch from the CMS directly when you need to.
+---
+
+After the [pull](/docs/sdk/pulling-content), your site reads entries from the local files with `readContent`. This guide shows how to list and find entries with types, how references and images appear in the data, and when to call the CMS client directly.
+
+`readContent` reads files from disk, so it runs only in Node.js code: a server function, a server route, or a build script. Never import it into code that runs in the browser.
+
+## Read a collection
+
+`readContent` is in `@areca-cms/site-sdk/pull`. It takes the output directory and a collection key, and returns the entries of that collection:
+
+```ts
+import { readContent } from '@areca-cms/site-sdk/pull'
+import type { SnapshotEntry } from '@areca-cms/site-sdk'
+
+const entries = readContent<SnapshotEntry>('src/generated/content', 'articles')
+```
+
+The function is synchronous. It reads and parses the file each time you call it. If you call it on every request, read the collection once and keep the result in a module-level variable. The files only change when you pull again.
+
+The path is resolved from the process's working directory, so run your code from the project root or pass an absolute path. If the file is missing, `readContent` throws an error that tells you to run `areca pull` first.
+
+## Type your entries
+
+The SDK does not generate types from your schema. Declare a type for each collection that matches its fields. Put these types in one module, so every page imports the same ones:
+
+```ts title="src/lib/content.ts"
+import { readContent } from '@areca-cms/site-sdk/pull'
+import type {
+  ImageValue,
+  ReferenceValue,
+  RichTextValue,
+  SnapshotEntry,
+} from '@areca-cms/site-sdk'
+
+const CONTENT_DIR = 'src/generated/content'
+
+export type Author = SnapshotEntry & {
+  data: {
+    name: string
+    bio?: string | null
+    photo?: ImageValue | null
+  }
+}
+
+export type Article = SnapshotEntry & {
+  data: {
+    title: string
+    excerpt?: string | null
+    body: RichTextValue
+    cover?: ImageValue | null
+    author?: ReferenceValue | null
+    category?: 'news' | 'guides' | 'updates' | null
+    publishedOn?: string | null
+    updatedOn?: string | null
+  }
+}
+
+export function getAuthors(): Author[] {
+  return readContent<Author>(CONTENT_DIR, 'authors')
+}
+
+export function getArticles(): Article[] {
+  return readContent<Article>(CONTENT_DIR, 'articles')
+}
+```
+
+The types describe what the CMS sends, but nothing checks them at runtime. If your schema changes, update the types too. A field that you mark `required` is always present in published entries. Optional fields can be missing, `null` or empty, so check them before you use them.
+
+## List and find entries
+
+Do not rely on the order of entries from `readContent`, so sort them yourself. Find one entry by its `slug`, which is the value used in your route:
+
+```ts title="src/lib/content.ts"
+export function getArticlesNewestFirst(): Article[] {
+  return [...getArticles()].sort((a, b) => {
+    const left = Date.parse(a.data.publishedOn ?? '') || 0
+    const right = Date.parse(b.data.publishedOn ?? '') || 0
+    return right - left
+  })
+}
+
+export function findArticle(slug: string): Article | undefined {
+  return getArticles().find((article) => article.slug === slug)
+}
+```
+
+Call `findArticle` from your route, and return `undefined` or `null` for an unknown slug so the route can show a 404.
+
+## Call it from a server function
+
+In TanStack Start, route loaders can run in the browser during navigation. Wrap the read in a server function, so the file read always happens on the server. This matches the example site:
+
+```ts title="src/lib/queries.ts"
+import { createServerFn } from '@tanstack/react-start'
+import { z } from 'zod'
+import { findArticle, getArticlesNewestFirst } from './content'
+
+export const loadArticles = createServerFn({ method: 'GET' }).handler(() =>
+  getArticlesNewestFirst(),
+)
+
+export const loadArticle = createServerFn({ method: 'GET' })
+  .validator(z.object({ slug: z.string().min(1) }))
+  .handler(({ data }) => findArticle(data.slug) ?? null)
+```
+
+The loader then calls `loadArticle({ data: { slug } })`. Other frameworks have an equivalent for code that runs only on the server, such as an API route, a server component or a loader that runs in Node.js.
+
+## Entry shape
+
+Each entry has the same shape:
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `id` | `string` | The entry's ID. Use it to find the entry from a reference. |
+| `slug` | `string` | The entry's slug. |
+| `publishedAt` | `string` or `null` | The publication time, as an ISO timestamp. |
+| `data` | object | The field values, keyed by field key. |
+| `seo` | `SeoMeta`, optional | The SEO data for the entry. Older snapshots do not include it. |
+
+The values in `data` depend on the field type:
+
+| Field type | Value in `data` |
+| --- | --- |
+| `text`, `textarea`, `select`, `slug`, `url` | `string` |
+| `number` | `number` |
+| `boolean` | `boolean` |
+| `date` | `string` in `YYYY-MM-DD` format |
+| `datetime` | `string` as an ISO timestamp |
+| `image` | `ImageValue`, or `null` |
+| `reference` | `ReferenceValue`, or `null` |
+| `richtext` | `RichTextValue` |
+
+See [field types](/docs/sdk/field-types) for the options that affect each type.
+
+## References
+
+A `reference` field holds a `ReferenceValue`, with the `collection` key, the target entry's `slug` and its `id`. Go live checks that every reference points to an entry in the same snapshot, so the target is available when you pull.
+
+To get the referenced entry, search its collection by `id`:
+
+```ts title="src/lib/content.ts"
+export function getAuthorFor(article: Article): Author | undefined {
+  const ref = article.data.author
+  if (!ref) return undefined
+  return readContent<Author>(CONTENT_DIR, ref.collection).find(
+    (author) => author.id === ref.id,
+  )
+}
+```
+
+Search by `id` rather than `slug`. An entry keeps its ID even if its slug changes.
+
+## Images
+
+Image fields hold an `ImageValue`:
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `url` | `string` | An absolute URL for the image file. |
+| `width` | `number` or `null` | The width in pixels, when known. |
+| `height` | `number` or `null` | The height in pixels, when known. |
+| `alt` | `string` | The alt text that the editor entered. |
+| `mimeType` | `string` | The file's MIME type, such as `image/jpeg`. |
+
+The `url` points at the CMS. Areca serves uploaded files from the CMS's public address, not from your site, and Areca does not copy images into your build. Your visitors' browsers load each image from the CMS, so the CMS must stay reachable at that address. If the CMS is offline or its address changes, images stop loading.
+
+Use `alt` for the image's alt attribute, and use `width` and `height` when you render an `<img>` tag, so the browser can reserve the space.
+
+## Rich text
+
+A `richtext` field holds a `RichTextValue`. It contains the Markdown source, a parsed document, and a static HTML version. To render it in React, pass the parsed document to the Markdown renderer. See [rich text](/docs/sdk/rich-text) for the full example.
+
+## SEO
+
+Each entry can have a `seo` object with its title, description, canonical URL, social data and JSON-LD. Convert it into page head tags with the helpers in `@areca-cms/site-sdk/seo`. See [SEO](/docs/sdk/seo).
+
+## Fetch from the CMS directly
+
+Pulling is the normal way to read content. Use the client when you need the manifest or the current snapshot in memory, for example in a one-off script:
+
+```ts
+import { createArecaClient } from '@areca-cms/site-sdk'
+
+const client = createArecaClient()
+const manifest = await client.fetchManifest()
+const snapshot = await client.fetchSnapshot()
+```
+
+`createArecaClient` reads `ARECA_CMS_URL` and `ARECA_SITE_TOKEN` from the environment, unless you pass them as options. Its `fetchManifest` and `fetchSnapshot` methods make authenticated requests with the site token. Do not call the CMS on every visitor request. These routes are rate limited per token, and the client does not retry failed requests. See [rate limits](/docs/security/rate-limits). See [client](/docs/sdk/client) and [errors and limits](/docs/sdk/errors-and-limits).
+
+## Deploy the content files
+
+`readContent` reads files at runtime, so the files must be in the deployed output. If you run your site in a container, copy the generated directory into the runtime image. For example:
+
+```dockerfile title="Dockerfile"
+COPY --from=build /app/src/generated ./src/generated
+```
+
+If the files are missing in production, `readContent` throws, so check this step in your first deployment.
+
+## Related
+
+- [Pulling content at build time](/docs/sdk/pulling-content): create the files that this page reads.
+- [Field types](/docs/sdk/field-types): the types and options for each field.
+- [Rich text](/docs/sdk/rich-text) and [SEO](/docs/sdk/seo): render the richer values.
+- [Preview](/docs/sdk/preview): show draft entries on your site before they go live.

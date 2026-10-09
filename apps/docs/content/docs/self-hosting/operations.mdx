@@ -1,0 +1,198 @@
+---
+title: Operations and monitoring
+description: Health and readiness endpoints, Prometheus metrics and alerts, logs, worker shutdown, database timeouts and routine maintenance for Areca.
+---
+
+Once Areca is running, you need to know whether it is healthy, whether releases are moving, and where to look when something fails. This page covers the endpoints, metrics, logs and background work the CMS exposes. For the environment variables that control them, see [configuration](/docs/self-hosting/configuration). For what happens to a release in the queue, see the [publishing pipeline](/docs/self-hosting/publishing-pipeline).
+
+## Health endpoints
+
+Two endpoints report health. Neither needs a sign-in.
+
+| Endpoint | Use it for | Response |
+| --- | --- | --- |
+| `GET /api/health` | Liveness: is the process serving requests? | Always `200` with `{"ok":true,"service":"cms"}`. It does not check any dependency. |
+| `GET /api/health/ready` | Readiness: can the CMS do its work? | `200` when every check passes, otherwise `503`. |
+
+The Docker image uses `/api/health` for its built-in health check, every 30 seconds. Liveness only shows that the process is responding. Restarting a container does not fix a database or storage outage, so the built-in check does not use readiness. If you want a load balancer to stop sending traffic to an instance while a dependency is down, point it at `/api/health/ready`.
+
+The readiness response lists each check. Responses contain only names, pass or fail status, timings and short, redacted reasons. Full errors are in the logs.
+
+```json title="Example readiness response (one check failing)"
+{
+  "ok": false,
+  "checks": {
+    "db": { "ok": true, "ms": 4 },
+    "storage": { "ok": false, "ms": 3001, "reason": "CheckTimeout: timed out after 3000ms" },
+    "redis": { "ok": true, "ms": 2, "degraded": true, "reason": "ECONNREFUSED" },
+    "worker": { "ok": true, "ms": 0, "detail": { "enabled": true, "tickAgeSeconds": 1 } },
+    "queue": { "ok": true, "ms": 5, "detail": { "queued": 0, "active": 1, "oldestQueuedAgeSeconds": null, "expiredLeases": 0, "schedulerAgeSeconds": 2 } }
+  }
+}
+```
+
+The checks are:
+
+- **db** runs a trivial query against PostgreSQL.
+- **storage** checks that the S3 bucket is reachable.
+- **redis** pings Redis. Rate limiting fails open when Redis is down, so a Redis failure is reported as `degraded` and does not make the instance unready.
+- **worker** fails if the publishing worker has not run for longer than `READINESS_MAX_TICK_AGE_SECONDS`. It is checked only when `WORKER_ENABLED` is on. Each process reports its own worker state.
+- **queue** fails if the oldest queued build is older than `READINESS_MAX_QUEUE_AGE_SECONDS`, if a build lease has been expired for longer than the tick age without recovery, or if the scheduler has stopped ticking.
+
+Each check has a time limit set by `READINESS_TIMEOUT_MS`.
+
+## Metrics
+
+`GET /api/metrics` returns Prometheus text. It is off by default. Set `METRICS_TOKEN` to a value of at least 16 characters, for example from `openssl rand -hex 32`, and restart the CMS. Without a token the endpoint returns `404`.
+
+Requests must send the token as a bearer credential:
+
+- A missing or wrong token returns `401`.
+- The endpoint is rate limited to 60 requests per minute per client IP. Keep your scrape interval at 15 seconds or more.
+- Behind a reverse proxy, every request can appear to come from the proxy's address, so all scrapes share one bucket. Set `RATE_LIMIT_TRUST_PROXY=true` only when the proxy overwrites the forwarding headers itself. The stock Compose file does not pass this variable; see [production setup](/docs/self-hosting/production#only-listed-variables-reach-the-container).
+
+Store the token in a file that only your Prometheus server can read:
+
+```yaml title="prometheus.yml"
+scrape_configs:
+  - job_name: areca-cms
+    metrics_path: /api/metrics
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/areca-metrics-token
+    static_configs:
+      - targets: ['cms.example.com']
+```
+
+### Metrics reference
+
+Most metrics are gauges read from the database when Prometheus scrapes, so the values stay correct across restarts and multiple instances.
+
+| Metric | Labels | Meaning |
+| --- | --- | --- |
+| `areca_build_jobs` | `status` | Build jobs in each status. |
+| `areca_build_jobs_oldest_queued_age_seconds` | | Age of the oldest queued job. `0` when the queue is empty. |
+| `areca_build_jobs_active` | | Jobs that are building, validating or deploying. |
+| `areca_build_jobs_failed_total` | | Jobs in the `failed` status. Despite the name, it is a gauge, and it falls when old history is deleted. |
+| `areca_publications` | `status` | Releases in each status. |
+| `areca_scheduled_entries_overdue` | | Scheduled entries whose time has passed but that have not been published. |
+| `areca_worker_enabled` | | `1` when this process runs the publishing worker. |
+| `areca_worker_last_tick_age_seconds` | | Seconds since the worker last ran. Reported only when the worker is enabled. |
+| `areca_scheduler_last_tick_age_seconds` | | Seconds since the scheduler last ran. Reported only when the worker is enabled. |
+| `areca_readiness_check_up` | `check` | `1` when a readiness check passes, `0` when it fails or is degraded. |
+| `areca_ready` | | `1` when `/api/health/ready` would return `200`. |
+| `areca_process_uptime_seconds` | | Seconds since this process started. |
+| `areca_process_memory_bytes` | `kind` | Memory use by kind: `rss`, `heap_used`, `heap_total` or `external`. |
+
+### Suggested alerts
+
+These rules are a starting point. Adjust the thresholds to match your release cadence.
+
+```yaml title="areca-alerts.yml"
+groups:
+  - name: areca-cms
+    rules:
+      - alert: ArecaNotReady
+        expr: areca_ready == 0
+        for: 5m
+        annotations:
+          summary: "CMS readiness failing ({{ $labels.instance }})"
+      - alert: ArecaDependencyDown
+        expr: areca_readiness_check_up{check=~"db|storage|queue|worker"} == 0
+        for: 5m
+        annotations:
+          summary: "CMS check {{ $labels.check }} is down"
+      - alert: ArecaBuildQueueStuck
+        expr: areca_build_jobs_oldest_queued_age_seconds > 900
+        for: 5m
+        annotations:
+          summary: "A publish job has waited over 15 minutes"
+      - alert: ArecaBuildJobsFailing
+        expr: increase(areca_build_jobs_failed_total[1h]) > 3
+        annotations:
+          summary: "More than 3 build jobs failed in the last hour"
+      - alert: ArecaSchedulerStalled
+        expr: areca_scheduler_last_tick_age_seconds > 300
+        annotations:
+          summary: "Scheduler has not completed a tick in 5 minutes"
+      - alert: ArecaScheduledEntriesOverdue
+        expr: areca_scheduled_entries_overdue > 0
+        for: 30m
+        annotations:
+          summary: "Scheduled entries are overdue by more than 30 minutes"
+      - alert: ArecaRedisDegraded
+        expr: areca_readiness_check_up{check="redis"} == 0
+        for: 10m
+        annotations:
+          summary: "Redis unreachable; rate limiting is failing open"
+```
+
+Alerts on `ArecaBuildQueueStuck` and `ArecaBuildJobsFailing` tell you a release needs attention. Start with the [publishing pipeline](/docs/self-hosting/publishing-pipeline#when-a-release-is-stuck) troubleshooting steps.
+
+## Logs
+
+The CMS writes one JSON object per line:
+
+```json title="Example log line"
+{"level":"error","time":"2026-10-01T13:30:20.823Z","component":"worker","msg":"job failed","jobId":"...","err":{"name":"Error","message":"...","stack":"..."}}
+```
+
+Set `LOG_LEVEL` to `debug`, `info` (the default), `warn`, `error` or `silent`. The stock Compose file does not pass it. Debug and info lines go to stdout. Warnings and errors go to stderr, so you can route them separately. Fields named `level`, `time`, `component` or `msg` are reserved. If a field uses one of those names, it is written with a `field_` prefix.
+
+Areca redacts secrets from logs on a best-effort basis. It removes values from variables whose names contain words such as `SECRET`, `TOKEN`, `PASSWORD`, `API_KEY`, `ACCESS_KEY`, `ENCRYPTION_KEY` or `CREDENTIAL`, the password in database URLs, and authorization headers. Do not rely on this to keep secrets out of your log pipeline. Keep log access limited to the people who run the instance.
+
+### Find an error from the interface
+
+When something unexpected fails, the admin interface shows `Something went wrong (ref: <id>)`. The same reference appears in the server log next to the full error, on a line with the message `unhandled server function error`. Use the reference to find the matching log line.
+
+### Build logs
+
+Each release has a build log, which you can read from the release details. Each line is limited to 8 KiB, and each job's log to 256 Ki characters. When a log goes over the limit, the oldest lines are dropped, the log starts with a `[truncated]` marker, and the most recent output is kept.
+
+## Worker and graceful shutdown
+
+The publishing worker and the scheduler run inside the CMS process. They are on by default. Set `WORKER_ENABLED=false` only during maintenance, or when you deliberately want to pause publishing and scheduled releases.
+
+`WORKER_CONCURRENCY` sets how many build jobs one process runs at a time, from 1 to 16 (default 2). Each site can have only one job running at a time, and the database enforces that across all instances. A slow deployment, which can take up to 15 minutes, does not hold up other sites or the scheduler.
+
+Areca handles `SIGTERM` and `SIGINT` like this:
+
+1. It stops taking new jobs.
+2. It waits up to `WORKER_DRAIN_TIMEOUT_MS` (default 8000) for running jobs to finish.
+3. It exits with code `0` if all jobs finished, or `1` if some were still running. A second signal stops it immediately.
+
+A job still running at exit keeps its lease. After restart, the lease expires and the job is marked failed. If the job had already sent its deploy request, the release is marked uncertain and must be reconciled. See [uncertain deployments](/docs/self-hosting/publishing-pipeline#uncertain-deployments).
+
+Keep `WORKER_DRAIN_TIMEOUT_MS` below the container's stop grace period. Docker's default is 10 seconds, so the default drain of 8 seconds fits. If you need a longer drain, raise the stop grace period in your orchestrator as well.
+
+Run one CMS instance, as described in [production setup](/docs/self-hosting/production#run-a-single-cms-replica). The database prevents two jobs for the same site, but running several instances is not a tested setup.
+
+## Database timeouts
+
+Three settings stop a slow or abandoned database operation from blocking the rest of the system:
+
+| Variable | Default | What it limits |
+| --- | --- | --- |
+| `DB_CONNECT_TIMEOUT_MS` | `5000` | How long a request waits for a pooled connection. |
+| `DB_STATEMENT_TIMEOUT_MS` | `15000` | How long any single SQL statement may run. |
+| `DB_IDLE_IN_TX_TIMEOUT_MS` | `30000` | How long a transaction may sit idle before PostgreSQL ends it, freeing its locks. |
+
+Setting a value to `0` turns that timeout off. Database migrations run at container startup and are not subject to these limits.
+
+## Routine maintenance
+
+These tasks keep an instance healthy over time:
+
+- **Back up the database and the encryption keys together.** Areca does not schedule backups for you. Keep the database copy, the S3 objects and the encryption keys in step, and test a restore. See [backup and recovery](/docs/self-hosting/backup-and-recovery).
+- **Check readiness after each deploy or restart.** Confirm `/api/health/ready` returns `200`, and that the queue is empty or moving.
+- **Review failed releases.** A failed release leaves the previous release live, but it needs a cause and a fix before the next Go live. See the [publishing pipeline](/docs/self-hosting/publishing-pipeline).
+- **Rotate credentials on a schedule.** The database password, the S3 access keys, the site tokens and the Dokploy API keys all have a rotation procedure. See [secrets](/docs/security/secrets).
+- **Clean up stored files carefully.** Storage objects that are still referenced by a draft, release or archive are protected. Follow [asset retention](/docs/self-hosting/asset-retention).
+- **Upgrade with a backup in hand.** Read [upgrades](/docs/self-hosting/upgrades) before you change the image version.
+
+## Related
+
+- [Configuration](/docs/self-hosting/configuration): every variable named on this page.
+- [Publishing pipeline](/docs/self-hosting/publishing-pipeline): the queue, the worker and recovery.
+- [Troubleshooting](/docs/self-hosting/troubleshooting)
+- [Capacity](/docs/self-hosting/capacity): sizing guidance.

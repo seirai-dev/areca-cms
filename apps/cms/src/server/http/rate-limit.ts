@@ -72,7 +72,7 @@ function tooManyRequests(rule: RateLimitRule, now: number) {
   )
 }
 
-async function consume(
+export async function consumeRateLimit(
   store: RateLimitStore,
   scope: string,
   identifier: string,
@@ -106,7 +106,7 @@ export async function enforceRequestRateLimit(
 
   if (path === '/api/metrics') {
     try {
-      const allowed = await consume(
+      const allowed = await consumeRateLimit(
         dependencies.store,
         'metrics',
         `ip:${getClientIp(request, dependencies.trustProxy)}`,
@@ -142,7 +142,7 @@ export async function enforceRequestRateLimit(
       const identifier = token
         ? `token:${token}`
         : `ip:${getClientIp(request, dependencies.trustProxy)}`
-      const allowed = await consume(
+      const allowed = await consumeRateLimit(
         dependencies.store,
         'site-api',
         identifier,
@@ -158,7 +158,7 @@ export async function enforceRequestRateLimit(
       : `ip:${getClientIp(request, dependencies.trustProxy)}`
     const rule = isUpload ? UPLOAD_RULE : MUTATION_RULE
     const scope = isUpload ? 'upload' : 'mutation'
-    const allowed = await consume(
+    const allowed = await consumeRateLimit(
       dependencies.store,
       scope,
       identifier,

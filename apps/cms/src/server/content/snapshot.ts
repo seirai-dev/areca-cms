@@ -8,9 +8,11 @@ import { and, eq, or } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { collection, entry, site } from '#/db/schema'
+import { readEntrySeo, withoutSeo } from '#/lib/seo'
 import type {
   EntryData,
   Field,
+  ImageValue,
   ReferenceValue,
   Snapshot,
   SnapshotEntry,
@@ -26,6 +28,7 @@ import { convertRichText, validateRichText } from '#/server/richtext'
 
 import { getCollection, listCollections } from './collections.ts'
 import { NotFoundError, ValidationError } from './errors.ts'
+import { buildEntrySeo } from './seo.ts'
 import { validateEntryData } from './validation.ts'
 
 type IncludedEntry = {
@@ -165,6 +168,8 @@ export async function buildSnapshot(
   const assetIds = new Set<string>()
   const assetKeys = new Set<string>()
   for (const item of included) {
+    const ogImage = readEntrySeo(item.data).ogImage
+    if (ogImage) assetIds.add(ogImage)
     for (const field of item.fields) {
       const value = item.data[field.key]
       if (field.type === 'richtext') {
@@ -247,17 +252,33 @@ export async function buildSnapshot(
       .sort(compareSnapshotEntries)
     const converted: SnapshotEntry[] = []
     for (const item of items) {
+      const data = await convertFields(item.fields, item.data, {
+        includedById,
+        connection,
+        assets,
+        siteId,
+        organizationId: existingSite.organizationId,
+        strict: true,
+      })
+      const ogImageId = readEntrySeo(item.data).ogImage
       converted.push({
         id: item.row.id,
         slug: item.slug,
         publishedAt: item.publishedAt?.toISOString() ?? null,
-        data: await convertFields(item.fields, item.data, {
-          includedById,
-          connection,
-          assets,
-          siteId,
-          organizationId: existingSite.organizationId,
-          strict: true,
+        data,
+        seo: buildEntrySeo({
+          fields: item.fields,
+          data: item.data,
+          converted: data,
+          slug: item.slug,
+          routePattern: item.routePattern,
+          site: existingSite,
+          // A missing OG image falls back to the hero image rather than
+          // blocking the whole publication.
+          ogImage: ogImageId
+            ? (resolveAssetFromLookup(assets, ogImageId) ?? null)
+            : null,
+          publishedAt: item.publishedAt,
         }),
       })
     }
@@ -302,12 +323,27 @@ export async function buildPreviewEntry(
     organizationId: existingSite.organizationId,
     strict: false,
   })
+  const ogImageId = readEntrySeo(row.draftData).ogImage
+  const ogImage: ImageValue | null = ogImageId
+    ? ((await resolveAssetValue(ogImageId, existingSite.organizationId)) ??
+      null)
+    : null
 
   return {
     id: row.id,
     slug: row.slug,
     publishedAt: row.publishedAt?.toISOString() ?? null,
     data,
+    seo: buildEntrySeo({
+      fields: col.fields,
+      data: row.draftData,
+      converted: data,
+      slug: row.slug,
+      routePattern: col.routePattern,
+      site: existingSite,
+      ogImage,
+      publishedAt: row.publishedAt,
+    }),
   }
 }
 
@@ -331,7 +367,7 @@ async function convertFields(
     strict: boolean
   },
 ): Promise<Record<string, unknown>> {
-  const out: Record<string, unknown> = { ...data }
+  const out: Record<string, unknown> = withoutSeo({ ...data })
 
   for (const field of fields) {
     const value = data[field.key]
