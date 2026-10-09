@@ -1,0 +1,84 @@
+---
+title: Deployments
+description: Connect a client's Dokploy account, choose Production or Demo mode for each site, set the application and health check URL, and test the connection.
+---
+
+When a release goes live, Areca can redeploy the website through a **deployment target**. This page covers the admin side: connecting a client to Dokploy, and choosing how each of its sites publishes. For the operator's view of targets and health checks, see [deployment targets](/docs/self-hosting/deployment-targets).
+
+You set this up in two places:
+
+1. **The client** has one Dokploy connection, shared by all of its sites. You set it up under **Agency › Clients › [client] › Deployment**.
+2. **Each site** chooses a publishing mode and an application. You set these under **Settings › Deployment** for that site.
+
+Only agency admins can change either place.
+
+![Deployment tab of a site's settings, showing Publishing mode set to Production, the Dokploy provider, the application ID and the health check URL](/screenshots/current-deployment-settings.png)
+
+## Choose a publishing mode
+
+Each site has a **Publishing mode**, set on **Settings › Deployment**.
+
+| Mode | What happens when a release goes live |
+| --- | --- |
+| **Production** | Areca builds the release, redeploys the site's Dokploy application, and checks the health check URL. The release counts as live only after the check passes. |
+| **Demo** (labelled "Demo — no production deployment") | Areca builds and records the release, but doesn't deploy it. Demo releases are labelled and never count as live in production. |
+
+Use **Demo** for a site that isn't ready to be deployed, or for local work. Use **Production** for the site the public sees.
+
+## Connect the client to Dokploy
+
+<Steps>
+<Step>
+
+**Open the client's Deployment tab.** In the **Agency** workspace, open the client and select **Deployment**.
+
+</Step>
+<Step>
+
+**Enter the Dokploy URL.** Use the address of your Dokploy dashboard, such as `https://dokploy.example.com`.
+
+</Step>
+<Step>
+
+**Enter the API key.** Areca encrypts the key before storing it and never shows it again. To replace a saved key later, enter a new one. Leave the field blank to keep the current key.
+
+</Step>
+<Step>
+
+**Select Save and verify.** Areca checks the credentials and lists the applications they can see. The **Connected** status appears when the connection works.
+
+</Step>
+</Steps>
+
+### Test the connection
+
+Use **Verify** to test the saved credentials again at any time, for example after you change something in Dokploy. If the test fails, Areca shows the reason next to the form, such as `Couldn't connect` followed by the error from Dokploy. Fix the URL or key, then verify again.
+
+**Remove credentials** deletes the saved connection. Production sites of this client then fail to deploy until you add the credentials again.
+
+## Set the application for a site
+
+Open the site's **Settings › Deployment** tab.
+
+- **Application.** When the client is connected, Areca lists the Dokploy applications the credentials can see. Select one from the list. If the list is long, search it by name.
+- **Or enter the application ID.** If you can't see the application in the list, type its ID. Find it in the application's URL in Dokploy. Areca marks an ID that isn't in the list as **Not in the list**.
+- **Health check URL.** The address Areca calls after each deploy. It must use `http` or `https`, and it must report the publication ID that Areca sends to the site. Production sites must have this URL. The CMS labels the field optional, but Go live is blocked in Production mode without it. Demo sites skip the health check. See [deployment targets](/docs/self-hosting/deployment-targets) for the details.
+
+Select **Save** to store the changes.
+
+Areca checks the health URL after each deploy, not when you save. To confirm the URL works before you go live, open it in a browser and check that it responds.
+
+## Stop deploying
+
+**Stop deploying…** removes the application and health check URL from a site. The site stops deploying through Dokploy.
+
+<Callout type="warn" title="A Production site can't go live without a target">
+If the site is still in **Production** mode, Go live is blocked until you choose an application and health check URL again. To release without deploying, switch the site to **Demo** first.
+</Callout>
+
+## Related
+
+- [Deployment targets](/docs/self-hosting/deployment-targets): how the Dokploy target and health check work for operators.
+- [Going live](/docs/cms/going-live): what happens when you publish a release.
+- [Site settings](/docs/cms/site-settings): the other tabs for each site.
+- [Configuration](/docs/self-hosting/configuration): the settings an operator sets for the installation.

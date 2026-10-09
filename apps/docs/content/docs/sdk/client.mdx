@@ -1,0 +1,457 @@
+---
+title: JavaScript API reference
+description: Every export of @areca-cms/site-sdk and its subpaths, with signatures, parameters, return types, errors and examples.
+---
+
+The SDK has one main entry point and three subpath entry points. Import from the entry point that matches what you need. The SDK is ESM only, has no framework dependency, and needs Node.js 22.6 or later on the server.
+
+<Callout type="warn" title="Keep the site token on the server">
+
+`createArecaClient`, `pullContent` and `readContent` read server-only settings. `pullContent` and `readContent` also use the file system. Do not import them into browser code, and never put a site token or schema token in a client bundle.
+
+</Callout>
+
+## Entry points
+
+| Import path | Exports |
+| --- | --- |
+| `@areca-cms/site-sdk` | `createArecaClient`, `defineSiteContent`, `manifestFromConfig`, `getPreviewEntry`, `previewHeaders`, `seoHead`, `seoHeadHtml`, `seoJsonLd`, `richTextDocument`, `richTextMarkdown`, `richTextHtml`, and the types listed in [Types](#types) |
+| `@areca-cms/site-sdk/pull` | `pullContent`, `readContent`, and the type `PullContentOptions` |
+| `@areca-cms/site-sdk/seo` | `seoHead`, `seoHeadHtml`, `seoJsonLd`, and the types `HeadMeta`, `HeadLink`, `HeadScript`, `SeoHeadOptions`, `SeoHeadResult` |
+| `@areca-cms/site-sdk/rich-text` | `richTextDocument`, `richTextMarkdown`, `richTextHtml` |
+
+The main entry point does not export `pullContent` or `readContent`. Import them from `@areca-cms/site-sdk/pull`. The CLI helpers and the internal modules are not part of the public API.
+
+## createArecaClient
+
+Creates a client for the CMS's site API. Use it when you need to call the API from your own code. For most sites, `areca pull` and the helpers in `/pull` are enough.
+
+```ts
+function createArecaClient(options?: ArecaClientOptions): ArecaClient
+```
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `options.cmsUrl` | `string` | `process.env.ARECA_CMS_URL` | CMS base URL. Trailing slashes are removed. The SDK does not check the protocol. |
+| `options.siteToken` | `string` | `process.env.ARECA_SITE_TOKEN` | Site token, sent as a bearer token on reads. |
+| `options.schemaToken` | `string` | `process.env.ARECA_SCHEMA_TOKEN` | Schema token, used only by `syncManifest`. It is read when that method runs, not when the client is created. |
+
+**Returns:** [`ArecaClient`](#arecaclient-methods).
+
+**Throws:** `Error` when `cmsUrl` or `siteToken` is missing or empty after trimming. The message names the environment variable and the option:
+
+```text
+Missing ARECA_SITE_TOKEN. Set the ARECA_SITE_TOKEN environment variable or pass siteToken to createArecaClient().
+```
+
+```ts
+import { createArecaClient } from '@areca-cms/site-sdk'
+
+// Reads ARECA_CMS_URL and ARECA_SITE_TOKEN from the environment.
+const client = createArecaClient()
+const snapshot = await client.fetchSnapshot()
+console.log(snapshot.publicationId, Object.keys(snapshot.collections))
+```
+
+### ArecaClient methods
+
+Each method sends one request. There are no timeouts and no retries. Network failures and HTTP errors are thrown as `Error`. See [Errors and limits](/docs/sdk/errors-and-limits) for the full list of messages.
+
+| Method | Request | Token | Returns |
+| --- | --- | --- | --- |
+| `syncManifest(config)` | `POST /api/sites/manifest` | Schema token | `Promise<{ ok: true }>` |
+| `fetchManifest()` | `GET /api/sites/manifest` | Site token | `Promise<SiteManifest>` |
+| `fetchSnapshot()` | `GET /api/sites/snapshot/current` | Site token | `Promise<Snapshot>` |
+| `fetchPreview(token)` | `GET /api/sites/preview?token=...` | Site token, plus the preview token | `Promise<PreviewResult>` |
+
+**`syncManifest(config: SiteContentConfig)`** converts the config with `manifestFromConfig` and sends it. The `siteKey` is not sent; the CMS identifies the site by the token.
+
+- Throws if `schemaToken` is missing: `Missing ARECA_SCHEMA_TOKEN. Set the ARECA_SCHEMA_TOKEN environment variable or pass schemaToken to createArecaClient().`
+- The site token is never used as a fallback.
+- Throws `Failed to sync manifest (<status>)` with the CMS's error message, if any, appended.
+- Throws an identifier or duplicate-field error from `manifestFromConfig` before any request is made.
+
+**`fetchManifest()`** returns the content definitions the CMS currently has for the site, as `{ collections }`.
+
+- Throws `Failed to fetch manifest (<status>)` on a non-2xx response.
+
+**`fetchSnapshot()`** returns the current publication. The CMS returns the publication of any active build first. If there is none, it returns the live publication, or the demo publication for a site in Demo mode.
+
+- Throws `No publication exists for this site. Publish content in the CMS before running areca pull.` on a 404. The CMS's message is appended when present.
+- Throws `Failed to fetch snapshot (<status>)` on other non-2xx responses.
+
+**`fetchPreview(token)`** returns one draft entry for a signed preview link.
+
+- Throws `Failed to fetch preview (<status>)` on a non-2xx response. A 401 means the token is invalid or expired. A 404 means the entry no longer exists.
+
+```ts
+const client = createArecaClient()
+const manifest = await client.fetchManifest()
+for (const [key, collection] of Object.entries(manifest.collections)) {
+  console.log(key, collection.route, collection.fields.length)
+}
+```
+
+## defineSiteContent
+
+Returns the config object you pass in, with its type inferred. It does not validate anything. Use it in `areca.config.ts` so your editor checks the shape.
+
+```ts
+function defineSiteContent<T extends SiteContentConfig>(config: T): T
+```
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `config` | `SiteContentConfig` | The site's `siteKey` and `collections`. |
+
+**Returns:** the same object, typed as `T`.
+
+**Throws:** nothing. Invalid identifiers only fail later, in `manifestFromConfig`, `areca manifest push` or `areca manifest pull`.
+
+```ts title="areca.config.ts"
+import { defineSiteContent } from '@areca-cms/site-sdk'
+
+export default defineSiteContent({
+  siteKey: 'acme-site',
+  collections: {
+    articles: {
+      route: '/blog/$slug',
+      label: 'Articles',
+      fields: [{ key: 'title', label: 'Title', type: 'text', required: true }],
+    },
+  },
+})
+```
+
+## manifestFromConfig
+
+Converts a config into the request body that `POST /api/sites/manifest` expects. It drops `siteKey` and checks identifiers.
+
+```ts
+function manifestFromConfig(config: SiteContentConfig): SiteManifest
+```
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `config` | `SiteContentConfig` | The config to convert. |
+
+**Returns:** `{ collections }`. Each collection keeps `route`, `fields`, and `label` only when it is set.
+
+**Throws:**
+
+- `Unsafe collection or field identifier: <value>` when a collection key, field key, or a field's `collection` or `after` value is not a safe identifier.
+- `Duplicate field identifier: <key>` when two fields in one collection share a key.
+
+```ts
+import { manifestFromConfig } from '@areca-cms/site-sdk'
+import config from './areca.config'
+
+const body = manifestFromConfig(config)
+```
+
+## pullContent
+
+Downloads the current publication and writes it to a folder. It is the function behind `areca pull`. Import it from `@areca-cms/site-sdk/pull`.
+
+```ts
+function pullContent(options: PullContentOptions): Promise<Snapshot>
+```
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `options.outDir` | `string` | None (required) | Folder to write into. Created if it does not exist. |
+| `options.client` | `ArecaClient` | `createArecaClient()` | Client to use. Pass one in tests. |
+
+**Returns:** the `Snapshot` that was written.
+
+The function writes `manifest.json` first, then one `<collection>.json` file per collection. It checks every collection key before it writes any file.
+
+**Throws:**
+
+- Every error from `fetchSnapshot`, including the "No publication exists" message.
+- `Unsafe collection or field identifier: <key>` when a collection key is not a safe identifier. No file is written.
+- `Output path escapes content directory` when a target path leaves `outDir`.
+- `Content output must not be a symbolic link` when a target file is a symlink.
+- File-system errors, such as permission errors.
+
+<Callout type="warn" title="A failed pull can leave the folder partly updated">
+
+`manifest.json` is written before the collection files are checked for symlinks. If a check fails, `manifest.json` already shows the new publication while some collection files still hold the old data. Run `pullContent` again after you fix the problem. Files for collections that were removed from the publication are not deleted.
+
+</Callout>
+
+```ts
+import { pullContent } from '@areca-cms/site-sdk/pull'
+
+const snapshot = await pullContent({ outDir: 'src/generated/content' })
+console.log(snapshot.publicationId, snapshot.hash)
+```
+
+## readContent
+
+Reads one collection file that `pullContent` wrote. It is synchronous, so you can call it in a server loader or at build time.
+
+```ts
+function readContent<T = SnapshotEntry>(outDir: string, collectionKey: string): T[]
+```
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `outDir` | `string` | None (required) | The folder that `pullContent` wrote into. |
+| `collectionKey` | `string` | None (required) | The collection key, for example `articles`. |
+| `T` | type parameter | `SnapshotEntry` | The type of the entry objects. The SDK does not check the JSON against `T`. |
+
+**Returns:** an array of entries, in the order the CMS sent them. An empty array is valid.
+
+**Throws:**
+
+- `Unsafe collection or field identifier: <key>` when the key is not a safe identifier.
+- `No content file for collection "<key>" in <outDir>. Run areca pull first.` when the folder is missing.
+- `No content file for collection "<key>" at <path>. Run areca pull first.` when the collection file is missing.
+- `Output path escapes content directory` or `Content output must not be a symbolic link`, as for `pullContent`.
+- A `SyntaxError` if the file is not valid JSON.
+
+```ts
+import { readContent } from '@areca-cms/site-sdk/pull'
+import type { SnapshotEntry } from '@areca-cms/site-sdk'
+
+type Article = SnapshotEntry & { data: { title: string; publishedAt?: string } }
+
+const articles = readContent<Article>('src/generated/content', 'articles')
+```
+
+## getPreviewEntry
+
+Fetches a draft entry for a preview page. Call it on the server, from the route that handles the preview link.
+
+```ts
+function getPreviewEntry(options: { token: string; client?: ArecaClient }): Promise<PreviewResult>
+```
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `options.token` | `string` | None (required) | The signed preview token from the preview link. |
+| `options.client` | `ArecaClient` | `createArecaClient()` | Client to use. The default reads the environment on each call. |
+
+**Returns:** `{ collection, slug, entry }`.
+
+**Throws:** the same errors as `fetchPreview`, such as `Failed to fetch preview (401): Unauthorized` for an invalid or expired token.
+
+```ts
+import { getPreviewEntry, previewHeaders } from '@areca-cms/site-sdk'
+
+const preview = await getPreviewEntry({ token })
+// Set these on the response that renders the preview.
+const headers = previewHeaders()
+```
+
+## previewHeaders
+
+Returns the headers that keep a preview page out of search engines and out of caches.
+
+```ts
+function previewHeaders(): { 'X-Robots-Tag': 'noindex, nofollow'; 'Cache-Control': 'no-store' }
+```
+
+**Parameters:** none. Each call returns a new object.
+
+**Returns:** the two headers above. The SDK does not set them for you. Your framework has to send them on the preview response.
+
+## seoHead
+
+Turns an entry's `seo` object into the parts of a page head: a title, meta tags, links and JSON-LD scripts. Import it from the main entry or from `@areca-cms/site-sdk/seo`.
+
+```ts
+function seoHead(seo: SeoMeta | null | undefined, options?: SeoHeadOptions): SeoHeadResult
+```
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `seo` | `SeoMeta` or `null` or `undefined` | None (required) | The `seo` value from an entry. Older snapshots do not have it. |
+| `options.titleTemplate` | `string` or `(title: string) => string` | No template | A string template where the first `%s` is replaced with the title, or a function that returns the final title. |
+| `options.siteName` | `string` | `seo.openGraph.siteName` | Overrides `og:site_name`. |
+
+**Returns:** a `SeoHeadResult`. When `seo` is `null` or `undefined`, the result is `{ title: undefined, meta: [], links: [], scripts: [] }`.
+
+The result contains:
+
+- `title`: the page title with the template applied. It is also the `{ title }` entry in `meta`.
+- `meta`: description, robots, Open Graph, article and Twitter tags. Blank and `null` values are skipped.
+- `links`: a canonical link when `canonicalUrl` is set.
+- `scripts`: one `application/ld+json` script for each object in `seo.jsonLd`.
+
+**Throws:** nothing.
+
+```tsx
+import { createFileRoute } from '@tanstack/react-router'
+import { seoHead } from '@areca-cms/site-sdk/seo'
+
+export const Route = createFileRoute('/blog/$slug')({
+  head: ({ loaderData }) => {
+    const head = seoHead(loaderData.entry.seo, { titleTemplate: '%s · Acme' })
+    return { meta: head.meta, links: head.links, scripts: head.scripts }
+  },
+})
+```
+
+## seoHeadHtml
+
+Does what `seoHead` does, and returns the result as an HTML string. Use it when your framework takes raw HTML for the head.
+
+```ts
+function seoHeadHtml(seo: SeoMeta | null | undefined, options?: SeoHeadOptions): string
+```
+
+Takes the same parameters as `seoHead`.
+
+**Returns:** the title, meta, link and script tags, one per line. Text and attribute values are HTML-escaped. JSON-LD is escaped so it cannot close its `<script>` tag early. For `null` input the result is an empty string.
+
+**Throws:** nothing.
+
+## seoJsonLd
+
+Returns the entry's JSON-LD objects as escaped JSON strings, ready to put inside `<script type="application/ld+json">`.
+
+```ts
+function seoJsonLd(seo: SeoMeta | null | undefined): string[]
+```
+
+**Returns:** one string per object in `seo.jsonLd`. Returns `[]` for `null`, `undefined`, or a missing list. Each string is safe to place inside a script element.
+
+**Throws:** nothing.
+
+## richTextDocument
+
+Returns the parsed document of a `richtext` value, ready to render with `@tanstack/markdown`.
+
+```ts
+function richTextDocument(value: RichTextValue | null | undefined): MarkdownDocument
+```
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `value` | `RichTextValue` or `null` or `undefined` | The field value from an entry. |
+
+**Returns:** the `document` from the value. For older snapshots that only have `markdown`, the SDK parses the Markdown. For `null` or `undefined`, it returns an empty root node.
+
+**Throws:** nothing.
+
+```tsx
+import { Markdown } from '@tanstack/markdown/react'
+import { richTextDocument } from '@areca-cms/site-sdk/rich-text'
+import type { RichTextValue } from '@areca-cms/site-sdk'
+
+export function ArticleBody({ body }: { body: RichTextValue }) {
+  return <Markdown>{richTextDocument(body)}</Markdown>
+}
+```
+
+The `document` type comes from `@tanstack/markdown`, which the SDK pins to an exact version. Use the same version of `@tanstack/markdown` in your site so the renderer and the document format match.
+
+## richTextMarkdown
+
+```ts
+function richTextMarkdown(value: RichTextValue | null | undefined): string
+```
+
+**Returns:** `value.markdown`, or `''` for `null` and `undefined`.
+
+## richTextHtml
+
+```ts
+function richTextHtml(value: RichTextValue | null | undefined): string
+```
+
+**Returns:** `value.html`, or `''` for `null` and `undefined`. The HTML is rendered by the CMS and is not sanitized again by the SDK. Only render it when you trust the content.
+
+## Types
+
+These types are exported from the main entry point. The types from the subpaths are listed with their functions above.
+
+| Type | Description |
+| --- | --- |
+| `ArecaClient` | The object returned by `createArecaClient`. |
+| `ArecaClientOptions` | Options for `createArecaClient`. |
+| `SiteContentConfig` | The shape of `areca.config.ts`: `siteKey` and `collections`. |
+| `CollectionConfig` | One collection: `route`, optional `label`, and `fields`. |
+| `Field` | One field definition. |
+| `FieldType` | The 12 field type names. See [Field types](/docs/sdk/field-types). |
+| `SiteManifest` | The request and response body for `/api/sites/manifest`: `{ collections }`. |
+| `Snapshot` | The publication: `publicationId`, `siteKey`, `createdAt`, `hash`, and `collections`. |
+| `SnapshotEntry` | One entry: `id`, `slug`, `publishedAt`, `data`, and optional `seo`. |
+| `PreviewResult` | `{ collection, slug, entry }` from a preview. |
+| `PulledContentManifest` | The shape of `manifest.json` written by `pullContent`. |
+| `RichTextValue` | A `richtext` value: `json`, `markdown`, `document` and `html`. |
+| `ImageValue` | An `image` value: `url`, `width`, `height`, `alt` and `mimeType`. |
+| `ReferenceValue` | A `reference` value: `collection`, `slug` and `id`. |
+| `SeoMeta` | The `seo` object on an entry. |
+| `HeadMeta`, `HeadLink`, `HeadScript`, `SeoHeadOptions`, `SeoHeadResult` | Types for the SEO helpers. Also exported from `@areca-cms/site-sdk/seo`. |
+
+```ts
+type SiteContentConfig = { siteKey: string; collections: Record<string, CollectionConfig> }
+type CollectionConfig = { route: string; label?: string; fields: Field[] }
+type Field = {
+  key: string
+  label: string
+  type: FieldType
+  required?: boolean
+  options?: string[]
+  collection?: string
+  description?: string
+  after?: string
+}
+
+type SiteManifest = { collections: Record<string, CollectionConfig> }
+
+type Snapshot = {
+  publicationId: string
+  siteKey: string
+  createdAt: string
+  hash: string
+  collections: Record<string, SnapshotEntry[]>
+}
+
+type SnapshotEntry = {
+  id: string
+  slug: string
+  publishedAt: string | null
+  data: Record<string, unknown> // your own types go here
+  seo?: SeoMeta               // missing in snapshots from older CMS versions
+}
+
+type PreviewResult = { collection: string; slug: string; entry: SnapshotEntry }
+
+type PulledContentManifest = {
+  publicationId: string
+  hash: string
+  createdAt: string
+  collections: Record<string, number> // entry counts per collection
+}
+
+type RichTextValue = {
+  json: unknown
+  markdown: string
+  document: MarkdownDocument
+  html: string
+}
+
+type ImageValue = {
+  url: string
+  width: number | null
+  height: number | null
+  alt: string
+  mimeType: string
+}
+
+type ReferenceValue = { collection: string; slug: string; id: string }
+```
+
+`SeoMeta` has these top-level keys: `title`, `description`, `canonicalUrl`, `robots`, `focusKeyphrase`, `openGraph`, `twitter`, `author`, `summary`, `keyTakeaways`, `faq`, `about`, and `jsonLd`. The CMS fills them in. The SDK does not render `summary`, `keyTakeaways` or `faq`. Render them on the page yourself, as [SEO](/docs/sdk/seo) explains.
+
+The SDK does not generate types from your schema. `SnapshotEntry.data` is `Record<string, unknown>`, so write an interface for each collection and cast with it, as [Reading content](/docs/sdk/reading-content) shows.
+
+## Related
+
+- [CLI reference](/docs/sdk/cli) covers the command-line equivalents.
+- [HTTP API](/docs/sdk/http-api) describes the requests this client makes.
+- [Errors and limits](/docs/sdk/errors-and-limits) lists every error message.

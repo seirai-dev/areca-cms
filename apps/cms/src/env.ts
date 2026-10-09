@@ -64,6 +64,12 @@ export const env = createEnv({
     DOKPLOY_CREDENTIALS_ENCRYPTION_KEY: z
       .string()
       .regex(/^[A-Za-z0-9+/]{43}=$/, 'Must be a base64-encoded 32-byte key'),
+    // Encrypts the OpenRouter API key stored by /agency/ai. Optional: AI
+    // features stay unavailable until it is set.
+    AI_SETTINGS_ENCRYPTION_KEY: z
+      .string()
+      .regex(/^[A-Za-z0-9+/]{43}=$/, 'Must be a base64-encoded 32-byte key')
+      .optional(),
     DOKPLOY_DEV_FALLBACK_ENABLED: z
       .enum(['true', 'false'])
       .optional()

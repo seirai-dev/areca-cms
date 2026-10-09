@@ -1,0 +1,172 @@
+---
+title: Upgrading
+description: Upgrade a self-hosted Areca instance safely by pinning images, backing up, rehearsing on a restored copy, and knowing how to roll back.
+---
+
+Upgrading Areca means replacing the CMS image and letting it migrate the database. Database migrations only move forward, so the safe way to upgrade is to back up first, rehearse on a restored copy, and keep the previous image so you can roll back. This page covers the image tags, what happens at startup, the upgrade procedure, rollback, and the extra checks for high-risk releases.
+
+<Callout type="warn" title="Migrations cannot be reversed">
+There is no down migration. The only way back from a bad upgrade is the backup you took before it, plus the previous image. Take a fresh backup before every upgrade, and keep it until the new version has run through a normal publishing cycle.
+</Callout>
+
+## Choose an image tag
+
+The CMS image is published to `ghcr.io/ekozf/areca-cms`. Set the image in the `CMS_IMAGE` variable in `docker/.env`. The Compose file defaults to `latest` if the variable is not set.
+
+| Tag | Contents | Use it for |
+| --- | --- | --- |
+| `latest` | Both architectures, built from `master` | Trying the demo only. |
+| `latest-amd64`, `latest-arm64` | One architecture, built from `master` | Trying the demo only. |
+| `sha-<full-commit-sha>` | Both architectures for one commit | Production. |
+| `sha-<full-commit-sha>-amd64`, `sha-<full-commit-sha>-arm64` | One architecture for one commit | Production, on a single-architecture host. |
+
+For production, pin the image to a `sha-` tag, or to a digest such as `ghcr.io/ekozf/areca-cms@sha256:<digest>`. A digest cannot change under you, so it is the most predictable choice. Record the tag or digest before and after each upgrade, because that is the value you roll back to.
+
+```sh title="docker/.env"
+CMS_IMAGE=ghcr.io/ekozf/areca-cms:sha-<full-commit-sha>
+```
+
+The PostgreSQL, Redis, RustFS and Mailpit images in the Compose file are also pinned to fixed versions. Change them as separate, deliberate upgrades. A PostgreSQL major version change is not an image swap. It needs a dump and restore, and the project does not provide a script for it.
+
+## What happens at startup
+
+The CMS image runs a startup script every time a container starts. On each start, it:
+
+1. Waits for PostgreSQL to accept connections. It tries for about 60 seconds, then stops with an error.
+2. Applies any pending database migrations, and logs `database migrations applied` when they finish.
+3. Creates the S3 bucket if it does not exist.
+4. Starts the CMS server. Unless `WORKER_ENABLED=false` is set, the publish worker and scheduler start in the same process.
+
+Migrations run automatically. You do not run a migration command. If a migration fails, the container exits before the server starts, and the container log shows the error. Treat a failed migration as a reason to restore from backup, unless you have checked that nothing was applied.
+
+A lock makes sure that only one container runs migrations at a time. Other starting containers wait for up to 10 minutes and then find nothing left to apply. The lock prevents two migrations running together, but it does not make a rolling upgrade safe. Stop the old containers before you start the new one, as the procedure below does.
+
+The image includes a health check that calls `/api/health` every 30 seconds. `docker compose up -d --wait` uses that check to decide when the new container is ready.
+
+## Migration release notes
+
+Most migrations need no action from you. The notes below cover the migrations that change behaviour or data in a way you should know about. The other migrations are not listed here. For the full list, read the files in the `apps/cms/drizzle` folder of the release you are installing.
+
+| Migration | What it does | What you do |
+| --- | --- | --- |
+| `0007` and `0008` | Part of the high-risk release. See [high-risk upgrades](#high-risk-upgrades). | Follow the high-risk checks. |
+| `0010` | Makes the audit log's client column optional, so instance-level events can be recorded. | Nothing. |
+| `0011` | Adds delivery-tracking columns to invitations. | Nothing. |
+| `0012` | Corrects which releases can be rolled back. | Check the rollback options in the release history after the upgrade. |
+| `0016` | Adds the AI settings table and an optional SEO prompt per site. It does not rewrite content. | Keep `AI_SETTINGS_ENCRYPTION_KEY` with your backups if you have a provider key saved. |
+
+`0012` changes data. Earlier code marked every superseded release as having been live, which allowed releases that were never deployed to be rolled back. After the upgrade, a release loses its rollback option only if nothing shows it was deployed. Releases with evidence of deployment keep it. No data is deleted, and the migration is safe to run again. Some historic releases may keep an option they should not have. A release whose build history has been pruned may lose its option even though it was deployed.
+
+## Keep secrets stable
+
+Do not change these values during an upgrade:
+
+- `BETTER_AUTH_SECRET`. Changing it signs everyone out.
+- `DOKPLOY_CREDENTIALS_ENCRYPTION_KEY`. Changing it makes saved deployment credentials unreadable.
+- `AI_SETTINGS_ENCRYPTION_KEY`, if you have an AI provider key saved. Changing it means entering the provider key again.
+
+See [configuration](/docs/self-hosting/configuration) for where these values are set.
+
+## Upgrade procedure
+
+Test the upgrade on a restored copy before you touch production. Then follow the steps below during an agreed maintenance window.
+
+<Steps>
+<Step>
+
+**Choose the target and check it.** Note the current image tag or digest. Choose the `sha-` tag or digest of the release you want, and confirm that its CI run passed. CI runs type checks, unit tests and secret scans.
+
+</Step>
+<Step>
+
+**Back up production.** From the repository root, run the coordinated backup against the Compose project that runs your instance. The command stops the stack while it copies the database, object storage, Redis data and configuration.
+
+```sh title="From the repository root"
+node docker/recovery.mjs backup areca-demo docker/.env /secure/backups/areca-2026-10-01
+```
+
+Copy the archive off the host to a protected location, then restart the stack with `cd docker && docker compose up -d --wait`. See [backup and recovery](/docs/self-hosting/backup-and-recovery) for what the archive contains.
+
+</Step>
+<Step>
+
+**Rehearse on a restored copy.** Restore the archive into a new Compose project with its own volumes and ports, and point `CMS_IMAGE` at the target image. Start the restored instance and check:
+
+- The container is healthy, and the log shows `database migrations applied`.
+- You can sign in, open an unpublished draft, open a revision, and open a live release.
+- An uploaded asset is served.
+- Counts of clients, sites, entries, revisions, releases and build jobs match the source.
+- No build job is stuck.
+
+Note how long the migration took. That tells you how long the maintenance window needs to be.
+
+</Step>
+<Step>
+
+**Stop the CMS.** Announce the maintenance window. Stop the CMS container, which also stops its worker, and confirm that nothing else writes to the database.
+
+```sh title="From the docker directory"
+docker compose stop cms
+```
+
+</Step>
+<Step>
+
+**Upgrade.** Set `CMS_IMAGE` in `docker/.env` to the target, then pull the image and start the container. Watch the log until the migrations finish.
+
+```sh title="From the docker directory"
+docker compose pull && docker compose up -d --wait
+docker compose logs -f cms
+```
+
+Only the first container to start migrates. Do not start a second CMS container until the first one reports healthy.
+
+</Step>
+<Step>
+
+**Verify.** Repeat the rehearsal checks on production. Sign in, open a draft, serve an asset, and run a Go live on a test site. Confirm that the release completes and the site shows the new content. Do not add replicas during the upgrade. The project recommends one CMS container.
+
+</Step>
+<Step>
+
+**Keep the rollback path.** Keep the backup and the previous image reference until the new version has been through a normal publishing cycle.
+
+</Step>
+</Steps>
+
+## Roll back
+
+Rolling back means returning to the backup you took before the upgrade. You cannot undo migrations, so an older image must never run against a database that a newer image has migrated.
+
+1. Stop every CMS container and worker, as in the upgrade procedure.
+2. Restore the pre-upgrade backup into new volumes, using the restore command in [backup and recovery](/docs/self-hosting/backup-and-recovery#restore-into-an-isolated-copy). The restore writes an image override that pins the previous image.
+3. Start the restored instance, check it with the same rehearsal checks, and then send traffic to it.
+
+<Callout type="warn" title="Work done after the backup is lost">
+A rollback restores the state at the time of the backup. Edits, uploads and releases made after that point are not in the restored copy. Export the affected client first, as described in [backup and recovery](/docs/self-hosting/backup-and-recovery#move-one-client), or re-enter the changes after the rollback.
+</Callout>
+
+If only the application misbehaves and the migration only added things, you may be able to fix forward with a newer image instead. Check the release notes before you choose. If the migration changed or removed data, restore from backup.
+
+## High-risk upgrades
+
+Some releases carry extra risk. The high-risk release is the one that applies migrations `0007` and `0008`. It applies to an instance installed before that release. Follow these checks on top of the procedure above.
+
+<Callout type="warn" title="Stop every worker before you migrate">
+Old workers cannot use the new job leases or the new approved-version model. Stop every CMS container and every publish worker before you start the new image, and start only one new instance first.
+</Callout>
+
+- **Review scheduled drafts first.** Migration `0007` freezes legacy schedules, fails build jobs that were running when it started, and merges duplicate queued jobs before it adds the uniqueness rule. Review scheduled entries before you enable workers, because the migration can only freeze the draft content that is stored at that time.
+- **Set up production targets.** Production sites need a configured deployment target and a health URL that returns the publication ID before they publish. Sites that are explicitly in demo mode create labelled demo releases instead.
+- **Rotate the schema-write token.** Existing site tokens can still read content and manifests, but they can no longer send schema changes. Create a schema-write token on the site's **Developer** tab, and set `ARECA_SCHEMA_TOKEN` only in the process that syncs the schema.
+- **Check collection and field keys.** Keys must match the new identifier rules. Check your keys before you sync, and rename any that the new rules reject.
+- **Check releases that were running.** If a release was running during the migration, check its deployment state before you start another release for the same site.
+- **Expect the new approval and save behaviour.** Owners approve the whole version, including its slug. A scheduled version stays frozen, so review it before you reschedule. An editor's save that is based on an old version pauses with a conflict, and the editor must reload or reapply their changes.
+- **Test recovery.** Run a full restore and a client export and import on an isolated instance before you rely on either.
+
+## Related
+
+- [Backup and recovery](/docs/self-hosting/backup-and-recovery) for the backup, restore and client export commands.
+- [Configuration](/docs/self-hosting/configuration) for the environment variables that must stay stable.
+- [Troubleshooting](/docs/self-hosting/troubleshooting) if the new container does not start.
+- [Operations](/docs/self-hosting/operations) for health checks to watch after the upgrade.

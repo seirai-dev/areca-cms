@@ -1,0 +1,143 @@
+---
+title: Capacity and sizing
+description: Know the supported size of an Areca instance, how it was measured, and which settings to tune before you outgrow it.
+---
+
+Areca is sized for a small agency: a few dozen client sites, one CMS process and one PostgreSQL database. This page lists the limits the project designs for, the benchmark results behind them, and the settings you can tune. Read it before you choose a server size, and again before you add clients.
+
+## Supported envelope
+
+These are the targets the instance is designed and measured against. They are not hard limits, with two exceptions noted in the table.
+
+| Dimension | Target | Notes |
+| --- | --- | --- |
+| Sites | Up to 50 | Across all clients on one instance. |
+| Entries per site | Up to 2,000 | The benchmark's largest site is at this size. |
+| Assets per client | Up to 10,000 | Asset library size for one client. |
+| CMS replicas | 1 | See [replica stance](#replica-stance). |
+| Largest snapshot build | p95 under 10 seconds | The time to build a release snapshot for the largest site. |
+| Editor list and search | p95 under 500 ms | The target for the editor's list and search endpoints. |
+| Upload size | 20 MiB per file | Enforced by the server. Requests above this are rejected. |
+| Build log size | 256 Ki characters per job | Enforced. Each line is cut at 8 KiB, and the oldest content is dropped first. |
+
+The 20 MiB upload limit is the only hard limit a user can hit in normal work. The log caps protect the database and the publish screen.
+
+## Benchmark results
+
+The project ships a benchmark that seeds a synthetic instance and measures the application code. It does not measure HTTP, network or object storage, so treat the numbers as the cost of the code itself.
+
+The reference dataset has 50 sites across 5 clients. The largest site has 2,000 entries, each with rich text, embedded images and references, and 5 revisions per entry. The largest client has 10,000 assets. Each site keeps 3 retained publications, and the largest site keeps 10.
+
+The reference run used an Apple M4 (10 cores, 16 GB), macOS, Node 24.21 and PostgreSQL 17.11 in a local container, so database latency was close to zero. Your numbers will differ on a remote database.
+
+| Scenario | p50 (ms) | p95 (ms) |
+| --- | ---: | ---: |
+| Snapshot build, largest site (before) | 5,949 | 7,984 |
+| Snapshot build, largest site (after) | 499 | 504 |
+| Entry list, first page | 5 | 11 |
+| Entry list, deep page (offset 1,500) | 4 | 5 |
+| Entry list, status filter | 2 | 2 |
+| Entry search (slug and body text) | 145 | 149 |
+| Asset list, first page | 2 | 2 |
+| Asset search | 7 | 7 |
+| Preview entry build | 4 | 6 |
+| Asset usage check, referenced asset (after) | 4,127 | 4,413 |
+
+The snapshot build dropped from about 6 seconds to about 0.5 seconds because the build now loads asset details in batches instead of one query per row. The asset usage check is still a full scan of the client's content, so it remains slow for a referenced asset.
+
+Memory for the largest snapshot build was measured at about 175 to 205 MB of heap growth and a process peak of about 700 to 830 MB resident memory.
+
+The table sizes in the reference dataset were about 20 MB for entries, 31 MB for revisions, 66 MB for publications and 4 MB for assets. The largest site's snapshot is about 22 MB of JSON.
+
+### Run the benchmark yourself
+
+Run the benchmark against a throwaway PostgreSQL database, never against a live instance. The tool refuses to run unless `ARECA_BENCHMARK=1` is set and the database name contains `bench` or `test`.
+
+```sh title="Run from a checkout of the repository"
+docker run -d --name areca-bench-pg -e POSTGRES_USER=bench -e POSTGRES_PASSWORD=bench \
+  -e POSTGRES_DB=areca_bench -p 55444:5432 postgres:17-alpine
+
+cd apps/cms
+export DATABASE_URL=postgres://bench:bench@localhost:55444/areca_bench
+pnpm db:migrate
+ARECA_BENCHMARK=1 pnpm bench --keep --json /tmp/bench.json
+ARECA_BENCHMARK=1 pnpm bench --skip-seed --keep
+
+docker rm -f areca-bench-pg
+```
+
+The first `bench` run seeds the data and measures. The `--skip-seed` run measures again in a fresh process, which gives cleaner memory numbers. Useful flags:
+
+| Flag | Effect |
+| --- | --- |
+| `--scale <n>` | Multiply the dataset. Use `0.1` for a quick smoke test. |
+| `--runs <n>` | Measured runs per scenario. The default is 7, plus one warm-up. |
+| `--json <file>` | Also write the results as JSON. |
+| `--keep` | Keep the seeded data afterwards. |
+| `--skip-seed` | Reuse data left by a previous `--keep` run. |
+
+## Sizing guidance
+
+Start from the envelope above and size for your largest site, not your average one.
+
+- **CPU.** The benchmark ran on a laptop-class CPU. A small server with two or more modern cores is enough for the envelope. Build work runs in the same process as the server, so a slow snapshot build can slow page responses briefly.
+- **Memory.** Plan for about 1 GB for the CMS container at the largest target site. The measured peak was 700 to 830 MB resident memory, and the snapshot is built in memory as one object. If you see out-of-memory restarts, give the container more memory and, if needed, raise Node's heap limit with the standard `--max-old-space-size` flag set through `NODE_OPTIONS`. The Compose file does not pass `NODE_OPTIONS`, so add it to the CMS service. Areca does not document or test a specific heap value.
+- **Uploads.** Each upload is held in memory while it is parsed, stored and processed. A file of 20 MiB can use tens of megabytes of memory, so several concurrent uploads of large files can use hundreds of megabytes. Ask editors to upload large media one at a time.
+- **Database storage.** Storage grows in three places, and none of them is pruned automatically:
+  - Every save adds a revision. There is no revision limit.
+  - Every release keeps a full copy of the snapshot. A largest-site snapshot is about 22 MB of JSON, and each retained release adds another copy.
+  - Deleted content is kept in archives. See [asset retention](/docs/self-hosting/asset-retention).
+
+  Plan disk space for revisions and retained releases, and watch the size of the database over time.
+- **Object storage.** Uploaded files are stored in your S3-compatible bucket and served through the CMS. Traffic to uploaded files goes through the CMS process, so put a CDN in front of `/api/assets/file/*` if your sites serve many images. See [storage and email](/docs/self-hosting/storage-and-email).
+- **Database connections.** The CMS uses one connection pool per process. Areca does not expose a setting for the pool size, so it uses the node-postgres default of 10 connections. Make sure your PostgreSQL `max_connections` setting allows for that, plus connections from your own tools.
+
+## Tuning settings
+
+These settings are read from the environment. Changing one needs a restart of the CMS. The full list is in [configuration](/docs/self-hosting/configuration). This table shows the ones that affect capacity.
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `WORKER_CONCURRENCY` | `2` | Maximum build jobs processed at once by one CMS process. Allowed values are 1 to 16. |
+| `WORKER_DRAIN_TIMEOUT_MS` | `8000` | How long shutdown waits for running jobs before it exits. |
+| `DB_CONNECT_TIMEOUT_MS` | `5000` | How long a request waits for a database connection. `0` disables the limit. |
+| `DB_STATEMENT_TIMEOUT_MS` | `15000` | The longest any single database statement can run. `0` disables the limit. |
+| `DB_IDLE_IN_TX_TIMEOUT_MS` | `30000` | Closes transactions left open, so they cannot hold locks forever. `0` disables the limit. |
+| `READINESS_MAX_QUEUE_AGE_SECONDS` | `900` | The age of the oldest queued build at which the readiness check fails. |
+| `READINESS_MAX_TICK_AGE_SECONDS` | `300` | How long the worker or scheduler can go without a tick before the readiness check fails. |
+
+Raise `WORKER_CONCURRENCY` only when several clients publish at the same time and jobs for different sites wait in the queue. Each extra job runs a build, which uses CPU and memory. The value is a limit per process, so it does not change how much work one site can run at once. Only one job runs per site at a time.
+
+Raise `DB_STATEMENT_TIMEOUT_MS` only if a legitimate operation regularly runs longer than 15 seconds. A longer limit hides slow queries instead of fixing them.
+
+<Callout type="warn" title="The bundled Compose file does not pass all of these settings">
+The Docker Compose file passes the database timeouts and readiness settings, but not `WORKER_CONCURRENCY` or `WORKER_DRAIN_TIMEOUT_MS`. Setting either in your `.env` file has no effect until you add it to the CMS service's `environment` block. See [production setup](/docs/self-hosting/production#only-listed-variables-reach-the-container).
+</Callout>
+
+## Replica stance
+
+Run one CMS replica. The capacity envelope is built for a single process, and the project does not yet document a supported way to run several.
+
+The publish worker and scheduler run in the same process as the server, and the readiness check reports worker state for each process. The worker and scheduler are designed for a single process, and the project has not tested several CMS processes against one database. Use one CMS container, and keep the restart policy on so the container comes back after a crash.
+
+If you need more capacity, scale up the one container before you add replicas. If you still need more than one, open an issue with the project first, so the change can be designed rather than guessed.
+
+## When to plan for more
+
+Change the setup, or talk to the project, when you see these signs:
+
+| Sign | What it means | What to do |
+| --- | --- | --- |
+| Snapshot builds take several seconds, or memory climbs | The largest site is near the snapshot limit. | Reduce retained releases, give the container more memory, and review the largest site's content. |
+| Editor search feels slow | The search is a text match over all entries, with no index. | Keep sites near 2,000 entries, and report the slow search. |
+| Asset usage checks take several seconds | The client's asset library is large, and each delete scans all content. | Keep asset libraries near 10,000 per client, and report it. |
+| Revision tables grow quickly | Revisions are never pruned. | Plan disk space, and review heavy editing habits. |
+| Uploads run out of memory | Large files are held in memory. | Limit concurrent uploads and raise container memory. |
+| Your instance grows past 50 sites or 2,000 entries per site | You are outside the envelope. | Measure your own data with the benchmark before you add more content. |
+
+## Related
+
+- [Operations](/docs/self-hosting/operations) for health checks, metrics and worker behaviour.
+- [Configuration](/docs/self-hosting/configuration) for every environment variable.
+- [Upgrading](/docs/self-hosting/upgrades) before you change the image.
+- [Asset retention](/docs/self-hosting/asset-retention) for how stored files and history grow.

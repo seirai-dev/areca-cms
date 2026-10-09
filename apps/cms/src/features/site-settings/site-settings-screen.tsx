@@ -8,6 +8,7 @@ import type { MeSite } from '#/lib/site-nav'
 import { m } from '#/paraglide/messages'
 
 import { ContentModelTab } from '#/features/content-model/content-model-tab'
+import { AiTab } from './ai-tab'
 import { DeploymentTab } from './deployment-tab'
 import { DeveloperTab } from './developer-tab'
 import { GeneralTab } from './general-tab'
@@ -17,13 +18,14 @@ export const SETTINGS_TABS = [
   'general',
   'deployment',
   'developer',
+  'ai',
   'content',
 ] as const
 export type SettingsTab = (typeof SETTINGS_TABS)[number]
 
 /**
  * Site settings (brief §3.10), agency admins only: underline tabs
- * General · Deployment · Developer · Content, addressable as `?tab=`.
+ * General · Deployment · Developer · AI · Content, addressable as `?tab=`.
  * Test ids: `site-settings`, `settings-tab-{tab}`, `site-header-slug`.
  */
 export function SiteSettingsScreen({
@@ -41,6 +43,7 @@ export function SiteSettingsScreen({
     general: m.settings_tab_general(),
     deployment: m.settings_tab_deployment(),
     developer: m.settings_tab_developer(),
+    ai: m.settings_tab_ai(),
     content: m.settings_tab_content(),
   }
 
@@ -102,6 +105,11 @@ export function SiteSettingsScreen({
         <TabsContent value="developer">
           {tab === 'developer'
             ? body((r) => <DeveloperTab site={r} settings={settings} />)
+            : null}
+        </TabsContent>
+        <TabsContent value="ai">
+          {tab === 'ai'
+            ? body((r) => <AiTab site={r} settings={settings} />)
             : null}
         </TabsContent>
         <TabsContent value="content">

@@ -1,0 +1,125 @@
+---
+title: Permissions matrix
+description: Every Areca action grouped by area, with the roles that can perform it and the actions that need a fresh authenticator code.
+---
+
+This page lists what each role can do, one row per action. For a plain-language description of each role, read [roles and permissions](/docs/security/roles-and-permissions) first.
+
+The columns are:
+
+- **Editor**: a client editor.
+- **Owner**: a client owner. Owners also have every editor action.
+- **Admin**: an agency admin. Admins can act in every client, and have every action on this page.
+
+Marks:
+
+- ✓ the role can do this.
+- – the role cannot do this.
+- ✓ + step-up the role can do this, but only when its sign-in is recent. If it is not, Areca asks for an authenticator code first. See [two-factor authentication and step-up](/docs/security/two-factor-and-step-up).
+
+Agency admins must also have two-factor authentication turned on. Without it, an admin is blocked from the actions in these tables. The exceptions are checking whether AI is available and the actions under **Your own account**, which an admin needs in order to turn two-factor on.
+
+## Content
+
+| Action | Editor | Owner | Admin |
+| --- | :---: | :---: | :---: |
+| See content types, entries and entry history | ✓ | ✓ | ✓ |
+| Create entries | ✓ | ✓ | ✓ |
+| Edit and save drafts | ✓ | ✓ | ✓ |
+| Preview a draft | ✓ | ✓ | ✓ |
+| Mark as ready (publish an entry) | – | ✓ | ✓ |
+| Move back to draft | – | ✓ | ✓ |
+| Schedule an entry | – | ✓ | ✓ |
+| Cancel a schedule | – | ✓ | ✓ |
+| Archive an entry | – | ✓ | ✓ |
+| Delete an entry | – | ✓ | ✓ |
+| Restore an earlier version | – | ✓ | ✓ |
+| Create, edit and delete content types (collections) | – | – | ✓ |
+
+Owners cannot change the structure of content types. Only agency admins can.
+
+## Publishing
+
+| Action | Editor | Owner | Admin |
+| --- | :---: | :---: | :---: |
+| See release status, pending changes and past releases | ✓ | ✓ | ✓ |
+| See builds and their progress | ✓ | ✓ | ✓ |
+| Go live | – | ✓ | ✓ |
+| Roll back to an earlier release | – | ✓ | ✓ |
+| Cancel a queued build | – | ✓ | ✓ |
+| Check the status of a deployment that did not report back | – | ✓ | ✓ |
+| Resolve an uncertain deployment after checking upstream | – | – | ✓ |
+
+## Library
+
+| Action | Editor | Owner | Admin |
+| --- | :---: | :---: | :---: |
+| See Library files | ✓ | ✓ | ✓ |
+| Upload files | ✓ | ✓ | ✓ |
+| Edit a file's description and alt text | ✓ | ✓ | ✓ |
+| Delete a file | – | ✓ | ✓ |
+
+Anyone with the URL of a Library file can open it, whatever their role. See [Library](/docs/cms/library).
+
+## People
+
+| Action | Editor | Owner | Admin |
+| --- | :---: | :---: | :---: |
+| See a client's members and pending invitations | – | ✓ | ✓ |
+| Invite people to a client | – | ✓ | ✓ |
+| Change a member's role | – | ✓ | ✓ |
+| Remove a member | – | ✓ | ✓ |
+| Resend or revoke an invitation | – | ✓ | ✓ |
+| See a client's activity log | – | ✓ | ✓ |
+| See the instance-wide activity log | – | – | ✓ |
+| See all users of the instance | – | – | ✓ |
+| Make someone an agency admin, or remove that status | – | – | ✓ + step-up |
+
+## Clients and sites
+
+| Action | Editor | Owner | Admin |
+| --- | :---: | :---: | :---: |
+| See the clients and sites you belong to | ✓ | ✓ | ✓ |
+| Create a client | – | – | ✓ |
+| Rename a client | – | – | ✓ |
+| Delete a client | – | – | ✓ + step-up |
+| Create a site | – | – | ✓ + step-up |
+| Change site settings, including production URL and deployment target | – | – | ✓ |
+| Delete a site | – | – | ✓ + step-up |
+| Rotate a site's build or schema-write token | – | – | ✓ + step-up |
+| Save or remove a client's deployment credentials | – | – | ✓ + step-up |
+| Check a client's deployment credentials | – | – | ✓ |
+
+## Agency settings
+
+| Action | Editor | Owner | Admin |
+| --- | :---: | :---: | :---: |
+| Change the instance branding, such as the app name and logo | – | – | ✓ |
+| Change the AI model and system prompt | – | – | ✓ |
+| Save or remove the AI API key | – | – | ✓ + step-up |
+| See the AI model list | – | – | ✓ |
+
+## AI
+
+| Action | Editor | Owner | Admin |
+| --- | :---: | :---: | :---: |
+| See whether AI suggestions are available | ✓ | ✓ | ✓ |
+| Generate SEO suggestions and alt text for an entry | ✓ | ✓ | ✓ |
+
+Each user can generate up to 30 suggestions per hour. See [rate limits](/docs/security/rate-limits#ai-suggestions). For what is sent to the AI provider, see [AI data handling](/docs/security/ai-data-handling).
+
+## Your own account
+
+Every signed-in user can see their own profile, set up or turn off two-factor authentication, and accept an invitation with its link.
+
+## Notes on "not found" answers
+
+Some actions identify the object they act on by its ID, such as an entry, a site, a file, a build or an invitation. For those, a person outside the client gets the same "not found" answer as for an ID that does not exist. A person inside the client but without the required role gets "Forbidden", because they already know the object exists.
+
+Actions that identify a client by its ID answer "Forbidden" to people who are not members, whether or not the client exists.
+
+## Related
+
+- [Roles and permissions](/docs/security/roles-and-permissions)
+- [Two-factor authentication and step-up](/docs/security/two-factor-and-step-up)
+- [Rate limits](/docs/security/rate-limits)

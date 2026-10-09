@@ -1,0 +1,270 @@
+---
+title: Field types
+description: Every field type in an Areca content type, with its settings, validation limits, how editors see it, and the value your site receives.
+---
+
+Use this page to choose a field type for each property of a content type, and to learn what your site receives when it pulls content. Each field has a `type`, a few shared settings, and some type-specific settings.
+
+Areca does not generate TypeScript types from your schema. The types shown here describe the JSON values in the pulled files (`SnapshotEntry.data`). Write an interface for each collection in your site project. See [Reading content](/docs/sdk/reading-content) for an example.
+
+## Summary
+
+There are 12 field types.
+
+| Type | Label in the CMS | Value in pulled content | Main limit |
+| --- | --- | --- | --- |
+| `text` | Short text | `string` | 1,000 characters |
+| `textarea` | Long text | `string` | 50,000 characters |
+| `richtext` | Rich text | `RichTextValue` | Entry data up to 1 MiB |
+| `image` | Image | `ImageValue` or `null` | Library file |
+| `date` | Date | `string` (`YYYY-MM-DD`) | Valid calendar date |
+| `datetime` | Date and time | `string` (ISO 8601) | 64 characters |
+| `select` | Choice | `string` | Up to 200 options |
+| `reference` | Link to entry | `ReferenceValue` or `null` | Requires `collection` |
+| `slug` | Slug | `string` | 200 characters, lowercase |
+| `boolean` | Yes / no | `boolean` | None |
+| `number` | Number | `number` or `null` | None |
+| `url` | Web address | `string` | 2,048 characters, `http` or `https` |
+
+## Shared settings
+
+Every field accepts these settings. Type-specific settings are listed in each section below.
+
+| Setting | Type | Required | Description |
+| --- | --- | --- | --- |
+| `key` | `string` | Yes | The property name in the content data. Must start with a letter and contain only letters, digits, `_` or `-`. Up to 64 characters. Reserved names are rejected. It cannot be changed after the field is created. See [identifier rules](/docs/sdk/errors-and-limits#identifier-rules). |
+| `label` | `string` | Yes | The name editors see. Up to 200 characters. |
+| `type` | `FieldType` | Yes | One of the 12 types in the table above. |
+| `required` | `boolean` | No | When `true`, the entry cannot be marked ready or go live until the field has a value. Drafts can be saved with the field empty. |
+| `description` | `string` | No | Help text shown under the field. Up to 1,000 characters. |
+| `options` | `string[]` | No | Choices for a `select` field. Ignored by other types. |
+| `collection` | `string` | For `reference` | The key of the collection a link can point to. Without it, the CMS refuses to save a value. |
+| `after` | `string` | No | For `date` and `datetime` only. The key of another date or datetime field in the same entry. This field's value must be on or after that field's value. |
+
+Optional fields that editors never filled can be `null` or missing from the pulled JSON. Check for both when you render.
+
+```ts title="areca.config.ts"
+import { defineSiteContent } from '@areca-cms/site-sdk'
+
+export default defineSiteContent({
+  siteKey: 'acme-site',
+  collections: {
+    articles: {
+      route: '/blog/$slug',
+      label: 'Articles',
+      fields: [
+        { key: 'title', label: 'Title', type: 'text', required: true },
+        { key: 'excerpt', label: 'Excerpt', type: 'textarea', description: 'Shown in lists.' },
+        { key: 'body', label: 'Body', type: 'richtext', required: true },
+        { key: 'heroImage', label: 'Hero image', type: 'image' },
+        { key: 'publishedAt', label: 'Published at', type: 'datetime' },
+        { key: 'category', label: 'Category', type: 'select', options: ['news', 'updates'] },
+      ],
+    },
+  },
+})
+```
+
+Each collection's `route` is the URL pattern where its entries live. Use `$slug` in the pattern. The CMS replaces it with each entry's slug.
+
+## text
+
+**Short text.** A single-line input.
+
+- **Settings:** none beyond the shared settings.
+- **Validation:** a string of up to 1,000 characters. A required field must not be empty.
+- **Pulled value:** `string`.
+
+```ts
+title: string
+```
+
+## textarea
+
+**Long text.** A multi-line input for plain text. It has no formatting.
+
+- **Validation:** a string of up to 50,000 characters.
+- **Pulled value:** `string`, with line breaks preserved.
+
+```ts
+excerpt?: string | null
+```
+
+## richtext
+
+**Rich text.** A formatted body with a toolbar. Editors can use:
+
+- Bold and italic.
+- Headings at levels 2, 3 and 4.
+- Links to `http`, `https` and `mailto` addresses.
+- Bulleted and numbered lists, block quotes and code blocks.
+- Tables and horizontal rules.
+- Images.
+
+- **Validation:** a required field fails when the document is empty. Other limits:
+
+| Limit | Value |
+| --- | --- |
+| Nesting depth | 32 |
+| Nodes in one document | 20,000 |
+| Text characters in one document | 200,000 |
+| Marks on one node | 16 |
+
+Content that uses other node types or marks is rejected. The whole entry's data must stay under 1 MiB.
+
+- **Pulled value:** a `RichTextValue` object. Render it with the helpers in [Rich text](/docs/sdk/rich-text).
+
+```ts
+type RichTextValue = {
+  json: unknown        // the editor's JSON document
+  markdown: string     // canonical Markdown
+  document: MarkdownDocument // parsed AST, from @tanstack/markdown
+  html: string         // static HTML rendered from the same AST
+}
+```
+
+## image
+
+**Image.** A thumbnail area. When empty, the area is a **Choose an image** button. Its hint reads "From the Library, or upload a new one." Once a file is chosen, editors can **Replace** or **Remove** it. If the image has no description, the editor shows a warning, because the description becomes the alt text.
+
+- **Validation:** the value must be a file in the same client's Library. The CMS checks this when the entry is saved.
+- **Library files:** JPEG, PNG, WebP, GIF and PDF, up to 20 MB each.
+- **Pulled value:** an `ImageValue` object, or `null` when the field is empty.
+
+```ts
+type ImageValue = {
+  url: string          // absolute URL of the file
+  width: number | null
+  height: number | null
+  alt: string          // the Library description, or "" if none
+  mimeType: string
+}
+```
+
+The field can point to any Library file, so check `mimeType` before you render the value as an `<img>`.
+
+## date
+
+**Date.** A native date picker.
+
+- **Validation:** an ISO calendar date in the form `YYYY-MM-DD`.
+- **Pulled value:** `string`, for example `"2026-03-01"`.
+
+```ts
+publishedOn: string
+```
+
+## datetime
+
+**Date and time.** A native date and time picker. The editor works in local time.
+
+- **Validation:** an ISO 8601 date and time, up to 64 characters.
+- **Pulled value:** `string` in UTC, for example `"2026-03-01T09:00:00.000Z"`. Parse it with `new Date(value)`.
+
+```ts
+publishedAt: string | null
+```
+
+## select
+
+**Choice.** One value from a list.
+
+- **Editor:** with four or fewer options, editors see a segmented control. Optional fields in that case also get a **Clear choice** link. With more options, editors see a dropdown.
+- **Settings:** `options`, an array of up to 200 strings. Each option can be up to 200 characters.
+- **Validation:** when `options` is set, the value must be one of them. Without `options`, any string of up to 500 characters is accepted.
+- **Pulled value:** `string`. If you remove an option that entries use, those entries need a new value before they can be published.
+
+```ts
+category: 'news' | 'updates'
+```
+
+When `options` is set, you can narrow the type in your interface to the same literal union.
+
+## reference
+
+**Link to entry.** A picker that searches the entries of one collection. The button reads **Select an entry…**, and the search box reads **Search entries…**.
+
+- **Settings:** `collection` is the key of the target collection. It is required.
+- **Validation:** the linked entry must exist in that collection. Saving a draft does not check whether the linked entry is published. Publishing the entry does.
+- **Pulled value:** a `ReferenceValue`, or `null` when the linked entry is not part of the snapshot.
+
+```ts
+type ReferenceValue = {
+  collection: string   // key of the target collection
+  slug: string         // the target entry's slug
+  id: string           // the target entry's ID
+}
+```
+
+To link to an article from a page, make the page's `related` field a `reference` with `collection: 'articles'`. Then build the link from `slug` and the target collection's route.
+
+## slug
+
+**Slug.** A text input in a monospace font.
+
+Every collection has a required slug field, named `slug`, added automatically as its first field. If your config defines a field with the key `slug`, the CMS replaces it with the built-in field, so you do not need to define one.
+
+- **Validation:** lowercase letters, digits and single hyphens, for example `my-first-post`. The pattern is `^[a-z0-9]+(?:-[a-z0-9]+)*$`. Up to 200 characters. A required field must not be empty.
+- **Pulled value:** `string`.
+
+The value of the slug field becomes the entry's slug, so it is what replaces `$slug` in the collection's `route`.
+
+```ts
+slug: string
+```
+
+## boolean
+
+**Yes / no.** A switch.
+
+- **Validation:** `true` or `false`.
+- **Pulled value:** `boolean`. An optional field that was never switched can be missing.
+
+```ts
+featured?: boolean
+```
+
+## number
+
+**Number.** A number input.
+
+- **Validation:** any JavaScript number. The CMS sets no minimum, maximum or step. Clearing the input stores `null`, which is accepted only when the field is optional.
+- **Pulled value:** `number`, or `null` when empty.
+
+```ts
+readingMinutes: number | null
+```
+
+## url
+
+**Web address.** A text input with `https://` as the placeholder.
+
+- **Validation:** an absolute URL that starts with `http://` or `https://`. Up to 2,048 characters.
+- **Pulled value:** `string`.
+
+```ts
+ctaUrl?: string
+```
+
+## Limits at a glance
+
+| Limit | Value |
+| --- | --- |
+| Collections per site manifest | 100 |
+| Fields per collection | 100 |
+| Manifest size | 256 KiB |
+| Route pattern length | 500 characters |
+| Field label | 200 characters |
+| Field description | 1,000 characters |
+| Options per `select` field | 200, each up to 200 characters |
+| Entry data, all fields together | 1 MiB |
+
+Site API rate limits are covered in [Errors and limits](/docs/sdk/errors-and-limits#site-api-limits).
+
+## Related
+
+- [Defining content](/docs/sdk/defining-content) shows how to write a `fields` list.
+- [Reading content](/docs/sdk/reading-content) shows how to type the pulled values.
+- [Rich text](/docs/sdk/rich-text) renders `richtext` values.
+- [SEO](/docs/sdk/seo) explains the `seo` object that each entry carries.
+- [CLI reference](/docs/sdk/cli) covers `areca manifest push`, which sends these definitions to the CMS.

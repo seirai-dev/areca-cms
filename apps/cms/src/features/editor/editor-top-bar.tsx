@@ -16,6 +16,7 @@ import {
   RocketLaunch,
   SidebarSimple,
   TextAa,
+  Sparkle,
   Trash,
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
@@ -77,6 +78,7 @@ export function EditorTopBar({
   hasRichText,
   previewing,
   onTogglePreviewing,
+  onGenerateSeo,
   onMarkReady,
   onGoLiveNow,
   onSchedule,
@@ -115,6 +117,8 @@ export function EditorTopBar({
   hasRichText: boolean
   previewing: boolean
   onTogglePreviewing: () => void
+  /** Opens the AI SEO dialog. Omitted when AI is not set up. */
+  onGenerateSeo?: () => void
   onMarkReady: () => void
   onGoLiveNow: () => void
   onSchedule: () => void
@@ -319,6 +323,21 @@ export function EditorTopBar({
               {m.editor_save()}
             </Button>
           </Hint>
+          {onGenerateSeo ? (
+            <Hint label={m.editor_seo_generate()}>
+              <Button
+                type="button"
+                variant="quiet"
+                size="icon-sm"
+                className="hidden sm:inline-flex"
+                onClick={onGenerateSeo}
+                data-testid="topbar-ai-seo"
+                aria-label={m.editor_seo_generate()}
+              >
+                <Sparkle weight="fill" className="text-icon-accent" />
+              </Button>
+            </Hint>
+          ) : null}
           {previewUrl ? (
             <Hint label={m.editor_preview_hint()}>
               <Button

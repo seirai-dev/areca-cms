@@ -1,0 +1,115 @@
+---
+title: Sign-in methods
+description: Turn on email and password, GitHub, Google, Discord or Microsoft Entra ID sign-in, and keep registration invite-only.
+---
+
+Areca signs people in with email and password by default. You can add GitHub, Google, Discord or Microsoft Entra ID (formerly Azure AD) sign-in as well. Every method is switched on or off with environment variables, so you change sign-in by editing the CMS configuration and restarting it.
+
+Registration is always invite-only. Signing in with a provider does not create an account on its own. Someone can only join if they were invited, or if they are the first person to complete [first-run setup](/docs/self-hosting/first-run).
+
+## Methods at a glance
+
+| Method | Turned on by | Notes |
+| --- | --- | --- |
+| Email and password | On by default. `AUTH_EMAIL_PASSWORD_ENABLED` | Set to `false` to hide the form and block password sign-in. |
+| GitHub | `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` | Both must be set. |
+| Google | `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` | Both must be set. |
+| Discord | `DISCORD_CLIENT_ID` and `DISCORD_CLIENT_SECRET` | Both must be set. |
+| Microsoft Entra ID | `MICROSOFT_SSO_CLIENT_ID`, `MICROSOFT_SSO_CLIENT_SECRET` and `MICROSOFT_SSO_TENANT_ID` | Environment only. Requires a tenant ID. |
+
+The variables are described in [configuration](/docs/self-hosting/configuration). A method that is off is removed from the sign-in page and cannot be used, even if someone sends a request for it by hand.
+
+## Before you start
+
+Set `BETTER_AUTH_URL` to the public address people use to open the CMS, including the scheme, for example `https://cms.example.com`. Every provider callback is built from it. If the callback address does not match the URL in the provider's settings, sign-in fails.
+
+Restart the CMS after you change any of these settings.
+
+## Email and password
+
+Email and password is on unless you set `AUTH_EMAIL_PASSWORD_ENABLED=false`. When it is off, the form is removed from the sign-in page and password sign-in is rejected.
+
+The first-run setup page still asks for a password, even when this setting is off. That lets you create the first admin account before you configure a provider.
+
+Before you turn password sign-in off, confirm that at least one admin can sign in another way.
+
+## Social sign-in
+
+GitHub, Google and Discord each need two values: a client ID and a client secret. Areca registers a provider only when both values are set. If you leave them unset or blank, the button does not appear.
+
+To set up a provider:
+
+<Steps>
+<Step>
+
+**Register an OAuth application.** Create an OAuth app in the provider's developer settings.
+
+</Step>
+<Step>
+
+**Set the callback URL.** Use the URL for that provider from the table below, with your own CMS address in place of the host.
+
+</Step>
+<Step>
+
+**Add the credentials.** Set the client ID and client secret in the CMS environment, then restart the CMS.
+
+</Step>
+</Steps>
+
+| Provider | Callback URL |
+| --- | --- |
+| GitHub | `https://cms.example.com/api/auth/callback/github` |
+| Google | `https://cms.example.com/api/auth/callback/google` |
+| Discord | `https://cms.example.com/api/auth/callback/discord` |
+| Microsoft Entra ID | `https://cms.example.com/api/auth/sso/callback/microsoft` |
+
+The host must match `BETTER_AUTH_URL`.
+
+## Microsoft Entra ID
+
+Entra ID is configured only through the environment. You cannot add or change an identity provider in the admin interface, because the runtime SSO management endpoints are disabled.
+
+Set these variables:
+
+- `MICROSOFT_SSO_CLIENT_ID` and `MICROSOFT_SSO_CLIENT_SECRET`, from an app registration in Entra ID.
+- `MICROSOFT_SSO_TENANT_ID`, the directory (tenant) ID of the Entra ID tenant whose users should sign in. A concrete ID is required. The shared `common` endpoint is not supported.
+- `MICROSOFT_SSO_DOMAIN` (optional), an email domain such as `agency.example`. When it is set, entering an address on that domain routes the sign-in to Microsoft.
+
+In the app registration, add the callback URL from the table above as a web redirect URI.
+
+Entra ID only sends an email address when the account has a mail attribute. Directory accounts without one cannot sign in.
+
+Areca trusts the email address that Entra ID reports as verified, and links the sign-in to an existing account with the same address.
+
+## Invite-only registration
+
+A new account is created only in one of two cases:
+
+- No accounts exist yet, during [first-run setup](/docs/self-hosting/first-run).
+- A pending invitation exists for that email address and has not expired.
+
+Anyone else who signs in with a provider or Microsoft is turned away with the message "This account is not allowed to sign in. Ask an admin for an invitation first."
+
+Invitations expire after seven days. To invite someone, see [people and invitations](/docs/cms/people-and-invitations). The address on the provider account must match the invited address.
+
+## Two-factor codes and provider sign-in
+
+Areca's own two-factor authentication (TOTP) is a challenge after email and password sign-in. Sign-ins through GitHub, Google, Discord or Entra ID do not show that prompt. Areca relies on the identity provider to have done its own multi-factor check.
+
+Agency admins still need two-factor authentication turned on in their Areca account, whichever method they use to sign in. This is controlled by `ADMIN_MFA_REQUIRED`, which defaults to `true`. Until an admin has enrolled, admin functions are blocked. Sensitive actions also ask for a fresh authenticator code.
+
+Read [two-factor authentication and step-up](/docs/security/two-factor-and-step-up) for the enrollment steps and the step-up rules.
+
+<Callout type="warn" title="Keep the secret stable">
+
+`BETTER_AUTH_SECRET` signs every session and protects two-factor enrollment data. Changing it signs everyone out, and it can stop existing authenticator codes from working. Change it only in a planned maintenance window, after you confirm that an admin can sign in and has backup codes.
+
+</Callout>
+
+## Related
+
+- [Configuration](/docs/self-hosting/configuration): every sign-in variable and the `BETTER_AUTH_URL` setting.
+- [Two-factor authentication and step-up](/docs/security/two-factor-and-step-up)
+- [Roles and permissions](/docs/security/roles-and-permissions)
+- [People and invitations](/docs/cms/people-and-invitations)

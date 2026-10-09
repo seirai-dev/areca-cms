@@ -36,8 +36,12 @@ import type { MeSite } from '#/lib/site-nav'
 import type { Field } from '#/lib/types'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
+import { readEntrySeo, SEO_KEY } from '#/lib/seo'
+import { getAiAvailabilityFn } from '#/server/fn/ai'
 import { listCollectionsFn, listInboundReferencesFn } from '#/server/fn/content'
 import type { Me } from '#/server/fn/me'
+
+import { AiSeoDialog } from './ai-seo-dialog'
 
 import { DetailsPanel } from './details-panel'
 import { EditorCanvas } from './editor-canvas'
@@ -45,6 +49,7 @@ import { EditorTopBar } from './editor-top-bar'
 import type { PrimaryState } from './editor-top-bar'
 import { ScheduledVersion } from './scheduled-version'
 import { ScheduleForm } from './schedule-form'
+import { SeoPanel, plainTextOf } from './seo-panel'
 import { useEntryEditor } from './use-entry-editor'
 
 type CollectionRecord = {
@@ -195,6 +200,12 @@ function EntryEditorView({
     enabled: deleteOpen && Boolean(editor.entryId),
   })
   const inboundTitles = (inboundQuery.data ?? []).map((row) => row.title)
+  const [aiOpen, setAiOpen] = React.useState(false)
+  const aiQuery = useQuery({
+    queryKey: queryKeys.aiAvailability(),
+    queryFn: () => getAiAvailabilityFn(),
+    staleTime: 30_000,
+  })
 
   const canvasFields = fields.filter(
     (field) =>
@@ -220,7 +231,9 @@ function EntryEditorView({
 
   function revealField(key: string) {
     const inPanel =
-      key === slugField?.key || panelFields.some((field) => field.key === key)
+      key === slugField?.key ||
+      key.startsWith(`${SEO_KEY}.`) ||
+      panelFields.some((field) => field.key === key)
     if (inPanel) openDetails()
     const attempt = (tries: number) => {
       const node = document.querySelector<HTMLElement>(
@@ -327,6 +340,21 @@ function EntryEditorView({
     }
   }
 
+  const seo = readEntrySeo(data)
+  const slugValue = slugField ? data[slugField.key] : undefined
+  const excerptField = fields.find(
+    (field) =>
+      field.type === 'textarea' &&
+      typeof data[field.key] === 'string' &&
+      (data[field.key] as string).trim(),
+  )
+  const bodyField = fields.find((field) => field.type === 'richtext')
+  const fallbackDescription = excerptField
+    ? (data[excerptField.key] as string)
+    : bodyField
+      ? plainTextOf(data[bodyField.key]) || null
+      : null
+
   const details = (
     <DetailsPanel
       siteId={siteId}
@@ -353,6 +381,27 @@ function EntryEditorView({
       onRetryRevisions={() => void editor.revisionsQuery.refetch()}
       onRestore={setRestoreId}
       onCancelSchedule={editor.cancelSchedule}
+      seoPanel={
+        <SeoPanel
+          seo={seo}
+          onChange={(next) => editor.updateField(SEO_KEY, next)}
+          errors={editor.fieldErrors}
+          organizationId={site.organizationId}
+          productionUrl={site.productionUrl}
+          routePattern={collection.routePattern}
+          slug={typeof slugValue === 'string' ? slugValue : ''}
+          entryTitle={
+            title === m.editor_untitled()
+              ? typeof slugValue === 'string'
+                ? slugValue
+                : ''
+              : title
+          }
+          fallbackDescription={fallbackDescription}
+          aiEnabled={aiQuery.data?.enabled === true}
+          onGenerate={() => setAiOpen(true)}
+        />
+      }
     />
   )
 
@@ -407,6 +456,9 @@ function EntryEditorView({
         hasRichText={canvasFields.some((field) => field.type === 'richtext')}
         previewing={previewing}
         onTogglePreviewing={() => setPreviewing((value) => !value)}
+        onGenerateSeo={
+          aiQuery.data?.enabled === true ? () => setAiOpen(true) : undefined
+        }
         onMarkReady={editor.markReady}
         onGoLiveNow={() => void goLiveNow()}
         onSchedule={() => setScheduleOpen(true)}
@@ -590,6 +642,17 @@ function EntryEditorView({
           {scheduleForm}
         </SlideOver>
       ) : null}
+
+      <AiSeoDialog
+        open={aiOpen}
+        onOpenChange={setAiOpen}
+        siteId={siteId}
+        collectionKey={collection.key}
+        entryId={editor.entryId}
+        data={data}
+        seo={seo}
+        onApply={(next) => editor.updateField(SEO_KEY, next)}
+      />
 
       <ConfirmDialog
         open={deleteOpen}

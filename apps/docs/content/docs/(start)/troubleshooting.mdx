@@ -1,0 +1,173 @@
+---
+title: Troubleshooting
+description: Find the fix for common sign-in, editing, go-live, SDK, preview and deployment problems, organised by what you see.
+---
+
+Start with the symptom you see. Each answer gives the likely cause and the fix, then links to the page that covers the topic in full. If the answer does not help, the detailed pages list more checks.
+
+When you ask an agency admin or your hosting team for help, include the exact error message, the release or job ID shown in the Go-live panel, and the step that failed. Never share passwords, tokens, preview links with a token in them, recovery codes or provider keys.
+
+## Signing in and setup
+
+<Accordions>
+  <Accordion title="The setup page redirects me to the sign-in page">
+    The instance already has an account, so the first-admin setup is finished. Sign in at `/login` with an existing account. Do not reset the database to fix a sign-in problem. See [Troubleshooting for self-hosting](/docs/self-hosting/troubleshooting).
+  </Accordion>
+  <Accordion title="The setup page asks for a setup token">
+    The token is printed once in the CMS log. With Docker, run `docker compose logs cms`. If you set `SETUP_TOKEN` in your environment, use that value instead. See [First run](/docs/self-hosting/first-run).
+  </Accordion>
+  <Accordion title="Sign-in fails with an invalid origin message">
+    The CMS address in the browser does not match the configured address. Open the canonical CMS address and check that `BETTER_AUTH_URL` and `APP_URL` match it. Restart the CMS after you change either value. See [Configuration](/docs/self-hosting/configuration).
+  </Accordion>
+  <Accordion title="The app asks for an authenticator code and I cannot use my app">
+    Choose **Use a backup code** and enter one of the recovery codes you saved when you turned on two-factor authentication. Each code works once. If you have none left, ask another agency admin to help you recover the account. See [Two-factor and step-up](/docs/security/two-factor-and-step-up).
+  </Accordion>
+  <Accordion title="Access is blocked after I sign in as an agency admin">
+    Agency admins must have two-factor authentication turned on. Finish the setup from **Account**. Do not turn two-factor authentication off on a shared instance. See [Two-factor and step-up](/docs/security/two-factor-and-step-up).
+  </Accordion>
+</Accordions>
+
+## Invitations and access
+
+<Accordions>
+  <Accordion title="I cannot see People, Settings or the publish button">
+    Your role decides what you can see. Editors write and preview drafts. Owners approve content, go live and manage client members. Agency admins manage Settings and clients. Disabled publish controls explain which role is needed. See [Roles and permissions](/docs/security/roles-and-permissions).
+  </Accordion>
+  <Accordion title="The invitation email did not arrive">
+    Check the address and that the invitation is still pending. Invitations expire after seven days. In the local demo, open the inbox at http://localhost:8025. On a deployed instance, check the SMTP settings. An owner can resend or revoke the invitation. See [People and invitations](/docs/cms/people-and-invitations).
+  </Accordion>
+  <Accordion title="The invitation link says it no longer works">
+    The invitation expired, was revoked, or was already used. Ask an owner to send a new one. Also check that you are signed in with the invited email address. See [People and invitations](/docs/cms/people-and-invitations).
+  </Accordion>
+</Accordions>
+
+## Writing and going live
+
+<Accordions>
+  <Accordion title="My new entry says it is not saved yet">
+    An entry needs a title that produces a valid, unique slug in its collection before it is saved. Add or edit the title and wait for the save indicator. See [Writing entries](/docs/cms/writing-entries).
+  </Accordion>
+  <Accordion title="My changes are saved but not on the website">
+    Saving only updates the draft. Mark the entry **Ready**, then select **Go live** and wait for the release to finish. The website shows the change only after that release succeeds and the site is rebuilt. If the status shows **Edited since ready**, the draft has changes that are not ready yet. See [Statuses and review](/docs/cms/statuses-and-review) and [Going live](/docs/cms/going-live).
+  </Accordion>
+  <Accordion title="Go live lists problems under Fix these first">
+    The CMS checks required fields, slugs, references, assets, rich text, SEO data and routes before it builds anything. Select each listed item to open the entry and fix the problem, mark the entry ready again, and retry. See [Going live](/docs/cms/going-live).
+  </Accordion>
+  <Accordion title="Two entries are rejected because they share a URL">
+    Each route and slug must produce a unique page on the website. Change the slug of one entry, or change the collection's route, then mark the entry ready again. See [Writing entries](/docs/cms/writing-entries) and [Defining content](/docs/sdk/defining-content).
+  </Accordion>
+  <Accordion title="I cannot delete a file from the Library">
+    A file cannot be deleted while a draft, an approved or scheduled version, an entry's history or a retained release still uses it. Remove the references first. Files in published releases are kept on purpose. See [Asset retention](/docs/self-hosting/asset-retention).
+  </Accordion>
+  <Accordion title="My text is missing after an interrupted save">
+    Reopen the same entry in the same browser. If the CMS has a local recovery copy, it offers to restore it. Review it before you apply it, and compare the entry's history if you need an older version. See [Writing entries](/docs/cms/writing-entries).
+  </Accordion>
+</Accordions>
+
+## Scheduling
+
+<Accordions>
+  <Accordion title="A scheduled entry did not go live at its time">
+    The scheduler starts a release when a scheduled time is due. The scheduled version goes live only when that release succeeds. Check the Go-live panel for a failed release, and check the site's activity for a scheduling failure. After a failure, the CMS retries after about ten minutes. Cancel and reschedule the entry if the schedule is wrong. See [Scheduling](/docs/cms/scheduling).
+  </Accordion>
+  <Accordion title="The scheduled version is different from my draft">
+    This is expected. A schedule freezes the draft when you set it. Later draft edits do not change it. To publish the newer text, mark the draft ready and schedule it again. See [Scheduling](/docs/cms/scheduling).
+  </Accordion>
+</Accordions>
+
+## Preview
+
+<Accordions>
+  <Accordion title="Preview opens a 404 page or does not connect">
+    The site's **Production URL** must point to a running website that has a preview route. For the local demo site, run the website on port 3001. See [Preview](/docs/cms/preview) and [Preview](/docs/sdk/preview).
+  </Accordion>
+  <Accordion title="The preview link says the token is invalid or expired">
+    Preview links last one hour. Select **Preview** again from the saved entry to get a new link. Check that your website route passes the whole token through to the SDK. See [Preview](/docs/sdk/preview).
+  </Accordion>
+</Accordions>
+
+## Website builds and the SDK
+
+<Accordions>
+  <Accordion title="The CLI cannot find my settings">
+    Run `areca` from the website project root. The CLI reads `.env.local` and then `.env` from that folder. Values already set in the shell take precedence over both files. See [CLI reference](/docs/sdk/cli).
+  </Accordion>
+  <Accordion title="Schema push fails with an authentication error">
+    `areca manifest push` needs `ARECA_SCHEMA_TOKEN`. The read-only site token cannot change the schema. Rotate the schema-write token in **Settings › Developer** if you do not have it. See [Schema sync](/docs/sdk/schema-sync).
+  </Accordion>
+  <Accordion title="Content pull fails with an authentication error">
+    The site token was rotated or copied incorrectly. Rotating a token stops the old one immediately. Update `ARECA_SITE_TOKEN` in `.env.local` and in any build secret, then pull again. See [Pulling content](/docs/sdk/pulling-content).
+  </Accordion>
+  <Accordion title="Content pull says there is no publication">
+    The site has no release yet. A ready entry alone is not enough. Select **Go live**, wait until the release is live or a demo release is complete, and pull again. See [Pulling content](/docs/sdk/pulling-content).
+  </Accordion>
+  <Accordion title="The generated content file is missing">
+    Run `areca pull` before your code reads the file, and check that the collection key and output folder match what your code expects. See [Pulling content](/docs/sdk/pulling-content).
+  </Accordion>
+  <Accordion title="The CLI fails to read areca.config.ts">
+    Use Node.js 24 LTS, which lets the CLI load `areca.config.ts` directly. On Node.js 22, see [Installation](/docs/sdk/installation) and the [CLI reference](/docs/sdk/cli).
+  </Accordion>
+  <Accordion title="Images load from the wrong host">
+    Image URLs come from the CMS address the CMS advertises. Set `APP_URL` to an address the browser can reach, then make a new release and pull again. Existing releases keep the URLs they were built with. See [Configuration](/docs/self-hosting/configuration).
+  </Accordion>
+  <Accordion title="SEO changes do not appear on the website">
+    Mark the SEO changes ready, go live, and rebuild the website from the new release. Check that the website uses the SDK's SEO helpers. See [SEO](/docs/sdk/seo).
+  </Accordion>
+  <Accordion title="Rich text fails to render">
+    Install the version of `@tanstack/markdown` that the rich text guide names, because the document format changes between versions. See [Rich text](/docs/sdk/rich-text).
+  </Accordion>
+</Accordions>
+
+## Deployment and go-live failures
+
+<Accordions>
+  <Accordion title="Go live says the Dokploy credentials are not configured">
+    The client has no working deployment connection. Open **Agency › Clients › [client] › Deployment**, enter the Dokploy URL and API key, and select **Save and verify**. See [Deployments](/docs/cms/deployments).
+  </Accordion>
+  <Accordion title="Go live says production needs a deployment target">
+    Production releases need an application and a health check URL on the site's **Settings › Deployment** tab. If you only want a local trial, set the mode to Demo. See [Deployments](/docs/cms/deployments) and [Going live](/docs/cms/going-live).
+  </Accordion>
+  <Accordion title="Pulls work on my computer but not in the deployment build">
+    Inside a build container, `localhost` points to the container, not your computer. Use a CMS address the build can reach, and give the build the site token as a build secret. See [Deployment targets](/docs/self-hosting/deployment-targets).
+  </Accordion>
+  <Accordion title="The deployment succeeds but the release fails its health check">
+    The website's health route must return `ok: true` and the publication ID of the release it was built from. Check the health URL, TLS and routing, and confirm the build pulled the pinned snapshot. The previous live release stays up. See [Go-live builds](/docs/sdk/go-live-builds).
+  </Accordion>
+  <Accordion title="A release stays in Waiting for a long time">
+    Another build for the same site may be active, or the worker may not be running. Check that `WORKER_ENABLED` is not set to `false`, and check the CMS logs for the worker. See [Operations](/docs/self-hosting/operations).
+  </Accordion>
+  <Accordion title="The release says the deployment outcome is unknown">
+    Check the deployment in Dokploy first, then use **Check deployment status** on the release in the Go-live panel. Do not start another release until the status is clear, and do not delete job records by hand. See [Operations](/docs/self-hosting/operations).
+  </Accordion>
+  <Accordion title="I want to return to an earlier version">
+    Open the Go-live panel and choose **Restore this version** on an earlier live release. The restore builds that release again. Drafts and ready changes stay as they are. See [Going live](/docs/cms/going-live).
+  </Accordion>
+</Accordions>
+
+## Operations
+
+<Accordions>
+  <Accordion title="The CMS readiness check returns 503">
+    The database, storage, or worker state is unhealthy. Check `/api/health/ready` for the failing component, then follow the operations checklist. See [Operations](/docs/self-hosting/operations).
+  </Accordion>
+  <Accordion title="Rate limiting seems to have stopped working">
+    When Redis is unavailable, shared rate limits fail open and the CMS logs a warning. Restore Redis and check the health output. See [Rate limits](/docs/security/rate-limits).
+  </Accordion>
+  <Accordion title="A saved provider key cannot be decrypted">
+    The encryption key in the environment no longer matches the key used to save the credential. Restore the original key from your backup, or enter the credential again. Keep encryption keys stable and backed up with the database. See [Secrets](/docs/security/secrets) and [Backup and recovery](/docs/self-hosting/backup-and-recovery).
+  </Accordion>
+</Accordions>
+
+## AI SEO suggestions
+
+<Accordions>
+  <Accordion title="The Generate with AI option is missing or fails">
+    AI features need an agency admin to save an OpenRouter key and a model under **Agency › AI**. The CMS also needs `AI_SETTINGS_ENCRYPTION_KEY`. A per-user hourly limit applies, and a provider can refuse a request because of model access or credits. See [AI settings](/docs/cms/ai-settings) and [AI data handling](/docs/security/ai-data-handling).
+  </Accordion>
+</Accordions>
+
+## Still stuck?
+
+- [Self-hosting troubleshooting](/docs/self-hosting/troubleshooting) covers installation and infrastructure problems in more detail.
+- [Errors and limits](/docs/sdk/errors-and-limits) explains the SDK's error messages and limits.
+- [Quickstart](/docs/quickstart) walks through a complete first publish, so you can compare each step.

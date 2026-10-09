@@ -1,5 +1,7 @@
-import { WarningCircle } from '@phosphor-icons/react'
+import { ArrowLeft, WarningCircle } from '@phosphor-icons/react'
+import { Link } from '@tanstack/react-router'
 
+import { buttonVariants } from '#/components/ui/button'
 import { PageHeader } from '#/components/ui/page-header'
 import { SettingsSection } from '#/components/ui/settings-section'
 import { m } from '#/paraglide/messages'
@@ -15,10 +17,25 @@ import { TwoFactorSection } from './two-factor-section'
 export function AccountScreen({ me }: { me: Me }) {
   return (
     <div className="grid max-w-[880px] gap-8" data-testid="account-page">
-      <PageHeader
-        title={m.account_title()}
-        description={m.account_description()}
-      />
+      <div className="grid gap-4">
+        {!me.mfaEnrolmentRequired ? (
+          <Link
+            to="/"
+            data-testid="account-back-to-workspace"
+            className={buttonVariants({
+              variant: 'quiet',
+              className: 'justify-self-start',
+            })}
+          >
+            <ArrowLeft aria-hidden="true" />
+            {m.account_back_to_workspace()}
+          </Link>
+        ) : null}
+        <PageHeader
+          title={m.account_title()}
+          description={m.account_description()}
+        />
+      </div>
 
       {me.mfaEnrolmentRequired ? (
         <div

@@ -1,0 +1,111 @@
+---
+title: SDK overview
+description: The Areca site SDK connects a Node.js website to your CMS site, so you can push its schema, pull published content and render it.
+---
+
+The site SDK, `@areca-cms/site-sdk`, is the package your website uses to talk to Areca. It runs in the website project, not in the CMS. Use it when you build a Node.js website, such as a TanStack Start, Vite or Astro project, that shows content from an Areca site.
+
+The SDK covers the developer side of the content workflow:
+
+- **Schema push.** It sends the content model you define in `areca.config.ts` to the CMS, so editors see the same collections and fields in the CMS.
+- **Build-time pull.** It downloads the latest published snapshot into local JSON files while your site builds.
+- **Reading content.** It reads those files from your server code, with typed entries.
+- **Rich text.** It turns a rich text value into a Markdown document, Markdown source or static HTML.
+- **SEO.** It turns each entry's SEO data into page title, meta tags, links and JSON-LD.
+- **Preview.** It fetches a draft entry with a signed token, so editors can see unpublished changes on your site.
+
+## How it fits into going live
+
+The SDK sits between the CMS and your website build. A typical cycle looks like this:
+
+<Steps>
+<Step>
+
+**Define and push the schema.** You describe your collections in `areca.config.ts` and run `areca manifest push`. You do this when the content model changes, not on every content edit.
+
+</Step>
+<Step>
+
+**Write and publish content.** Editors write entries in the CMS and approve them. When they go live, Areca creates an immutable snapshot of the published content.
+
+</Step>
+<Step>
+
+**Pull during the build.** Your build runs `areca pull`, which downloads the snapshot into local files. Your site reads those files, so visitor requests do not call the CMS for content. Images are the exception: they load from the CMS.
+
+</Step>
+<Step>
+
+**Deploy and check.** The build is deployed, and the site reports the publication it was built from. See [Go-live builds](/docs/sdk/go-live-builds) for the health check.
+
+</Step>
+</Steps>
+
+Read [How Areca works](/docs/concepts) for the full model, and [going live](/docs/cms/going-live) for what editors see.
+
+## Package and entry points
+
+Install the package once. It exposes one command-line tool, `areca`, and four import paths:
+
+| Import | What it provides |
+| --- | --- |
+| `@areca-cms/site-sdk` | `defineSiteContent`, `manifestFromConfig`, `createArecaClient`, `getPreviewEntry`, `previewHeaders`, the SEO and rich text helpers, and the TypeScript types |
+| `@areca-cms/site-sdk/pull` | `pullContent` and `readContent` |
+| `@areca-cms/site-sdk/seo` | `seoHead`, `seoHeadHtml` and `seoJsonLd` |
+| `@areca-cms/site-sdk/rich-text` | `richTextDocument`, `richTextMarkdown` and `richTextHtml` |
+
+The root entry does not re-export `pullContent` or `readContent`. Import them from `@areca-cms/site-sdk/pull`.
+
+## Requirements
+
+- **Node.js 22.6 or newer.** On Node.js 24 LTS, the CLI can load `areca.config.ts` directly, so Node 24 is recommended. On older versions, see [the CLI reference](/docs/sdk/cli) for running the config through `tsx`.
+- **ESM only.** Use `import` syntax. The package has no CommonJS build.
+- **No React dependency.** The SDK works with any Node.js framework. To render rich text with React, install `@tanstack/markdown` yourself, at the version the SDK pins. See [rich text](/docs/sdk/rich-text).
+
+## Where to start
+
+<Cards>
+  <Card title="Installation and setup" href="/docs/sdk/installation">
+    Install the package, run `areca init`, and set the environment variables.
+  </Card>
+  <Card title="Defining your content" href="/docs/sdk/defining-content">
+    Write `areca.config.ts` with collections, fields and identifiers.
+  </Card>
+  <Card title="Syncing the schema" href="/docs/sdk/schema-sync">
+    Push your content model to the CMS and pull it back.
+  </Card>
+  <Card title="Pulling content at build time" href="/docs/sdk/pulling-content">
+    Download the published snapshot before your site builds.
+  </Card>
+  <Card title="Reading content" href="/docs/sdk/reading-content">
+    Read entries in your server code with typed results.
+  </Card>
+  <Card title="Example site" href="/docs/sdk/example-site">
+    Run the demo site that ships with the repository.
+  </Card>
+</Cards>
+
+## Reference
+
+<Cards>
+  <Card title="Field types" href="/docs/sdk/field-types">
+    Every field type, its options and the values it produces.
+  </Card>
+  <Card title="CLI reference" href="/docs/sdk/cli">
+    Every `areca` command and flag.
+  </Card>
+  <Card title="Client" href="/docs/sdk/client">
+    `createArecaClient` and its methods.
+  </Card>
+  <Card title="HTTP API" href="/docs/sdk/http-api">
+    The endpoints the SDK calls, and their responses.
+  </Card>
+  <Card title="Errors and limits" href="/docs/sdk/errors-and-limits">
+    Common errors, and the size and rate limits.
+  </Card>
+</Cards>
+
+## Related
+
+- [Introduction](/docs)
+- [Quickstart](/docs/quickstart), for your first publish from start to finish

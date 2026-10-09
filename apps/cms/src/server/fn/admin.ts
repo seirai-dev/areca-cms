@@ -43,6 +43,7 @@ import {
   rotateSiteTokenAdmin,
   updateSite,
 } from '#/server/admin/sites'
+import { AI_PROMPT_MAX_LENGTH } from '#/server/ai/settings'
 import { NotFoundError } from '#/server/content/errors'
 import { pageLimitSchema, pageOffsetSchema } from '#/server/pagination'
 
@@ -203,6 +204,7 @@ export const updateSiteFn = createServerFn({ method: 'POST', ...adminFn })
       productionUrl: z.string().url().optional(),
       publishingMode: z.enum(['production', 'demo']).optional(),
       deploymentTarget: deploymentTargetSchema.optional(),
+      aiPrompt: z.string().max(AI_PROMPT_MAX_LENGTH).nullable().optional(),
     }),
   )
   .handler(async ({ data }) => {

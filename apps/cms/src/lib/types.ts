@@ -67,6 +67,45 @@ export type SnapshotEntry = {
   slug: string
   publishedAt: string | null
   data: Record<string, unknown>
+  /**
+   * Resolved SEO/GEO head data — matches `@areca-cms/site-sdk` `SeoMeta`.
+   * Always set by current builds; absent in publications stored before it.
+   */
+  seo?: SeoMeta
+}
+
+/** Wire contract — matches `@areca-cms/site-sdk` `SeoMeta`. */
+export type SeoMeta = {
+  /** Page title without any site suffix. */
+  title: string
+  description: string | null
+  canonicalUrl: string | null
+  robots: { index: boolean; follow: boolean; content: string }
+  focusKeyphrase: string | null
+  openGraph: {
+    type: 'article' | 'website'
+    title: string
+    description: string | null
+    url: string | null
+    siteName: string
+    image: ImageValue | null
+    publishedTime: string | null
+    modifiedTime: string | null
+  }
+  twitter: {
+    card: 'summary' | 'summary_large_image'
+    title: string
+    description: string | null
+    image: ImageValue | null
+  }
+  author: { name: string; url: string | null; bio: string | null } | null
+  /** TL;DR for answer engines; render it visibly on the page. */
+  summary: string | null
+  keyTakeaways: string[]
+  faq: { question: string; answer: string }[]
+  about: { name: string; sameAs: string | null }[]
+  /** Ready-to-embed JSON-LD objects (main type, FAQPage, extras). */
+  jsonLd: Record<string, unknown>[]
 }
 
 /** Wire contract — matches `@areca-cms/site-sdk` `Snapshot`. */

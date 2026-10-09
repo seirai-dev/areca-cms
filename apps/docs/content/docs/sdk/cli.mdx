@@ -1,0 +1,287 @@
+---
+title: CLI reference
+description: Every areca command and flag, the environment variables each command reads, exit codes, and the quirks to know before you script it.
+---
+
+The `areca` command comes with `@areca-cms/site-sdk`. It connects your site project to Areca: it creates the setup files, sends your content definitions to the CMS, and pulls published content for your build. Run it from the root of your site project, through your package manager (`pnpm exec areca` or a `package.json` script).
+
+For a walkthrough, see [Installation](/docs/sdk/installation) and [Pulling content](/docs/sdk/pulling-content).
+
+## Commands
+
+| Command | What it does | Reads |
+| --- | --- | --- |
+| [`areca init`](#areca-init) | Creates the config, environment and output files in a site project. | Flags, or prompts |
+| [`areca pull`](#areca-pull) | Downloads the current publication into a folder. | `ARECA_CMS_URL`, `ARECA_SITE_TOKEN` |
+| [`areca manifest push`](#areca-manifest-push) | Sends the content definitions in `areca.config.ts` to the CMS. | `ARECA_CMS_URL`, `ARECA_SITE_TOKEN`, `ARECA_SCHEMA_TOKEN` |
+| [`areca manifest pull`](#areca-manifest-pull) | Writes the CMS's content definitions into `areca.config.ts`. | `ARECA_CMS_URL`, `ARECA_SITE_TOKEN`, `ARECA_SITE_KEY` |
+| [`areca sync-manifest`](#areca-sync-manifest) | Deprecated alias of `areca manifest push`. | Same as `manifest push` |
+| [`areca run --`](#areca-run) | Runs another command with the environment loaded. | Nothing extra |
+
+Run `areca` with no arguments, or `areca --help`, to print the usage text.
+
+## Global behavior
+
+These rules apply to every command.
+
+- **Environment files load first.** Before any command runs, `areca` reads `.env.local`, then `.env`, from the current directory. A variable that is already set in the shell is never overwritten. Because `.env.local` loads first, it wins over `.env`.
+- **Empty values count as set.** If `.env.local` contains `ARECA_SITE_TOKEN=`, that empty value blocks a value for the same key in `.env`.
+- **Empty arguments are ignored.** Empty strings in the argument list are dropped before parsing.
+- **Errors go to stderr.** A parse error prints the message and the full usage text to stderr and exits with code `1`. A runtime error prints only its message to stderr.
+- **`--help` works only as the first argument.** `areca --help` and `areca -h` print usage. `areca pull --help` fails with `Unknown argument: --help`.
+- **Unknown flags fail.** Any argument a command does not recognize fails with `Unknown argument: <arg>`.
+- **A flag needs a value.** The value is the next argument. If it is missing, or starts with `-`, the command fails with `Missing value for <flag>`. For example, `--token -abc` is rejected.
+
+### Environment file format
+
+`.env.local` and `.env` are read line by line:
+
+- Blank lines and lines starting with `#` are skipped.
+- Each line is split at the first `=`. Spaces around the key and at the ends of the line are removed. Spaces inside the value are kept.
+- Matching double or single quotes around a value are removed.
+- There is no `export` prefix support, no escape handling and no inline comments.
+- If a key appears twice in one file, the last value wins.
+
+## areca init
+
+Sets up a site project for Areca. It writes the config file, an example env file, the local env file, and a generated content folder. It also adds two scripts to `package.json`.
+
+```bash
+areca init --cms-url https://cms.example.com --site-key acme-site
+```
+
+Run `init` in a terminal and omit `--token`. The command then prompts for the site token, which is masked. Only pass `--token` in a script where the value comes from a secret store.
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--cms-url <url>` | string | Prompt: `http://localhost:3000` | Base URL of your CMS. Must start with `http://` or `https://`. Trailing slashes are removed. |
+| `--token <token>` | string | Prompt (masked) | The site token. See the quirk below. |
+| `--site-key <key>` | string | Prompt | The site key, shown in the CMS. Lowercase letters, digits and single hyphens, for example `acme-site`. |
+| `--out <dir>` | path | `src/generated/content` | Folder for the pulled content. |
+| `--config <path>` | path | `areca.config.ts` | Path of the config file to create. |
+| `--yes`, `-y` | boolean | `false` | Skip prompts. Missing `--cms-url`, `--token` or `--site-key` is then an error. |
+| `--force` | boolean | `false` | Overwrite the config file and `.env.example` if they exist. |
+
+**Interactive mode** runs when `--yes` is not set and stdin is a terminal. The command prompts for each value you did not pass as a flag.
+
+**Non-interactive mode** runs otherwise. All three of `--cms-url`, `--token` and `--site-key` are then required.
+
+### Files written
+
+Paths are relative to the current directory.
+
+| File | Behavior |
+| --- | --- |
+| `areca.config.ts` (or the `--config` path) | Created only if missing, or with `--force`. It contains an empty `collections` object. |
+| `.env.example` | Created only if missing, or with `--force`. Sets `ARECA_CMS_URL` to the CMS URL, and lists `ARECA_SITE_TOKEN` and `ARECA_SCHEMA_TOKEN` with empty values. It contains no secrets. |
+| `.env.local` | Always updated. Sets `ARECA_CMS_URL` and `ARECA_SITE_TOKEN`. Other lines are kept. |
+| `.gitignore` | Adds `.env.local` and the `--out` folder if they are not already listed. |
+| `<out>/manifest.json` | Created with empty values, so the folder exists before the first pull. |
+| `package.json` | Adds `sync-manifest` (`areca manifest push`) and `content:pull` (`areca pull --out <out>`) scripts if they are missing or blank. If `dev` exists and does not already use `--env-file` or `areca run`, it becomes `areca run -- <dev command>`. |
+
+`init` must run in a folder with a `package.json` object. Otherwise it stops before writing anything.
+
+### Environment variables
+
+`init` does not read `ARECA_*` variables from the shell. It takes its values from flags or prompts, then writes them to `.env.local`. Variables from `.env.local` and `.env` are still loaded first.
+
+### Quirks
+
+- **`--token` leaves the secret in your shell history and process list.** The value appears in your command history and in `ps` output while the command runs. Use the prompt instead. The SDK never prints the token.
+- **`.env.local` keeps the default file permissions.** On a shared machine, other users may be able to read the token. See [restrict the file permissions](/docs/sdk/installation#restrict-the-file-permissions).
+- **Symlinks are followed.** `init` writes through a symlinked config or env file.
+
+## areca pull
+
+Downloads the current publication from the CMS and writes one JSON file per collection. Your build reads these files. Run it before `dev` or `build`, and again whenever you publish.
+
+```bash
+areca pull --out src/generated/content
+```
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--out <dir>` | path | `src/generated/content` | Folder for the output. Created if missing. Relative paths are resolved from the current directory. |
+
+### Environment variables
+
+| Variable | Required | Use |
+| --- | --- | --- |
+| `ARECA_CMS_URL` | Yes | CMS base URL. |
+| `ARECA_SITE_TOKEN` | Yes | Site token, sent as a bearer token. |
+
+### Output
+
+On success it prints one line, for example:
+
+```text
+Pulled publication pub_1 (abc123): articles=1, pages=0
+```
+
+The folder then contains:
+
+```text
+src/generated/content/
+  manifest.json      publication ID, hash, creation time and entry counts
+  articles.json      the entries of the articles collection
+  pages.json         one file per collection
+```
+
+`manifest.json` has this shape:
+
+```json
+{
+  "publicationId": "pub_1",
+  "hash": "abc123",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "collections": { "articles": 1, "pages": 0 }
+}
+```
+
+Each collection file is an array of entries. See [Pulling content](/docs/sdk/pulling-content) for the shape of an entry.
+
+### Quirks
+
+- **Stale files are kept.** If a collection is removed from the publication, its old file stays in the folder. Delete it yourself.
+- **Collection names must be safe identifiers.** `pull` refuses a collection whose key is not a safe identifier, before it writes any file. See [identifier rules](/docs/sdk/errors-and-limits#identifier-rules).
+- **`manifest.json` is written first.** If a symlink is found at a collection file, the command fails after `manifest.json` has already changed. The folder can then be partly updated. Run `pull` again after you fix the symlink.
+- **No publication, no output.** If the site has never gone live, the command fails with the 404 message and writes nothing new. See [Errors and limits](/docs/sdk/errors-and-limits#no-publication).
+
+## areca manifest push
+
+Sends the content definitions in your config file to the CMS. The CMS then creates or updates the collections for the site. Run it after you change `areca.config.ts`.
+
+```bash
+areca manifest push
+areca manifest push ./areca.config.ts
+```
+
+| Argument | Type | Default | Description |
+| --- | --- | --- | --- |
+| `[config]` | path | `./areca.config.ts` | The config file to read. Optional. Extra arguments after the first are ignored without an error. |
+
+The command loads the config file by importing it. That runs the file's code. Keep the config free of side effects.
+
+For a TypeScript config, the command uses Node's native TypeScript import. If that import fails, the error suggests running the command through `tsx`, for example `pnpm exec tsx ./node_modules/@areca-cms/site-sdk/dist/cli.js manifest push ./areca.config.ts`.
+
+### Environment variables
+
+| Variable | Required | Use |
+| --- | --- | --- |
+| `ARECA_CMS_URL` | Yes | CMS base URL. |
+| `ARECA_SITE_TOKEN` | Yes | Site token. The client checks for it at startup, even though a push does not use it. |
+| `ARECA_SCHEMA_TOKEN` | Yes | Schema token. Used for the push. It never falls back to the site token. |
+
+The schema token is in **Settings › Developer** for the site. Keep it on the machine where you edit the schema. It should not be in a build's environment.
+
+### Output
+
+```text
+Synced manifest from ./areca.config.ts
+```
+
+### Quirks
+
+- **Collections missing from the file are turned off.** A push turns off any collection in the CMS that the file does not define. Turned-off collections are not deleted, but their entries stop going live until the collection is turned on again.
+- **The payload is checked before sending.** Duplicate field keys and unsafe identifiers fail in the SDK before any request is made.
+
+## areca manifest pull
+
+Reads the content definitions from the CMS and writes them into your config file. Use it when someone changed a content type in the CMS and you need to match it in code.
+
+```bash
+areca manifest pull
+areca manifest pull --config ./areca.config.ts --yes
+```
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--config <path>` | path | `./areca.config.ts` | The config file to write. |
+| `--yes`, `-y` | boolean | `false` | Overwrite an existing config without asking. |
+
+### Behavior
+
+1. The command fetches the content definitions from the CMS.
+2. If the config file exists, it loads it. The site key is taken from that file.
+3. If the existing config defines one or more collections and `--yes` is not set:
+   - In a terminal, the command prints the changes (`+` added, `~` changed, `-` removed) and asks `Overwrite ./areca.config.ts?` before writing.
+   - Without a terminal, the command fails and asks you to re-run with `--yes`.
+4. The command writes the config file. It does not keep comments or helper code.
+
+A config file that defines no collections is overwritten without a prompt, even if it contains comments or helper code.
+
+### Environment variables
+
+| Variable | Required | Use |
+| --- | --- | --- |
+| `ARECA_CMS_URL` | Yes | CMS base URL. |
+| `ARECA_SITE_TOKEN` | Yes | Site token, sent as a bearer token. |
+| `ARECA_SITE_KEY` | Only without a config file | The site key, used when the config file is missing or has no `siteKey`. |
+
+### Output
+
+```text
+Wrote ./areca.config.ts with 2 collection(s) (+1 ~0 -0)
+```
+
+If you decline the prompt, the command prints `Aborted` and exits with `0`.
+
+### Quirks
+
+- **`--config` can point outside the project.** The file is written wherever the path points. Loading the existing config also runs it.
+- **Writes follow symlinks.** The file is written with no symlink check.
+
+## areca sync-manifest
+
+A deprecated alias of [`areca manifest push`](#areca-manifest-push). It takes the same optional `[config]` argument and has the same behavior, environment variables and output. Use `manifest push` in new scripts. The alias is kept so that existing `package.json` scripts keep working.
+
+## areca run
+
+Runs any other command with the environment loaded from `.env.local` and `.env`. Use it to start your dev server with Areca variables present.
+
+```bash
+areca run -- vite --port 3001
+```
+
+The arguments after `--` form the command. The `--` is required, and at least one argument must follow it. Otherwise the command fails with `Missing command. Usage: areca run -- <command>`.
+
+### Behavior
+
+- The command runs in a shell with inherited input and output. It exits with the child's exit code.
+- If the child is stopped by a signal, `areca run` exits with `1`.
+- If the command cannot start, the error is printed and `areca run` exits with `1`.
+
+### Quirks
+
+- **Arguments are joined into one string.** The words are joined with spaces and passed to the shell. Quoting is lost. An argument that contains a space must be quoted in your shell, and then it is passed through as typed. Keep commands simple, or put complex commands in a `package.json` script.
+- **Environment variables stay with the child process.** The variables are passed to the command you run. They are not exported to your shell.
+
+## Exit codes
+
+| Code | Meaning |
+| --- | --- |
+| `0` | Success. Also used for `--help`, for an `init` you cancel at a prompt, and for a `manifest pull` you decline. |
+| `1` | Any error: a parse error, a failed request, a file error, or a missing value. |
+| Child code | `areca run --` exits with the exit code of the command it ran. |
+
+Cancelling `init` exits with `0` and prints `Operation cancelled.` That is easy to miss in a script. Pass `--yes` and all three values when you script `init`.
+
+## Environment variables
+
+| Variable | Read by | Description |
+| --- | --- | --- |
+| `ARECA_CMS_URL` | `pull`, `manifest push`, `manifest pull` | CMS base URL. Trailing slashes are removed. |
+| `ARECA_SITE_TOKEN` | `pull`, `manifest push`, `manifest pull` | Site token. Required by every command that talks to the CMS. |
+| `ARECA_SCHEMA_TOKEN` | `manifest push` | Schema token, used only for the push. |
+| `ARECA_SITE_KEY` | `manifest pull` | Site key, used only when the config file is missing or has no `siteKey`. |
+
+The `ARECA_SNAPSHOT_ID` variable is not read by the SDK. It is only used as a Docker build argument to bust the build cache. See [Go-live builds](/docs/sdk/go-live-builds).
+
+For the CMS's own environment variables, see [Configuration](/docs/self-hosting/configuration).
+
+## Related
+
+- [Installation](/docs/sdk/installation) walks through `areca init`.
+- [Schema sync](/docs/sdk/schema-sync) explains when to run `manifest push` and `manifest pull`.
+- [Pulling content](/docs/sdk/pulling-content) explains the output of `areca pull`.
+- [Errors and limits](/docs/sdk/errors-and-limits) lists the messages these commands print.

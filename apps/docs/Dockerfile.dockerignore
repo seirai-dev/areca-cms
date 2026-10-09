@@ -1,0 +1,10 @@
+# Only the root workspace manifests and apps/docs are needed.
+**
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!apps/docs/**
+apps/docs/node_modules
+apps/docs/dist
+apps/docs/.tanstack
+apps/docs/.source

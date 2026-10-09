@@ -3,8 +3,9 @@
 Database migrations are **forward-only**. There is no down migration, so the way
 back from a bad upgrade is the pre-upgrade backup plus the previous image. Plan
 every upgrade around that. Day-to-day monitoring is in
-[OPERATIONS.md](OPERATIONS.md); backup and restore tooling is in
-[docker/RECOVERY.md](../docker/RECOVERY.md) and is not repeated here.
+[OPERATIONS.md](OPERATIONS.md); backup and restore paths are summarized in
+[RECOVERY.md](RECOVERY.md), with detailed Docker procedures in
+[docker/RECOVERY.md](../docker/RECOVERY.md).
 
 ## How migrations run
 
@@ -50,8 +51,10 @@ time unless the release notes say the migration is backward compatible.
   separate, deliberate changes. A PostgreSQL major version upgrade needs a
   dump/restore, not an image swap.
 - **Keep secrets stable.** Do not change `DOKPLOY_CREDENTIALS_ENCRYPTION_KEY` or
-  `BETTER_AUTH_SECRET` as part of an upgrade (see _Secret handling_ in
-  [DEPLOYMENT.md](DEPLOYMENT.md)).
+  `BETTER_AUTH_SECRET` as part of an upgrade. Keep `AI_SETTINGS_ENCRYPTION_KEY`
+  stable too if OpenRouter settings are configured. See _Secret handling_ in
+  [DEPLOYMENT.md](DEPLOYMENT.md) and the full
+  [configuration reference](CONFIGURATION.md).
 - **Read the release's migration notes** (for example
   [HIGH_RISK_UPGRADE.md](HIGH_RISK_UPGRADE.md)). Some migrations freeze schedules
   or fail interrupted jobs and ask for manual review afterwards.
@@ -71,6 +74,10 @@ time unless the release notes say the migration is backward compatible.
   and the correction can be repeated from a backup. It is safe to re-run.
 - `0010`/`0011` are additive (`audit_log.organization_id` becomes nullable for
   instance-level events; `invitation` gains delivery-tracking columns).
+- `0016_ai_settings_and_site_prompt` adds the singleton AI settings table and
+  optional per-site SEO prompt. It does not rewrite existing content. AI key
+  encryption uses `AI_SETTINGS_ENCRYPTION_KEY`; retain that key with backups if
+  an encrypted provider key is configured.
 
 ## Procedure
 
@@ -98,8 +105,9 @@ time unless the release notes say the migration is backward compatible.
 5. **Upgrade.** Update `CMS_IMAGE` to the target tag/digest, then
    `docker compose pull && docker compose up -d --wait`. The first container to
    start migrates; watch `docker compose logs -f cms`.
-6. **Verify** with the same checks as the rehearsal plus a real publish to a
-   demo site. Re-enable additional replicas and workers last.
+6. **Verify** with the same checks as the rehearsal. On an isolated site,
+   explicitly select Demo mode to verify snapshot publishing, or configure a
+   separate Dokploy application and health URL to verify Production deployment. Re-enable additional replicas and workers last.
 7. **Keep** the backup and the previous image reference until the release has
    run through at least one normal publishing cycle.
 

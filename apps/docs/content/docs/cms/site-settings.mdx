@@ -1,0 +1,65 @@
+---
+title: Site settings
+description: A tour of the five Settings tabs for a site, what each one controls, and who can change them.
+---
+
+Each site has its own **Settings** page with five tabs: **General**, **Deployment**, **Developer**, **AI** and **Content**. Settings control how a site is named, where it is deployed, how its website project connects, how AI writes suggestions for it, and which content types it has.
+
+Only agency admins see **Settings** in the sidebar. Client owners and editors can't open it, even though they can see the site. The **General**, **Deployment** and **AI** tabs show a bar with **Save** and **Discard** when you have unsaved changes. The **Developer** and **Content** tabs act as soon as you select a button or switch.
+
+![Developer tab of a site's settings, showing the site key, token controls and the site project status](/screenshots/current-developer-settings.png)
+
+## General
+
+Use this tab for the basic identity of the site.
+
+| Setting | What it does |
+| --- | --- |
+| **Name** | The site name shown in the sidebar and the site picker. |
+| **Production URL** | The address where the live site is. Previews open at this address too. |
+| **Danger zone** | Contains **Delete site…**, which permanently removes the site. See [clients and sites](/docs/cms/clients-and-sites#delete-a-site). |
+
+## Deployment
+
+Use this tab to decide whether a site goes live through a deployment target or only as a marked release. The tab sets the **Publishing mode**, connects the site to a Dokploy application, and sets the **Health check URL**.
+
+- **Production** deploys each release to the site's Dokploy application and checks its health before the release counts as live. Production requires an application and a Health check URL, even though the field is labelled optional.
+- **Demo** keeps the release in Areca without a production deployment. No deploy or health check runs. Demo releases are labelled and never count as live.
+
+The full steps are in [deployments](/docs/cms/deployments).
+
+## Developer
+
+Use this tab to connect the website project to Areca.
+
+| Card | What it shows |
+| --- | --- |
+| **Site key** | The short name that identifies the site. Copy it when you run `areca init`. It can't be changed. |
+| **Site token** | The token the website project uses to read content. Use **Rotate token…** to replace it. The old token stops working straight away. |
+| **Schema-write token** | The token used only to push content types. Use **Rotate schema token** to replace it. Never add it to website builds. |
+| **Site project** | The content types that the project last pushed, and a quick-start list of commands to connect a project. |
+
+Tokens are shown once, when they are created or rotated. The steps are in [clients and sites](/docs/cms/clients-and-sites#rotate-a-site-token), and the security details are in [tokens](/docs/security/tokens).
+
+## AI
+
+Use this tab to add instructions that apply to this site only. Areca adds them to the agency-wide AI instructions when an editor asks for SEO suggestions on this site. The text can be up to 20,000 characters.
+
+Describe the brand voice, the audience, terms to use or avoid, and the language. See [AI settings](/docs/cms/ai-settings) for the agency-wide setup, and [AI data handling](/docs/security/ai-data-handling) for what is sent to the AI provider.
+
+## Content
+
+Use this tab to see the site's **content types** and turn them on or off. A content type is the kind of thing editors write, such as Articles or Pages.
+
+- The **switch** on each row turns a content type on or off. A content type that is off is hidden from writers, and its entries don't go live.
+- Select a row to open its fields and route, and change them there.
+- **New content type** creates a content type in the CMS.
+
+The content types usually come from the website project. Read [content types](/docs/cms/content-types) before you edit them here, so you know which one wins.
+
+## Related
+
+- [Clients and sites](/docs/cms/clients-and-sites): create sites, copy the site key and rotate tokens.
+- [Deployments](/docs/cms/deployments): connect a site to Dokploy.
+- [Content types](/docs/cms/content-types): how content types are defined and kept in sync.
+- [AI settings](/docs/cms/ai-settings): the agency-wide OpenRouter connection.

@@ -8,7 +8,7 @@ Button labels, URLs, and commands below match the UI as of this guide. PowerShel
 
 - **Docker Desktop** (Postgres, RustFS/S3, Mailpit)
 - **Node 24** (`node -v` should start with `v24`)
-- **pnpm** 11 (`corepack enable`, then `corepack prepare pnpm@11.18.0 --activate` if needed)
+- **pnpm** 12 (`corepack enable`, then `corepack prepare pnpm@12.8.1 --activate` if needed)
 - This repo cloned locally
 
 ## 1. Infrastructure
@@ -19,15 +19,29 @@ From the repo root:
 docker compose up -d
 pnpm install
 cp apps/cms/.env.example apps/cms/.env.local
-pnpm --filter @areca/cms s3:init
-pnpm db:migrate
 ```
 
-`apps/cms/.env.local` is gitignored. For **local** images and preview links, set:
+Now edit `apps/cms/.env.local` before running the CMS setup commands below.
+Replace the example `BETTER_AUTH_SECRET` and set
+`DOKPLOY_CREDENTIALS_ENCRYPTION_KEY` to the output of `openssl rand -base64 32`.
+Keep the encryption key safe and stable; the CMS configuration requires it
+even before you connect Dokploy. `docker compose up` provides the local database,
+Redis, RustFS and Mailpit services. The full variable reference is
+[CMS configuration](CONFIGURATION.md).
+
+`apps/cms/.env.local` is gitignored. For **local** sign-in links, images and
+previews, set:
 
 ```
 APP_URL=http://localhost:3000
 BETTER_AUTH_URL=http://localhost:3000
+```
+
+Then create the local storage bucket and apply database migrations:
+
+```powershell
+pnpm --filter @areca/cms s3:init
+pnpm db:migrate
 ```
 
 For **Dokploy** builds later, `APP_URL` and `ARECA_CMS_URL` must be a LAN URL the Dokploy host can reach (see [Deploying with Dokploy](#deploying-with-dokploy)).
@@ -35,6 +49,13 @@ For **Dokploy** builds later, `APP_URL` and `ARECA_CMS_URL` must be a LAN URL th
 Expected: compose starts Postgres on `5432`, RustFS on `9000`, Mailpit SMTP on `1025` and UI on [http://localhost:8025](http://localhost:8025). `s3:init` prints `Created bucket: areca` or `Bucket already exists: areca`. `db:migrate` applies migrations without dropping them.
 
 ## 2. Start from an empty CMS
+
+This step is optional. A new database already has no users or content, so skip
+it on first run. `db:reset` is destructive: it truncates every CMS table and
+empties the configured S3 bucket. Use it only when you intentionally want to
+erase the local instance, and confirm `DATABASE_URL` and `S3_BUCKET` point to
+throwaway local resources before running it. Never run it against a shared or
+production instance.
 
 ```powershell
 pnpm db:reset
@@ -58,14 +79,23 @@ If you already had a session cookie from a previous admin, sign out first or use
 
 URL: [http://localhost:3000/setup](http://localhost:3000/setup)
 
-Page title: **Welcome to Areca** — *Create the first admin account.*
+Page title: **Welcome to Areca** — *Create the first admin account.* The form
+asks for the first-run setup token. If you did not set `SETUP_TOKEN`, read the
+generated token in the CMS terminal output; it is printed while the instance
+has no users. Do not share it.
 
-1. **Name** — e.g. `Kaan Kaya`
-2. **Email** — e.g. `admin@areca.local`
-3. **Password** — at least 8 characters (e.g. `password123`; the eye icon shows it)
-4. Click **Create admin account**
+1. **Setup token** — paste the token from the CMS terminal, unless you configured `SETUP_TOKEN` yourself
+2. **Name** — e.g. `Kaan Kaya`
+3. **Email** — e.g. `admin@areca.local`
+4. **Password** — at least 8 characters (the eye icon shows it)
+5. Click **Create admin account**
 
-Expected: you are signed in and land in the **Agency workspace** (`/agency`). While the instance is empty the **Get your agency ready** checklist lists five steps, each with a direct action: *Create a client*, *Add a site*, *Connect the site project*, *Invite the client*, *Go live*. It collapses to **All set** once they are done.
+Expected: you are signed in. The first agency admin is prompted to enroll in
+two-factor authentication (TOTP); save the recovery codes somewhere safe. Then
+you land in the **Agency workspace** (`/agency`). While the instance is empty the
+**Get your agency ready** checklist lists five steps, each with a direct action:
+*Create a client*, *Add a site*, *Connect the site project*, *Invite the client*,
+*Go live*. It collapses to **All set** once they are done.
 
 A second visit to `/setup` redirects to `/login` when you are signed out (“already set up”). If you still have a session you land in your workspace instead. `/login` and every signed-in page also redirect to `/setup` while the user table is empty.
 
@@ -136,8 +166,9 @@ Each site card on the Sites tab has **Open** (into the site workspace) and **Set
 Open the site (sidebar **All sites**, the workspace switcher, or **Open** on the card), then **Settings** in the sidebar (`/sites/<id>/settings`). Tabs:
 
 - **General** — name and **Production URL** (where the live site is; Preview opens `<productionUrl>/__preview/<collection>/<slug>?token=`). **Delete site…** sits in the danger zone.
-- **Deployment** — optional. Provider is Dokploy: pick the application from the client's verified Dokploy list (or type its ID) and set the health check URL. Leave it empty for local work: **Go live** then just marks the release **live** without deploying. **Stop deploying…** clears it again.
-- **Developer** — the site key with a copy button, **Rotate token…**, the **Site project** status (content types synced from the project's `areca.config`) and a **Quick start** snippet.
+- **Deployment** — choose **Demo** for local work; its releases are labeled demo and do not count as production live. For **Production**, connect Dokploy and set its publication-aware health check URL before going live. Production publishing is blocked until a valid target is configured. **Stop deploying…** clears the target.
+- **Developer** — the site key, read-only site token and separate schema-write token, **Rotate token…**, the **Site project** status (content types synced from the project's `areca.config`) and a **Quick start** snippet.
+- **AI** — site-specific instructions for the optional agency-configured SEO assistant; see [SEO and AI](SEO.md).
 - **Content** — the content types (collections): label, key, route, field count and an On/Off switch. **New content type** (or clicking a row) opens the schema editor; content types normally arrive from `sync-manifest` (section 8). Until there are any, the site Overview says *This site has no content types yet*.
 
 ## 8. Connect the demo site
@@ -156,19 +187,29 @@ Edit `.env.local` (gitignored):
 ```
 ARECA_CMS_URL=http://localhost:3000
 ARECA_SITE_TOKEN=<paste the token>
+ARECA_SCHEMA_TOKEN=<paste the separate schema-write token>
 ```
+
+Copy the schema-write token from **Settings › Developer**. It is separate from
+the site token: builds and content pulls use `ARECA_SITE_TOKEN`; only schema
+publishing uses `ARECA_SCHEMA_TOKEN`. Keep the schema token in this local,
+trusted authoring environment, never in a public build secret.
 
 Scripts load `.env.local` automatically (`node --env-file-if-exists=.env.local`). From the repo root:
 
 ```powershell
+pnpm --filter @areca-cms/site-sdk build
 pnpm --filter @areca/demo-site sync-manifest
 ```
+
+Build the workspace SDK first so its `dist/cli.js` exists for the demo site's
+schema-push script.
 
 Expected: the command exits 0. **Settings › Content** lists key `articles`, label **Articles**, route `/blog/$slug`, and **Settings › Developer** reports *1 content type synced from the site project*. The site sidebar's **CONTENT** section now shows **Articles**.
 
 `pnpm content:fixture` is the **no-CMS fallback only**. `prebuild` / `content:pull` do **not** fall back to the fixture when `ARECA_CMS_URL` and `ARECA_SITE_TOKEN` are set — a failed pull exits non-zero.
 
-The demo-site **Dockerfile is unchanged**: Dokploy still passes `ARECA_CMS_URL` / `ARECA_SITE_TOKEN` as build args.
+For Docker deployments, pass `ARECA_CMS_URL` as a build argument and `ARECA_SITE_TOKEN` as a BuildKit build secret. The adapter updates `ARECA_SNAPSHOT_ID` to invalidate the cached content-pull layer. See [deployment](DEPLOYMENT.md).
 
 ## 9. Invite the client's people
 
@@ -263,7 +304,7 @@ The **Go-live tray** at the bottom of the site sidebar always shows the publishi
 1. Mark each article as ready
 2. Click **Go live** in the tray (or on the Overview's *changes ready* card)
 
-Expected: the tray shows *Going live…*. With **no deployment target** the worker log says `no deployment target configured, marking live without deploy` and the tray settles on **Live · Up to date**.
+Expected: in **Demo** mode, the tray shows that the demo publication completed; it is labeled Demo and is not a production live release. In **Production** mode, the tray shows *Going live…* while Dokploy builds and the CMS verifies the exact publication ID at the site's health URL. Production mode requires a deployment target before publishing.
 
 Click the tray (or open `/sites/<id>?panel=golive`) for the **Go-live panel**:
 
@@ -274,7 +315,8 @@ Click the tray (or open `/sites/<id>?panel=golive`) for the **Go-live panel**:
 | Publication status | Shown as |
 | --- | --- |
 | `pending` / `building` | Waiting… / Going live |
-| `live` | Went live (current) |
+| `live` | Went live (current production release) |
+| `demo` | Demo publication; no production deployment |
 | `failed` | Failed — the previous live release stays |
 | `superseded` | Replaced by a newer release |
 | `rolled_back` | An earlier release was restored |
@@ -315,7 +357,7 @@ const articles = readContent('src/generated/content', 'articles')
 // article.data.heroImage.url → CMS /api/assets/file/...
 ```
 
-Preview is a live fetch: `getPreviewEntry({ token })` → `GET /api/sites/preview?token=`. Visitors never call the CMS; only the build and the preview route do.
+Preview is a live fetch: `getPreviewEntry({ token })` → `GET /api/sites/preview?token=`. Normal content pages use the pulled snapshot. Build pulls and draft previews contact the CMS; visitors also contact its asset endpoint when pages use CMS-hosted images.
 
 See [`packages/site-sdk/README.md`](../packages/site-sdk/README.md).
 
@@ -326,7 +368,7 @@ After you are happy locally, follow [`docs/DEPLOYMENT.md`](DEPLOYMENT.md).
 Important after a **db:reset**:
 
 1. Create the site again and copy the **new** token
-2. Update Dokploy `env` + `buildArgs` (`ARECA_SITE_TOKEN`, `ARECA_CMS_URL`) — `pnpm --filter @areca/cms dokploy:setup` or edit the app in the Dokploy UI
+2. Update Dokploy runtime environment as needed, the `ARECA_CMS_URL` build argument, and the `ARECA_SITE_TOKEN` build secret — `pnpm --filter @areca/cms dokploy:setup` or edit the app in the Dokploy UI
 3. `APP_URL` (CMS) and `ARECA_CMS_URL` (site build) must be **LAN-reachable** from the Dokploy host, not `localhost`
 4. Listen on all interfaces: `pnpm --filter @areca/cms dev:lan`
 5. Set a deployment target on the site (application id + health check URL) (**Settings › Deployment**) so **Go live** actually deploys
@@ -336,10 +378,10 @@ Important after a **db:reset**:
 | Symptom | What to do |
 | --- | --- |
 | `areca pull` 404 / `No publication exists` | Mark at least one entry as ready, then **Go live**, wait until the tray says **Up to date**, pull again |
-| `areca pull` 401 | Wrong or rotated token. Copy the current token into `.env.local` (and Dokploy build args) |
+| `areca pull` 401 | Wrong or rotated token. Copy the current token into `.env.local` (and the Dokploy build secret) |
 | Images 404 or wrong host | `APP_URL` must be `http://localhost:3000` for local; **Go live** again so snapshot URLs refresh |
-| `/setup` says already set up / redirects to `/login` | A user already exists. `pnpm db:reset` to start empty, or sign in at `/login` |
+| `/setup` says already set up / redirects to `/login` | A user already exists. Sign in at `/login`; only use the optional destructive reset above when intentionally erasing a throwaway local instance |
 | Worker not running / publication stuck `pending` | `WORKER_ENABLED` must not be `false` in `apps/cms/.env.local`. Restart `pnpm --filter @areca/cms dev`. Logs should include `[areca] publishing worker started` |
 | Invite mail missing | Mailpit at http://localhost:8025. Check `SMTP_HOST=localhost` and `SMTP_PORT=1025` |
-| `pnpm sync-manifest` cannot connect | CMS on :3000, `ARECA_CMS_URL` in `.env.local`, token matches |
+| `pnpm sync-manifest` fails | CMS on :3000, `ARECA_CMS_URL`, `ARECA_SITE_TOKEN`, and `ARECA_SCHEMA_TOKEN` in `.env.local`; use the schema-write token, not the read-only site token |
 | `prebuild` failed after setting env | Intended: it will not use the fixture when env vars are set. Fix CMS/token/publication, or unset the vars and run `pnpm content:fixture` only for no-CMS work |

@@ -55,7 +55,8 @@ export type PendingReleaseChange = {
   exists: boolean
 }
 
-type IndexedEntry = ReleaseDiffEntry
+type IndexedEntry = ReleaseDiffEntry &
+  Pick<SnapshotEntry, 'seo' | 'publishedAt'>
 
 /** Order-insensitive JSON; same rule as `entry-live-state` `stable()`. */
 export function stableJson(value: unknown): string {
@@ -74,6 +75,43 @@ export function stableJson(value: unknown): string {
 
 function fingerprint(entry: Pick<SnapshotEntry, 'id' | 'slug' | 'data'>) {
   return `${entry.id}\0${entry.slug}\0${stableJson(entry.data)}`
+}
+
+/** Resolved SEO minus the publish dates, which follow `publishedAt`. */
+function seoFingerprint(seo: SnapshotEntry['seo']) {
+  if (!seo) return null
+  return stableJson({
+    ...seo,
+    openGraph: { ...seo.openGraph, publishedTime: null, modifiedTime: null },
+    jsonLd: seo.jsonLd.map((node, index) => {
+      // The resolver puts the generated main node first; later nodes may
+      // contain editor-supplied dates that are meaningful content changes.
+      if (index !== 0) return node
+      const { datePublished: _p, dateModified: _m, ...rest } = node
+      return rest
+    }),
+  })
+}
+
+function withoutSeoKey({
+  seo: _seo,
+  publishedAt: _publishedAt,
+  ...rest
+}: IndexedEntry): ReleaseDiffEntry {
+  return rest
+}
+
+function changed(next: IndexedEntry, prev: IndexedEntry) {
+  if (fingerprint(next) !== fingerprint(prev)) return true
+  const a = seoFingerprint(next.seo)
+  const b = seoFingerprint(prev.seo)
+  // Adding resolved defaults to an untouched legacy entry is not a change.
+  // Re-approval advances publishedAt, so its SEO must be released even when
+  // the live baseline predates SEO and has no metadata to compare.
+  if (a !== null && b === null) {
+    return next.publishedAt !== prev.publishedAt
+  }
+  return a !== null && b !== null && a !== b
 }
 
 /**
@@ -103,6 +141,8 @@ function indexCollections(
         slug: item.slug,
         collectionKey,
         data: item.data,
+        seo: item.seo,
+        publishedAt: item.publishedAt,
       })
     }
   }
@@ -112,7 +152,8 @@ function indexCollections(
 /**
  * Diff two snapshot `collections` maps by entry id.
  * Missing in live = add; missing in candidate = removal; same id but slug
- * or stable(data) differs = update. `publishedAt` is ignored.
+ * or stable(data)/SEO differs = update. `publishedAt` only distinguishes
+ * re-approved entries from untouched entries when live SEO is missing.
  */
 export function diffSnapshotCollections(
   candidate: Record<string, SnapshotEntry[]> | null | undefined,
@@ -127,13 +168,13 @@ export function diffSnapshotCollections(
   for (const [id, item] of next) {
     const existing = prev.get(id)
     if (!existing) {
-      adds.push(item)
+      adds.push(withoutSeoKey(item))
       continue
     }
-    if (fingerprint(item) !== fingerprint(existing)) updates.push(item)
+    if (changed(item, existing)) updates.push(withoutSeoKey(item))
   }
   for (const [id, item] of prev) {
-    if (!next.has(id)) removals.push(item)
+    if (!next.has(id)) removals.push(withoutSeoKey(item))
   }
 
   return { adds, updates, removals }

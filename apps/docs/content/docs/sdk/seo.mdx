@@ -1,0 +1,156 @@
+---
+title: SEO helpers
+description: Turn each entry's SEO data into title, meta, canonical, Open Graph and JSON-LD tags with seoHead, seoHeadHtml and seoJsonLd.
+---
+
+Every entry in a snapshot can carry resolved SEO data in its `seo` property. The SDK's SEO helpers turn that data into the tags your page needs: the title, meta description, robots directive, canonical link, Open Graph and Twitter tags, and JSON-LD structured data. You choose how to output them. Use `seoHead` for a router's `head()` option, or `seoHeadHtml` for a plain HTML template.
+
+Editors write the SEO fields in the CMS. For what they can set, see [SEO and AI suggestions](/docs/cms/seo-and-ai).
+
+## The three helpers
+
+| Helper | Returns | Use it for |
+| --- | --- | --- |
+| `seoHead(seo, options?)` | `SeoHeadResult` | Routers and frameworks that take head data as objects, such as TanStack Start |
+| `seoHeadHtml(seo, options?)` | `string` | Plain HTML templates, Astro, or any server-rendered page |
+| `seoJsonLd(seo)` | `string[]` | Only the JSON-LD blocks, if you place them yourself |
+
+All three accept `SeoMeta | null | undefined`. Pass `entry.seo` straight in. If the value is missing, `seoHead` returns empty arrays and `seoHeadHtml` returns an empty string.
+
+Import them from the `seo` entry point, or from the main package:
+
+```ts
+import { seoHead, seoHeadHtml, seoJsonLd } from '@areca-cms/site-sdk/seo'
+```
+
+Snapshots from older CMS versions do not include `seo`. Plan for it being missing and fall back to a title and description of your own.
+
+## The SeoMeta shape
+
+`SeoMeta` is the data the CMS resolves for each entry. The SDK reads these fields:
+
+| Field | Type | Becomes |
+| --- | --- | --- |
+| `title` | `string` | The `<title>` element |
+| `description` | `string \| null` | `<meta name="description">` |
+| `canonicalUrl` | `string \| null` | `<link rel="canonical">` |
+| `robots` | `{ index, follow, content }` | `<meta name="robots">`, from `content` |
+| `openGraph` | object | `og:*` and `article:*` meta tags |
+| `twitter` | object | `twitter:*` meta tags |
+| `author` | `{ name, url, bio } \| null` | `article:author` |
+| `jsonLd` | `Record<string, unknown>[]` | `<script type="application/ld+json">` blocks |
+| `summary`, `keyTakeaways`, `faq` | text, list, list | Not turned into tags |
+
+Blank strings and `null` values are skipped, so a field that is not set produces no tag.
+
+`summary`, `keyTakeaways` and `faq` are for people and answer engines to read on the page. The SDK does not turn them into tags. Render them visibly in your template, or the answer engines will not see them as part of the page.
+
+## Options
+
+Both `seoHead` and `seoHeadHtml` accept the same options:
+
+<TypeTable
+  type={{
+    titleTemplate: {
+      type: "string | ((title: string) => string)",
+      description: "Wraps the title. A string replaces the first %s with the title. A function receives the title and returns the final text.",
+    },
+    siteName: {
+      type: 'string',
+      description: 'Overrides og:site_name. Without it, the value from the entry is used.',
+    },
+  }}
+/>
+
+```ts
+seoHeadHtml(entry.seo, { titleTemplate: '%s · Acme', siteName: 'Acme' })
+```
+
+Only the first `%s` in the template is replaced. Use a function when you need more control, for example to skip the suffix on the home page.
+
+## Canonical URLs and robots
+
+The canonical link comes from `canonicalUrl`. The SDK does not build a canonical URL from your domain. It uses the value the CMS resolved for the entry. The `robots` meta tag uses `robots.content`, the directive the CMS resolved for the entry.
+
+## Open Graph and Twitter
+
+For `openGraph`, the helpers emit `og:type`, `og:title`, `og:description`, `og:url`, `og:site_name`, the `og:image` family (URL, width, height, alt and MIME type when present), and `article:published_time` and `article:modified_time`.
+
+For `twitter`, they emit `twitter:card`, `twitter:title`, `twitter:description`, and `twitter:image` with `twitter:image:alt`.
+
+`article:author` uses the author's URL when there is one. Otherwise it uses the author's name. It does not check that the value is a URL.
+
+## JSON-LD
+
+`jsonLd` holds ready-to-embed objects, such as the main `Article` type and any `FAQPage` block. `seoHead` and `seoHeadHtml` put each one in its own `application/ld+json` script. The helpers escape `<`, `>`, `&` and the two Unicode line separators, so the JSON cannot close the script tag early. Use `seoJsonLd` if you need the escaped strings yourself.
+
+## Framework-agnostic: an HTML template
+
+Use `seoHeadHtml` inside your page's `<head>`. This works in Astro, Express, Hono or any template engine that can output a string.
+
+```astro title="src/layouts/Article.astro"
+---
+import { seoHeadHtml } from '@areca-cms/site-sdk/seo'
+
+const { entry } = Astro.props
+---
+<html lang="en">
+  <head>
+    <Fragment set:html={seoHeadHtml(entry.seo, { titleTemplate: '%s · Acme' })} />
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>
+```
+
+The helper returns escaped HTML, so inserting it as raw HTML is safe. Do not escape it a second time.
+
+## TanStack Start: a head() route
+
+In TanStack Router, a route's `head()` returns the head data. Use `seoHead` and pass its `meta`, `links` and `scripts` through. The example reuses the article loader from the [demo site](/docs/sdk/example-site).
+
+```tsx title="src/routes/blog/$slug.tsx"
+import { createFileRoute, notFound } from '@tanstack/react-router'
+import { seoHead } from '@areca-cms/site-sdk/seo'
+import { loadArticle } from '../../lib/queries.ts'
+
+export const Route = createFileRoute('/blog/$slug')({
+  loader: async ({ params }) => {
+    const article = await loadArticle({ data: { slug: params.slug } })
+    if (!article) throw notFound()
+    return { article }
+  },
+  head: ({ loaderData }) => {
+    const seo = loaderData?.article.seo
+    const head = seoHead(seo, { titleTemplate: '%s · Acme' })
+    if (head.meta.length === 0) {
+      return { meta: [{ title: `${loaderData?.article.data.title ?? 'Article'} · Acme` }] }
+    }
+    return { meta: head.meta, links: head.links, scripts: head.scripts }
+  },
+  component: BlogArticle,
+})
+
+function BlogArticle() {
+  const { article } = Route.useLoaderData()
+  return <h1>{article.data.title}</h1>
+}
+```
+
+`seoHead` also returns a top-level `title` value. Do not pass it to the route. The same text is already in `meta` as a `{ title }` entry, and the route uses `meta`.
+
+The fallback covers snapshots without `seo`. Replace the placeholder component with your article view.
+
+## Checklist
+
+- Pass `entry.seo` to the helper, not the whole entry.
+- Render `summary`, `keyTakeaways` and `faq` visibly on the page.
+- Give every page one canonical link, from `canonicalUrl`.
+- Do not index preview pages. Use the [preview helpers](/docs/sdk/preview), which send `noindex` headers.
+
+## Related
+
+- [Rendering rich text](/docs/sdk/rich-text) for the body of the same entry.
+- [SEO and AI suggestions](/docs/cms/seo-and-ai) for the editor side.
+- [Reading content](/docs/sdk/reading-content) for how entries are loaded.

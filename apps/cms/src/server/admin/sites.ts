@@ -50,6 +50,7 @@ const publicSiteColumns = {
   publishingMode: site.publishingMode,
   deploymentTarget: site.deploymentTarget,
   lastManifest: site.lastManifest,
+  aiPrompt: site.aiPrompt,
   createdAt: site.createdAt,
   updatedAt: site.updatedAt,
 }
@@ -160,6 +161,7 @@ export async function updateSite(
     productionUrl?: string
     publishingMode?: 'production' | 'demo'
     deploymentTarget?: DeploymentTarget | null
+    aiPrompt?: string | null
   },
   actorId: string,
 ) {
@@ -177,6 +179,7 @@ export async function updateSite(
     productionUrl?: string
     publishingMode?: 'production' | 'demo'
     deploymentTarget?: DeploymentTarget | null
+    aiPrompt?: string | null
     updatedAt: Date
   } = { updatedAt: new Date() }
 
@@ -187,6 +190,8 @@ export async function updateSite(
   if (input.name !== undefined) patch.name = input.name
   if (input.productionUrl !== undefined)
     patch.productionUrl = input.productionUrl
+  if (input.aiPrompt !== undefined)
+    patch.aiPrompt = input.aiPrompt?.trim() ? input.aiPrompt : null
   if ('deploymentTarget' in input) {
     patch.deploymentTarget = deploymentTargetSchema.parse(
       input.deploymentTarget,

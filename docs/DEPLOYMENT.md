@@ -7,6 +7,9 @@ health-checks the new container and marks the publication live.
 This is the checklist used for the Acme demo (`examples/demo-site`) against
 Dokploy v0.29.12. Register or update an application with:
 
+For the full CMS environment variable reference, including local versus
+production values, see [configuration](CONFIGURATION.md).
+
 ```
 pnpm --filter @areca/cms dokploy:setup
 ```
@@ -141,7 +144,7 @@ Go-live panel, `?panel=golive`). Owners and agency admins can use it.
 2. Worker sets the publication to `building` and calls `POST /api/application.deploy`.
 3. **Cache bust:** Dokploy cannot pass a per-deploy env var from the worker
    except by rewriting the app config. Before deploy, the adapter writes
-   `ARECA_SNAPSHOT_ID=<timestamp>` into `buildArgs`. The demo Dockerfile
+   `ARECA_SNAPSHOT_ID=<publication-id>` into `buildArgs`. The demo Dockerfile
    declares that `ARG` _after_ the SDK build and _immediately before_
    `pnpm --filter @areca/demo-site build` (which runs `areca pull`). Changing
    the ARG invalidates only the content-pull layer, so Docker does not reuse a
@@ -222,6 +225,7 @@ What is secret, and where it lives:
 | `S3_ACCESS_KEY` / `S3_SECRET_KEY` | CMS environment | Full access to every upload. |
 | `SMTP_*`, OAuth/SSO client secrets | CMS environment | |
 | `DOKPLOY_CREDENTIALS_ENCRYPTION_KEY` | CMS environment | Encrypts each organization's Dokploy API key at rest. Back it up with the database ([RECOVERY.md](../docker/RECOVERY.md)). |
+| `AI_SETTINGS_ENCRYPTION_KEY` | CMS environment (optional) | Encrypts the OpenRouter API key saved on `/agency/ai`. AI SEO suggestions stay off until it is set. Changing it means re-entering the key. Generate with `openssl rand -base64 32`; retain it with backups if restoring those settings. |
 | Dokploy API keys | Database, encrypted | Entered per organization in the CMS. |
 | Site build token, schema-write token | Site settings > Developer (agency administrators) | `ARECA_SITE_TOKEN` is read-only and used by `areca pull`; `ARECA_SCHEMA_TOKEN` allows `areca manifest push` and belongs only in the schema-authoring environment, never in build secrets. |
 | Deploy keys | Dokploy | Never commit them. |
@@ -276,7 +280,7 @@ Rotation:
 | Deploy finishes in a few seconds, site still shows old `publicationId` | Docker cached `areca pull`. Confirm `ARECA_SNAPSHOT_ID` is in `buildArgs` and sits **after** the SDK build in the Dockerfile.              |
 | Job `failed: Deploy error` / clone errors                              | Deploy key, `customGitSSHKeyId`, repo URL `git@github.com:…`.                                                                              |
 | `areca pull` 401                                                       | Site token rotated; update Dokploy runtime `env` + `buildSecrets` and the local token you use for `sync-manifest`.                         |
-| `areca pull` 404 `No publication exists`                               | Snapshot endpoint only returns the active job's publication or the latest `live`. Publish from the CMS first.                              |
+| `areca pull` 404 `No publication exists`                               | Snapshot reads use the active/uncertain job's publication, or the latest successful `live`/`demo` publication for the site's current mode. Request a publication first.                              |
 | `areca pull` connection refused / timeout                              | CMS not on `0.0.0.0`, wrong `ARECA_CMS_URL`, or Windows firewall blocking :3000.                                                           |
 | `pnpm install --frozen-lockfile` fails                                 | Lockfile out of date vs `package.json`; commit an updated `pnpm-lock.yaml`.                                                                |
 | Health check fails                                                     | `GET /api/deployment.all?applicationId=` then `GET /api/deployment.readLogs?deploymentId=&tail=200`. Port `3101→3000` `publishMode: host`. |

@@ -1,0 +1,51 @@
+---
+title: Previewing drafts
+description: Open a draft of an entry on the real website before you mark it ready, and know how long the preview link stays valid.
+---
+
+A preview shows you an entry the way it will look on the website, before anyone else sees it. It uses your latest saved draft, so you can check your text, images and layout in context. Opening a preview never changes the status of an entry, and it never publishes anything.
+
+## Open a preview
+
+Open the entry in the editor, then select the **Preview** button (the eye icon) in the top bar. The draft opens on the website in a new tab.
+
+You can also open the **More actions** menu (⋯) and select **Open in new tab**.
+
+<Callout>
+A preview shows the draft as it was last saved. If you have just typed something, wait until the save status says **Saved** or **All changes saved**, then open the preview.
+</Callout>
+
+A new entry can be previewed once it has a title and a slug. Until then, the button tells you **Preview works once the entry is saved. Add a title to save it.** or **Add a slug to preview this entry**.
+
+## What the website needs
+
+The preview is shown by the website itself, not by the CMS. For it to work, two things must be in place:
+
+- **The website has a preview page.** The developer who built the website adds a preview route with the site SDK. If previews do not open, ask your developer to check it. For the developer side, see [Preview](/docs/sdk/preview).
+- **The site has a production address.** Previews open at the site's production URL, so that URL must be set. An agency admin sets it in **Settings › General**, under **Production URL**. The field explains: **Where the live site is. Previews open on this address too.**
+
+## Preview links expire
+
+Each preview link is valid for one hour. Select **Preview** again after that to open a fresh link. Each link is tied to one entry, so you cannot use it to see other entries.
+
+<Callout type="warn" title="Anyone with the link can see the draft">
+A preview link lets anyone who has it read the draft until the link expires, even without signing in to the CMS. Do not post preview links in public channels or send them to people outside the project.
+</Callout>
+
+## Preview formatting in the editor
+
+Entries with rich text fields have an extra option. Open the **More actions** menu (⋯) and select **Preview formatting**. The editor then shows the text the way the website receives it, so you can check headings, lists and links without leaving the CMS.
+
+## What a preview does not do
+
+- It does not mark the entry ready.
+- It does not change the live website.
+- It does not start a Go live.
+
+When you are happy with the draft, the next step is to ask an owner to mark it ready, or to mark it ready yourself if you are an owner. See [Drafts, ready and live](/docs/cms/statuses-and-review).
+
+## Related
+
+- [Writing and editing entries](/docs/cms/writing-entries)
+- [Drafts, ready and live](/docs/cms/statuses-and-review)
+- [Preview](/docs/sdk/preview)

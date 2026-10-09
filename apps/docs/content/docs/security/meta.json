@@ -1,0 +1,17 @@
+{
+  "title": "Security",
+  "description": "Roles, authentication and secrets",
+  "icon": "ShieldCheck",
+  "root": true,
+  "pages": [
+    "index",
+    "roles-and-permissions",
+    "permissions-matrix",
+    "two-factor-and-step-up",
+    "tokens",
+    "secrets",
+    "rate-limits",
+    "ai-data-handling",
+    "..."
+  ]
+}

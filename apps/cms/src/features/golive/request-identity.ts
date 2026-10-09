@@ -3,6 +3,23 @@ type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
 const completed = new Set<string>()
 const fallback = new Map<string, StoredRequest>()
 
+function requestUUID() {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+
+  // randomUUID requires a secure context; getRandomValues also works on LAN HTTP.
+  const bytes = crypto.getRandomValues(new Uint8Array(16))
+  bytes[6] = (bytes[6] & 0x0f) | 0x40
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0'))
+  return [
+    hex.slice(0, 4).join(''),
+    hex.slice(4, 6).join(''),
+    hex.slice(6, 8).join(''),
+    hex.slice(8, 10).join(''),
+    hex.slice(10).join(''),
+  ].join('-')
+}
+
 /** Keep uncertain requests through remounts and reloads, scoped to the actor. */
 export function publishingRequestIdentity(
   actorId: string,
@@ -41,7 +58,7 @@ export function publishingRequestIdentity(
       'Retry the unresolved publishing request before changing its options',
     )
   }
-  const request = previous ?? { key: crypto.randomUUID(), payload }
+  const request = previous ?? { key: requestUUID(), payload }
   // If persistence is unavailable, fail before making the RPC rather than
   // losing the key after an ambiguous response.
   storage?.setItem(scope, JSON.stringify(request))

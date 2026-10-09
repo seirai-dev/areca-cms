@@ -1,0 +1,120 @@
+---
+title: Defining your content
+description: Describe your collections, fields and identifiers in areca.config.ts, with the validation rules the SDK and CMS enforce.
+---
+
+Your content model lives in `areca.config.ts`, at the root of the website project. It lists the kinds of content your site has, such as articles or authors, and the fields editors fill in for each one. You push this file to the CMS with `areca manifest push`, and the CMS then shows the same collections and fields to editors.
+
+In the CMS, a collection is called a **content type**. This guide uses "collection" throughout, because that is the name in the code.
+
+The config file uses `defineSiteContent`, which checks the shape of your config at compile time and returns it unchanged.
+
+## An example: articles and authors
+
+This example has two collections. Each article points to one author, which is a [reference](/docs/sdk/field-types).
+
+```ts title="areca.config.ts"
+import { defineSiteContent } from '@areca-cms/site-sdk'
+
+export default defineSiteContent({
+  siteKey: 'acme-site',
+  collections: {
+    authors: {
+      route: '/authors/$slug',
+      label: 'Authors',
+      fields: [
+        { key: 'name', label: 'Name', type: 'text', required: true },
+        { key: 'bio', label: 'Bio', type: 'textarea' },
+        { key: 'photo', label: 'Photo', type: 'image' },
+      ],
+    },
+    articles: {
+      route: '/blog/$slug',
+      label: 'Articles',
+      fields: [
+        { key: 'title', label: 'Title', type: 'text', required: true },
+        { key: 'excerpt', label: 'Excerpt', type: 'textarea' },
+        { key: 'body', label: 'Body', type: 'richtext', required: true },
+        { key: 'cover', label: 'Cover image', type: 'image' },
+        { key: 'author', label: 'Author', type: 'reference', collection: 'authors' },
+        {
+          key: 'category',
+          label: 'Category',
+          type: 'select',
+          options: ['news', 'guides', 'updates'],
+        },
+        { key: 'publishedOn', label: 'Published on', type: 'date' },
+        { key: 'updatedOn', label: 'Updated on', type: 'date', after: 'publishedOn' },
+      ],
+    },
+  },
+})
+```
+
+Areca adds a required `slug` field as the first field of every collection, so you do not need to declare one. Each entry's slug is used in URLs, and `route` tells the CMS where entries live on your site. See [slug values](#slug-values).
+
+## Top-level options
+
+| Option | Required | Description |
+| --- | --- | --- |
+| `siteKey` | Yes | The key of the CMS site, as shown on the site's Developer tab. `areca init` and `areca manifest pull` use it. The push does not send it, because the schema token already identifies the site. |
+| `collections` | Yes | An object whose keys are collection keys and whose values are collection definitions. It can be empty. |
+
+## Collection options
+
+| Option | Required | Description |
+| --- | --- | --- |
+| `route` | Yes | The frontend route pattern for entries, such as `/blog/$slug`. `$slug` is replaced by each entry's slug. It can be up to 500 characters. The SDK records the pattern for the CMS, but it does not generate routes. You still write the route in your framework. |
+| `label` | No | The name editors see in the CMS, such as "Articles". It can be up to 200 characters. If you omit it, the CMS shows the collection key. |
+| `fields` | Yes | The list of fields. A collection can have up to 100 fields. |
+
+## Field options
+
+Each entry in `fields` is an object with these options:
+
+| Option | Required | Description |
+| --- | --- | --- |
+| `key` | Yes | The identifier for the field. It is the name of the field's value in pulled data. See [identifiers](#identifiers). |
+| `label` | Yes | The label editors see. It can be up to 200 characters. |
+| `type` | Yes | One of the twelve field types, such as `text`, `richtext` or `reference`. See [field types](/docs/sdk/field-types) for each one. |
+| `required` | No | Set to `true` to require a value. Editors can save a draft without it, but the entry cannot be marked ready or go live until they fill it in. |
+| `description` | No | Help text shown to editors. It can be up to 1,000 characters. |
+| `options` | No | The choices for a `select` field. Up to 200 options, each up to 200 characters. |
+| `collection` | No | For a `reference` field, the key of the collection it can point to. |
+| `after` | No | For a `date` or `datetime` field, the key of another date field. This value must be on or after that field's value. |
+
+The SDK checks identifiers before it sends anything. The CMS validates the whole manifest when it receives it, including the length and count limits above.
+
+## Identifiers
+
+Identifiers are the names you choose for collections and fields: the keys of `collections`, the `key` of each field, and any `collection` or `after` value that points to another one. They have these rules:
+
+- They start with an ASCII letter. After that they can contain letters, digits, `_` and `-`.
+- They are at most 64 characters long.
+- They must not be a reserved name. The reserved names are `__proto__`, `prototype`, `constructor`, `manifest`, `con`, `prn`, `aux`, `nul`, `com1` to `com9`, and `lpt1` to `lpt9`. The check ignores case, so `MANIFEST` is reserved too.
+- A field key must be unique within its collection.
+
+Identifiers are also used as names in the output. Each collection becomes a file named after its key, such as `articles.json`. For that reason, pick names that you will keep.
+
+Two rules follow from this:
+
+- **Renaming a collection key creates a new collection.** The old one is disabled on the next push. Its entries stay in the CMS but are no longer published.
+- **Renaming a field key does not move values.** Existing values stay under the old key, and the new field starts empty. Editors need to re-enter the value.
+
+If an identifier breaks the rules, `areca manifest push` stops with an error such as `Unsafe collection or field identifier`, and it does not send the manifest.
+
+## Slug values
+
+Entries and `slug` fields have a second, separate rule: the value must be lowercase letters and digits, with single hyphens between parts. There are no leading or trailing hyphens, and the value can be up to 200 characters. Examples: `hello-world`, `2026-roadmap`.
+
+## Changing the config
+
+Edit `areca.config.ts` and run `areca manifest push`. The push replaces the definition of each collection it lists, and it disables any collection it leaves out. For what happens to existing content, see [syncing the schema](/docs/sdk/schema-sync).
+
+If your collections were created in the CMS, you can copy them into a config file with `areca manifest pull`. See [CLI reference](/docs/sdk/cli).
+
+## Related
+
+- [Field types](/docs/sdk/field-types): every field type, its options and the values it produces.
+- [Syncing the schema](/docs/sdk/schema-sync): push the config and understand what changes.
+- [Reading content](/docs/sdk/reading-content): use the typed entries in your site.

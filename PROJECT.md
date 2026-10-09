@@ -1,3 +1,7 @@
+# Original project proposal
+
+This document preserves the initial design discussion and proposed scope. It is historical context, not a guide to the current implementation. Start with [the documentation index](docs/README.md), [architecture](docs/ARCHITECTURE.md), or [implementation status](docs/MVP_STATUS.md) for current behavior.
+
 Yes—your idea makes sense. In fact, it addresses a real gap between:
 
 - Traditional headless CMSs, which usually require runtime API requests

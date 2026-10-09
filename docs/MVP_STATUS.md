@@ -1,6 +1,6 @@
 # Suggested MVP status
 
-Audit of `PROJECT.md` § Suggested MVP against this repo (Phase 9). Status is
+Audit of `PROJECT.md` § Suggested MVP against this repo. Status is
 **done** / **partial** / **missing**. Verification is a unit or e2e test when
 one exists, otherwise a code-path review.
 
@@ -9,7 +9,7 @@ one exists, otherwise a code-path review.
 | item | status | where | notes |
 | --- | --- | --- | --- |
 | Organizations | done | `apps/cms/src/db/schema.ts`, `apps/cms/src/server/admin/organizations.ts`, `apps/cms/src/routes/_app/agency/clients/`, `apps/cms/src/features/agency/clients-screen.tsx`, `apps/cms/src/server/admin/admin.test.ts`, `apps/cms/e2e/admin.spec.ts` | Create/list/update/delete; cannot delete an org that still has sites. |
-| Sites | done | `apps/cms/src/db/schema.ts`, `apps/cms/src/server/admin/sites.ts`, `apps/cms/src/routes/_app/sites/$siteId.tsx`, `apps/cms/src/routes/_app/sites/$siteId/settings.tsx` | Org-scoped sites, token rotate, Dokploy target JSON. |
+| Sites | done | `apps/cms/src/db/schema.ts`, `apps/cms/src/server/admin/sites.ts`, `apps/cms/src/routes/_app/sites/$siteId.tsx`, `apps/cms/src/routes/_app/sites/$siteId/settings.tsx` | Client-scoped sites, separate read and schema-write tokens, Demo/Production publishing mode, and Dokploy target. |
 | Users and invitations | done | `apps/cms/src/server/admin/members.ts`, `apps/cms/src/routes/invite/$token.tsx`, `apps/cms/src/features/people/people-manager.tsx`, `apps/cms/src/server/admin/admin.test.ts` | Invite email, accept, revoke, last-owner guards. Also rejects duplicate pending invites, already-members, and accept with a mismatched signed-in email. |
 | Basic roles | done | `apps/cms/src/lib/session.server.ts`, `apps/cms/src/db/schema.ts` (`membership.role`, `user.isAgencyAdmin`) | Agency admin / org owner / org editor. |
 | Agency-managed collections | done | `apps/cms/src/server/content/collections.ts`, `apps/cms/src/routes/api/sites/manifest.ts`, `apps/cms/src/features/content-model/schema-editor-sheet.tsx` | Synced from the site manifest or created by agency admin; customers cannot invent schemas. |
@@ -22,11 +22,13 @@ one exists, otherwise a code-path review.
 | References | done | `apps/cms/src/features/editor/fields/reference-picker.tsx`, `apps/cms/src/server/content/validation.ts`, `apps/cms/src/server/content/snapshot.ts` | Must exist, be published, and appear in the snapshot. |
 | Slugs | done | `apps/cms/src/features/editor/details-panel.tsx`, `apps/cms/src/server/content/validation.ts` | `^[a-z0-9]+(?:-[a-z0-9]+)*$`; unique per collection. |
 | Draft/published states | done | `apps/cms/src/db/schema.ts` (`entry.status`), `apps/cms/src/server/content/entries.ts`, `apps/cms/src/features/editor/` | `draft \| published \| scheduled \| archived`. |
-| Scheduled publishing | done | `apps/cms/src/server/content/entries.ts` (`scheduleEntry`), `apps/cms/src/server/publishing/scheduler.ts`, `apps/cms/e2e/schedule.spec.ts` | Timezone stored; due drafts are snapshotted; entry becomes `published` only after a successful deploy. |
+| Scheduled publishing | done | `apps/cms/src/server/content/entries.ts` (`scheduleEntry`), `apps/cms/src/server/publishing/scheduler.ts`, `apps/cms/e2e/schedule.spec.ts` | Time zone and a frozen approved data/slug version are stored. The due version is published only after its release succeeds; later edits remain drafts. |
 | Revision history | done | `apps/cms/src/db/schema.ts` (`entry_revision`), `apps/cms/src/server/content/entries.ts`, `apps/cms/src/features/editor/` | List + restore. Covered by `entries.test.ts`. |
 | Basic media library | done | `apps/cms/src/features/library/`, `apps/cms/src/server/assets/`, `apps/cms/src/routes/api/assets/` | Upload, alt text, type/size limits, dimensions via sharp, delete blocked when in use. |
 | Whitelabel branding | done | `apps/cms/src/lib/branding.ts`, `apps/cms/src/server/admin/branding.ts`, `apps/cms/src/features/agency/branding-screen.tsx` | Instance-wide name, logo, favicon, accent colour, font, and email sender name. Agency admins edit at **/agency/branding**; the root route loads it for every page. |
 | Audit log | done | `apps/cms/src/db/schema.ts` (`audit_log`), `apps/cms/src/server/audit.ts`, `apps/cms/src/features/activity/` | Written on admin/content/publish actions. Agency sees all events; org owners see their org at **Activity**. |
+| Entry SEO and structured metadata | done | `apps/cms/src/lib/seo.ts`, `apps/cms/src/features/editor/seo-panel.tsx`, `apps/cms/src/server/content/snapshot.ts`, `packages/site-sdk/src/seo.ts` | Per-entry search/social metadata, robots directives, canonical fallback, JSON-LD and answer-oriented fields ship in snapshots. The site must render the metadata. |
+| AI SEO suggestions | done | `apps/cms/src/server/ai/`, `apps/cms/src/server/fn/ai.ts`, `apps/cms/src/features/editor/ai-seo-dialog.tsx` | Optional OpenRouter model generates reviewable suggestions; agency and site prompts are configurable. Suggestions do not publish automatically. |
 
 ## Site integration
 
@@ -37,7 +39,7 @@ one exists, otherwise a code-path review.
 | Generated content manifest | done | `packages/site-sdk/src/pull.ts` | `manifest.json` with publicationId, hash, createdAt, counts. |
 | Static route generation | done | `examples/demo-site/src/routes/blog/$slug.tsx`, `examples/demo-site/src/lib/queries.ts`, `examples/demo-site/scripts/verify-prerender.ts` | Prerender `/`, `/blog`, `/blog/<slug>`. |
 | Collection-to-route mapping | done | `packages/site-sdk/src/config.ts`, `examples/demo-site/areca.config.ts`, `apps/cms` collection `routePattern` | e.g. articles → `/blog/$slug`. |
-| Site-specific schema registration | done | `packages/site-sdk` `sync-manifest`, `apps/cms/src/routes/api/sites/manifest.ts` | Site token auth; CMS stores `lastManifest` and upserts collections. |
+| Site-specific schema registration | done | `packages/site-sdk` `manifest push`, `apps/cms/src/routes/api/sites/manifest.ts` | Separate schema-write token authorizes manifest POST; read token authorizes GET. CMS stores `lastManifest` and upserts collections. |
 
 ## Publishing
 
@@ -74,7 +76,7 @@ Confirmed **not** built as product features:
 | Real-time collaborative editing | not built |
 | Multi-framework support | not built (TanStack Start only) |
 | Public plugins | not built (internal `DeploymentAdapter` / `AssetStorageAdapter` only) |
-| AI features | not built |
+| General-purpose AI writing or chat | not built |
 | Complex branching workflows | not built |
 | Marketplace functionality | not built |
 
@@ -85,7 +87,7 @@ Large or explicitly later work, not started:
 - Preview deployments (temp snapshot → preview target). Live draft preview covers the MVP.
 - Multi-language content / missing-translation checks. UI i18n (Paraglide) is unrelated.
 - Broken internal-link crawl across the snapshot (rich-text hrefs are protocol-checked only).
-- SEO-specific validators (title length, canonical, etc.).
+- Search-engine ranking guarantees, crawler-based SEO audits, and broken-link crawling. SEO editor limits validate data shape and maximum length; character targets are guidance.
 - Media extras from PROJECT.md that are beyond “basic”: thumbnails, focal point, CDN, usage graph UI.
 - Separate build workers / incremental builds / per-site locking beyond the in-process queue.
 
@@ -93,7 +95,7 @@ Large or explicitly later work, not started:
 
 | status | count |
 | --- | --- |
-| done | 37 |
+| done | 39 |
 | partial | 0 |
 | missing | 1 (preview deployments — deferred) |
 | do-not-build (correctly absent) | 9 |

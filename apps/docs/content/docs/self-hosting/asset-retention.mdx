@@ -1,0 +1,110 @@
+---
+title: Asset retention
+description: How Areca decides when an uploaded file can be deleted, how storage cleanup works, and what to do when a public file must be removed.
+---
+
+Areca keeps every file that a draft, a release or a piece of history still uses. This protects published sites and lets you restore past content, but it also means some files cannot be removed from the CMS. This page explains what keeps a file in use, how storage cleanup works, and what to do when you must take a public file down.
+
+<Callout type="warn" title="Uploaded files are public">
+Anyone who has the address of an uploaded file can open it, with no sign-in. Addresses appear in page source, referrers, caches and shared links. Do not upload confidential or embargoed material, even to an unpublished draft.
+</Callout>
+
+## What keeps a file in use
+
+Areca refuses to delete an asset while any of these still refer to it:
+
+- An entry's draft, its approved version, or its scheduled version.
+- A revision of an entry, including every saved version in its history.
+- A release, whether it is live, superseded, failed or demo. Releases are kept as history.
+- Deleted content in the archive. Deleting an entry, a collection or a site moves its content into the client's archive.
+
+Rich-text images count too, including older images that point straight at the file's address.
+
+Removing an image from the latest draft does not make it deletable. An image that was ever used in a release, a revision or an archive stays protected for as long as that history exists. Areca does not expire history or purge archives automatically.
+
+## Deleting an asset
+
+In the **Library**, choose **Delete…** on a file. Only client owners can delete files. Deleting a file that nothing refers to removes it from the library, and its address stops working. Deleting a file that is still referenced fails, and the file stays where it is.
+
+To check whether a file is still in use before you delete it, look at where it appears in the client's entries, releases and archives. Remove it from every draft, and publish a new release, before you try again. Remember that older releases and archived content still count, so a file used in any past release cannot be deleted this way.
+
+## How storage cleanup works
+
+When Areca deletes an asset's database record, it also records the file's storage key in a deletion queue. The file itself is then removed from your S3-compatible bucket. If the removal fails, the key stays in the queue with the last error, and Areca tries again later.
+
+Two things protect the queue:
+
+- Uploads clean up after themselves. If saving the database record fails after the file is stored, Areca deletes the new file right away. If that also fails, the file's key is queued for cleanup.
+- The queue is stored in the database. Full backups include it, and it survives when a client is deleted.
+
+### Run the cleanup
+
+The cleanup command processes up to 1,000 queued files per run. Run it from a checkout of the repository, with an environment file that points at the same database and bucket as the CMS. The container image does not include the script.
+
+```sh title="From the apps/cms directory of a checkout"
+cd apps/cms
+node --env-file=/secure/areca-cms.env scripts/cleanup-assets.mjs
+```
+
+The environment file needs `DATABASE_URL`, `S3_BUCKET`, `S3_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` and `S3_FORCE_PATH_STYLE`, with the same values the CMS uses. Keep the file out of version control and restrict its permissions.
+
+The command prints a summary such as `Storage cleanup: 12 removed, 0 pending retries`. It exits with an error code when any removal fails, so a scheduler can alert on it.
+
+Each run processes up to 1,000 queued files. If a run removes that many, run the command again, because more files may still be queued. A file whose removal failed stays queued, and the database keeps the last error for it.
+
+<Steps>
+<Step>
+
+**Run the cleanup.** Run the command and read the summary. Zero pending retries means every removal in that run succeeded.
+
+</Step>
+<Step>
+
+**Fix the cause of any failure.** Common causes are wrong S3 credentials, an unreachable endpoint, or a bucket policy that denies deletes. See [troubleshooting](/docs/self-hosting/troubleshooting#s3-storage).
+
+</Step>
+<Step>
+
+**Run it again.** Repeat until a run removes fewer than 1,000 files and reports no pending retries.
+
+</Step>
+</Steps>
+
+### Schedule cleanup
+
+Areca does not schedule the cleanup for you. Run it on a timer from a host that can reach the bucket. A cron entry that runs every 15 minutes looks like this:
+
+```sh title="crontab entry on the host"
+*/15 * * * * cd /opt/areca-cms/apps/cms && node --env-file=/secure/areca-cms.env scripts/cleanup-assets.mjs >> /var/log/areca-cleanup.log 2>&1
+```
+
+The Compose file does not publish the S3 API port, so the host may not be able to reach the bucket at the address in the CMS environment. In that case, run the command from a place on the Compose network that can reach it.
+
+## Delete a whole client
+
+Use **Delete client** only when you are retiring the whole client. Areca blocks the delete while the client still has sites, so delete each site first. Deleting the client then removes its archived content and asset records, and queues its stored files for cleanup.
+
+<Callout type="warn" title="This cannot be undone in Areca">
+Deleting a client removes its history and archives for good. The only way back is a backup taken before the delete. Check that you have one before you start.
+</Callout>
+
+## Take down a public file
+
+Once a file has appeared in any release, its address stays reachable. Areca has no supported way to make one file's address stop working while that release is still kept as history. The steps below reduce exposure, but they do not remove the file.
+
+1. **Stop using the file.** Remove it from every draft and every entry that uses it. Mark the entries as ready, then choose **Go live**, so that new releases no longer show it.
+2. **Check the scope.** Find the older releases, revisions and archived content that still use it. Each one keeps the file in use.
+3. **Decide what the file's address exposes.** If the file is sensitive, a public address that still works is a security incident. Record it, and tell the client.
+4. **Ask before you delete by hand.** Removing a file from the bucket or from the database by hand skips the reference checks, and can break history. Contact the Areca maintainers before you do this.
+
+The only supported way to remove the file is to delete the whole client, which is described above. Use it only when you are retiring the client.
+
+Prevent this case where you can. Ask editors not to upload files that must not be public, and review uploads before you publish.
+
+## Related
+
+- [Backup and recovery](/docs/self-hosting/backup-and-recovery) for how the deletion queue and history are backed up.
+- [Operations](/docs/self-hosting/operations) for the health checks that show storage problems.
+- [Storage and email](/docs/self-hosting/storage-and-email) for the S3 settings the cleanup command uses.
+- [Library](/docs/cms/library) for how editors upload and delete files.
+- [Capacity and sizing](/docs/self-hosting/capacity) for how history and stored files grow.

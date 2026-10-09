@@ -9,7 +9,7 @@ function decodeKey(encodedKey: string) {
   const key = Buffer.from(encodedKey, 'base64')
   if (key.length !== KEY_BYTES || key.toString('base64') !== encodedKey) {
     throw new Error(
-      'DOKPLOY_CREDENTIALS_ENCRYPTION_KEY must be a base64-encoded 32-byte key',
+      'Secret encryption key must be a base64-encoded 32-byte key',
     )
   }
   return key

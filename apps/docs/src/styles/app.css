@@ -1,0 +1,66 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+@import '@fontsource-variable/inter';
+@import '@fontsource/ibm-plex-mono/400.css';
+@import '@fontsource/ibm-plex-mono/500.css';
+
+/*
+  Areca brand, mirrored from the CMS (iris accent, Inter, hairline borders).
+  These are copies, not imports: the docs site shares no code with the CMS.
+*/
+@theme {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+
+  --color-fd-background: #f6f6f4;
+  --color-fd-foreground: #1d1d1f;
+  --color-fd-card: #ffffff;
+  --color-fd-card-foreground: #1d1d1f;
+  --color-fd-popover: #ffffff;
+  --color-fd-popover-foreground: #1d1d1f;
+  --color-fd-muted: #efefec;
+  --color-fd-muted-foreground: #6e6e73;
+  --color-fd-border: rgb(0 0 0 / 0.08);
+  --color-fd-primary: #5856d6;
+  --color-fd-primary-foreground: #ffffff;
+  --color-fd-secondary: #ffffff;
+  --color-fd-secondary-foreground: #1d1d1f;
+  --color-fd-accent: rgb(88 86 214 / 0.1);
+  --color-fd-accent-foreground: #4b49c4;
+  --color-fd-ring: #5856d6;
+}
+
+.dark {
+  --color-fd-background: #0e0e10;
+  --color-fd-foreground: #f5f5f7;
+  --color-fd-card: #18181b;
+  --color-fd-card-foreground: #f5f5f7;
+  --color-fd-popover: #18181b;
+  --color-fd-popover-foreground: #f5f5f7;
+  --color-fd-muted: #1c1c20;
+  --color-fd-muted-foreground: #a1a1a6;
+  --color-fd-border: rgb(255 255 255 / 0.08);
+  --color-fd-primary: #7d7aff;
+  --color-fd-primary-foreground: #ffffff;
+  --color-fd-secondary: #18181b;
+  --color-fd-secondary-foreground: #f5f5f7;
+  --color-fd-accent: rgb(125 122 255 / 0.16);
+  --color-fd-accent-foreground: #a5a3ff;
+  --color-fd-ring: #7d7aff;
+}
+
+.dark #nd-sidebar {
+  --color-fd-muted: #1c1c20;
+  --color-fd-secondary: #202024;
+}
+
+html {
+  scrollbar-gutter: stable;
+  font-feature-settings: 'cv11', 'ss01';
+}
+
+html > body[data-scroll-locked] {
+  margin-right: 0px !important;
+  --removed-body-scroll-bar-size: 0px !important;
+}

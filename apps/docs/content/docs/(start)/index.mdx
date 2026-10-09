@@ -1,0 +1,60 @@
+---
+title: Introduction
+description: Areca is a CMS for agency-managed websites. Write content, approve it, and go live with an immutable snapshot your website builds from.
+---
+
+Areca is a content management system built for agencies that run websites for their clients. Editors write and review content in the CMS. When it is approved, **Go live** freezes it into an immutable snapshot, and the website is rebuilt and deployed from that snapshot.
+
+Your website stays a normal project in your own repository. The [site SDK](/docs/sdk) connects it to Areca: it pushes the content schema, pulls published content at build time, and renders rich text, SEO tags and draft previews.
+
+![Article collection with draft, ready and live entries](/screenshots/current-collection.png)
+
+## How it fits together
+
+A **client** is an organisation your agency works for. Each client has one or more **sites**. A site contains **collections**, which are content types such as Articles or Team members, and each collection contains **entries**.
+
+<Steps>
+<Step>
+
+**Write a draft.** Saving a draft never changes the public website.
+
+</Step>
+<Step>
+
+**Mark it as ready.** An owner approves a version for the next release.
+
+</Step>
+<Step>
+
+**Go live.** Areca creates an immutable content snapshot, starts the website build, deploys it and runs a health check.
+
+</Step>
+<Step>
+
+**The release becomes live** once the deployment is healthy. If something goes wrong, you can roll back to an earlier release.
+
+</Step>
+</Steps>
+
+Read [How Areca works](/docs/concepts) for the full model.
+
+## Find your guide
+
+<Cards>
+  <Card title="CMS guide" href="/docs/cms">
+    For editors and agency admins: writing, reviewing, publishing and managing sites.
+  </Card>
+  <Card title="SDK & API" href="/docs/sdk">
+    For developers: connect a website, define content, pull snapshots, render previews.
+  </Card>
+  <Card title="Self-hosting" href="/docs/self-hosting">
+    For operators: install with Docker, configure, deploy, operate and upgrade.
+  </Card>
+  <Card title="Security" href="/docs/security">
+    Roles, two-factor authentication, tokens, secrets and rate limits.
+  </Card>
+</Cards>
+
+## Your first publish
+
+New to Areca? The [quickstart](/docs/quickstart) takes you from an empty installation to a live website in five steps.

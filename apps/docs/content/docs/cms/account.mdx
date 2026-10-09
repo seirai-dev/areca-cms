@@ -1,0 +1,112 @@
+---
+title: Your account
+description: Set your language and appearance, turn on two-factor authentication with an authenticator app, keep your recovery codes safe, and sign out.
+---
+
+Your account holds your name and email, how you sign in, and your display preferences. You manage most of it from the account menu and the **Account** page.
+
+## Open your account
+
+Select your name at the bottom of the sidebar to open the account menu. It shows your name and email, and these options:
+
+- **Appearance**: **Light**, **Dark** or **Auto**.
+- **Language**: **English**, **Nederlands** or **Türkçe**.
+- **Account and security**: opens the **Account** page.
+- **Keyboard shortcuts**: lists the shortcuts available in the CMS.
+- **Sign out**.
+
+## Profile
+
+The **Profile** section on the **Account** page shows your **Name** and **Email**. Both are read-only there. The Account page has no setting to change your name, email or password. If you need a change, contact your agency admin.
+
+## Language
+
+Choose **Language** in the account menu. Areca supports three interface languages:
+
+- English
+- Nederlands (Dutch)
+- Türkçe (Turkish)
+
+The language changes the labels, buttons and messages in the CMS. It does not translate the content your team has written. Entries stay in the language they were written in.
+
+## Appearance
+
+Choose **Appearance** in the account menu:
+
+| Option | Effect |
+| --- | --- |
+| **Light** | Always uses the light theme. |
+| **Dark** | Always uses the dark theme. |
+| **Auto** | Follows the theme of your device. |
+
+## Two-factor authentication
+
+Two-factor authentication adds a second step to sign-in. After your password, Areca asks for a six-digit code from an authenticator app on your phone. Any app that generates time-based codes works, including many password managers.
+
+Turn it on from **Account**, in the **Two-factor authentication** section.
+
+<Steps>
+<Step>
+
+**Start setup.** Press **Set up two-factor**.
+
+</Step>
+<Step>
+
+**Confirm your password.** If you are asked for your password, enter it. If you only sign in through a provider and have no password, leave the field empty.
+
+</Step>
+<Step>
+
+**Add the account to your app.** Scan the code with your authenticator app. If you cannot scan it, choose the **Secret key** and enter it by hand.
+
+</Step>
+<Step>
+
+**Enter a code.** Type the six-digit code your app shows, then press **Verify and turn on**.
+
+</Step>
+<Step>
+
+**Save your backup codes.** Areca shows a set of backup codes once. Copy them and store them somewhere safe, then press **I've saved them**.
+
+</Step>
+</Steps>
+
+<Callout type="warn" title="Save your backup codes">
+Backup codes are shown only once. Each code works one time, and they are the way back in if you lose your phone. Store them outside your phone, for example in a password manager.
+</Callout>
+
+### Sign in with a code
+
+After you enter your password, Areca asks for the **Authentication code**. Enter the six-digit code from your app. If you cannot use your app, choose **Use a backup code** and enter one of your saved codes.
+
+![The sign-in screen that asks for a code from an authenticator app, with a link to use a backup code](/screenshots/two-factor-authentication.png)
+
+Some sensitive admin actions ask you to confirm with a fresh code, even if you are already signed in. See [Two-factor and step-up](/docs/security/two-factor-and-step-up) for when this applies.
+
+### Create new backup codes
+
+If you are running low on backup codes, press **New backup codes** on the **Account** page and confirm when asked. Save the new codes as before. Earlier codes stop working.
+
+### Turn off two-factor authentication
+
+Press **Turn off** on the **Account** page and confirm when asked. Agency admins must keep two-factor authentication on. If you are an agency admin and turn it off, Areca sends you back to the **Account** page until you set it up again.
+
+### Agency admins
+
+If you are an agency admin, Areca requires two-factor authentication. Until you set it up, the **Account** page shows **Set up two-factor authentication** and the rest of the CMS is unavailable. The **Back to workspace** button is hidden until setup is complete.
+
+## Back to the workspace
+
+On the **Account** page, select **Back to workspace** to return to your sites. The button is hidden for agency admins who still need to set up two-factor authentication.
+
+## Sign out
+
+Choose **Sign out** from the account menu. Areca signs you out on this device and shows the sign-in page. Sign out on a shared computer before you leave it.
+
+## Related
+
+- [Roles and permissions](/docs/security/roles-and-permissions) for what your role allows.
+- [Two-factor and step-up](/docs/security/two-factor-and-step-up) for the two-factor policy and when extra confirmation is needed.
+- [Troubleshooting](/docs/troubleshooting) if you cannot sign in.

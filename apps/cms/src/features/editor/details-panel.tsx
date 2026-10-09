@@ -46,8 +46,8 @@ function Section({
 
 /**
  * The editor's details panel (brief §3.5): grouped cards — Page (address
- * and slug), Fields (every structured field), Status (pill, schedule,
- * dates, author, id) and History.
+ * and slug), Fields (every structured field), SEO & discovery, Status
+ * (pill, schedule, dates, author, id) and History.
  */
 export function DetailsPanel({
   siteId,
@@ -72,6 +72,7 @@ export function DetailsPanel({
   onRetryRevisions,
   onRestore,
   onCancelSchedule,
+  seoPanel,
 }: {
   siteId: string
   organizationId: string
@@ -95,6 +96,8 @@ export function DetailsPanel({
   onRetryRevisions: () => void
   onRestore: (revisionId: string) => void
   onCancelSchedule: () => void
+  /** The built-in SEO & discovery block (see `SeoPanel`). */
+  seoPanel?: React.ReactNode
 }) {
   return (
     <div
@@ -135,6 +138,12 @@ export function DetailsPanel({
               organizationId={organizationId}
             />
           ))}
+        </Section>
+      ) : null}
+
+      {seoPanel ? (
+        <Section title={m.editor_seo_section()} testId="details-seo">
+          {seoPanel}
         </Section>
       ) : null}
 

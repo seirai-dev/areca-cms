@@ -1,0 +1,7 @@
+{
+  "title": "Get started",
+  "description": "What Areca is and your first publish",
+  "icon": "Rocket",
+  "root": true,
+  "pages": ["index", "quickstart", "concepts", "glossary", "troubleshooting", "..."]
+}

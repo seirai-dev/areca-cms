@@ -1,0 +1,139 @@
+---
+title: First-run setup
+description: Create the first agency admin on a new Areca instance, protect the setup page with a token, turn on two-factor authentication and set up your first client.
+---
+
+A new Areca instance has no users. The one-time setup page at `/setup` creates the first **agency admin**, the account that manages every client, site and person. This guide covers the setup token that protects that page, the account you create, the two-factor authentication every admin must turn on, and the first steps after sign-in.
+
+Setup runs once. As soon as the first account exists, `/setup` stops accepting new accounts and redirects to sign-in.
+
+## Before you start
+
+- The stack is running. Follow the [Docker quickstart](/docs/self-hosting/docker-quickstart) for a local instance, or the [production setup](/docs/self-hosting/production) for a public one.
+- You can read the CMS log. You need it if you did not set `SETUP_TOKEN`.
+- You have decided who the first admin is. Use a real email address that you can read, because it is the address you will sign in with.
+
+<Callout type="warn" title="Set the token before the CMS is reachable">
+Until the first admin exists, anyone who can reach `/setup` and knows the setup token can create that admin. On a public instance, set `SETUP_TOKEN` in `.env` before you start the stack, or complete setup before you open the CMS to the internet.
+</Callout>
+
+## The setup token
+
+The setup page asks for a **Setup token**. The token is checked on every attempt, and a missing or wrong value gets the same error: *The setup token is missing or incorrect.*
+
+The token comes from one of two places:
+
+| Situation | Where the token comes from | How long it lasts |
+| --- | --- | --- |
+| You set `SETUP_TOKEN` in `.env` | Your own value. It must be at least 16 characters. | Until the first admin is created. The value is the same after restarts. |
+| You left `SETUP_TOKEN` unset | The CMS generates one and prints it once in its log: `[setup] First-run setup token: <token>` | Until the first admin is created, or until the CMS restarts. A restart generates a new token. |
+
+The generated token appears the first time the CMS checks whether setup is needed, which usually happens when you first open it in a browser. Read it from the log:
+
+```sh
+docker compose logs cms | grep "First-run setup token"
+```
+
+If you do not see the line, reload the CMS in your browser, then read the log again. If you restarted the CMS, use the latest line, because an earlier token no longer works.
+
+After the first admin is created, the token is discarded. You never need it again, so you can remove `SETUP_TOKEN` from `.env` if you like.
+
+## Create the first admin
+
+Open the CMS URL in your browser. While no account exists, you are sent to `/setup`. The page is titled *Create the first admin account.*
+
+<Steps>
+<Step>
+
+**Fill in the form.** Enter the following:
+
+1. **Setup token**: the token from the previous section.
+2. **Name**: the admin's display name.
+3. **Email**: the admin's email address. This is the address you sign in with.
+4. **Password**: at least 8 characters. Use the eye icon to check what you typed.
+
+</Step>
+<Step>
+
+**Create the account.** Click **Create admin account**. The footnote on the page says that this account can manage every client, site and person, and that you can invite others later.
+
+</Step>
+</Steps>
+
+The first account always gets a password, even if you have turned off password sign-in with `AUTH_EMAIL_PASSWORD_ENABLED=false`. This means the instance cannot be locked out during setup. If you turn password sign-in off later, sign in with a provider using the same email address.
+
+## Turn on two-factor authentication
+
+Agency admins must turn on two-factor authentication (2FA) before they can use any admin feature. This is enforced by default (`ADMIN_MFA_REQUIRED=true`). Right after setup, you are taken to **Account and security**, where the page **Two-factor authentication** asks you to set it up.
+
+<Steps>
+<Step>
+
+**Start the setup.** Click **Set up two-factor**.
+
+</Step>
+<Step>
+
+**Add the authenticator.** Scan the QR code with an authenticator app that supports time-based codes. You can also choose to enter the **Secret key** by hand.
+
+</Step>
+<Step>
+
+**Turn it on.** Type the 6-digit code the app shows, then click **Verify and turn on**.
+
+</Step>
+<Step>
+
+**Save the backup codes.** Each code works once if you lose your authenticator, and they are not shown again. Copy them to a password manager or a printed sheet kept in a safe place. Keep them somewhere other than the CMS host. If you lose both your authenticator and the codes, you can be locked out of the admin account.
+
+</Step>
+<Step>
+
+**Confirm.** Click **I've saved them**.
+
+</Step>
+</Steps>
+
+Two more points about 2FA:
+
+- Some actions ask you to **Confirm it's you** with a fresh code, even when you are signed in. These include deleting a client, saving Dokploy credentials, creating a site or rotating its tokens, and granting or removing agency access. After you confirm a code, the session stays fresh for 10 minutes. See [two-factor and step-up](/docs/security/two-factor-and-step-up).
+- Sign-in with GitHub, Google, Discord or Microsoft skips the CMS's own 2FA prompt, because the identity provider is expected to enforce its own MFA. Make sure your provider account has MFA turned on.
+
+## Set up the agency
+
+After you turn on 2FA, you land in the **Agency** workspace. While the instance is empty, the **Get your agency ready** checklist lists five steps. Each step has a direct action, and the checklist shows **All set** when they are all done:
+
+| Step | What it means |
+| --- | --- |
+| **Create a client** | A client is a company you build and run sites for. Click **New client**, enter a name and click **Create client**. |
+| **Add a site** | Each client has one or more sites. Create a site and copy its token. The token is shown once. |
+| **Connect the site project** | Give the website project its token and push its content model, so editors have fields to fill in. |
+| **Invite the client** | Invite the people who will write and approve content. Invitations are sent by email, so check your mail settings first. |
+| **Go live** | Publish the site's content for the first time. |
+
+The [quickstart](/docs/quickstart) walks through these steps with an example site. For the full guides, see [clients and sites](/docs/cms/clients-and-sites) and [people and invitations](/docs/cms/people-and-invitations).
+
+## Next steps
+
+Before you invite people, set up the things they will notice:
+
+- **Branding.** Under **Agency**, open **Branding** to change the name shown in the sidebar, the logo, the accent colour and the sender name on invitation emails. See [branding](/docs/cms/branding).
+- **Sign-in methods.** Decide whether editors sign in with a password, a provider, or both. Provider settings are environment variables, and the Compose file passes only the variables it lists, so add them to the `cms` service as described in [production setup](/docs/self-hosting/production#only-listed-variables-reach-the-container). See [authentication](/docs/self-hosting/authentication).
+- **Email.** Send yourself a test invitation to check that your SMTP relay works. In the local stack, invitations appear in Mailpit at [http://localhost:8025](http://localhost:8025). See [storage and email](/docs/self-hosting/storage-and-email).
+- **Deployments.** To publish websites, connect Dokploy and set each site's deployment target. See [deployment targets](/docs/self-hosting/deployment-targets) and [deployments](/docs/cms/deployments).
+
+## Troubleshooting
+
+| Symptom | What to do |
+| --- | --- |
+| The page says *The setup token is missing or incorrect.* | Check that you copied the latest token. If it came from the log, use the most recent `First-run setup token` line. A token from before a restart no longer works. |
+| `/setup` redirects to sign-in | An account already exists. Sign in with the account you created. If sign-in fails, see [sign-in and access](/docs/self-hosting/troubleshooting#sign-in-and-access). |
+| You cannot find the token in the log | Reload the CMS in your browser so it checks whether setup is needed, then run the `grep` command again. |
+| You want to start again on a local test instance | Run `docker compose down --volumes` from the `docker` directory. This deletes all data, including the admin you created, so the setup page returns. Do not run it on an instance you care about. |
+
+## Related
+
+- [Docker quickstart](/docs/self-hosting/docker-quickstart)
+- [Production setup](/docs/self-hosting/production)
+- [Roles and permissions](/docs/security/roles-and-permissions) for what each role can do
+- [CMS guide](/docs/cms) for day-to-day use

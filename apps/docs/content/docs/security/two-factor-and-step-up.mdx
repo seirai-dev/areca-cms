@@ -1,0 +1,104 @@
+---
+title: Two-factor authentication and step-up
+description: Set up the authenticator app, see how the agency admin requirement is enforced, and learn which actions ask for a fresh code and when the lockout applies.
+---
+
+Areca uses time-based one-time codes (TOTP) from an authenticator app as its second factor. Agency admins must use one. Two other mechanisms build on it: sign-in asks for a code when two-factor is on, and **step-up** asks for a fresh code before a small set of sensitive actions.
+
+![Two-factor authentication section on the Account page](/screenshots/two-factor-authentication.png)
+
+## Set up two-factor
+
+Open **Account** and find the **Two-factor authentication** section.
+
+<Steps>
+<Step>
+
+**Start the setup.** Select **Set up two-factor**. You may be asked for your password. If your account has no password because you sign in only with a provider, leave the field empty.
+
+</Step>
+<Step>
+
+**Add the account to your app.** Scan the QR code with an authenticator app, or enter the **Secret key** by hand.
+
+</Step>
+<Step>
+
+**Confirm with a code.** Type the 6-digit code the app shows, then select **Verify and turn on**.
+
+</Step>
+<Step>
+
+**Save the backup codes.** Areca shows a set of backup codes once. Each one works once if you lose your device. Store them somewhere safe, then select **I've saved them**.
+
+</Step>
+</Steps>
+
+Select **New backup codes** on the same section to get a new set. Two-factor stays on.
+
+## Sign-in with a code
+
+When two-factor is on and you sign in with an email and password, Areca asks for the **Authentication code** from your app. If you cannot use the app, select **Use a backup code**.
+
+Sign-in with GitHub, Google, Discord, or Microsoft does not ask for an authenticator code. See [social and single sign-on](#social-and-single-sign-on) below.
+
+## Agency admins must have two-factor
+
+The `ADMIN_MFA_REQUIRED` setting controls this rule. It is `true` by default. Set it to `false` only on an isolated development or test instance. With it set to `false`, step-up checks are also skipped for accounts that have no two-factor.
+
+When it is on:
+
+- An agency admin without two-factor is sent to **Account** when they open the CMS, and cannot use the rest of it until they turn two-factor on.
+- Every admin action checks the requirement on the server. If an admin's two-factor is off, the action fails with a message that two-factor is required, and the CMS points them to the Account page.
+
+**Turning two-factor off as an agency admin is not blocked in the interface.** The **Turn off** button is shown to every user with two-factor on, including agency admins. Your next admin action will fail until you turn it back on, so agency admins should keep two-factor on.
+
+Changing two-factor settings, including turning it off, asks for your password. If your account has no password, Areca asks you to have signed in within the last 10 minutes instead.
+
+## Step-up: a fresh code for sensitive actions
+
+Some actions need proof that you are still the person at the keyboard, not just someone with an open session. For these actions, Areca asks you to **Confirm it's you** and enter a code from your authenticator app.
+
+These actions require step-up:
+
+- Delete a client.
+- Create a site, and delete a site.
+- Rotate a site's token or schema-write token.
+- Save or remove a client's deployment credentials.
+- Save a new AI API key, or remove the stored one.
+- Make someone an agency admin, or remove that status.
+
+Step-up checks when your session started and when you last confirmed a code:
+
+- A session counts as fresh for **10 minutes** after it starts. Signing in with a password and code starts a session, and so does signing in with a provider.
+- Confirming a code in the step-up dialog makes the session fresh again for 10 minutes.
+- After 10 minutes, the next step-up action asks for a code.
+
+<Callout type="warn" title="Provider sign-ins count as fresh without a code">
+
+A session started with GitHub, Google, Discord, or Microsoft counts as fresh for 10 minutes, even though no authenticator code was asked for. An agency admin who signs in with a provider can run a step-up action within those 10 minutes without entering a code. Agency admins who sign in with a password are asked for a code at sign-in.
+
+</Callout>
+
+## Lockout after wrong codes
+
+Step-up is locked for a user after **5 wrong codes** in a row. The lock lasts **15 minutes** and applies to that user across all sessions. While it lasts, the CMS does not check codes and answers "Too many wrong codes. Try again in a few minutes." A correct code entered before the lock starts clears the count.
+
+The lockout applies to the step-up check only. Requests to the sign-in and two-factor endpoints are limited separately; see [rate limits](/docs/security/rate-limits#two-factor-codes).
+
+## Social and single sign-on
+
+Sign-in with GitHub, Google, Discord, or Microsoft Entra ID skips the authenticator code. The provider is trusted to have done its own multi-factor check. The consequences are:
+
+- A person who signs in with a provider is not asked for a code at sign-in, even if two-factor is on for that account.
+- The agency admin requirement still applies. An agency admin's account must have two-factor on, and an admin without it cannot use admin actions.
+- The step-up window described above still applies, and provider sign-ins count as fresh for 10 minutes.
+
+Configure these providers on the server. See [authentication](/docs/self-hosting/authentication).
+
+## Related
+
+- [Roles and permissions](/docs/security/roles-and-permissions)
+- [Permissions matrix](/docs/security/permissions-matrix)
+- [Rate limits](/docs/security/rate-limits)
+- [Secrets and encryption](/docs/security/secrets) covers the `BETTER_AUTH_SECRET` setting, which affects two-factor secrets.

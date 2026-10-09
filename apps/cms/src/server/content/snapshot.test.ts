@@ -88,6 +88,50 @@ describe.skipIf(!hasDb)('buildSnapshot', () => {
     })
   })
 
+  it('moves $seo out of data into a resolved entry.seo', async () => {
+    await withTestSite(async (ctx) => {
+      await createTestCollection(ctx.site.id, { routePattern: '/blog/$slug' })
+      const slug = `seo-${ctx.suffix}`
+      const created = await createEntry({
+        siteId: ctx.site.id,
+        collectionKey: 'articles',
+        data: {
+          title: 'Entry title',
+          slug,
+          body: sampleRichText,
+          $seo: {
+            description: 'Search snippet',
+            noindex: true,
+            faq: [{ question: 'Why?', answer: 'Because.' }],
+          },
+        },
+        actorId: ctx.actor.id,
+      })
+      await publishEntry(created.id, ctx.actor.id)
+
+      const result = await buildSnapshot(ctx.site.id)
+      expect(result.ok).toBe(true)
+      if (!result.ok) return
+      const item = result.snapshot.collections.articles?.[0]
+      expect(item?.data).not.toHaveProperty('$seo')
+      expect(item?.seo).toMatchObject({
+        title: 'Entry title',
+        description: 'Search snippet',
+        canonicalUrl: `${new URL(ctx.site.productionUrl).origin}/blog/${slug}`,
+        robots: { index: false, follow: true },
+        faq: [{ question: 'Why?', answer: 'Because.' }],
+      })
+      expect(item?.seo?.jsonLd.map((node) => node['@type'])).toEqual([
+        'Article',
+        'FAQPage',
+      ])
+
+      const preview = await buildPreviewEntry(ctx.site.id, 'articles', slug)
+      expect(preview?.data).not.toHaveProperty('$seo')
+      expect(preview?.seo?.description).toBe('Search snippet')
+    })
+  })
+
   it('errors on a route slug collision', async () => {
     await withTestSite(async (ctx) => {
       await createTestCollection(ctx.site.id, {

@@ -21,6 +21,7 @@ export const queryKeys = {
   publications: (siteId: string) => ['publications', siteId] as const,
   buildJobs: (siteId: string) => ['build-jobs', siteId] as const,
   buildJob: (id: string) => ['build-job', id] as const,
+  aiAvailability: () => ['ai-availability'] as const,
   previewUrl: (siteId: string, collection: string, slug: string) =>
     ['preview-url', siteId, collection, slug] as const,
 }

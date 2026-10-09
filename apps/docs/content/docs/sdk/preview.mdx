@@ -1,0 +1,172 @@
+---
+title: Draft preview
+description: Let editors see draft entries on your site with a signed, one-hour preview token, a server-side preview route and noindex headers.
+---
+
+Editors can preview a draft on your website before it goes live. When an editor selects **Preview** on an entry, the CMS signs a short-lived token and opens a URL on your production site. Your site exchanges that token for the draft on the server and renders it with the same view it uses for published content. The draft is never built into a snapshot, and the page is marked so search engines do not index it.
+
+This page covers the whole flow and what your site needs to build. For what editors see, read [Preview](/docs/cms/preview).
+
+## How a preview works
+
+<Steps>
+<Step>
+
+**The editor opens a preview.** The CMS signs a token for one entry: the site, the collection, the slug and an expiry time. It then builds a URL of the form `<production URL>/__preview/<collection>/<slug>?token=<token>`.
+
+</Step>
+<Step>
+
+**Your route receives the request.** The route at `/__preview/$collection/$slug` runs on your server and reads the `token` query parameter.
+
+</Step>
+<Step>
+
+**Your server asks the CMS for the draft.** `getPreviewEntry()` calls the CMS preview endpoint with the token. The CMS checks the token's signature and expiry, then returns the entry.
+
+</Step>
+<Step>
+
+**You render the draft with noindex headers.** Send the headers from `previewHeaders()` with the response. Show a clear banner so nobody mistakes the page for published content.
+
+</Step>
+</Steps>
+
+Two things are fixed by the CMS and cannot be changed on your side. The path must be `/__preview/<collection>/<slug>`, because the CMS builds that URL. The token is valid for one entry only, so changing the slug in the address bar does not reveal another draft.
+
+## The token
+
+| Property | Behaviour |
+| --- | --- |
+| Signed | The CMS signs the token with a secret held for each site. A token with a changed payload or signature is rejected. |
+| Expiry | Valid for one hour from the time the editor opens the preview. |
+| Scope | One site, one collection and one entry. |
+| Invalid or expired | The CMS responds with `401`. |
+| Entry missing | The CMS responds with `404`. |
+
+Each time an editor opens a preview, the CMS signs a new token. Old tokens do not need to be revoked. They stop working after their expiry time.
+
+The preview token is separate from the site token. The [site token](/docs/security/tokens) reads published content and is used by your build and your preview server. The preview token authorises one draft.
+
+## Environment variables
+
+The preview helpers use the same client as the build. The client reads two variables, and both must be set on the server that runs your preview route.
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `ARECA_CMS_URL` | Yes | The origin of the CMS, for example `https://cms.example.com`. |
+| `ARECA_SITE_TOKEN` | Yes | The site token. It is required even though the CMS checks the preview token, because `createArecaClient()` will not start without it. |
+
+If `ARECA_SITE_TOKEN` is missing, `getPreviewEntry()` throws `Missing ARECA_SITE_TOKEN`. Your preview route catches that error and shows a message. The site token is sent as a bearer header on the preview request. The CMS authorises the request with the preview token in the URL. See [the client](/docs/sdk/client) for the full list of options.
+
+## The preview helpers
+
+| Helper | Signature | Returns |
+| --- | --- | --- |
+| `getPreviewEntry` | `({ token, client? }) => Promise<PreviewResult>` | `{ collection, slug, entry }` |
+| `previewHeaders` | `() => { 'X-Robots-Tag': 'noindex, nofollow', 'Cache-Control': 'no-store' }` | Headers for the response |
+
+`entry` has the same shape as a published entry, so the view you use for published pages works for drafts too. The optional `client` argument exists for tests. Leave it out in your app.
+
+`getPreviewEntry` throws when the CMS returns an error. The message includes the status code and the CMS's error text, for example `Failed to fetch preview (401): Unauthorized`.
+
+## Build the preview route
+
+The example uses TanStack Start, like the [demo site](/docs/sdk/example-site). The data fetch runs in a server function, so the token and site token never reach the browser beyond the URL.
+
+```tsx title="src/routes/[__preview]/$collection/$slug.tsx"
+import { createFileRoute } from '@tanstack/react-router'
+import { createServerFn } from '@tanstack/react-start'
+import { setResponseHeader } from '@tanstack/react-start/server'
+import { getPreviewEntry, previewHeaders } from '@areca-cms/site-sdk'
+import { z } from 'zod'
+
+const loadPreview = createServerFn({ method: 'GET', strict: { output: false } })
+  .validator(z.object({ token: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    const headers = previewHeaders()
+    setResponseHeader('X-Robots-Tag', headers['X-Robots-Tag'])
+    setResponseHeader('Cache-Control', headers['Cache-Control'])
+    try {
+      const preview = await getPreviewEntry({ token: data.token })
+      return { ok: true as const, preview }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to fetch preview'
+      return { ok: false as const, error: message }
+    }
+  })
+
+export const Route = createFileRoute('/__preview/$collection/$slug')({
+  validateSearch: (search) => z.object({ token: z.string().min(1) }).parse(search),
+  loaderDeps: ({ search }) => ({ token: search.token }),
+  loader: ({ deps }) => loadPreview({ data: { token: deps.token } }),
+  head: () => ({
+    meta: [{ name: 'robots', content: 'noindex, nofollow' }],
+  }),
+  component: PreviewPage,
+})
+
+function PreviewPage() {
+  const result = Route.useLoaderData()
+  if (!result.ok) {
+    return <p role="status">Preview unavailable: {result.error}</p>
+  }
+  const { entry } = result.preview
+  return (
+    <main>
+      <p role="status">Draft preview. This page is not published.</p>
+      <h1>{String(entry.data.title ?? entry.slug)}</h1>
+      {/* Render the rest of the entry with the same components as published pages. */}
+    </main>
+  )
+}
+```
+
+Replace the status text and the body with your own components. The demo site renders the same article view for drafts and published pages, with an extra banner.
+
+Notes on the example:
+
+- `previewHeaders()` sets the `X-Robots-Tag` and `Cache-Control` headers. The SDK does not add a robots meta tag, so the route adds one in `head()`. The demo does the same.
+- The server function sets the headers before it calls the CMS, so they are present on error responses as well.
+- The `$collection` and `$slug` URL parameters are for the URL only. The entry comes from the token, so the page shows the draft the token was issued for.
+
+### Keep previews out of prerendering
+
+If you prerender your site, exclude the preview path. The demo does this in its Vite config:
+
+```ts
+prerender: {
+  filter: (page) => !page.path.startsWith('/__preview'),
+}
+```
+
+A prerendered preview page would be a copy of a draft, written to disk and served to anyone who requests the file.
+
+## Security
+
+<Callout type="warn" title="The token is in the URL">
+
+Anyone who has the preview URL can read that draft until the token expires. Browsers, proxies, CDNs and access logs can record URLs. Do not log the query string, do not send it to analytics, and do not store it.
+
+</Callout>
+
+- **Keep the site token on the server.** Call `getPreviewEntry` only from server code. Never put `ARECA_SITE_TOKEN` in client code, a public environment variable or a page's HTML.
+- **Do not cache preview responses.** `previewHeaders()` sends `Cache-Control: no-store`. Keep it on every response from the preview route, including errors.
+- **Do not index preview pages.** Send `X-Robots-Tag` and a robots meta tag. Keep the route out of your sitemap.
+- **Treat expired tokens as normal.** An editor who waits more than an hour gets an error and must open the preview again.
+
+## Troubleshooting
+
+| Symptom | Likely cause |
+| --- | --- |
+| `Missing ARECA_SITE_TOKEN` | The preview server does not have the site token. Set it as a runtime environment variable. |
+| `Failed to fetch preview (401)` | The token expired or was altered. Open the preview again from the CMS. |
+| `Failed to fetch preview (404)` | The entry does not exist any more, or the slug changed. |
+| `Failed to reach CMS at ...` | `ARECA_CMS_URL` is wrong, or the preview server cannot reach the CMS. |
+
+## Related
+
+- [Preview](/docs/cms/preview) for what editors do in the CMS.
+- [Go live builds](/docs/sdk/go-live-builds) for the runtime variables a deployed site needs.
+- [Tokens](/docs/security/tokens) for the site token, the schema token and the preview token.
+- [The client](/docs/sdk/client) for the client options.

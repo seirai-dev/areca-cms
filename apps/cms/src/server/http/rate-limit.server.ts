@@ -4,8 +4,8 @@ import { env } from '#/env'
 import { auth } from '#/lib/auth'
 import { createLogger } from '#/server/log'
 
-import type { RateLimitStore } from './rate-limit.ts'
-import { enforceRequestRateLimit } from './rate-limit.ts'
+import type { RateLimitRule, RateLimitStore } from './rate-limit.ts'
+import { consumeRateLimit, enforceRequestRateLimit } from './rate-limit.ts'
 
 const log = createLogger('rate-limit')
 
@@ -52,4 +52,27 @@ export function enforceCmsRateLimit(request: Request) {
     // Do not log the Redis error object: connection errors may contain a URL.
     logError: (message) => log.error(message),
   })
+}
+
+/**
+ * Per-user budget for an expensive action (e.g. a paid AI call). Like the
+ * request limiter it fails open when Redis is unavailable.
+ */
+export async function allowUserAction(
+  scope: string,
+  userId: string,
+  rule: RateLimitRule,
+): Promise<boolean> {
+  try {
+    return await consumeRateLimit(
+      store,
+      scope,
+      `user:${userId}`,
+      rule,
+      Date.now(),
+    )
+  } catch {
+    log.error('Rate limiting unavailable; action allowed')
+    return true
+  }
 }

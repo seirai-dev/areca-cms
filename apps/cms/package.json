@@ -6,8 +6,8 @@
     "#/*": "./src/*"
   },
   "scripts": {
-    "dev": "vite dev --port 3000",
-    "dev:lan": "vite dev --port 3000 --host 0.0.0.0",
+    "dev": "vite dev --port 3000 --strictPort",
+    "dev:lan": "vite dev --port 3000 --strictPort --host 0.0.0.0",
     "dokploy:setup": "tsx --env-file=.env.local scripts/dokploy-setup.ts",
     "generate-routes": "tsr generate",
     "build": "vite build",
@@ -43,6 +43,8 @@
     "@phosphor-icons/react": "^2.1.10",
     "@t3-oss/env-core": "^0.13.11",
     "@tailwindcss/vite": "^4.3.3",
+    "@tanstack/ai": "^0.65.1",
+    "@tanstack/ai-openrouter": "^0.21.1",
     "@tanstack/markdown": "^1.0.0",
     "@tanstack/react-devtools": "^0.10.13",
     "@tanstack/react-query": "^5.104.0",

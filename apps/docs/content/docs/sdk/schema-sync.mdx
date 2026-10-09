@@ -1,0 +1,120 @@
+---
+title: Syncing the schema
+description: Push your content model to the CMS with areca manifest push, pull it back with areca manifest pull, and understand what a push changes.
+---
+
+Schema sync keeps the CMS in step with `areca.config.ts`. A **push** sends your config to the CMS. A **pull** writes the CMS's current collections back into a config file. You run a push whenever you change the content model, and you run a pull when the model was changed in the CMS and you want it in code.
+
+Schema sync does not change content. Entries stay as they are, and the push does not build pages or migrate values.
+
+## Push the schema
+
+```bash
+pnpm exec areca manifest push
+pnpm exec areca manifest push ./config/areca.config.ts
+```
+
+With no path, the command reads `./areca.config.ts`. It loads the file, checks the identifiers, and sends the collections to the CMS. On success it prints `Synced manifest from` followed by the path. The config file must have a default export, which `defineSiteContent` gives you.
+
+The older `areca sync-manifest` command still works as an alias for `areca manifest push`. It is deprecated, so use `manifest push` in new scripts. Your package scripts may still call `sync-manifest`, which `areca init` sets up.
+
+### Which tokens a push needs
+
+| Variable | Why it is needed |
+| --- | --- |
+| `ARECA_SCHEMA_TOKEN` | Authorizes the write. The push fails without it. |
+| `ARECA_SITE_TOKEN` | Required even for a push. The SDK client will not start without it. Use the site token, not the schema token, for this variable. |
+| `ARECA_CMS_URL` | The CMS address. |
+
+Get the schema-write token from the **Developer** tab, under the **Schema-write token** section. The site token is the read token that builds use. The two tokens are not interchangeable. A push with only the site token fails.
+
+<Callout type="warn" title="Run pushes only where you trust the environment">
+Builds and routine content pulls need the site token. Only the schema push needs the schema token. Run the push from your own machine or from a protected CI job, and keep the schema token out of website build settings.
+</Callout>
+
+## What a push changes
+
+A push replaces the schema on the CMS side for the collections in your file:
+
+- **Listed collections are updated.** The label, route and fields are replaced with the values in your config. If you omit `label`, the CMS shows the collection key. Changes made to these collections in the CMS are overwritten by the push.
+- **Omitted collections are disabled.** A collection that is not in your file is turned off. Its entries stay in the CMS, but they are left out of new snapshots, so they stop going live. Pushing an empty `collections` object disables every collection.
+- **A disabled collection can come back.** Add its key to the config and push again. It is enabled again, with its entries.
+- **Entry values are not migrated.** Values stay as they are. A new field starts empty, and values under a removed field are no longer published.
+
+### What happens to existing content
+
+Changing a field can make existing entries invalid. Areca checks the published entries again each time you go live:
+
+- **Draft entries** are saved with partial validation, so editors can save a draft that is missing a new required field.
+- **Entries that are ready or live** are checked against the current schema when a snapshot is built. If a published entry no longer passes, for example because you made a field required and it is empty, Go live stops and reports the problem.
+
+Before you remove a collection or make a field required, check which entries use it. Fill in or update those entries first, then push. Test the change on a non-production site when you can. For a reference field, also check that the entries it points to are still included in the snapshot.
+
+## Pull the schema
+
+```bash
+pnpm exec areca manifest pull --config ./areca.config.ts
+pnpm exec areca manifest pull --config ./areca.config.ts --yes
+```
+
+The pull fetches the site's enabled collections from the CMS and writes a complete `areca.config.ts`. It uses the existing `siteKey`, or `ARECA_SITE_KEY` if the file does not exist.
+
+<Callout type="warn" title="The pull replaces the whole file">
+The generated file replaces the old one completely. Comments, helper functions and any other code in the file are lost. Commit or back up the file first.
+</Callout>
+
+If the existing file already has collections, the command shows the difference and asks you to confirm before it overwrites the file:
+
+- `+` for a collection the CMS has and your file does not
+- `~` for a collection that differs on both sides
+- `-` for a collection your file has and the CMS does not
+
+Use `--yes` to skip the question. If the file already has collections and the shell is not interactive, the command stops unless you pass `--yes`. The pull only reads from the CMS, so it needs only the site token.
+
+## Use schema sync in CI
+
+Keep the schema push out of routine website builds. A push is a change to the content model, so it should be a deliberate step. A common setup is a manual workflow that runs in a protected environment:
+
+```yaml title=".github/workflows/publish-schema.yml"
+name: Publish content schema
+on:
+  workflow_dispatch:
+
+jobs:
+  manifest:
+    runs-on: ubuntu-latest
+    environment: areca-authoring
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec areca manifest push
+        env:
+          ARECA_CMS_URL: ${{ vars.ARECA_CMS_URL }}
+          ARECA_SITE_TOKEN: ${{ secrets.ARECA_SITE_TOKEN }}
+          ARECA_SCHEMA_TOKEN: ${{ secrets.ARECA_SCHEMA_TOKEN }}
+```
+
+Store the schema token as a secret in the protected environment only. Node 24 lets the CLI load `areca.config.ts` directly. On older Node versions, see [the CLI reference](/docs/sdk/cli).
+
+## Errors
+
+| Message or status | What to check |
+| --- | --- |
+| `Missing ARECA_SCHEMA_TOKEN` | Set the schema-write token in the environment that runs the push. |
+| `Missing ARECA_SITE_TOKEN` or `Missing ARECA_CMS_URL` | Both are needed to start the client, even for a push. |
+| `Unsafe collection or field identifier` | Fix the key so it follows the [identifier rules](/docs/sdk/defining-content#identifiers). |
+| `400` | The CMS rejected the schema. The response lists the issues. A manifest can have at most 100 collections. |
+| `413` | The manifest is larger than 256 KiB. |
+| `401` | The token is wrong, or it was rotated. A push needs the schema token. A pull needs the site token. |
+
+See [errors and limits](/docs/sdk/errors-and-limits) for the full list.
+
+## Related
+
+- [Defining your content](/docs/sdk/defining-content): the config file format.
+- [Pulling content at build time](/docs/sdk/pulling-content): download the published content.
+- [CLI reference](/docs/sdk/cli): every command and flag.

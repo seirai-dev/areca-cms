@@ -1,0 +1,27 @@
+{
+  "title": "SDK & API",
+  "description": "Connect a website to Areca",
+  "icon": "Code",
+  "root": true,
+  "pages": [
+    "index",
+    "---Guides---",
+    "installation",
+    "defining-content",
+    "schema-sync",
+    "pulling-content",
+    "reading-content",
+    "rich-text",
+    "seo",
+    "preview",
+    "go-live-builds",
+    "example-site",
+    "---Reference---",
+    "field-types",
+    "cli",
+    "client",
+    "http-api",
+    "errors-and-limits",
+    "..."
+  ]
+}

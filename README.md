@@ -1,106 +1,64 @@
 # Areca
 
-Areca is a **build-time CMS** for agency-managed sites. Editors write drafts in the CMS; owners mark them **ready** and press **Go live**. Going live writes an immutable snapshot, a build job deploys the customer's TanStack Start site via Dokploy, and the site pulls that pinned snapshot **at build time**. Visitors never call the CMS.
+Areca is a build-time CMS for agency-managed websites. Editors write drafts; owners approve them with **Mark as ready**, then **Go live** creates a content snapshot and deploys the website. The website pulls that snapshot during its build using `@areca-cms/site-sdk`.
 
-![The site Overview](docs/screenshots/overview-light.png)
+**[Start with the documentation](docs/README.md)** for setup, CMS walkthroughs, SDK examples, and operations.
+
+![Areca content editor with SEO controls](docs/screenshots/current-editor-seo.png)
+
+## Get started
+
+| Your task | Guide |
+| --- | --- |
+| Install the CMS locally and create the first admin | [Onboarding](docs/ONBOARDING.md) |
+| Install the published CMS image with Docker | [Docker installation](docker/README.md) |
+| Write, preview, schedule, and publish content | [CMS guide](docs/CMS_GUIDE.md) |
+| Manage clients, sites, people, branding, and AI | [Agency admin guide](docs/ADMIN_GUIDE.md) |
+| Connect a website using the SDK | [SDK guide](docs/SDK.md) |
+| Define content types | [Content schemas](docs/CONTENT_SCHEMA.md) |
+| Configure SEO and AI suggestions | [SEO guide](docs/SEO.md) |
+| Deploy and verify a customer website | [Deployment](docs/DEPLOYMENT.md) |
+
+## How publishing works
 
 ```text
-CMS (author + validate)
-      │
-      ▼
-immutable publication snapshot
-      │
-      ▼
-build job (queue / worker)
-      │
-      ▼
-Dokploy deploy
-      │
-      ▼
-site build (`areca pull` fetches the pinned snapshot)
-      │
-      ▼
-health check
-      │
-      ▼
-publication marked live
+Draft → Mark as ready → Go live → Immutable snapshot
+  → Website build pulls content → Dokploy deployment → Health check → Live
 ```
 
-## The CMS at a glance
+Draft edits stay separate from approved and live versions. Scheduled content uses a frozen approved version. Failed releases keep the previous live publication; rollback redeploys a saved snapshot.
 
-- **Workspaces.** Everyone works inside a site workspace ("Acme Website"): Overview, the site's content types, Library, People (owners) and Settings (agency admins). Agency admins also get the **Agency** workspace: clients, all sites, people, activity and branding. The workspace card at the top of the sidebar switches between them; ⌘K opens the command palette.
-- **Draft → Ready → Live.** Drafts save themselves as you type. **Mark as ready** queues an entry for the next release; the **Go-live tray** at the bottom of the sidebar shows what is waiting and runs **Go live**. Releases, build logs and rollback live in the Go-live panel.
-- **Roles.** Editors write and edit drafts; owners also mark as ready, schedule, archive, delete, go live and manage people; agency admins can do everything, including site settings and content types.
-- Light and dark themes, English/Dutch/Turkish UI, whitelabel branding (name, logo, accent, font). The design system is documented in [`docs/DESIGN.md`](docs/DESIGN.md).
+**Production** mode requires a deployment target and a health response containing the expected publication ID. **Demo** mode supports local content pulls without a production deployment; its publications are labeled Demo and do not count as live.
 
-## Layout
+Normal website pages read built content rather than query the CMS. Draft preview fetches from the CMS. Uploaded media URLs remain publicly accessible through the CMS, including files attached to drafts; see [media privacy](docs/DEPLOYMENT.md#media-privacy).
 
-- `apps/cms` — TanStack Start CMS (UI, API, in-process worker/scheduler)
-- `packages/site-sdk` — `@areca-cms/site-sdk`: schema, `areca pull`, preview helpers
-- `examples/demo-site` — sample TanStack Start customer site
-- `docker-compose.yml` — Postgres, Redis, RustFS (S3), Mailpit
+## Workspaces and roles
 
-## Run with Docker
+Each client organization has sites, owners, and editors. Site workspaces contain Overview, content types, Library, and role-specific controls. Agency admins also manage clients, sites, people, activity, branding, and AI from the Agency workspace.
 
-For a complete stack using the published CMS image, see [`docker/README.md`](docker/README.md).
+- **Editors:** create and edit drafts, preview, upload media, and write image descriptions.
+- **Owners:** also approve, schedule, archive, delete, publish, roll back, and manage client people.
+- **Agency admins:** manage all clients and site settings, content types, branding, and integrations. MFA is required by default.
 
-## Quick start
+The interface supports light/dark appearance and English, Dutch, and Turkish. Interface language does not translate website content.
 
-Empty CMS (recommended first time): see [`docs/ONBOARDING.md`](docs/ONBOARDING.md).
+## Repository
 
-Seeded demo data:
+| Path | Purpose |
+| --- | --- |
+| `apps/cms` | TanStack Start CMS, API, publishing worker and scheduler |
+| `packages/site-sdk` | ESM SDK, schema helpers, CLI, rich text, preview, and SEO |
+| `examples/demo-site` | TanStack Start website using generated content |
+| `docker-compose.yml` | Local PostgreSQL, Redis, RustFS, and Mailpit |
+| `docker` | Production Compose installation and recovery tooling |
+| `docs` | User, developer, integration, and operations guides |
 
-```powershell
-docker compose up -d
-pnpm install
-cp apps/cms/.env.example apps/cms/.env.local
-pnpm --filter @areca/cms s3:init
-pnpm db:migrate
-pnpm --filter @areca/cms db:seed
-pnpm dev
-```
+Local development uses Node 24 and pnpm 12; see [development](docs/DEVELOPMENT.md) and [onboarding](docs/ONBOARDING.md) for commands, secrets, and migrations. The CMS runs on port 3000 and the demo site on port 3001.
 
-CMS: http://localhost:3000. Demo site: `pnpm --filter @areca/demo-site dev` (port 3001).
+Optional seed data creates `admin@areca.local`, `owner@acme.local`, and `editor@acme.local` with password `password123`. Use these only on a local demo; admin MFA enrollment or verification can still be required. A new empty instance uses `/setup` with a first-run setup token.
 
-Redis provides shared rate limits for CMS mutations, uploads, and site-token
-API calls. Requests fail open with a server error log if Redis is unavailable.
-Set `REDIS_URL` in production. Set `RATE_LIMIT_TRUST_PROXY=true` only when the
-fronting proxy replaces client-supplied forwarding headers.
+## Operate and maintain
 
-Seeded logins (password `password123`):
+Use [configuration](docs/CONFIGURATION.md), [operations](docs/OPERATIONS.md), [recovery](docs/RECOVERY.md), and [upgrades](docs/UPGRADES.md) for deployed instances. [Troubleshooting](docs/TROUBLESHOOTING.md) connects common failures to the appropriate guide.
 
-- `admin@areca.local` — agency admin
-- `owner@acme.local` — Acme owner
-- `editor@acme.local` — Acme editor
-
-## Integrate a site
-
-Declare collections with `defineSiteContent`, sync the manifest, and pull the snapshot at build time. See [`packages/site-sdk/README.md`](packages/site-sdk/README.md).
-
-## Deploy a customer site
-
-Dokploy builds from git; the CMS pins the snapshot and health-checks the new container. See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
-
-## Testing
-
-```powershell
-pnpm test
-pnpm test:e2e
-pnpm -r typecheck
-```
-
-`pnpm test:e2e` runs against `PLAYWRIGHT_BASE_URL` (default `http://localhost:3000`) and its setup spec **wipes the database and the upload bucket**. To keep your dev data, run the suite on an isolated stack instead: `pnpm --filter @areca/cms test:e2e:isolated` (and `test:e2e:qa:isolated` for the screenshot walkthrough). It uses the `areca_e2e` database, the `areca-e2e` bucket and Redis DB 1 on port 3100, creating and migrating them as needed (see `apps/cms/scripts/e2e-isolated.mjs`). `PW_CHROMIUM_PATH` points Playwright at a local Chromium; `QA_SCREENSHOT_DIR` sets where the walkthrough saves screenshots.
-
-## Docs
-
-- [`docs/ONBOARDING.md`](docs/ONBOARDING.md) — empty CMS → first admin → demo site
-- [`docs/DESIGN.md`](docs/DESIGN.md) — design system: tokens, type, primitives, patterns, checklist
-- [`docs/design/brief.md`](docs/design/brief.md) — the UI/UX redo specification and its deviations
-- [`docs/DECISIONS.md`](docs/DECISIONS.md) — architecture decisions
-- [`docs/UPGRADES.md`](docs/UPGRADES.md) — upgrades, migrations, rollback and staging checklist
-- [`docs/OPERATIONS.md`](docs/OPERATIONS.md) — health checks, logs and day-to-day operation
-- [`docker/RECOVERY.md`](docker/RECOVERY.md) — backup, restore and organization export/import
-- [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — Dokploy deployment, media privacy and secret handling
-- [`docs/MVP_STATUS.md`](docs/MVP_STATUS.md) — Suggested MVP audit
-- [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — Dokploy customer-site deploy
-- [`PROJECT.md`](PROJECT.md) — original design notes
+Browser tests clear their configured database and upload bucket. Use the provided isolated test stack when retaining local data; details are in [development](docs/DEVELOPMENT.md). The [original project proposal](PROJECT.md) remains available as historical context.

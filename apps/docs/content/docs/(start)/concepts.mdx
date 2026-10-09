@@ -1,0 +1,132 @@
+---
+title: How Areca works
+description: The data model, entry statuses, releases, the go-live pipeline and how websites read content, explained once for everyone.
+---
+
+Areca separates writing from publishing. Editors change drafts freely. Nothing reaches the public website until someone approves the content and goes live. This page explains the model behind that split, so the rest of the documentation makes sense.
+
+## Data model
+
+Content is organised in four levels:
+
+| Level | What it is | Example |
+| --- | --- | --- |
+| **Client** | The organisation you build websites for. It owns the shared Library and the people who work on its sites. | Acme |
+| **Site** | One website. It has its own collections, entries, deployment target and tokens. | Acme Website |
+| **Collection** | A content type with a fixed set of fields and a route on the website. The CMS UI also calls it a content type. | Articles, `/blog/$slug` |
+| **Entry** | One item in a collection. | "Welcome to Acme" |
+
+Collections belong to the website, not to the CMS. A developer declares them in the website's `areca.config.ts` and pushes them to the CMS. Agency admins can also edit them in the CMS, but a push overwrites those CMS edits. Pushing a schema changes what editors can fill in. It does not create pages on the website, and the website's code still decides how an article is rendered.
+
+The Library belongs to the client. All of a client's sites share its files. Files uploaded to the Library have public URLs, including files attached to drafts. See [Library](/docs/cms/library) before you upload anything confidential.
+
+## Entry versions and statuses
+
+Each entry can hold several versions at once. Areca tracks four:
+
+| Version | Meaning |
+| --- | --- |
+| **Draft** | The latest saved changes. Only the CMS and the draft preview see it. |
+| **Ready** | A copy of the draft that an owner approved for the next release. Still not public. |
+| **Scheduled** | A version frozen when you scheduled it, with a chosen publish time. |
+| **Live** | The version included in the release that is currently live. |
+
+An entry can also be **Archived**. Archived entries stay in the CMS and are left out of the website.
+
+Some rules follow from this model:
+
+- Saving a draft never changes the public website.
+- Editing an entry that is ready or live changes its draft. The ready or live version stays as it was until someone marks the new draft ready.
+- When the draft differs from the ready version, the CMS shows that the entry was edited since it was ready.
+- Entry history restores authoring data for one entry. Restoring a release rolls back the whole site.
+
+See [Statuses and review](/docs/cms/statuses-and-review) for how these states look in the editor.
+
+## Scheduling
+
+Scheduling freezes the draft and its slug at the moment you schedule it, after the required fields are checked. Later draft edits do not change the scheduled version.
+
+When the scheduled time arrives, the CMS starts a release for the site, just as if someone had selected **Go live**. The scheduled version becomes live only when that release succeeds. If the release fails, the entry stays scheduled, the failure is recorded in the site's activity, and the CMS retries after a cooldown of about ten minutes. Owners can cancel a schedule before it runs.
+
+See [Scheduling](/docs/cms/scheduling) for the editor workflow.
+
+## Releases and snapshots
+
+A **release** is one publication of a whole site. Each **Go live** creates a release that includes every ready change on the site, not only the entry you just changed. The CMS:
+
+1. Builds a snapshot: the content of every enabled collection, with references and asset URLs resolved.
+2. Stores the snapshot with a publication ID and a content hash.
+3. Never changes it afterwards.
+
+Because snapshots are immutable, a release always shows exactly what was published. The CMS keeps earlier releases so that you can restore one later.
+
+In the Go-live panel, releases show one of these states:
+
+| State | Meaning |
+| --- | --- |
+| **Waiting** | Queued, not yet building. |
+| **Going live** | Being built or deployed. |
+| **Live** | The current production release. |
+| **Failed** | The build or deployment failed. The previous live release stays live. |
+| **Replaced** | A newer release replaced it. |
+| **Rolled back** | An earlier release was restored. |
+
+Demo releases are labelled as demo. They are available for local builds but are never production live.
+
+## The go-live pipeline
+
+When an owner or agency admin selects **Go live**, the CMS works through these stages:
+
+1. **Validate.** The CMS checks every enabled collection: required fields, slugs, references, assets, rich text, SEO data and route collisions. Problems are listed under **Fix these first**, and nothing is built until they are resolved.
+2. **Snapshot.** The CMS saves the immutable snapshot and queues a build. A new request replaces any build for the same site that is still queued.
+3. **Build.** The website's build pulls the snapshot with `areca pull`. The snapshot is pinned to this release, so the build cannot pick up later drafts.
+4. **Deploy.** For production sites, the CMS asks the deployment provider to deploy the site. Only one deployment can be active per site at a time.
+5. **Health check.** The CMS calls the site's health URL and checks that it reports the publication ID it just built.
+6. **Live.** The release becomes live. If any step fails, the previous live release stays live.
+
+Production and Demo sites differ in steps 4 and 5:
+
+| Mode | Deploys | Health check | Counts as live |
+| --- | --- | --- | --- |
+| **Production** (default) | Yes, to the site's deployment target | Required | Yes, after the health check passes |
+| **Demo** | No | No | No |
+
+If the CMS loses track of a deployment request, it reconciles the request with the provider instead of sending it again, so a retry cannot deploy twice.
+
+### Rollback
+
+A rollback restores an earlier release that was live. The CMS creates a new release from the saved snapshot of that earlier release and queues a high-priority build. A rollback does not use today's drafts, does not delete newer drafts, and does not change the website's source code, database migrations or provider settings. See [Going live](/docs/cms/going-live) for the steps.
+
+## How websites use content
+
+A website uses the CMS in three ways. Each uses a different credential.
+
+| Path | When it happens | Credential | Notes |
+| --- | --- | --- | --- |
+| **Build-time pull** | When the website is built | Site token | `areca pull` downloads the pinned snapshot as JSON files. Visitors never call the CMS for content. |
+| **Draft preview** | When an editor opens **Preview** | Preview token | A signed token that works for one draft and expires after one hour. The response is never indexed or cached. |
+| **Asset URLs** | When a page shows an image or file | None | Images and files are served by the CMS from its asset endpoint. Browsers load them directly from the CMS. |
+
+Because the site renders from a pulled snapshot, a change to a published entry appears on the website only after a successful release and a new build.
+
+Assets work differently. A snapshot stores the asset URLs as they were when it was built, so the CMS must stay reachable at the address it advertises. A file used by a retained release cannot be deleted from the Library. See [Asset retention](/docs/self-hosting/asset-retention).
+
+For the credentials in detail, see [Tokens](/docs/security/tokens).
+
+## Roles
+
+Access depends on the role a person holds:
+
+| Role | Scope | Main abilities |
+| --- | --- | --- |
+| **Editor** | A client | Write and edit drafts, preview, upload files. |
+| **Owner** | A client | Everything an editor can do, plus mark ready, schedule, archive and delete entries, go live, roll back, and manage client members. |
+| **Agency admin** | All clients | Everything an owner can do in every client, plus manage clients, sites, content types, branding and AI settings. Requires two-factor authentication. |
+
+Some sensitive actions also ask for a fresh authenticator code. See [Roles and permissions](/docs/security/roles-and-permissions) and [Two-factor and step-up](/docs/security/two-factor-and-step-up).
+
+## Related
+
+- [Quickstart](/docs/quickstart) takes you through a first publish.
+- [Glossary](/docs/glossary) defines every term used in the documentation.
+- [Self-hosting overview](/docs/self-hosting) explains what you need to run Areca.

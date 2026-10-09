@@ -72,6 +72,10 @@ jobs:
         run: |
           pnpm --filter @areca/demo-site typecheck
           pnpm --filter @areca/demo-site test
+      - name: Docs build, anchor validation, and typecheck
+        run: |
+          pnpm --filter @areca/docs build
+          pnpm --filter @areca/docs typecheck
 
   secret-scan:
     name: Secret scan (git history)

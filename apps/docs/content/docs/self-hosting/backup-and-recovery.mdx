@@ -1,0 +1,170 @@
+---
+title: Backup and recovery
+description: Back up everything an Areca instance needs, restore it into an isolated copy to test, and move one client between instances.
+---
+
+A copy of the database is not a complete backup of Areca. Uploaded files live in object storage, and saved deployment credentials can only be read with the encryption key that was in use when they were saved. This page explains what to back up, how to take a backup and restore it, how to check the restore, and how to move a single client with the export and import tools.
+
+Areca does not schedule backups for you. Choose a schedule and retention that match how much work you can afford to lose, and test your restores regularly.
+
+<Callout type="warn" title="Backups contain secrets and personal data">
+A backup includes your environment file, with the auth secret, database and storage passwords and encryption keys. It also includes users, unpublished content and history. Store every backup encrypted, off the CMS host, with access limited to the people who need it. Never commit a backup or put one in public storage.
+</Callout>
+
+## What to back up
+
+An Areca instance has four parts. You need all four to recover it.
+
+| Part | What it holds | Notes |
+| --- | --- | --- |
+| PostgreSQL database | Clients, sites, collections, entries, revisions, releases, build jobs, users, audit history and the asset cleanup queue. | Take it in the same backup window as the object storage. |
+| S3 bucket | Every uploaded file. | Releases and history refer to these files, so the bucket must match the database. |
+| Environment and keys | `BETTER_AUTH_SECRET`, `DOKPLOY_CREDENTIALS_ENCRYPTION_KEY`, `AI_SETTINGS_ENCRYPTION_KEY` if you use AI, and the database and storage credentials. | Keep them with the backup. Without the matching encryption key, saved deployment credentials cannot be read. |
+| Redis | Shared rate-limit counters. | The Docker backup includes it. Losing the counters only resets the current rate-limit windows, so a restore without Redis data still works. |
+
+Keep the image reference too. A restore needs the same image it was taken with, so record the tag or digest you run. The Docker backup records the image IDs for you.
+
+## Back up a Docker Compose instance
+
+The backup command is built for the Compose stack in the repository. Run it from the repository root, and point it at the Compose project name and the environment file that the instance uses.
+
+```sh title="From the repository root"
+node docker/recovery.mjs backup areca-demo docker/.env /secure/backups/areca-2026-10-01
+```
+
+The command:
+
+1. Stops every service in the project, so the database and bucket are not written during the copy.
+2. Copies the PostgreSQL, RustFS and Redis volumes into the backup directory.
+3. Saves a copy of the environment file, the original Compose file, a resolved Compose configuration, the image IDs and SHA-256 checksums for each file.
+
+The backup directory and its files are readable only by the owner. If the command fails, the services stay stopped, and you must not use the incomplete directory.
+
+When the command succeeds, copy the backup directory to a protected location off the host. Then start the instance again:
+
+```sh title="From the docker directory"
+docker compose up -d --wait
+```
+
+The backup takes the instance offline while it runs. Plan a short maintenance window.
+
+The backup can only be restored onto the same engine images and the same processor architecture. If you may restore onto a different host, keep the images too, with `docker image save`, or rely on the pinned digests in the backup.
+
+### Back up a managed database and storage
+
+If PostgreSQL and object storage are managed services, use the provider's snapshots, and take them in one window. Stop all CMS containers and workers first, so that the database and the bucket are captured together. Also capture the environment file and the encryption keys. Restore the two services from the same window. Check your provider's documentation for the exact steps for each service.
+
+## Restore into an isolated copy
+
+Restore into a new project, with new volumes and different ports, before you put the instance back into service. The original instance and its backup are not changed by a restore.
+
+<Steps>
+<Step>
+
+**Restore the volumes.** Choose a project name that is not in use, and an environment file that you keep safe. The command refuses to restore into volumes that already exist, and refuses an archive whose checksums do not match.
+
+```sh title="From the repository root"
+node docker/recovery.mjs restore areca-restore /secure/restore.env /secure/backups/areca-2026-10-01
+```
+
+The command writes an image override next to the environment file, named after the project, so that the restored instance uses the same images as the source.
+
+</Step>
+<Step>
+
+**Start the infrastructure.** Start the database, storage and Redis, and leave the CMS stopped while you check the data.
+
+```sh
+docker compose --project-name areca-restore --env-file /secure/restore.env \
+  -f /secure/backups/areca-2026-10-01/compose.yml \
+  -f /secure/areca-restore-images.yml \
+  up -d postgres rustfs redis
+```
+
+Add a Compose override that changes the published ports, so the restored services do not collide with the original instance.
+
+</Step>
+<Step>
+
+**Verify the data.** Run the checks in [verify a restore](#verify-a-restore) before you start the CMS.
+
+</Step>
+<Step>
+
+**Start the CMS on the isolated copy.** Start the CMS only after the checks pass, on a port that does not collide with the original. Keep deployments from running on the copy. Set `WORKER_ENABLED=false` through a Compose override, because the bundled Compose file does not pass worker settings to the CMS. Check for build jobs that were running at backup time before you enable workers.
+
+</Step>
+<Step>
+
+**Test sign-in and content.** Sign in, open an unpublished draft, open a revision, open a live release, and serve an uploaded file. Record the commands, results and dates in your restore log.
+
+</Step>
+<Step>
+
+**Cut over only after the checks pass.** Keep the original backup unchanged, and keep the previous instance until you have accepted the restored one.
+
+</Step>
+</Steps>
+
+### Verify a restore
+
+Compare the restored instance with the source before you accept it. The project does not provide a report command, so count the records yourself and keep the numbers in your restore log.
+
+- Counts of clients, memberships, sites, entries, revisions, releases and build jobs match the source.
+- Several uploaded files download, and their SHA-256 checksums match the originals.
+- The restored `DOKPLOY_CREDENTIALS_ENCRYPTION_KEY` is the same key the source used. If the key is not available, the restore still works, but you must enter each saved deployment credential again.
+- No build job is stuck in a running state.
+
+## Move one client
+
+The export and import tools move one client's authoring data from one instance to another, such as to a new host or to a test copy. They are not a replacement for a full backup. Use them when you want one client without the rest of the instance.
+
+Run the tools from a checkout of the repository, in the `apps/cms` directory, with dependencies installed and an environment file that points at the instance's database and bucket. Stop every CMS container and worker that writes to that database first. Then set `ARECA_WRITES_STOPPED=1` so the tools know the instance is idle.
+
+```sh title="Export one client"
+cd apps/cms
+ARECA_WRITES_STOPPED=1 node --env-file=/secure/source.env scripts/authoring-transfer.mjs export ORGANIZATION_ID /secure/client.json
+```
+
+```sh title="Import into an isolated instance"
+cd apps/cms
+ARECA_WRITES_STOPPED=1 node --env-file=/secure/destination.env scripts/authoring-transfer.mjs import --offline /secure/client.json
+```
+
+Use the ID of the client's organization record, and make sure the export file does not already exist. Import into an isolated instance first, and check it before you use it anywhere else.
+
+<Callout type="warn" title="The export file contains the encryption key">
+The export always includes the `DOKPLOY_CREDENTIALS_ENCRYPTION_KEY` of the source instance, in plain text, next to the deployment credentials it protects. The file is created readable only by its owner. Treat it as a secret. Store it encrypted, and delete it once the import is verified.
+</Callout>
+
+### What the export contains
+
+The export includes the client's organization record, its sites and their manifests, collections, drafts, approved and scheduled versions, complete entry revisions, asset records with their file bytes and checksums, memberships, invitations, releases, build jobs, audit history, deleted-content archives, and the client's saved deployment credentials.
+
+It does not include user accounts, passwords, sessions or other clients. Users are recorded by email address, so create matching accounts in the destination before you import. The import stops with an error if a user cannot be matched.
+
+### What the import changes
+
+The import makes the new copy safe to run without touching the source's external systems.
+
+- The client is created with its content IDs and references preserved.
+- Each imported site runs in demo mode, and its deployment target is removed.
+- Build and preview secrets are rotated, and pending invitations are disabled.
+- Imported releases become superseded history. Their deployment status is cleared, so the destination does not treat them as deployed. Their original status is kept in the audit history.
+- Queued build jobs from the source are cancelled.
+- Asset links in the content are rewritten to the destination's `APP_URL`. Older release snapshots keep the URLs they were published with, and external media links are kept as they are.
+
+After the import, rotate the site and schema-write tokens for each site, reconnect the integrations you need, and request a new demo release before you use the imported content. Run the destination on the same release as the source, and let its migrations finish, before you import.
+
+Verify an import by exporting the destination and comparing it with the source export.
+
+## Retry deferred file cleanup
+
+When a file cannot be removed from storage, Areca keeps it in a cleanup queue. The queue is part of the database, so full backups keep it. To retry the queue, run the cleanup command as described in [asset retention](/docs/self-hosting/asset-retention#run-the-cleanup). Do not run the cleanup against a destination while an offline import is running.
+
+## Related
+
+- [Upgrading](/docs/self-hosting/upgrades) for when to take a backup and how to use it to roll back.
+- [Asset retention](/docs/self-hosting/asset-retention) for how stored files are kept and cleaned up.
+- [Configuration](/docs/self-hosting/configuration) for the keys and credentials you must back up.
+- [Troubleshooting](/docs/self-hosting/troubleshooting) if a restored instance does not start.

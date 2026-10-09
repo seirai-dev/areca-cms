@@ -1,0 +1,84 @@
+---
+title: Roles and permissions
+description: What an agency admin, client owner and client editor can do in Areca, with a summary table. Detailed actions are in the permissions matrix.
+---
+
+Areca has two kinds of access. **Agency admin** is an account-wide flag for the people who run the agency's work on Areca. **Owner** and **Editor** are roles inside one client, and each person can have a different role in each client. In the interface, the client roles are called **Owner** and **Editor**.
+
+Every role is enforced on the server. A client editor who calls an owner-only action directly gets a "Forbidden" response and nothing changes.
+
+## Agency admin
+
+Agency admins work across all clients from one place. They can see and act in every client without being a member of it.
+
+Agency admins can:
+
+- Create, rename and delete clients, and add, configure and delete sites.
+- Define and change content types (the UI may say "content type" for a collection), including their fields and routes.
+- Set the deployment target for each site and store the deployment credentials for each client.
+- Create and rotate site tokens for the site projects.
+- Manage branding and AI settings for the whole instance.
+- Invite people, change anyone's role, and see the instance-wide activity log.
+- Make other people agency admins, or remove that status.
+
+Two rules apply to agency admins specifically:
+
+- They must have two-factor authentication turned on before they can use admin functions. See [two-factor authentication and step-up](/docs/security/two-factor-and-step-up).
+- The first account created during [setup](/docs/self-hosting/first-run) is an agency admin. Areca does not let you remove the last agency admin.
+
+## Client owner
+
+An owner runs publishing for one client. Owners can do everything an editor can, and also:
+
+- Mark entries as ready, move them back to draft, schedule and cancel schedules, archive them, and delete them.
+- Restore an earlier version of an entry.
+- Go live, roll back to an earlier release, and cancel a build that is still queued.
+- Delete files from the client's Library.
+- Invite people to the client, change their roles, remove them, and resend or revoke invitations.
+- See the client's activity log.
+
+Owners cannot change content types, site settings, deployment targets, deployment credentials, or AI settings. Those belong to agency admins.
+
+## Client editor
+
+An editor writes content for one client:
+
+- See the client's content types and entries, and create new entries.
+- Edit and save drafts, and open a preview of a draft.
+- Upload files to the Library and edit their descriptions, including alt text.
+- Ask for AI SEO suggestions and alt text.
+
+Editors cannot mark entries as ready, schedule, archive, delete, restore, or go live. They cannot see People, Settings, or the activity log.
+
+## Summary
+
+| Capability | Client editor | Client owner | Agency admin |
+| --- | :---: | :---: | :---: |
+| Scope of access | One client | One client | All clients |
+| Create entries, edit and save drafts | ✓ | ✓ | ✓ |
+| Preview drafts | ✓ | ✓ | ✓ |
+| Ask for AI suggestions | ✓ | ✓ | ✓ |
+| Upload files and edit alt text | ✓ | ✓ | ✓ |
+| Mark as ready, schedule, archive, delete entries | – | ✓ | ✓ |
+| Restore earlier versions | – | ✓ | ✓ |
+| Go live and roll back | – | ✓ | ✓ |
+| Delete Library files | – | ✓ | ✓ |
+| Invite and manage people in a client | – | ✓ | ✓ |
+| See a client's activity log | – | ✓ | ✓ |
+| Change content types and site settings | – | – | ✓ |
+| Manage clients, deployment credentials and site tokens | – | – | ✓ |
+| Manage AI settings and branding | – | – | ✓ |
+| Make or remove agency admins | – | – | ✓ |
+| Requires two-factor authentication | – | – | ✓ |
+
+For the action-by-action breakdown, including the actions that need a fresh authenticator code, see the [permissions matrix](/docs/security/permissions-matrix).
+
+## Access to other clients
+
+If you are not a member of a client, Areca does not show you its sites, entries or files. When you try to open one of its sites, entries, files, builds or invitations by ID, you get the same "not found" answer as for an ID that does not exist, so people cannot discover which IDs exist in other clients. Actions that take a client's own ID, such as listing its members, answer "Forbidden" to non-members.
+
+## Related
+
+- [Permissions matrix](/docs/security/permissions-matrix)
+- [Two-factor authentication and step-up](/docs/security/two-factor-and-step-up)
+- [People and invitations](/docs/cms/people-and-invitations) explains how to invite someone and choose their role.

@@ -1,0 +1,28 @@
+{
+  "title": "Self-hosting",
+  "description": "Install, configure and operate Areca",
+  "icon": "Server",
+  "root": true,
+  "pages": [
+    "index",
+    "---Install---",
+    "docker-quickstart",
+    "production",
+    "first-run",
+    "---Configure---",
+    "configuration",
+    "authentication",
+    "storage-and-email",
+    "deployment-targets",
+    "---Operate---",
+    "operations",
+    "publishing-pipeline",
+    "capacity",
+    "asset-retention",
+    "---Maintain---",
+    "upgrades",
+    "backup-and-recovery",
+    "troubleshooting",
+    "..."
+  ]
+}

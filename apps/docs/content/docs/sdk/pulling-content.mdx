@@ -1,0 +1,151 @@
+---
+title: Pulling content at build time
+description: Download the latest published snapshot with areca pull, understand the generated files, and keep the pull safe in your build.
+---
+
+Your site builds from a copy of the published content, not from live CMS requests. `areca pull` downloads the current published snapshot into JSON files in your project. Your site then reads those files while it builds and while it serves pages, so content requests do not depend on the CMS being up. Images still load from the CMS, see [reading content](/docs/sdk/reading-content#images).
+
+Run the pull before every build. Because the files are created during the build, they should be ignored by Git. `areca init` adds the default output directory to `.gitignore` for you.
+
+## Run the pull
+
+```bash
+pnpm exec areca pull
+pnpm exec areca pull --out .cache/areca-content
+```
+
+The default output directory is `src/generated/content`. Use `--out` to choose another directory. The command reads `ARECA_CMS_URL` and `ARECA_SITE_TOKEN`, and it loads them from `.env.local` and `.env` if they are not already set. When it succeeds, it prints the publication ID, the snapshot hash and the number of entries in each collection:
+
+```text
+Pulled publication <publication-id> (<snapshot-hash>): articles=12, authors=4
+```
+
+The pull fails if the site has no published content yet. Publish content in the CMS, then run the pull again.
+
+### From code
+
+If you need the pull in your own script, call `pullContent` from `@areca-cms/site-sdk/pull`. It returns the snapshot it wrote:
+
+```ts
+import { pullContent } from '@areca-cms/site-sdk/pull'
+
+const snapshot = await pullContent({ outDir: 'src/generated/content' })
+console.log(snapshot.publicationId, Object.keys(snapshot.collections))
+```
+
+## Add the pull to your build
+
+Add the pull to the `prebuild` script, so it runs before every build:
+
+```json title="package.json"
+{
+  "scripts": {
+    "prebuild": "areca pull --out src/generated/content",
+    "build": "vite build"
+  }
+}
+```
+
+With this setup, `pnpm build` pulls the latest content first. In CI, set `ARECA_CMS_URL` and `ARECA_SITE_TOKEN` as secrets for the build job. The site token is a read token, so it is the only token a build needs. See [installation](/docs/sdk/installation#keep-tokens-on-the-server).
+
+## Output layout
+
+The pull writes one JSON file for each collection, plus a `manifest.json` file.
+
+<Files>
+  <Folder name="src" defaultOpen>
+    <Folder name="generated" defaultOpen>
+      <Folder name="content" defaultOpen>
+        <File name="manifest.json" />
+        <File name="articles.json" />
+        <File name="authors.json" />
+      </Folder>
+    </Folder>
+  </Folder>
+</Files>
+
+Each collection file, such as `articles.json`, is an array of entries. Each entry has the entry's `id`, `slug`, `publishedAt` (an ISO timestamp, or `null`), its `data` and, when the CMS sends it, its `seo` block. Your site reads these entries with [`readContent`](/docs/sdk/reading-content).
+
+### manifest.json
+
+`manifest.json` describes the snapshot. Read it to find out which publication your build used.
+
+| Field | Description |
+| --- | --- |
+| `publicationId` | The ID of the publication the snapshot came from. |
+| `hash` | A hash of the snapshot contents. The same content gives the same hash. |
+| `createdAt` | When the snapshot was created. |
+| `collections` | An object that maps each collection key to its number of entries. |
+
+The `collections` object is also the list of collections in the snapshot. Use its keys, not the directory listing, to find out which collections are current. Files for collections removed from the CMS can remain in the directory after a pull (see below).
+
+## Snapshot pinning
+
+A pull downloads the snapshot that the CMS gives your site at that moment. The CMS chooses which publication that is:
+
+- **While Areca is building or deploying a release**, the snapshot endpoint returns that release's publication to every caller with a valid site token. The build gets the same content as the release, and so does a pull made during the deployment.
+- **Otherwise**, it returns the live publication. A pull on your laptop, with no release in progress, gets this one.
+
+You cannot choose a publication from the SDK. The SDK sends only the site token, and it does not read `ARECA_SNAPSHOT_ID`.
+
+Areca's own deployment integration sets `ARECA_SNAPSHOT_ID` as a Docker build argument, and it changes on every build. Docker then cannot reuse a cached content pull from an earlier build, even when the code and CMS settings are the same. If you build with Docker, declare the argument before the build step that runs your `prebuild` pull:
+
+```dockerfile title="Dockerfile"
+ARG ARECA_SNAPSHOT_ID=
+ENV ARECA_SNAPSHOT_ID=$ARECA_SNAPSHOT_ID
+RUN --mount=type=secret,id=ARECA_SITE_TOKEN,required=true \
+    ARECA_SITE_TOKEN="$(cat /run/secrets/ARECA_SITE_TOKEN)" \
+    pnpm build
+```
+
+Mount the site token as a BuildKit secret. Do not pass it as a plain `ARG` or `ENV`, because those values are stored in the image.
+
+## Re-pulling
+
+Each pull replaces `manifest.json` and the files for the collections in the new snapshot. Pulling does not delete files for collections that have been removed since an earlier pull. Read the collection keys from `manifest.json`, not from the directory listing.
+
+A pull writes `manifest.json` first, then the collection files. If a pull fails partway through, the directory can hold a mix of old and new files. Run the pull again before you build.
+
+## Running commands with env files
+
+`areca run` runs any command with `.env.local` and `.env` loaded first. Use it when your dev server or build tool does not load env files itself:
+
+```bash
+pnpm exec areca run -- vite dev --port 3001
+```
+
+The command after `--` is joined with spaces and run through the shell. Pass the whole command as one string if it contains quoted arguments, because the shell sees the joined text and not your original quoting:
+
+```bash
+pnpm exec areca run -- "node scripts/build.mjs --label 'site build'"
+```
+
+`areca run` exits with the exit code of the command it runs.
+
+## Safety
+
+The pull has several built-in checks. You do not need to add them yourself, but they affect what you can do:
+
+- **Collection keys are checked.** A key that breaks the [identifier rules](/docs/sdk/defining-content#identifiers) stops the pull with an `Unsafe collection or field identifier` error.
+- **Files must stay in the output directory.** The pull refuses any path that would be written outside the output directory.
+- **Symbolic links are refused.** The pull does not write to a file that is a symlink, and it fails with `Content output must not be a symbolic link`. `readContent` refuses symlinked files too.
+- **Output directories are created as needed.** The pull creates the output directory if it does not exist.
+
+Keep the output directory inside your project, and do not commit it. Pulled content is build input, and a fresh pull replaces it.
+
+## Troubleshooting
+
+| Message | What to do |
+| --- | --- |
+| `No publication exists for this site` | Publish content in the CMS, then run the pull again. |
+| `Missing ARECA_CMS_URL` or `Missing ARECA_SITE_TOKEN` | Set the variables in the environment, or in `.env.local` in the directory where you run the command. |
+| `Failed to reach CMS` | Check that `ARECA_CMS_URL` is correct and that the CMS is running. |
+| `401` | The site token is wrong, or it was rotated. Update `ARECA_SITE_TOKEN`. |
+
+See [errors and limits](/docs/sdk/errors-and-limits) for the full list.
+
+## Related
+
+- [Reading content](/docs/sdk/reading-content): read the generated files in your site.
+- [Go-live builds](/docs/sdk/go-live-builds): how Areca starts builds and checks deployments.
+- [CLI reference](/docs/sdk/cli): every command and flag.

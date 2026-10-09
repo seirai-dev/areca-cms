@@ -113,6 +113,13 @@
       "when": 1790881050503,
       "tag": "0015_unique_tarantula",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1791555230496,
+      "tag": "0016_ai_settings_and_site_prompt",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,91 @@
+---
+title: Glossary
+description: Definitions of the terms used across Areca, from agency admin and client to snapshot, step-up verification and site token.
+---
+
+These are the terms used across the CMS, the site SDK and self-hosting documentation. Each term links to the page where it is explained in full. Where the CMS UI uses a different name, the definition says so.
+
+## A
+
+- **[Activity](/docs/cms/history-and-activity)**: The log of content, people and release actions for a site. Owners see a site's activity, and agency admins see activity across the instance.
+- **[Agency admin](/docs/security/roles-and-permissions)**: A person who manages the agency's whole Areca instance: clients, sites, content types, branding, AI settings and agency-wide access. Agency admins must use two-factor authentication.
+- **[Agency workspace](/docs/cms/workspace)**: The area for agency admins, reached from the workspace switcher. It holds clients, agency-wide people, branding, activity and AI settings.
+- **[Archived](/docs/cms/statuses-and-review)**: An entry state. The entry stays in the CMS but is left out of the website at the next release.
+- **[Asset](/docs/cms/library)**: A file in the Library, such as an image or PDF. Assets have public URLs.
+
+## C
+
+- **[Client](/docs/cms/clients-and-sites)**: The organisation an agency builds websites for. A client has one or more sites, a shared Library and its own people.
+- **[Client editor](/docs/security/roles-and-permissions)**: A person with the **Editor** role for a client. Editors write and edit drafts, preview entries and upload files, but cannot mark entries ready, go live or manage people.
+- **[Client owner](/docs/security/roles-and-permissions)**: A person with the **Owner** role for a client. Owners approve content, schedule entries, go live, roll back releases and manage the client's people.
+- **[Collection](/docs/cms/content-types)**: A content type on a site, such as Articles or Team members. It has fields and a route on the website. The CMS UI calls it a content type.
+- **[Content type](/docs/cms/content-types)**: The name the CMS UI uses for a collection.
+
+## D
+
+- **[Deployment target](/docs/cms/deployments)**: The application on the hosting provider that serves a production site, together with its health check URL. Set under the site's **Settings › Deployment**.
+- **[Demo mode](/docs/cms/deployments)**: A site publishing mode for local trials. Go live creates a demo release that a local build can pull, but nothing is deployed and the site is never production live.
+- **[Draft](/docs/cms/statuses-and-review)**: The latest saved version of an entry. Saving changes the draft, and the draft is visible only in the CMS and in preview.
+- **[Dokploy](/docs/self-hosting/deployment-targets)**: The deployment provider that Areca uses to build and deploy production websites. Each client connects its own Dokploy instance.
+
+## E
+
+- **[Entry](/docs/cms/writing-entries)**: One item in a collection, such as a single article. An entry has fields, a slug and versions.
+
+## F
+
+- **[Field type](/docs/sdk/field-types)**: The kind of value a field holds, such as text, rich text, image, date or reference.
+
+## G
+
+- **[Go live](/docs/cms/going-live)**: The action that creates a release. It packages every ready change on a site into a snapshot, builds and deploys the website, and checks that it is healthy.
+
+## H
+
+- **[Health check](/docs/sdk/go-live-builds)**: A request the CMS makes to the website after a deployment. The website must report the publication ID it was built from, otherwise the release fails.
+
+## L
+
+- **[Library](/docs/cms/library)**: The file store for a client. Every site of the client uses the same Library.
+- **[Live](/docs/cms/statuses-and-review)**: The state of a version that is part of the current production release. A ready entry is not live until a release that includes it succeeds.
+
+## M
+
+- **[Manifest](/docs/sdk/schema-sync)**: The schema description of a website's collections and fields. A developer publishes it with `areca manifest push`, and the CMS uses it to build the editing forms.
+- **[Mark as ready](/docs/cms/statuses-and-review)**: The owner action that approves the current draft of an entry for the next release. Ready does not publish anything by itself.
+
+## P
+
+- **[Preview](/docs/cms/preview)**: A way to see an entry's draft on the website before it is published.
+- **[Preview token](/docs/security/tokens)**: A signed, short-lived token in a preview link. It grants read access to one draft and expires after one hour.
+- **[Production mode](/docs/cms/deployments)**: The default site publishing mode. Go live deploys the website and counts the release as live only after the health check passes.
+- **[Publication ID](/docs/sdk/go-live-builds)**: The identifier of one release. The website reports it in its health check and in the manifest of the snapshot it was built from.
+
+## R
+
+- **[Ready](/docs/cms/statuses-and-review)**: The state of an entry whose draft an owner has approved with **Mark as ready**. Ready content goes into the next release.
+- **[Recovery codes](/docs/security/two-factor-and-step-up)**: One-time codes that sign in to an account when the authenticator app is unavailable. They are shown once when two-factor authentication is turned on.
+- **[Release](/docs/cms/going-live)**: One publication of a whole site, with its snapshot, build steps, logs and status. Each **Go live** creates a release.
+- **[Rollback](/docs/cms/going-live)**: Going back to an earlier release that was live. The CMS builds that release's saved snapshot again. Drafts are not affected.
+- **[Rich text](/docs/sdk/rich-text)**: A formatted text field. The SDK provides helpers to render it on the website.
+
+## S
+
+- **[Schedule](/docs/cms/scheduling)**: The action that makes an approved version go live at a chosen time. The version is frozen when you schedule it.
+- **[Schema](/docs/sdk/schema-sync)**: The content model of a site: its collections and their fields. Developers define it in `areca.config.ts`, and `areca manifest push` sends it to the CMS as the site's manifest.
+- **[Schema token](/docs/security/tokens)**: A secret used by a developer to push the content model with `areca manifest push`. It must never be part of a website build. Also called the schema-write token.
+- **[Setup token](/docs/self-hosting/first-run)**: A one-time token that protects the first-run page for creating the first admin.
+- **[Site](/docs/cms/clients-and-sites)**: One website inside a client. A site has its own collections, entries, deployment target and tokens.
+- **[Site key](/docs/cms/clients-and-sites)**: The slug that identifies a site in the CMS and in the website's `areca.config.ts`. It is set when the site is created.
+- **[Site token](/docs/security/tokens)**: A secret that lets a website read its published content. The build uses it for `areca pull`. The CMS stores only a hash, so the token is shown once. If you lose it, rotate it.
+- **[Slug](/docs/cms/writing-entries#slugs)**: The last part of an entry's web address, such as `spring-launch`. Each slug is unique within its content type.
+- **[Snapshot](/docs/sdk/pulling-content)**: The frozen, complete copy of a site's published content that a release contains. Snapshots never change after creation.
+- **[Step-up verification](/docs/security/two-factor-and-step-up)**: A fresh authenticator code that some sensitive actions require, even when you are already signed in. It is valid for ten minutes after you enter it.
+
+## T
+
+- **[Two-factor authentication](/docs/security/two-factor-and-step-up)**: A second sign-in step that asks for a code from an authenticator app. It is required for agency admins.
+
+## W
+
+- **[Workspace](/docs/cms/workspace)**: The view you are working in: the agency workspace or a single site. You switch between them from the workspace switcher.

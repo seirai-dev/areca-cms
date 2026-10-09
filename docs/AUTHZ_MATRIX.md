@@ -53,7 +53,7 @@ unchanged (each row carries a side-effect probe).
 | `getSiteFn` | `admin.ts` | `agency` | agency admin (MFA) |
 | `createSiteFn` | `admin.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) |
 | `updateSiteFn` | `admin.ts` | `agency` | agency admin (MFA) |
-| `rotateSiteTokenFn` | `admin.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) |
+| `rotateSiteTokenFn` | `admin.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up); rotates the build or schema token according to `privilege` |
 | `deleteSiteFn` | `admin.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) |
 | `listMembersFn` | `admin.ts` | `org-owner` | org owner, agency admin (MFA) |
 | `updateMemberRoleFn` | `admin.ts` | `org-owner` | org owner, agency admin (MFA) |
@@ -99,6 +99,11 @@ unchanged (each row carries a side-effect probe).
 | `updateBrandingFn` | `branding.ts` | `agency` | agency admin (MFA) |
 | `clearBrandingImageFn` | `branding.ts` | `agency` | agency admin (MFA) |
 | `resetBrandingFn` | `branding.ts` | `agency` | agency admin (MFA) |
+| `getAiSettingsFn` | `ai.ts` | `agency` | agency admin (MFA); never returns the API key |
+| `saveAiSettingsFn` | `ai.ts` | `agency` | agency admin (MFA); `agency-fresh` when the API key is set or removed |
+| `listAiModelsFn` | `ai.ts` | `agency` | agency admin (MFA) |
+| `getAiAvailabilityFn` | `ai.ts` | `user` | any signed-in user (boolean only) |
+| `generateEntrySeoFn` | `ai.ts` | `org-editor` | org member (editor/owner) or agency admin; NotFound outside the org; 30/hour per user |
 | `verifyStepUpFn` | `security.ts` | `user` | any signed-in user |
 | `getAuthMethodsFn` | `auth-methods.ts` | `public` | anyone |
 | `getSetupStatusFn` | `setup.ts` | `public` | anyone |
