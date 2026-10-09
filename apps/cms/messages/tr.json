@@ -1,4 +1,5 @@
 {
+  "account_back_to_workspace": "Çalışma alanına dön",
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "account_description": "Your profile and how you sign in.",
   "account_mfa_required_action": "Set up two-factor",

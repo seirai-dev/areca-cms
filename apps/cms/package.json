@@ -6,8 +6,8 @@
     "#/*": "./src/*"
   },
   "scripts": {
-    "dev": "vite dev --port 3000",
-    "dev:lan": "vite dev --port 3000 --host 0.0.0.0",
+    "dev": "vite dev --port 3000 --strictPort",
+    "dev:lan": "vite dev --port 3000 --strictPort --host 0.0.0.0",
     "dokploy:setup": "tsx --env-file=.env.local scripts/dokploy-setup.ts",
     "generate-routes": "tsr generate",
     "build": "vite build",
