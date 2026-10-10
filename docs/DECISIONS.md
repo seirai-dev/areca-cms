@@ -76,12 +76,7 @@ Field def: `{ key, label, type, required?, options? (select), collection? (refer
 ## Site integration (how the site gets content)
 
 - Dokploy builds the site from its git repo. Build env has `ARECA_CMS_URL` and `ARECA_SITE_TOKEN` for read access. `ARECA_SCHEMA_TOKEN` separately authorizes `POST /api/sites/manifest` to write the site's schema; the token pair is also surfaced in Settings › Developer.
-- SDK `areca pull` / `pullContent()` calls `GET /api/sites/snapshot/current` (read token) which returns the publication marked
-  as the one being built/deployed for an active or uncertain dispatch, else the current mode's latest successful `live` or `demo` publication. Result written to
-  `src/generated/content/*.json` by the CLI and read by the site. The adapter sets
-  `ARECA_SNAPSHOT_ID` to the publication ID before deployment. The CMS also pins the snapshot: the endpoint returns the publication
-  of the _active build job_ or unresolved dispatch for that site (falls back to the latest publication matching the site's current mode).
-  The build fails loudly if no publication exists.
+- SDK `areca pull` / `pullContent()` calls `GET /api/sites/snapshot/current` with the read token. A worker build passes its exact publication ID using `ARECA_SNAPSHOT_ID`; the SDK sends `?publicationId=<id>` and checks the response identity. Ordinary manual pulls without a pin return the latest successful `live` or `demo` release for the current mode. An explicit missing or foreign publication fails without fallback. Generated JSON is written to `src/generated/content/*.json` and read by the site.
 - Preview: CMS signs a JWT-like token (HMAC, `previewSecret`, 1h expiry, scoped to site+collection+slug). Site route `/__preview/$collection/$slug?token=`
   calls `GET /api/sites/preview?token=` and renders draft data with the same components; responds with `X-Robots-Tag: noindex`.
 - The site integration is responsible for rendering snapshot SEO fields in the

@@ -81,6 +81,7 @@ export function useSchemaEditor({
 
   const [segment, setSegmentState] = useState<SchemaSegment>('settings')
   const [key, setKey] = useState('')
+  const [keyTouched, setKeyTouched] = useState(false)
   const [label, setLabel] = useState('')
   const [routePattern, setRoutePattern] = useState('')
   const [enabled, setEnabled] = useState(true)
@@ -100,6 +101,7 @@ export function useSchemaEditor({
     const nextFields = draftsFromFields(collection?.fields)
     setSegmentState(initialSegment ?? (collection ? 'fields' : 'settings'))
     setKey(collection?.key ?? '')
+    setKeyTouched(Boolean(collection))
     setLabel(collection?.label ?? '')
     setRoutePattern(collection?.routePattern ?? '')
     setEnabled(collection?.enabled ?? true)
@@ -217,11 +219,15 @@ export function useSchemaEditor({
     label?: string
     routePattern?: string
   }) {
-    if (patch.key !== undefined) setKey(patch.key)
+    if (patch.key !== undefined) {
+      setKey(patch.key)
+      setKeyTouched(true)
+    }
     if (patch.label !== undefined) {
       setLabel(patch.label)
       setLabelError(null)
-      if (creating && !key.trim()) setKey(slugifyKey(patch.label))
+      if (creating && !keyTouched && patch.key === undefined)
+        setKey(slugifyKey(patch.label))
     }
     if (patch.routePattern !== undefined) setRoutePattern(patch.routePattern)
   }

@@ -18,7 +18,7 @@ test('the site token syncs a manifest (it shows up as content types) and reads s
   await openClient(page, 'Acme', 'acme')
   const site = await createSiteOnClientPage(page, suffix, 'E2E API Site')
 
-  await pushManifest(request, site.token, {
+  await pushManifest(request, site.schemaToken, {
     collections: {
       pages: {
         route: '/pages/$slug',

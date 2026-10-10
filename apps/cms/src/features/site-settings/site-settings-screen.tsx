@@ -3,7 +3,12 @@ import type * as React from 'react'
 import { PageHeader } from '#/components/ui/page-header'
 import { QueryError } from '#/components/ui/query-error'
 import { Skeleton } from '#/components/ui/skeleton'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '#/components/ui/tabs'
+import {
+  Tabs,
+  PersistentTabsContent as TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '#/components/ui/tabs'
 import type { MeSite } from '#/lib/site-nav'
 import { m } from '#/paraglide/messages'
 
@@ -91,29 +96,27 @@ export function SiteSettingsScreen({
           ))}
         </TabsList>
         <TabsContent value="general">
-          {tab === 'general'
-            ? body((r) => <GeneralTab site={r} settings={settings} />)
-            : null}
+          {body((r) => (
+            <GeneralTab site={r} settings={settings} />
+          ))}
         </TabsContent>
         <TabsContent value="deployment">
-          {tab === 'deployment'
-            ? body((r) => (
-                <DeploymentTab site={r} meSite={site} settings={settings} />
-              ))
-            : null}
+          {body((r) => (
+            <DeploymentTab site={r} meSite={site} settings={settings} />
+          ))}
         </TabsContent>
         <TabsContent value="developer">
-          {tab === 'developer'
-            ? body((r) => <DeveloperTab site={r} settings={settings} />)
-            : null}
+          {body((r) => (
+            <DeveloperTab site={r} settings={settings} />
+          ))}
         </TabsContent>
         <TabsContent value="ai">
-          {tab === 'ai'
-            ? body((r) => <AiTab site={r} settings={settings} />)
-            : null}
+          {body((r) => (
+            <AiTab site={r} settings={settings} />
+          ))}
         </TabsContent>
         <TabsContent value="content">
-          {tab === 'content' ? <ContentModelTab siteId={site.id} /> : null}
+          <ContentModelTab siteId={site.id} />
         </TabsContent>
       </Tabs>
     </div>

@@ -2,9 +2,10 @@ import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { z } from 'zod'
 
-import { requireUser } from '#/lib/session.server'
+import { requireFreshAgencyAdmin, requireUser } from '#/lib/session.server'
 import { ForbiddenError } from '#/server/content/errors'
 import { m } from '#/paraglide/messages'
+import { resetAdminFactorLockout } from '#/server/security/reset-factor-lockout'
 import { verifyStepUp } from '#/server/security/verify-step-up'
 
 const securityFn = { strict: { output: false } as const }
@@ -14,7 +15,12 @@ export const verifyStepUpFn = createServerFn({
   method: 'POST',
   ...securityFn,
 })
-  .validator(z.object({ code: z.string().min(6).max(12) }))
+  .validator(
+    z.object({
+      code: z.string().min(6).max(32),
+      kind: z.enum(['totp', 'backup']).optional(),
+    }),
+  )
   .handler(async ({ data }) => {
     const session = await requireUser()
     if (!session.user.twoFactorEnabled) {
@@ -24,6 +30,19 @@ export const verifyStepUpFn = createServerFn({
       session: session.session,
       userId: session.user.id,
       code: data.code,
+      kind: data.kind,
       headers: getRequestHeaders(),
     })
+  })
+
+/** A verified agency admin can clear another admin's failed-code lockout. */
+export const resetAdminFactorLockoutFn = createServerFn({
+  method: 'POST',
+  ...securityFn,
+})
+  .validator(z.object({ userId: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    const principal = await requireFreshAgencyAdmin()
+    await resetAdminFactorLockout(data.userId, principal.user.id)
+    return { ok: true as const }
   })

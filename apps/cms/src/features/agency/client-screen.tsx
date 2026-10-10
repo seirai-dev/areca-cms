@@ -16,7 +16,12 @@ import { Input } from '#/components/ui/input'
 import { QueryError } from '#/components/ui/query-error'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Stagger, StaggerItem } from '#/components/ui/stagger'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '#/components/ui/tabs'
+import {
+  Tabs,
+  PersistentTabsContent as TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '#/components/ui/tabs'
 import { PeopleManager } from '#/features/people/people-manager'
 import { TokenReveal } from '#/features/site-settings/token-reveal'
 import { m } from '#/paraglide/messages'
@@ -25,12 +30,9 @@ import { ClientDeployment } from './client-deployment'
 import { ClientSettings } from './client-settings'
 import { ClientTile } from './client-tile'
 import { clientCounts } from './clients-screen'
-import {
-  NewSiteSheet,
-  readPendingToken,
-  writePendingToken,
-} from './new-site-sheet'
-import type { PendingToken } from './new-site-sheet'
+import { NewSiteSheet } from './new-site-sheet'
+import { readPendingTokens, removePendingToken } from './pending-site-tokens'
+import type { PendingToken } from './pending-site-tokens'
 import { clientSitesQuery, clientsQuery } from './queries'
 import type { ClientRow } from './queries'
 import { AgencySiteCard } from './site-card'
@@ -222,11 +224,11 @@ function ClientSites({
   const sites = useQuery(clientSitesQuery(client.id))
   const overview = useQuery(sitesOverviewQueryOptions())
   const [search, setSearch] = React.useState('')
-  const [pending, setPending] = React.useState<PendingToken | null>(null)
+  const [pending, setPending] = React.useState<PendingToken[]>([])
 
   // A token from an unconfirmed New site sheet (or a reload) stays visible.
   React.useEffect(() => {
-    setPending(readPendingToken(client.id))
+    setPending(readPendingTokens(client.id))
   }, [client.id, newSiteOpen])
 
   const figures = React.useMemo(() => {
@@ -261,23 +263,31 @@ function ClientSites({
 
   return (
     <div className="grid gap-4">
-      {pending && !newSiteOpen ? (
-        <div className="grid gap-2">
-          {pending.siteName ? (
-            <p className="px-1 text-callout text-text-secondary">
-              {m.agency_pending_token({ site: pending.siteName })}
-            </p>
-          ) : null}
-          <TokenReveal
-            token={pending.token}
-            onDismiss={() => {
-              writePendingToken(client.id, null)
-              setPending(null)
-            }}
-            dismissLabel={m.agency_token_saved()}
-          />
-        </div>
-      ) : null}
+      {!newSiteOpen
+        ? pending.map((item) => (
+            <div key={item.siteId} className="grid gap-2">
+              {item.siteName ? (
+                <p className="px-1 text-callout text-text-secondary">
+                  {m.agency_pending_token({ site: item.siteName })}
+                </p>
+              ) : null}
+              <TokenReveal token={item.token} />
+              {item.schemaToken ? (
+                <TokenReveal token={item.schemaToken} privilege="schema" />
+              ) : null}
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  removePendingToken(client.id, item.siteId)
+                  setPending(readPendingTokens(client.id))
+                }}
+              >
+                {m.agency_token_saved()}
+              </Button>
+            </div>
+          ))
+        : null}
 
       {sites.isError ? (
         <QueryError
@@ -356,7 +366,7 @@ function ClientSites({
         orgId={client.id}
         open={newSiteOpen}
         onOpenChange={onNewSiteOpenChange}
-        onUnconfirmed={setPending}
+        onUnconfirmed={() => setPending(readPendingTokens(client.id))}
       />
     </div>
   )

@@ -55,6 +55,11 @@ test('agency admin can whitelabel the CMS and reset it', async ({ page }) => {
         .trim(),
     ),
   ).not.toMatch(/^oklch\(/)
+  // Upload and removal are independent saves; metadata stays a local draft.
+  const draftName = `${name} unsaved`
+  await page.getByTestId('brand-name').fill(draftName)
+  await page.getByTestId('brand-accent').fill('#cc0000')
+  await page.getByTestId('brand-email-from').fill('Unsaved sender')
   // Logo upload swaps the leaf tile for the image.
   await page.getByTestId('brand-logo-input').setInputFiles({
     name: 'logo.png',
@@ -68,6 +73,19 @@ test('agency admin can whitelabel the CMS and reset it', async ({ page }) => {
       .getByTestId('sidebar')
       .locator('img[src*="/api/assets/file/branding/logo-"]'),
   ).toBeVisible()
+
+  await expect(page.getByTestId('brand-name')).toHaveValue(draftName)
+  await expect(page.getByTestId('brand-accent')).toHaveValue('#cc0000')
+  await expect(page.getByTestId('brand-email-from')).toHaveValue(
+    'Unsaved sender',
+  )
+  await page.getByTestId('brand-logo-remove').click()
+  await expect(page.getByText('Logo removed')).toBeVisible()
+  await expect(page.getByTestId('brand-name')).toHaveValue(draftName)
+  await expect(page.getByTestId('brand-accent')).toHaveValue('#cc0000')
+  await expect(page.getByTestId('brand-email-from')).toHaveValue(
+    'Unsaved sender',
+  )
 
   // The public sign-in page shows the brand too.
   await signOut(page)

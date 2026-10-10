@@ -93,9 +93,13 @@ export function useBrandingForm() {
     setAdvancedColors(cloneAdvancedColors(view.advancedColors))
   }, [])
 
-  // Seed from the saved values, and again after each save.
+  // Independent image/key changes must not overwrite the metadata draft.
+  const seeded = React.useRef(false)
   React.useEffect(() => {
-    if (saved) seed(saved)
+    if (saved && !seeded.current) {
+      seeded.current = true
+      seed(saved)
+    }
   }, [saved, seed])
 
   async function applySaved(next: BrandingView) {
@@ -116,6 +120,7 @@ export function useBrandingForm() {
         },
       }),
     onSuccess: async (next) => {
+      seed(next)
       toast.success(m.admin_branding_toast_saved())
       await applySaved(next)
     },
@@ -152,6 +157,7 @@ export function useBrandingForm() {
   const reset = useMutation({
     mutationFn: () => resetBrandingFn(),
     onSuccess: async (next) => {
+      seed(next)
       toast.success(m.admin_branding_toast_reset())
       await applySaved(next)
     },

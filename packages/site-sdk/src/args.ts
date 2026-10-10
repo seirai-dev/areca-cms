@@ -1,5 +1,5 @@
 export type ParsedArgs =
-  | { command: 'pull'; outDir: string }
+  | { command: 'pull'; outDir: string; publicationId?: string }
   | { command: 'sync-manifest'; configPath: string }
   | { command: 'manifest-pull'; configPath: string; yes: boolean }
   | {
@@ -54,6 +54,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
 
 function parsePullArgs(args: string[]): ParsedArgs {
   let outDir = DEFAULT_PULL_OUT_DIR
+  let publicationId: string | undefined
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i]
@@ -64,10 +65,21 @@ function parsePullArgs(args: string[]): ParsedArgs {
       i += 1
       continue
     }
+    if (arg === '--publication') {
+      const value = readFlagValue(args, i, '--publication')
+      if (value.error) return value.error
+      publicationId = value.value
+      i += 1
+      continue
+    }
     return { command: 'error', message: `Unknown argument: ${arg}` }
   }
 
-  return { command: 'pull', outDir }
+  return {
+    command: 'pull',
+    outDir,
+    ...(publicationId ? { publicationId } : {}),
+  }
 }
 
 function parseSyncManifestArgs(args: string[]): ParsedArgs {
@@ -85,7 +97,10 @@ function parseManifestArgs(args: string[]): ParsedArgs {
   const [sub, ...rest] = args
 
   if (!sub) {
-    return { command: 'error', message: 'Missing manifest subcommand. Expected push or pull.' }
+    return {
+      command: 'error',
+      message: 'Missing manifest subcommand. Expected push or pull.',
+    }
   }
   if (sub === 'push') {
     return parseSyncManifestArgs(rest)
@@ -177,12 +192,24 @@ function parseInitArgs(args: string[]): ParsedArgs {
     return { command: 'error', message: `Unknown argument: ${arg}` }
   }
 
-  return { command: 'init', cmsUrl, token, siteKey, outDir, configPath, yes, force }
+  return {
+    command: 'init',
+    cmsUrl,
+    token,
+    siteKey,
+    outDir,
+    configPath,
+    yes,
+    force,
+  }
 }
 
 function parseRunArgs(args: string[]): ParsedArgs {
   if (args[0] !== '--' || args.length < 2) {
-    return { command: 'error', message: 'Missing command. Usage: areca run -- <command>' }
+    return {
+      command: 'error',
+      message: 'Missing command. Usage: areca run -- <command>',
+    }
   }
   return { command: 'run', commandArgs: args.slice(1) }
 }
@@ -191,10 +218,14 @@ function readFlagValue(
   args: string[],
   index: number,
   flag: string,
-): { value: string; error?: undefined } | { value?: undefined; error: ParsedArgs } {
+):
+  | { value: string; error?: undefined }
+  | { value?: undefined; error: ParsedArgs } {
   const value = args[index + 1]
   if (!value || value.startsWith('-')) {
-    return { error: { command: 'error', message: `Missing value for ${flag}` } }
+    return {
+      error: { command: 'error', message: `Missing value for ${flag}` },
+    }
   }
   return { value }
 }
@@ -202,7 +233,7 @@ function readFlagValue(
 export function usage(): string {
   return `Usage:
   areca init [--cms-url <url>] [--token <token>] [--site-key <key>] [--out ${DEFAULT_PULL_OUT_DIR}] [--config ${DEFAULT_CONFIG_PATH}] [--yes|-y] [--force]
-  areca pull [--out ${DEFAULT_PULL_OUT_DIR}]
+  areca pull [--out ${DEFAULT_PULL_OUT_DIR}] [--publication <id>]
   areca manifest push [${DEFAULT_SYNC_MANIFEST_PATH}]
   areca manifest pull [--config ${DEFAULT_SYNC_MANIFEST_PATH}] [--yes|-y]
   areca sync-manifest [${DEFAULT_SYNC_MANIFEST_PATH}]   (deprecated alias for manifest push)
@@ -211,6 +242,8 @@ export function usage(): string {
 Environment:
   ARECA_CMS_URL      CMS base URL
   ARECA_SITE_TOKEN   Site token sent as Authorization: Bearer <token>
+  ARECA_SCHEMA_TOKEN Schema token required for manifest push
+  ARECA_SNAPSHOT_ID  Exact publication to pull (empty or 0 selects live content)
 
 Env files (loaded automatically from the current directory; existing process.env keys win):
   .env.local

@@ -17,6 +17,8 @@ import {
 import type { DeploymentTarget } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
+import { lockOrganizationForMutation } from './organization-lock'
+import { assertSiteHasNoPendingDeployment } from '#/server/publishing/deployment-safety'
 import { ConflictError, NotFoundError } from '#/server/content/errors'
 import { generateSiteToken } from '#/server/content/site-auth'
 
@@ -115,6 +117,7 @@ export async function createSite(input: {
   const previewSecret = randomBytes(32).toString('hex')
 
   const created = await db.transaction(async (tx) => {
+    await lockOrganizationForMutation(tx, input.organizationId)
     const [row] = await tx
       .insert(site)
       .values({
@@ -298,6 +301,14 @@ export async function deleteSite(id: string, actorId: string) {
   }
 
   await db.transaction(async (tx) => {
+    await lockOrganizationForMutation(tx, existing.organizationId)
+    const [locked] = await tx
+      .select()
+      .from(site)
+      .where(eq(site.id, id))
+      .for('update')
+    if (!locked) throw new NotFoundError(m.server_site_not_found())
+    await assertSiteHasNoPendingDeployment(tx, id)
     await archiveDeletedContent(tx, existing.organizationId, 'site', id)
     const entryRows = await tx
       .select({ id: entry.id })

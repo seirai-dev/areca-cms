@@ -44,6 +44,15 @@ test('agency admin sets up a client, a site, its content model and invites peopl
     await expect(page.getByRole('tab', { name: tab })).toBeVisible()
   }
 
+  // Client settings retain unsaved changes across tab visits.
+  await page.getByRole('tab', { name: 'Settings', exact: true }).click()
+  await page.locator('#rename-org').fill(`${clientName} unsaved`)
+  await page.getByRole('tab', { name: 'Sites', exact: true }).click()
+  await page.getByRole('tab', { name: 'Settings', exact: true }).click()
+  await expect(page.locator('#rename-org')).toHaveValue(`${clientName} unsaved`)
+  await page.locator('#rename-org').fill(clientName)
+  await page.getByRole('tab', { name: 'Sites', exact: true }).click()
+
   /* New site: two steps, the token is revealed once. */
   const site = await createSiteOnClientPage(page, suffix)
   const card = page.getByTestId(`client-site-${site.siteSlug}`)
@@ -62,6 +71,15 @@ test('agency admin sets up a client, a site, its content model and invites peopl
   await expect(page.getByTestId('settings-site-name')).toHaveValue(
     site.siteName,
   )
+
+  // General drafts survive a tab visit, with hidden panels excluded from UI.
+  await page.getByTestId('settings-site-name').fill(`${site.siteName} unsaved`)
+  await page.getByRole('tab', { name: 'Developer', exact: true }).click()
+  await page.getByRole('tab', { name: 'General', exact: true }).click()
+  await expect(page.getByTestId('settings-site-name')).toHaveValue(
+    `${site.siteName} unsaved`,
+  )
+  await page.getByTestId('settings-site-name').fill(site.siteName)
 
   await page.getByRole('tab', { name: 'Deployment' }).click()
   await expect(page).toHaveURL(/[?&]tab=deployment/)

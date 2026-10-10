@@ -870,6 +870,12 @@ export const ROWS: Row[] = [
     prepare: () => ({ data: { code: '000000' } }),
   },
   {
+    name: 'resetAdminFactorLockoutFn',
+    fn: securityFns.resetAdminFactorLockoutFn,
+    policy: 'agency-fresh',
+    prepare: (w) => ({ data: { userId: w.users.adminStale.id } }),
+  },
+  {
     name: 'getAuthMethodsFn',
     fn: authMethodFns.getAuthMethodsFn,
     policy: 'public',
@@ -1073,7 +1079,10 @@ export const ROWS: Row[] = [
         data: { id: connection.id },
         untouched: exists(
           mcpConnection,
-          and(eq(mcpConnection.id, connection.id), isNull(mcpConnection.revokedAt)),
+          and(
+            eq(mcpConnection.id, connection.id),
+            isNull(mcpConnection.revokedAt),
+          ),
         ),
       }
     },

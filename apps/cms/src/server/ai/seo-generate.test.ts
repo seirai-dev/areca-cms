@@ -213,6 +213,50 @@ describe('generateSeoSuggestion: images', () => {
     ])
   })
 
+  it('skips an unreadable image without shifting the next attachment or its alt description', async () => {
+    mocks.loadAssetLookup.mockResolvedValue({
+      byId: new Map([
+        ['asset-1', assetRow({})],
+        [
+          'asset-2',
+          assetRow({
+            id: 'asset-2',
+            storageKey: 'org-1/second.png',
+            originalFilename: 'second.png',
+          }),
+        ],
+      ]),
+      byStorageKey: new Map(),
+    })
+    mocks.getStorage.mockReturnValue({
+      get: vi.fn(async (key: string) => {
+        if (key.endsWith('/hero.png')) throw new Error('Missing object')
+        return { body: pngBuffer }
+      }),
+    })
+    mocks.chat.mockResolvedValue({
+      ...suggestion,
+      imageAlts: [
+        { imageId: 'asset-1', alt: 'Incorrect skipped image' },
+        { imageId: 'asset-2', alt: 'Second image' },
+      ],
+    })
+    const result = await generateSeoSuggestion({
+      ...baseInput,
+      fields: [...fields, { key: 'second', label: 'Second', type: 'image' }],
+      data: { ...baseInput.data, second: 'asset-2' },
+    })
+    expect(result.images.map((image) => image.id)).toEqual(['asset-2'])
+    expect(result.warnings).toEqual([expect.stringContaining('hero.png')])
+    expect(result.suggestion.imageAlts).toEqual([
+      { imageId: 'asset-2', alt: 'Second image' },
+    ])
+    const content = lastChatOptions().messages[0].content
+    expect(content).toHaveLength(2)
+    expect(JSON.stringify(content[0])).not.toContain('asset-1')
+    expect(JSON.stringify(content[0])).toContain('asset-2')
+  })
+
   it('sends no image parts when the model cannot read images, but still lists them', async () => {
     mocks.findOpenRouterModel.mockResolvedValue({
       id: config.model,

@@ -1,4 +1,7 @@
-import { assertSafeIdentifier } from './identifiers.js'
+import {
+  assertSafeIdentifier,
+  assertUniqueCollectionIdentifiers,
+} from './identifiers.js'
 import type { SiteContentConfig, SiteManifest } from './types.js'
 
 export function defineSiteContent<T extends SiteContentConfig>(config: T): T {
@@ -7,13 +10,15 @@ export function defineSiteContent<T extends SiteContentConfig>(config: T): T {
 
 export function manifestFromConfig(config: SiteContentConfig): SiteManifest {
   const collections: SiteManifest['collections'] = {}
+  assertUniqueCollectionIdentifiers(Object.keys(config.collections))
 
   for (const [key, collection] of Object.entries(config.collections)) {
     assertSafeIdentifier(key)
     const keys = new Set<string>()
     for (const field of collection.fields) {
       assertSafeIdentifier(field.key)
-      if (keys.has(field.key)) throw new Error(`Duplicate field identifier: ${field.key}`)
+      if (keys.has(field.key))
+        throw new Error(`Duplicate field identifier: ${field.key}`)
       keys.add(field.key)
       if (field.collection) assertSafeIdentifier(field.collection)
       if (field.after) assertSafeIdentifier(field.after)

@@ -4,8 +4,9 @@ import type { MarkdownDocument } from '@tanstack/markdown'
 import { env } from '#/env'
 import { ValidationError } from '#/server/content/errors'
 
-import { parseRichTextDocument, renderRichTextHtml } from './document'
+import { renderRichTextHtml } from './document'
 import { serializeMarkdown } from './markdown'
+import { richTextDocumentFromJson } from './from-json'
 import { validateRichText } from './validate'
 
 const RELATIVE_ASSET_SRC = /^\/(api\/)?assets\//
@@ -46,43 +47,9 @@ function rewriteRelativeAssetSrcs(node: JSONContent): void {
   }
 }
 
-function imageDimensions(node: JSONContent): Array<{
-  width?: number
-  height?: number
-}> {
-  const dimensions: Array<{ width?: number; height?: number }> = []
-  function visit(current: JSONContent) {
-    if (current.type === 'image') {
-      const width = current.attrs?.width
-      const height = current.attrs?.height
-      dimensions.push({
-        ...(typeof width === 'number' && { width }),
-        ...(typeof height === 'number' && { height }),
-      })
-    }
-    current.content?.forEach(visit)
-  }
-  visit(node)
-  return dimensions
-}
-
-function addImageDimensionsToHtml(html: string, json: JSONContent): string {
-  const dimensions = imageDimensions(json)
-  let index = 0
-  return html.replace(/<img\b/g, (tag) => {
-    const size = dimensions.at(index++)
-    if (!size) return tag
-    const attrs = [
-      size.width ? ` width="${size.width}"` : '',
-      size.height ? ` height="${size.height}"` : '',
-    ].join('')
-    return `${tag}${attrs}`
-  })
-}
-
 /**
  * Build the published shape of a rich text field. Markdown is the canonical
- * serialization; `document` is the TanStack Markdown AST parsed from it and
+ * export; `document` preserves the validated editor structure directly and
  * `html` is TanStack's static rendering of that same AST.
  */
 export function convertRichText(json: unknown): {
@@ -102,8 +69,8 @@ export function convertRichText(json: unknown): {
   rewriteRelativeAssetSrcs(rewritten)
 
   const markdown = serializeMarkdown(rewritten)
-  const document = parseRichTextDocument(markdown)
-  const html = addImageDimensionsToHtml(renderRichTextHtml(document), rewritten)
+  const document = richTextDocumentFromJson(rewritten)
+  const html = renderRichTextHtml(document)
 
   return {
     json: rewritten,

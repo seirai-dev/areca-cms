@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm'
 import {
+  bigint,
   boolean,
   index,
   integer,
@@ -314,6 +315,10 @@ export const asset = pgTable('asset', {
     .notNull()
     .references(() => organization.id, { onDelete: 'cascade' }),
   storageKey: text('storage_key').notNull(),
+  /** Uploads made through a site's AI connection remain available to that site. */
+  originSiteId: text('origin_site_id').references(() => site.id, {
+    onDelete: 'set null',
+  }),
   originalFilename: text('original_filename').notNull(),
   mimeType: text('mime_type').notNull(),
   size: integer('size').notNull(),
@@ -369,6 +374,9 @@ export const buildJob = pgTable(
     attempts: integer('attempts').notNull().default(0),
     dispatchStartedAt: timestamptz('dispatch_started_at'),
     dispatchTarget: jsonb('dispatch_target').$type<DeploymentTarget>(),
+    deploymentResourceKey: text('deployment_resource_key'),
+    dispatchConnectionUrl: text('dispatch_connection_url'),
+    schedulerFingerprint: text('scheduler_fingerprint'),
     upstreamDeploymentId: text('upstream_deployment_id'),
     dispatchUncertain: boolean('dispatch_uncertain').notNull().default(false),
     leaseExpiresAt: timestamptz('lease_expires_at'),
@@ -386,6 +394,11 @@ export const buildJob = pgTable(
     uniqueIndex('build_job_one_active_per_site')
       .on(t.siteId)
       .where(sql`${t.status} IN ('building', 'validating', 'deploying')`),
+    uniqueIndex('build_job_one_dispatch_per_resource')
+      .on(t.deploymentResourceKey)
+      .where(
+        sql`${t.deploymentResourceKey} IS NOT NULL AND (${t.status} IN ('building', 'validating', 'deploying') OR ${t.dispatchUncertain})`,
+      ),
   ],
 )
 
@@ -467,6 +480,14 @@ export const storageObjectDeletion = pgTable('storage_object_deletion', {
   storageKey: text('storage_key').primaryKey(),
   createdAt: createdAt(),
   lastError: text('last_error'),
+  attempts: integer('attempts').notNull().default(0),
+  nextAttemptAt: timestamptz('next_attempt_at'),
+})
+
+/** Cumulative operation counts survive job reconciliation and deletion. */
+export const opsCounter = pgTable('ops_counter', {
+  name: text('name').primaryKey(),
+  value: bigint('value', { mode: 'number' }).notNull().default(0),
 })
 
 /** Per-site scheduler retry cooldown. Survives process restart. */
@@ -476,6 +497,9 @@ export const schedulerBackoff = pgTable('scheduler_backoff', {
     .references(() => site.id, { onDelete: 'cascade' }),
   lastAttemptAt: timestamptz('last_attempt_at').notNull(),
   lastError: text('last_error'),
+  failureCount: integer('failure_count').notNull().default(0),
+  approvalFingerprint: text('approval_fingerprint'),
+  nextAttemptAt: timestamptz('next_attempt_at'),
 })
 
 /**
@@ -545,7 +569,9 @@ export const oauthClient = pgTable(
     redirectUris: text('redirectUris').array().notNull(),
     postLogoutRedirectUris: text('postLogoutRedirectUris').array(),
     backchannelLogoutUri: text('backchannelLogoutUri'),
-    backchannelLogoutSessionRequired: boolean('backchannelLogoutSessionRequired'),
+    backchannelLogoutSessionRequired: boolean(
+      'backchannelLogoutSessionRequired',
+    ),
     tokenEndpointAuthMethod: text('tokenEndpointAuthMethod'),
     applicationType: text('applicationType'),
     jwks: text('jwks'),
@@ -634,7 +660,9 @@ export const oauthRefreshToken = pgTable(
     index('oauth_refresh_token_client_idx').on(t.clientId),
     index('oauth_refresh_token_session_idx').on(t.sessionId),
     index('oauth_refresh_token_user_idx').on(t.userId),
-    index('oauth_refresh_token_authorization_code_idx').on(t.authorizationCodeId),
+    index('oauth_refresh_token_authorization_code_idx').on(
+      t.authorizationCodeId,
+    ),
   ],
 )
 
@@ -668,7 +696,9 @@ export const oauthAccessToken = pgTable(
     index('oauth_access_token_session_idx').on(t.sessionId),
     index('oauth_access_token_user_idx').on(t.userId),
     index('oauth_access_token_refresh_idx').on(t.refreshId),
-    index('oauth_access_token_authorization_code_idx').on(t.authorizationCodeId),
+    index('oauth_access_token_authorization_code_idx').on(
+      t.authorizationCodeId,
+    ),
   ],
 )
 

@@ -6,6 +6,7 @@ import { db } from '#/db'
 import { membership } from '#/db/schema'
 import { env } from '#/env'
 import { MfaRequiredError } from '#/lib/security-errors'
+import { requireAdminLocalMfa } from '#/server/security/local-mfa'
 import { assertFreshSession } from '#/server/security/step-up'
 
 import type { MembershipRole } from './types.ts'
@@ -49,6 +50,7 @@ export async function requireAgencyAdmin() {
     throw new Response('Forbidden', { status: 403 })
   }
   assertAdminMfa(session.user)
+  await requireAdminLocalMfa(session)
   return session
 }
 
@@ -67,6 +69,7 @@ export async function requireOrgMember(orgId: string, role?: MembershipRole) {
   const session = await requireUser()
   if (session.user.isAgencyAdmin) {
     assertAdminMfa(session.user)
+    await requireAdminLocalMfa(session)
     return session
   }
 

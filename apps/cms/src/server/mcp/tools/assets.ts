@@ -6,14 +6,8 @@ import {
   URL_MAX_LENGTH,
 } from '#/lib/content-limits'
 import type { Asset } from '#/server/assets'
-import {
-  assetUrl,
-  assetUsage,
-  deleteAsset,
-  getAsset,
-  listAssets,
-  updateAsset,
-} from '#/server/assets'
+import { assetUrl, assetUsage, deleteAsset, updateAsset } from '#/server/assets'
+import { siteAssets } from '#/server/assets/site-scope'
 import { uploadAssetFromUrl } from '#/server/assets/remote'
 import { audit } from '#/server/audit'
 import { McpNotFoundError } from '../errors'
@@ -36,10 +30,12 @@ function describeAsset(row: Asset) {
 }
 
 async function requireAsset(actor: McpActor, id: string): Promise<Asset> {
-  const row = await getAsset(id, actor.organizationId)
+  const row = (await siteAssets(actor.organizationId, actor.siteId)).find(
+    (item) => item.id === id,
+  )
   if (!row) {
     throw new McpNotFoundError(
-      `No asset with id "${id}" in this organization. Call list_assets to find valid ids.`,
+      `No asset with id "${id}" available to this site. Call list_assets to find valid ids.`,
     )
   }
   return row
@@ -50,7 +46,7 @@ export function registerAssetTools(registry: ToolRegistry): void {
     name: 'list_assets',
     title: 'List assets',
     description:
-      'Lists images and PDFs in the organization library, newest first, with assetId, filename, alt text and url. Search matches filename or alt text. Use an assetId in image fields, seo.ogImage, or ![alt](asset:<assetId>) in Markdown.',
+      'Lists images and PDFs referenced by this site or uploaded through its AI connection, newest first, with assetId, filename, alt text and url. Search matches filename or alt text. Use an assetId in image fields, seo.ogImage, or ![alt](asset:<assetId>) in Markdown.',
     inputSchema: z.object({
       search: z
         .string()
@@ -73,11 +69,17 @@ export function registerAssetTools(registry: ToolRegistry): void {
     }),
     annotations: { readOnlyHint: true, idempotentHint: true },
     run: async (input, actor) => {
-      const rows = await listAssets(actor.organizationId, {
-        search: input.search,
-        limit: input.limit ?? 20,
-        offset: input.offset ?? 0,
-      })
+      const search = input.search?.trim().toLowerCase()
+      const allowed = await siteAssets(actor.organizationId, actor.siteId)
+      const matches = search
+        ? allowed.filter(
+            (row) =>
+              row.originalFilename.toLowerCase().includes(search) ||
+              row.altText?.toLowerCase().includes(search),
+          )
+        : allowed
+      const offset = input.offset ?? 0
+      const rows = matches.slice(offset, offset + (input.limit ?? 20))
       return rows.map(describeAsset)
     },
   })
@@ -135,6 +137,7 @@ export function registerAssetTools(registry: ToolRegistry): void {
     run: async (input, actor) => {
       const row = await uploadAssetFromUrl({
         organizationId: actor.organizationId,
+        originSiteId: actor.siteId,
         url: input.url,
         altText: input.altText,
         filename: input.filename,

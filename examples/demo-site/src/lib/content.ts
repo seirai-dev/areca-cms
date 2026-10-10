@@ -1,6 +1,5 @@
-import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { readContent } from '@areca-cms/site-sdk/pull'
+import { readContent, readContentManifest } from '@areca-cms/site-sdk/pull'
 import type {
   ImageValue,
   PulledContentManifest,
@@ -36,7 +35,7 @@ export function getArticle(slug: string): Article | undefined {
 export function getManifest(): PulledContentManifest {
   const filePath = join(CONTENT_DIR, 'manifest.json')
   try {
-    return JSON.parse(readFileSync(filePath, 'utf8')) as PulledContentManifest
+    return readContentManifest(CONTENT_DIR)
   } catch (error) {
     if (isNodeError(error) && error.code === 'ENOENT') {
       throw new Error(

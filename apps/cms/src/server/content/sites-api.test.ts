@@ -172,7 +172,7 @@ describe.skipIf(!hasDb)('site API routes', () => {
 
       await db.insert(buildJob).values({
         siteId: fixtures.site.id,
-        publicationId: buildingPub!.id,
+        publicationId: buildingPub.id,
         status: 'deploying',
       })
 
@@ -183,9 +183,9 @@ describe.skipIf(!hasDb)('site API routes', () => {
       )
       expect(current.status).toBe(200)
       const currentJson = (await current.json()) as Snapshot
-      expect(currentJson.publicationId).toBe(buildingPub!.id)
-      expect(currentJson.hash).toBe('hash-building')
-      expect(currentJson.publicationId).not.toBe(livePub!.id)
+      expect(currentJson.publicationId).toBe(livePub.id)
+      expect(currentJson.hash).toBe('hash-live')
+      expect(currentJson.publicationId).not.toBe(buildingPub.id)
 
       const created = await createEntry({
         siteId: fixtures.site.id,
@@ -313,7 +313,7 @@ describe.skipIf(!hasDb)('site API routes', () => {
 
         await db.insert(buildJob).values({
           siteId: siteA.site.id,
-          publicationId: foreign!.id,
+          publicationId: foreign.id,
           status: 'deploying',
         })
 
@@ -324,9 +324,9 @@ describe.skipIf(!hasDb)('site API routes', () => {
         )
         expect(current.status).toBe(200)
         const json = (await current.json()) as Snapshot
-        expect(json.publicationId).toBe(liveA!.id)
+        expect(json.publicationId).toBe(liveA.id)
         expect(json.hash).toBe('hash-a')
-        expect(json.publicationId).not.toBe(foreign!.id)
+        expect(json.publicationId).not.toBe(foreign.id)
       })
     })
   })

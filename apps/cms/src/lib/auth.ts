@@ -16,6 +16,12 @@ import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { db } from '#/db'
 import * as schema from '#/db/schema'
 import { env } from '#/env'
+import { handleLocalFactorRequest } from '#/server/security/factor-http'
+import { MfaRequiredError } from '#/lib/security-errors'
+import {
+  recordLocalMfaForToken,
+  requireAdminLocalMfa,
+} from '#/server/security/local-mfa'
 import { assertEmailMayRegister } from '#/server/auth/registration-gate'
 import {
   MCP_ACCESS_TOKEN_PREFIX,
@@ -49,6 +55,20 @@ import {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+async function assertAuthAdminMfa(
+  principal: Parameters<typeof requireAdminLocalMfa>[0],
+) {
+  try {
+    await requireAdminLocalMfa(principal)
+  } catch (error) {
+    if (!(error instanceof MfaRequiredError)) throw error
+    throw new APIError('FORBIDDEN', {
+      code: error.code,
+      message: error.message,
+    })
+  }
 }
 
 const SSO_MANAGEMENT_PATHS = new Set([
@@ -86,8 +106,12 @@ const authBase = betterAuth({
   databaseHooks: {
     user: {
       create: {
-        before: async (created) => {
-          await assertEmailMayRegister(created.email)
+        before: async (created, ctx) => {
+          await assertEmailMayRegister(created.email, {
+            passwordSignup: ctx?.path === '/sign-up/email',
+            emailVerified: created.emailVerified,
+            invitationToken: ctx?.body?.invitationToken,
+          })
         },
       },
     },
@@ -112,6 +136,8 @@ const authBase = betterAuth({
       // Each MCP site is its own protected resource. Create its row when the
       // authorization request names it, so the plugin accepts the resource.
       if (ctx.path === '/oauth2/authorize') {
+        const session = await getSessionFromCtx(ctx)
+        if (session) await assertAuthAdminMfa(session)
         assertSingleMcpResource(ctx.query?.resource, true)
         for (const resource of resourceParams(ctx.query?.resource)) {
           await ensureMcpSiteResource(resource)
@@ -144,6 +170,7 @@ const authBase = betterAuth({
       if (TWO_FACTOR_MANAGEMENT_PATHS.has(ctx.path)) {
         const session = await getSessionFromCtx(ctx)
         if (session) {
+          if (session.user.twoFactorEnabled) await assertAuthAdminMfa(session)
           const credential =
             await ctx.context.internalAdapter.findCredentialAccount(
               session.user.id,
@@ -153,6 +180,19 @@ const authBase = betterAuth({
             sessionCreatedAt: session.session.createdAt,
           })
         }
+      }
+    }),
+    after: createAuthMiddleware(async (ctx) => {
+      if (
+        ctx.path !== '/two-factor/verify-totp' &&
+        ctx.path !== '/two-factor/verify-backup-code'
+      )
+        return
+      const result: unknown = ctx.context.returned
+      if (isRecord(result) && typeof result.token === 'string') {
+        await recordLocalMfaForToken(
+          ctx.context.newSession?.session.token ?? result.token,
+        )
       }
     }),
   },
@@ -168,9 +208,8 @@ const authBase = betterAuth({
           }),
         ]
       : []),
-    // TOTP + backup codes. Enforcement for agency admins lives in
-    // `requireAgencyAdmin`; SSO/social sign-ins skip the challenge because the
-    // identity provider is trusted to have done its own MFA.
+    // All agency-admin sessions, including SSO/social, must prove a local
+    // TOTP or backup code before guards grant agency access.
     twoFactor({ issuer: 'Areca CMS', allowPasswordless: true }),
     // OAuth 2.1 authorization server for the per-site MCP endpoints. See
     // docs in server/mcp/oauth-resource.ts for the resource and scope model.
@@ -219,5 +258,10 @@ const authBase = betterAuth({
 // Keep token issuance/replay and connection revocation under the same grant lock.
 export const auth: typeof authBase = {
   ...authBase,
-  handler: (request) => handleMcpOAuthTokenRequest(request, authBase.handler),
+  handler: (request) =>
+    handleMcpOAuthTokenRequest(request, (incoming) =>
+      handleLocalFactorRequest(incoming, authBase.handler, () =>
+        authBase.api.getSession({ headers: incoming.headers }),
+      ),
+    ),
 }

@@ -160,4 +160,25 @@ function TabsContent({
   )
 }
 
-export { Tabs, TabsList, TabsTrigger, TabsContent }
+/** Mount on first visit, then retain draft state while the panel is hidden. */
+function PersistentTabsContent({
+  className,
+  ...props
+}: React.ComponentProps<typeof TabsPrimitive.Content>) {
+  const active = React.useContext(TabsValueContext) === props.value
+  const [visited, setVisited] = React.useState(active)
+  React.useEffect(() => {
+    if (active) setVisited(true)
+  }, [active])
+  if (!active && !visited) return null
+  return (
+    <TabsContent
+      {...props}
+      forceMount
+      hidden={!active}
+      className={cn('data-[state=inactive]:hidden', className)}
+    />
+  )
+}
+
+export { Tabs, TabsList, TabsTrigger, TabsContent, PersistentTabsContent }

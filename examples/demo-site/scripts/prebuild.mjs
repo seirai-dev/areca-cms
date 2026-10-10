@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs'
+import { readContent } from '@areca-cms/site-sdk/pull'
 import { spawnSync } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -9,9 +9,12 @@ const cli = join(pkgRoot, 'node_modules/@areca-cms/site-sdk/dist/cli.js')
 const hasCmsEnv = Boolean(
   process.env.ARECA_CMS_URL?.trim() && process.env.ARECA_SITE_TOKEN?.trim(),
 )
-const hasContent =
-  existsSync(join(pkgRoot, outDir, 'manifest.json')) &&
-  existsSync(join(pkgRoot, outDir, 'articles.json'))
+let hasContent = false
+try {
+  hasContent = Array.isArray(readContent(join(pkgRoot, outDir), 'articles'))
+} catch {
+  // A missing or invalid generation needs a fresh pull or fixtures.
+}
 
 if (hasCmsEnv) {
   console.log(`Running areca pull --out ${outDir}`)

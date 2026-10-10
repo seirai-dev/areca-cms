@@ -26,8 +26,20 @@ cd apps/cms
 node --env-file=.env.local scripts/cleanup-assets.mjs
 ```
 
-The command processes up to 1,000 objects per invocation and can be scheduled by
-the operator. Successful deletes clear their records; failed deletes remain with
-a diagnostic error. Uploads compensate failed database inserts by deleting the
-just-uploaded object, or recording its storage key for cleanup if that deletion
-fails and the database is reachable.
+The CMS maintenance loop automatically processes eligible cleanup records. A
+failed delete retries after 1, 5, and 15 minutes, then pauses after the initial
+attempt and three retries. Fix the storage issue and explicitly restart paused
+work with `node --env-file=.env.local scripts/cleanup-assets.mjs --retry-paused`.
+The command processes up to 1,000 objects per invocation and honors retry delays.
+Successful deletes clear their records; failed deletes retain a diagnostic error.
+
+Asset and branding uploads persist a cleanup intent before storing bytes, then
+clear it in the successful database transaction. Failed uploads compensate the
+new object immediately; process death leaves its intent eligible for later
+cleanup. Cleanup preserves objects that became owned by a committed asset or
+current branding configuration after a lost transaction response. Old branding
+images are queued durably when replaced, cleared, or reset.
+
+Raster uploads validate decoded bytes against the declared PNG, JPEG, WebP, or
+GIF format before storage. Branding also validates ICO structure. Invalid or
+mislabeled image contents return a user-readable validation error.

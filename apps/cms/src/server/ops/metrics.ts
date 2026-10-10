@@ -34,6 +34,7 @@ export const PUBLICATION_STATUSES: PublicationStatus[] = [
 const ACTIVE: BuildJobStatus[] = ['building', 'validating', 'deploying']
 
 export type MetricsSnapshot = {
+  publicationFailuresTotal: number
   jobsByStatus: Partial<Record<string, number>>
   publicationsByStatus: Partial<Record<string, number>>
   oldestQueuedAgeSeconds: number | null
@@ -98,10 +99,15 @@ export function renderPrometheus(snapshot: MetricsSnapshot): string {
   )
   families.push({
     name: 'areca_build_jobs_failed_total',
-    help: 'Build jobs that ended in failed status (from database counts).',
+    help: 'Publication execution failures since metrics history began; retained after job deletion.',
     type: 'counter',
-    samples: [{ value: snapshot.jobsByStatus.failed ?? 0 }],
+    samples: [{ value: snapshot.publicationFailuresTotal }],
   })
+  gauge(
+    'areca_build_jobs_failed_backlog',
+    'Build jobs currently in failed status.',
+    [{ value: snapshot.jobsByStatus.failed ?? 0 }],
+  )
   gauge(
     'areca_publications',
     'Publications by status.',
@@ -178,7 +184,7 @@ export function renderPrometheus(snapshot: MetricsSnapshot): string {
 export async function collectMetrics(
   readiness?: ReadinessReport,
 ): Promise<MetricsSnapshot> {
-  const [jobs, pubs, overdue, report] = await Promise.all([
+  const [jobs, pubs, overdue, failures, report] = await Promise.all([
     db.execute<{ status: string; n: string; oldest: string | null }>(sql`
       select status, count(*) as n,
         extract(epoch from now() - min(created_at)) as oldest
@@ -188,6 +194,9 @@ export async function collectMetrics(
     ),
     db.execute<{ n: string }>(
       sql`select count(*) as n from entry where status = 'scheduled' and scheduled_at <= now()`,
+    ),
+    db.execute<{ value: string }>(
+      sql`select value from ops_counter where name = 'publication_failures'`,
     ),
     readiness ?? runReadinessChecks(),
   ])
@@ -203,6 +212,7 @@ export async function collectMetrics(
   for (const row of pubs.rows) publicationsByStatus[row.status] = Number(row.n)
   const mem = process.memoryUsage()
   return {
+    publicationFailuresTotal: Number(failures.rows[0]?.value ?? 0),
     jobsByStatus,
     publicationsByStatus,
     oldestQueuedAgeSeconds: oldestQueued,

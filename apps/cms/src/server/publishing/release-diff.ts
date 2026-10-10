@@ -193,14 +193,14 @@ async function latestPublication(
   return row ?? null
 }
 
-function comparisonSnapshot(
+export function comparisonSnapshot(
   publishingMode: 'production' | 'demo',
   live: typeof publication.$inferSelect | null,
   demo: typeof publication.$inferSelect | null,
 ): Snapshot | null {
-  if (live) return live.snapshot
-  if (publishingMode === 'demo' && demo) return demo.snapshot
-  return null
+  return publishingMode === 'demo'
+    ? (demo?.snapshot ?? null)
+    : (live?.snapshot ?? null)
 }
 
 async function listScheduledUpcoming(
@@ -239,10 +239,7 @@ async function listScheduledUpcoming(
       slug: row.scheduledSlug ?? row.publishedSlug ?? row.slug,
       collectionKey: row.collectionKey,
       scheduledAt: row.scheduledAt,
-      data: (row.scheduledData ?? row.publishedData ?? row.draftData) as Record<
-        string,
-        unknown
-      >,
+      data: (row.scheduledData ?? row.publishedData ?? row.draftData),
     })
   }
   return upcoming

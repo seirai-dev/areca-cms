@@ -25,6 +25,7 @@ export const listAssetsFn = createServerFn({ method: 'GET' })
     z.object({
       organizationId: z.string().min(1).max(ID_MAX_LENGTH),
       search: z.string().max(SEARCH_MAX_LENGTH).optional(),
+      imagesOnly: z.boolean().optional(),
       limit: pageLimitSchema,
       offset: pageOffsetSchema,
     }),
@@ -33,6 +34,7 @@ export const listAssetsFn = createServerFn({ method: 'GET' })
     await requireOrgMember(data.organizationId)
     return listAssets(data.organizationId, {
       search: data.search,
+      imagesOnly: data.imagesOnly,
       limit: data.limit,
       offset: data.offset,
     })

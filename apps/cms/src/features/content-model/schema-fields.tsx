@@ -444,13 +444,45 @@ export function FieldFormPanel({
             htmlFor={`field-options-${index}`}
             hint={m.content_field_options_hint()}
           >
-            <Input
-              id={`field-options-${index}`}
-              data-testid={`field-options-${index}`}
-              placeholder={m.admin_collection_options_placeholder()}
-              value={field.options}
-              onChange={(event) => onChange({ options: event.target.value })}
-            />
+            <div className="grid gap-2">
+              {field.options.map((option, optionIndex) => (
+                <div key={optionIndex} className="flex gap-2">
+                  <Input
+                    id={`field-options-${index}-${optionIndex}`}
+                    data-testid={`field-options-${index}`}
+                    value={option}
+                    aria-label={`${m.admin_collection_options()} ${optionIndex + 1}`}
+                    onChange={(event) =>
+                      onChange({
+                        options: field.options.map((value, i) =>
+                          i === optionIndex ? event.target.value : value,
+                        ),
+                      })
+                    }
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() =>
+                      onChange({
+                        options: field.options.filter(
+                          (_, i) => i !== optionIndex,
+                        ),
+                      })
+                    }
+                  >
+                    {m.admin_remove()}
+                  </Button>
+                </div>
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onChange({ options: [...field.options, ''] })}
+              >
+                {m.content_add_option()}
+              </Button>
+            </div>
           </FormField>
         ) : null}
         {field.type === 'reference' ? (

@@ -6,11 +6,11 @@ environment-variable reference, see [CMS configuration](CONFIGURATION.md).
 
 ## Endpoints
 
-| Endpoint | Auth | Purpose |
-| --- | --- | --- |
-| `GET /api/health` | none | Cheap liveness. Always `200 {"ok":true,"service":"cms"}` while the process serves requests. Touches no dependency. |
-| `GET /api/health/ready` | none | Readiness. `200` or `503` with JSON; every check is time-bounded so it never hangs. |
-| `GET /api/metrics` | `Authorization: Bearer $METRICS_TOKEN` | Prometheus text format. `404` when `METRICS_TOKEN` is unset, `401` for a wrong or missing token. |
+| Endpoint                | Auth                                   | Purpose                                                                                                            |
+| ----------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `GET /api/health`       | none                                   | Cheap liveness. Always `200 {"ok":true,"service":"cms"}` while the process serves requests. Touches no dependency. |
+| `GET /api/health/ready` | none                                   | Readiness. `200` or `503` with JSON; every check is time-bounded so it never hangs.                                |
+| `GET /api/metrics`      | `Authorization: Bearer $METRICS_TOKEN` | Prometheus text format. `404` when `METRICS_TOKEN` is unset, `401` for a wrong or missing token.                   |
 
 Use `/api/health` for container liveness and `/api/health/ready` for
 load-balancer or orchestrator readiness. A Docker `HEALTHCHECK` should call
@@ -24,11 +24,34 @@ Postgres or S3 is down; a plain restart will not fix those, so
 {
   "ok": false,
   "checks": {
-    "db":      { "ok": true,  "ms": 4 },
-    "storage": { "ok": false, "ms": 3001, "reason": "CheckTimeout: timed out after 3000ms" },
-    "redis":   { "ok": true,  "ms": 2, "degraded": true, "reason": "ECONNREFUSED" },
-    "worker":  { "ok": true,  "ms": 0, "detail": { "enabled": true, "tickAgeSeconds": 1 } },
-    "queue":   { "ok": true,  "ms": 5, "detail": { "queued": 0, "active": 1, "oldestQueuedAgeSeconds": null, "expiredLeases": 0, "schedulerAgeSeconds": 2 } }
+    "db": { "ok": true, "ms": 4 },
+    "storage": {
+      "ok": false,
+      "ms": 3001,
+      "reason": "CheckTimeout: timed out after 3000ms"
+    },
+    "redis": {
+      "ok": true,
+      "ms": 2,
+      "degraded": true,
+      "reason": "ECONNREFUSED"
+    },
+    "worker": {
+      "ok": true,
+      "ms": 0,
+      "detail": { "enabled": true, "tickAgeSeconds": 1 }
+    },
+    "queue": {
+      "ok": true,
+      "ms": 5,
+      "detail": {
+        "queued": 0,
+        "active": 1,
+        "oldestQueuedAgeSeconds": null,
+        "expiredLeases": 0,
+        "schedulerAgeSeconds": 2
+      }
+    }
   }
 }
 ```
@@ -54,21 +77,22 @@ replicas, only those running with `WORKER_ENABLED=true` report worker state.
 All metrics are gauges unless noted. Counts come from the database at scrape
 time, so they are correct across restarts and replicas.
 
-| Metric | Labels | Meaning |
-| --- | --- | --- |
-| `areca_build_jobs` | `status` | Build jobs per status |
-| `areca_build_jobs_oldest_queued_age_seconds` | | Oldest queued job age (0 when empty) |
-| `areca_build_jobs_active` | | building + validating + deploying |
-| `areca_build_jobs_failed_total` | | Jobs in `failed` status (counter-like; falls if history is deleted) |
-| `areca_publications` | `status` | Publications per status |
-| `areca_scheduled_entries_overdue` | | Scheduled entries past their time and not yet published |
-| `areca_worker_enabled` | | 1 when worker loops run in this process |
-| `areca_worker_last_tick_age_seconds` | | Only when the worker is enabled |
-| `areca_scheduler_last_tick_age_seconds` | | Only when the worker is enabled |
-| `areca_readiness_check_up` | `check` | 1 up, 0 down or degraded |
-| `areca_ready` | | 1 when readiness would return 200 |
-| `areca_process_uptime_seconds` | | |
-| `areca_process_memory_bytes` | `kind` | rss, heap_used, heap_total, external |
+| Metric                                       | Labels   | Meaning                                                                          |
+| -------------------------------------------- | -------- | -------------------------------------------------------------------------------- |
+| `areca_build_jobs`                           | `status` | Build jobs per status                                                            |
+| `areca_build_jobs_oldest_queued_age_seconds` |          | Oldest queued job age (0 when empty)                                             |
+| `areca_build_jobs_active`                    |          | building + validating + deploying                                                |
+| `areca_build_jobs_failed_total`              |          | Durable cumulative execution/recovery failures; retained after job/site deletion |
+| `areca_build_jobs_failed_backlog`            |          | Gauge of jobs currently in `failed` status                                       |
+| `areca_publications`                         | `status` | Publications per status                                                          |
+| `areca_scheduled_entries_overdue`            |          | Scheduled entries past their time and not yet published                          |
+| `areca_worker_enabled`                       |          | 1 when worker loops run in this process                                          |
+| `areca_worker_last_tick_age_seconds`         |          | Only when the worker is enabled                                                  |
+| `areca_scheduler_last_tick_age_seconds`      |          | Only when the worker is enabled                                                  |
+| `areca_readiness_check_up`                   | `check`  | 1 up, 0 down or degraded                                                         |
+| `areca_ready`                                |          | 1 when readiness would return 200                                                |
+| `areca_process_uptime_seconds`               |          |                                                                                  |
+| `areca_process_memory_bytes`                 | `kind`   | rss, heap_used, heap_total, external                                             |
 
 Scrape config:
 
@@ -80,7 +104,7 @@ scrape_configs:
       type: Bearer
       credentials_file: /etc/prometheus/areca-metrics-token
     static_configs:
-      - targets: ['cms.example.com']
+      - targets: ["cms.example.com"]
 ```
 
 Metrics are built from several `count(*)` queries; keep the scrape interval at
@@ -135,7 +159,14 @@ Operational logging (worker, scheduler, rate limiter, adapters, readiness,
 server-function errors) is one JSON object per line:
 
 ```json
-{"level":"error","time":"2026-10-01T13:30:20.823Z","component":"worker","msg":"job failed","jobId":"...","err":{"name":"Error","message":"...","stack":"..."}}
+{
+  "level": "error",
+  "time": "2026-10-01T13:30:20.823Z",
+  "component": "worker",
+  "msg": "job failed",
+  "jobId": "...",
+  "err": { "name": "Error", "message": "...", "stack": "..." }
+}
 ```
 
 `info` and `debug` go to stdout, `warn` and `error` to stderr. `LOG_LEVEL` is
@@ -172,10 +203,10 @@ expose a new error type to the UI, extend `AppError`
 
 ## Database deadlines
 
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `DB_CONNECT_TIMEOUT_MS` | `5000` | Time to get a pooled connection |
-| `DB_STATEMENT_TIMEOUT_MS` | `15000` | Server-side `statement_timeout` for every statement |
+| Variable                   | Default | Meaning                                                                      |
+| -------------------------- | ------- | ---------------------------------------------------------------------------- |
+| `DB_CONNECT_TIMEOUT_MS`    | `5000`  | Time to get a pooled connection                                              |
+| `DB_STATEMENT_TIMEOUT_MS`  | `15000` | Server-side `statement_timeout` for every statement                          |
 | `DB_IDLE_IN_TX_TIMEOUT_MS` | `30000` | `idle_in_transaction_session_timeout`; frees locks of abandoned transactions |
 
 `0` disables a timeout. Migrations run in a separate process
@@ -193,13 +224,18 @@ no-deploy release. **Demo** publications intentionally skip external deployment
 and remain labeled demo, never counting as production live releases. See
 [deployment](DEPLOYMENT.md) for setup and verification.
 
-Three independent timers, each with its own in-flight guard: job claiming,
-stale-lease recovery, and scheduling of due entries. Claimed jobs run as
+Four independent timers, each with its own in-flight guard: job claiming,
+stale-lease recovery, scheduling of due entries, and durable storage cleanup.
+Cleanup retries failed object deletions independently of long deployments. Claimed jobs run as
 tracked in-flight promises with a global cap (`WORKER_CONCURRENCY`, default 2),
 and a freed slot is refilled immediately. A job that waits on a slow deployment
 (up to 15 minutes) therefore delays neither scheduling, recovery, nor jobs for
 other sites. One job per site at a time is still enforced by the database (claim
-SQL, partial unique indexes, leases).
+SQL, partial unique indexes, leases). Shared Dokploy application deployments
+are also serialized; this prevents concurrent build-environment changes.
+Scheduled failures retry after 1, 5, and 15 minutes, then pause after the fourth
+failed attempt. Manual release requests or a new scheduled approval restart the
+retry budget.
 
 On `SIGTERM`/`SIGINT` the process stops claiming, waits up to
 `WORKER_DRAIN_TIMEOUT_MS` (default 8000) for in-flight jobs, then exits (code 0
@@ -211,15 +247,36 @@ entrypoint forwards the signal to the server process and waits for it to exit.
 
 ## Environment variables
 
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `METRICS_TOKEN` | unset | Bearer token (min 16 chars) for `/api/metrics`; unset means 404. Generate with `openssl rand -hex 32`. |
-| `LOG_LEVEL` | `info` | Log threshold |
-| `WORKER_CONCURRENCY` | `2` | Max build jobs processed at once by this process |
-| `WORKER_DRAIN_TIMEOUT_MS` | `8000` | Shutdown wait for in-flight jobs |
-| `DB_CONNECT_TIMEOUT_MS` | `5000` | See above |
-| `DB_STATEMENT_TIMEOUT_MS` | `15000` | See above |
-| `DB_IDLE_IN_TX_TIMEOUT_MS` | `30000` | See above |
-| `READINESS_TIMEOUT_MS` | `3000` | Per-check timeout for readiness |
-| `READINESS_MAX_QUEUE_AGE_SECONDS` | `900` | Oldest queued job age that fails readiness |
-| `READINESS_MAX_TICK_AGE_SECONDS` | `300` | Worker/scheduler tick age (and expired-lease age) that fails readiness |
+| Variable                          | Default | Meaning                                                                                                |
+| --------------------------------- | ------- | ------------------------------------------------------------------------------------------------------ |
+| `METRICS_TOKEN`                   | unset   | Bearer token (min 16 chars) for `/api/metrics`; unset means 404. Generate with `openssl rand -hex 32`. |
+| `LOG_LEVEL`                       | `info`  | Log threshold                                                                                          |
+| `WORKER_CONCURRENCY`              | `2`     | Max build jobs processed at once by this process                                                       |
+| `WORKER_DRAIN_TIMEOUT_MS`         | `8000`  | Shutdown wait for in-flight jobs                                                                       |
+| `DB_CONNECT_TIMEOUT_MS`           | `5000`  | See above                                                                                              |
+| `DB_STATEMENT_TIMEOUT_MS`         | `15000` | See above                                                                                              |
+| `DB_IDLE_IN_TX_TIMEOUT_MS`        | `30000` | See above                                                                                              |
+| `READINESS_TIMEOUT_MS`            | `3000`  | Per-check timeout for readiness                                                                        |
+| `READINESS_MAX_QUEUE_AGE_SECONDS` | `900`   | Oldest queued job age that fails readiness                                                             |
+| `READINESS_MAX_TICK_AGE_SECONDS`  | `300`   | Worker/scheduler tick age (and expired-lease age) that fails readiness                                 |
+
+### Recover an administrator verification lockout
+
+Five failed local factor attempts lock an administrator for 15 minutes across
+sessions. Another agency administrator with a freshly verified local factor can
+use **Agency → People → Reset verification lockout**. This resets the failure
+counter only; the locked administrator must still verify their own TOTP or backup
+code. Administrators cannot reset their own lockout in the browser.
+
+If every administrator is locked out, an operator with access to the CMS host can
+run the recovery command with the production environment loaded:
+
+```sh
+cd apps/cms
+node scripts/reset-mfa-lockout.mjs --email admin@example.com --confirm
+```
+
+The command writes an audit event and removes only the named administrator's
+failure counter. It preserves MFA enrollment, credentials, and session factor
+proof requirements. It does not recover a lost authenticator or replace backup
+codes. Wait for expiry if operator access is unavailable.

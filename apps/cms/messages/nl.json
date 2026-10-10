@@ -655,7 +655,7 @@
   "content_field_key_hint": "Used by the site project. Letters and numbers, no spaces.",
   "content_field_label_placeholder": "Hero image",
   "content_field_locked": "Built-in field",
-  "content_field_options_hint": "Separate the choices with commas.",
+  "content_field_options_hint": "Voeg één keuze per rij toe. Komma’s blijven deel van de keuze.",
   "content_field_reference_target": "Links to",
   "content_field_reference_target_hint": "Editors pick an entry from this content type.",
   "content_field_required_hint": "It must be filled in before an entry can be marked as ready.",
@@ -1551,5 +1551,16 @@
   "ui_copy": "Copy",
   "ui_copy_failed": "Couldn't copy to the clipboard",
   "ui_more": "Meer",
-  "ui_try_again": "Try again"
+  "ui_try_again": "Try again",
+  "account_factor_lockout_reset": "Verificatieblokkering opheffen",
+  "account_factor_lockout_reset_description": "Dit wist mislukte codepogingen. Tweestapsverificatie blijft ingeschakeld en de beheerder moet nog steeds een code verifiëren.",
+  "account_factor_lockout_reset_success": "Verificatieblokkering opgeheven",
+  "server_factor_lockout_self_reset": "Vraag een andere agencybeheerder om je verificatieblokkering op te heffen.",
+  "server_restore_field_removed": "Dit veld bestaat niet meer in dit inhoudstype.",
+  "editor_revision_restored_partial": "Versie hersteld. Sommige velden hebben hun huidige waarden behouden.",
+  "editor_revision_skipped_fields": "Niet herstelde velden",
+  "editor_revision_keep_current": "Deze oudere waarden passen niet meer bij het huidige inhoudstype. De huidige waarden van je concept zijn behouden.",
+  "media_picker_image_required": "Kies een JPEG-, PNG-, WebP- of GIF-afbeelding. PDF-bestanden kunnen hier niet worden gebruikt.",
+  "content_add_option": "Keuze toevoegen",
+  "settings_schema_token_reveal_title": "Bewaar je schematoken"
 }

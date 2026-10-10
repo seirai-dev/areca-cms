@@ -33,3 +33,9 @@ export async function uploadAssetFile(
 /** File types the Library accepts. */
 export const MEDIA_ACCEPT =
   'image/jpeg,image/png,image/webp,image/gif,application/pdf'
+
+export function isPickerImage(mimeType: string): boolean {
+  return ['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(
+    mimeType.toLowerCase(),
+  )
+}

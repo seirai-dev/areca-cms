@@ -1,9 +1,6 @@
 import { eq, like } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const verifyTOTP = vi.hoisted(() => vi.fn())
-vi.mock('#/lib/auth', () => ({ auth: { api: { verifyTOTP } } }))
-
 import { db } from '#/db'
 import { verification } from '#/db/schema'
 import { securityErrorCode } from '#/lib/security-errors'
@@ -16,6 +13,9 @@ import {
   recordStepUpFailure,
 } from './step-up.ts'
 import { verifyStepUp } from './verify-step-up.ts'
+
+const verifyTOTP = vi.hoisted(() => vi.fn())
+vi.mock('#/lib/auth', () => ({ auth: { api: { verifyTOTP } } }))
 
 const hasDb = Boolean(process.env.DATABASE_URL)
 
@@ -49,7 +49,18 @@ describe.skipIf(!hasDb)('step-up', () => {
     throw new Error('expected a rejection')
   }
 
-  it('passes for a session created in the last ten minutes', async () => {
+  it('passes for a local factor verified in the last ten minutes', async () => {
+    const id = `local-mfa:${sessionId}`
+    await db
+      .insert(verification)
+      .values({
+        id,
+        identifier: id,
+        value: userId,
+        createdAt: minutesAgo(2),
+        updatedAt: new Date(),
+        expiresAt: new Date(Date.now() + 60000),
+      })
     await expect(assertFreshSession(session(minutesAgo(2)))).resolves.toBe(
       undefined,
     )

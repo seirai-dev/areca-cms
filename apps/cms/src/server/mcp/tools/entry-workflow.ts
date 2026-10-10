@@ -195,13 +195,16 @@ export function registerEntryWorkflowTools(registry: ToolRegistry): void {
     },
     run: async (input, actor) => {
       const entry = await loadEntryInSite(actor, input.id)
-      await restoreRevision(
+      const restored = await restoreRevision(
         entry.id,
         input.revisionId,
         actor.userId,
         input.expectedVersion ?? entry.draftVersion,
       )
-      return formatStoredEntry(actor, entry.id)
+      return {
+        ...(await formatStoredEntry(actor, entry.id)),
+        skippedFields: restored.skippedFields,
+      }
     },
   })
 }

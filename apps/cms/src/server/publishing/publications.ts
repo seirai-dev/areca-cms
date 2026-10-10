@@ -1,8 +1,11 @@
+import { createHash } from 'node:crypto'
 import { and, desc, eq, inArray, lte, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
 import {
   buildJob,
+  dokployCredential,
+  schedulerBackoff,
   entry,
   publication,
   publicationRequest,
@@ -12,6 +15,8 @@ import {
 import type { BuildJobStatus } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
+import { env } from '#/env'
+import { lockOrganizationForMutation } from '#/server/admin/organization-lock'
 import { assetMutationLock } from '#/server/assets/usage'
 import { buildSnapshot } from '#/server/content/snapshot'
 import {
@@ -127,6 +132,7 @@ export async function requestPublication(input: {
   priority?: number
   note?: string
   scheduledBy?: string[]
+  schedulerFingerprint?: string
 }): Promise<
   | {
       ok: true
@@ -144,7 +150,9 @@ export async function requestPublication(input: {
   const actorId = dbActorId(input.actorId)
   const priority = input.priority ?? 0
 
+  const preliminarySite = await getSiteOrThrow(input.siteId)
   return db.transaction(async (tx) => {
+    await lockOrganizationForMutation(tx, preliminarySite.organizationId)
     const replay = await replayRequest(tx, input, 'publish', payload)
     if (replay) return { ok: true as const, ...replay }
     const [lockedSite] = await tx
@@ -163,6 +171,69 @@ export async function requestPublication(input: {
         errors: [
           'Production publishing requires a deployment target and a publication-aware health URL.',
         ],
+      }
+    }
+    if (input.schedulerFingerprint) {
+      const [pending] = await tx
+        .select()
+        .from(buildJob)
+        .where(
+          and(
+            eq(buildJob.siteId, input.siteId),
+            inArray(buildJob.status, [
+              'queued',
+              'building',
+              'validating',
+              'deploying',
+            ]),
+          ),
+        )
+        .limit(1)
+      if (pending) {
+        const [pendingPublication] = await tx
+          .select()
+          .from(publication)
+          .where(eq(publication.id, pending.publicationId))
+        return {
+          ok: true as const,
+          publication: pendingPublication,
+          job: pending,
+        }
+      }
+      const [retry] = await tx
+        .select()
+        .from(schedulerBackoff)
+        .where(eq(schedulerBackoff.siteId, input.siteId))
+      if (
+        retry?.approvalFingerprint === input.schedulerFingerprint &&
+        (retry.failureCount >= 4 ||
+          (retry.nextAttemptAt && retry.nextAttemptAt > new Date()))
+      )
+        return {
+          ok: false as const,
+          errors: [
+            'Scheduled release retries are paused or waiting for their next attempt',
+          ],
+        }
+      if (retry?.approvalFingerprint !== input.schedulerFingerprint) {
+        await tx
+          .insert(schedulerBackoff)
+          .values({
+            siteId: input.siteId,
+            approvalFingerprint: input.schedulerFingerprint,
+            failureCount: 0,
+            lastAttemptAt: new Date(),
+          })
+          .onConflictDoUpdate({
+            target: schedulerBackoff.siteId,
+            set: {
+              approvalFingerprint: input.schedulerFingerprint,
+              failureCount: 0,
+              nextAttemptAt: null,
+              lastAttemptAt: new Date(),
+              lastError: null,
+            },
+          })
       }
     }
     await assertDispatchResolved(tx, input.siteId)
@@ -222,6 +293,8 @@ export async function requestPublication(input: {
         siteId: input.siteId,
         publicationId: pub.id,
         priority,
+        ...(await deploymentIdentity(tx, lockedSite)),
+        schedulerFingerprint: input.schedulerFingerprint ?? null,
         status: 'queued',
       })
       .returning()
@@ -268,6 +341,10 @@ export async function requestPublication(input: {
       tx,
     )
 
+    if (input.actorId !== 'system')
+      await tx
+        .delete(schedulerBackoff)
+        .where(eq(schedulerBackoff.siteId, input.siteId))
     await rememberRequest(tx, input, 'publish', payload, pub.id, job.id)
     return { ok: true as const, publication: pub, job }
   })
@@ -281,7 +358,9 @@ export async function requestRollback(input: {
 }) {
   const payload = JSON.stringify({ publicationId: input.publicationId })
   const actorId = dbActorId(input.actorId)
+  const preliminarySite = await getSiteOrThrow(input.siteId)
   return db.transaction(async (tx) => {
+    await lockOrganizationForMutation(tx, preliminarySite.organizationId)
     const replay = await replayRequest(tx, input, 'rollback', payload)
     if (replay) return replay
     const [pub] = await tx
@@ -367,6 +446,7 @@ export async function requestRollback(input: {
         siteId: input.siteId,
         publicationId: updated.id,
         priority: 100,
+        ...(await deploymentIdentity(tx, lockedSite)),
         status: 'queued',
       })
       .returning()
@@ -578,5 +658,35 @@ export async function getSiteReleaseStatus(siteId: string) {
     liveEntryIds: diff.liveEntryIds,
     liveSlugsByEntryId: diff.liveSlugsByEntryId,
     pendingEntryIds: [...diff.adds, ...diff.updates].map((item) => item.id),
+  }
+}
+
+/** Freeze the hosting destination when a release is requested. */
+export async function deploymentIdentity(
+  tx: RequestTx,
+  existingSite: typeof site.$inferSelect,
+) {
+  if (existingSite.publishingMode === 'demo') return {}
+  const [credential] = await tx
+    .select()
+    .from(dokployCredential)
+    .where(eq(dokployCredential.organizationId, existingSite.organizationId))
+  const rawUrl =
+    credential?.url ??
+    (process.env.NODE_ENV !== 'production' && env.DOKPLOY_DEV_FALLBACK_ENABLED
+      ? env.DOKPLOY_URL
+      : undefined)
+  const connectionUrl = rawUrl ? new URL(rawUrl).href.replace(/\/+$/, '') : null
+  return {
+    dispatchTarget: existingSite.deploymentTarget,
+    dispatchConnectionUrl: connectionUrl,
+    deploymentResourceKey:
+      connectionUrl && existingSite.deploymentTarget
+        ? createHash('sha256')
+            .update(
+              `${connectionUrl}\n${existingSite.deploymentTarget.applicationId}`,
+            )
+            .digest('hex')
+        : null,
   }
 }

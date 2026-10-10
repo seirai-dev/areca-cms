@@ -49,7 +49,7 @@ function createDokployRequest(opts: DokployConnectionOptions) {
   const baseUrl = assertSecureServiceUrl(
     opts.baseUrl,
     opts.allowInsecureHttp,
-  ).href.replace(/\/$/, '')
+  ).href.replace(/\/+$/, '')
   const fetchFn = opts.fetch ?? fetch
 
   async function request<T>(path: string, init: RequestInit = {}): Promise<T> {

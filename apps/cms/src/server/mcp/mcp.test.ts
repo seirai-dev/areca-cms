@@ -435,6 +435,7 @@ describe.skipIf(!hasDb)('MCP server', () => {
     await db.insert(asset).values({
       id,
       organizationId: world.ctx.org.id,
+      originSiteId: world.ctx.site.id,
       storageKey,
       originalFilename: 'body.png',
       mimeType: 'image/png',
@@ -471,31 +472,29 @@ describe.skipIf(!hasDb)('MCP server', () => {
       .update(site)
       .set({ publishingMode: 'demo' })
       .where(eq(site.id, world.ctx.site.id))
-    await db
-      .insert(publication)
-      .values({
-        id: publicationId,
-        siteId: world.ctx.site.id,
-        status: 'demo',
-        publishingMode: 'demo',
-        snapshotHash: 'test-demo',
-        snapshot: {
-          publicationId,
-          siteKey: world.ctx.site.slug,
-          createdAt: new Date().toISOString(),
-          hash: 'test-demo',
-          collections: {
-            posts: [
-              {
-                id,
-                slug: 'demo-only',
-                publishedAt: null,
-                data: { title: 'Demo title' },
-              },
-            ],
-          },
+    await db.insert(publication).values({
+      id: publicationId,
+      siteId: world.ctx.site.id,
+      status: 'demo',
+      publishingMode: 'demo',
+      snapshotHash: 'test-demo',
+      snapshot: {
+        publicationId,
+        siteKey: world.ctx.site.slug,
+        createdAt: new Date().toISOString(),
+        hash: 'test-demo',
+        collections: {
+          posts: [
+            {
+              id,
+              slug: 'demo-only',
+              publishedAt: null,
+              data: { title: 'Demo title' },
+            },
+          ],
         },
-      })
+      },
+    })
     try {
       const read = await call(client, 'get_entry', {
         id,
@@ -593,6 +592,7 @@ describe.skipIf(!hasDb)('MCP server', () => {
     await db.insert(asset).values({
       id,
       organizationId: world.ctx.org.id,
+      originSiteId: world.ctx.site.id,
       storageKey: `${world.ctx.org.id}/audit-${id}.png`,
       originalFilename: 'audit.png',
       mimeType: 'image/png',
@@ -754,6 +754,7 @@ describe.skipIf(!hasDb)('MCP server', () => {
       .insert(asset)
       .values({
         organizationId: world.ctx.org.id,
+        originSiteId: world.ctx.site.id,
         storageKey: `${world.ctx.org.id}/mcp-test.png`,
         originalFilename: 'loaf.png',
         mimeType: 'image/png',
@@ -771,6 +772,9 @@ describe.skipIf(!hasDb)('MCP server', () => {
     })
     expect(uploaded.isError).toBe(false)
     expect(uploaded.data?.assetId).toBe(row.id)
+    expect(vi.mocked(uploadAssetFromUrl)).toHaveBeenLastCalledWith(
+      expect.objectContaining({ originSiteId: world.ctx.site.id }),
+    )
 
     const audits = await db
       .select()

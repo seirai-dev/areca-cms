@@ -33,7 +33,12 @@ export type ValidateEntryResult =
 export type SchemaMode = 'strict' | 'partial'
 
 function isIsoDateTime(value: string) {
-  return ISO_DATETIME.test(value) && !Number.isNaN(Date.parse(value))
+  return (
+    ISO_DATETIME.test(value) &&
+    z.iso.date().safeParse(value.slice(0, 10)).success &&
+    Number(value.slice(11, 13)) < 24 &&
+    !Number.isNaN(Date.parse(value))
+  )
 }
 
 export function isEmptyRichText(value: unknown): boolean {
@@ -42,12 +47,15 @@ export function isEmptyRichText(value: unknown): boolean {
   const doc = value as { type?: string; content?: unknown[] }
   if (doc.type !== 'doc') return false
   const content = doc.content ?? []
+  if (!Array.isArray(content)) return false
   if (content.length === 0) return true
   return content.every((node) => {
     if (!node || typeof node !== 'object' || Array.isArray(node)) return false
     const item = node as { type?: string; content?: unknown[] }
     return (
-      item.type === 'paragraph' && (!item.content || item.content.length === 0)
+      item.type === 'paragraph' &&
+      (item.content === undefined ||
+        (Array.isArray(item.content) && item.content.length === 0))
     )
   })
 }
@@ -97,14 +105,19 @@ function schemaForField(field: Field, mode: SchemaMode): z.ZodType {
       )
     case 'richtext': {
       const richtext = z.any().superRefine((value, ctx) => {
+        if (value != null && value !== '') {
+          const errors = validateRichText(value)
+          if (errors.length) {
+            for (const message of errors)
+              ctx.addIssue({ code: 'custom', message })
+            return
+          }
+        }
         if (isEmptyRichText(value)) {
           if (mode === 'strict' && field.required) {
             ctx.addIssue({ code: 'custom', message: m.server_required() })
           }
           return
-        }
-        for (const message of validateRichText(value)) {
-          ctx.addIssue({ code: 'custom', message })
         }
       })
       if (mode === 'partial' || !field.required) {
@@ -214,7 +227,7 @@ export function pickDeclaredFields(
   const out: EntryData = {}
   for (const field of fields) {
     if (Object.prototype.hasOwnProperty.call(data, field.key)) {
-      out[field.key] = data[field.key] as EntryData[string]
+      out[field.key] = data[field.key]
     }
   }
   if (Object.prototype.hasOwnProperty.call(data, SEO_KEY)) {
@@ -367,7 +380,12 @@ export async function validateReferences(
     }
 
     const [ref] = await db
-      .select({ id: entry.id, status: entry.status })
+      .select({
+        id: entry.id,
+        status: entry.status,
+        publishedData: entry.publishedData,
+        publishedSlug: entry.publishedSlug,
+      })
       .from(entry)
       .where(and(eq(entry.id, value), eq(entry.collectionId, refCollection.id)))
       .limit(1)
@@ -379,7 +397,7 @@ export async function validateReferences(
       })
       continue
     }
-    if (options.requirePublished !== false && ref.status !== 'published') {
+    if (options.requirePublished !== false && !isApprovedReferenceTarget(ref)) {
       errors.push({
         path: field.key,
         message: m.server_referenced_entry_not_published(),
@@ -388,6 +406,19 @@ export async function validateReferences(
   }
 
   return errors
+}
+
+/** A scheduled replacement retains the already-approved reference version. */
+export function isApprovedReferenceTarget(ref: {
+  status: string
+  publishedData: unknown
+  publishedSlug: string | null
+}): boolean {
+  return (
+    (ref.status === 'published' || ref.status === 'scheduled') &&
+    ref.publishedData != null &&
+    Boolean(ref.publishedSlug)
+  )
 }
 
 export function resolveSlug(

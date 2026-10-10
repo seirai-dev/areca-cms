@@ -35,7 +35,7 @@ export type FieldDraft = {
   label: string
   type: FieldType
   required: boolean
-  options: string
+  options: string[]
   collection: string
   description: string
   /** False until the user edits the key by hand, so it follows the label. */
@@ -172,7 +172,7 @@ export function emptyFieldDraft(type: FieldType = 'text'): FieldDraft {
     label: '',
     type,
     required: false,
-    options: '',
+    options: [],
     collection: '',
     description: '',
     keyTouched: false,
@@ -186,7 +186,7 @@ function toFieldDraft(field: Field): FieldDraft {
     label: field.label,
     type: field.type,
     required: Boolean(field.required),
-    options: field.options?.join(', ') ?? '',
+    options: [...(field.options ?? [])],
     collection: field.collection ?? '',
     description: field.description ?? '',
     keyTouched: true,
@@ -208,10 +208,7 @@ export function fieldsFromDrafts(drafts: FieldDraft[]): Field[] {
     description: field.description.trim() || undefined,
     options:
       field.type === 'select'
-        ? field.options
-            .split(',')
-            .map((option) => option.trim())
-            .filter(Boolean)
+        ? field.options.filter((option) => option.trim().length > 0)
         : undefined,
     collection:
       field.type === 'reference'

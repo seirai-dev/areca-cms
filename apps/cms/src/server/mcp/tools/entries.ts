@@ -1,7 +1,11 @@
 import { z } from 'zod'
 
 import { assetUrl, loadAssetLookup } from '#/server/assets'
-import { richTextAssetRefs } from '#/server/assets/richtext-ownership'
+import { siteAssetLookup } from '#/server/assets/site-scope'
+import {
+  richTextAssetsAuthorizedFrom,
+  richTextAssetRefs,
+} from '#/server/assets/richtext-ownership'
 import { SEO_KEY } from '#/lib/seo'
 import { ID_MAX_LENGTH, SEARCH_MAX_LENGTH } from '#/lib/content-limits'
 import type { EntryData, Field } from '#/lib/types'
@@ -69,8 +73,16 @@ async function assetLookupFor(
   seo: Record<string, unknown> | null | undefined,
 ): Promise<AssetLookup> {
   const ids = collectAssetIds(fields, inputs, seo ?? undefined)
-  if (ids.length === 0) return { byId: new Map(), byStorageKey: new Map() }
-  return loadAssetLookup(actor.organizationId, { ids, storageKeys: [] })
+  const lookup = await siteAssetLookup(actor.organizationId, actor.siteId)
+  const missing = ids.find((id) => !lookup.byId.has(id))
+  if (missing)
+    throw new ValidationError([
+      {
+        path: 'fields',
+        message: `Asset ${missing} is not available to this site. Use list_assets or upload_asset_from_url.`,
+      },
+    ])
+  return lookup
 }
 
 /** Lookup for read paths: every image id stored on the given entry data. */
@@ -269,6 +281,7 @@ export function registerEntryTools(registry: ToolRegistry): void {
       const seo = seoPatch(input.seo)
       const assets = await assetLookupFor(actor, col.fields, inputs, seo)
       const data = toStoredFields(col.fields, inputs, assets)
+      assertSiteImages(col.fields, data, assets)
       const merged = mergeSeo(undefined, seo)
       if (merged) data[SEO_KEY] = merged
       const created = await createEntry({
@@ -309,6 +322,7 @@ export function registerEntryTools(registry: ToolRegistry): void {
       const patch = seoPatch(input.seo)
       const assets = await assetLookupFor(actor, col.fields, inputs, patch)
       const converted = toStoredFields(col.fields, inputs, assets)
+      assertSiteImages(col.fields, converted, assets)
       const data = pickDeclaredFields(col.fields, entry.draftData)
       Object.assign(data, converted)
       const seo = mergeSeo(
@@ -368,4 +382,25 @@ export function registerEntryTools(registry: ToolRegistry): void {
       return { url }
     },
   })
+}
+
+function assertSiteImages(
+  fields: Field[],
+  data: EntryData,
+  lookup: AssetLookup,
+) {
+  for (const field of fields) {
+    if (
+      field.type === 'richtext' &&
+      !richTextAssetsAuthorizedFrom(data[field.key], lookup)
+    ) {
+      throw new ValidationError([
+        {
+          path: field.key,
+          message:
+            'This image is not available to this site. Use list_assets or upload_asset_from_url.',
+        },
+      ])
+    }
+  }
 }

@@ -1,4 +1,5 @@
 import { eq, inArray, or } from 'drizzle-orm'
+import sharp from 'sharp'
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('#/adapters/email', () => ({ sendEmail: vi.fn(async () => {}) }))
@@ -180,7 +181,7 @@ describe.skipIf(!hasDb)(
         await updateBranding({ appName: `Brand ${suffix}` }, admin.id)
         await setBrandingImage(
           'logo',
-          { buffer: Buffer.from('x'), mimeType: 'image/png' },
+          { buffer: await sharp({create:{width:1,height:1,channels:4,background:'#ffffff'}}).png().toBuffer(), mimeType: 'image/png' },
           admin.id,
         )
         await clearBrandingImage('logo', admin.id)

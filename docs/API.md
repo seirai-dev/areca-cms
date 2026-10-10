@@ -11,10 +11,10 @@ This page does not cover the MCP endpoints that AI apps use: the per-site connec
 Set the CMS origin in `ARECA_CMS_URL`. The SDK removes trailing slashes and
 uses these bearer tokens:
 
-| Credential | Header | Access |
-| --- | --- | --- |
-| Site token | `Authorization: Bearer <site-token>` | Read the manifest and current snapshot. |
-| Schema token | `Authorization: Bearer <schema-token>` | POST schema manifest. |
+| Credential   | Header                                 | Access                                  |
+| ------------ | -------------------------------------- | --------------------------------------- |
+| Site token   | `Authorization: Bearer <site-token>`   | Read the manifest and current snapshot. |
+| Schema token | `Authorization: Bearer <schema-token>` | POST schema manifest.                   |
 
 `ARECA_SITE_TOKEN` and `ARECA_SCHEMA_TOKEN` are separate. The SDK requires
 `ARECA_SITE_TOKEN` when `createArecaClient()` is constructed, including before
@@ -24,12 +24,12 @@ in the local schema-authoring environment and out of build/deploy secrets.
 
 ## Endpoints
 
-| Method and path | Authorization | Purpose | Success body |
-| --- | --- | --- | --- |
-| `GET /api/sites/manifest` | Site token | Read the site's content schema | `{ "collections": { ... } }` |
-| `POST /api/sites/manifest` | Schema token | Create or update the site's schema | `{ "ok": true }` |
-| `GET /api/sites/snapshot/current` | Site token | Get the current publication snapshot | `Snapshot` object |
-| `GET /api/sites/preview?token=<preview-token>` | Signed, expiring preview token | Get one draft entry | `{ "collection", "slug", "entry" }` |
+| Method and path                                | Authorization                  | Purpose                              | Success body                        |
+| ---------------------------------------------- | ------------------------------ | ------------------------------------ | ----------------------------------- |
+| `GET /api/sites/manifest`                      | Site token                     | Read the site's content schema       | `{ "collections": { ... } }`        |
+| `POST /api/sites/manifest`                     | Schema token                   | Create or update the site's schema   | `{ "ok": true }`                    |
+| `GET /api/sites/snapshot/current`              | Site token                     | Get the current publication snapshot | `Snapshot` object                   |
+| `GET /api/sites/preview?token=<preview-token>` | Signed, expiring preview token | Get one draft entry                  | `{ "collection", "slug", "entry" }` |
 
 The POST body is the manifest shape, with a `collections` object. The SDK
 converts `areca.config.ts` to that body; collection labels are preserved when
@@ -56,25 +56,25 @@ cache the response.
 ## SDK client
 
 ```ts
-import { createArecaClient } from '@areca-cms/site-sdk'
-import type { SiteContentConfig } from '@areca-cms/site-sdk'
+import { createArecaClient } from "@areca-cms/site-sdk";
+import type { SiteContentConfig } from "@areca-cms/site-sdk";
 
-const client = createArecaClient()
-const manifest = await client.fetchManifest()
-const snapshot = await client.fetchSnapshot()
-const config: SiteContentConfig = { siteKey: 'acme-site', collections: {} }
-await client.syncManifest(config)
-const preview = await client.fetchPreview(previewToken)
+const client = createArecaClient();
+const manifest = await client.fetchManifest();
+const snapshot = await client.fetchSnapshot();
+const config: SiteContentConfig = { siteKey: "acme-site", collections: {} };
+await client.syncManifest(config);
+const preview = await client.fetchPreview(previewToken);
 ```
 
 Options can be passed instead of environment variables:
 
 ```ts
 const client = createArecaClient({
-  cmsUrl: 'https://cms.example.com',
+  cmsUrl: "https://cms.example.com",
   siteToken: process.env.ARECA_SITE_TOKEN,
   schemaToken: process.env.ARECA_SCHEMA_TOKEN,
-})
+});
 ```
 
 `syncManifest(config)` requires both tokens to construct the SDK client and
@@ -124,14 +124,14 @@ Collection field values are application-defined, so pair `SnapshotEntry` with
 your own `data` type:
 
 ```ts
-import type { RichTextValue, SnapshotEntry } from '@areca-cms/site-sdk'
+import type { RichTextValue, SnapshotEntry } from "@areca-cms/site-sdk";
 
 type Article = SnapshotEntry & {
-  data: { title: string; body: RichTextValue }
-}
+  data: { title: string; body: RichTextValue };
+};
 ```
 
-Rich text provides canonical Markdown, a TanStack Markdown AST, the original
+Rich text provides an escaped Markdown export, an editor-preserving TanStack Markdown AST, the original
 JSON representation, and a static HTML fallback. Images include dimensions,
 alt text, and MIME type. If present, `seo` contains resolved page metadata and
 JSON-LD; older snapshots can omit it. See [Content schema](CONTENT_SCHEMA.md)

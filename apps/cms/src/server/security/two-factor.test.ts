@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty; retain defensive lookup and authorization checks. */
 import { createHmac } from 'node:crypto'
 
 import { eq } from 'drizzle-orm'
@@ -5,6 +6,7 @@ import { afterAll, describe, expect, it } from 'vitest'
 
 import { db } from '#/db'
 import { account, session, twoFactor, user } from '#/db/schema'
+import { localMfaVerifiedAt } from './local-mfa'
 import { auth } from '#/lib/auth'
 
 const hasDb = Boolean(process.env.DATABASE_URL)
@@ -20,7 +22,7 @@ function totp(base32: string, at = Date.now()) {
   const counter = Buffer.alloc(8)
   counter.writeBigUInt64BE(BigInt(Math.floor(at / 1000 / 30)))
   const hmac = createHmac('sha1', key).update(counter).digest()
-  const offset = hmac[hmac.length - 1]! & 0xf
+  const offset = hmac[hmac.length - 1] & 0xf
   const binary = hmac.readUInt32BE(offset) & 0x7fffffff
   return String(binary % 1_000_000).padStart(6, '0')
 }
@@ -91,6 +93,16 @@ describe.skipIf(!hasDb)('two-factor (Better Auth)', () => {
     const secret = new URL(enabled.totpURI).searchParams.get('secret') ?? ''
     const code = totp(secret)
     await auth.api.verifyTOTP({ body: { code }, headers })
+    const [factorSession] = await db
+      .select()
+      .from(session)
+      .where(eq(session.userId, userId))
+    expect(
+      await localMfaVerifiedAt({
+        session: factorSession,
+        user: { id: userId },
+      }),
+    ).toBeInstanceOf(Date)
 
     const [enrolled] = await db.select().from(user).where(eq(user.id, userId))
     expect(enrolled?.twoFactorEnabled).toBe(true)

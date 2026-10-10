@@ -26,7 +26,10 @@ export const Route = createFileRoute('/_app')({
     }
     // Agency admins must enrol in two-factor before anything else; the
     // account page is where they do it.
-    if (me.mfaEnrolmentRequired && !isAccountPath(location.pathname)) {
+    if (
+      (me.mfaEnrolmentRequired || me.mfaVerificationRequired) &&
+      !isAccountPath(location.pathname)
+    ) {
       throw redirect({ to: '/account' })
     }
     return { me }

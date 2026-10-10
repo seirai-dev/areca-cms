@@ -655,7 +655,7 @@
   "content_field_key_hint": "Used by the site project. Letters and numbers, no spaces.",
   "content_field_label_placeholder": "Hero image",
   "content_field_locked": "Built-in field",
-  "content_field_options_hint": "Separate the choices with commas.",
+  "content_field_options_hint": "Add one choice per row. Commas stay part of the choice.",
   "content_field_reference_target": "Links to",
   "content_field_reference_target_hint": "Editors pick an entry from this content type.",
   "content_field_required_hint": "It must be filled in before an entry can be marked as ready.",
@@ -1551,5 +1551,16 @@
   "ui_copy": "Copy",
   "ui_copy_failed": "Couldn't copy to the clipboard",
   "ui_more": "More",
-  "ui_try_again": "Try again"
+  "ui_try_again": "Try again",
+  "account_factor_lockout_reset": "Reset verification lockout",
+  "account_factor_lockout_reset_description": "This clears failed-code attempts. Two-factor authentication stays enabled and the admin must still verify a code.",
+  "account_factor_lockout_reset_success": "Verification lockout reset",
+  "server_factor_lockout_self_reset": "Ask another agency admin to reset your verification lockout.",
+  "server_restore_field_removed": "This field no longer exists in this content type.",
+  "editor_revision_restored_partial": "Revision restored. Some fields kept their current values.",
+  "editor_revision_skipped_fields": "Fields not restored",
+  "editor_revision_keep_current": "These older values no longer fit the current content type. Your current draft values were kept.",
+  "media_picker_image_required": "Choose a JPEG, PNG, WebP or GIF image. PDFs cannot be used here.",
+  "content_add_option": "Add choice",
+  "settings_schema_token_reveal_title": "Save your schema token"
 }

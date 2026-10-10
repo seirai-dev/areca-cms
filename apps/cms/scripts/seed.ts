@@ -1,8 +1,16 @@
+/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty; retain defensive lookup and authorization checks. */
 import { createHash, randomBytes } from 'node:crypto'
 import { eq } from 'drizzle-orm'
 
 import { db, pool } from '#/db'
-import { collection, invitation, organization, site, user } from '#/db/schema'
+import {
+  account,
+  collection,
+  invitation,
+  organization,
+  site,
+  user,
+} from '#/db/schema'
 import { auth } from '#/lib/auth'
 import type { Field, MembershipRole } from '#/lib/types'
 import { acceptInvitation } from '#/server/admin/members'
@@ -25,10 +33,9 @@ const articleFields: Field[] = [
   },
 ]
 
-async function signUp(name: string, email: string) {
-  const result = await auth.api.signUpEmail({
-    body: { name, email, password: PASSWORD },
-  })
+async function signUp(name: string, email: string, invitationToken: string) {
+  const body = { name, email, password: PASSWORD, invitationToken }
+  const result = await auth.api.signUpEmail({ body })
   if (!result.user) {
     throw new Error(`Failed to create user ${email}`)
   }
@@ -55,7 +62,7 @@ async function inviteAndSignUp(input: {
     token,
     expiresAt: new Date(Date.now() + 60 * 60 * 1000),
   })
-  const created = await signUp(input.name, input.email)
+  const created = await signUp(input.name, input.email, token)
   await acceptInvitation({ token, userId: created.id })
   return created
 }
@@ -72,11 +79,25 @@ async function main() {
     return
   }
 
-  const admin = await signUp('Agency Admin', ADMIN_EMAIL)
-  await db
-    .update(user)
-    .set({ isAgencyAdmin: true })
-    .where(eq(user.id, admin.id))
+  // Operator-only seed provisions the initial credential atomically. Public
+  // signup stays invite-only and cannot bootstrap an empty instance.
+  await db.transaction(async (tx) => {
+    const id = crypto.randomUUID()
+    const context = await auth.$context
+    await tx.insert(user).values({
+      id,
+      name: 'Agency Admin',
+      email: ADMIN_EMAIL,
+      isAgencyAdmin: true,
+    })
+    await tx.insert(account).values({
+      id: crypto.randomUUID(),
+      userId: id,
+      providerId: 'credential',
+      accountId: id,
+      password: await context.password.hash(PASSWORD),
+    })
+  })
 
   const [org] = await db
     .insert(organization)

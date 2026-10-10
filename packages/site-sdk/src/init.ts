@@ -1,6 +1,15 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
-import { cancel, intro, isCancel, note, outro, password, spinner, text } from '@clack/prompts'
+import { dirname, join } from 'node:path'
+import {
+  cancel,
+  intro,
+  isCancel,
+  note,
+  outro,
+  password,
+  spinner,
+  text,
+} from '@clack/prompts'
 import { DEFAULT_CONFIG_PATH, DEFAULT_PULL_OUT_DIR } from './args.js'
 import { parseEnvAssignment } from './env.js'
 import type { PulledContentManifest } from './types.js'
@@ -69,7 +78,9 @@ export async function initSite(options: InitSiteOptions): Promise<void> {
   }
 }
 
-async function promptInitValues(options: InitSiteOptions): Promise<ResolvedInitValues> {
+async function promptInitValues(
+  options: InitSiteOptions,
+): Promise<ResolvedInitValues> {
   const cmsUrl = options.cmsUrl
     ? parseCmsUrl(options.cmsUrl)
     : parseCmsUrl(
@@ -78,7 +89,8 @@ async function promptInitValues(options: InitSiteOptions): Promise<ResolvedInitV
             message: 'CMS URL',
             placeholder: DEFAULT_CMS_URL,
             defaultValue: DEFAULT_CMS_URL,
-            validate: (value) => validateCmsUrlInput((value ?? '').trim() || DEFAULT_CMS_URL),
+            validate: (value) =>
+              validateCmsUrlInput((value ?? '').trim() || DEFAULT_CMS_URL),
           }),
         ),
       )
@@ -88,7 +100,8 @@ async function promptInitValues(options: InitSiteOptions): Promise<ResolvedInitV
     : requirePrompt(
         await password({
           message: 'Site token',
-          validate: (value) => ((value ?? '').trim() ? undefined : 'Site token is required'),
+          validate: (value) =>
+            (value ?? '').trim() ? undefined : 'Site token is required',
         }),
       ).trim()
 
@@ -121,12 +134,20 @@ function writeSiteFiles(
     ARECA_CMS_URL: values.cmsUrl,
     ARECA_SITE_TOKEN: values.token,
   })
-  ensureGitignore(join(cwd, '.gitignore'), ['.env.local', gitignoreOutDir(options.outDir)])
+  ensureGitignore(join(cwd, '.gitignore'), [
+    '.env.local',
+    gitignoreOutDir(options.outDir),
+  ])
   writeEmptyGeneratedContent(join(cwd, options.outDir))
-  writePackageJson(packageJsonPath, patchPackageScripts(pkg, options.outDir))
+  writePackageJson(
+    packageJsonPath,
+    patchPackageScripts(pkg, options.outDir, options.configPath),
+  )
 }
 
-function requireNonInteractiveValues(options: InitSiteOptions): ResolvedInitValues {
+function requireNonInteractiveValues(
+  options: InitSiteOptions,
+): ResolvedInitValues {
   const cmsUrl = options.cmsUrl?.trim() ?? ''
   const token = options.token?.trim() ?? ''
   const siteKey = options.siteKey?.trim() ?? ''
@@ -192,8 +213,13 @@ function requirePrompt(value: string | symbol): string {
   return value
 }
 
-function writeArecaConfig(filePath: string, siteKey: string, force: boolean): void {
+function writeArecaConfig(
+  filePath: string,
+  siteKey: string,
+  force: boolean,
+): void {
   if (!force && existsSync(filePath)) return
+  mkdirSync(dirname(filePath), { recursive: true })
   writeFileSync(
     filePath,
     `import { defineSiteContent } from '@areca-cms/site-sdk'\n\nexport default defineSiteContent({\n  siteKey: '${siteKey}',\n  collections: {},\n})\n`,
@@ -201,7 +227,11 @@ function writeArecaConfig(filePath: string, siteKey: string, force: boolean): vo
   )
 }
 
-function writeEnvExample(filePath: string, cmsUrl: string, force: boolean): void {
+function writeEnvExample(
+  filePath: string,
+  cmsUrl: string,
+  force: boolean,
+): void {
   if (!force && existsSync(filePath)) return
   writeFileSync(
     filePath,
@@ -210,7 +240,10 @@ function writeEnvExample(filePath: string, cmsUrl: string, force: boolean): void
   )
 }
 
-function upsertEnvLocal(filePath: string, updates: Record<string, string>): void {
+function upsertEnvLocal(
+  filePath: string,
+  updates: Record<string, string>,
+): void {
   const original = readOptionalUtf8(filePath) ?? ''
   const lines = original.length > 0 ? original.split(/\r?\n/) : []
   if (lines.length > 0 && lines[lines.length - 1] === '') {
@@ -260,7 +293,9 @@ function ensureGitignore(filePath: string, entries: string[]): void {
 
 function hasGitignoreEntry(existing: Set<string>, entry: string): boolean {
   const trimmed = entry.replace(/\/+$/, '')
-  return existing.has(entry) || existing.has(trimmed) || existing.has(`${trimmed}/`)
+  return (
+    existing.has(entry) || existing.has(trimmed) || existing.has(`${trimmed}/`)
+  )
 }
 
 function gitignoreOutDir(outDir: string): string {
@@ -269,6 +304,7 @@ function gitignoreOutDir(outDir: string): string {
 
 function writeEmptyGeneratedContent(outDir: string): void {
   mkdirSync(outDir, { recursive: true })
+  if (existsSync(join(outDir, 'manifest.json'))) return
   const manifest: PulledContentManifest = {
     publicationId: '',
     hash: '',
@@ -284,7 +320,9 @@ function readPackageJson(filePath: string): Record<string, unknown> {
     raw = readFileSync(filePath, 'utf8')
   } catch (error) {
     if (isNodeError(error) && error.code === 'ENOENT') {
-      throw new Error(`No package.json found. Run areca init from the site root.`)
+      throw new Error(
+        `No package.json found. Run areca init from the site root.`,
+      )
     }
     throw error
   }
@@ -306,14 +344,25 @@ function readPackageJson(filePath: string): Record<string, unknown> {
 function patchPackageScripts(
   pkg: Record<string, unknown>,
   outDir: string,
+  configPath: string,
 ): Record<string, unknown> {
   const scripts =
-    pkg.scripts && typeof pkg.scripts === 'object' && !Array.isArray(pkg.scripts)
+    pkg.scripts &&
+    typeof pkg.scripts === 'object' &&
+    !Array.isArray(pkg.scripts)
       ? { ...(pkg.scripts as Record<string, unknown>) }
       : {}
 
-  setScriptIfEmpty(scripts, 'sync-manifest', 'areca manifest push')
-  setScriptIfEmpty(scripts, 'content:pull', `areca pull --out ${outDir}`)
+  setScriptIfEmpty(
+    scripts,
+    'sync-manifest',
+    `areca manifest push${configPath === DEFAULT_CONFIG_PATH ? '' : ` ${shellArgument(configPath)}`}`,
+  )
+  setScriptIfEmpty(
+    scripts,
+    'content:pull',
+    `areca pull --out ${shellArgument(outDir)}`,
+  )
 
   const dev = scripts.dev
   if (typeof dev === 'string' && dev.trim() !== '' && !scriptLoadsEnv(dev)) {
@@ -323,7 +372,16 @@ function patchPackageScripts(
   return { ...pkg, scripts }
 }
 
-function setScriptIfEmpty(scripts: Record<string, unknown>, key: string, value: string): void {
+function shellArgument(value: string): string {
+  if (/^[A-Za-z0-9_./-]+$/.test(value)) return value
+  return `'${value.replace(/'/g, "'\\''")}'`
+}
+
+function setScriptIfEmpty(
+  scripts: Record<string, unknown>,
+  key: string,
+  value: string,
+): void {
   const current = scripts[key]
   if (typeof current !== 'string' || current.trim() === '') {
     scripts[key] = value
@@ -334,7 +392,10 @@ function scriptLoadsEnv(script: string): boolean {
   return script.includes('--env-file') || script.includes('areca run')
 }
 
-function writePackageJson(filePath: string, pkg: Record<string, unknown>): void {
+function writePackageJson(
+  filePath: string,
+  pkg: Record<string, unknown>,
+): void {
   writeJson(filePath, pkg)
 }
 

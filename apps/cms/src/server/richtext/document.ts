@@ -15,5 +15,5 @@ export function parseRichTextDocument(markdown: string): MarkdownDocument {
 
 /** Static HTML fallback for sites that do not render the document themselves. */
 export function renderRichTextHtml(document: MarkdownDocument): string {
-  return renderHtml(document)
+  return renderHtml(document).replace(/<\/img>/g, '')
 }

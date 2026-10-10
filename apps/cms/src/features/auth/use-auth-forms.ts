@@ -238,7 +238,10 @@ export function useInvitation(token: string, initialError: string | null) {
   }) {
     setPending('sign-up')
     setError(null)
-    const result = await authClient.signUp.email(input)
+    const result = await authClient.signUp.email({
+      ...input,
+      invitationToken: token,
+    } as typeof input)
     if (result.error) {
       setError(result.error.message ?? m.auth_could_not_create_account())
       setPending(null)

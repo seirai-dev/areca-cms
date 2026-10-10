@@ -45,11 +45,11 @@ install from a release or registry configured by your project maintainer.
 
 The package is ESM-only and does not import React. If your React site renders
 rich text, install the Markdown renderer version that matches the SDK's
-dependency. This SDK currently uses `@tanstack/markdown` 0.0.15, so install
+dependency. This SDK currently uses `@tanstack/markdown` 1.0.0, so install
 that compatible version rather than the latest major:
 
 ```bash
-pnpm add @tanstack/markdown@0.0.15
+pnpm add @tanstack/markdown@1.0.0
 ```
 
 ## Initialize your website
@@ -95,23 +95,23 @@ Edit `areca.config.ts` and replace the empty `collections` object with the
 content your site needs:
 
 ```ts
-import { defineSiteContent } from '@areca-cms/site-sdk'
+import { defineSiteContent } from "@areca-cms/site-sdk";
 
 export default defineSiteContent({
-  siteKey: 'acme-site',
+  siteKey: "acme-site",
   collections: {
     articles: {
-      route: '/blog/$slug',
-      label: 'Articles',
+      route: "/blog/$slug",
+      label: "Articles",
       fields: [
-        { key: 'title', label: 'Title', type: 'text', required: true },
-        { key: 'slug', label: 'Slug', type: 'slug', required: true },
-        { key: 'body', label: 'Body', type: 'richtext', required: true },
-        { key: 'cover', label: 'Cover', type: 'image' },
+        { key: "title", label: "Title", type: "text", required: true },
+        { key: "slug", label: "Slug", type: "slug", required: true },
+        { key: "body", label: "Body", type: "richtext", required: true },
+        { key: "cover", label: "Cover", type: "image" },
       ],
     },
   },
-})
+});
 ```
 
 The `siteKey` must match the site created in the CMS. Collection and field keys
@@ -204,12 +204,15 @@ call it from your build pipeline. The demo site's more flexible `prebuild`
 script pulls when credentials are set, reuses existing generated content when
 they are absent, and allows a local fixture when there is no CMS content.
 
-For deployments started by Areca, the snapshot endpoint pins the active build
-to its publication, falling back to the live publication when no build is
-active. `createArecaClient().fetchSnapshot()` sends the site-token bearer
-header; it does not send a publication ID header or read `ARECA_SNAPSHOT_ID`.
-The Dokploy adapter sets `ARECA_SNAPSHOT_ID` as a changing Docker build
-argument to invalidate a cached content-pull layer. In a Dockerfile, declare
+For deployments started by Areca, `areca pull` reads the existing
+`ARECA_SNAPSHOT_ID` build argument and requests that exact publication through
+`?publicationId=<id>`. The SDK rejects a mismatched response. Empty or `0` values
+select the current successful live/demo publication, as do manual pulls without
+a pin. Use `areca pull --publication <id>` or
+`createArecaClient().fetchSnapshot({ publicationId })` for an explicit selection.
+The endpoint scopes every frozen publication to the authenticated site.
+The Dokploy adapter sets `ARECA_SNAPSHOT_ID` for each deployment and invalidates
+the cached content-pull layer. In a Dockerfile, declare
 that argument after dependency/SDK installation and before the build step that
 runs `areca pull`; keep the site token mounted as a BuildKit secret. See
 [`examples/demo-site/Dockerfile`](../examples/demo-site/Dockerfile) and the
@@ -217,23 +220,39 @@ runs `areca pull`; keep the site token mounted as a BuildKit secret. See
 
 ## Read entries in a server loader
 
+Pulls now write immutable collection files under
+`src/generated/content/.publications/publication-<generation>/` and atomically
+replace `manifest.json` with the generation pointer. Use SDK readers rather
+than direct flat JSON imports. A failed pull keeps the previous whole publication;
+removed collections become unavailable on the next successful pull. Legacy flat
+outputs remain readable. Prior generations are retained for active readers; prune
+an unused output directory by deleting it and pulling again.
+
+Capture `readContentManifest(directory)` once and pass it as the third argument
+to `readContent(directory, collectionKey, manifest)` when loading several
+collections from a single publication.
+
 `readContent()` is exported from `@areca-cms/site-sdk/pull`. Define a type for
 the fields used by your UI; the schema does not generate application types:
 
 ```ts
-import { readContent } from '@areca-cms/site-sdk/pull'
-import type { ImageValue, RichTextValue, SnapshotEntry } from '@areca-cms/site-sdk'
+import { readContent } from "@areca-cms/site-sdk/pull";
+import type {
+  ImageValue,
+  RichTextValue,
+  SnapshotEntry,
+} from "@areca-cms/site-sdk";
 
 type Article = SnapshotEntry & {
   data: {
-    title: string
-    body: RichTextValue
-    cover: ImageValue | null
-  }
-}
+    title: string;
+    body: RichTextValue;
+    cover: ImageValue | null;
+  };
+};
 
 export function getArticles() {
-  return readContent<Article>('src/generated/content', 'articles')
+  return readContent<Article>("src/generated/content", "articles");
 }
 ```
 
@@ -252,24 +271,40 @@ Dockerfile copies that directory into its runtime image.
 
 ## Render rich text
 
-The CMS parses rich text into the SDK's TanStack Markdown document. Render the
+The CMS converts validated visual-editor content directly into a TanStack Markdown
+document so literal syntax, empty paragraphs, marks, lists, and complex tables retain
+their editor structure. The Markdown field is an escaped interoperable export; it
+can simplify structures outside its syntax profile. Render the
 document with the matching TanStack renderer:
 
 ```tsx
-import { Markdown } from '@tanstack/markdown/react'
-import { richTextDocument } from '@areca-cms/site-sdk'
-import type { RichTextValue } from '@areca-cms/site-sdk'
+import { Markdown } from "@tanstack/markdown/react";
+import { richTextComponents } from "@areca-cms/site-sdk/rich-text-react";
+import { richTextDocument } from "@areca-cms/site-sdk";
+import type { RichTextValue } from "@areca-cms/site-sdk";
 
 export function ArticleBody({ body }: { body: RichTextValue }) {
-  return <Markdown>{richTextDocument(body)}</Markdown>
+  return (
+    <Markdown components={richTextComponents()}>
+      {richTextDocument(body)}
+    </Markdown>
+  );
 }
 ```
 
+Use the optional `rich-text-react` adapter for React rendering. Explicitly resized
+editor images use safe `img` component nodes carrying numeric width/height; the
+adapter removes TanStack's generated empty children from these void elements.
+Pass your own map as `richTextComponents(myComponents)` to keep custom image
+rendering. Keep `max-width: 100%` while respecting supplied dimensions; forcing
+`width: 100%` overrides the author's chosen size. The CLI and core SDK do not
+import React. Static HTML already contains the chosen dimensions. Plain images
+remain standard Markdown image nodes.
+
 `richTextDocument()` also parses Markdown from older snapshots that predate the
-document property. `richTextMarkdown()` returns the canonical source and
+document property. `richTextMarkdown()` returns the Markdown export and
 `richTextHtml()` returns the static HTML fallback. Prefer the Markdown renderer
-when you need to control element rendering. The Markdown AST is pre-1.0, so
-keep the renderer dependency aligned with the SDK's TanStack Markdown version.
+when you need to control element rendering. Keep the renderer dependency aligned with the CMS and SDK's TanStack Markdown version (1.0.0).
 
 ## Add page metadata
 
@@ -280,53 +315,59 @@ uses that loader result for metadata:
 
 ```tsx
 // src/lib/content.ts: filesystem access used only by the server function below.
-import { readContent } from '@areca-cms/site-sdk/pull'
-import type { ImageValue, RichTextValue, SnapshotEntry } from '@areca-cms/site-sdk'
+import { readContent } from "@areca-cms/site-sdk/pull";
+import type {
+  ImageValue,
+  RichTextValue,
+  SnapshotEntry,
+} from "@areca-cms/site-sdk";
 
 export type Article = SnapshotEntry & {
-  data: { title: string; body: RichTextValue; cover: ImageValue | null }
-}
+  data: { title: string; body: RichTextValue; cover: ImageValue | null };
+};
 
 export function findArticle(slug: string) {
-  return readContent<Article>('src/generated/content', 'articles')
-    .find((article) => article.slug === slug)
+  return readContent<Article>("src/generated/content", "articles").find(
+    (article) => article.slug === slug,
+  );
 }
 ```
 
 ```ts
 // src/lib/queries.ts: TanStack Start keeps the handler on the server.
-import { createServerFn } from '@tanstack/react-start'
-import { z } from 'zod'
-import { findArticle } from './content'
+import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
+import { findArticle } from "./content";
 
-const loose = { strict: { output: false } as const }
+const loose = { strict: { output: false } as const };
 
-export const loadArticle = createServerFn({ method: 'GET', ...loose })
+export const loadArticle = createServerFn({ method: "GET", ...loose })
   .validator(z.object({ slug: z.string().min(1) }))
-  .handler(({ data }) => findArticle(data.slug) ?? null)
+  .handler(({ data }) => findArticle(data.slug) ?? null);
 ```
 
 ```tsx
 // src/routes/blog/$slug.tsx: route and page can run in the browser safely.
-import { createFileRoute, notFound } from '@tanstack/react-router'
-import { Markdown } from '@tanstack/markdown/react'
-import { richTextDocument, seoHead } from '@areca-cms/site-sdk'
-import { loadArticle } from '../../lib/queries'
+import { createFileRoute, notFound } from "@tanstack/react-router";
+import { Markdown } from "@tanstack/markdown/react";
+import { richTextComponents } from "@areca-cms/site-sdk/rich-text-react";
+import { richTextDocument, seoHead } from "@areca-cms/site-sdk";
+import { loadArticle } from "../../lib/queries";
 
-export const Route = createFileRoute('/blog/$slug')({
+export const Route = createFileRoute("/blog/$slug")({
   loader: async ({ params }) => {
-    const article = await loadArticle({ data: { slug: params.slug } })
-    if (!article) throw notFound()
-    return { article }
+    const article = await loadArticle({ data: { slug: params.slug } });
+    if (!article) throw notFound();
+    return { article };
   },
   head: ({ loaderData }) =>
-    seoHead(loaderData?.article.seo, { titleTemplate: '%s · Acme' }),
+    seoHead(loaderData?.article.seo, { titleTemplate: "%s · Acme" }),
   component: ArticlePage,
-})
+});
 
 function ArticlePage() {
-  const { article } = Route.useLoaderData()
-  const cover = article.data.cover
+  const { article } = Route.useLoaderData();
+  const cover = article.data.cover;
 
   return (
     <article>
@@ -339,9 +380,11 @@ function ArticlePage() {
         />
       ) : null}
       <h1>{article.data.title}</h1>
-      <Markdown>{richTextDocument(article.data.body)}</Markdown>
+      <Markdown components={richTextComponents()}>
+        {richTextDocument(article.data.body)}
+      </Markdown>
     </article>
-  )
+  );
 }
 ```
 
@@ -369,10 +412,10 @@ a collection, slug, and signed token. Fetch the draft on the server and mark
 the response private, uncached, and noindex. The SDK helpers are:
 
 ```ts
-import { getPreviewEntry, previewHeaders } from '@areca-cms/site-sdk'
+import { getPreviewEntry, previewHeaders } from "@areca-cms/site-sdk";
 
-const { entry } = await getPreviewEntry({ token })
-const headers = previewHeaders()
+const { entry } = await getPreviewEntry({ token });
+const headers = previewHeaders();
 // Apply headers to the server response and render the entry.
 ```
 
@@ -405,28 +448,37 @@ as the site's health-check endpoint. A TanStack Start route can use this small
 implementation (content is already pulled before the build):
 
 ```ts
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
-import { createFileRoute } from '@tanstack/react-router'
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { createFileRoute } from "@tanstack/react-router";
 
-export const Route = createFileRoute('/api/health')({
+export const Route = createFileRoute("/api/health")({
   server: {
     handlers: {
       GET: () => {
         try {
-          const path = join(process.cwd(), 'src/generated/content/manifest.json')
-          const manifest = JSON.parse(readFileSync(path, 'utf8'))
-          if (typeof manifest.publicationId !== 'string' || !manifest.publicationId) {
-            throw new Error('Publication ID missing')
+          const path = join(
+            process.cwd(),
+            "src/generated/content/manifest.json",
+          );
+          const manifest = JSON.parse(readFileSync(path, "utf8"));
+          if (
+            typeof manifest.publicationId !== "string" ||
+            !manifest.publicationId
+          ) {
+            throw new Error("Publication ID missing");
           }
-          return Response.json({ ok: true, publicationId: manifest.publicationId })
+          return Response.json({
+            ok: true,
+            publicationId: manifest.publicationId,
+          });
         } catch {
-          return Response.json({ ok: false }, { status: 503 })
+          return Response.json({ ok: false }, { status: 503 });
         }
       },
     },
   },
-})
+});
 ```
 
 The file-based route reads `src/generated/content/manifest.json` at runtime,
@@ -449,13 +501,13 @@ For scripts and custom build integrations, create a client from environment
 variables or explicit options:
 
 ```ts
-import { createArecaClient } from '@areca-cms/site-sdk'
-import { pullContent } from '@areca-cms/site-sdk/pull'
+import { createArecaClient } from "@areca-cms/site-sdk";
+import { pullContent } from "@areca-cms/site-sdk/pull";
 
-const client = createArecaClient()
-const manifest = await client.fetchManifest()
-const snapshot = await client.fetchSnapshot()
-await pullContent({ outDir: 'src/generated/content', client })
+const client = createArecaClient();
+const manifest = await client.fetchManifest();
+const snapshot = await client.fetchSnapshot();
+await pullContent({ outDir: "src/generated/content", client });
 ```
 
 The client has `fetchManifest()`, `fetchSnapshot()`, `syncManifest(config)`,
@@ -466,15 +518,15 @@ options object when you do not want to use environment variables.
 
 ## Common errors
 
-| Message or behavior | What to check |
-| --- | --- |
-| Missing `ARECA_CMS_URL` or `ARECA_SITE_TOKEN` | Set them in the environment or in `.env.local` in the directory where the CLI runs. |
-| Missing `ARECA_SCHEMA_TOKEN` during manifest push | Get the schema token from the site's Developer settings and set it in the authoring environment. |
-| `401` / unauthorized | Check which credential the operation needs and whether it was rotated. Schema push needs the schema token; manifest and snapshot reads need the site token. Preview needs the URL's current signed token. |
-| `429` / too many requests | Wait for the `Retry-After` seconds in the response, then retry. Site manifest and snapshot routes allow 300 requests per minute per token. |
-| No publication exists | Publish content in the CMS, then rerun `areca pull`. |
-| No content file for collection | Pull content first and confirm the collection key matches the schema. |
-| TypeScript config import fails | Use Node 24 or run the CLI through `tsx`, as suggested in the error. |
+| Message or behavior                               | What to check                                                                                                                                                                                             |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Missing `ARECA_CMS_URL` or `ARECA_SITE_TOKEN`     | Set them in the environment or in `.env.local` in the directory where the CLI runs.                                                                                                                       |
+| Missing `ARECA_SCHEMA_TOKEN` during manifest push | Get the schema token from the site's Developer settings and set it in the authoring environment.                                                                                                          |
+| `401` / unauthorized                              | Check which credential the operation needs and whether it was rotated. Schema push needs the schema token; manifest and snapshot reads need the site token. Preview needs the URL's current signed token. |
+| `429` / too many requests                         | Wait for the `Retry-After` seconds in the response, then retry. Site manifest and snapshot routes allow 300 requests per minute per token.                                                                |
+| No publication exists                             | Publish content in the CMS, then rerun `areca pull`.                                                                                                                                                      |
+| No content file for collection                    | Pull content first and confirm the collection key matches the schema.                                                                                                                                     |
+| TypeScript config import fails                    | Use Node 24 or run the CLI through `tsx`, as suggested in the error.                                                                                                                                      |
 
 The client does not retry failed HTTP requests. Network errors include the CMS
 URL and underlying fetch detail. HTTP errors include their status and CMS error

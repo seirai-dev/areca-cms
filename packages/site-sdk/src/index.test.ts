@@ -8,8 +8,17 @@ import { createArecaClient } from './client.js'
 import { defineSiteContent, manifestFromConfig } from './config.js'
 import { getPreviewEntry, previewHeaders } from './preview.js'
 import { pullContent, readContent } from './pull.js'
-import { richTextDocument, richTextHtml, richTextMarkdown } from './rich-text.js'
-import type { RichTextValue, SiteContentConfig, Snapshot, SnapshotEntry } from './types.js'
+import {
+  richTextDocument,
+  richTextHtml,
+  richTextMarkdown,
+} from './rich-text.js'
+import type {
+  RichTextValue,
+  SiteContentConfig,
+  Snapshot,
+  SnapshotEntry,
+} from './types.js'
 
 const sampleConfig: SiteContentConfig = {
   siteKey: 'demo',
@@ -40,7 +49,9 @@ const sampleEntry: SnapshotEntry = {
       markdown: 'Hi',
       document: {
         type: 'root',
-        children: [{ type: 'paragraph', children: [{ type: 'text', value: 'Hi' }] }],
+        children: [
+          { type: 'paragraph', children: [{ type: 'text', value: 'Hi' }] },
+        ],
       },
       html: '<p>Hi</p>',
     },
@@ -100,9 +111,9 @@ describe('createArecaClient', () => {
     delete process.env.ARECA_SITE_TOKEN
 
     expect(() => createArecaClient()).toThrow(/ARECA_CMS_URL/)
-    expect(() => createArecaClient({ cmsUrl: 'https://cms.example.com' })).toThrow(
-      /ARECA_SITE_TOKEN/,
-    )
+    expect(() =>
+      createArecaClient({ cmsUrl: 'https://cms.example.com' }),
+    ).toThrow(/ARECA_SITE_TOKEN/)
   })
 
   it('syncManifest posts the manifest with a bearer token', async () => {
@@ -125,7 +136,9 @@ describe('createArecaClient', () => {
     expect(calls[0]?.url).toBe('https://cms.example.com/api/sites/manifest')
     expect(calls[0]?.init?.method).toBe('POST')
     expect(authHeader(calls[0]?.init)).toBe('Bearer schema-token')
-    expect(calls[0]?.init?.body).toBe(JSON.stringify(manifestFromConfig(sampleConfig)))
+    expect(calls[0]?.init?.body).toBe(
+      JSON.stringify(manifestFromConfig(sampleConfig)),
+    )
   })
 
   it('fetchManifest GETs the manifest with a bearer token', async () => {
@@ -139,14 +152,17 @@ describe('createArecaClient', () => {
       cmsUrl: 'https://cms.example.com',
       siteToken: 'site-token',
     })
-    await expect(client.fetchManifest()).resolves.toEqual(manifestFromConfig(sampleConfig))
+    await expect(client.fetchManifest()).resolves.toEqual(
+      manifestFromConfig(sampleConfig),
+    )
     expect(calls[0]?.url).toBe('https://cms.example.com/api/sites/manifest')
     expect(calls[0]?.init?.method).toBe('GET')
     expect(authHeader(calls[0]?.init)).toBe('Bearer site-token')
   })
 
   it('fetchManifest throws on 401', async () => {
-    globalThis.fetch = async () => jsonResponse({ error: 'Invalid site token' }, 401)
+    globalThis.fetch = async () =>
+      jsonResponse({ error: 'Invalid site token' }, 401)
     const client = createArecaClient({
       cmsUrl: 'https://cms.example.com',
       siteToken: 'bad',
@@ -158,7 +174,9 @@ describe('createArecaClient', () => {
 
   it('fetchSnapshot returns the snapshot', async () => {
     globalThis.fetch = async (input) => {
-      expect(String(input)).toBe('https://cms.example.com/api/sites/snapshot/current')
+      expect(String(input)).toBe(
+        'https://cms.example.com/api/sites/snapshot/current',
+      )
       return jsonResponse(sampleSnapshot)
     }
 
@@ -170,13 +188,16 @@ describe('createArecaClient', () => {
   })
 
   it('fetchSnapshot throws when no publication exists', async () => {
-    globalThis.fetch = async () => jsonResponse({ error: 'No live publication' }, 404)
+    globalThis.fetch = async () =>
+      jsonResponse({ error: 'No live publication' }, 404)
 
     const client = createArecaClient({
       cmsUrl: 'https://cms.example.com',
       siteToken: 'site-token',
     })
-    await expect(client.fetchSnapshot()).rejects.toThrow(/No publication exists/)
+    await expect(client.fetchSnapshot()).rejects.toThrow(
+      /No publication exists/,
+    )
   })
 
   it('fetchSnapshot throws a clear error when the CMS is unreachable', async () => {
@@ -200,7 +221,9 @@ describe('createArecaClient', () => {
       entry: sampleEntry,
     }
     globalThis.fetch = async (input) => {
-      expect(String(input)).toBe('https://cms.example.com/api/sites/preview?token=opaque-token')
+      expect(String(input)).toBe(
+        'https://cms.example.com/api/sites/preview?token=opaque-token',
+      )
       return jsonResponse(preview)
     }
 
@@ -251,13 +274,16 @@ describe('pullContent / readContent', () => {
       })
       expect(snapshot).toEqual(sampleSnapshot)
 
-      const manifest = JSON.parse(readFileSync(join(outDir, 'manifest.json'), 'utf8'))
-      expect(manifest).toEqual({
+      const manifest = JSON.parse(
+        readFileSync(join(outDir, 'manifest.json'), 'utf8'),
+      )
+      expect(manifest).toMatchObject({
         publicationId: 'pub_1',
         hash: 'abc123',
         createdAt: '2026-01-01T00:00:00.000Z',
         collections: { articles: 1, pages: 0 },
       })
+      expect(manifest.generation).toMatch(/^publication-/)
 
       expect(readContent(outDir, 'articles')).toEqual([sampleEntry])
       expect(readContent(outDir, 'pages')).toEqual([])
@@ -395,7 +421,9 @@ describe('parseArgs', () => {
       configPath: './areca.config.ts',
       yes: false,
     })
-    expect(parseArgs(['manifest', 'pull', '--config', 'custom.config.ts', '-y'])).toEqual({
+    expect(
+      parseArgs(['manifest', 'pull', '--config', 'custom.config.ts', '-y']),
+    ).toEqual({
       command: 'manifest-pull',
       configPath: 'custom.config.ts',
       yes: true,
@@ -442,7 +470,8 @@ describe('run', () => {
   it('exits 1 when pull has no publication', async () => {
     process.env.ARECA_CMS_URL = 'https://cms.example.com'
     process.env.ARECA_SITE_TOKEN = 'site-token'
-    globalThis.fetch = async () => jsonResponse({ error: 'No live publication' }, 404)
+    globalThis.fetch = async () =>
+      jsonResponse({ error: 'No live publication' }, 404)
 
     const outDir = mkdtempSync(join(tmpdir(), 'areca-site-sdk-'))
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
