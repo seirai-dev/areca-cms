@@ -1331,6 +1331,8 @@
   "settings_provider_title": "Provider",
   "settings_quickstart": "Quick start",
   "settings_quickstart_hint": "Run these in the site project. init asks for the site token and saves it in .env.local.",
+  "settings_agent_skills": "Yapay zekâ kodlama ajanları",
+  "settings_agent_skills_hint": "Claude Code, Codex, Cursor, Copilot ve diğer ajanlara SDK'yı ve bu sitenin MCP sunucusunu nasıl kullanacaklarını öğretir.",
   "settings_rotate_button": "Rotate token…",
   "settings_save": "Save",
   "settings_site_key_description": "Identifies this site to the site project. It can't be changed.",
@@ -1562,5 +1564,6 @@
   "account_factor_lockout_reset_success": "Doğrulama kilidi sıfırlandı.",
   "server_factor_lockout_self_reset": "Kendi doğrulama kilidinizi sıfırlayamazsınız.",
   "content_add_option": "Seçenek ekle",
-  "settings_schema_token_reveal_title": "Şema anahtarınızı kaydedin"
+  "settings_schema_token_reveal_title": "Şema anahtarınızı kaydedin",
+  "connect_ai_skills_hint": "Bir kodlama ajanı mı kullanıyorsunuz? Bu komut, ajana bu araçları ve site SDK'sını öğreten Areca becerilerini kurar ve sunucuyu seçtiğiniz ajanlara ekler."
 }

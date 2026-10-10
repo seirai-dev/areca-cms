@@ -15,6 +15,7 @@ import {
   connectSetupPrompt,
   connectorJsonConfig,
   cursorConnectLink,
+  skillsInstallCommand,
   vscodeConnectLink,
 } from '#/lib/mcp-install'
 import type { McpConnectInput } from '#/lib/mcp-install'
@@ -147,6 +148,7 @@ export function ConnectApps({
             testId="connect-ai-command"
             wrap
           />
+          <SkillsHint url={input.url} app="claude-code" />
         </TabsContent>
 
         <TabsContent value="cursor">
@@ -172,6 +174,7 @@ export function ConnectApps({
               testId="connect-ai-cursor-config"
             />
           </details>
+          <SkillsHint url={input.url} app="cursor" />
         </TabsContent>
 
         <TabsContent value="vscode">
@@ -197,6 +200,7 @@ export function ConnectApps({
               </a>
             </Button>
           </div>
+          <SkillsHint url={input.url} app="vscode" />
         </TabsContent>
 
         <TabsContent value="other">
@@ -213,6 +217,7 @@ export function ConnectApps({
               testId="connect-ai-generic-config"
             />
           </details>
+          <SkillsHint url={input.url} app="other" />
         </TabsContent>
       </Tabs>
 
@@ -233,6 +238,26 @@ export function ConnectApps({
         />
       </div>
     </section>
+  )
+}
+
+/**
+ * For coding agents: one command installs the Areca skills (how to use the
+ * SDK and these tools) and adds this connector in the agents the user picks.
+ */
+function SkillsHint({ url, app }: { url: string; app: ConnectApp }) {
+  return (
+    <div className="grid gap-2 border-t border-border-default pt-4">
+      <p className="text-callout text-text-secondary">
+        {m.connect_ai_skills_hint()}
+      </p>
+      <CodeBlock
+        text={skillsInstallCommand(url)}
+        copyLabel={m.connect_ai_reveal_copy_command()}
+        testId={`connect-ai-skills-${app}`}
+        wrap
+      />
+    </div>
   )
 }
 

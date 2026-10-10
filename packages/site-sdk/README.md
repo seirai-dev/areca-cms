@@ -6,7 +6,8 @@ draft entries for preview. It does not create a CMS site or generate frontend
 routes.
 
 For a step-by-step integration guide, see the repository's
-[SDK guide](../../docs/SDK.md).
+[SDK guide](../../docs/SDK.md). Using an AI coding agent? Run
+`npx @areca-cms/skills` to teach it this SDK and the Areca MCP server.
 
 Requires Node.js 22.6 or newer. Node 24 LTS is recommended for direct import of
 the TypeScript config by `areca manifest push`. The SDK is ESM-only and has no

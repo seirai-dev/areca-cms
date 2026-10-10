@@ -1,0 +1,244 @@
+name: Release packages
+
+# Per package (scripts/release/lib.mjs lists their paths):
+# - If the version in package.json has no tag yet, test and pack it, then the
+#   publish job publishes it to npm, tags it and creates a GitHub Release. This
+#   is what merging a release PR does. A version that is already on npm is only
+#   tagged, which sets the baseline.
+# - Otherwise, open or update the release/<package> PR with the next version
+#   and changelog, based on conventional commits since the tag.
+#
+# npm authenticates through trusted publishing (OIDC), configured on npmjs.com
+# for this workflow file. Renaming the file breaks publishing.
+on:
+  push:
+    branches: [master]
+    paths:
+      - packages/site-sdk/**
+      - packages/skills/**
+      - skills/**
+      - .claude-plugin/**
+      - scripts/release/**
+      - .github/workflows/release.yml
+  workflow_dispatch:
+    inputs:
+      package:
+        description: Package to release
+        type: choice
+        options: [both, site-sdk, skills]
+        default: both
+      bump:
+        description: Version bump for the release PR (auto follows the commits; anything else opens one even without feat/fix commits). Ignored when an untagged version is waiting to publish.
+        type: choice
+        options: [auto, patch, minor, major]
+        default: auto
+
+permissions:
+  contents: write
+
+env:
+  # Keep in step with ci.yml.
+  NODE_VERSION: 24.21.0
+  PNPM_VERSION: 12.8.1
+
+jobs:
+  release:
+    name: Release ${{ matrix.package }}
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJSON(contains(fromJSON('["site-sdk","skills"]'), inputs.package) && format('["{0}"]', inputs.package) || '["site-sdk","skills"]') }}
+    concurrency:
+      group: release-${{ matrix.package }}
+      cancel-in-progress: false
+    env:
+      PACKAGE: ${{ matrix.package }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - id: status
+        run: node scripts/release/release.mjs status "$PACKAGE"
+      - id: mode
+        env:
+          TAGGED: ${{ steps.status.outputs.tagged }}
+          PUBLISHED: ${{ steps.status.outputs.published }}
+        run: |
+          if [ "$TAGGED" = true ]; then mode=prepare
+          elif [ "$PUBLISHED" = true ]; then mode=tag
+          else mode=publish
+          fi
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "Mode: $mode"
+
+      # Pack the untagged version from the commit that set it; the publish job
+      # below publishes the tarball.
+      - if: steps.mode.outputs.mode == 'publish'
+        name: Write release notes and check out the release commit
+        env:
+          SHA: ${{ steps.status.outputs.sha }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/release"
+          node scripts/release/release.mjs notes "$PACKAGE" --notes-file "$RUNNER_TEMP/release/notes.md"
+          git checkout --detach "$SHA"
+      - if: steps.mode.outputs.mode == 'publish'
+        run: npm install --global "pnpm@${PNPM_VERSION}"
+      - if: steps.mode.outputs.mode == 'publish'
+        id: store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - if: steps.mode.outputs.mode == 'publish'
+        uses: actions/cache@v6.1.0
+        with:
+          path: ${{ steps.store.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-store-${{ runner.os }}-
+      - if: steps.mode.outputs.mode == 'publish'
+        run: pnpm install --frozen-lockfile
+      # pack runs prepack (test + build).
+      - if: steps.mode.outputs.mode == 'publish'
+        name: Typecheck, test, build and pack
+        working-directory: ${{ steps.status.outputs.dir }}
+        env:
+          NAME: ${{ steps.status.outputs.name }}
+          TAG: ${{ steps.status.outputs.tag }}
+          VERSION: ${{ steps.status.outputs.version }}
+          SHA: ${{ steps.status.outputs.sha }}
+        run: |
+          pnpm typecheck
+          pnpm pack --pack-destination "$RUNNER_TEMP/release"
+          jq -n '{name: env.NAME, tag: env.TAG, version: env.VERSION, sha: env.SHA}' > "$RUNNER_TEMP/release/release.json"
+      - if: steps.mode.outputs.mode == 'publish'
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: release-${{ matrix.package }}
+          path: ${{ runner.temp }}/release
+          retention-days: 7
+          if-no-files-found: error
+
+      # A previous run published but failed to create the GitHub Release.
+      - if: steps.mode.outputs.mode == 'tag' && steps.status.outputs.changelog == 'true'
+        name: Tag and create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NAME: ${{ steps.status.outputs.name }}
+          TAG: ${{ steps.status.outputs.tag }}
+          VERSION: ${{ steps.status.outputs.version }}
+          SHA: ${{ steps.status.outputs.sha }}
+        run: |
+          node scripts/release/release.mjs notes "$PACKAGE" --notes-file "$RUNNER_TEMP/notes.md"
+          gh release create "$TAG" --target "$SHA" --title "$NAME v$VERSION" --notes-file "$RUNNER_TEMP/notes.md"
+
+      # Already on npm but untagged, with no changelog entry: the first run,
+      # which baselines the tag.
+      - if: steps.mode.outputs.mode == 'tag' && steps.status.outputs.changelog != 'true'
+        name: Tag the published version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.status.outputs.tag }}
+          SHA: ${{ steps.status.outputs.sha }}
+        run: gh api "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/$TAG" -f "sha=$SHA"
+
+      # Open or update the release PR.
+      - if: steps.mode.outputs.mode == 'prepare'
+        id: prepare
+        env:
+          BUMP: ${{ inputs.bump || 'auto' }}
+        run: node scripts/release/release.mjs prepare "$PACKAGE" --bump "$BUMP" --notes-file "$RUNNER_TEMP/notes.md"
+      # An App token, so CI runs on the release PR (GITHUB_TOKEN events don't trigger workflows).
+      - if: steps.prepare.outputs.next != '' && steps.mode.outputs.mode == 'prepare'
+        id: app
+        uses: actions/create-github-app-token@v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+      - if: steps.prepare.outputs.next != '' && steps.mode.outputs.mode == 'prepare'
+        name: Push release branch and open or update the PR
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          APP_SLUG: ${{ steps.app.outputs.app-slug }}
+          NAME: ${{ steps.status.outputs.name }}
+          CURRENT: ${{ steps.status.outputs.version }}
+          NEXT: ${{ steps.prepare.outputs.next }}
+        run: |
+          branch="release/$PACKAGE"
+          title="chore(release): $NAME v$NEXT"
+          bot="${APP_SLUG}[bot]"
+          git config user.name "$bot"
+          git config user.email "$(gh api "/users/$bot" --jq .id)+$bot@users.noreply.github.com"
+          git switch -C "$branch"
+          git add -A
+          git commit -m "$title"
+          git push --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/$branch"
+
+          {
+            echo "Releases \`$NAME\` $CURRENT → **$NEXT**. Merging this PR publishes it to npm, tags \`$PACKAGE-v$NEXT\` and creates a GitHub Release."
+            echo
+            cat "$RUNNER_TEMP/notes.md"
+            echo
+            echo
+            echo "_This PR is updated on every push to master that touches $NAME, so edits here are overwritten. To force a bump, run the Release packages workflow manually._"
+          } > "$RUNNER_TEMP/body.md"
+
+          pr=$(gh pr list --head "$branch" --base master --state open --json number,isCrossRepository --jq 'map(select(.isCrossRepository | not)) | .[0].number // empty')
+          if [ -n "$pr" ]; then
+            gh pr edit "$pr" --title "$title" --body-file "$RUNNER_TEMP/body.md"
+          else
+            gh pr create --head "$branch" --base master --title "$title" --body-file "$RUNNER_TEMP/body.md"
+          fi
+
+  # Kept apart from the release job so the OIDC token for npm is never
+  # available to repository code: this job only publishes the packed tarball.
+  publish:
+    name: Publish ${{ matrix.package }}
+    needs: release
+    if: ${{ !cancelled() && github.ref == 'refs/heads/master' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJSON(contains(fromJSON('["site-sdk","skills"]'), inputs.package) && format('["{0}"]', inputs.package) || '["site-sdk","skills"]') }}
+    concurrency:
+      group: publish-${{ matrix.package }}
+      cancel-in-progress: false
+    steps:
+      # Matches nothing (and downloads nothing) unless the release job packed this package.
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          pattern: release-${{ matrix.package }}
+          path: ${{ runner.temp }}/release
+          merge-multiple: true
+      - id: artifact
+        run: |
+          if [ -f "$RUNNER_TEMP/release/release.json" ]; then echo "found=true" >> "$GITHUB_OUTPUT"; fi
+      # Trusted publishing needs npm 11.5.1+; Node 24.21.0 ships npm 11.19.0.
+      - if: steps.artifact.outputs.found == 'true'
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - if: steps.artifact.outputs.found == 'true'
+        name: Publish to npm
+        run: npm publish "$RUNNER_TEMP"/release/*.tgz --access public
+      - if: steps.artifact.outputs.found == 'true'
+        name: Tag and create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          meta="$RUNNER_TEMP/release/release.json"
+          gh release create "$(jq -r .tag "$meta")" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$(jq -r .sha "$meta")" \
+            --title "$(jq -r '.name + " v" + .version' "$meta")" \
+            --notes-file "$RUNNER_TEMP/release/notes.md"
