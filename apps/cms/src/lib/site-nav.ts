@@ -75,7 +75,8 @@ export function displayHost(url: string | null | undefined) {
    Site workspace
 ------------------------------------------------------------------------- */
 
-export type SiteNavKey = 'overview' | 'library' | 'people' | 'settings'
+export type SiteNavKey =
+  'overview' | 'library' | 'connect-ai' | 'people' | 'settings'
 
 export type SiteNavItem = {
   key: SiteNavKey
@@ -84,6 +85,7 @@ export type SiteNavItem = {
   to:
     | '/sites/$siteId'
     | '/sites/$siteId/library'
+    | '/sites/$siteId/connect-ai'
     | '/sites/$siteId/people'
     | '/sites/$siteId/settings'
   /** Match only the exact path (Overview). */
@@ -112,6 +114,13 @@ export function siteNavItems(me: Me, site: MeSite): SiteNavItem[] {
       to: '/sites/$siteId/library',
       testId: 'library-nav',
       shortcut: 'l',
+    },
+    {
+      key: 'connect-ai',
+      label: m.shell_nav_connect_ai(),
+      icon: Sparkle,
+      to: '/sites/$siteId/connect-ai',
+      testId: 'connect-ai-nav',
     },
   ]
   if (canManageSite(me, site.organizationId)) {

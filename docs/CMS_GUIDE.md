@@ -50,6 +50,14 @@ Owners can request a rollback from a prior successful release in the Go-live pan
 
 ![Go-live panel with changes and release history](screenshots/current-releases.png)
 
+## Connect an AI app
+
+Connect AI lets an AI app you run, such as Claude Code, Cursor, VS Code or Claude Desktop, read and write one site as you. Open **Connect AI** in the site's sidebar or from the card on the Overview, and select **Create AI key**. Choose a name, the app, how long the key lasts (30 days, 90 days, 1 year or never; 90 days by default) and, for owners and agency admins, whether it may **Allow going live**. Areca shows the key once, with an install step for each app.
+
+The AI works within your role. Editors can create and edit drafts, upload files from web addresses and edit alt text. Owners can also mark ready, schedule, archive and delete. Only a key with **Allow going live** can publish. Keys stop working when they expire or are revoked, and owners can see and revoke every key on the site. Actions made through a key appear in the activity log as **via AI**.
+
+For setup steps and troubleshooting, see the [Connect AI guide](/docs/cms/connect-ai) in the docs site. For the tools and their rules, see [MCP.md](MCP.md).
+
 ## Keyboard shortcuts
 
 The account menu's **Keyboard shortcuts…** dialog lists the available shortcuts. The global shortcuts are ⌘K / Ctrl+K for search and commands, **g** then **o** for Overview, **g** then **l** for Library, **g** then **p** for People, and **g** then **s** for the workspace switcher. In a collection, **n** creates a new entry. **/** focuses page search (or opens the command palette when the page has no search). In the editor, ⌘S / Ctrl+S saves and ⌘. / Ctrl+. toggles Details. Single-key shortcuts pause while you type.

@@ -1,0 +1,276 @@
+---
+title: MCP endpoint and tools
+description: The per-site MCP endpoint that AI apps call, its transport and authentication, every tool with its inputs and who can call it, the field formats, SEO limits, errors and rate limit.
+---
+
+This is the technical reference for the per-site MCP endpoint. Editors who want to connect an AI app should start with [Connect AI](/docs/cms/connect-ai). This page is for developers and agency admins who configure AI apps, write their own MCP clients, or need the exact tool names and formats.
+
+The endpoint belongs to the CMS, not to a site project. It is authenticated with a **personal AI key**, which acts as one user on one site. It does not use the site token or the schema token. See [tokens](/docs/security/tokens#personal-ai-keys).
+
+## Endpoint
+
+| Item | Value |
+| --- | --- |
+| URL | `https://<your CMS>/api/mcp`. The **Server URL** on the Connect AI page shows the exact value. It is built from `APP_URL`. |
+| Method | `POST` for JSON-RPC messages |
+| Transport | MCP Streamable HTTP in stateless mode. Each request stands alone and no session ID is needed. Responses are JSON, not event streams. |
+| Protocol | MCP `2026-07-28`. Clients that use the 2025 protocol revisions are served too, statelessly. |
+| Authentication | `Authorization: Bearer areca_mcp_…` on every request |
+| Server name | `areca-<site slug>`, for example `areca-acme-site`. The install buttons use this name. |
+| Request size | Up to 1 MB per request |
+| Rate limit | 120 requests per minute per key, and 600 per minute per client address when the address is known. See [rate limits](/docs/security/rate-limits#ai-app-requests). |
+
+Cookies are not accepted. A request without a bearer key, or with a key that does not start with `areca_mcp_`, is refused.
+
+## Authentication
+
+A key is `areca_mcp_` followed by 43 random characters. Areca stores a SHA-256 hash of it, shows it once, and checks it on every request. A request is refused with HTTP `401` and this body when the key:
+
+- does not exist, was revoked, or has expired,
+- belongs to a user who is no longer a member of the site's client,
+- belongs to an agency admin who has no two-factor sign-in, on an installation that requires it.
+
+```json title="401 response body"
+{ "error": "Invalid or expired Areca MCP key" }
+```
+
+The response includes `WWW-Authenticate: Bearer realm="areca-mcp"`.
+
+An agency admin whose account has no two-factor sign-in is refused with HTTP `403` instead, when the installation requires two-factor for admins (the default):
+
+```json title="403 response body"
+{ "error": "Your account needs two-factor authentication before AI keys work. Turn it on in Account settings.", "code": "mfa_required" }
+```
+
+The role is read from the database on each request, so a change of role applies to the next request. The **Last used** time on a key is updated at most once a minute.
+
+## Access levels
+
+Tools are registered per request, based on the caller's current role. A tool that the caller cannot use is not listed by `tools/list`, and calling it by name returns an error.
+
+| Access | Who can use it | Tools |
+| --- | --- | --- |
+| Everyone | Any member of the site, including editors | All read tools, drafts, uploads, alt text, preview |
+| Owner | Owners, and agency admins | Workflow, delete, Library delete |
+| Go live | A key with **Allow going live**, held by an owner or agency admin | `go_live`, `rollback`, `cancel_build` |
+| Agency | Agency admins only | `upsert_collection`, `delete_collection` |
+
+The **Go live** flag is ignored for editors. The key's flag and the user's live role are both checked on each request.
+
+## Tools
+
+Every tool returns text or JSON. Ids come from earlier tool results. Inputs marked as required must be sent.
+
+### Site and schema
+
+| Tool | Access | Inputs | What it does |
+| --- | --- | --- | --- |
+| `get_site_info` | Everyone | None | Returns the site, your role and capabilities, `cannotDo` (what this key may not do, in plain sentences), every collection, and a short writing guide. Call it first. |
+| `get_collection_schema` | Everyone | `collection` (required) | Returns each field's key, label, type, required flag, format, options or referenced collection, and an example `fields` and `seo` payload. |
+
+### Entries
+
+| Tool | Access | Inputs | What it does |
+| --- | --- | --- | --- |
+| `list_entries` | Everyone | `collection` (required), `status` (`draft`, `ready`, `scheduled`, `archived`), `search`, `limit` (1 to 100, default 20), `offset` | Lists entry summaries with id, slug, status, `live`, `pendingRelease`, title and version, plus `total` and `nextOffset`. |
+| `get_entry` | Everyone | `id` (required), `includePublished` | Returns one entry with `fields`, `seo`, `status`, `live`, `pendingRelease`, `approvedAt` and `version`. With `includePublished`, also returns `liveFields`, the version visitors see now. See [reading entries](#reading-entries). |
+| `create_entry` | Everyone | `collection` (required), `fields`, `seo` | Creates a draft and returns the entry and its `previewUrl`. Put the slug in `fields`, under the collection's field of type `slug` (usually `slug`). It must be unique in the collection. |
+| `update_entry` | Everyone | `id` (required), `fields`, `seo`, `expectedVersion` | Changes only the keys you send. Clear a field with `""`, and an SEO key with `""`, `false` or `[]`. See [clearing values](#clearing-values). Send at least one of `fields` or `seo`. Editing a ready entry does not change the live site. |
+| `list_revisions` | Everyone | `id` (required) | Lists the history of an entry: revision id, note, time and author. |
+| `get_preview_url` | Everyone | `id` (required) | Returns a signed preview link for an entry, drafts included. It expires after about one hour. Fails when the site has no production URL. |
+
+### Library
+
+| Tool | Access | Inputs | What it does |
+| --- | --- | --- | --- |
+| `list_assets` | Everyone | `search`, `limit` (1 to 100, default 20), `offset` | Lists images and PDFs in the client's Library, with `assetId`, filename, alt text and URL. |
+| `get_asset` | Everyone | `id` (required) | Returns one asset with size, alt text and `usageCount`. |
+| `upload_asset_from_url` | Everyone | `url` (required), `altText`, `filename` | Imports a public image or PDF and returns its `assetId`. See [uploads from a URL](#uploads-from-a-url). |
+| `update_asset_alt` | Everyone | `id` (required), `altText` (required; empty clears it) | Sets the alt text of an asset. |
+| `delete_asset` | Owner | `id` (required) | Deletes an asset. Refused while an entry, revision or published snapshot uses it; the error says how many. |
+
+### Publishing
+
+| Tool | Access | Inputs | What it does |
+| --- | --- | --- | --- |
+| `get_release_status` | Everyone | None | Returns the live and demo publications, any running build, the publishing mode, and `pendingChanges`: entries that are ready but not live, scheduled entries, and entries withdrawn since the last go live. |
+| `list_publications` | Everyone | `limit` (1 to 50, default 10) | Lists recent go lives, newest first, with `publicationId`, status (`pending`, `building`, `live`, `failed`, `superseded` or `rolled_back`), who requested them and their build job. |
+| `get_build_job` | Everyone | `jobId` (required) | Returns one build job's status, attempts, timing and error. |
+| `go_live` | Go live | `note` (up to 500 characters) | Queues a build that publishes every approved change. Follow it with `get_build_job`. |
+| `rollback` | Go live | `publicationId` (required) | Queues a rollback that makes an earlier publication live again. |
+| `cancel_build` | Go live | `jobId` (required) | Cancels a build that is queued. A build that has started cannot be cancelled. |
+
+### Workflow (owners)
+
+| Tool | Access | Inputs | What it does |
+| --- | --- | --- | --- |
+| `mark_ready` | Owner | `id` (required) | Approves the current draft for the next release. Checks required fields and names any that are missing. It returns a message that the entry is approved and goes live with the next release. It does not change the live site. |
+| `unpublish_entry` | Owner | `id` (required) | Withdraws the entry from the release: its status becomes `draft` and the approved version is dropped. The draft is kept. The live site stops showing it at the next go live. |
+| `archive_entry` | Owner | `id` (required) | Archives the entry. The live site is updated at the next go live. |
+| `schedule_entry` | Owner | `id` (required), `publishAt` (required; ISO 8601 with an offset, in the future), `timezone` (required; IANA name such as `Europe/Amsterdam`) | Sets the status to `scheduled`. The entry goes live at that time without a `go_live` call. Date fields in the content do not schedule anything. |
+| `cancel_schedule` | Owner | `id` (required) | Removes the scheduled time. The draft and any live version are kept. |
+| `delete_entry` | Owner | `id` (required) | Deletes the entry. Use `archive_entry` when unsure. |
+| `restore_revision` | Owner | `id` (required), `revisionId` (required), `expectedVersion` | Copies an earlier revision into the draft. It does not mark the entry ready and does not change the live site. |
+
+### Content types (agency admins)
+
+| Tool | Access | Inputs | What it does |
+| --- | --- | --- | --- |
+| `upsert_collection` | Agency | `key`, `label`, `routePattern`, `fields` (the complete list), `enabled` | Creates a collection, or replaces its label, route, fields and enabled flag. A slug field is added if none exists. Fields replace the whole list, so send every field. |
+| `delete_collection` | Agency | `key` (required) | Deletes a collection and its entries. |
+
+If the site syncs its content types from code, the next manifest push replaces changes made with these tools. Prefer changing the site's configuration.
+
+### Prompt
+
+The server offers one prompt, `write_post`, with the arguments `collection` and `topic`. It asks the model to read the site and collection schema, draft the content in Markdown, fill in SEO, upload or find images with alt text, create a draft, share the preview URL, and not mark the entry ready or go live unless asked.
+
+## Reading entries
+
+Every entry read returns the same shape. Collection data is under `fields`, and system values sit at the top level, so a field can never collide with them.
+
+| Key | Meaning |
+| --- | --- |
+| `status` | `draft` (being written), `ready` (approved for the next release), `scheduled` or `archived`. |
+| `live` | `true` when the entry is on the live site now. |
+| `pendingRelease` | `true` when approved changes, an approval, a schedule or a withdrawal are waiting for the next go live. |
+| `approvedAt`, `scheduledAt`, `scheduleTimezone` | Approval and schedule times, when set. |
+| `editedSinceReady` | `true` when the draft differs from the approved version. |
+| `previewAvailable` | `true` when the site has a production URL. |
+| `version` | Pass it as `expectedVersion` on the next write. |
+| `liveFields` | Only with `includePublished`: the version visitors see now. |
+
+`ready` means approved, not live. A ready entry can still show `live: false` until the next go live. Use `live` and `pendingRelease` to answer "what is live" and "what is pending". `get_release_status` lists the pending changes.
+
+## Field values
+
+Get the exact format for each field from `get_collection_schema`. The formats are below. Date and datetime fields are content you write, such as an event date. They do not publish or schedule an entry. Use `schedule_entry` for that.
+
+| Field type | Write | Read |
+| --- | --- | --- |
+| `text` | Plain text, up to 1,000 characters | Same |
+| `textarea` | Plain text with line breaks, up to 50,000 characters. No Markdown. | Same |
+| `richtext` | A Markdown string. See [rich text](#rich-text). | Markdown |
+| `image` | An asset id, such as `"3f2c…"`, from `list_assets` or `upload_asset_from_url` | `{assetId, url, alt}`, or `null` |
+| `reference` | The id of an entry in the referenced collection, from `list_entries` | `{entryId}`, or `null` |
+| `date` | `YYYY-MM-DD` | Same |
+| `datetime` | ISO 8601 with an offset, such as `2026-10-10T09:00:00+02:00` | Same |
+| `select` | One of the listed options, spelled exactly | Same |
+| `slug` | Lowercase letters, numbers and dashes, such as `my-first-post`. Unique in the collection, up to 200 characters. | Same |
+| `boolean` | `true` or `false` | Same |
+| `number` | A JSON number | Same |
+| `url` | An absolute `http` or `https` URL | Same |
+
+Unknown field keys are refused, and the error lists the valid keys.
+
+### Clearing values
+
+On update, a value is cleared with a spelling that matches its type. Leaving a key out keeps its stored value.
+
+| Where | Clear with |
+| --- | --- |
+| A field | `""` (an empty string) |
+| SEO text keys | `""` |
+| SEO `noindex`, `nofollow` | `false` |
+| SEO lists (`keyTakeaways`, `faq`, `about`) | `[]` |
+| SEO `author` | an empty `name` |
+
+Do not send `null`. The input schema does not accept it for SEO keys.
+
+### Rich text
+
+Write rich text as Markdown, never as HTML. Areca converts it to the stored format.
+
+- Use `##` for section headings, and `###` or `####` for subsections. Other heading levels are adjusted to these.
+- Separate paragraphs with a blank line. Use `**bold**`, `*italic*` and `[links](https://…)`.
+- Use bullet and numbered lists, `>` blockquotes and tables.
+- Put images in the text as `![alt text](asset:<assetId>)`. The asset id must belong to the client's Library, or the write is refused.
+- Raw HTML is dropped. An image written with a full `https` URL also works, but uploaded assets are preferred.
+
+When an entry is read back, its images appear as `asset:<assetId>` in the Markdown, so the same text can be sent again.
+
+## SEO object
+
+The `seo` argument has these optional keys. To clear one on update, use the spelling in [clearing values](#clearing-values). Unknown keys are refused. Stored values follow the same limits as the SEO panel in the CMS. See [SEO and AI suggestions](/docs/cms/seo-and-ai).
+
+| Key | Type | Limit | Notes |
+| --- | --- | --- | --- |
+| `title` | Text | 300 characters | Target about 50 to 60 characters. Falls back to the entry title. |
+| `description` | Text | 1,000 characters | Target 140 to 160 characters. Falls back to the summary. |
+| `focusKeyphrase` | Text | 200 characters | The search phrase the entry targets. Not shown to visitors. |
+| `canonicalUrl` | URL | 2,048 characters | Only when the page copies another URL. |
+| `noindex`, `nofollow` | Boolean | | `true` keeps the page out of search results, or stops crawlers following its links. |
+| `ogTitle`, `ogDescription` | Text | 300 and 1,000 characters | Shown when the page is shared. Fall back to the SEO title and description. |
+| `ogImage` | Asset id | | A social share image, ideally 1200 × 630. |
+| `twitterCard` | `summary_large_image` or `summary` | | |
+| `schemaType` | `Article`, `BlogPosting`, `NewsArticle` or `WebPage` | | |
+| `summary` | Text | 2,000 characters | Two or three sentences that answer the main question. |
+| `keyTakeaways` | List of text | Up to 12 items, 500 characters each | Aim for 3 to 5 self-contained points. |
+| `faq` | List of `{question, answer}` | Up to 20 items; question 500 characters, answer 3,000 | Only real questions the entry answers. |
+| `about` | List of `{name, sameAs}` | Up to 12 items; name 200 characters; `sameAs` an optional URL | The entities the entry is about. |
+| `author` | `{name, url, bio}` | Name 200 characters, bio 1,000 characters, `url` optional | The author of the entry. An empty `name` removes it. |
+| `jsonLd` | Text (JSON) | 20,000 characters | Extra schema.org structured data, one object or an array. Usually leave it unset: the CMS writes the main node from the other keys. |
+
+The agent is asked to fill in `title`, `description`, `focusKeyphrase`, `summary`, `keyTakeaways` and `faq` for every new entry. There is no separate SEO-generation tool. The agent writes these values itself.
+
+## Errors
+
+Errors from tools come back as a normal response with `isError: true` and a message written for the AI. They are not HTTP errors. Typical messages:
+
+| Message starts with | Meaning and next step |
+| --- | --- |
+| `Validation failed.` | A field is missing, unknown or in the wrong format. Call `get_collection_schema` and retry. |
+| `This entry changed since you last read it` | The `expectedVersion` is stale. Call `get_entry`, reapply the change and retry with the new version. |
+| A slug message | The slug is already used in the collection. Choose another. |
+| `This asset is still used by N item(s)` | `delete_asset` is refused. Remove the asset from those items first. |
+| `Could not import the file:` | The URL could not be imported. See [uploads from a URL](#uploads-from-a-url). |
+| `Only site owners can…`, `Going live is not enabled for this key…`, `Only agency admins…` | The caller's role or key does not allow the tool. The message says who can do it. |
+| `No entry with id…`, `No collection…`, `No asset…` | The id or key is not on this site. Use the list tool to find valid ids. |
+| `Something went wrong on the Areca server (ref …)` | An unexpected error. Nothing is confirmed as saved. The reference is in the server log. |
+
+Other failures use HTTP status codes:
+
+- `401` for a missing, invalid, revoked or expired key, as described under [authentication](#authentication).
+- `403` with `"code": "mfa_required"` for an agency admin without two-factor sign-in, as described under [authentication](#authentication).
+- `429` when a rate limit is reached, per key (120 a minute) or per client address (600 a minute). The body is `{ "error": "Too many requests" }`, and the `Retry-After` header gives the wait in seconds. See [rate limits](/docs/security/rate-limits#responses).
+
+## Uploads from a URL
+
+`upload_asset_from_url` downloads a file from the public internet and stores it in the client's Library. Areca accepts only:
+
+- JPEG, PNG, WebP, GIF or PDF files. The file's bytes decide the type, not the `Content-Type` header.
+- Files up to **20 MB**.
+- `http` or `https` links on ports 80, 443, 8080 or 8443, without a username or password.
+- Addresses on the public internet. Private, local, loopback and link-local addresses are refused, including names that resolve to them.
+- Up to three redirects, each checked in the same way.
+- Downloads that finish within 15 seconds.
+
+When a download fails, the error begins `Could not import the file:` and then says why. The main cases are:
+
+| Message | Meaning and next step |
+| --- | --- |
+| `Unsupported file type. Use a JPEG, PNG, WebP, GIF or PDF file.` | The bytes are not one of those types. |
+| `The link returned a web page (text/html), not an image. Use a direct image URL.` | The link points at a page. Use the file's own address. |
+| `The link returned a file of type …, not an image or PDF.` | The host sent another kind of file. |
+| `The file is larger than 20 MB` | Use a smaller file, or ask the user to upload it in the Library. |
+| `Port … is not allowed. Use 80, 443, 8080 or 8443` | Use a standard web port. |
+| `Links with a username or password are not supported` | Use a public link without credentials. |
+| `That address is private or local and can't be downloaded` | Only public addresses are allowed. |
+| `The domain name could not be resolved` or `Could not reach the server` | Check the host name, or try again later. |
+| `The link redirected too many times` | Use the final address. More than three redirects are refused. |
+| `The download timed out` | The file did not arrive within 15 seconds. |
+| `The link didn't return a downloadable file (HTTP 4xx …)` | Check the link opens directly as an image or PDF. |
+| `The server at … failed (HTTP 5xx …)` | The host is down. Try later or use another link. |
+
+The import is recorded in the activity log as an upload ("uploaded … to the Library"). Always pass `altText`, which describes the image in one sentence.
+
+## Activity and audit
+
+Every change made through a key is recorded as the key's user, with the key's name, so it appears as **via AI · name** in the activity log. The log stores the action and the key's name, not the text of the content.
+
+## Related
+
+- [Connect AI](/docs/cms/connect-ai) for editors and owners.
+- [Tokens](/docs/security/tokens#personal-ai-keys) for how keys are stored and revoked.
+- [Permissions matrix](/docs/security/permissions-matrix#ai-keys) for the roles behind each tool.
+- [Rate limits](/docs/security/rate-limits#ai-app-requests) for the per-key limit.

@@ -75,6 +75,117 @@ describe('request rate limiting', () => {
     expect(store.keys[0]).not.toContain('site-secret')
   })
 
+  it('limits the MCP endpoint to 120 per AI key, without the mutation budget', async () => {
+    const store = countingStore()
+    const deps = dependencies(store)
+    const request = new Request('https://cms.test/api/mcp', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer areca_mcp_secret-key' },
+    })
+
+    for (let i = 0; i < 120; i += 1) {
+      expect(await enforceRequestRateLimit(request, deps)).toBeNull()
+    }
+    expect((await enforceRequestRateLimit(request, deps))?.status).toBe(429)
+    expect(deps.resolveUserId).not.toHaveBeenCalled()
+    expect(store.keys.every((key) => key.includes(':mcp:') || key.includes(':mcp-ip:'))).toBe(true)
+    expect(store.keys.some((key) => key.includes(':mcp:'))).toBe(true)
+    expect(store.keys.join('\n')).not.toContain('areca_mcp_secret-key')
+  })
+
+  it('buckets an AI key by the SHA-256 of its token, never the raw token', async () => {
+    const store = countingStore()
+    const deps = dependencies(store)
+    const token = 'areca_mcp_raw-secret-value'
+    await enforceRequestRateLimit(
+      new Request('https://cms.test/api/mcp', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+      deps,
+    )
+    const perKey = store.keys.find((key) => key.includes(':mcp:'))
+    expect(perKey).toBeDefined()
+    expect(perKey).not.toContain(token)
+    expect(perKey).not.toContain('raw-secret-value')
+    expect(perKey).toMatch(/:mcp:[0-9a-f]{64}:\d+$/)
+  })
+
+  it('throttles a flood of fake bearer tokens from one IP, though each token is new', async () => {
+    const store = countingStore()
+    const deps = { ...dependencies(store), trustProxy: true }
+    const headers = (i: number) => ({
+      Authorization: `Bearer areca_mcp_fake-${i}`,
+      'X-Forwarded-For': '198.51.100.7',
+    })
+
+    // Each fake token gets its own per-key bucket, so only the per-IP rule can stop them.
+    for (let i = 0; i < 600; i += 1) {
+      const response = await enforceRequestRateLimit(
+        new Request('https://cms.test/api/mcp', { method: 'POST', headers: headers(i) }),
+        deps,
+      )
+      expect(response).toBeNull()
+    }
+    const blocked = await enforceRequestRateLimit(
+      new Request('https://cms.test/api/mcp', { method: 'POST', headers: headers(600) }),
+      deps,
+    )
+    expect(blocked?.status).toBe(429)
+    expect(blocked?.headers.get('Retry-After')).toBe('60')
+    expect(store.keys.filter((key) => key.includes(':mcp-ip:'))).toHaveLength(601)
+  })
+
+  it('skips the per-IP MCP budget when the client IP is unknown', async () => {
+    const store = countingStore()
+    const deps = dependencies(store)
+    for (let i = 0; i < 700; i += 1) {
+      const response = await enforceRequestRateLimit(
+        new Request('https://cms.test/api/mcp', {
+          method: 'POST',
+          headers: { Authorization: `Bearer areca_mcp_agent-${i % 10}` },
+        }),
+        deps,
+      )
+      expect(response).toBeNull()
+    }
+    expect(store.keys.some((key) => key.includes(':mcp-ip:'))).toBe(false)
+  })
+
+  it('keeps a per-IP MCP budget separate for each client when proxy trust is on', async () => {
+    const store = countingStore()
+    const deps = { ...dependencies(store), trustProxy: true }
+    for (let i = 0; i < 600; i += 1) {
+      await enforceRequestRateLimit(
+        new Request('https://cms.test/api/mcp', {
+          method: 'POST',
+          headers: { 'X-Forwarded-For': '198.51.100.7' },
+        }),
+        deps,
+      )
+    }
+    expect(
+      (
+        await enforceRequestRateLimit(
+          new Request('https://cms.test/api/mcp', {
+            method: 'POST',
+            headers: { 'X-Forwarded-For': '198.51.100.7' },
+          }),
+          deps,
+        )
+      )?.status,
+    ).toBe(429)
+    expect(
+      await enforceRequestRateLimit(
+        new Request('https://cms.test/api/mcp', {
+          method: 'POST',
+          headers: { 'X-Forwarded-For': '203.0.113.20' },
+        }),
+        deps,
+      ),
+    ).toBeNull()
+  })
+
   it('uses a trusted forwarded IP only when proxy trust is enabled', () => {
     const request = new Request('https://cms.test/setup', {
       headers: { 'X-Forwarded-For': '203.0.113.9, 10.0.0.2' },

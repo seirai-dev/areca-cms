@@ -1,0 +1,165 @@
+---
+title: Connect AI
+description: Connect Claude, Cursor, VS Code or another AI app to one of your sites, so it can draft and update content as you. What it can do for each role, how to set it up, and how to manage or revoke its key.
+---
+
+**Connect AI** lets an AI assistant work on one of your sites. You create a key, add it to your AI app once, and then ask the assistant in plain words, for example "Write a blog post about our spring menu, with SEO filled in." The assistant reads the site, creates or edits drafts, and uploads images from web addresses. It never publishes by itself unless you give that key permission to go live.
+
+The assistant acts as you. It can do what you can do on that site, and no more. If your role changes, what the assistant can do changes with it.
+
+Connect AI is not the same as [AI settings](/docs/cms/ai-settings) or the **Generate with AI** button in the SEO panel. Those use an OpenRouter key that an agency admin saves, to suggest SEO text and alt text inside the CMS. Connect AI lets an AI app that you run, such as Claude or Cursor, read and write the site.
+
+Open it from **Connect AI** in the sidebar, or from the card on the site's Overview page.
+
+## What your AI can do
+
+The tools your AI sees depend on your role on that site. Areca checks your current role every time the AI makes a request.
+
+| What the AI can do | Editor | Owner | Owner key with **Allow going live** | Agency admin |
+| --- | :---: | :---: | :---: | :---: |
+| See the site, its content types and their fields | ✓ | ✓ | ✓ | ✓ |
+| List, read and search entries | ✓ | ✓ | ✓ | ✓ |
+| Create entries and edit their drafts | ✓ | ✓ | ✓ | ✓ |
+| Get a preview link for a draft | ✓ | ✓ | ✓ | ✓ |
+| Browse the Library, upload from a web address, edit alt text | ✓ | ✓ | ✓ | ✓ |
+| Mark an entry ready, unpublish, archive, delete, restore an earlier version | – | ✓ | ✓ | ✓ |
+| Schedule an entry, or cancel a schedule | – | ✓ | ✓ | ✓ |
+| Delete a Library file that is not in use | – | ✓ | ✓ | ✓ |
+| Go live, roll back, cancel a queued build | – | – | ✓ | ✓ if the key allows going live |
+| Create or delete content types (collections) | – | – | – | ✓ |
+
+Keys follow the same rules as the buttons in the CMS. An editor's AI cannot mark an entry ready, just as an editor cannot press the button. When the AI is refused, it explains why and who can do it.
+
+The Connect AI page shows one sentence for your role, under the heading, for example "Your AI can write and edit drafts and upload files. Only an owner can mark a post ready or publish it."
+
+Two details matter in practice:
+
+- **Going live is opt-in.** You can allow a key to go live only when you create it, and only owners and agency admins can tick **Allow going live**. Even then, the key can publish only while you are still an owner or agency admin.
+- **Content types are agency-only.** Only an agency admin's key can change them, and if the site gets its content types from code, the next manifest push overwrites those changes. See [troubleshooting](#troubleshooting).
+
+## Before you start
+
+- You must be a member of the client that owns the site.
+- Your AI app must support remote MCP servers with a custom header. Claude Code, Cursor, VS Code, Claude Desktop and most other MCP-capable apps do.
+- ChatGPT and claude.ai in the browser cannot connect yet. They sign in with OAuth, and Areca connects AI apps with a key sent in a header. Use one of the apps above for now.
+- Claude Desktop needs Node.js installed, because it connects through `npx`.
+
+## Connect your AI app
+
+### 1. Create a key
+
+Select **Create AI key** on the Connect AI page. Then fill in the form:
+
+- **Name.** Something you will recognise later, such as "Claude on my laptop". Up to 80 characters.
+- **Which app will you use?** This chooses the install steps shown on the next screen. Choices: Claude Code, Cursor, VS Code, Claude Desktop, or Other. On the next screen, phones show the choice as a menu and wider screens show tabs.
+- **Key lasts.** 30 days, 90 days, 1 year or never. The default is 90 days. See [how long a key lasts](#how-long-a-key-lasts).
+- **Allow going live.** Shown only to owners and agency admins. Leave it off unless you trust the AI to publish the whole site.
+
+Select **Create key**. If you are an agency admin, Areca asks for a fresh code from your authenticator app first, because a key made by an admin keeps admin power for as long as it lives.
+
+### 2. Copy the key and add it to your app
+
+<Callout type="warn" title="Copy your key now">
+
+The key is shown only once. Areca stores only a fingerprint of it, so it cannot show the key again. If you close the dialog without copying it, revoke that key and create a new one.
+
+</Callout>
+
+The next screen has the key already built into each install option. Pick your app and follow its steps.
+
+**Claude Code.** Copy the command, paste it into a terminal and press Enter. The command adds the server to Claude Code with your key in the `Authorization` header.
+
+**Cursor.** Select **Add to Cursor**. Cursor opens and asks you to confirm. You can also select **Copy settings** and paste them into Cursor's MCP settings.
+
+**VS Code.** Select **Add to VS Code**, or **Add to VS Code Insiders** if you use that edition. VS Code opens and asks you to confirm.
+
+**Claude Desktop.** Open Claude Desktop, go to **Settings**, then **Developer**, then **Edit Config**. Select **Copy settings**, paste the text into the file, save it and restart Claude Desktop. Claude Desktop connects through `npx`, so Node.js must be installed.
+
+**Other.** Select **Copy settings** and paste them into your app's MCP or connector settings. Look for "MCP servers" or "Add server". The settings use the standard `mcpServers` format with an `Authorization` header.
+
+**Or paste this into your AI.** If you are not sure which app to use, or you are using a different assistant, select **Copy prompt** under **Or paste this into your AI** and paste it into the chat. The assistant follows the prompt to connect itself. Check that it reports the site's name when it has finished.
+
+Treat the key like a password. Do not paste it into a shared document, a chat with other people or a public repository.
+
+### 3. Check the connection
+
+Ask your AI: "What can you do on my site?" It calls **get_site_info** and reports your role and the content types it can use. If it cannot connect, see [troubleshooting](#troubleshooting).
+
+## Example prompts
+
+Copy any of these from the Connect AI page, or write your own. Name the content type and the fields when you can. The assistant is told to read the content type's schema before it writes, so the fields it uses match the site.
+
+- "Write a blog post about [topic], with SEO filled in. Leave it as a draft."
+- "Draft a new page about [subject] and leave it as a draft."
+- "Update the intro on our About page to sound friendlier."
+- "Find the posts that are still drafts and list their titles."
+- "Add alt text to the images on the Team page."
+- "Show me what is ready but not yet live."
+
+The AI writes drafts. Your site does not change until an owner marks the entry ready and the site goes live. See [statuses and review](/docs/cms/statuses-and-review) and [going live](/docs/cms/going-live).
+
+## Manage your keys
+
+The **AI keys** section lists the keys for this site. Each row shows when the key was created, when it was last used, and when it expires.
+
+- **Editors** see only their own keys.
+- **Owners and agency admins** see every key on the site, including keys made by other people. Each row says whose key it is.
+
+A key's row can also show **Can go live** or **Expired**.
+
+### Revoke a key
+
+Select **Revoke** on the key, then confirm. The key stops working straight away, in every AI app that uses it. This cannot be undone. Create a new key for that app if you still need it.
+
+Revoke a key when you stop using an app, change laptops, or see a key you do not recognise. Owners and agency admins can revoke any key on the site, for example when someone leaves the team.
+
+### How long a key lasts
+
+A key stops working on its expiry date. The row then shows **Expired**. Nothing else changes: the content is the same, and the AI app is still installed. To carry on, create a new key and update the app.
+
+You can have up to 20 active keys per site for yourself. Revoke a key you no longer use to make room.
+
+### Your role changes
+
+Keys follow your live role. If an owner becomes an editor, the key loses publishing rights at once. If you leave the client, your keys stop working. You do not need to revoke them, but revoking them tidies the list.
+
+## Who can see what the AI did
+
+Every change made through an AI key is recorded in the site's activity log as you, with the label **via AI** and the key's name, for example "via AI · Claude on my laptop". Owners see this in the site's activity. Use it to review what an AI has changed. See [history and activity](/docs/cms/history-and-activity).
+
+## Your data and the AI provider
+
+The AI can read any content you can read on the site, including drafts and unpublished changes. What it does with that text depends on the AI app and its provider, not on Areca. Read your app's data policy before you connect a site with unpublished or confidential content. Areca does not send Connect AI requests to OpenRouter, and the activity log records what was changed, not the text. See [AI data handling](/docs/security/ai-data-handling) for the other AI features.
+
+## Troubleshooting
+
+**The AI says it is not connected, or reports "Invalid or expired Areca MCP key".** The key is wrong, revoked, expired, or you are no longer a member of the client. Check the key row on the Connect AI page. If it shows **Expired** or is missing, create a new key and update the app. If the key is listed and active, check that the app has the whole key, with no spaces or missing characters, and that the server URL is the one shown on the Connect AI page.
+
+**"Your account needs two-factor authentication before AI keys work."** On an installation that requires two-factor authentication for agency admins, an agency admin's keys are refused (HTTP 403) until two-factor sign-in is on. Turn it on in Account settings, then try again. The key does not need to be replaced.
+
+**The AI cannot see a tool I expected.** The tools depend on your role. An editor does not see mark-ready or publishing tools, and a key without **Allow going live** does not see go-live tools. Some apps keep the tool list from the start of a session, so restart the AI session after your role changes.
+
+**"Only site owners can…"** The action needs an owner. Ask an owner to do it, or ask the AI to leave the entry as a draft.
+
+**"Going live is not enabled for this key."** The key was made without **Allow going live**, or its user is an editor. Ask an owner to press **Go live** in the CMS, or to create a key with that option.
+
+**"This entry changed since you last read it."** Someone else saved the entry after the AI read it. Ask the AI to read the entry again and apply its change to the new version.
+
+**"Could not import the file: …".** The AI could not download the image from the address it was given. The rest of the message says why, for example:
+
+- "The link returned a web page (text/html), not an image." Use the address of the image file itself, not the page it appears on.
+- "The file is larger than 20 MB." Use a smaller copy.
+- "That address is private or local and can't be downloaded." Only public addresses work.
+- "The link didn't return a downloadable file (HTTP 404 …)" or a similar HTTP error. Check that the link opens directly in a browser.
+- "The download timed out." The file took longer than 15 seconds to arrive.
+
+The file must be a public JPEG, PNG, WebP, GIF or PDF. Links that need a login are refused. You can also upload the file in the [Library](/docs/cms/library) and ask the AI to use it. The full list is in the [technical reference](/docs/cms/mcp-tools#uploads-from-a-url).
+
+**A schema change disappeared.** When the site gets its content types from a code manifest, the next manifest push replaces the content types changed in the CMS. Change them in the site's configuration instead. See [schema sync](/docs/sdk/schema-sync).
+
+## Related
+
+- [For technical users: tools and endpoint](/docs/cms/mcp-tools) lists every tool, its inputs and the field formats.
+- [Tokens](/docs/security/tokens) explains how AI keys are stored and revoked.
+- [Roles and permissions](/docs/security/roles-and-permissions) lists what each role can do.
+- [AI settings](/docs/cms/ai-settings) covers the SEO and alt-text suggestions that agency admins set up.

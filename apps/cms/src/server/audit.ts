@@ -2,6 +2,8 @@ import { db } from '#/db'
 import { auditLog } from '#/db/schema'
 import type { AuditMeta } from '#/lib/types'
 
+import { currentAuditContext } from './audit-context.ts'
+
 export async function audit(
   input: {
     /** Null for instance-level events that belong to no organization. */
@@ -22,6 +24,12 @@ export async function audit(
     action: input.action,
     targetType: input.targetType,
     targetId: input.targetId,
-    meta: input.meta ?? null,
+    meta: mergeMeta(input.meta),
   })
+}
+
+function mergeMeta(meta: AuditMeta | undefined): AuditMeta | null {
+  const context = currentAuditContext()
+  if (!context) return meta ?? null
+  return { ...context, ...meta }
 }

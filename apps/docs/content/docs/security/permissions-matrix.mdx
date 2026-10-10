@@ -108,6 +108,21 @@ Anyone with the URL of a Library file can open it, whatever their role. See [Lib
 
 Each user can generate up to 30 suggestions per hour. See [rate limits](/docs/security/rate-limits#ai-suggestions). For what is sent to the AI provider, see [AI data handling](/docs/security/ai-data-handling).
 
+## AI keys
+
+These actions manage personal AI keys on the [Connect AI](/docs/cms/connect-ai) page. A key then acts as its user, and every tool it calls is checked against the same rules as the rest of this page. See [MCP endpoint and tools](/docs/cms/mcp-tools) for the tool list.
+
+| Action | Editor | Owner | Admin |
+| --- | :---: | :---: | :---: |
+| Create a personal AI key for yourself | ✓ | ✓ | ✓ + fresh sign-in code |
+| See your own AI keys | ✓ | ✓ | ✓ |
+| See every AI key on a site | – | ✓ | ✓ |
+| Revoke your own AI key | ✓ | ✓ | ✓ |
+| Revoke someone else's AI key on a site | – | ✓ | ✓ |
+| Allow an AI key to go live | – | ✓ | ✓ |
+
+A key made with **Allow going live** can publish only while its user is still an owner or agency admin. A key cannot do anything its user cannot do in the rest of this matrix.
+
 ## Your own account
 
 Every signed-in user can see their own profile, set up or turn off two-factor authentication, and accept an invitation with its link.
@@ -118,8 +133,11 @@ Some actions identify the object they act on by its ID, such as an entry, a site
 
 Actions that identify a client by its ID answer "Forbidden" to people who are not members, whether or not the client exists.
 
+Revoking an AI key that belongs to someone else answers "not found" for editors, because editors can only see their own keys.
+
 ## Related
 
 - [Roles and permissions](/docs/security/roles-and-permissions)
 - [Two-factor authentication and step-up](/docs/security/two-factor-and-step-up)
 - [Rate limits](/docs/security/rate-limits)
+- [Connect AI](/docs/cms/connect-ai)

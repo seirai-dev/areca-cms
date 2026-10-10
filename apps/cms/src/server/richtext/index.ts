@@ -13,6 +13,12 @@ const RELATIVE_ASSET_SRC = /^\/(api\/)?assets\//
 export { parseRichTextDocument, renderRichTextHtml } from './document'
 export { richTextExtensions } from './extensions'
 export { richTextPlainText } from './markdown'
+export {
+  markdownToRichText,
+  normalizeRichTextInput,
+  richTextToMarkdown,
+} from './from-markdown'
+export type { MarkdownToRichTextOptions, RichTextDoc } from './from-markdown'
 export { validateRichText } from './validate'
 
 export function emptyRichText() {

@@ -130,3 +130,17 @@ publish-type controls disabled with the reason ("Only owners can publish…").
   files; manage members and invitations; read the client's activity.
 - Org `editor`: create entries, edit and save drafts, preview, upload and describe Library files. Editors **cannot**
   mark as ready (publish), schedule, archive, delete, restore or go live, and have no People, Settings or Activity.
+
+## AI apps (Connect AI, MCP)
+
+- Each site has one MCP endpoint, `/api/mcp`, served by the CMS. It is documented in the CMS docs, not the site SDK docs, because it authenticates users, not site projects.
+- Access uses personal keys, one per user and site, sent as `Authorization: Bearer areca_mcp_…`. OAuth is deferred for v1: it needs an authorization server, consent screens and refresh handling. Keys cover Claude Code, Cursor, VS Code, Claude Desktop and other header-capable apps. ChatGPT and claude.ai web connectors are not supported until OAuth exists.
+- Keys are 32 random bytes, stored as SHA-256 hashes and shown once. Expiry is 30, 90, 365 days or never (default 90). A user may hold 20 active keys per site. Owners and agency admins can see and revoke every key on the site, and editors only their own.
+- A key acts as its user with the user's live role, read on every request. The tool list is filtered by role, and each call re-checks access. Revoked, expired or removed-member keys fail at once, even in an open session.
+- Going live is opt-in per key. Only owners and agency admins can allow it, and it works only while the user remains an owner or agency admin. Rollback and build cancellation use the same flag.
+- Agency admins creating a key need a fresh authenticator code, because the key keeps admin power for its lifetime. Their keys can also change content types.
+- Files come in only from public URLs, through the SSRF-safe downloader used for other remote fetches. The type is judged from the bytes, the size is capped at 20 MB, and no base64 upload exists.
+- Rich text is written as Markdown and converted to the stored format, so agents never send HTML. Image references use asset ids (`![alt](asset:<id>)`), which must exist in the organization library.
+- There is no tool that generates SEO. The model writes the SEO fields itself, which keeps SEO content under the same draft and review flow as other fields. The OpenRouter-based AI settings are unchanged and stay separate.
+- `/api/mcp` has its own limits: 120 requests a minute per key (keyed by the SHA-256 of the bearer token), plus 600 a minute per client IP when the IP is known (behind a trusted proxy). It is exempt from the general writes limit, because one AI session makes many small requests.
+- The server is stateless with JSON responses, so no session state is stored between requests.

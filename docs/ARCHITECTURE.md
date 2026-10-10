@@ -77,6 +77,10 @@ SEO/GEO settings are saved with each entry's draft and follow the same approval 
 
 AI SEO generation is optional. Agency admins configure an encrypted OpenRouter key and models; a site's additional prompt guides suggestions. Generation proposes edits for review and does not publish them. See [SEO and AI](SEO.md).
 
+## AI apps (MCP)
+
+Each site has a per-site MCP endpoint at `/api/mcp`. A user creates a personal AI key for one site on the Connect AI page, and an AI app uses it as a bearer token. Every request re-reads the key, its expiry, and the user's live role on that site, then runs the same kind of checks as the CMS screens. Tools are registered only for the roles that may use them. Writes go through the same services as the UI, so drafts, publishing and activity behave identically. Tool results report errors in plain language for the model. See [MCP.md](MCP.md).
+
 ## Repository map
 
 | Path | Responsibility |
@@ -88,6 +92,8 @@ AI SEO generation is optional. Agency admins configure an encrypted OpenRouter k
 | `apps/cms/src/server/admin` | Clients, sites, members, branding, credentials |
 | `apps/cms/src/server/security` | Authorization, two-factor step-up, encryption |
 | `apps/cms/src/server/ai` | AI configuration and SEO generation |
+| `apps/cms/src/server/mcp` | Connect AI: personal keys, the MCP endpoint and its tools |
+| `apps/cms/src/features/connect-ai` | Connect AI page |
 | `apps/cms/src/adapters` | Deployment, storage, and email integrations |
 | `apps/cms/src/db`, `apps/cms/drizzle` | Database schema and migrations |
 | `packages/site-sdk/src` | Schema helpers, CLI, content pull, preview, SEO rendering |

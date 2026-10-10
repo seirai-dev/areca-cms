@@ -1,6 +1,6 @@
 ---
 title: AI data handling
-description: What content Areca sends to OpenRouter for SEO suggestions and alt text, when it is sent, who can trigger it, how the key is stored, and how to turn it off.
+description: What content Areca sends to OpenRouter for SEO suggestions and alt text, what AI apps you connect can read, when it is sent, how keys are stored, and how to turn it off.
 ---
 
 Areca can use an AI model, through [OpenRouter](https://openrouter.ai), to suggest SEO fields for an entry and alt text for its images. This page describes exactly what leaves your instance, when, and who controls it, so you can decide whether to enable it and tell your editors what to expect.
@@ -59,6 +59,16 @@ An agency admin enters the OpenRouter key on the AI page. Before saving, Areca c
 ## What is logged
 
 Each generation adds an entry to the activity log. It records the content type, the model used, whether images were included, and the token counts and cost reported by OpenRouter. It does not record the text that was sent.
+
+## AI apps you connect
+
+Connect AI is a separate feature. It lets an AI app that you run, such as Claude or Cursor, read and write one site with a personal AI key. Areca does not send anything to OpenRouter for these requests. Areca answers the requests from the app with content from the site, and the app then sends what it reads to its own AI provider.
+
+- **What the app can read.** Everything the key's user can read on the site, including drafts and unpublished changes.
+- **Who controls it.** The user creates the key and chooses the app. The user can revoke the key at any time, and owners and agency admins can revoke any key on the site.
+- **What is logged.** Each change is recorded in the activity log with the key's name. The log does not store the text of the content.
+
+Tell your editors which AI apps are allowed on your client's sites, and that the apps' providers may keep what they read. See [Connect AI](/docs/cms/connect-ai) and [tokens](/docs/security/tokens#personal-ai-keys).
 
 ## Limits
 

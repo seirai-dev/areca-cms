@@ -8,6 +8,7 @@ Choose the guide that matches what you want to do:
 | --- | --- |
 | Set up Areca for the first time | [First-run onboarding](ONBOARDING.md) |
 | Write, preview, and publish website content | [CMS guide](CMS_GUIDE.md) |
+| Let Claude, Cursor or another AI app work on a site | [Connect AI (MCP)](MCP.md) |
 | Manage clients, sites, people, branding, and AI | [Agency admin guide](ADMIN_GUIDE.md) |
 | Connect my own website to Areca | [SDK guide](SDK.md) |
 | Define content types and fields | [Content schema reference](CONTENT_SCHEMA.md) |
@@ -52,6 +53,7 @@ Normal pages use content included in the website build. Draft preview fetches fr
 | [API](API.md) | Site-token endpoints, snapshot and preview contracts, errors |
 | [Configuration](CONFIGURATION.md) | Environment variables, secrets, storage, email, authentication |
 | [Permissions](AUTHZ_MATRIX.md) | Server-enforced roles and access rules |
+| [Connect AI (MCP)](MCP.md) | Personal AI keys, the per-site MCP endpoint, tools, and roles |
 | [Operations](OPERATIONS.md) | Health, metrics, logs, worker and incident handling |
 | [Recovery](RECOVERY.md) | Backups, restores, organization transfer |
 | [Integration reliability](INTEGRATIONS.md) | Deployment delivery, retries, uncertain dispatch recovery |

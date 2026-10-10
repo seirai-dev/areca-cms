@@ -65,7 +65,7 @@ const MIME_BY_EXT: Record<string, string> = {
 
 const ASSET_FILE_PREFIX = '/api/assets/file/'
 
-const MAX_SIZE_BYTES = 20 * 1024 * 1024
+export const MAX_SIZE_BYTES = 20 * 1024 * 1024
 
 export class AssetValidationError extends AppError {
   constructor(message: string) {

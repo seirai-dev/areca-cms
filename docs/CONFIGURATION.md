@@ -15,7 +15,7 @@ present even when no Dokploy account has been configured yet.
 | `DATABASE_URL` | PostgreSQL connection URL. |
 | `BETTER_AUTH_SECRET` | Signs authentication sessions. Keep stable; changing it signs everyone out. |
 | `BETTER_AUTH_URL` | Canonical CMS URL used by authentication callbacks. Include the public scheme and host. |
-| `APP_URL` | CMS origin included in invitation and asset URLs. Set it to an origin reachable by the browser and any site build that fetches assets. |
+| `APP_URL` | CMS origin included in invitation and asset URLs, and the origin of the MCP endpoint shown on the Connect AI page (`/api/mcp`). Set it to an origin reachable by the browser, any site build that fetches assets, and the AI apps that connect. |
 | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` | S3-compatible object storage for uploaded assets and branding. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM` | SMTP server and sender for invitation email. |
 | `DOKPLOY_CREDENTIALS_ENCRYPTION_KEY` | Base64-encoded 32-byte key that encrypts organization Dokploy credentials in PostgreSQL. |

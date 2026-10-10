@@ -69,6 +69,7 @@ unchanged (each row carries a side-effect probe).
 | `listCollectionsFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
 | `listEntriesFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
 | `getEntryFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
+| `listInboundReferencesFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
 | `createEntryFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
 | `updateDraftFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
 | `publishEntryFn` | `content.ts` | `org-owner` | org owner, agency admin (MFA) |
@@ -113,6 +114,9 @@ unchanged (each row carries a side-effect probe).
 | `acceptInvitationFn` | `me.ts` | `user` | any signed-in user |
 | `getSitesOverviewFn` | `overview.ts` | `user` | any signed-in user |
 | `getHomeActivityFn` | `home.ts` | `user` | any signed-in user |
+| `listMcpKeysFn` | `mcp-keys.ts` | `org-editor` | any site member; editors see only their own keys, owners and agency admins all keys on the site |
+| `createMcpKeyFn` | `mcp-keys.ts` | `org-editor` | any site member (MFA for agency admins); agency admins also need a fresh session (`REAUTH_REQUIRED`); editors cannot allow go-live |
+| `revokeMcpKeyFn` | `mcp-keys.ts` | `org-editor` | editors revoke their own keys; owners and agency admins any key on the site; other keys are NotFound |
 
 Per-row exceptions (see `note`/`override` in the matrix): `verifyStepUpFn` needs a
 two-factor session (everyone else gets Forbidden; wrong codes are refused);
@@ -121,6 +125,9 @@ two-factor session (everyone else gets Forbidden; wrong codes are refused);
 tenant data (asserted in the cross-tenant tests); `getInvitationFn` and
 `acceptInvitationFn` are authorized by an unguessable, unexpired, unaccepted
 token (+ matching e-mail for accept).
+`listMcpKeysFn`, `createMcpKeyFn` and `revokeMcpKeyFn` answer NotFound for sites
+outside the caller's organization. Revoking a key that belongs to someone else
+answers NotFound for editors (the matrix override), so existence is not revealed.
 
 ## HTTP routes (`src/routes/api/**`)
 
@@ -136,6 +143,27 @@ token (+ matching e-mail for accept).
 | `/api/sites/manifest` | POST | site **schema** token | 401 for build token; writes only the token's own site |
 | `/api/sites/snapshot/current` | GET | site build token | 401 for schema token; only own publication |
 | `/api/sites/preview` | GET | HMAC preview token | 401 expired/tampered/foreign-secret/unknown site; 404 for another site's slug |
+| `/api/mcp` | POST, GET, DELETE | personal AI key (`Authorization: Bearer areca_mcp_…`); no cookies 401 for no, malformed, unknown, revoked or expired key, and for a user who is no longer a member; 403 `mfa_required` for an agency admin without 2FA when `ADMIN_MFA_REQUIRED` is set (default on); 429 after 120 requests a minute per key, or 600 a minute per client IP when the IP is known; tool access as listed under MCP tools |
+
+## MCP tools (`src/server/mcp/tools/*.ts`)
+
+The AI endpoint's tools are not rows in `authz-matrix.ts`. Each tool declares
+its `access` level, `ToolRegistry` (`tool-kit.ts`) registers only the tools the
+caller may use, and `requireAccess` (`guard.ts`) refuses a direct call with a
+message that says who may do it. The access is re-read from the live role on
+every request (`resolveMcpActor`, `keys.ts`). `mcp.test.ts` covers the role
+listings, direct calls, cross-site ids, go-live and the agency schema tools.
+
+| Access | Who may call it | Tools |
+| --- | --- | --- |
+| everyone | any site member (editor, owner, agency admin) | `get_site_info`, `get_collection_schema`, `list_entries`, `get_entry`, `create_entry`, `update_entry`, `list_revisions`, `get_preview_url`, `list_assets`, `get_asset`, `upload_asset_from_url`, `update_asset_alt`, `get_release_status`, `list_publications`, `get_build_job` |
+| owner | owner or agency admin | `mark_ready`, `unpublish_entry`, `archive_entry`, `schedule_entry`, `cancel_schedule`, `delete_entry`, `restore_revision`, `delete_asset` |
+| go-live | a key with `allowGoLive` (the key flag and a non-editor live role) | `go_live`, `rollback`, `cancel_build` |
+| agency | agency admin only | `upsert_collection`, `delete_collection` |
+
+Ids sent by an AI are checked against the key's site (`scope.ts`). An entry,
+build job or publication on another site answers the same "not found" as a
+missing id. Asset ids are looked up within the key's organization.
 
 ## Error shape
 

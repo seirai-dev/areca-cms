@@ -16,6 +16,7 @@ import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppAccountRouteImport } from './routes/_app/account'
 import { Route as AppAgencyRouteImport } from './routes/_app/agency'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
+import { Route as ApiMcpRouteImport } from './routes/api/mcp'
 import { Route as ApiMetricsRouteImport } from './routes/api/metrics'
 import { Route as InviteTokenRouteImport } from './routes/invite/$token'
 import { Route as AppAdminIndexRouteImport } from './routes/_app/admin/index'
@@ -38,6 +39,7 @@ import { Route as AppOrgsOrgIdAuditRouteImport } from './routes/_app/orgs/$orgId
 import { Route as AppOrgsOrgIdMembersRouteImport } from './routes/_app/orgs/$orgId/members'
 import { Route as AppSitesSiteIdIndexRouteImport } from './routes/_app/sites/$siteId/index'
 import { Route as AppSitesSiteIdActivityRouteImport } from './routes/_app/sites/$siteId/activity'
+import { Route as AppSitesSiteIdConnectAiRouteImport } from './routes/_app/sites/$siteId/connect-ai'
 import { Route as AppSitesSiteIdLibraryRouteImport } from './routes/_app/sites/$siteId/library'
 import { Route as AppSitesSiteIdMediaRouteImport } from './routes/_app/sites/$siteId/media'
 import { Route as AppSitesSiteIdPeopleRouteImport } from './routes/_app/sites/$siteId/people'
@@ -84,6 +86,11 @@ const AppAgencyRoute = AppAgencyRouteImport.update({
 const ApiHealthRoute = ApiHealthRouteImport.update({
   id: '/api/health',
   path: '/api/health',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMcpRoute = ApiMcpRouteImport.update({
+  id: '/api/mcp',
+  path: '/api/mcp',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiMetricsRoute = ApiMetricsRouteImport.update({
@@ -196,6 +203,11 @@ const AppSitesSiteIdActivityRoute = AppSitesSiteIdActivityRouteImport.update({
   path: '/activity',
   getParentRoute: () => AppSitesSiteIdRoute,
 } as any)
+const AppSitesSiteIdConnectAiRoute = AppSitesSiteIdConnectAiRouteImport.update({
+  id: '/connect-ai',
+  path: '/connect-ai',
+  getParentRoute: () => AppSitesSiteIdRoute,
+} as any)
 const AppSitesSiteIdLibraryRoute = AppSitesSiteIdLibraryRouteImport.update({
   id: '/library',
   path: '/library',
@@ -274,6 +286,7 @@ export interface FileRoutesByFullPath {
   '/account': typeof AppAccountRoute
   '/agency': typeof AppAgencyRouteWithChildren
   '/api/health': typeof ApiHealthRouteWithChildren
+  '/api/mcp': typeof ApiMcpRoute
   '/api/metrics': typeof ApiMetricsRoute
   '/invite/$token': typeof InviteTokenRoute
   '/admin/$': typeof AppAdminSplatRoute
@@ -294,6 +307,7 @@ export interface FileRoutesByFullPath {
   '/orgs/$orgId/audit': typeof AppOrgsOrgIdAuditRoute
   '/orgs/$orgId/members': typeof AppOrgsOrgIdMembersRoute
   '/sites/$siteId/activity': typeof AppSitesSiteIdActivityRoute
+  '/sites/$siteId/connect-ai': typeof AppSitesSiteIdConnectAiRoute
   '/sites/$siteId/library': typeof AppSitesSiteIdLibraryRoute
   '/sites/$siteId/media': typeof AppSitesSiteIdMediaRoute
   '/sites/$siteId/people': typeof AppSitesSiteIdPeopleRoute
@@ -315,6 +329,7 @@ export interface FileRoutesByTo {
   '/setup': typeof SetupRoute
   '/account': typeof AppAccountRoute
   '/api/health': typeof ApiHealthRouteWithChildren
+  '/api/mcp': typeof ApiMcpRoute
   '/api/metrics': typeof ApiMetricsRoute
   '/invite/$token': typeof InviteTokenRoute
   '/': typeof AppIndexRoute
@@ -335,6 +350,7 @@ export interface FileRoutesByTo {
   '/orgs/$orgId/audit': typeof AppOrgsOrgIdAuditRoute
   '/orgs/$orgId/members': typeof AppOrgsOrgIdMembersRoute
   '/sites/$siteId/activity': typeof AppSitesSiteIdActivityRoute
+  '/sites/$siteId/connect-ai': typeof AppSitesSiteIdConnectAiRoute
   '/sites/$siteId/library': typeof AppSitesSiteIdLibraryRoute
   '/sites/$siteId/media': typeof AppSitesSiteIdMediaRoute
   '/sites/$siteId/people': typeof AppSitesSiteIdPeopleRoute
@@ -358,6 +374,7 @@ export interface FileRoutesById {
   '/_app/account': typeof AppAccountRoute
   '/_app/agency': typeof AppAgencyRouteWithChildren
   '/api/health': typeof ApiHealthRouteWithChildren
+  '/api/mcp': typeof ApiMcpRoute
   '/api/metrics': typeof ApiMetricsRoute
   '/invite/$token': typeof InviteTokenRoute
   '/_app/': typeof AppIndexRoute
@@ -379,6 +396,7 @@ export interface FileRoutesById {
   '/_app/orgs/$orgId/audit': typeof AppOrgsOrgIdAuditRoute
   '/_app/orgs/$orgId/members': typeof AppOrgsOrgIdMembersRoute
   '/_app/sites/$siteId/activity': typeof AppSitesSiteIdActivityRoute
+  '/_app/sites/$siteId/connect-ai': typeof AppSitesSiteIdConnectAiRoute
   '/_app/sites/$siteId/library': typeof AppSitesSiteIdLibraryRoute
   '/_app/sites/$siteId/media': typeof AppSitesSiteIdMediaRoute
   '/_app/sites/$siteId/people': typeof AppSitesSiteIdPeopleRoute
@@ -404,6 +422,7 @@ export interface FileRouteTypes {
     | '/account'
     | '/agency'
     | '/api/health'
+    | '/api/mcp'
     | '/api/metrics'
     | '/invite/$token'
     | '/admin/$'
@@ -424,6 +443,7 @@ export interface FileRouteTypes {
     | '/orgs/$orgId/audit'
     | '/orgs/$orgId/members'
     | '/sites/$siteId/activity'
+    | '/sites/$siteId/connect-ai'
     | '/sites/$siteId/library'
     | '/sites/$siteId/media'
     | '/sites/$siteId/people'
@@ -445,6 +465,7 @@ export interface FileRouteTypes {
     | '/setup'
     | '/account'
     | '/api/health'
+    | '/api/mcp'
     | '/api/metrics'
     | '/invite/$token'
     | '/'
@@ -465,6 +486,7 @@ export interface FileRouteTypes {
     | '/orgs/$orgId/audit'
     | '/orgs/$orgId/members'
     | '/sites/$siteId/activity'
+    | '/sites/$siteId/connect-ai'
     | '/sites/$siteId/library'
     | '/sites/$siteId/media'
     | '/sites/$siteId/people'
@@ -487,6 +509,7 @@ export interface FileRouteTypes {
     | '/_app/account'
     | '/_app/agency'
     | '/api/health'
+    | '/api/mcp'
     | '/api/metrics'
     | '/invite/$token'
     | '/_app/'
@@ -508,6 +531,7 @@ export interface FileRouteTypes {
     | '/_app/orgs/$orgId/audit'
     | '/_app/orgs/$orgId/members'
     | '/_app/sites/$siteId/activity'
+    | '/_app/sites/$siteId/connect-ai'
     | '/_app/sites/$siteId/library'
     | '/_app/sites/$siteId/media'
     | '/_app/sites/$siteId/people'
@@ -530,6 +554,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   SetupRoute: typeof SetupRoute
   ApiHealthRoute: typeof ApiHealthRouteWithChildren
+  ApiMcpRoute: typeof ApiMcpRoute
   ApiMetricsRoute: typeof ApiMetricsRoute
   InviteTokenRoute: typeof InviteTokenRoute
   ApiAssetsUploadRoute: typeof ApiAssetsUploadRoute
@@ -590,6 +615,13 @@ declare module '@tanstack/react-router' {
       path: '/api/health'
       fullPath: '/api/health'
       preLoaderRoute: typeof ApiHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mcp': {
+      id: '/api/mcp'
+      path: '/api/mcp'
+      fullPath: '/api/mcp'
+      preLoaderRoute: typeof ApiMcpRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/metrics': {
@@ -746,6 +778,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSitesSiteIdActivityRouteImport
       parentRoute: typeof AppSitesSiteIdRoute
     }
+    '/_app/sites/$siteId/connect-ai': {
+      id: '/_app/sites/$siteId/connect-ai'
+      path: '/connect-ai'
+      fullPath: '/sites/$siteId/connect-ai'
+      preLoaderRoute: typeof AppSitesSiteIdConnectAiRouteImport
+      parentRoute: typeof AppSitesSiteIdRoute
+    }
     '/_app/sites/$siteId/library': {
       id: '/_app/sites/$siteId/library'
       path: '/library'
@@ -886,6 +925,7 @@ const AppSitesSiteIdCCollectionKeyRouteWithChildren =
 
 interface AppSitesSiteIdRouteChildren {
   AppSitesSiteIdActivityRoute: typeof AppSitesSiteIdActivityRoute
+  AppSitesSiteIdConnectAiRoute: typeof AppSitesSiteIdConnectAiRoute
   AppSitesSiteIdLibraryRoute: typeof AppSitesSiteIdLibraryRoute
   AppSitesSiteIdMediaRoute: typeof AppSitesSiteIdMediaRoute
   AppSitesSiteIdPeopleRoute: typeof AppSitesSiteIdPeopleRoute
@@ -898,6 +938,7 @@ interface AppSitesSiteIdRouteChildren {
 
 const AppSitesSiteIdRouteChildren: AppSitesSiteIdRouteChildren = {
   AppSitesSiteIdActivityRoute: AppSitesSiteIdActivityRoute,
+  AppSitesSiteIdConnectAiRoute: AppSitesSiteIdConnectAiRoute,
   AppSitesSiteIdLibraryRoute: AppSitesSiteIdLibraryRoute,
   AppSitesSiteIdMediaRoute: AppSitesSiteIdMediaRoute,
   AppSitesSiteIdPeopleRoute: AppSitesSiteIdPeopleRoute,
@@ -956,6 +997,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   SetupRoute: SetupRoute,
   ApiHealthRoute: ApiHealthRouteWithChildren,
+  ApiMcpRoute: ApiMcpRoute,
   ApiMetricsRoute: ApiMetricsRoute,
   InviteTokenRoute: InviteTokenRoute,
   ApiAssetsUploadRoute: ApiAssetsUploadRoute,
