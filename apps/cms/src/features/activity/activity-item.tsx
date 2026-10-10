@@ -3,12 +3,17 @@ import { Link } from '@tanstack/react-router'
 import { CheckCircle, XCircle } from '@phosphor-icons/react'
 
 import { SystemAvatar, UserAvatar } from '#/components/ui/avatar'
+import { Tag } from '#/components/ui/tag'
 import { RelativeTime, TimelineItem } from '#/components/ui/timeline'
 import { queryKeys } from '#/lib/content/query-keys'
 import type { EntryData } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 import { getEntryFn } from '#/server/fn/content'
-import { activityParts, entryTargetIds } from './activity-sentence'
+import {
+  activityParts,
+  entryTargetIds,
+  viaMcpKeyName,
+} from './activity-sentence'
 import type { ActivityLike } from './activity-sentence'
 
 type EntryRef = {
@@ -114,6 +119,7 @@ export function ActivityTimelineItem({
         : m.activity_repeat_times({ count })
       : null
   const metaLine = [scope, repeat].filter(Boolean).join(' · ')
+  const viaKey = viaMcpKeyName(row)
 
   const icon =
     row.action === 'publication.live' ? (
@@ -154,9 +160,14 @@ export function ActivityTimelineItem({
       }
       time={<RelativeTime value={row.createdAt} />}
       meta={
-        metaLine ? (
-          <span className="text-caption font-normal text-text-muted">
+        metaLine || viaKey ? (
+          <span className="flex flex-wrap items-center gap-2 text-caption font-normal text-text-muted">
             {metaLine}
+            {viaKey ? (
+              <Tag tone="accent" data-testid="activity-via-ai">
+                {m.activity_via_ai({ name: viaKey })}
+              </Tag>
+            ) : null}
           </span>
         ) : undefined
       }

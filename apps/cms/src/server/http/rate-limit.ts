@@ -20,6 +20,11 @@ export interface RequestRateLimitDependencies {
 const MUTATION_RULE = { limit: 60, windowSeconds: 60 } as const
 const UPLOAD_RULE = { limit: 10, windowSeconds: 60 } as const
 const SITE_API_RULE = { limit: 300, windowSeconds: 60 } as const
+// Per AI key. Agents make several small calls per entry (read, write, preview).
+const MCP_RULE = { limit: 120, windowSeconds: 60 } as const
+// Per client IP, across all bearer tokens. Random fake tokens each get a fresh
+// per-token bucket, so this is what throttles a flood of invalid keys.
+const MCP_IP_RULE = { limit: 600, windowSeconds: 60 } as const
 // Throttles bearer-token guessing against /api/metrics; a scraper needs ~4/min.
 const METRICS_RULE = { limit: 60, windowSeconds: 60 } as const
 
@@ -121,6 +126,45 @@ export async function enforceRequestRateLimit(
         'Rate limiting unavailable; request allowed',
         error,
       )
+      return null
+    }
+  }
+
+  // The MCP endpoint has its own budgets and is exempt from the general
+  // mutation budget (POST), which would otherwise throttle one agent session by
+  // IP. Two budgets apply: a per-IP one that also catches invalid tokens, and a
+  // per-key one keyed by the SHA-256 of the bearer token (never the raw secret).
+  // The per-IP budget needs a real client IP: without a trusted proxy every
+  // client is 'unknown', and one shared bucket would throttle all agents
+  // together. Keys are 256-bit random values checked with one indexed lookup,
+  // so skipping it there costs little.
+  if (path === '/api/mcp') {
+    const now = dependencies.now?.() ?? Date.now()
+    try {
+      const ip = getClientIp(request, dependencies.trustProxy)
+      if (ip !== 'unknown') {
+        const ipAllowed = await consumeRateLimit(
+          dependencies.store,
+          'mcp-ip',
+          `ip:${ip}`,
+          MCP_IP_RULE,
+          now,
+        )
+        if (!ipAllowed) return tooManyRequests(MCP_IP_RULE, now)
+      }
+
+      const token = bearerToken(request)
+      const identifier = token ? `token:${fingerprint(token)}` : `ip:${ip}`
+      const allowed = await consumeRateLimit(
+        dependencies.store,
+        'mcp',
+        identifier,
+        MCP_RULE,
+        now,
+      )
+      return allowed ? null : tooManyRequests(MCP_RULE, now)
+    } catch (error) {
+      dependencies.logError?.('Rate limiting unavailable; request allowed', error)
       return null
     }
   }

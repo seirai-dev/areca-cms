@@ -3,6 +3,7 @@ import '@tanstack/react-start'
 
 import { securityErrorCode } from '#/lib/security-errors'
 import { getSession, requireOrgMember } from '#/lib/session.server'
+import { audit } from '#/server/audit'
 import { AssetValidationError, uploadAsset } from '#/server/assets'
 import { parseLimitedFormData, UploadTooLargeError } from '#/server/http/upload'
 
@@ -61,6 +62,15 @@ export const Route = createFileRoute('/api/assets/upload')({
             },
             actorId: session.user.id,
             altText: typeof altText === 'string' ? altText : undefined,
+          })
+          // Same row the MCP upload writes, so the activity log shows both.
+          await audit({
+            organizationId,
+            actorId: session.user.id,
+            action: 'asset.upload',
+            targetType: 'asset',
+            targetId: row.id,
+            meta: { filename: row.originalFilename },
           })
           return Response.json(row)
         } catch (err) {

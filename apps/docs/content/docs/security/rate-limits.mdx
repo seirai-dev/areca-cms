@@ -11,9 +11,10 @@ The numbers are fixed in the software. No environment variable changes them. You
 
 | Limit | Applies to | Allowed | Counted per |
 | --- | --- | --- | --- |
-| [Writes](#writes) | Any request that changes data (not GET, HEAD or OPTIONS) | 60 per minute | Signed-in user, or IP address when anonymous |
+| [Writes](#writes) | Any request that changes data (not GET, HEAD or OPTIONS), except `/api/mcp` | 60 per minute | Signed-in user, or IP address when anonymous |
 | [Uploads](#uploads) | Library and branding uploads | 10 per minute | Signed-in user, or IP address |
 | [Site API](#site-api) | Site project reads and schema pushes | 300 per minute | Bearer token, or IP address without a token |
+| [AI app requests](#ai-app-requests) | The MCP endpoint, `/api/mcp`, used by AI apps with a personal AI key | 120 per minute per key; 600 per minute per client IP | AI key; client IP (only when it is known) |
 | [Metrics](#metrics) | The metrics endpoint | 60 per minute | IP address |
 | [AI suggestions](#ai-suggestions) | Generating SEO suggestions and alt text | 30 per hour | Signed-in user |
 | [Two-factor codes](#two-factor-codes) | Wrong codes at step-up | 5 wrong codes, then 15 minutes locked | Signed-in user |
@@ -25,7 +26,7 @@ Every request that is not a read (GET, HEAD or OPTIONS) counts against this limi
 
 - **Allowed:** 60 requests per minute.
 - **Counted per:** the signed-in user. Anonymous requests are counted per IP address.
-- **Not counted:** the health endpoints `/api/health` and `/api/health/ready`, which monitoring tools call often. Requests to the authentication endpoints under `/api/auth` are handled by a separate limit; see [sign-in and two-factor endpoints](#sign-in-and-two-factor-endpoints).
+- **Not counted:** the health endpoints `/api/health` and `/api/health/ready`, which monitoring tools call often. Requests to the authentication endpoints under `/api/auth` are handled by a separate limit; see [sign-in and two-factor endpoints](#sign-in-and-two-factor-endpoints). Requests to `/api/mcp` have their own limit; see [AI app requests](#ai-app-requests).
 
 A person working quickly in the editor is unlikely to reach 60 writes in a minute. A script or a stuck browser tab can.
 
@@ -47,6 +48,17 @@ The site project uses these endpoints to read its content types and the publishe
 - **Counted per:** the bearer token in the request. Requests without a token count per IP address.
 
 A busy build pipeline with several sites sharing an IP address can still stay within the limit, because each site has its own token and its own count.
+
+## AI app requests
+
+AI apps that use a personal AI key call the MCP endpoint at `/api/mcp`. Each AI app makes many small requests while it works, so this endpoint has its own limit instead of the writes limit.
+
+- **Allowed per key:** 120 requests per minute. A key is identified by a hash of its token, and the raw key is never stored in the limiter.
+- **Allowed per IP:** 600 requests per minute across all keys from one client address. This applies only when Areca knows the client's address, which needs `RATE_LIMIT_TRUST_PROXY=true` behind a reverse proxy. Without it, only the per-key limit applies.
+- **Requests without a valid key:** they count against the per-IP limit (when the address is known). The endpoint refuses them with `401` anyway.
+- **Not counted:** these requests do not use the writes limit above.
+
+A key that makes a burst of requests is slowed down, not revoked. Wait for the `Retry-After` time before the AI app tries again. See [MCP endpoint and tools](/docs/cms/mcp-tools) for the endpoint, and [Connect AI](/docs/cms/connect-ai) for managing keys.
 
 ## Metrics
 
@@ -118,7 +130,7 @@ These settings affect how limits behave. The numbers themselves cannot be change
 
 ### `RATE_LIMIT_TRUST_PROXY`
 
-Without a trusted address, Areca cannot tell anonymous clients apart. Every anonymous request then counts against one shared bucket, so one client can block the others.
+Without a trusted address, Areca cannot tell anonymous clients apart. Every anonymous request then counts against one shared bucket, so one client can block the others. The MCP endpoint is the exception: without a trusted address it skips the per-IP limit, and only the per-key limit applies.
 
 Set `RATE_LIMIT_TRUST_PROXY=true` only when the CMS runs behind a reverse proxy or load balancer that sets `X-Forwarded-For`, `X-Real-IP` or `CF-Connecting-IP` itself. Areca uses the address from these headers as given. If clients can reach the CMS directly, or your proxy passes headers through unchanged, a client can send its own header and choose its address, which lets it avoid its limit.
 

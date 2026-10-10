@@ -1,6 +1,6 @@
 ---
 title: Tokens
-description: The site, schema-write, preview, setup, metrics and invitation tokens, what each one can do, where to store it, and how to rotate it after a leak.
+description: The site, schema-write, preview, setup, metrics, invitation and personal AI tokens, what each one can do, where to store it, and how to rotate or revoke it after a leak.
 ---
 
 Areca uses several tokens. Each one grants one specific ability, so a leaked token exposes less than a password would. This page lists them, explains how they are stored, and gives the steps to take when one leaks.
@@ -15,6 +15,7 @@ Areca uses several tokens. Each one grants one specific ability, so a leaked tok
 | Setup token | Create the first agency admin | Until first setup completes | The `SETUP_TOKEN` setting, or the server log | Set a new value and restart |
 | Metrics token | Read the Prometheus metrics endpoint | Until changed | The `METRICS_TOKEN` setting and your monitoring tool | Change the setting and restart |
 | Invitation link | Join a client with the role in the invitation | Seven days | The invitation link you send | Revoke or resend the invitation |
+| Personal AI key (`areca_mcp_…`) | Act as you on one site through an AI app, with your current role | 30, 90 or 365 days, or never (default 90) | Shown once. You paste it into your AI app's settings. | Revoke it on the Connect AI page |
 
 ## Site and schema-write tokens
 
@@ -86,6 +87,19 @@ The `/api/metrics` endpoint is off until you set `METRICS_TOKEN` to a value of a
 
 Each invitation has a link that is valid for seven days and can be used once to join. Owners see pending invitations and can copy, resend or revoke them on the People page. Resending issues a new link with a new expiry, so the old link stops working. See [people and invitations](/docs/cms/people-and-invitations).
 
+## Personal AI keys
+
+A personal AI key lets one AI app work on one site as you. You create it on the [Connect AI](/docs/cms/connect-ai) page. Its value starts with `areca_mcp_`, and it is sent in an `Authorization: Bearer` header to the site's [MCP endpoint](/docs/cms/mcp-tools).
+
+- **Scope.** A key belongs to one user and one site. It does not reach other sites or other clients, and it is not accepted by any site, preview or schema endpoint.
+- **Permissions.** A key acts with your live role on that site, and checks it on every request. Going live needs a key created with **Allow going live**, and only owners and agency admins can create one.
+- **Storage.** Areca generates 32 random bytes and stores only a SHA-256 hash. The key is shown once. If you lose it, revoke it and create a new one.
+- **Lifetime.** You choose 30 days, 90 days, 1 year or never. The default is 90 days. An expired key stops working on its expiry date.
+- **Revocation.** Revoking takes effect at once. Editors can revoke their own keys. Owners and agency admins can revoke any key on the site. Each key shows when it was last used, which helps you spot a key that is no longer in use.
+- **Limits.** Each person can have 20 active keys per site. Requests made with a key are rate limited to 120 a minute per key, and to 600 a minute per client address when the address is known; see [rate limits](/docs/security/rate-limits#ai-app-requests).
+
+A personal AI key is not a site token. It cannot be used to build a website, and a site token cannot be used to call the MCP endpoint.
+
 ## If a token leaks
 
 Act on the token that leaked. The first step is always the same: stop the token from working.
@@ -98,6 +112,7 @@ Act on the token that leaked. The first step is always the same: stop the token 
 | Setup token, before setup is done | Finish setup at once. Then check the People page for agency admins you did not create, remove their agency admin status, and check the activity log. |
 | Metrics token | Change `METRICS_TOKEN`, restart the CMS, and update your monitoring tool. |
 | Invitation link | Revoke the invitation and send a new one. |
+| Personal AI key | Revoke it on the Connect AI page. Its actions stay in the activity log under its name, so you can review what it did. |
 
 If a token was in a Git commit, a log, or a shared chat, treat it as leaked. Rotating removes the risk of further use; it does not remove the token from history, so rotate even if you think nobody saw it.
 
@@ -105,5 +120,6 @@ If a token was in a Git commit, a log, or a shared chat, treat it as leaked. Rot
 
 - [Secrets and encryption](/docs/security/secrets)
 - [Two-factor authentication and step-up](/docs/security/two-factor-and-step-up)
+- [Connect AI](/docs/cms/connect-ai) for personal AI keys.
 - [Site settings](/docs/cms/site-settings)
 - [Preview](/docs/sdk/preview) explains how the site project renders previews.

@@ -82,6 +82,9 @@ const SENTENCES: Partial<Record<string, Sentence>> = {
   'manifest.sync': () => m.activity_manifest_sync(),
   'collection.upsert': (target) => m.activity_collection_upsert({ target }),
   'collection.delete': (target) => m.activity_collection_delete({ target }),
+  'mcp_key.create': (target) => m.activity_mcp_key_create({ target }),
+  'mcp_key.revoke': (target) => m.activity_mcp_key_revoke({ target }),
+  'asset.upload': (target) => m.activity_asset_upload({ target }),
 }
 
 /** Events the system reports about the site, told without an actor. */
@@ -163,6 +166,20 @@ export function activityTarget(
           named: false,
         }
       )
+    case 'mcp_key':
+      return (
+        named(text(meta?.name)) ?? {
+          label: m.activity_target_ai_key(),
+          named: false,
+        }
+      )
+    case 'asset':
+      return (
+        named(text(meta?.filename) ?? text(meta?.originalFilename)) ?? {
+          label: m.activity_target_asset(),
+          named: false,
+        }
+      )
     case 'collection':
       return (
         named(
@@ -216,7 +233,7 @@ export function activityParts(
     before: marked.slice(0, at),
     // Titles read best quoted; site, client and people names do not.
     target:
-      target.named && row.targetType === 'entry'
+      target.named && (row.targetType === 'entry' || row.targetType === 'asset')
         ? `“${target.label}”`
         : target.label,
     named: target.named,
@@ -233,6 +250,16 @@ export function activityText(row: ActivityLike, entryTitle?: string | null) {
     return body.charAt(0).toUpperCase() + body.slice(1)
   }
   return `${row.actorName} ${body}`
+}
+
+/**
+ * The name of the MCP key that performed a row's action ("via AI · Laptop"),
+ * or null for actions taken in the UI.
+ */
+export function viaMcpKeyName(row: ActivityLike): string | null {
+  const meta = metaOf(row)
+  if (meta?.via !== 'mcp') return null
+  return text(meta.mcpKeyName)
 }
 
 /** Consecutive repeats (the same person, action and target) closer together

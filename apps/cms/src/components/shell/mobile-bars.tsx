@@ -11,6 +11,7 @@ import {
   Palette,
   Pulse,
   RocketLaunch,
+  Sparkle,
   Stack,
   Users,
   UsersThree,
@@ -227,6 +228,15 @@ export function MobileTabBar() {
             </SheetHeader>
             <SheetBody className="pt-0">
               <InsetList>
+                <SheetRowLink
+                  link={{
+                    to: '/sites/$siteId/connect-ai',
+                    params: { siteId: site.id },
+                  }}
+                  icon={<Sparkle />}
+                  label={m.shell_nav_connect_ai()}
+                  onClick={close}
+                />
                 {manage ? (
                   <SheetRowLink
                     link={{

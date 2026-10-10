@@ -12,7 +12,7 @@ The most important rule is that **access is enforced on the server**. The interf
 - **Server-enforced authorization.** Each request is checked against the signed-in user, their role and their client before any data is read or changed. A denied request returns no data and changes nothing. See [roles and permissions](/docs/security/roles-and-permissions).
 - **Two-factor authentication for agency admins.** Agency admins must set up an authenticator app before they can use admin functions. This is on by default. See [two-factor authentication and step-up](/docs/security/two-factor-and-step-up).
 - **Step-up checks.** The most sensitive actions, such as deleting a client or a site, rotating a site token, or changing a stored API key, need a recent sign-in or a recent authenticator code. A session is recent for 10 minutes after it starts or after a code is confirmed. When it is not, Areca asks for a code.
-- **Scoped tokens.** Each site project has a read-only site token and a separate schema-write token. Preview links are signed and expire after one hour. See [tokens](/docs/security/tokens).
+- **Scoped tokens.** Each site project has a read-only site token and a separate schema-write token. Preview links are signed and expire after one hour. A personal AI key lets one AI app act as you on one site, and you can revoke it at any time. See [tokens](/docs/security/tokens).
 - **Encrypted stored keys.** Deployment and AI API keys are encrypted at rest with a key you supply. Site tokens are stored only as hashes. See [secrets and encryption](/docs/security/secrets).
 - **Rate limits.** Writes, uploads, site API calls, AI suggestions, and metrics requests are limited, and repeated wrong two-factor codes lock step-up. See [rate limits](/docs/security/rate-limits).
 - **Errors that reveal little.** Unexpected server errors return a generic message with a reference ID, and the details stay in the server log. A request for an object in another client gets the same answer as a request for an object that does not exist.
@@ -44,16 +44,16 @@ Library files are served from a URL that needs no sign-in. Anyone who has the UR
     Setting up the authenticator app, the 10-minute re-check and the lockout.
   </Card>
   <Card title="Tokens" href="/docs/security/tokens">
-    Site, schema-write, preview and setup tokens, and what to do if one leaks.
+    Site, schema-write, preview, setup and personal AI keys, and what to do if one leaks.
   </Card>
   <Card title="Secrets and encryption" href="/docs/security/secrets">
     The secrets you provide, how stored keys are encrypted, and how to rotate them.
   </Card>
   <Card title="Rate limits" href="/docs/security/rate-limits">
-    Every limit, what it applies to, and the response you receive.
+    Every limit, including the one for AI apps, what it applies to, and the response you receive.
   </Card>
   <Card title="AI data handling" href="/docs/security/ai-data-handling">
-    What content leaves your instance for SEO suggestions and alt text, and how to turn it off.
+    What content leaves your instance for SEO suggestions, alt text and the AI apps you connect.
   </Card>
 </Cards>
 

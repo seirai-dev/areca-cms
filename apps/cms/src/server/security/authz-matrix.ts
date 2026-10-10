@@ -8,7 +8,7 @@
  * Human-readable version: docs/AUTHZ_MATRIX.md. Adding a server function
  * without adding a row here fails the inventory test.
  */
-import { and, count, eq } from 'drizzle-orm'
+import { and, count, eq, isNull } from 'drizzle-orm'
 
 import { db } from '#/db'
 import {
@@ -21,6 +21,7 @@ import {
   entryRevision,
   invitation,
   membership,
+  mcpKey,
   organization,
   publication,
   site,
@@ -33,6 +34,7 @@ import * as authMethodFns from '#/server/fn/auth-methods'
 import * as brandingFns from '#/server/fn/branding'
 import * as contentFns from '#/server/fn/content'
 import * as homeFns from '#/server/fn/home'
+import * as mcpKeyFns from '#/server/fn/mcp-keys'
 import * as meFns from '#/server/fn/me'
 import * as overviewFns from '#/server/fn/overview'
 import * as publishingFns from '#/server/fn/publishing'
@@ -406,6 +408,13 @@ export const ROWS: Row[] = [
     prepare: (w) => ({ data: { id: w.X.entry.id } }),
   },
   {
+    name: 'listInboundReferencesFn',
+    hidden: true,
+    fn: contentFns.listInboundReferencesFn,
+    policy: 'org-editor',
+    prepare: (w) => ({ data: { id: w.X.entry.id } }),
+  },
+  {
     name: 'createEntryFn',
     hidden: true,
     fn: contentFns.createEntryFn,
@@ -472,9 +481,7 @@ export const ROWS: Row[] = [
       return {
         data: {
           id: e.id,
-          scheduledAt: new Date(Date.now() + 86_400_000)
-            .toISOString()
-            .slice(0, 16),
+          scheduledAt: new Date(Date.now() + 86_400_000).toISOString(),
           timezone: 'UTC',
         },
         untouched: entryUntouched(e.id, { status: 'draft' }),
@@ -933,6 +940,64 @@ export const ROWS: Row[] = [
     override: { adminNoMfa: 'mfa' },
     prepare: () => ({ data: undefined }),
   },
+  // ------------------------------------------------------- mcp-keys.ts
+  {
+    name: 'listMcpKeysFn',
+    hidden: true,
+    fn: mcpKeyFns.listMcpKeysFn,
+    policy: 'org-editor',
+    note: 'Editors see only their own keys; owners and agency admins see all keys on the site (scoping asserted separately).',
+    prepare: (w) => ({ data: { siteId: w.X.site.id } }),
+  },
+  {
+    name: 'createMcpKeyFn',
+    hidden: true,
+    fn: mcpKeyFns.createMcpKeyFn,
+    policy: 'org-editor',
+    note: 'Any site member can create a personal key. Agency admins need a fresh second factor (reauth). Editors cannot allow go-live (asserted separately).',
+    override: { adminStale: 'reauth' },
+    prepare: (w) => {
+      const name = `authz-key-${uniq()}`
+      return {
+        data: {
+          siteId: w.X.site.id,
+          name,
+          expiresInDays: 30,
+          allowGoLive: false,
+        },
+        untouched: absent(mcpKey, eq(mcpKey.name, name)),
+      }
+    },
+  },
+  {
+    name: 'revokeMcpKeyFn',
+    hidden: true,
+    fn: mcpKeyFns.revokeMcpKeyFn,
+    policy: 'org-editor',
+    note: 'Owners and agency admins revoke any key on the site; editors only their own. Other keys answer NotFound.',
+    override: { editorX: 'not-found' },
+    prepare: async (w) => {
+      const [key] = await db
+        .insert(mcpKey)
+        .values({
+          userId: w.users.ownerX.id,
+          siteId: w.X.site.id,
+          name: `authz-revoke-${uniq()}`,
+          tokenPrefix: 'areca_mcp_authz',
+          tokenHash: `authz-${crypto.randomUUID()}`,
+          expiresAt: new Date(Date.now() + 86_400_000),
+        })
+        .returning()
+      if (!key) throw new Error('mcp key insert failed')
+      return {
+        data: { id: key.id },
+        untouched: exists(
+          mcpKey,
+          and(eq(mcpKey.id, key.id), isNull(mcpKey.revokedAt)),
+        ),
+      }
+    },
+  },
 ]
 
 export const ALL_FN_MODULES = {
@@ -943,6 +1008,7 @@ export const ALL_FN_MODULES = {
   branding: brandingFns,
   content: contentFns,
   home: homeFns,
+  'mcp-keys': mcpKeyFns,
   me: meFns,
   overview: overviewFns,
   publishing: publishingFns,

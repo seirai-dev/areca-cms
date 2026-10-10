@@ -4,6 +4,8 @@ This page describes the HTTP contract used by `@areca-cms/site-sdk` and the
 matching client methods. Most sites should use the SDK rather than call these
 endpoints directly.
 
+This page does not cover the per-site MCP endpoint that AI apps use (`/api/mcp`). It authenticates with personal AI keys, not site tokens. See [Connect AI (MCP)](MCP.md).
+
 ## Base URL and credentials
 
 Set the CMS origin in `ARECA_CMS_URL`. The SDK removes trailing slashes and

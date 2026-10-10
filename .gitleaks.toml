@@ -21,4 +21,7 @@ paths = [
   '''(^|/)apps/cms/src/server/log\.test\.ts$''',
   # Fake private-key header / connection strings proving the scanner matches.
   '''(^|/)apps/cms/scripts/scan-client-bundle\.test\.mjs$''',
+  # Fake MCP keys and OAuth tokens in install-snippet and OAuth flow tests.
+  '''(^|/)apps/cms/src/lib/mcp-install\.test\.ts$''',
+  '''(^|/)apps/cms/src/server/mcp/oauth-flow\.test\.ts$''',
 ]

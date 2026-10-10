@@ -477,3 +477,34 @@ export const schedulerBackoff = pgTable('scheduler_backoff', {
   lastAttemptAt: timestamptz('last_attempt_at').notNull(),
   lastError: text('last_error'),
 })
+
+/**
+ * Personal per-site API keys for the MCP server. Only the sha256 hash is
+ * stored; `tokenPrefix` is the first characters of the token, for display.
+ * The key acts as `userId` with that user's live role on the site.
+ */
+export const mcpKey = pgTable(
+  'mcp_key',
+  {
+    id: id(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    siteId: text('site_id')
+      .notNull()
+      .references(() => site.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    tokenPrefix: text('token_prefix').notNull(),
+    tokenHash: text('token_hash').notNull().unique(),
+    /** Opt-in: lets an owner or agency admin key publish (go live). */
+    allowGoLive: boolean('allow_go_live').notNull().default(false),
+    expiresAt: timestamptz('expires_at'),
+    lastUsedAt: timestamptz('last_used_at'),
+    revokedAt: timestamptz('revoked_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('mcp_key_site_id_idx').on(t.siteId),
+    index('mcp_key_user_id_idx').on(t.userId),
+  ],
+)

@@ -20,6 +20,7 @@ import type { SidebarCollection } from '#/components/shell/sidebar'
 import { UserAvatar } from '#/components/ui/avatar'
 import { Button } from '#/components/ui/button'
 import { Card } from '#/components/ui/card'
+import { ConnectAiCard } from '#/features/connect-ai/connect-ai-card'
 import { greeting, greetingName } from '#/features/overview/greeting'
 import { EmptyState } from '#/components/ui/empty-state'
 import { InsetList, InsetRow } from '#/components/ui/inset-list'
@@ -117,6 +118,8 @@ export function OverviewScreen({ site }: { site: MeSite }) {
         collections={collections}
         myUserId={me.user.id}
       />
+
+      <ConnectAiCard siteId={site.id} siteName={site.name} />
 
       {isError ? (
         <QueryError

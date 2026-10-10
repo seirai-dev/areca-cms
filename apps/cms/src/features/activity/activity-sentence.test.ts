@@ -5,6 +5,7 @@ import {
   activityText,
   collapseRepeats,
   entryTargetIds,
+  viaMcpKeyName,
 } from './activity-sentence'
 import type { ActivityLike } from './activity-sentence'
 
@@ -124,5 +125,73 @@ describe('activityScope', () => {
     expect(activityScope({ organizationName: 'Acme', siteName: null })).toBe(
       'Acme',
     )
+  })
+})
+
+describe('MCP keys in the activity log', () => {
+  it('names the key a revoke or create touched', () => {
+    expect(
+      activityText(
+        row({
+          action: 'mcp_key.create',
+          targetType: 'mcp_key',
+          meta: { name: 'Laptop' },
+        }),
+      ),
+    ).toBe('Sanne de Vries created the AI key Laptop')
+    expect(
+      activityText(
+        row({
+          action: 'mcp_key.revoke',
+          targetType: 'mcp_key',
+          meta: { name: 'Laptop' },
+        }),
+      ),
+    ).toBe('Sanne de Vries revoked the AI key Laptop')
+  })
+
+  it('reads the via-AI key name only for MCP-performed rows', () => {
+    expect(
+      viaMcpKeyName(row({ meta: { via: 'mcp', mcpKeyName: 'Claude' } })),
+    ).toBe('Claude')
+    expect(viaMcpKeyName(row({ meta: { via: 'ui' } }))).toBeNull()
+    expect(viaMcpKeyName(row({ meta: null }))).toBeNull()
+  })
+})
+
+describe('asset uploads in the activity log', () => {
+  it('names the file uploaded to the Library', () => {
+    expect(
+      activityText(
+        row({
+          action: 'asset.upload',
+          targetType: 'asset',
+          targetId: 'a1',
+          meta: {
+            filename: 'spring-hero.jpg',
+            via: 'mcp',
+            mcpKeyName: 'Laptop',
+          },
+        }),
+      ),
+    ).toBe('Sanne de Vries uploaded “spring-hero.jpg” to the Library')
+    expect(
+      activityText(
+        row({
+          action: 'asset.upload',
+          targetType: 'asset',
+          targetId: 'a2',
+          meta: { originalFilename: 'brochure.pdf' },
+        }),
+      ),
+    ).toBe('Sanne de Vries uploaded “brochure.pdf” to the Library')
+  })
+
+  it('falls back to a generic word when the filename is missing', () => {
+    expect(
+      activityText(
+        row({ action: 'asset.upload', targetType: 'asset', targetId: 'a3' }),
+      ),
+    ).toBe('Sanne de Vries uploaded a file to the Library')
   })
 })
