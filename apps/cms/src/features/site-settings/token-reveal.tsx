@@ -77,7 +77,9 @@ export function TokenReveal({
         </span>
         <div className="grid min-w-0 gap-0.5">
           <p className="text-headline text-text-primary">
-            {m.settings_token_reveal_title()}
+            {privilege === 'schema'
+              ? m.settings_schema_token_reveal_title()
+              : m.settings_token_reveal_title()}
           </p>
           <p className="text-callout text-text-secondary">
             {m.settings_token_reveal_body()}

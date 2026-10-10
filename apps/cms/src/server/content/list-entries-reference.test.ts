@@ -42,7 +42,7 @@ async function insertEntry(input: {
 }
 
 describe.skipIf(!hasDb)('listEntries referenceTargets', () => {
-  it('omits draft and archived; includes published and snapshot-eligible scheduled', async () => {
+  it('includes approved targets and excludes scheduled targets without an approved version', async () => {
     await withTestSite(async (ctx) => {
       const col = await createTestCollection(ctx.site.id)
       const due = new Date(Date.now() - 60_000)
@@ -110,7 +110,7 @@ describe.skipIf(!hasDb)('listEntries referenceTargets', () => {
 
       expect(ids).toContain(published.id)
       expect(ids).toContain(scheduledLive.id)
-      expect(ids).toContain(scheduledDue.id)
+      expect(ids).not.toContain(scheduledDue.id)
       expect(ids).not.toContain(draft.id)
       expect(ids).not.toContain(archived.id)
       expect(ids).not.toContain(scheduledFuture.id)
@@ -119,7 +119,7 @@ describe.skipIf(!hasDb)('listEntries referenceTargets', () => {
           (item) => item.status === 'published' || item.status === 'scheduled',
         ),
       ).toBe(true)
-      expect(result.total).toBe(3)
+      expect(result.total).toBe(2)
     })
   })
 

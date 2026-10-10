@@ -1,3 +1,4 @@
+import { richTextComponents } from '@areca-cms/site-sdk/rich-text-react'
 import { Markdown } from '@tanstack/markdown/react'
 import type { MarkdownComponents } from '@tanstack/markdown/react'
 import { richTextDocument } from '@areca-cms/site-sdk'
@@ -98,7 +99,11 @@ export const articleComponents = {
         <img
           {...props}
           loading="lazy"
-          className="h-auto w-full rounded-xl"
+          className={
+            props.width
+              ? 'h-auto max-w-full rounded-xl'
+              : 'h-auto w-full rounded-xl'
+          }
         />
         {props.alt ? (
           <figcaption className="mt-2 text-center text-sm text-zinc-500">
@@ -109,17 +114,25 @@ export const articleComponents = {
     )
   },
   hr() {
-    return <hr className="my-10 border-0 text-center text-2xl tracking-[1em] text-zinc-400 before:content-['···']" />
+    return (
+      <hr className="my-10 border-0 text-center text-2xl tracking-[1em] text-zinc-400 before:content-['···']" />
+    )
   },
   br() {
     return <br />
   },
 } satisfies MarkdownComponents
 
-export function ArticleBody({ body }: { body: RichTextValue | null | undefined }) {
+export function ArticleBody({
+  body,
+}: {
+  body: RichTextValue | null | undefined
+}) {
   return (
     <div className="mt-8">
-      <Markdown components={articleComponents}>{richTextDocument(body)}</Markdown>
+      <Markdown components={richTextComponents(articleComponents)}>
+        {richTextDocument(body)}
+      </Markdown>
     </div>
   )
 }

@@ -16,35 +16,12 @@ import { createSiteFn } from '#/server/fn/admin'
 
 import { SlugField } from './slug-field'
 
+import { writePendingToken, removePendingToken } from './pending-site-tokens'
+import type { PendingToken } from './pending-site-tokens'
+
 /** The local demo site, suggested only while developing. */
 const DEMO_SITE_URL = 'http://localhost:3001'
 const DEFAULT_PRODUCTION_URL = import.meta.env.DEV ? DEMO_SITE_URL : ''
-
-/** A token the admin has not confirmed saving yet; survives a reload. */
-export type PendingToken = { siteName: string; token: string }
-
-const tokenKey = (orgId: string) => `areca.site-token.${orgId}`
-
-export function readPendingToken(orgId: string): PendingToken | null {
-  try {
-    const raw = sessionStorage.getItem(tokenKey(orgId))
-    if (!raw) return null
-    // Older builds stored the bare token.
-    if (!raw.startsWith('{')) return { siteName: '', token: raw }
-    return JSON.parse(raw) as PendingToken
-  } catch {
-    return null
-  }
-}
-
-export function writePendingToken(orgId: string, value: PendingToken | null) {
-  try {
-    if (value) sessionStorage.setItem(tokenKey(orgId), JSON.stringify(value))
-    else sessionStorage.removeItem(tokenKey(orgId))
-  } catch {
-    // Private mode: the reveal simply won't survive a reload.
-  }
-}
 
 /** Create a site in a client; refreshes every list that shows sites. */
 function useCreateSite(orgId: string) {
@@ -136,7 +113,7 @@ export function NewSiteSheet({
 
   function close(confirmed: boolean) {
     if (created && !confirmed) onUnconfirmed(created)
-    if (created && confirmed) writePendingToken(orgId, null)
+    if (created && confirmed) removePendingToken(orgId, created.siteId)
     onOpenChange(false)
     // Let the exit animation play before clearing the form.
     setTimeout(reset, 250)
@@ -210,7 +187,12 @@ export function NewSiteSheet({
               },
               {
                 onSuccess: (site) => {
-                  const pending = { siteName, token: site.token }
+                  const pending = {
+                    siteId: site.id,
+                    siteName,
+                    token: site.token,
+                    schemaToken: site.schemaToken,
+                  }
                   // Survives a reload until "I've saved it".
                   writePendingToken(orgId, pending)
                   setCreated(pending)
@@ -266,6 +248,9 @@ export function NewSiteSheet({
       ) : created ? (
         <div className="grid gap-4 pt-2">
           <TokenReveal token={created.token} />
+          {created.schemaToken ? (
+            <TokenReveal token={created.schemaToken} privilege="schema" />
+          ) : null}
           <p className="px-1 text-callout text-text-secondary">
             {m.agency_connect_site_next()}
           </p>

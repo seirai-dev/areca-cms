@@ -4,6 +4,8 @@ import type { ReactElement, SVGProps } from 'react'
 import { Button } from '#/components/ui/button'
 import { authClient } from '#/lib/auth-client'
 import type { AuthMethods, SocialProviderId } from '#/lib/auth-providers'
+import { providerRequest } from './provider-request'
+import { AuthError } from './auth-shell'
 import { m } from '#/paraglide/messages'
 
 function GitHubIcon(props: SVGProps<SVGSVGElement>) {
@@ -84,7 +86,36 @@ export function ProviderSignIn({
   errorCallbackURL: string
 }) {
   const [pending, setPending] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const sso = methods.sso
+  async function signIn(provider: SocialProviderId | 'sso') {
+    if (pending) return
+    setPending(provider)
+    setError(null)
+    try {
+      await providerRequest(() =>
+        provider === 'sso'
+          ? authClient.signIn.sso({
+              providerId: sso!.providerId,
+              callbackURL,
+              errorCallbackURL,
+            })
+          : authClient.signIn.social({
+              provider,
+              callbackURL,
+              errorCallbackURL,
+            }),
+      )
+    } catch (failure) {
+      setError(
+        failure instanceof Error && failure.message
+          ? failure.message
+          : m.auth_could_not_sign_in(),
+      )
+    } finally {
+      setPending(null)
+    }
+  }
 
   if (methods.socials.length === 0 && !sso) {
     return null
@@ -92,6 +123,7 @@ export function ProviderSignIn({
 
   return (
     <div className="grid gap-2">
+      {error ? <AuthError>{error}</AuthError> : null}
       {methods.socials.map((provider) => {
         const { icon: Icon, label } = SOCIALS[provider]
         return (
@@ -104,14 +136,7 @@ export function ProviderSignIn({
             disabled={pending !== null && pending !== provider}
             loading={pending === provider}
             data-testid={`sign-in-${provider}`}
-            onClick={() => {
-              setPending(provider)
-              void authClient.signIn.social({
-                provider,
-                callbackURL,
-                errorCallbackURL,
-              })
-            }}
+            onClick={() => void signIn(provider)}
           >
             {pending === provider ? null : <Icon className="size-[18px]" />}
             {label()}
@@ -127,14 +152,7 @@ export function ProviderSignIn({
           disabled={pending !== null && pending !== 'sso'}
           loading={pending === 'sso'}
           data-testid="sign-in-sso"
-          onClick={() => {
-            setPending('sso')
-            void authClient.signIn.sso({
-              providerId: sso.providerId,
-              callbackURL,
-              errorCallbackURL,
-            })
-          }}
+          onClick={() => void signIn('sso')}
         >
           {pending === 'sso' ? null : <MicrosoftIcon className="size-[18px]" />}
           {m.auth_continue_with_microsoft()}

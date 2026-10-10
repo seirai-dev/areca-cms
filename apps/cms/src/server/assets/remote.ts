@@ -555,6 +555,7 @@ export function unsupportedDownloadMessage(remote: Pick<RemoteFile, 'bytes' | 'c
 export async function uploadAssetFromUrl(
   input: {
     organizationId: string
+    originSiteId?: string
     url: string
     altText?: string
     filename?: string
@@ -576,6 +577,7 @@ export async function uploadAssetFromUrl(
 
   return uploadAsset({
     organizationId: input.organizationId,
+    originSiteId: input.originSiteId,
     file: { buffer: remote.bytes, filename, mimeType },
     actorId: input.actorId,
     altText: input.altText,

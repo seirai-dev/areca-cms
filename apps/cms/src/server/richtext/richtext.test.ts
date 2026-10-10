@@ -256,8 +256,8 @@ describe('validateRichText', () => {
         ],
       }),
     ).toEqual([
-      'Image width must be a positive number',
-      'Image height must be a positive number',
+      'Image width must be a positive number no greater than 10000',
+      'Image height must be a positive number no greater than 10000',
     ])
   })
 })

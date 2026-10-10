@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .select() are checked defensively */
 import { eq } from 'drizzle-orm'
+import { DPOP_SIGNING_ALGORITHMS } from 'better-auth/oauth2'
 
 import { db } from '#/db'
 import { site } from '#/db/schema'
@@ -85,7 +86,10 @@ async function respond(path: string): Promise<Response | null> {
     if (path === `${AS_DOC_PREFIX}${issuerPath}` || path === AS_DOC_PREFIX) {
       return json(metadata)
     }
-    if (path === `${OIDC_DOC_PREFIX}${issuerPath}` || path === OIDC_DOC_PREFIX) {
+    if (
+      path === `${OIDC_DOC_PREFIX}${issuerPath}` ||
+      path === OIDC_DOC_PREFIX
+    ) {
       return json(await auth.api.getOpenIdConfig())
     }
     return null
@@ -103,8 +107,7 @@ async function resourceDocument(path: string): Promise<Response> {
   // The path must be exactly the resource's own path (APP_URL origin + path),
   // so the document is served only at the URL the client derives from it.
   const exact =
-    slug !== null &&
-    new URL(mcpResourceUrl(slug)).pathname === resourcePath
+    slug !== null && new URL(mcpResourceUrl(slug)).pathname === resourcePath
   const [found] =
     exact && slug
       ? await db
@@ -121,6 +124,7 @@ async function resourceDocument(path: string): Promise<Response> {
     authorization_servers: [issuer],
     scopes_supported: [...MCP_OAUTH_SCOPES],
     bearer_methods_supported: ['header'],
+    dpop_signing_alg_values_supported: [...DPOP_SIGNING_ALGORITHMS],
     resource_name: `${found.name} (Areca CMS)`,
   })
 }

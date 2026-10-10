@@ -49,9 +49,13 @@ export function useAiSettings() {
     setPrompt(view.systemPrompt ?? view.defaultSystemPrompt)
   }, [])
 
-  // Seed from the saved values, and again after each save.
+  // Independent image/key changes must not overwrite the metadata draft.
+  const seeded = React.useRef(false)
   React.useEffect(() => {
-    if (saved) seed(saved)
+    if (saved && !seeded.current) {
+      seeded.current = true
+      seed(saved)
+    }
   }, [saved, seed])
 
   const save = useMutation({
@@ -72,6 +76,7 @@ export function useAiSettings() {
         : saveAiSettingsFn({ data: input })
     },
     onSuccess: (next) => {
+      seed(next)
       toast.success(m.agency_ai_saved())
       queryClient.setQueryData(aiSettingsQueryKey, next)
       // Editors' "Generate with AI" depends on this; don't wait for staleTime.

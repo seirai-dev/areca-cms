@@ -16,6 +16,7 @@ const readiness: ReadinessReport = {
 }
 
 const snapshot: MetricsSnapshot = {
+  publicationFailuresTotal: 12,
   jobsByStatus: {
     queued: 2,
     building: 1,
@@ -42,8 +43,10 @@ describe('renderPrometheus', () => {
     expect(text).toContain('# TYPE areca_build_jobs gauge')
     expect(text).toContain('areca_build_jobs{status="queued"} 2')
     expect(text).toContain('areca_build_jobs{status="cancelled"} 0')
-    expect(text).toContain('areca_build_jobs_failed_total 5')
+    expect(text).toContain('areca_build_jobs_failed_total 12')
     expect(text).toContain('# TYPE areca_build_jobs_failed_total counter')
+    expect(text).toContain('# TYPE areca_build_jobs_failed_backlog gauge')
+    expect(text).toContain('areca_build_jobs_failed_backlog 5')
     expect(text).toContain('areca_build_jobs_active 2')
     expect(text).toContain('areca_build_jobs_oldest_queued_age_seconds 42.5')
     expect(text).toContain('areca_publications{status="live"} 3')
@@ -136,4 +139,10 @@ describe('handleMetricsRequest', () => {
     expect(tokenMatches('a', 'a')).toBe(true)
     expect(tokenMatches('a', 'ab')).toBe(false)
   })
+})
+
+it('failure counter remains cumulative as the current failed backlog decreases', () => {
+  const out = renderPrometheus({ ...snapshot, jobsByStatus: { failed: 0 } })
+  expect(out).toContain('areca_build_jobs_failed_backlog 0')
+  expect(out).toContain('areca_build_jobs_failed_total 12')
 })

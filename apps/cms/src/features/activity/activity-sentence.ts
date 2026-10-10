@@ -89,6 +89,8 @@ const SENTENCES: Partial<Record<string, Sentence>> = {
   'mcp_connection.revoke': (target) =>
     m.activity_mcp_connection_revoke({ target }),
   'asset.upload': (target) => m.activity_asset_upload({ target }),
+  'asset.update': (target) => m.activity_asset_update({ target }),
+  'asset.delete': (target) => m.activity_asset_delete({ target }),
 }
 
 /** Events the system reports about the site, told without an actor. */

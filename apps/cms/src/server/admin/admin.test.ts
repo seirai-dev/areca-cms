@@ -52,7 +52,9 @@ type MailpitMessages = { messages?: MailpitMessage[] }
 
 async function findMailpitMessage(email: string) {
   for (let attempt = 0; attempt < 20; attempt++) {
-    const res = await fetch('http://localhost:8025/api/v1/messages')
+    const res = await fetch(
+      `${process.env.MAILPIT_URL ?? 'http://localhost:8025'}/api/v1/messages`,
+    )
     if (res.ok) {
       const body = (await res.json()) as MailpitMessages
       const found = (body.messages ?? []).find((message) =>
@@ -498,6 +500,18 @@ describe.skipIf(!hasDb)('admin', () => {
       })
       expect(requested.ok).toBe(true)
 
+      // Completed historical jobs may cascade; queued work must block deletion.
+      await expect(deleteSite(ctx.site.id, ctx.actor.id)).rejects.toThrow(
+        'pending releases',
+      )
+      await db
+        .update(buildJob)
+        .set({
+          status: 'succeeded',
+          dispatchUncertain: false,
+          finishedAt: new Date(),
+        })
+        .where(eq(buildJob.siteId, ctx.site.id))
       const entryId = created.id
       await deleteSite(ctx.site.id, ctx.actor.id)
 

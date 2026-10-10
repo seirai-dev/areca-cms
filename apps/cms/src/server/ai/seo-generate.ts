@@ -260,6 +260,7 @@ export type GenerateSeoResult = {
   images: AiImageInput[]
   model: string
   usedImages: boolean
+  warnings: string[]
   usage: { promptTokens?: number; completionTokens?: number; cost?: number }
 }
 
@@ -278,7 +279,7 @@ export async function generateSeoSuggestion(input: {
     input.fields,
     input.data,
   )
-  const images: AiImageInput[] = assets.map((row) => ({
+  let images: AiImageInput[] = assets.map((row) => ({
     id: row.id,
     url: assetUrl(row),
     filename: row.originalFilename,
@@ -290,15 +291,24 @@ export async function generateSeoSuggestion(input: {
     type: 'image'
     source: { type: 'data'; value: string; mimeType: string }
   }[] = []
+  const warnings: string[] = []
   if (model?.supportsImages) {
+    const readableIds = new Set<string>()
     for (const row of assets) {
       const value = await readImageBase64(row)
-      if (value)
+      if (value) {
+        readableIds.add(row.id)
         imageParts.push({
           type: 'image',
           source: { type: 'data', value, mimeType: 'image/jpeg' },
         })
+      } else {
+        warnings.push(
+          `Skipped unreadable image: ${row.originalFilename}. Its image description was not generated.`,
+        )
+      }
     }
+    images = images.filter((image) => readableIds.has(image.id))
   }
 
   const article = buildArticlePrompt({
@@ -358,6 +368,7 @@ export async function generateSeoSuggestion(input: {
       images,
       model: input.config.model,
       usedImages: imageParts.length > 0,
+      warnings,
       usage,
     }
   } catch (error) {

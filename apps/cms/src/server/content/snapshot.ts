@@ -8,7 +8,7 @@ import { and, eq, or } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { collection, entry, site } from '#/db/schema'
-import { readEntrySeo, withoutSeo } from '#/lib/seo'
+import { entryPublicUrl, readEntrySeo, withoutSeo } from '#/lib/seo'
 import type {
   EntryData,
   Field,
@@ -29,7 +29,7 @@ import { convertRichText, validateRichText } from '#/server/richtext'
 import { getCollection, listCollections } from './collections.ts'
 import { NotFoundError, ValidationError } from './errors.ts'
 import { buildEntrySeo } from './seo.ts'
-import { validateEntryData } from './validation.ts'
+import { pickDeclaredFields, validateEntryData } from './validation.ts'
 
 type IncludedEntry = {
   collectionKey: string
@@ -143,20 +143,21 @@ export async function buildSnapshot(
     slugs.add(item.slug)
   }
 
-  const slugsByRoute = new Map<string, Map<string, string>>()
+  const entriesByUrl = new Map<string, IncludedEntry>()
   for (const item of included) {
-    let bySlug = slugsByRoute.get(item.routePattern)
-    if (!bySlug) {
-      bySlug = new Map()
-      slugsByRoute.set(item.routePattern, bySlug)
-    }
-    const owner = bySlug.get(item.slug)
-    if (owner && owner !== item.collectionKey) {
+    const url = entryPublicUrl(
+      existingSite.productionUrl,
+      item.routePattern,
+      item.slug,
+    )
+    if (!url) continue
+    const owner = entriesByUrl.get(url)
+    if (owner) {
       errors.push(
-        `Route collision: ${item.routePattern} slug "${item.slug}" used by ${owner} and ${item.collectionKey}`,
+        `Route collision: two pages use the same URL ${url}: "${owner.collectionKey}/${owner.slug}" and "${item.collectionKey}/${item.slug}". Change a page slug or content type route before publishing.`,
       )
     }
-    bySlug.set(item.slug, item.collectionKey)
+    entriesByUrl.set(url, item)
   }
 
   const includedById = new Map<string, IncludedEntry>()
@@ -367,7 +368,9 @@ async function convertFields(
     strict: boolean
   },
 ): Promise<Record<string, unknown>> {
-  const out: Record<string, unknown> = withoutSeo({ ...data })
+  const out: Record<string, unknown> = withoutSeo(
+    pickDeclaredFields(fields, data),
+  )
 
   for (const field of fields) {
     const value = data[field.key]

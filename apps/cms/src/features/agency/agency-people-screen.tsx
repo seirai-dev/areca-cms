@@ -32,6 +32,7 @@ import { RelativeTime } from '#/components/ui/timeline'
 import { Hint } from '#/components/ui/tooltip'
 import { m } from '#/paraglide/messages'
 import type { Me } from '#/server/fn/me'
+import { resetAdminFactorLockoutFn } from '#/server/fn/security'
 import { setAgencyAdminFn } from '#/server/fn/admin'
 
 import { accountsQuery } from './queries'
@@ -79,6 +80,17 @@ function useAgencyPeople() {
     name: string
     next: boolean
   } | null>(null)
+  const [resetTarget, setResetTarget] = React.useState<AccountRow | null>(null)
+  const resetLockout = useMutation({
+    mutationFn: (userId: string) =>
+      stepUp.run(() => resetAdminFactorLockoutFn({ data: { userId } })),
+    onSuccess: async () => {
+      setResetTarget(null)
+      toast.success(m.account_factor_lockout_reset_success())
+      await queryClient.invalidateQueries({ queryKey: adminQueryKeys.users })
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  })
   const mutation = useMutation({
     mutationFn: (input: { userId: string; isAgencyAdmin: boolean }) =>
       stepUp.run(() => setAgencyAdminFn({ data: input })),
@@ -93,7 +105,15 @@ function useAgencyPeople() {
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
-  return { accounts, pending, setPending, mutation }
+  return {
+    accounts,
+    pending,
+    setPending,
+    mutation,
+    resetTarget,
+    setResetTarget,
+    resetLockout,
+  }
 }
 
 /**
@@ -102,7 +122,15 @@ function useAgencyPeople() {
  * person with their client memberships and an Agency access switch.
  */
 export function AgencyPeopleScreen({ me }: { me: Me }) {
-  const { accounts, pending, setPending, mutation } = useAgencyPeople()
+  const {
+    accounts,
+    pending,
+    setPending,
+    mutation,
+    resetTarget,
+    setResetTarget,
+    resetLockout,
+  } = useAgencyPeople()
   const [search, setSearch] = React.useState('')
   const [role, setRole] = React.useState<RoleFilter>('all')
   const [clientId, setClientId] = React.useState(ALL)
@@ -287,6 +315,7 @@ export function AgencyPeopleScreen({ me }: { me: Me }) {
                   key={account.id}
                   account={account}
                   isSelf={account.id === me.user.id}
+                  onResetLockout={() => setResetTarget(account)}
                   onToggle={(next) =>
                     setPending({ userId: account.id, name: account.name, next })
                   }
@@ -296,6 +325,20 @@ export function AgencyPeopleScreen({ me }: { me: Me }) {
           )}
         </div>
       )}
+
+      <ConfirmDialog
+        open={resetTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setResetTarget(null)
+        }}
+        title={m.account_factor_lockout_reset()}
+        description={m.account_factor_lockout_reset_description()}
+        confirmLabel={m.account_factor_lockout_reset()}
+        onConfirm={async () => {
+          if (resetTarget) await resetLockout.mutateAsync(resetTarget.id)
+        }}
+        testId="reset-factor-lockout-dialog"
+      />
 
       <ConfirmDialog
         open={pending !== null}
@@ -337,10 +380,12 @@ function PersonRow({
   account,
   isSelf,
   onToggle,
+  onResetLockout,
 }: {
   account: AccountRow
   isSelf: boolean
   onToggle: (next: boolean) => void
+  onResetLockout: () => void
 }) {
   const switchId = `agency-access-${account.id}`
   const toggle = (
@@ -385,6 +430,17 @@ function PersonRow({
         </label>
       }
     >
+      {account.isAgencyAdmin && account.factorLockedUntil && !isSelf ? (
+        <Button
+          type="button"
+          size="xs"
+          variant="secondary"
+          onClick={onResetLockout}
+          data-testid={`reset-factor-lockout-${account.email}`}
+        >
+          {m.account_factor_lockout_reset()}
+        </Button>
+      ) : null}
       <span className="mt-1 flex flex-wrap items-center gap-1.5">
         {account.memberships.length === 0 ? (
           <span className="text-caption font-normal text-text-muted">

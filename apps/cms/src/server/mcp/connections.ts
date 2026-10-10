@@ -1,21 +1,35 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .returning()/.select() are checked defensively */
-import { and, desc, eq, isNull } from 'drizzle-orm'
+import { AsyncLocalStorage } from 'node:async_hooks'
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 
-import { db } from '#/db'
+import { Pool } from 'pg'
+
+import { db, pool } from '#/db'
 import {
   mcpConnection,
   oauthAccessToken,
   oauthConsent,
   oauthRefreshToken,
   user,
+  site,
 } from '#/db/schema'
 import { m } from '#/paraglide/messages'
+import { createLogger } from '#/server/log'
 import { audit } from '#/server/audit'
 import { NotFoundError } from '#/server/content/errors'
 
 import { MCP_CONNECTION_IDLE_MS } from './oauth-resource'
 
 const LAST_USED_WRITE_INTERVAL_MS = 60_000
+// Locks use a separate small pool: waiting approvals cannot exhaust the data
+// pool while the lock holder's OAuth handler needs a connection to finish.
+const grantLockPool = new Pool({ ...pool.options, max: 4 })
+grantLockPool.on('error', (error) =>
+  createLogger('mcp-grants').error('Grant lock connection failed', {
+    err: error,
+  }),
+)
+const heldGrantLock = new AsyncLocalStorage<string>()
 
 export type McpConnectionRow = typeof mcpConnection.$inferSelect
 
@@ -57,33 +71,104 @@ export async function upsertConnection(input: {
   allowGoLive: boolean
   now?: Date
 }): Promise<McpConnectionRow> {
-  const now = input.now ?? new Date()
-  const clientName = input.clientName.trim() || 'AI app'
-
-  const [existing] = await db
-    .select()
-    .from(mcpConnection)
-    .where(
-      and(
-        eq(mcpConnection.userId, input.userId),
-        eq(mcpConnection.siteId, input.siteId),
-        eq(mcpConnection.clientId, input.clientId),
-        isNull(mcpConnection.revokedAt),
-      ),
+  return withConnectionLock(input, async () => {
+    const now = input.now ?? new Date()
+    const existing = await findUsableConnection({ ...input, now })
+    return saveConnectionApproval(
+      input,
+      existing?.id ?? crypto.randomUUID(),
+      now,
     )
-    .limit(1)
+  })
+}
 
-  let row: McpConnectionRow | undefined
-  if (existing) {
-    ;[row] = await db
+/** Serialize approval and disconnect for the same grant across processes. */
+export async function withConnectionLock<T>(
+  input: { userId: string; siteId: string; clientId: string },
+  run: () => Promise<T>,
+): Promise<T> {
+  const key = JSON.stringify([input.userId, input.siteId, input.clientId])
+  if (heldGrantLock.getStore() === key) return run()
+  const lock = await grantLockPool.connect()
+  let acquired = false
+  let healthy = true
+  let connectionError: Error | undefined
+  const onError = (error: Error) => {
+    healthy = false
+    connectionError = error
+  }
+  lock.on('error', onError)
+  try {
+    await lock.query('SELECT pg_advisory_lock(hashtextextended($1, 0))', [key])
+    acquired = true
+    const result = await heldGrantLock.run(key, run)
+    if (connectionError) throw connectionError
+    return result
+  } finally {
+    if (acquired) {
+      try {
+        await lock.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [
+          key,
+        ])
+      } catch {
+        healthy = false
+      }
+    } else healthy = false
+    lock.removeListener('error', onError)
+    lock.release(!healthy)
+  }
+}
+
+/** Called under the tuple lock, after OAuth consent has completed. */
+export async function saveConnectionApproval(
+  input: {
+    userId: string
+    siteId: string
+    organizationId: string
+    clientId: string
+    clientName: string
+    allowGoLive: boolean
+  },
+  id: string,
+  now: Date = new Date(),
+): Promise<McpConnectionRow> {
+  const clientName = input.clientName.trim() || 'AI app'
+  const row = await db.transaction(async (tx) => {
+    // A new generation retires an idle connection instead of reviving its old tokens.
+    const retired = await tx
       .update(mcpConnection)
-      .set({ clientName, allowGoLive: input.allowGoLive })
-      .where(eq(mcpConnection.id, existing.id))
+      .set({ revokedAt: now })
+      .where(
+        and(
+          eq(mcpConnection.userId, input.userId),
+          eq(mcpConnection.siteId, input.siteId),
+          eq(mcpConnection.clientId, input.clientId),
+          isNull(mcpConnection.revokedAt),
+          sql`${mcpConnection.id} <> ${id}`,
+        ),
+      )
       .returning()
-  } else {
-    ;[row] = await db
+    for (const previous of retired) {
+      await revokeGenerationTokens(
+        tx,
+        previous,
+        [previous.id, previous.siteId],
+        now,
+      )
+      await tx
+        .delete(oauthConsent)
+        .where(
+          and(
+            eq(oauthConsent.userId, previous.userId),
+            eq(oauthConsent.clientId, previous.clientId),
+            inArray(oauthConsent.referenceId, [previous.id, previous.siteId]),
+          ),
+        )
+    }
+    const [saved] = await tx
       .insert(mcpConnection)
       .values({
+        id,
         userId: input.userId,
         siteId: input.siteId,
         clientId: input.clientId,
@@ -91,18 +176,26 @@ export async function upsertConnection(input: {
         allowGoLive: input.allowGoLive,
         createdAt: now,
       })
+      .onConflictDoUpdate({
+        target: mcpConnection.id,
+        set: { clientName, allowGoLive: input.allowGoLive },
+        setWhere: isNull(mcpConnection.revokedAt),
+      })
       .returning()
-  }
-  if (!row) throw new Error('Failed to record MCP connection')
-
-  await audit({
-    organizationId: input.organizationId,
-    siteId: input.siteId,
-    actorId: input.userId,
-    action: 'mcp_connection.create',
-    targetType: 'mcp_connection',
-    targetId: row.id,
-    meta: { clientName, allowGoLive: row.allowGoLive },
+    if (!saved) throw new Error('Connection was disconnected during approval')
+    await audit(
+      {
+        organizationId: input.organizationId,
+        siteId: input.siteId,
+        actorId: input.userId,
+        action: 'mcp_connection.create',
+        targetType: 'mcp_connection',
+        targetId: saved.id,
+        meta: { clientName, allowGoLive: saved.allowGoLive },
+      },
+      tx,
+    )
+    return saved
   })
   return row
 }
@@ -156,7 +249,6 @@ export async function revokeConnection(input: {
   canRevokeOthers: boolean
   now?: Date
 }): Promise<void> {
-  const now = input.now ?? new Date()
   const [row] = await db
     .select()
     .from(mcpConnection)
@@ -167,57 +259,118 @@ export async function revokeConnection(input: {
       ),
     )
     .limit(1)
-  if (!row) throw new NotFoundError(m.server_mcp_connection_not_found())
-  if (row.userId !== input.actorId && !input.canRevokeOthers) {
+  if (!row || (row.userId !== input.actorId && !input.canRevokeOthers)) {
     throw new NotFoundError(m.server_mcp_connection_not_found())
   }
-  if (row.revokedAt) return
-
-  await db.transaction(async (tx) => {
-    await tx
-      .update(mcpConnection)
-      .set({ revokedAt: now })
-      .where(eq(mcpConnection.id, row.id))
-    // Consent, access and refresh tokens are keyed by the site id that the
-    // authorization was bound to (see siteIdForAuthorizationQuery).
-    const scope = and(
-      eq(oauthConsent.clientId, row.clientId),
-      eq(oauthConsent.userId, row.userId),
-      eq(oauthConsent.referenceId, row.siteId),
-    )
-    await tx.delete(oauthConsent).where(scope)
-    await tx
-      .update(oauthAccessToken)
-      .set({ revoked: now })
-      .where(
-        and(
-          eq(oauthAccessToken.clientId, row.clientId),
-          eq(oauthAccessToken.userId, row.userId),
-          eq(oauthAccessToken.referenceId, row.siteId),
-          isNull(oauthAccessToken.revoked),
-        ),
+  await withConnectionLock(row, async () => {
+    const now = input.now ?? new Date()
+    await db.transaction(async (tx) => {
+      const [revoked] = await tx
+        .update(mcpConnection)
+        .set({ revokedAt: now })
+        .where(
+          and(eq(mcpConnection.id, row.id), isNull(mcpConnection.revokedAt)),
+        )
+        .returning()
+      if (!revoked) return
+      // Include legacy site references so deployment also invalidates pre-upgrade tokens.
+      const refs = [row.id, row.siteId]
+      await tx
+        .delete(oauthConsent)
+        .where(
+          and(
+            eq(oauthConsent.clientId, row.clientId),
+            eq(oauthConsent.userId, row.userId),
+            sql`${oauthConsent.referenceId} in (${row.id}, ${row.siteId})`,
+          ),
+        )
+      await revokeGenerationTokens(tx, row, refs, now)
+      await audit(
+        {
+          organizationId: input.organizationId,
+          siteId: input.siteId,
+          actorId: input.actorId,
+          action: 'mcp_connection.revoke',
+          targetType: 'mcp_connection',
+          targetId: row.id,
+          meta: { clientName: row.clientName, allowGoLive: row.allowGoLive },
+        },
+        tx,
       )
-    await tx
-      .update(oauthRefreshToken)
-      .set({ revoked: now })
-      .where(
-        and(
-          eq(oauthRefreshToken.clientId, row.clientId),
-          eq(oauthRefreshToken.userId, row.userId),
-          eq(oauthRefreshToken.referenceId, row.siteId),
-          isNull(oauthRefreshToken.revoked),
-        ),
-      )
+    })
   })
+}
 
-  await audit({
-    organizationId: input.organizationId,
-    siteId: input.siteId,
-    actorId: input.actorId,
-    action: 'mcp_connection.revoke',
-    targetType: 'mcp_connection',
-    targetId: row.id,
-    meta: { clientName: row.clientName, allowGoLive: row.allowGoLive },
+/** Clear replay caches too: a disconnected rotated token must never return 200. */
+async function revokeGenerationTokens(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  row: { clientId: string; userId: string },
+  refs: string[],
+  now: Date,
+) {
+  await tx
+    .update(oauthAccessToken)
+    .set({ revoked: now })
+    .where(
+      and(
+        eq(oauthAccessToken.clientId, row.clientId),
+        eq(oauthAccessToken.userId, row.userId),
+        inArray(oauthAccessToken.referenceId, refs),
+      ),
+    )
+  await tx
+    .update(oauthRefreshToken)
+    .set({
+      revoked: now,
+      rotatedAt: null,
+      rotationReplayExpiresAt: null,
+      rotationReplayResponse: null,
+    })
+    .where(
+      and(
+        eq(oauthRefreshToken.clientId, row.clientId),
+        eq(oauthRefreshToken.userId, row.userId),
+        inArray(oauthRefreshToken.referenceId, refs),
+      ),
+    )
+}
+
+/** Replay invalidates this connection generation, leaving other sites intact. */
+export async function revokeReplayedGrant(row: McpConnectionRow) {
+  await withConnectionLock(row, async () => {
+    await db.transaction(async (tx) => {
+      const now = new Date()
+      const [revoked] = await tx
+        .update(mcpConnection)
+        .set({ revokedAt: now })
+        .where(
+          and(eq(mcpConnection.id, row.id), isNull(mcpConnection.revokedAt)),
+        )
+        .returning()
+      await revokeGenerationTokens(tx, row, [row.id], now)
+      await tx.delete(oauthConsent).where(eq(oauthConsent.referenceId, row.id))
+      const [target] = await tx
+        .select({ organizationId: site.organizationId })
+        .from(site)
+        .where(eq(site.id, row.siteId))
+      if (revoked && target)
+        await audit(
+          {
+            organizationId: target.organizationId,
+            siteId: row.siteId,
+            actorId: row.userId,
+            action: 'mcp_connection.revoke',
+            targetType: 'mcp_connection',
+            targetId: row.id,
+            meta: {
+              clientName: row.clientName,
+              allowGoLive: row.allowGoLive,
+              reason: 'refresh_token_replay',
+            },
+          },
+          tx,
+        )
+    })
   })
 }
 
@@ -262,5 +415,11 @@ export async function touchConnection(
   await db
     .update(mcpConnection)
     .set({ lastUsedAt: now })
-    .where(eq(mcpConnection.id, row.id))
+    .where(
+      and(
+        eq(mcpConnection.id, row.id),
+        isNull(mcpConnection.revokedAt),
+        sql`(${mcpConnection.lastUsedAt} is null or ${mcpConnection.lastUsedAt} < ${now})`,
+      ),
+    )
 }

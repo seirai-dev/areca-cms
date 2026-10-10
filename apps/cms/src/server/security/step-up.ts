@@ -1,5 +1,9 @@
+/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty; retain defensive lookup and authorization checks. */
 import { and, eq, gt } from 'drizzle-orm'
 
+import { withFactorLock } from './factor-lock'
+import { env } from '#/env'
+import { localMfaVerifiedAt } from './local-mfa'
 import { db } from '#/db'
 import { verification } from '#/db/schema'
 import { ReauthRequiredError } from '#/lib/security-errors'
@@ -32,7 +36,10 @@ export async function assertFreshSession(
   now: Date = new Date(),
 ) {
   if (!session.user.twoFactorEnabled) return
-  if (isFresh([session.session.createdAt], now)) return
+  const factorAt = env.ADMIN_MFA_REQUIRED
+    ? await localMfaVerifiedAt(session)
+    : session.session.createdAt
+  if (isFresh([factorAt], now)) return
 
   const [marker] = await db
     .select({ createdAt: verification.createdAt })
@@ -93,24 +100,28 @@ export async function recordStepUpFailure(
   userId: string,
   now: Date = new Date(),
 ) {
-  const count = (await failureCount(userId, now)) + 1
-  await db.transaction(async (tx) => {
-    await tx
-      .delete(verification)
-      .where(eq(verification.identifier, failureId(userId)))
-    await tx.insert(verification).values({
-      id: crypto.randomUUID(),
-      identifier: failureId(userId),
-      value: String(count),
-      expiresAt: new Date(now.getTime() + LOCKOUT_MS),
-      createdAt: now,
-      updatedAt: now,
+  await withFactorLock(userId, async () => {
+    const count = (await failureCount(userId, now)) + 1
+    await db.transaction(async (tx) => {
+      await tx
+        .delete(verification)
+        .where(eq(verification.identifier, failureId(userId)))
+      await tx.insert(verification).values({
+        id: failureId(userId),
+        identifier: failureId(userId),
+        value: String(count),
+        expiresAt: new Date(now.getTime() + LOCKOUT_MS),
+        createdAt: now,
+        updatedAt: now,
+      })
     })
   })
 }
 
 export async function clearStepUpFailures(userId: string) {
-  await db
-    .delete(verification)
-    .where(eq(verification.identifier, failureId(userId)))
+  await withFactorLock(userId, () =>
+    db
+      .delete(verification)
+      .where(eq(verification.identifier, failureId(userId))),
+  )
 }

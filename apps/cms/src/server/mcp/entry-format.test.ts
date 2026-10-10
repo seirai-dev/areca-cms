@@ -8,6 +8,7 @@ import {
   agentStatus,
   collectAssetIds,
   formatEntry,
+  formatSnapshotFields,
   linkAssetRefs,
   markdownAssetIds,
   mergeSeo,
@@ -27,7 +28,12 @@ const fields: Field[] = [
   { key: 'body', label: 'Body', type: 'richtext', required: true },
   { key: 'heroImage', label: 'Hero', type: 'image' },
   { key: 'related', label: 'Related', type: 'reference', collection: 'pages' },
-  { key: 'category', label: 'Category', type: 'select', options: ['news', 'updates'] },
+  {
+    key: 'category',
+    label: 'Category',
+    type: 'select',
+    options: ['news', 'updates'],
+  },
 ]
 
 const ASSET_ID = '11111111-2222-4333-8444-555555555555'
@@ -66,7 +72,9 @@ describe('toStoredFields', () => {
       { body: `Intro.\n\n![A loaf](asset:${ASSET_ID})` },
       lookup(),
     )
-    expect(JSON.stringify(data.body)).toContain(`/api/assets/file/${STORAGE_KEY}`)
+    expect(JSON.stringify(data.body)).toContain(
+      `/api/assets/file/${STORAGE_KEY}`,
+    )
   })
 
   it('rejects an unknown field and lists the valid ones', () => {
@@ -108,7 +116,9 @@ describe('toStoredFields', () => {
   })
 
   it('keeps null as a clearing value', () => {
-    expect(toStoredFields(fields, { heroImage: null }, empty)).toEqual({ heroImage: null })
+    expect(toStoredFields(fields, { heroImage: null }, empty)).toEqual({
+      heroImage: null,
+    })
   })
 })
 
@@ -117,8 +127,31 @@ describe('asset references', () => {
     const md = `![a](asset:one) text ![b](asset:two)`
     expect(markdownAssetIds(md)).toEqual(['one', 'two'])
     expect(
-      collectAssetIds(fields, { heroImage: 'three', body: md }, { ogImage: 'four' }).sort(),
+      collectAssetIds(
+        fields,
+        { heroImage: 'three', body: md },
+        { ogImage: 'four' },
+      ).sort(),
     ).toEqual(['four', 'one', 'three', 'two'])
+  })
+
+  it('collects titled and reference images but ignores code examples', () => {
+    const md = `![Titled](asset:${ASSET_ID} "Title")\n\n![Reference][img]\n\n[img]: asset:${ASSET_ID}`
+    expect(markdownAssetIds(md)).toEqual([ASSET_ID])
+    expect(
+      JSON.stringify(toStoredFields(fields, { body: md }, lookup()).body),
+    ).toContain(STORAGE_KEY)
+    const code = '```md\n![example](asset:missing)\n```'
+    expect(markdownAssetIds(code)).toEqual([])
+    expect(() => toStoredFields(fields, { body: code }, empty)).not.toThrow()
+    expect(() =>
+      toStoredFields(fields, { body: '![x](asset:missing "title")' }, empty),
+    ).toThrow(ValidationError)
+  })
+
+  it('preserves ordinary download links when resolving image references', () => {
+    const link = `[Download](/api/assets/file/${STORAGE_KEY})`
+    expect(linkAssetRefs(link, lookup())).toBe(link)
   })
 
   it('rewrites stored image links back to asset references', () => {
@@ -132,7 +165,10 @@ describe('asset references', () => {
 describe('mergeSeo', () => {
   it('merges a patch and removes keys set to null', () => {
     expect(
-      mergeSeo({ title: 'Old', description: 'Keep me' }, { title: 'New', description: null }),
+      mergeSeo(
+        { title: 'Old', description: 'Keep me' },
+        { title: 'New', description: null },
+      ),
     ).toEqual({ title: 'New' })
   })
 
@@ -163,9 +199,15 @@ describe('releaseFlags', () => {
   }
 
   it('reports live and pending independently', () => {
-    expect(releaseFlags(state, 'live-only')).toEqual({ live: true, pendingRelease: false })
+    expect(releaseFlags(state, 'live-only')).toEqual({
+      live: true,
+      pendingRelease: false,
+    })
     expect(releaseFlags(state, 'live-and-pending')).toEqual(LIVE_AND_PENDING)
-    expect(releaseFlags(state, 'pending-only')).toEqual({ live: false, pendingRelease: true })
+    expect(releaseFlags(state, 'pending-only')).toEqual({
+      live: false,
+      pendingRelease: true,
+    })
     expect(releaseFlags(state, 'unknown')).toEqual(NOT_LIVE)
   })
 })
@@ -181,13 +223,18 @@ describe('formatEntry', () => {
       title: 'Hello',
       body: {
         type: 'doc',
-        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Body' }] }],
+        content: [
+          { type: 'paragraph', content: [{ type: 'text', text: 'Body' }] },
+        ],
       },
       heroImage: ASSET_ID,
       related: 'entry-9',
       $seo: { title: 'Hello SEO' },
     } as Record<string, unknown>,
-    publishedData: { title: 'Hello', $seo: { title: 'Hello SEO' } } as Record<string, unknown>,
+    publishedData: { title: 'Hello', $seo: { title: 'Hello SEO' } } as Record<
+      string,
+      unknown
+    >,
     publishedAt: now,
     scheduledAt: null,
     scheduleTimezone: null,
@@ -251,8 +298,84 @@ describe('formatEntry', () => {
       previewAvailable: false,
       includePublished: true,
     })
-    expect(out.liveFields).toEqual({ title: 'Hello' })
+    expect(out.liveFields).toBeNull()
+    expect(out.approvedFields).toEqual({ title: 'Hello' })
     expect(out.previewAvailable).toBe(false)
+  })
+
+  it('reports SEO-only changes and ignores object property order', () => {
+    const options = {
+      entry,
+      fields,
+      ctx: ctx(),
+      release: LIVE_AND_PENDING,
+      previewAvailable: true,
+      includePublished: false,
+    }
+    expect(
+      formatEntry({
+        ...options,
+        entry: {
+          ...entry,
+          draftData: { title: 'Same', $seo: { title: 'New' } },
+          publishedData: { title: 'Same', $seo: { title: 'Old' } },
+        },
+      }).editedSinceReady,
+    ).toBe(true)
+    expect(
+      formatEntry({
+        ...options,
+        entry: {
+          ...entry,
+          draftData: { title: 'Same', slug: 'same' },
+          publishedData: { slug: 'same', title: 'Same' },
+        },
+      }).editedSinceReady,
+    ).toBe(false)
+  })
+
+  it('keeps actual live snapshot fields separate from approved fields', () => {
+    const out = formatEntry({
+      entry,
+      fields,
+      ctx: ctx(),
+      release: LIVE_AND_PENDING,
+      previewAvailable: true,
+      includePublished: true,
+      liveFields: { title: 'Earlier deployment' },
+    })
+    expect(out.liveFields).toEqual({ title: 'Earlier deployment' })
+    expect(out.approvedFields).toEqual({ title: 'Hello' })
+  })
+
+  it('formats frozen snapshot rich text, images and references', () => {
+    expect(
+      formatSnapshotFields(
+        {
+          body: {
+            markdown: `![x](https://cms.test/api/assets/file/${STORAGE_KEY})`,
+            json: {},
+          },
+          hero: {
+            url: `https://cms.test/api/assets/file/${STORAGE_KEY}`,
+            alt: 'Frozen alt',
+            mimeType: 'image/png',
+          },
+          related: { id: 'other', collection: 'pages', slug: 'old-slug' },
+          removedField: 'Still live',
+        },
+        lookup(),
+      ),
+    ).toEqual({
+      body: `![x](asset:${ASSET_ID})`,
+      hero: {
+        assetId: ASSET_ID,
+        url: `https://cms.test/api/assets/file/${STORAGE_KEY}`,
+        alt: 'Frozen alt',
+      },
+      related: { entryId: 'other' },
+      removedField: 'Still live',
+    })
   })
 
   it('does not report edits to a draft that is not ready', () => {
@@ -278,7 +401,12 @@ describe('formatEntry', () => {
     const out = formatEntry({
       entry: {
         ...entry,
-        draftData: { approvedAt: '2026-01-01', status: 'news', live: true, pendingRelease: false },
+        draftData: {
+          approvedAt: '2026-01-01',
+          status: 'news',
+          live: true,
+          pendingRelease: false,
+        },
         publishedData: null,
         status: 'draft',
       },
@@ -310,11 +438,16 @@ describe('summarizeEntry', () => {
       draftVersion: 1,
       updatedAt: new Date(0),
     }
-    expect(summarizeEntry({ ...base, draftData: { title: 'T' } }, fields, NOT_LIVE).title).toBe('T')
     expect(
-      summarizeEntry({ ...base, draftData: { headline: 'H' } }, [
-        { key: 'headline', label: 'H', type: 'text' },
-      ], NOT_LIVE).title,
+      summarizeEntry({ ...base, draftData: { title: 'T' } }, fields, NOT_LIVE)
+        .title,
+    ).toBe('T')
+    expect(
+      summarizeEntry(
+        { ...base, draftData: { headline: 'H' } },
+        [{ key: 'headline', label: 'H', type: 'text' }],
+        NOT_LIVE,
+      ).title,
     ).toBe('H')
   })
 
@@ -331,7 +464,11 @@ describe('summarizeEntry', () => {
       fields,
       { live: true, pendingRelease: false },
     )
-    expect(row).toMatchObject({ status: 'ready', live: true, pendingRelease: false })
+    expect(row).toMatchObject({
+      status: 'ready',
+      live: true,
+      pendingRelease: false,
+    })
   })
 })
 

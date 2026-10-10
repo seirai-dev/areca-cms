@@ -15,7 +15,10 @@ type RunOptions = {
   cwd?: string
 }
 
-export async function run(argv: string[], options: RunOptions = {}): Promise<number> {
+export async function run(
+  argv: string[],
+  options: RunOptions = {},
+): Promise<number> {
   const cwd = options.cwd ?? process.cwd()
   loadLocalEnv(cwd)
   const parsed = parseArgs(argv)
@@ -51,7 +54,10 @@ export async function run(argv: string[], options: RunOptions = {}): Promise<num
     }
 
     if (parsed.command === 'pull') {
-      const snapshot = await pullContent({ outDir: parsed.outDir })
+      const snapshot = await pullContent({
+        outDir: resolve(cwd, parsed.outDir),
+        publicationId: parsed.publicationId,
+      })
       const counts = Object.entries(snapshot.collections)
         .map(([key, entries]) => `${key}=${entries.length}`)
         .join(', ')
@@ -117,7 +123,10 @@ function isMainModule(): boolean {
       realpathSync(entry).toLowerCase()
     )
   } catch {
-    return resolve(fileURLToPath(import.meta.url)).toLowerCase() === resolve(entry).toLowerCase()
+    return (
+      resolve(fileURLToPath(import.meta.url)).toLowerCase() ===
+      resolve(entry).toLowerCase()
+    )
   }
 }
 

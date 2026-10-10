@@ -15,7 +15,7 @@ The numbers are fixed in the software. No environment variable changes them. You
 | [Uploads](#uploads) | Library and branding uploads | 10 per minute | Signed-in user, or IP address |
 | [Site API](#site-api) | Site project reads and schema pushes | 300 per minute | Bearer token, or IP address without a token |
 | [AI app requests](#ai-app-requests) | The MCP endpoints, `/api/mcp/<site>` and `/api/mcp`, used by AI apps (connected apps and personal keys) | 120 per minute per key or connection; 600 per minute per client IP | Key or connection; client IP (only when it is known) |
-| [OAuth sign-in](#oauth-sign-in) | Registering an AI app, and token requests during sign-in | Registration: 20 an hour per address, 300 an hour for the whole deployment. Token: 60 a minute per app and address. | Client address; app |
+| [OAuth sign-in](#oauth-sign-in) | Registering an AI app, and token requests during sign-in | Registration: 20 an hour per address, 300 an hour for the whole deployment. Token: 60 a minute per app and address, 120 a minute per known address, 600 a minute for the deployment. | Client address; app |
 | [Metrics](#metrics) | The metrics endpoint | 60 per minute | IP address |
 | [AI suggestions](#ai-suggestions) | Generating SEO suggestions and alt text | 30 per hour | Signed-in user |
 | [Two-factor codes](#two-factor-codes) | Wrong codes at step-up | 5 wrong codes, then 15 minutes locked | Signed-in user |
@@ -66,7 +66,7 @@ A connection or key that makes a burst of requests is slowed down, not revoked. 
 AI apps register themselves and request tokens during sign-in. Both endpoints are open to anonymous clients, so they have their own limits. Everything else under `/api/auth` stays under the sign-in limits below.
 
 - **Registration** (`POST /api/auth/oauth2/register`): 20 requests an hour per client address, and 300 an hour across the whole deployment. The per-address limit applies only when the address is known, so it needs `RATE_LIMIT_TRUST_PROXY=true`. The deployment-wide limit always applies. A real person registers a handful of apps, so these limits are generous for them.
-- **Token** (`POST /api/auth/oauth2/token`): 60 requests a minute per app and client address. An app refreshes about once an hour per user, so this allows bursts without letting one app flood the endpoint. The app is identified from its request, and falls back to a shared bucket when it cannot be read.
+- **Token** (`POST /api/auth/oauth2/token`): 60 requests a minute per app and client address, 120 a minute per known client address, and 600 a minute across the deployment. The address and deployment budgets apply independently of the supplied app ID, including invalid IDs. The per-address budget needs `RATE_LIMIT_TRUST_PROXY=true`; the deployment budget always applies. Token request bodies are limited to 64 KiB, including requests sent with HTTP Basic credentials; oversized bodies receive `413`.
 
 A blocked request receives the same `429` response as elsewhere. An AI app that is blocked during sign-in should wait for `Retry-After` and try again.
 

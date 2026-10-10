@@ -67,11 +67,18 @@ export function richTextAssetRefs(value: unknown): {
 } {
   const storageKeys: string[] = []
   let malformed = false
-  const visit = (node: unknown) => {
-    if (!node || typeof node !== 'object') return
+  const stack: unknown[] = [value]
+  let visited = 0
+  while (stack.length > 0) {
+    const node = stack.pop()
+    if (!node || typeof node !== 'object') continue
+    if (++visited > RICHTEXT_MAX_NODES) {
+      malformed = true
+      break
+    }
     if (Array.isArray(node)) {
-      for (const child of node) visit(child)
-      return
+      for (const child of node) stack.push(child)
+      continue
     }
     const item = node as {
       type?: string
@@ -89,9 +96,8 @@ export function richTextAssetRefs(value: unknown): {
         malformed = true
       }
     }
-    visit(item.content)
+    stack.push(item.content)
   }
-  visit(value)
   return { storageKeys, malformed }
 }
 

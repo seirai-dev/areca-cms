@@ -11,10 +11,10 @@ This page does not cover the MCP endpoints that AI apps use: the per-site connec
 Set the CMS origin in `ARECA_CMS_URL`. The SDK removes trailing slashes and
 uses these bearer tokens:
 
-| Credential | Header | Access |
-| --- | --- | --- |
-| Site token | `Authorization: Bearer <site-token>` | Read the manifest and current snapshot. |
-| Schema token | `Authorization: Bearer <schema-token>` | POST schema manifest. |
+| Credential   | Header                                 | Access                                  |
+| ------------ | -------------------------------------- | --------------------------------------- |
+| Site token   | `Authorization: Bearer <site-token>`   | Read the manifest and current snapshot. |
+| Schema token | `Authorization: Bearer <schema-token>` | POST schema manifest.                   |
 
 `ARECA_SITE_TOKEN` and `ARECA_SCHEMA_TOKEN` are separate. The SDK requires
 `ARECA_SITE_TOKEN` when `createArecaClient()` is constructed, including before
@@ -24,29 +24,42 @@ in the local schema-authoring environment and out of build/deploy secrets.
 
 ## Endpoints
 
-| Method and path | Authorization | Purpose | Success body |
-| --- | --- | --- | --- |
-| `GET /api/sites/manifest` | Site token | Read the site's content schema | `{ "collections": { ... } }` |
-| `POST /api/sites/manifest` | Schema token | Create or update the site's schema | `{ "ok": true }` |
-| `GET /api/sites/snapshot/current` | Site token | Get the current publication snapshot | `Snapshot` object |
-| `GET /api/sites/preview?token=<preview-token>` | Signed, expiring preview token | Get one draft entry | `{ "collection", "slug", "entry" }` |
+| Method and path                                | Authorization                  | Purpose                              | Success body                        |
+| ---------------------------------------------- | ------------------------------ | ------------------------------------ | ----------------------------------- |
+| `GET /api/sites/manifest`                      | Site token                     | Read the site's content schema       | `{ "collections": { ... } }`        |
+| `POST /api/sites/manifest`                     | Schema token                   | Create or update the site's schema   | `{ "ok": true }`                    |
+| `GET /api/sites/snapshot/current`              | Site token                     | Get the current publication snapshot | `Snapshot` object                   |
+| `GET /api/sites/preview?token=<preview-token>` | Signed, expiring preview token | Get one draft entry                  | `{ "collection", "slug", "entry" }` |
 
 The POST body is the manifest shape, with a `collections` object. The SDK
 converts `areca.config.ts` to that body; collection labels are preserved when
 provided. A snapshot contains `publicationId`, `siteKey`, `createdAt`, `hash`,
-and a `collections` map of entry arrays. A snapshot GET returns 404 when the
-site has no publication. Preview requests are authorized by the signed,
+and a `collections` map of entry arrays. Preview requests are authorized by the signed,
 expiring query token; the SDK also sends its standard site-token bearer header,
 but the preview route validates the preview token itself. Preview requests
 return a `PreviewResult` containing the collection key, slug, and entry.
 
-The snapshot endpoint pins reads to the publication associated with the site's
-active build job, including an uncertain dispatch. With no active build, it
-returns the live publication (or the current demo publication when the site is
-in Demo mode). The SDK makes a normal bearer-authenticated GET; it does not
-send a publication ID header or read `ARECA_SNAPSHOT_ID`. Dokploy changes
-`ARECA_SNAPSHOT_ID` as a Docker build argument to invalidate a cached pull/build
-layer so that the new build runs the GET again.
+Without a `publicationId` query parameter, the snapshot endpoint returns the
+authenticated site's latest publication by creation time with status `live`,
+or status `demo` when the site is in Demo mode. An active build does not change
+this selection. If no publication matches the site's current mode, it returns 404.
+
+`GET /api/sites/snapshot/current?publicationId=<id>` requests that exact frozen
+publication from the authenticated site, regardless of its status, including
+while it is building. An ID that does not exist or belongs to another site returns
+404; the endpoint never falls back to the current publication. An empty or
+whitespace-only `publicationId` query value returns 400. Snapshot responses,
+including errors, use `Cache-Control: no-store`.
+
+Use `client.fetchSnapshot({ publicationId })` to send this query. The SDK rejects
+a response whose publication ID does not match the requested ID.
+`fetchSnapshot()` does not read `ARECA_SNAPSHOT_ID` itself. `areca pull` and
+`pullContent({ outDir, publicationId? })` select an explicit publication when
+provided (`--publication <id>` for the CLI), otherwise they read
+`ARECA_SNAPSHOT_ID`. An unset, empty, whitespace-only or `0` environment value
+selects the current successful live/demo publication. Dokploy sets this Docker
+build argument for each deployment to pin the pull and invalidate its cached
+build layer. No publication ID header is used. See [the SDK guide](SDK.md).
 
 Do not place the preview token in logs or analytics. The SDK sends it as the
 preview URL's query parameter; handle the token only on the server, set
@@ -56,25 +69,25 @@ cache the response.
 ## SDK client
 
 ```ts
-import { createArecaClient } from '@areca-cms/site-sdk'
-import type { SiteContentConfig } from '@areca-cms/site-sdk'
+import { createArecaClient } from "@areca-cms/site-sdk";
+import type { SiteContentConfig } from "@areca-cms/site-sdk";
 
-const client = createArecaClient()
-const manifest = await client.fetchManifest()
-const snapshot = await client.fetchSnapshot()
-const config: SiteContentConfig = { siteKey: 'acme-site', collections: {} }
-await client.syncManifest(config)
-const preview = await client.fetchPreview(previewToken)
+const client = createArecaClient();
+const manifest = await client.fetchManifest();
+const snapshot = await client.fetchSnapshot();
+const config: SiteContentConfig = { siteKey: "acme-site", collections: {} };
+await client.syncManifest(config);
+const preview = await client.fetchPreview(previewToken);
 ```
 
 Options can be passed instead of environment variables:
 
 ```ts
 const client = createArecaClient({
-  cmsUrl: 'https://cms.example.com',
+  cmsUrl: "https://cms.example.com",
   siteToken: process.env.ARECA_SITE_TOKEN,
   schemaToken: process.env.ARECA_SCHEMA_TOKEN,
-})
+});
 ```
 
 `syncManifest(config)` requires both tokens to construct the SDK client and
@@ -124,14 +137,14 @@ Collection field values are application-defined, so pair `SnapshotEntry` with
 your own `data` type:
 
 ```ts
-import type { RichTextValue, SnapshotEntry } from '@areca-cms/site-sdk'
+import type { RichTextValue, SnapshotEntry } from "@areca-cms/site-sdk";
 
 type Article = SnapshotEntry & {
-  data: { title: string; body: RichTextValue }
-}
+  data: { title: string; body: RichTextValue };
+};
 ```
 
-Rich text provides canonical Markdown, a TanStack Markdown AST, the original
+Rich text provides an escaped Markdown export, an editor-preserving TanStack Markdown AST, the original
 JSON representation, and a static HTML fallback. Images include dimensions,
 alt text, and MIME type. If present, `seo` contains resolved page metadata and
 JSON-LD; older snapshots can omit it. See [Content schema](CONTENT_SCHEMA.md)

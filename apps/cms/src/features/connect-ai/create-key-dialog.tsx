@@ -100,8 +100,9 @@ function CreateKeyFlow({
   const [install, setInstall] = React.useState<McpInstallInput | null>(null)
 
   const trimmed = name.trim()
-  const expiryDays =
-    EXPIRY_OPTIONS.find((item) => item.value === expiry)?.days ?? 90
+  const expiryDays = (
+    EXPIRY_OPTIONS.find((item) => item.value === expiry) ?? EXPIRY_OPTIONS[1]
+  ).days
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()

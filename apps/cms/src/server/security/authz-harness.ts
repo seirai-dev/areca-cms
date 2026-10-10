@@ -357,6 +357,23 @@ export async function seedWorld() {
     adminStale: sessionOf(adminStale, minutesAgo(30)),
   }
 
+  // Enrolled test admins have session-bound local factor proof, independently
+  // of their sign-in time. The stale actor's proof remains outside step-up.
+  for (const actor of ['adminMfa', 'adminStale'] as const) {
+    const principal = sessions[actor]!
+    const id = `local-mfa:${principal.session.id}`
+    await db
+      .insert(verification)
+      .values({
+        id,
+        identifier: id,
+        value: principal.user.id,
+        createdAt: principal.session.createdAt,
+        updatedAt: principal.session.createdAt,
+        expiresAt: principal.session.expiresAt,
+      })
+  }
+
   // Fixtures every tenant owns ----------------------------------------------
   const base = {} as Record<
     Side,

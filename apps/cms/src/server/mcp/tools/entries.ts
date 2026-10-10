@@ -1,6 +1,11 @@
 import { z } from 'zod'
 
 import { assetUrl, loadAssetLookup } from '#/server/assets'
+import { siteAssetLookup } from '#/server/assets/site-scope'
+import {
+  richTextAssetsAuthorizedFrom,
+  richTextAssetRefs,
+} from '#/server/assets/richtext-ownership'
 import { SEO_KEY } from '#/lib/seo'
 import { ID_MAX_LENGTH, SEARCH_MAX_LENGTH } from '#/lib/content-limits'
 import type { EntryData, Field } from '#/lib/types'
@@ -14,13 +19,18 @@ import {
 import { pickDeclaredFields } from '#/server/content/validation'
 import { ValidationError } from '#/server/content/errors'
 import { McpNotFoundError } from '../errors'
-import { signPreviewToken, buildPreviewUrl } from '#/server/content/preview-token'
+import {
+  signPreviewToken,
+  buildPreviewUrl,
+} from '#/server/content/preview-token'
 
 import type { AssetLookup } from '../entry-format'
 import {
   AGENT_STATUSES,
   collectAssetIds,
   formatEntry,
+  formatSnapshotFields,
+  ASSET_FILE_PREFIX,
   mergeSeo,
   seoPatchFromInput,
   storedStatus,
@@ -50,7 +60,9 @@ const expectedVersion = z
   )
 
 /** Stored `$seo` from agent input: clearing spellings become nulls, which mergeSeo removes. */
-function seoPatch(seo: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+function seoPatch(
+  seo: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
   return seoPatchFromInput(seo)
 }
 
@@ -61,8 +73,16 @@ async function assetLookupFor(
   seo: Record<string, unknown> | null | undefined,
 ): Promise<AssetLookup> {
   const ids = collectAssetIds(fields, inputs, seo ?? undefined)
-  if (ids.length === 0) return { byId: new Map(), byStorageKey: new Map() }
-  return loadAssetLookup(actor.organizationId, { ids, storageKeys: [] })
+  const lookup = await siteAssetLookup(actor.organizationId, actor.siteId)
+  const missing = ids.find((id) => !lookup.byId.has(id))
+  if (missing)
+    throw new ValidationError([
+      {
+        path: 'fields',
+        message: `Asset ${missing} is not available to this site. Use list_assets or upload_asset_from_url.`,
+      },
+    ])
+  return lookup
 }
 
 /** Lookup for read paths: every image id stored on the given entry data. */
@@ -72,14 +92,24 @@ async function assetLookupForData(
   datas: EntryData[],
 ): Promise<AssetLookup> {
   const ids = new Set<string>()
+  const storageKeys = new Set<string>()
   for (const data of datas) {
     for (const field of fields) {
       const value = data[field.key]
-      if (field.type === 'image' && typeof value === 'string' && value) ids.add(value)
+      if (field.type === 'image' && typeof value === 'string' && value)
+        ids.add(value)
+      if (field.type === 'richtext') {
+        for (const key of richTextAssetRefs(value).storageKeys)
+          storageKeys.add(key)
+      }
     }
   }
-  if (ids.size === 0) return { byId: new Map(), byStorageKey: new Map() }
-  return loadAssetLookup(actor.organizationId, { ids: [...ids], storageKeys: [] })
+  if (ids.size === 0 && storageKeys.size === 0)
+    return { byId: new Map(), byStorageKey: new Map() }
+  return loadAssetLookup(actor.organizationId, {
+    ids: [...ids],
+    storageKeys: [...storageKeys],
+  })
 }
 
 async function previewUrlFor(
@@ -112,6 +142,30 @@ export async function formatStoredEntry(
   ])
   const siteRow = await loadSiteRow(actor)
   const release = await loadReleaseState(actor.siteId)
+  const liveEntry = options.includePublished
+    ? release.liveSnapshot?.collections[row.collectionKey]?.find(
+        (item) => item.id === row.id,
+      )
+    : undefined
+  if (liveEntry) {
+    const keys = new Set<string>()
+    for (const value of Object.values(liveEntry.data)) {
+      if (!value || typeof value !== 'object') continue
+      const item = value as Record<string, unknown>
+      for (const key of richTextAssetRefs(item.json).storageKeys) keys.add(key)
+      if (typeof item.url === 'string') {
+        const path = new URL(item.url, 'https://asset.local').pathname
+        if (path.startsWith(ASSET_FILE_PREFIX))
+          keys.add(decodeURIComponent(path.slice(ASSET_FILE_PREFIX.length)))
+      }
+    }
+    const liveAssets = await loadAssetLookup(actor.organizationId, {
+      ids: [],
+      storageKeys: [...keys],
+    })
+    for (const [key, value] of liveAssets.byStorageKey)
+      assets.byStorageKey.set(key, value)
+  }
   const formatted = formatEntry({
     entry: row,
     fields: col.fields,
@@ -119,6 +173,7 @@ export async function formatStoredEntry(
     release: releaseFlags(release, row.id),
     previewAvailable: Boolean(siteRow.productionUrl),
     includePublished: options.includePublished ?? false,
+    liveFields: liveEntry ? formatSnapshotFields(liveEntry.data, assets) : null,
   })
   if (!options.withPreview) return formatted
   return {
@@ -132,20 +187,33 @@ export function registerEntryTools(registry: ToolRegistry): void {
     name: 'list_entries',
     title: 'List entries',
     description:
-      'Lists entries in one collection, newest first. Each row has id, slug, status (draft, ready, scheduled or archived), live (on the live site now), pendingRelease (approved changes waiting for the next go live), title and version, plus total. "ready" means approved, not live: check live. Use search to find text in the slug or content, and status to filter. Page with limit and offset.',
+      'Lists entries in one collection, newest first. Each row has id, slug, status (draft, ready, scheduled or archived), live (on the production site now; demo previews do not count), pendingRelease (approved changes waiting for the next go live), title and version, plus total. "ready" means approved, not live: check live. Use search to find text in the slug or content, and status to filter. Page with limit and offset.',
     inputSchema: z.object({
       collection: collectionKey,
       status: z
         .enum(AGENT_STATUSES)
         .optional()
-        .describe('Only entries in this status: draft, ready (approved), scheduled or archived.'),
+        .describe(
+          'Only entries in this status: draft, ready (approved), scheduled or archived.',
+        ),
       search: z
         .string()
         .max(SEARCH_MAX_LENGTH)
         .optional()
         .describe('Case-insensitive text to match in the slug or content.'),
-      limit: z.number().int().min(1).max(100).optional().describe('Page size, 1-100. Default 20.'),
-      offset: z.number().int().min(0).optional().describe('Number of entries to skip. Default 0.'),
+      limit: z
+        .number()
+        .int()
+        .min(1)
+        .max(100)
+        .optional()
+        .describe('Page size, 1-100. Default 20.'),
+      offset: z
+        .number()
+        .int()
+        .min(0)
+        .optional()
+        .describe('Number of entries to skip. Default 0.'),
     }),
     annotations: { readOnlyHint: true, idempotentHint: true },
     run: async (input, actor) => {
@@ -175,7 +243,7 @@ export function registerEntryTools(registry: ToolRegistry): void {
     name: 'get_entry',
     title: 'Get entry',
     description:
-      'Returns one entry: status (draft, ready, scheduled or archived), live (on the live site now), pendingRelease (approved changes waiting for the next go live), approvedAt, fields (rich text as Markdown, images as {assetId,url,alt}, references as {entryId}), seo, and version (pass it to update_entry as expectedVersion). Set includePublished to also get liveFields, the version visitors see now. Read-only.',
+      'Returns one entry: status (draft, ready, scheduled or archived), live (on the production site now; demo previews do not count), pendingRelease (approved changes waiting for the next go live), approvedAt, fields (rich text as Markdown, images as {assetId,url,alt}, references as {entryId}), seo, and version (pass it to update_entry as expectedVersion). Set includePublished to also get liveFields, the version visitors see now. Read-only.',
     inputSchema: z.object({
       id: idSchema('entry'),
       includePublished: z
@@ -202,13 +270,18 @@ export function registerEntryTools(registry: ToolRegistry): void {
       fields: fieldsInputSchema.optional(),
       seo: seoInputSchema.optional(),
     }),
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     run: async (input, actor) => {
       const col = await loadCollectionInSite(actor, input.collection)
       const inputs = input.fields ?? {}
       const seo = seoPatch(input.seo)
       const assets = await assetLookupFor(actor, col.fields, inputs, seo)
       const data = toStoredFields(col.fields, inputs, assets)
+      assertSiteImages(col.fields, data, assets)
       const merged = mergeSeo(undefined, seo)
       if (merged) data[SEO_KEY] = merged
       const created = await createEntry({
@@ -232,7 +305,11 @@ export function registerEntryTools(registry: ToolRegistry): void {
       seo: seoInputSchema.optional(),
       expectedVersion,
     }),
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     run: async (input, actor) => {
       if (input.fields === undefined && input.seo === undefined) {
         throw new ValidationError([
@@ -245,6 +322,7 @@ export function registerEntryTools(registry: ToolRegistry): void {
       const patch = seoPatch(input.seo)
       const assets = await assetLookupFor(actor, col.fields, inputs, patch)
       const converted = toStoredFields(col.fields, inputs, assets)
+      assertSiteImages(col.fields, converted, assets)
       const data = pickDeclaredFields(col.fields, entry.draftData)
       Object.assign(data, converted)
       const seo = mergeSeo(
@@ -296,11 +374,33 @@ export function registerEntryTools(registry: ToolRegistry): void {
         throw new ValidationError([
           {
             path: '',
-            message: 'This site has no production URL set, so previews are not available',
+            message:
+              'This site has no production URL set, so previews are not available',
           },
         ])
       }
       return { url }
     },
   })
+}
+
+function assertSiteImages(
+  fields: Field[],
+  data: EntryData,
+  lookup: AssetLookup,
+) {
+  for (const field of fields) {
+    if (
+      field.type === 'richtext' &&
+      !richTextAssetsAuthorizedFrom(data[field.key], lookup)
+    ) {
+      throw new ValidationError([
+        {
+          path: field.key,
+          message:
+            'This image is not available to this site. Use list_assets or upload_asset_from_url.',
+        },
+      ])
+    }
+  }
 }

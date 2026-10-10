@@ -43,8 +43,8 @@ export type SiteManifest = {
 }
 
 /**
- * Published rich text. `markdown` is the canonical serialization, `document`
- * is the TanStack Markdown AST parsed from it (render with
+ * Published rich text. `markdown` is an interoperable export, `document`
+ * preserves the editor as a TanStack Markdown AST (render with
  * `@tanstack/markdown/react` or `renderHtml`), and `html` is a static
  * fallback rendered from the same AST.
  */
@@ -134,4 +134,6 @@ export type PulledContentManifest = {
   hash: string
   createdAt: string
   collections: Record<string, number>
+  /** Immutable directory under `.publications`; absent in legacy flat output. */
+  generation?: string
 }

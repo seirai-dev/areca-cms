@@ -129,32 +129,40 @@ export function FieldControl({
             ) : null}
           </div>
         ) : (
-          <Select
-            value={current || undefined}
-            onValueChange={(next) => onChange(next)}
-          >
-            <SelectTrigger
-              id={id}
-              className="w-full"
-              {...fieldAria({
-                invalid,
-                required: field.required,
-                describedBy: joinDescribedBy(
-                  field.description ? `${id}-description` : undefined,
-                  error ? `${id}-error` : undefined,
-                ),
-              })}
-            >
-              <SelectValue placeholder={m.editor_select_placeholder()} />
-            </SelectTrigger>
-            <SelectContent>
-              {options.map((option) => (
-                <SelectItem key={option} value={option}>
-                  {option}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="grid gap-1">
+            <Select value={current} onValueChange={(next) => onChange(next)}>
+              <SelectTrigger
+                id={id}
+                className="w-full"
+                {...fieldAria({
+                  invalid,
+                  required: field.required,
+                  describedBy: joinDescribedBy(
+                    field.description ? `${id}-description` : undefined,
+                    error ? `${id}-error` : undefined,
+                  ),
+                })}
+              >
+                <SelectValue placeholder={m.editor_select_placeholder()} />
+              </SelectTrigger>
+              <SelectContent>
+                {options.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {option}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {current && !field.required ? (
+              <button
+                type="button"
+                onClick={() => onChange('')}
+                className="w-fit text-caption font-normal text-text-muted hover:text-text-primary hover:underline"
+              >
+                {m.editor_clear_choice()}
+              </button>
+            ) : null}
+          </div>
         )
       break
     }

@@ -22,12 +22,12 @@ Pushing a manifest changes the CMS schema; it does not build page components. Yo
 
 An entry can hold different versions at the same time:
 
-| Version | Purpose |
-| --- | --- |
-| Draft | Current editable data and slug; draft preview uses these |
-| Approved | Version copied by **Mark as ready**; the next release uses this |
-| Scheduled | Frozen version and slug approved for a future time |
-| Live | Version inside the currently live publication snapshot |
+| Version   | Purpose                                                         |
+| --------- | --------------------------------------------------------------- |
+| Draft     | Current editable data and slug; draft preview uses these        |
+| Approved  | Version copied by **Mark as ready**; the next release uses this |
+| Scheduled | Frozen version and slug approved for a future time              |
+| Live      | Version inside the currently live publication snapshot          |
 
 Editing a ready or live entry changes its draft. Mark it ready again to approve those edits. A scheduled version remains separate from later draft edits. Entry revision history helps restore earlier authoring data; a release rollback restores an entire website content snapshot.
 
@@ -41,7 +41,7 @@ Archiving or deleting content does not instantly remove it from an already deplo
 2. The CMS validates the enabled collections' approved content and due scheduled versions. It checks required fields, slugs, references, assets, rich text, SEO, and route collisions.
 3. The CMS saves an immutable publication snapshot and its hash, then queues a build job. New requests can replace queued work for the same site.
 4. A worker claims the job, resolves the client's deployment credentials, and asks Dokploy to deploy the site's application.
-5. The website build runs `areca pull`. The CMS pins the snapshot for the active deployment; the Dokploy's `ARECA_SNAPSHOT_ID` build argument changes for each publication to invalidate the cached pull layer; the SDK itself does not use it to select a snapshot.
+5. The website build runs `areca pull`. The SDK uses Dokploy’s `ARECA_SNAPSHOT_ID` build argument to request that exact frozen publication and invalidate the cached pull layer. Manual pulls without a publication ID read the latest successful release for the site’s current mode.
 6. The worker waits for deployment and checks the website's health response against the expected publication ID.
 7. On success, the publication becomes live. On failure, the previous live publication remains the CMS's live version.
 
@@ -49,7 +49,7 @@ Sites default to **Production** mode, which requires a deployment target and a p
 
 ### Worker behavior
 
-The worker and scheduler run inside the CMS server when `WORKER_ENABLED` is enabled. Work is stored in PostgreSQL. Database claims, leases, and heartbeats coordinate jobs across processes; only one active or uncertain deployment is allowed per site. Global concurrency is configurable.
+The worker and scheduler run inside the CMS server when `WORKER_ENABLED` is enabled. Work is stored in PostgreSQL. Database claims, leases, and heartbeats coordinate jobs across processes; only one active or uncertain deployment is allowed per site and per shared Dokploy application. Global concurrency is configurable.
 
 A lost deployment response may leave the dispatch outcome uncertain. The worker reconciles it rather than blindly dispatching again. See [integration reliability](INTEGRATIONS.md) and [operations](OPERATIONS.md) before resolving such a job manually.
 
@@ -83,22 +83,22 @@ Each site has a connector URL at `/api/mcp/<site-slug>`. An AI app connects to i
 
 ## Repository map
 
-| Path | Responsibility |
-| --- | --- |
-| `apps/cms/src/routes` | CMS pages and HTTP API routes |
-| `apps/cms/src/features` | CMS screen components and client interactions |
-| `apps/cms/src/server/content` | Entries, schemas, validation, snapshots, preview |
-| `apps/cms/src/server/publishing` | Releases, queue, scheduler, worker |
-| `apps/cms/src/server/admin` | Clients, sites, members, branding, credentials |
-| `apps/cms/src/server/security` | Authorization, two-factor step-up, encryption |
-| `apps/cms/src/server/ai` | AI configuration and SEO generation |
-| `apps/cms/src/server/mcp` | Connect AI: personal keys, the MCP endpoint and its tools |
-| `apps/cms/src/features/connect-ai` | Connect AI page |
-| `apps/cms/src/adapters` | Deployment, storage, and email integrations |
-| `apps/cms/src/db`, `apps/cms/drizzle` | Database schema and migrations |
-| `packages/site-sdk/src` | Schema helpers, CLI, content pull, preview, SEO rendering |
-| `examples/demo-site` | TanStack Start integration and build/health examples |
-| `docker` | Production Compose installation and recovery tools |
-| `docker-compose.yml` | Local development infrastructure |
+| Path                                  | Responsibility                                            |
+| ------------------------------------- | --------------------------------------------------------- |
+| `apps/cms/src/routes`                 | CMS pages and HTTP API routes                             |
+| `apps/cms/src/features`               | CMS screen components and client interactions             |
+| `apps/cms/src/server/content`         | Entries, schemas, validation, snapshots, preview          |
+| `apps/cms/src/server/publishing`      | Releases, queue, scheduler, worker                        |
+| `apps/cms/src/server/admin`           | Clients, sites, members, branding, credentials            |
+| `apps/cms/src/server/security`        | Authorization, two-factor step-up, encryption             |
+| `apps/cms/src/server/ai`              | AI configuration and SEO generation                       |
+| `apps/cms/src/server/mcp`             | Connect AI: personal keys, the MCP endpoint and its tools |
+| `apps/cms/src/features/connect-ai`    | Connect AI page                                           |
+| `apps/cms/src/adapters`               | Deployment, storage, and email integrations               |
+| `apps/cms/src/db`, `apps/cms/drizzle` | Database schema and migrations                            |
+| `packages/site-sdk/src`               | Schema helpers, CLI, content pull, preview, SEO rendering |
+| `examples/demo-site`                  | TanStack Start integration and build/health examples      |
+| `docker`                              | Production Compose installation and recovery tools        |
+| `docker-compose.yml`                  | Local development infrastructure                          |
 
 [Architecture decisions](DECISIONS.md) explains lower-level contracts. [Development](DEVELOPMENT.md) explains how to work on the repository.

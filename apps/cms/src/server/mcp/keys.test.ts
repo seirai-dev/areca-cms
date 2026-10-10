@@ -4,7 +4,12 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { db } from '#/db'
 import { auditLog, membership, mcpKey, user } from '#/db/schema'
-import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '#/server/content/errors'
+import {
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+  ValidationError,
+} from '#/server/content/errors'
 import { withTestSite } from '#/server/content/test-utils'
 
 import {
@@ -46,7 +51,11 @@ describe.skipIf(!hasDb)('MCP keys', () => {
     const userIds: string[] = []
     const addUser = async (
       label: string,
-      flags: { role?: 'owner' | 'editor'; agency?: boolean; twoFactor?: boolean } = {},
+      flags: {
+        role?: 'owner' | 'editor'
+        agency?: boolean
+        twoFactor?: boolean
+      } = {},
     ) => {
       const id = crypto.randomUUID()
       userIds.push(id)
@@ -130,13 +139,18 @@ describe.skipIf(!hasDb)('MCP keys', () => {
         .where(eq(auditLog.targetId, key.id))
       expect(entry?.action).toBe('mcp_key.create')
       expect(entry?.targetType).toBe('mcp_key')
-      expect(entry?.meta).toMatchObject({ name: 'Claude desktop', allowGoLive: true })
+      expect(entry?.meta).toMatchObject({
+        name: 'Claude desktop',
+        allowGoLive: true,
+      })
     })
   })
 
   it('resolves an owner key with the owner role and go-live allowed', async () => {
     await withKeyWorld(async (w) => {
-      const { token, key } = await w.create(w.owner, 'owner', { allowGoLive: true })
+      const { token, key } = await w.create(w.owner, 'owner', {
+        allowGoLive: true,
+      })
       const actor = await resolveMcpActor(token)
       expect(actor).toMatchObject({
         keyId: key.id,
@@ -165,9 +179,9 @@ describe.skipIf(!hasDb)('MCP keys', () => {
       await expect(
         w.create(w.editor, 'editor', { allowGoLive: true }),
       ).rejects.toBeInstanceOf(ForbiddenError)
-      await expect(w.create(w.owner, 'owner', { name: '   ' })).rejects.toBeInstanceOf(
-        ValidationError,
-      )
+      await expect(
+        w.create(w.owner, 'owner', { name: '   ' }),
+      ).rejects.toBeInstanceOf(ValidationError)
       await expect(
         w.create(w.owner, 'owner', { name: 'x'.repeat(81) }),
       ).rejects.toBeInstanceOf(ValidationError)
@@ -176,7 +190,9 @@ describe.skipIf(!hasDb)('MCP keys', () => {
 
   it('resolves agency admins with 2FA as agency and blocks them without 2FA', async () => {
     await withKeyWorld(async (w) => {
-      const { token } = await w.create(w.agency, 'agency', { allowGoLive: true })
+      const { token } = await w.create(w.agency, 'agency', {
+        allowGoLive: true,
+      })
       const actor = await resolveMcpActor(token)
       expect(actor?.role).toBe('agency')
       expect(actor?.allowGoLive).toBe(true)
@@ -209,11 +225,15 @@ describe.skipIf(!hasDb)('MCP keys', () => {
         ok: false,
         reason: 'mfa_required',
       })
-      await expect(resolveMcpActorResult('areca_mcp_no-such-key')).resolves.toEqual({
+      await expect(
+        resolveMcpActorResult('areca_mcp_no-such-key'),
+      ).resolves.toEqual({
         ok: false,
         reason: 'invalid',
       })
-      const { token } = await w.create(w.agency, 'agency', { allowGoLive: false })
+      const { token } = await w.create(w.agency, 'agency', {
+        allowGoLive: false,
+      })
       const result = await resolveMcpActorResult(token)
       expect(result.ok).toBe(true)
     })
@@ -228,7 +248,9 @@ describe.skipIf(!hasDb)('MCP keys', () => {
       })
       expect(await resolveMcpActor('sk_not_ours')).toBeNull()
       expect(await resolveMcpActor(`${MCP_KEY_PREFIX}unknown-token`)).toBeNull()
-      expect(await resolveMcpActor(token, new Date(now.getTime() + 31 * DAY))).toBeNull()
+      expect(
+        await resolveMcpActor(token, new Date(now.getTime() + 31 * DAY)),
+      ).toBeNull()
 
       const other = await w.create(w.owner, 'owner')
       await revokeMcpKey({
@@ -249,9 +271,7 @@ describe.skipIf(!hasDb)('MCP keys', () => {
     await withKeyWorld(async (w) => {
       const { token } = await w.create(w.editor, 'editor')
       expect(await resolveMcpActor(token)).not.toBeNull()
-      await db
-        .delete(membership)
-        .where(eq(membership.userId, w.editor))
+      await db.delete(membership).where(eq(membership.userId, w.editor))
       expect(await resolveMcpActor(token)).toBeNull()
     })
   })
@@ -329,8 +349,14 @@ describe.skipIf(!hasDb)('MCP keys', () => {
         ownerKey.key.id,
         expired.key.id,
       ])
-      expect(asOwner.map((k) => k.userName)).toEqual(['editor', 'Test Actor', 'editor'])
-      expect(asOwner.find((k) => k.id === expired.key.id)?.expiresAt).not.toBeNull()
+      expect(asOwner.map((k) => k.userName)).toEqual([
+        'editor',
+        'Test Actor',
+        'editor',
+      ])
+      expect(
+        asOwner.find((k) => k.id === expired.key.id)?.expiresAt,
+      ).not.toBeNull()
 
       const asEditor = await listMcpKeys({
         siteId: w.site.id,
@@ -400,13 +426,37 @@ describe.skipIf(!hasDb)('MCP keys', () => {
     })
   })
 
+  it('enforces the key cap for concurrent creation', async () => {
+    await withKeyWorld(async (w) => {
+      for (let i = 0; i < 19; i++) await w.create(w.editor, 'editor')
+      const results = await Promise.allSettled(
+        Array.from({ length: 8 }, () => w.create(w.editor, 'editor')),
+      )
+      expect(
+        results.filter((result) => result.status === 'fulfilled'),
+      ).toHaveLength(1)
+      for (const result of results)
+        if (result.status === 'rejected')
+          expect(result.reason).toBeInstanceOf(ConflictError)
+      expect(
+        await listMcpKeys({
+          siteId: w.site.id,
+          userId: w.editor,
+          includeAllUsers: false,
+        }),
+      ).toHaveLength(20)
+    })
+  })
+
   it('caps active keys at 20 per user per site; revoking one frees a slot', async () => {
     await withKeyWorld(async (w) => {
       const keys = []
       for (let i = 0; i < 20; i++) {
         keys.push(await w.create(w.editor, 'editor', { name: `Key ${i}` }))
       }
-      await expect(w.create(w.editor, 'editor')).rejects.toBeInstanceOf(ConflictError)
+      await expect(w.create(w.editor, 'editor')).rejects.toBeInstanceOf(
+        ConflictError,
+      )
 
       // Other users are not affected by this user's cap.
       await expect(w.create(w.owner, 'owner')).resolves.toBeDefined()

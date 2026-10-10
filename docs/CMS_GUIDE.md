@@ -14,13 +14,13 @@ The site **Overview** shows work that needs attention, shortcuts to create entri
 
 An entry moves through these states:
 
-| State | What it means |
-| --- | --- |
-| Draft | Only the CMS has the latest changes. |
-| Ready | An owner marked the current draft ready; it will be included the next time the site goes live. |
-| Live | The current version is in the live site release. |
-| Scheduled | The entry is queued for its chosen time. |
-| Archived | Kept in the CMS and omitted from the site. |
+| State     | What it means                                                                                  |
+| --------- | ---------------------------------------------------------------------------------------------- |
+| Draft     | Only the CMS has the latest changes.                                                           |
+| Ready     | An owner marked the current draft ready; it will be included the next time the site goes live. |
+| Live      | The current version is in the live site release.                                               |
+| Scheduled | The entry is queued for its chosen time.                                                       |
+| Archived  | Kept in the CMS and omitted from the site.                                                     |
 
 Saving an entry does not make it public. **Mark as ready** copies the draft into the version eligible for a release. **Go live** publishes a snapshot of the whole site, including all ready changes. Owners and agency admins can perform these actions. Editors can create, edit, save, and preview drafts; publish controls explain why they are unavailable.
 
@@ -36,7 +36,7 @@ An entry can show **Edited since ready** when its editable draft has changed sin
 
 ![Saved entry editor with the Details panel](screenshots/current-editor-seo.png)
 
-Entry history appears after the first save. Owners and agency admins can restore a revision. If a save cannot reach the server, the editor keeps a local recovery copy in this browser and offers it when the entry is reopened. Review the recovered draft before reapplying it to the latest saved version.
+Entry history appears after the first save. Owners and agency admins can restore a revision. Restore applies fields compatible with the current content model and keeps current draft values for removed or incompatible fields. The editor lists every skipped field and its reason; the approved version stays unchanged. If a save cannot reach the server, the editor keeps a local recovery copy in this browser and offers it when the entry is reopened. Review the recovered draft before reapplying it to the latest saved version.
 
 ## Make changes live
 
@@ -76,11 +76,11 @@ Uploaded files have public URLs, including files attached to drafts. Organizatio
 
 Owners invite people from **People**. You can enter several email addresses separated by commas and choose **Editor** or **Owner** for the invitation. Pending invitations can be resent or revoked; membership roles can be changed later. An invitation expires after seven days. Editors do not see People, Settings, or Activity.
 
-| Role | Main permissions |
-| --- | --- |
-| Editor | Create and edit drafts, preview, upload files, and update file descriptions. Cannot approve, schedule, archive, delete entries, restore revisions, publish, delete files, or manage people. |
-| Owner | All editor tasks, plus approve and schedule content, archive/delete entries, restore revisions, run site releases and rollbacks, delete unused files, and manage client people and invitations. |
-| Agency admin | All client and site capabilities, plus manage clients, sites, content types, agency access, branding, global activity, and AI configuration. Requires two-factor authentication. |
+| Role         | Main permissions                                                                                                                                                                                |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Editor       | Create and edit drafts, preview, upload files, and update file descriptions. Cannot approve, schedule, archive, delete entries, restore revisions, publish, delete files, or manage people.     |
+| Owner        | All editor tasks, plus approve and schedule content, archive/delete entries, restore revisions, run site releases and rollbacks, delete unused files, and manage client people and invitations. |
+| Agency admin | All client and site capabilities, plus manage clients, sites, content types, agency access, branding, global activity, and AI configuration. Requires two-factor authentication.                |
 
 Agency admins can access all sites and manage agency-wide access from Agency › People. Members of a client can open all sites belonging to that client.
 

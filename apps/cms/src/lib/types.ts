@@ -57,7 +57,7 @@ export type DeploymentTarget = {
 export type SnapshotRichText = {
   json: unknown
   markdown: string
-  /** TanStack Markdown AST parsed from `markdown`. */
+  /** TanStack Markdown AST preserving the validated visual editor structure. */
   document: MarkdownDocument
   html: string
 }

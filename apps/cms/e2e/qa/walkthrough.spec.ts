@@ -52,10 +52,14 @@ const SITE_SLUG = 'acme-website'
 const WELCOME = 'Welcome to Acme'
 const SHIPPING = 'Shipping the first release'
 
-const state = { siteId: '', token: '' }
+const state = { siteId: '', token: '', schemaToken: '' }
 
 function runCmsScript(script: string) {
-  execSync(`pnpm -s ${script}`, { cwd: CMS_ROOT, stdio: 'inherit', env: process.env })
+  execSync(`pnpm -s ${script}`, {
+    cwd: CMS_ROOT,
+    stdio: 'inherit',
+    env: process.env,
+  })
 }
 
 const MANIFEST = {
@@ -69,7 +73,12 @@ const MANIFEST = {
         { key: 'excerpt', label: 'Excerpt', type: 'textarea' },
         { key: 'body', label: 'Body', type: 'richtext', required: true },
         { key: 'heroImage', label: 'Hero image', type: 'image' },
-        { key: 'category', label: 'Category', type: 'select', options: ['news', 'updates'] },
+        {
+          key: 'category',
+          label: 'Category',
+          type: 'select',
+          options: ['news', 'updates'],
+        },
       ],
     },
     pages: {
@@ -95,7 +104,9 @@ async function acceptInvite(browser: Browser, email: string, name: string) {
   watchErrors(page, `invite ${email}`)
   await page.goto(link)
   await authForm(page)
-  await expect(page.getByRole('heading', { name: 'Acme invited you' })).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Acme invited you' }),
+  ).toBeVisible()
   await screenshot(page, `invite-${name.split(' ')[1].toLowerCase()}`)
   await page.getByLabel('Name').fill(name)
   await page.getByLabel('Password').fill(QA_PASSWORD)
@@ -161,15 +172,27 @@ test('02 client, site and content model', async ({ page }) => {
   await page.getByTestId('site-production-url').fill('https://acme.example.com')
   await screenshot(page, 'new-site-step-1')
   await page.getByTestId('create-site').click()
-  await expect(page.getByTestId('site-token-alert')).toBeVisible()
-  state.token = (await page.getByTestId('site-token-value').innerText()).trim()
+  const buildReveal = page
+    .getByTestId('site-token-alert')
+    .filter({ hasText: 'ARECA_SITE_TOKEN=' })
+  const schemaReveal = page
+    .getByTestId('site-token-alert')
+    .filter({ hasText: 'ARECA_SCHEMA_TOKEN=' })
+  await expect(buildReveal).toBeVisible()
+  await expect(schemaReveal).toBeVisible()
+  state.token = (
+    await buildReveal.getByTestId('site-token-value').innerText()
+  ).trim()
+  state.schemaToken = (
+    await schemaReveal.getByTestId('site-token-value').innerText()
+  ).trim()
   await screenshot(page, 'new-site-step-2-token')
   await page.getByTestId('token-saved').click()
   await expect(page.getByTestId(`client-site-${SITE_SLUG}`)).toBeVisible()
   await screenshot(page, 'client-with-site')
 
   // The site project pushes its manifest with the token.
-  await pushManifest(new URL(page.url()).origin, state.token, MANIFEST)
+  await pushManifest(new URL(page.url()).origin, state.schemaToken, MANIFEST)
 
   await page.getByTestId(`site-settings-${SITE_SLUG}`).click()
   await expect(page.getByTestId('site-settings')).toBeVisible()
@@ -187,7 +210,10 @@ test('02 client, site and content model', async ({ page }) => {
   await screenshot(page, 'settings-content')
   await page.getByTestId('content-type-articles').click()
   await expect(page.getByTestId('collection-drawer')).toBeVisible()
-  await expect(page.getByTestId('field-row-0')).toHaveAttribute('data-locked', 'true')
+  await expect(page.getByTestId('field-row-0')).toHaveAttribute(
+    'data-locked',
+    'true',
+  )
   await screenshot(page, 'schema-editor')
   await page.keyboard.press('Escape')
   await expect(page.getByTestId('collection-drawer')).toBeHidden()
@@ -196,9 +222,18 @@ test('02 client, site and content model', async ({ page }) => {
   // The manifest arrived out of band; load the overview fresh.
   await page.reload()
   await hydrated(page)
-  await expect(page.getByTestId('get-started-client')).toHaveAttribute('data-done', 'true')
-  await expect(page.getByTestId('get-started-site')).toHaveAttribute('data-done', 'true')
-  await expect(page.getByTestId('get-started-connect')).toHaveAttribute('data-done', 'true')
+  await expect(page.getByTestId('get-started-client')).toHaveAttribute(
+    'data-done',
+    'true',
+  )
+  await expect(page.getByTestId('get-started-site')).toHaveAttribute(
+    'data-done',
+    'true',
+  )
+  await expect(page.getByTestId('get-started-connect')).toHaveAttribute(
+    'data-done',
+    'true',
+  )
   await screenshot(page, 'agency-checklist-progress')
 })
 
@@ -239,7 +274,9 @@ test('04 the editor writes drafts', async ({ page }) => {
   // The editor's only site opens straight away.
   await expect(page).toHaveURL(new RegExp(`/sites/${state.siteId}`))
   await expect(page.getByTestId('site-overview')).toBeVisible()
-  await expect(page.getByTestId('sidebar').getByTestId('team-nav')).toHaveCount(0)
+  await expect(page.getByTestId('sidebar').getByTestId('team-nav')).toHaveCount(
+    0,
+  )
   await screenshot(page, 'editor-overview')
 
   await openCollection(page, 'articles')
@@ -262,11 +299,14 @@ test('04 the editor writes drafts', async ({ page }) => {
     .getByTestId('entry-details')
     .getByRole('button', { name: /Choose an image/ })
     .click()
-  await page.getByTestId('media-picker').getByTestId('media-upload').setInputFiles({
-    name: 'welcome-hero.png',
-    mimeType: 'image/png',
-    buffer: QA_PNG,
-  })
+  await page
+    .getByTestId('media-picker')
+    .getByTestId('media-upload')
+    .setInputFiles({
+      name: 'welcome-hero.png',
+      mimeType: 'image/png',
+      buffer: QA_PNG,
+    })
   await expect(page.getByTestId('image-field-thumb')).toBeVisible()
   await waitForSaved(page)
   await screenshot(page, 'editor-writing')
@@ -295,8 +335,15 @@ test('05 the owner reviews and goes live', async ({ page }) => {
   await screenshot(page, 'owner-overview')
 
   await openCollection(page, 'articles')
-  await page.getByTestId(`entry-${slugify(WELCOME)}`).getByRole('link').first().click()
-  await expect(page.getByTestId('entry-editor')).toHaveAttribute('data-ready', 'true')
+  await page
+    .getByTestId(`entry-${slugify(WELCOME)}`)
+    .getByRole('link')
+    .first()
+    .click()
+  await expect(page.getByTestId('entry-editor')).toHaveAttribute(
+    'data-ready',
+    'true',
+  )
   await screenshot(page, 'owner-opens-draft')
   await markAsReady(page)
   await screenshot(page, 'owner-marked-ready')
@@ -304,28 +351,41 @@ test('05 the owner reviews and goes live', async ({ page }) => {
 
   // The second one through select mode.
   await page.getByTestId('select-mode').click()
-  await page.getByRole('button', { name: `Select ${SHIPPING}`, exact: true }).click()
+  await page
+    .getByRole('button', { name: `Select ${SHIPPING}`, exact: true })
+    .click()
   await screenshot(page, 'select-mode')
   await page.getByTestId('bulk-ready').click()
   await expect(
     page.getByTestId(`entry-${slugify(SHIPPING)}`).getByTestId('entry-status'),
   ).toHaveAttribute('data-ui-status', 'ready')
   await page.getByTestId('bulk-done').click()
-  await expect(page.getByTestId('release-status')).toContainText('2 changes ready')
+  await expect(page.getByTestId('release-status')).toContainText(
+    '2 changes ready',
+  )
   await screenshot(page, 'tray-two-ready')
 
   await goLiveFromTray(page)
   await screenshot(page, 'tray-live')
   const panel = await openGoLivePanel(page)
-  await expect(panel.getByTestId('publication-live')).toContainText('by QA Owner')
+  await expect(panel.getByTestId('publication-live')).toContainText(
+    'by QA Owner',
+  )
   await screenshot(page, 'golive-panel-live')
 })
 
 test('06 restore an earlier release', async ({ page }) => {
   await signIn(page, OWNER)
   await openCollection(page, 'articles')
-  await page.getByTestId(`entry-${slugify(WELCOME)}`).getByRole('link').first().click()
-  await expect(page.getByTestId('entry-editor')).toHaveAttribute('data-ready', 'true')
+  await page
+    .getByTestId(`entry-${slugify(WELCOME)}`)
+    .getByRole('link')
+    .first()
+    .click()
+  await expect(page.getByTestId('entry-editor')).toHaveAttribute(
+    'data-ready',
+    'true',
+  )
   await titleInput(page).fill(`${WELCOME} (updated)`)
   await waitForSaved(page)
   await markAsReady(page)
@@ -340,14 +400,20 @@ test('06 restore an earlier release', async ({ page }) => {
   await replaced.getByTestId('publication-menu').click()
   await page.getByTestId('rollback-publication').click()
   await screenshot(page, 'restore-confirm')
-  await page.getByRole('alertdialog').getByRole('button', { name: 'Restore this version' }).click()
+  await page
+    .getByRole('alertdialog')
+    .getByRole('button', { name: 'Restore this version' })
+    .click()
   await expect(panel.locator(`[data-release-id="${id}"]`)).toHaveAttribute(
     'data-testid',
     'publication-live',
     { timeout: 45_000 },
   )
   // The later edit stays ready to go live again.
-  await expect(page.getByTestId('release-status')).toHaveAttribute('data-state', 'ready')
+  await expect(page.getByTestId('release-status')).toHaveAttribute(
+    'data-state',
+    'ready',
+  )
   await screenshot(page, 'golive-restored')
 })
 
@@ -372,7 +438,11 @@ test('07 Library and Activity', async ({ page }) => {
   await screenshot(page, 'activity-panel')
   const text = await activity.innerText()
   if (/\b[0-9a-f]{8}-[0-9a-f]{4}-/.test(text)) {
-    logIssue({ area: 'activity', severity: 'visual', note: 'Activity shows raw ids' })
+    logIssue({
+      area: 'activity',
+      severity: 'visual',
+      note: 'Activity shows raw ids',
+    })
   }
 })
 
@@ -397,7 +467,10 @@ test('08 branding', async ({ page }) => {
   await page.goto('/agency/branding')
   await hydrated(page)
   await page.getByRole('button', { name: 'Reset to defaults' }).click()
-  await page.getByTestId('reset-branding').getByRole('button', { name: 'Reset to defaults' }).click()
+  await page
+    .getByTestId('reset-branding')
+    .getByRole('button', { name: 'Reset to defaults' })
+    .click()
   await expectToast(page, 'Branding reset to defaults')
   await screenshot(page, 'branding-reset')
 })
@@ -418,8 +491,14 @@ test('09 on a phone', async ({ browser }) => {
   await page.getByTestId('mobile-content').click()
   await expect(page.getByRole('dialog', { name: 'Content' })).toBeVisible()
   await screenshot(page, 'phone-content-sheet')
-  await page.getByRole('dialog', { name: 'Content' }).getByRole('link', { name: /Articles/ }).click()
-  await expect(page.getByTestId('site-content')).toHaveAttribute('data-ready', 'true')
+  await page
+    .getByRole('dialog', { name: 'Content' })
+    .getByRole('link', { name: /Articles/ })
+    .click()
+  await expect(page.getByTestId('site-content')).toHaveAttribute(
+    'data-ready',
+    'true',
+  )
   await screenshot(page, 'phone-articles')
   await page.getByTestId('golive-pill').click()
   await expect(page.getByTestId('golive-panel')).toBeVisible()

@@ -132,6 +132,9 @@ export function useEntryEditor({
   const goLive = useGoLive(siteId)
 
   const [createdId, setCreatedId] = React.useState<string | undefined>()
+  const [restoreSkippedFields, setRestoreSkippedFields] = React.useState<
+    Array<{ key: string; label: string; reason: string }>
+  >([])
   const entryId = routeEntryId ?? createdId
   const entryIdRef = React.useRef(entryId)
   entryIdRef.current = entryId
@@ -712,7 +715,7 @@ export function useEntryEditor({
       const id = await ensureSaved()
       if (!id)
         throw new Error('Save or resolve your draft conflict before restoring.')
-      const restored: EntryRecord = await restoreRevisionFn({
+      const restored = await restoreRevisionFn({
         data: {
           entryId: entryIdRef.current!,
           revisionId,
@@ -723,6 +726,7 @@ export function useEntryEditor({
     },
     onSuccess: async (restored) => {
       hydrate(restored, true)
+      setRestoreSkippedFields(restored.skippedFields)
       setFieldErrors({})
       setFormError(null)
       queryClient.setQueryData(
@@ -732,7 +736,9 @@ export function useEntryEditor({
           ...restored,
         }),
       )
-      toast.success(m.editor_revision_restored())
+      if (restored.skippedFields.length)
+        toast.warning(m.editor_revision_restored_partial())
+      else toast.success(m.editor_revision_restored())
       await invalidateEntry(restored.id)
     },
     onError: actionError(m.editor_could_not_restore()),
@@ -842,6 +848,7 @@ export function useEntryEditor({
     archive: () => archiveMutation.mutate(),
     remove: () => deleteMutation.mutateAsync(),
     restore: (revisionId: string) => restoreMutation.mutateAsync(revisionId),
+    restoreSkippedFields,
     blocker,
     leaveAnyway: () => {
       bypassRef.current = true

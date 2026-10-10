@@ -121,6 +121,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
             .from(storageObjectDeletion)
             .where(eq(storageObjectDeletion.storageKey, image.storageKey)),
         ).toHaveLength(1)
+        await db
+          .update(storageObjectDeletion)
+          .set({ nextAttemptAt: new Date(Date.now() - 1000) })
+          .where(eq(storageObjectDeletion.storageKey, image.storageKey))
         await drainStorageObjectDeletions()
         expect(
           await db
@@ -339,6 +343,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
             .from(storageObjectDeletion)
             .where(eq(storageObjectDeletion.storageKey, key)),
         ).toHaveLength(1)
+        await db
+          .update(storageObjectDeletion)
+          .set({ nextAttemptAt: new Date(Date.now() - 1000) })
+          .where(eq(storageObjectDeletion.storageKey, key))
         await drainStorageObjectDeletions()
         expect(storage.delete).toHaveBeenCalledWith(key)
         expect(

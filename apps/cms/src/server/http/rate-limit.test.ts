@@ -88,7 +88,11 @@ describe('request rate limiting', () => {
     }
     expect((await enforceRequestRateLimit(request, deps))?.status).toBe(429)
     expect(deps.resolveUserId).not.toHaveBeenCalled()
-    expect(store.keys.every((key) => key.includes(':mcp:') || key.includes(':mcp-ip:'))).toBe(true)
+    expect(
+      store.keys.every(
+        (key) => key.includes(':mcp:') || key.includes(':mcp-ip:'),
+      ),
+    ).toBe(true)
     expect(store.keys.some((key) => key.includes(':mcp:'))).toBe(true)
     expect(store.keys.join('\n')).not.toContain('areca_mcp_secret-key')
   })
@@ -122,18 +126,26 @@ describe('request rate limiting', () => {
     // Each fake token gets its own per-key bucket, so only the per-IP rule can stop them.
     for (let i = 0; i < 600; i += 1) {
       const response = await enforceRequestRateLimit(
-        new Request('https://cms.test/api/mcp', { method: 'POST', headers: headers(i) }),
+        new Request('https://cms.test/api/mcp', {
+          method: 'POST',
+          headers: headers(i),
+        }),
         deps,
       )
       expect(response).toBeNull()
     }
     const blocked = await enforceRequestRateLimit(
-      new Request('https://cms.test/api/mcp', { method: 'POST', headers: headers(600) }),
+      new Request('https://cms.test/api/mcp', {
+        method: 'POST',
+        headers: headers(600),
+      }),
       deps,
     )
     expect(blocked?.status).toBe(429)
     expect(blocked?.headers.get('Retry-After')).toBe('60')
-    expect(store.keys.filter((key) => key.includes(':mcp-ip:'))).toHaveLength(601)
+    expect(store.keys.filter((key) => key.includes(':mcp-ip:'))).toHaveLength(
+      601,
+    )
   })
 
   it('skips the per-IP MCP budget when the client IP is unknown', async () => {
@@ -277,13 +289,20 @@ describe('request rate limiting', () => {
       const store = countingStore()
       const deps = { ...dependencies(store), trustProxy: true }
       for (let i = 0; i < 20; i += 1) {
-        expect(await enforceRequestRateLimit(register('198.51.100.7'), deps)).toBeNull()
+        expect(
+          await enforceRequestRateLimit(register('198.51.100.7'), deps),
+        ).toBeNull()
       }
-      const blocked = await enforceRequestRateLimit(register('198.51.100.7'), deps)
+      const blocked = await enforceRequestRateLimit(
+        register('198.51.100.7'),
+        deps,
+      )
       expect(blocked?.status).toBe(429)
       expect(blocked?.headers.get('Retry-After')).toBeTruthy()
       // Another address has its own budget.
-      expect(await enforceRequestRateLimit(register('198.51.100.8'), deps)).toBeNull()
+      expect(
+        await enforceRequestRateLimit(register('198.51.100.8'), deps),
+      ).toBeNull()
     })
 
     it('caps all registrations deployment-wide at 300 per hour when no address is known', async () => {
@@ -292,7 +311,9 @@ describe('request rate limiting', () => {
       for (let i = 0; i < 300; i += 1) {
         expect(await enforceRequestRateLimit(register(), deps)).toBeNull()
       }
-      expect((await enforceRequestRateLimit(register(), deps))?.status).toBe(429)
+      expect((await enforceRequestRateLimit(register(), deps))?.status).toBe(
+        429,
+      )
     })
 
     it('limits token requests to 60 per minute per client and address', async () => {
@@ -305,14 +326,113 @@ describe('request rate limiting', () => {
             'content-type': 'application/x-www-form-urlencoded',
             'x-forwarded-for': '198.51.100.9',
           },
-          body: new URLSearchParams({ grant_type: 'refresh_token', client_id: clientId }),
+          body: new URLSearchParams({
+            grant_type: 'refresh_token',
+            client_id: clientId,
+          }),
         })
       for (let i = 0; i < 60; i += 1) {
-        expect(await enforceRequestRateLimit(token('client-a'), deps)).toBeNull()
+        expect(
+          await enforceRequestRateLimit(token('client-a'), deps),
+        ).toBeNull()
       }
-      expect((await enforceRequestRateLimit(token('client-a'), deps))?.status).toBe(429)
+      expect(
+        (await enforceRequestRateLimit(token('client-a'), deps))?.status,
+      ).toBe(429)
       // A different client from the same address is counted separately.
       expect(await enforceRequestRateLimit(token('client-b'), deps)).toBeNull()
+    })
+
+    it('limits rotating unverified client IDs independently per IP', async () => {
+      const deps = { ...dependencies(countingStore()), trustProxy: true }
+      const token = (i: number) =>
+        new Request('https://cms.test/api/auth/oauth2/token', {
+          method: 'POST',
+          headers: { 'x-forwarded-for': '198.51.100.9' },
+          body: new URLSearchParams({ client_id: `fake-${i}` }),
+        })
+      for (let i = 0; i < 120; i += 1) {
+        expect(await enforceRequestRateLimit(token(i), deps)).toBeNull()
+      }
+      expect((await enforceRequestRateLimit(token(120), deps))?.status).toBe(
+        429,
+      )
+    })
+
+    it('bounds rotating client IDs globally when an IP is unavailable', async () => {
+      const deps = dependencies(countingStore())
+      for (let i = 0; i < 600; i += 1) {
+        expect(
+          await enforceRequestRateLimit(
+            new Request('https://cms.test/api/auth/oauth2/token', {
+              method: 'POST',
+              body: new URLSearchParams({ client_id: `fake-${i}` }),
+            }),
+            deps,
+          ),
+        ).toBeNull()
+      }
+      expect(
+        (
+          await enforceRequestRateLimit(
+            new Request('https://cms.test/api/auth/oauth2/token', {
+              method: 'POST',
+              body: 'client_id=another',
+            }),
+            deps,
+          )
+        )?.status,
+      ).toBe(429)
+    })
+
+    it.each([false, true])(
+      'rejects oversized token bodies (Basic auth: %s) without consuming the original request',
+      async (basic) => {
+        const deps = dependencies(countingStore())
+        const request = new Request('https://cms.test/api/auth/oauth2/token', {
+          method: 'POST',
+          headers: basic ? { authorization: 'Basic Y2xpZW50OnNlY3JldA==' } : {},
+          body: 'x'.repeat(65_537),
+        })
+        expect((await enforceRequestRateLimit(request, deps))?.status).toBe(413)
+        expect(request.bodyUsed).toBe(false)
+        expect(deps.logError).not.toHaveBeenCalled()
+      },
+    )
+
+    it('accepts mixed-case Bearer credentials in the same MCP bucket', async () => {
+      const store = countingStore()
+      const deps = dependencies(store)
+      for (const scheme of ['Bearer', 'bearer', 'BEARER', 'DPoP', 'dpop']) {
+        expect(
+          await enforceRequestRateLimit(
+            new Request('https://cms.test/api/mcp/site', {
+              headers: { authorization: `${scheme} areca_at_secret` },
+            }),
+            deps,
+          ),
+        ).toBeNull()
+      }
+      expect(new Set(store.keys)).toHaveLength(1)
+    })
+
+    it('keeps the token body cap during a limiter outage', async () => {
+      const deps = dependencies({
+        increment: async () => {
+          throw new Error('Redis unavailable')
+        },
+      })
+      expect(
+        (
+          await enforceRequestRateLimit(
+            new Request('https://cms.test/api/auth/oauth2/token', {
+              method: 'POST',
+              body: 'x'.repeat(65_537),
+            }),
+            deps,
+          )
+        )?.status,
+      ).toBe(413)
     })
 
     it('keeps the rest of the auth API exempt', async () => {
@@ -321,7 +441,10 @@ describe('request rate limiting', () => {
       for (let i = 0; i < 100; i += 1) {
         expect(
           await enforceRequestRateLimit(
-            new Request('https://cms.test/api/auth/oauth2/authorize?client_id=x', { method: 'GET' }),
+            new Request(
+              'https://cms.test/api/auth/oauth2/authorize?client_id=x',
+              { method: 'GET' },
+            ),
             deps,
           ),
         ).toBeNull()

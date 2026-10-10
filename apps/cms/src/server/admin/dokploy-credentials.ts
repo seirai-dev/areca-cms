@@ -10,6 +10,8 @@ import { dokployCredential, organization } from '#/db/schema'
 import { env } from '#/env'
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
+import { lockOrganizationForMutation } from './organization-lock'
+import { assertOrganizationHasNoPendingDeployment } from '#/server/publishing/deployment-safety'
 import {
   ConflictError,
   NotFoundError,
@@ -39,7 +41,7 @@ function normalizeUrl(url: string) {
   return assertSecureServiceUrl(
     url.trim(),
     env.DOKPLOY_ALLOW_INSECURE_HTTP === 'true',
-  ).href.replace(/\/$/, '')
+  ).href.replace(/\/+$/, '')
 }
 
 async function requireOrganization(organizationId: string) {
@@ -128,6 +130,21 @@ export async function saveDokployCredentials(input: {
   }
 
   await db.transaction(async (tx) => {
+    await lockOrganizationForMutation(tx, input.organizationId)
+    const [current] = await tx
+      .select()
+      .from(dokployCredential)
+      .where(eq(dokployCredential.organizationId, input.organizationId))
+    if (!current || current.url !== url)
+      await assertOrganizationHasNoPendingDeployment(tx, input.organizationId)
+    // A concurrent credential update must not be overwritten with a stale key.
+    if (
+      !enteredApiKey &&
+      current?.encryptedApiKey !== existing?.encryptedApiKey
+    )
+      throw new ConflictError(
+        'Dokploy credentials changed; reload before saving',
+      )
     await tx
       .insert(dokployCredential)
       .values({
@@ -202,6 +219,8 @@ export async function removeDokployCredentials(input: {
 }) {
   await requireOrganization(input.organizationId)
   await db.transaction(async (tx) => {
+    await lockOrganizationForMutation(tx, input.organizationId)
+    await assertOrganizationHasNoPendingDeployment(tx, input.organizationId)
     const removed = await tx
       .delete(dokployCredential)
       .where(eq(dokployCredential.organizationId, input.organizationId))

@@ -1,7 +1,8 @@
-import { eq, sql } from 'drizzle-orm'
+/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty; retain defensive lookup and authorization checks. */
+import { sql } from 'drizzle-orm'
 
 import { db } from '#/db'
-import { user } from '#/db/schema'
+import { account, user } from '#/db/schema'
 import { env } from '#/env'
 import { auth } from '#/lib/auth'
 import { m } from '#/paraglide/messages'
@@ -49,43 +50,34 @@ export async function completeSetup(input: {
       throw new ConflictError(m.server_setup_already_completed())
     }
 
-    // The first admin is always created with a password, even when password
-    // sign-in is switched off in the environment, so the instance can never be
-    // bootstrapped into a state with no way in. Writing the credential through
-    // Better Auth's internals (instead of the sign-up endpoint) keeps that
-    // true when `emailAndPassword` is disabled.
+    // Bootstrap owns every write, including the credential. Better Auth's
+    // global adapter would commit independently of this transaction.
     const authContext = await auth.$context
-    const created = await authContext.internalAdapter.createUser(
-      {
-        name: input.name,
-        email: input.email,
-        emailVerified: false,
-      },
-      { method: 'email-password' },
-    )
-    if (!created) {
-      throw new Error(m.server_failed_to_create_user())
-    }
-    await authContext.internalAdapter.createAccount({
-      userId: created.id,
-      providerId: 'credential',
-      accountId: created.id,
-      password: await authContext.password.hash(input.password),
-    })
-
+    const id = crypto.randomUUID()
+    const password = await authContext.password.hash(input.password)
     const [updated] = await tx
-      .update(user)
-      .set({ isAgencyAdmin: true, updatedAt: new Date() })
-      .where(eq(user.id, created.id))
+      .insert(user)
+      .values({
+        id,
+        name: input.name.trim(),
+        email: input.email.trim().toLowerCase(),
+        emailVerified: false,
+        isAgencyAdmin: true,
+      })
       .returning({
         id: user.id,
         name: user.name,
         email: user.email,
         isAgencyAdmin: user.isAgencyAdmin,
       })
-    if (!updated) {
-      throw new Error(m.server_failed_to_promote_admin())
-    }
+    if (!updated) throw new Error(m.server_failed_to_create_user())
+    await tx.insert(account).values({
+      id: crypto.randomUUID(),
+      userId: id,
+      providerId: 'credential',
+      accountId: id,
+      password,
+    })
 
     await audit(
       {

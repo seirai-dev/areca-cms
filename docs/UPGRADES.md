@@ -9,6 +9,21 @@ every upgrade around that. Day-to-day monitoring is in
 
 ## How migrations run
 
+### MCP grant binding update
+
+The fixes from the [PR #6/#7 review](reviews/mcp-pr-6-7.md) bind OAuth tokens to
+an individual approved connection generation. Previously issued OAuth tokens
+must be replaced through a fresh consent flow after deploying these fixes.
+Reconnect AI apps; personal MCP keys continue to work. Deploy the fixed version
+to all replicas together, so an old replica cannot accept tokens that a fixed
+replica rejects. These fixes reuse the existing OAuth tables and need no new
+database migration.
+
+Offline OAuth access no longer depends on an unexpired browser login session.
+Its connection expires after ninety days without successful MCP use; refresh
+alone does not extend that activity window. Scheduling now requires the
+credential's “Allow going live” permission.
+
 The image starts through `apps/cms/scripts/docker-entrypoint.mjs`, which on every
 container start:
 

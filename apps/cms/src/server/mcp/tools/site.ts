@@ -29,12 +29,14 @@ export function cannotDoFor(actor: McpActor): string[] {
   if (!actor.allowGoLive) {
     out.push(
       actor.credential === 'oauth'
-        ? `Go live: going live is not enabled for ${credentialPhrase(actor.credential)}. A site owner presses Go live in the CMS, or the app can be reconnected from Connect AI with "Allow going live" ticked.`
-        : `Go live: going live is not enabled for ${credentialPhrase(actor.credential)}. A site owner presses Go live in the CMS.`,
+        ? `Go live or schedule: going live is not enabled for ${credentialPhrase(actor.credential)}. A site owner presses Go live in the CMS, or the app can be reconnected from Connect AI with "Allow going live" ticked.`
+        : `Go live or schedule: going live is not enabled for ${credentialPhrase(actor.credential)}. A site owner presses Go live in the CMS.`,
     )
   }
   if (actor.role !== 'agency') {
-    out.push('Change collection schemas (add, edit or delete collections): only agency admins can, so ask one.')
+    out.push(
+      'Change collection schemas (add, edit or delete collections): only agency admins can, so ask one.',
+    )
   }
   return out
 }
@@ -47,7 +49,9 @@ function writingGuide(actor: McpActor): string {
   return [
     'Workflow: 1) get_collection_schema for the collection you need. 2) create_entry with fields and seo (rich text as Markdown). 3) get_preview_url to check it. 4) update_entry to revise (pass the version from get_entry as expectedVersion).',
     'Images: upload_asset_from_url with a public image URL, then use the returned assetId in image fields, seo.ogImage, or ![alt](asset:<assetId>) in Markdown. Always give alt text.',
-    'Drafts are safe. ' + approval + ' go_live puts the release live, and only when the user asks.',
+    'Drafts are safe. ' +
+      approval +
+      ' go_live puts the release live, and only when the user asks.',
     STATUS_GUIDE,
     DATES_NOTE,
     SEO_GUIDE,
@@ -84,7 +88,9 @@ export function registerSiteTools(registry: ToolRegistry): void {
             uploadAndEditAssets: true,
             previewEntries: true,
             markReady: isOwner,
-            unpublishArchiveScheduleDelete: isOwner,
+            unpublishArchiveScheduleDelete: isOwner && actor.allowGoLive,
+            unpublishArchiveDelete: isOwner,
+            schedule: actor.allowGoLive,
             restoreRevisions: isOwner,
             deleteAssets: isOwner,
             goLive: actor.allowGoLive,
@@ -112,7 +118,9 @@ export function registerSiteTools(registry: ToolRegistry): void {
       collection: z
         .string()
         .min(1)
-        .describe('Collection key, e.g. "posts". See get_site_info for the keys.'),
+        .describe(
+          'Collection key, e.g. "posts". See get_site_info for the keys.',
+        ),
     }),
     annotations: { readOnlyHint: true, idempotentHint: true },
     run: async (input, actor) => {
@@ -128,8 +136,7 @@ export function registerSiteTools(registry: ToolRegistry): void {
           seo: EXAMPLE_SEO,
         },
         seo: {
-          keys:
-            'Object with optional keys: title, description, focusKeyphrase, canonicalUrl, noindex, nofollow, ogTitle, ogDescription, ogImage, twitterCard, schemaType, summary, keyTakeaways, faq, about, author, jsonLd. To clear a key on update: empty string for text, false for noindex/nofollow, empty array for lists.',
+          keys: 'Object with optional keys: title, description, focusKeyphrase, canonicalUrl, noindex, nofollow, ogTitle, ogDescription, ogImage, twitterCard, schemaType, summary, keyTakeaways, faq, about, author, jsonLd. To clear a key on update: empty string for text, false for noindex/nofollow, empty array for lists.',
           guide: SEO_GUIDE,
         },
         notes: [

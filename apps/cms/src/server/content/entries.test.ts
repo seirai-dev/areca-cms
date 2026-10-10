@@ -201,15 +201,22 @@ describe.skipIf(!hasDb)('entries', () => {
         .returning()
       const restored = await restoreRevision(
         created.id,
-        revision!.id,
+        revision.id,
         ctx.actor.id,
         created.draftVersion,
       )
-      expect(restored.draftData).toEqual({ title: 'Old', slug })
+      expect(restored.draftData).toEqual({
+        title: 'Old',
+        slug,
+        body: sampleRichText,
+      })
+      expect(restored.skippedFields).toContainEqual(
+        expect.objectContaining({ key: 'removedField' }),
+      )
       const latest = (await listRevisions(created.id)).find(
         (row) => row.note === 'restore',
       )
-      expect(latest?.data).toEqual({ title: 'Old', slug })
+      expect(latest?.data).toEqual({ title: 'Old', slug, body: sampleRichText })
     })
   })
 })

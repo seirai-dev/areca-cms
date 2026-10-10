@@ -157,8 +157,9 @@ Go-live panel, `?panel=golive`). Owners and agency admins can use it.
    `pnpm --filter @areca/demo-site build` (which runs `areca pull`). Changing
    the ARG invalidates only the content-pull layer, so Docker does not reuse a
    cached snapshot from an earlier publication.
-4. Dokploy clones git, builds the Dockerfile, `areca pull` reads the **active
-   job** snapshot (`GET /api/sites/snapshot/current`).
+4. Dokploy clones git, builds the Dockerfile, and `areca pull` requests the exact
+   frozen publication (`GET /api/sites/snapshot/current?publicationId=<id>`)
+   selected by `ARECA_SNAPSHOT_ID`. A missing or different publication fails the build.
 5. Worker polls `application.one` until that deployment is `done`, then GET
    the health URL until `{ ok: true, publicationId }` matches the publication.
 6. Publication becomes `live` (`wasLive=true`); the previous live one is
@@ -183,11 +184,14 @@ snapshot for local demonstration. Configure a deployment target and health URL
 and switch to Production before releasing a production site.
 
 The queue locks each site when enqueueing or claiming work and enforces one
-queued and one active job per site in PostgreSQL. Claimed jobs carry a 60-second
+queued and one active job per site in PostgreSQL. Sites may share a Dokploy
+application; deployments for that application are serialized, including uncertain
+dispatches. The website developer controls how combined content is built. Claimed jobs carry a 60-second
 lease, renewed every 15 seconds. Recovery runs periodically, independently of
 long deployment polling. Expired jobs fail and cannot subsequently mark a
-publication live; request a fresh publication to retry. Scheduling retries due
-entries automatically after recovery.
+publication live; request a fresh publication to retry. Scheduled failures allow an initial attempt and three retries, after 1, 5, and
+15 minutes. After those retries the schedule stays paused until an owner
+manually requests a release or replaces the scheduled approval.
 
 ## Media privacy
 
@@ -202,7 +206,7 @@ cross-origin`.
   access control; URLs leak through page source, referrers, browser history,
   caches and shared links.
 - **Assets attached to drafts, unpublished entries and archived content are
-  public too.** Draft *content* is protected by sign-in and preview tokens, but
+  public too.** Draft _content_ is protected by sign-in and preview tokens, but
   its images are not. Do not upload embargoed or confidential material, and do
   not rely on removing an entry to retract a file that has already been shared:
   deleting the asset (see [asset retention](ASSET_RETENTION.md)) is the only way
@@ -226,17 +230,17 @@ a configuration switch.
 
 What is secret, and where it lives:
 
-| Secret | Where | Notes |
-| --- | --- | --- |
-| `BETTER_AUTH_SECRET` | CMS environment | Signs sessions and cookies. |
-| `DATABASE_URL`, `REDIS_URL` | CMS environment | Contain passwords. |
-| `S3_ACCESS_KEY` / `S3_SECRET_KEY` | CMS environment | Full access to every upload. |
-| `SMTP_*`, OAuth/SSO client secrets | CMS environment | |
-| `DOKPLOY_CREDENTIALS_ENCRYPTION_KEY` | CMS environment | Encrypts each organization's Dokploy API key at rest. Back it up with the database ([RECOVERY.md](../docker/RECOVERY.md)). |
-| `AI_SETTINGS_ENCRYPTION_KEY` | CMS environment (optional) | Encrypts the OpenRouter API key saved on `/agency/ai`. AI SEO suggestions stay off until it is set. Changing it means re-entering the key. Generate with `openssl rand -base64 32`; retain it with backups if restoring those settings. |
-| Dokploy API keys | Database, encrypted | Entered per organization in the CMS. |
-| Site build token, schema-write token | Site settings > Developer (agency administrators) | `ARECA_SITE_TOKEN` is read-only and used by `areca pull`; `ARECA_SCHEMA_TOKEN` allows `areca manifest push` and belongs only in the schema-authoring environment, never in build secrets. |
-| Deploy keys | Dokploy | Never commit them. |
+| Secret                               | Where                                             | Notes                                                                                                                                                                                                                                   |
+| ------------------------------------ | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BETTER_AUTH_SECRET`                 | CMS environment                                   | Signs sessions and cookies.                                                                                                                                                                                                             |
+| `DATABASE_URL`, `REDIS_URL`          | CMS environment                                   | Contain passwords.                                                                                                                                                                                                                      |
+| `S3_ACCESS_KEY` / `S3_SECRET_KEY`    | CMS environment                                   | Full access to every upload.                                                                                                                                                                                                            |
+| `SMTP_*`, OAuth/SSO client secrets   | CMS environment                                   |                                                                                                                                                                                                                                         |
+| `DOKPLOY_CREDENTIALS_ENCRYPTION_KEY` | CMS environment                                   | Encrypts each organization's Dokploy API key at rest. Back it up with the database ([RECOVERY.md](../docker/RECOVERY.md)).                                                                                                              |
+| `AI_SETTINGS_ENCRYPTION_KEY`         | CMS environment (optional)                        | Encrypts the OpenRouter API key saved on `/agency/ai`. AI SEO suggestions stay off until it is set. Changing it means re-entering the key. Generate with `openssl rand -base64 32`; retain it with backups if restoring those settings. |
+| Dokploy API keys                     | Database, encrypted                               | Entered per organization in the CMS.                                                                                                                                                                                                    |
+| Site build token, schema-write token | Site settings > Developer (agency administrators) | `ARECA_SITE_TOKEN` is read-only and used by `areca pull`; `ARECA_SCHEMA_TOKEN` allows `areca manifest push` and belongs only in the schema-authoring environment, never in build secrets.                                               |
+| Deploy keys                          | Dokploy                                           | Never commit them.                                                                                                                                                                                                                      |
 
 Only `.env.example` files with placeholders are tracked in git. Real values live
 in the host's environment, a secrets manager, or gitignored `.env` /
@@ -265,8 +269,8 @@ Rotation:
   authentication is enabled: authenticator data protected by this secret may no
   longer verify, so confirm an administrator can still sign in (and has recovery
   codes) before relying on it.
-- **Site build token / schema-write token:** *Settings > Developer > Rotate
-  token…*. The old token stops working immediately; update `ARECA_SITE_TOKEN`
+- **Site build token / schema-write token:** _Settings > Developer > Rotate
+  token…_. The old token stops working immediately; update `ARECA_SITE_TOKEN`
   (and `ARECA_SCHEMA_TOKEN`) in the site's Dokploy env/build secrets and in local
   `.env.local` files.
 - **Database, Redis, S3, SMTP credentials:** change them on the service, then
@@ -282,16 +286,16 @@ Rotation:
 
 ## Troubleshooting
 
-| Symptom                                                                | What to check                                                                                                                              |
-| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `Unexpected end of JSON input`                                         | `application.deploy` can return an empty 200. Current adapter treats that as success.                                                      |
-| Deploy finishes in a few seconds, site still shows old `publicationId` | Docker cached `areca pull`. Confirm `ARECA_SNAPSHOT_ID` is in `buildArgs` and sits **after** the SDK build in the Dockerfile.              |
-| Job `failed: Deploy error` / clone errors                              | Deploy key, `customGitSSHKeyId`, repo URL `git@github.com:…`.                                                                              |
-| `areca pull` 401                                                       | Site token rotated; update Dokploy runtime `env` + `buildSecrets` and the local token you use for `sync-manifest`.                         |
-| `areca pull` 404 `No publication exists`                               | Snapshot reads use the active/uncertain job's publication, or the latest successful `live`/`demo` publication for the site's current mode. Request a publication first.                              |
-| `areca pull` connection refused / timeout                              | CMS not on `0.0.0.0`, wrong `ARECA_CMS_URL`, or Windows firewall blocking :3000.                                                           |
-| `pnpm install --frozen-lockfile` fails                                 | Lockfile out of date vs `package.json`; commit an updated `pnpm-lock.yaml`.                                                                |
-| Health check fails                                                     | `GET /api/deployment.all?applicationId=` then `GET /api/deployment.readLogs?deploymentId=&tail=200`. Port `3101→3000` `publishMode: host`. |
-| Build succeeds, site still serves old `publicationId`                  | Swarm kept the old task (`docker.getContainers` image digest unchanged). Set `updateConfigSwarm.Order` to `stop-first` and publish again.  |
-| `application.saveGitProdiver` 404                                      | Typo path on v0.29.12. Use `saveGitProvider`.                                                                                              |
-| `sshKey.create` 400 `organizationId`                                   | Required. Take it from `project.all`.                                                                                                      |
+| Symptom                                                                | What to check                                                                                                                                                              |
+| ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Unexpected end of JSON input`                                         | `application.deploy` can return an empty 200. Current adapter treats that as success.                                                                                      |
+| Deploy finishes in a few seconds, site still shows old `publicationId` | Docker cached `areca pull`. Confirm `ARECA_SNAPSHOT_ID` is in `buildArgs` and sits **after** the SDK build in the Dockerfile.                                              |
+| Job `failed: Deploy error` / clone errors                              | Deploy key, `customGitSSHKeyId`, repo URL `git@github.com:…`.                                                                                                              |
+| `areca pull` 401                                                       | Site token rotated; update Dokploy runtime `env` + `buildSecrets` and the local token you use for `sync-manifest`.                                                         |
+| `areca pull` 404 `No publication exists`                               | Unpinned pulls require a successful `live`/`demo` release for the current mode. Worker builds request the exact `ARECA_SNAPSHOT_ID`; a missing pin fails without fallback. |
+| `areca pull` connection refused / timeout                              | CMS not on `0.0.0.0`, wrong `ARECA_CMS_URL`, or Windows firewall blocking :3000.                                                                                           |
+| `pnpm install --frozen-lockfile` fails                                 | Lockfile out of date vs `package.json`; commit an updated `pnpm-lock.yaml`.                                                                                                |
+| Health check fails                                                     | `GET /api/deployment.all?applicationId=` then `GET /api/deployment.readLogs?deploymentId=&tail=200`. Port `3101→3000` `publishMode: host`.                                 |
+| Build succeeds, site still serves old `publicationId`                  | Swarm kept the old task (`docker.getContainers` image digest unchanged). Set `updateConfigSwarm.Order` to `stop-first` and publish again.                                  |
+| `application.saveGitProdiver` 404                                      | Typo path on v0.29.12. Use `saveGitProvider`.                                                                                                                              |
+| `sshKey.create` 400 `organizationId`                                   | Required. Take it from `project.all`.                                                                                                                                      |

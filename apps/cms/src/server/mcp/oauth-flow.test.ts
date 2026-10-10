@@ -10,6 +10,7 @@ import type * as StartServer from '@tanstack/react-start/server'
 import { db } from '#/db'
 import {
   membership,
+  session,
   oauthAccessToken,
   oauthClient,
   oauthConsent,
@@ -635,7 +636,7 @@ describe.skipIf(!hasDb)('OAuth connector: discovery and the per-site endpoint', 
         .select()
         .from(oauthConsent)
         .where(and(eq(oauthConsent.clientId, clientId), eq(oauthConsent.userId, ownerId)))
-      expect(consent.map((row) => row.referenceId)).toEqual([ctx.site.id])
+      expect(consent.map((row) => row.referenceId)).toEqual([ownerConnectionId])
     })
 
     it('lets an owner with go-live use every tool, and gives the token the connection identity', async () => {
@@ -714,6 +715,8 @@ describe.skipIf(!hasDb)('OAuth connector: discovery and the per-site endpoint', 
       })
       ownerAccess = fresh.access
       ownerRefresh = fresh.refresh
+      const renewed = await db.select().from(mcpConnection).where(eq(mcpConnection.clientId, clientId))
+      ownerConnectionId = renewed.find((row) => row.revokedAt === null)?.id ?? ''
     })
 
     it('answers invalid_grant for a refresh token that was never issued', async () => {
@@ -944,28 +947,8 @@ describe.skipIf(!hasDb)('OAuth connector: discovery and the per-site endpoint', 
         code_verifier: pkce.verifier,
         resource: mcpResourceUrl(ctx.site.slug),
       })
-      expect(exchanged.status).toBe(200)
-      const token = String(exchanged.json.access_token)
-
-      const response = await handleSiteMcpRequest(
-        new Request(mcpResourceUrl(ctx.site.slug), {
-          method: 'POST',
-          headers: {
-            authorization: `Bearer ${token}`,
-            'content-type': 'application/json',
-            accept: 'application/json, text/event-stream',
-          },
-          body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
-        }),
-        ctx.site.slug,
-      )
-      expect(response.status).toBe(401)
-
-      const connections = await db
-        .select()
-        .from(mcpConnection)
-        .where(and(eq(mcpConnection.clientId, directClientId), eq(mcpConnection.siteId, ctx.site.id)))
-      expect(connections).toHaveLength(0)
+      expect(exchanged.status).toBe(400)
+      expect(exchanged.json.error).toBe('invalid_grant')
     })
 
     describe('the client shapes AI apps register', () => {
@@ -1207,7 +1190,410 @@ describe.skipIf(!hasDb)('OAuth connector: discovery and the per-site endpoint', 
       })
     })
 
-    describe('resource indicator (RFC 8707)', () => {
+    describe('connection lifecycle regressions', () => {
+        const requestTools = (slug: string, access: string) =>
+          handleSiteMcpRequest(
+            new Request(mcpResourceUrl(slug), {
+              method: 'POST',
+              headers: {
+                authorization: `Bearer ${access}`,
+                'content-type': 'application/json',
+                accept: 'application/json, text/event-stream',
+              },
+              body: JSON.stringify({
+                jsonrpc: '2.0',
+                id: 1,
+                method: 'tools/list',
+              }),
+            }),
+            slug,
+          )
+
+        it('keeps offline grants working after browser session expiry', async () => {
+          const id = await registerClient()
+          const tokens = await connectApp({
+            clientId: id,
+            slug: ctx.site.slug,
+            siteId: ctx.site.id,
+            email: ownerEmail,
+            state: 'offline-expiry',
+            allowGoLive: false,
+          })
+          const [access] = await db
+            .select()
+            .from(oauthAccessToken)
+            .where(eq(oauthAccessToken.clientId, id))
+          const [refresh] = await db
+            .select()
+            .from(oauthRefreshToken)
+            .where(eq(oauthRefreshToken.clientId, id))
+          expect(access.sessionId).toBeNull()
+          expect(refresh.sessionId).toBeNull()
+          await db
+            .update(session)
+            .set({ expiresAt: new Date(Date.now() - 1000) })
+            .where(eq(session.userId, ownerId))
+          const rotated = await tokenRequest({
+            grant_type: 'refresh_token',
+            refresh_token: tokens.refresh,
+            client_id: id,
+          })
+          expect(rotated.status).toBe(200)
+          expect(
+            (
+              await requestTools(
+                ctx.site.slug,
+                String(rotated.json.access_token),
+              )
+            ).status,
+          ).toBe(200)
+        })
+
+        it('requires fresh consent for idle connections and never revives their old tokens', async () => {
+          const id = await registerClient()
+          const original = await connectApp({
+            clientId: id,
+            slug: ctx.site.slug,
+            siteId: ctx.site.id,
+            email: ownerEmail,
+            state: 'idle-original',
+            allowGoLive: true,
+          })
+          const [before] = await db
+            .select()
+            .from(mcpConnection)
+            .where(eq(mcpConnection.clientId, id))
+          const old = new Date(Date.now() - 91 * 24 * 60 * 60 * 1000)
+          await db
+            .update(mcpConnection)
+            .set({ createdAt: old, lastUsedAt: old })
+            .where(eq(mcpConnection.id, before.id))
+          const refused = await tokenRequest({
+            grant_type: 'refresh_token',
+            refresh_token: original.refresh,
+            client_id: id,
+          })
+          expect(refused.status).toBe(400)
+          expect(refused.json.error).toBe('invalid_grant')
+          const fresh = await connectApp({
+            clientId: id,
+            slug: ctx.site.slug,
+            siteId: ctx.site.id,
+            email: ownerEmail,
+            state: 'idle-reconnect',
+            allowGoLive: false,
+          })
+          const rows = await db
+            .select()
+            .from(mcpConnection)
+            .where(eq(mcpConnection.clientId, id))
+          const current = rows.find((row) => row.revokedAt === null)
+          expect(current?.id).not.toBe(before.id)
+          expect(current?.allowGoLive).toBe(false)
+          expect(
+            (await requestTools(ctx.site.slug, original.access)).status,
+          ).toBe(401)
+          expect((await requestTools(ctx.site.slug, fresh.access)).status).toBe(
+            200,
+          )
+        })
+
+        it('rejects a cached rotation retry immediately after disconnect', async () => {
+          const id = await registerClient()
+          const tokens = await connectApp({
+            clientId: id,
+            slug: ctx.site.slug,
+            siteId: ctx.site.id,
+            email: ownerEmail,
+            state: 'revoke-grace',
+            allowGoLive: false,
+          })
+          const rotated = await tokenRequest({
+            grant_type: 'refresh_token',
+            refresh_token: tokens.refresh,
+            client_id: id,
+          })
+          expect(rotated.status).toBe(200)
+          const [connection] = await db
+            .select()
+            .from(mcpConnection)
+            .where(eq(mcpConnection.clientId, id))
+          await revokeConnection({
+            id: connection.id,
+            siteId: ctx.site.id,
+            actorId: ownerId,
+            organizationId: ctx.org.id,
+            canRevokeOthers: true,
+          })
+          for (const refresh of [
+            tokens.refresh,
+            String(rotated.json.refresh_token),
+          ]) {
+            const retry = await tokenRequest({
+              grant_type: 'refresh_token',
+              refresh_token: refresh,
+              client_id: id,
+            })
+            expect(retry.status).toBe(400)
+            expect(retry.json.error).toBe('invalid_grant')
+          }
+        })
+
+        it('authenticates a confidential client before applying replay invalidation', async () => {
+        const registered = await authPost('/oauth2/register', {
+          client_name: 'OAuth e2e app', redirect_uris: [REDIRECT_URI],
+          token_endpoint_auth_method: 'client_secret_post', grant_types: ['authorization_code', 'refresh_token'],
+        })
+        const id = String(registered.json.client_id)
+        const secret = String(registered.json.client_secret)
+        createdClientIds.push(id)
+        const original = await connectApp({ clientId: id, clientSecret: secret, slug: ctx.site.slug,
+          siteId: ctx.site.id, email: ownerEmail, state: 'confidential-replay', allowGoLive: false })
+        const rotated = await tokenRequest({ grant_type: 'refresh_token', refresh_token: original.refresh,
+          client_id: id, client_secret: secret })
+        expect(rotated.status).toBe(200)
+        await db.update(oauthRefreshToken).set({ rotationReplayExpiresAt: new Date(Date.now() - 1000) })
+          .where(and(eq(oauthRefreshToken.clientId, id), isNotNull(oauthRefreshToken.rotatedAt)))
+        const wrong = await tokenRequest({ grant_type: 'refresh_token', refresh_token: original.refresh,
+          client_id: id, client_secret: 'incorrect-secret' })
+        expect(wrong.status).toBe(400)
+        expect(wrong.json.error).toBe('invalid_client')
+        expect((await requestTools(ctx.site.slug, String(rotated.json.access_token))).status).toBe(200)
+        const correct = await tokenRequest({ grant_type: 'refresh_token', refresh_token: original.refresh,
+          client_id: id, client_secret: secret })
+        expect(correct.status).toBe(400)
+        expect(correct.json.error).toBe('invalid_grant')
+        expect((await requestTools(ctx.site.slug, String(rotated.json.access_token))).status).toBe(401)
+      })
+
+      it('rejects oversized token bodies at the HTTP auth boundary', async () => {
+        const response = await auth.handler(new Request(`${AUTH_BASE}/oauth2/token`, {
+          method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: 'client_id=' + 'a'.repeat(65_536),
+        }))
+        expect(response.status).toBe(413)
+      })
+
+      it('limits replay invalidation to its site and authenticates before invalidating', async () => {
+          const id = await registerClient()
+          const first = await connectApp({
+            clientId: id,
+            slug: ctx.site.slug,
+            siteId: ctx.site.id,
+            email: ownerEmail,
+            state: 'replay-first',
+            allowGoLive: false,
+          })
+          const second = await connectApp({
+            clientId: id,
+            slug: other.site.slug,
+            siteId: other.site.id,
+            email: ownerEmail,
+            state: 'replay-second',
+            allowGoLive: false,
+          })
+          const rotated = await tokenRequest({
+            grant_type: 'refresh_token',
+            refresh_token: first.refresh,
+            client_id: id,
+          })
+          expect(rotated.status).toBe(200)
+          await db
+            .update(oauthRefreshToken)
+            .set({ rotationReplayExpiresAt: new Date(Date.now() - 1000) })
+            .where(
+              and(
+                eq(oauthRefreshToken.clientId, id),
+                isNotNull(oauthRefreshToken.rotatedAt),
+              ),
+            )
+          const wrong = await tokenRequest({
+            grant_type: 'refresh_token',
+            refresh_token: first.refresh,
+            client_id: await registerClient(),
+          })
+          expect(wrong.status).toBe(400)
+          expect(
+            (
+              await requestTools(
+                ctx.site.slug,
+                String(rotated.json.access_token),
+              )
+            ).status,
+          ).toBe(200)
+          const invalidRequests: Record<string, string>[] = [
+            { scope: 'email' },
+            { resource: mcpResourceUrl(other.site.slug) },
+          ]
+        for (const invalid of invalidRequests) {
+            const refused = await tokenRequest({
+              grant_type: 'refresh_token',
+              refresh_token: first.refresh,
+              client_id: id,
+              ...invalid,
+            })
+            expect(refused.status).toBe(400)
+            expect(
+              (
+                await requestTools(
+                  ctx.site.slug,
+                  String(rotated.json.access_token),
+                )
+              ).status,
+            ).toBe(200)
+          }
+          const replay = await tokenRequest({
+            grant_type: 'refresh_token',
+            refresh_token: first.refresh,
+            client_id: id,
+          })
+          expect(replay.status).toBe(400)
+          expect(replay.json.error).toBe('invalid_grant')
+          expect(
+            (
+              await requestTools(
+                ctx.site.slug,
+                String(rotated.json.access_token),
+              )
+            ).status,
+          ).toBe(401)
+          expect(
+            (await requestTools(other.site.slug, second.access)).status,
+          ).toBe(200)
+        })
+
+        it('cannot redeem an outstanding code after disconnect and reconnect', async () => {
+          const id = await registerClient()
+          const pkce = pkcePair()
+          const loginQuery = await startAuthorization({
+            clientId: id,
+            slug: ctx.site.slug,
+            pkce,
+            state: 'outstanding-code',
+          })
+          const jar: Jar = new Map()
+          const signIn = await authPost(
+            '/sign-in/email',
+            { email: ownerEmail, password: PASSWORD, oauth_query: loginQuery },
+            jar,
+          )
+          cookiesAsHeaders(jar)
+          const approved = await approveConsentRequest({
+            query: new URL(String(signIn.json.url), AUTH_ORIGIN).search.slice(
+              1,
+            ),
+            siteId: ctx.site.id,
+            allowGoLive: false,
+          })
+          const code =
+            new URL(approved.redirectTo).searchParams.get('code') ?? ''
+          const [connection] = await db
+            .select()
+            .from(mcpConnection)
+            .where(eq(mcpConnection.clientId, id))
+          await revokeConnection({
+            id: connection.id,
+            siteId: ctx.site.id,
+            actorId: ownerId,
+            organizationId: ctx.org.id,
+            canRevokeOthers: true,
+          })
+          await connectApp({
+            clientId: id,
+            slug: ctx.site.slug,
+            siteId: ctx.site.id,
+            email: ownerEmail,
+            state: 'after-outstanding',
+            allowGoLive: false,
+          })
+          const exchange = await tokenRequest({
+            grant_type: 'authorization_code',
+            code,
+            redirect_uri: REDIRECT_URI,
+            client_id: id,
+            code_verifier: pkce.verifier,
+          })
+          expect(exchange.status).toBe(400)
+          expect(exchange.json.error).toBe('invalid_grant')
+        })
+
+        it('does not change existing permissions if plugin consent fails', async () => {
+          const id = await registerClient()
+          await connectApp({
+            clientId: id,
+            slug: ctx.site.slug,
+            siteId: ctx.site.id,
+            email: ownerEmail,
+            state: 'permissions-original',
+            allowGoLive: false,
+          })
+          const pkce = pkcePair()
+          const query = await startAuthorization({
+            clientId: id,
+            slug: ctx.site.slug,
+            pkce,
+            state: 'failed-approval',
+          })
+          const jar: Jar = new Map()
+          await authPost(
+            '/sign-in/email',
+            { email: ownerEmail, password: PASSWORD },
+            jar,
+          )
+          cookiesAsHeaders(jar)
+          const handler = vi
+            .spyOn(auth, 'handler')
+            .mockResolvedValueOnce(
+              Response.json({ error: 'invalid_request' }, { status: 400 }),
+            )
+          try {
+            await expect(
+              approveConsentRequest({
+                query,
+                siteId: ctx.site.id,
+                allowGoLive: true,
+              }),
+            ).rejects.toThrow()
+          } finally {
+            handler.mockRestore()
+          }
+          const [connection] = await db
+            .select()
+            .from(mcpConnection)
+            .where(eq(mcpConnection.clientId, id))
+          expect(connection.allowGoLive).toBe(false)
+        })
+
+        it('rejects multiple site resources before issuing consent', async () => {
+          const id = await registerClient()
+          const pkce = pkcePair()
+          const params = new URLSearchParams({
+            client_id: id,
+            response_type: 'code',
+            redirect_uri: REDIRECT_URI,
+            scope: 'mcp offline_access',
+            code_challenge: pkce.challenge,
+            code_challenge_method: 'S256',
+          })
+          params.append('resource', mcpResourceUrl(ctx.site.slug))
+          params.append('resource', mcpResourceUrl(other.site.slug))
+          const response = await auth.handler(
+            new Request(`${AUTH_BASE}/oauth2/authorize?${params}`),
+          )
+          expect(response.status).toBe(400)
+          expect((await response.json()).error).toBe('invalid_target')
+        const tokenParams = new URLSearchParams({ grant_type: 'authorization_code', code: 'unissued-code', client_id: id, redirect_uri: REDIRECT_URI })
+        tokenParams.append('resource', mcpResourceUrl(ctx.site.slug))
+        tokenParams.append('resource', mcpResourceUrl(other.site.slug))
+        const tokenResponse = await auth.handler(new Request(`${AUTH_BASE}/oauth2/token`, { method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: tokenParams }))
+        expect(tokenResponse.status).toBe(400)
+        expect(['invalid_target', 'invalid_request']).toContain((await tokenResponse.json()).error)
+
+        })
+      })
+
+      describe('resource indicator (RFC 8707)', () => {
       it('accepts the resource on the authorize request only', async () => {
         const tokens = await connectApp({
           clientId,

@@ -12,12 +12,9 @@ import { FormField } from '#/components/ui/form-field'
 import { Input } from '#/components/ui/input'
 import { REAUTH_REQUIRED, securityErrorCode } from '#/lib/security-errors'
 import { m } from '#/paraglide/messages'
+import { StepUpQueue } from './step-up-queue'
+import type { PendingConfirmation } from './step-up-queue'
 import { verifyStepUpFn } from '#/server/fn/security'
-
-type Pending = {
-  resolve: () => void
-  reject: () => void
-}
 
 type StepUp = {
   /**
@@ -38,15 +35,10 @@ export function useStepUp(): StepUp {
 
 /** Mounts the single re-verification dialog behind `useStepUp().run`. */
 export function StepUpProvider({ children }: { children: React.ReactNode }) {
-  const [pending, setPending] = React.useState<Pending | null>(null)
-
-  const askForCode = React.useCallback(
-    () =>
-      new Promise<void>((resolve, reject) => {
-        setPending({ resolve, reject })
-      }),
-    [],
-  )
+  const [pending, setPending] = React.useState<PendingConfirmation | null>(null)
+  const [queue] = React.useState(() => new StepUpQueue(setPending))
+  React.useEffect(() => () => queue.dispose(), [queue])
+  const askForCode = React.useCallback(() => queue.ask(), [queue])
 
   const value = React.useMemo<StepUp>(
     () => ({
@@ -67,18 +59,18 @@ export function StepUpProvider({ children }: { children: React.ReactNode }) {
     [askForCode],
   )
 
-  function settle(ok: boolean) {
-    pending?.[ok ? 'resolve' : 'reject']()
-    setPending(null)
+  function settle(id: number | undefined, ok: boolean) {
+    if (id !== undefined) queue.settle(id, ok)
   }
 
   return (
     <StepUpContext.Provider value={value}>
       {children}
       <StepUpDialog
+        key={pending?.id ?? 'closed'}
         open={pending !== null}
-        onVerified={() => settle(true)}
-        onCancel={() => settle(false)}
+        onVerified={() => settle(pending?.id, true)}
+        onCancel={() => settle(pending?.id, false)}
       />
     </StepUpContext.Provider>
   )

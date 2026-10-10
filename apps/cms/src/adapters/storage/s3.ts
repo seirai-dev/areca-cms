@@ -35,6 +35,7 @@ export function createS3Storage(opts: {
           Body: body,
           ContentType: contentType,
         }),
+        { abortSignal: AbortSignal.timeout(60_000) },
       )
     },
 
@@ -55,6 +56,7 @@ export function createS3Storage(opts: {
     async delete(key) {
       await client.send(
         new DeleteObjectCommand({ Bucket: opts.bucket, Key: key }),
+        { abortSignal: AbortSignal.timeout(30_000) },
       )
     },
   }

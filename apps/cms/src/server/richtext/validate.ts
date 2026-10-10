@@ -104,9 +104,14 @@ function checkNode(
       if (
         value !== undefined &&
         value !== null &&
-        (typeof value !== 'number' || !Number.isFinite(value) || value <= 0)
+        (typeof value !== 'number' ||
+          !Number.isFinite(value) ||
+          value <= 0 ||
+          value > 10000)
       ) {
-        errors.push(`Image ${dimension} must be a positive number`)
+        errors.push(
+          `Image ${dimension} must be a positive number no greater than 10000`,
+        )
       }
     }
   }
