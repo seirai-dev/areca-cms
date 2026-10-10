@@ -87,6 +87,7 @@ test.describe('Connect AI', () => {
     const dialog = page.getByTestId('connect-ai-create-dialog')
     await expect(dialog).toBeVisible()
     await page.getByTestId('connect-ai-name').fill(name)
+    await page.getByTestId('connect-ai-expiry-never').click()
     const goLive = page.getByTestId('connect-ai-go-live')
     await expect(goLive).toBeVisible()
     await goLive.click()
@@ -109,6 +110,7 @@ test.describe('Connect AI', () => {
     await expect(row).toBeVisible()
     await expect(row).toContainText('Can go live')
     await expect(row).toContainText('Never used')
+    await expect(row).toContainText('Never expires')
     await expect(page.getByTestId('connect-ai-role-note')).toContainText(
       'delete and restore entries',
     )

@@ -26,8 +26,14 @@ import {
   MCP_REFRESH_TOKEN_TTL_SECONDS,
   ensureMcpSiteResource,
   resourceParams,
-  siteIdForAuthorizationQuery,
 } from '#/server/mcp/oauth-resource'
+import {
+  assertSingleMcpResource,
+  consentReferenceFor,
+  mcpOAuthAdapter,
+  validateMcpRefreshGrant,
+  handleMcpOAuthTokenRequest,
+} from '#/server/mcp/oauth-grants'
 import { normaliseRegistrationBody } from '#/server/mcp/oauth-registration'
 import {
   TWO_FACTOR_MANAGEMENT_PATHS,
@@ -53,8 +59,8 @@ const SSO_MANAGEMENT_PATHS = new Set([
   '/sso/verify-domain',
 ])
 
-export const auth = betterAuth({
-  database: drizzleAdapter(db, { provider: 'pg', schema }),
+const authBase = betterAuth({
+  database: mcpOAuthAdapter(drizzleAdapter(db, { provider: 'pg', schema })),
   secret: env.BETTER_AUTH_SECRET,
   baseURL: env.BETTER_AUTH_URL,
   trustedOrigins: [
@@ -106,9 +112,17 @@ export const auth = betterAuth({
       // Each MCP site is its own protected resource. Create its row when the
       // authorization request names it, so the plugin accepts the resource.
       if (ctx.path === '/oauth2/authorize') {
+        assertSingleMcpResource(ctx.query?.resource, true)
         for (const resource of resourceParams(ctx.query?.resource)) {
           await ensureMcpSiteResource(resource)
         }
+      }
+      if (ctx.path === '/oauth2/token' && isRecord(ctx.body)) {
+        assertSingleMcpResource(
+          ctx.body.resource as string | string[] | undefined,
+          false,
+        )
+        await validateMcpRefreshGrant(ctx.body, ctx)
       }
       // Clients register with the redirect forms they use (loopback http for
       // desktop and CLI apps). Normalise the metadata before the plugin
@@ -185,16 +199,25 @@ export const auth = betterAuth({
       // Every MCP resource is a site, so the plugin must not require explicit
       // client-to-resource links (those would be created per site by hand).
       enforcePerClientResources: false,
+      customAccessTokenClaims: ({ referenceId }) => ({
+        mcp_connection_id: referenceId,
+      }),
       postLogin: {
         // Never redirects: the plugin only needs `consentReferenceId` here.
         page: '/oauth/consent',
         shouldRedirect: () => false,
         // Consent is remembered per (app, user, site), not per app, so an
         // approval for one site never covers another.
-        consentReferenceId: async () =>
-          siteIdForAuthorizationQuery((await getOAuthProviderState())?.query),
+        consentReferenceId: async ({ user }) =>
+          consentReferenceFor((await getOAuthProviderState())?.query, user.id),
       },
     }),
     tanstackStartCookies(),
   ],
 })
+
+// Keep token issuance/replay and connection revocation under the same grant lock.
+export const auth: typeof authBase = {
+  ...authBase,
+  handler: (request) => handleMcpOAuthTokenRequest(request, authBase.handler),
+}

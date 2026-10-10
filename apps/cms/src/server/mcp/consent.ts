@@ -13,7 +13,12 @@ import { m } from '#/paraglide/messages'
 import { ForbiddenError, ValidationError } from '#/server/content/errors'
 import { assertFreshSession } from '#/server/security/step-up'
 
-import { upsertConnection } from './connections'
+import {
+  findUsableConnection,
+  saveConnectionApproval,
+  withConnectionLock,
+} from './connections'
+import { withApprovalReference } from './oauth-grants'
 import { liveRoleFor } from './keys'
 import type { McpRole } from './keys'
 import { siteSlugFromMcpResource } from './oauth-resource'
@@ -46,15 +51,13 @@ export async function readSignedConsentQuery(
   const redirectUri = params.get('redirect_uri')
   if (!clientId || !redirectUri) return null
 
-  const siteSlugs = params
-    .getAll('resource')
+  const resources = params.getAll('resource')
+  if (resources.length !== 1) return null
+  const siteSlugs = resources
     .map((resource) => siteSlugFromMcpResource(resource))
     .filter((slug): slug is string => slug !== null)
-  return {
-    clientId,
-    redirectUri,
-    siteSlug: siteSlugs[0] ?? null,
-  }
+  if (siteSlugs.length !== 1) return null
+  return { clientId, redirectUri, siteSlug: siteSlugs[0] }
 }
 
 /** The registered app behind a client id, or null. */
@@ -62,7 +65,9 @@ export async function findOAuthClient(clientId: string) {
   const [client] = await db
     .select()
     .from(oauthClient)
-    .where(and(eq(oauthClient.clientId, clientId), eq(oauthClient.disabled, false)))
+    .where(
+      and(eq(oauthClient.clientId, clientId), eq(oauthClient.disabled, false)),
+    )
     .limit(1)
   return client ?? null
 }
@@ -72,7 +77,9 @@ export function safeLogoUri(value: string | null | undefined): string | null {
   if (!value) return null
   try {
     const url = new URL(value)
-    return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : null
+    return url.protocol === 'https:' || url.protocol === 'http:'
+      ? url.href
+      : null
   } catch {
     return null
   }
@@ -147,9 +154,14 @@ export async function completePluginConsent(input: {
       body: JSON.stringify({ accept: input.accept, oauth_query: input.query }),
     }),
   )
-  const body = (await response.json()) as { url?: unknown; redirect_uri?: unknown }
+  const body = (await response.json()) as {
+    url?: unknown
+    redirect_uri?: unknown
+  }
   if (!response.ok) {
-    throw new ValidationError([{ path: 'query', message: m.server_mcp_oauth_link_invalid() }])
+    throw new ValidationError([
+      { path: 'query', message: m.server_mcp_oauth_link_invalid() },
+    ])
   }
   if (typeof body.url === 'string') return body.url
   if (typeof body.redirect_uri === 'string') return body.redirect_uri
@@ -188,18 +200,34 @@ export async function describeConsentRequest(
 ): Promise<ConsentInfo> {
   const parsed = await readSignedConsentQuery(query)
   if (!parsed) {
-    return { ok: false, reason: 'invalid_request', message: m.server_mcp_oauth_link_invalid() }
+    return {
+      ok: false,
+      reason: 'invalid_request',
+      message: m.server_mcp_oauth_link_invalid(),
+    }
   }
   const session = await getSession()
   if (!session) {
-    return { ok: false, reason: 'signed_out', message: m.server_mcp_oauth_signed_out() }
+    return {
+      ok: false,
+      reason: 'signed_out',
+      message: m.server_mcp_oauth_signed_out(),
+    }
   }
   const client = await findOAuthClient(parsed.clientId)
   if (!client) {
-    return { ok: false, reason: 'invalid_request', message: m.server_mcp_oauth_app_unknown() }
+    return {
+      ok: false,
+      reason: 'invalid_request',
+      message: m.server_mcp_oauth_app_unknown(),
+    }
   }
   if (!parsed.siteSlug) {
-    return { ok: false, reason: 'invalid_request', message: m.server_mcp_oauth_no_site() }
+    return {
+      ok: false,
+      reason: 'invalid_request',
+      message: m.server_mcp_oauth_no_site(),
+    }
   }
   const [target] = await db
     .select()
@@ -207,7 +235,11 @@ export async function describeConsentRequest(
     .where(eq(site.slug, parsed.siteSlug))
     .limit(1)
   if (!target) {
-    return { ok: false, reason: 'unknown_site', message: m.server_mcp_oauth_site_unknown() }
+    return {
+      ok: false,
+      reason: 'unknown_site',
+      message: m.server_mcp_oauth_site_unknown(),
+    }
   }
   const live = await liveRoleFor(session.user, target.organizationId)
   if (!live.ok) {
@@ -252,7 +284,11 @@ export async function approveConsentRequest(input: {
   siteId: string
   allowGoLive: boolean
 }): Promise<{ redirectTo: string }> {
-  const { session, site: found, role } = await requireMcpSiteAccess(input.siteId)
+  const {
+    session,
+    site: found,
+    role,
+  } = await requireMcpSiteAccess(input.siteId)
   // An agency admin's approval grants the app admin power, so it needs a
   // fresh second factor, like creating a personal key.
   if (role === 'agency') await assertFreshSession(session)
@@ -262,33 +298,63 @@ export async function approveConsentRequest(input: {
 
   const parsed = await readSignedConsentQuery(input.query)
   if (!parsed) {
-    throw new ValidationError([{ path: 'query', message: m.server_mcp_oauth_link_invalid() }])
+    throw new ValidationError([
+      { path: 'query', message: m.server_mcp_oauth_link_invalid() },
+    ])
   }
   if (parsed.siteSlug !== found.slug) {
-    throw new ValidationError([{ path: 'siteId', message: m.server_mcp_oauth_site_mismatch() }])
+    throw new ValidationError([
+      { path: 'siteId', message: m.server_mcp_oauth_site_mismatch() },
+    ])
   }
   const client = await findOAuthClient(parsed.clientId)
   if (!client) {
-    throw new ValidationError([{ path: 'query', message: m.server_mcp_oauth_app_unknown() }])
+    throw new ValidationError([
+      { path: 'query', message: m.server_mcp_oauth_app_unknown() },
+    ])
   }
 
-  await upsertConnection({
+  const identity = {
     userId: session.user.id,
     siteId: found.id,
-    organizationId: found.organizationId,
     clientId: client.clientId,
-    clientName: client.name?.trim() || m.server_mcp_oauth_unnamed_app(),
-    allowGoLive: input.allowGoLive && role !== 'editor',
+  }
+  return withConnectionLock(identity, async () => {
+    const existing = await findUsableConnection(identity)
+    const connectionId = existing?.id ?? crypto.randomUUID()
+    // The OAuth code and tokens bind to this exact approval generation. A
+    // failed plugin call must not change an existing app's go-live permission.
+    const redirectTo = await withApprovalReference(connectionId, () =>
+      completePluginConsent({ query: input.query, accept: true }),
+    )
+    const result = new URL(redirectTo)
+    if (!result.searchParams.has('code')) {
+      throw new ValidationError([
+        { path: 'query', message: m.server_mcp_oauth_link_invalid() },
+      ])
+    }
+    await saveConnectionApproval(
+      {
+        ...identity,
+        organizationId: found.organizationId,
+        clientName: client.name?.trim() || m.server_mcp_oauth_unnamed_app(),
+        allowGoLive: input.allowGoLive && role !== 'editor',
+      },
+      connectionId,
+    )
+    return { redirectTo }
   })
-  const redirectTo = await completePluginConsent({ query: input.query, accept: true })
-  return { redirectTo }
 }
 
 /** Refuses an app's request. The app receives `access_denied`. */
-export async function denyConsentRequest(query: string): Promise<{ redirectTo: string }> {
+export async function denyConsentRequest(
+  query: string,
+): Promise<{ redirectTo: string }> {
   const parsed = await readSignedConsentQuery(query)
   if (!parsed) {
-    throw new ValidationError([{ path: 'query', message: m.server_mcp_oauth_link_invalid() }])
+    throw new ValidationError([
+      { path: 'query', message: m.server_mcp_oauth_link_invalid() },
+    ])
   }
   const redirectTo = await completePluginConsent({ query, accept: false })
   return { redirectTo }

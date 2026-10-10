@@ -190,6 +190,24 @@ describe('MCP keys in the activity log', () => {
 })
 
 describe('asset uploads in the activity log', () => {
+  it.each([
+    ['asset.update', 'Sanne de Vries updated alt text for “spring-hero.jpg”'],
+    [
+      'asset.delete',
+      'Sanne de Vries deleted “spring-hero.jpg” from the Library',
+    ],
+  ])('describes %s with the file name', (action, expected) => {
+    expect(
+      activityText(
+        row({
+          action,
+          targetType: 'asset',
+          meta: { filename: 'spring-hero.jpg' },
+        }),
+      ),
+    ).toBe(expected)
+  })
+
   it('names the file uploaded to the Library', () => {
     expect(
       activityText(

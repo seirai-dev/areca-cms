@@ -1,9 +1,12 @@
+import type { Snapshot } from '#/lib/types'
+
 /**
  * Pure helpers for the live and pending flags an agent reads on each entry.
  * Kept free of database imports so they can be unit tested directly.
  */
 
 export type ReleaseState = {
+  liveSnapshot?: Snapshot | null
   liveIds: ReadonlySet<string>
   pendingIds: ReadonlySet<string>
 }
@@ -15,7 +18,10 @@ export type ReleaseFlags = {
   pendingRelease: boolean
 }
 
-export function releaseFlags(state: ReleaseState, entryId: string): ReleaseFlags {
+export function releaseFlags(
+  state: ReleaseState,
+  entryId: string,
+): ReleaseFlags {
   return {
     live: state.liveIds.has(entryId),
     pendingRelease: state.pendingIds.has(entryId),

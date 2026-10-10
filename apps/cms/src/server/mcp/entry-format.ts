@@ -1,6 +1,7 @@
 import type { Asset } from '#/server/assets'
 import { ValidationError } from '#/server/content/errors'
 import { SEO_KEY } from '#/lib/seo'
+import { isEditedSinceReady } from '#/features/golive/entry-live-state'
 import type { EntryData, EntryStatus, Field } from '#/lib/types'
 
 import type { ReleaseFlags } from './release-flags'
@@ -16,9 +17,6 @@ import {
  */
 
 export const ASSET_FILE_PREFIX = '/api/assets/file/'
-
-/** `![alt](asset:<id>)` image references inside agent-written Markdown. */
-const MARKDOWN_ASSET_REF = /!\[[^\]]*\]\(asset:([^)\s]+)\)/g
 
 type AssetRow = Pick<Asset, 'id' | 'storageKey' | 'altText'>
 
@@ -50,7 +48,16 @@ export function collectAssetIds(
 }
 
 export function markdownAssetIds(markdown: string): string[] {
-  return [...markdown.matchAll(MARKDOWN_ASSET_REF)].map((match) => match[1])
+  const ids = new Set<string>()
+  // Use the converter's parsed image nodes, including titles and references,
+  // while excluding examples inside fenced/inline code.
+  markdownToRichText(markdown, {
+    resolveAssetSrc: (id) => {
+      ids.add(id)
+      return null
+    },
+  })
+  return [...ids]
 }
 
 function imageAssetId(value: unknown): string | null {
@@ -98,7 +105,11 @@ export function toStoredFields(
 }
 
 /** Text-like fields keep an empty string; every other type treats "" as "no value". */
-const KEEPS_EMPTY_STRING = new Set<Field['type']>(['text', 'textarea', 'richtext'])
+const KEEPS_EMPTY_STRING = new Set<Field['type']>([
+  'text',
+  'textarea',
+  'richtext',
+])
 
 function convertValue(
   field: Field,
@@ -127,7 +138,11 @@ function convertValue(
   if (field.type === 'image') {
     return imageAssetId(value) ?? value
   }
-  if (field.type === 'reference' && typeof value === 'object' && 'entryId' in value) {
+  if (
+    field.type === 'reference' &&
+    typeof value === 'object' &&
+    'entryId' in value
+  ) {
     return value.entryId
   }
   return value
@@ -175,10 +190,10 @@ export function mergeSeo(
  */
 export function linkAssetRefs(markdown: string, assets: AssetLookup): string {
   return markdown.replace(
-    /\]\((?:[^)\s]*?)\/api\/assets\/file\/([^)\s]+)\)/g,
-    (whole, storageKey: string) => {
+    /(!\[[^\]]*\])\((?:[^)\s]*?)\/api\/assets\/file\/([^)\s]+)\)/g,
+    (whole, label: string, storageKey: string) => {
       const row = assets.byStorageKey.get(storageKey)
-      return row ? `](asset:${row.id})` : whole
+      return row ? `${label}(asset:${row.id})` : whole
     },
   )
 }
@@ -228,7 +243,12 @@ function formatValue(
 }
 
 /** Entry status as agents see it. The stored 'published' is the UI's 'ready'. */
-export const AGENT_STATUSES = ['draft', 'ready', 'scheduled', 'archived'] as const
+export const AGENT_STATUSES = [
+  'draft',
+  'ready',
+  'scheduled',
+  'archived',
+] as const
 export type AgentStatus = (typeof AGENT_STATUSES)[number]
 
 export function agentStatus(status: EntryStatus): AgentStatus {
@@ -280,14 +300,11 @@ export function formatEntry(input: {
   release: ReleaseFlags
   previewAvailable: boolean
   includePublished: boolean
+  liveFields?: Record<string, unknown> | null
 }) {
   const { entry, fields, ctx } = input
   const seo = readSeo(entry.draftData)
-  const editedSinceReady =
-    entry.status === 'published' &&
-    entry.publishedData !== null &&
-    JSON.stringify(withoutSeo(entry.draftData)) !==
-      JSON.stringify(withoutSeo(entry.publishedData))
+  const editedSinceReady = isEditedSinceReady(entry)
   return {
     id: entry.id,
     collection: entry.collectionKey,
@@ -306,7 +323,8 @@ export function formatEntry(input: {
     seo,
     ...(input.includePublished
       ? {
-          liveFields: formatFields(fields, entry.publishedData ?? {}, ctx),
+          liveFields: input.liveFields ?? null,
+          approvedFields: formatFields(fields, entry.publishedData ?? {}, ctx),
         }
       : {}),
   }
@@ -314,7 +332,10 @@ export function formatEntry(input: {
 
 /** Short row for list_entries. Title is the `title` field, else the first text field. */
 export function summarizeEntry(
-  entry: Pick<EntryForFormat, 'id' | 'slug' | 'status' | 'draftVersion' | 'draftData' | 'updatedAt'>,
+  entry: Pick<
+    EntryForFormat,
+    'id' | 'slug' | 'status' | 'draftVersion' | 'draftData' | 'updatedAt'
+  >,
   fields: Field[],
   release: ReleaseFlags,
 ) {
@@ -341,7 +362,37 @@ function readSeo(data: EntryData): Record<string, unknown> {
     : {}
 }
 
-function withoutSeo(data: EntryData | null): EntryData {
-  const { [SEO_KEY]: _seo, ...rest } = data ?? {}
-  return rest
+/** Snapshot values retain the live schema and frozen asset metadata. */
+export function formatSnapshotFields(
+  data: Record<string, unknown>,
+  assets: AssetLookup,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(data).map(([key, value]) => {
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        const item = value as Record<string, unknown>
+        if (typeof item.markdown === 'string' && 'json' in item) {
+          return [key, linkAssetRefs(item.markdown, assets)]
+        }
+        if (
+          typeof item.id === 'string' &&
+          'collection' in item &&
+          'slug' in item
+        ) {
+          return [key, { entryId: item.id }]
+        }
+        if (typeof item.url === 'string' && 'mimeType' in item) {
+          const path = new URL(item.url, 'https://asset.local').pathname
+          const row = assets.byStorageKey.get(
+            decodeURIComponent(path.slice(ASSET_FILE_PREFIX.length)),
+          )
+          return [
+            key,
+            { assetId: row?.id ?? null, url: item.url, alt: item.alt ?? '' },
+          ]
+        }
+      }
+      return [key, value]
+    }),
+  )
 }

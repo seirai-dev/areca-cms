@@ -2,10 +2,15 @@
 import { createMcpHandler } from '@modelcontextprotocol/server'
 import type { McpRequestContext } from '@modelcontextprotocol/server'
 import { eq } from 'drizzle-orm'
+import {
+  DPOP_SIGNING_ALGORITHMS,
+  parseAccessTokenAuthorization,
+} from 'better-auth/oauth2'
 
 import { db } from '#/db'
 import { site, user } from '#/db/schema'
 import { createLogger } from '#/server/log'
+import { bearerToken } from '#/server/http/bearer-token'
 
 import { findUsableConnection, touchConnection } from './connections'
 import type { McpActor } from './keys'
@@ -37,7 +42,9 @@ const handler = createMcpHandler(
 function actorFrom(ctx: McpRequestContext): McpActor {
   const actor = ctx.authInfo?.extra?.actor
   if (!isActor(actor)) {
-    throw new Error('MCP request reached the server without an authenticated actor')
+    throw new Error(
+      'MCP request reached the server without an authenticated actor',
+    )
   }
   return actor
 }
@@ -52,18 +59,14 @@ function isActor(value: unknown): value is McpActor {
   )
 }
 
-function bearerToken(request: Request): string | null {
-  const header = request.headers.get('authorization')
-  if (!header?.startsWith('Bearer ')) return null
-  const token = header.slice('Bearer '.length).trim()
-  return token.length > 0 ? token : null
-}
-
 export const MFA_REQUIRED_MESSAGE =
   'Your account needs two-factor authentication before AI keys work. Turn it on in Account settings.'
 
 function mfaRequired(): Response {
-  return Response.json({ error: MFA_REQUIRED_MESSAGE, code: 'mfa_required' }, { status: 403 })
+  return Response.json(
+    { error: MFA_REQUIRED_MESSAGE, code: 'mfa_required' },
+    { status: 403 },
+  )
 }
 
 function unauthorized(): Response {
@@ -89,19 +92,26 @@ export function protectedResourceMetadataUrl(siteSlug: string): string {
  */
 function challengeHeader(
   siteSlug: string,
-  params: { error?: string; description?: string; scope?: string } = {},
+  params: {
+    error?: string
+    description?: string
+    scope?: string
+    dpop?: boolean
+  } = {},
 ): string {
   const parts: string[] = []
   if (params.error) parts.push(`error="${params.error}"`)
-  if (params.description) parts.push(`error_description="${params.description}"`)
+  if (params.description)
+    parts.push(`error_description="${params.description}"`)
   parts.push(`resource_metadata="${protectedResourceMetadataUrl(siteSlug)}"`)
   parts.push(`scope="${params.scope ?? MCP_CHALLENGE_SCOPES.join(' ')}"`)
-  return `Bearer ${parts.join(', ')}`
+  if (params.dpop) parts.push(`algs="${DPOP_SIGNING_ALGORITHMS.join(' ')}"`)
+  return `${params.dpop ? 'DPoP' : 'Bearer'} ${parts.join(', ')}`
 }
 
 function challenge401(
   siteSlug: string,
-  params: { error?: string; description?: string } = {},
+  params: { error?: string; description?: string; dpop?: boolean } = {},
 ): Response {
   return Response.json(
     { error: params.description ?? 'Sign in to connect to this site' },
@@ -112,7 +122,7 @@ function challenge401(
   )
 }
 
-function insufficientScope(siteSlug: string): Response {
+function insufficientScope(siteSlug: string, dpop = false): Response {
   return Response.json(
     { error: 'This connection is not allowed to use the site' },
     {
@@ -121,6 +131,7 @@ function insufficientScope(siteSlug: string): Response {
         'WWW-Authenticate': challengeHeader(siteSlug, {
           error: 'insufficient_scope',
           scope: MCP_SCOPE,
+          dpop,
         }),
       },
     },
@@ -166,19 +177,37 @@ export async function handleSiteMcpRequest(
     .limit(1)
   if (!found) return unknownSite()
 
-  const token = bearerToken(request)
+  const authorization = parseAccessTokenAuthorization(
+    request.headers.get('authorization'),
+  )
+  const token =
+    authorization?.scheme === 'Bearer' || authorization?.scheme === 'DPoP'
+      ? authorization.token
+      : null
   if (!token) return challenge401(siteSlug)
 
   if (token.startsWith(MCP_KEY_PREFIX)) {
+    if (authorization?.scheme !== 'Bearer')
+      return challenge401(siteSlug, {
+        error: 'invalid_token',
+        dpop: true,
+        description: 'Personal keys require Bearer authorization',
+      })
     const resolution = await resolveMcpActorResult(token)
     if (!resolution.ok) {
       return resolution.reason === 'mfa_required'
         ? mfaRequired()
-        : challenge401(siteSlug, { error: 'invalid_token', description: 'Invalid or expired key' })
+        : challenge401(siteSlug, {
+            error: 'invalid_token',
+            description: 'Invalid or expired key',
+          })
     }
     if (resolution.actor.siteId !== found.id) {
       // A key for another site is a valid key here but not for this resource.
-      return challenge401(siteSlug, { error: 'invalid_token', description: 'Key is for a different site' })
+      return challenge401(siteSlug, {
+        error: 'invalid_token',
+        description: 'Key is for a different site',
+      })
     }
     return runMcp(request, resolution.actor, {
       clientId: resolution.actor.keyId,
@@ -186,24 +215,44 @@ export async function handleSiteMcpRequest(
     })
   }
 
-  const verdict = await verifyMcpAccessToken(token)
+  const verdict = await verifyMcpAccessToken(
+    token,
+    request,
+    mcpResourceUrl(siteSlug),
+  )
   if (!verdict.ok) {
-    return challenge401(siteSlug, { error: 'invalid_token', description: 'Access token is invalid or expired' })
+    return challenge401(siteSlug, {
+      error: verdict.error ?? 'invalid_token',
+      dpop: verdict.dpop || authorization?.scheme === 'DPoP',
+      description:
+        verdict.error === 'invalid_dpop_proof'
+          ? 'DPoP proof is missing, invalid or already used'
+          : 'Access token is invalid or expired',
+    })
   }
-  const { userId, clientId, resources, scopes } = verdict.token
+  const { userId, clientId, connectionId, resources, scopes } = verdict.token
   // RFC 8707: a token only works at the resource it was issued for.
   if (!resources.includes(mcpResourceUrl(siteSlug))) {
-    return challenge401(siteSlug, { error: 'invalid_token', description: 'Access token was issued for a different site' })
+    return challenge401(siteSlug, {
+      error: 'invalid_token',
+      description: 'Access token was issued for a different site',
+      dpop: authorization?.scheme === 'DPoP',
+    })
   }
-  if (!scopes.includes(MCP_SCOPE)) return insufficientScope(siteSlug)
+  if (!scopes.includes(MCP_SCOPE))
+    return insufficientScope(siteSlug, authorization?.scheme === 'DPoP')
 
   const connection = await findUsableConnection({
     userId,
     siteId: found.id,
     clientId,
   })
-  if (!connection) {
-    return challenge401(siteSlug, { error: 'invalid_token', description: 'This app is no longer connected to the site' })
+  if (!connection || connection.id !== connectionId) {
+    return challenge401(siteSlug, {
+      error: 'invalid_token',
+      description: 'This app is no longer connected to the site',
+      dpop: authorization?.scheme === 'DPoP',
+    })
   }
 
   const [owner] = await db
@@ -217,16 +266,22 @@ export async function handleSiteMcpRequest(
     .where(eq(user.id, userId))
     .limit(1)
   if (!owner) {
-    return challenge401(siteSlug, { error: 'invalid_token' })
+    return challenge401(siteSlug, {
+      error: 'invalid_token',
+      dpop: authorization?.scheme === 'DPoP',
+    })
   }
   const live = await liveRoleFor(owner, found.organizationId)
   if (!live.ok) {
     return live.reason === 'mfa_required'
       ? mfaRequired()
-      : challenge401(siteSlug, { error: 'invalid_token', description: 'You no longer have access to this site' })
+      : challenge401(siteSlug, {
+          error: 'invalid_token',
+          description: 'You no longer have access to this site',
+          dpop: authorization?.scheme === 'DPoP',
+        })
   }
 
-  await touchConnection(connection)
   const actor: McpActor = {
     keyId: connection.id,
     keyName: connection.clientName,
@@ -240,7 +295,9 @@ export async function handleSiteMcpRequest(
     role: live.role,
     allowGoLive: connection.allowGoLive && live.role !== 'editor',
   }
-  return runMcp(request, actor, { clientId, scopes })
+  const response = await runMcp(request, actor, { clientId, scopes })
+  if (await isSuccessfulMcpResponse(response)) await touchConnection(connection)
+  return response
 }
 
 function runMcp(
@@ -257,4 +314,41 @@ function runMcp(
       extra: { actor },
     },
   })
+}
+
+/** Only successful protocol results keep the approval's idle window alive. */
+async function isSuccessfulMcpResponse(response: Response): Promise<boolean> {
+  if (!response.ok) return false
+  try {
+    const text = await response.clone().text()
+    const bodies: unknown[] = response.headers
+      .get('content-type')
+      ?.includes('text/event-stream')
+      ? text
+          .split(/\r?\n/)
+          .filter((line) => line.startsWith('data:'))
+          .map((line) => JSON.parse(line.slice(5)))
+      : [JSON.parse(text)]
+    const results: unknown[] = bodies.flatMap((body) =>
+      Array.isArray(body) ? body : [body],
+    )
+    return results.some((item: unknown) => {
+      if (
+        !item ||
+        typeof item !== 'object' ||
+        !('result' in item) ||
+        'error' in item
+      )
+        return false
+      const result = item.result
+      return (
+        !result ||
+        typeof result !== 'object' ||
+        !('isError' in result) ||
+        result.isError !== true
+      )
+    })
+  } catch {
+    return false
+  }
 }

@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unnecessary-condition -- publication lookup may return no row at runtime */
+import { getLivePublication } from '#/server/publishing/publications'
 import { diffApprovedRelease } from '#/server/publishing/release-diff'
 
 import type { ReleaseState } from './release-flags'
@@ -11,7 +13,10 @@ export { releaseFlags } from './release-flags'
  * call and apply the result to every entry that call returns.
  */
 export async function loadReleaseState(siteId: string): Promise<ReleaseState> {
-  const diff = await diffApprovedRelease(siteId)
+  const [diff, live] = await Promise.all([
+    diffApprovedRelease(siteId),
+    getLivePublication(siteId),
+  ])
   const pending = [
     ...diff.adds,
     ...diff.updates,
@@ -19,7 +24,12 @@ export async function loadReleaseState(siteId: string): Promise<ReleaseState> {
     ...diff.scheduledUpcoming,
   ]
   return {
-    liveIds: new Set(diff.liveEntryIds),
+    liveSnapshot: live?.snapshot ?? null,
+    liveIds: new Set(
+      Object.values(live?.snapshot.collections ?? {}).flatMap((items) =>
+        items.map((item) => item.id),
+      ),
+    ),
     pendingIds: new Set(pending.map((item) => item.id)),
   }
 }

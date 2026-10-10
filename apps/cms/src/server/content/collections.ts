@@ -122,6 +122,7 @@ export async function upsertCollection(
     fields: Field[]
     enabled?: boolean
   },
+  actorId?: string,
 ) {
   validateCollectionDefinitions([input])
   const label = input.label.trim()
@@ -180,6 +181,7 @@ export async function upsertCollection(
   await audit({
     organizationId: existingSite.organizationId,
     siteId,
+    actorId,
     action: 'collection.upsert',
     targetType: 'collection',
     targetId: row.id,

@@ -167,24 +167,14 @@ function ConsentRequest({ query, info }: { query: string; info: ConsentOk }) {
         data-ready={ready ? 'true' : 'false'}
       >
         <div className="grid justify-items-center gap-3">
-          {client.logoUri ? (
-            <img
-              src={client.logoUri}
-              alt=""
-              width={56}
-              height={56}
-              loading="lazy"
-              referrerPolicy="no-referrer"
-              className="size-14 rounded-[14px] border border-border-default object-cover"
-            />
-          ) : (
-            <span
-              aria-hidden="true"
-              className="grid size-14 place-content-center rounded-[14px] bg-accent-soft text-icon-accent"
-            >
-              <Sparkle weight="duotone" className="size-7" />
-            </span>
-          )}
+          {/* Anonymous client metadata is unverified. Loading its logo before
+              approval would contact an app-controlled URL from the browser. */}
+          <span
+            aria-hidden="true"
+            className="grid size-14 place-content-center rounded-[14px] bg-accent-soft text-icon-accent"
+          >
+            <Sparkle weight="duotone" className="size-7" />
+          </span>
           <AuthHeading
             title={m.oauth_consent_title({ app: client.name, site: site.name })}
             description={m.oauth_consent_subtitle({

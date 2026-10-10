@@ -1,5 +1,8 @@
 import { createHash } from 'node:crypto'
 
+import { authorizationToken, bearerToken } from './bearer-token'
+import { OAuthTokenBodyTooLarge, readOAuthTokenBody } from './oauth-token-body'
+
 export interface RateLimitStore {
   increment: (key: string, ttlSeconds: number) => Promise<number>
 }
@@ -31,10 +34,15 @@ const METRICS_RULE = { limit: 60, windowSeconds: 60 } as const
 // real user registers a handful of apps; a flood from one address is abuse.
 const OAUTH_REGISTER_IP_RULE = { limit: 20, windowSeconds: 60 * 60 } as const
 // Caps the whole deployment, which also covers clients that share 'unknown'.
-const OAUTH_REGISTER_GLOBAL_RULE = { limit: 300, windowSeconds: 60 * 60 } as const
+const OAUTH_REGISTER_GLOBAL_RULE = {
+  limit: 300,
+  windowSeconds: 60 * 60,
+} as const
 // Per app and address. Refresh tokens rotate, so a busy app refreshes about
 // hourly per user; this allows bursts without letting one client flood /token.
 const OAUTH_TOKEN_RULE = { limit: 60, windowSeconds: 60 } as const
+const OAUTH_TOKEN_IP_RULE = { limit: 120, windowSeconds: 60 } as const
+const OAUTH_TOKEN_GLOBAL_RULE = { limit: 600, windowSeconds: 60 } as const
 
 // Liveness/readiness probes must never be throttled (orchestrators poll often
 // and a 429 would look like an outage).
@@ -47,12 +55,6 @@ const SITE_TOKEN_PATHS = new Set([
 
 function fingerprint(value: string) {
   return createHash('sha256').update(value).digest('hex')
-}
-
-function bearerToken(request: Request) {
-  const header = request.headers.get('authorization')
-  if (!header?.startsWith('Bearer ')) return null
-  return header.slice('Bearer '.length).trim() || null
 }
 
 export function getClientIp(request: Request, trustProxy: boolean) {
@@ -137,6 +139,26 @@ async function enforceOAuthToken(
   const now = dependencies.now?.() ?? Date.now()
   try {
     const ip = getClientIp(request, dependencies.trustProxy)
+    // A caller controls client_id, including invalid IDs. Independent budgets
+    // must run before reading the body or selecting a per-client bucket.
+    const globalAllowed = await consumeRateLimit(
+      dependencies.store,
+      'oauth-token-global',
+      'all',
+      OAUTH_TOKEN_GLOBAL_RULE,
+      now,
+    )
+    if (!globalAllowed) return tooManyRequests(OAUTH_TOKEN_GLOBAL_RULE, now)
+    if (ip !== 'unknown') {
+      const ipAllowed = await consumeRateLimit(
+        dependencies.store,
+        'oauth-token-ip',
+        `ip:${ip}`,
+        OAUTH_TOKEN_IP_RULE,
+        now,
+      )
+      if (!ipAllowed) return tooManyRequests(OAUTH_TOKEN_IP_RULE, now)
+    }
     const clientId = (await clientIdOf(request)) ?? 'anonymous'
     const allowed = await consumeRateLimit(
       dependencies.store,
@@ -147,6 +169,23 @@ async function enforceOAuthToken(
     )
     return allowed ? null : tooManyRequests(OAUTH_TOKEN_RULE, now)
   } catch (error) {
+    if (error instanceof OAuthTokenBodyTooLarge) {
+      return Response.json(
+        { error: 'Token request body is too large' },
+        { status: 413 },
+      )
+    }
+    // Redis outages fail open for the budget, not for request-size validation.
+    try {
+      await readOAuthTokenBody(request)
+    } catch (bodyError) {
+      if (bodyError instanceof OAuthTokenBodyTooLarge) {
+        return Response.json(
+          { error: 'Token request body is too large' },
+          { status: 413 },
+        )
+      }
+    }
     dependencies.logError?.('Rate limiting unavailable; request allowed', error)
     return null
   }
@@ -158,6 +197,7 @@ async function enforceOAuthToken(
  * need to be verified here.
  */
 async function clientIdOf(request: Request): Promise<string | null> {
+  const text = await readOAuthTokenBody(request)
   const basic = request.headers.get('authorization')
   if (basic?.toLowerCase().startsWith('basic ')) {
     try {
@@ -169,7 +209,6 @@ async function clientIdOf(request: Request): Promise<string | null> {
     }
   }
   try {
-    const text = await request.clone().text()
     if (!text) return null
     const contentType = request.headers.get('content-type') ?? ''
     if (contentType.includes('application/json')) {
@@ -255,7 +294,7 @@ export async function enforceRequestRateLimit(
         if (!ipAllowed) return tooManyRequests(MCP_IP_RULE, now)
       }
 
-      const token = bearerToken(request)
+      const token = authorizationToken(request)
       const identifier = token ? `token:${fingerprint(token)}` : `ip:${ip}`
       const allowed = await consumeRateLimit(
         dependencies.store,
@@ -266,7 +305,10 @@ export async function enforceRequestRateLimit(
       )
       return allowed ? null : tooManyRequests(MCP_RULE, now)
     } catch (error) {
-      dependencies.logError?.('Rate limiting unavailable; request allowed', error)
+      dependencies.logError?.(
+        'Rate limiting unavailable; request allowed',
+        error,
+      )
       return null
     }
   }

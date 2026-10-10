@@ -193,7 +193,7 @@ Every tool returns text or JSON. Ids come from earlier tool results. Inputs mark
 | `mark_ready` | Owner | `id` (required) | Approves the current draft for the next release. Checks required fields and names any that are missing. It returns a message that the entry is approved and goes live with the next release. It does not change the live site. |
 | `unpublish_entry` | Owner | `id` (required) | Withdraws the entry from the release: its status becomes `draft` and the approved version is dropped. The draft is kept. The live site stops showing it at the next go live. |
 | `archive_entry` | Owner | `id` (required) | Archives the entry. The live site is updated at the next go live. |
-| `schedule_entry` | Owner | `id` (required), `publishAt` (required; ISO 8601 with an offset, in the future), `timezone` (required; IANA name such as `Europe/Amsterdam`) | Sets the status to `scheduled`. The entry goes live at that time without a `go_live` call. Date fields in the content do not schedule anything. |
+| `schedule_entry` | Go-live permission | `id` (required), `publishAt` (required; ISO 8601 with an offset, in the future), `timezone` (required; IANA name such as `Europe/Amsterdam`) | Sets the status to `scheduled`. The entry goes live at that time without a `go_live` call. Date fields in the content do not schedule anything. |
 | `cancel_schedule` | Owner | `id` (required) | Removes the scheduled time. The draft and any live version are kept. |
 | `delete_entry` | Owner | `id` (required) | Deletes the entry. Use `archive_entry` when unsure. |
 | `restore_revision` | Owner | `id` (required), `revisionId` (required), `expectedVersion` | Copies an earlier revision into the draft. It does not mark the entry ready and does not change the live site. |
@@ -218,13 +218,14 @@ Every entry read returns the same shape. Collection data is under `fields`, and 
 | Key | Meaning |
 | --- | --- |
 | `status` | `draft` (being written), `ready` (approved for the next release), `scheduled` or `archived`. |
-| `live` | `true` when the entry is on the live site now. |
+| `live` | `true` when the entry is in the production live publication. Demo previews do not count; inspect `get_release_status.demo` for the demo publication. |
 | `pendingRelease` | `true` when approved changes, an approval, a schedule or a withdrawal are waiting for the next go live. |
 | `approvedAt`, `scheduledAt`, `scheduleTimezone` | Approval and schedule times, when set. |
 | `editedSinceReady` | `true` when the draft differs from the approved version. |
 | `previewAvailable` | `true` when the site has a production URL. |
 | `version` | Pass it as `expectedVersion` on the next write. |
-| `liveFields` | Only with `includePublished`: the version visitors see now. |
+| `liveFields` | Only with `includePublished`: fields from the actual live publication, or `null` if this entry is not live. Demo previews are not reported as live fields. |
+| `approvedFields` | Only with `includePublished`: the approved version waiting for release, separate from the live publication. |
 
 `ready` means approved, not live. A ready entry can still show `live: false` until the next go live. Use `live` and `pendingRelease` to answer "what is live" and "what is pending". `get_release_status` lists the pending changes.
 
@@ -361,3 +362,5 @@ Every change made through a connected app or a personal key is recorded as the u
 - [Rate limits](/docs/security/rate-limits#oauth-sign-in) for the sign-in endpoints.
 - [Permissions matrix](/docs/security/permissions-matrix#ai-apps-and-keys) for the roles behind each tool.
 - [Rate limits](/docs/security/rate-limits#ai-app-requests) for the per-key limit.
+
+Scheduling requires **Allow going live** because the scheduler deploys the site at the chosen time, including other approved changes. Cancelling a schedule remains an owner action. Rich-text image references accept ordinary Markdown titles and reference-style syntax; image examples inside code are not treated as assets.

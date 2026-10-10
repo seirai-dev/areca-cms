@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .returning()/.select() are checked defensively */
 import { createHash, randomBytes } from 'node:crypto'
-import { and, count, desc, eq, gt, isNull, or } from 'drizzle-orm'
+import { and, count, desc, eq, gt, isNull, or, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { membership, mcpKey, site, user } from '#/db/schema'
@@ -93,8 +93,11 @@ function toSummary(row: KeyRow, userName: string | null): McpKeySummary {
   }
 }
 
-async function userNameOf(userId: string) {
-  const [found] = await db
+async function userNameOf(
+  userId: string,
+  connection: Pick<typeof db, 'select'> = db,
+) {
+  const [found] = await connection
     .select({ name: user.name })
     .from(user)
     .where(eq(user.id, userId))
@@ -123,59 +126,68 @@ export async function createMcpKey(input: {
     throw new ForbiddenError(m.server_mcp_key_go_live_owners_only())
   }
 
-  const [active] = await db
-    .select({ value: count() })
-    .from(mcpKey)
-    .where(
-      and(
-        eq(mcpKey.userId, input.userId),
-        eq(mcpKey.siteId, input.siteId),
-        isNull(mcpKey.revokedAt),
-        or(isNull(mcpKey.expiresAt), gt(mcpKey.expiresAt, now)),
-      ),
+  return db.transaction(async (tx) => {
+    // Serialize the count/insert pair across processes for this user and site.
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${JSON.stringify(['mcp-key', input.userId, input.siteId])}, 0))`,
     )
-  if (Number(active?.value ?? 0) >= MAX_ACTIVE_KEYS_PER_USER_PER_SITE) {
-    throw new ConflictError(m.server_mcp_key_limit_reached())
-  }
+    const [active] = await tx
+      .select({ value: count() })
+      .from(mcpKey)
+      .where(
+        and(
+          eq(mcpKey.userId, input.userId),
+          eq(mcpKey.siteId, input.siteId),
+          isNull(mcpKey.revokedAt),
+          or(isNull(mcpKey.expiresAt), gt(mcpKey.expiresAt, now)),
+        ),
+      )
+    if (Number(active?.value ?? 0) >= MAX_ACTIVE_KEYS_PER_USER_PER_SITE) {
+      throw new ConflictError(m.server_mcp_key_limit_reached())
+    }
 
-  const expiresAt =
-    input.expiresInDays === null
-      ? null
-      : new Date(now.getTime() + input.expiresInDays * DAY_MS)
-  const generated = generateMcpKey()
-  const [row] = await db
-    .insert(mcpKey)
-    .values({
-      userId: input.userId,
-      siteId: input.siteId,
-      name,
-      tokenPrefix: generated.tokenPrefix,
-      tokenHash: generated.tokenHash,
-      allowGoLive: input.allowGoLive,
-      expiresAt,
-      createdAt: now,
-    })
-    .returning()
-  if (!row) throw new Error('Failed to create MCP key')
+    const expiresAt =
+      input.expiresInDays === null
+        ? null
+        : new Date(now.getTime() + input.expiresInDays * DAY_MS)
+    const generated = generateMcpKey()
+    const [row] = await tx
+      .insert(mcpKey)
+      .values({
+        userId: input.userId,
+        siteId: input.siteId,
+        name,
+        tokenPrefix: generated.tokenPrefix,
+        tokenHash: generated.tokenHash,
+        allowGoLive: input.allowGoLive,
+        expiresAt,
+        createdAt: now,
+      })
+      .returning()
+    if (!row) throw new Error('Failed to create MCP key')
 
-  await audit({
-    organizationId: input.organizationId,
-    siteId: input.siteId,
-    actorId: input.userId,
-    action: 'mcp_key.create',
-    targetType: 'mcp_key',
-    targetId: row.id,
-    meta: {
-      name,
-      allowGoLive: input.allowGoLive,
-      expiresAt: expiresAt?.toISOString() ?? null,
-    },
+    await audit(
+      {
+        organizationId: input.organizationId,
+        siteId: input.siteId,
+        actorId: input.userId,
+        action: 'mcp_key.create',
+        targetType: 'mcp_key',
+        targetId: row.id,
+        meta: {
+          name,
+          allowGoLive: input.allowGoLive,
+          expiresAt: expiresAt?.toISOString() ?? null,
+        },
+      },
+      tx,
+    )
+
+    return {
+      key: toSummary(row, await userNameOf(input.userId, tx)),
+      token: generated.token,
+    }
   })
-
-  return {
-    key: toSummary(row, await userNameOf(input.userId)),
-    token: generated.token,
-  }
 }
 
 /**

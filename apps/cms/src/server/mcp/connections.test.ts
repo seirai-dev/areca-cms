@@ -108,7 +108,11 @@ describe.skipIf(!hasDb)('MCP connections', () => {
     await cleanupTestSite(ctx)
   })
 
-  const connect = (userId: string, allowGoLive = false, clientName = 'Connections test app') =>
+  const connect = (
+    userId: string,
+    allowGoLive = false,
+    clientName = 'Connections test app',
+  ) =>
     upsertConnection({
       userId,
       siteId: ctx.site.id,
@@ -142,6 +146,13 @@ describe.skipIf(!hasDb)('MCP connections', () => {
       .from(auditLog)
       .where(eq(auditLog.targetId, first.id))
     expect(log.map((row) => row.action)).toContain('mcp_connection.create')
+  })
+
+  it('serializes simultaneous approvals without creating duplicates', async () => {
+    const results = await Promise.all(
+      Array.from({ length: 12 }, () => connect(owner, true, 'Renamed app')),
+    )
+    expect(new Set(results.map((row) => row.id)).size).toBe(1)
   })
 
   it('shows owners every connection on the site and editors only their own', async () => {

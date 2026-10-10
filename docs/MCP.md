@@ -82,13 +82,17 @@ Lifetimes and tokens:
 
 - Access tokens are opaque, prefix `areca_at_`, and last 1 hour.
 - Refresh tokens are opaque, prefix `areca_rt_`, last 90 days from their last use, and rotate on every refresh.
-- Refresh reuse window: 30 seconds. A retry inside the window gets the same tokens back. Reusing a rotated refresh token after the window is treated as replay: the plugin deletes every access and refresh token the client holds for that user, on every site, and the app must sign in again. Dead refresh tokens return `invalid_grant`.
+- Refresh reuse window: 30 seconds. A retry inside the window gets the same tokens back. Reusing a rotated refresh token after the window is treated as replay: the server revokes the affected site’s connection generation and its access and refresh tokens. Other sites connected to the same app remain usable; the affected site needs fresh consent. Dead refresh tokens return `invalid_grant`.
 - Tokens are stored as SHA-256 hashes (`storeTokens: "hashed"`, the plugin default). Access tokens are checked against the database on each request, so revocation is immediate.
-- A connection (`mcp_connection`) is valid while it is not revoked and was used within 90 days. Access tokens are bound to a resource (RFC 8707): a token for one site is refused at another.
+- A connection (`mcp_connection`) is valid while it is not revoked and has had successful MCP use within 90 days (or was approved within that window). Refresh alone does not extend this activity window. Offline OAuth tokens outlive the browser login session; live user permissions are still checked for every MCP request. Access tokens are bound to a resource (RFC 8707): a token for one site is refused at another.
 
-Consent is per site: the consent reference is the site the request names in `resource`, so an approval for one site does not cover another. The approval also creates or updates the `mcp_connection` row that each request checks.
+Consent is per site: the consent reference is the unique approved connection generation for the single site named in `resource`, so an approval for one site does not cover another. The approval also creates or updates the `mcp_connection` row that each request checks.
 
-On each request the endpoint checks, in order: the token exists, is unexpired and unrevoked, names this site as its resource, and carries `mcp`; an active connection exists for (user, app, site); the user still exists and has a live role on the site (agency admins also need two-factor sign-in when `ADMIN_MFA_REQUIRED` is set). Then it runs the tool with that role.
+On each request the endpoint checks, in order: the token exists, is unexpired and unrevoked, names this site as its resource, and carries `mcp`; an active connection exists for (user, app, site) and matches the token’s approval generation; the user still exists and has a live role on the site (agency admins also need two-factor sign-in when `ADMIN_MFA_REQUIRED` is set). Then it runs the tool with that role.
+
+### DPoP clients
+
+Clients may register `dpop_bound_access_tokens: true` and send DPoP proofs at the token endpoint. Bound tokens must be sent to MCP as `Authorization: DPoP <token>` with a fresh `DPoP` proof. The resource verifies the proof signature, bound public key, HTTP method, public connector URL, access-token hash and a 60-second proof age. Proof IDs are reserved atomically in the shared authentication database, so replay is rejected across replicas. Verification fails closed if that store is unavailable. Server-provided nonces are optional and are not required; accepted signing algorithms are advertised in resource metadata. Ordinary Bearer clients remain supported.
 
 ### Personal keys
 
@@ -138,7 +142,7 @@ Tools are registered per request for the caller's role, so a tool the caller can
 | Workflow | `mark_ready` | owner | `id` (does not publish) |
 | Workflow | `unpublish_entry` | owner | `id` |
 | Workflow | `archive_entry` | owner | `id` |
-| Workflow | `schedule_entry` | owner | `id`, `publishAt` (ISO 8601 with offset, future), `timezone` (IANA) |
+| Workflow | `schedule_entry` | go-live permission | `id`, `publishAt` (ISO 8601 with offset, future), `timezone` (IANA) |
 | Workflow | `cancel_schedule` | owner | `id` |
 | Workflow | `delete_entry` | owner | `id` |
 | Workflow | `restore_revision` | owner | `id`, `revisionId`, `expectedVersion?` (does not publish) |
@@ -158,13 +162,14 @@ Every entry read (`get_entry`, `create_entry`, `update_entry`, `mark_ready` and 
 | Key | Meaning |
 | --- | --- |
 | `status` | `draft` (being written), `ready` (approved for the next release), `scheduled` or `archived`. The stored `published` value is reported as `ready`. |
-| `live` | `true` when the entry is on the live site now. |
+| `live` | `true` when the entry is in the production live publication. Demo previews do not count; inspect `get_release_status.demo` for the demo publication. |
 | `pendingRelease` | `true` when approved changes, an approval, a schedule or a withdrawal are waiting for the next go live. |
 | `approvedAt`, `scheduledAt`, `scheduleTimezone` | Approval and schedule times, when set. |
 | `editedSinceReady` | `true` when the draft differs from the approved version. |
 | `previewAvailable` | `true` when the site has a production URL, so `get_preview_url` works. |
 | `version` | Pass it as `expectedVersion` on the next write. |
-| `liveFields` | Only with `includePublished`: the version visitors see now. |
+| `liveFields` | Only with `includePublished`: fields from the actual live publication, or `null` if this entry is not live. Demo previews are not reported as live fields. |
+| `approvedFields` | Only with `includePublished`: the approved version waiting for release, separate from the live publication. |
 
 A `ready` entry can still have `live: false` until the next go live. Editing a ready entry does not change the live site; mark it ready again to approve the new version. `mark_ready` returns a message saying the entry is approved and will go live with the next release.
 
@@ -272,3 +277,5 @@ Connecting an app to a site is audited as `mcp_connection.create` (the activity 
 | `apps/cms/src/lib/mcp-install.ts` | Connector and install snippets per app |
 | `apps/cms/src/features/connect-ai/` | Connect AI page UI (connector URL, per-app steps, connected apps, Advanced personal keys) |
 | `apps/cms/src/features/auth/consent-screen.tsx` | Consent screen UI |
+
+Scheduling requires **Allow going live** because the scheduler deploys the site at the chosen time, including other approved changes. Cancelling a schedule remains an owner action. Rich-text image references accept ordinary Markdown titles and reference-style syntax; image examples inside code are not treated as assets.

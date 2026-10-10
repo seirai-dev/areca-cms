@@ -1,6 +1,10 @@
 import { z } from 'zod'
 
-import { ALT_TEXT_MAX_LENGTH, SEARCH_MAX_LENGTH, URL_MAX_LENGTH } from '#/lib/content-limits'
+import {
+  ALT_TEXT_MAX_LENGTH,
+  SEARCH_MAX_LENGTH,
+  URL_MAX_LENGTH,
+} from '#/lib/content-limits'
 import type { Asset } from '#/server/assets'
 import {
   assetUrl,
@@ -48,9 +52,24 @@ export function registerAssetTools(registry: ToolRegistry): void {
     description:
       'Lists images and PDFs in the organization library, newest first, with assetId, filename, alt text and url. Search matches filename or alt text. Use an assetId in image fields, seo.ogImage, or ![alt](asset:<assetId>) in Markdown.',
     inputSchema: z.object({
-      search: z.string().max(SEARCH_MAX_LENGTH).optional().describe('Text to match in filename or alt text.'),
-      limit: z.number().int().min(1).max(100).optional().describe('Page size, 1-100. Default 20.'),
-      offset: z.number().int().min(0).optional().describe('Number of assets to skip. Default 0.'),
+      search: z
+        .string()
+        .max(SEARCH_MAX_LENGTH)
+        .optional()
+        .describe('Text to match in filename or alt text.'),
+      limit: z
+        .number()
+        .int()
+        .min(1)
+        .max(100)
+        .optional()
+        .describe('Page size, 1-100. Default 20.'),
+      offset: z
+        .number()
+        .int()
+        .min(0)
+        .optional()
+        .describe('Number of assets to skip. Default 0.'),
     }),
     annotations: { readOnlyHint: true, idempotentHint: true },
     run: async (input, actor) => {
@@ -72,7 +91,10 @@ export function registerAssetTools(registry: ToolRegistry): void {
     annotations: { readOnlyHint: true, idempotentHint: true },
     run: async (input, actor) => {
       const row = await requireAsset(actor, input.id)
-      return { ...describeAsset(row), usageCount: await assetUsage(row.id, actor.organizationId) }
+      return {
+        ...describeAsset(row),
+        usageCount: await assetUsage(row.id, actor.organizationId),
+      }
     },
   })
 
@@ -87,19 +109,29 @@ export function registerAssetTools(registry: ToolRegistry): void {
         .min(1)
         .max(URL_MAX_LENGTH)
         .url()
-        .describe('Public https URL of the file, e.g. https://example.com/photo.jpg.'),
+        .describe(
+          'Public https URL of the file, e.g. https://example.com/photo.jpg.',
+        ),
       altText: z
         .string()
         .max(ALT_TEXT_MAX_LENGTH)
         .optional()
-        .describe('What the image shows, in one sentence. Recommended for every image.'),
+        .describe(
+          'What the image shows, in one sentence. Recommended for every image.',
+        ),
       filename: z
         .string()
         .max(200)
         .optional()
-        .describe('Optional file name to store, e.g. "sourdough-loaf.jpg". Derived from the URL if omitted.'),
+        .describe(
+          'Optional file name to store, e.g. "sourdough-loaf.jpg". Derived from the URL if omitted.',
+        ),
     }),
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     run: async (input, actor) => {
       const row = await uploadAssetFromUrl({
         organizationId: actor.organizationId,
@@ -132,12 +164,32 @@ export function registerAssetTools(registry: ToolRegistry): void {
       'Sets the alt text of an asset: one sentence describing what the image shows, for screen readers and search. Pass an empty string to clear it.',
     inputSchema: z.object({
       id: idSchema('asset'),
-      altText: z.string().max(ALT_TEXT_MAX_LENGTH).describe('The new alt text. Empty string clears it.'),
+      altText: z
+        .string()
+        .max(ALT_TEXT_MAX_LENGTH)
+        .describe('The new alt text. Empty string clears it.'),
     }),
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     run: async (input, actor) => {
       await requireAsset(actor, input.id)
-      const row = await updateAsset(input.id, { altText: input.altText }, actor.organizationId)
+      const row = await updateAsset(
+        input.id,
+        { altText: input.altText },
+        actor.organizationId,
+      )
+      await audit({
+        organizationId: actor.organizationId,
+        siteId: actor.siteId,
+        actorId: actor.userId,
+        action: 'asset.update',
+        targetType: 'asset',
+        targetId: row.id,
+        meta: { filename: row.originalFilename },
+      })
       return describeAsset(row)
     },
   })
@@ -150,10 +202,23 @@ export function registerAssetTools(registry: ToolRegistry): void {
     inputSchema: z.object({ id: idSchema('asset') }),
     access: 'owner',
     deniedMessage: 'Only site owners can delete files. Ask a site owner.',
-    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+    },
     run: async (input, actor) => {
-      await requireAsset(actor, input.id)
+      const row = await requireAsset(actor, input.id)
       await deleteAsset(input.id, actor.organizationId)
+      await audit({
+        organizationId: actor.organizationId,
+        siteId: actor.siteId,
+        actorId: actor.userId,
+        action: 'asset.delete',
+        targetType: 'asset',
+        targetId: row.id,
+        meta: { filename: row.originalFilename },
+      })
       return { deleted: true, assetId: input.id }
     },
   })
