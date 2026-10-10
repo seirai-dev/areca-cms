@@ -106,13 +106,12 @@ Each connection is recorded with who approved it and when, which is what the Con
 
 ## Personal AI keys
 
-A personal AI key lets one AI app work on one site as you. You create it on the [Connect AI](/docs/cms/connect-ai) page. Its value starts with `areca_mcp_`, and it is sent in an `Authorization: Bearer` header to the site's [MCP endpoint](/docs/cms/mcp-tools).
+A personal AI key lets one AI app work on one site as you. You create it on the [Connect AI](/docs/cms/connect-ai) page. Its value starts with `areca_mcp_`, and it is sent in an `Authorization: Bearer` header to the site's [MCP endpoint](/docs/cms/mcp-tools). Personal keys require Bearer authorization and do not support DPoP.
 
 - **Scope.** A key belongs to one user and one site. It does not reach other sites or other clients, and it is not accepted by any site, preview or schema endpoint.
 - **Permissions.** A key acts with your live role on that site, and checks it on every request. Going live needs a key created with **Allow going live**, and only owners and agency admins can create one.
 - **Storage.** Areca generates 32 random bytes and stores only a SHA-256 hash. The key is shown once. If you lose it, revoke it and create a new one.
 - **Lifetime.** You choose 30 days, 90 days, 1 year or never. The default is 90 days. An expired key stops working on its expiry date.
-- **Proof-bound clients.** DPoP clients must prove possession of their registered key on each request. Areca checks the proof against the token, method and public connector URL, and rejects reused proofs through a shared database replay store. A proof-bound token is refused as an ordinary Bearer token.
 - **Revocation.** Revoking takes effect at once. Editors can revoke their own keys. Owners and agency admins can revoke any key on the site. Each key shows when it was last used, which helps you spot a key that is no longer in use.
 - **Limits.** Each person can have 20 active keys per site. Requests made with a key are rate limited to 120 a minute per key, and to 600 a minute per client address when the address is known; see [rate limits](/docs/security/rate-limits#ai-app-requests).
 

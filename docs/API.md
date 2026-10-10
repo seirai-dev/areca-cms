@@ -34,19 +34,32 @@ in the local schema-authoring environment and out of build/deploy secrets.
 The POST body is the manifest shape, with a `collections` object. The SDK
 converts `areca.config.ts` to that body; collection labels are preserved when
 provided. A snapshot contains `publicationId`, `siteKey`, `createdAt`, `hash`,
-and a `collections` map of entry arrays. A snapshot GET returns 404 when the
-site has no publication. Preview requests are authorized by the signed,
+and a `collections` map of entry arrays. Preview requests are authorized by the signed,
 expiring query token; the SDK also sends its standard site-token bearer header,
 but the preview route validates the preview token itself. Preview requests
 return a `PreviewResult` containing the collection key, slug, and entry.
 
-The snapshot endpoint pins reads to the publication associated with the site's
-active build job, including an uncertain dispatch. With no active build, it
-returns the live publication (or the current demo publication when the site is
-in Demo mode). The SDK makes a normal bearer-authenticated GET; it does not
-send a publication ID header or read `ARECA_SNAPSHOT_ID`. Dokploy changes
-`ARECA_SNAPSHOT_ID` as a Docker build argument to invalidate a cached pull/build
-layer so that the new build runs the GET again.
+Without a `publicationId` query parameter, the snapshot endpoint returns the
+authenticated site's latest publication by creation time with status `live`,
+or status `demo` when the site is in Demo mode. An active build does not change
+this selection. If no publication matches the site's current mode, it returns 404.
+
+`GET /api/sites/snapshot/current?publicationId=<id>` requests that exact frozen
+publication from the authenticated site, regardless of its status, including
+while it is building. An ID that does not exist or belongs to another site returns
+404; the endpoint never falls back to the current publication. An empty or
+whitespace-only `publicationId` query value returns 400. Snapshot responses,
+including errors, use `Cache-Control: no-store`.
+
+Use `client.fetchSnapshot({ publicationId })` to send this query. The SDK rejects
+a response whose publication ID does not match the requested ID.
+`fetchSnapshot()` does not read `ARECA_SNAPSHOT_ID` itself. `areca pull` and
+`pullContent({ outDir, publicationId? })` select an explicit publication when
+provided (`--publication <id>` for the CLI), otherwise they read
+`ARECA_SNAPSHOT_ID`. An unset, empty, whitespace-only or `0` environment value
+selects the current successful live/demo publication. Dokploy sets this Docker
+build argument for each deployment to pin the pull and invalidate its cached
+build layer. No publication ID header is used. See [the SDK guide](SDK.md).
 
 Do not place the preview token in logs or analytics. The SDK sends it as the
 preview URL's query parameter; handle the token only on the server, set

@@ -439,11 +439,13 @@ export function FieldFormPanel({
           />
         </FormField>
         {field.type === 'select' ? (
-          <FormField
-            label={m.admin_collection_options()}
-            htmlFor={`field-options-${index}`}
-            hint={m.content_field_options_hint()}
+          <fieldset
+            className="grid gap-1.5"
+            aria-describedby={`field-options-${index}-hint`}
           >
+            <legend className="mb-1.5 text-[13px] leading-[18px] font-medium text-text-primary">
+              {m.admin_collection_options()}
+            </legend>
             <div className="grid gap-2">
               {field.options.map((option, optionIndex) => (
                 <div key={optionIndex} className="flex gap-2">
@@ -483,7 +485,13 @@ export function FieldFormPanel({
                 {m.content_add_option()}
               </Button>
             </div>
-          </FormField>
+            <p
+              id={`field-options-${index}-hint`}
+              className="text-caption font-normal text-text-muted"
+            >
+              {m.content_field_options_hint()}
+            </p>
+          </fieldset>
         ) : null}
         {field.type === 'reference' ? (
           <FormField

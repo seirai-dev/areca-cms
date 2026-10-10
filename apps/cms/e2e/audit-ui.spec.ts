@@ -42,15 +42,30 @@ test('content model keeps typed keys and comma choices; optional large choices c
   await page.getByTestId('add-field').click()
   await page.getByTestId('field-type-tile-select').click()
   await page.getByTestId('field-label-2').fill('Destination')
+  const optionsGroup = page.getByRole('group', { name: 'Options', exact: true })
+  await expect(optionsGroup).toBeVisible()
+  await expect(optionsGroup).toHaveAccessibleDescription(
+    'Add one choice per row. Commas stay part of the choice.',
+  )
+  await expect(optionsGroup.getByRole('textbox')).toHaveCount(0)
+  const addChoice = optionsGroup.getByRole('button', {
+    name: 'Add choice',
+    exact: true,
+  })
+  await expect(addChoice).toBeVisible()
+  await expect(addChoice).toBeEnabled()
   const options = ['Paris, France', 'Ghent', 'London', 'Berlin', 'Rome']
   for (let index = 0; index < options.length; index++) {
-    const rows = page.getByTestId('field-options-2')
+    const rows = optionsGroup.getByRole('textbox')
     if ((await rows.count()) <= index) {
-      await page
-        .getByRole('button', { name: 'Add choice', exact: true })
-        .click()
+      await addChoice.click()
     }
-    await rows.nth(index).fill(options[index])
+    const option = optionsGroup.getByRole('textbox', {
+      name: `Options ${index + 1}`,
+      exact: true,
+    })
+    await expect(option).toHaveAccessibleName(`Options ${index + 1}`)
+    await option.fill(options[index])
   }
   await page.getByTestId('save-collection').click()
   await expect(page).toHaveURL(/\/c\/travel$/)
