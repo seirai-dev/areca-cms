@@ -82,13 +82,13 @@ Use [upgrades](UPGRADES.md) for production migration, staging validation, backup
 1. A push to `master` that touches a package's files runs the workflow. For the site SDK, that is `packages/site-sdk/`. For skills, it is `packages/skills/`, `skills/` and `.claude-plugin/`.
 2. Commit subjects since the package's last tag decide the bump. Merge commits are ignored. `feat:` bumps minor, `fix:` and `perf:` bump patch, and `!` or a `BREAKING CHANGE:` footer bumps major. Below 1.0.0, a breaking change bumps minor. `docs:`, `chore:`, `test:`, `ci:`, `refactor:` and `style:` don't release.
 3. The workflow opens or updates a `release/<package>` PR with the new version and changelog. It rebuilds the PR on every push, so don't edit it by hand.
-4. Merging the PR publishes the version to npm and creates the tag and GitHub Release. Before publishing, the workflow typechecks, tests and builds the package.
+4. Merging the PR publishes the version to npm and creates the tag and GitHub Release. The workflow first typechecks, tests, builds and packs the package. A separate job then publishes the tarball, so the npm credential is never available to tests or builds.
 
 To release without a qualifying commit, or to go to 1.0.0, run **Release packages** from the Actions tab and choose a package and bump. `node --test scripts/release/*.test.mjs` tests the bump and changelog logic.
 
-The workflow needs the following:
+The workflow needs no npm token. It needs the following:
 
-- `NPM_TOKEN` secret: a granular npm token with read and write access to the `@areca-cms` scope.
+- npm trusted publishing (OIDC) for each package. In the package's settings on npmjs.com, add a GitHub Actions trusted publisher for `ekozf/areca-cms` with workflow file `release.yml`. A new trusted publisher configuration must publish within 2 days or it expires, so add it just before merging that package's release PR. Renaming the workflow file breaks publishing until you update the configuration. Provenance isn't generated while the repository is private.
 - A GitHub App installed on this repository only, with Contents and Pull requests read and write. Store its client ID in the `RELEASE_APP_CLIENT_ID` repository variable and a private key in the `RELEASE_APP_PRIVATE_KEY` secret. CI only runs on the release PR because the PR is opened with the App's token.
 
 ## Documentation maintenance
