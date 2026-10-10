@@ -130,6 +130,10 @@ Apps such as Windsurf or Gemini CLI can use the same URL if they support remote 
 
 Some apps only accept a settings file. The Connect AI page shows the settings in the standard `mcpServers` form with the URL only, and no secret. Apps name the field for a remote HTTP server differently, so check your app's documentation for the exact field name.
 
+### Coding agents
+
+The Claude Code, Cursor, VS Code and Other apps tabs also show `npx @areca-cms/skills --mcp-url <connector URL>`. Run it in the website project. It installs the Areca [agent skills](/docs/sdk/agent-skills), which teach the agent these tools and the site SDK, and adds the connector to the coding agents you pick, including Codex, Gemini CLI, OpenCode and others.
+
 ### Or paste this into your AI
 
 If you are not sure which app to use, or you use a different assistant, select **Copy prompt** under **Or paste this into your AI** and paste it into the chat. The assistant follows the prompt to connect itself, then asks you to sign in and approve. Check that it reports the site's name when it has finished.

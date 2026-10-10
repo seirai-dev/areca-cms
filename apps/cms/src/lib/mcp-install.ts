@@ -168,6 +168,14 @@ export function connectorJsonConfig({ name, url }: McpConnectInput): string {
 }
 
 /**
+ * Installs the Areca agent skills and registers this connector URL (no
+ * secret) in the coding agents the user picks.
+ */
+export function skillsInstallCommand(url: string): string {
+  return `npx @areca-cms/skills --mcp-url ${url}`
+}
+
+/**
  * A prompt an AI assistant can follow to connect itself. No secret in it:
  * the assistant's app runs the browser sign-in. English, as with setupPrompt.
  */

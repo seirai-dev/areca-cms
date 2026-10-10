@@ -1331,6 +1331,8 @@
   "settings_provider_title": "Provider",
   "settings_quickstart": "Quick start",
   "settings_quickstart_hint": "Run these in the site project. init asks for the site token and saves it in .env.local.",
+  "settings_agent_skills": "AI-coding agents",
+  "settings_agent_skills_hint": "Leert Claude Code, Codex, Cursor, Copilot en andere agents hoe ze de SDK en de MCP-server van deze site gebruiken.",
   "settings_rotate_button": "Rotate token…",
   "settings_save": "Save",
   "settings_site_key_description": "Identifies this site to the site project. It can't be changed.",
@@ -1562,5 +1564,6 @@
   "editor_revision_keep_current": "Deze oudere waarden passen niet meer bij het huidige inhoudstype. De huidige waarden van je concept zijn behouden.",
   "media_picker_image_required": "Kies een JPEG-, PNG-, WebP- of GIF-afbeelding. PDF-bestanden kunnen hier niet worden gebruikt.",
   "content_add_option": "Keuze toevoegen",
-  "settings_schema_token_reveal_title": "Bewaar je schematoken"
+  "settings_schema_token_reveal_title": "Bewaar je schematoken",
+  "connect_ai_skills_hint": "Gebruik je een coding agent? Deze opdracht installeert de Areca-skills, die de agent deze tools en de site-SDK leren, en voegt de server toe aan de agents die je kiest."
 }

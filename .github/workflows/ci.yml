@@ -60,6 +60,11 @@ jobs:
           pnpm --filter @areca-cms/site-sdk typecheck
           pnpm --filter @areca-cms/site-sdk test
           pnpm --filter @areca-cms/site-sdk build
+      - name: Agent skills typecheck, test, build
+        run: |
+          pnpm --filter @areca-cms/skills typecheck
+          pnpm --filter @areca-cms/skills test
+          pnpm --filter @areca-cms/skills build
       - name: CMS typecheck
         run: pnpm --filter @areca/cms typecheck
       - name: CMS unit tests

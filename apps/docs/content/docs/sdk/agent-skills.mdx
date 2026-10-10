@@ -1,0 +1,67 @@
+---
+title: Agent skills
+description: Install the Areca skills so AI coding agents and chat apps know how to use the site SDK and the MCP server.
+---
+
+`@areca-cms/skills` installs two [Agent Skills](https://agentskills.io) into the AI tools your team uses. Skills are plain instruction folders, and the agent loads them only when a task needs them.
+
+| Skill | The agent learns |
+| --- | --- |
+| `areca-sdk` | Setting up `@areca-cms/site-sdk`: tokens and env vars, `areca.config.ts`, the `areca` CLI, reading content, rich text, SEO, the preview and health routes, and Go-live builds. |
+| `areca-mcp` | Connecting to the site's [MCP server](/docs/cms/mcp-tools) and using it well: roles, the draft, ready and live workflow, field formats, SEO, images, and every tool. |
+
+## Install
+
+Run this in the website project:
+
+```bash
+npx @areca-cms/skills
+```
+
+<Steps>
+<Step>
+
+**Pick your agents.** Agents found in the project are preselected. Space toggles an agent, and Enter confirms.
+
+</Step>
+<Step>
+
+**Pick the skills and where they go.** **This project** writes them into the repository, so commit them and the whole team gets them. **Me, in every project** writes them to your user folders instead.
+
+</Step>
+<Step>
+
+**Optionally add the MCP server.** Paste the connector URL from [Connect AI](/docs/cms/connect-ai). If the project already has `ARECA_CMS_URL` and an `areca.config.ts`, the URL is prefilled. Only the URL is written, never a secret. Each agent asks you to sign in to Areca in the browser the first time it connects.
+
+</Step>
+</Steps>
+
+Agents that read the same folder share one copy. For example, Codex, Cursor, GitHub Copilot, Gemini CLI and OpenCode all read `.agents/skills`. Run the command again to update the skills.
+
+## Supported tools
+
+| Kind | Tools |
+| --- | --- |
+| Coding agents | Claude Code, Codex, Cursor, GitHub Copilot, OpenCode, Gemini CLI, Windsurf, Antigravity, Cline, Roo Code, Kilo Code, Kiro, Amp, Factory Droid, Goose, JetBrains Junie, Continue, Augment, Zed, Trae, Warp, OpenHands, Qwen Code, and any other agent that reads `.agents/skills` |
+| Chat apps | The Claude app and ChatGPT. The installer writes one `.zip` per skill for you to upload. In Claude, go to **Customize > Skills > + > Upload a skill**. In ChatGPT, go to **Skills > Create > Upload from your computer**. |
+
+For agents that keep their MCP settings outside the project (Windsurf, Cline, Zed, Goose and Augment) or in a settings screen, the installer prints the snippet to add instead of writing a file.
+
+## Without prompts
+
+```bash
+npx @areca-cms/skills add -a claude-code,codex,cursor -y
+npx @areca-cms/skills add -a claude-code --mcp-url https://cms.example.com/api/mcp/acme-site -y
+npx @areca-cms/skills add -a codex --global -y
+npx @areca-cms/skills export --out ./zips
+npx @areca-cms/skills remove -a claude-code -y
+npx @areca-cms/skills list
+```
+
+`list` prints every agent id with its project and user folders. `remove` deletes only the `areca-*` skill folders.
+
+## Other install options
+
+- **Claude Code plugin:** run `/plugin marketplace add ekozf/areca-cms`, then `/plugin install areca@areca-cms`.
+- **skills CLI:** `npx skills add ekozf/areca-cms --skill areca-sdk --skill areca-mcp`.
+- **By hand:** copy the `skills/areca-sdk` and `skills/areca-mcp` folders from the repository into your agent's skills folder.
