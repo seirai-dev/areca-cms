@@ -266,4 +266,78 @@ describe('request rate limiting', () => {
     expect(store.keys.every((key) => key.includes(':metrics:'))).toBe(true)
     expect(deps.resolveUserId).not.toHaveBeenCalled()
   })
+  describe('OAuth endpoints', () => {
+    const register = (ip?: string) =>
+      new Request('https://cms.test/api/auth/oauth2/register', {
+        method: 'POST',
+        headers: ip ? { 'x-forwarded-for': ip } : {},
+      })
+
+    it('limits anonymous registration to 20 per hour per address, when the address is known', async () => {
+      const store = countingStore()
+      const deps = { ...dependencies(store), trustProxy: true }
+      for (let i = 0; i < 20; i += 1) {
+        expect(await enforceRequestRateLimit(register('198.51.100.7'), deps)).toBeNull()
+      }
+      const blocked = await enforceRequestRateLimit(register('198.51.100.7'), deps)
+      expect(blocked?.status).toBe(429)
+      expect(blocked?.headers.get('Retry-After')).toBeTruthy()
+      // Another address has its own budget.
+      expect(await enforceRequestRateLimit(register('198.51.100.8'), deps)).toBeNull()
+    })
+
+    it('caps all registrations deployment-wide at 300 per hour when no address is known', async () => {
+      const store = countingStore()
+      const deps = dependencies(store)
+      for (let i = 0; i < 300; i += 1) {
+        expect(await enforceRequestRateLimit(register(), deps)).toBeNull()
+      }
+      expect((await enforceRequestRateLimit(register(), deps))?.status).toBe(429)
+    })
+
+    it('limits token requests to 60 per minute per client and address', async () => {
+      const store = countingStore()
+      const deps = { ...dependencies(store), trustProxy: true }
+      const token = (clientId: string) =>
+        new Request('https://cms.test/api/auth/oauth2/token', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/x-www-form-urlencoded',
+            'x-forwarded-for': '198.51.100.9',
+          },
+          body: new URLSearchParams({ grant_type: 'refresh_token', client_id: clientId }),
+        })
+      for (let i = 0; i < 60; i += 1) {
+        expect(await enforceRequestRateLimit(token('client-a'), deps)).toBeNull()
+      }
+      expect((await enforceRequestRateLimit(token('client-a'), deps))?.status).toBe(429)
+      // A different client from the same address is counted separately.
+      expect(await enforceRequestRateLimit(token('client-b'), deps)).toBeNull()
+    })
+
+    it('keeps the rest of the auth API exempt', async () => {
+      const store = countingStore()
+      const deps = dependencies(store)
+      for (let i = 0; i < 100; i += 1) {
+        expect(
+          await enforceRequestRateLimit(
+            new Request('https://cms.test/api/auth/oauth2/authorize?client_id=x', { method: 'GET' }),
+            deps,
+          ),
+        ).toBeNull()
+      }
+      expect(store.keys).toHaveLength(0)
+    })
+
+    it('applies the per-token budget to the per-site MCP endpoint', async () => {
+      const store = countingStore()
+      const deps = dependencies(store)
+      const request = new Request('https://cms.test/api/mcp/acme-site', {
+        method: 'POST',
+        headers: { authorization: 'Bearer areca_at_example' },
+      })
+      expect(await enforceRequestRateLimit(request, deps)).toBeNull()
+      expect(store.keys.some((key) => key.includes(':mcp:'))).toBe(true)
+    })
+  })
 })

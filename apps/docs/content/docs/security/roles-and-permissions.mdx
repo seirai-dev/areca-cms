@@ -20,7 +20,7 @@ Agency admins can:
 - Manage branding and AI settings for the whole instance.
 - Invite people, change anyone's role, and see the instance-wide activity log.
 - Make other people agency admins, or remove that status.
-- Create personal AI keys. Creating one needs a fresh authenticator code, and a key made by an agency admin can also change content types.
+- Approve AI apps connected to a site, and create personal AI keys. Each needs a fresh authenticator code, and an app or key approved by an agency admin can also change content types.
 
 Two rules apply to agency admins specifically:
 
@@ -37,7 +37,7 @@ An owner runs publishing for one client. Owners can do everything an editor can,
 - Delete files from the client's Library.
 - Invite people to the client, change their roles, remove them, and resend or revoke invitations.
 - See the client's activity log.
-- Create personal AI keys, allow them to go live, and see and revoke every AI key on the site.
+- Connect AI apps and create personal AI keys, allow them to publish, and see, disconnect and revoke every connected app and AI key on the site.
 
 Owners cannot change content types, site settings, deployment targets, deployment credentials, or AI settings. Those belong to agency admins.
 
@@ -49,7 +49,7 @@ An editor writes content for one client:
 - Edit and save drafts, and open a preview of a draft.
 - Upload files to the Library and edit their descriptions, including alt text.
 - Ask for AI SEO suggestions and alt text.
-- Connect an AI app with a personal key. The key does what the editor can do, and the editor can revoke it at any time. See [Connect AI](/docs/cms/connect-ai).
+- Connect an AI app to the site by approving it on the consent screen, or with a personal key. The app does what the editor can do, and the editor can disconnect it or revoke the key at any time. See [Connect AI](/docs/cms/connect-ai).
 
 Editors cannot mark entries as ready, schedule, archive, delete, restore, or go live. They cannot see People, Settings, or the activity log.
 
@@ -62,10 +62,10 @@ Editors cannot mark entries as ready, schedule, archive, delete, restore, or go 
 | Preview drafts | ✓ | ✓ | ✓ |
 | Ask for AI suggestions | ✓ | ✓ | ✓ |
 | Upload files and edit alt text | ✓ | ✓ | ✓ |
-| Connect an AI app with a personal key | ✓ | ✓ | ✓ |
+| Connect an AI app (OAuth or personal key) | ✓ | ✓ | ✓ |
 | Mark as ready, schedule, archive, delete entries | – | ✓ | ✓ |
 | Restore earlier versions | – | ✓ | ✓ |
-| Let an AI key go live | – | ✓ | ✓ |
+| Let an AI app or key publish | – | ✓ | ✓ |
 | Go live and roll back | – | ✓ | ✓ |
 | Delete Library files | – | ✓ | ✓ |
 | Invite and manage people in a client | – | ✓ | ✓ |
@@ -87,4 +87,4 @@ If you are not a member of a client, Areca does not show you its sites, entries 
 - [Permissions matrix](/docs/security/permissions-matrix)
 - [Two-factor authentication and step-up](/docs/security/two-factor-and-step-up)
 - [People and invitations](/docs/cms/people-and-invitations) explains how to invite someone and choose their role.
-- [Connect AI](/docs/cms/connect-ai) explains personal AI keys and what they can do for each role.
+- [Connect AI](/docs/cms/connect-ai) explains connected apps, personal AI keys and what they can do for each role.

@@ -1,21 +1,26 @@
 # Connect AI (MCP)
 
-Connect AI lets an AI app such as Claude Code, Cursor, VS Code or Claude Desktop read and write one Areca site as the signed-in user. The app connects to a per-site MCP endpoint with a personal AI key. The key acts with the user's live role on that site, so it can do exactly what the user can do in the CMS, and nothing more.
+Connect AI lets an AI app such as ChatGPT, Claude, Claude Code, Cursor or VS Code read and write one Areca site as the signed-in user. Each site has one connector URL, `{APP_URL}/api/mcp/<site-slug>`. The app signs in with OAuth 2.1 in the browser, and the user approves it on a consent screen. The app then acts with the user's live role on that site, so it can do exactly what the user can do in the CMS, and nothing more.
 
-This page is the combined guide for editors, owners and agency admins, and the technical reference for the endpoint. The public version is in the docs app under `apps/docs/content/docs/cms/connect-ai.mdx` (for editors) and `apps/docs/content/docs/cms/mcp-tools.mdx` (tool reference).
+Personal AI keys still work for scripts, CI and clients that cannot sign in through a browser. They are under **Advanced: personal keys** on the Connect AI page.
+
+This page is the combined guide for editors, owners and agency admins, and the technical reference for the endpoints. The public version is in the docs app: `apps/docs/content/docs/cms/connect-ai.mdx` (for users) and `apps/docs/content/docs/cms/mcp-tools.mdx` (tool and sign-in reference).
 
 ## Using it
 
 1. Open **Connect AI** in the site's sidebar, or the card on the site Overview. Every site member can open it.
-2. Select **Create AI key**. Enter a name, choose the app, choose how long the key lasts (30 days, 90 days, 1 year or never; default 90), and, for owners and agency admins only, choose whether it may **Allow going live**.
-3. Copy the key from the one-time screen. Each app tab has a one-click install (Claude Code command, Cursor and VS Code links, Claude Desktop or generic `mcpServers` JSON), and a prompt that any assistant can follow to connect itself. The key is shown once and cannot be recovered.
-4. Ask the assistant to read the site (`get_site_info`) and then to write.
+2. Under **Your connector URL**, select **Copy connector URL**.
+3. Add the URL in your AI app, following the guide for that app: ChatGPT, Claude (custom connector), Claude Code (`claude mcp add --transport http …`, then `/mcp`), Cursor (**Add to Cursor**), VS Code (**Add to VS Code**), or any app that takes a remote MCP server URL.
+4. The app opens a browser window. Sign in to Areca, check the consent screen and select **Allow** (owners and agency admins can also tick **Allow going live**, which lets the app publish the whole site; it is off by default). Agency admins are asked for a fresh authenticator code first.
+5. Ask the assistant to read the site (`get_site_info`) and then to write.
 
-ChatGPT and claude.ai in the browser are not supported yet: they require OAuth, and Areca accepts only a bearer key in the `Authorization` header.
+Connected apps are listed under **Connected apps** on the same page, with **Disconnect**. Editors see their own connections; owners and agency admins see all connections on the site.
+
+ChatGPT and Claude connect from the internet, so the CMS must be reachable on its public HTTPS address. Claude Code, Cursor and VS Code need HTTPS for any address except `localhost`.
 
 ## What each role can do
 
-| Capability | Editor | Owner | Owner key with go-live | Agency admin |
+| Capability | Editor | Owner | Owner, publishing allowed | Agency admin |
 | --- | :---: | :---: | :---: | :---: |
 | Read site, schema, entries, revisions, library, release status | yes | yes | yes | yes |
 | Create entries, edit drafts, preview, get preview URL | yes | yes | yes | yes |
@@ -23,36 +28,87 @@ ChatGPT and claude.ai in the browser are not supported yet: they require OAuth, 
 | Mark ready, unpublish, archive, delete, restore revision | no | yes | yes | yes |
 | Schedule, cancel schedule | no | yes | yes | yes |
 | Delete library asset (not in use) | no | yes | yes | yes |
-| `go_live`, `rollback`, `cancel_build` | no | no | yes | yes, if the key allows going live |
+| `go_live`, `rollback`, `cancel_build` | no | no | yes | yes, if the app or key may publish |
 | `upsert_collection`, `delete_collection` | no | no | no | yes |
 
 Rules:
 
-- Editors cannot create a key with **Allow going live** (the server refuses it). Owners and agency admins can.
-- A go-live key stops publishing as soon as its user is no longer an owner or agency admin. The key's flag and the live role are both checked on every request.
-- Owners and agency admins see and revoke all keys on the site. Editors see and revoke only their own.
-- Agency admins creating a key need a fresh authenticator code (step-up).
-- Each user can hold up to 20 active keys per site.
-- Keys expire on their expiry date. Revocation is immediate.
+- Editors cannot allow publishing, either on the consent screen or on a key (the server refuses it). Owners and agency admins can.
+- A connection or key allowed to publish stops publishing as soon as its user is no longer an owner or agency admin. The app's flag and the live role are both checked on every request.
+- Owners and agency admins see and disconnect or revoke all connected apps and keys on the site. Editors see and revoke only their own.
+- Agency admins approving a connection, or creating a key, need a fresh authenticator code (step-up).
+- Each user can hold up to 20 active personal keys per site.
+- Connections last until disconnected, or until 90 days without use. Keys expire on their expiry date. Disconnect and revocation are immediate.
 
-## Endpoint and transport
+## Endpoints and transport
 
 | Item | Value |
 | --- | --- |
-| URL | `{APP_URL}/api/mcp` (the Server URL on the Connect AI page) |
-| Method | `POST` JSON-RPC |
+| Connector URL (per site) | `{APP_URL}/api/mcp/<site-slug>`, shown on the Connect AI page. Accepts OAuth access tokens issued for this site, and personal keys for this site. |
+| Key endpoint | `{APP_URL}/api/mcp`. Accepts personal keys only (`Authorization: Bearer areca_mcp_<43 characters>`); the key's site is used. OAuth tokens are refused here. |
+| Methods | `POST` (JSON-RPC), `GET` and `DELETE` (Streamable HTTP) |
 | Transport | MCP Streamable HTTP, stateless, JSON responses |
 | Protocol | MCP `2026-07-28` via `createMcpHandler` (`@modelcontextprotocol/server`). 2025-era clients are served too, statelessly (`legacy: 'stateless'`). |
-| Auth | `Authorization: Bearer areca_mcp_<43 characters>` on every request |
 | Server name | `areca-<site slug>` |
 | Max request body | 1 MB |
-| Rate limit | 120 requests per minute per key, and 600 per minute per client IP when the IP is known. See [Configuration](#configuration). |
+| Rate limit | 120 requests per minute per access token or key, and 600 per minute per client IP when the IP is known. See [Configuration](#configuration). |
 
-Authentication failures return HTTP `401` with `{"error":"Invalid or expired Areca MCP key"}` and `WWW-Authenticate: Bearer realm="areca-mcp"`. An agency admin whose account has no two-factor sign-in, on an installation with `ADMIN_MFA_REQUIRED` on (the default), gets HTTP `403` with `{"error":"Your account needs two-factor authentication before AI keys work. Turn it on in Account settings.","code":"mfa_required"}`. Keys are checked on every request, so a revoked key stops working at once, even in an open session. Tool errors are not HTTP errors: they return a normal result with `isError: true` and a message written for the model.
+Cookies are not accepted. Tool errors are not HTTP errors: they return a normal result with `isError: true` and a message written for the model.
 
-The server sends role-specific instructions when a client connects. They say what the key may do (for example, editors are told they cannot mark entries ready), so the model explains refusals instead of trying other tools.
+The server sends role-specific instructions when a client connects. They say what the caller may do (for example, editors are told they cannot mark entries ready), so the model explains refusals instead of trying other tools.
 
-Keys are stored as SHA-256 hashes (`mcp_key.token_hash`), with a display prefix in `mcp_key.token_prefix`. `mcp_key.last_used_at` is written at most once a minute.
+## Authentication
+
+### OAuth sign-in (connected apps)
+
+The CMS is an OAuth 2.1 authorization server, built with `@better-auth/oauth-provider` (Better Auth 1.7). It follows the MCP authorization specification, and the connector URL is a protected resource. Decisions are recorded in [DECISIONS.md](DECISIONS.md#ai-apps-connect-ai-mcp).
+
+| Step | Request | Result |
+| --- | --- | --- |
+| Challenge | `POST`/`GET` `{APP_URL}/api/mcp/<slug>` with no token | `401`, `WWW-Authenticate: Bearer resource_metadata="{APP_URL}/.well-known/oauth-protected-resource/api/mcp/<slug>", scope="mcp offline_access"` |
+| Protected resource metadata (RFC 9728) | `GET {APP_URL}/.well-known/oauth-protected-resource/api/mcp/<slug>` | `resource` (the connector URL), `authorization_servers: ["{BETTER_AUTH_URL}/api/auth"]`, `scopes_supported`, `bearer_methods_supported: ["header"]`, `resource_name`. `404` for unknown slugs. |
+| Authorization server metadata (RFC 8414) | `GET {BETTER_AUTH_URL}/.well-known/oauth-authorization-server/api/auth` | Issuer `{BETTER_AUTH_URL}/api/auth`, endpoints, `code_challenge_methods_supported: ["S256"]`, `authorization_response_iss_parameter_supported: true`. Also under `/api/auth/.well-known/…`. |
+| OpenID configuration | `GET {BETTER_AUTH_URL}/.well-known/openid-configuration/api/auth` | Same issuer. Root-level documents (no `/api/auth` path) are not served. |
+| Registration (RFC 7591) | `POST {BETTER_AUTH_URL}/api/auth/oauth2/register` | Open to anonymous clients; registers a public client (no secret). Redirect URIs: `https` anywhere, `http` only for `localhost`, `127.0.0.1` and `[::1]`. Client ID Metadata Documents (CIMD) are not supported yet. Rate limited. |
+| Authorization | `GET {BETTER_AUTH_URL}/api/auth/oauth2/authorize` | Needs `response_type=code`, `client_id`, `redirect_uri`, `scope` (must include `mcp`), `resource` (RFC 8707, the connector URL), `code_challenge` with `code_challenge_method=S256`, and `state`. Sign-in at `/login`, then consent at `/oauth/consent`. |
+| Token | `POST {BETTER_AUTH_URL}/api/auth/oauth2/token` | `grant_type=authorization_code` (with `code_verifier` and `resource`) or `refresh_token`. Rate limited. |
+| Revocation / introspection / user info | `POST …/oauth2/revoke`, `POST …/oauth2/introspect`, `GET …/oauth2/userinfo` | RFC 7009 and RFC 7662 endpoints of the plugin. Disconnecting in the CMS revokes the same tokens. |
+
+The authorization response carries `iss` (RFC 9207) set to the issuer, so clients can check which server answered.
+
+Scopes: `mcp` is the only scope the MCP endpoint checks, and it is required (`403 insufficient_scope` without it). `offline_access` is needed for refresh tokens. `openid`, `profile` and `email` are accepted and advertised because common clients request them, but they are not used for access.
+
+Lifetimes and tokens:
+
+- Access tokens are opaque, prefix `areca_at_`, and last 1 hour.
+- Refresh tokens are opaque, prefix `areca_rt_`, last 90 days from their last use, and rotate on every refresh.
+- Refresh reuse window: 30 seconds. A retry inside the window gets the same tokens back. Reusing a rotated refresh token after the window is treated as replay: the plugin deletes every access and refresh token the client holds for that user, on every site, and the app must sign in again. Dead refresh tokens return `invalid_grant`.
+- Tokens are stored as SHA-256 hashes (`storeTokens: "hashed"`, the plugin default). Access tokens are checked against the database on each request, so revocation is immediate.
+- A connection (`mcp_connection`) is valid while it is not revoked and was used within 90 days. Access tokens are bound to a resource (RFC 8707): a token for one site is refused at another.
+
+Consent is per site: the consent reference is the site the request names in `resource`, so an approval for one site does not cover another. The approval also creates or updates the `mcp_connection` row that each request checks.
+
+On each request the endpoint checks, in order: the token exists, is unexpired and unrevoked, names this site as its resource, and carries `mcp`; an active connection exists for (user, app, site); the user still exists and has a live role on the site (agency admins also need two-factor sign-in when `ADMIN_MFA_REQUIRED` is set). Then it runs the tool with that role.
+
+### Personal keys
+
+A personal key is `areca_mcp_` followed by 43 random characters. Keys are stored as SHA-256 hashes (`mcp_key.token_hash`), with a display prefix in `mcp_key.token_prefix`. They are shown once and checked on every request. A key works on the connector URL of its own site and on `/api/mcp`. On the connector URL of another site it is refused with `401`.
+
+Keys are sent as `Authorization: Bearer areca_mcp_…`. `mcp_key.last_used_at` is written at most once a minute.
+
+### Errors
+
+| Status | Endpoint | Meaning |
+| --- | --- | --- |
+| `401` | connector URL | No bearer credential. The body is `{"error":"Sign in to connect to this site"}`, with the `resource_metadata` challenge above. |
+| `401` | connector URL | `invalid_token`: the access token is invalid, expired or revoked, was issued for another site, or the app is no longer connected to the site, or the user no longer has access. The challenge also carries `resource_metadata`. |
+| `403` | connector URL | `insufficient_scope`: the token has no `mcp` scope. |
+| `401` | `/api/mcp` | `{"error":"Invalid or expired Areca MCP key"}` with `WWW-Authenticate: Bearer realm="areca-mcp"`, for a missing, malformed, unknown, revoked or expired key, or a user who is no longer a member. |
+| `403` | both | `{"error":"Your account needs two-factor authentication before AI keys work. Turn it on in Account settings.","code":"mfa_required"}` for an agency admin without two-factor sign-in, when `ADMIN_MFA_REQUIRED` is on (the default). |
+| `404` | connector URL | Unknown site slug. |
+| `429` | both | Rate limit exceeded, with `Retry-After`. See [Configuration](#configuration). |
+
+A client that gets `401` with `invalid_token` should refresh its access token, and start sign-in again if the refresh fails. Keys are checked on every request, so a revoked key or disconnected app stops working at once, even in an open session.
 
 ## Tools
 
@@ -168,7 +224,7 @@ Common tool error messages and what they mean:
 | Slug conflict | Slug already used in the collection. |
 | `This asset is still used by N item(s)` | `delete_asset` refused. |
 | `Could not import the file: …` | Upload from URL refused (see above). |
-| `Only site owners can …` / `Going live is not enabled for this key…` / `Only agency admins can …` | Role or key does not allow it. The message says who can. |
+| `Only site owners can …` / `Going live wasn't allowed when this app was connected.` (or `Going live is not enabled for this key.`) / `Only agency admins can …` | Role or key does not allow it. The message says who can. |
 | `No entry with id …` / `No collection …` | Not on this site. Use the list tool to find valid ids. |
 | `Something went wrong on the Areca server (ref …)` | Unexpected failure. Nothing is confirmed as saved. The ref is in the server log. |
 
@@ -176,29 +232,43 @@ Not found and forbidden answers follow the rules in `AUTHZ_MATRIX.md`: objects o
 
 ## Activity and audit
 
-Each MCP tool call runs inside `withAuditContext({ via: 'mcp', mcpKeyId, mcpKeyName })`, so every audit row written by the call carries that metadata. The activity log shows these actions as **via AI · <key name>**. Audit metadata holds the action, key name and identifiers, not the content text.
+Each MCP tool call runs inside `withAuditContext({ via: 'mcp', mcpKeyId, mcpKeyName })`, where `mcpKeyId` and `mcpKeyName` hold the connection's id and the connected app's name for OAuth connections, and the key's id and name for keys. The activity log shows these actions as **via AI · <app name>**. Audit metadata holds the action, the name and identifiers, not the content text.
 
-Key creation and revocation are audited as `mcp_key.create` and `mcp_key.revoke`.
+Connecting an app to a site is audited as `mcp_connection.create` (the activity log: "connected … to the site"), and disconnecting as `mcp_connection.revoke`. Key creation and revocation are audited as `mcp_key.create` and `mcp_key.revoke`.
 
 ## Configuration
 
-- **`APP_URL`** sets the origin of the endpoint shown on the Connect AI page (`APP_URL` + `/api/mcp`). Set it to the public CMS origin, or the install snippets will point at an address the AI app cannot reach. See [CONFIGURATION.md](CONFIGURATION.md).
-- **`RATE_LIMIT_TRUST_PROXY`** decides whether the per-IP budget (600 a minute) applies to `/api/mcp`. Without a trusted proxy the client IP is unknown, so only the per-key budget (120 a minute) applies. Set it to `true` only behind a proxy that sets the client address header.
-- **`ADMIN_MFA_REQUIRED`** (default `true`): an agency admin without two-factor sign-in gets `403` with `mfa_required` on every key.
+- **`APP_URL`** sets the origin of each connector URL (`APP_URL` + `/api/mcp/<slug>`), and the protected resource metadata. Set it to the public HTTPS origin, or the connector URLs will point at an address the AI app cannot reach.
+- **`BETTER_AUTH_URL`** is the OAuth issuer (`BETTER_AUTH_URL` + `/api/auth`), and the origin of the authorization server's discovery documents. Use the same public HTTPS origin as `APP_URL`. A mismatch breaks sign-in. See [CONFIGURATION.md](CONFIGURATION.md).
+- **Reverse proxy.** The proxy must forward `/.well-known/*`, `/api/auth/*` and `/api/mcp/*` to the CMS. See [DEPLOYMENT.md](DEPLOYMENT.md#ai-apps-need-public-https).
+- **`RATE_LIMIT_TRUST_PROXY`** decides whether the per-IP budgets apply. Without a trusted proxy the client IP is unknown, so `/api/mcp` and `/api/mcp/<slug>` apply only the per-credential budget (120 a minute), and the OAuth registration per-address limit (20 an hour) is skipped. The deployment-wide registration limit (300 an hour) and the token limit (60 a minute per app, and per client address when it is known) still apply. Set it to `true` only behind a proxy that sets the client address header.
+- **`ADMIN_MFA_REQUIRED`** (default `true`): an agency admin without two-factor sign-in gets `403` with `mfa_required` on every connector URL and key, and cannot approve a connection.
 
 ## Code map
 
 | Path | Role |
 | --- | --- |
-| `apps/cms/src/routes/api/mcp.ts` | Route: POST, GET, DELETE to the handler |
-| `apps/cms/src/server/mcp/http.ts` | Bearer parsing, actor resolution, 401, SDK handler (stateless, JSON) |
-| `apps/cms/src/server/mcp/keys.ts` | Key generation, hashing, create, list, revoke, `resolveMcpActor` |
+| `apps/cms/src/lib/auth.ts` | Better Auth with `oauthProvider` (opaque tokens, PKCE `S256`, DCR, `login`/`consent` pages, per-site consent reference, resource hooks) |
+| `apps/cms/src/server/mcp/oauth-resource.ts` | Scopes, token lifetimes and prefixes, per-site resource URLs, `ensureMcpSiteResource` |
+| `apps/cms/src/server/mcp/oauth-registration.ts` | Registration normalisation (`application_type` native for loopback clients, full scope set) |
+| `apps/cms/src/server/mcp/oauth-tokens.ts` | Verifies access tokens through the plugin's API (expiry, revocation, client) |
+| `apps/cms/src/server/mcp/discovery.ts` | Discovery documents at the origin root (AS, OIDC and protected resource metadata); dispatched from `apps/cms/src/server.ts` |
+| `apps/cms/src/server/mcp/consent.ts` | Consent: signed query check, access check, step-up for agency admins, approve and deny |
+| `apps/cms/src/server/mcp/connections.ts` | `mcp_connection` rows: create on approval, list, disconnect (revokes tokens and consent), 90-day idle rule |
+| `apps/cms/src/server/mcp/site-access.ts` | Site access for Connect AI pages and their server functions |
+| `apps/cms/src/server/mcp/http.ts` | Per-site endpoint (`handleSiteMcpRequest`), key endpoint (`handleMcpRequest`), challenges, actor construction, SDK handler (stateless, JSON) |
+| `apps/cms/src/server/mcp/keys.ts` | Key generation, hashing, create, list, revoke, `resolveMcpActor`, live role |
 | `apps/cms/src/server/mcp/server.ts` | Server instructions, registration, `write_post` prompt |
 | `apps/cms/src/server/mcp/tool-kit.ts`, `guard.ts`, `scope.ts`, `errors.ts` | Tool registry, access checks, tenancy lookups, error mapping |
 | `apps/cms/src/server/mcp/tools/*.ts` | The tools, grouped by area |
 | `apps/cms/src/server/mcp/entry-format.ts`, `schemas.ts`, `schema-docs.ts` | Field conversion, SEO schema, agent-facing format docs |
 | `apps/cms/src/server/assets/remote.ts` | SSRF-safe download and `uploadAssetFromUrl` |
 | `apps/cms/src/server/richtext/from-markdown.ts` | Markdown to stored rich text |
-| `apps/cms/src/server/fn/mcp-keys.ts` | Server functions for the Connect AI page |
-| `apps/cms/src/lib/mcp-install.ts` | Install snippets per app |
-| `apps/cms/src/features/connect-ai/` | Connect AI page UI |
+| `apps/cms/src/routes/api/mcp/$siteSlug.ts` | Route: per-site connector URL, POST, GET, DELETE |
+| `apps/cms/src/routes/api/mcp/index.ts` | Route: personal-key endpoint `/api/mcp`, POST, GET, DELETE |
+| `apps/cms/src/routes/oauth/consent.tsx` | Consent page at `/oauth/consent` |
+| `apps/cms/src/server/http/rate-limit.ts` | Rate limits for `/api/mcp*`, OAuth registration and token |
+| `apps/cms/src/server/fn/mcp-keys.ts`, `mcp-oauth.ts` | Server functions for keys, consent and connected apps |
+| `apps/cms/src/lib/mcp-install.ts` | Connector and install snippets per app |
+| `apps/cms/src/features/connect-ai/` | Connect AI page UI (connector URL, per-app steps, connected apps, Advanced personal keys) |
+| `apps/cms/src/features/auth/consent-screen.tsx` | Consent screen UI |

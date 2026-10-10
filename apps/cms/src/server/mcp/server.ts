@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/server'
 import { z } from 'zod'
 
+import { credentialPhrase } from './guard'
 import type { McpActor } from './keys'
 import { ToolRegistry } from './tool-kit'
 import { registerAssetTools } from './tools/assets'
@@ -14,7 +15,7 @@ export const MCP_SERVER_NAME = 'areca-cms'
 export const MCP_SERVER_VERSION = '1.0.0'
 
 /** What the caller may do, in the words the CMS uses. Drives the instructions. */
-function roleInstruction(actor: Pick<McpActor, 'role' | 'allowGoLive'>): string[] {
+function roleInstruction(actor: Pick<McpActor, 'role' | 'allowGoLive' | 'credential'>): string[] {
   if (actor.role === 'editor') {
     return [
       'You can create and edit drafts, upload images and edit alt text. You cannot mark entries ready or go live.',
@@ -29,8 +30,12 @@ function roleInstruction(actor: Pick<McpActor, 'role' | 'allowGoLive'>): string[
       'go_live puts the release live (builds the ready changes and deploys them). Only call it when the user asks.',
     )
   } else {
+    const fix =
+      actor.credential === 'oauth'
+        ? ', or that the app can be reconnected from Connect AI with "Allow going live" ticked'
+        : ''
     lines.push(
-      'Going live is not enabled for this key. When the user asks to go live, explain that a site owner presses Go live in the CMS.',
+      `Going live is not enabled for ${credentialPhrase(actor.credential)}. When the user asks to go live, explain that a site owner presses Go live in the CMS${fix}.`,
     )
   }
   if (actor.role === 'agency') {
@@ -42,7 +47,9 @@ function roleInstruction(actor: Pick<McpActor, 'role' | 'allowGoLive'>): string[
 }
 
 /** Read by the model once, at connection time. Keep it short and specific. */
-export function serverInstructions(actor: Pick<McpActor, 'siteName' | 'role' | 'allowGoLive'>): string {
+export function serverInstructions(
+  actor: Pick<McpActor, 'siteName' | 'role' | 'allowGoLive' | 'credential'>,
+): string {
   return [
     `This server edits one website: "${actor.siteName}". Every tool acts only on that site.`,
     'Before writing: call get_site_info (your role, what you cannot do, and the collections), then get_collection_schema for the collection you need. The schema gives the exact field formats and an example payload.',

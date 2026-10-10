@@ -150,6 +150,36 @@ describe('MCP keys in the activity log', () => {
     ).toBe('Sanne de Vries revoked the AI key Laptop')
   })
 
+  it('names the AI app connected or disconnected on a site', () => {
+    expect(
+      activityText(
+        row({
+          action: 'mcp_connection.create',
+          targetType: 'mcp_connection',
+          meta: { clientName: 'Claude', allowGoLive: false },
+        }),
+      ),
+    ).toBe('Sanne de Vries connected Claude to the site')
+    expect(
+      activityText(
+        row({
+          action: 'mcp_connection.revoke',
+          targetType: 'mcp_connection',
+          meta: { clientName: 'ChatGPT', allowGoLive: true },
+        }),
+      ),
+    ).toBe('Sanne de Vries disconnected ChatGPT from the site')
+    expect(
+      activityText(
+        row({
+          action: 'mcp_connection.revoke',
+          targetType: 'mcp_connection',
+          meta: null,
+        }),
+      ),
+    ).toBe('Sanne de Vries disconnected an AI app from the site')
+  })
+
   it('reads the via-AI key name only for MCP-performed rows', () => {
     expect(
       viaMcpKeyName(row({ meta: { via: 'mcp', mcpKeyName: 'Claude' } })),

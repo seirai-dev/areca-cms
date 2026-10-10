@@ -52,9 +52,9 @@ Owners can request a rollback from a prior successful release in the Go-live pan
 
 ## Connect an AI app
 
-Connect AI lets an AI app you run, such as Claude Code, Cursor, VS Code or Claude Desktop, read and write one site as you. Open **Connect AI** in the site's sidebar or from the card on the Overview, and select **Create AI key**. Choose a name, the app, how long the key lasts (30 days, 90 days, 1 year or never; 90 days by default) and, for owners and agency admins, whether it may **Allow going live**. Areca shows the key once, with an install step for each app.
+Connect AI lets an AI app you use, such as ChatGPT, Claude, Claude Code, Cursor or VS Code, read and write one site as you. Open **Connect AI** in the site's sidebar or from the card on the Overview. Copy the site's connector URL into your app, then sign in to Areca in the browser and select **Allow** on the consent screen. Owners and agency admins can also tick **Allow going live**, which lets the app publish the whole site and is off by default. Connected apps are listed on the same page, and you can disconnect any of them at any time. Personal keys, for scripts, are under **Advanced: personal keys**.
 
-The AI works within your role. Editors can create and edit drafts, upload files from web addresses and edit alt text. Owners can also mark ready, schedule, archive and delete. Only a key with **Allow going live** can publish. Keys stop working when they expire or are revoked, and owners can see and revoke every key on the site. Actions made through a key appear in the activity log as **via AI**.
+The AI works within your role. Editors can create and edit drafts, upload files from web addresses and edit alt text. Owners can also mark ready, schedule, archive and delete. Only a key with **Allow going live** can publish. Connections stop working when they are disconnected or unused for 90 days, and keys stop working when they expire or are revoked. Owners can see and disconnect every connection on the site. Actions made through a connected app or key appear in the activity log as **via AI**.
 
 For setup steps and troubleshooting, see the [Connect AI guide](/docs/cms/connect-ai) in the docs site. For the tools and their rules, see [MCP.md](MCP.md).
 

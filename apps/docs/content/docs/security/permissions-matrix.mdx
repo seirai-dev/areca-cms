@@ -108,12 +108,18 @@ Anyone with the URL of a Library file can open it, whatever their role. See [Lib
 
 Each user can generate up to 30 suggestions per hour. See [rate limits](/docs/security/rate-limits#ai-suggestions). For what is sent to the AI provider, see [AI data handling](/docs/security/ai-data-handling).
 
-## AI keys
+## AI apps and keys
 
-These actions manage personal AI keys on the [Connect AI](/docs/cms/connect-ai) page. A key then acts as its user, and every tool it calls is checked against the same rules as the rest of this page. See [MCP endpoint and tools](/docs/cms/mcp-tools) for the tool list.
+These actions manage AI apps connected with OAuth, and personal AI keys, on the [Connect AI](/docs/cms/connect-ai) page. A connected app or key then acts as its user, and every tool it calls is checked against the same rules as the rest of this page. See [MCP endpoint and tools](/docs/cms/mcp-tools) for the tool list.
 
 | Action | Editor | Owner | Admin |
 | --- | :---: | :---: | :---: |
+| Connect an AI app to a site by approving its consent screen | ✓ | ✓ | ✓ + fresh sign-in code |
+| See your own connected apps | ✓ | ✓ | ✓ |
+| See every connected app on a site | – | ✓ | ✓ |
+| Disconnect your own connected app | ✓ | ✓ | ✓ |
+| Disconnect someone else's connected app on a site | – | ✓ | ✓ |
+| Allow a connected app to publish the site (consent checkbox) | – | ✓ | ✓ |
 | Create a personal AI key for yourself | ✓ | ✓ | ✓ + fresh sign-in code |
 | See your own AI keys | ✓ | ✓ | ✓ |
 | See every AI key on a site | – | ✓ | ✓ |
@@ -121,7 +127,7 @@ These actions manage personal AI keys on the [Connect AI](/docs/cms/connect-ai) 
 | Revoke someone else's AI key on a site | – | ✓ | ✓ |
 | Allow an AI key to go live | – | ✓ | ✓ |
 
-A key made with **Allow going live** can publish only while its user is still an owner or agency admin. A key cannot do anything its user cannot do in the rest of this matrix.
+A connected app or key allowed to publish can publish only while its user is still an owner or agency admin. A connection or key cannot do anything its user cannot do in the rest of this matrix. Approving a connection for a site needs a site role there, and the approval is for that site only.
 
 ## Your own account
 
@@ -133,7 +139,7 @@ Some actions identify the object they act on by its ID, such as an entry, a site
 
 Actions that identify a client by its ID answer "Forbidden" to people who are not members, whether or not the client exists.
 
-Revoking an AI key that belongs to someone else answers "not found" for editors, because editors can only see their own keys.
+Revoking an AI key, or disconnecting a connected app, that belongs to someone else answers "not found" for editors, because editors can only see their own.
 
 ## Related
 

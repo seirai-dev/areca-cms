@@ -82,6 +82,7 @@ function InsetRow({
   chevron = false,
   asChild = false,
   inset = true,
+  wrapSubtitle = false,
   className,
   children,
   ...props
@@ -94,6 +95,8 @@ function InsetRow({
   asChild?: boolean
   /** Inset the separator to start after the leading slot. */
   inset?: boolean
+  /** Wrap a long subtitle onto more lines instead of truncating it. */
+  wrapSubtitle?: boolean
 }) {
   const Comp = asChild ? Slot.Root : 'div'
   const layout = (extra: React.ReactNode) => (
@@ -110,7 +113,12 @@ function InsetRow({
           </span>
         ) : null}
         {subtitle ? (
-          <span className="truncate text-callout text-text-secondary">
+          <span
+            className={cn(
+              'text-callout text-text-secondary',
+              wrapSubtitle ? 'min-w-0 break-words' : 'truncate',
+            )}
+          >
             {subtitle}
           </span>
         ) : null}

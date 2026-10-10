@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import { listCollections } from '#/server/content/collections'
 
+import { credentialPhrase } from '../guard'
 import type { ToolRegistry } from '../tool-kit'
 import { loadCollectionInSite, loadSiteRow } from '../scope'
 import type { McpActor } from '../keys'
@@ -27,7 +28,9 @@ export function cannotDoFor(actor: McpActor): string[] {
   }
   if (!actor.allowGoLive) {
     out.push(
-      'Go live: going live is not enabled for this key. A site owner presses Go live in the CMS.',
+      actor.credential === 'oauth'
+        ? `Go live: going live is not enabled for ${credentialPhrase(actor.credential)}. A site owner presses Go live in the CMS, or the app can be reconnected from Connect AI with "Allow going live" ticked.`
+        : `Go live: going live is not enabled for ${credentialPhrase(actor.credential)}. A site owner presses Go live in the CMS.`,
     )
   }
   if (actor.role !== 'agency') {
@@ -56,7 +59,7 @@ export function registerSiteTools(registry: ToolRegistry): void {
     name: 'get_site_info',
     title: 'Get site info',
     description:
-      'Call this first. Returns the site this AI key is connected to (name, slug, production URL, publishing mode), your role and what you may do, every collection with its route and whether it is enabled, and a short guide for writing content. Read-only.',
+      'Call this first. Returns the site this AI connection is for (name, slug, production URL, publishing mode), your role and what you may do, every collection with its route and whether it is enabled, and a short guide for writing content. Read-only.',
     inputSchema: z.object({}),
     annotations: { readOnlyHint: true, idempotentHint: true },
     run: async (_input, actor) => {

@@ -21,7 +21,9 @@ import {
   entryRevision,
   invitation,
   membership,
+  mcpConnection,
   mcpKey,
+  oauthClient,
   organization,
   publication,
   site,
@@ -35,6 +37,7 @@ import * as brandingFns from '#/server/fn/branding'
 import * as contentFns from '#/server/fn/content'
 import * as homeFns from '#/server/fn/home'
 import * as mcpKeyFns from '#/server/fn/mcp-keys'
+import * as mcpOauthFns from '#/server/fn/mcp-oauth'
 import * as meFns from '#/server/fn/me'
 import * as overviewFns from '#/server/fn/overview'
 import * as publishingFns from '#/server/fn/publishing'
@@ -998,6 +1001,83 @@ export const ROWS: Row[] = [
       }
     },
   },
+  // ------------------------------------------------------- mcp-oauth.ts
+  {
+    name: 'getOAuthConsentFn',
+    fn: mcpOauthFns.getOAuthConsentFn,
+    // Returns a reason instead of throwing: signed_out, invalid_request,
+    // unknown_site or no_access. Those outcomes are asserted separately in
+    // mcp-oauth.test.ts; this row only checks that it reads nothing it
+    // should not, and that a bogus query is refused without a side effect.
+    policy: 'public',
+    note: 'Read-only. Non-members get reason no_access and an agency admin without 2FA gets the MFA message, both asserted separately.',
+    prepare: () => ({ data: { query: 'client_id=nope&sig=nope&exp=1' } }),
+  },
+  {
+    name: 'approveOAuthConsentFn',
+    hidden: true,
+    fn: mcpOauthFns.approveOAuthConsentFn,
+    policy: 'org-editor',
+    tolerant: true,
+    note: 'Site access (NotFound for other tenants, 2FA for agency admins, fresh session for agency approval) is checked before the signed query. Editors cannot go live (asserted separately).',
+    override: { adminStale: 'reauth' },
+    prepare: (w) => ({
+      data: {
+        query: 'client_id=nope&sig=nope&exp=1',
+        siteId: w.X.site.id,
+        allowGoLive: false,
+      },
+    }),
+  },
+  {
+    name: 'denyOAuthConsentFn',
+    fn: mcpOauthFns.denyOAuthConsentFn,
+    policy: 'user',
+    tolerant: true,
+    note: 'Any signed-in user may refuse a request addressed to them; the query must still be signed by the server.',
+    prepare: () => ({ data: { query: 'client_id=nope&sig=nope&exp=1' } }),
+  },
+  {
+    name: 'listMcpConnectionsFn',
+    hidden: true,
+    fn: mcpOauthFns.listMcpConnectionsFn,
+    policy: 'org-editor',
+    note: 'Editors see only their own connections; owners and agency admins see all (scoping asserted separately).',
+    prepare: (w) => ({ data: { siteId: w.X.site.id } }),
+  },
+  {
+    name: 'revokeMcpConnectionFn',
+    hidden: true,
+    fn: mcpOauthFns.revokeMcpConnectionFn,
+    policy: 'org-editor',
+    note: 'Owners and agency admins disconnect any app on the site; editors only their own. Other connections answer NotFound.',
+    override: { editorX: 'not-found' },
+    prepare: async (w) => {
+      const clientId = `authz-client-${uniq()}`
+      await db.insert(oauthClient).values({
+        clientId,
+        redirectUris: ['http://localhost:9999/callback'],
+        name: 'Authz app',
+      })
+      const [connection] = await db
+        .insert(mcpConnection)
+        .values({
+          userId: w.users.ownerX.id,
+          siteId: w.X.site.id,
+          clientId,
+          clientName: 'Authz app',
+        })
+        .returning()
+      if (!connection) throw new Error('mcp connection insert failed')
+      return {
+        data: { id: connection.id },
+        untouched: exists(
+          mcpConnection,
+          and(eq(mcpConnection.id, connection.id), isNull(mcpConnection.revokedAt)),
+        ),
+      }
+    },
+  },
 ]
 
 export const ALL_FN_MODULES = {
@@ -1009,6 +1089,7 @@ export const ALL_FN_MODULES = {
   content: contentFns,
   home: homeFns,
   'mcp-keys': mcpKeyFns,
+  'mcp-oauth': mcpOauthFns,
   me: meFns,
   overview: overviewFns,
   publishing: publishingFns,

@@ -26,42 +26,80 @@ async function openConnectAi(page: Page) {
   await hydrated(page, page.getByTestId('connect-ai'))
 }
 
+/** Personal keys live under "Advanced", collapsed by default. */
+async function openAdvanced(page: Page) {
+  const advanced = page.getByTestId('connect-ai-advanced')
+  await advanced.locator('summary').click()
+  await expect(advanced).toHaveAttribute('open', '')
+}
+
 test.describe('Connect AI', () => {
-  test('owner creates a key, sees it once, and revokes it', async ({
+  test('shows one connector URL and a guide for each AI app', async ({
     page,
   }) => {
     await login(page, OWNER, PASSWORD)
     await openSite(page, ACME_SITE)
     await openConnectAi(page)
 
+    const panel = page.getByTestId('connect-ai-url-panel')
+    await expect(panel).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByTestId('connect-ai-endpoint')).toContainText(
+      '/api/mcp/acme-site',
+    )
+    await expect(page.getByTestId('connect-ai-url-copy')).toBeVisible()
+
+    // Desktop: tabs per app. The Claude Code guide carries the command.
+    await page.getByTestId('connect-ai-guide-tab-claude-code').click()
+    await expect(page.getByTestId('connect-ai-command')).toContainText(
+      'claude mcp add --transport http areca-acme-site',
+    )
+    await expect(page.getByTestId('connect-ai-command')).not.toContainText(
+      'Authorization',
+    )
+    await page.getByTestId('connect-ai-guide-tab-cursor').click()
+    await expect(page.getByTestId('connect-ai-add-cursor')).toHaveAttribute(
+      'href',
+      /^cursor:\/\/anysphere\.cursor-deeplink/,
+    )
+    await page.screenshot({
+      path: test.info().outputPath('connect-ai-desktop.png'),
+      fullPage: true,
+    })
+  })
+
+  test('owner creates an advanced key, sees it once, and revokes it', async ({
+    page,
+  }) => {
+    await login(page, OWNER, PASSWORD)
+    await openSite(page, ACME_SITE)
+    await openConnectAi(page)
+    // Connected apps (OAuth) are listed above the advanced section.
+    await expect(
+      page
+        .getByTestId('connect-ai-connected-empty')
+        .or(page.getByTestId('connect-ai-connected')),
+    ).toBeVisible({ timeout: 30_000 })
+
+    // The advanced key flow still works for scripts.
+    await openAdvanced(page)
     const name = `E2E Claude ${uniqueSuffix()}`
     await page.getByTestId('connect-ai-create').click()
     const dialog = page.getByTestId('connect-ai-create-dialog')
     await expect(dialog).toBeVisible()
-
     await page.getByTestId('connect-ai-name').fill(name)
-    // Owners may tick "Allow going live".
     const goLive = page.getByTestId('connect-ai-go-live')
     await expect(goLive).toBeVisible()
     await goLive.click()
     await expect(goLive).toHaveAttribute('aria-checked', 'true')
     await page.getByTestId('connect-ai-create-submit').click()
 
-    // The reveal: the warning, the real key and the Claude Code command.
     await expect(page.getByTestId('connect-ai-warning')).toBeVisible({
       timeout: 30_000,
     })
     await expect(page.getByTestId('connect-ai-key')).toContainText('areca_mcp_')
     await expect(page.getByTestId('connect-ai-command')).toContainText(
-      'claude mcp add --transport http areca-acme-site',
-    )
-    await expect(page.getByTestId('connect-ai-command')).toContainText(
       'Authorization: Bearer areca_mcp_',
     )
-    await page.screenshot({
-      path: test.info().outputPath('connect-ai-reveal.png'),
-    })
-
     await page.getByTestId('connect-ai-done').click()
     await expect(dialog).toBeHidden()
 
@@ -74,11 +112,6 @@ test.describe('Connect AI', () => {
     await expect(page.getByTestId('connect-ai-role-note')).toContainText(
       'delete and restore entries',
     )
-    await page.screenshot({
-      path: test.info().outputPath('connect-ai-page.png'),
-      fullPage: true,
-    })
-
     await row.getByTestId('connect-ai-revoke').click()
     await page.getByTestId('confirm-action').click()
     await expect(row).toHaveCount(0, { timeout: 30_000 })
@@ -92,6 +125,7 @@ test.describe('Connect AI', () => {
     await expect(page.getByTestId('connect-ai-role-note')).toContainText(
       'Only an owner can mark a post ready or publish it',
     )
+    await openAdvanced(page)
     await page.getByTestId('connect-ai-create').click()
     await expect(page.getByTestId('connect-ai-create-dialog')).toBeVisible()
     await expect(page.getByTestId('connect-ai-name')).toBeVisible()
@@ -103,7 +137,7 @@ test.describe('Connect AI', () => {
   test.describe('on a phone', () => {
     test.use({ viewport: { width: 375, height: 812 } })
 
-    test('the page and reveal fit the screen with touch-sized buttons', async ({
+    test('the page fits the screen and the app guide is a menu', async ({
       page,
     }) => {
       await login(page, OWNER, PASSWORD)
@@ -112,9 +146,11 @@ test.describe('Connect AI', () => {
       await page.goto(`/sites/${siteId}/connect-ai`)
       await hydrated(page, page.getByTestId('connect-ai'))
 
-      const create = page.getByTestId('connect-ai-create')
-      await expect(create).toBeVisible({ timeout: 30_000 })
-      const box = await create.boundingBox()
+      await expect(page.getByTestId('connect-ai-url-copy')).toBeVisible({
+        timeout: 30_000,
+      })
+      const copy = page.getByTestId('connect-ai-url-copy')
+      const box = await copy.boundingBox()
       expect(box?.height ?? 0).toBeGreaterThanOrEqual(44)
       await expect
         .poll(() =>
@@ -124,30 +160,15 @@ test.describe('Connect AI', () => {
         )
         .toBe(true)
 
-      await create.click()
-      await page.getByTestId('connect-ai-name').fill('Phone key')
-      await page.getByTestId('connect-ai-create-submit').click()
-      await expect(page.getByTestId('connect-ai-key')).toContainText(
-        'areca_mcp_',
-        { timeout: 30_000 },
-      )
       // Narrow screens pick the app from a menu instead of a tab strip.
-      await expect(page.getByTestId('connect-ai-tab-cursor')).toBeHidden()
-      await page.getByTestId('connect-ai-app-picker').click()
+      await expect(page.getByTestId('connect-ai-guide-tab-cursor')).toBeHidden()
+      await page.getByTestId('connect-ai-guide-picker').click()
       await page.getByRole('option', { name: 'Cursor' }).click()
       await expect(page.getByTestId('connect-ai-add-cursor')).toBeVisible()
       await page.screenshot({
-        path: test.info().outputPath('connect-ai-mobile-reveal.png'),
+        path: test.info().outputPath('connect-ai-375.png'),
+        fullPage: true,
       })
-      await page.getByTestId('connect-ai-done').click()
-      await expect(page.getByTestId('connect-ai-create-dialog')).toBeHidden()
-
-      const row = page
-        .getByTestId('connect-ai-keys')
-        .locator('li', { hasText: 'Phone key' })
-      await row.getByTestId('connect-ai-revoke').click()
-      await page.getByTestId('confirm-action').click()
-      await expect(row).toHaveCount(0, { timeout: 30_000 })
     })
   })
 })

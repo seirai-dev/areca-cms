@@ -117,6 +117,11 @@ unchanged (each row carries a side-effect probe).
 | `listMcpKeysFn` | `mcp-keys.ts` | `org-editor` | any site member; editors see only their own keys, owners and agency admins all keys on the site |
 | `createMcpKeyFn` | `mcp-keys.ts` | `org-editor` | any site member (MFA for agency admins); agency admins also need a fresh session (`REAUTH_REQUIRED`); editors cannot allow go-live |
 | `revokeMcpKeyFn` | `mcp-keys.ts` | `org-editor` | editors revoke their own keys; owners and agency admins any key on the site; other keys are NotFound |
+| `getOAuthConsentFn` | `mcp-oauth.ts` | `public` (reason-based) | signed-out, invalid or tampered requests and non-members get a reason instead of data; nothing is changed |
+| `approveOAuthConsentFn` | `mcp-oauth.ts` | `org-editor` | site access first (NotFound for other tenants); agency admins need a fresh second factor; editors cannot allow go-live; the signed query must name this site |
+| `denyOAuthConsentFn` | `mcp-oauth.ts` | `user` | any signed-in user may refuse a request addressed to them; the query must be signed by the server |
+| `listMcpConnectionsFn` | `mcp-oauth.ts` | `org-editor` | editors see only their own connected apps; owners and agency admins all on the site |
+| `revokeMcpConnectionFn` | `mcp-oauth.ts` | `org-editor` | editors disconnect their own apps; owners and agency admins any app on the site; others are NotFound |
 
 Per-row exceptions (see `note`/`override` in the matrix): `verifyStepUpFn` needs a
 two-factor session (everyone else gets Forbidden; wrong codes are refused);
@@ -143,6 +148,12 @@ answers NotFound for editors (the matrix override), so existence is not revealed
 | `/api/sites/manifest` | POST | site **schema** token | 401 for build token; writes only the token's own site |
 | `/api/sites/snapshot/current` | GET | site build token | 401 for schema token; only own publication |
 | `/api/sites/preview` | GET | HMAC preview token | 401 expired/tampered/foreign-secret/unknown site; 404 for another site's slug |
+| `/api/mcp/<siteSlug>` | POST, GET, DELETE | OAuth access token issued for that site (RFC 8707 audience), or a personal key for that site; 401 with `WWW-Authenticate: Bearer resource_metadata=…` for none, invalid, expired, revoked, other-site or disconnected credentials; 403 `insufficient_scope` without the `mcp` scope; 403 `mfa_required` as for keys; 404 for an unknown slug |
+| `/.well-known/oauth-authorization-server/api/auth`, `/.well-known/openid-configuration/api/auth` | GET | none | public metadata, CORS `*`; the issuer matches the plugin's; root-level documents are not served |
+| `/.well-known/oauth-protected-resource/api/mcp/<siteSlug>` | GET | none | public PRM for that site, `resource` equal to the connector URL; 404 for unknown slugs |
+| `/api/auth/oauth2/authorize`, `/api/auth/oauth2/consent`, `/api/auth/oauth2/continue` | GET, POST | session cookie (for consent and continue) and the signed `oauth_query` | plugin endpoints; the consent endpoint does not check site membership itself. A grant is usable only with an `mcp_connection` row, which only `approveOAuthConsentFn` creates after the membership and step-up checks, so a consent without one yields a token that the MCP endpoint refuses (`401`). |
+| `/api/auth/oauth2/register` | POST | none (open DCR) | rate limited: 20 an hour per address, 300 an hour deployment-wide |
+| `/api/auth/oauth2/token` | POST | client | rate limited: 60 a minute per client and address; other `/api/auth/*` routes stay exempt from the app limiter |
 | `/api/mcp` | POST, GET, DELETE | personal AI key (`Authorization: Bearer areca_mcp_…`); no cookies 401 for no, malformed, unknown, revoked or expired key, and for a user who is no longer a member; 403 `mfa_required` for an agency admin without 2FA when `ADMIN_MFA_REQUIRED` is set (default on); 429 after 120 requests a minute per key, or 600 a minute per client IP when the IP is known; tool access as listed under MCP tools |
 
 ## MCP tools (`src/server/mcp/tools/*.ts`)

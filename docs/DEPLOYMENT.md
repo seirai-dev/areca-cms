@@ -111,6 +111,14 @@ The Docker build calls `GET /api/sites/snapshot/current` on `ARECA_CMS_URL`.
 - If the build log shows `areca pull` cannot connect, allow inbound TCP 3000 on the CMS machine
   (elevated): `New-NetFirewallRule -DisplayName "Areca CMS dev 3000" -Direction Inbound -LocalPort 3000 -Protocol TCP -Action Allow`.
 
+## AI apps need public HTTPS
+
+ChatGPT and Claude connect to the CMS from the internet, so the CMS must answer on a public HTTPS address for them. Claude Code, Cursor and VS Code need HTTPS for any address except `localhost`, so a plain `http://` LAN address does not work for their sign-in.
+
+- Set `APP_URL` and `BETTER_AUTH_URL` to the same public `https://` origin. The connector URL (`<APP_URL>/api/mcp/<site-slug>`), the OAuth issuer (`<BETTER_AUTH_URL>/api/auth`) and the discovery documents are built from them.
+- A reverse proxy must forward every path to the CMS, including `/.well-known/*` (discovery), `/api/auth/*` (sign-in and OAuth) and `/api/mcp/*` (the connectors). A proxy that forwards only some paths breaks AI app sign-in.
+- Check the discovery documents after a deploy. `https://<cms>/.well-known/oauth-protected-resource/api/mcp/<site-slug>` must return a `resource` equal to the connector URL, and `https://<cms>/.well-known/oauth-authorization-server/api/auth` must return the issuer `https://<cms>/api/auth`.
+
 ## 4. CMS site settings
 
 As an agency administrator, first save and verify the organization's Dokploy

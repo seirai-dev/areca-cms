@@ -27,6 +27,14 @@ const MCP_RULE = { limit: 120, windowSeconds: 60 } as const
 const MCP_IP_RULE = { limit: 600, windowSeconds: 60 } as const
 // Throttles bearer-token guessing against /api/metrics; a scraper needs ~4/min.
 const METRICS_RULE = { limit: 60, windowSeconds: 60 } as const
+// Anonymous client registration (RFC 7591) is open so AI apps can connect. A
+// real user registers a handful of apps; a flood from one address is abuse.
+const OAUTH_REGISTER_IP_RULE = { limit: 20, windowSeconds: 60 * 60 } as const
+// Caps the whole deployment, which also covers clients that share 'unknown'.
+const OAUTH_REGISTER_GLOBAL_RULE = { limit: 300, windowSeconds: 60 * 60 } as const
+// Per app and address. Refresh tokens rotate, so a busy app refreshes about
+// hourly per user; this allows bursts without letting one client flood /token.
+const OAUTH_TOKEN_RULE = { limit: 60, windowSeconds: 60 } as const
 
 // Liveness/readiness probes must never be throttled (orchestrators poll often
 // and a 429 would look like an outage).
@@ -89,6 +97,94 @@ export async function consumeRateLimit(
   return (await store.increment(key, rule.windowSeconds + 1)) <= rule.limit
 }
 
+async function enforceOAuthRegister(
+  request: Request,
+  dependencies: RequestRateLimitDependencies,
+): Promise<Response | null> {
+  const now = dependencies.now?.() ?? Date.now()
+  try {
+    const ip = getClientIp(request, dependencies.trustProxy)
+    if (ip !== 'unknown') {
+      const ipAllowed = await consumeRateLimit(
+        dependencies.store,
+        'oauth-register-ip',
+        `ip:${ip}`,
+        OAUTH_REGISTER_IP_RULE,
+        now,
+      )
+      if (!ipAllowed) return tooManyRequests(OAUTH_REGISTER_IP_RULE, now)
+    }
+    const globalAllowed = await consumeRateLimit(
+      dependencies.store,
+      'oauth-register-global',
+      'all',
+      OAUTH_REGISTER_GLOBAL_RULE,
+      now,
+    )
+    return globalAllowed
+      ? null
+      : tooManyRequests(OAUTH_REGISTER_GLOBAL_RULE, now)
+  } catch (error) {
+    dependencies.logError?.('Rate limiting unavailable; request allowed', error)
+    return null
+  }
+}
+
+async function enforceOAuthToken(
+  request: Request,
+  dependencies: RequestRateLimitDependencies,
+): Promise<Response | null> {
+  const now = dependencies.now?.() ?? Date.now()
+  try {
+    const ip = getClientIp(request, dependencies.trustProxy)
+    const clientId = (await clientIdOf(request)) ?? 'anonymous'
+    const allowed = await consumeRateLimit(
+      dependencies.store,
+      'oauth-token',
+      `client:${clientId}|ip:${ip}`,
+      OAUTH_TOKEN_RULE,
+      now,
+    )
+    return allowed ? null : tooManyRequests(OAUTH_TOKEN_RULE, now)
+  } catch (error) {
+    dependencies.logError?.('Rate limiting unavailable; request allowed', error)
+    return null
+  }
+}
+
+/**
+ * The client id of a token request, from the form body, the JSON body or HTTP
+ * Basic credentials. Only used to pick a rate-limit bucket, so it does not
+ * need to be verified here.
+ */
+async function clientIdOf(request: Request): Promise<string | null> {
+  const basic = request.headers.get('authorization')
+  if (basic?.toLowerCase().startsWith('basic ')) {
+    try {
+      const decoded = Buffer.from(basic.slice(6).trim(), 'base64').toString()
+      const id = decoded.split(':')[0]
+      if (id) return id
+    } catch {
+      // Malformed credentials fall through to the body.
+    }
+  }
+  try {
+    const text = await request.clone().text()
+    if (!text) return null
+    const contentType = request.headers.get('content-type') ?? ''
+    if (contentType.includes('application/json')) {
+      const parsed: unknown = JSON.parse(text)
+      if (!parsed || typeof parsed !== 'object' || !('client_id' in parsed)) {
+        return null
+      }
+      return typeof parsed.client_id === 'string' ? parsed.client_id : null
+    }
+    return new URLSearchParams(text).get('client_id')
+  } catch {
+    return null
+  }
+}
+
 /**
  * Returns a 429 response when blocked and null when the request may continue.
  * Redis failures deliberately fail open so an infrastructure outage does not
@@ -102,6 +198,12 @@ export async function enforceRequestRateLimit(
   const path =
     url.pathname.length > 1 ? url.pathname.replace(/\/+$/, '') : url.pathname
 
+  if (path === '/api/auth/oauth2/register' && request.method === 'POST') {
+    return enforceOAuthRegister(request, dependencies)
+  }
+  if (path === '/api/auth/oauth2/token' && request.method === 'POST') {
+    return enforceOAuthToken(request, dependencies)
+  }
   if (path === '/api/auth' || path.startsWith('/api/auth/')) return null
 
   const method = request.method.toUpperCase()
@@ -138,7 +240,7 @@ export async function enforceRequestRateLimit(
   // client is 'unknown', and one shared bucket would throttle all agents
   // together. Keys are 256-bit random values checked with one indexed lookup,
   // so skipping it there costs little.
-  if (path === '/api/mcp') {
+  if (path === '/api/mcp' || path.startsWith('/api/mcp/')) {
     const now = dependencies.now?.() ?? Date.now()
     try {
       const ip = getClientIp(request, dependencies.trustProxy)

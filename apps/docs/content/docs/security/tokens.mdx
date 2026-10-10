@@ -1,6 +1,6 @@
 ---
 title: Tokens
-description: The site, schema-write, preview, setup, metrics, invitation and personal AI tokens, what each one can do, where to store it, and how to rotate or revoke it after a leak.
+description: The site, schema-write, preview, setup, metrics, invitation, AI app connection and personal AI tokens, what each one can do, where to store it, and how to rotate or revoke it after a leak.
 ---
 
 Areca uses several tokens. Each one grants one specific ability, so a leaked token exposes less than a password would. This page lists them, explains how they are stored, and gives the steps to take when one leaks.
@@ -15,7 +15,9 @@ Areca uses several tokens. Each one grants one specific ability, so a leaked tok
 | Setup token | Create the first agency admin | Until first setup completes | The `SETUP_TOKEN` setting, or the server log | Set a new value and restart |
 | Metrics token | Read the Prometheus metrics endpoint | Until changed | The `METRICS_TOKEN` setting and your monitoring tool | Change the setting and restart |
 | Invitation link | Join a client with the role in the invitation | Seven days | The invitation link you send | Revoke or resend the invitation |
-| Personal AI key (`areca_mcp_…`) | Act as you on one site through an AI app, with your current role | 30, 90 or 365 days, or never (default 90) | Shown once. You paste it into your AI app's settings. | Revoke it on the Connect AI page |
+| AI app access token (`areca_at_…`) | Act as you on one site through a connected AI app, with your current role | One hour, renewed automatically | Inside the connected app. Never shown. | Disconnect the app on the Connect AI page |
+| AI app refresh token (`areca_rt_…`) | Renew the access token for that app and site | 90 days from its last use; rotated on every renewal | Inside the connected app. Never shown. | Disconnect the app on the Connect AI page |
+| Personal AI key (`areca_mcp_…`) | Act as you on one site through an AI app or script, with your current role | 30, 90 or 365 days, or never (default 90) | Shown once. You paste it into your AI app's settings. | Revoke it on the Connect AI page |
 
 ## Site and schema-write tokens
 
@@ -87,6 +89,20 @@ The `/api/metrics` endpoint is off until you set `METRICS_TOKEN` to a value of a
 
 Each invitation has a link that is valid for seven days and can be used once to join. Owners see pending invitations and can copy, resend or revoke them on the People page. Resending issues a new link with a new expiry, so the old link stops working. See [people and invitations](/docs/cms/people-and-invitations).
 
+## OAuth connections
+
+When you connect an AI app to a site on the [Connect AI](/docs/cms/connect-ai) page, you sign in and approve on a consent screen. The app then receives tokens for that site only. It never sees your password or a secret that you could paste elsewhere.
+
+- **Scope.** A connection belongs to one user, one app and one site. Its tokens name that site's connector URL as their resource, so a token for one site is refused at another. Approving a site does not cover other sites.
+- **Format.** Access tokens start with `areca_at_` and refresh tokens with `areca_rt_`. Both are opaque random strings, not signed data, so the server looks them up on each request. Secret scanners can recognise them by prefix.
+- **Storage.** The server stores a SHA-256 hash of each access and refresh token, not the token. A hash cannot be turned back into a token. Each app is registered as a public client, which has no client secret and must use PKCE with `S256`.
+- **Lifetime.** An access token lasts one hour, and the app renews it with its refresh token. A refresh token lasts 90 days from its last use, and each renewal issues a new one. A connection that is not used for 90 days stops working, and the app must be connected again.
+- **Reuse.** A client that loses a refresh response may retry it within 30 seconds and receives the same tokens. Reusing a refresh token after that window is treated as a leak: the server deletes every token that app holds for you, on every site, and the app must sign in again. If an app then reports an authorization error, reconnect it from the Connect AI page.
+- **Permissions.** A connection acts with your live role on the site, and checks it on every request. Going live needs the approval checkbox on the consent screen, and only owners and agency admins can tick it.
+- **Revocation.** Disconnecting an app takes effect on its next request. It revokes the app's tokens for that site and removes the approval. Owners and agency admins can disconnect any app on the site, and editors can disconnect their own.
+
+Each connection is recorded with who approved it and when, which is what the Connected apps list shows. See [MCP endpoint and tools](/docs/cms/mcp-tools#oauth-sign-in) for the sign-in flow.
+
 ## Personal AI keys
 
 A personal AI key lets one AI app work on one site as you. You create it on the [Connect AI](/docs/cms/connect-ai) page. Its value starts with `areca_mcp_`, and it is sent in an `Authorization: Bearer` header to the site's [MCP endpoint](/docs/cms/mcp-tools).
@@ -112,6 +128,7 @@ Act on the token that leaked. The first step is always the same: stop the token 
 | Setup token, before setup is done | Finish setup at once. Then check the People page for agency admins you did not create, remove their agency admin status, and check the activity log. |
 | Metrics token | Change `METRICS_TOKEN`, restart the CMS, and update your monitoring tool. |
 | Invitation link | Revoke the invitation and send a new one. |
+| AI app access or refresh token | Disconnect the app on the Connect AI page. Its tokens for that site stop working on the next request. Then check the activity log for the app's actions. |
 | Personal AI key | Revoke it on the Connect AI page. Its actions stay in the activity log under its name, so you can review what it did. |
 
 If a token was in a Git commit, a log, or a shared chat, treat it as leaked. Rotating removes the risk of further use; it does not remove the token from history, so rotate even if you think nobody saw it.
@@ -120,6 +137,6 @@ If a token was in a Git commit, a log, or a shared chat, treat it as leaked. Rot
 
 - [Secrets and encryption](/docs/security/secrets)
 - [Two-factor authentication and step-up](/docs/security/two-factor-and-step-up)
-- [Connect AI](/docs/cms/connect-ai) for personal AI keys.
+- [Connect AI](/docs/cms/connect-ai) for connected apps and personal AI keys.
 - [Site settings](/docs/cms/site-settings)
 - [Preview](/docs/sdk/preview) explains how the site project renders previews.

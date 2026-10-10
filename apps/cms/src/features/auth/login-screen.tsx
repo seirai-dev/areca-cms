@@ -27,10 +27,13 @@ export function LoginScreen({
   methods,
   redirectTo,
   providerError,
+  oauthQuery,
 }: {
   methods: AuthMethods
   redirectTo: string | undefined
   providerError: string | undefined
+  /** The signed authorization query when this sign-in is for an AI app. */
+  oauthQuery: string | null
 }) {
   const branding = useBranding()
   const ready = useHydrated()
@@ -43,8 +46,15 @@ export function LoginScreen({
     challenge,
     error,
     pending,
-  } = usePasswordSignIn(redirectTo, providerErrorMessage(providerError))
+  } = usePasswordSignIn(
+    redirectTo,
+    providerErrorMessage(providerError),
+    oauthQuery,
+  )
   const hasProviders = methods.socials.length > 0 || Boolean(methods.sso)
+  // After a provider round trip the browser returns here with the query, so
+  // the sign-in resumes the AI app's authorization.
+  const oauthLoginPath = oauthQuery ? `/login?${oauthQuery}` : null
 
   if (challenge) {
     return (
@@ -71,9 +81,11 @@ export function LoginScreen({
       <AuthHeading
         title={m.auth_sign_in_to({ appName: branding.appName })}
         description={
-          methods.emailPassword
-            ? m.auth_sign_in_subtitle()
-            : m.auth_sign_in_subtitle_providers()
+          oauthQuery
+            ? m.auth_sign_in_oauth_subtitle({ appName: branding.appName })
+            : methods.emailPassword
+              ? m.auth_sign_in_subtitle()
+              : m.auth_sign_in_subtitle_providers()
         }
       />
       <div className="mt-7 grid gap-5">
@@ -132,8 +144,8 @@ export function LoginScreen({
             {methods.emailPassword ? <AuthDivider /> : null}
             <ProviderSignIn
               methods={methods}
-              callbackURL={safeRedirectPath(redirectTo)}
-              errorCallbackURL="/login"
+              callbackURL={oauthLoginPath ?? safeRedirectPath(redirectTo)}
+              errorCallbackURL={oauthLoginPath ?? '/login'}
             />
           </>
         ) : null}

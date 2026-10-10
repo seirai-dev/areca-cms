@@ -1,5 +1,6 @@
 import { createRouter as createTanStackRouter } from '@tanstack/react-router'
 import { routeTree } from './routeTree.gen'
+import { stringifySearchKeepingRepeats } from './lib/router-search'
 
 import { setupRouterSsrQueryIntegration } from '@tanstack/react-router-ssr-query'
 import { getContext } from './integrations/tanstack-query/root-provider'
@@ -12,6 +13,8 @@ export function getRouter() {
     routeTree,
     context,
     scrollRestoration: true,
+    // Keeps Better Auth's signed sign-in query intact (see lib/router-search.ts).
+    stringifySearch: stringifySearchKeepingRepeats,
     defaultPreload: 'intent',
     defaultPreloadStaleTime: 0,
     // Shared-element morphs (card → editor, site card → overview) and a

@@ -126,3 +126,57 @@ export function setupPrompt({
 }): string {
   return `Please connect to my Areca CMS site "${siteName}" as an MCP server. Server URL: ${url} (Streamable HTTP). Send the header Authorization: ${bearer(key)}. Once connected, call get_site_info to see what you can do.`
 }
+
+/**
+ * The connector builders. They carry only the URL: AI apps sign in through
+ * the browser (OAuth), so nothing secret is written into a config or command.
+ */
+export type McpConnectInput = {
+  /** Server name shown in the AI app, e.g. `areca-acme-site`. */
+  name: string
+  /** The site's connector URL, e.g. `https://cms.example.com/api/mcp/acme-site`. */
+  url: string
+}
+
+/** `claude mcp add …` for Claude Code. Claude Code then asks to sign in. */
+export function claudeCodeConnectCommand({
+  name,
+  url,
+}: McpConnectInput): string {
+  return `claude mcp add --transport http ${name} ${url}`
+}
+
+/** One-click Cursor install (`cursor://` deeplink) with only the URL. */
+export function cursorConnectLink({ name, url }: McpConnectInput): string {
+  const config = toBase64(JSON.stringify({ url }))
+  return `cursor://anysphere.cursor-deeplink/mcp/install?name=${encodeURIComponent(name)}&config=${encodeURIComponent(config)}`
+}
+
+/** One-click VS Code (or Insiders) install with only the URL. */
+export function vscodeConnectLink(
+  { name, url }: McpConnectInput,
+  options: { insiders?: boolean } = {},
+): string {
+  const scheme = options.insiders ? 'vscode-insiders' : 'vscode'
+  const payload = JSON.stringify({ name, type: 'http', url })
+  return `${scheme}:mcp/install?${encodeURIComponent(payload)}`
+}
+
+/** `mcpServers` JSON with the URL only, for apps that read a settings file. */
+export function connectorJsonConfig({ name, url }: McpConnectInput): string {
+  return JSON.stringify({ mcpServers: { [name]: { url } } }, null, 2)
+}
+
+/**
+ * A prompt an AI assistant can follow to connect itself. No secret in it:
+ * the assistant's app runs the browser sign-in. English, as with setupPrompt.
+ */
+export function connectSetupPrompt({
+  siteName,
+  url,
+}: {
+  siteName: string
+  url: string
+}): string {
+  return `Please connect to my Areca CMS site "${siteName}" as an MCP server. Server URL: ${url} (Streamable HTTP). If the connection asks me to sign in, I will sign in with my Areca account and approve access. Once connected, call get_site_info to see what you can do.`
+}

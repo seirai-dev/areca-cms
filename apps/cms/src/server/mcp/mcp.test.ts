@@ -17,6 +17,8 @@ import type * as RemoteModule from '#/server/assets/remote'
 
 import { createMcpKey, revokeMcpKey } from './keys'
 import { handleMcpRequest } from './http'
+import { serverInstructions } from './server'
+import { cannotDoFor } from './tools/site'
 
 // Keep the agency-admin 2FA rule identical to the production env.
 vi.hoisted(() => {
@@ -595,6 +597,35 @@ describe.skipIf(!hasDb)('MCP server', () => {
       {},
     )
     expect((agencyInfo.data?.cannotDo as string[]).join('\n')).not.toContain('collection schemas')
+  })
+
+  it('words go-live refusals for an OAuth connection without the word key', async () => {
+    const oauthActor = {
+      keyId: 'conn-1',
+      keyName: 'ChatGPT',
+      credential: 'oauth' as const,
+      userId: world.owner,
+      userName: 'Owner',
+      siteId: world.ctx.site.id,
+      siteSlug: world.ctx.site.slug,
+      siteName: world.ctx.site.name,
+      organizationId: world.ctx.org.id,
+      role: 'owner' as const,
+      allowGoLive: false,
+    }
+    const instructions = serverInstructions(oauthActor)
+    expect(instructions).toContain('Going live is not enabled for this AI connection')
+    expect(instructions).toContain('reconnected from Connect AI with "Allow going live" ticked')
+    expect(instructions).not.toContain('this key')
+
+    const cannotDo = cannotDoFor(oauthActor).join('\n')
+    expect(cannotDo).toContain('Go live: going live is not enabled for this AI connection')
+    expect(cannotDo).toContain('Allow going live')
+    expect(cannotDo).not.toContain('this key')
+
+    const goLive = { ...oauthActor, allowGoLive: true }
+    expect(cannotDoFor(goLive).join('\n')).not.toContain('Go live:')
+    expect(serverInstructions(goLive)).not.toContain('Going live is not enabled')
   })
 
   it('answers 403 with a clear message when an agency admin has no 2FA', async () => {

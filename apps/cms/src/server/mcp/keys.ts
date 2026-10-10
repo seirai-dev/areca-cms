@@ -16,9 +16,14 @@ import {
 
 export type McpRole = 'editor' | 'owner' | 'agency'
 
+/** How the caller connected: a personal key, or an app signed in with OAuth. */
+export type McpCredential = 'key' | 'oauth'
+
 export type McpActor = {
+  /** The key id, or the mcp_connection id for OAuth. */
   keyId: string
   keyName: string
+  credential: McpCredential
   userId: string
   userName: string
   siteId: string
@@ -236,6 +241,41 @@ export type McpResolution =
   | { ok: true; actor: McpActor }
   | { ok: false; reason: 'invalid' | 'mfa_required' }
 
+export type LiveRoleResult =
+  | { ok: true; role: McpRole }
+  | { ok: false; reason: 'invalid' | 'mfa_required' }
+
+/**
+ * The user's live role on a site's organization, read on every request so a
+ * demotion or removed membership takes effect at once. Shared by personal keys
+ * and OAuth connections so both obey the same rules.
+ */
+export async function liveRoleFor(
+  owner: { id: string; isAgencyAdmin: boolean; twoFactorEnabled: boolean },
+  organizationId: string,
+): Promise<LiveRoleResult> {
+  if (owner.isAgencyAdmin) {
+    // Mirrors assertAdminMfa in lib/session.server.ts. Not imported, because
+    // that module pulls in request-only APIs.
+    if (env.ADMIN_MFA_REQUIRED && !owner.twoFactorEnabled) {
+      return { ok: false, reason: 'mfa_required' }
+    }
+    return { ok: true, role: 'agency' }
+  }
+  const [member] = await db
+    .select({ role: membership.role })
+    .from(membership)
+    .where(
+      and(
+        eq(membership.userId, owner.id),
+        eq(membership.organizationId, organizationId),
+      ),
+    )
+    .limit(1)
+  if (!member) return { ok: false, reason: 'invalid' }
+  return { ok: true, role: member.role }
+}
+
 /**
  * Resolve a bearer token to the acting user and their live role on the key's
  * site. Never throws. `reason` says why a key was refused: `mfa_required` means
@@ -261,28 +301,8 @@ export async function resolveMcpActorResult(
   if (key.revokedAt) return invalid
   if (key.expiresAt && key.expiresAt.getTime() <= now.getTime()) return invalid
 
-  let role: McpRole
-  if (owner.isAgencyAdmin) {
-    // Mirrors assertAdminMfa in lib/session.server.ts. Not imported, because
-    // that module pulls in request-only APIs.
-    if (env.ADMIN_MFA_REQUIRED && !owner.twoFactorEnabled) {
-      return { ok: false, reason: 'mfa_required' }
-    }
-    role = 'agency'
-  } else {
-    const [member] = await db
-      .select({ role: membership.role })
-      .from(membership)
-      .where(
-        and(
-          eq(membership.userId, owner.id),
-          eq(membership.organizationId, target.organizationId),
-        ),
-      )
-      .limit(1)
-    if (!member) return invalid
-    role = member.role
-  }
+  const live = await liveRoleFor(owner, target.organizationId)
+  if (!live.ok) return live
 
   if (
     !key.lastUsedAt ||
@@ -299,14 +319,15 @@ export async function resolveMcpActorResult(
     actor: {
       keyId: key.id,
       keyName: key.name,
+      credential: 'key',
       userId: owner.id,
       userName: owner.name,
       siteId: target.id,
       siteSlug: target.slug,
       siteName: target.name,
       organizationId: target.organizationId,
-      role,
-      allowGoLive: key.allowGoLive && role !== 'editor',
+      role: live.role,
+      allowGoLive: key.allowGoLive && live.role !== 'editor',
     },
   }
 }

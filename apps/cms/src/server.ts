@@ -10,6 +10,7 @@ import { paraglideMiddleware } from '#/paraglide/server.js'
 import { enforceCmsRateLimit } from '#/server/http/rate-limit.server'
 import { withSecurityHeaders } from '#/server/http/security-headers'
 import { getSetupStatus } from '#/server/admin/setup'
+import { handleDiscoveryRequest } from '#/server/mcp/discovery'
 import { createLogger } from '#/server/log'
 import { startWorker } from '#/server/publishing/worker'
 import { validateCookieMutationOrigin } from '#/server/request-origin'
@@ -38,6 +39,11 @@ const fetch: typeof startFetch = async (req, ...args) => {
     env.APP_URL,
   ])
   if (invalidOrigin) return withSecurityHeaders(req, invalidOrigin)
+
+  // OAuth discovery documents live at the origin root, which file routing does
+  // not serve reliably for dot-folders such as `.well-known`.
+  const discovery = await handleDiscoveryRequest(req)
+  if (discovery) return withSecurityHeaders(req, discovery)
 
   const rateLimited = await enforceCmsRateLimit(req)
   if (rateLimited) return withSecurityHeaders(req, rateLimited)

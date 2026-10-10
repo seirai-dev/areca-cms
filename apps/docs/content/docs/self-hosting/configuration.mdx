@@ -42,8 +42,8 @@ The `docker/.env.example` file contains a placeholder for `DOKPLOY_CREDENTIALS_E
 
 | Variable | Required | Default | Meaning |
 | --- | --- | --- | --- |
-| `APP_URL` | Yes | Compose: `${CMS_URL}`, default `http://localhost:3000` | The public CMS address, used in invitation links and in uploaded file URLs. Browsers and the Dokploy host must be able to reach it. Do not use `localhost` in production. |
-| `BETTER_AUTH_URL` | Yes | Compose: `${CMS_URL}`, default `http://localhost:3000` | The public CMS address used for sign-in callbacks. It must match the address people use to open the CMS, including the scheme. |
+| `APP_URL` | Yes | Compose: `${CMS_URL}`, default `http://localhost:3000` | The public CMS address, used in invitation links, uploaded file URLs and each site's AI connector URL (`/api/mcp/<site>`). Browsers and the Dokploy host must be able to reach it. Do not use `localhost` in production. |
+| `BETTER_AUTH_URL` | Yes | Compose: `${CMS_URL}`, default `http://localhost:3000` | The public CMS address used for sign-in callbacks. It must match the address people use to open the CMS, including the scheme. It is also the OAuth issuer (`<BETTER_AUTH_URL>/api/auth`) that AI apps sign in with, so use the public HTTPS address and the same origin as `APP_URL`. |
 | `SERVER_URL` | No | Unset | Accepted by the configuration check, but the CMS does not read it at runtime. Leave it unset. |
 | `PORT` | No | `3000` (set by the image) | The port the server listens on inside the container. Compose maps the host port `CMS_PORT` to it. |
 | `HOST` | No | `0.0.0.0` (set by the image) | The address the server listens on inside the container. |
