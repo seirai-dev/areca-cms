@@ -107,6 +107,12 @@ Read [two-factor authentication and step-up](/docs/security/two-factor-and-step-
 
 </Callout>
 
+## AI apps and sign-in
+
+An AI app that a user connects to a site, such as ChatGPT, Claude or Cursor, signs the user in on the same sign-in page as the CMS. The user signs in with the methods you have turned on, and two-factor codes are asked for in the same way. After sign-in, the user sees a consent screen before the app is connected. See [Connect AI](/docs/cms/connect-ai#the-consent-screen).
+
+AI apps need the public HTTPS address set in `BETTER_AUTH_URL` and `APP_URL`. See [production](/docs/self-hosting/production#ai-apps-need-public-https).
+
 ## Related
 
 - [Configuration](/docs/self-hosting/configuration): every sign-in variable and the `BETTER_AUTH_URL` setting.

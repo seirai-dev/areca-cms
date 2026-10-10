@@ -16,9 +16,9 @@ import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppAccountRouteImport } from './routes/_app/account'
 import { Route as AppAgencyRouteImport } from './routes/_app/agency'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
-import { Route as ApiMcpRouteImport } from './routes/api/mcp'
 import { Route as ApiMetricsRouteImport } from './routes/api/metrics'
 import { Route as InviteTokenRouteImport } from './routes/invite/$token'
+import { Route as OauthConsentRouteImport } from './routes/oauth/consent'
 import { Route as AppAdminIndexRouteImport } from './routes/_app/admin/index'
 import { Route as AppAdminSplatRouteImport } from './routes/_app/admin/$'
 import { Route as AppAgencyIndexRouteImport } from './routes/_app/agency/index'
@@ -31,6 +31,8 @@ import { Route as AppSitesSiteIdRouteImport } from './routes/_app/sites/$siteId'
 import { Route as ApiAssetsUploadRouteImport } from './routes/api/assets/upload'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiHealthReadyRouteImport } from './routes/api/health.ready'
+import { Route as ApiMcpIndexRouteImport } from './routes/api/mcp/index'
+import { Route as ApiMcpSiteSlugRouteImport } from './routes/api/mcp/$siteSlug'
 import { Route as ApiSitesManifestRouteImport } from './routes/api/sites/manifest'
 import { Route as ApiSitesPreviewRouteImport } from './routes/api/sites/preview'
 import { Route as AppAgencyClientsIndexRouteImport } from './routes/_app/agency/clients/index'
@@ -88,11 +90,6 @@ const ApiHealthRoute = ApiHealthRouteImport.update({
   path: '/api/health',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiMcpRoute = ApiMcpRouteImport.update({
-  id: '/api/mcp',
-  path: '/api/mcp',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiMetricsRoute = ApiMetricsRouteImport.update({
   id: '/api/metrics',
   path: '/api/metrics',
@@ -101,6 +98,11 @@ const ApiMetricsRoute = ApiMetricsRouteImport.update({
 const InviteTokenRoute = InviteTokenRouteImport.update({
   id: '/invite/$token',
   path: '/invite/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OauthConsentRoute = OauthConsentRouteImport.update({
+  id: '/oauth/consent',
+  path: '/oauth/consent',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppAdminIndexRoute = AppAdminIndexRouteImport.update({
@@ -162,6 +164,16 @@ const ApiHealthReadyRoute = ApiHealthReadyRouteImport.update({
   id: '/ready',
   path: '/ready',
   getParentRoute: () => ApiHealthRoute,
+} as any)
+const ApiMcpIndexRoute = ApiMcpIndexRouteImport.update({
+  id: '/api/mcp/',
+  path: '/api/mcp/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMcpSiteSlugRoute = ApiMcpSiteSlugRouteImport.update({
+  id: '/api/mcp/$siteSlug',
+  path: '/api/mcp/$siteSlug',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiSitesManifestRoute = ApiSitesManifestRouteImport.update({
   id: '/api/sites/manifest',
@@ -286,9 +298,9 @@ export interface FileRoutesByFullPath {
   '/account': typeof AppAccountRoute
   '/agency': typeof AppAgencyRouteWithChildren
   '/api/health': typeof ApiHealthRouteWithChildren
-  '/api/mcp': typeof ApiMcpRoute
   '/api/metrics': typeof ApiMetricsRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/oauth/consent': typeof OauthConsentRoute
   '/admin/$': typeof AppAdminSplatRoute
   '/agency/activity': typeof AppAgencyActivityRoute
   '/agency/ai': typeof AppAgencyAiRoute
@@ -298,11 +310,13 @@ export interface FileRoutesByFullPath {
   '/api/assets/upload': typeof ApiAssetsUploadRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/health/ready': typeof ApiHealthReadyRoute
+  '/api/mcp/$siteSlug': typeof ApiMcpSiteSlugRoute
   '/api/sites/manifest': typeof ApiSitesManifestRoute
   '/api/sites/preview': typeof ApiSitesPreviewRoute
   '/admin/': typeof AppAdminIndexRoute
   '/agency/': typeof AppAgencyIndexRoute
   '/sites/': typeof AppSitesIndexRoute
+  '/api/mcp/': typeof ApiMcpIndexRoute
   '/agency/clients/$orgId': typeof AppAgencyClientsOrgIdRoute
   '/orgs/$orgId/audit': typeof AppOrgsOrgIdAuditRoute
   '/orgs/$orgId/members': typeof AppOrgsOrgIdMembersRoute
@@ -329,9 +343,9 @@ export interface FileRoutesByTo {
   '/setup': typeof SetupRoute
   '/account': typeof AppAccountRoute
   '/api/health': typeof ApiHealthRouteWithChildren
-  '/api/mcp': typeof ApiMcpRoute
   '/api/metrics': typeof ApiMetricsRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/oauth/consent': typeof OauthConsentRoute
   '/': typeof AppIndexRoute
   '/admin/$': typeof AppAdminSplatRoute
   '/agency/activity': typeof AppAgencyActivityRoute
@@ -341,11 +355,13 @@ export interface FileRoutesByTo {
   '/api/assets/upload': typeof ApiAssetsUploadRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/health/ready': typeof ApiHealthReadyRoute
+  '/api/mcp/$siteSlug': typeof ApiMcpSiteSlugRoute
   '/api/sites/manifest': typeof ApiSitesManifestRoute
   '/api/sites/preview': typeof ApiSitesPreviewRoute
   '/admin': typeof AppAdminIndexRoute
   '/agency': typeof AppAgencyIndexRoute
   '/sites': typeof AppSitesIndexRoute
+  '/api/mcp': typeof ApiMcpIndexRoute
   '/agency/clients/$orgId': typeof AppAgencyClientsOrgIdRoute
   '/orgs/$orgId/audit': typeof AppOrgsOrgIdAuditRoute
   '/orgs/$orgId/members': typeof AppOrgsOrgIdMembersRoute
@@ -374,9 +390,9 @@ export interface FileRoutesById {
   '/_app/account': typeof AppAccountRoute
   '/_app/agency': typeof AppAgencyRouteWithChildren
   '/api/health': typeof ApiHealthRouteWithChildren
-  '/api/mcp': typeof ApiMcpRoute
   '/api/metrics': typeof ApiMetricsRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/oauth/consent': typeof OauthConsentRoute
   '/_app/': typeof AppIndexRoute
   '/_app/admin/$': typeof AppAdminSplatRoute
   '/_app/agency/activity': typeof AppAgencyActivityRoute
@@ -387,11 +403,13 @@ export interface FileRoutesById {
   '/api/assets/upload': typeof ApiAssetsUploadRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/health/ready': typeof ApiHealthReadyRoute
+  '/api/mcp/$siteSlug': typeof ApiMcpSiteSlugRoute
   '/api/sites/manifest': typeof ApiSitesManifestRoute
   '/api/sites/preview': typeof ApiSitesPreviewRoute
   '/_app/admin/': typeof AppAdminIndexRoute
   '/_app/agency/': typeof AppAgencyIndexRoute
   '/_app/sites/': typeof AppSitesIndexRoute
+  '/api/mcp/': typeof ApiMcpIndexRoute
   '/_app/agency/clients/$orgId': typeof AppAgencyClientsOrgIdRoute
   '/_app/orgs/$orgId/audit': typeof AppOrgsOrgIdAuditRoute
   '/_app/orgs/$orgId/members': typeof AppOrgsOrgIdMembersRoute
@@ -422,9 +440,9 @@ export interface FileRouteTypes {
     | '/account'
     | '/agency'
     | '/api/health'
-    | '/api/mcp'
     | '/api/metrics'
     | '/invite/$token'
+    | '/oauth/consent'
     | '/admin/$'
     | '/agency/activity'
     | '/agency/ai'
@@ -434,11 +452,13 @@ export interface FileRouteTypes {
     | '/api/assets/upload'
     | '/api/auth/$'
     | '/api/health/ready'
+    | '/api/mcp/$siteSlug'
     | '/api/sites/manifest'
     | '/api/sites/preview'
     | '/admin/'
     | '/agency/'
     | '/sites/'
+    | '/api/mcp/'
     | '/agency/clients/$orgId'
     | '/orgs/$orgId/audit'
     | '/orgs/$orgId/members'
@@ -465,9 +485,9 @@ export interface FileRouteTypes {
     | '/setup'
     | '/account'
     | '/api/health'
-    | '/api/mcp'
     | '/api/metrics'
     | '/invite/$token'
+    | '/oauth/consent'
     | '/'
     | '/admin/$'
     | '/agency/activity'
@@ -477,11 +497,13 @@ export interface FileRouteTypes {
     | '/api/assets/upload'
     | '/api/auth/$'
     | '/api/health/ready'
+    | '/api/mcp/$siteSlug'
     | '/api/sites/manifest'
     | '/api/sites/preview'
     | '/admin'
     | '/agency'
     | '/sites'
+    | '/api/mcp'
     | '/agency/clients/$orgId'
     | '/orgs/$orgId/audit'
     | '/orgs/$orgId/members'
@@ -509,9 +531,9 @@ export interface FileRouteTypes {
     | '/_app/account'
     | '/_app/agency'
     | '/api/health'
-    | '/api/mcp'
     | '/api/metrics'
     | '/invite/$token'
+    | '/oauth/consent'
     | '/_app/'
     | '/_app/admin/$'
     | '/_app/agency/activity'
@@ -522,11 +544,13 @@ export interface FileRouteTypes {
     | '/api/assets/upload'
     | '/api/auth/$'
     | '/api/health/ready'
+    | '/api/mcp/$siteSlug'
     | '/api/sites/manifest'
     | '/api/sites/preview'
     | '/_app/admin/'
     | '/_app/agency/'
     | '/_app/sites/'
+    | '/api/mcp/'
     | '/_app/agency/clients/$orgId'
     | '/_app/orgs/$orgId/audit'
     | '/_app/orgs/$orgId/members'
@@ -554,13 +578,15 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   SetupRoute: typeof SetupRoute
   ApiHealthRoute: typeof ApiHealthRouteWithChildren
-  ApiMcpRoute: typeof ApiMcpRoute
   ApiMetricsRoute: typeof ApiMetricsRoute
   InviteTokenRoute: typeof InviteTokenRoute
+  OauthConsentRoute: typeof OauthConsentRoute
   ApiAssetsUploadRoute: typeof ApiAssetsUploadRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiMcpSiteSlugRoute: typeof ApiMcpSiteSlugRoute
   ApiSitesManifestRoute: typeof ApiSitesManifestRoute
   ApiSitesPreviewRoute: typeof ApiSitesPreviewRoute
+  ApiMcpIndexRoute: typeof ApiMcpIndexRoute
   ApiAdminBrandingUploadRoute: typeof ApiAdminBrandingUploadRoute
   ApiSitesSnapshotCurrentRoute: typeof ApiSitesSnapshotCurrentRoute
   ApiAssetsFilePrefixFilenameRoute: typeof ApiAssetsFilePrefixFilenameRoute
@@ -617,13 +643,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiHealthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/mcp': {
-      id: '/api/mcp'
-      path: '/api/mcp'
-      fullPath: '/api/mcp'
-      preLoaderRoute: typeof ApiMcpRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/metrics': {
       id: '/api/metrics'
       path: '/api/metrics'
@@ -636,6 +655,13 @@ declare module '@tanstack/react-router' {
       path: '/invite/$token'
       fullPath: '/invite/$token'
       preLoaderRoute: typeof InviteTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/oauth/consent': {
+      id: '/oauth/consent'
+      path: '/oauth/consent'
+      fullPath: '/oauth/consent'
+      preLoaderRoute: typeof OauthConsentRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/admin/': {
@@ -721,6 +747,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/health/ready'
       preLoaderRoute: typeof ApiHealthReadyRouteImport
       parentRoute: typeof ApiHealthRoute
+    }
+    '/api/mcp/': {
+      id: '/api/mcp/'
+      path: '/api/mcp'
+      fullPath: '/api/mcp/'
+      preLoaderRoute: typeof ApiMcpIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mcp/$siteSlug': {
+      id: '/api/mcp/$siteSlug'
+      path: '/api/mcp/$siteSlug'
+      fullPath: '/api/mcp/$siteSlug'
+      preLoaderRoute: typeof ApiMcpSiteSlugRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/sites/manifest': {
       id: '/api/sites/manifest'
@@ -997,13 +1037,15 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   SetupRoute: SetupRoute,
   ApiHealthRoute: ApiHealthRouteWithChildren,
-  ApiMcpRoute: ApiMcpRoute,
   ApiMetricsRoute: ApiMetricsRoute,
   InviteTokenRoute: InviteTokenRoute,
+  OauthConsentRoute: OauthConsentRoute,
   ApiAssetsUploadRoute: ApiAssetsUploadRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiMcpSiteSlugRoute: ApiMcpSiteSlugRoute,
   ApiSitesManifestRoute: ApiSitesManifestRoute,
   ApiSitesPreviewRoute: ApiSitesPreviewRoute,
+  ApiMcpIndexRoute: ApiMcpIndexRoute,
   ApiAdminBrandingUploadRoute: ApiAdminBrandingUploadRoute,
   ApiSitesSnapshotCurrentRoute: ApiSitesSnapshotCurrentRoute,
   ApiAssetsFilePrefixFilenameRoute: ApiAssetsFilePrefixFilenameRoute,

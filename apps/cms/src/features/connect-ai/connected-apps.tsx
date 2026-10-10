@@ -1,0 +1,191 @@
+import { Plug, Trash } from '@phosphor-icons/react'
+import { toast } from 'sonner'
+
+import { Button } from '#/components/ui/button'
+import { ConfirmDialog } from '#/components/ui/confirm-dialog'
+import { EmptyState } from '#/components/ui/empty-state'
+import { InsetIcon, InsetList, InsetRow } from '#/components/ui/inset-list'
+import { QueryError } from '#/components/ui/query-error'
+import { Skeleton } from '#/components/ui/skeleton'
+import { Tag } from '#/components/ui/tag'
+import { errorMessage } from '#/lib/admin/helpers'
+import { absoluteTimeLabel, formatRelativeTime } from '#/lib/relative-time'
+import { m } from '#/paraglide/messages'
+
+import { formatDay } from './format'
+
+export type ConnectedApp = {
+  id: string
+  clientName: string
+  userId: string
+  userName: string | null
+  allowGoLive: boolean
+  createdAt: Date | string
+  lastUsedAt: Date | string | null
+}
+
+/**
+ * Apps connected to the site through sign-in. Each row says who connected it
+ * (owners see everyone's), when, and when it was last used. Disconnect asks
+ * first and takes effect on the app's next request.
+ */
+export function ConnectedAppsSection({
+  connections,
+  currentUserId,
+  showOwners,
+  onRetry,
+  retrying,
+  error,
+  onDisconnect,
+}: {
+  connections: ConnectedApp[] | undefined
+  currentUserId: string
+  showOwners: boolean
+  error: unknown
+  retrying: boolean
+  onRetry: () => void
+  onDisconnect: (id: string) => Promise<unknown>
+}) {
+  return (
+    <section
+      className="grid gap-3"
+      aria-labelledby="connect-ai-connected-heading"
+    >
+      <div className="grid gap-0.5 px-1">
+        <h2
+          id="connect-ai-connected-heading"
+          className="text-headline text-text-primary"
+        >
+          {m.connect_ai_connected_title()}
+        </h2>
+        <p className="text-callout text-text-secondary">
+          {showOwners
+            ? m.connect_ai_connected_description_all()
+            : m.connect_ai_connected_description()}
+        </p>
+      </div>
+
+      {error ? (
+        <QueryError
+          title={m.connect_ai_connected_load_error()}
+          error={error}
+          onRetry={onRetry}
+          retrying={retrying}
+        />
+      ) : connections === undefined ? (
+        <div
+          className="grid gap-2"
+          aria-hidden="true"
+          data-testid="connect-ai-connected-loading"
+        >
+          <Skeleton className="h-14 rounded-card" />
+        </div>
+      ) : connections.length === 0 ? (
+        <EmptyState
+          card
+          size="sm"
+          tone="neutral"
+          icon={<Plug weight="duotone" />}
+          title={m.connect_ai_connected_empty_title()}
+          description={m.connect_ai_connected_empty_body()}
+          data-testid="connect-ai-connected-empty"
+        />
+      ) : (
+        <InsetList data-testid="connect-ai-connected">
+          {connections.map((app) => (
+            <ConnectedAppRow
+              key={app.id}
+              app={app}
+              showBy={showOwners && app.userId !== currentUserId}
+              onDisconnect={onDisconnect}
+            />
+          ))}
+        </InsetList>
+      )}
+    </section>
+  )
+}
+
+function ConnectedAppRow({
+  app,
+  showBy,
+  onDisconnect,
+}: {
+  app: ConnectedApp
+  showBy: boolean
+  onDisconnect: (id: string) => Promise<unknown>
+}) {
+  const parts = [
+    ...(showBy
+      ? [m.connect_ai_connected_by({ name: app.userName ?? '—' })]
+      : []),
+    m.connect_ai_connected_on({ date: formatDay(app.createdAt) }),
+    app.lastUsedAt
+      ? m.connect_ai_key_last_used({ when: formatRelativeTime(app.lastUsedAt) })
+      : m.connect_ai_key_never_used(),
+  ]
+  return (
+    <InsetRow
+      inset={false}
+      leading={
+        <InsetIcon tone="accent">
+          <Plug />
+        </InsetIcon>
+      }
+      title={
+        <span className="inline-flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="min-w-0 break-words">{app.clientName}</span>
+          {app.allowGoLive ? (
+            <Tag tone="accent" data-testid="connect-ai-connected-go-live">
+              {m.connect_ai_key_can_go_live()}
+            </Tag>
+          ) : null}
+        </span>
+      }
+      wrapSubtitle
+      subtitle={
+        <span
+          className="block break-words"
+          title={absoluteTimeLabel(app.createdAt)}
+        >
+          {parts.join(' · ')}
+        </span>
+      }
+      trailing={
+        <ConfirmDialog
+          title={m.connect_ai_connected_disconnect_title({
+            app: app.clientName,
+          })}
+          description={m.connect_ai_connected_disconnect_description({
+            app: app.clientName,
+          })}
+          confirmLabel={m.connect_ai_connected_disconnect_confirm()}
+          variant="destructive"
+          testId="connect-ai-disconnect-dialog"
+          onConfirm={async () => {
+            try {
+              await onDisconnect(app.id)
+              toast.success(
+                m.connect_ai_connected_disconnected({ app: app.clientName }),
+              )
+            } catch (error) {
+              toast.error(errorMessage(error))
+            }
+          }}
+        >
+          <Button
+            type="button"
+            variant="quiet"
+            size="sm"
+            className="min-h-11 sm:min-h-0"
+            aria-label={`${m.connect_ai_connected_disconnect()}: ${app.clientName}`}
+            data-testid="connect-ai-disconnect"
+          >
+            <Trash />
+            {m.connect_ai_connected_disconnect()}
+          </Button>
+        </ConfirmDialog>
+      }
+    />
+  )
+}

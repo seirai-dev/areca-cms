@@ -84,6 +84,10 @@ const SENTENCES: Partial<Record<string, Sentence>> = {
   'collection.delete': (target) => m.activity_collection_delete({ target }),
   'mcp_key.create': (target) => m.activity_mcp_key_create({ target }),
   'mcp_key.revoke': (target) => m.activity_mcp_key_revoke({ target }),
+  'mcp_connection.create': (target) =>
+    m.activity_mcp_connection_create({ target }),
+  'mcp_connection.revoke': (target) =>
+    m.activity_mcp_connection_revoke({ target }),
   'asset.upload': (target) => m.activity_asset_upload({ target }),
 }
 
@@ -170,6 +174,13 @@ export function activityTarget(
       return (
         named(text(meta?.name)) ?? {
           label: m.activity_target_ai_key(),
+          named: false,
+        }
+      )
+    case 'mcp_connection':
+      return (
+        named(text(meta?.clientName)) ?? {
+          label: m.activity_target_ai_app(),
           named: false,
         }
       )

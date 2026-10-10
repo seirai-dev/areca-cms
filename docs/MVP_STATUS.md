@@ -29,7 +29,7 @@ one exists, otherwise a code-path review.
 | Audit log | done | `apps/cms/src/db/schema.ts` (`audit_log`), `apps/cms/src/server/audit.ts`, `apps/cms/src/features/activity/` | Written on admin/content/publish actions. Agency sees all events; org owners see their org at **Activity**. |
 | Entry SEO and structured metadata | done | `apps/cms/src/lib/seo.ts`, `apps/cms/src/features/editor/seo-panel.tsx`, `apps/cms/src/server/content/snapshot.ts`, `packages/site-sdk/src/seo.ts` | Per-entry search/social metadata, robots directives, canonical fallback, JSON-LD and answer-oriented fields ship in snapshots. The site must render the metadata. |
 | AI SEO suggestions | done | `apps/cms/src/server/ai/`, `apps/cms/src/server/fn/ai.ts`, `apps/cms/src/features/editor/ai-seo-dialog.tsx` | Optional OpenRouter model generates reviewable suggestions; agency and site prompts are configurable. Suggestions do not publish automatically. |
-| Connect AI (per-site MCP) | done | `apps/cms/src/server/mcp/`, `apps/cms/src/routes/api/mcp.ts`, `apps/cms/src/server/fn/mcp-keys.ts`, `apps/cms/src/features/connect-ai/`, `apps/cms/src/lib/mcp-install.ts`, `apps/cms/src/server/assets/remote.ts`, `apps/cms/src/server/richtext/from-markdown.ts`, `apps/cms/src/server/mcp/mcp.test.ts` | Personal per-site keys (hashed, shown once, 30/90/365 days or never), 28 tools plus a `write_post` prompt, role-filtered to the live role. Go live needs a key with the go-live flag. Files are imported from public URLs only. Rich text is written as Markdown. No OAuth: ChatGPT and claude.ai web connectors are not supported. |
+| Connect AI (per-site MCP) | done | `apps/cms/src/server/mcp/`, `apps/cms/src/routes/api/mcp/`, `apps/cms/src/server/fn/mcp-keys.ts`, `apps/cms/src/features/connect-ai/`, `apps/cms/src/lib/mcp-install.ts`, `apps/cms/src/server/assets/remote.ts`, `apps/cms/src/server/richtext/from-markdown.ts`, `apps/cms/src/server/mcp/mcp.test.ts` | Personal per-site keys (hashed, shown once, 30/90/365 days or never), 28 tools plus a `write_post` prompt, role-filtered to the live role. Go live needs a key with the go-live flag. Files are imported from public URLs only. Rich text is written as Markdown. No OAuth: ChatGPT and claude.ai web connectors are not supported. |
 
 ## Site integration
 
@@ -91,7 +91,7 @@ Large or explicitly later work, not started:
 - Search-engine ranking guarantees, crawler-based SEO audits, and broken-link crawling. SEO editor limits validate data shape and maximum length; character targets are guidance.
 - Media extras from PROJECT.md that are beyond “basic”: thumbnails, focal point, CDN, usage graph UI.
 - Separate build workers / incremental builds / per-site locking beyond the in-process queue.
-- OAuth for the MCP endpoint, so ChatGPT and claude.ai web can connect as connectors. Personal keys in a bearer header cover desktop and terminal AI apps for now.
+- OAuth for the MCP endpoint is done: connected apps sign in through the browser (per-site connector URLs). Still open: Client ID Metadata Documents (CIMD), once the authorization library supports them.
 
 ## Summary
 

@@ -2,11 +2,16 @@ import { describe, expect, it } from 'vitest'
 
 import {
   claudeCodeCommand,
+  claudeCodeConnectCommand,
   claudeDesktopConfig,
+  connectSetupPrompt,
+  connectorJsonConfig,
+  cursorConnectLink,
   cursorInstallLink,
   genericMcpConfig,
   mcpServerName,
   setupPrompt,
+  vscodeConnectLink,
   vscodeInstallLink,
 } from './mcp-install'
 
@@ -141,5 +146,65 @@ describe('setupPrompt', () => {
     expect(prompt).toContain(input.url)
     expect(prompt).toContain('Authorization: Bearer areca_mcp_abc123XYZ')
     expect(prompt).toContain('get_site_info')
+  })
+})
+
+const connect = {
+  name: 'areca-acme-site',
+  url: 'https://cms.example.com/api/mcp/acme-site',
+}
+
+describe('connector builders (OAuth, no secret)', () => {
+  it('builds the Claude Code command with the URL only', () => {
+    expect(claudeCodeConnectCommand(connect)).toBe(
+      'claude mcp add --transport http areca-acme-site https://cms.example.com/api/mcp/acme-site',
+    )
+    expect(claudeCodeConnectCommand(connect)).not.toContain('Authorization')
+  })
+
+  it('puts only the URL in the Cursor deeplink config', () => {
+    const url = new URL(cursorConnectLink(connect))
+    expect(url.protocol).toBe('cursor:')
+    expect(url.searchParams.get('name')).toBe('areca-acme-site')
+    const config = JSON.parse(
+      Buffer.from(url.searchParams.get('config') ?? '', 'base64').toString(
+        'utf8',
+      ),
+    ) as unknown
+    expect(config).toEqual({ url: connect.url })
+  })
+
+  it('puts only type and URL in the VS Code payload, for both channels', () => {
+    const stable = vscodeConnectLink(connect)
+    expect(stable.startsWith('vscode:mcp/install?')).toBe(true)
+    const payload = JSON.parse(
+      decodeURIComponent(stable.slice('vscode:mcp/install?'.length)),
+    ) as unknown
+    expect(payload).toEqual({
+      name: connect.name,
+      type: 'http',
+      url: connect.url,
+    })
+    expect(
+      vscodeConnectLink(connect, { insiders: true }).startsWith(
+        'vscode-insiders:mcp/install?',
+      ),
+    ).toBe(true)
+  })
+
+  it('writes a URL-only mcpServers JSON fallback', () => {
+    expect(JSON.parse(connectorJsonConfig(connect)) as unknown).toEqual({
+      mcpServers: { 'areca-acme-site': { url: connect.url } },
+    })
+  })
+
+  it('writes a setup prompt that carries no key', () => {
+    const prompt = connectSetupPrompt({
+      siteName: 'Acme Website',
+      url: connect.url,
+    })
+    expect(prompt).toContain(connect.url)
+    expect(prompt).toContain('Acme Website')
+    expect(prompt).not.toMatch(/areca_mcp_|Bearer/)
   })
 })

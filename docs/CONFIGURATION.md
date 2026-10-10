@@ -14,8 +14,8 @@ present even when no Dokploy account has been configured yet.
 | --- | --- |
 | `DATABASE_URL` | PostgreSQL connection URL. |
 | `BETTER_AUTH_SECRET` | Signs authentication sessions. Keep stable; changing it signs everyone out. |
-| `BETTER_AUTH_URL` | Canonical CMS URL used by authentication callbacks. Include the public scheme and host. |
-| `APP_URL` | CMS origin included in invitation and asset URLs, and the origin of the MCP endpoint shown on the Connect AI page (`/api/mcp`). Set it to an origin reachable by the browser, any site build that fetches assets, and the AI apps that connect. |
+| `BETTER_AUTH_URL` | Canonical CMS URL used by authentication callbacks. Include the public scheme and host. It is also the OAuth issuer (`<BETTER_AUTH_URL>/api/auth`) that AI apps sign in with. |
+| `APP_URL` | CMS origin included in invitation and asset URLs, and the origin of each site's connector URL (`/api/mcp/<site-slug>`) shown on the Connect AI page. Set it to the public HTTPS origin, reachable by the browser, any site build that fetches assets, and the AI apps that connect. Use the same origin as `BETTER_AUTH_URL`. |
 | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` | S3-compatible object storage for uploaded assets and branding. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM` | SMTP server and sender for invitation email. |
 | `DOKPLOY_CREDENTIALS_ENCRYPTION_KEY` | Base64-encoded 32-byte key that encrypts organization Dokploy credentials in PostgreSQL. |
@@ -45,7 +45,9 @@ site on `http://localhost:3001`, PostgreSQL on `localhost:5432`, RustFS S3 on
 service names are used instead: `postgres`, `rustfs`, `mailpit`, and `redis`.
 
 `BETTER_AUTH_URL` must match the URL users use to open the CMS so OAuth and SSO
-callbacks land on the right origin. `APP_URL` is used to create invitation and
+callbacks land on the right origin. AI apps use it as the OAuth issuer, so it
+must be the public HTTPS origin, and `APP_URL` must be the same origin. See
+[AI apps need public HTTPS](DEPLOYMENT.md#ai-apps-need-public-https). `APP_URL` is used to create invitation and
 asset links. For Dokploy builds, the CMS and its asset URLs must be reachable
 from the Dokploy host; `localhost` there means the Dokploy container itself.
 See [deployment](DEPLOYMENT.md) for the LAN and public-host setup.

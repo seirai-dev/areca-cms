@@ -287,7 +287,7 @@ function AppStep({
 }
 
 /** Monospace block with a copy button in its header row. */
-function CodeBlock({
+export function CodeBlock({
   text,
   copyLabel,
   testId,
@@ -315,7 +315,7 @@ function CodeBlock({
         data-testid={testId}
         className={cn(
           'scroll-quiet max-h-64 overflow-auto px-3.5 py-3 font-mono text-[12.5px] leading-5 text-text-primary',
-          wrap ? 'break-all whitespace-pre-wrap' : 'whitespace-pre',
+          wrap ? 'break-words whitespace-pre-wrap' : 'whitespace-pre',
         )}
       >
         {text}

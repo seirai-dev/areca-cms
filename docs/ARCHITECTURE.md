@@ -79,7 +79,7 @@ AI SEO generation is optional. Agency admins configure an encrypted OpenRouter k
 
 ## AI apps (MCP)
 
-Each site has a per-site MCP endpoint at `/api/mcp`. A user creates a personal AI key for one site on the Connect AI page, and an AI app uses it as a bearer token. Every request re-reads the key, its expiry, and the user's live role on that site, then runs the same kind of checks as the CMS screens. Tools are registered only for the roles that may use them. Writes go through the same services as the UI, so drafts, publishing and activity behave identically. Tool results report errors in plain language for the model. See [MCP.md](MCP.md).
+Each site has a connector URL at `/api/mcp/<site-slug>`. An AI app connects to it by signing the user in through OAuth 2.1 (the CMS is the authorization server, built on `@better-auth/oauth-provider`), and the user approves the app for that site on a consent screen. Each request re-checks the access token, the app's connection to the site, and the user's live role on that site, then runs the same kind of checks as the CMS screens. Personal keys for scripts use the same checks through `/api/mcp`. Discovery documents are served from the origin root. Tools are registered only for the roles that may use them. Writes go through the same services as the UI, so drafts, publishing and activity behave identically. Tool results report errors in plain language for the model. See [MCP.md](MCP.md).
 
 ## Repository map
 

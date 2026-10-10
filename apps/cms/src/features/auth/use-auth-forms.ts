@@ -7,6 +7,12 @@ import { localizeHref } from '#/paraglide/runtime'
 import { acceptInvitationFn } from '#/server/fn/me'
 import { completeSetupFn } from '#/server/fn/setup'
 
+import {
+  continueOAuth,
+  isPluginRedirect,
+  redirectUrlFrom,
+} from './oauth-resume'
+
 /**
  * Auth logic, separate from the markup (brief §5.2). Every form reports its
  * failures inline, never as a toast, and navigates with a full page load so
@@ -36,13 +42,40 @@ function go(path: string) {
 }
 
 /**
+ * Where a successful sign-in goes next. Inside an AI app's authorization the
+ * plugin names the next page (consent, or the app's redirect); otherwise
+ * `redirect` (validated) or the home page.
+ */
+async function finishSignIn(
+  data: unknown,
+  oauthQuery: string | null,
+  redirectTo: string | undefined,
+) {
+  // The client's redirect plugin already sends the browser to a `url` with
+  // `redirect: true`; navigating again would abort that load.
+  if (isPluginRedirect(data)) return
+  const next = redirectUrlFrom(data)
+  if (next) {
+    window.location.assign(next)
+    return
+  }
+  if (oauthQuery) {
+    window.location.assign(await continueOAuth(oauthQuery))
+    return
+  }
+  go(safeRedirectPath(redirectTo))
+}
+
+/**
  * Email + password sign-in, then on to `redirect` (validated). Accounts with
  * two-factor answer with a challenge instead of a session: `challenge` flips
- * on and the screen asks for a code (`verifyTwoFactor`).
+ * on and the screen asks for a code (`verifyTwoFactor`). `oauthQuery` is set
+ * when the sign-in resumes an AI app's authorization.
  */
 export function usePasswordSignIn(
   redirectTo: string | undefined,
   initialError: string | null,
+  oauthQuery: string | null = null,
 ) {
   const [error, setError] = React.useState<string | null>(initialError)
   const [pending, setPending] = React.useState(false)
@@ -57,12 +90,18 @@ export function usePasswordSignIn(
       setPending(false)
       return
     }
-    if (result.data && 'twoFactorRedirect' in result.data) {
+    if ('twoFactorRedirect' in result.data) {
       setChallenge(true)
       setPending(false)
       return
     }
-    go(safeRedirectPath(redirectTo))
+    await finishOrFail(
+      result.data,
+      oauthQuery,
+      redirectTo,
+      setError,
+      setPending,
+    )
   }
 
   async function verifyTwoFactor(code: string, kind: 'totp' | 'backup') {
@@ -78,7 +117,13 @@ export function usePasswordSignIn(
       setPending(false)
       return
     }
-    go(safeRedirectPath(redirectTo))
+    await finishOrFail(
+      result.data,
+      oauthQuery,
+      redirectTo,
+      setError,
+      setPending,
+    )
   }
 
   function cancelChallenge() {
@@ -93,6 +138,22 @@ export function usePasswordSignIn(
     challenge,
     error,
     pending,
+  }
+}
+
+/** Runs `finishSignIn`, reporting an expired AI-app link inline. */
+async function finishOrFail(
+  data: unknown,
+  oauthQuery: string | null,
+  redirectTo: string | undefined,
+  setError: (message: string) => void,
+  setPending: (pending: boolean) => void,
+) {
+  try {
+    await finishSignIn(data, oauthQuery, redirectTo)
+  } catch (err) {
+    setError(err instanceof Error ? err.message : m.auth_could_not_sign_in())
+    setPending(false)
   }
 }
 

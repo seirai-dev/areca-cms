@@ -26,6 +26,7 @@ The proxy must do three things:
 
 - Forward the original `Host` header. Sign-in and form submissions are checked against `BETTER_AUTH_URL` and `APP_URL`, so a request that arrives under another address is blocked.
 - Send `X-Forwarded-Proto` so the CMS knows the request came in over HTTPS.
+- Forward **every** path to the CMS, including `/.well-known/` (AI apps find the sign-in server there), `/api/auth/` (sign-in) and `/api/mcp/` (the connector URL). A proxy that forwards only some paths breaks AI app sign-in.
 - **Replace** `X-Forwarded-For` with the real client address instead of adding to it. When `RATE_LIMIT_TRUST_PROXY` is on, the CMS takes the client address from the first value in that header, and falls back to `X-Real-IP` or `CF-Connecting-IP`. If the proxy appends to the header, a visitor can send a fake first value and dodge the limit.
 
 **Caddy** does all of this with automatic certificates:
@@ -71,10 +72,26 @@ Three variables must match the address people use:
 | Variable | Compose default | Production value | Why it matters |
 | --- | --- | --- | --- |
 | `CMS_URL` in `.env` | `http://localhost:3000` | `https://cms.example.com` | Feeds `BETTER_AUTH_URL` and `APP_URL` in the Compose file. |
-| `BETTER_AUTH_URL` | `${CMS_URL}` | `https://cms.example.com` | Used for sign-in callbacks and social or SSO login redirects. A mismatch breaks sign-in. |
-| `APP_URL` | `${CMS_URL}` | `https://cms.example.com` | Used in invitation links and uploaded file URLs. Browsers and the Dokploy host must be able to reach it. |
+| `BETTER_AUTH_URL` | `${CMS_URL}` | `https://cms.example.com` | Used for sign-in callbacks and social or SSO login redirects. It is also the OAuth issuer, `https://cms.example.com/api/auth`, that AI apps sign in with. A mismatch breaks sign-in. |
+| `APP_URL` | `${CMS_URL}` | `https://cms.example.com` | Used in invitation links, uploaded file URLs and the connector URL of each site (`/api/mcp/<site>`). Browsers and the Dokploy host must be able to reach it. |
 
 Set `CMS_URL` in `.env` to the public HTTPS address, and the Compose file passes it to both variables. Do not use `localhost` or a private LAN address for `APP_URL`. A site build on the Dokploy host would fetch content from its own `localhost`, which fails.
+
+Keep `APP_URL` and `BETTER_AUTH_URL` on the same public origin. AI apps read the sign-in server from the connector URL's protected resource document, and then sign in there, so the two must agree.
+
+### AI apps need public HTTPS
+
+ChatGPT and Claude connect from the internet, so a CMS that is reachable only on a local network cannot be used with them. Claude Code, Cursor and VS Code also require HTTPS for any address except `localhost`, so they cannot sign in to a CMS on a plain `http://` LAN address. After you deploy, check the two discovery documents. Replace `cms.example.com` and `acme-site` with your values:
+
+```bash title="Check the discovery documents"
+curl -s https://cms.example.com/.well-known/oauth-protected-resource/api/mcp/acme-site
+# "resource" is https://cms.example.com/api/mcp/acme-site and
+# "authorization_servers" is ["https://cms.example.com/api/auth"]
+curl -s https://cms.example.com/.well-known/oauth-authorization-server/api/auth
+# "issuer" is https://cms.example.com/api/auth
+```
+
+If either request returns a `404`, or the values use another origin, check `APP_URL`, `BETTER_AUTH_URL` and the proxy's paths.
 
 Uploaded files are served from the CMS at `/api/assets/file/...` and their URLs contain `APP_URL`. Existing published releases keep the URLs they were built with. After you change `APP_URL`, go live again so new releases use the new address.
 

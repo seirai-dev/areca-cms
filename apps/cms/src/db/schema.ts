@@ -508,3 +508,229 @@ export const mcpKey = pgTable(
     index('mcp_key_user_id_idx').on(t.userId),
   ],
 )
+
+// ---------------------------------------------------------------------------
+// OAuth 2.1 authorization server (@better-auth/oauth-provider). Model and field
+// names must match the plugin's `schema` exactly; the drizzle adapter maps
+// them by key. Access tokens are opaque (disableJwtPlugin), stored hashed.
+
+export const oauthClient = pgTable(
+  'oauthClient',
+  {
+    id: id(),
+    clientId: text('clientId').notNull().unique(),
+    clientSecret: text('clientSecret'),
+    clientDiscoveryId: text('clientDiscoveryId'),
+    disabled: boolean('disabled').notNull().default(false),
+    skipConsent: boolean('skipConsent'),
+    enableEndSession: boolean('enableEndSession'),
+    subjectType: text('subjectType'),
+    scopes: text('scopes').array(),
+    clientCredentialsScopes: text('clientCredentialsScopes')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    userId: text('userId').references(() => user.id, { onDelete: 'cascade' }),
+    createdAt: timestamptz('createdAt'),
+    updatedAt: timestamptz('updatedAt'),
+    name: text('name'),
+    uri: text('uri'),
+    icon: text('icon'),
+    contacts: text('contacts').array(),
+    tos: text('tos'),
+    policy: text('policy'),
+    softwareId: text('softwareId'),
+    softwareVersion: text('softwareVersion'),
+    softwareStatement: text('softwareStatement'),
+    redirectUris: text('redirectUris').array().notNull(),
+    postLogoutRedirectUris: text('postLogoutRedirectUris').array(),
+    backchannelLogoutUri: text('backchannelLogoutUri'),
+    backchannelLogoutSessionRequired: boolean('backchannelLogoutSessionRequired'),
+    tokenEndpointAuthMethod: text('tokenEndpointAuthMethod'),
+    applicationType: text('applicationType'),
+    jwks: text('jwks'),
+    jwksUri: text('jwksUri'),
+    grantTypes: text('grantTypes').array(),
+    responseTypes: text('responseTypes').array(),
+    requirePKCE: boolean('requirePKCE'),
+    dpopBoundAccessTokens: boolean('dpopBoundAccessTokens')
+      .notNull()
+      .default(false),
+    referenceId: text('referenceId'),
+    metadata: jsonb('metadata'),
+  },
+  (t) => [index('oauth_client_user_id_idx').on(t.userId)],
+)
+
+export const oauthResource = pgTable('oauthResource', {
+  id: id(),
+  identifier: text('identifier').notNull().unique(),
+  name: text('name').notNull(),
+  accessTokenTtl: integer('accessTokenTtl'),
+  refreshTokenTtl: integer('refreshTokenTtl'),
+  signingAlgorithm: text('signingAlgorithm'),
+  signingKeyId: text('signingKeyId'),
+  allowedScopes: text('allowedScopes').array(),
+  customClaims: jsonb('customClaims'),
+  dpopBoundAccessTokensRequired: boolean('dpopBoundAccessTokensRequired')
+    .notNull()
+    .default(false),
+  disabled: boolean('disabled').notNull().default(false),
+  createdAt: timestamptz('createdAt'),
+  updatedAt: timestamptz('updatedAt'),
+  policyVersion: integer('policyVersion').notNull().default(1),
+  metadata: jsonb('metadata'),
+})
+
+export const oauthClientResource = pgTable(
+  'oauthClientResource',
+  {
+    id: id(),
+    clientId: text('clientId')
+      .notNull()
+      .references(() => oauthClient.clientId, { onDelete: 'cascade' }),
+    resourceId: text('resourceId')
+      .notNull()
+      .references(() => oauthResource.identifier, { onDelete: 'cascade' }),
+    metadata: jsonb('metadata'),
+    createdAt: timestamptz('createdAt'),
+  },
+  (t) => [
+    index('oauth_client_resource_client_idx').on(t.clientId),
+    index('oauth_client_resource_resource_idx').on(t.resourceId),
+    unique('oauth_client_resource_pair_unique').on(t.clientId, t.resourceId),
+  ],
+)
+
+export const oauthRefreshToken = pgTable(
+  'oauthRefreshToken',
+  {
+    id: id(),
+    token: text('token').notNull().unique(),
+    clientId: text('clientId')
+      .notNull()
+      .references(() => oauthClient.clientId, { onDelete: 'cascade' }),
+    sessionId: text('sessionId').references(() => session.id, {
+      onDelete: 'set null',
+    }),
+    userId: text('userId')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    referenceId: text('referenceId'),
+    authorizationCodeId: text('authorizationCodeId'),
+    resources: text('resources').array(),
+    requestedUserInfoClaims: text('requestedUserInfoClaims').array(),
+    expiresAt: timestamptz('expiresAt').notNull(),
+    createdAt: timestamptz('createdAt').notNull(),
+    revoked: timestamptz('revoked'),
+    rotatedAt: timestamptz('rotatedAt'),
+    rotationReplayResponse: text('rotationReplayResponse'),
+    rotationReplayExpiresAt: timestamptz('rotationReplayExpiresAt'),
+    authTime: timestamptz('authTime'),
+    confirmation: jsonb('confirmation'),
+    scopes: text('scopes').array().notNull(),
+  },
+  (t) => [
+    index('oauth_refresh_token_client_idx').on(t.clientId),
+    index('oauth_refresh_token_session_idx').on(t.sessionId),
+    index('oauth_refresh_token_user_idx').on(t.userId),
+    index('oauth_refresh_token_authorization_code_idx').on(t.authorizationCodeId),
+  ],
+)
+
+export const oauthAccessToken = pgTable(
+  'oauthAccessToken',
+  {
+    id: id(),
+    token: text('token').unique(),
+    clientId: text('clientId')
+      .notNull()
+      .references(() => oauthClient.clientId, { onDelete: 'cascade' }),
+    sessionId: text('sessionId').references(() => session.id, {
+      onDelete: 'set null',
+    }),
+    userId: text('userId').references(() => user.id, { onDelete: 'cascade' }),
+    referenceId: text('referenceId'),
+    authorizationCodeId: text('authorizationCodeId'),
+    resources: text('resources').array(),
+    requestedUserInfoClaims: text('requestedUserInfoClaims').array(),
+    refreshId: text('refreshId').references(() => oauthRefreshToken.id, {
+      onDelete: 'cascade',
+    }),
+    expiresAt: timestamptz('expiresAt').notNull(),
+    createdAt: timestamptz('createdAt').notNull(),
+    revoked: timestamptz('revoked'),
+    confirmation: jsonb('confirmation'),
+    scopes: text('scopes').array().notNull(),
+  },
+  (t) => [
+    index('oauth_access_token_client_idx').on(t.clientId),
+    index('oauth_access_token_session_idx').on(t.sessionId),
+    index('oauth_access_token_user_idx').on(t.userId),
+    index('oauth_access_token_refresh_idx').on(t.refreshId),
+    index('oauth_access_token_authorization_code_idx').on(t.authorizationCodeId),
+  ],
+)
+
+export const oauthConsent = pgTable(
+  'oauthConsent',
+  {
+    id: id(),
+    clientId: text('clientId')
+      .notNull()
+      .references(() => oauthClient.clientId, { onDelete: 'cascade' }),
+    userId: text('userId').references(() => user.id, { onDelete: 'cascade' }),
+    referenceId: text('referenceId'),
+    resources: text('resources').array(),
+    requestedUserInfoClaims: text('requestedUserInfoClaims').array(),
+    scopes: text('scopes').array().notNull(),
+    createdAt: timestamptz('createdAt'),
+    updatedAt: timestamptz('updatedAt'),
+  },
+  (t) => [
+    index('oauth_consent_client_idx').on(t.clientId),
+    index('oauth_consent_user_idx').on(t.userId),
+  ],
+)
+
+export const oauthClientAssertion = pgTable('oauthClientAssertion', {
+  id: id(),
+  expiresAt: timestamptz('expiresAt').notNull(),
+})
+
+/**
+ * A user's connected AI app for one site (created when they approve the OAuth
+ * consent screen). Active until revokedAt is set. The OAuth tokens themselves
+ * live in the oauth tables and are matched to a connection by (user, client,
+ * site resource) at request time.
+ */
+export const mcpConnection = pgTable(
+  'mcp_connection',
+  {
+    id: id(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    siteId: text('site_id')
+      .notNull()
+      .references(() => site.id, { onDelete: 'cascade' }),
+    clientId: text('client_id')
+      .notNull()
+      .references(() => oauthClient.clientId, { onDelete: 'cascade' }),
+    clientName: text('client_name').notNull(),
+    /** Opt-in: lets an owner or agency admin connection publish (go live). */
+    allowGoLive: boolean('allow_go_live').notNull().default(false),
+    createdAt: createdAt(),
+    lastUsedAt: timestamptz('last_used_at'),
+    revokedAt: timestamptz('revoked_at'),
+  },
+  (t) => [
+    index('mcp_connection_site_id_idx').on(t.siteId),
+    index('mcp_connection_user_id_idx').on(t.userId),
+    index('mcp_connection_client_id_idx').on(t.clientId),
+    // One active connection per user, site and app; revoked rows are history.
+    uniqueIndex('mcp_connection_active_unique')
+      .on(t.userId, t.siteId, t.clientId)
+      .where(sql`${t.revokedAt} is null`),
+  ],
+)

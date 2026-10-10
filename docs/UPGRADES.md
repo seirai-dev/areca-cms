@@ -78,6 +78,11 @@ time unless the release notes say the migration is backward compatible.
   optional per-site SEO prompt. It does not rewrite existing content. AI key
   encryption uses `AI_SETTINGS_ENCRYPTION_KEY`; retain that key with backups if
   an encrypted provider key is configured.
+- `0018_mcp_oauth` is additive. It adds the `mcp_connection` table and the OAuth
+  authorization-server tables. Existing personal keys keep working. After you
+  upgrade, set `APP_URL` and `BETTER_AUTH_URL` to the public HTTPS origin, and
+  check that the reverse proxy forwards `/.well-known/*`, `/api/auth/*` and
+  `/api/mcp/*` to the CMS. See [DEPLOYMENT.md](DEPLOYMENT.md#ai-apps-need-public-https).
 
 ## Procedure
 

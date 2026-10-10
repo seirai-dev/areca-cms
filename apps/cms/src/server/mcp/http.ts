@@ -1,10 +1,21 @@
+/* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .select() are checked defensively */
 import { createMcpHandler } from '@modelcontextprotocol/server'
 import type { McpRequestContext } from '@modelcontextprotocol/server'
+import { eq } from 'drizzle-orm'
 
+import { db } from '#/db'
+import { site, user } from '#/db/schema'
 import { createLogger } from '#/server/log'
 
+import { findUsableConnection, touchConnection } from './connections'
 import type { McpActor } from './keys'
-import { resolveMcpActorResult, MCP_KEY_PREFIX } from './keys'
+import { liveRoleFor, resolveMcpActorResult, MCP_KEY_PREFIX } from './keys'
+import {
+  MCP_CHALLENGE_SCOPES,
+  MCP_SCOPE,
+  mcpResourceUrl,
+} from './oauth-resource'
+import { verifyMcpAccessToken } from './oauth-tokens'
 import { createArecaMcpServer } from './server'
 
 const log = createLogger('mcp')
@@ -45,7 +56,7 @@ function bearerToken(request: Request): string | null {
   const header = request.headers.get('authorization')
   if (!header?.startsWith('Bearer ')) return null
   const token = header.slice('Bearer '.length).trim()
-  return token.startsWith(MCP_KEY_PREFIX) ? token : null
+  return token.length > 0 ? token : null
 }
 
 export const MFA_REQUIRED_MESSAGE =
@@ -65,6 +76,61 @@ function unauthorized(): Response {
   )
 }
 
+/** Where a client finds the site's authorization server (RFC 9728). */
+export function protectedResourceMetadataUrl(siteSlug: string): string {
+  const resource = new URL(mcpResourceUrl(siteSlug))
+  return `${resource.origin}/.well-known/oauth-protected-resource${resource.pathname}`
+}
+
+/**
+ * The RFC 6750 / RFC 9728 challenge. Every 401 for the per-site endpoint
+ * carries `resource_metadata`, which is how a client that has no token yet
+ * discovers how to sign in.
+ */
+function challengeHeader(
+  siteSlug: string,
+  params: { error?: string; description?: string; scope?: string } = {},
+): string {
+  const parts: string[] = []
+  if (params.error) parts.push(`error="${params.error}"`)
+  if (params.description) parts.push(`error_description="${params.description}"`)
+  parts.push(`resource_metadata="${protectedResourceMetadataUrl(siteSlug)}"`)
+  parts.push(`scope="${params.scope ?? MCP_CHALLENGE_SCOPES.join(' ')}"`)
+  return `Bearer ${parts.join(', ')}`
+}
+
+function challenge401(
+  siteSlug: string,
+  params: { error?: string; description?: string } = {},
+): Response {
+  return Response.json(
+    { error: params.description ?? 'Sign in to connect to this site' },
+    {
+      status: 401,
+      headers: { 'WWW-Authenticate': challengeHeader(siteSlug, params) },
+    },
+  )
+}
+
+function insufficientScope(siteSlug: string): Response {
+  return Response.json(
+    { error: 'This connection is not allowed to use the site' },
+    {
+      status: 403,
+      headers: {
+        'WWW-Authenticate': challengeHeader(siteSlug, {
+          error: 'insufficient_scope',
+          scope: MCP_SCOPE,
+        }),
+      },
+    },
+  )
+}
+
+function unknownSite(): Response {
+  return Response.json({ error: 'Site not found' }, { status: 404 })
+}
+
 /**
  * Serves one MCP request for the site the bearer key belongs to. Every
  * request is authenticated again, so a revoked or expired key stops working
@@ -72,20 +138,122 @@ function unauthorized(): Response {
  */
 export async function handleMcpRequest(request: Request): Promise<Response> {
   const token = bearerToken(request)
-  const resolution = token
-    ? await resolveMcpActorResult(token)
-    : { ok: false as const, reason: 'invalid' as const }
+  if (!token?.startsWith(MCP_KEY_PREFIX)) return unauthorized()
+  const resolution = await resolveMcpActorResult(token)
   if (!resolution.ok) {
     return resolution.reason === 'mfa_required' ? mfaRequired() : unauthorized()
   }
-  const actor = resolution.actor
+  return runMcp(request, resolution.actor, {
+    clientId: resolution.actor.keyId,
+    scopes: [],
+  })
+}
 
+/**
+ * The per-site connector endpoint `/api/mcp/<slug>`. Two credentials work:
+ *   - a personal key (`areca_mcp_…`) whose site must be this site;
+ *   - an OAuth access token issued for this site's resource, from an app the
+ *     user connected to this site, acting as that user with their live role.
+ */
+export async function handleSiteMcpRequest(
+  request: Request,
+  siteSlug: string,
+): Promise<Response> {
+  const [found] = await db
+    .select()
+    .from(site)
+    .where(eq(site.slug, siteSlug))
+    .limit(1)
+  if (!found) return unknownSite()
+
+  const token = bearerToken(request)
+  if (!token) return challenge401(siteSlug)
+
+  if (token.startsWith(MCP_KEY_PREFIX)) {
+    const resolution = await resolveMcpActorResult(token)
+    if (!resolution.ok) {
+      return resolution.reason === 'mfa_required'
+        ? mfaRequired()
+        : challenge401(siteSlug, { error: 'invalid_token', description: 'Invalid or expired key' })
+    }
+    if (resolution.actor.siteId !== found.id) {
+      // A key for another site is a valid key here but not for this resource.
+      return challenge401(siteSlug, { error: 'invalid_token', description: 'Key is for a different site' })
+    }
+    return runMcp(request, resolution.actor, {
+      clientId: resolution.actor.keyId,
+      scopes: [],
+    })
+  }
+
+  const verdict = await verifyMcpAccessToken(token)
+  if (!verdict.ok) {
+    return challenge401(siteSlug, { error: 'invalid_token', description: 'Access token is invalid or expired' })
+  }
+  const { userId, clientId, resources, scopes } = verdict.token
+  // RFC 8707: a token only works at the resource it was issued for.
+  if (!resources.includes(mcpResourceUrl(siteSlug))) {
+    return challenge401(siteSlug, { error: 'invalid_token', description: 'Access token was issued for a different site' })
+  }
+  if (!scopes.includes(MCP_SCOPE)) return insufficientScope(siteSlug)
+
+  const connection = await findUsableConnection({
+    userId,
+    siteId: found.id,
+    clientId,
+  })
+  if (!connection) {
+    return challenge401(siteSlug, { error: 'invalid_token', description: 'This app is no longer connected to the site' })
+  }
+
+  const [owner] = await db
+    .select({
+      id: user.id,
+      name: user.name,
+      isAgencyAdmin: user.isAgencyAdmin,
+      twoFactorEnabled: user.twoFactorEnabled,
+    })
+    .from(user)
+    .where(eq(user.id, userId))
+    .limit(1)
+  if (!owner) {
+    return challenge401(siteSlug, { error: 'invalid_token' })
+  }
+  const live = await liveRoleFor(owner, found.organizationId)
+  if (!live.ok) {
+    return live.reason === 'mfa_required'
+      ? mfaRequired()
+      : challenge401(siteSlug, { error: 'invalid_token', description: 'You no longer have access to this site' })
+  }
+
+  await touchConnection(connection)
+  const actor: McpActor = {
+    keyId: connection.id,
+    keyName: connection.clientName,
+    credential: 'oauth',
+    userId: owner.id,
+    userName: owner.name,
+    siteId: found.id,
+    siteSlug: found.slug,
+    siteName: found.name,
+    organizationId: found.organizationId,
+    role: live.role,
+    allowGoLive: connection.allowGoLive && live.role !== 'editor',
+  }
+  return runMcp(request, actor, { clientId, scopes })
+}
+
+function runMcp(
+  request: Request,
+  actor: McpActor,
+  auth: { clientId: string; scopes: string[] },
+): Promise<Response> {
   return handler.fetch(request, {
     authInfo: {
-      // Never the secret: the key id is enough for logs and audit labels.
+      // Never the secret: the connection or key id is enough for logs and audit.
       token: actor.keyId,
-      clientId: actor.keyId,
-      scopes: [],
+      clientId: auth.clientId,
+      scopes: auth.scopes,
       extra: { actor },
     },
   })

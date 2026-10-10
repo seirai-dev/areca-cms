@@ -53,6 +53,11 @@ The CMS checks every setting when it starts. A setting that is missing or malfor
 
 **Fix:** Set both to the public address of the CMS, for example `https://cms.example.com`. Behind a reverse proxy, use the public HTTPS address, not the local one.
 </Accordion>
+<Accordion title="An AI app cannot connect or sign in">
+**Cause:** Usually the address. ChatGPT and Claude connect from the internet, so the CMS needs a public HTTPS address. Other causes are a reverse proxy that does not forward `/.well-known/` paths, or `BETTER_AUTH_URL` or `APP_URL` set to an address other than the public one.
+
+**Fix:** Set `APP_URL` and `BETTER_AUTH_URL` to the same public `https://` origin, restart the CMS, and check the two discovery documents as described in [production](/docs/self-hosting/production#ai-apps-need-public-https). Then reconnect the app from the site's Connect AI page.
+</Accordion>
 <Accordion title="DOKPLOY_CREDENTIALS_ENCRYPTION_KEY is rejected">
 **Cause:** The key must be a base64 encoding of 32 random bytes. It is 44 characters long and ends with `=`.
 

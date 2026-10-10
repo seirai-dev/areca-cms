@@ -53,7 +53,7 @@ Normal pages use content included in the website build. Draft preview fetches fr
 | [API](API.md) | Site-token endpoints, snapshot and preview contracts, errors |
 | [Configuration](CONFIGURATION.md) | Environment variables, secrets, storage, email, authentication |
 | [Permissions](AUTHZ_MATRIX.md) | Server-enforced roles and access rules |
-| [Connect AI (MCP)](MCP.md) | Personal AI keys, the per-site MCP endpoint, tools, and roles |
+| [Connect AI (MCP)](MCP.md) | OAuth sign-in for connected apps, personal keys, the per-site MCP endpoint, tools, and roles |
 | [Operations](OPERATIONS.md) | Health, metrics, logs, worker and incident handling |
 | [Recovery](RECOVERY.md) | Backups, restores, organization transfer |
 | [Integration reliability](INTEGRATIONS.md) | Deployment delivery, retries, uncertain dispatch recovery |

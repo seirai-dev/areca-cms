@@ -62,13 +62,13 @@ Each generation adds an entry to the activity log. It records the content type, 
 
 ## AI apps you connect
 
-Connect AI is a separate feature. It lets an AI app that you run, such as Claude or Cursor, read and write one site with a personal AI key. Areca does not send anything to OpenRouter for these requests. Areca answers the requests from the app with content from the site, and the app then sends what it reads to its own AI provider.
+Connect AI is a separate feature. It lets an AI app that you use, such as ChatGPT, Claude or Cursor, read and write one site, either through a connection that you approve on the consent screen, or with a personal AI key. Areca does not send anything to OpenRouter for these requests. Areca answers the requests from the app with content from the site, and the app then sends what it reads to its own AI provider.
 
 - **What the app can read.** Everything the key's user can read on the site, including drafts and unpublished changes.
-- **Who controls it.** The user creates the key and chooses the app. The user can revoke the key at any time, and owners and agency admins can revoke any key on the site.
-- **What is logged.** Each change is recorded in the activity log with the key's name. The log does not store the text of the content.
+- **Who controls it.** The user approves the app on the consent screen, or creates the key and chooses the app. The user can disconnect the app or revoke the key at any time, and owners and agency admins can disconnect or revoke any of them on the site.
+- **What is logged.** Each change is recorded in the activity log with the app's name, or the key's name. The log does not store the text of the content.
 
-Tell your editors which AI apps are allowed on your client's sites, and that the apps' providers may keep what they read. See [Connect AI](/docs/cms/connect-ai) and [tokens](/docs/security/tokens#personal-ai-keys).
+Tell your editors which AI apps are allowed on your client's sites, and that the apps' providers may keep what they read. See [Connect AI](/docs/cms/connect-ai) and [tokens](/docs/security/tokens#oauth-connections).
 
 ## Limits
 

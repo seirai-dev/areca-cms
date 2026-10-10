@@ -1,4 +1,5 @@
 import { ssoClient } from '@better-auth/sso/client'
+import { oauthProviderClient } from '@better-auth/oauth-provider/client'
 import {
   inferAdditionalFields,
   twoFactorClient,
@@ -12,5 +13,8 @@ export const authClient = createAuthClient({
     inferAdditionalFields<typeof auth>(),
     ssoClient(),
     twoFactorClient(),
+    // Attaches the signed authorization query from the page (`?sig=…`) to
+    // sign-in requests, so a sign-in started from an AI app resumes it.
+    oauthProviderClient(),
   ],
 })

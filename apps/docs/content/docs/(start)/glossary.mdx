@@ -10,7 +10,8 @@ These are the terms used across the CMS, the site SDK and self-hosting documenta
 - **[Activity](/docs/cms/history-and-activity)**: The log of content, people and release actions for a site. Owners see a site's activity, and agency admins see activity across the instance.
 - **[Agency admin](/docs/security/roles-and-permissions)**: A person who manages the agency's whole Areca instance: clients, sites, content types, branding, AI settings and agency-wide access. Agency admins must use two-factor authentication.
 - **[Agency workspace](/docs/cms/workspace)**: The area for agency admins, reached from the workspace switcher. It holds clients, agency-wide people, branding, activity and AI settings.
-- **[AI key](/docs/cms/connect-ai)**: A personal key that lets one AI app work on one site as you, with your current role. It is shown once, expires after a set time and can be revoked at any time. Keys start with `areca_mcp_`.
+- **[Connected app](/docs/cms/connect-ai)**: An AI app, such as ChatGPT, Claude or Cursor, that you approved to work on one site as you, with your current role. It signs in through the browser and can be disconnected at any time. It stops working after 90 days without use.
+- **[AI key](/docs/cms/connect-ai#advanced-personal-keys)**: A personal key that lets a script or an app work on one site as you, with your current role. It is shown once, expires after a set time and can be revoked at any time. Keys start with `areca_mcp_`.
 - **[Archived](/docs/cms/statuses-and-review)**: An entry state. The entry stays in the CMS but is left out of the website at the next release.
 - **[Asset](/docs/cms/library)**: A file in the Library, such as an image or PDF. Assets have public URLs.
 
@@ -54,7 +55,7 @@ These are the terms used across the CMS, the site SDK and self-hosting documenta
 
 - **[Manifest](/docs/sdk/schema-sync)**: The schema description of a website's collections and fields. A developer publishes it with `areca manifest push`, and the CMS uses it to build the editing forms.
 - **[Mark as ready](/docs/cms/statuses-and-review)**: The owner action that approves the current draft of an entry for the next release. Ready does not publish anything by itself.
-- **[MCP endpoint](/docs/cms/mcp-tools)**: The per-site address, `/api/mcp`, that AI apps call to read and write a site with an AI key. Model Context Protocol (MCP) is the standard these apps use.
+- **[Connector URL](/docs/cms/mcp-tools)**: The per-site address, `/api/mcp/<site-slug>`, that AI apps call to read and write a site. Connected apps sign in to it with OAuth. The `/api/mcp` address accepts personal keys. Model Context Protocol (MCP) is the standard these apps use.
 
 ## P
 
