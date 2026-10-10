@@ -28,7 +28,8 @@
   },
   "files": [
     "dist",
-    "skills"
+    "skills",
+    "CHANGELOG.md"
   ],
   "engines": {
     "node": ">=22.6.0"

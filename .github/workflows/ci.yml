@@ -71,6 +71,8 @@ jobs:
         run: pnpm --filter @areca/cms test
       - name: CMS script tests (scanner, transfer tooling)
         run: pnpm --filter @areca/cms test:scripts
+      - name: Release script tests
+        run: node --test scripts/release/*.test.mjs
       - name: Docker recovery tooling tests
         run: node --test docker/*.test.mjs
       - name: Demo site typecheck and tests

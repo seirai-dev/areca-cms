@@ -52,4 +52,4 @@ MCP config is written to the project file for Claude Code (`.mcp.json`), Cursor,
 
 The skill source lives in the repository root under `skills/`. The build copies it into this package. `pnpm test` checks the skills against the agentskills.io spec, and also checks that every SDK export, CLI command, env var and MCP tool in the monorepo is documented, and that no removed tool still is.
 
-Releases are manual. Bump `version` here, in `.claude-plugin/plugin.json` and in each `SKILL.md` `metadata.version` (the tests enforce that they match), then run `pnpm publish`. `prepack` runs the tests and the build.
+Releases are automated; see [Releasing packages](../../docs/DEVELOPMENT.md#releasing-packages). The release PR bumps `version` here, in `.claude-plugin/plugin.json` and in each `SKILL.md` `metadata.version` together (the tests enforce that they match). Commits under `packages/skills/`, `skills/` and `.claude-plugin/` count towards a skills release.

@@ -75,6 +75,22 @@ Drizzle's source schema lives in `apps/cms/src/db/schema.ts`; committed migratio
 
 Use [upgrades](UPGRADES.md) for production migration, staging validation, backups, and rollback. `db:reset` erases application data and the configured upload bucket; it is a deliberate local reset tool rather than a setup prerequisite.
 
+## Releasing packages
+
+`@areca-cms/site-sdk` and `@areca-cms/skills` are published to npm by `.github/workflows/release.yml`, using `scripts/release/release.mjs`. Each package has its own version, tags (`site-sdk-v0.3.0`, `skills-v0.2.0`), `CHANGELOG.md` and release PR.
+
+1. A push to `master` that touches a package's files runs the workflow. For the site SDK, that is `packages/site-sdk/`. For skills, it is `packages/skills/`, `skills/` and `.claude-plugin/`.
+2. Commit subjects since the package's last tag decide the bump. Merge commits are ignored. `feat:` bumps minor, `fix:` and `perf:` bump patch, and `!` or a `BREAKING CHANGE:` footer bumps major. Below 1.0.0, a breaking change bumps minor. `docs:`, `chore:`, `test:`, `ci:`, `refactor:` and `style:` don't release.
+3. The workflow opens or updates a `release/<package>` PR with the new version and changelog. It rebuilds the PR on every push, so don't edit it by hand.
+4. Merging the PR publishes the version to npm and creates the tag and GitHub Release. Before publishing, the workflow typechecks, tests and builds the package.
+
+To release without a qualifying commit, or to go to 1.0.0, run **Release packages** from the Actions tab and choose a package and bump. `node --test scripts/release/*.test.mjs` tests the bump and changelog logic.
+
+The workflow needs the following:
+
+- `NPM_TOKEN` secret: a granular npm token with read and write access to the `@areca-cms` scope.
+- A GitHub App installed on this repository only, with Contents and Pull requests read and write. Store its client ID in the `RELEASE_APP_CLIENT_ID` repository variable and a private key in the `RELEASE_APP_PRIVATE_KEY` secret. CI only runs on the release PR because the PR is opened with the App's token.
+
 ## Documentation maintenance
 
 Update the guide for the affected audience and link it from [the documentation index](README.md). Keep code examples small but usable; identify required variables and prerequisites. Describe current behavior separately from planned work. Keep historical proposal documents labeled as such.
