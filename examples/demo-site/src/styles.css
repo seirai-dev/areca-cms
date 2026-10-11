@@ -1,6 +1,90 @@
+@import '@fontsource-variable/fraunces/full.css';
+@import '@fontsource-variable/fraunces/full-italic.css';
+@import '@fontsource-variable/inter';
 @import 'tailwindcss';
 
+/*
+ * Northbound design tokens. Light values are the default; dark values apply
+ * when the visitor prefers a dark color scheme. Fixed brand colours (brand,
+ * brand-ink) keep the same value in both modes so the footer, the quote band
+ * and text on photography always read the same.
+ */
 @theme {
-  --font-sans: ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji',
-    'Segoe UI Emoji';
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Fraunces Variable', 'Iowan Old Style', Georgia, serif;
+  --font-mono: ui-monospace, 'SFMono-Regular', Menlo, monospace;
+
+  --color-canvas: #f5f1ea; /* paper */
+  --color-surface: #fffdf9;
+  --color-ink: #1a1d1b;
+  --color-muted: #5b6f55; /* moss */
+  --color-primary: #1f3a32; /* pine */
+  --color-on-primary: #f5f1ea;
+  --color-accent: #c4572b; /* ember: decoration, focus rings */
+  --color-accent-strong: #a3441e; /* ember for text and badges */
+  --color-on-accent: #f5f1ea;
+  --color-fjord: #2e4a5c;
+  --color-line: rgb(26 29 27 / 0.12);
+
+  --color-brand: #1f3a32;
+  --color-brand-ink: #f5f1ea;
+  --color-on-image: #f5f1ea;
+
+  --shadow-card: 0 1px 0 rgb(26 29 27 / 0.04), 0 18px 40px -28px rgb(26 29 27 / 0.35);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-canvas: #101614;
+    --color-surface: #17201c;
+    --color-ink: #ece7de;
+    --color-muted: #a7b0a8;
+    --color-primary: #8fb8a0;
+    --color-on-primary: #101614;
+    --color-accent: #e07a4c;
+    --color-accent-strong: #e07a4c;
+    --color-on-accent: #101614;
+    --color-fjord: #8db0c0;
+    --color-line: rgb(236 231 222 / 0.14);
+    --shadow-card: 0 1px 0 rgb(0 0 0 / 0.2), 0 18px 40px -28px rgb(0 0 0 / 0.7);
+  }
+}
+
+@layer base {
+  :root {
+    color-scheme: light dark;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+    scroll-padding-top: 5rem;
+  }
+
+  body {
+    @apply bg-canvas text-ink font-sans antialiased;
+  }
+
+  ::selection {
+    background: var(--color-accent);
+    color: var(--color-on-accent);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+}
+
+/* Motion is decorative: remove it for visitors who ask for less. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

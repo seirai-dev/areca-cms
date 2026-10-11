@@ -2,14 +2,13 @@ FROM node:24-alpine AS deps
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@11.18.0 --activate
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
-COPY packages/site-sdk ./packages/site-sdk
-COPY examples/demo-site ./examples/demo-site
+COPY examples/demo-site/package.json ./examples/demo-site/
 RUN pnpm install --frozen-lockfile --filter @areca/demo-site...
 
 FROM deps AS build
+COPY examples/demo-site ./examples/demo-site
 ARG ARECA_CMS_URL
 ENV ARECA_CMS_URL=$ARECA_CMS_URL
-RUN pnpm --filter @areca-cms/site-sdk build
 # Changing this ARG busts the content-pull layer. Same git + same CMS URL/token
 # would otherwise reuse a cached `areca pull` from a previous publication.
 ARG ARECA_SNAPSHOT_ID=

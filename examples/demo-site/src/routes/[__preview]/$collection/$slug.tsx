@@ -1,93 +1,75 @@
-import {
-  createFileRoute,
-  type ErrorComponentProps,
-} from "@tanstack/react-router";
-import { createServerFn } from "@tanstack/react-start";
-import { getPreviewEntry, previewHeaders } from "@areca-cms/site-sdk";
-import { setResponseHeader } from "@tanstack/react-start/server";
-import { z } from "zod";
-import { ArticleView } from "../../../components/article-view.tsx";
-import type { Article } from "../../../lib/content.ts";
+import { createFileRoute, type ErrorComponentProps } from '@tanstack/react-router'
+import { z } from 'zod'
+import { ArticleView } from '../../../components/article-view.tsx'
+import { AuthorView } from '../../../components/author-view.tsx'
+import { CoffeeView } from '../../../components/coffee-view.tsx'
+import { PageMessage, PreviewBanner } from '../../../components/cms-image.tsx'
+import { loadPreview } from '../../../lib/queries.ts'
+import { pageHead } from '../../../lib/seo.ts'
 
 const previewSearchSchema = z.object({
   token: z.string().min(1),
-});
-
-const loadPreview = createServerFn({
-  method: "GET",
-  strict: { output: false },
 })
-  .validator(z.object({ token: z.string().min(1) }))
-  .handler(async ({ data }) => {
-    const headers = previewHeaders();
-    setResponseHeader("X-Robots-Tag", headers["X-Robots-Tag"]);
-    setResponseHeader("Cache-Control", headers["Cache-Control"]);
-    try {
-      const preview = await getPreviewEntry({ token: data.token });
-      return { ok: true as const, preview };
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to fetch preview";
-      return { ok: false as const, error: message };
-    }
-  });
 
-export const Route = createFileRoute("/__preview/$collection/$slug")({
+export const Route = createFileRoute('/__preview/$collection/$slug')({
   validateSearch: (search) => previewSearchSchema.parse(search),
   loaderDeps: ({ search }) => ({ token: search.token }),
-  loader: async ({ deps }) => {
-    return loadPreview({ data: { token: deps.token } });
-  },
+  loader: ({ deps }) => loadPreview({ data: { token: deps.token } }),
   head: () => ({
     meta: [
-      { title: "Preview - Acme" },
-      { name: "robots", content: "noindex, nofollow" },
+      ...pageHead({ title: 'Preview' }).meta,
+      { name: 'robots', content: 'noindex, nofollow' },
     ],
   }),
   component: PreviewPage,
   errorComponent: PreviewError,
-});
+})
 
 function PreviewPage() {
-  const { collection } = Route.useParams();
-  const result = Route.useLoaderData();
-
-  if (!result) {
-    return (
-      <PreviewMessage title="Preview unavailable" body="No preview data" />
-    );
-  }
+  const { collection } = Route.useParams()
+  const result = Route.useLoaderData()
 
   if (!result.ok) {
-    return <PreviewMessage title="Preview unavailable" body={result.error} />;
+    return <PreviewMessage title="Preview unavailable" body={result.error} />
   }
 
-  if (collection !== "articles") {
+  const { preview } = result
+  if (preview.collection !== collection) {
     return (
       <PreviewMessage
         title="Preview unavailable"
-        body={`Collection "${collection}" is not rendered on this site.`}
+        body={`The link points at "${collection}" but the draft is a "${preview.collection}".`}
       />
-    );
+    )
   }
 
-  return <ArticleView article={result.preview.entry as Article} preview />;
+  switch (preview.collection) {
+    case 'articles':
+      return (
+        <ArticleView
+          article={preview.entry}
+          author={preview.author}
+          coffee={preview.coffee}
+          preview
+        />
+      )
+    case 'coffees':
+      return <CoffeeView coffee={preview.entry} articles={preview.articles} preview />
+    case 'authors':
+      return <AuthorView author={preview.entry} articles={preview.articles} preview />
+  }
 }
 
 function PreviewError({ error }: ErrorComponentProps) {
-  const body =
-    error instanceof Error ? error.message : "Failed to load preview";
-  return <PreviewMessage title="Preview unavailable" body={body} />;
+  const body = error instanceof Error ? error.message : 'Failed to load preview'
+  return <PreviewMessage title="Preview unavailable" body={body} />
 }
 
 function PreviewMessage({ title, body }: { title: string; body: string }) {
   return (
-    <div className="mx-auto max-w-3xl px-4 py-16">
-      <p className="mb-6 rounded-md border border-amber-300 bg-amber-100 px-4 py-3 text-sm font-semibold tracking-wide text-amber-950">
-        PREVIEW - draft content
-      </p>
-      <h1 className="text-3xl font-semibold">{title}</h1>
-      <p className="mt-3 text-zinc-600">{body}</p>
-    </div>
-  );
+    <PageMessage title={title}>
+      <PreviewBanner />
+      <p className="text-muted">{body}</p>
+    </PageMessage>
+  )
 }
