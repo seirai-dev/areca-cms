@@ -112,7 +112,7 @@ test.describe('Connect AI', () => {
     await expect(row).toContainText('Never used')
     await expect(row).toContainText('Never expires')
     await expect(page.getByTestId('connect-ai-role-note')).toContainText(
-      'delete and restore entries',
+      'Scheduling and publishing need an app or key allowed to go live',
     )
     await row.getByTestId('connect-ai-revoke').click()
     await page.getByTestId('confirm-action').click()
