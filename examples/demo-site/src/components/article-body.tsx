@@ -14,7 +14,7 @@ export const articleComponents = {
     return (
       <h2
         {...props}
-        className="mt-12 scroll-mt-24 text-2xl font-semibold tracking-tight text-zinc-950"
+        className="mt-16 scroll-mt-28 font-display text-3xl leading-tight tracking-tight text-ink md:text-4xl"
       />
     )
   },
@@ -22,7 +22,7 @@ export const articleComponents = {
     return (
       <h3
         {...props}
-        className="mt-8 scroll-mt-24 text-xl font-semibold tracking-tight text-zinc-900"
+        className="mt-12 scroll-mt-28 font-display text-2xl leading-snug tracking-tight text-ink md:text-3xl"
       />
     )
   },
@@ -30,12 +30,12 @@ export const articleComponents = {
     return (
       <h4
         {...props}
-        className="mt-6 scroll-mt-24 text-base font-semibold uppercase tracking-wide text-zinc-700"
+        className="mt-10 scroll-mt-28 text-xs font-semibold uppercase tracking-[0.18em] text-muted"
       />
     )
   },
   p(props) {
-    return <p {...props} className="mt-5 text-lg leading-8 text-zinc-700" />
+    return <p {...props} className="mt-6 text-[1.125rem] leading-[1.8] text-ink/90" />
   },
   a(props) {
     const href = props.href ?? ''
@@ -43,14 +43,14 @@ export const articleComponents = {
     return (
       <a
         {...props}
-        className="font-medium text-zinc-950 underline decoration-zinc-300 underline-offset-4 transition hover:decoration-zinc-950"
+        className="font-medium text-ink underline decoration-accent/60 decoration-[1.5px] underline-offset-[5px] transition-colors duration-200 hover:text-accent-strong hover:decoration-accent-strong"
         rel={external ? 'noopener noreferrer' : props.rel}
         target={external ? '_blank' : props.target}
       />
     )
   },
   strong(props) {
-    return <strong {...props} className="font-semibold text-zinc-950" />
+    return <strong {...props} className="font-semibold text-ink" />
   },
   em(props) {
     return <em {...props} className="italic" />
@@ -59,7 +59,7 @@ export const articleComponents = {
     return (
       <ul
         {...props}
-        className="mt-5 list-disc space-y-2 pl-6 text-lg leading-8 text-zinc-700 marker:text-zinc-400"
+        className="mt-6 list-disc space-y-3 pl-6 text-[1.125rem] leading-[1.8] text-ink/90 marker:text-accent"
       />
     )
   },
@@ -67,7 +67,7 @@ export const articleComponents = {
     return (
       <ol
         {...props}
-        className="mt-5 list-decimal space-y-2 pl-6 text-lg leading-8 text-zinc-700 marker:font-medium marker:text-zinc-500"
+        className="mt-6 list-decimal space-y-3 pl-6 text-[1.125rem] leading-[1.8] text-ink/90 marker:font-display marker:text-accent-strong"
       />
     )
   },
@@ -78,7 +78,7 @@ export const articleComponents = {
     return (
       <blockquote
         {...props}
-        className="mt-6 border-l-4 border-zinc-900 pl-6 text-xl italic text-zinc-800 [&>p]:mt-0"
+        className="my-14 border-l-2 border-accent py-1 pl-7 font-display text-2xl italic leading-snug tracking-tight text-ink md:text-3xl [&>p]:m-0 [&>p]:text-[inherit] [&>p]:leading-[inherit] [&>p]:italic"
       />
     )
   },
@@ -86,27 +86,24 @@ export const articleComponents = {
     return (
       <pre
         {...props}
-        className="mt-6 overflow-x-auto rounded-lg bg-zinc-950 p-5 text-sm leading-6 text-zinc-100"
+        className="mt-8 overflow-x-auto rounded-2xl bg-brand p-6 text-sm leading-7 text-brand-ink"
       />
     )
   },
   code(props) {
-    return <code {...props} className="font-mono" />
+    return <code {...props} className="rounded bg-surface px-1.5 py-0.5 font-mono text-[0.9em] text-ink ring-1 ring-inset ring-line" />
   },
   img(props) {
     return (
-      <figure className="mt-8">
+      <figure className="-mx-5 mt-12 sm:mx-0">
         <img
           {...props}
           loading="lazy"
-          className={
-            props.width
-              ? 'h-auto max-w-full rounded-xl'
-              : 'h-auto w-full rounded-xl'
-          }
+          decoding="async"
+          className="h-auto w-full rounded-2xl bg-surface"
         />
         {props.alt ? (
-          <figcaption className="mt-2 text-center text-sm text-zinc-500">
+          <figcaption className="mt-3 px-5 text-center text-sm leading-6 text-muted sm:px-0">
             {props.alt}
           </figcaption>
         ) : null}
@@ -115,7 +112,7 @@ export const articleComponents = {
   },
   hr() {
     return (
-      <hr className="my-10 border-0 text-center text-2xl tracking-[1em] text-zinc-400 before:content-['···']" />
+      <hr className="my-14 border-0 text-center font-display text-2xl tracking-[1em] text-accent before:content-['···']" />
     )
   },
   br() {
@@ -129,7 +126,7 @@ export function ArticleBody({
   body: RichTextValue | null | undefined
 }) {
   return (
-    <div className="mt-8">
+    <div className="mt-10 max-w-[68ch]">
       <Markdown components={richTextComponents(articleComponents)}>
         {richTextDocument(body)}
       </Markdown>

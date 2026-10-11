@@ -1,28 +1,28 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { getArticles } from '../src/lib/content.ts'
+import { listPrerenderPages } from '../src/lib/content.ts'
 
 const publicDir = join(process.cwd(), '.output/public')
-const articles = getArticles()
+const pages = listPrerenderPages()
 
-if (articles.length === 0) {
-  console.error('No articles in src/generated/content. Run `pnpm content:fixture` then build.')
+if (pages.length === 0) {
+  console.error('No pages to verify. Run `pnpm content:fixture` then build.')
   process.exit(1)
 }
 
 let failed = false
-for (const article of articles) {
-  const filePath = join(publicDir, 'blog', article.slug, 'index.html')
+for (const path of pages) {
+  const filePath = join(publicDir, path, 'index.html')
   if (!existsSync(filePath)) {
-    console.error(`Missing prerendered article: ${filePath}`)
+    console.error(`Missing prerendered page for ${path}: ${filePath}`)
     failed = true
     continue
   }
-  console.log(`ok ${filePath}`)
+  console.log(`ok ${path} -> ${filePath}`)
 }
 
 if (failed) {
   process.exit(1)
 }
 
-console.log(`Verified ${articles.length} prerendered article page(s).`)
+console.log(`Verified ${pages.length} prerendered page(s).`)

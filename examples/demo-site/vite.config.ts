@@ -19,7 +19,7 @@ const config = defineConfig({
         filter: (page) =>
           !page.path.startsWith('/__preview') && !page.path.startsWith('/api'),
       },
-      pages: listPrerenderPages(),
+      pages: listPrerenderPages().map((path) => ({ path })),
     }),
     viteReact(),
   ],

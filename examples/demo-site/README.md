@@ -52,14 +52,16 @@ environment. Routine content pulls and builds use the read-only site token.
 
 ## How the site reads content
 
-`src/lib/content.ts` reads `src/generated/content/articles.json` with
-`readContent()`, types the records, and sorts articles newest first. The
-TanStack server functions in `src/lib/queries.ts` expose the content to route
-loaders. The `/blog` route lists articles; `/blog/$slug` renders one article.
-Rich text is rendered from the SDK's TanStack Markdown document. Update the
-route and UI types if you change the collection fields.
+`src/lib/content.ts` reads `articles`, `coffees` and `authors` from
+`src/generated/content` with `readContent()`, types the records, sorts them,
+and resolves references by id. The TanStack server functions in
+`src/lib/queries.ts` expose the content to route loaders. Routes: `/coffees`
+and `/coffees/$slug`, `/journal` and `/journal/$slug`, `/team` and
+`/team/$slug`, and `/about`. Rich text is rendered from the SDK's TanStack
+Markdown document. Update the route and UI types if you change the collection
+fields.
 
-Vite prerenders the home page, blog listing, and every current article slug.
+Vite prerenders the home page, every list and detail page, and `/about`.
 It excludes `/__preview` and `/api` routes. `/api/health` reports the snapshot
 publication ID and returns 503 when the generated manifest is missing.
 
@@ -109,7 +111,7 @@ commands:
 
 ## Docker
 
-Build from the repository root because the image installs the workspace SDK.
+Build from the repository root because the image needs the workspace lockfile. The image installs the published `@areca-cms/site-sdk` package from npm.
 Pass the CMS URL as a build argument and the site token as a BuildKit secret:
 
 ```bash
