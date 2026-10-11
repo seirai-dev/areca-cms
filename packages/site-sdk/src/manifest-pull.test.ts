@@ -139,6 +139,28 @@ describe('manifestPull', () => {
     }
   })
 
+  it('keeps the local assets settings when re-rendering the config', async () => {
+    const dir = makeDir()
+    try {
+      const name = writeConfig(dir, {
+        siteKey: 'acme-site',
+        assets: { download: true, dir: 'static/media', publicPath: '/media' },
+        collections: {},
+      })
+      await manifestPull({
+        cwd: dir,
+        configPath: name,
+        client: makeClient(),
+        interactive: false,
+      })
+      expect(readFileSync(join(dir, name), 'utf8')).toContain(
+        "  siteKey: 'acme-site',\n  assets: {\n    download: true,\n    dir: 'static/media',\n    publicPath: '/media',\n  },\n  collections: {\n",
+      )
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   it('falls back to ARECA_SITE_KEY when no config exists', async () => {
     const dir = makeDir()
     process.env.ARECA_SITE_KEY = 'env-site'

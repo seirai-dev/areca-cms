@@ -6,6 +6,7 @@ export { seoHead, seoHeadHtml, seoJsonLd } from './seo.js'
 export type { HeadLink, HeadMeta, HeadScript, SeoHeadOptions, SeoHeadResult } from './seo.js'
 export { richTextDocument, richTextHtml, richTextMarkdown } from './rich-text.js'
 export type {
+  AssetsConfig,
   CollectionConfig,
   Field,
   FieldType,
@@ -18,5 +19,6 @@ export type {
   SiteContentConfig,
   SiteManifest,
   Snapshot,
+  SnapshotAsset,
   SnapshotEntry,
 } from './types.js'

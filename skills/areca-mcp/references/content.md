@@ -24,7 +24,7 @@ Unknown field keys are refused, and the error lists the valid ones. Entry data i
 - Use `##` for sections and `###` or `####` for subsections. Other heading levels are clamped.
 - Separate paragraphs with a blank line. `**bold**`, `*italic*`, `[link](https://…)`, lists, `>` quotes and tables all work.
 - Images: `![alt text](asset:<assetId>)`. The asset must be in this client's Library. Read-back keeps the `asset:` form, so the text can be sent again as is.
-- Never send HTML: it is not rendered, and the tags end up as visible text. A full https image URL works for images, but uploaded assets are better.
+- Never send HTML: it is not rendered, and the tags end up as visible text. A full https image URL is copied into the Library on save; if the copy fails it stays external and the result lists it in `warnings`. Uploaded assets are still better, because you set their alt text.
 
 ## SEO object (`seo` on create/update)
 

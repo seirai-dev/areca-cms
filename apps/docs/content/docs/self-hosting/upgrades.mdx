@@ -54,6 +54,7 @@ Most migrations need no action from you. The notes below cover the migrations th
 | `0011` | Adds delivery-tracking columns to invitations. | Nothing. |
 | `0012` | Corrects which releases can be rolled back. | Check the rollback options in the release history after the upgrade. |
 | `0016` | Adds the AI settings table and an optional SEO prompt per site. It does not rewrite content. | Keep `AI_SETTINGS_ENCRYPTION_KEY` with your backups if you have a provider key saved. |
+| `0020` | Records the source URL of Library files copied from external rich-text images, so the same image is copied once. | Optional: copy external images in existing content into the Library with `pnpm --filter @areca/cms assets:import-external` (add `-- --dry-run` to only list them). New saves do this automatically. |
 
 `0012` changes data. Earlier code marked every superseded release as having been live, which allowed releases that were never deployed to be rolled back. After the upgrade, a release loses its rollback option only if nothing shows it was deployed. Releases with evidence of deployment keep it. No data is deleted, and the migration is safe to run again. Some historic releases may keep an option they should not have. A release whose build history has been pruned may lose its option even though it was deployed.
 

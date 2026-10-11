@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process'
-import { realpathSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { existsSync, realpathSync } from 'node:fs'
+import { relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { parseArgs, usage } from './args.js'
+import { DEFAULT_CONFIG_PATH, parseArgs, usage } from './args.js'
+import { resolveAssetsConfig } from './assets.js'
 import { createArecaClient } from './client.js'
 import { loadLocalEnv } from './env.js'
 import { InitCancelledError, initSite } from './init.js'
@@ -49,14 +50,25 @@ export async function run(
         configPath: parsed.configPath,
         yes: parsed.yes,
         force: parsed.force,
+        assetsDir: parsed.assetsDir,
+        assetsPublicPath: parsed.assetsPublicPath,
+        noAssets: parsed.noAssets,
       })
       return 0
     }
 
     if (parsed.command === 'pull') {
+      // Without a config file the defaults apply (media in public/areca).
+      const configPath = parsed.configPath ?? DEFAULT_CONFIG_PATH
+      const config =
+        parsed.configPath !== undefined || existsSync(resolve(cwd, configPath))
+          ? await loadConfig(configPath, cwd)
+          : undefined
+      const assets = resolveAssetsConfig(config?.assets, cwd)
       const snapshot = await pullContent({
         outDir: resolve(cwd, parsed.outDir),
         publicationId: parsed.publicationId,
+        ...(assets ? { assets } : {}),
       })
       const counts = Object.entries(snapshot.collections)
         .map(([key, entries]) => `${key}=${entries.length}`)
@@ -64,6 +76,13 @@ export async function run(
       console.log(
         `Pulled publication ${snapshot.publicationId} (${snapshot.hash})${counts ? `: ${counts}` : ''}`,
       )
+      if (snapshot.localAssets) {
+        const { total, downloaded, dir } = snapshot.localAssets
+        console.log(
+          `Media: ${total} file(s) in ${relative(cwd, dir) || '.'} (${downloaded} downloaded)`,
+        )
+      }
+      for (const warning of snapshot.warnings) console.warn(`Warning: ${warning}`)
       return 0
     }
 

@@ -31,7 +31,7 @@ pnpm exec areca init                  # interactive; writes config, env files, s
 pnpm exec areca init --cms-url https://cms.example.com --token "$ARECA_SITE_TOKEN" --site-key acme-site --yes
 ```
 
-`init` writes `areca.config.ts`, `.env.example`, `.env.local` (`ARECA_CMS_URL`, `ARECA_SITE_TOKEN`), `.gitignore` entries, `src/generated/content/manifest.json`, and the package scripts `sync-manifest` and `content:pull`. It also wraps `dev` in `areca run --`. Use `--force` to overwrite an existing config. `--out` and `--config` change the paths.
+`init` writes `areca.config.ts` (including an `assets` block), `.env.example`, `.env.local` (`ARECA_CMS_URL`, `ARECA_SITE_TOKEN`), `.gitignore` entries (content and media folders), `src/generated/content/manifest.json`, and the package scripts `sync-manifest` and `content:pull`. It also wraps `dev` in `areca run --`. Use `--force` to overwrite an existing config. `--out` and `--config` change the paths. Media flags: `--assets-dir <dir>` (default `public/areca`), `--assets-public-path <path>` (only for folders outside `public/`), `--no-assets`. On an existing config, init inserts an `assets` block if there is none.
 
 | Env var | Needed for | Where the user gets it |
 | --- | --- | --- |
@@ -75,15 +75,24 @@ export default defineSiteContent({
 - Field types: `text`, `textarea`, `richtext`, `image`, `date`, `datetime`, `select` (`options`), `reference` (`collection`), `slug`, `boolean`, `number`, `url`. Optional per field: `required`, `description`, `after` (date or datetime key this must be on or after).
 - Keys match `^[A-Za-z][A-Za-z0-9_-]{0,63}$`. Collection keys must be unique case-insensitively. Reserved: `manifest`, `constructor`, `prototype`, `__proto__`, and Windows device names (`con`, `prn`, `aux`, `nul`, `com1`, `lpt1`, ...).
 - A push is the **full** manifest. Collections left out are disabled (their entries are kept). The CMS adds a required `slug` field if one is missing. Limits: 100 collections, 100 fields each, 256 KiB.
-- `areca manifest pull --config areca.config.ts [--yes]` regenerates the config from the CMS. It replaces the whole file and keeps `siteKey`. Without a TTY it needs `--yes` if the config already has collections.
+- `areca manifest pull --config areca.config.ts [--yes]` regenerates the config from the CMS. It replaces the whole file and keeps `siteKey` and `assets`. Without a TTY it needs `--yes` if the config already has collections.
+
+### Media (`assets`)
+
+```ts
+assets: { download: true, dir: "public/areca" /*, publicPath: "/areca" */ }, // top level of defineSiteContent
+```
+
+`areca pull` copies every file the content uses (image fields, SEO images, rich-text images and file links) into `dir` and rewrites URLs to `<publicPath>/<name>-<id>.<ext>`, so the deployed site never calls the CMS. `publicPath` is derived for folders under `public/`; set it for others (e.g. SvelteKit `static/`). SEO image URLs become absolute with the site's production URL. `download: false` keeps CMS URLs. The setting is local only; `manifest push` does not send it. A failed download fails the pull without changing the current content.
 
 ## CLI
 
 ```text
-areca init [--cms-url <url>] [--token <t>] [--site-key <key>] [--out <dir>] [--config <path>] [--yes] [--force]
+areca init [--cms-url <url>] [--token <t>] [--site-key <key>] [--out <dir>] [--config <path>]
+           [--assets-dir <dir>] [--assets-public-path <path>] [--no-assets] [--yes] [--force]
 areca manifest push [config]             # needs ARECA_SCHEMA_TOKEN (+ URL and site token)
 areca manifest pull [--config <path>] [--yes]
-areca pull [--out <dir>] [--publication <id>]   # default out: src/generated/content
+areca pull [--out <dir>] [--publication <id>] [--config <path>]   # default out: src/generated/content; media: public/areca
 areca run -- <command>                   # run a command with .env.local/.env loaded
 ```
 
@@ -106,7 +115,7 @@ const post = articles.find((a) => a.slug === slug);
 ```
 
 - Entry: `{ id, slug, publishedAt, data, seo? }`. The field values live in `data`. You write the types yourself because there is no codegen.
-- `ImageValue` = `{ url, width|null, height|null, alt, mimeType }`, where `url` is absolute on the CMS origin. `ReferenceValue` = `{ collection, slug, id }`. Optional and image fields can be `null` or missing, so check them.
+- `ImageValue` = `{ url, width|null, height|null, alt, mimeType }`, where `url` is the local path after `areca pull` (e.g. `/areca/hero-3f2a91c0.jpg`), or an absolute CMS URL with `assets.download: false`. Serve the media folder with the site (it is part of `public/` by default). `ReferenceValue` = `{ collection, slug, id }`. Optional and image fields can be `null` or missing, so check them.
 - `readContent` reads files at runtime, so ship `src/generated/content/` (including `.publications/`) with the server build or container. For TanStack Start, call it inside a `createServerFn` handler, never in route or component code.
 
 ## Rich text

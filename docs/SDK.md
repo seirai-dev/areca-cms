@@ -257,7 +257,9 @@ export function getArticles() {
 ```
 
 Entries include `id`, `slug`, `publishedAt`, `data`, and optional `seo`. Image
-values include a URL, nullable dimensions, alt text, and MIME type. Rich text
+values include a URL, nullable dimensions, alt text, and MIME type. `areca pull`
+copies media into `public/areca` by default and sets the URL to the local path
+(`/areca/<name>-<id>.<ext>`); configure it with `assets` in `areca.config.ts`. Rich text
 includes Markdown source, a TanStack Markdown AST, its original JSON, and
 static HTML. Reference values contain their target collection, slug, and ID.
 Optional fields and image values should be checked before rendering.

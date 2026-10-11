@@ -1,9 +1,11 @@
+import { cmsAssetDownloader } from './assets.js'
 import { manifestFromConfig } from './config.js'
 import type {
   PreviewResult,
   SiteContentConfig,
   SiteManifest,
   Snapshot,
+  SnapshotAsset,
 } from './types.js'
 
 export type ArecaClientOptions = {
@@ -17,6 +19,8 @@ export type ArecaClient = {
   fetchManifest: () => Promise<SiteManifest>
   fetchSnapshot: (options?: { publicationId?: string }) => Promise<Snapshot>
   fetchPreview: (token: string) => Promise<PreviewResult>
+  /** Downloads a media file listed in `Snapshot.assets`. */
+  fetchAsset: (asset: SnapshotAsset) => Promise<Uint8Array>
 }
 
 export function createArecaClient(
@@ -52,6 +56,8 @@ export function createArecaClient(
   }
 
   return {
+    fetchAsset: cmsAssetDownloader(cmsUrl),
+
     async syncManifest(config) {
       const res = await cmsFetch(`${cmsUrl}/api/sites/manifest`, {
         method: 'POST',

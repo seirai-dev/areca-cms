@@ -87,9 +87,11 @@ export class AssetInUseError extends AppError {
 export async function uploadAsset(input: {
   organizationId: string
   file: { buffer: Buffer; filename: string; mimeType: string }
-  actorId: string
+  /** Null for system jobs such as the external image backfill. */
+  actorId: string | null
   altText?: string
   originSiteId?: string
+  sourceUrl?: string
 }): Promise<Asset> {
   const mimeType = input.file.mimeType.toLowerCase()
   if (!ALLOWED_MIMES.has(mimeType)) {
@@ -129,6 +131,7 @@ export async function uploadAsset(input: {
           width,
           height,
           altText: input.altText,
+          sourceUrl: input.sourceUrl,
           createdBy: input.actorId,
         })
         .returning()

@@ -158,6 +158,17 @@ The CMS chooses the publication in this order:
   "siteKey": "acme-site",
   "createdAt": "2026-01-01T00:00:00.000Z",
   "hash": "abc123",
+  "siteUrl": "https://www.acme.com",
+  "assets": [
+    {
+      "id": "ast_1",
+      "storageKey": "<folder>/<file>.png",
+      "url": "https://cms.example.com/api/assets/file/<folder>/<file>.png",
+      "filename": "Cover photo.png",
+      "mimeType": "image/png",
+      "size": 48213
+    }
+  ],
   "collections": {
     "articles": [
       {
@@ -188,7 +199,9 @@ The CMS chooses the publication in this order:
 }
 ```
 
-Each entry also has an `seo` object, which is omitted above for brevity. Snapshots from older CMS versions do not include it. The shape of each value type is in [Field types](/docs/sdk/field-types). The top-level fields are described in the [JavaScript API reference](/docs/sdk/client#types).
+Each entry also has an `seo` object, which is omitted above for brevity. Snapshots from older CMS versions do not include it.
+
+`assets` lists every Library file the content references: image fields, SEO images, and images and file links in rich text. Each file is public at `GET /api/assets/file/{storageKey}`, and every content URL for it ends in that path. `areca pull` uses the list to copy the files into your site. `siteUrl` is the site's production URL from the CMS, used to build absolute SEO image URLs. Both are missing in responses from older CMS versions. The shape of each value type is in [Field types](/docs/sdk/field-types). The top-level fields are described in the [JavaScript API reference](/docs/sdk/client#types).
 
 **Errors**
 

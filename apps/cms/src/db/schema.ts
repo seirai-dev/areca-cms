@@ -309,27 +309,37 @@ export const deletedContentArchive = pgTable('deleted_content_archive', {
   createdAt: createdAt(),
 })
 
-export const asset = pgTable('asset', {
-  id: id(),
-  organizationId: text('organization_id')
-    .notNull()
-    .references(() => organization.id, { onDelete: 'cascade' }),
-  storageKey: text('storage_key').notNull(),
-  /** Uploads made through a site's AI connection remain available to that site. */
-  originSiteId: text('origin_site_id').references(() => site.id, {
-    onDelete: 'set null',
-  }),
-  originalFilename: text('original_filename').notNull(),
-  mimeType: text('mime_type').notNull(),
-  size: integer('size').notNull(),
-  width: integer('width'),
-  height: integer('height'),
-  altText: text('alt_text'),
-  createdBy: text('created_by').references(() => user.id, {
-    onDelete: 'set null',
-  }),
-  createdAt: createdAt(),
-})
+export const asset = pgTable(
+  'asset',
+  {
+    id: id(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    storageKey: text('storage_key').notNull(),
+    /** Uploads made through a site's AI connection remain available to that site. */
+    originSiteId: text('origin_site_id').references(() => site.id, {
+      onDelete: 'set null',
+    }),
+    originalFilename: text('original_filename').notNull(),
+    mimeType: text('mime_type').notNull(),
+    size: integer('size').notNull(),
+    width: integer('width'),
+    height: integer('height'),
+    altText: text('alt_text'),
+    /** External URL a rich-text image was imported from; reused instead of downloading again. */
+    sourceUrl: text('source_url'),
+    createdBy: text('created_by').references(() => user.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('asset_org_source_url_unique')
+      .on(t.organizationId, t.sourceUrl)
+      .where(sql`${t.sourceUrl} is not null`),
+  ],
+)
 
 export const publication = pgTable(
   'publication',

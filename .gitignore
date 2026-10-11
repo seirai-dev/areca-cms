@@ -15,6 +15,7 @@ __unconfig*
 todos.json
 **/src/paraglide/
 **/src/generated/
+examples/demo-site/public/areca/
 playwright-report
 test-results
 qa-screenshots

@@ -63,6 +63,7 @@ Each method sends one request. There are no timeouts and no retries. Network fai
 | `fetchManifest()` | `GET /api/sites/manifest` | Site token | `Promise<SiteManifest>` |
 | `fetchSnapshot()` | `GET /api/sites/snapshot/current` | Site token | `Promise<Snapshot>` |
 | `fetchPreview(token)` | `GET /api/sites/preview?token=...` | Site token, plus the preview token | `Promise<PreviewResult>` |
+| `fetchAsset(asset)` | `GET /api/assets/file/{storageKey}` | None | `Promise<Uint8Array>` |
 
 **`syncManifest(config: SiteContentConfig)`** converts the config with `manifestFromConfig` and sends it. The `siteKey` is not sent; the CMS identifies the site by the token.
 
@@ -154,17 +155,19 @@ const body = manifestFromConfig(config)
 Downloads the current publication and writes it to a folder. It is the function behind `areca pull`. Import it from `@areca-cms/site-sdk/pull`.
 
 ```ts
-function pullContent(options: PullContentOptions): Promise<Snapshot>
+function pullContent(options: PullContentOptions): Promise<PullContentResult>
 ```
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
 | `options.outDir` | `string` | None (required) | Folder to write into. Created if it does not exist. |
 | `options.client` | `ArecaClient` | `createArecaClient()` | Client to use. Pass one in tests. |
+| `options.publicationId` | `string` | `ARECA_SNAPSHOT_ID`, else live | Exact publication to pull. |
+| `options.assets` | `{ dir: string; publicPath: string }` | None | Copy media into the absolute folder `dir` and point the content at `publicPath`. Without it, media URLs point at the CMS. `areca pull` fills this in from `areca.config.ts`. |
 
-**Returns:** the `Snapshot` that was written.
+**Returns:** the snapshot that was written, with media URLs rewritten, plus `localAssets` (`{ dir, total, downloaded }`) when media was copied and `warnings` (for example when the CMS does not list media).
 
-The function writes `manifest.json` first, then one `<collection>.json` file per collection. It checks every collection key before it writes any file.
+The function downloads media first, then writes one `<collection>.json` file per collection into a new folder under `.publications`, and finally points `manifest.json` at it in one rename. It keeps the current folder and the two before it, and deletes older folders and the media files only they used. It checks every collection key before it writes any file.
 
 **Throws:**
 
@@ -172,13 +175,10 @@ The function writes `manifest.json` first, then one `<collection>.json` file per
 - `Unsafe collection or field identifier: <key>` when a collection key is not a safe identifier. No file is written.
 - `Output path escapes content directory` when a target path leaves `outDir`.
 - `Content output must not be a symbolic link` when a target file is a symlink.
+- `Failed to download N media file(s); the previous content is unchanged.` followed by one line per file.
 - File-system errors, such as permission errors.
 
-<Callout type="warn" title="A failed pull can leave the folder partly updated">
-
-`manifest.json` is written before the collection files are checked for symlinks. If a check fails, `manifest.json` already shows the new publication while some collection files still hold the old data. Run `pullContent` again after you fix the problem. Files for collections that were removed from the publication are not deleted.
-
-</Callout>
+A failed pull leaves `manifest.json` pointing at the previous complete publication, and removes the media files it had downloaded.
 
 ```ts
 import { pullContent } from '@areca-cms/site-sdk/pull'
@@ -388,7 +388,16 @@ These types are exported from the main entry point. The types from the subpaths 
 | `HeadMeta`, `HeadLink`, `HeadScript`, `SeoHeadOptions`, `SeoHeadResult` | Types for the SEO helpers. Also exported from `@areca-cms/site-sdk/seo`. |
 
 ```ts
-type SiteContentConfig = { siteKey: string; collections: Record<string, CollectionConfig> }
+type SiteContentConfig = {
+  siteKey: string
+  collections: Record<string, CollectionConfig>
+  assets?: AssetsConfig // local only, never sent to the CMS
+}
+type AssetsConfig = {
+  download?: boolean   // default true
+  dir?: string         // default 'public/areca'
+  publicPath?: string  // derived for folders under public/
+}
 type CollectionConfig = { route: string; label?: string; fields: Field[] }
 type Field = {
   key: string
@@ -409,6 +418,17 @@ type Snapshot = {
   createdAt: string
   hash: string
   collections: Record<string, SnapshotEntry[]>
+  assets?: SnapshotAsset[]  // missing from older CMS versions
+  siteUrl?: string | null   // the site's production URL
+}
+
+type SnapshotAsset = {
+  id: string
+  storageKey: string // content URLs end in /api/assets/file/<storageKey>
+  url: string
+  filename: string
+  mimeType: string
+  size: number
 }
 
 type SnapshotEntry = {
@@ -426,6 +446,8 @@ type PulledContentManifest = {
   hash: string
   createdAt: string
   collections: Record<string, number> // entry counts per collection
+  generation?: string                 // folder under .publications
+  assets?: { publicPath: string; count: number } // when media was copied
 }
 
 type RichTextValue = {

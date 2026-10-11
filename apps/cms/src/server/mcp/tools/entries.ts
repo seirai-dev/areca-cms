@@ -182,6 +182,14 @@ export async function formatStoredEntry(
   }
 }
 
+/** External images that could not be copied into the media library stay external; say so. */
+export function withImportWarnings<T extends object>(
+  result: T,
+  warnings: string[],
+): T | (T & { warnings: string[] }) {
+  return warnings.length > 0 ? { ...result, warnings } : result
+}
+
 export function registerEntryTools(registry: ToolRegistry): void {
   registry.add({
     name: 'list_entries',
@@ -290,7 +298,10 @@ export function registerEntryTools(registry: ToolRegistry): void {
         data,
         actorId: actor.userId,
       })
-      return formatStoredEntry(actor, created.id, { withPreview: true })
+      return withImportWarnings(
+        await formatStoredEntry(actor, created.id, { withPreview: true }),
+        created.importWarnings,
+      )
     },
   })
 
@@ -331,13 +342,16 @@ export function registerEntryTools(registry: ToolRegistry): void {
       )
       if (seo) data[SEO_KEY] = seo
       else delete data[SEO_KEY]
-      await updateDraft(
+      const updated = await updateDraft(
         entry.id,
         data,
         actor.userId,
         input.expectedVersion ?? entry.draftVersion,
       )
-      return formatStoredEntry(actor, entry.id, { withPreview: true })
+      return withImportWarnings(
+        await formatStoredEntry(actor, entry.id, { withPreview: true }),
+        updated.importWarnings,
+      )
     },
   })
 

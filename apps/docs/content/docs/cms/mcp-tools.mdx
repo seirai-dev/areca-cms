@@ -272,7 +272,7 @@ Write rich text as Markdown, never as HTML. Areca converts it to the stored form
 - Separate paragraphs with a blank line. Use `**bold**`, `*italic*` and `[links](https://…)`.
 - Use bullet and numbered lists, `>` blockquotes and tables.
 - Put images in the text as `![alt text](asset:<assetId>)`. The asset id must belong to the client's Library, or the write is refused.
-- Raw HTML is dropped. An image written with a full `https` URL also works, but uploaded assets are preferred.
+- Raw HTML is dropped. An image written with a full `https` URL is copied into the Library when the entry is saved, and the text then points at the copy. If a copy fails, the image keeps its URL and the result has a `warnings` list that names it. Uploaded assets are still preferred, because you control their alt text.
 
 When an entry is read back, its images appear as `asset:<assetId>` in the Markdown, so the same text can be sent again.
 

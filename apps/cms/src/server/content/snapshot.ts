@@ -24,6 +24,7 @@ import {
   resolveAssetValue,
 } from '#/server/assets'
 import type { AssetLookup } from '#/server/assets'
+import { snapshotAssets } from '#/server/assets/published-assets'
 import { convertRichText, validateRichText } from '#/server/richtext'
 
 import { getCollection, listCollections } from './collections.ts'
@@ -293,6 +294,12 @@ export async function buildSnapshot(
     createdAt: now.toISOString(),
     hash,
     collections,
+    // Outside the hash: it is derived from the collections.
+    assets: await snapshotAssets(
+      existingSite.organizationId,
+      collections,
+      connection,
+    ),
   }
 
   return { ok: true, snapshot, hash, entryVersions }

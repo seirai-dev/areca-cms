@@ -59,10 +59,13 @@ Run `init` in a terminal and omit `--token`. The command then prompts for the si
 | `--site-key <key>` | string | Prompt | The site key, shown in the CMS. Lowercase letters, digits and single hyphens, for example `acme-site`. |
 | `--out <dir>` | path | `src/generated/content` | Folder for the pulled content. |
 | `--config <path>` | path | `areca.config.ts` | Path of the config file to create. |
+| `--assets-dir <dir>` | path | Prompt: `public/areca` | Folder that `areca pull` copies media into. Relative to the project root. |
+| `--assets-public-path <path>` | string | Derived | URL path your site serves the media folder from. Needed only when the folder is not under `public/`. |
+| `--no-assets` | boolean | `false` | Keep media URLs pointing at the CMS. Cannot be combined with the two flags above. |
 | `--yes`, `-y` | boolean | `false` | Skip prompts. Missing `--cms-url`, `--token` or `--site-key` is then an error. |
 | `--force` | boolean | `false` | Overwrite the config file and `.env.example` if they exist. |
 
-**Interactive mode** runs when `--yes` is not set and stdin is a terminal. The command prompts for each value you did not pass as a flag.
+**Interactive mode** runs when `--yes` is not set and stdin is a terminal. The command prompts for each value you did not pass as a flag. After the site key it asks whether to download media into the repo (default yes) and which folder to use (default `public/areca`). For a folder outside `public/` it also asks for the URL path that serves it. See [local media](/docs/sdk/pulling-content#media).
 
 **Non-interactive mode** runs otherwise. All three of `--cms-url`, `--token` and `--site-key` are then required.
 
@@ -72,10 +75,10 @@ Paths are relative to the current directory.
 
 | File | Behavior |
 | --- | --- |
-| `areca.config.ts` (or the `--config` path) | Created only if missing, or with `--force`. It contains an empty `collections` object. |
+| `areca.config.ts` (or the `--config` path) | Created if missing, or with `--force`, with the `assets` settings and an empty `collections` object. If the file exists, `init` adds an `assets` block after `siteKey` when there is none. If there is one, the interactive prompt shows it and asks before replacing it; without a prompt it is kept unless you pass a media flag. When the file cannot be edited safely, `init` prints the block to paste. |
 | `.env.example` | Created only if missing, or with `--force`. Sets `ARECA_CMS_URL` to the CMS URL, and lists `ARECA_SITE_TOKEN` and `ARECA_SCHEMA_TOKEN` with empty values. It contains no secrets. |
 | `.env.local` | Always updated. Sets `ARECA_CMS_URL` and `ARECA_SITE_TOKEN`. Other lines are kept. |
-| `.gitignore` | Adds `.env.local` and the `--out` folder if they are not already listed. |
+| `.gitignore` | Adds `.env.local`, the `--out` folder and the media folder if they are not already listed. Media is downloaded again by every pull, like the content. |
 | `<out>/manifest.json` | Created with empty values, so the folder exists before the first pull. |
 | `package.json` | Adds `sync-manifest` (`areca manifest push`) and `content:pull` (`areca pull --out <out>`) scripts if they are missing or blank. If `dev` exists and does not already use `--env-file` or `areca run`, it becomes `areca run -- <dev command>`. |
 
@@ -93,7 +96,7 @@ Paths are relative to the current directory.
 
 ## areca pull
 
-Downloads the current publication from the CMS and writes one JSON file per collection. Your build reads these files. Run it before `dev` or `build`, and again whenever you publish.
+Downloads the current publication from the CMS and writes one JSON file per collection. It also copies every image and file the content uses into your project, and points the content at those copies, so the built site never requests anything from the CMS. Your build reads these files. Run it before `dev` or `build`, and again whenever you publish.
 
 ```bash
 areca pull --out src/generated/content
@@ -102,6 +105,10 @@ areca pull --out src/generated/content
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
 | `--out <dir>` | path | `src/generated/content` | Folder for the output. Created if missing. Relative paths are resolved from the current directory. |
+| `--publication <id>` | string | Live publication | Pull this exact publication. `ARECA_SNAPSHOT_ID` does the same in go-live builds. |
+| `--config <path>` | path | `areca.config.ts` | Config file to read the `assets` settings from. Without this flag a missing file is fine and the defaults apply. |
+
+The media settings come from `assets` in the config file: by default files go to `public/areca` and the content uses `/areca/<file>`. See [local media](/docs/sdk/pulling-content#media).
 
 ### Environment variables
 
@@ -116,15 +123,21 @@ On success it prints one line, for example:
 
 ```text
 Pulled publication pub_1 (abc123): articles=1, pages=0
+Media: 12 file(s) in public/areca (3 downloaded)
 ```
 
-The folder then contains:
+The folders then contain:
 
 ```text
 src/generated/content/
-  manifest.json      publication ID, hash, creation time and entry counts
-  articles.json      the entries of the articles collection
-  pages.json         one file per collection
+  manifest.json                  points at the current generation
+  .publications/
+    publication-Ab12Cd/
+      articles.json              the entries of the articles collection
+      pages.json                 one file per collection
+      .assets.json               the media files this generation uses
+public/areca/
+  hero-banner-3f2a91c0.jpg       one file per image or uploaded file
 ```
 
 `manifest.json` has this shape:
@@ -134,7 +147,9 @@ src/generated/content/
   "publicationId": "pub_1",
   "hash": "abc123",
   "createdAt": "2026-01-01T00:00:00.000Z",
-  "collections": { "articles": 1, "pages": 0 }
+  "collections": { "articles": 1, "pages": 0 },
+  "generation": "publication-Ab12Cd",
+  "assets": { "publicPath": "/areca", "count": 12 }
 }
 ```
 
@@ -142,9 +157,11 @@ Each collection file is an array of entries. See [Pulling content](/docs/sdk/pul
 
 ### Quirks
 
-- **Stale files are kept.** If a collection is removed from the publication, its old file stays in the folder. Delete it yourself.
+- **Each pull is a new generation.** Files are written to a new folder under `.publications`, then `manifest.json` switches to it in one rename. A failed pull leaves the previous content in place.
+- **Two older generations are kept.** The current generation and the two before it stay, so a server that read an older `manifest.json` keeps working. Older generations are deleted, along with media files that only they used. Files in the media folder that no generation recorded, such as your own, are never deleted.
+- **Media is all or nothing.** If any file fails to download, the pull fails and nothing changes. Files already on disk are not downloaded again.
+- **Older CMS versions.** If the CMS does not list media files, the pull prints a warning and keeps the CMS URLs.
 - **Collection names must be safe identifiers.** `pull` refuses a collection whose key is not a safe identifier, before it writes any file. See [identifier rules](/docs/sdk/errors-and-limits#identifier-rules).
-- **`manifest.json` is written first.** If a symlink is found at a collection file, the command fails after `manifest.json` has already changed. The folder can then be partly updated. Run `pull` again after you fix the symlink.
 - **No publication, no output.** If the site has never gone live, the command fails with the 404 message and writes nothing new. See [Errors and limits](/docs/sdk/errors-and-limits#no-publication).
 
 ## areca manifest push

@@ -3,9 +3,9 @@ title: Pulling content at build time
 description: Download the latest published snapshot with areca pull, understand the generated files, and keep the pull safe in your build.
 ---
 
-Your site builds from a copy of the published content, not from live CMS requests. `areca pull` downloads the current published snapshot into JSON files in your project. Your site then reads those files while it builds and while it serves pages, so content requests do not depend on the CMS being up. Images still load from the CMS, see [reading content](/docs/sdk/reading-content#images).
+Your site builds from a copy of the published content, not from live CMS requests. `areca pull` downloads the current published snapshot into JSON files in your project, and copies every image and file the content uses into your public folder. Your site then reads those files while it builds and while it serves pages, so neither content nor media depend on the CMS being up. See [media](#media).
 
-Run the pull before every build. Because the files are created during the build, they should be ignored by Git. `areca init` adds the default output directory to `.gitignore` for you.
+Run the pull before every build. Because the files are created during the build, they should be ignored by Git. `areca init` adds the default output and media directories to `.gitignore` for you.
 
 ## Run the pull
 
@@ -18,19 +18,24 @@ The default output directory is `src/generated/content`. Use `--out` to choose a
 
 ```text
 Pulled publication <publication-id> (<snapshot-hash>): articles=12, authors=4
+Media: 31 file(s) in public/areca (5 downloaded)
 ```
 
 The pull fails if the site has no published content yet. Publish content in the CMS, then run the pull again.
 
 ### From code
 
-If you need the pull in your own script, call `pullContent` from `@areca-cms/site-sdk/pull`. It returns the snapshot it wrote:
+If you need the pull in your own script, call `pullContent` from `@areca-cms/site-sdk/pull`. It returns the snapshot it wrote. Unlike the CLI, it only copies media when you pass `assets`:
 
 ```ts
 import { pullContent } from '@areca-cms/site-sdk/pull'
+import { resolve } from 'node:path'
 
-const snapshot = await pullContent({ outDir: 'src/generated/content' })
-console.log(snapshot.publicationId, Object.keys(snapshot.collections))
+const snapshot = await pullContent({
+  outDir: 'src/generated/content',
+  assets: { dir: resolve('public/areca'), publicPath: '/areca' },
+})
+console.log(snapshot.publicationId, snapshot.localAssets)
 ```
 
 ## Add the pull to your build
@@ -50,21 +55,31 @@ With this setup, `pnpm build` pulls the latest content first. In CI, set `ARECA_
 
 ## Output layout
 
-The pull writes one JSON file for each collection, plus a `manifest.json` file.
+Each pull writes one JSON file for each collection into a new folder under `.publications`, then points `manifest.json` at it. Media goes to the media folder.
 
 <Files>
+  <Folder name="public" defaultOpen>
+    <Folder name="areca" defaultOpen>
+      <File name="hero-banner-3f2a91c0.jpg" />
+    </Folder>
+  </Folder>
   <Folder name="src" defaultOpen>
     <Folder name="generated" defaultOpen>
       <Folder name="content" defaultOpen>
         <File name="manifest.json" />
-        <File name="articles.json" />
-        <File name="authors.json" />
+        <Folder name=".publications" defaultOpen>
+          <Folder name="publication-Ab12Cd" defaultOpen>
+            <File name="articles.json" />
+            <File name="authors.json" />
+            <File name=".assets.json" />
+          </Folder>
+        </Folder>
       </Folder>
     </Folder>
   </Folder>
 </Files>
 
-Each collection file, such as `articles.json`, is an array of entries. Each entry has the entry's `id`, `slug`, `publishedAt` (an ISO timestamp, or `null`), its `data` and, when the CMS sends it, its `seo` block. Your site reads these entries with [`readContent`](/docs/sdk/reading-content).
+Each collection file, such as `articles.json`, is an array of entries. Each entry has the entry's `id`, `slug`, `publishedAt` (an ISO timestamp, or `null`), its `data` and, when the CMS sends it, its `seo` block. Your site reads these entries with [`readContent`](/docs/sdk/reading-content), which follows `manifest.json` to the right folder.
 
 ### manifest.json
 
@@ -76,8 +91,38 @@ Each collection file, such as `articles.json`, is an array of entries. Each entr
 | `hash` | A hash of the snapshot contents. The same content gives the same hash. |
 | `createdAt` | When the snapshot was created. |
 | `collections` | An object that maps each collection key to its number of entries. |
+| `generation` | The folder under `.publications` that holds this snapshot. |
+| `assets` | `{ publicPath, count }` when media was copied locally. |
 
-The `collections` object is also the list of collections in the snapshot. Use its keys, not the directory listing, to find out which collections are current. Files for collections removed from the CMS can remain in the directory after a pull (see below).
+The `collections` object is also the list of collections in the snapshot. Use its keys, not the directory listing, to find out which collections are current.
+
+## Media
+
+By default, the pull copies every image and file the content references (image fields, SEO images, images and file links in rich text) into `public/areca`, and rewrites the content to point at the copies. Your site then serves them like any other static file, and visitors never request anything from the CMS.
+
+- **Image fields** get `url: "/areca/hero-banner-3f2a91c0.jpg"`, so `<img src={image.url}>` works unchanged.
+- **Rich text** gets the same paths in `json`, `markdown`, `document` and `html`.
+- **SEO data** (`og:image`, `twitter:image`, JSON-LD) gets absolute URLs built from the site's production URL in the CMS, for example `https://www.acme.com/areca/hero-banner-3f2a91c0.jpg`, because social networks and search engines need absolute image URLs.
+
+File names are the original file name as a slug plus part of the file's unique ID. A file is downloaded once; later pulls skip files that are already there.
+
+Configure it with `assets` in `areca.config.ts`. `areca init` asks for these values and writes them for you:
+
+```ts title="areca.config.ts"
+export default defineSiteContent({
+  siteKey: 'acme-site',
+  assets: {
+    download: true, // false keeps CMS URLs
+    dir: 'public/areca', // relative to the project root
+    // publicPath: '/areca', // needed only when dir is not under public/
+  },
+  collections: { /* ... */ },
+})
+```
+
+A folder under `public/` is served from the matching path: `public/areca` from `/areca`, `public/media/cms` from `/media/cms`. For other folders, for example `static/` in SvelteKit, set `publicPath` to the URL path your framework serves it from. Without an `assets` block, the defaults apply. The `assets` settings stay in your project: `areca manifest push` does not send them, and `areca manifest pull` keeps them.
+
+Media files are downloaded from `ARECA_CMS_URL`, with no token. If a file fails to download, the pull fails and the previous content stays in place.
 
 ## Snapshot pinning
 
@@ -86,7 +131,7 @@ A pull downloads the snapshot that the CMS gives your site at that moment. The C
 - **While Areca is building or deploying a release**, the snapshot endpoint returns that release's publication to every caller with a valid site token. The build gets the same content as the release, and so does a pull made during the deployment.
 - **Otherwise**, it returns the live publication. A pull on your laptop, with no release in progress, gets this one.
 
-You cannot choose a publication from the SDK. The SDK sends only the site token, and it does not read `ARECA_SNAPSHOT_ID`.
+To pull an exact publication, pass `--publication <id>` or set `ARECA_SNAPSHOT_ID`. An empty value or `0` selects the live publication.
 
 Areca's own deployment integration sets `ARECA_SNAPSHOT_ID` as a Docker build argument, and it changes on every build. Docker then cannot reuse a cached content pull from an earlier build, even when the code and CMS settings are the same. If you build with Docker, declare the argument before the build step that runs your `prebuild` pull:
 
@@ -102,9 +147,9 @@ Mount the site token as a BuildKit secret. Do not pass it as a plain `ARG` or `E
 
 ## Re-pulling
 
-Each pull replaces `manifest.json` and the files for the collections in the new snapshot. Pulling does not delete files for collections that have been removed since an earlier pull. Read the collection keys from `manifest.json`, not from the directory listing.
+Each pull writes the new snapshot into a fresh folder and then switches `manifest.json` to it in one rename. If a pull fails, `manifest.json` still points at the previous complete snapshot, and its media files are untouched.
 
-A pull writes `manifest.json` first, then the collection files. If a pull fails partway through, the directory can hold a mix of old and new files. Run the pull again before you build.
+The current folder and the two before it are kept, so a server that read an older `manifest.json` keeps working. Older folders are deleted, together with media files that only they used. Files in the media folder that no pull recorded, such as files you added yourself, are never deleted.
 
 ## Running commands with env files
 
@@ -141,6 +186,9 @@ Keep the output directory inside your project, and do not commit it. Pulled cont
 | `Missing ARECA_CMS_URL` or `Missing ARECA_SITE_TOKEN` | Set the variables in the environment, or in `.env.local` in the directory where you run the command. |
 | `Failed to reach CMS` | Check that `ARECA_CMS_URL` is correct and that the CMS is running. |
 | `401` | The site token is wrong, or it was rotated. Update `ARECA_SITE_TOKEN`. |
+| `Failed to download N media file(s)` | The listed files could not be fetched from `ARECA_CMS_URL`. Check that the CMS serves `/api/assets/file/` from that address, then run the pull again. Nothing was changed. |
+| `Cannot tell which URL serves <dir>` | The media folder is not under `public/`. Set `assets.publicPath` in `areca.config.ts`. |
+| `This CMS version does not list media files` | The CMS is older than the SDK. Update the CMS; until then media URLs point at the CMS. |
 
 See [errors and limits](/docs/sdk/errors-and-limits) for the full list.
 

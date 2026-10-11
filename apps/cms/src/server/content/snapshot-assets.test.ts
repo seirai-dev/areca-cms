@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { db } from '#/db'
 import { asset, entry, entryRevision } from '#/db/schema'
+import { env } from '#/env'
 import { assetUsage, loadAssetLookup, resolveAssetValue } from '#/server/assets'
 import {
   richTextAssetsAuthorized,
@@ -90,6 +91,70 @@ describe.skipIf(!hasDb)('snapshot asset resolution (batched)', () => {
       expect(JSON.stringify(item.data.body)).toContain(
         `/api/assets/file/${inline.storageKey}`,
       )
+    })
+  })
+
+  it('lists every referenced asset, including files linked from rich text', async () => {
+    await withTestSite(async (ctx) => {
+      await createTestCollection(ctx.site.id)
+      const [col] = await db.query.collection.findMany({
+        where: (c, { eq }) => eq(c.siteId, ctx.site.id),
+      })
+      const hero = await makeAsset(ctx.org.id, 'hero')
+      const inline = await makeAsset(ctx.org.id, 'inline')
+      const unused = await makeAsset(ctx.org.id, 'unused')
+      const [pdf] = await db
+        .insert(asset)
+        .values({
+          organizationId: ctx.org.id,
+          storageKey: `${ctx.org.id}/brochure.pdf`,
+          originalFilename: 'Brochure 2026.pdf',
+          mimeType: 'application/pdf',
+          size: 1234,
+        })
+        .returning()
+      await publishRaw(ctx.site.id, col.id, 'one', {
+        title: 'One',
+        slug: 'one',
+        body: doc(image(`/api/assets/file/${inline.storageKey}`), {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'text',
+              text: 'Download',
+              marks: [
+                {
+                  type: 'link',
+                  attrs: {
+                    href: `${env.APP_URL}/api/assets/file/${pdf.storageKey}`,
+                  },
+                },
+              ],
+            },
+          ],
+        }),
+        heroImage: hero.id,
+      })
+
+      const result = await buildSnapshot(ctx.site.id)
+      expect(result.ok).toBe(true)
+      if (!result.ok) return
+      const listed = result.snapshot.assets ?? []
+      expect(listed.map((item) => item.id).sort()).toEqual(
+        [hero.id, inline.id, pdf.id].sort(),
+      )
+      expect(listed.map((item) => item.id)).not.toContain(unused.id)
+      expect(listed.find((item) => item.id === pdf.id)).toEqual({
+        id: pdf.id,
+        storageKey: pdf.storageKey,
+        url: `${env.APP_URL}/api/assets/file/${pdf.storageKey}`,
+        filename: 'Brochure 2026.pdf',
+        mimeType: 'application/pdf',
+        size: 1234,
+      })
+      // Derived data stays outside the content hash.
+      const again = await buildSnapshot(ctx.site.id)
+      expect(again.ok && again.hash).toBe(result.hash)
     })
   })
 

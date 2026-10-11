@@ -79,21 +79,26 @@ site token or call the CMS from a public browser bundle.
 | Command                                               | Purpose                                                                                                 |
 | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | `areca init`                                          | Create frontend config and environment-file scaffolding.                                                |
-| `areca pull [--out <directory>] [--publication <id>]` | Download the current published snapshot; default output is `src/generated/content`.                     |
+| `areca pull [--out <directory>] [--publication <id>] [--config <path>]` | Download the current published snapshot and its media; default output is `src/generated/content`. |
 | `areca manifest push [config]`                        | Send the local config to the CMS. Default config is `./areca.config.ts`. Requires `ARECA_SCHEMA_TOKEN`. |
 | `areca manifest pull [--config <path>] [--yes]`       | Replace the local config with enabled CMS collections.                                                  |
 | `areca sync-manifest [config]`                        | Deprecated alias for `areca manifest push`.                                                             |
 | `areca run -- <command>`                              | Run a child command with SDK-loaded environment files.                                                  |
 
 `areca init` accepts `--cms-url`, `--token`, `--site-key`, `--out`, `--config`,
-`--yes`/`-y`, and `--force`. Use flags with `--yes` in automation. `--force`
-allows init to overwrite its config and `.env.example` outputs.
+`--assets-dir`, `--assets-public-path`, `--no-assets`, `--yes`/`-y`, and
+`--force`. Use flags with `--yes` in automation. `--force` allows init to
+overwrite its config and `.env.example` outputs. Interactively, init asks
+whether to download media into the repo (default yes) and where (default
+`public/areca`). Run on an existing config, it adds an `assets` block, or asks
+before replacing one.
 
 `manifest pull` replaces the entire config file, including comments and helper
 code. It prints a collection diff and prompts before overwriting a config that
 already defines collections. `--yes` skips the prompt; in non-interactive use,
-it is required when collections already exist. The local `siteKey` is kept. If
-there is no config, set `ARECA_SITE_KEY` or run `areca init` first.
+it is required when collections already exist. The local `siteKey` and `assets`
+settings are kept. If there is no config, set `ARECA_SITE_KEY` or run
+`areca init` first.
 
 `areca pull` exits with an error if the site has no published snapshot. Publish
 content in the CMS before adding it to a production build. Pulls write an immutable generation, then atomically replace `manifest.json` to select it:
@@ -103,16 +108,42 @@ src/generated/content/
 ├── manifest.json       # publication ID, hash, counts, and generation pointer
 └── .publications/
     └── publication-<generation>/
-        └── articles.json
+        ├── articles.json
+        └── .assets.json  # media files this generation uses
+public/areca/
+└── hero-banner-3f2a91c0.jpg
 ```
 
 Use `readContent()` instead of importing a flat `<collection>.json` file. It follows
 the current manifest and rejects collections absent from that publication. Legacy
-flat outputs remain readable. A failed pull preserves the complete prior generation;
-old generations remain for readers that captured their manifest. Generated output
-is normally ephemeral. To prune it, delete the output directory when no readers
-are using it and pull again. Direct file imports do not receive this atomic-switch
-guarantee.
+flat outputs remain readable. A failed pull preserves the complete prior generation.
+The current generation and the two before it are kept for readers that captured
+their manifest; older ones are deleted with the media files only they used.
+Direct file imports do not receive this atomic-switch guarantee.
+
+### Media
+
+By default `areca pull` copies every file the content references (image fields,
+SEO images, rich-text images and file links) into `public/areca` and rewrites the
+content to `/areca/<name>-<id>.<ext>`, so the site never requests anything from
+the CMS. SEO image URLs (`og:image`, `twitter:image`, JSON-LD) become absolute
+using the site's production URL from the CMS. Configure it in `areca.config.ts`:
+
+```ts
+export default defineSiteContent({
+  siteKey: 'acme-site',
+  assets: {
+    download: true, // false keeps CMS URLs
+    dir: 'public/areca', // relative to the project root
+    // publicPath: '/areca', // required when dir is not under public/
+  },
+  collections: {},
+})
+```
+
+Files are downloaded from `ARECA_CMS_URL` once and skipped on later pulls. A
+failed download fails the pull and leaves the previous content unchanged.
+`manifest push` never sends `assets` to the CMS.
 
 `areca pull` honors `ARECA_SNAPSHOT_ID` from deployment builds, or an explicit
 `--publication <id>`. Empty and `0` values select the current live/demo publication.
