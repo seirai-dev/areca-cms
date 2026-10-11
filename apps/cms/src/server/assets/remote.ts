@@ -559,7 +559,9 @@ export async function uploadAssetFromUrl(
     url: string
     altText?: string
     filename?: string
-    actorId: string
+    actorId: string | null
+    /** Records the URL so later imports of the same image reuse this asset. */
+    sourceUrl?: string
   },
   deps: { fetch?: typeof fetchRemoteFile } = {},
 ): Promise<Asset> {
@@ -581,5 +583,6 @@ export async function uploadAssetFromUrl(
     file: { buffer: remote.bytes, filename, mimeType },
     actorId: input.actorId,
     altText: input.altText,
+    sourceUrl: input.sourceUrl,
   })
 }

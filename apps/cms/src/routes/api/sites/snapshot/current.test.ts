@@ -4,7 +4,12 @@ import { PgDialect } from 'drizzle-orm/pg-core'
 import { getSitesSnapshotCurrent } from './current'
 
 const state = vi.hoisted(() => ({
-  site: null as { id: string; publishingMode: string } | null,
+  site: null as {
+    id: string
+    publishingMode: string
+    organizationId?: string
+    productionUrl?: string
+  } | null,
   rows: [] as Array<{
     id: string
     siteId: string
@@ -40,10 +45,13 @@ vi.mock('#/db', () => ({
 vi.mock('#/server/content/site-auth', () => ({
   authenticateSite: async () => state.site,
 }))
+const snapshotAssets = vi.hoisted(() => vi.fn(async () => [{ id: 'derived' }]))
+vi.mock('#/server/assets/published-assets', () => ({ snapshotAssets }))
 
 const request = (query = '') =>
   new Request(`http://cms.test/api/sites/snapshot/current${query}`)
 beforeEach(() => {
+  snapshotAssets.mockClear()
   state.site = { id: 's', publishingMode: 'production' }
   state.rows = [
     {
@@ -107,5 +115,46 @@ describe('snapshot/current publication selection and caching', () => {
     expect(
       await (await getSitesSnapshotCurrent(request())).json(),
     ).toMatchObject({ publicationId: 'demo' })
+  })
+
+  it('adds the site URL and the asset list, computing it for older publications', async () => {
+    state.site = {
+      id: 's',
+      publishingMode: 'production',
+      organizationId: 'org',
+      productionUrl: 'https://www.acme.test/',
+    }
+    const collections = { articles: [] }
+    state.rows = [
+      {
+        id: 'old',
+        siteId: 's',
+        status: 'live',
+        snapshot: { hash: 'a', collections },
+      },
+    ]
+    expect(
+      await (await getSitesSnapshotCurrent(request())).json(),
+    ).toMatchObject({
+      assets: [{ id: 'derived' }],
+      siteUrl: 'https://www.acme.test',
+    })
+    expect(snapshotAssets).toHaveBeenCalledWith('org', collections)
+
+    snapshotAssets.mockClear()
+    state.rows = [
+      {
+        id: 'new',
+        siteId: 's',
+        status: 'live',
+        snapshot: { hash: 'b', collections, assets: [{ id: 'stored' }] },
+      },
+    ]
+    expect(
+      await (await getSitesSnapshotCurrent(request())).json(),
+    ).toMatchObject({
+      assets: [{ id: 'stored' }],
+    })
+    expect(snapshotAssets).not.toHaveBeenCalled()
   })
 })

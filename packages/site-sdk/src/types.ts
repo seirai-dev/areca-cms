@@ -35,6 +35,25 @@ export type CollectionConfig = {
 export type SiteContentConfig = {
   siteKey: string
   collections: Record<string, CollectionConfig>
+  /** Where `areca pull` copies media. Local only: never sent to the CMS. */
+  assets?: AssetsConfig
+}
+
+/**
+ * Media handling for `areca pull`. By default every file the content uses is
+ * downloaded into `public/areca` and the content points at `/areca/...`, so
+ * the site never requests anything from the CMS.
+ */
+export type AssetsConfig = {
+  /** Default `true`. `false` keeps URLs pointing at the CMS. */
+  download?: boolean
+  /** Directory relative to the project root. Default `public/areca`. */
+  dir?: string
+  /**
+   * URL path the site serves `dir` from. Derived for directories under
+   * `public/` (`public/areca` is served from `/areca`); required otherwise.
+   */
+  publicPath?: string
 }
 
 /** POST /api/sites/manifest body */
@@ -121,6 +140,21 @@ export type Snapshot = {
   createdAt: string
   hash: string
   collections: Record<string, SnapshotEntry[]>
+  /** Every media file the content references. Absent from older CMS versions. */
+  assets?: SnapshotAsset[]
+  /** The site's production URL, used to make SEO image URLs absolute. */
+  siteUrl?: string | null
+}
+
+/** A media file referenced by a publication. */
+export type SnapshotAsset = {
+  id: string
+  /** Content URLs for this file end in `/api/assets/file/<storageKey>`. */
+  storageKey: string
+  url: string
+  filename: string
+  mimeType: string
+  size: number
 }
 
 export type PreviewResult = {
@@ -136,4 +170,10 @@ export type PulledContentManifest = {
   collections: Record<string, number>
   /** Immutable directory under `.publications`; absent in legacy flat output. */
   generation?: string
+  /** Present when media was copied locally. */
+  assets?: {
+    /** URL path the content uses for media, e.g. `/areca`. */
+    publicPath: string
+    count: number
+  }
 }

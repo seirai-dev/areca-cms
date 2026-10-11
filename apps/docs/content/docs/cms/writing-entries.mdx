@@ -86,6 +86,8 @@ A rich text field has a formatting toolbar and a **/** menu.
 
 To start a block, type **/** on an empty line and choose from the menu. Links must start with `http://`, `https://` or `mailto:`. Links open in a new tab on the live site.
 
+Images pasted from another website are copied into the Library when the entry saves, and the text then uses the Library copy. That way the live site only serves files from your Library, and the website can bundle them with `areca pull`. The same address is copied once, so pasting it again reuses the file. If a copy fails, for example because the other site refuses the download or the file is not a JPEG, PNG, WebP, GIF or PDF, the image keeps its original address and the editor shows a warning. The copy is tried again when you mark the entry ready.
+
 Use the **Preview formatting** option in the **More actions** menu to see how the text will look on the website.
 
 ## Details

@@ -166,7 +166,7 @@ describe('initSite', () => {
       })
 
       expect(readUtf8(join(dir, 'areca.config.ts'))).toBe(
-        `import { defineSiteContent } from '@areca-cms/site-sdk'\n\nexport default defineSiteContent({\n  siteKey: 'acme-site',\n  collections: {},\n})\n`,
+        `import { defineSiteContent } from '@areca-cms/site-sdk'\n\nexport default defineSiteContent({\n  siteKey: 'acme-site',\n  assets: {\n    download: true,\n    dir: 'public/areca',\n  },\n  collections: {},\n})\n`,
       )
       expect(readUtf8(join(dir, '.env.example'))).toBe(
         'ARECA_CMS_URL=http://localhost:3000\nARECA_SITE_TOKEN=\nARECA_SCHEMA_TOKEN=\n',
@@ -175,7 +175,7 @@ describe('initSite', () => {
         'ARECA_CMS_URL=http://localhost:3000\nARECA_SITE_TOKEN=site-token\n',
       )
       expect(readUtf8(join(dir, '.gitignore'))).toBe(
-        '.env.local\nsrc/generated/content/\n',
+        '.env.local\nsrc/generated/content/\npublic/areca/\n',
       )
       expect(
         JSON.parse(readUtf8(join(dir, 'src/generated/content/manifest.json'))),
@@ -278,11 +278,93 @@ describe('initSite', () => {
     }
   })
 
+  it('writes media flags into the config and ignores the media directory', async () => {
+    const dir = makeSiteDir()
+    try {
+      await initSite({
+        cwd: dir,
+        yes: true,
+        cmsUrl: 'http://localhost:3000',
+        token: 'site-token',
+        siteKey: 'acme-site',
+        assetsDir: 'static/media',
+        assetsPublicPath: 'media/',
+      })
+      expect(readUtf8(join(dir, 'areca.config.ts'))).toContain(
+        "  assets: {\n    download: true,\n    dir: 'static/media',\n    publicPath: '/media',\n  },\n",
+      )
+      expect(readUtf8(join(dir, '.gitignore'))).toContain('static/media/\n')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('requires a public path for media outside public/', async () => {
+    const dir = makeSiteDir()
+    try {
+      await expect(
+        initSite({
+          cwd: dir,
+          yes: true,
+          cmsUrl: 'http://localhost:3000',
+          token: 'site-token',
+          siteKey: 'acme-site',
+          assetsDir: 'static/media',
+        }),
+      ).rejects.toThrow(/--assets-public-path/)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('adds a media block to an existing config, then keeps it unless told otherwise', async () => {
+    const dir = makeSiteDir()
+    const configPath = join(dir, 'areca.config.ts')
+    const original = `import { defineSiteContent } from '@areca-cms/site-sdk'
+
+export default defineSiteContent({
+  siteKey: 'acme-site',
+  collections: {
+    assets: { route: '/assets/:slug', fields: [] },
+  },
+})
+`
+    writeFileSync(configPath, original, 'utf8')
+    const base = {
+      cwd: dir,
+      yes: true,
+      cmsUrl: 'http://localhost:3000',
+      token: 'site-token',
+      siteKey: 'acme-site',
+    }
+    try {
+      await initSite(base)
+      const withDefaults = original.replace(
+        "  siteKey: 'acme-site',\n",
+        "  siteKey: 'acme-site',\n  assets: {\n    download: true,\n    dir: 'public/areca',\n  },\n",
+      )
+      expect(readUtf8(configPath)).toBe(withDefaults)
+
+      await initSite(base)
+      expect(readUtf8(configPath)).toBe(withDefaults)
+
+      await initSite({ ...base, noAssets: true })
+      expect(readUtf8(configPath)).toBe(
+        original.replace(
+          "  siteKey: 'acme-site',\n",
+          "  siteKey: 'acme-site',\n  assets: {\n    download: false,\n  },\n",
+        ),
+      )
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   it('does not duplicate gitignore lines', async () => {
     const dir = makeSiteDir()
     writeFileSync(
       join(dir, '.gitignore'),
-      'node_modules/\n.env.local\nsrc/generated/content/\n',
+      'node_modules/\n.env.local\nsrc/generated/content/\npublic/areca\n',
       'utf8',
     )
     try {
@@ -294,7 +376,7 @@ describe('initSite', () => {
         siteKey: 'acme-site',
       })
       expect(readUtf8(join(dir, '.gitignore'))).toBe(
-        'node_modules/\n.env.local\nsrc/generated/content/\n',
+        'node_modules/\n.env.local\nsrc/generated/content/\npublic/areca\n',
       )
     } finally {
       rmSync(dir, { recursive: true, force: true })

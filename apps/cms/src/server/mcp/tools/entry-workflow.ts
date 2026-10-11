@@ -10,7 +10,7 @@ import {
   unpublishEntry,
 } from '#/server/content/entries'
 
-import { formatStoredEntry } from './entries'
+import { formatStoredEntry, withImportWarnings } from './entries'
 import { loadEntryInSite } from '../scope'
 import { idSchema } from '../schemas'
 import type { ToolRegistry } from '../tool-kit'
@@ -48,11 +48,14 @@ export function registerEntryWorkflowTools(registry: ToolRegistry): void {
     },
     run: async (input, actor) => {
       const entry = await loadEntryInSite(actor, input.id)
-      await publishEntry(entry.id, actor.userId)
-      return {
-        message: APPROVED_MESSAGE,
-        ...(await formatStoredEntry(actor, entry.id)),
-      }
+      const published = await publishEntry(entry.id, actor.userId)
+      return withImportWarnings(
+        {
+          message: APPROVED_MESSAGE,
+          ...(await formatStoredEntry(actor, entry.id)),
+        },
+        published.importWarnings,
+      )
     },
   })
 
@@ -126,13 +129,16 @@ export function registerEntryWorkflowTools(registry: ToolRegistry): void {
     },
     run: async (input, actor) => {
       const entry = await loadEntryInSite(actor, input.id)
-      await scheduleEntry(
+      const scheduled = await scheduleEntry(
         entry.id,
         input.publishAt,
         input.timezone,
         actor.userId,
       )
-      return formatStoredEntry(actor, entry.id)
+      return withImportWarnings(
+        await formatStoredEntry(actor, entry.id),
+        scheduled.importWarnings,
+      )
     },
   })
 

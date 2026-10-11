@@ -12,6 +12,7 @@ import type { EntryData, EntryStatus, Field } from '#/lib/types'
 import { SEO_KEY } from '#/lib/seo'
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
+import { importExternalImages } from '#/server/assets/external-images'
 import { assetMutationLock } from '#/server/assets/usage'
 
 import { archiveDeletedContent } from './deletion-archive'
@@ -110,13 +111,15 @@ export async function createEntry(input: {
     throw new NotFoundError(m.server_collection_not_found())
   }
 
-  const parsed = validateEntryData(ctx.collection.fields, input.data, {
+  const validated = validateEntryData(ctx.collection.fields, input.data, {
     mode: 'partial',
     write: true,
   })
-  if (!parsed.ok) {
-    throw new ValidationError(parsed.errors)
+  if (!validated.ok) {
+    throw new ValidationError(validated.errors)
   }
+  const images = await importEntryImages(ctx, validated.data, input.actorId)
+  const parsed = { ...validated, data: images.data }
 
   const slug = resolveSlug(parsed.data, ctx.collection.fields)
   if (!slug || !SLUG_PATTERN.test(slug)) {
@@ -171,7 +174,12 @@ export async function createEntry(input: {
       tx,
     )
 
-    return { ...created, collectionKey: ctx.collection.key }
+    return {
+      ...created,
+      collectionKey: ctx.collection.key,
+      importedImages: images.imported,
+      importWarnings: images.warnings,
+    }
   })
 }
 
@@ -182,13 +190,15 @@ export async function updateDraft(
   expectedVersion: number,
 ) {
   const ctx = await loadEntryContext(id)
-  const parsed = validateEntryData(ctx.collection.fields, data, {
+  const validated = validateEntryData(ctx.collection.fields, data, {
     mode: 'partial',
     write: true,
   })
-  if (!parsed.ok) {
-    throw new ValidationError(parsed.errors)
+  if (!validated.ok) {
+    throw new ValidationError(validated.errors)
   }
+  const images = await importEntryImages(ctx, validated.data, actorId)
+  const parsed = { ...validated, data: images.data }
 
   const nextSlug = resolveSlug(parsed.data, ctx.collection.fields)
   if (nextSlug && nextSlug !== ctx.entry.slug) {
@@ -242,7 +252,12 @@ export async function updateDraft(
       tx,
     )
 
-    return { ...updated, collectionKey: ctx.collection.key }
+    return {
+      ...updated,
+      collectionKey: ctx.collection.key,
+      importedImages: images.imported,
+      importWarnings: images.warnings,
+    }
   })
 }
 
@@ -445,14 +460,17 @@ function keepCurrentRevisionField(
 
 export async function publishEntry(id: string, actorId: string) {
   const ctx = await loadEntryContext(id)
-  const parsed = validateEntryData(ctx.collection.fields, ctx.entry.draftData)
+  // Drafts saved before external images were imported are caught up here.
+  const images = await importEntryImages(ctx, ctx.entry.draftData, actorId)
+  const draftData = images.data
+  const parsed = validateEntryData(ctx.collection.fields, draftData)
   if (!parsed.ok) {
     throw new ValidationError(parsed.errors)
   }
   const refErrors = await validateReferences(
     ctx.site.id,
     ctx.collection.fields,
-    ctx.entry.draftData,
+    draftData,
   )
   if (refErrors.length > 0) {
     throw new ValidationError(refErrors)
@@ -464,7 +482,7 @@ export async function publishEntry(id: string, actorId: string) {
       ctx.site.id,
       ctx.site.organizationId,
       ctx.collection.fields,
-      ctx.entry.draftData,
+      draftData,
       tx,
     )
     if (ownershipErrors.length) throw new ValidationError(ownershipErrors)
@@ -472,6 +490,7 @@ export async function publishEntry(id: string, actorId: string) {
     const [updated] = await tx
       .update(entry)
       .set({
+        ...(images.imported > 0 ? { draftData } : {}),
         status: 'published',
         publishedData: parsed.data,
         publishedSlug: ctx.entry.slug,
@@ -496,7 +515,7 @@ export async function publishEntry(id: string, actorId: string) {
       )
     }
 
-    await writeRevision(id, ctx.entry.draftData, actorId, 'publish', tx)
+    await writeRevision(id, draftData, actorId, 'publish', tx)
     await audit(
       {
         organizationId: ctx.site.organizationId,
@@ -509,7 +528,12 @@ export async function publishEntry(id: string, actorId: string) {
       tx,
     )
 
-    return { ...updated, collectionKey: ctx.collection.key }
+    return {
+      ...updated,
+      collectionKey: ctx.collection.key,
+      importedImages: images.imported,
+      importWarnings: images.warnings,
+    }
   })
 }
 
@@ -610,6 +634,8 @@ export async function scheduleEntry(
       { path: 'scheduledAt', message: m.server_schedule_in_past() },
     ])
   }
+  const images = await importEntryImages(ctx, ctx.entry.draftData, actorId)
+  const draftData = images.data
 
   return db.transaction(async (tx) => {
     await assetMutationLock(tx, ctx.site.organizationId)
@@ -617,19 +643,17 @@ export async function scheduleEntry(
       ctx.site.id,
       ctx.site.organizationId,
       ctx.collection.fields,
-      ctx.entry.draftData,
+      draftData,
       tx,
     )
     if (ownershipErrors.length) throw new ValidationError(ownershipErrors)
-    const validated = validateEntryData(
-      ctx.collection.fields,
-      ctx.entry.draftData,
-    )
+    const validated = validateEntryData(ctx.collection.fields, draftData)
     if (!validated.ok) throw new ValidationError(validated.errors)
     const now = new Date()
     const [updated] = await tx
       .update(entry)
       .set({
+        ...(images.imported > 0 ? { draftData } : {}),
         status: 'scheduled',
         scheduledData: validated.data,
         scheduledSlug: ctx.entry.slug,
@@ -651,7 +675,7 @@ export async function scheduleEntry(
       )
     }
 
-    await writeRevision(id, ctx.entry.draftData, actorId, 'schedule', tx)
+    await writeRevision(id, draftData, actorId, 'schedule', tx)
     await audit(
       {
         organizationId: ctx.site.organizationId,
@@ -665,7 +689,12 @@ export async function scheduleEntry(
       tx,
     )
 
-    return { ...updated, collectionKey: ctx.collection.key }
+    return {
+      ...updated,
+      collectionKey: ctx.collection.key,
+      importedImages: images.imported,
+      importWarnings: images.warnings,
+    }
   })
 }
 
@@ -792,4 +821,21 @@ async function loadEntryContext(
     throw new NotFoundError(m.server_entry_not_found())
   }
   return row
+}
+
+function importEntryImages(
+  ctx: {
+    site: typeof site.$inferSelect
+    collection: typeof collection.$inferSelect
+  },
+  data: EntryData,
+  actorId: string,
+) {
+  return importExternalImages({
+    organizationId: ctx.site.organizationId,
+    originSiteId: ctx.site.id,
+    actorId,
+    fields: ctx.collection.fields,
+    data,
+  })
 }

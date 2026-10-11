@@ -5,6 +5,7 @@ import { and, desc, eq } from 'drizzle-orm'
 import { db } from '#/db'
 import { publication } from '#/db/schema'
 import type { Snapshot } from '#/lib/types'
+import { snapshotAssets } from '#/server/assets/published-assets'
 import { authenticateSite } from '#/server/content/site-auth'
 
 const NO_STORE = { 'Cache-Control': 'no-store' }
@@ -54,9 +55,25 @@ export async function getSitesSnapshotCurrent(request: Request) {
   const snapshot: Snapshot = {
     ...pub.snapshot,
     publicationId: pub.id,
+    // Publications stored before the asset list existed get it computed.
+    assets:
+      pub.snapshot.assets ??
+      (await snapshotAssets(site.organizationId, pub.snapshot.collections)),
+    siteUrl: siteOrigin(site.productionUrl),
   }
 
   return Response.json(snapshot, { headers: NO_STORE })
+}
+
+/** Lets sites build absolute URLs (og:image) for files they host themselves. */
+function siteOrigin(productionUrl: string): string | null {
+  try {
+    const url = new URL(productionUrl)
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null
+    return `${url.origin}${url.pathname.replace(/\/+$/, '')}`
+  } catch {
+    return null
+  }
 }
 
 export const Route = createFileRoute('/api/sites/snapshot/current')({

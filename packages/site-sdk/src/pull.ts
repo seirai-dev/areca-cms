@@ -14,22 +14,48 @@ import {
 } from 'node:fs'
 import { join, resolve, relative, isAbsolute } from 'node:path'
 import {
+  downloadAssets,
+  localAssetFileNames,
+  localizeCollections,
+  pruneGenerations,
+  writeAssetIndex,
+  type MediaChanges,
+  type ResolvedAssets,
+} from './assets.js'
+
+export type { ResolvedAssets } from './assets.js'
+import {
   assertSafeIdentifier,
   assertUniqueCollectionIdentifiers,
 } from './identifiers.js'
 import { createArecaClient, type ArecaClient } from './client.js'
 import type { PulledContentManifest, Snapshot, SnapshotEntry } from './types.js'
 
+/** Older generations kept next to the current one for readers that captured them. */
+const PREVIOUS_GENERATIONS_KEPT = 2
+
 export type PullContentOptions = {
   outDir: string
   client?: ArecaClient
   publicationId?: string
+  /**
+   * Copy media into `dir` and point the content at `publicPath`. Omit to keep
+   * CMS URLs. The `areca pull` CLI resolves this from areca.config.ts.
+   */
+  assets?: ResolvedAssets
+}
+
+export type PullContentResult = Snapshot & {
+  /** Set when media was copied locally. */
+  localAssets?: { dir: string; total: number; downloaded: number }
+  /** Set when the CMS does not list media, so URLs still point at it. */
+  warnings: string[]
 }
 
 /** Stage immutable files, then switch the manifest pointer in one atomic rename. */
 export async function pullContent(
   options: PullContentOptions,
-): Promise<Snapshot> {
+): Promise<PullContentResult> {
   const client = options.client ?? createArecaClient()
   const publicationId = options.publicationId ?? configuredPublicationId()
   const snapshot = await client.fetchSnapshot(
@@ -47,24 +73,71 @@ export async function pullContent(
   const manifestPath = containedPath(base, 'manifest')
   for (const key of Object.keys(snapshot.collections)) containedPath(base, key)
   const publications = safeDirectory(base, '.publications', true)
-  const stage = mkdtempSync(join(publications, 'publication-'))
+  const warnings: string[] = []
+  let collections = snapshot.collections
+  let localAssets: PullContentResult['localAssets']
+  let assetFiles: string[] | undefined
+  let media: MediaChanges | undefined
+  if (options.assets && !snapshot.assets) {
+    warnings.push(
+      'This CMS version does not list media files, so media URLs still point at the CMS. Update the CMS to copy media locally.',
+    )
+  } else if (options.assets && snapshot.assets) {
+    // Downloads finish before anything is staged: a failed download leaves
+    // the current content and its media exactly as they were.
+    const files = localAssetFileNames(snapshot.assets)
+    media = await downloadAssets(
+      snapshot.assets,
+      files,
+      options.assets.dir,
+      client.fetchAsset,
+    )
+    collections = localizeCollections(snapshot.collections, files, {
+      publicPath: options.assets.publicPath,
+      siteUrl: snapshot.siteUrl,
+    })
+    assetFiles = [...files.values()]
+    localAssets = {
+      dir: options.assets.dir,
+      total: snapshot.assets.length,
+      downloaded: media.downloaded,
+    }
+  }
+  let stage: string
+  try {
+    stage = mkdtempSync(join(publications, 'publication-'))
+  } catch (error) {
+    media?.rollback()
+    throw error
+  }
   const generation = relative(publications, stage)
   const temporaryManifest = join(base, `.manifest-${randomUUID()}.tmp`)
   try {
-    for (const [key, entries] of Object.entries(snapshot.collections)) {
+    for (const [key, entries] of Object.entries(collections)) {
       writeJson(containedPath(stage, key), entries)
+    }
+    if (assetFiles && options.assets) {
+      writeAssetIndex(stage, base, options.assets.dir, assetFiles)
     }
     const manifest: PulledContentManifest = {
       publicationId: snapshot.publicationId,
       hash: snapshot.hash,
       createdAt: snapshot.createdAt,
       collections: Object.fromEntries(
-        Object.entries(snapshot.collections).map(([key, entries]) => [
+        Object.entries(collections).map(([key, entries]) => [
           key,
           entries.length,
         ]),
       ),
       generation,
+      ...(assetFiles && options.assets
+        ? {
+            assets: {
+              publicPath: options.assets.publicPath,
+              count: assetFiles.length,
+            },
+          }
+        : {}),
     }
     writeJson(temporaryManifest, manifest, true)
     // Prior generations stay immutable for readers that already captured a pointer.
@@ -72,9 +145,29 @@ export async function pullContent(
   } catch (error) {
     rmSync(stage, { recursive: true, force: true })
     rmSync(temporaryManifest, { force: true })
+    media?.rollback()
     throw error
   }
-  return snapshot
+  // The new content is live from here on: cleanup problems are warnings,
+  // not a failed pull.
+  try {
+    media?.commit()
+    pruneGenerations(
+      base,
+      publications,
+      generation,
+      PREVIOUS_GENERATIONS_KEPT + 1,
+    )
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    warnings.push(`Pulled, but cleaning up older content failed: ${detail}`)
+  }
+  return {
+    ...snapshot,
+    collections,
+    ...(localAssets ? { localAssets } : {}),
+    warnings,
+  }
 }
 
 /** Capture once and pass to readContent for consistent reads across collections. */

@@ -183,3 +183,24 @@ it('sends explicit publication query and checks the returned ID', async () => {
     publicationId: 'expected',
   })
 })
+
+it('parses pull --config and the init media flags', () => {
+  expect(parseArgs(['pull', '--config', 'site.config.ts'])).toEqual({
+    command: 'pull',
+    outDir: 'src/generated/content',
+    configPath: 'site.config.ts',
+  })
+  expect(
+    parseArgs([
+      'init',
+      '--assets-dir',
+      'static/media',
+      '--assets-public-path',
+      '/media',
+    ]),
+  ).toMatchObject({ assetsDir: 'static/media', assetsPublicPath: '/media' })
+  expect(parseArgs(['init', '--no-assets'])).toMatchObject({ noAssets: true })
+  expect(parseArgs(['init', '--no-assets', '--assets-dir', 'x'])).toMatchObject(
+    { command: 'error' },
+  )
+})

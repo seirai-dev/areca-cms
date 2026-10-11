@@ -2,6 +2,10 @@ import { defineSiteContent } from '@areca-cms/site-sdk'
 
 export default defineSiteContent({
   siteKey: 'acme-site',
+  assets: {
+    download: true,
+    dir: 'public/areca',
+  },
   collections: {
     articles: {
       route: '/blog/$slug',

@@ -54,6 +54,7 @@ Set the CMS health check URL to this route, e.g. `https://www.example.com/api/he
 - The CMS deploy passes the build arg `ARECA_SNAPSHOT_ID`, and `areca pull` fetches exactly that publication. Declare the arg right before the pull step so the cache is busted for each release.
 - Pass `ARECA_SITE_TOKEN` as a build secret, not as an ARG or ENV in the image.
 - Copy `src/generated` into the runtime image when the server reads content at runtime.
+- Media lands in `public/areca` before the build, so the framework bundles it with other static files. With a custom `assets.dir`, make sure the build or image includes it.
 
 ```dockerfile
 ARG ARECA_CMS_URL

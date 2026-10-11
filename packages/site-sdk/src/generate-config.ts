@@ -1,4 +1,9 @@
-import type { CollectionConfig, Field, SiteContentConfig } from './types.js'
+import type {
+  AssetsConfig,
+  CollectionConfig,
+  Field,
+  SiteContentConfig,
+} from './types.js'
 
 const MAX_LINE_WIDTH = 80
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/
@@ -27,6 +32,10 @@ export function generateConfigSource(config: SiteContentConfig): string {
     `  siteKey: ${quote(config.siteKey)},`,
   ]
 
+  if (config.assets !== undefined) {
+    lines.push(...assetsConfigLines(config.assets, '  '))
+  }
+
   const keys = Object.keys(config.collections).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
 
   if (keys.length === 0) {
@@ -41,6 +50,20 @@ export function generateConfigSource(config: SiteContentConfig): string {
 
   lines.push('})')
   return `${lines.join('\n')}\n`
+}
+
+const ASSETS_KEY_ORDER = ['download', 'dir', 'publicPath'] as const
+
+/** The `assets: { ... },` block of an areca.config.ts, indented by `indent`. */
+export function assetsConfigLines(
+  assets: AssetsConfig,
+  indent: string,
+): string[] {
+  const entries = ASSETS_KEY_ORDER.filter(
+    (key) => assets[key] !== undefined,
+  ).map((key) => `${indent}  ${key}: ${renderValue(assets[key]!)},`)
+  if (entries.length === 0) return [`${indent}assets: {},`]
+  return [`${indent}assets: {`, ...entries, `${indent}},`]
 }
 
 function collectionLines(key: string, collection: CollectionConfig): string[] {

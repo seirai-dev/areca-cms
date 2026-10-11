@@ -1,5 +1,11 @@
 export type ParsedArgs =
-  | { command: 'pull'; outDir: string; publicationId?: string }
+  | {
+      command: 'pull'
+      outDir: string
+      publicationId?: string
+      /** Set only when passed; the default config may be absent. */
+      configPath?: string
+    }
   | { command: 'sync-manifest'; configPath: string }
   | { command: 'manifest-pull'; configPath: string; yes: boolean }
   | {
@@ -11,12 +17,16 @@ export type ParsedArgs =
       configPath: string
       yes: boolean
       force: boolean
+      assetsDir?: string
+      assetsPublicPath?: string
+      noAssets?: true
     }
   | { command: 'run'; commandArgs: string[] }
   | { command: 'help' }
   | { command: 'error'; message: string }
 
 export const DEFAULT_PULL_OUT_DIR = 'src/generated/content'
+export const DEFAULT_ASSETS_DIR = 'public/areca'
 export const DEFAULT_CONFIG_PATH = 'areca.config.ts'
 export const DEFAULT_SYNC_MANIFEST_PATH = './areca.config.ts'
 
@@ -55,9 +65,17 @@ export function parseArgs(argv: string[]): ParsedArgs {
 function parsePullArgs(args: string[]): ParsedArgs {
   let outDir = DEFAULT_PULL_OUT_DIR
   let publicationId: string | undefined
+  let configPath: string | undefined
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i]
+    if (arg === '--config') {
+      const value = readFlagValue(args, i, '--config')
+      if (value.error) return value.error
+      configPath = value.value
+      i += 1
+      continue
+    }
     if (arg === '--out') {
       const value = readFlagValue(args, i, '--out')
       if (value.error) return value.error
@@ -79,6 +97,7 @@ function parsePullArgs(args: string[]): ParsedArgs {
     command: 'pull',
     outDir,
     ...(publicationId ? { publicationId } : {}),
+    ...(configPath ? { configPath } : {}),
   }
 }
 
@@ -143,9 +162,30 @@ function parseInitArgs(args: string[]): ParsedArgs {
   let configPath = DEFAULT_CONFIG_PATH
   let yes = false
   let force = false
+  let assetsDir: string | undefined
+  let assetsPublicPath: string | undefined
+  let noAssets = false
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i]
+    if (arg === '--assets-dir') {
+      const value = readFlagValue(args, i, '--assets-dir')
+      if (value.error) return value.error
+      assetsDir = value.value
+      i += 1
+      continue
+    }
+    if (arg === '--assets-public-path') {
+      const value = readFlagValue(args, i, '--assets-public-path')
+      if (value.error) return value.error
+      assetsPublicPath = value.value
+      i += 1
+      continue
+    }
+    if (arg === '--no-assets') {
+      noAssets = true
+      continue
+    }
     if (arg === '--cms-url') {
       const value = readFlagValue(args, i, '--cms-url')
       if (value.error) return value.error
@@ -192,6 +232,13 @@ function parseInitArgs(args: string[]): ParsedArgs {
     return { command: 'error', message: `Unknown argument: ${arg}` }
   }
 
+  if (noAssets && (assetsDir || assetsPublicPath)) {
+    return {
+      command: 'error',
+      message: '--no-assets cannot be combined with --assets-dir or --assets-public-path',
+    }
+  }
+
   return {
     command: 'init',
     cmsUrl,
@@ -201,6 +248,9 @@ function parseInitArgs(args: string[]): ParsedArgs {
     configPath,
     yes,
     force,
+    ...(assetsDir ? { assetsDir } : {}),
+    ...(assetsPublicPath ? { assetsPublicPath } : {}),
+    ...(noAssets ? { noAssets: true as const } : {}),
   }
 }
 
@@ -232,8 +282,9 @@ function readFlagValue(
 
 export function usage(): string {
   return `Usage:
-  areca init [--cms-url <url>] [--token <token>] [--site-key <key>] [--out ${DEFAULT_PULL_OUT_DIR}] [--config ${DEFAULT_CONFIG_PATH}] [--yes|-y] [--force]
-  areca pull [--out ${DEFAULT_PULL_OUT_DIR}] [--publication <id>]
+  areca init [--cms-url <url>] [--token <token>] [--site-key <key>] [--out ${DEFAULT_PULL_OUT_DIR}] [--config ${DEFAULT_CONFIG_PATH}]
+             [--assets-dir ${DEFAULT_ASSETS_DIR}] [--assets-public-path /areca] [--no-assets] [--yes|-y] [--force]
+  areca pull [--out ${DEFAULT_PULL_OUT_DIR}] [--publication <id>] [--config ${DEFAULT_CONFIG_PATH}]
   areca manifest push [${DEFAULT_SYNC_MANIFEST_PATH}]
   areca manifest pull [--config ${DEFAULT_SYNC_MANIFEST_PATH}] [--yes|-y]
   areca sync-manifest [${DEFAULT_SYNC_MANIFEST_PATH}]   (deprecated alias for manifest push)

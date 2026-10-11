@@ -16,7 +16,7 @@ export async function loadConfig(
     if (abs.endsWith('.ts') || abs.endsWith('.mts') || abs.endsWith('.tsx')) {
       const detail = error instanceof Error ? error.message : String(error)
       throw new Error(
-        `Failed to load TypeScript config ${configPath} via native import (${detail}). Retry with tsx, e.g. pnpm exec tsx ./node_modules/@areca-cms/site-sdk/dist/cli.js manifest push ${configPath}`,
+        `Failed to load TypeScript config ${configPath} via native import (${detail}). Use Node.js 22.18 or newer, or retry with tsx, e.g. pnpm exec tsx ./node_modules/@areca-cms/site-sdk/dist/cli.js <command>`,
       )
     }
     throw error

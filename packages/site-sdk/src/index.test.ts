@@ -272,7 +272,7 @@ describe('pullContent / readContent', () => {
           siteToken: 't',
         }),
       })
-      expect(snapshot).toEqual(sampleSnapshot)
+      expect(snapshot).toEqual({ ...sampleSnapshot, warnings: [] })
 
       const manifest = JSON.parse(
         readFileSync(join(outDir, 'manifest.json'), 'utf8'),
