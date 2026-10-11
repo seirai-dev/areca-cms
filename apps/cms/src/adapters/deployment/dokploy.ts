@@ -1,3 +1,4 @@
+import type { LookupAddress, LookupOptions } from 'node:dns'
 import { request as httpRequest } from 'node:http'
 import { request as httpsRequest } from 'node:https'
 import { isIP } from 'node:net'
@@ -387,7 +388,7 @@ export function createDokployAdapter(
           redirect: 'manual',
           signal: AbortSignal.timeout(remaining),
         })
-      : await pinnedRequest(url, resolved.addresses[0], remaining)
+      : await pinnedRequest(url, resolved.addresses, remaining)
     if (response.status >= 300 && response.status < 400) {
       const location = response.headers.get('location')
       if (!location || redirects >= 4) return response
@@ -401,9 +402,13 @@ export function createDokployAdapter(
   }
 }
 
-function pinnedRequest(
+/**
+ * Connects only to the addresses that were checked for being public, so DNS
+ * cannot change between the check and the connection. Exported for tests.
+ */
+export function pinnedRequest(
   url: URL,
-  address: string | undefined,
+  addresses: string[],
   timeoutMs: number,
 ) {
   return new Promise<Response>((resolve, reject) => {
@@ -412,12 +417,7 @@ function pinnedRequest(
       url,
       {
         signal: AbortSignal.timeout(timeoutMs),
-        ...(address
-          ? {
-              lookup: (_hostname, _options, callback) =>
-                callback(null, address, isIP(address)),
-            }
-          : {}),
+        ...(addresses.length > 0 ? { lookup: pinnedLookup(addresses) } : {}),
       },
       (incoming) => {
         const chunks: Buffer[] = []
@@ -536,4 +536,43 @@ async function retrySafe<T>(operation: () => Promise<T>): Promise<T> {
 
 function sleep(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms))
+}
+
+/**
+ * A `lookup` that answers with the pinned addresses. Node (22+) asks with
+ * `{ all: true }` for Happy Eyeballs and then needs the whole list, not a
+ * single address; answering with one address fails every connection.
+ */
+function pinnedLookup(addresses: string[]) {
+  const records = addresses.map((address) => ({
+    address,
+    family: isIP(address),
+  }))
+  return (
+    _hostname: string,
+    options: LookupOptions,
+    callback: (
+      error: NodeJS.ErrnoException | null,
+      address: string | LookupAddress[],
+      family?: number,
+    ) => void,
+  ) => {
+    const family =
+      options.family === 4 || options.family === 6 ? options.family : undefined
+    const pool = family
+      ? records.filter((record) => record.family === family)
+      : records
+    const first = pool.at(0)
+    if (!first) {
+      callback(
+        Object.assign(new Error('No pinned address for this address family'), {
+          code: 'ENOTFOUND',
+        }),
+        '',
+      )
+      return
+    }
+    if (options.all) callback(null, pool)
+    else callback(null, first.address, first.family)
+  }
 }

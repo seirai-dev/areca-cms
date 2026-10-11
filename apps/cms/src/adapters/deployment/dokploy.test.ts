@@ -1,5 +1,11 @@
+import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { describe, expect, it } from 'vitest'
-import { createDokployAdapter, listDokployApplications } from './dokploy'
+import {
+  createDokployAdapter,
+  listDokployApplications,
+  pinnedRequest,
+} from './dokploy'
 import { DeploymentUncertainError } from './types'
 import type { DeploymentTarget } from './types'
 
@@ -693,5 +699,31 @@ describe('createDokployAdapter', () => {
     })
     expect(ok).toBe(false)
     expect(attempts).toBeGreaterThan(0)
+  })
+
+  it('connects through the pinned addresses when Node asks for all of them', async () => {
+    // Regression: Node 22+ calls `lookup` with { all: true }. Answering with a
+    // single address made every real health check fail with
+    // ERR_INVALID_IP_ADDRESS, while fetch-mocked tests kept passing.
+    const server = createServer((_req, res) => {
+      res.setHeader('content-type', 'application/json')
+      res.end(JSON.stringify({ ok: true, publicationId: 'pub-1' }))
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const { port } = server.address() as AddressInfo
+    try {
+      const response = await pinnedRequest(
+        new URL(`http://pinned.test:${port}/api/health`),
+        ['127.0.0.1'],
+        2_000,
+      )
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual({
+        ok: true,
+        publicationId: 'pub-1',
+      })
+    } finally {
+      await new Promise((resolve) => server.close(resolve))
+    }
   })
 })
