@@ -16,7 +16,7 @@ export function ConnectorUrlPanel({
   return (
     <section
       aria-labelledby="connect-ai-url-title"
-      className="grid gap-4 rounded-panel border border-border-default bg-background-surface p-5 shadow-card sm:p-6"
+      className="grid min-w-0 gap-4 overflow-hidden rounded-panel border border-border-default bg-background-surface p-5 shadow-card sm:p-6"
       data-testid="connect-ai-url-panel"
     >
       <div className="grid gap-1">
@@ -31,7 +31,7 @@ export function ConnectorUrlPanel({
         </p>
       </div>
       {url ? (
-        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
+        <div className="flex min-w-0 flex-col gap-2.5 sm:flex-row sm:items-center">
           <code
             className="scroll-quiet min-w-0 flex-1 overflow-x-auto rounded-control bg-background-subtle px-3 py-2.5 font-mono text-[13px] whitespace-nowrap text-text-primary"
             data-testid="connect-ai-endpoint"

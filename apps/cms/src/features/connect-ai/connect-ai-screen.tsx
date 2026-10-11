@@ -15,8 +15,8 @@ import { ConnectApps } from './connect-apps'
 import { ConnectedAppsSection } from './connected-apps'
 import { ConnectorUrlPanel } from './connector-url-panel'
 import { CreateKeyDialog } from './create-key-dialog'
-import { HowItWorks, PromptExamples, RoleNote } from './how-it-works'
 import { KeysList, KeysListSkeleton } from './keys-list'
+import { RoleNote } from './role-note'
 import { useMcpConnections } from './use-mcp-connections'
 import { useMcpKeys } from './use-mcp-keys'
 
@@ -38,7 +38,7 @@ export function ConnectAiScreen({ site }: { site: MeSite }) {
 
   return (
     <div
-      className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-10 pb-24"
+      className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-12 pb-24"
       data-testid="connect-ai"
     >
       <PageHeader
@@ -56,8 +56,6 @@ export function ConnectAiScreen({ site }: { site: MeSite }) {
       ) : (
         <ConnectorUrlPanel url={connectorUrl} siteName={site.name} />
       )}
-
-      <HowItWorks />
 
       {connectorUrl ? (
         <ConnectApps
@@ -77,8 +75,6 @@ export function ConnectAiScreen({ site }: { site: MeSite }) {
         onRetry={() => void connections.refetch()}
         onDisconnect={(id) => disconnect.mutateAsync(id)}
       />
-
-      <PromptExamples />
 
       {role ? <RoleNote role={role} /> : null}
 
@@ -135,7 +131,7 @@ function Advanced({
 }) {
   return (
     <details
-      className="group/advanced grid gap-6 rounded-card border border-border-default px-4 py-3 open:pb-5"
+      className="group/advanced rounded-card border border-border-default px-4 py-3 open:pb-6 sm:px-5"
       data-testid="connect-ai-advanced"
     >
       <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-[14px] leading-5 font-medium text-text-primary outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus [&::-webkit-details-marker]:hidden">
@@ -146,58 +142,65 @@ function Advanced({
         <CaretDown className="size-3.5 text-icon-muted transition-transform duration-150 group-open/advanced:rotate-180" />
       </summary>
 
-      <p className="text-callout text-text-secondary">
-        {m.connect_ai_advanced_description()}
-      </p>
+      {/* Content sits in its own grid: <details> does not lay out its
+          children as grid items in every browser. */}
+      <div className="grid gap-8 pt-1">
+        <p className="text-callout text-text-secondary">
+          {m.connect_ai_advanced_description()}
+        </p>
 
-      <section className="grid gap-3" aria-labelledby="connect-ai-keys-heading">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div className="grid gap-0.5 px-1">
-            <h2
-              id="connect-ai-keys-heading"
-              className="text-headline text-text-primary"
+        <section
+          className="grid gap-4"
+          aria-labelledby="connect-ai-keys-heading"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div className="grid gap-0.5">
+              <h2
+                id="connect-ai-keys-heading"
+                className="text-headline text-text-primary"
+              >
+                {m.connect_ai_keys_title()}
+              </h2>
+              <p className="text-callout text-text-secondary">
+                {showOwners
+                  ? m.connect_ai_keys_description_all()
+                  : m.connect_ai_keys_description_own()}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              size="lg"
+              className="min-h-11 w-full sm:w-auto"
+              onClick={onCreate}
+              data-testid="connect-ai-create"
             >
-              {m.connect_ai_keys_title()}
-            </h2>
-            <p className="text-callout text-text-secondary">
-              {showOwners
-                ? m.connect_ai_keys_description_all()
-                : m.connect_ai_keys_description_own()}
-            </p>
+              <Plus />
+              {m.connect_ai_create_key()}
+            </Button>
           </div>
-          <Button
-            type="button"
-            variant="secondary"
-            size="lg"
-            className="min-h-11 w-full sm:w-auto"
-            onClick={onCreate}
-            data-testid="connect-ai-create"
-          >
-            <Plus />
-            {m.connect_ai_create_key()}
-          </Button>
-        </div>
 
-        {keysError ? (
-          <QueryError
-            title={m.connect_ai_keys_load_error()}
-            error={keysError}
-            onRetry={onRetry}
-            retrying={keysRetrying}
-          />
-        ) : keysLoaded ? (
-          <KeysList
-            keys={keysLoaded.keys}
-            currentUserId={currentUserId}
-            showOwners={showOwners}
-            onRevoke={onRevoke}
-          />
-        ) : (
-          <KeysListSkeleton />
-        )}
-      </section>
+          {keysError ? (
+            <QueryError
+              title={m.connect_ai_keys_load_error()}
+              error={keysError}
+              onRetry={onRetry}
+              retrying={keysRetrying}
+            />
+          ) : keysLoaded ? (
+            <KeysList
+              keys={keysLoaded.keys}
+              currentUserId={currentUserId}
+              showOwners={showOwners}
+              onRevoke={onRevoke}
+            />
+          ) : (
+            <KeysListSkeleton />
+          )}
+        </section>
 
-      <TechnicalDetails endpointUrl={endpointUrl} serverName={serverName} />
+        <TechnicalDetails endpointUrl={endpointUrl} serverName={serverName} />
+      </div>
     </details>
   )
 }
@@ -212,13 +215,13 @@ function TechnicalDetails({
 }) {
   return (
     <section
-      className="grid gap-3"
+      className="grid gap-4 border-t border-border-default pt-6"
       aria-labelledby="connect-ai-details-heading"
       data-testid="connect-ai-details"
     >
       <h2
         id="connect-ai-details-heading"
-        className="px-1 text-overline text-text-muted"
+        className="text-overline text-text-muted"
       >
         {m.connect_ai_details()}
       </h2>

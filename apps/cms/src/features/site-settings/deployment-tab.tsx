@@ -159,36 +159,46 @@ export function DeploymentTab({
         description={m.settings_provider_description()}
       >
         <div
-          className="flex flex-wrap items-center gap-3"
+          className="flex flex-col gap-3 sm:flex-row sm:items-center"
           data-testid="deployment-provider"
         >
-          <InsetIcon
-            tone={configured ? 'accent' : 'neutral'}
-            className="size-10 rounded-[11px]"
-          >
-            <CloudArrowUp weight="duotone" />
-          </InsetIcon>
-          <div className="grid min-w-0 flex-1 gap-0.5">
-            <span className="flex items-center gap-2 text-[14px] leading-5 font-medium text-text-primary">
-              {m.settings_provider_dokploy()}
-              {dokploy.status.isPending ? null : configured ? (
-                <Tag tone="success">{m.settings_provider_connected_tag()}</Tag>
-              ) : null}
-            </span>
-            <span className="truncate text-callout text-text-secondary">
-              {dokploy.status.isPending ? (
-                <Skeleton className="h-4 w-48" />
-              ) : configured ? (
-                m.settings_provider_connected({
-                  client,
-                  host: displayHost(dokploy.status.data?.url ?? ''),
-                })
-              ) : (
-                m.settings_provider_not_connected({ client })
-              )}
-            </span>
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <InsetIcon
+              tone={configured ? 'accent' : 'neutral'}
+              className="size-10 rounded-[11px]"
+            >
+              <CloudArrowUp weight="duotone" />
+            </InsetIcon>
+            <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)] gap-0.5">
+              <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[14px] leading-5 font-medium text-text-primary">
+                {m.settings_provider_dokploy()}
+                {dokploy.status.isPending ? null : configured ? (
+                  <Tag tone="success">
+                    {m.settings_provider_connected_tag()}
+                  </Tag>
+                ) : null}
+              </span>
+              <span className="truncate text-callout text-text-secondary">
+                {dokploy.status.isPending ? (
+                  <Skeleton className="h-4 w-48" />
+                ) : configured ? (
+                  m.settings_provider_connected({
+                    client,
+                    host: displayHost(dokploy.status.data?.url ?? ''),
+                  })
+                ) : (
+                  m.settings_provider_not_connected({ client })
+                )}
+              </span>
+            </div>
           </div>
-          <Button type="button" variant="secondary" size="sm" asChild>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="w-full sm:w-auto"
+            asChild
+          >
             <Link
               to="/agency/clients/$orgId"
               params={{ orgId: site.organizationId }}
