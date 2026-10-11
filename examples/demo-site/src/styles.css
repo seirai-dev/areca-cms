@@ -1,7 +1,13 @@
 @import '@fontsource-variable/fraunces/full.css';
 @import '@fontsource-variable/fraunces/full-italic.css';
 @import '@fontsource-variable/inter';
-@import 'tailwindcss';
+/*
+ * Scan only the app source for class names. Automatic detection relies on a
+ * .gitignore, which Docker builds do not have, and then also scans .output:
+ * the server build saw the client bundle and produced different CSS (and a
+ * different file name) than the one the client shipped.
+ */
+@import 'tailwindcss' source('.');
 
 /*
  * Northbound design tokens. Light values are the default; dark values apply
