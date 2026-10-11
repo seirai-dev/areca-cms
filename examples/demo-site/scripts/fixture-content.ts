@@ -47,7 +47,8 @@ function richText(markdown: string): RichTextValue {
 }
 
 /** Where `areca pull` copies media for this site (see areca.config.ts). */
-export const MEDIA_DIR = join(process.cwd(), 'public/areca')
+export const MEDIA_DIR =
+  process.env.ARECA_MEDIA_DIR ?? join(process.cwd(), 'public/areca')
 
 /** A solid-colour PNG, so fixtures work offline like pulled media does. */
 function solidPng(width: number, height: number, rgb: [number, number, number]): Buffer {

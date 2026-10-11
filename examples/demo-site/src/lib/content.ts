@@ -8,7 +8,9 @@ import type {
   SnapshotEntry,
 } from '@areca-cms/site-sdk'
 
-export const CONTENT_DIR = join(process.cwd(), 'src/generated/content')
+/** Pulled content. Tests point ARECA_CONTENT_DIR elsewhere so they never touch a real pull. */
+export const CONTENT_DIR =
+  process.env.ARECA_CONTENT_DIR ?? join(process.cwd(), 'src/generated/content')
 
 export type ArticleCategory =
   | 'origin-stories'

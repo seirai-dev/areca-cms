@@ -117,7 +117,6 @@ describe('content access', () => {
       publicationId: 'pub_fixture_northbound',
       collections: { articles: 3, coffees: 3, authors: 2 },
     })
-    expect(CONTENT_DIR).toContain('src')
   })
 })
 

@@ -36,10 +36,13 @@ export function CoffeeCard({ coffee }: { coffee: Coffee }) {
         ) : null}
       </div>
       <div className="flex flex-1 flex-col pt-5">
-        <p className="flex flex-wrap items-center gap-x-2 text-[0.7rem] font-medium uppercase tracking-[0.16em] text-muted">
-          {meta}
+        {/* One line only, so long origin/region names do not push titles out of line across the row. */}
+        <p className="flex min-w-0 items-center gap-x-2 text-[0.7rem] font-medium uppercase tracking-[0.16em] text-muted">
+          <span className="min-w-0 truncate" title={meta}>
+            {meta}
+          </span>
           {data.limited && !data.image ? (
-            <span className="rounded-full bg-accent-strong px-2.5 py-0.5 text-on-accent">Limited</span>
+            <span className="shrink-0 rounded-full bg-accent-strong px-2.5 py-0.5 text-on-accent">Limited</span>
           ) : null}
         </p>
         <h2 className="mt-2 font-display text-2xl leading-tight tracking-tight text-ink">

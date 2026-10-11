@@ -28,7 +28,7 @@ function TeamIndex() {
           The people who buy the coffee, roast it and write about it.
         </p>
       </header>
-      <div className="mt-16 grid gap-x-10 gap-y-20 border-t border-line pt-16 md:grid-cols-2">
+      <div className="mt-16 grid gap-x-8 gap-y-20 border-t border-line pt-16 md:grid-cols-3">
         {authors.map((author) => (
           <AuthorCard key={author.id} author={author} />
         ))}

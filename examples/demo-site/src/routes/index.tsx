@@ -25,9 +25,9 @@ function Home() {
         {heroImage ? (
           <CmsImage image={heroImage} priority className="absolute inset-0 -z-10 size-full object-cover" />
         ) : null}
-        <div aria-hidden="true" className="absolute inset-0 -z-10 bg-linear-to-t from-[#0c120f]/90 via-[#0c120f]/45 to-[#0c120f]/10" />
+        <div aria-hidden="true" className="absolute inset-0 -z-10 bg-linear-to-t from-[#0c120f]/92 via-[#0c120f]/70 to-[#0c120f]/25" />
         <div className="mx-auto w-full max-w-6xl px-5 pb-16 pt-40 sm:px-8 md:pb-24">
-          <p className="text-[0.72rem] font-medium uppercase tracking-[0.2em] text-on-image/75">
+          <p className="text-[0.72rem] font-medium uppercase tracking-[0.2em] text-on-image/90">
             Roasters in Bergen, Norway
           </p>
           <h1 className="mt-5 max-w-4xl font-display text-5xl font-normal leading-[0.98] tracking-tight sm:text-6xl md:text-7xl lg:text-[5.5rem]">
@@ -76,7 +76,7 @@ function Home() {
             <div className="mt-14 grid gap-14 lg:grid-cols-[1.6fr_1fr] lg:gap-16">
               <ArticleCard
                 article={lead}
-                variant="feature"
+                variant="lead"
                 author={authorFor(lead.data.author?.id, authors)}
               />
               <div className="flex flex-col gap-10 self-start">
@@ -97,7 +97,7 @@ function Home() {
       {authors.length ? (
         <section className="mx-auto max-w-6xl px-5 py-24 sm:px-8 md:py-32" aria-labelledby="home-team">
           <SectionHeading id="home-team" eyebrow="Team" title="The people behind the roast" linkTo="/team" linkLabel="Meet the team" />
-          <div className="mt-14 grid gap-12 md:grid-cols-2 md:gap-16">
+          <div className="mt-14 grid gap-12 md:grid-cols-3 md:gap-8">
             {authors.map((author) => (
               <AuthorCard key={author.id} author={author} />
             ))}

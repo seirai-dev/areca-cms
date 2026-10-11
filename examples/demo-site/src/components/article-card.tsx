@@ -5,8 +5,9 @@ import { formatDate } from './formatters.ts'
 import { CategoryPill } from './ui.tsx'
 
 /**
- * `feature` is the large lead story, `row` a compact side-by-side card, and
- * `default` a vertical card. `author` adds a byline with a round portrait.
+ * `feature` is the large side-by-side lead story, `lead` a large stacked one
+ * for narrower columns, `row` a compact side-by-side card, and `default` a
+ * vertical card. `author` adds a byline with a round portrait.
  */
 export function ArticleCard({
   article,
@@ -15,13 +16,14 @@ export function ArticleCard({
 }: {
   article: Article
   author?: Author | null
-  variant?: 'default' | 'feature' | 'row'
+  variant?: 'default' | 'feature' | 'lead' | 'row'
 }) {
   const { data } = article
   const rawDate = data.publishedAt ?? article.publishedAt
   const published = formatDate(rawDate)
   const isFeature = variant === 'feature'
   const isRow = variant === 'row'
+  const isLead = variant === 'lead'
 
   const image = data.heroImage ? (
     <Link
@@ -34,7 +36,13 @@ export function ArticleCard({
       <CmsImage
         image={data.heroImage}
         className={`group-hover:scale-[1.035] h-full w-full object-cover transition-transform duration-700 ease-out ${
-          isFeature ? 'aspect-[4/3] md:aspect-[5/4]' : isRow ? 'aspect-square' : 'aspect-[3/2]'
+          isFeature
+            ? 'aspect-[4/3] md:aspect-[5/4]'
+            : isRow
+              ? 'aspect-square'
+              : isLead
+                ? 'aspect-[16/10]'
+                : 'aspect-[3/2]'
         }`}
       />
     </Link>
@@ -43,7 +51,13 @@ export function ArticleCard({
   const title = (
     <h2
       className={`font-display leading-[1.1] tracking-tight text-ink ${
-        isFeature ? 'mt-6 text-4xl md:text-5xl' : isRow ? 'mt-3 text-xl' : 'mt-5 text-2xl'
+        isFeature
+          ? 'mt-6 text-4xl md:text-5xl'
+          : isLead
+            ? 'mt-5 text-3xl md:text-4xl'
+            : isRow
+              ? 'mt-3 text-xl'
+              : 'mt-5 text-2xl'
       }`}
     >
       <Link
@@ -79,7 +93,7 @@ export function ArticleCard({
   const excerpt = data.excerpt ? (
     <p
       className={`text-muted ${
-        isFeature ? 'mt-5 text-lg leading-8' : isRow ? 'mt-2 line-clamp-2 text-sm leading-6' : 'mt-3 line-clamp-3 leading-7'
+        isFeature || isLead ? 'mt-5 text-lg leading-8' : isRow ? 'mt-2 line-clamp-2 text-sm leading-6' : 'mt-3 line-clamp-3 leading-7'
       }`}
     >
       {data.excerpt}

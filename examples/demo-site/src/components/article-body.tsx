@@ -93,21 +93,27 @@ export const articleComponents = {
   code(props) {
     return <code {...props} className="rounded bg-surface px-1.5 py-0.5 font-mono text-[0.9em] text-ink ring-1 ring-inset ring-line" />
   },
+  /*
+   * Markdown wraps a standalone image in a paragraph, so this element can
+   * sit inside a <p>. <figure> and <div> are not allowed there (the browser
+   * closes the <p> early and hydration fails), so the image uses phrasing
+   * content only: block-level <span>s styled as a figure.
+   */
   img(props) {
     return (
-      <figure className="-mx-5 mt-12 sm:mx-0">
+      <span className="-mx-5 mt-12 block sm:mx-0">
         <img
           {...props}
           loading="lazy"
           decoding="async"
-          className="h-auto w-full rounded-2xl bg-surface"
+          className="block h-auto w-full rounded-2xl bg-surface"
         />
         {props.alt ? (
-          <figcaption className="mt-3 px-5 text-center text-sm leading-6 text-muted sm:px-0">
+          <span className="mt-3 block px-5 text-center text-sm leading-6 text-muted sm:px-0">
             {props.alt}
-          </figcaption>
+          </span>
         ) : null}
-      </figure>
+      </span>
     )
   },
   hr() {
