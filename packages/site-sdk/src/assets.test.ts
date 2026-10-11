@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  chmodSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
@@ -116,6 +118,17 @@ describe('asset config', () => {
     ).toThrow(/not a URL/)
   })
 
+  it('refuses media folders outside the project', () => {
+    for (const dir of ['../shared/media', '/var/www/media', '.', 'public/../..']) {
+      expect(() =>
+        resolveAssetsConfig({ dir, publicPath: '/media' }, '/site'),
+      ).toThrow(/inside the project/)
+    }
+    expect(
+      resolveAssetsConfig({ dir: '..media', publicPath: '/m' }, '/site')?.dir,
+    ).toBe('/site/..media')
+  })
+
   it('names files after the original file plus a short unique id', () => {
     const names = localAssetFileNames([HERO, BROCHURE])
     expect(names.get(HERO.storageKey)).toBe('hero-banner-3f2a91c0.jpg')
@@ -224,6 +237,63 @@ describe('pullContent with local media', () => {
     ).rejects.toThrow(/Brochure \(2026\)\.pdf.*HTTP 404/)
     expect(readContentManifest(outDir)).toEqual(before)
     expect(readdirSync(assets.dir)).toEqual(['hero-banner-3f2a91c0.jpg'])
+  })
+
+  it('restores a replaced file and leaves no temporary files when another download fails', async () => {
+    const root = directory()
+    const outDir = join(root, 'content')
+    const assets = { dir: join(root, 'public/areca'), publicPath: '/areca' }
+    await pullContent({ outDir, client: client(snapshotWith([HERO])), assets })
+    // A damaged copy (wrong size) is due for replacement on the next pull.
+    writeFileSync(join(assets.dir, 'hero-banner-3f2a91c0.jpg'), 'damaged')
+
+    const failing = client(
+      snapshotWith([HERO, BROCHURE]),
+      vi.fn(async (item: SnapshotAsset) => {
+        if (item === BROCHURE) throw new Error('HTTP 500')
+        return new TextEncoder().encode('xxx')
+      }),
+    )
+    await expect(
+      pullContent({ outDir, client: failing, assets }),
+    ).rejects.toThrow(/HTTP 500/)
+    expect(readdirSync(assets.dir)).toEqual(['hero-banner-3f2a91c0.jpg'])
+    expect(readFileSync(join(assets.dir, 'hero-banner-3f2a91c0.jpg'), 'utf8')).toBe(
+      'damaged',
+    )
+
+    // A successful pull replaces it and drops the kept-aside copy.
+    await pullContent({ outDir, client: client(snapshotWith([HERO])), assets })
+    expect(readdirSync(assets.dir)).toEqual(['hero-banner-3f2a91c0.jpg'])
+    expect(readFileSync(join(assets.dir, 'hero-banner-3f2a91c0.jpg'), 'utf8')).toBe(
+      'xxx',
+    )
+  })
+
+  it('reports a cleanup failure after the switch as a warning', async () => {
+    const root = directory()
+    const outDir = join(root, 'content')
+    const publications = join(outDir, '.publications')
+    const locked = join(publications, 'publication-old0', 'locked')
+    mkdirSync(locked, { recursive: true })
+    writeFileSync(join(locked, 'file.json'), '[]')
+    // The locked generation is the oldest, so it is the one pruned.
+    for (const [age, name] of ['publication-old0', 'publication-old1', 'publication-old2'].entries()) {
+      mkdirSync(join(publications, name), { recursive: true })
+      const time = new Date(Date.now() - (3 - age) * 60_000)
+      utimesSync(join(publications, name), time, time)
+    }
+    chmodSync(locked, 0o500)
+    try {
+      const result = await pullContent({
+        outDir,
+        client: client(snapshotWith([])),
+      })
+      expect(result.warnings.join('\n')).toMatch(/cleaning up older content failed/)
+      expect(readContentManifest(outDir).generation).not.toMatch(/old/)
+    } finally {
+      chmodSync(locked, 0o700)
+    }
   })
 
   it('rejects a file whose size does not match', async () => {

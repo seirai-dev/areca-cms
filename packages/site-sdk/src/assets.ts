@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import {
   closeSync,
   constants,
+  existsSync,
   lstatSync,
   mkdirSync,
   openSync,
@@ -40,7 +41,7 @@ export type ResolvedAssets = {
   publicPath: string
 }
 
-/** `null` when downloads are turned off. Relative `dir` resolves against `root`. */
+/** `null` when downloads are turned off. `dir` must stay inside `root`. */
 export function resolveAssetsConfig(
   config: AssetsConfig | undefined,
   root: string,
@@ -57,7 +58,20 @@ export function resolveAssetsConfig(
       `Cannot tell which URL serves ${dir}. Set assets.publicPath in areca.config.ts (for example '/${posix.basename(toPosix(dir))}').`,
     )
   }
-  return { dir: resolve(root, dir), publicPath }
+  const absolute = resolve(root, dir)
+  const inside = relative(resolve(root), absolute)
+  // Pull writes and prunes files here: keep it inside the project.
+  if (
+    isAbsolute(dir) ||
+    !inside ||
+    /^\.\.(?:[\\/]|$)/.test(inside) ||
+    isAbsolute(inside)
+  ) {
+    throw new Error(
+      `assets.dir must be a folder inside the project, relative to it (for example 'public/areca'): ${dir}`,
+    )
+  }
+  return { dir: absolute, publicPath }
 }
 
 /** `public/areca` → `/areca`; `undefined` for directories outside `public/`. */
@@ -166,21 +180,31 @@ function mapStrings<T>(value: T, map: (value: string) => string): T {
 
 export type AssetDownloader = (asset: SnapshotAsset) => Promise<Uint8Array>
 
+/** Media written by a pull, undone together with the pull's content. */
+export type MediaChanges = {
+  downloaded: number
+  /** Removes new files and puts replaced ones back. */
+  rollback: () => void
+  /** Drops the copies of replaced files once the new content is live. */
+  commit: () => void
+}
+
 /**
- * Downloads files that are not on disk yet. Files are written under a
- * temporary name and renamed, so an interrupted pull never leaves a partial
- * file behind. On failure the files created by this call are removed.
+ * Downloads files that are not on disk yet, or whose size is wrong. Every
+ * download lands in a temporary file first; nothing in the media directory
+ * changes until all of them succeed. Replaced files are kept aside until
+ * `commit`, so `rollback` restores the directory exactly.
  */
 export async function downloadAssets(
   assets: SnapshotAsset[],
   files: Map<string, string>,
   dir: string,
   download: AssetDownloader,
-): Promise<{ created: string[] }> {
-  if (assets.length === 0) return { created: [] }
+): Promise<MediaChanges> {
+  const none: MediaChanges = { downloaded: 0, rollback: () => {}, commit: () => {} }
+  if (assets.length === 0) return none
   const base = ensureAssetDirectory(dir)
-  const created: string[] = []
-  const missing = assets.filter((asset) => {
+  const pending = assets.filter((asset) => {
     const target = join(base, files.get(asset.storageKey)!)
     try {
       const stat = lstatSync(target)
@@ -192,10 +216,14 @@ export async function downloadAssets(
       throw error
     }
   })
+  if (pending.length === 0) return none
 
+  // Phase 1: download everything into temporary files.
+  const staged: { temporary: string; target: string }[] = []
   const failures: string[] = []
   const work = async (asset: SnapshotAsset) => {
     const name = files.get(asset.storageKey)!
+    const temporary = join(base, `.${name}.${randomUUID()}.tmp`)
     try {
       const bytes = await download(asset)
       if (asset.size > 0 && bytes.byteLength !== asset.size) {
@@ -203,36 +231,69 @@ export async function downloadAssets(
           `expected ${asset.size} bytes, received ${bytes.byteLength}`,
         )
       }
-      const temporary = join(base, `.${name}.${randomUUID()}.tmp`)
-      const fd = openSync(
-        temporary,
-        constants.O_WRONLY |
-          constants.O_CREAT |
-          constants.O_EXCL |
-          constants.O_NOFOLLOW,
-      )
-      try {
-        writeFileSync(fd, bytes)
-      } finally {
-        closeSync(fd)
-      }
-      renameSync(temporary, join(base, name))
-      created.push(join(base, name))
+      writeExclusive(temporary, bytes)
+      staged.push({ temporary, target: join(base, name) })
     } catch (error) {
+      rmSync(temporary, { force: true })
       const detail = error instanceof Error ? error.message : String(error)
       failures.push(`${asset.filename} (${asset.storageKey}): ${detail}`)
     }
   }
-  for (let i = 0; i < missing.length; i += DOWNLOAD_CONCURRENCY) {
-    await Promise.all(missing.slice(i, i + DOWNLOAD_CONCURRENCY).map(work))
+  for (let i = 0; i < pending.length; i += DOWNLOAD_CONCURRENCY) {
+    await Promise.all(pending.slice(i, i + DOWNLOAD_CONCURRENCY).map(work))
   }
   if (failures.length > 0) {
-    for (const file of created) rmSync(file, { force: true })
+    for (const { temporary } of staged) rmSync(temporary, { force: true })
     throw new Error(
       `Failed to download ${failures.length} media file(s); the previous content is unchanged.\n  ${failures.join('\n  ')}`,
     )
   }
-  return { created }
+
+  // Phase 2: move the files into place, keeping replaced files aside.
+  const placed: { target: string; backup?: string }[] = []
+  const rollback = () => {
+    for (const { target, backup } of placed.splice(0).reverse()) {
+      rmSync(target, { force: true })
+      if (backup) renameSync(backup, target)
+    }
+  }
+  try {
+    for (const { temporary, target } of staged) {
+      let backup: string | undefined
+      if (existsSync(target)) {
+        backup = `${target}.${randomUUID()}.bak`
+        renameSync(target, backup)
+      }
+      placed.push({ target, backup })
+      renameSync(temporary, target)
+    }
+  } catch (error) {
+    rollback()
+    throw error
+  } finally {
+    for (const { temporary } of staged) rmSync(temporary, { force: true })
+  }
+  return {
+    downloaded: staged.length,
+    rollback,
+    commit: () => {
+      for (const { backup } of placed.splice(0)) {
+        if (backup) rmSync(backup, { force: true })
+      }
+    },
+  }
+}
+
+function writeExclusive(filePath: string, bytes: Uint8Array): void {
+  const fd = openSync(
+    filePath,
+    constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+  )
+  try {
+    writeFileSync(fd, bytes)
+  } finally {
+    closeSync(fd)
+  }
 }
 
 /** Downloads from the CMS the SDK talks to (`ARECA_CMS_URL`), not the URL in the content. */

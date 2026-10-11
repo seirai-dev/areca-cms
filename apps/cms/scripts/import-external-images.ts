@@ -3,7 +3,8 @@
 // saves do this automatically; this catches up content written before.
 //
 //   pnpm assets:import-external [--dry-run]
-import { and, eq } from 'drizzle-orm'
+import { randomUUID } from 'node:crypto'
+import { and, eq, isNull } from 'drizzle-orm'
 
 import { db, pool } from '#/db'
 import { collection, entry, site } from '#/db/schema'
@@ -66,17 +67,29 @@ try {
     }
     if (Object.keys(changes).length === 0) continue
 
-    // Only write when nobody saved the entry in the meantime.
+    // Only write when nobody saved, scheduled or released the entry in the
+    // meantime: going live promotes scheduled data without touching
+    // updatedAt, so the schedule version and status are checked too.
+    const { scheduledVersion } = row.entry
     const written = await db.transaction(async (tx) => {
       await assetMutationLock(tx, row.site.organizationId)
       return tx
         .update(entry)
-        .set(changes)
+        .set({
+          ...changes,
+          // A release already building for the old approval must not promote
+          // the rewritten data; the scheduler builds the new version instead.
+          ...(changes.scheduledData ? { scheduledVersion: randomUUID() } : {}),
+        })
         .where(
           and(
             eq(entry.id, row.entry.id),
             eq(entry.draftVersion, row.entry.draftVersion),
             eq(entry.updatedAt, row.entry.updatedAt),
+            eq(entry.status, row.entry.status),
+            scheduledVersion === null
+              ? isNull(entry.scheduledVersion)
+              : eq(entry.scheduledVersion, scheduledVersion),
           ),
         )
         .returning({ id: entry.id })

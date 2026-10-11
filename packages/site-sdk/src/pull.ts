@@ -19,6 +19,7 @@ import {
   localizeCollections,
   pruneGenerations,
   writeAssetIndex,
+  type MediaChanges,
   type ResolvedAssets,
 } from './assets.js'
 
@@ -76,7 +77,7 @@ export async function pullContent(
   let collections = snapshot.collections
   let localAssets: PullContentResult['localAssets']
   let assetFiles: string[] | undefined
-  let createdFiles: string[] = []
+  let media: MediaChanges | undefined
   if (options.assets && !snapshot.assets) {
     warnings.push(
       'This CMS version does not list media files, so media URLs still point at the CMS. Update the CMS to copy media locally.',
@@ -85,7 +86,7 @@ export async function pullContent(
     // Downloads finish before anything is staged: a failed download leaves
     // the current content and its media exactly as they were.
     const files = localAssetFileNames(snapshot.assets)
-    const { created } = await downloadAssets(
+    media = await downloadAssets(
       snapshot.assets,
       files,
       options.assets.dir,
@@ -99,11 +100,16 @@ export async function pullContent(
     localAssets = {
       dir: options.assets.dir,
       total: snapshot.assets.length,
-      downloaded: created.length,
+      downloaded: media.downloaded,
     }
-    createdFiles = created
   }
-  const stage = mkdtempSync(join(publications, 'publication-'))
+  let stage: string
+  try {
+    stage = mkdtempSync(join(publications, 'publication-'))
+  } catch (error) {
+    media?.rollback()
+    throw error
+  }
   const generation = relative(publications, stage)
   const temporaryManifest = join(base, `.manifest-${randomUUID()}.tmp`)
   try {
@@ -139,10 +145,23 @@ export async function pullContent(
   } catch (error) {
     rmSync(stage, { recursive: true, force: true })
     rmSync(temporaryManifest, { force: true })
-    for (const file of createdFiles) rmSync(file, { force: true })
+    media?.rollback()
     throw error
   }
-  pruneGenerations(base, publications, generation, PREVIOUS_GENERATIONS_KEPT + 1)
+  // The new content is live from here on: cleanup problems are warnings,
+  // not a failed pull.
+  try {
+    media?.commit()
+    pruneGenerations(
+      base,
+      publications,
+      generation,
+      PREVIOUS_GENERATIONS_KEPT + 1,
+    )
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    warnings.push(`Pulled, but cleaning up older content failed: ${detail}`)
+  }
   return {
     ...snapshot,
     collections,

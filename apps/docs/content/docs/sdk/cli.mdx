@@ -159,7 +159,8 @@ Each collection file is an array of entries. See [Pulling content](/docs/sdk/pul
 
 - **Each pull is a new generation.** Files are written to a new folder under `.publications`, then `manifest.json` switches to it in one rename. A failed pull leaves the previous content in place.
 - **Two older generations are kept.** The current generation and the two before it stay, so a server that read an older `manifest.json` keeps working. Older generations are deleted, along with media files that only they used. Files in the media folder that no generation recorded, such as your own, are never deleted.
-- **Media is all or nothing.** If any file fails to download, the pull fails and nothing changes. Files already on disk are not downloaded again.
+- **Media is all or nothing.** If any file fails to download, the pull fails and nothing changes. Files already on disk are not downloaded again. The media folder must be inside the project.
+- **Cleanup does not fail a pull.** Old generations are removed after the new one is live. If that fails, the pull still succeeds and prints a warning.
 - **Older CMS versions.** If the CMS does not list media files, the pull prints a warning and keeps the CMS URLs.
 - **Collection names must be safe identifiers.** `pull` refuses a collection whose key is not a safe identifier, before it writes any file. See [identifier rules](/docs/sdk/errors-and-limits#identifier-rules).
 - **No publication, no output.** If the site has never gone live, the command fails with the 404 message and writes nothing new. See [Errors and limits](/docs/sdk/errors-and-limits#no-publication).

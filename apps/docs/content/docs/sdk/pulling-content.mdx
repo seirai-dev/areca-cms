@@ -122,7 +122,7 @@ export default defineSiteContent({
 
 A folder under `public/` is served from the matching path: `public/areca` from `/areca`, `public/media/cms` from `/media/cms`. For other folders, for example `static/` in SvelteKit, set `publicPath` to the URL path your framework serves it from. Without an `assets` block, the defaults apply. The `assets` settings stay in your project: `areca manifest push` does not send them, and `areca manifest pull` keeps them.
 
-Media files are downloaded from `ARECA_CMS_URL`, with no token. If a file fails to download, the pull fails and the previous content stays in place.
+The folder must be inside the project: absolute paths and paths that go above the project root are refused. Media files are downloaded from `ARECA_CMS_URL`, with no token. Each download goes to a temporary file first, and the media folder only changes once all of them succeed. If a file fails to download, the pull fails, and the previous content and media stay exactly as they were.
 
 ## Snapshot pinning
 
@@ -187,6 +187,8 @@ Keep the output directory inside your project, and do not commit it. Pulled cont
 | `Failed to reach CMS` | Check that `ARECA_CMS_URL` is correct and that the CMS is running. |
 | `401` | The site token is wrong, or it was rotated. Update `ARECA_SITE_TOKEN`. |
 | `Failed to download N media file(s)` | The listed files could not be fetched from `ARECA_CMS_URL`. Check that the CMS serves `/api/assets/file/` from that address, then run the pull again. Nothing was changed. |
+| `Pulled, but cleaning up older content failed` | The new content is live. Removing an older generation or its media failed, usually because of file permissions. Fix the permissions; the next pull cleans up again. |
+| `assets.dir must be a folder inside the project` | Use a path relative to the project root that stays inside it, such as `public/areca`. |
 | `Cannot tell which URL serves <dir>` | The media folder is not under `public/`. Set `assets.publicPath` in `areca.config.ts`. |
 | `This CMS version does not list media files` | The CMS is older than the SDK. Update the CMS; until then media URLs point at the CMS. |
 
