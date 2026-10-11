@@ -1,6 +1,6 @@
 {
   "name": "@areca-cms/site-sdk",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Schema, content sync, and preview tools for sites powered by Areca CMS.",
   "keywords": [
     "areca",
