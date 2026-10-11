@@ -1,6 +1,6 @@
 {
   "name": "areca",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Agent skills for Areca CMS: the site SDK (areca-sdk) and the MCP server (areca-mcp).",
   "author": {
     "name": "Areca CMS"
