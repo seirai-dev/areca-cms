@@ -57,7 +57,7 @@ export type DeploymentTarget = {
 export type SnapshotRichText = {
   json: unknown
   markdown: string
-  /** TanStack Markdown AST parsed from `markdown`. */
+  /** TanStack Markdown AST preserving the validated visual editor structure. */
   document: MarkdownDocument
   html: string
 }
@@ -115,6 +115,25 @@ export type Snapshot = {
   createdAt: string
   hash: string
   collections: Record<string, SnapshotEntry[]>
+  /**
+   * Every media file the content references, so a site can copy them into
+   * its own repository. Publications stored before this field existed get it
+   * computed when they are served.
+   */
+  assets?: SnapshotAsset[]
+  /** The site's production URL, added when served (not stored). */
+  siteUrl?: string | null
+}
+
+/** Wire contract — matches `@areca-cms/site-sdk` `SnapshotAsset`. */
+export type SnapshotAsset = {
+  id: string
+  /** Content URLs for this file end in `/api/assets/file/<storageKey>`. */
+  storageKey: string
+  url: string
+  filename: string
+  mimeType: string
+  size: number
 }
 
 export type ImageValue = {

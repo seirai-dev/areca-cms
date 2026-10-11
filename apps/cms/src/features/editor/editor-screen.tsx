@@ -543,6 +543,24 @@ function EntryEditorView({
               </div>
             </div>
           ) : null}
+          {editor.restoreSkippedFields.length > 0 ? (
+            <section
+              role="status"
+              className="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"
+            >
+              <h2 className="font-semibold">
+                {m.editor_revision_skipped_fields()}
+              </h2>
+              <p className="mt-1">{m.editor_revision_keep_current()}</p>
+              <ul className="mt-3 list-disc space-y-1 pl-5">
+                {editor.restoreSkippedFields.map((field) => (
+                  <li key={field.key}>
+                    <strong>{field.label}</strong>: {field.reason}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
           {entry?.status === 'scheduled' &&
           entry.scheduledData &&
           entry.scheduledSlug ? (

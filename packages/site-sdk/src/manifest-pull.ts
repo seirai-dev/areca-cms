@@ -108,7 +108,12 @@ export async function manifestPull(options: ManifestPullOptions): Promise<Manife
     }
   }
 
-  const source = generateConfigSource({ siteKey, collections: manifest.collections })
+  const source = generateConfigSource({
+    siteKey,
+    // Local settings survive a re-render; only collections come from the CMS.
+    ...(existing?.assets !== undefined ? { assets: existing.assets } : {}),
+    collections: manifest.collections,
+  })
   writeFileSync(absConfigPath, source, 'utf8')
 
   return {

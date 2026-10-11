@@ -4,6 +4,7 @@ import type { SnapshotEntry } from '#/lib/types'
 import { resolveEntrySeo } from '#/lib/seo'
 
 import {
+  comparisonSnapshot,
   diffSnapshotCollections,
   pendingCountFromDiff,
   stableJson,
@@ -212,5 +213,20 @@ describe('pendingCountFromDiff', () => {
 describe('stableJson', () => {
   it('is order-insensitive for objects', () => {
     expect(stableJson({ b: 2, a: 1 })).toBe(stableJson({ a: 1, b: 2 }))
+  })
+})
+
+describe('release comparison mode', () => {
+  it('uses latest demo after production mode is changed to demo', () => {
+    const live = { snapshot: { publicationId: 'production' } }
+    const demo = { snapshot: { publicationId: 'latest-demo' } }
+    expect(
+      comparisonSnapshot('demo', live as never, demo as never)?.publicationId,
+    ).toBe('latest-demo')
+    expect(comparisonSnapshot('demo', live as never, null)).toBeNull()
+    expect(
+      comparisonSnapshot('production', live as never, demo as never)
+        ?.publicationId,
+    ).toBe('production')
   })
 })

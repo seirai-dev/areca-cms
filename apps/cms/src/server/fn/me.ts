@@ -1,9 +1,11 @@
+/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty; retain defensive lookup and authorization checks. */
 import { createServerFn } from '@tanstack/react-start'
 import { eq, inArray, sql } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { db } from '#/db'
 import { membership, organization, site } from '#/db/schema'
+import { localMfaVerifiedAt } from '#/server/security/local-mfa'
 import { env } from '#/env'
 import type { MembershipRole } from '#/lib/types'
 import { getSession, requireUser } from '#/lib/session.server'
@@ -23,6 +25,8 @@ export type Me = {
   }
   /** An agency admin who must enrol in two-factor before using the app. */
   mfaEnrolmentRequired: boolean
+  /** Enrolled admins must verify a local factor in this session. */
+  mfaVerificationRequired: boolean
   memberships: Array<{
     organizationId: string
     organizationName: string
@@ -91,7 +95,7 @@ export const getMeFn = createServerFn({ method: 'GET', ...meFn }).handler(
             .where(
               inArray(
                 site.organizationId,
-                memberships.map((m) => m.organizationId),
+                memberships.map((member) => member.organizationId),
               ),
             )
             .orderBy(site.name)
@@ -114,6 +118,11 @@ export const getMeFn = createServerFn({ method: 'GET', ...meFn }).handler(
     return {
       user: currentUser,
       mfaEnrolmentRequired,
+      mfaVerificationRequired:
+        env.ADMIN_MFA_REQUIRED &&
+        currentUser.isAgencyAdmin &&
+        currentUser.twoFactorEnabled &&
+        !(await localMfaVerifiedAt(session)),
       memberships,
       sites,
       organizationCount,

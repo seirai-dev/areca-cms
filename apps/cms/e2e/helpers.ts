@@ -235,6 +235,7 @@ export type CreatedSite = {
   siteSlug: string
   productionUrl: string
   token: string
+  schemaToken: string
 }
 
 /**
@@ -261,16 +262,26 @@ export async function createSiteOnClientPage(
   await page.getByTestId('create-site').click()
 
   await expect(sheet.getByText('Step 2 of 2')).toBeVisible()
-  const alert = page.getByTestId('site-token-alert')
-  await expect(alert).toBeVisible()
-  await expect(page.getByTestId('site-token-env')).toContainText(
-    'ARECA_SITE_TOKEN=',
-  )
-  const token = (await page.getByTestId('site-token-value').innerText()).trim()
+  const buildReveal = sheet
+    .getByTestId('site-token-alert')
+    .filter({ hasText: 'ARECA_SITE_TOKEN=' })
+  const schemaReveal = sheet
+    .getByTestId('site-token-alert')
+    .filter({ hasText: 'ARECA_SCHEMA_TOKEN=' })
+  await expect(buildReveal).toBeVisible()
+  await expect(schemaReveal).toBeVisible()
+  const token = (
+    await buildReveal.getByTestId('site-token-value').innerText()
+  ).trim()
+  const schemaToken = (
+    await schemaReveal.getByTestId('site-token-value').innerText()
+  ).trim()
   expect(token).toMatch(/^[a-f0-9]{32,}$/)
+  expect(schemaToken).toMatch(/^[a-f0-9]{32,}$/)
+  expect(schemaToken).not.toBe(token)
   await page.getByTestId('token-saved').click()
   await expect(sheet).toBeHidden()
-  return { siteName, siteSlug, productionUrl, token }
+  return { siteName, siteSlug, productionUrl, token, schemaToken }
 }
 
 export const ARTICLES_MANIFEST = {
@@ -324,7 +335,7 @@ export async function createIsolatedAcmeSite(
   await login(page, ADMIN)
   await openClient(page, 'Acme', 'acme')
   const site = await createSiteOnClientPage(page, suffix)
-  await pushManifest(new URL(page.url()).origin, site.token)
+  await pushManifest(new URL(page.url()).origin, site.schemaToken)
   await signOut(page)
   return site
 }
@@ -358,7 +369,11 @@ export async function startNewEntry(page: Page) {
 }
 
 /** Title + body. Autosave creates the entry once the slug is valid. */
-export async function writeArticle(page: Page, title: string, body = `Body for ${title}`) {
+export async function writeArticle(
+  page: Page,
+  title: string,
+  body = `Body for ${title}`,
+) {
   await titleInput(page).fill(title)
   await richText(page).click()
   await page.keyboard.type(body)
@@ -366,9 +381,12 @@ export async function writeArticle(page: Page, title: string, body = `Body for $
 
 /** Autosave settled: the entry exists (URL has its id) and nothing is dirty. */
 export async function waitForSaved(page: Page) {
-  await expect(page).toHaveURL(/\/c\/[^/]+\/(?!new(?:[/?#]|$))[^/?#]+(?:\?.*)?$/, {
-    timeout: 20_000,
-  })
+  await expect(page).toHaveURL(
+    /\/c\/[^/]+\/(?!new(?:[/?#]|$))[^/?#]+(?:\?.*)?$/,
+    {
+      timeout: 20_000,
+    },
+  )
   await expect(page.getByTestId('entry-editor')).toHaveAttribute(
     'data-dirty',
     'false',
@@ -455,7 +473,11 @@ export function releases(panel: Locator) {
 
 const MAILPIT = process.env.MAILPIT_URL ?? 'http://localhost:8025'
 
-type MailpitMessage = { ID: string; Subject: string; To: Array<{ Address?: string }> }
+type MailpitMessage = {
+  ID: string
+  Subject: string
+  To: Array<{ Address?: string }>
+}
 
 /** The invitation link e-mailed to `email` (polls Mailpit). */
 export async function waitForInviteLink(email: string, timeout = 30_000) {

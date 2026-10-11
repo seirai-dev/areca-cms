@@ -1,0 +1,10 @@
+{
+  "name": "areca",
+  "version": "0.2.0",
+  "description": "Agent skills for Areca CMS: the site SDK (areca-sdk) and the MCP server (areca-mcp).",
+  "author": {
+    "name": "Areca CMS"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/ekozf/areca-cms"
+}

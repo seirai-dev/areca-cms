@@ -15,6 +15,7 @@ Areca is a build-time CMS for agency-managed websites. Editors write drafts; own
 | Write, preview, schedule, and publish content | [CMS guide](docs/CMS_GUIDE.md) |
 | Manage clients, sites, people, branding, and AI | [Agency admin guide](docs/ADMIN_GUIDE.md) |
 | Connect a website using the SDK | [SDK guide](docs/SDK.md) |
+| Teach AI agents the SDK and MCP (`npx @areca-cms/skills`) | [Agent skills](packages/skills/README.md) |
 | Define content types | [Content schemas](docs/CONTENT_SCHEMA.md) |
 | Configure SEO and AI suggestions | [SEO guide](docs/SEO.md) |
 | Deploy and verify a customer website | [Deployment](docs/DEPLOYMENT.md) |
@@ -48,6 +49,7 @@ The interface supports light/dark appearance and English, Dutch, and Turkish. In
 | --- | --- |
 | `apps/cms` | TanStack Start CMS, API, publishing worker and scheduler |
 | `packages/site-sdk` | ESM SDK, schema helpers, CLI, rich text, preview, and SEO |
+| `packages/skills`, `skills` | Agent skills for the SDK and MCP server, and the `npx @areca-cms/skills` installer |
 | `examples/demo-site` | TanStack Start website using generated content |
 | `docker-compose.yml` | Local PostgreSQL, Redis, RustFS, and Mailpit |
 | `docker` | Production Compose installation and recovery tooling |

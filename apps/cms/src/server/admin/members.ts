@@ -1,9 +1,16 @@
+/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty; retain defensive lookup and authorization checks. */
 import { randomBytes } from 'node:crypto'
-import { and, eq, gt, isNull } from 'drizzle-orm'
+import { and, eq, gt, isNull, like, sql } from 'drizzle-orm'
 
 import { sendEmail } from '#/adapters/email'
 import { db } from '#/db'
-import { invitation, membership, organization, user } from '#/db/schema'
+import {
+  invitation,
+  membership,
+  organization,
+  user,
+  verification,
+} from '#/db/schema'
 import { env } from '#/env'
 import type { MembershipRole } from '#/lib/types'
 import { m } from '#/paraglide/messages'
@@ -205,49 +212,52 @@ export async function inviteMember(input: {
 
   const email = normalizeEmail(input.email)
 
-  const [existingUser] = await db
-    .select({ id: user.id })
-    .from(user)
-    .where(eq(user.email, email))
-    .limit(1)
-  if (existingUser) {
-    const [existingMember] = await db
-      .select({ id: membership.id })
-      .from(membership)
+  const created = await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${JSON.stringify(['invitation', input.organizationId, email])}, 0))`,
+    )
+    const [existingUser] = await tx
+      .select({ id: user.id })
+      .from(user)
+      .where(eq(user.email, email))
+      .limit(1)
+    if (existingUser) {
+      const [existingMember] = await tx
+        .select({ id: membership.id })
+        .from(membership)
+        .where(
+          and(
+            eq(membership.userId, existingUser.id),
+            eq(membership.organizationId, input.organizationId),
+          ),
+        )
+        .limit(1)
+      if (existingMember) {
+        throw new ConflictError(m.server_email_already_member())
+      }
+    }
+
+    const [pending] = await tx
+      .select({ id: invitation.id })
+      .from(invitation)
       .where(
         and(
-          eq(membership.userId, existingUser.id),
-          eq(membership.organizationId, input.organizationId),
+          eq(invitation.organizationId, input.organizationId),
+          eq(invitation.email, email),
+          isNull(invitation.acceptedAt),
+          gt(invitation.expiresAt, new Date()),
         ),
       )
       .limit(1)
-    if (existingMember) {
-      throw new ConflictError(m.server_email_already_member())
+    if (pending) {
+      throw new ConflictError(m.server_invitation_pending())
     }
-  }
 
-  const [pending] = await db
-    .select({ id: invitation.id })
-    .from(invitation)
-    .where(
-      and(
-        eq(invitation.organizationId, input.organizationId),
-        eq(invitation.email, email),
-        isNull(invitation.acceptedAt),
-        gt(invitation.expiresAt, new Date()),
-      ),
-    )
-    .limit(1)
-  if (pending) {
-    throw new ConflictError(m.server_invitation_pending())
-  }
+    const token = newInvitationToken()
+    const expiresAt = new Date(Date.now() + INVITE_TTL_MS)
 
-  const token = newInvitationToken()
-  const expiresAt = new Date(Date.now() + INVITE_TTL_MS)
-
-  // Created as "failed" until SMTP accepts the message, so a crash between
-  // the insert and the send leaves a row that can be resent, not a ghost.
-  const created = await db.transaction(async (tx) => {
+    // Created as "failed" until SMTP accepts the message, so a crash between
+    // the insert and the send leaves a row that can be resent, not a ghost.
     const [row] = await tx
       .insert(invitation)
       .values({
@@ -300,7 +310,7 @@ async function deliverInvitation(
       fromName: brand.emailFromName ?? brand.appName,
       subject: m.server_invite_subject({ org: organizationName }),
       text: `${m.server_invite_body({ org: organizationName, role: row.role })}\n\n${m.server_invite_accept_text({ link })}\n\n— ${brand.appName}`,
-      html: `<p>${m.server_invite_body({ org: organizationName, role: row.role })}</p><p><a href="${link}">${m.server_invite_accept()}</a></p><p style="color:#666;font-size:12px">— ${escapeHtml(brand.appName)}</p>`,
+      html: `<p>${escapeHtml(m.server_invite_body({ org: organizationName, role: row.role }))}</p><p><a href="${link}">${m.server_invite_accept()}</a></p><p style="color:#666;font-size:12px">— ${escapeHtml(brand.appName)}</p>`,
     })
   } catch (error) {
     // SMTP failures can echo the message body, including its bearer link.
@@ -361,12 +371,15 @@ export async function getInvitationById(id: string) {
 }
 
 export async function revokeInvitation(id: string, actorId: string) {
-  const existing = await getInvitationById(id)
-  if (!existing) {
-    throw new NotFoundError(m.server_invitation_not_found())
-  }
-
   await db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(invitation)
+      .where(eq(invitation.id, id))
+      .for('update')
+    if (!existing) throw new NotFoundError(m.server_invitation_not_found())
+    if (existing.acceptedAt)
+      throw new ConflictError(m.server_invitation_already_accepted())
     await tx.delete(invitation).where(eq(invitation.id, id))
     await audit(
       {
@@ -472,28 +485,44 @@ export async function acceptInvitation(input: {
   token: string
   userId: string
 }) {
-  const invite = await getInvitation(input.token)
-  if (!invite) {
-    throw new NotFoundError(m.server_invitation_not_found())
-  }
-
-  const [invitee] = await db
-    .select({ email: user.email })
-    .from(user)
-    .where(eq(user.id, input.userId))
+  // Read only the tuple identity first. Re-read the invitation under both
+  // locks, so revocation/acceptance cannot make this snapshot authoritative.
+  const [identity] = await db
+    .select({
+      organizationId: invitation.organizationId,
+      email: invitation.email,
+    })
+    .from(invitation)
+    .where(eq(invitation.token, input.token))
     .limit(1)
-  if (!invitee) {
-    throw new NotFoundError(m.server_user_not_found())
-  }
-  if (normalizeEmail(invitee.email) !== normalizeEmail(invite.email)) {
-    throw new ConflictError(m.server_invite_email_mismatch())
-  }
-
-  const acceptedAt = new Date()
-
-  await db.transaction(async (tx) => {
+  if (!identity) throw new NotFoundError(m.server_invitation_not_found())
+  return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${JSON.stringify(['invitation', identity.organizationId, normalizeEmail(identity.email)])}, 0))`,
+    )
+    const [invite] = await tx
+      .select()
+      .from(invitation)
+      .where(eq(invitation.token, input.token))
+      .for('update')
+    if (
+      !invite ||
+      (!invite.acceptedAt && invite.expiresAt.getTime() <= Date.now())
+    )
+      throw new NotFoundError(m.server_invitation_not_found())
+    const [invitee] = await tx
+      .select({ email: user.email })
+      .from(user)
+      .where(eq(user.id, input.userId))
+      .limit(1)
+    if (!invitee) throw new NotFoundError(m.server_user_not_found())
+    if (normalizeEmail(invitee.email) !== normalizeEmail(invite.email)) {
+      if (invite.acceptedAt)
+        throw new NotFoundError(m.server_invitation_not_found())
+      throw new ConflictError(m.server_invite_email_mismatch())
+    }
     const [existingMember] = await tx
-      .select({ id: membership.id })
+      .select()
       .from(membership)
       .where(
         and(
@@ -502,20 +531,44 @@ export async function acceptInvitation(input: {
         ),
       )
       .limit(1)
-
-    if (!existingMember) {
-      await tx.insert(membership).values({
+    // A consumed link can reopen an existing membership, never restore one
+    // that an owner removed later.
+    if (invite.acceptedAt) {
+      if (!existingMember)
+        throw new NotFoundError(m.server_invitation_not_found())
+      return {
+        organizationId: invite.organizationId,
+        role: existingMember.role,
+      }
+    }
+    if (invite.expiresAt.getTime() <= Date.now()) {
+      throw new NotFoundError(m.server_invitation_not_found())
+    }
+    await tx
+      .insert(membership)
+      .values({
         userId: input.userId,
         organizationId: invite.organizationId,
         role: invite.role,
       })
-    }
-
+      .onConflictDoNothing({
+        target: [membership.userId, membership.organizationId],
+      })
+    const [member] = await tx
+      .select()
+      .from(membership)
+      .where(
+        and(
+          eq(membership.userId, input.userId),
+          eq(membership.organizationId, invite.organizationId),
+        ),
+      )
+      .limit(1)
+    if (!member) throw new NotFoundError(m.server_member_not_found())
     await tx
       .update(invitation)
-      .set({ acceptedAt })
+      .set({ acceptedAt: new Date() })
       .where(eq(invitation.id, invite.id))
-
     await audit(
       {
         organizationId: invite.organizationId,
@@ -527,9 +580,8 @@ export async function acceptInvitation(input: {
       },
       tx,
     )
+    return { organizationId: invite.organizationId, role: member.role }
   })
-
-  return { organizationId: invite.organizationId, role: invite.role }
 }
 
 export async function listAgencyAdmins() {
@@ -622,6 +674,24 @@ export async function listUsers() {
     .from(membership)
     .innerJoin(organization, eq(membership.organizationId, organization.id))
 
+  const failureRows = await db
+    .select()
+    .from(verification)
+    .where(
+      and(
+        like(verification.identifier, 'step-up-failures:%'),
+        gt(verification.expiresAt, new Date()),
+      ),
+    )
+  const lockouts = new Map(
+    failureRows
+      .filter((row) => Number(row.value) >= 5)
+      .map((row) => [
+        row.identifier.slice('step-up-failures:'.length),
+        row.expiresAt,
+      ]),
+  )
+
   const membershipsByUser = new Map<
     string,
     Array<{
@@ -652,5 +722,6 @@ export async function listUsers() {
   return users.map((row) => ({
     ...row,
     memberships: membershipsByUser.get(row.id) ?? [],
+    factorLockedUntil: lockouts.get(row.id) ?? null,
   }))
 }

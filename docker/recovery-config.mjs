@@ -41,7 +41,7 @@ export function verifyContainerCredentials(service, expected, actualEnv) {
   );
   for (const [key, value] of Object.entries(expected ?? {})) {
     if (
-      /^(DATABASE_URL|POSTGRES_(PASSWORD|USER|DB)|BETTER_AUTH_SECRET|DOKPLOY_CREDENTIALS_ENCRYPTION_KEY|S3_|RUSTFS_)/.test(
+      /^(DATABASE_URL|POSTGRES_(PASSWORD|USER|DB)|BETTER_AUTH_SECRET|DOKPLOY_CREDENTIALS_ENCRYPTION_KEY|AI_SETTINGS_ENCRYPTION_KEY|S3_|RUSTFS_)/.test(
         key,
       ) &&
       String(value) !== actual[key]

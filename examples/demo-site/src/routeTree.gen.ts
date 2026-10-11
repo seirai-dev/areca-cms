@@ -10,9 +10,14 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AboutRouteImport } from './routes/about'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
-import { Route as BlogIndexRouteImport } from './routes/blog/index'
-import { Route as BlogSlugRouteImport } from './routes/blog/$slug'
+import { Route as CoffeesIndexRouteImport } from './routes/coffees/index'
+import { Route as CoffeesSlugRouteImport } from './routes/coffees/$slug'
+import { Route as JournalIndexRouteImport } from './routes/journal/index'
+import { Route as JournalSlugRouteImport } from './routes/journal/$slug'
+import { Route as TeamIndexRouteImport } from './routes/team/index'
+import { Route as TeamSlugRouteImport } from './routes/team/$slug'
 import { Route as Char91__previewChar93CollectionSlugRouteImport } from './routes/[__preview]/$collection/$slug'
 
 const IndexRoute = IndexRouteImport.update({
@@ -20,19 +25,44 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AboutRoute = AboutRouteImport.update({
+  id: '/about',
+  path: '/about',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiHealthRoute = ApiHealthRouteImport.update({
   id: '/api/health',
   path: '/api/health',
   getParentRoute: () => rootRouteImport,
 } as any)
-const BlogIndexRoute = BlogIndexRouteImport.update({
-  id: '/blog/',
-  path: '/blog/',
+const CoffeesIndexRoute = CoffeesIndexRouteImport.update({
+  id: '/coffees/',
+  path: '/coffees/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const BlogSlugRoute = BlogSlugRouteImport.update({
-  id: '/blog/$slug',
-  path: '/blog/$slug',
+const CoffeesSlugRoute = CoffeesSlugRouteImport.update({
+  id: '/coffees/$slug',
+  path: '/coffees/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const JournalIndexRoute = JournalIndexRouteImport.update({
+  id: '/journal/',
+  path: '/journal/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const JournalSlugRoute = JournalSlugRouteImport.update({
+  id: '/journal/$slug',
+  path: '/journal/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TeamIndexRoute = TeamIndexRouteImport.update({
+  id: '/team/',
+  path: '/team/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TeamSlugRoute = TeamSlugRouteImport.update({
+  id: '/team/$slug',
+  path: '/team/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
 const Char91__previewChar93CollectionSlugRoute =
@@ -44,55 +74,90 @@ const Char91__previewChar93CollectionSlugRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
   '/api/health': typeof ApiHealthRoute
-  '/blog/$slug': typeof BlogSlugRoute
-  '/blog/': typeof BlogIndexRoute
+  '/coffees/$slug': typeof CoffeesSlugRoute
+  '/journal/$slug': typeof JournalSlugRoute
+  '/team/$slug': typeof TeamSlugRoute
+  '/coffees/': typeof CoffeesIndexRoute
+  '/journal/': typeof JournalIndexRoute
+  '/team/': typeof TeamIndexRoute
   '/__preview/$collection/$slug': typeof Char91__previewChar93CollectionSlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
   '/api/health': typeof ApiHealthRoute
-  '/blog/$slug': typeof BlogSlugRoute
-  '/blog': typeof BlogIndexRoute
+  '/coffees/$slug': typeof CoffeesSlugRoute
+  '/journal/$slug': typeof JournalSlugRoute
+  '/team/$slug': typeof TeamSlugRoute
+  '/coffees': typeof CoffeesIndexRoute
+  '/journal': typeof JournalIndexRoute
+  '/team': typeof TeamIndexRoute
   '/__preview/$collection/$slug': typeof Char91__previewChar93CollectionSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
   '/api/health': typeof ApiHealthRoute
-  '/blog/$slug': typeof BlogSlugRoute
-  '/blog/': typeof BlogIndexRoute
+  '/coffees/$slug': typeof CoffeesSlugRoute
+  '/journal/$slug': typeof JournalSlugRoute
+  '/team/$slug': typeof TeamSlugRoute
+  '/coffees/': typeof CoffeesIndexRoute
+  '/journal/': typeof JournalIndexRoute
+  '/team/': typeof TeamIndexRoute
   '/__preview/$collection/$slug': typeof Char91__previewChar93CollectionSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/about'
     | '/api/health'
-    | '/blog/$slug'
-    | '/blog/'
+    | '/coffees/$slug'
+    | '/journal/$slug'
+    | '/team/$slug'
+    | '/coffees/'
+    | '/journal/'
+    | '/team/'
     | '/__preview/$collection/$slug'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/about'
     | '/api/health'
-    | '/blog/$slug'
-    | '/blog'
+    | '/coffees/$slug'
+    | '/journal/$slug'
+    | '/team/$slug'
+    | '/coffees'
+    | '/journal'
+    | '/team'
     | '/__preview/$collection/$slug'
   id:
     | '__root__'
     | '/'
+    | '/about'
     | '/api/health'
-    | '/blog/$slug'
-    | '/blog/'
+    | '/coffees/$slug'
+    | '/journal/$slug'
+    | '/team/$slug'
+    | '/coffees/'
+    | '/journal/'
+    | '/team/'
     | '/__preview/$collection/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AboutRoute: typeof AboutRoute
   ApiHealthRoute: typeof ApiHealthRoute
-  BlogSlugRoute: typeof BlogSlugRoute
-  BlogIndexRoute: typeof BlogIndexRoute
+  CoffeesSlugRoute: typeof CoffeesSlugRoute
+  JournalSlugRoute: typeof JournalSlugRoute
+  TeamSlugRoute: typeof TeamSlugRoute
+  CoffeesIndexRoute: typeof CoffeesIndexRoute
+  JournalIndexRoute: typeof JournalIndexRoute
+  TeamIndexRoute: typeof TeamIndexRoute
   Char91__previewChar93CollectionSlugRoute: typeof Char91__previewChar93CollectionSlugRoute
 }
 
@@ -105,6 +170,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/about': {
+      id: '/about'
+      path: '/about'
+      fullPath: '/about'
+      preLoaderRoute: typeof AboutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/health': {
       id: '/api/health'
       path: '/api/health'
@@ -112,18 +184,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiHealthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/blog/': {
-      id: '/blog/'
-      path: '/blog'
-      fullPath: '/blog/'
-      preLoaderRoute: typeof BlogIndexRouteImport
+    '/coffees/': {
+      id: '/coffees/'
+      path: '/coffees'
+      fullPath: '/coffees/'
+      preLoaderRoute: typeof CoffeesIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/blog/$slug': {
-      id: '/blog/$slug'
-      path: '/blog/$slug'
-      fullPath: '/blog/$slug'
-      preLoaderRoute: typeof BlogSlugRouteImport
+    '/coffees/$slug': {
+      id: '/coffees/$slug'
+      path: '/coffees/$slug'
+      fullPath: '/coffees/$slug'
+      preLoaderRoute: typeof CoffeesSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/journal/': {
+      id: '/journal/'
+      path: '/journal'
+      fullPath: '/journal/'
+      preLoaderRoute: typeof JournalIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/journal/$slug': {
+      id: '/journal/$slug'
+      path: '/journal/$slug'
+      fullPath: '/journal/$slug'
+      preLoaderRoute: typeof JournalSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/team/': {
+      id: '/team/'
+      path: '/team'
+      fullPath: '/team/'
+      preLoaderRoute: typeof TeamIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/team/$slug': {
+      id: '/team/$slug'
+      path: '/team/$slug'
+      fullPath: '/team/$slug'
+      preLoaderRoute: typeof TeamSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/__preview/$collection/$slug': {
@@ -138,12 +238,26 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AboutRoute: AboutRoute,
   ApiHealthRoute: ApiHealthRoute,
-  BlogSlugRoute: BlogSlugRoute,
-  BlogIndexRoute: BlogIndexRoute,
+  CoffeesSlugRoute: CoffeesSlugRoute,
+  JournalSlugRoute: JournalSlugRoute,
+  TeamSlugRoute: TeamSlugRoute,
+  CoffeesIndexRoute: CoffeesIndexRoute,
+  JournalIndexRoute: JournalIndexRoute,
+  TeamIndexRoute: TeamIndexRoute,
   Char91__previewChar93CollectionSlugRoute:
     Char91__previewChar93CollectionSlugRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}

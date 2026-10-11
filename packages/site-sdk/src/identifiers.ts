@@ -12,9 +12,31 @@ const reserved = new Set([
 ])
 
 export function isSafeIdentifier(value: string): boolean {
-  return /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(value) && !reserved.has(value.toLowerCase())
+  return (
+    /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(value) &&
+    !reserved.has(value.toLowerCase())
+  )
 }
 
 export function assertSafeIdentifier(value: string): void {
-  if (!isSafeIdentifier(value)) throw new Error(`Unsafe collection or field identifier: ${value}`)
+  if (!isSafeIdentifier(value))
+    throw new Error(`Unsafe collection or field identifier: ${value}`)
+}
+
+/** Filesystem collection names must also be unique on Mac and Windows. */
+export function assertUniqueCollectionIdentifiers(
+  keys: Iterable<string>,
+): void {
+  const seen = new Map<string, string>()
+  for (const key of keys) {
+    assertSafeIdentifier(key)
+    const folded = key.toLowerCase()
+    const previous = seen.get(folded)
+    if (previous !== undefined) {
+      throw new Error(
+        `Collection identifiers differ only by case: ${previous}, ${key}`,
+      )
+    }
+    seen.set(folded, key)
+  }
 }

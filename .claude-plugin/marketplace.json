@@ -1,0 +1,14 @@
+{
+  "name": "areca-cms",
+  "description": "Agent skills for Areca CMS.",
+  "owner": {
+    "name": "Areca CMS"
+  },
+  "plugins": [
+    {
+      "name": "areca",
+      "source": "./",
+      "description": "Agent skills for Areca CMS: the site SDK (areca-sdk) and the MCP server (areca-mcp)."
+    }
+  ]
+}

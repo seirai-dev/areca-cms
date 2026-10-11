@@ -1,12 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const getSession = vi.hoisted(() => vi.fn())
-
-vi.mock('#/lib/auth', () => ({ auth: { api: { getSession } } }))
-vi.mock('@tanstack/react-start/server', () => ({
-  getRequestHeaders: () => new Headers(),
-}))
-
 import { securityErrorCode } from './security-errors.ts'
 import {
   assertAdminMfa,
@@ -14,6 +7,19 @@ import {
   requireFreshAgencyAdmin,
   requireOrgMember,
 } from './session.server.ts'
+
+const getSession = vi.hoisted(() => vi.fn())
+const factorProof = vi.hoisted(() => vi.fn())
+const factorVerifiedAt = vi.hoisted(() => vi.fn())
+vi.mock('#/server/security/local-mfa', () => ({
+  requireAdminLocalMfa: factorProof,
+  localMfaVerifiedAt: factorVerifiedAt,
+}))
+
+vi.mock('#/lib/auth', () => ({ auth: { api: { getSession } } }))
+vi.mock('@tanstack/react-start/server', () => ({
+  getRequestHeaders: () => new Headers(),
+}))
 
 function sessionFor(user: {
   isAgencyAdmin: boolean
@@ -34,7 +40,13 @@ async function rejection(promise: Promise<unknown>) {
   throw new Error('expected a rejection')
 }
 
-beforeEach(() => getSession.mockReset())
+beforeEach(() => {
+  getSession.mockReset()
+  factorProof.mockReset()
+  factorProof.mockResolvedValue(undefined)
+  factorVerifiedAt.mockReset()
+  factorVerifiedAt.mockResolvedValue(new Date())
+})
 
 describe('assertAdminMfa', () => {
   it('requires two-factor when enforcement is on', () => {
@@ -66,6 +78,18 @@ describe('requireAgencyAdmin', () => {
     await expect(requireAgencyAdmin()).resolves.toMatchObject({
       user: { id: 'user-1' },
     })
+  })
+
+  it('rejects an enrolled provider session without local factor proof', async () => {
+    getSession.mockResolvedValue(
+      sessionFor({ isAgencyAdmin: true, twoFactorEnabled: true }),
+    )
+    factorProof.mockRejectedValue(
+      new Error('MFA_REQUIRED: Verify your local factor'),
+    )
+    expect(securityErrorCode(await rejection(requireAgencyAdmin()))).toBe(
+      'MFA_REQUIRED',
+    )
   })
 
   it('answers non-admins with a plain 403, not MFA_REQUIRED', async () => {
@@ -104,7 +128,7 @@ describe('requireFreshAgencyAdmin', () => {
     expect(securityErrorCode(error)).toBe('MFA_REQUIRED')
   })
 
-  it('passes for an enrolled admin whose session was just created', async () => {
+  it('passes for an enrolled admin with fresh local factor proof', async () => {
     getSession.mockResolvedValue(
       sessionFor({ isAgencyAdmin: true, twoFactorEnabled: true }),
     )

@@ -15,6 +15,29 @@ function asNode(value: unknown): PMNode {
   return value as PMNode
 }
 
+/** Escape literal inline syntax and paragraph-start block markers. */
+function escapeText(value: string): string {
+  return value
+    .replace(/[\\`*_[\]<>~#-]/g, '\\$&')
+    .replace(
+      /^(\s*)(\+|\d+[.)])(?=\s)/gm,
+      (_match, space: string, marker: string) =>
+        `${space}${marker.replace(/([+.)])$/, '\\$1')}`,
+    )
+}
+
+function destination(value: string): string {
+  return value.replace(/[%\\\s()<>"']/g, (character) =>
+    character === '%'
+      ? '%'
+      : encodeURIComponent(character).replace(
+          /[()']/g,
+          (punctuation) =>
+            `%${punctuation.charCodeAt(0).toString(16).toUpperCase()}`,
+        ),
+  )
+}
+
 function wrapMarks(text: string, marks: Mark[] | undefined): string {
   if (!marks?.length) return text
   let out = text
@@ -23,7 +46,7 @@ function wrapMarks(text: string, marks: Mark[] | undefined): string {
   const link = marks.find((mark) => mark.type === 'link')
   if (link) {
     const href = typeof link.attrs?.href === 'string' ? link.attrs.href : ''
-    out = `[${out}](${href})`
+    out = `[${out}](${destination(href)})`
   }
   return out
 }
@@ -36,7 +59,8 @@ function serializeInline(nodes: PMNode[] | undefined): string {
 function serializeInlineNode(node: PMNode): string {
   // TanStack Markdown only recognises backslash hard breaks.
   if (node.type === 'hardBreak') return '\\\n'
-  if (node.type === 'text') return wrapMarks(node.text ?? '', node.marks)
+  if (node.type === 'text')
+    return wrapMarks(escapeText(node.text ?? ''), node.marks)
   if (node.content) return serializeInline(node.content)
   return ''
 }
@@ -141,7 +165,12 @@ function serializeBlock(node: PMNode, indent = 0): string {
       const code = (node.content ?? [])
         .map((child) => child.text ?? '')
         .join('')
-      return `\`\`\`${language}\n${code}\n\`\`\``
+      const runs = code.match(/`+/g) ?? []
+      const fence = '`'.repeat(
+        Math.max(3, ...runs.map((run) => run.length + 1)),
+      )
+      const safeLanguage = language.replace(/[\r\n`]/g, '')
+      return `${fence}${safeLanguage}\n${code}\n${fence}`
     }
     case 'bulletList':
       return serializeList(node, false, indent)
@@ -152,7 +181,7 @@ function serializeBlock(node: PMNode, indent = 0): string {
     case 'image': {
       const alt = typeof node.attrs?.alt === 'string' ? node.attrs.alt : ''
       const src = typeof node.attrs?.src === 'string' ? node.attrs.src : ''
-      return `![${alt}](${src})`
+      return `![${escapeText(alt)}](${destination(src)})`
     }
     case 'table':
       return serializeTable(node)

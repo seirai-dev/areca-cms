@@ -1,0 +1,55 @@
+{
+  "name": "@areca-cms/skills",
+  "version": "0.2.0",
+  "description": "Agent skills for Areca CMS: the site SDK and the MCP server. Installs into Claude Code, Codex, Cursor, Copilot, OpenCode, Gemini CLI and 20+ other agents.",
+  "keywords": [
+    "areca",
+    "cms",
+    "agent-skills",
+    "skills",
+    "mcp",
+    "claude-code",
+    "codex",
+    "cursor"
+  ],
+  "homepage": "https://github.com/ekozf/areca-cms/tree/master/packages/skills#readme",
+  "bugs": {
+    "url": "https://github.com/ekozf/areca-cms/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ekozf/areca-cms.git",
+    "directory": "packages/skills"
+  },
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "areca-skills": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "skills",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=22.6.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "clean": "node --eval \"for (const d of ['dist', 'skills']) require('node:fs').rmSync(d, { recursive: true, force: true })\"",
+    "build": "pnpm run clean && tsc && node --eval \"const fs = require('node:fs'); fs.chmodSync('dist/cli.js', 0o755); fs.cpSync('../../skills', 'skills', { recursive: true })\"",
+    "prepack": "pnpm test && pnpm run build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.4",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.1"
+  }
+}

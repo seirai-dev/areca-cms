@@ -1,6 +1,5 @@
 import { and, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm'
 import type { AnyColumn, InferSelectModel, SQL } from 'drizzle-orm'
-import sharp from 'sharp'
 
 import { getStorage } from '#/adapters'
 import { db } from '#/db'
@@ -19,7 +18,18 @@ import { NotFoundError } from '#/server/content/errors'
 import { AppError } from '#/server/http/app-error'
 
 import { assetMutationLock, referencesAsset } from './usage'
+import { AssetValidationError } from './errors'
+import { validateImageBytes } from './image-validation'
+import {
+  beginObjectUpload,
+  completeObjectUpload,
+  compensateObjectUpload,
+  drainStorageObjectDeletions,
+} from './storage-cleanup'
 import type { AssetTransaction } from './usage'
+
+export { AssetValidationError } from './errors'
+export { drainStorageObjectDeletions } from './storage-cleanup'
 
 export type Asset = InferSelectModel<typeof asset>
 
@@ -67,13 +77,6 @@ const ASSET_FILE_PREFIX = '/api/assets/file/'
 
 export const MAX_SIZE_BYTES = 20 * 1024 * 1024
 
-export class AssetValidationError extends AppError {
-  constructor(message: string) {
-    super(message)
-    this.name = 'AssetValidationError'
-  }
-}
-
 export class AssetInUseError extends AppError {
   constructor(public readonly usage: number) {
     super(m.server_asset_in_use({ usage: String(usage) }))
@@ -84,8 +87,11 @@ export class AssetInUseError extends AppError {
 export async function uploadAsset(input: {
   organizationId: string
   file: { buffer: Buffer; filename: string; mimeType: string }
-  actorId: string
+  /** Null for system jobs such as the external image backfill. */
+  actorId: string | null
   altText?: string
+  originSiteId?: string
+  sourceUrl?: string
 }): Promise<Asset> {
   const mimeType = input.file.mimeType.toLowerCase()
   if (!ALLOWED_MIMES.has(mimeType)) {
@@ -100,7 +106,7 @@ export async function uploadAsset(input: {
   let width: number | null = null
   let height: number | null = null
   if (RASTER_MIMES.has(mimeType)) {
-    const meta = await sharp(input.file.buffer).metadata()
+    const meta = await validateImageBytes(input.file.buffer, mimeType)
     width = meta.width ?? null
     height = meta.height ?? null
   }
@@ -108,15 +114,16 @@ export async function uploadAsset(input: {
   const ext = EXT_BY_MIME[mimeType] ?? 'bin'
   const storageKey = `${input.organizationId}/${crypto.randomUUID()}.${ext}`
   const storage = getStorage()
-  await storage.put(storageKey, input.file.buffer, mimeType)
-
+  await beginObjectUpload(storageKey)
   try {
+    await storage.put(storageKey, input.file.buffer, mimeType)
     return await db.transaction(async (tx) => {
       await assetMutationLock(tx, input.organizationId)
       const [row] = await tx
         .insert(asset)
         .values({
           organizationId: input.organizationId,
+          originSiteId: input.originSiteId,
           storageKey,
           originalFilename: input.file.filename,
           mimeType,
@@ -124,26 +131,23 @@ export async function uploadAsset(input: {
           width,
           height,
           altText: input.altText,
+          sourceUrl: input.sourceUrl,
           createdBy: input.actorId,
         })
         .returning()
       if (!row) throw new Error(m.server_failed_to_insert_asset())
+      await completeObjectUpload(tx, storageKey)
       return row
     })
   } catch (error) {
     try {
-      await storage.delete(storageKey)
+      await compensateObjectUpload(storageKey)
     } catch (cleanupError) {
-      // If the database is reachable again, persist cleanup for the operator retry.
-      try {
-        await db
-          .insert(storageObjectDeletion)
-          .values({ storageKey })
-          .onConflictDoNothing()
-      } catch {}
+      // The upload intent remains durable even if the database is temporarily
+      // unreachable; the maintenance loop will pick it up after recovery.
       throw new AggregateError(
         [error, cleanupError],
-        `Upload failed; object cleanup required: ${storageKey}`,
+        'Upload failed; object cleanup is queued',
       )
     }
     throw error
@@ -152,24 +156,32 @@ export async function uploadAsset(input: {
 
 export async function listAssets(
   organizationId: string,
-  opts: { search?: string; limit: number; offset: number },
+  opts: {
+    search?: string
+    limit: number
+    offset: number
+    imagesOnly?: boolean
+  },
 ): Promise<Asset[]> {
   const search = opts.search?.trim()
   return db
     .select()
     .from(asset)
     .where(
-      search
-        ? and(
-            eq(asset.organizationId, organizationId),
-            or(
+      and(
+        eq(asset.organizationId, organizationId),
+        opts.imagesOnly
+          ? inArray(asset.mimeType, [...RASTER_MIMES])
+          : undefined,
+        search
+          ? or(
               ilike(asset.originalFilename, `%${search}%`),
               ilike(asset.altText, `%${search}%`),
-            ),
-          )
-        : eq(asset.organizationId, organizationId),
+            )
+          : undefined,
+      ),
     )
-    .orderBy(desc(asset.createdAt))
+    .orderBy(desc(asset.createdAt), desc(asset.id))
     .limit(opts.limit)
     .offset(opts.offset)
 }
@@ -326,30 +338,6 @@ export async function deleteAsset(
     await tx.delete(asset).where(eq(asset.id, id))
   })
   await drainStorageObjectDeletions()
-}
-
-export async function drainStorageObjectDeletions(
-  limit = 100,
-): Promise<number> {
-  const pending = await db.select().from(storageObjectDeletion).limit(limit)
-  let removed = 0
-  for (const item of pending) {
-    try {
-      await getStorage().delete(item.storageKey)
-      await db
-        .delete(storageObjectDeletion)
-        .where(eq(storageObjectDeletion.storageKey, item.storageKey))
-      removed++
-    } catch (error) {
-      await db
-        .update(storageObjectDeletion)
-        .set({
-          lastError: error instanceof Error ? error.message : String(error),
-        })
-        .where(eq(storageObjectDeletion.storageKey, item.storageKey))
-    }
-  }
-  return removed
 }
 
 export function assetUrl(assetRow: Pick<Asset, 'storageKey'>): string {

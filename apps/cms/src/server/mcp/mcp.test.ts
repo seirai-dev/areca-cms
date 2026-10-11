@@ -1,10 +1,23 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .returning()/.select() are checked defensively */
 import { and, eq, inArray } from 'drizzle-orm'
-import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
+import {
+  Client,
+  StreamableHTTPClientTransport,
+} from '@modelcontextprotocol/client'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { db } from '#/db'
-import { asset, auditLog, collection, entry, membership, mcpKey, site, user } from '#/db/schema'
+import {
+  asset,
+  auditLog,
+  collection,
+  entry,
+  membership,
+  mcpKey,
+  publication,
+  site,
+  user,
+} from '#/db/schema'
 import { createEntry } from '#/server/content/entries'
 import {
   cleanupTestSite,
@@ -40,8 +53,14 @@ type World = Awaited<ReturnType<typeof buildWorld>>
 
 async function buildWorld() {
   const ctx = await createTestSite()
-  const col = await createTestCollection(ctx.site.id, { key: 'posts', routePattern: '/blog/$slug' })
-  const addUser = async (label: string, flags: { agency?: boolean; twoFactor?: boolean } = {}) => {
+  const col = await createTestCollection(ctx.site.id, {
+    key: 'posts',
+    routePattern: '/blog/$slug',
+  })
+  const addUser = async (
+    label: string,
+    flags: { agency?: boolean; twoFactor?: boolean } = {},
+  ) => {
     const id = crypto.randomUUID()
     await db.insert(user).values({
       id,
@@ -55,11 +74,15 @@ async function buildWorld() {
   }
   const userIds: string[] = [ctx.actor.id]
   const owner = ctx.actor.id
-  await db.insert(membership).values({ userId: owner, organizationId: ctx.org.id, role: 'owner' })
+  await db
+    .insert(membership)
+    .values({ userId: owner, organizationId: ctx.org.id, role: 'owner' })
 
   const editor = await addUser('editor')
   userIds.push(editor)
-  await db.insert(membership).values({ userId: editor, organizationId: ctx.org.id, role: 'editor' })
+  await db
+    .insert(membership)
+    .values({ userId: editor, organizationId: ctx.org.id, role: 'editor' })
 
   const agency = await addUser('agency', { agency: true, twoFactor: true })
   userIds.push(agency)
@@ -108,7 +131,11 @@ async function connect(token: string) {
   return client
 }
 
-type CallOutcome = { isError: boolean; text: string; data: Record<string, unknown> | null }
+type CallOutcome = {
+  isError: boolean
+  text: string
+  data: Record<string, unknown> | null
+}
 
 async function call(
   client: Client,
@@ -122,7 +149,10 @@ async function call(
   if (!result.isError) {
     try {
       const parsed: unknown = JSON.parse(text)
-      data = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null
+      data =
+        parsed && typeof parsed === 'object'
+          ? (parsed as Record<string, unknown>)
+          : null
     } catch {
       data = null
     }
@@ -154,27 +184,43 @@ describe.skipIf(!hasDb)('MCP server', () => {
   it('answers 401 without a valid key, and for revoked keys', async () => {
     const url = new URL(MCP_URL)
     const body = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' })
-    const headers = { 'content-type': 'application/json', accept: 'application/json, text/event-stream' }
-    const none = await handleMcpRequest(new Request(url, { method: 'POST', headers, body }))
+    const headers = {
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+    }
+    const none = await handleMcpRequest(
+      new Request(url, { method: 'POST', headers, body }),
+    )
     expect(none.status).toBe(401)
     expect(none.headers.get('www-authenticate')).toContain('areca-mcp')
-    expect(await none.json()).toEqual({ error: 'Invalid or expired Areca MCP key' })
+    expect(await none.json()).toEqual({
+      error: 'Invalid or expired Areca MCP key',
+    })
 
     const bad = await handleMcpRequest(
       new Request(url, {
         method: 'POST',
-        headers: { ...headers, authorization: 'Bearer areca_mcp_not-a-real-key' },
+        headers: {
+          ...headers,
+          authorization: 'Bearer areca_mcp_not-a-real-key',
+        },
         body,
       }),
     )
     expect(bad.status).toBe(401)
 
     const other = await handleMcpRequest(
-      new Request(url, { method: 'POST', headers: { ...headers, authorization: 'Bearer sk_other' }, body }),
+      new Request(url, {
+        method: 'POST',
+        headers: { ...headers, authorization: 'Bearer sk_other' },
+        body,
+      }),
     )
     expect(other.status).toBe(401)
 
-    const { token, id } = await world.keyFor(world.editor, 'editor', { name: 'Doomed' })
+    const { token, id } = await world.keyFor(world.editor, 'editor', {
+      name: 'Doomed',
+    })
     await revokeMcpKey({
       id,
       siteId: world.ctx.site.id,
@@ -183,7 +229,11 @@ describe.skipIf(!hasDb)('MCP server', () => {
       canRevokeOthers: false,
     })
     const revoked = await handleMcpRequest(
-      new Request(url, { method: 'POST', headers: { ...headers, authorization: `Bearer ${token}` }, body }),
+      new Request(url, {
+        method: 'POST',
+        headers: { ...headers, authorization: `Bearer ${token}` },
+        body,
+      }),
     )
     expect(revoked.status).toBe(401)
     const [row] = await db.select().from(mcpKey).where(eq(mcpKey.id, id))
@@ -192,8 +242,13 @@ describe.skipIf(!hasDb)('MCP server', () => {
 
   it('advertises only the tools each role may use', async () => {
     const editorKey = await world.keyFor(world.editor, 'editor')
-    const ownerKey = await world.keyFor(world.owner, 'owner', { name: 'Owner plain' })
-    const goLiveKey = await world.keyFor(world.owner, 'owner', { name: 'Owner go-live', allowGoLive: true })
+    const ownerKey = await world.keyFor(world.owner, 'owner', {
+      name: 'Owner plain',
+    })
+    const goLiveKey = await world.keyFor(world.owner, 'owner', {
+      name: 'Owner go-live',
+      allowGoLive: true,
+    })
     const agencyKey = await world.keyFor(world.agency, 'agency')
 
     const editor = await toolNames(await connect(editorKey.token))
@@ -211,14 +266,24 @@ describe.skipIf(!hasDb)('MCP server', () => {
     expect(owner).not.toContain('upsert_collection')
 
     const goLive = await toolNames(await connect(goLiveKey.token))
-    expect(goLive).toEqual(expect.arrayContaining(['go_live', 'rollback', 'cancel_build']))
+    expect(goLive).toEqual(
+      expect.arrayContaining(['go_live', 'rollback', 'cancel_build']),
+    )
 
     const agency = await toolNames(await connect(agencyKey.token))
-    expect(agency).toEqual(expect.arrayContaining(['upsert_collection', 'delete_collection', 'mark_ready']))
+    expect(agency).toEqual(
+      expect.arrayContaining([
+        'upsert_collection',
+        'delete_collection',
+        'mark_ready',
+      ]),
+    )
   })
 
   it('creates a post from Markdown and SEO, then patches only what was sent', async () => {
-    const { token } = await world.keyFor(world.editor, 'editor', { name: 'Laptop' })
+    const { token } = await world.keyFor(world.editor, 'editor', {
+      name: 'Laptop',
+    })
     const client = await connect(token)
 
     const created = await call(client, 'create_entry', {
@@ -242,13 +307,20 @@ describe.skipIf(!hasDb)('MCP server', () => {
     expect(created.data?.pendingRelease).toBe(false)
     expect('publishedAt' in (created.data ?? {})).toBe(false)
     expect(created.data?.approvedAt).toBeNull()
-    expect(String(created.data?.previewUrl)).toContain('/__preview/posts/hello-world?token=')
+    expect(String(created.data?.previewUrl)).toContain(
+      '/__preview/posts/hello-world?token=',
+    )
 
     const row = await storedEntry(id)
-    const body = row.draftData.body as { type: string; content: { type: string }[] }
+    const body = row.draftData.body as {
+      type: string
+      content: { type: string }[]
+    }
     expect(body.type).toBe('doc')
     expect(body.content[0]?.type).toBe('heading')
-    expect((row.draftData.$seo as Record<string, unknown>).title).toBe('Hello SEO title')
+    expect((row.draftData.$seo as Record<string, unknown>).title).toBe(
+      'Hello SEO title',
+    )
 
     const patched = await call(client, 'update_entry', {
       id,
@@ -261,7 +333,10 @@ describe.skipIf(!hasDb)('MCP server', () => {
     expect(after.draftData.title).toBe('Hello world')
     expect(after.draftData.excerpt).toBe('Short teaser')
     expect(after.draftData.body).toEqual(row.draftData.body)
-    expect(after.draftData.$seo).toEqual({ title: 'Hello SEO title', focusKeyphrase: 'hello' })
+    expect(after.draftData.$seo).toEqual({
+      title: 'Hello SEO title',
+      focusKeyphrase: 'hello',
+    })
 
     const stale = await call(client, 'update_entry', {
       id,
@@ -272,11 +347,15 @@ describe.skipIf(!hasDb)('MCP server', () => {
     expect(stale.text).toContain('get_entry')
 
     const read = await call(client, 'get_entry', { id })
-    expect((read.data?.fields as Record<string, unknown>).body).toContain('## Intro')
+    expect((read.data?.fields as Record<string, unknown>).body).toContain(
+      '## Intro',
+    )
   })
 
   it('returns actionable validation errors', async () => {
-    const { token } = await world.keyFor(world.editor, 'editor', { name: 'Validator' })
+    const { token } = await world.keyFor(world.editor, 'editor', {
+      name: 'Validator',
+    })
     const client = await connect(token)
     const typo = await call(client, 'create_entry', {
       collection: 'posts',
@@ -293,13 +372,18 @@ describe.skipIf(!hasDb)('MCP server', () => {
     expect(badSlug.isError).toBe(true)
     expect(badSlug.text).toMatch(/slug/)
 
-    const missing = await call(client, 'create_entry', { collection: 'nope', fields: {} })
+    const missing = await call(client, 'create_entry', {
+      collection: 'nope',
+      fields: {},
+    })
     expect(missing.isError).toBe(true)
     expect(missing.text).toContain('Valid collections: posts')
   })
 
   it('refuses owner actions for editors, both as a listing and as a direct call', async () => {
-    const { token } = await world.keyFor(world.editor, 'editor', { name: 'Editor direct' })
+    const { token } = await world.keyFor(world.editor, 'editor', {
+      name: 'Editor direct',
+    })
     const client = await connect(token)
     const [draft] = await db
       .insert(entry)
@@ -307,7 +391,11 @@ describe.skipIf(!hasDb)('MCP server', () => {
         siteId: world.ctx.site.id,
         collectionId: world.col.id,
         slug: 'editor-cannot-publish',
-        draftData: { title: 'Ready?', slug: 'editor-cannot-publish', body: sampleRichText },
+        draftData: {
+          title: 'Ready?',
+          slug: 'editor-cannot-publish',
+          body: sampleRichText,
+        },
         createdBy: world.editor,
         updatedBy: world.editor,
       })
@@ -324,13 +412,235 @@ describe.skipIf(!hasDb)('MCP server', () => {
     expect((await storedEntry(draft.id)).status).toBe('draft')
   })
 
-  it('lets an owner mark ready, and schedules without deploying', async () => {
-    const { token } = await world.keyFor(world.owner, 'owner', { name: 'Owner work' })
+  it('does not advertise scheduling to a key without go-live permission', async () => {
+    const { token } = await world.keyFor(world.owner, 'owner')
     const client = await connect(token)
-    const { id } = (await call(client, 'create_entry', {
+    expect(await toolNames(client)).not.toContain('schedule_entry')
+    const created = await call(client, 'create_entry', {
       collection: 'posts',
-      fields: { title: 'Owner post', slug: 'owner-post', body: 'Owner body.' },
-    })).data as { id: string }
+      fields: { title: 'No schedule', slug: 'no-schedule' },
+    })
+    await expect(
+      client.callTool({
+        name: 'schedule_entry',
+        arguments: { id: created.data?.id, publishAt: FUTURE, timezone: 'UTC' },
+      }),
+    ).rejects.toThrow()
+    expect((await storedEntry(created.data?.id as string)).status).toBe('draft')
+  })
+
+  it('normalizes body-only library images on reads', async () => {
+    const id = crypto.randomUUID()
+    const storageKey = `${world.ctx.org.id}/body-only-${id}.png`
+    await db.insert(asset).values({
+      id,
+      organizationId: world.ctx.org.id,
+      originSiteId: world.ctx.site.id,
+      storageKey,
+      originalFilename: 'body.png',
+      mimeType: 'image/png',
+      size: 8,
+      createdBy: world.editor,
+    })
+    const { token } = await world.keyFor(world.editor, 'editor')
+    const client = await connect(token)
+    const created = await call(client, 'create_entry', {
+      collection: 'posts',
+      fields: {
+        title: 'Body image',
+        slug: 'body-image',
+        body: `![Body](asset:${id} "Title")`,
+      },
+    })
+    expect(created.isError).toBe(false)
+    const read = await call(client, 'get_entry', { id: created.data?.id })
+    expect((read.data?.fields as Record<string, unknown>).body).toContain(
+      `asset:${id}`,
+    )
+  })
+
+  it('does not report demo-only content as production live', async () => {
+    const { token } = await world.keyFor(world.owner, 'owner')
+    const client = await connect(token)
+    const created = await call(client, 'create_entry', {
+      collection: 'posts',
+      fields: { title: 'Demo title', slug: 'demo-only', body: 'Body' },
+    })
+    const id = created.data?.id as string
+    const publicationId = crypto.randomUUID()
+    await db
+      .update(site)
+      .set({ publishingMode: 'demo' })
+      .where(eq(site.id, world.ctx.site.id))
+    await db.insert(publication).values({
+      id: publicationId,
+      siteId: world.ctx.site.id,
+      status: 'demo',
+      publishingMode: 'demo',
+      snapshotHash: 'test-demo',
+      snapshot: {
+        publicationId,
+        siteKey: world.ctx.site.slug,
+        createdAt: new Date().toISOString(),
+        hash: 'test-demo',
+        collections: {
+          posts: [
+            {
+              id,
+              slug: 'demo-only',
+              publishedAt: null,
+              data: { title: 'Demo title' },
+            },
+          ],
+        },
+      },
+    })
+    try {
+      const read = await call(client, 'get_entry', {
+        id,
+        includePublished: true,
+      })
+      expect(read.data?.live).toBe(false)
+      expect(read.data?.liveFields).toBeNull()
+      const listed = await call(client, 'list_entries', { collection: 'posts' })
+      expect(
+        (listed.data?.items as { id: string; live: boolean }[]).find(
+          (item) => item.id === id,
+        )?.live,
+      ).toBe(false)
+      const status = await call(client, 'get_release_status')
+      expect((status.data?.demo as Record<string, unknown>).publicationId).toBe(
+        publicationId,
+      )
+    } finally {
+      await db.delete(publication).where(eq(publication.id, publicationId))
+      await db
+        .update(site)
+        .set({ publishingMode: 'production' })
+        .where(eq(site.id, world.ctx.site.id))
+    }
+  })
+
+  it('reads deployed fields after reapproval and withdrawal', async () => {
+    const { token } = await world.keyFor(world.owner, 'owner')
+    const client = await connect(token)
+    const created = await call(client, 'create_entry', {
+      collection: 'posts',
+      fields: {
+        title: 'Approved new title',
+        slug: 'snapshot-read',
+        body: 'Body',
+      },
+    })
+    const id = created.data?.id as string
+    await call(client, 'mark_ready', { id })
+    const publicationId = crypto.randomUUID()
+    await db.insert(publication).values({
+      id: publicationId,
+      siteId: world.ctx.site.id,
+      status: 'live',
+      snapshotHash: 'test-live',
+      snapshot: {
+        publicationId,
+        siteKey: world.ctx.site.slug,
+        createdAt: new Date().toISOString(),
+        hash: 'test-live',
+        collections: {
+          posts: [
+            {
+              id,
+              slug: 'previous-live-slug',
+              publishedAt: null,
+              data: {
+                title: 'Deployed old title',
+                removedField: 'Frozen schema',
+              },
+            },
+          ],
+        },
+      },
+    })
+    try {
+      const approved = await call(client, 'get_entry', {
+        id,
+        includePublished: true,
+      })
+      expect(approved.data?.liveFields).toEqual({
+        title: 'Deployed old title',
+        removedField: 'Frozen schema',
+      })
+      expect(
+        (approved.data?.approvedFields as Record<string, unknown>).title,
+      ).toBe('Approved new title')
+      await call(client, 'unpublish_entry', { id })
+      const withdrawn = await call(client, 'get_entry', {
+        id,
+        includePublished: true,
+      })
+      expect(withdrawn.data?.liveFields).toEqual({
+        title: 'Deployed old title',
+        removedField: 'Frozen schema',
+      })
+      expect(withdrawn.data?.approvedFields).toEqual({})
+    } finally {
+      await db.delete(publication).where(eq(publication.id, publicationId))
+    }
+  })
+
+  it('audits AI asset edits and deletions with the user and credential', async () => {
+    const id = crypto.randomUUID()
+    await db.insert(asset).values({
+      id,
+      organizationId: world.ctx.org.id,
+      originSiteId: world.ctx.site.id,
+      storageKey: `${world.ctx.org.id}/audit-${id}.png`,
+      originalFilename: 'audit.png',
+      mimeType: 'image/png',
+      size: 8,
+      createdBy: world.owner,
+    })
+    const { token } = await world.keyFor(world.owner, 'owner', {
+      name: 'Asset audit',
+    })
+    const client = await connect(token)
+    expect(
+      (await call(client, 'update_asset_alt', { id, altText: 'New alt' }))
+        .isError,
+    ).toBe(false)
+    expect((await call(client, 'delete_asset', { id })).isError).toBe(false)
+    const events = await db
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.targetId, id))
+    expect(events.map((event) => event.action).sort()).toEqual([
+      'asset.delete',
+      'asset.update',
+    ])
+    for (const event of events) {
+      expect(event.actorId).toBe(world.owner)
+      expect(event.meta).toMatchObject({
+        via: 'mcp',
+        mcpKeyName: 'Asset audit',
+      })
+    }
+  })
+
+  it('lets an owner mark ready, and schedules without deploying', async () => {
+    const { token } = await world.keyFor(world.owner, 'owner', {
+      name: 'Owner work',
+      allowGoLive: true,
+    })
+    const client = await connect(token)
+    const { id } = (
+      await call(client, 'create_entry', {
+        collection: 'posts',
+        fields: {
+          title: 'Owner post',
+          slug: 'owner-post',
+          body: 'Owner body.',
+        },
+      })
+    ).data as { id: string }
 
     const ready = await call(client, 'mark_ready', { id })
     expect(ready.isError).toBe(false)
@@ -343,12 +653,22 @@ describe.skipIf(!hasDb)('MCP server', () => {
     )
     expect(ready.text).not.toMatch(/"status": "live"/)
 
-    const readyList = await call(client, 'list_entries', { collection: 'posts', status: 'ready' })
+    const readyList = await call(client, 'list_entries', {
+      collection: 'posts',
+      status: 'ready',
+    })
     expect(readyList.isError).toBe(false)
-    const readyIds = (readyList.data?.items as { id: string }[]).map((item) => item.id)
+    const readyIds = (readyList.data?.items as { id: string }[]).map(
+      (item) => item.id,
+    )
     expect(readyIds).toContain(id)
-    const draftList = await call(client, 'list_entries', { collection: 'posts', status: 'draft' })
-    expect((draftList.data?.items as { id: string }[]).map((item) => item.id)).not.toContain(id)
+    const draftList = await call(client, 'list_entries', {
+      collection: 'posts',
+      status: 'draft',
+    })
+    expect(
+      (draftList.data?.items as { id: string }[]).map((item) => item.id),
+    ).not.toContain(id)
 
     const scheduled = await call(client, 'schedule_entry', {
       id,
@@ -369,19 +689,26 @@ describe.skipIf(!hasDb)('MCP server', () => {
   it('does not reveal entries of another site', async () => {
     const other = await createTestSite()
     try {
-      const otherCol = await createTestCollection(other.site.id, { key: 'posts' })
+      const otherCol = await createTestCollection(other.site.id, {
+        key: 'posts',
+      })
       const foreign = await createEntry({
         siteId: other.site.id,
         collectionKey: otherCol.key,
         data: { title: 'Foreign', slug: 'foreign-post', body: sampleRichText },
         actorId: other.actor.id,
       })
-      const { token } = await world.keyFor(world.editor, 'editor', { name: 'Tenancy' })
+      const { token } = await world.keyFor(world.editor, 'editor', {
+        name: 'Tenancy',
+      })
       const client = await connect(token)
       const read = await call(client, 'get_entry', { id: foreign.id })
       expect(read.isError).toBe(true)
       expect(read.text).toContain('No entry with id')
-      const write = await call(client, 'update_entry', { id: foreign.id, fields: { title: 'x' } })
+      const write = await call(client, 'update_entry', {
+        id: foreign.id,
+        fields: { title: 'x' },
+      })
       expect(write.isError).toBe(true)
       expect((await storedEntry(foreign.id)).draftData.title).toBe('Foreign')
     } finally {
@@ -391,7 +718,9 @@ describe.skipIf(!hasDb)('MCP server', () => {
   })
 
   it('labels every audited change made through a key as via AI', async () => {
-    const { token } = await world.keyFor(world.editor, 'editor', { name: 'Audit key' })
+    const { token } = await world.keyFor(world.editor, 'editor', {
+      name: 'Audit key',
+    })
     const client = await connect(token)
     const created = await call(client, 'create_entry', {
       collection: 'posts',
@@ -401,14 +730,18 @@ describe.skipIf(!hasDb)('MCP server', () => {
     const rows = await db
       .select()
       .from(auditLog)
-      .where(and(eq(auditLog.targetId, id), eq(auditLog.action, 'entry.create')))
+      .where(
+        and(eq(auditLog.targetId, id), eq(auditLog.action, 'entry.create')),
+      )
     expect(rows).toHaveLength(1)
     expect(rows[0]?.actorId).toBe(world.editor)
     expect(rows[0]?.meta).toMatchObject({ via: 'mcp', mcpKeyName: 'Audit key' })
   })
 
   it('refuses private addresses and audits imported files', async () => {
-    const { token } = await world.keyFor(world.editor, 'editor', { name: 'Uploader' })
+    const { token } = await world.keyFor(world.editor, 'editor', {
+      name: 'Uploader',
+    })
     const client = await connect(token)
     const blocked = await call(client, 'upload_asset_from_url', {
       url: 'http://127.0.0.1/cat.png',
@@ -421,6 +754,7 @@ describe.skipIf(!hasDb)('MCP server', () => {
       .insert(asset)
       .values({
         organizationId: world.ctx.org.id,
+        originSiteId: world.ctx.site.id,
         storageKey: `${world.ctx.org.id}/mcp-test.png`,
         originalFilename: 'loaf.png',
         mimeType: 'image/png',
@@ -438,11 +772,16 @@ describe.skipIf(!hasDb)('MCP server', () => {
     })
     expect(uploaded.isError).toBe(false)
     expect(uploaded.data?.assetId).toBe(row.id)
+    expect(vi.mocked(uploadAssetFromUrl)).toHaveBeenLastCalledWith(
+      expect.objectContaining({ originSiteId: world.ctx.site.id }),
+    )
 
     const audits = await db
       .select()
       .from(auditLog)
-      .where(and(eq(auditLog.targetId, row.id), eq(auditLog.action, 'asset.upload')))
+      .where(
+        and(eq(auditLog.targetId, row.id), eq(auditLog.action, 'asset.upload')),
+      )
     expect(audits[0]?.meta).toMatchObject({ via: 'mcp' })
 
     const other = await client.callTool({
@@ -453,18 +792,31 @@ describe.skipIf(!hasDb)('MCP server', () => {
   })
 
   it('keeps go-live off unless the key allows it', async () => {
-    await db.update(site).set({ publishingMode: 'demo' }).where(eq(site.id, world.ctx.site.id))
-    const plain = await world.keyFor(world.owner, 'owner', { name: 'No go-live' })
+    await db
+      .update(site)
+      .set({ publishingMode: 'demo' })
+      .where(eq(site.id, world.ctx.site.id))
+    const plain = await world.keyFor(world.owner, 'owner', {
+      name: 'No go-live',
+    })
     const plainClient = await connect(plain.token)
     // The tool is not advertised to this key, so a direct call is refused.
-    const refused = await plainClient.callTool({ name: 'go_live', arguments: {} }).then(
-      (result) => ({ isError: Boolean(result.isError), text: JSON.stringify(result.content) }),
-      (error: Error) => ({ isError: true, text: error.message }),
-    )
+    const refused = await plainClient
+      .callTool({ name: 'go_live', arguments: {} })
+      .then(
+        (result) => ({
+          isError: Boolean(result.isError),
+          text: JSON.stringify(result.content),
+        }),
+        (error: Error) => ({ isError: true, text: error.message }),
+      )
     expect(refused.isError).toBe(true)
     expect(await toolNames(plainClient)).not.toContain('go_live')
 
-    const allowed = await world.keyFor(world.owner, 'owner', { name: 'Go-live', allowGoLive: true })
+    const allowed = await world.keyFor(world.owner, 'owner', {
+      name: 'Go-live',
+      allowGoLive: true,
+    })
     const client = await connect(allowed.token)
     const queued = await call(client, 'go_live', { note: 'Spring update' })
     expect(queued.isError).toBe(false)
@@ -476,7 +828,9 @@ describe.skipIf(!hasDb)('MCP server', () => {
   })
 
   it('lets an agency admin change the collection schema, scoped to its site', async () => {
-    const { token } = await world.keyFor(world.agency, 'agency', { name: 'Schema' })
+    const { token } = await world.keyFor(world.agency, 'agency', {
+      name: 'Schema',
+    })
     const client = await connect(token)
     const upserted = await call(client, 'upsert_collection', {
       key: 'pages',
@@ -488,16 +842,36 @@ describe.skipIf(!hasDb)('MCP server', () => {
     const rows = await db
       .select()
       .from(collection)
-      .where(and(eq(collection.siteId, world.ctx.site.id), eq(collection.key, 'pages')))
+      .where(
+        and(
+          eq(collection.siteId, world.ctx.site.id),
+          eq(collection.key, 'pages'),
+        ),
+      )
     expect(rows).toHaveLength(1)
+    const [event] = await db
+      .select()
+      .from(auditLog)
+      .where(
+        and(
+          eq(auditLog.targetId, rows[0].id),
+          eq(auditLog.action, 'collection.upsert'),
+        ),
+      )
+    expect(event.actorId).toBe(world.agency)
+    expect(event.meta).toMatchObject({ via: 'mcp' })
 
-    const schema = await call(client, 'get_collection_schema', { collection: 'pages' })
+    const schema = await call(client, 'get_collection_schema', {
+      collection: 'pages',
+    })
     expect(schema.isError).toBe(false)
     expect(JSON.stringify(schema.data)).toContain('"example"')
   })
 
   it('offers a write_post prompt that walks through the workflow', async () => {
-    const { token } = await world.keyFor(world.editor, 'editor', { name: 'Prompt' })
+    const { token } = await world.keyFor(world.editor, 'editor', {
+      name: 'Prompt',
+    })
     const client = await connect(token)
     const { prompts } = await client.listPrompts()
     expect(prompts.map((prompt) => prompt.name)).toContain('write_post')
@@ -506,24 +880,37 @@ describe.skipIf(!hasDb)('MCP server', () => {
       arguments: { collection: 'posts', topic: 'sourdough' },
     })
     const first = prompt.messages[0]?.content
-    expect(first?.type === 'text' && first.text).toContain('get_collection_schema for "posts"')
+    expect(first?.type === 'text' && first.text).toContain(
+      'get_collection_schema for "posts"',
+    )
   })
 
   it('describes the caller in get_site_info', async () => {
-    const { token } = await world.keyFor(world.editor, 'editor', { name: 'Info' })
+    const { token } = await world.keyFor(world.editor, 'editor', {
+      name: 'Info',
+    })
     const info = await call(await connect(token), 'get_site_info', {})
     expect(info.isError).toBe(false)
     expect((info.data?.you as Record<string, unknown>).role).toBe('editor')
     expect(
-      ((info.data?.you as Record<string, unknown>).capabilities as Record<string, unknown>).markReady,
+      (
+        (info.data?.you as Record<string, unknown>).capabilities as Record<
+          string,
+          unknown
+        >
+      ).markReady,
     ).toBe(false)
     expect(info.data?.collections).toEqual(
-      expect.arrayContaining([expect.objectContaining({ key: 'posts', enabled: true })]),
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'posts', enabled: true }),
+      ]),
     )
   })
 
   it('publishes tool input schemas that clients accept: no union-with-null types', async () => {
-    const { token } = await world.keyFor(world.agency, 'agency', { name: 'Schema check' })
+    const { token } = await world.keyFor(world.agency, 'agency', {
+      name: 'Schema check',
+    })
     const { tools } = await (await connect(token)).listTools()
     expect(tools.length).toBeGreaterThan(20)
 
@@ -535,7 +922,8 @@ describe.skipIf(!hasDb)('MCP server', () => {
       }
       if (!node || typeof node !== 'object') return
       for (const [key, value] of Object.entries(node)) {
-        if (key === 'type' && (Array.isArray(value) || value === 'null')) offenders.push(path)
+        if (key === 'type' && (Array.isArray(value) || value === 'null'))
+          offenders.push(path)
         walk(value, `${path}.${key}`)
       }
     }
@@ -543,9 +931,15 @@ describe.skipIf(!hasDb)('MCP server', () => {
     expect(offenders).toEqual([])
 
     const create = tools.find((tool) => tool.name === 'create_entry')
-    const props = create?.inputSchema.properties as Record<string, Record<string, unknown>>
+    const props = create?.inputSchema.properties as Record<
+      string,
+      Record<string, unknown>
+    >
     expect(props.fields?.type).toBe('object')
-    expect(props.fields?.additionalProperties === true || typeof props.fields?.additionalProperties === 'object').toBe(true)
+    expect(
+      props.fields?.additionalProperties === true ||
+        typeof props.fields?.additionalProperties === 'object',
+    ).toBe(true)
     expect(JSON.stringify(props.seo)).toContain('"jsonLd"')
 
     const upload = tools.find((tool) => tool.name === 'upload_asset_from_url')
@@ -554,49 +948,86 @@ describe.skipIf(!hasDb)('MCP server', () => {
   })
 
   it('tells each role how far it can go in the server instructions', async () => {
-    const editor = await connect((await world.keyFor(world.editor, 'editor', { name: 'Instr editor' })).token)
-    expect(editor.getInstructions()).toContain('You cannot mark entries ready or go live.')
-    expect(editor.getInstructions()).toContain('explain that a site owner must mark it ready')
+    const editor = await connect(
+      (await world.keyFor(world.editor, 'editor', { name: 'Instr editor' }))
+        .token,
+    )
+    expect(editor.getInstructions()).toContain(
+      'You cannot mark entries ready or go live.',
+    )
+    expect(editor.getInstructions()).toContain(
+      'explain that a site owner must mark it ready',
+    )
 
     const plainOwner = await connect(
       (await world.keyFor(world.owner, 'owner', { name: 'Instr owner' })).token,
     )
-    expect(plainOwner.getInstructions()).toContain('Going live is not enabled for this key')
+    expect(plainOwner.getInstructions()).toContain(
+      'Going live is not enabled for this key',
+    )
 
     const goLiveOwner = await connect(
-      (await world.keyFor(world.owner, 'owner', { name: 'Instr go-live', allowGoLive: true })).token,
+      (
+        await world.keyFor(world.owner, 'owner', {
+          name: 'Instr go-live',
+          allowGoLive: true,
+        })
+      ).token,
     )
-    expect(goLiveOwner.getInstructions()).toContain('go_live puts the release live')
-    expect(goLiveOwner.getInstructions()).not.toContain('Going live is not enabled')
+    expect(goLiveOwner.getInstructions()).toContain(
+      'go_live puts the release live',
+    )
+    expect(goLiveOwner.getInstructions()).not.toContain(
+      'Going live is not enabled',
+    )
   })
 
   it('lists in get_site_info what the caller cannot do', async () => {
     const editorInfo = await call(
-      await connect((await world.keyFor(world.editor, 'editor', { name: 'Cannot editor' })).token),
+      await connect(
+        (await world.keyFor(world.editor, 'editor', { name: 'Cannot editor' }))
+          .token,
+      ),
       'get_site_info',
       {},
     )
     const editorCannot = (editorInfo.data?.cannotDo as string[]).join('\n')
-    expect(editorCannot).toContain('Mark entries ready, schedule, unpublish, archive, delete')
+    expect(editorCannot).toContain(
+      'Mark entries ready, schedule, unpublish, archive, delete',
+    )
     expect(editorCannot).toContain('ask a site owner')
-    expect(editorCannot).toContain('Go live: going live is not enabled for this key')
-    expect(String(editorInfo.data?.guide)).toContain('You cannot mark entries ready')
+    expect(editorCannot).toContain(
+      'Go live or schedule: going live is not enabled for this key',
+    )
+    expect(String(editorInfo.data?.guide)).toContain(
+      'You cannot mark entries ready',
+    )
 
     const ownerInfo = await call(
-      await connect((await world.keyFor(world.owner, 'owner', { name: 'Cannot owner' })).token),
+      await connect(
+        (await world.keyFor(world.owner, 'owner', { name: 'Cannot owner' }))
+          .token,
+      ),
       'get_site_info',
       {},
     )
     const ownerCannot = (ownerInfo.data?.cannotDo as string[]).join('\n')
-    expect(ownerCannot).toContain('Go live: going live is not enabled for this key')
+    expect(ownerCannot).toContain(
+      'Go live or schedule: going live is not enabled for this key',
+    )
     expect(ownerCannot).not.toContain('ask a site owner')
 
     const agencyInfo = await call(
-      await connect((await world.keyFor(world.agency, 'agency', { name: 'Cannot agency' })).token),
+      await connect(
+        (await world.keyFor(world.agency, 'agency', { name: 'Cannot agency' }))
+          .token,
+      ),
       'get_site_info',
       {},
     )
-    expect((agencyInfo.data?.cannotDo as string[]).join('\n')).not.toContain('collection schemas')
+    expect((agencyInfo.data?.cannotDo as string[]).join('\n')).not.toContain(
+      'collection schemas',
+    )
   })
 
   it('words go-live refusals for an OAuth connection without the word key', async () => {
@@ -614,23 +1045,36 @@ describe.skipIf(!hasDb)('MCP server', () => {
       allowGoLive: false,
     }
     const instructions = serverInstructions(oauthActor)
-    expect(instructions).toContain('Going live is not enabled for this AI connection')
-    expect(instructions).toContain('reconnected from Connect AI with "Allow going live" ticked')
+    expect(instructions).toContain(
+      'Going live is not enabled for this AI connection',
+    )
+    expect(instructions).toContain(
+      'reconnected from Connect AI with "Allow going live" ticked',
+    )
     expect(instructions).not.toContain('this key')
 
     const cannotDo = cannotDoFor(oauthActor).join('\n')
-    expect(cannotDo).toContain('Go live: going live is not enabled for this AI connection')
+    expect(cannotDo).toContain(
+      'Go live or schedule: going live is not enabled for this AI connection',
+    )
     expect(cannotDo).toContain('Allow going live')
     expect(cannotDo).not.toContain('this key')
 
     const goLive = { ...oauthActor, allowGoLive: true }
     expect(cannotDoFor(goLive).join('\n')).not.toContain('Go live:')
-    expect(serverInstructions(goLive)).not.toContain('Going live is not enabled')
+    expect(serverInstructions(goLive)).not.toContain(
+      'Going live is not enabled',
+    )
   })
 
   it('answers 403 with a clear message when an agency admin has no 2FA', async () => {
-    const { token } = await world.keyFor(world.agency, 'agency', { name: 'Admin no 2FA' })
-    await db.update(user).set({ twoFactorEnabled: false }).where(eq(user.id, world.agency))
+    const { token } = await world.keyFor(world.agency, 'agency', {
+      name: 'Admin no 2FA',
+    })
+    await db
+      .update(user)
+      .set({ twoFactorEnabled: false })
+      .where(eq(user.id, world.agency))
     try {
       const response = await handleMcpRequest(
         new Request(MCP_URL, {
@@ -649,22 +1093,39 @@ describe.skipIf(!hasDb)('MCP server', () => {
           'Your account needs two-factor authentication before AI keys work. Turn it on in Account settings.',
       })
     } finally {
-      await db.update(user).set({ twoFactorEnabled: true }).where(eq(user.id, world.agency))
+      await db
+        .update(user)
+        .set({ twoFactorEnabled: true })
+        .where(eq(user.id, world.agency))
     }
   })
 
   it('stores seo.jsonLd and clears seo keys with empty values on update', async () => {
-    const { token } = await world.keyFor(world.editor, 'editor', { name: 'JSON-LD' })
+    const { token } = await world.keyFor(world.editor, 'editor', {
+      name: 'JSON-LD',
+    })
     const client = await connect(token)
-    const jsonLd = JSON.stringify({ '@context': 'https://schema.org', '@type': 'Thing', name: 'Sourdough' })
+    const jsonLd = JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'Thing',
+      name: 'Sourdough',
+    })
     const created = await call(client, 'create_entry', {
       collection: 'posts',
       fields: { title: 'Structured', slug: 'structured-post', body: 'Body.' },
-      seo: { jsonLd, title: 'Structured SEO', keyTakeaways: ['One', 'Two'], noindex: true },
+      seo: {
+        jsonLd,
+        title: 'Structured SEO',
+        keyTakeaways: ['One', 'Two'],
+        noindex: true,
+      },
     })
     expect(created.isError).toBe(false)
     const id = String(created.data?.id)
-    expect((await storedEntry(id)).draftData.$seo).toMatchObject({ jsonLd, noindex: true })
+    expect((await storedEntry(id)).draftData.$seo).toMatchObject({
+      jsonLd,
+      noindex: true,
+    })
 
     const cleared = await call(client, 'update_entry', {
       id,
@@ -673,37 +1134,60 @@ describe.skipIf(!hasDb)('MCP server', () => {
     expect(cleared.isError).toBe(false)
     expect((await storedEntry(id)).draftData.$seo).toEqual({ jsonLd })
 
-    const badJsonLd = await call(client, 'update_entry', { id, seo: { jsonLd: 'not json' } })
+    const badJsonLd = await call(client, 'update_entry', {
+      id,
+      seo: { jsonLd: 'not json' },
+    })
     expect(badJsonLd.isError).toBe(true)
     expect(badJsonLd.text).toContain('JSON')
   })
 
   it('keeps collection fields named like system keys under fields, and reports the release flags separately', async () => {
-    await db.update(collection).set({
-      fields: [
-        { key: 'title', label: 'Title', type: 'text', required: true },
-        { key: 'slug', label: 'Slug', type: 'slug', required: true },
-        { key: 'publishedAt', label: 'Published on', type: 'date' },
-        { key: 'status', label: 'Status', type: 'text' },
-      ],
-    }).where(eq(collection.id, world.col.id))
+    await db
+      .update(collection)
+      .set({
+        fields: [
+          { key: 'title', label: 'Title', type: 'text', required: true },
+          { key: 'slug', label: 'Slug', type: 'slug', required: true },
+          { key: 'publishedAt', label: 'Published on', type: 'date' },
+          { key: 'status', label: 'Status', type: 'text' },
+        ],
+      })
+      .where(eq(collection.id, world.col.id))
     try {
-      const { token } = await world.keyFor(world.owner, 'owner', { name: 'Clash' })
+      const { token } = await world.keyFor(world.owner, 'owner', {
+        name: 'Clash',
+      })
       const client = await connect(token)
       const created = await call(client, 'create_entry', {
         collection: 'posts',
-        fields: { title: 'Clash', slug: 'clash-post', publishedAt: '2026-10-01', status: 'news' },
+        fields: {
+          title: 'Clash',
+          slug: 'clash-post',
+          publishedAt: '2026-10-01',
+          status: 'news',
+        },
       })
       expect(created.isError).toBe(false)
-      expect(created.data?.fields).toMatchObject({ publishedAt: '2026-10-01', status: 'news' })
+      expect(created.data?.fields).toMatchObject({
+        publishedAt: '2026-10-01',
+        status: 'news',
+      })
       expect(created.data?.status).toBe('draft')
       expect(created.data?.approvedAt).toBeNull()
       expect(created.data?.live).toBe(false)
 
-      const schema = await call(client, 'get_collection_schema', { collection: 'posts' })
-      expect(JSON.stringify(schema.data)).toContain('Date and datetime fields are content')
+      const schema = await call(client, 'get_collection_schema', {
+        collection: 'posts',
+      })
+      expect(JSON.stringify(schema.data)).toContain(
+        'Date and datetime fields are content',
+      )
     } finally {
-      await db.update(collection).set({ fields: world.col.fields }).where(eq(collection.id, world.col.id))
+      await db
+        .update(collection)
+        .set({ fields: world.col.fields })
+        .where(eq(collection.id, world.col.id))
     }
   })
 })

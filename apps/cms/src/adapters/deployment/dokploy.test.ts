@@ -1,5 +1,12 @@
+import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { describe, expect, it } from 'vitest'
-import { createDokployAdapter, listDokployApplications } from './dokploy'
+import {
+  createDokployAdapter,
+  listDokployApplications,
+  pinnedRequest,
+} from './dokploy'
+import { DeploymentUncertainError } from './types'
 import type { DeploymentTarget } from './types'
 
 const context = {
@@ -487,6 +494,149 @@ describe('createDokployAdapter', () => {
     )
   })
 
+  describe('when the provider ignores the dispatch title (git-sourced apps)', () => {
+    const dispatchedAt = new Date('2026-01-02T00:00:00.000Z')
+    const dispatchContext = { ...context, dispatchedAt }
+    const gitCommitTitle = {
+      title: 'Merge pull request #13 from ekozf/release/site-sdk',
+      description: 'Commit: 8917f62a',
+    }
+    const previous = {
+      deploymentId: 'previous',
+      title: 'Merge pull request #12',
+      description: 'Commit: 6aa1b27',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    }
+
+    function adapterWith(deployments: unknown[], timing = {}) {
+      return createDokployAdapter({
+        baseUrl: 'https://dokploy.test',
+        apiKey: 'key',
+        reconciliationTimeoutMs: 20,
+        reconciliationPollMs: 5,
+        ...timing,
+        fetch: fakeFetch(() => json({ deployments })),
+      })
+    }
+
+    it('matches the one deployment created after dispatch on deploy()', async () => {
+      let posts = 0
+      const logs: string[] = []
+      const adapter = createDokployAdapter({
+        baseUrl: 'http://dokploy.test',
+        apiKey: 'k',
+        ...localTestOptions,
+        fetch: fakeFetch((url) => {
+          if (url.endsWith('/api/application.deploy')) {
+            posts++
+            return json(true)
+          }
+          if (url.endsWith('/api/application.saveEnvironment')) {
+            return json(true)
+          }
+          return json({
+            deployments: [
+              previous,
+              {
+                deploymentId: 'accepted',
+                ...gitCommitTitle,
+                status: 'running',
+                createdAt: '2026-01-02T00:00:02.000Z',
+              },
+            ],
+          })
+        }),
+      })
+      const result = await adapter.deploy(
+        target,
+        (line) => logs.push(line),
+        dispatchContext,
+      )
+      expect(result).toEqual({ deploymentId: 'accepted' })
+      expect(posts).toBe(1)
+      expect(logs).toContain(
+        'deployment=accepted matched as the only deployment created after dispatch',
+      )
+    })
+
+    it('refuses when two deployments were created after dispatch', async () => {
+      const adapter = adapterWith([
+        previous,
+        {
+          deploymentId: 'one',
+          ...gitCommitTitle,
+          createdAt: '2026-01-02T00:00:02.000Z',
+        },
+        {
+          deploymentId: 'two',
+          title: 'Manual redeploy',
+          createdAt: '2026-01-02T00:00:03.000Z',
+        },
+      ])
+      const error = await adapter.reconcile!(
+        target,
+        dispatchContext,
+        () => {},
+      ).catch((cause) => cause)
+      expect(error).toBeInstanceOf(DeploymentUncertainError)
+      expect((error as Error).message).toMatch(/Multiple upstream deployments/)
+    })
+
+    it('stays unknown when only older deployments exist', async () => {
+      const adapter = adapterWith([previous])
+      expect(
+        await adapter.reconcile!(target, dispatchContext, () => {}),
+      ).toBeNull()
+    })
+
+    it('does not take a new deployment that carries another job areca title', async () => {
+      const adapter = adapterWith([
+        previous,
+        {
+          deploymentId: 'other-job',
+          title: 'areca:job-2',
+          description: 'publication=pub-2 snapshot=hash-2',
+          createdAt: '2026-01-02T00:00:02.000Z',
+        },
+      ])
+      expect(
+        await adapter.reconcile!(target, dispatchContext, () => {}),
+      ).toBeNull()
+    })
+
+    it('prefers the exact dispatch identity over a newer unrelated deployment', async () => {
+      const logs: string[] = []
+      const adapter = adapterWith([
+        {
+          deploymentId: 'exact',
+          ...identity,
+          createdAt: '2026-01-02T00:00:01.000Z',
+        },
+        {
+          deploymentId: 'newer',
+          ...gitCommitTitle,
+          createdAt: '2026-01-02T00:00:05.000Z',
+        },
+      ])
+      expect(
+        await adapter.reconcile!(target, dispatchContext, (line) =>
+          logs.push(line),
+        ),
+      ).toEqual({ deploymentId: 'exact' })
+      expect(logs).toContain('deployment=exact matched by dispatch title')
+    })
+
+    it('ignores the fallback without a dispatch time or createdAt', async () => {
+      const adapter = adapterWith([
+        { deploymentId: 'no-date', ...gitCommitTitle },
+      ])
+      expect(
+        await adapter.reconcile!(target, dispatchContext, () => {}),
+      ).toBeNull()
+      expect(await adapter.reconcile!(target, context, () => {})).toBeNull()
+    })
+  })
+
   it('retries healthCheck until 200', async () => {
     let attempts = 0
     const adapter = createDokployAdapter({
@@ -549,5 +699,31 @@ describe('createDokployAdapter', () => {
     })
     expect(ok).toBe(false)
     expect(attempts).toBeGreaterThan(0)
+  })
+
+  it('connects through the pinned addresses when Node asks for all of them', async () => {
+    // Regression: Node 22+ calls `lookup` with { all: true }. Answering with a
+    // single address made every real health check fail with
+    // ERR_INVALID_IP_ADDRESS, while fetch-mocked tests kept passing.
+    const server = createServer((_req, res) => {
+      res.setHeader('content-type', 'application/json')
+      res.end(JSON.stringify({ ok: true, publicationId: 'pub-1' }))
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const { port } = server.address() as AddressInfo
+    try {
+      const response = await pinnedRequest(
+        new URL(`http://pinned.test:${port}/api/health`),
+        ['127.0.0.1'],
+        2_000,
+      )
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual({
+        ok: true,
+        publicationId: 'pub-1',
+      })
+    } finally {
+      await new Promise((resolve) => server.close(resolve))
+    }
   })
 })

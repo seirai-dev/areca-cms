@@ -244,6 +244,13 @@ export function AiSeoDialog({
           </div>
         ) : result ? (
           <div className="grid gap-4">
+            {result.warnings.length ? (
+              <div role="status" className="text-callout text-text-muted">
+                {result.warnings.map((warning) => (
+                  <p key={warning}>{warning}</p>
+                ))}
+              </div>
+            ) : null}
             {allKeys.length === 0 ? (
               <p className="py-6 text-center text-callout text-text-muted">
                 {m.editor_ai_nothing_new()}

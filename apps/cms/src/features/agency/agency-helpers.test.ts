@@ -8,6 +8,7 @@ const accounts = [
     id: '1',
     name: 'Agency Admin',
     email: 'admin@areca.local',
+    factorLockedUntil: null,
     isAgencyAdmin: true,
     createdAt: new Date(),
     memberships: [],
@@ -16,6 +17,7 @@ const accounts = [
     id: '2',
     name: 'Acme Owner',
     email: 'owner@acme.local',
+    factorLockedUntil: null,
     isAgencyAdmin: false,
     createdAt: new Date(),
     memberships: [
@@ -30,6 +32,7 @@ const accounts = [
     id: '3',
     name: 'Mixed Person',
     email: 'mixed@example.com',
+    factorLockedUntil: null,
     isAgencyAdmin: false,
     createdAt: new Date(),
     memberships: [
@@ -47,7 +50,7 @@ const accounts = [
   },
 ]
 
-const ids = (rows: typeof accounts) => rows.map((row) => row.id)
+const ids = (rows: Array<{ id: string }>) => rows.map((row) => row.id)
 
 describe('filterAccounts', () => {
   it('returns everyone by default', () => {

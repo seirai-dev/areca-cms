@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty; retain defensive lookup and authorization checks. */
 import { eq, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
@@ -13,6 +14,7 @@ import { assetMutationLock } from '#/server/assets/usage'
 import { drainStorageObjectDeletions } from '#/server/assets'
 import { audit } from '#/server/audit'
 import { ConflictError, NotFoundError } from '#/server/content/errors'
+import { lockOrganizationForMutation } from './organization-lock'
 
 export async function listOrganizations() {
   const rows = await db
@@ -129,21 +131,15 @@ export async function updateOrganization(
 }
 
 export async function deleteOrganization(id: string, actorId: string) {
-  const existing = await getOrganization(id)
-  if (!existing) {
-    throw new NotFoundError(m.server_organization_not_found())
-  }
-
-  const [siteRow] = await db
-    .select({ id: site.id })
-    .from(site)
-    .where(eq(site.organizationId, id))
-    .limit(1)
-  if (siteRow) {
-    throw new ConflictError(m.server_cannot_delete_org_with_sites())
-  }
-
   await db.transaction(async (tx) => {
+    const existing = await lockOrganizationForMutation(tx, id)
+    const [siteRow] = await tx
+      .select({ id: site.id })
+      .from(site)
+      .where(eq(site.organizationId, id))
+      .limit(1)
+    if (siteRow)
+      throw new ConflictError(m.server_cannot_delete_org_with_sites())
     await assetMutationLock(tx, id)
     const objects = await tx
       .select({ storageKey: asset.storageKey })

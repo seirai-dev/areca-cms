@@ -60,6 +60,24 @@ export async function syncManifest(siteId: string, manifest: SiteManifest) {
   const now = new Date()
 
   await db.transaction(async (tx) => {
+    await tx
+      .select({ id: site.id })
+      .from(site)
+      .where(eq(site.id, siteId))
+      .for('update')
+    const existing = await tx
+      .select()
+      .from(collection)
+      .where(eq(collection.siteId, siteId))
+    validateCollectionDefinitions([
+      ...existing
+        .filter((row) => !keys.includes(row.key))
+        .map((row) => ({ ...row, enabled: false })),
+      ...Object.entries(manifest.collections).map(([key, def]) => ({
+        key,
+        fields: def.fields,
+      })),
+    ])
     for (const [key, def] of Object.entries(manifest.collections)) {
       await tx
         .insert(collection)
@@ -122,8 +140,8 @@ export async function upsertCollection(
     fields: Field[]
     enabled?: boolean
   },
+  actorId?: string,
 ) {
-  validateCollectionDefinitions([input])
   const label = input.label.trim()
   if (!label) {
     throw new ValidationError([{ path: 'label', message: m.server_required() }])
@@ -150,27 +168,42 @@ export async function upsertCollection(
   const now = new Date()
   const enabled = input.enabled ?? true
 
-  await db
-    .insert(collection)
-    .values({
-      siteId,
-      key: input.key,
-      label,
-      routePattern: input.routePattern,
-      fields,
-      enabled,
-      updatedAt: now,
-    })
-    .onConflictDoUpdate({
-      target: [collection.siteId, collection.key],
-      set: {
+  await db.transaction(async (tx) => {
+    await tx
+      .select({ id: site.id })
+      .from(site)
+      .where(eq(site.id, siteId))
+      .for('update')
+    const existing = await tx
+      .select()
+      .from(collection)
+      .where(eq(collection.siteId, siteId))
+    validateCollectionDefinitions([
+      ...existing.filter((row) => row.key !== input.key),
+      { key: input.key, fields, enabled },
+    ])
+    await tx
+      .insert(collection)
+      .values({
+        siteId,
+        key: input.key,
         label,
         routePattern: input.routePattern,
         fields,
         enabled,
         updatedAt: now,
-      },
-    })
+      })
+      .onConflictDoUpdate({
+        target: [collection.siteId, collection.key],
+        set: {
+          label,
+          routePattern: input.routePattern,
+          fields,
+          enabled,
+          updatedAt: now,
+        },
+      })
+  })
 
   const row = await getCollection(siteId, input.key)
   if (!row) {
@@ -180,6 +213,7 @@ export async function upsertCollection(
   await audit({
     organizationId: existingSite.organizationId,
     siteId,
+    actorId,
     action: 'collection.upsert',
     targetType: 'collection',
     targetId: row.id,
@@ -211,17 +245,19 @@ export async function deleteCollection(
     throw new NotFoundError(m.server_collection_not_found())
   }
 
-  await audit({
-    organizationId: existing.organizationId,
-    siteId,
-    actorId,
-    action: 'collection.delete',
-    targetType: 'collection',
-    targetId: existing.id,
-    meta: { key: existing.key },
-  })
-
   await db.transaction(async (tx) => {
+    await tx
+      .select({ id: site.id })
+      .from(site)
+      .where(eq(site.id, siteId))
+      .for('update')
+    const remaining = await tx
+      .select()
+      .from(collection)
+      .where(eq(collection.siteId, siteId))
+    validateCollectionDefinitions(
+      remaining.filter((row) => row.id !== existing.id),
+    )
     await archiveDeletedContent(
       tx,
       existing.organizationId,
@@ -229,16 +265,40 @@ export async function deleteCollection(
       existing.id,
     )
     await tx.delete(collection).where(eq(collection.id, existing.id))
+    await audit(
+      {
+        organizationId: existing.organizationId,
+        siteId,
+        actorId,
+        action: 'collection.delete',
+        targetType: 'collection',
+        targetId: existing.id,
+        meta: { key: existing.key },
+      },
+      tx,
+    )
   })
 }
 
-function validateCollectionDefinitions(
-  defs: { key: string; fields: Field[] }[],
+export function validateCollectionDefinitions(
+  defs: { key: string; fields: Field[]; enabled?: boolean }[],
 ) {
   const issues: { path: string; message: string }[] = []
+  const foldedKeys = new Map<string, string>()
+  const activeCollections = new Set(
+    defs.filter((def) => def.enabled !== false).map((def) => def.key),
+  )
   for (const def of defs) {
     if (!isSafeIdentifier(def.key))
       issues.push({ path: def.key, message: 'Unsafe collection identifier' })
+    const folded = def.key.toLowerCase()
+    const previous = foldedKeys.get(folded)
+    if (previous !== undefined)
+      issues.push({
+        path: def.key,
+        message: `Collection "${def.key}" conflicts with "${previous}". Collection names must be distinct even when letter case is ignored.`,
+      })
+    foldedKeys.set(folded, def.key)
     const keys = new Set<string>()
     for (const field of def.fields) {
       if (!isSafeIdentifier(field.key) || keys.has(field.key))
@@ -252,6 +312,30 @@ function validateCollectionDefinitions(
           issues.push({
             path: `${def.key}.${field.key}`,
             message: 'Unsafe field reference identifier',
+          })
+      }
+      if (
+        def.enabled !== false &&
+        field.type === 'reference' &&
+        (!field.collection || !activeCollections.has(field.collection))
+      )
+        issues.push({
+          path: `${def.key}.${field.key}`,
+          message:
+            'Choose an existing enabled target collection for this reference field.',
+        })
+      if (field.after !== undefined) {
+        const target = def.fields.find((item) => item.key === field.after)
+        if (
+          (field.type !== 'date' && field.type !== 'datetime') ||
+          !target ||
+          target.key === field.key ||
+          (target.type !== 'date' && target.type !== 'datetime')
+        )
+          issues.push({
+            path: `${def.key}.${field.key}`,
+            message:
+              'Date ordering must refer to another existing date or datetime field.',
           })
       }
     }

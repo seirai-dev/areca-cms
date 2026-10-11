@@ -1,5 +1,11 @@
 export type ParsedArgs =
-  | { command: 'pull'; outDir: string }
+  | {
+      command: 'pull'
+      outDir: string
+      publicationId?: string
+      /** Set only when passed; the default config may be absent. */
+      configPath?: string
+    }
   | { command: 'sync-manifest'; configPath: string }
   | { command: 'manifest-pull'; configPath: string; yes: boolean }
   | {
@@ -11,12 +17,16 @@ export type ParsedArgs =
       configPath: string
       yes: boolean
       force: boolean
+      assetsDir?: string
+      assetsPublicPath?: string
+      noAssets?: true
     }
   | { command: 'run'; commandArgs: string[] }
   | { command: 'help' }
   | { command: 'error'; message: string }
 
 export const DEFAULT_PULL_OUT_DIR = 'src/generated/content'
+export const DEFAULT_ASSETS_DIR = 'public/areca'
 export const DEFAULT_CONFIG_PATH = 'areca.config.ts'
 export const DEFAULT_SYNC_MANIFEST_PATH = './areca.config.ts'
 
@@ -54,9 +64,18 @@ export function parseArgs(argv: string[]): ParsedArgs {
 
 function parsePullArgs(args: string[]): ParsedArgs {
   let outDir = DEFAULT_PULL_OUT_DIR
+  let publicationId: string | undefined
+  let configPath: string | undefined
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i]
+    if (arg === '--config') {
+      const value = readFlagValue(args, i, '--config')
+      if (value.error) return value.error
+      configPath = value.value
+      i += 1
+      continue
+    }
     if (arg === '--out') {
       const value = readFlagValue(args, i, '--out')
       if (value.error) return value.error
@@ -64,10 +83,22 @@ function parsePullArgs(args: string[]): ParsedArgs {
       i += 1
       continue
     }
+    if (arg === '--publication') {
+      const value = readFlagValue(args, i, '--publication')
+      if (value.error) return value.error
+      publicationId = value.value
+      i += 1
+      continue
+    }
     return { command: 'error', message: `Unknown argument: ${arg}` }
   }
 
-  return { command: 'pull', outDir }
+  return {
+    command: 'pull',
+    outDir,
+    ...(publicationId ? { publicationId } : {}),
+    ...(configPath ? { configPath } : {}),
+  }
 }
 
 function parseSyncManifestArgs(args: string[]): ParsedArgs {
@@ -85,7 +116,10 @@ function parseManifestArgs(args: string[]): ParsedArgs {
   const [sub, ...rest] = args
 
   if (!sub) {
-    return { command: 'error', message: 'Missing manifest subcommand. Expected push or pull.' }
+    return {
+      command: 'error',
+      message: 'Missing manifest subcommand. Expected push or pull.',
+    }
   }
   if (sub === 'push') {
     return parseSyncManifestArgs(rest)
@@ -128,9 +162,30 @@ function parseInitArgs(args: string[]): ParsedArgs {
   let configPath = DEFAULT_CONFIG_PATH
   let yes = false
   let force = false
+  let assetsDir: string | undefined
+  let assetsPublicPath: string | undefined
+  let noAssets = false
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i]
+    if (arg === '--assets-dir') {
+      const value = readFlagValue(args, i, '--assets-dir')
+      if (value.error) return value.error
+      assetsDir = value.value
+      i += 1
+      continue
+    }
+    if (arg === '--assets-public-path') {
+      const value = readFlagValue(args, i, '--assets-public-path')
+      if (value.error) return value.error
+      assetsPublicPath = value.value
+      i += 1
+      continue
+    }
+    if (arg === '--no-assets') {
+      noAssets = true
+      continue
+    }
     if (arg === '--cms-url') {
       const value = readFlagValue(args, i, '--cms-url')
       if (value.error) return value.error
@@ -177,12 +232,34 @@ function parseInitArgs(args: string[]): ParsedArgs {
     return { command: 'error', message: `Unknown argument: ${arg}` }
   }
 
-  return { command: 'init', cmsUrl, token, siteKey, outDir, configPath, yes, force }
+  if (noAssets && (assetsDir || assetsPublicPath)) {
+    return {
+      command: 'error',
+      message: '--no-assets cannot be combined with --assets-dir or --assets-public-path',
+    }
+  }
+
+  return {
+    command: 'init',
+    cmsUrl,
+    token,
+    siteKey,
+    outDir,
+    configPath,
+    yes,
+    force,
+    ...(assetsDir ? { assetsDir } : {}),
+    ...(assetsPublicPath ? { assetsPublicPath } : {}),
+    ...(noAssets ? { noAssets: true as const } : {}),
+  }
 }
 
 function parseRunArgs(args: string[]): ParsedArgs {
   if (args[0] !== '--' || args.length < 2) {
-    return { command: 'error', message: 'Missing command. Usage: areca run -- <command>' }
+    return {
+      command: 'error',
+      message: 'Missing command. Usage: areca run -- <command>',
+    }
   }
   return { command: 'run', commandArgs: args.slice(1) }
 }
@@ -191,18 +268,23 @@ function readFlagValue(
   args: string[],
   index: number,
   flag: string,
-): { value: string; error?: undefined } | { value?: undefined; error: ParsedArgs } {
+):
+  | { value: string; error?: undefined }
+  | { value?: undefined; error: ParsedArgs } {
   const value = args[index + 1]
   if (!value || value.startsWith('-')) {
-    return { error: { command: 'error', message: `Missing value for ${flag}` } }
+    return {
+      error: { command: 'error', message: `Missing value for ${flag}` },
+    }
   }
   return { value }
 }
 
 export function usage(): string {
   return `Usage:
-  areca init [--cms-url <url>] [--token <token>] [--site-key <key>] [--out ${DEFAULT_PULL_OUT_DIR}] [--config ${DEFAULT_CONFIG_PATH}] [--yes|-y] [--force]
-  areca pull [--out ${DEFAULT_PULL_OUT_DIR}]
+  areca init [--cms-url <url>] [--token <token>] [--site-key <key>] [--out ${DEFAULT_PULL_OUT_DIR}] [--config ${DEFAULT_CONFIG_PATH}]
+             [--assets-dir ${DEFAULT_ASSETS_DIR}] [--assets-public-path /areca] [--no-assets] [--yes|-y] [--force]
+  areca pull [--out ${DEFAULT_PULL_OUT_DIR}] [--publication <id>] [--config ${DEFAULT_CONFIG_PATH}]
   areca manifest push [${DEFAULT_SYNC_MANIFEST_PATH}]
   areca manifest pull [--config ${DEFAULT_SYNC_MANIFEST_PATH}] [--yes|-y]
   areca sync-manifest [${DEFAULT_SYNC_MANIFEST_PATH}]   (deprecated alias for manifest push)
@@ -211,6 +293,8 @@ export function usage(): string {
 Environment:
   ARECA_CMS_URL      CMS base URL
   ARECA_SITE_TOKEN   Site token sent as Authorization: Bearer <token>
+  ARECA_SCHEMA_TOKEN Schema token required for manifest push
+  ARECA_SNAPSHOT_ID  Exact publication to pull (empty or 0 selects live content)
 
 Env files (loaded automatically from the current directory; existing process.env keys win):
   .env.local

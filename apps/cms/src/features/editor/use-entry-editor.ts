@@ -64,6 +64,12 @@ export type EntryRecord = {
   updatedByName?: string | null
 }
 
+/** Save and approve responses: external images copied into the media library. */
+type ImageImportResult = {
+  importedImages?: number
+  importWarnings?: string[]
+}
+
 export type RevisionRecord = {
   id: string
   createdAt: string | Date
@@ -132,6 +138,9 @@ export function useEntryEditor({
   const goLive = useGoLive(siteId)
 
   const [createdId, setCreatedId] = React.useState<string | undefined>()
+  const [restoreSkippedFields, setRestoreSkippedFields] = React.useState<
+    Array<{ key: string; label: string; reason: string }>
+  >([])
   const entryId = routeEntryId ?? createdId
   const entryIdRef = React.useRef(entryId)
   entryIdRef.current = entryId
@@ -360,6 +369,18 @@ export function useEntryEditor({
   const onRevealRef = React.useRef(onRevealError)
   onRevealRef.current = onRevealError
 
+  // Each external image that could not be copied is reported once, not on
+  // every autosave.
+  const warnedImagesRef = React.useRef(new Set<string>())
+  const warnImageImports = React.useCallback((result: unknown) => {
+    const warnings = (result as ImageImportResult | null)?.importWarnings ?? []
+    for (const warning of warnings) {
+      if (warnedImagesRef.current.has(warning)) continue
+      warnedImagesRef.current.add(warning)
+      toast.warning(warning)
+    }
+  }, [])
+
   const reveal = React.useCallback((errors: FieldErrorMap) => {
     const first = fieldsRef.current.find((field) => errors[field.key])
     if (first) onRevealRef.current?.(first.key)
@@ -404,13 +425,21 @@ export function useEntryEditor({
           : await createEntryFn({
               data: { siteId, collectionKey, data: payload },
             })
-      ) as EntryRecord
+      ) as EntryRecord & ImageImportResult
       versionRef.current = saved.draftVersion
-      serverJsonRef.current = JSON.stringify(
-        initialEntryData(fieldsRef.current, saved.draftData),
-      )
-      setBaseline(submitted)
-      if (JSON.stringify(dataRef.current) === submitted) {
+      const serverData = initialEntryData(fieldsRef.current, saved.draftData)
+      serverJsonRef.current = JSON.stringify(serverData)
+      const settled = JSON.stringify(dataRef.current) === submitted
+      if ((saved.importedImages ?? 0) > 0 && settled) {
+        // The server swapped external images for library copies: show them.
+        // With newer local edits the next save receives the same swap.
+        setData(serverData)
+        setBaseline(serverJsonRef.current)
+      } else {
+        setBaseline(submitted)
+      }
+      warnImageImports(saved)
+      if (settled) {
         try {
           localStorage.removeItem(recoveryKeyRef.current)
         } catch {
@@ -471,8 +500,10 @@ export function useEntryEditor({
     collectionKey,
     queryClient,
     setBaseline,
+    setData,
     invalidateLists,
     reveal,
+    warnImageImports,
   ])
 
   const requested = () => pendingRef.current
@@ -606,7 +637,7 @@ export function useEntryEditor({
     mutationFn: async (options: { quiet?: boolean } = {}) => {
       const id = await ensureSaved()
       if (!id) return null
-      await publishEntryFn({ data: { id } })
+      warnImageImports(await publishEntryFn({ data: { id } }))
       return { id, quiet: options.quiet }
     },
     onSuccess: async (result) => {
@@ -634,13 +665,15 @@ export function useEntryEditor({
     mutationFn: async (input: { at: Date; timeZone: string }) => {
       const id = await ensureSaved()
       if (!id) return null
-      await scheduleEntryFn({
-        data: {
-          id,
-          scheduledAt: input.at.toISOString(),
-          timezone: input.timeZone,
-        },
-      })
+      warnImageImports(
+        await scheduleEntryFn({
+          data: {
+            id,
+            scheduledAt: input.at.toISOString(),
+            timezone: input.timeZone,
+          },
+        }),
+      )
       return id
     },
     onSuccess: async (id) => {
@@ -712,7 +745,7 @@ export function useEntryEditor({
       const id = await ensureSaved()
       if (!id)
         throw new Error('Save or resolve your draft conflict before restoring.')
-      const restored: EntryRecord = await restoreRevisionFn({
+      const restored = await restoreRevisionFn({
         data: {
           entryId: entryIdRef.current!,
           revisionId,
@@ -723,6 +756,7 @@ export function useEntryEditor({
     },
     onSuccess: async (restored) => {
       hydrate(restored, true)
+      setRestoreSkippedFields(restored.skippedFields)
       setFieldErrors({})
       setFormError(null)
       queryClient.setQueryData(
@@ -732,7 +766,9 @@ export function useEntryEditor({
           ...restored,
         }),
       )
-      toast.success(m.editor_revision_restored())
+      if (restored.skippedFields.length)
+        toast.warning(m.editor_revision_restored_partial())
+      else toast.success(m.editor_revision_restored())
       await invalidateEntry(restored.id)
     },
     onError: actionError(m.editor_could_not_restore()),
@@ -842,6 +878,7 @@ export function useEntryEditor({
     archive: () => archiveMutation.mutate(),
     remove: () => deleteMutation.mutateAsync(),
     restore: (revisionId: string) => restoreMutation.mutateAsync(revisionId),
+    restoreSkippedFields,
     blocker,
     leaveAnyway: () => {
       bypassRef.current = true

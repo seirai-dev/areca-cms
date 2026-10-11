@@ -1,5 +1,7 @@
-node_modules
-.output
-dist
+**/node_modules
+**/.output
+**/dist
 .git
 **/.env*
+examples/demo-site/src/generated
+examples/demo-site/public/areca

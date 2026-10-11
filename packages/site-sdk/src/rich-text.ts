@@ -21,8 +21,10 @@ export function richTextDocument(
   return EMPTY_DOCUMENT
 }
 
-/** Canonical markdown source, for re-parsing with custom options or extensions. */
-export function richTextMarkdown(value: RichTextValue | null | undefined): string {
+/** Escaped Markdown export; the document preserves editor-only structures and sizing. */
+export function richTextMarkdown(
+  value: RichTextValue | null | undefined,
+): string {
   return value?.markdown ?? ''
 }
 

@@ -16,7 +16,9 @@ describe.skipIf(!process.env.SMTP_HOST)('sendEmail', () => {
 async function waitForMailpit(subject: string, to: string) {
   const deadline = Date.now() + 5000
   while (Date.now() < deadline) {
-    const res = await fetch('http://localhost:8025/api/v1/messages')
+    const res = await fetch(
+      `${process.env.MAILPIT_URL ?? 'http://localhost:8025'}/api/v1/messages`,
+    )
     if (res.ok) {
       const data = (await res.json()) as {
         messages?: Array<{

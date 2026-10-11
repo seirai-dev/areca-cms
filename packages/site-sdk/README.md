@@ -6,7 +6,8 @@ draft entries for preview. It does not create a CMS site or generate frontend
 routes.
 
 For a step-by-step integration guide, see the repository's
-[SDK guide](../../docs/SDK.md).
+[SDK guide](../../docs/SDK.md). Using an AI coding agent? Run
+`npx @areca-cms/skills` to teach it this SDK and the Areca MCP server.
 
 Requires Node.js 22.6 or newer. Node 24 LTS is recommended for direct import of
 the TypeScript config by `areca manifest push`. The SDK is ESM-only and has no
@@ -43,22 +44,22 @@ take precedence.
 Declare a collection in `areca.config.ts`:
 
 ```ts
-import { defineSiteContent } from '@areca-cms/site-sdk'
+import { defineSiteContent } from "@areca-cms/site-sdk";
 
 export default defineSiteContent({
-  siteKey: 'acme-site',
+  siteKey: "acme-site",
   collections: {
     articles: {
-      route: '/blog/$slug',
-      label: 'Articles',
+      route: "/blog/$slug",
+      label: "Articles",
       fields: [
-        { key: 'title', label: 'Title', type: 'text', required: true },
-        { key: 'body', label: 'Body', type: 'richtext' },
-        { key: 'cover', label: 'Cover', type: 'image' },
+        { key: "title", label: "Title", type: "text", required: true },
+        { key: "body", label: "Body", type: "richtext" },
+        { key: "cover", label: "Cover", type: "image" },
       ],
     },
   },
-})
+});
 ```
 
 Publish that schema to the CMS, publish at least one content release in the
@@ -75,33 +76,78 @@ site token or call the CMS from a public browser bundle.
 
 ## CLI
 
-| Command | Purpose |
-| --- | --- |
-| `areca init` | Create frontend config and environment-file scaffolding. |
-| `areca pull [--out <directory>]` | Download the current published snapshot; default output is `src/generated/content`. |
-| `areca manifest push [config]` | Send the local config to the CMS. Default config is `./areca.config.ts`. Requires `ARECA_SCHEMA_TOKEN`. |
-| `areca manifest pull [--config <path>] [--yes]` | Replace the local config with enabled CMS collections. |
-| `areca sync-manifest [config]` | Deprecated alias for `areca manifest push`. |
-| `areca run -- <command>` | Run a child command with SDK-loaded environment files. |
+| Command                                               | Purpose                                                                                                 |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `areca init`                                          | Create frontend config and environment-file scaffolding.                                                |
+| `areca pull [--out <directory>] [--publication <id>] [--config <path>]` | Download the current published snapshot and its media; default output is `src/generated/content`. |
+| `areca manifest push [config]`                        | Send the local config to the CMS. Default config is `./areca.config.ts`. Requires `ARECA_SCHEMA_TOKEN`. |
+| `areca manifest pull [--config <path>] [--yes]`       | Replace the local config with enabled CMS collections.                                                  |
+| `areca sync-manifest [config]`                        | Deprecated alias for `areca manifest push`.                                                             |
+| `areca run -- <command>`                              | Run a child command with SDK-loaded environment files.                                                  |
 
 `areca init` accepts `--cms-url`, `--token`, `--site-key`, `--out`, `--config`,
-`--yes`/`-y`, and `--force`. Use flags with `--yes` in automation. `--force`
-allows init to overwrite its config and `.env.example` outputs.
+`--assets-dir`, `--assets-public-path`, `--no-assets`, `--yes`/`-y`, and
+`--force`. Use flags with `--yes` in automation. `--force` allows init to
+overwrite its config and `.env.example` outputs. Interactively, init asks
+whether to download media into the repo (default yes) and where (default
+`public/areca`). Run on an existing config, it adds an `assets` block, or asks
+before replacing one.
 
 `manifest pull` replaces the entire config file, including comments and helper
 code. It prints a collection diff and prompts before overwriting a config that
 already defines collections. `--yes` skips the prompt; in non-interactive use,
-it is required when collections already exist. The local `siteKey` is kept. If
-there is no config, set `ARECA_SITE_KEY` or run `areca init` first.
+it is required when collections already exist. The local `siteKey` and `assets`
+settings are kept. If there is no config, set `ARECA_SITE_KEY` or run
+`areca init` first.
 
 `areca pull` exits with an error if the site has no published snapshot. Publish
-content in the CMS before adding it to a production build. Pulls write:
+content in the CMS before adding it to a production build. Pulls write an immutable generation, then atomically replace `manifest.json` to select it:
 
 ```text
 src/generated/content/
-├── manifest.json       # publication ID, snapshot hash, time, collection counts
-└── articles.json       # one JSON array per collection key
+├── manifest.json       # publication ID, hash, counts, and generation pointer
+└── .publications/
+    └── publication-<generation>/
+        ├── articles.json
+        └── .assets.json  # media files this generation uses
+public/areca/
+└── hero-banner-3f2a91c0.jpg
 ```
+
+Use `readContent()` instead of importing a flat `<collection>.json` file. It follows
+the current manifest and rejects collections absent from that publication. Legacy
+flat outputs remain readable. A failed pull preserves the complete prior generation.
+The current generation and the two before it are kept for readers that captured
+their manifest; older ones are deleted with the media files only they used.
+Direct file imports do not receive this atomic-switch guarantee.
+
+### Media
+
+By default `areca pull` copies every file the content references (image fields,
+SEO images, rich-text images and file links) into `public/areca` and rewrites the
+content to `/areca/<name>-<id>.<ext>`, so the site never requests anything from
+the CMS. SEO image URLs (`og:image`, `twitter:image`, JSON-LD) become absolute
+using the site's production URL from the CMS. Configure it in `areca.config.ts`:
+
+```ts
+export default defineSiteContent({
+  siteKey: 'acme-site',
+  assets: {
+    download: true, // false keeps CMS URLs
+    dir: 'public/areca', // relative to the project root
+    // publicPath: '/areca', // required when dir is not under public/
+  },
+  collections: {},
+})
+```
+
+Files are downloaded from `ARECA_CMS_URL` once and skipped on later pulls. A
+failed download fails the pull and leaves the previous content unchanged.
+`manifest push` never sends `assets` to the CMS.
+
+`areca pull` honors `ARECA_SNAPSHOT_ID` from deployment builds, or an explicit
+`--publication <id>`. Empty and `0` values select the current live/demo publication.
+The SDK checks that the CMS returned the requested publication before writing.
 
 The generated files should usually be ignored by Git and created during local
 development or the build. Pull rejects unsafe collection names and refuses
@@ -112,15 +158,19 @@ symbolic-link output files.
 Use the `@areca-cms/site-sdk/pull` export from server-side code:
 
 ```ts
-import { readContent } from '@areca-cms/site-sdk/pull'
-import type { ImageValue, RichTextValue, SnapshotEntry } from '@areca-cms/site-sdk'
+import { readContent } from "@areca-cms/site-sdk/pull";
+import type {
+  ImageValue,
+  RichTextValue,
+  SnapshotEntry,
+} from "@areca-cms/site-sdk";
 
 type Article = SnapshotEntry & {
-  data: { title: string; body: RichTextValue; cover: ImageValue | null }
-}
+  data: { title: string; body: RichTextValue; cover: ImageValue | null };
+};
 
-const articles = readContent<Article>('src/generated/content', 'articles')
-const article = articles.find((item) => item.slug === 'hello-world')
+const articles = readContent<Article>("src/generated/content", "articles");
+const article = articles.find((item) => item.slug === "hello-world");
 ```
 
 Each entry has `id`, `slug`, `publishedAt`, `data`, and optional `seo`. The
@@ -131,39 +181,60 @@ References include the target collection, slug, and ID.
 For one-time content loads in Node, the client can pull files directly:
 
 ```ts
-import { createArecaClient } from '@areca-cms/site-sdk'
-import { pullContent } from '@areca-cms/site-sdk/pull'
+import { createArecaClient } from "@areca-cms/site-sdk";
+import { pullContent } from "@areca-cms/site-sdk/pull";
 
-const client = createArecaClient()
-const snapshot = await pullContent({ outDir: 'src/generated/content', client })
-console.log(snapshot.publicationId)
+const client = createArecaClient();
+const snapshot = await pullContent({ outDir: "src/generated/content", client });
+console.log(snapshot.publicationId);
 ```
 
-`readContent<T>(directory, collectionKey)` reads the collection array and
+`readContentManifest(directory)` captures the current publication pointer. Pass it
+as the third argument to each `readContent()` call when reading multiple collections
+that must belong to one publication.
+
+`readContent<T>(directory, collectionKey, capturedManifest?)` reads the collection array and
 returns it as `T[]`. If the content has not been pulled, it explains that you
 need to run `areca pull` first.
 
 ## Render rich text
 
-Rich-text values contain canonical Markdown plus the parsed TanStack Markdown
-document and a static HTML fallback. The helper supports older snapshots that
+Rich-text values contain an escaped Markdown export, a TanStack Markdown document
+that preserves the visual editor structure, and a static HTML fallback from that
+document. Literal Markdown typed into the editor stays literal in published content.
+Complex tables use public component nodes to retain mixed headers, merged cells,
+and multiple paragraphs. The Markdown export can simplify structures outside its
+syntax profile; use the document for faithful rendering. The helper supports older snapshots that
 contain Markdown without the parsed document:
 
 ```tsx
-import { Markdown } from '@tanstack/markdown/react'
-import { richTextDocument } from '@areca-cms/site-sdk'
-import type { RichTextValue } from '@areca-cms/site-sdk'
+import { Markdown } from "@tanstack/markdown/react";
+import { richTextComponents } from "@areca-cms/site-sdk/rich-text-react";
+import { richTextDocument } from "@areca-cms/site-sdk";
+import type { RichTextValue } from "@areca-cms/site-sdk";
 
 export function ArticleBody({ body }: { body: RichTextValue }) {
-  return <Markdown>{richTextDocument(body)}</Markdown>
+  return (
+    <Markdown components={richTextComponents()}>
+      {richTextDocument(body)}
+    </Markdown>
+  );
 }
 ```
+
+Use the optional `rich-text-react` adapter for React rendering. Explicitly resized
+editor images use safe `img` component nodes carrying numeric width/height; the
+adapter removes TanStack's generated empty children from these void elements.
+Pass your own map as `richTextComponents(myComponents)` to keep custom image
+rendering. Keep `max-width: 100%` while respecting supplied dimensions; forcing
+`width: 100%` overrides the author's chosen size. The CLI and core SDK do not
+import React. Static HTML already contains the chosen dimensions. Plain images
+remain standard Markdown image nodes.
 
 `richTextMarkdown(value)` returns the Markdown source. `richTextHtml(value)`
 returns the CMS-rendered static HTML string; only render trusted CMS content as
 HTML. For custom rendering, pass a `components` map to `Markdown`. The SDK uses
-`@tanstack/markdown` 0.0.15; keep the renderer version aligned because its AST
-format is pre-1.0.
+`@tanstack/markdown` 1.0.0; keep the renderer version aligned with the CMS and SDK.
 
 ## SEO metadata
 
@@ -178,11 +249,11 @@ title, description, canonical URL, robots, Open Graph, Twitter, author, and
 JSON-LD tags:
 
 ```tsx
-import { seoHead } from '@areca-cms/site-sdk'
-import type { SnapshotEntry } from '@areca-cms/site-sdk'
+import { seoHead } from "@areca-cms/site-sdk";
+import type { SnapshotEntry } from "@areca-cms/site-sdk";
 
 export function articleHead(entry: SnapshotEntry) {
-  return seoHead(entry.seo, { titleTemplate: '%s · Acme' })
+  return seoHead(entry.seo, { titleTemplate: "%s · Acme" });
 }
 ```
 
@@ -211,10 +282,10 @@ Fetch preview data on the server and mark the response non-indexable and
 uncacheable:
 
 ```ts
-import { getPreviewEntry, previewHeaders } from '@areca-cms/site-sdk'
+import { getPreviewEntry, previewHeaders } from "@areca-cms/site-sdk";
 
-const preview = await getPreviewEntry({ token })
-const headers = previewHeaders()
+const preview = await getPreviewEntry({ token });
+const headers = previewHeaders();
 // Apply headers to the server response.
 // Render preview.entry using the same view as a published entry.
 ```
@@ -230,17 +301,18 @@ clear error for expired/invalid tokens (401) and missing preview entries (404).
 environment variables when options are omitted:
 
 ```ts
-import { createArecaClient } from '@areca-cms/site-sdk'
+import { createArecaClient } from "@areca-cms/site-sdk";
 
-const client = createArecaClient()
-const manifest = await client.fetchManifest()
-const snapshot = await client.fetchSnapshot()
-await client.syncManifest(config)
-const preview = await client.fetchPreview(previewToken)
+const client = createArecaClient();
+const manifest = await client.fetchManifest();
+const snapshot = await client.fetchSnapshot();
+await client.syncManifest(config);
+const preview = await client.fetchPreview(previewToken);
 ```
 
 The client methods are `fetchManifest()`, `fetchSnapshot()`,
-`syncManifest(config)`, and `fetchPreview(token)`. It throws readable errors
+`syncManifest(config)`, and `fetchPreview(token)`. Use
+`fetchSnapshot({ publicationId })` to request an exact frozen publication. It throws readable errors
 when required settings are missing, the CMS cannot be reached, or an HTTP
 request fails. A missing publication gives a specific publish-first error.
 Errors from HTTP responses include the status and CMS error detail when

@@ -32,6 +32,7 @@ const userColumns = [
   'updated_by',
   'requested_by',
   'actor_id',
+  'scheduled_by',
 ]
 const archivedActorKeys = new Set([
   ...userColumns,
@@ -40,6 +41,7 @@ const archivedActorKeys = new Set([
   'updatedBy',
   'requestedBy',
   'actorId',
+  'scheduledBy',
 ])
 /** Archived row metadata includes camelCase Drizzle rows and snake_case SQL rows. */
 export function transformArchivedActors(value, transform) {

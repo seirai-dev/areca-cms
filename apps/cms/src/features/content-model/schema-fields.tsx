@@ -439,19 +439,59 @@ export function FieldFormPanel({
           />
         </FormField>
         {field.type === 'select' ? (
-          <FormField
-            label={m.admin_collection_options()}
-            htmlFor={`field-options-${index}`}
-            hint={m.content_field_options_hint()}
+          <fieldset
+            className="grid gap-1.5"
+            aria-describedby={`field-options-${index}-hint`}
           >
-            <Input
-              id={`field-options-${index}`}
-              data-testid={`field-options-${index}`}
-              placeholder={m.admin_collection_options_placeholder()}
-              value={field.options}
-              onChange={(event) => onChange({ options: event.target.value })}
-            />
-          </FormField>
+            <legend className="mb-1.5 text-[13px] leading-[18px] font-medium text-text-primary">
+              {m.admin_collection_options()}
+            </legend>
+            <div className="grid gap-2">
+              {field.options.map((option, optionIndex) => (
+                <div key={optionIndex} className="flex gap-2">
+                  <Input
+                    id={`field-options-${index}-${optionIndex}`}
+                    data-testid={`field-options-${index}`}
+                    value={option}
+                    aria-label={`${m.admin_collection_options()} ${optionIndex + 1}`}
+                    onChange={(event) =>
+                      onChange({
+                        options: field.options.map((value, i) =>
+                          i === optionIndex ? event.target.value : value,
+                        ),
+                      })
+                    }
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() =>
+                      onChange({
+                        options: field.options.filter(
+                          (_, i) => i !== optionIndex,
+                        ),
+                      })
+                    }
+                  >
+                    {m.admin_remove()}
+                  </Button>
+                </div>
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onChange({ options: [...field.options, ''] })}
+              >
+                {m.content_add_option()}
+              </Button>
+            </div>
+            <p
+              id={`field-options-${index}-hint`}
+              className="text-caption font-normal text-text-muted"
+            >
+              {m.content_field_options_hint()}
+            </p>
+          </fieldset>
         ) : null}
         {field.type === 'reference' ? (
           <FormField

@@ -9,7 +9,7 @@ const cmsRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 
 /** Runs a CMS script against the same DATABASE_URL/S3_BUCKET as the server. */
 function runCmsScript(script: string) {
-  execSync(`pnpm -s ${script}`, {
+  execSync(`pnpm run ${script}`, {
     cwd: cmsRoot,
     stdio: 'inherit',
     env: process.env,

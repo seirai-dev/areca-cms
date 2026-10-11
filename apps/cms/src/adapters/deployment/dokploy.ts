@@ -1,3 +1,4 @@
+import type { LookupAddress, LookupOptions } from 'node:dns'
 import { request as httpRequest } from 'node:http'
 import { request as httpsRequest } from 'node:https'
 import { isIP } from 'node:net'
@@ -21,6 +22,9 @@ import type { ResolveHost } from '#/server/http/outbound-url'
 // domain.create: { host, path?, port?, https?, certificateType?, applicationId?, domainType?, ... }
 
 type FetchFn = typeof fetch
+
+/** Tolerated CMS-to-Dokploy clock skew when comparing deployment createdAt. */
+const DISPATCH_CLOCK_SKEW_MS = 5_000
 
 type DokployConnectionOptions = {
   baseUrl: string
@@ -49,7 +53,7 @@ function createDokployRequest(opts: DokployConnectionOptions) {
   const baseUrl = assertSecureServiceUrl(
     opts.baseUrl,
     opts.allowInsecureHttp,
-  ).href.replace(/\/$/, '')
+  ).href.replace(/\/+$/, '')
   const fetchFn = opts.fetch ?? fetch
 
   async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -253,7 +257,7 @@ export function createDokployAdapter(
           'Deploy response uncertain; reconciling the same dispatch before proceeding',
         )
       }
-      const found = await reconcile(target.applicationId, context)
+      const found = await reconcile(target.applicationId, context, log)
       if (!found)
         throw new DeploymentUncertainError(
           `Deployment acceptance unknown for job=${context.jobId} publication=${context.publicationId}; reconcile manually, do not redeploy`,
@@ -263,7 +267,7 @@ export function createDokployAdapter(
     },
 
     async reconcile(target, context, log) {
-      const found = await reconcile(target.applicationId, context)
+      const found = await reconcile(target.applicationId, context, log)
       log(
         found
           ? `Reconciled upstream deployment=${found.deploymentId}`
@@ -316,23 +320,47 @@ export function createDokployAdapter(
     },
   }
 
-  async function reconcile(applicationId: string, context: DeploymentContext) {
+  async function reconcile(
+    applicationId: string,
+    context: DeploymentContext,
+    log: (line: string) => void,
+  ) {
     const deadline = Date.now() + (opts.reconciliationTimeoutMs ?? 30_000)
     const identity = dispatchIdentity(context)
     for (;;) {
       const app = await getApplication(applicationId)
-      const matches =
-        app.deployments?.filter(
-          (item) =>
-            item.title === identity.title &&
-            item.description === identity.description,
-        ) ?? []
+      const deployments = app.deployments ?? []
+      // Preferred evidence: the exact identity we sent. Git-sourced apps make
+      // Dokploy ignore title/description, so this only matches other providers.
+      const matches = deployments.filter(
+        (item) =>
+          item.title === identity.title &&
+          item.description === identity.description,
+      )
       if (matches.length > 1)
         throw new DeploymentUncertainError(
           `Multiple upstream deployments match job=${context.jobId}; manual investigation required`,
         )
       const id = matches[0]?.deploymentId
-      if (id) return { deploymentId: id }
+      if (id) {
+        log(`deployment=${id} matched by dispatch title`)
+        return { deploymentId: id }
+      }
+      // Fallback: Dokploy ignored our identity. Builds for an application are
+      // serialised by the worker, so the single deployment created since our
+      // dispatch is ours. The health check still verifies the publicationId.
+      const created = findDeploymentsCreatedSince(deployments, context)
+      if (created.length > 1)
+        throw new DeploymentUncertainError(
+          `Multiple upstream deployments were created after dispatch for job=${context.jobId}; manual investigation required`,
+        )
+      const onlyCreated = created[0]?.deploymentId
+      if (onlyCreated) {
+        log(
+          `deployment=${onlyCreated} matched as the only deployment created after dispatch`,
+        )
+        return { deploymentId: onlyCreated }
+      }
       const wait = Math.min(
         opts.reconciliationPollMs ?? 1000,
         deadline - Date.now(),
@@ -360,7 +388,7 @@ export function createDokployAdapter(
           redirect: 'manual',
           signal: AbortSignal.timeout(remaining),
         })
-      : await pinnedRequest(url, resolved.addresses[0], remaining)
+      : await pinnedRequest(url, resolved.addresses, remaining)
     if (response.status >= 300 && response.status < 400) {
       const location = response.headers.get('location')
       if (!location || redirects >= 4) return response
@@ -374,9 +402,13 @@ export function createDokployAdapter(
   }
 }
 
-function pinnedRequest(
+/**
+ * Connects only to the addresses that were checked for being public, so DNS
+ * cannot change between the check and the connection. Exported for tests.
+ */
+export function pinnedRequest(
   url: URL,
-  address: string | undefined,
+  addresses: string[],
   timeoutMs: number,
 ) {
   return new Promise<Response>((resolve, reject) => {
@@ -385,12 +417,7 @@ function pinnedRequest(
       url,
       {
         signal: AbortSignal.timeout(timeoutMs),
-        ...(address
-          ? {
-              lookup: (_hostname, _options, callback) =>
-                callback(null, address, isIP(address)),
-            }
-          : {}),
+        ...(addresses.length > 0 ? { lookup: pinnedLookup(addresses) } : {}),
       },
       (incoming) => {
         const chunks: Buffer[] = []
@@ -468,6 +495,27 @@ function dispatchIdentity(context: DeploymentContext) {
   }
 }
 
+/**
+ * Deployments created at or after the dispatch (minus clock skew between the
+ * CMS and Dokploy) that do not carry any CMS `areca:` dispatch title. Entries
+ * without a parseable createdAt are ignored. Empty when no dispatch time is
+ * known, which disables the fallback.
+ */
+function findDeploymentsCreatedSince(
+  deployments: DokployDeployment[],
+  context: DeploymentContext,
+) {
+  if (!context.dispatchedAt) return []
+  const since = context.dispatchedAt.getTime() - DISPATCH_CLOCK_SKEW_MS
+  return deployments.filter((item) => {
+    if (!item.deploymentId) return false
+    if (item.title?.startsWith('areca:')) return false
+    if (typeof item.createdAt !== 'string') return false
+    const created = Date.parse(item.createdAt)
+    return Number.isFinite(created) && created >= since
+  })
+}
+
 /** Bounded retry only for read operations or an identical idempotent write. */
 async function retrySafe<T>(operation: () => Promise<T>): Promise<T> {
   for (let attempt = 0; ; attempt++) {
@@ -488,4 +536,43 @@ async function retrySafe<T>(operation: () => Promise<T>): Promise<T> {
 
 function sleep(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms))
+}
+
+/**
+ * A `lookup` that answers with the pinned addresses. Node (22+) asks with
+ * `{ all: true }` for Happy Eyeballs and then needs the whole list, not a
+ * single address; answering with one address fails every connection.
+ */
+function pinnedLookup(addresses: string[]) {
+  const records = addresses.map((address) => ({
+    address,
+    family: isIP(address),
+  }))
+  return (
+    _hostname: string,
+    options: LookupOptions,
+    callback: (
+      error: NodeJS.ErrnoException | null,
+      address: string | LookupAddress[],
+      family?: number,
+    ) => void,
+  ) => {
+    const family =
+      options.family === 4 || options.family === 6 ? options.family : undefined
+    const pool = family
+      ? records.filter((record) => record.family === family)
+      : records
+    const first = pool.at(0)
+    if (!first) {
+      callback(
+        Object.assign(new Error('No pinned address for this address family'), {
+          code: 'ENOTFOUND',
+        }),
+        '',
+      )
+      return
+    }
+    if (options.all) callback(null, pool)
+    else callback(null, first.address, first.family)
+  }
 }

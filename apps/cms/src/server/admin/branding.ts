@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import type { InferSelectModel } from 'drizzle-orm'
 
 import { getStorage } from '#/adapters'
@@ -24,6 +24,14 @@ import { m } from '#/paraglide/messages'
 import { AssetValidationError } from '#/server/assets'
 import { audit } from '#/server/audit'
 import { createLogger } from '#/server/log'
+import { validateImageBytes } from '#/server/assets/image-validation'
+import {
+  beginObjectUpload,
+  completeObjectUpload,
+  compensateObjectUpload,
+  drainStorageObjectDeletions,
+  queueObjectDeletion,
+} from '#/server/assets/storage-cleanup'
 
 export type BrandingRow = InferSelectModel<typeof branding>
 
@@ -117,6 +125,13 @@ async function upsertBranding(
 ) {
   const values = { ...patch, updatedBy: actorId, updatedAt: new Date() }
   return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtextextended('branding', 0))`,
+    )
+    const [previous] = await tx
+      .select()
+      .from(branding)
+      .where(eq(branding.id, BRANDING_ID))
     const rows = await tx
       .insert(branding)
       .values({ id: BRANDING_ID, ...values })
@@ -137,6 +152,12 @@ async function upsertBranding(
       },
       tx,
     )
+    for (const key of ['logoKey', 'faviconKey'] as const) {
+      if (!(key in patch)) continue
+      if (previous?.[key] && previous[key] !== row[key])
+        await queueObjectDeletion(tx, previous[key])
+      if (row[key]) await completeObjectUpload(tx, row[key])
+    }
     return toBrandingView(row)
   })
 }
@@ -242,29 +263,32 @@ export async function setBrandingImage(
     throw new AssetValidationError(m.server_image_exceeds_2mb())
   }
 
-  const previous = await getBrandingRow()
+  await validateImageBytes(file.buffer, mimeType)
   const storageKey = `branding/${kind}-${crypto.randomUUID()}.${ext}`
-  await getStorage().put(storageKey, file.buffer, mimeType)
-
-  const view = await upsertBranding(
-    kind === 'logo'
-      ? { logoKey: storageKey, logoMime: mimeType }
-      : { faviconKey: storageKey, faviconMime: mimeType },
-    actorId,
-    { action: 'branding.image_set', meta: { kind } },
-  )
-
-  await deleteImageQuietly(
-    kind === 'logo' ? previous?.logoKey : previous?.faviconKey,
-  )
-  return view
+  await beginObjectUpload(storageKey)
+  try {
+    await getStorage().put(storageKey, file.buffer, mimeType)
+    const view = await upsertBranding(
+      kind === 'logo'
+        ? { logoKey: storageKey, logoMime: mimeType }
+        : { faviconKey: storageKey, faviconMime: mimeType },
+      actorId,
+      { action: 'branding.image_set', meta: { kind } },
+    )
+    await drainStorageObjectDeletions().catch((error) =>
+      createLogger('branding').warn('storage cleanup deferred', { err: error }),
+    )
+    return view
+  } catch (error) {
+    await compensateObjectUpload(storageKey)
+    throw error
+  }
 }
 
 export async function clearBrandingImage(
   kind: BrandingImageKind,
   actorId: string,
 ): Promise<BrandingView> {
-  const previous = await getBrandingRow()
   const view = await upsertBranding(
     kind === 'logo'
       ? { logoKey: null, logoMime: null }
@@ -272,14 +296,13 @@ export async function clearBrandingImage(
     actorId,
     { action: 'branding.image_clear', meta: { kind } },
   )
-  await deleteImageQuietly(
-    kind === 'logo' ? previous?.logoKey : previous?.faviconKey,
+  await drainStorageObjectDeletions().catch((error) =>
+    createLogger('branding').warn('storage cleanup deferred', { err: error }),
   )
   return view
 }
 
 export async function resetBranding(actorId: string): Promise<BrandingView> {
-  const previous = await getBrandingRow()
   const view = await upsertBranding(
     {
       appName: null,
@@ -296,18 +319,8 @@ export async function resetBranding(actorId: string): Promise<BrandingView> {
     actorId,
     { action: 'branding.reset' },
   )
-  await deleteImageQuietly(previous?.logoKey)
-  await deleteImageQuietly(previous?.faviconKey)
+  await drainStorageObjectDeletions().catch((error) =>
+    createLogger('branding').warn('storage cleanup deferred', { err: error }),
+  )
   return view
-}
-
-const log = createLogger('branding')
-
-async function deleteImageQuietly(key: string | null | undefined) {
-  if (!key) return
-  try {
-    await getStorage().delete(key)
-  } catch (err) {
-    log.warn('could not delete branding image', { key, err })
-  }
 }

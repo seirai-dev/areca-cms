@@ -1,5 +1,9 @@
+import * as React from 'react'
+import { useRouter, Link  } from '@tanstack/react-router'
+import { authClient } from '#/lib/auth-client'
+import { verifyStepUpFn } from '#/server/fn/security'
+import { TwoFactorChallenge } from '#/features/auth/two-factor-challenge'
 import { ArrowLeft, WarningCircle } from '@phosphor-icons/react'
-import { Link } from '@tanstack/react-router'
 
 import { buttonVariants } from '#/components/ui/button'
 import { PageHeader } from '#/components/ui/page-header'
@@ -15,6 +19,49 @@ import { TwoFactorSection } from './two-factor-section'
  * the one signed-in page the enrolment redirect leaves alone.
  */
 export function AccountScreen({ me }: { me: Me }) {
+  const router = useRouter()
+  const [pending, setPending] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+  if (me.mfaVerificationRequired) {
+    return (
+      <div
+        className="grid max-w-[480px] gap-6"
+        data-testid="admin-mfa-challenge"
+      >
+        <PageHeader
+          title={m.auth_two_factor_title()}
+          description={m.auth_two_factor_subtitle()}
+        />
+        <TwoFactorChallenge
+          ready
+          pending={pending}
+          error={error}
+          onCancel={() => {
+            void authClient
+              .signOut()
+              .then(() => window.location.assign('/login'))
+          }}
+          onSubmit={(code, kind) => {
+            setPending(true)
+            setError(null)
+            void verifyStepUpFn({ data: { code, kind } })
+              .then(async () => {
+                await router.invalidate()
+                window.location.assign('/')
+              })
+              .catch((failure: unknown) => {
+                setError(
+                  failure instanceof Error
+                    ? failure.message
+                    : m.auth_two_factor_invalid_code(),
+                )
+              })
+              .finally(() => setPending(false))
+          }}
+        />
+      </div>
+    )
+  }
   return (
     <div className="grid max-w-[880px] gap-8" data-testid="account-page">
       <div className="grid gap-4">

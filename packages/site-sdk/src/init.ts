@@ -1,9 +1,27 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
-import { cancel, intro, isCancel, note, outro, password, spinner, text } from '@clack/prompts'
-import { DEFAULT_CONFIG_PATH, DEFAULT_PULL_OUT_DIR } from './args.js'
+import { dirname, isAbsolute, join, posix } from 'node:path'
+import {
+  cancel,
+  confirm,
+  intro,
+  isCancel,
+  log,
+  note,
+  outro,
+  password,
+  spinner,
+  text,
+} from '@clack/prompts'
+import {
+  DEFAULT_ASSETS_DIR,
+  DEFAULT_CONFIG_PATH,
+  DEFAULT_PULL_OUT_DIR,
+} from './args.js'
+import { derivePublicPath, normalizePublicPath } from './assets.js'
 import { parseEnvAssignment } from './env.js'
-import type { PulledContentManifest } from './types.js'
+import { assetsConfigLines } from './generate-config.js'
+import { loadConfig } from './load-config.js'
+import type { AssetsConfig, PulledContentManifest } from './types.js'
 
 const SITE_KEY_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const DEFAULT_CMS_URL = 'http://localhost:3000'
@@ -24,6 +42,12 @@ export type InitSiteOptions = {
   configPath?: string
   yes?: boolean
   force?: boolean
+  /** Media directory for `areca pull` (default `public/areca`). */
+  assetsDir?: string
+  /** URL path that serves `assetsDir`; needed outside `public/`. */
+  assetsPublicPath?: string
+  /** Keep media URLs pointing at the CMS. */
+  noAssets?: boolean
 }
 
 type ResolvedInitValues = {
@@ -31,6 +55,9 @@ type ResolvedInitValues = {
   token: string
   siteKey: string
 }
+
+/** `keep` leaves an existing `assets` block in areca.config.ts untouched. */
+type AssetsChoice = AssetsConfig | 'keep'
 
 export async function initSite(options: InitSiteOptions): Promise<void> {
   const cwd = options.cwd ?? process.cwd()
@@ -50,15 +77,37 @@ export async function initSite(options: InitSiteOptions): Promise<void> {
     ? await promptInitValues(options)
     : requireNonInteractiveValues(options)
 
+  const configFile = join(cwd, configPath)
+  const existingSource =
+    !force && existsSync(configFile) ? readFileSync(configFile, 'utf8') : undefined
+  const assets = await chooseAssets(options, {
+    interactive,
+    existing: existingSource !== undefined && hasAssetsBlock(existingSource)
+      ? await describeExistingAssets(configFile, cwd, existingSource)
+      : undefined,
+  })
+
   const spin = interactive ? spinner() : undefined
   spin?.start('Writing Areca files...')
+  let manualSnippet: string | undefined
   try {
-    writeSiteFiles(cwd, values, { outDir, configPath, force })
+    manualSnippet = writeSiteFiles(cwd, values, {
+      outDir,
+      configPath,
+      force,
+      assets,
+      existingSource,
+    })
   } catch (error) {
     spin?.stop('Failed to write files')
     throw error
   }
   spin?.stop('Wrote Areca files')
+  if (manualSnippet) {
+    const message = `Could not update ${configPath} automatically. Add this inside defineSiteContent({ ... }):\n\n${manualSnippet}`
+    if (interactive) log.warn(message)
+    else console.warn(message)
+  }
 
   const nextSteps =
     'Set ARECA_SCHEMA_TOKEN from Settings > Developer (keep it out of builds) → add collections to areca.config.ts → pnpm sync-manifest → publish in CMS → pnpm content:pull → pnpm dev'
@@ -69,7 +118,9 @@ export async function initSite(options: InitSiteOptions): Promise<void> {
   }
 }
 
-async function promptInitValues(options: InitSiteOptions): Promise<ResolvedInitValues> {
+async function promptInitValues(
+  options: InitSiteOptions,
+): Promise<ResolvedInitValues> {
   const cmsUrl = options.cmsUrl
     ? parseCmsUrl(options.cmsUrl)
     : parseCmsUrl(
@@ -78,7 +129,8 @@ async function promptInitValues(options: InitSiteOptions): Promise<ResolvedInitV
             message: 'CMS URL',
             placeholder: DEFAULT_CMS_URL,
             defaultValue: DEFAULT_CMS_URL,
-            validate: (value) => validateCmsUrlInput((value ?? '').trim() || DEFAULT_CMS_URL),
+            validate: (value) =>
+              validateCmsUrlInput((value ?? '').trim() || DEFAULT_CMS_URL),
           }),
         ),
       )
@@ -88,7 +140,8 @@ async function promptInitValues(options: InitSiteOptions): Promise<ResolvedInitV
     : requirePrompt(
         await password({
           message: 'Site token',
-          validate: (value) => ((value ?? '').trim() ? undefined : 'Site token is required'),
+          validate: (value) =>
+            (value ?? '').trim() ? undefined : 'Site token is required',
         }),
       ).trim()
 
@@ -107,26 +160,238 @@ async function promptInitValues(options: InitSiteOptions): Promise<ResolvedInitV
   return { cmsUrl, token, siteKey }
 }
 
+/** Returns a snippet to paste when an existing config could not be patched. */
 function writeSiteFiles(
   cwd: string,
   values: ResolvedInitValues,
-  options: { outDir: string; configPath: string; force: boolean },
-): void {
+  options: {
+    outDir: string
+    configPath: string
+    force: boolean
+    assets: AssetsChoice
+    existingSource: string | undefined
+  },
+): string | undefined {
   const packageJsonPath = join(cwd, 'package.json')
   const pkg = readPackageJson(packageJsonPath)
+  const configFile = join(cwd, options.configPath)
+  let manualSnippet: string | undefined
 
-  writeArecaConfig(join(cwd, options.configPath), values.siteKey, options.force)
+  if (options.existingSource === undefined) {
+    writeArecaConfig(
+      configFile,
+      values.siteKey,
+      options.assets === 'keep' ? undefined : options.assets,
+    )
+  } else if (options.assets !== 'keep') {
+    const patched = patchAssetsBlock(options.existingSource, options.assets)
+    if (patched === undefined) {
+      manualSnippet = assetsConfigLines(options.assets, '  ').join('\n')
+    } else if (patched !== options.existingSource) {
+      writeFileSync(configFile, patched, 'utf8')
+    }
+  }
   writeEnvExample(join(cwd, '.env.example'), values.cmsUrl, options.force)
   upsertEnvLocal(join(cwd, '.env.local'), {
     ARECA_CMS_URL: values.cmsUrl,
     ARECA_SITE_TOKEN: values.token,
   })
-  ensureGitignore(join(cwd, '.gitignore'), ['.env.local', gitignoreOutDir(options.outDir)])
+  // Downloaded media is regenerated by every pull, like the content itself.
+  const mediaDir =
+    options.assets !== 'keep' && options.assets.download !== false
+      ? (options.assets.dir ?? DEFAULT_ASSETS_DIR)
+      : undefined
+  ensureGitignore(join(cwd, '.gitignore'), [
+    '.env.local',
+    gitignoreOutDir(options.outDir),
+    ...(mediaDir ? [gitignoreOutDir(mediaDir)] : []),
+  ])
   writeEmptyGeneratedContent(join(cwd, options.outDir))
-  writePackageJson(packageJsonPath, patchPackageScripts(pkg, options.outDir))
+  writePackageJson(
+    packageJsonPath,
+    patchPackageScripts(pkg, options.outDir, options.configPath),
+  )
+  return manualSnippet
 }
 
-function requireNonInteractiveValues(options: InitSiteOptions): ResolvedInitValues {
+async function chooseAssets(
+  options: InitSiteOptions,
+  context: { interactive: boolean; existing: string | undefined },
+): Promise<AssetsChoice> {
+  if (options.noAssets) return { download: false }
+  if (options.assetsDir !== undefined || options.assetsPublicPath !== undefined) {
+    return parseAssetsChoice(
+      options.assetsDir ?? DEFAULT_ASSETS_DIR,
+      options.assetsPublicPath,
+    )
+  }
+  if (!context.interactive) {
+    return context.existing !== undefined
+      ? 'keep'
+      : { download: true, dir: DEFAULT_ASSETS_DIR }
+  }
+
+  if (context.existing !== undefined) {
+    note(context.existing, 'Current media settings')
+    const replace = await confirm({
+      message: 'Change the media settings?',
+      initialValue: false,
+    })
+    if (isCancel(replace)) return cancelInit()
+    if (!replace) return 'keep'
+  }
+
+  const download = await confirm({
+    message: 'Download media (images, files) into this repo when pulling content?',
+    initialValue: true,
+  })
+  if (isCancel(download)) return cancelInit()
+  if (!download) return { download: false }
+
+  const dir = requirePrompt(
+    await text({
+      message: 'Media directory',
+      placeholder: DEFAULT_ASSETS_DIR,
+      defaultValue: DEFAULT_ASSETS_DIR,
+      validate: (value) => validateAssetsDir((value ?? '').trim() || DEFAULT_ASSETS_DIR),
+    }),
+  ).trim() || DEFAULT_ASSETS_DIR
+  if (derivePublicPath(dir) !== undefined) return parseAssetsChoice(dir)
+
+  const suggested = `/${posix.basename(dir.replace(/\\/g, '/'))}`
+  const publicPath = requirePrompt(
+    await text({
+      message: `URL path your site serves ${dir} from`,
+      placeholder: suggested,
+      defaultValue: suggested,
+      validate: (value) => validatePublicPath((value ?? '').trim() || suggested),
+    }),
+  ).trim() || suggested
+  return parseAssetsChoice(dir, publicPath)
+}
+
+function parseAssetsChoice(dir: string, publicPath?: string): AssetsConfig {
+  const trimmed = dir.trim()
+  const dirError = validateAssetsDir(trimmed)
+  if (dirError) throw new Error(`Invalid media directory: ${trimmed}. ${dirError}`)
+  if (publicPath !== undefined) {
+    const pathError = validatePublicPath(publicPath)
+    if (pathError) throw new Error(`Invalid media URL path: ${publicPath}. ${pathError}`)
+    return { download: true, dir: trimmed, publicPath: normalizePublicPath(publicPath) }
+  }
+  if (derivePublicPath(trimmed) === undefined) {
+    throw new Error(
+      `${trimmed} is not under public/. Pass --assets-public-path with the URL path your site serves it from.`,
+    )
+  }
+  return { download: true, dir: trimmed }
+}
+
+function validateAssetsDir(value: string): string | undefined {
+  if (!value) return 'Enter a directory'
+  if (isAbsolute(value)) return 'Use a path relative to the project root'
+  if (posix.normalize(value.replace(/\\/g, '/')).startsWith('..'))
+    return 'The directory must be inside the project'
+  return undefined
+}
+
+function validatePublicPath(value: string): string | undefined {
+  try {
+    normalizePublicPath(value)
+    return undefined
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error)
+  }
+}
+
+function cancelInit(): never {
+  cancel('Operation cancelled.')
+  throw new InitCancelledError()
+}
+
+const SITE_KEY_LINE = /^([ \t]*)siteKey\s*:.*,[ \t]*$/m
+
+/** Top-level `assets:` only: a collection named `assets` sits deeper. */
+function assetsBlockStart(source: string): RegExp {
+  const indent = SITE_KEY_LINE.exec(source)?.[1] ?? '  '
+  return new RegExp(`^(${indent})assets\\s*:\\s*`, 'm')
+}
+
+function hasAssetsBlock(source: string): boolean {
+  return assetsBlockStart(source).test(source)
+}
+
+async function describeExistingAssets(
+  configFile: string,
+  cwd: string,
+  source: string,
+): Promise<string> {
+  try {
+    const config = await loadConfig(configFile, cwd)
+    if (config.assets) return assetsConfigLines(config.assets, '').join('\n')
+  } catch {
+    // Show the source text when the config cannot be imported here.
+  }
+  const range = assetsBlockRange(source)
+  return range ? source.slice(range.start, range.end).trim() : 'assets: (custom)'
+}
+
+/**
+ * Replaces the `assets: { ... }` block, or inserts one after `siteKey`.
+ * Returns undefined when the file does not have a shape that can be edited
+ * safely (for example `assets: someVariable`).
+ */
+export function patchAssetsBlock(
+  source: string,
+  assets: AssetsConfig,
+): string | undefined {
+  if (hasAssetsBlock(source)) {
+    const range = assetsBlockRange(source)
+    if (!range) return undefined
+    const lines = assetsConfigLines(assets, range.indent).join('\n')
+    return `${source.slice(0, range.start)}${lines}${source.slice(range.end)}`
+  }
+  const siteKey = SITE_KEY_LINE.exec(source)
+  if (!siteKey) return undefined
+  const insertAt = siteKey.index + siteKey[0].length
+  const lines = assetsConfigLines(assets, siteKey[1] ?? '  ').join('\n')
+  return `${source.slice(0, insertAt)}\n${lines}${source.slice(insertAt)}`
+}
+
+/** The `assets: { ... },` text including indentation and trailing comma. */
+function assetsBlockRange(
+  source: string,
+): { start: number; end: number; indent: string } | undefined {
+  const match = assetsBlockStart(source).exec(source)
+  if (!match) return undefined
+  const open = match.index + match[0].length
+  if (source[open] !== '{') return undefined
+  let depth = 0
+  let quote: string | undefined
+  for (let i = open; i < source.length; i += 1) {
+    const char = source[i]
+    if (quote) {
+      if (char === '\\') i += 1
+      else if (char === quote) quote = undefined
+      continue
+    }
+    if (char === "'" || char === '"' || char === '`') quote = char
+    else if (char === '{') depth += 1
+    else if (char === '}') {
+      depth -= 1
+      if (depth === 0) {
+        let end = i + 1
+        if (source[end] === ',') end += 1
+        return { start: match.index, end, indent: match[1] ?? '' }
+      }
+    }
+  }
+  return undefined
+}
+
+function requireNonInteractiveValues(
+  options: InitSiteOptions,
+): ResolvedInitValues {
   const cmsUrl = options.cmsUrl?.trim() ?? ''
   const token = options.token?.trim() ?? ''
   const siteKey = options.siteKey?.trim() ?? ''
@@ -192,16 +457,25 @@ function requirePrompt(value: string | symbol): string {
   return value
 }
 
-function writeArecaConfig(filePath: string, siteKey: string, force: boolean): void {
-  if (!force && existsSync(filePath)) return
+function writeArecaConfig(
+  filePath: string,
+  siteKey: string,
+  assets: AssetsConfig | undefined,
+): void {
+  mkdirSync(dirname(filePath), { recursive: true })
+  const assetsLines = assets ? `${assetsConfigLines(assets, '  ').join('\n')}\n` : ''
   writeFileSync(
     filePath,
-    `import { defineSiteContent } from '@areca-cms/site-sdk'\n\nexport default defineSiteContent({\n  siteKey: '${siteKey}',\n  collections: {},\n})\n`,
+    `import { defineSiteContent } from '@areca-cms/site-sdk'\n\nexport default defineSiteContent({\n  siteKey: '${siteKey}',\n${assetsLines}  collections: {},\n})\n`,
     'utf8',
   )
 }
 
-function writeEnvExample(filePath: string, cmsUrl: string, force: boolean): void {
+function writeEnvExample(
+  filePath: string,
+  cmsUrl: string,
+  force: boolean,
+): void {
   if (!force && existsSync(filePath)) return
   writeFileSync(
     filePath,
@@ -210,7 +484,10 @@ function writeEnvExample(filePath: string, cmsUrl: string, force: boolean): void
   )
 }
 
-function upsertEnvLocal(filePath: string, updates: Record<string, string>): void {
+function upsertEnvLocal(
+  filePath: string,
+  updates: Record<string, string>,
+): void {
   const original = readOptionalUtf8(filePath) ?? ''
   const lines = original.length > 0 ? original.split(/\r?\n/) : []
   if (lines.length > 0 && lines[lines.length - 1] === '') {
@@ -260,7 +537,9 @@ function ensureGitignore(filePath: string, entries: string[]): void {
 
 function hasGitignoreEntry(existing: Set<string>, entry: string): boolean {
   const trimmed = entry.replace(/\/+$/, '')
-  return existing.has(entry) || existing.has(trimmed) || existing.has(`${trimmed}/`)
+  return (
+    existing.has(entry) || existing.has(trimmed) || existing.has(`${trimmed}/`)
+  )
 }
 
 function gitignoreOutDir(outDir: string): string {
@@ -269,6 +548,7 @@ function gitignoreOutDir(outDir: string): string {
 
 function writeEmptyGeneratedContent(outDir: string): void {
   mkdirSync(outDir, { recursive: true })
+  if (existsSync(join(outDir, 'manifest.json'))) return
   const manifest: PulledContentManifest = {
     publicationId: '',
     hash: '',
@@ -284,7 +564,9 @@ function readPackageJson(filePath: string): Record<string, unknown> {
     raw = readFileSync(filePath, 'utf8')
   } catch (error) {
     if (isNodeError(error) && error.code === 'ENOENT') {
-      throw new Error(`No package.json found. Run areca init from the site root.`)
+      throw new Error(
+        `No package.json found. Run areca init from the site root.`,
+      )
     }
     throw error
   }
@@ -306,14 +588,25 @@ function readPackageJson(filePath: string): Record<string, unknown> {
 function patchPackageScripts(
   pkg: Record<string, unknown>,
   outDir: string,
+  configPath: string,
 ): Record<string, unknown> {
   const scripts =
-    pkg.scripts && typeof pkg.scripts === 'object' && !Array.isArray(pkg.scripts)
+    pkg.scripts &&
+    typeof pkg.scripts === 'object' &&
+    !Array.isArray(pkg.scripts)
       ? { ...(pkg.scripts as Record<string, unknown>) }
       : {}
 
-  setScriptIfEmpty(scripts, 'sync-manifest', 'areca manifest push')
-  setScriptIfEmpty(scripts, 'content:pull', `areca pull --out ${outDir}`)
+  setScriptIfEmpty(
+    scripts,
+    'sync-manifest',
+    `areca manifest push${configPath === DEFAULT_CONFIG_PATH ? '' : ` ${shellArgument(configPath)}`}`,
+  )
+  setScriptIfEmpty(
+    scripts,
+    'content:pull',
+    `areca pull --out ${shellArgument(outDir)}`,
+  )
 
   const dev = scripts.dev
   if (typeof dev === 'string' && dev.trim() !== '' && !scriptLoadsEnv(dev)) {
@@ -323,7 +616,16 @@ function patchPackageScripts(
   return { ...pkg, scripts }
 }
 
-function setScriptIfEmpty(scripts: Record<string, unknown>, key: string, value: string): void {
+function shellArgument(value: string): string {
+  if (/^[A-Za-z0-9_./-]+$/.test(value)) return value
+  return `'${value.replace(/'/g, "'\\''")}'`
+}
+
+function setScriptIfEmpty(
+  scripts: Record<string, unknown>,
+  key: string,
+  value: string,
+): void {
   const current = scripts[key]
   if (typeof current !== 'string' || current.trim() === '') {
     scripts[key] = value
@@ -334,7 +636,10 @@ function scriptLoadsEnv(script: string): boolean {
   return script.includes('--env-file') || script.includes('areca run')
 }
 
-function writePackageJson(filePath: string, pkg: Record<string, unknown>): void {
+function writePackageJson(
+  filePath: string,
+  pkg: Record<string, unknown>,
+): void {
   writeJson(filePath, pkg)
 }
 

@@ -1,5 +1,12 @@
+import { cmsAssetDownloader } from './assets.js'
 import { manifestFromConfig } from './config.js'
-import type { PreviewResult, SiteContentConfig, SiteManifest, Snapshot } from './types.js'
+import type {
+  PreviewResult,
+  SiteContentConfig,
+  SiteManifest,
+  Snapshot,
+  SnapshotAsset,
+} from './types.js'
 
 export type ArecaClientOptions = {
   cmsUrl?: string
@@ -10,13 +17,21 @@ export type ArecaClientOptions = {
 export type ArecaClient = {
   syncManifest: (config: SiteContentConfig) => Promise<{ ok: true }>
   fetchManifest: () => Promise<SiteManifest>
-  fetchSnapshot: () => Promise<Snapshot>
+  fetchSnapshot: (options?: { publicationId?: string }) => Promise<Snapshot>
   fetchPreview: (token: string) => Promise<PreviewResult>
+  /** Downloads a media file listed in `Snapshot.assets`. */
+  fetchAsset: (asset: SnapshotAsset) => Promise<Uint8Array>
 }
 
-export function createArecaClient(options: ArecaClientOptions = {}): ArecaClient {
+export function createArecaClient(
+  options: ArecaClientOptions = {},
+): ArecaClient {
   const cmsUrl = normalizeBaseUrl(
-    requiredValue(options.cmsUrl ?? process.env.ARECA_CMS_URL, 'ARECA_CMS_URL', 'cmsUrl'),
+    requiredValue(
+      options.cmsUrl ?? process.env.ARECA_CMS_URL,
+      'ARECA_CMS_URL',
+      'cmsUrl',
+    ),
   )
   const siteToken = requiredValue(
     options.siteToken ?? process.env.ARECA_SITE_TOKEN,
@@ -41,6 +56,8 @@ export function createArecaClient(options: ArecaClientOptions = {}): ArecaClient
   }
 
   return {
+    fetchAsset: cmsAssetDownloader(cmsUrl),
+
     async syncManifest(config) {
       const res = await cmsFetch(`${cmsUrl}/api/sites/manifest`, {
         method: 'POST',
@@ -72,13 +89,19 @@ export function createArecaClient(options: ArecaClientOptions = {}): ArecaClient
       return (await res.json()) as SiteManifest
     },
 
-    async fetchSnapshot() {
-      const res = await cmsFetch(`${cmsUrl}/api/sites/snapshot/current`, {
-        method: 'GET',
-        headers,
-      })
+    async fetchSnapshot(options = {}) {
+      const query = options.publicationId
+        ? `?${new URLSearchParams({ publicationId: options.publicationId })}`
+        : ''
+      const res = await cmsFetch(
+        `${cmsUrl}/api/sites/snapshot/current${query}`,
+        {
+          method: 'GET',
+          headers,
+        },
+      )
 
-      if (res.status === 404) {
+      if (res.status === 404 && !options.publicationId) {
         const detail = await readError(res)
         throw new Error(
           `No publication exists for this site. Publish content in the CMS before running areca pull.${detail ? ` ${detail}` : ''}`,
@@ -89,7 +112,16 @@ export function createArecaClient(options: ArecaClientOptions = {}): ArecaClient
         throw new Error(await formatHttpError('Failed to fetch snapshot', res))
       }
 
-      return (await res.json()) as Snapshot
+      const snapshot = (await res.json()) as Snapshot
+      if (
+        options.publicationId &&
+        snapshot.publicationId !== options.publicationId
+      ) {
+        throw new Error(
+          `Expected publication ${options.publicationId}, received ${snapshot.publicationId}`,
+        )
+      }
+      return snapshot
     },
 
     async fetchPreview(token) {
@@ -108,7 +140,11 @@ export function createArecaClient(options: ArecaClientOptions = {}): ArecaClient
   }
 }
 
-function requiredValue(value: string | undefined, envName: string, optionName: string): string {
+function requiredValue(
+  value: string | undefined,
+  envName: string,
+  optionName: string,
+): string {
   const trimmed = value?.trim()
   if (!trimmed) {
     throw new Error(
@@ -136,5 +172,7 @@ async function readError(res: Response): Promise<string> {
 
 async function formatHttpError(prefix: string, res: Response): Promise<string> {
   const detail = await readError(res)
-  return detail ? `${prefix} (${res.status}): ${detail}` : `${prefix} (${res.status})`
+  return detail
+    ? `${prefix} (${res.status}): ${detail}`
+    : `${prefix} (${res.status})`
 }

@@ -60,12 +60,19 @@ jobs:
           pnpm --filter @areca-cms/site-sdk typecheck
           pnpm --filter @areca-cms/site-sdk test
           pnpm --filter @areca-cms/site-sdk build
+      - name: Agent skills typecheck, test, build
+        run: |
+          pnpm --filter @areca-cms/skills typecheck
+          pnpm --filter @areca-cms/skills test
+          pnpm --filter @areca-cms/skills build
       - name: CMS typecheck
         run: pnpm --filter @areca/cms typecheck
       - name: CMS unit tests
         run: pnpm --filter @areca/cms test
       - name: CMS script tests (scanner, transfer tooling)
         run: pnpm --filter @areca/cms test:scripts
+      - name: Release script tests
+        run: node --test scripts/release/*.test.mjs
       - name: Docker recovery tooling tests
         run: node --test docker/*.test.mjs
       - name: Demo site typecheck and tests

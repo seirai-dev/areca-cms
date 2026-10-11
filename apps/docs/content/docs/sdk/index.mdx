@@ -31,7 +31,7 @@ The SDK sits between the CMS and your website build. A typical cycle looks like 
 </Step>
 <Step>
 
-**Pull during the build.** Your build runs `areca pull`, which downloads the snapshot into local files. Your site reads those files, so visitor requests do not call the CMS for content. Images are the exception: they load from the CMS.
+**Pull during the build.** Your build runs `areca pull`, which downloads the snapshot into local files. It also copies the images and files the content uses into your public folder. Your site reads those files, so visitor requests never call the CMS.
 
 </Step>
 <Step>

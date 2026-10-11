@@ -55,3 +55,20 @@ test("rejects mismatched running credentials without exposing their values", () 
       !error.message.includes("wrongsecret"),
   );
 });
+
+test("backup rejects a different AI encryption key in the supplied environment", () => {
+  assert.throws(
+    () =>
+      verifyContainerCredentials(
+        "cms",
+        { AI_SETTINGS_ENCRYPTION_KEY: "stale-key" },
+        ["AI_SETTINGS_ENCRYPTION_KEY=actual-key"],
+      ),
+    /AI_SETTINGS_ENCRYPTION_KEY/,
+  );
+  verifyContainerCredentials(
+    "cms",
+    { AI_SETTINGS_ENCRYPTION_KEY: "actual-key" },
+    ["AI_SETTINGS_ENCRYPTION_KEY=actual-key"],
+  );
+});

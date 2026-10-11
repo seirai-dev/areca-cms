@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { createMockDeploymentAdapter } from '#/adapters/deployment/mock'
 import type { DeploymentAdapter } from '#/adapters/deployment/types'
@@ -362,15 +362,15 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
       const jobs = await listBuildJobs(ctx.site.id, { limit: 10 })
       expect(jobs).toHaveLength(1)
       expect(jobs[0]?.status).toBe('queued')
-      const queued = await getPublication(jobs[0]!.publicationId)
+      const queued = await getPublication(jobs[0].publicationId)
       expect(queued).not.toBeNull()
-      expect(queued!.requestedBy).toBeNull()
+      expect(queued.requestedBy).toBeNull()
       const [requested] = await db
         .select()
         .from(auditLog)
         .where(
           and(
-            eq(auditLog.targetId, queued!.id),
+            eq(auditLog.targetId, queued.id),
             eq(auditLog.action, 'publication.requested'),
           ),
         )
@@ -654,7 +654,7 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
     })
   })
 
-  it('requires production health verification at execution even if site settings change after enqueue', async () => {
+  it('verifies the frozen production health URL even if site settings change after enqueue', async () => {
     await withTestSite(async (ctx) => {
       await setDeploymentTarget(ctx.site.id)
       await createTestCollection(ctx.site.id)
@@ -668,11 +668,19 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
         .update(site)
         .set({ deploymentTarget: null })
         .where(eq(site.id, ctx.site.id))
-      await processJob(requested.job, {
-        adapter: createMockDeploymentAdapter(),
-      })
-      expect((await getBuildJob(requested.job.id)).status).toBe('failed')
-      expect(await getLivePublication(ctx.site.id)).toBeNull()
+      const adapter = createMockDeploymentAdapter()
+      const healthCheck = vi.fn(adapter.healthCheck)
+      await processJob(requested.job, { adapter: { ...adapter, healthCheck } })
+      expect(healthCheck).toHaveBeenCalledWith(
+        'http://localhost:3999',
+        expect.objectContaining({
+          expectPublicationId: requested.publication.id,
+        }),
+      )
+      expect((await getBuildJob(requested.job.id)).status).toBe('succeeded')
+      expect((await getLivePublication(ctx.site.id))?.id).toBe(
+        requested.publication.id,
+      )
     })
   })
 
@@ -813,7 +821,7 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
         .from(schedulerBackoff)
         .where(eq(schedulerBackoff.siteId, ctx.site.id))
         .limit(1)
-      expect(still?.lastAttemptAt.getTime()).toBe(row!.lastAttemptAt.getTime())
+      expect(still?.lastAttemptAt.getTime()).toBe(row.lastAttemptAt.getTime())
     })
   })
 

@@ -138,3 +138,13 @@ test('rejects validation-phase jobs from authoring export', () => {
   bundle.rows.build_job = [{ id: 'job', site_id: 's', status: 'validating' }]
   assert.throws(() => validateBundle(bundle, schema), /Active jobs/)
 })
+
+test('remaps scheduled approvers in retained authoring and archived records', () => {
+  assert.deepEqual(
+    transformArchivedActors(
+      { scheduled_by: 'source', nested: { scheduledBy: 'source' } },
+      () => 'destination',
+    ),
+    { scheduled_by: 'destination', nested: { scheduledBy: 'destination' } },
+  )
+})

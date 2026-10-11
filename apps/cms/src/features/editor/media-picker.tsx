@@ -1,8 +1,7 @@
 import * as React from 'react'
 import {
-  keepPreviousData,
+  useInfiniteQuery,
   useMutation,
-  useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
@@ -15,7 +14,6 @@ import {
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
-import { queryKeys } from '#/lib/content/query-keys'
 import { assetFileUrl, errorMessage } from '#/lib/content/utils'
 import { Button } from '#/components/ui/button'
 import {
@@ -35,8 +33,9 @@ import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 import { listAssetsFn } from '#/server/fn/assets'
 
-import { MEDIA_ACCEPT, uploadAssetFile } from './media-upload'
+import { MEDIA_ACCEPT, uploadAssetFile, isPickerImage } from './media-upload'
 import type { MediaAsset } from './media-upload'
+import { visiblePickerAssets } from './media-picker-pages'
 
 export type { MediaAsset }
 
@@ -66,24 +65,25 @@ export function MediaPickerDialog({
   const inputRef = React.useRef<HTMLInputElement>(null)
   const [search, setSearch] = React.useState('')
   const debouncedSearch = useDebouncedValue(search.trim(), 250)
-  const [pages, setPages] = React.useState(1)
   const [dragging, setDragging] = React.useState(false)
   const dragDepth = React.useRef(0)
 
-  const limit = PAGE * pages
-  const assetsQuery = useQuery({
-    queryKey: queryKeys.assets(organizationId, debouncedSearch, limit),
-    queryFn: () =>
+  const assetsQuery = useInfiniteQuery({
+    queryKey: ['assets', organizationId, 'picker', debouncedSearch, imagesOnly],
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) =>
       listAssetsFn({
         data: {
           organizationId,
           search: debouncedSearch || undefined,
-          limit: limit + 1,
-          offset: 0,
+          imagesOnly,
+          limit: PAGE + 1,
+          offset: pageParam,
         },
       }),
+    getNextPageParam: (lastPage, _pages, offset) =>
+      lastPage.length > PAGE ? offset + PAGE : undefined,
     enabled: open,
-    placeholderData: keepPreviousData,
   })
 
   const uploadMutation = useMutation({
@@ -100,22 +100,28 @@ export function MediaPickerDialog({
       toast.error(errorMessage(error, m.editor_upload_failed())),
   })
 
-  const all = (assetsQuery.data ?? []) as MediaAsset[]
-  const hasMore = all.length > limit
-  const visible = (hasMore ? all.slice(0, limit) : all).filter(
-    (asset) => !imagesOnly || asset.mimeType.startsWith('image/'),
-  )
+  const hasMore = assetsQuery.hasNextPage
+  const visible = visiblePickerAssets(
+    assetsQuery.data?.pages ?? [],
+    PAGE,
+  ) as MediaAsset[]
 
   function close() {
     setSearch('')
-    setPages(1)
     setDragging(false)
     dragDepth.current = 0
     onOpenChange(false)
   }
 
   function pick(file: File | null | undefined) {
-    if (file && !uploadMutation.isPending) uploadMutation.mutate(file)
+    if (!file || uploadMutation.isPending) return
+    if (imagesOnly && !isPickerImage(file.type)) {
+      toast.error(
+        'Choose a JPEG, PNG, WebP or GIF image. PDFs cannot be used here.',
+      )
+      return
+    }
+    uploadMutation.mutate(file)
   }
 
   return (
@@ -166,7 +172,6 @@ export function MediaPickerDialog({
                 value={search}
                 onChange={(event) => {
                   setSearch(event.target.value)
-                  setPages(1)
                 }}
                 className="pl-9"
                 data-testid="media-search"
@@ -269,7 +274,7 @@ export function MediaPickerDialog({
                     variant="secondary"
                     size="sm"
                     loading={assetsQuery.isFetching}
-                    onClick={() => setPages((n) => n + 1)}
+                    onClick={() => void assetsQuery.fetchNextPage()}
                   >
                     {m.editor_load_more()}
                   </Button>

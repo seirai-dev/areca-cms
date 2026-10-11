@@ -6,12 +6,21 @@ import {
 } from '#/adapters/deployment/types'
 import type {
   DeploymentAdapter,
+  DeploymentContext,
   DeploymentTarget,
 } from '#/adapters/deployment/types'
 import { db, pool } from '#/db'
-import { buildJob, entry, publication, site, user } from '#/db/schema'
+import {
+  buildJob,
+  entry,
+  publication,
+  site,
+  user,
+  opsCounter,
+} from '#/db/schema'
 import { env } from '#/env'
 import { audit } from '#/server/audit'
+import { drainStorageObjectDeletions } from '#/server/assets/storage-cleanup'
 import {
   markLoopsStarted,
   markLoopsStopped,
@@ -22,19 +31,50 @@ import { createLogger, redactString } from '#/server/log'
 import { installShutdownHandlers } from './shutdown.ts'
 import { getDeploymentAdapterForOrganization } from '#/server/admin/dokploy-credentials'
 
-import { getPublication } from './publications.ts'
-import { runSchedulerTick } from './scheduler.ts'
+import { deploymentIdentity, getPublication } from './publications.ts'
+import {
+  runSchedulerTick,
+  recordSchedulerFailure,
+  clearSchedulerFailure,
+} from './scheduler.ts'
+
+// Legacy active/uncertain rows may predate resource keys. Resolve their frozen
+// target (or prior site target) so new releases cannot bypass their quarantine.
+const fallbackConnectionUrl =
+  process.env.NODE_ENV !== 'production' &&
+  env.DOKPLOY_DEV_FALLBACK_ENABLED &&
+  env.DOKPLOY_URL
+    ? new URL(env.DOKPLOY_URL).href.replace(/\/+$/, '')
+    : null
+
+export function resourceBlockerSql(fallbackUrl: string | null) {
+  const fallbackLiteral =
+    fallbackUrl === null ? 'NULL' : `'${fallbackUrl.replaceAll("'", "''")}'`
+  return `
+SELECT 1 FROM build_job a
+JOIN site legacy_site ON legacy_site.id=a.site_id
+LEFT JOIN dokploy_credential credential ON credential.organization_id=legacy_site.organization_id
+WHERE a.id<>q.id AND (a.status IN ('building','validating','deploying') OR a.dispatch_uncertain)
+AND coalesce(a.deployment_resource_key,
+  CASE WHEN coalesce(a.dispatch_connection_url, credential.url, ${fallbackLiteral}) IS NOT NULL
+  THEN encode(sha256(convert_to(rtrim(coalesce(a.dispatch_connection_url, credential.url, ${fallbackLiteral}), '/') || E'\\n' || (coalesce(a.dispatch_target, legacy_site.deployment_target)->>'applicationId'), 'UTF8')), 'hex') END
+)=q.deployment_resource_key
+`
+}
+const RESOURCE_BLOCKER_SQL = resourceBlockerSql(fallbackConnectionUrl)
 
 export const CLAIM_SQL = `
 WITH candidate_site AS (
   SELECT s.id FROM site s
-  WHERE EXISTS (SELECT 1 FROM build_job q WHERE q.site_id=s.id AND q.status='queued')
+  WHERE EXISTS (SELECT 1 FROM build_job q WHERE q.site_id=s.id AND q.status='queued'
+    AND (q.deployment_resource_key IS NULL OR NOT EXISTS (${RESOURCE_BLOCKER_SQL})))
     AND NOT EXISTS (SELECT 1 FROM build_job a WHERE a.site_id=s.id AND (a.status IN ('building','validating','deploying') OR a.dispatch_uncertain))
   ORDER BY (SELECT max(priority) FROM build_job q WHERE q.site_id=s.id AND q.status='queued') DESC, s.id
   LIMIT 1 FOR UPDATE OF s SKIP LOCKED
 ), candidate_job AS (
-  SELECT j.id FROM build_job j JOIN candidate_site s ON s.id=j.site_id
-  WHERE j.status='queued' ORDER BY j.priority DESC, j.created_at ASC LIMIT 1 FOR UPDATE OF j SKIP LOCKED
+  SELECT q.id FROM build_job q JOIN candidate_site s ON s.id=q.site_id
+  WHERE q.status='queued' AND (q.deployment_resource_key IS NULL OR NOT EXISTS (${RESOURCE_BLOCKER_SQL}))
+  ORDER BY q.priority DESC, q.created_at ASC LIMIT 1 FOR UPDATE OF q SKIP LOCKED
 )
 UPDATE build_job SET status='building', started_at=now(), lease_expires_at=now()+interval '60 seconds', attempts=attempts+1
 WHERE id=(SELECT id FROM candidate_job) RETURNING *
@@ -56,6 +96,7 @@ type WorkerState = {
   timer: ReturnType<typeof setInterval>
   recoveryTimer: ReturnType<typeof setInterval>
   schedulerTimer: ReturnType<typeof setInterval>
+  cleanupTimer?: ReturnType<typeof setInterval>
   pool?: JobPool
   ticking: boolean
   schedulerTicking: boolean
@@ -100,7 +141,33 @@ export async function appendLog(jobId: string, line: string) {
 }
 
 export async function claimNextJob() {
-  const result = await pool.query<{ id: string }>(CLAIM_SQL)
+  await pool.query(
+    `UPDATE build_job j SET
+    dispatch_target=coalesce(j.dispatch_target,s.deployment_target),
+    dispatch_connection_url=coalesce(j.dispatch_connection_url,c.url,$1::text),
+    deployment_resource_key=encode(sha256(convert_to(rtrim(coalesce(j.dispatch_connection_url,c.url,$1::text), '/') || E'\\n' || (coalesce(j.dispatch_target,s.deployment_target)->>'applicationId'), 'UTF8')), 'hex')
+    FROM site s LEFT JOIN dokploy_credential c ON c.organization_id=s.organization_id,
+      publication p
+    WHERE j.site_id=s.id AND j.publication_id=p.id AND p.publishing_mode='production'
+      AND j.status='queued' AND j.deployment_resource_key IS NULL
+      AND coalesce(j.dispatch_target,s.deployment_target)->>'applicationId' IS NOT NULL
+      AND coalesce(j.dispatch_connection_url,c.url,$1::text) IS NOT NULL`,
+    [fallbackConnectionUrl],
+  )
+  let result
+  try {
+    result = await pool.query<{ id: string }>(CLAIM_SQL)
+  } catch (error) {
+    // Two sites can race for one upstream resource; the unique index is the
+    // final database fence. Leave the losing job queued for the next tick.
+    if (
+      (error as { code?: string; constraint?: string }).code === '23505' &&
+      (error as { constraint?: string }).constraint ===
+        'build_job_one_dispatch_per_resource'
+    )
+      return null
+    throw error
+  }
   const id = result.rows[0]?.id
   if (!id) return null
   const [job] = await db
@@ -127,12 +194,29 @@ export async function processJob(
       await tx.execute(
         sql`SELECT id FROM site WHERE id=${job.siteId} FOR UPDATE`,
       )
+      const identity = await resourceIdentity(tx, job)
+      const resourceKey =
+        identity.deploymentResourceKey ?? job.deploymentResourceKey
+      if (resourceKey) {
+        await tx.execute(
+          sql`SELECT pg_advisory_xact_lock(hashtextextended(${resourceKey}, 2))`,
+        )
+        const blocked = await tx.execute(
+          sql`SELECT 1 FROM (SELECT ${job.id}::text id, ${resourceKey}::text deployment_resource_key) q WHERE EXISTS (${sql.raw(RESOURCE_BLOCKER_SQL)})`,
+        )
+        if (blocked.rows.length) return null
+      }
       const [active] = await tx
         .select()
         .from(buildJob)
         .where(
           and(
-            eq(buildJob.siteId, job.siteId),
+            or(
+              eq(buildJob.siteId, job.siteId),
+              ...(resourceKey
+                ? [eq(buildJob.deploymentResourceKey, resourceKey)]
+                : []),
+            ),
             or(
               inArray(buildJob.status, ['building', 'validating', 'deploying']),
               eq(buildJob.dispatchUncertain, true),
@@ -146,6 +230,7 @@ export async function processJob(
           await tx
             .update(buildJob)
             .set({
+              ...identity,
               status: 'building',
               startedAt: new Date(),
               leaseExpiresAt: new Date(Date.now() + LEASE_MS),
@@ -283,10 +368,11 @@ export async function processJob(
         (await (deps.resolveAdapter ?? getDeploymentAdapterForOrganization)(
           existingSite.organizationId,
         ))
-      const context = {
+      const context: DeploymentContext = {
         jobId: job.id,
         publicationId: pub.id,
         snapshotHash: pub.snapshotHash,
+        dispatchedAt: job.dispatchStartedAt ?? undefined,
       }
       let deploymentId = job.upstreamDeploymentId
       if (job.dispatchStartedAt) {
@@ -302,10 +388,11 @@ export async function processJob(
         }
         dispatchUncertain = true
       } else {
+        const dispatchedAt = new Date()
         const [intent] = await db
           .update(buildJob)
           .set({
-            dispatchStartedAt: new Date(),
+            dispatchStartedAt: dispatchedAt,
             dispatchTarget: adapterTarget,
             dispatchUncertain: true,
           })
@@ -313,7 +400,10 @@ export async function processJob(
           .returning({ id: buildJob.id })
         if (!intent) throw new Error('Publication worker lease lost')
         dispatchUncertain = true
-        const result = await adapter.deploy(adapterTarget, log, context)
+        const result = await adapter.deploy(adapterTarget, log, {
+          ...context,
+          dispatchedAt,
+        })
         deploymentId = result.deploymentId
       }
       const [ownedDispatch] = await db
@@ -393,6 +483,7 @@ export async function processJob(
           wasLive: !demo,
         })
         .where(eq(publication.id, pub.id))
+      await clearSchedulerFailure(tx, job)
       await tx
         .update(buildJob)
         .set({
@@ -520,6 +611,8 @@ async function failJob(
       )
       .returning()
     if (!failed) return false
+    await incrementFailureCounter(tx)
+    await recordSchedulerFailure(tx, job, error, now)
     await tx
       .update(publication)
       .set({ status: dispatchUncertain ? 'building' : 'failed' })
@@ -567,9 +660,25 @@ export async function reconcileDeploymentJob(
       )
       .limit(1)
     if (active) throw new Error('A worker is already reconciling this site')
+    const identity = await resourceIdentity(tx, candidate)
+    const resourceKey =
+      identity.deploymentResourceKey ?? candidate.deploymentResourceKey
+    if (resourceKey) {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtextextended(${resourceKey}, 2))`,
+      )
+      const blocked = await tx.execute(
+        sql`SELECT 1 FROM (SELECT ${candidate.id}::text id, ${resourceKey}::text deployment_resource_key) q WHERE EXISTS (${sql.raw(RESOURCE_BLOCKER_SQL)})`,
+      )
+      if (blocked.rows.length)
+        throw new Error(
+          'Another deployment for this Dokploy application must finish or be resolved first',
+        )
+    }
     const [job] = await tx
       .update(buildJob)
       .set({
+        ...identity,
         status: 'deploying',
         startedAt: new Date(),
         leaseExpiresAt: new Date(Date.now() + LEASE_MS),
@@ -601,7 +710,7 @@ export async function reconcileDeploymentJob(
   }
   return (
     await db.select().from(buildJob).where(eq(buildJob.id, jobId)).limit(1)
-  )[0]!
+  )[0]
 }
 
 /** Explicit terminal resolution after an agency admin has stopped/drained upstream. */
@@ -762,7 +871,13 @@ export function createJobPool({
       })
       try {
         const result = await Promise.race([
-          Promise.allSettled([...running, filling]).then(() => 'done' as const),
+          (async () => {
+            // A claim already in progress can add a task after stop. Include
+            // that task before deciding the pool has finished draining.
+            await filling
+            await Promise.allSettled([...running])
+            return 'done' as const
+          })(),
           timeout,
         ])
         return result === 'done'
@@ -803,6 +918,8 @@ export async function recoverStaleJobs(
       )
       .for('update', { skipLocked: true })
     for (const job of stale) {
+      await incrementFailureCounter(tx)
+      await recordSchedulerFailure(tx, job, 'Worker lease expired', now)
       await tx
         .update(buildJob)
         .set({
@@ -840,15 +957,18 @@ export type WorkerLoopDeps = {
   recover: () => Promise<unknown>
   /** Enqueues due scheduled publications. */
   schedule: () => Promise<unknown>
+  /** Retries durable storage cleanup independently of releases. */
+  cleanup?: () => Promise<unknown>
 }
 
 /**
- * Three independent timers, each with its own in-flight guard, so a slow
+ * Independent timers, each with its own in-flight guard, so a slow
  * deployment (up to DEPLOY_TIMEOUT_MS) never delays recovery or the
  * scheduling of due entries for other sites:
  * - jobs: claims and runs queued jobs
  * - recovery: fails jobs whose lease expired
  * - scheduler: turns due scheduled entries into publications
+ * - cleanup: retries durable storage object deletions
  */
 export function startWorkerLoops(
   deps: WorkerLoopDeps,
@@ -904,6 +1024,23 @@ export function startWorkerLoops(
       })
   }, schedulerIntervalMs)
 
+  if (deps.cleanup) {
+    let cleaning = false
+    const cleanup = () => {
+      if (cleaning) return
+      cleaning = true
+      void deps.cleanup!()
+        .catch((error) =>
+          logger.error('storage cleanup failed', { err: error }),
+        )
+        .finally(() => {
+          cleaning = false
+        })
+    }
+    state.cleanupTimer = setInterval(cleanup, 15_000)
+    cleanup()
+  }
+
   // Boot: recover once, then start processing and scheduling immediately.
   void deps
     .recover()
@@ -948,6 +1085,7 @@ export function startWorker({
       processJobs: pool.fill,
       recover: () => recoverStaleJobs(),
       schedule: () => runSchedulerTick(),
+      cleanup: () => drainStorageObjectDeletions(),
     },
     { intervalMs },
   )
@@ -985,5 +1123,39 @@ export function stopWorkerLoops(state: WorkerState) {
   clearInterval(state.timer)
   clearInterval(state.recoveryTimer)
   clearInterval(state.schedulerTimer)
+  clearInterval(state.cleanupTimer)
   markLoopsStopped()
+}
+
+async function incrementFailureCounter(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+) {
+  await tx
+    .insert(opsCounter)
+    .values({ name: 'publication_failures', value: 1 })
+    .onConflictDoUpdate({
+      target: opsCounter.name,
+      set: { value: sql`${opsCounter.value} + 1` },
+    })
+}
+
+async function resourceIdentity(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  job: typeof buildJob.$inferSelect,
+) {
+  if (job.deploymentResourceKey) return {}
+  const [existingSite] = await tx
+    .select()
+    .from(site)
+    .where(eq(site.id, job.siteId))
+  const [pub] = await tx
+    .select({ publishingMode: publication.publishingMode })
+    .from(publication)
+    .where(eq(publication.id, job.publicationId))
+  if (!existingSite || !pub) return {}
+  return deploymentIdentity(tx, {
+    ...existingSite,
+    publishingMode: pub.publishingMode,
+    deploymentTarget: job.dispatchTarget ?? existingSite.deploymentTarget,
+  })
 }

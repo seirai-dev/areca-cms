@@ -16,6 +16,12 @@ import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { db } from '#/db'
 import * as schema from '#/db/schema'
 import { env } from '#/env'
+import { handleLocalFactorRequest } from '#/server/security/factor-http'
+import { MfaRequiredError } from '#/lib/security-errors'
+import {
+  recordLocalMfaForToken,
+  requireAdminLocalMfa,
+} from '#/server/security/local-mfa'
 import { assertEmailMayRegister } from '#/server/auth/registration-gate'
 import {
   MCP_ACCESS_TOKEN_PREFIX,
@@ -26,8 +32,14 @@ import {
   MCP_REFRESH_TOKEN_TTL_SECONDS,
   ensureMcpSiteResource,
   resourceParams,
-  siteIdForAuthorizationQuery,
 } from '#/server/mcp/oauth-resource'
+import {
+  assertSingleMcpResource,
+  consentReferenceFor,
+  mcpOAuthAdapter,
+  validateMcpRefreshGrant,
+  handleMcpOAuthTokenRequest,
+} from '#/server/mcp/oauth-grants'
 import { normaliseRegistrationBody } from '#/server/mcp/oauth-registration'
 import {
   TWO_FACTOR_MANAGEMENT_PATHS,
@@ -45,6 +57,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+async function assertAuthAdminMfa(
+  principal: Parameters<typeof requireAdminLocalMfa>[0],
+) {
+  try {
+    await requireAdminLocalMfa(principal)
+  } catch (error) {
+    if (!(error instanceof MfaRequiredError)) throw error
+    throw new APIError('FORBIDDEN', {
+      code: error.code,
+      message: error.message,
+    })
+  }
+}
+
 const SSO_MANAGEMENT_PATHS = new Set([
   '/sso/register',
   '/sso/update-provider',
@@ -53,8 +79,8 @@ const SSO_MANAGEMENT_PATHS = new Set([
   '/sso/verify-domain',
 ])
 
-export const auth = betterAuth({
-  database: drizzleAdapter(db, { provider: 'pg', schema }),
+const authBase = betterAuth({
+  database: mcpOAuthAdapter(drizzleAdapter(db, { provider: 'pg', schema })),
   secret: env.BETTER_AUTH_SECRET,
   baseURL: env.BETTER_AUTH_URL,
   trustedOrigins: [
@@ -80,8 +106,12 @@ export const auth = betterAuth({
   databaseHooks: {
     user: {
       create: {
-        before: async (created) => {
-          await assertEmailMayRegister(created.email)
+        before: async (created, ctx) => {
+          await assertEmailMayRegister(created.email, {
+            passwordSignup: ctx?.path === '/sign-up/email',
+            emailVerified: created.emailVerified,
+            invitationToken: ctx?.body?.invitationToken,
+          })
         },
       },
     },
@@ -106,9 +136,19 @@ export const auth = betterAuth({
       // Each MCP site is its own protected resource. Create its row when the
       // authorization request names it, so the plugin accepts the resource.
       if (ctx.path === '/oauth2/authorize') {
+        const session = await getSessionFromCtx(ctx)
+        if (session) await assertAuthAdminMfa(session)
+        assertSingleMcpResource(ctx.query?.resource, true)
         for (const resource of resourceParams(ctx.query?.resource)) {
           await ensureMcpSiteResource(resource)
         }
+      }
+      if (ctx.path === '/oauth2/token' && isRecord(ctx.body)) {
+        assertSingleMcpResource(
+          ctx.body.resource as string | string[] | undefined,
+          false,
+        )
+        await validateMcpRefreshGrant(ctx.body, ctx)
       }
       // Clients register with the redirect forms they use (loopback http for
       // desktop and CLI apps). Normalise the metadata before the plugin
@@ -130,6 +170,7 @@ export const auth = betterAuth({
       if (TWO_FACTOR_MANAGEMENT_PATHS.has(ctx.path)) {
         const session = await getSessionFromCtx(ctx)
         if (session) {
+          if (session.user.twoFactorEnabled) await assertAuthAdminMfa(session)
           const credential =
             await ctx.context.internalAdapter.findCredentialAccount(
               session.user.id,
@@ -139,6 +180,19 @@ export const auth = betterAuth({
             sessionCreatedAt: session.session.createdAt,
           })
         }
+      }
+    }),
+    after: createAuthMiddleware(async (ctx) => {
+      if (
+        ctx.path !== '/two-factor/verify-totp' &&
+        ctx.path !== '/two-factor/verify-backup-code'
+      )
+        return
+      const result: unknown = ctx.context.returned
+      if (isRecord(result) && typeof result.token === 'string') {
+        await recordLocalMfaForToken(
+          ctx.context.newSession?.session.token ?? result.token,
+        )
       }
     }),
   },
@@ -154,9 +208,8 @@ export const auth = betterAuth({
           }),
         ]
       : []),
-    // TOTP + backup codes. Enforcement for agency admins lives in
-    // `requireAgencyAdmin`; SSO/social sign-ins skip the challenge because the
-    // identity provider is trusted to have done its own MFA.
+    // All agency-admin sessions, including SSO/social, must prove a local
+    // TOTP or backup code before guards grant agency access.
     twoFactor({ issuer: 'Areca CMS', allowPasswordless: true }),
     // OAuth 2.1 authorization server for the per-site MCP endpoints. See
     // docs in server/mcp/oauth-resource.ts for the resource and scope model.
@@ -185,16 +238,30 @@ export const auth = betterAuth({
       // Every MCP resource is a site, so the plugin must not require explicit
       // client-to-resource links (those would be created per site by hand).
       enforcePerClientResources: false,
+      customAccessTokenClaims: ({ referenceId }) => ({
+        mcp_connection_id: referenceId,
+      }),
       postLogin: {
         // Never redirects: the plugin only needs `consentReferenceId` here.
         page: '/oauth/consent',
         shouldRedirect: () => false,
         // Consent is remembered per (app, user, site), not per app, so an
         // approval for one site never covers another.
-        consentReferenceId: async () =>
-          siteIdForAuthorizationQuery((await getOAuthProviderState())?.query),
+        consentReferenceId: async ({ user }) =>
+          consentReferenceFor((await getOAuthProviderState())?.query, user.id),
       },
     }),
     tanstackStartCookies(),
   ],
 })
+
+// Keep token issuance/replay and connection revocation under the same grant lock.
+export const auth: typeof authBase = {
+  ...authBase,
+  handler: (request) =>
+    handleMcpOAuthTokenRequest(request, (incoming) =>
+      handleLocalFactorRequest(incoming, authBase.handler, () =>
+        authBase.api.getSession({ headers: incoming.headers }),
+      ),
+    ),
+}

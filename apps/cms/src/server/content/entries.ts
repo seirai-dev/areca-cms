@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { and, desc, eq, ilike, isNotNull, lte, or, sql } from 'drizzle-orm'
+import { and, desc, eq, ilike, isNotNull, or, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { collection, entry, entryRevision, site, user } from '#/db/schema'
@@ -8,9 +8,11 @@ import {
   isPastInstant,
   parseOffsetInstant,
 } from '#/lib/schedule-time'
-import type { EntryData, EntryStatus } from '#/lib/types'
+import type { EntryData, EntryStatus, Field } from '#/lib/types'
+import { SEO_KEY } from '#/lib/seo'
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
+import { importExternalImages } from '#/server/assets/external-images'
 import { assetMutationLock } from '#/server/assets/usage'
 
 import { archiveDeletedContent } from './deletion-archive'
@@ -30,7 +32,7 @@ export async function listEntries(
   collectionKey: string,
   options: {
     status?: EntryStatus
-    /** Eligible snapshot/publish targets only; do not combine with `status`. */
+    /** Approved reference targets only; do not combine with `status`. */
     referenceTargets?: boolean
     search?: string
     limit?: number
@@ -46,20 +48,11 @@ export async function listEntries(
   const offset = options.offset ?? 0
   const filters = [eq(entry.siteId, siteId), eq(entry.collectionId, col.id)]
   if (options.referenceTargets) {
-    const now = new Date()
     filters.push(
-      or(
-        eq(entry.status, 'published'),
-        and(
-          eq(entry.status, 'scheduled'),
-          or(isNotNull(entry.publishedData), isNotNull(entry.publishedSlug))!,
-        ),
-        and(
-          eq(entry.status, 'scheduled'),
-          isNotNull(entry.scheduledAt),
-          lte(entry.scheduledAt, now),
-        ),
-      )!,
+      or(eq(entry.status, 'published'), eq(entry.status, 'scheduled'))!,
+      isNotNull(entry.publishedData),
+      isNotNull(entry.publishedSlug),
+      sql`${entry.publishedSlug} <> ''`,
     )
   } else if (options.status) {
     filters.push(eq(entry.status, options.status))
@@ -118,13 +111,15 @@ export async function createEntry(input: {
     throw new NotFoundError(m.server_collection_not_found())
   }
 
-  const parsed = validateEntryData(ctx.collection.fields, input.data, {
+  const validated = validateEntryData(ctx.collection.fields, input.data, {
     mode: 'partial',
     write: true,
   })
-  if (!parsed.ok) {
-    throw new ValidationError(parsed.errors)
+  if (!validated.ok) {
+    throw new ValidationError(validated.errors)
   }
+  const images = await importEntryImages(ctx, validated.data, input.actorId)
+  const parsed = { ...validated, data: images.data }
 
   const slug = resolveSlug(parsed.data, ctx.collection.fields)
   if (!slug || !SLUG_PATTERN.test(slug)) {
@@ -179,7 +174,12 @@ export async function createEntry(input: {
       tx,
     )
 
-    return { ...created, collectionKey: ctx.collection.key }
+    return {
+      ...created,
+      collectionKey: ctx.collection.key,
+      importedImages: images.imported,
+      importWarnings: images.warnings,
+    }
   })
 }
 
@@ -190,13 +190,15 @@ export async function updateDraft(
   expectedVersion: number,
 ) {
   const ctx = await loadEntryContext(id)
-  const parsed = validateEntryData(ctx.collection.fields, data, {
+  const validated = validateEntryData(ctx.collection.fields, data, {
     mode: 'partial',
     write: true,
   })
-  if (!parsed.ok) {
-    throw new ValidationError(parsed.errors)
+  if (!validated.ok) {
+    throw new ValidationError(validated.errors)
   }
+  const images = await importEntryImages(ctx, validated.data, actorId)
+  const parsed = { ...validated, data: images.data }
 
   const nextSlug = resolveSlug(parsed.data, ctx.collection.fields)
   if (nextSlug && nextSlug !== ctx.entry.slug) {
@@ -250,7 +252,12 @@ export async function updateDraft(
       tx,
     )
 
-    return { ...updated, collectionKey: ctx.collection.key }
+    return {
+      ...updated,
+      collectionKey: ctx.collection.key,
+      importedImages: images.imported,
+      importWarnings: images.warnings,
+    }
   })
 }
 
@@ -272,7 +279,7 @@ export async function restoreRevision(
   actorId: string,
   expectedVersion: number,
 ) {
-  const ctx = await loadEntryContext(entryId)
+  const initial = await loadEntryContext(entryId)
   const [revision] = await db
     .select()
     .from(entryRevision)
@@ -284,24 +291,56 @@ export async function restoreRevision(
     throw new NotFoundError(m.server_revision_not_found())
   }
 
-  // Drop keys the schema no longer declares so legacy data does not return.
-  const restoredData = pickDeclaredFields(ctx.collection.fields, revision.data)
-
-  const nextSlug = resolveSlug(restoredData, ctx.collection.fields)
-  if (nextSlug && nextSlug !== ctx.entry.slug) {
-    await assertSlugAvailable(ctx.collection.id, nextSlug, entryId)
-  }
-
   return db.transaction(async (tx) => {
+    await tx
+      .select({ id: site.id })
+      .from(site)
+      .where(eq(site.id, initial.site.id))
+      .for('update')
+    const ctx = await loadEntryContext(entryId, tx)
     await assetMutationLock(tx, ctx.site.organizationId)
-    const ownershipErrors = await validateContentOwnership(
-      ctx.site.id,
-      ctx.site.organizationId,
+    const prepared = prepareRevisionRestore(
       ctx.collection.fields,
-      restoredData,
-      tx,
+      revision.data,
+      ctx.entry.draftData,
     )
-    if (ownershipErrors.length) throw new ValidationError(ownershipErrors)
+    const restoredData = prepared.data
+    const skippedFields = prepared.skippedFields
+    for (const key of prepared.restoredKeys) {
+      const field = ctx.collection.fields.find((item) => item.key === key)
+      const errors = await validateContentOwnership(
+        ctx.site.id,
+        ctx.site.organizationId,
+        field ? [field] : [],
+        { [key]: restoredData[key] },
+        tx,
+      )
+      if (errors.length) {
+        keepCurrentRevisionField(restoredData, ctx.entry.draftData, key)
+        skippedFields.push({
+          key,
+          label: field?.label ?? 'SEO',
+          reason: errors.map((error) => error.message).join('; '),
+        })
+      }
+    }
+    let nextSlug = resolveSlug(restoredData, ctx.collection.fields)
+    if (nextSlug && nextSlug !== ctx.entry.slug) {
+      try {
+        await assertSlugAvailable(ctx.collection.id, nextSlug, entryId, tx)
+      } catch (error) {
+        if (!(error instanceof ConflictError)) throw error
+        keepCurrentRevisionField(restoredData, ctx.entry.draftData, 'slug')
+        skippedFields.push({
+          key: 'slug',
+          label:
+            ctx.collection.fields.find((field) => field.key === 'slug')
+              ?.label ?? 'Slug',
+          reason: error.message,
+        })
+        nextSlug = ctx.entry.slug
+      }
+    }
     const now = new Date()
     const [updated] = await tx
       .update(entry)
@@ -337,20 +376,101 @@ export async function restoreRevision(
       tx,
     )
 
-    return { ...updated, collectionKey: ctx.collection.key }
+    return { ...updated, collectionKey: ctx.collection.key, skippedFields }
   })
+}
+
+export type SkippedRevisionField = {
+  key: string
+  label: string
+  reason: string
+}
+
+/** Restore schema-compatible values; incompatible or newly added fields keep the current draft. */
+export function prepareRevisionRestore(
+  fields: Field[],
+  historical: EntryData,
+  current: EntryData,
+) {
+  const data = pickDeclaredFields(fields, current)
+  const skippedFields: SkippedRevisionField[] = []
+  const restoredKeys = new Set<string>()
+  for (const key of Object.keys(historical)) {
+    const field = fields.find((item) => item.key === key)
+    if (!field && key !== SEO_KEY) {
+      skippedFields.push({
+        key,
+        label: key,
+        reason: m.server_restore_field_removed(),
+      })
+      continue
+    }
+    const result = validateEntryData(
+      field ? [field] : [],
+      { [key]: historical[key] },
+      { mode: 'partial' },
+    )
+    if (!result.ok) {
+      skippedFields.push({
+        key,
+        label: field?.label ?? 'SEO',
+        reason: result.errors.map((error) => error.message).join('; '),
+      })
+      continue
+    }
+    data[key] = result.data[key]
+    restoredKeys.add(key)
+  }
+  // Individually valid dates can conflict once merged with retained current values.
+  for (let attempt = 0; attempt <= fields.length; attempt++) {
+    const result = validateEntryData(fields, data, { mode: 'partial' })
+    if (result.ok) break
+    let changed = false
+    for (const error of result.errors) {
+      const field = fields.find((item) => item.key === error.path.split('.')[0])
+      const key =
+        field && restoredKeys.has(field.key)
+          ? field.key
+          : field?.after && restoredKeys.has(field.after)
+            ? field.after
+            : undefined
+      if (!key) continue
+      keepCurrentRevisionField(data, current, key)
+      restoredKeys.delete(key)
+      skippedFields.push({
+        key,
+        label: fields.find((item) => item.key === key)?.label ?? key,
+        reason: error.message,
+      })
+      changed = true
+    }
+    if (!changed) break
+  }
+  return { data, skippedFields, restoredKeys }
+}
+
+function keepCurrentRevisionField(
+  data: EntryData,
+  current: EntryData,
+  key: string,
+) {
+  if (Object.hasOwn(current, key)) data[key] = current[key]
+  else delete data[key]
 }
 
 export async function publishEntry(id: string, actorId: string) {
   const ctx = await loadEntryContext(id)
-  const parsed = validateEntryData(ctx.collection.fields, ctx.entry.draftData)
+  // Drafts saved before external images were imported are caught up here.
+  const images = await importEntryImages(ctx, ctx.entry.draftData, actorId)
+  const draftData = images.data
+  const parsed = validateEntryData(ctx.collection.fields, draftData)
   if (!parsed.ok) {
     throw new ValidationError(parsed.errors)
   }
   const refErrors = await validateReferences(
     ctx.site.id,
     ctx.collection.fields,
-    ctx.entry.draftData,
+    draftData,
   )
   if (refErrors.length > 0) {
     throw new ValidationError(refErrors)
@@ -362,7 +482,7 @@ export async function publishEntry(id: string, actorId: string) {
       ctx.site.id,
       ctx.site.organizationId,
       ctx.collection.fields,
-      ctx.entry.draftData,
+      draftData,
       tx,
     )
     if (ownershipErrors.length) throw new ValidationError(ownershipErrors)
@@ -370,6 +490,7 @@ export async function publishEntry(id: string, actorId: string) {
     const [updated] = await tx
       .update(entry)
       .set({
+        ...(images.imported > 0 ? { draftData } : {}),
         status: 'published',
         publishedData: parsed.data,
         publishedSlug: ctx.entry.slug,
@@ -394,7 +515,7 @@ export async function publishEntry(id: string, actorId: string) {
       )
     }
 
-    await writeRevision(id, ctx.entry.draftData, actorId, 'publish', tx)
+    await writeRevision(id, draftData, actorId, 'publish', tx)
     await audit(
       {
         organizationId: ctx.site.organizationId,
@@ -407,7 +528,12 @@ export async function publishEntry(id: string, actorId: string) {
       tx,
     )
 
-    return { ...updated, collectionKey: ctx.collection.key }
+    return {
+      ...updated,
+      collectionKey: ctx.collection.key,
+      importedImages: images.imported,
+      importWarnings: images.warnings,
+    }
   })
 }
 
@@ -508,6 +634,8 @@ export async function scheduleEntry(
       { path: 'scheduledAt', message: m.server_schedule_in_past() },
     ])
   }
+  const images = await importEntryImages(ctx, ctx.entry.draftData, actorId)
+  const draftData = images.data
 
   return db.transaction(async (tx) => {
     await assetMutationLock(tx, ctx.site.organizationId)
@@ -515,19 +643,17 @@ export async function scheduleEntry(
       ctx.site.id,
       ctx.site.organizationId,
       ctx.collection.fields,
-      ctx.entry.draftData,
+      draftData,
       tx,
     )
     if (ownershipErrors.length) throw new ValidationError(ownershipErrors)
-    const validated = validateEntryData(
-      ctx.collection.fields,
-      ctx.entry.draftData,
-    )
+    const validated = validateEntryData(ctx.collection.fields, draftData)
     if (!validated.ok) throw new ValidationError(validated.errors)
     const now = new Date()
     const [updated] = await tx
       .update(entry)
       .set({
+        ...(images.imported > 0 ? { draftData } : {}),
         status: 'scheduled',
         scheduledData: validated.data,
         scheduledSlug: ctx.entry.slug,
@@ -549,7 +675,7 @@ export async function scheduleEntry(
       )
     }
 
-    await writeRevision(id, ctx.entry.draftData, actorId, 'schedule', tx)
+    await writeRevision(id, draftData, actorId, 'schedule', tx)
     await audit(
       {
         organizationId: ctx.site.organizationId,
@@ -563,7 +689,12 @@ export async function scheduleEntry(
       tx,
     )
 
-    return { ...updated, collectionKey: ctx.collection.key }
+    return {
+      ...updated,
+      collectionKey: ctx.collection.key,
+      importedImages: images.imported,
+      importWarnings: images.warnings,
+    }
   })
 }
 
@@ -648,8 +779,9 @@ async function assertSlugAvailable(
   collectionId: string,
   slug: string,
   excludeId?: string,
+  connection: Pick<typeof db, 'select'> = db,
 ) {
-  const [existing] = await db
+  const [existing] = await connection
     .select({ id: entry.id })
     .from(entry)
     .where(and(eq(entry.collectionId, collectionId), eq(entry.slug, slug)))
@@ -674,8 +806,11 @@ async function loadCollectionContext(siteId: string, collectionKey: string) {
   return row
 }
 
-async function loadEntryContext(id: string) {
-  const [row] = await db
+async function loadEntryContext(
+  id: string,
+  connection: Pick<typeof db, 'select'> = db,
+) {
+  const [row] = await connection
     .select({ entry, collection, site })
     .from(entry)
     .innerJoin(collection, eq(entry.collectionId, collection.id))
@@ -686,4 +821,21 @@ async function loadEntryContext(id: string) {
     throw new NotFoundError(m.server_entry_not_found())
   }
   return row
+}
+
+function importEntryImages(
+  ctx: {
+    site: typeof site.$inferSelect
+    collection: typeof collection.$inferSelect
+  },
+  data: EntryData,
+  actorId: string,
+) {
+  return importExternalImages({
+    organizationId: ctx.site.organizationId,
+    originSiteId: ctx.site.id,
+    actorId,
+    fields: ctx.collection.fields,
+    data,
+  })
 }

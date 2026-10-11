@@ -35,18 +35,18 @@ not the author of every entry in the site snapshot.
 
 ## Deployment delivery and recovery
 
-The worker persists dispatch intent and the deployment target before calling
-Dokploy. Adapter calls carry the job ID, publication ID and snapshot hash. The
+Release enqueueing freezes the deployment target and upstream connection URL.
+The worker persists dispatch intent before calling Dokploy. Adapter calls carry the job ID, publication ID and snapshot hash. The
 adapter sets `ARECA_SNAPSHOT_ID` to the publication ID before deploying and tags
 the Dokploy deployment with `title=areca:<jobId>` plus publication and hash in its
 description. Completion polling follows that matching deployment's ID, not the
 application’s overall status.
 
-The saved target pins the application ID and health URL; recovery resolves the
-organization's current Dokploy host and credential. Do not change that host while
-a dispatch remains uncertain: reconcile on the original host first, or stop and
-drain its work before agency terminal resolution. Replacing a credential on the
-same host is supported.
+The saved target pins the application ID and health URL. Changing or removing
+the organization's Dokploy connection is blocked while jobs are queued, active,
+or uncertain; replacing a credential on the same host is supported. Sites may
+share an application, but its deployments are serialized across organizations
+and remain blocked by uncertain dispatches until resolution.
 
 Safe application reads and identical environment writes have at most three
 attempts with short exponential backoff for transient failures. The deployment
@@ -55,7 +55,8 @@ the existing tagged deployment before proceeding. A worker recovered after a
 persisted intent also reconciles instead of sending another deployment POST.
 
 An unresolved dispatch or completion timeout leaves the job failed with an
-uncertain outcome, and preserves its publication as the pinned build snapshot.
+uncertain outcome. Its exact saved publication remains available to explicitly
+pinned builds; ordinary manual pulls continue reading the successful release.
 New publish/rollback requests, queued jobs and scheduler work for that site are
 blocked while the uncertainty exists, preventing another build from taking its
 snapshot. The previously live publication remains live.
@@ -179,3 +180,11 @@ the global job queue sequentially to avoid claiming another suite's fixtures.
 The additive migrations were also checked against a database containing an
 existing deploying job. Automated validation uses fake adapters; live Dokploy
 and end-to-end browser UI verification are not claimed.
+
+## Site-scoped AI media
+
+AI tools can use assets referenced by their site’s content, retained versions,
+archives, or publications, plus assets uploaded through AI for that site.
+The ordinary client media library stays shared across the client organization.
+A tool connection cannot browse or modify unrelated assets from another site
+just because both sites belong to the same client.

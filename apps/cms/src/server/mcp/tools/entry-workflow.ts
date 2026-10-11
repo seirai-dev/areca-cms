@@ -10,7 +10,7 @@ import {
   unpublishEntry,
 } from '#/server/content/entries'
 
-import { formatStoredEntry } from './entries'
+import { formatStoredEntry, withImportWarnings } from './entries'
 import { loadEntryInSite } from '../scope'
 import { idSchema } from '../schemas'
 import type { ToolRegistry } from '../tool-kit'
@@ -27,7 +27,9 @@ const expectedVersion = z
   .int()
   .positive()
   .optional()
-  .describe('The "version" you last read with get_entry. Omit to use the current version.')
+  .describe(
+    'The "version" you last read with get_entry. Omit to use the current version.',
+  )
 
 export function registerEntryWorkflowTools(registry: ToolRegistry): void {
   registry.add({
@@ -39,11 +41,21 @@ export function registerEntryWorkflowTools(registry: ToolRegistry): void {
     access: 'owner',
     deniedMessage:
       'Only site owners can mark entries ready. Ask an owner, or leave it as a draft.',
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     run: async (input, actor) => {
       const entry = await loadEntryInSite(actor, input.id)
-      await publishEntry(entry.id, actor.userId)
-      return { message: APPROVED_MESSAGE, ...(await formatStoredEntry(actor, entry.id)) }
+      const published = await publishEntry(entry.id, actor.userId)
+      return withImportWarnings(
+        {
+          message: APPROVED_MESSAGE,
+          ...(await formatStoredEntry(actor, entry.id)),
+        },
+        published.importWarnings,
+      )
     },
   })
 
@@ -55,7 +67,11 @@ export function registerEntryWorkflowTools(registry: ToolRegistry): void {
     inputSchema: z.object({ id: idSchema('entry') }),
     access: 'owner',
     deniedMessage: OWNER_ONLY,
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     run: async (input, actor) => {
       const entry = await loadEntryInSite(actor, input.id)
       await unpublishEntry(entry.id, actor.userId)
@@ -71,7 +87,11 @@ export function registerEntryWorkflowTools(registry: ToolRegistry): void {
     inputSchema: z.object({ id: idSchema('entry') }),
     access: 'owner',
     deniedMessage: OWNER_ONLY,
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     run: async (input, actor) => {
       const entry = await loadEntryInSite(actor, input.id)
       await archiveEntry(entry.id, actor.userId)
@@ -83,27 +103,42 @@ export function registerEntryWorkflowTools(registry: ToolRegistry): void {
     name: 'schedule_entry',
     title: 'Schedule entry',
     description:
-      'Owner action. Schedules the entry to go live at a set time: status becomes scheduled, and the entry goes live at that time without a go_live call. publishAt is an ISO 8601 instant with an offset, e.g. "2026-10-20T09:00:00+02:00", and must be in the future. timezone is the IANA zone the owner wants shown, e.g. "Europe/Amsterdam". Date fields in the content are not scheduling; use this tool to schedule.',
+      'Requires permission to go live. Schedules the entry to go live at a set time: status becomes scheduled, and the entry goes live at that time without a go_live call. publishAt is an ISO 8601 instant with an offset, e.g. "2026-10-20T09:00:00+02:00", and must be in the future. timezone is the IANA zone the owner wants shown, e.g. "Europe/Amsterdam". Date fields in the content are not scheduling; use this tool to schedule.',
     inputSchema: z.object({
       id: idSchema('entry'),
       publishAt: z
         .string()
         .min(1)
         .max(100)
-        .describe('ISO 8601 date and time with offset, in the future, e.g. 2026-10-20T09:00:00+02:00.'),
+        .describe(
+          'ISO 8601 date and time with offset, in the future, e.g. 2026-10-20T09:00:00+02:00.',
+        ),
       timezone: z
         .string()
         .min(1)
         .max(100)
-        .describe('IANA time zone name, e.g. Europe/Amsterdam or America/New_York.'),
+        .describe(
+          'IANA time zone name, e.g. Europe/Amsterdam or America/New_York.',
+        ),
     }),
-    access: 'owner',
-    deniedMessage: OWNER_ONLY,
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    access: 'go-live',
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     run: async (input, actor) => {
       const entry = await loadEntryInSite(actor, input.id)
-      await scheduleEntry(entry.id, input.publishAt, input.timezone, actor.userId)
-      return formatStoredEntry(actor, entry.id)
+      const scheduled = await scheduleEntry(
+        entry.id,
+        input.publishAt,
+        input.timezone,
+        actor.userId,
+      )
+      return withImportWarnings(
+        await formatStoredEntry(actor, entry.id),
+        scheduled.importWarnings,
+      )
     },
   })
 
@@ -115,7 +150,11 @@ export function registerEntryWorkflowTools(registry: ToolRegistry): void {
     inputSchema: z.object({ id: idSchema('entry') }),
     access: 'owner',
     deniedMessage: OWNER_ONLY,
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     run: async (input, actor) => {
       const entry = await loadEntryInSite(actor, input.id)
       await cancelSchedule(entry.id, actor.userId)
@@ -131,7 +170,11 @@ export function registerEntryWorkflowTools(registry: ToolRegistry): void {
     inputSchema: z.object({ id: idSchema('entry') }),
     access: 'owner',
     deniedMessage: OWNER_ONLY,
-    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+    },
     run: async (input, actor) => {
       const entry = await loadEntryInSite(actor, input.id)
       await deleteEntry(entry.id, actor.userId)
@@ -151,16 +194,23 @@ export function registerEntryWorkflowTools(registry: ToolRegistry): void {
     }),
     access: 'owner',
     deniedMessage: OWNER_ONLY,
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     run: async (input, actor) => {
       const entry = await loadEntryInSite(actor, input.id)
-      await restoreRevision(
+      const restored = await restoreRevision(
         entry.id,
         input.revisionId,
         actor.userId,
         input.expectedVersion ?? entry.draftVersion,
       )
-      return formatStoredEntry(actor, entry.id)
+      return {
+        ...(await formatStoredEntry(actor, entry.id)),
+        skippedFields: restored.skippedFields,
+      }
     },
   })
 }

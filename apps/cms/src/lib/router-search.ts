@@ -4,16 +4,19 @@ import {
 } from '@tanstack/react-router'
 
 /**
- * Search (de)serialisation for the router, with one fix. The default writes an
- * array as a single JSON value, but a repeated key (`ba_param=a&ba_param=b`)
- * reads back as an array. Better Auth's signed authorization query repeats
- * keys, so the router rewrote it on load, and its signature stopped matching:
- * an AI app's sign-in then failed.
- *
- * Arrays of two or more plain strings are therefore written back as repeated
- * keys, which read back as the same array. Everything else keeps the default
- * encoding, so existing URLs are unchanged.
+ * OAuth authorization queries contain signed, opaque strings. Router's default
+ * JSON decoder changes values such as `1e3` or `[1, 2]`, invalidating their
+ * signature. Keep every value and repetition as a string for these queries;
+ * ordinary application searches retain the default JSON behavior.
  */
+
+function isSignedOAuthSearch(search: Record<string, unknown>): boolean {
+  return (
+    typeof search.sig === 'string' &&
+    typeof search.exp === 'string' &&
+    typeof search.client_id === 'string'
+  )
+}
 
 /** True when a decoded value of this shape would read back identically. */
 function isRepeatable(value: unknown): value is string[] {
@@ -33,6 +36,20 @@ function decodesAsOther(text: string): boolean {
 export function stringifySearchKeepingRepeats(
   search: Record<string, unknown>,
 ): string {
+  if (isSignedOAuthSearch(search)) {
+    const params = new URLSearchParams()
+    for (const [key, value] of Object.entries(search)) {
+      if (typeof value === 'string') params.append(key, value)
+      else if (Array.isArray(value)) {
+        for (const item of value) {
+          if (typeof item === 'string') params.append(key, item)
+        }
+      }
+    }
+    const query = params.toString()
+    return query ? `?${query}` : ''
+  }
+
   const plain: Record<string, unknown> = {}
   const repeated: [string, string[]][] = []
   for (const [key, value] of Object.entries(search)) {
@@ -49,5 +66,18 @@ export function stringifySearchKeepingRepeats(
   return query ? `?${query}` : ''
 }
 
-/** Reads search strings as the router always has (repeats become arrays). */
-export const parseSearchKeepingRepeats = defaultParseSearch
+/** Decode signed query values without JSON coercion or losing repetitions. */
+export function parseSearchKeepingRepeats(
+  searchStr: string,
+): Record<string, unknown> {
+  const params = new URLSearchParams(searchStr.replace(/^\?/, ''))
+  if (!params.has('sig') || !params.has('exp') || !params.has('client_id')) {
+    return defaultParseSearch(searchStr)
+  }
+  const search: Record<string, unknown> = Object.create(null)
+  for (const key of new Set(params.keys())) {
+    const values = params.getAll(key)
+    search[key] = values.length === 1 ? values[0] : values
+  }
+  return search
+}

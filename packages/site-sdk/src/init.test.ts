@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { parseArgs } from './args.js'
@@ -160,7 +166,7 @@ describe('initSite', () => {
       })
 
       expect(readUtf8(join(dir, 'areca.config.ts'))).toBe(
-        `import { defineSiteContent } from '@areca-cms/site-sdk'\n\nexport default defineSiteContent({\n  siteKey: 'acme-site',\n  collections: {},\n})\n`,
+        `import { defineSiteContent } from '@areca-cms/site-sdk'\n\nexport default defineSiteContent({\n  siteKey: 'acme-site',\n  assets: {\n    download: true,\n    dir: 'public/areca',\n  },\n  collections: {},\n})\n`,
       )
       expect(readUtf8(join(dir, '.env.example'))).toBe(
         'ARECA_CMS_URL=http://localhost:3000\nARECA_SITE_TOKEN=\nARECA_SCHEMA_TOKEN=\n',
@@ -168,20 +174,28 @@ describe('initSite', () => {
       expect(readUtf8(join(dir, '.env.local'))).toBe(
         'ARECA_CMS_URL=http://localhost:3000\nARECA_SITE_TOKEN=site-token\n',
       )
-      expect(readUtf8(join(dir, '.gitignore'))).toBe('.env.local\nsrc/generated/content/\n')
-      expect(JSON.parse(readUtf8(join(dir, 'src/generated/content/manifest.json')))).toEqual({
+      expect(readUtf8(join(dir, '.gitignore'))).toBe(
+        '.env.local\nsrc/generated/content/\npublic/areca/\n',
+      )
+      expect(
+        JSON.parse(readUtf8(join(dir, 'src/generated/content/manifest.json'))),
+      ).toEqual({
         publicationId: '',
         hash: '',
         createdAt: '',
         collections: {},
       })
-      expect(existsSync(join(dir, 'src/generated/content/articles.json'))).toBe(false)
+      expect(existsSync(join(dir, 'src/generated/content/articles.json'))).toBe(
+        false,
+      )
 
       const pkg = JSON.parse(readUtf8(join(dir, 'package.json'))) as {
         scripts: Record<string, string>
       }
       expect(pkg.scripts['sync-manifest']).toBe('areca manifest push')
-      expect(pkg.scripts['content:pull']).toBe('areca pull --out src/generated/content')
+      expect(pkg.scripts['content:pull']).toBe(
+        'areca pull --out src/generated/content',
+      )
       expect(pkg.scripts.dev).toBeUndefined()
       expect(pkg.scripts.prebuild).toBeUndefined()
     } finally {
@@ -233,7 +247,9 @@ describe('initSite', () => {
         siteKey: 'acme-site',
       })
       expect(readUtf8(configPath)).toContain("siteKey: 'acme-site'")
-      expect(readUtf8(join(dir, '.env.example'))).toContain('ARECA_CMS_URL=http://localhost:3000')
+      expect(readUtf8(join(dir, '.env.example'))).toContain(
+        'ARECA_CMS_URL=http://localhost:3000',
+      )
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
@@ -262,11 +278,93 @@ describe('initSite', () => {
     }
   })
 
+  it('writes media flags into the config and ignores the media directory', async () => {
+    const dir = makeSiteDir()
+    try {
+      await initSite({
+        cwd: dir,
+        yes: true,
+        cmsUrl: 'http://localhost:3000',
+        token: 'site-token',
+        siteKey: 'acme-site',
+        assetsDir: 'static/media',
+        assetsPublicPath: 'media/',
+      })
+      expect(readUtf8(join(dir, 'areca.config.ts'))).toContain(
+        "  assets: {\n    download: true,\n    dir: 'static/media',\n    publicPath: '/media',\n  },\n",
+      )
+      expect(readUtf8(join(dir, '.gitignore'))).toContain('static/media/\n')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('requires a public path for media outside public/', async () => {
+    const dir = makeSiteDir()
+    try {
+      await expect(
+        initSite({
+          cwd: dir,
+          yes: true,
+          cmsUrl: 'http://localhost:3000',
+          token: 'site-token',
+          siteKey: 'acme-site',
+          assetsDir: 'static/media',
+        }),
+      ).rejects.toThrow(/--assets-public-path/)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('adds a media block to an existing config, then keeps it unless told otherwise', async () => {
+    const dir = makeSiteDir()
+    const configPath = join(dir, 'areca.config.ts')
+    const original = `import { defineSiteContent } from '@areca-cms/site-sdk'
+
+export default defineSiteContent({
+  siteKey: 'acme-site',
+  collections: {
+    assets: { route: '/assets/:slug', fields: [] },
+  },
+})
+`
+    writeFileSync(configPath, original, 'utf8')
+    const base = {
+      cwd: dir,
+      yes: true,
+      cmsUrl: 'http://localhost:3000',
+      token: 'site-token',
+      siteKey: 'acme-site',
+    }
+    try {
+      await initSite(base)
+      const withDefaults = original.replace(
+        "  siteKey: 'acme-site',\n",
+        "  siteKey: 'acme-site',\n  assets: {\n    download: true,\n    dir: 'public/areca',\n  },\n",
+      )
+      expect(readUtf8(configPath)).toBe(withDefaults)
+
+      await initSite(base)
+      expect(readUtf8(configPath)).toBe(withDefaults)
+
+      await initSite({ ...base, noAssets: true })
+      expect(readUtf8(configPath)).toBe(
+        original.replace(
+          "  siteKey: 'acme-site',\n",
+          "  siteKey: 'acme-site',\n  assets: {\n    download: false,\n  },\n",
+        ),
+      )
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   it('does not duplicate gitignore lines', async () => {
     const dir = makeSiteDir()
     writeFileSync(
       join(dir, '.gitignore'),
-      'node_modules/\n.env.local\nsrc/generated/content/\n',
+      'node_modules/\n.env.local\nsrc/generated/content/\npublic/areca\n',
       'utf8',
     )
     try {
@@ -278,7 +376,7 @@ describe('initSite', () => {
         siteKey: 'acme-site',
       })
       expect(readUtf8(join(dir, '.gitignore'))).toBe(
-        'node_modules/\n.env.local\nsrc/generated/content/\n',
+        'node_modules/\n.env.local\nsrc/generated/content/\npublic/areca\n',
       )
     } finally {
       rmSync(dir, { recursive: true, force: true })
@@ -299,7 +397,9 @@ describe('initSite', () => {
         scripts: Record<string, string>
       }
       expect(pkg.scripts['sync-manifest']).toBe('echo custom')
-      expect(pkg.scripts['content:pull']).toBe('areca pull --out src/generated/content')
+      expect(pkg.scripts['content:pull']).toBe(
+        'areca pull --out src/generated/content',
+      )
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
@@ -343,7 +443,9 @@ describe('initSite', () => {
         scripts: Record<string, string>
       }
       expect(pkg.scripts.dev).toBe('areca run -- vite')
-      expect(pkg.scripts.preview).toBe('node --env-file=.env.local vite preview')
+      expect(pkg.scripts.preview).toBe(
+        'node --env-file=.env.local vite preview',
+      )
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
@@ -451,7 +553,9 @@ describe('initSite', () => {
         token: 'site-token',
         siteKey: 'acme-site',
       })
-      expect(readUtf8(join(dir, 'areca.config.ts'))).toContain("siteKey: 'acme-site'")
+      expect(readUtf8(join(dir, 'areca.config.ts'))).toContain(
+        "siteKey: 'acme-site'",
+      )
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
@@ -472,7 +576,12 @@ describe('initSite', () => {
         token,
         siteKey: 'acme-site',
       })
-      const printed = [...log.mock.calls, ...err.mock.calls, ...info.mock.calls, ...warn.mock.calls]
+      const printed = [
+        ...log.mock.calls,
+        ...err.mock.calls,
+        ...info.mock.calls,
+        ...warn.mock.calls,
+      ]
         .flat()
         .map(String)
         .join(' ')
@@ -515,7 +624,11 @@ describe('loadLocalEnv', () => {
       ].join('\n'),
       'utf8',
     )
-    writeFileSync(join(dir, '.env'), 'SHARED=from-env\nENV_ONLY=2\nCOMMENTED=nope\n', 'utf8')
+    writeFileSync(
+      join(dir, '.env'),
+      'SHARED=from-env\nENV_ONLY=2\nCOMMENTED=nope\n',
+      'utf8',
+    )
     try {
       const loaded = loadLocalEnv(dir)
       expect(loaded).toEqual([join(dir, '.env.local'), join(dir, '.env')])
@@ -537,7 +650,11 @@ describe('loadLocalEnv', () => {
     const dir = mkdtempSync(join(tmpdir(), 'areca-env-'))
     extraEnvKeys.add('FOO')
     extraEnvKeys.add('BAR')
-    writeFileSync(join(dir, '.env'), '# ignore\n\nFOO=bar\n  # also\nBAR=baz\n', 'utf8')
+    writeFileSync(
+      join(dir, '.env'),
+      '# ignore\n\nFOO=bar\n  # also\nBAR=baz\n',
+      'utf8',
+    )
     try {
       loadLocalEnv(dir)
       expect(process.env.FOO).toBe('bar')
@@ -589,7 +706,9 @@ describe('run init', () => {
         ),
       ).resolves.toBe(0)
       expect(existsSync(join(dir, 'areca.config.ts'))).toBe(true)
-      expect(existsSync(join(dir, 'src/generated/content/manifest.json'))).toBe(true)
+      expect(existsSync(join(dir, 'src/generated/content/manifest.json'))).toBe(
+        true,
+      )
     } finally {
       log.mockRestore()
       err.mockRestore()
@@ -615,3 +734,29 @@ function makeSiteDir(pkg: Record<string, unknown> = {}): string {
 function readUtf8(filePath: string): string {
   return readFileSync(filePath, 'utf8')
 }
+
+it('uses custom config and quoted output paths in generated scripts', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'areca-custom-init-'))
+  try {
+    writeFileSync(join(dir, 'package.json'), '{}')
+    await initSite({
+      cwd: dir,
+      cmsUrl: 'https://cms.test',
+      token: 'read',
+      siteKey: 'site',
+      configPath: 'config/custom schema.ts',
+      outDir: 'generated content',
+      yes: true,
+    })
+    const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
+    expect(pkg.scripts['sync-manifest']).toBe(
+      "areca manifest push 'config/custom schema.ts'",
+    )
+    expect(pkg.scripts['content:pull']).toBe(
+      "areca pull --out 'generated content'",
+    )
+    expect(existsSync(join(dir, 'config/custom schema.ts'))).toBe(true)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})

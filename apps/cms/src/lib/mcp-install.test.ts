@@ -11,6 +11,7 @@ import {
   genericMcpConfig,
   mcpServerName,
   setupPrompt,
+  skillsInstallCommand,
   vscodeConnectLink,
   vscodeInstallLink,
 } from './mcp-install'
@@ -206,5 +207,15 @@ describe('connector builders (OAuth, no secret)', () => {
     expect(prompt).toContain(connect.url)
     expect(prompt).toContain('Acme Website')
     expect(prompt).not.toMatch(/areca_mcp_|Bearer/)
+  })
+})
+
+describe('skillsInstallCommand', () => {
+  it('passes only the connector URL to the skills installer', () => {
+    expect(
+      skillsInstallCommand('https://cms.example.com/api/mcp/acme-site'),
+    ).toBe(
+      'npx @areca-cms/skills --mcp-url https://cms.example.com/api/mcp/acme-site',
+    )
   })
 })

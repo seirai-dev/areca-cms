@@ -56,7 +56,7 @@ export function serverInstructions(
     'Entry status: draft (not approved), ready (approved for the next release; status "ready" is not the same as live), scheduled, archived. Check the live and pendingRelease flags to know what visitors see.',
     'Write rich text fields as Markdown (headings ##, lists, links, ![alt](asset:<assetId>) images). Do not send HTML.',
     'Always fill SEO for new entries: seo.title (about 50-60 characters), seo.description (140-160 characters), seo.focusKeyphrase, seo.summary (2-3 sentences), seo.keyTakeaways (3-5), and seo.faq only when the body really answers questions.',
-    'Images: upload_asset_from_url with a direct link to the image file, then use the returned assetId in image fields, seo.ogImage and ![alt](asset:<assetId>). Always give alt text. If an upload fails, do not guess other URLs: ask the user for a working link or continue without the image.',
+    'Images: upload_asset_from_url with a direct link to the image file, then use the returned assetId in image fields, seo.ogImage and ![alt](asset:<assetId>). Always give alt text. If an upload fails, do not guess other URLs: ask the user for a working link or continue without the image. An external ![alt](https://...) image in rich text is copied into the media library when the entry is saved; any that could not be copied are listed in the result\'s warnings.',
     'Drafts are safe. Nothing you write changes the live site until it is approved and a go live happens.',
     ...roleInstruction(actor),
     'Respect the caller role: tools you cannot use are not listed. If an action is refused, explain the reason to the user and say who can do it.',

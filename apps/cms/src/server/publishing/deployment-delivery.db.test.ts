@@ -94,9 +94,12 @@ describe.skipIf(!process.env.DATABASE_URL)(
           dispatchUncertain: true,
         })
         const response = await getSitesSnapshotCurrent(
-          new Request('http://cms.test/api/sites/snapshot/current', {
-            headers: { authorization: `Bearer ${token}` },
-          }),
+          new Request(
+            `http://cms.test/api/sites/snapshot/current?publicationId=${pub.id}`,
+            {
+              headers: { authorization: `Bearer ${token}` },
+            },
+          ),
         )
         expect(response.status).toBe(200)
         expect((await response.json()).publicationId).toBe(pub.id)
@@ -314,7 +317,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         await expect(
           resolveUncertainDeploymentJob({
             ...input,
-            upstreamStopped: false as unknown as true,
+            upstreamStopped: false,
           }),
         ).rejects.toThrow(/Confirm upstream/)
         expect(await resolveUncertainDeploymentJob(input)).toMatchObject({

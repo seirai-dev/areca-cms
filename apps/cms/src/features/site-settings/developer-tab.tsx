@@ -22,6 +22,8 @@ function useOrigin() {
   return origin
 }
 
+const SKILLS_COMMAND = 'npx @areca-cms/skills'
+
 /**
  * Settings › Developer (brief §3.10): the site key, token rotation with a
  * one-time reveal, and what the site project last synced (`lastManifest`)
@@ -246,6 +248,34 @@ export function DeveloperTab({
             </pre>
             <p className="px-0.5 text-caption font-normal text-text-muted">
               {m.settings_quickstart_hint()}
+            </p>
+          </div>
+
+          <div className="grid gap-1.5">
+            <div className="flex items-center justify-between gap-3 px-0.5">
+              <span className="text-caption text-text-muted">
+                {m.settings_agent_skills()}
+              </span>
+              <CopyButton
+                value={SKILLS_COMMAND}
+                label={m.connect_ai_reveal_copy_command()}
+                toastMessage={m.connect_ai_copied_toast()}
+                variant="quiet"
+                size="xs"
+                data-testid="copy-agent-skills"
+              />
+            </div>
+            <pre
+              className="scroll-quiet overflow-x-auto rounded-card bg-background-inverse px-4 py-3.5 text-mono whitespace-pre text-text-inverse dark:border dark:border-border-default dark:bg-background-subtle dark:text-text-primary"
+              data-testid="agent-skills-snippet"
+            >
+              <code>
+                <span className="opacity-50 select-none">$ </span>
+                {SKILLS_COMMAND}
+              </code>
+            </pre>
+            <p className="px-0.5 text-caption font-normal text-text-muted">
+              {m.settings_agent_skills_hint()}
             </p>
           </div>
         </div>

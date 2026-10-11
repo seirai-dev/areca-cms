@@ -134,6 +134,20 @@
       "when": 1791646236354,
       "tag": "0018_mcp_oauth",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1791655636625,
+      "tag": "0019_audit_reliability",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1791714987671,
+      "tag": "0020_asset_source_url",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,2 @@
+ALTER TABLE "asset" ADD COLUMN "source_url" text;--> statement-breakpoint
+CREATE UNIQUE INDEX "asset_org_source_url_unique" ON "asset" USING btree ("organization_id","source_url") WHERE "asset"."source_url" is not null;

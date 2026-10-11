@@ -37,6 +37,24 @@ describe('worker loops', () => {
     stopWorkerLoops(state)
   })
 
+  it('runs storage cleanup independently while releases are stalled', async () => {
+    const cleanup = vi.fn(async () => {})
+    const state = startWorkerLoops(
+      {
+        processJobs: () => new Promise(() => {}),
+        recover: async () => {},
+        schedule: async () => {},
+        cleanup,
+      },
+      { intervalMs: 1000 },
+    )
+    await vi.advanceTimersByTimeAsync(31_000)
+    expect(cleanup).toHaveBeenCalledTimes(3)
+    stopWorkerLoops(state)
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(cleanup).toHaveBeenCalledTimes(3)
+  })
+
   it('does not overlap slow scheduler ticks', async () => {
     let running = 0
     let maxRunning = 0
@@ -116,6 +134,35 @@ describe('job pool', () => {
     await pool.fill()
     await vi.waitFor(() => expect(ran).toEqual(['x', 'y']))
     expect(await pool.drain(1000)).toBe(true)
+  })
+
+  it('drains a job returned by an outstanding claim before reporting completion', async () => {
+    vi.useRealTimers()
+    let finishClaim!: (value: ReturnType<typeof job>) => void
+    let finishRun!: () => void
+    const claim = new Promise<ReturnType<typeof job>>((resolve) => {
+      finishClaim = resolve
+    })
+    const run = new Promise<void>((resolve) => {
+      finishRun = resolve
+    })
+    const pool = createJobPool({
+      concurrency: 1,
+      claim: () => claim,
+      run: () => run,
+    })
+    void pool.fill()
+    let drained = false
+    const stopping = pool.drain(1000).then((result) => {
+      drained = result
+      return result
+    })
+    finishClaim(job('late'))
+    await vi.waitFor(() => expect(pool.inFlight()).toBe(1))
+    expect(drained).toBe(false)
+    finishRun()
+    expect(await stopping).toBe(true)
+    expect(pool.inFlight()).toBe(0)
   })
 
   it('drain is bounded and stops claiming', async () => {
