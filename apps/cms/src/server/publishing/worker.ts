@@ -6,6 +6,7 @@ import {
 } from '#/adapters/deployment/types'
 import type {
   DeploymentAdapter,
+  DeploymentContext,
   DeploymentTarget,
 } from '#/adapters/deployment/types'
 import { db, pool } from '#/db'
@@ -367,10 +368,11 @@ export async function processJob(
         (await (deps.resolveAdapter ?? getDeploymentAdapterForOrganization)(
           existingSite.organizationId,
         ))
-      const context = {
+      const context: DeploymentContext = {
         jobId: job.id,
         publicationId: pub.id,
         snapshotHash: pub.snapshotHash,
+        dispatchedAt: job.dispatchStartedAt ?? undefined,
       }
       let deploymentId = job.upstreamDeploymentId
       if (job.dispatchStartedAt) {
@@ -386,10 +388,11 @@ export async function processJob(
         }
         dispatchUncertain = true
       } else {
+        const dispatchedAt = new Date()
         const [intent] = await db
           .update(buildJob)
           .set({
-            dispatchStartedAt: new Date(),
+            dispatchStartedAt: dispatchedAt,
             dispatchTarget: adapterTarget,
             dispatchUncertain: true,
           })
@@ -397,7 +400,10 @@ export async function processJob(
           .returning({ id: buildJob.id })
         if (!intent) throw new Error('Publication worker lease lost')
         dispatchUncertain = true
-        const result = await adapter.deploy(adapterTarget, log, context)
+        const result = await adapter.deploy(adapterTarget, log, {
+          ...context,
+          dispatchedAt,
+        })
         deploymentId = result.deploymentId
       }
       const [ownedDispatch] = await db

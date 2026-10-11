@@ -74,7 +74,7 @@ Areca never sends a second deploy request to resolve an uncertain job. Recovery 
 </Step>
 <Step>
 
-**Check Dokploy.** In the application's deployment history, look for a deployment titled `areca:<jobId>` whose description contains the matching publication ID and snapshot hash. Do not start a replacement build while the original might still be running.
+**Check Dokploy.** In the application's deployment history, look for a deployment titled `areca:<jobId>` whose description contains the matching publication ID and snapshot hash. For applications built from a Git provider, Dokploy replaces that title and description with the commit message and `Commit: <sha>`. Areca then matches the one deployment created after the dispatch, if there is exactly one. If there are several, check the deployment history by hand. Do not start a replacement build while the original might still be running.
 
 </Step>
 <Step>
