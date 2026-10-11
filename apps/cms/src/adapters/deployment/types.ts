@@ -9,6 +9,12 @@ export interface DeploymentContext {
   jobId: string
   publicationId: string
   snapshotHash: string
+  /**
+   * When the dispatch intent was recorded, before the deploy request was sent.
+   * Stable across recovery (persisted as build_job.dispatch_started_at). Some
+   * providers ignore the identity we send, so adapters may use it as evidence.
+   */
+  dispatchedAt?: Date
 }
 
 /** The adapter has established that no deploy request was sent/accepted. */

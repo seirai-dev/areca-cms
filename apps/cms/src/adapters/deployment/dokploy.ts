@@ -22,6 +22,9 @@ import type { ResolveHost } from '#/server/http/outbound-url'
 
 type FetchFn = typeof fetch
 
+/** Tolerated CMS-to-Dokploy clock skew when comparing deployment createdAt. */
+const DISPATCH_CLOCK_SKEW_MS = 5_000
+
 type DokployConnectionOptions = {
   baseUrl: string
   apiKey: string
@@ -253,7 +256,7 @@ export function createDokployAdapter(
           'Deploy response uncertain; reconciling the same dispatch before proceeding',
         )
       }
-      const found = await reconcile(target.applicationId, context)
+      const found = await reconcile(target.applicationId, context, log)
       if (!found)
         throw new DeploymentUncertainError(
           `Deployment acceptance unknown for job=${context.jobId} publication=${context.publicationId}; reconcile manually, do not redeploy`,
@@ -263,7 +266,7 @@ export function createDokployAdapter(
     },
 
     async reconcile(target, context, log) {
-      const found = await reconcile(target.applicationId, context)
+      const found = await reconcile(target.applicationId, context, log)
       log(
         found
           ? `Reconciled upstream deployment=${found.deploymentId}`
@@ -316,23 +319,47 @@ export function createDokployAdapter(
     },
   }
 
-  async function reconcile(applicationId: string, context: DeploymentContext) {
+  async function reconcile(
+    applicationId: string,
+    context: DeploymentContext,
+    log: (line: string) => void,
+  ) {
     const deadline = Date.now() + (opts.reconciliationTimeoutMs ?? 30_000)
     const identity = dispatchIdentity(context)
     for (;;) {
       const app = await getApplication(applicationId)
-      const matches =
-        app.deployments?.filter(
-          (item) =>
-            item.title === identity.title &&
-            item.description === identity.description,
-        ) ?? []
+      const deployments = app.deployments ?? []
+      // Preferred evidence: the exact identity we sent. Git-sourced apps make
+      // Dokploy ignore title/description, so this only matches other providers.
+      const matches = deployments.filter(
+        (item) =>
+          item.title === identity.title &&
+          item.description === identity.description,
+      )
       if (matches.length > 1)
         throw new DeploymentUncertainError(
           `Multiple upstream deployments match job=${context.jobId}; manual investigation required`,
         )
       const id = matches[0]?.deploymentId
-      if (id) return { deploymentId: id }
+      if (id) {
+        log(`deployment=${id} matched by dispatch title`)
+        return { deploymentId: id }
+      }
+      // Fallback: Dokploy ignored our identity. Builds for an application are
+      // serialised by the worker, so the single deployment created since our
+      // dispatch is ours. The health check still verifies the publicationId.
+      const created = findDeploymentsCreatedSince(deployments, context)
+      if (created.length > 1)
+        throw new DeploymentUncertainError(
+          `Multiple upstream deployments were created after dispatch for job=${context.jobId}; manual investigation required`,
+        )
+      const onlyCreated = created[0]?.deploymentId
+      if (onlyCreated) {
+        log(
+          `deployment=${onlyCreated} matched as the only deployment created after dispatch`,
+        )
+        return { deploymentId: onlyCreated }
+      }
       const wait = Math.min(
         opts.reconciliationPollMs ?? 1000,
         deadline - Date.now(),
@@ -466,6 +493,27 @@ function dispatchIdentity(context: DeploymentContext) {
     title: `areca:${context.jobId}`,
     description: `publication=${context.publicationId} snapshot=${context.snapshotHash}`,
   }
+}
+
+/**
+ * Deployments created at or after the dispatch (minus clock skew between the
+ * CMS and Dokploy) that do not carry any CMS `areca:` dispatch title. Entries
+ * without a parseable createdAt are ignored. Empty when no dispatch time is
+ * known, which disables the fallback.
+ */
+function findDeploymentsCreatedSince(
+  deployments: DokployDeployment[],
+  context: DeploymentContext,
+) {
+  if (!context.dispatchedAt) return []
+  const since = context.dispatchedAt.getTime() - DISPATCH_CLOCK_SKEW_MS
+  return deployments.filter((item) => {
+    if (!item.deploymentId) return false
+    if (item.title?.startsWith('areca:')) return false
+    if (typeof item.createdAt !== 'string') return false
+    const created = Date.parse(item.createdAt)
+    return Number.isFinite(created) && created >= since
+  })
 }
 
 /** Bounded retry only for read operations or an identical idempotent write. */

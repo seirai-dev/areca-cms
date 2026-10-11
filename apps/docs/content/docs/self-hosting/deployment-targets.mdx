@@ -89,7 +89,7 @@ Every Go live request creates a publication with an immutable snapshot. Before i
 
 The Dockerfile must declare `ARG ARECA_SNAPSHOT_ID` immediately before the step that runs `areca pull`, after the SDK is built. A Docker build caches each step, and changing the argument invalidates only the layers after it. If the argument is declared too early, Docker reuses the cached content pull from an earlier release, and the new container serves old content. The health check then fails, and the release is not marked live.
 
-Areca also tags each Dokploy deployment with `areca:<jobId>` as its title, and writes the publication ID and snapshot hash into its description. You need these values to find a deployment when you reconcile an uncertain release.
+Areca also tags each Dokploy deployment with `areca:<jobId>` as its title, and writes the publication ID and snapshot hash into its description. You need these values to find a deployment when you reconcile an uncertain release. Applications built from a Git provider do not keep these values: Dokploy stores the commit message and `Commit: <sha>` instead, so Areca falls back to the single deployment created after the dispatch.
 
 ## Health checks
 
