@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "areca-demo-app-areca": {
-      "type": "http",
-      "url": "https://areca.emirkaan-web.eu/api/mcp/demo-app-areca"
-    }
-  }
-}
