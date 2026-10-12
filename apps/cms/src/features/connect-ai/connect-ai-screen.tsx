@@ -11,7 +11,7 @@ import type { MeSite } from '#/lib/site-nav'
 import { m } from '#/paraglide/messages'
 import type { McpKeySummary } from '#/server/mcp/keys'
 
-import { ConnectApps } from './connect-apps'
+import { ConnectApps, ConnectPrompt } from './connect-apps'
 import { ConnectedAppsSection } from './connected-apps'
 import { ConnectorUrlPanel } from './connector-url-panel'
 import { CreateKeyDialog } from './create-key-dialog'
@@ -38,7 +38,7 @@ export function ConnectAiScreen({ site }: { site: MeSite }) {
 
   return (
     <div
-      className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-12 pb-24"
+      className="grid w-full max-w-[760px] min-w-0 grid-cols-[minmax(0,1fr)] gap-14 pb-24"
       data-testid="connect-ai"
     >
       <PageHeader
@@ -58,10 +58,13 @@ export function ConnectAiScreen({ site }: { site: MeSite }) {
       )}
 
       {connectorUrl ? (
-        <ConnectApps
-          input={{ name: serverName, url: connectorUrl }}
-          siteName={site.name}
-        />
+        <>
+          <ConnectApps
+            input={{ name: serverName, url: connectorUrl }}
+            siteName={site.name}
+          />
+          <ConnectPrompt url={connectorUrl} siteName={site.name} />
+        </>
       ) : (
         <Skeleton className="h-64 rounded-card" />
       )}
@@ -131,10 +134,10 @@ function Advanced({
 }) {
   return (
     <details
-      className="group/advanced rounded-card border border-border-default px-4 py-3 open:pb-6 sm:px-5"
+      className="group/advanced rounded-card border border-border-default px-4 py-2 open:pb-6 sm:px-5"
       data-testid="connect-ai-advanced"
     >
-      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-[14px] leading-5 font-medium text-text-primary outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus [&::-webkit-details-marker]:hidden">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-headline text-text-primary outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus [&::-webkit-details-marker]:hidden">
         <span className="flex items-center gap-2.5">
           <Key className="size-4 text-icon-muted" />
           {m.connect_ai_advanced_title()}
@@ -144,7 +147,7 @@ function Advanced({
 
       {/* Content sits in its own grid: <details> does not lay out its
           children as grid items in every browser. */}
-      <div className="grid gap-8 pt-1">
+      <div className="grid gap-8 border-t border-border-default pt-5 mt-2">
         <p className="text-callout text-text-secondary">
           {m.connect_ai_advanced_description()}
         </p>
@@ -170,8 +173,7 @@ function Advanced({
             <Button
               type="button"
               variant="secondary"
-              size="lg"
-              className="min-h-11 w-full sm:w-auto"
+              className="w-full sm:w-auto"
               onClick={onCreate}
               data-testid="connect-ai-create"
             >

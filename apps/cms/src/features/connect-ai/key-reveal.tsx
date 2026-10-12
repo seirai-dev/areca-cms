@@ -24,6 +24,8 @@ import type { McpInstallInput } from '#/lib/mcp-install'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
+import { GuideStep, GuideSteps } from './guide-steps'
+
 /** The AI apps the install guide knows about. */
 export const AI_APPS = [
   'claude-code',
@@ -125,7 +127,7 @@ export function KeyReveal({
       <Tabs
         value={app}
         onValueChange={(value) => setApp(value as AiApp)}
-        className="gap-4"
+        className="gap-5"
       >
         {/* Narrow screens: a picker, because five labels do not fit in a row. */}
         <div className="md:hidden">
@@ -161,88 +163,95 @@ export function KeyReveal({
         </div>
 
         <TabsContent value="claude-code">
-          <AppStep text={m.connect_ai_reveal_step_claude_code()}>
-            <CodeBlock
-              text={claudeCodeCommand(install)}
-              copyLabel={m.connect_ai_reveal_copy_command()}
-              testId="connect-ai-command"
-              wrap
-            />
-          </AppStep>
+          <GuideSteps>
+            <GuideStep text={m.connect_ai_reveal_step_claude_code()}>
+              <CodeBlock
+                text={claudeCodeCommand(install)}
+                copyLabel={m.connect_ai_reveal_copy_command()}
+                testId="connect-ai-command"
+                wrap
+              />
+            </GuideStep>
+          </GuideSteps>
         </TabsContent>
 
         <TabsContent value="cursor">
-          <AppStep text={m.connect_ai_reveal_step_cursor()}>
-            <div className="flex flex-wrap gap-2">
-              <Button asChild size="lg" className="min-h-11 w-full sm:w-auto">
-                <a
-                  href={cursorInstallLink(install)}
-                  data-testid="connect-ai-add-cursor"
-                >
-                  <ArrowSquareOut />
-                  {m.connect_ai_reveal_add_cursor()}
-                </a>
-              </Button>
-              <CopyButton
-                value={genericMcpConfig(install)}
-                label={m.connect_ai_reveal_copy_config()}
-                variant="secondary"
-                size="lg"
-                className="min-h-11"
-              />
-            </div>
-          </AppStep>
+          <GuideSteps>
+            <GuideStep text={m.connect_ai_reveal_step_cursor()}>
+              <div className="flex flex-wrap gap-2">
+                <Button asChild className="w-full sm:w-auto">
+                  <a
+                    href={cursorInstallLink(install)}
+                    data-testid="connect-ai-add-cursor"
+                  >
+                    <ArrowSquareOut />
+                    {m.connect_ai_reveal_add_cursor()}
+                  </a>
+                </Button>
+                <CopyButton
+                  value={genericMcpConfig(install)}
+                  label={m.connect_ai_reveal_copy_config()}
+                  variant="secondary"
+                />
+              </div>
+            </GuideStep>
+          </GuideSteps>
         </TabsContent>
 
         <TabsContent value="vscode">
-          <AppStep text={m.connect_ai_reveal_step_vscode()}>
-            <div className="flex flex-wrap gap-2">
-              <Button asChild size="lg" className="min-h-11 w-full sm:w-auto">
-                <a
-                  href={vscodeInstallLink(install)}
-                  data-testid="connect-ai-add-vscode"
+          <GuideSteps>
+            <GuideStep text={m.connect_ai_reveal_step_vscode()}>
+              <div className="flex flex-wrap gap-2">
+                <Button asChild className="w-full sm:w-auto">
+                  <a
+                    href={vscodeInstallLink(install)}
+                    data-testid="connect-ai-add-vscode"
+                  >
+                    <ArrowSquareOut />
+                    {m.connect_ai_reveal_add_vscode()}
+                  </a>
+                </Button>
+                <Button
+                  asChild
+                  variant="secondary"
+                  className="w-full sm:w-auto"
                 >
-                  <ArrowSquareOut />
-                  {m.connect_ai_reveal_add_vscode()}
-                </a>
-              </Button>
-              <Button
-                asChild
-                variant="secondary"
-                size="lg"
-                className="min-h-11 w-full sm:w-auto"
-              >
-                <a href={vscodeInstallLink(install, { insiders: true })}>
-                  {m.connect_ai_reveal_add_vscode_insiders()}
-                </a>
-              </Button>
-            </div>
-          </AppStep>
+                  <a href={vscodeInstallLink(install, { insiders: true })}>
+                    {m.connect_ai_reveal_add_vscode_insiders()}
+                  </a>
+                </Button>
+              </div>
+            </GuideStep>
+          </GuideSteps>
         </TabsContent>
 
         <TabsContent value="claude-desktop">
-          <AppStep text={m.connect_ai_reveal_step_desktop()}>
-            <CodeBlock
-              text={claudeDesktopConfig(install)}
-              copyLabel={m.connect_ai_reveal_copy_config()}
-              testId="connect-ai-desktop-config"
-            />
-          </AppStep>
+          <GuideSteps>
+            <GuideStep text={m.connect_ai_reveal_step_desktop()}>
+              <CodeBlock
+                text={claudeDesktopConfig(install)}
+                copyLabel={m.connect_ai_reveal_copy_config()}
+                testId="connect-ai-desktop-config"
+              />
+            </GuideStep>
+          </GuideSteps>
         </TabsContent>
 
         <TabsContent value="other">
-          <AppStep text={m.connect_ai_reveal_step_other()}>
-            <CodeBlock
-              text={genericMcpConfig(install)}
-              copyLabel={m.connect_ai_reveal_copy_config()}
-              testId="connect-ai-generic-config"
-            />
-          </AppStep>
+          <GuideSteps>
+            <GuideStep text={m.connect_ai_reveal_step_other()}>
+              <CodeBlock
+                text={genericMcpConfig(install)}
+                copyLabel={m.connect_ai_reveal_copy_config()}
+                testId="connect-ai-generic-config"
+              />
+            </GuideStep>
+          </GuideSteps>
         </TabsContent>
       </Tabs>
 
-      <div className="grid gap-2 border-t border-border-default pt-5">
-        <div className="grid gap-0.5">
+      <div className="grid gap-3 border-t border-border-default pt-5">
+        <div className="grid gap-1">
           <h3 className="text-headline text-text-primary">
             {m.connect_ai_reveal_prompt_title()}
           </h3>
@@ -271,22 +280,12 @@ export function KeyReveal({
   )
 }
 
-function AppStep({
-  text,
-  children,
-}: {
-  text: string
-  children: React.ReactNode
-}) {
-  return (
-    <div className="grid gap-3">
-      <p className="text-callout text-text-secondary">{text}</p>
-      {children}
-    </div>
-  )
-}
-
-/** Monospace block with a copy button in its header row. */
+/**
+ * Monospace block with its copy button. Wrapped text (commands, prompts)
+ * keeps the button beside it on wide screens, so a one-line command reads as
+ * one row; configs and phones put it in a header row so the text keeps the
+ * full width.
+ */
 export function CodeBlock({
   text,
   copyLabel,
@@ -300,8 +299,18 @@ export function CodeBlock({
   wrap?: boolean
 }) {
   return (
-    <div className="grid overflow-hidden rounded-card border border-border-default bg-background-subtle">
-      <div className="flex justify-end border-b border-border-default px-2 py-1.5">
+    <div
+      className={cn(
+        'grid min-w-0 overflow-hidden rounded-card border border-border-default bg-background-subtle',
+        wrap && 'sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start',
+      )}
+    >
+      <div
+        className={cn(
+          'flex justify-end border-b border-border-default px-2 py-1.5',
+          wrap && 'sm:order-last sm:border-b-0 sm:py-2 sm:ps-0',
+        )}
+      >
         <CopyButton
           value={text}
           label={copyLabel}
@@ -314,7 +323,7 @@ export function CodeBlock({
       <pre
         data-testid={testId}
         className={cn(
-          'scroll-quiet max-h-64 overflow-auto px-3.5 py-3 font-mono text-[12.5px] leading-5 text-text-primary',
+          'scroll-quiet max-h-64 min-w-0 overflow-auto px-4 py-3.5 font-mono text-[12.5px] leading-5 text-text-primary',
           wrap ? 'break-words whitespace-pre-wrap' : 'whitespace-pre',
         )}
       >

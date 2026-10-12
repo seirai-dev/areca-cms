@@ -1552,5 +1552,8 @@
   "media_picker_image_required": "Kies een JPEG-, PNG-, WebP- of GIF-afbeelding. PDF-bestanden kunnen hier niet worden gebruikt.",
   "content_add_option": "Keuze toevoegen",
   "settings_schema_token_reveal_title": "Bewaar je schematoken",
-  "connect_ai_skills_hint": "Gebruik je een coding agent? Deze opdracht installeert de Areca-skills, die de agent deze tools en de site-SDK leren, en voegt de server toe aan de agents die je kiest."
+  "connect_ai_skills_hint": "Gebruik je een coding agent? Deze opdracht installeert de Areca-skills, die de agent deze tools en de site-SDK leren, en voegt de server toe aan de agents die je kiest.",
+  "connect_ai_optional": "Optioneel",
+  "connect_ai_skills_title": "Installeer de Areca-skills",
+  "connect_ai_copy_url": "URL kopiëren"
 }

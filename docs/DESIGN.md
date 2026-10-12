@@ -150,8 +150,8 @@ All in [`apps/cms/src/components/ui`](../apps/cms/src/components/ui). Use them; 
 | --- | --- |
 | `FormField` | Label on top, control, hint or error below; wires `htmlFor`/`aria-describedby`. |
 | `Input`, `Textarea`, `Label` | Text entry (36px, 10px radius, accent focus ring). |
-| `Select` | Choosing one of many (more than four options). |
-| `SegmentedControl` | Choosing one of two to four, with a sliding thumb: role switches, view toggles, filters, Light · Dark · Auto. `semantics="radio"` or `"tabs"`. |
+| `Select` | Choosing one of many (more than four options, or labels too long to fit as segments). |
+| `SegmentedControl` | Choosing one of two to four, with a sliding thumb: role switches, view toggles, filters, Light · Dark · Auto. `semantics="radio"` or `"tabs"`. Only when every label fits its segment; select fields in the editor measure this and fall back to `Select`. |
 | `RadioCards` / `RadioCard` | A choice that needs a sentence of explanation: invite roles, fonts. |
 | `Switch` | Instant on/off that saves immediately (content type enabled, agency access). |
 | `Checkbox` | Selection in lists (select mode). |

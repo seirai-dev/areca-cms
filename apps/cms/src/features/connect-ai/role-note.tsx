@@ -1,3 +1,5 @@
+import { Info } from '@phosphor-icons/react'
+
 import { m } from '#/paraglide/messages'
 
 /** A role-specific sentence: what the viewer's AI is allowed to do here. */
@@ -9,11 +11,16 @@ export function RoleNote({ role }: { role: 'editor' | 'owner' | 'agency' }) {
         ? m.connect_ai_role_agency()
         : m.connect_ai_role_owner()
   return (
-    <p
-      className="rounded-card bg-background-subtle px-4 py-3 text-callout text-text-secondary"
+    <div
+      className="flex gap-3 rounded-card bg-background-subtle px-4 py-3.5"
       data-testid="connect-ai-role-note"
     >
-      {text}
-    </p>
+      <Info
+        weight="duotone"
+        className="mt-px size-4 shrink-0 text-icon-muted"
+        aria-hidden="true"
+      />
+      <p className="text-callout text-text-secondary">{text}</p>
+    </div>
   )
 }

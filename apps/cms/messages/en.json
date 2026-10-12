@@ -1552,5 +1552,8 @@
   "media_picker_image_required": "Choose a JPEG, PNG, WebP or GIF image. PDFs cannot be used here.",
   "content_add_option": "Add choice",
   "settings_schema_token_reveal_title": "Save your schema token",
-  "connect_ai_skills_hint": "Using a coding agent? This command installs the Areca skills, which teach it these tools and the site SDK, and adds the server to the agents you pick."
+  "connect_ai_skills_hint": "Using a coding agent? This command installs the Areca skills, which teach it these tools and the site SDK, and adds the server to the agents you pick.",
+  "connect_ai_optional": "Optional",
+  "connect_ai_skills_title": "Install the Areca skills",
+  "connect_ai_copy_url": "Copy URL"
 }

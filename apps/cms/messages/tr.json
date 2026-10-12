@@ -1552,5 +1552,8 @@
   "server_factor_lockout_self_reset": "Kendi doğrulama kilidinizi sıfırlayamazsınız.",
   "content_add_option": "Seçenek ekle",
   "settings_schema_token_reveal_title": "Şema anahtarınızı kaydedin",
-  "connect_ai_skills_hint": "Bir kodlama ajanı mı kullanıyorsunuz? Bu komut, ajana bu araçları ve site SDK'sını öğreten Areca becerilerini kurar ve sunucuyu seçtiğiniz ajanlara ekler."
+  "connect_ai_skills_hint": "Bir kodlama ajanı mı kullanıyorsunuz? Bu komut, ajana bu araçları ve site SDK'sını öğreten Areca becerilerini kurar ve sunucuyu seçtiğiniz ajanlara ekler.",
+  "connect_ai_optional": "İsteğe bağlı",
+  "connect_ai_skills_title": "Areca becerilerini kurun",
+  "connect_ai_copy_url": "URL'yi kopyala"
 }
