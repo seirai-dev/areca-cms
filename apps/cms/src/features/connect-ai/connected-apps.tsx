@@ -48,13 +48,13 @@ export function ConnectedAppsSection({
 }) {
   return (
     <section
-      className="grid gap-3"
+      className="grid gap-5"
       aria-labelledby="connect-ai-connected-heading"
     >
-      <div className="grid gap-0.5 px-1">
+      <div className="grid gap-1">
         <h2
           id="connect-ai-connected-heading"
-          className="text-headline text-text-primary"
+          className="text-title-2 text-text-primary"
         >
           {m.connect_ai_connected_title()}
         </h2>

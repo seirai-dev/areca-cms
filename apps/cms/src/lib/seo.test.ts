@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { getLocale, overwriteGetLocale } from '#/paraglide/runtime'
+import { m } from '#/paraglide/messages'
 
 import {
   entryPublicUrl,
@@ -31,6 +33,37 @@ const base: ResolveSeoInput = {
 }
 
 describe('entrySeoSchema', () => {
+  it('uses the current locale when validating an already imported schema', () => {
+    const originalGetLocale = getLocale
+    try {
+      for (const locale of ['en', 'nl', 'tr'] as const) {
+        overwriteGetLocale(() => locale)
+        const url = entrySeoSchema.safeParse({
+          canonicalUrl: 'javascript:alert(1)',
+        })
+        const json = entrySeoSchema.safeParse({ jsonLd: '{oops' })
+        expect(url.success).toBe(false)
+        expect(json.success).toBe(false)
+        if (!url.success) {
+          expect(
+            url.error.issues.some(
+              (issue) => issue.message === m.server_seo_http_url_required(),
+            ),
+          ).toBe(true)
+        }
+        if (!json.success) {
+          expect(
+            json.error.issues.some(
+              (issue) => issue.message === m.server_seo_json_object_required(),
+            ),
+          ).toBe(true)
+        }
+      }
+    } finally {
+      overwriteGetLocale(originalGetLocale)
+    }
+  })
+
   it('accepts an empty block and a full block', () => {
     expect(entrySeoSchema.safeParse({}).success).toBe(true)
     const full = entrySeoSchema.safeParse({
@@ -50,8 +83,7 @@ describe('entrySeoSchema', () => {
   it('rejects unknown keys, bad URLs and invalid JSON-LD', () => {
     expect(entrySeoSchema.safeParse({ nope: 1 }).success).toBe(false)
     expect(
-      entrySeoSchema.safeParse({ canonicalUrl: 'javascript:alert(1)' })
-        .success,
+      entrySeoSchema.safeParse({ canonicalUrl: 'javascript:alert(1)' }).success,
     ).toBe(false)
     expect(entrySeoSchema.safeParse({ jsonLd: '[1,2]' }).success).toBe(false)
     expect(entrySeoSchema.safeParse({ jsonLd: '{oops' }).success).toBe(false)

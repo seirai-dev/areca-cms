@@ -4,6 +4,7 @@ import '@tanstack/react-start'
 import { env } from '#/env'
 import { MFA_REQUIRED } from '#/lib/security-errors'
 import { getSession } from '#/lib/session.server'
+import { m } from '#/paraglide/messages'
 import { setBrandingImage } from '#/server/admin/branding'
 import { AssetValidationError } from '#/server/assets'
 import { parseLimitedFormData, UploadTooLargeError } from '#/server/http/upload'
@@ -17,10 +18,10 @@ export const Route = createFileRoute('/api/admin/branding/upload')({
       POST: async ({ request }) => {
         const session = await getSession()
         if (!session) {
-          return new Response('Unauthorized', { status: 401 })
+          return new Response(m.server_unauthorized(), { status: 401 })
         }
         if (!session.user.isAgencyAdmin) {
-          return new Response('Forbidden', { status: 403 })
+          return new Response(m.server_forbidden(), { status: 403 })
         }
         if (!session.user.twoFactorEnabled && env.ADMIN_MFA_REQUIRED) {
           return new Response(MFA_REQUIRED, { status: 403 })
@@ -31,7 +32,7 @@ export const Route = createFileRoute('/api/admin/branding/upload')({
           form = await parseLimitedFormData(request, MAX_UPLOAD_BODY_BYTES)
         } catch (error) {
           if (error instanceof UploadTooLargeError) {
-            return new Response('Image exceeds 2 MB', { status: 413 })
+            return new Response(m.server_image_exceeds_2mb(), { status: 413 })
           }
           throw error
         }
@@ -39,10 +40,12 @@ export const Route = createFileRoute('/api/admin/branding/upload')({
         const kind = form.get('kind')
 
         if (!(file instanceof File)) {
-          return new Response('file is required', { status: 400 })
+          return new Response(m.server_upload_file_required(), { status: 400 })
         }
         if (kind !== 'logo' && kind !== 'favicon') {
-          return new Response('kind must be logo or favicon', { status: 400 })
+          return new Response(m.server_branding_image_kind_invalid(), {
+            status: 400,
+          })
         }
 
         const buffer = Buffer.from(await file.arrayBuffer())

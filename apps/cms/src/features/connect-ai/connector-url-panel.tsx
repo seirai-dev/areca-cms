@@ -16,13 +16,13 @@ export function ConnectorUrlPanel({
   return (
     <section
       aria-labelledby="connect-ai-url-title"
-      className="grid min-w-0 gap-4 overflow-hidden rounded-panel border border-border-default bg-background-surface p-5 shadow-card sm:p-6"
+      className="grid min-w-0 gap-5 overflow-hidden rounded-panel border border-border-default bg-background-surface p-5 shadow-card sm:p-6"
       data-testid="connect-ai-url-panel"
     >
       <div className="grid gap-1">
         <h2
           id="connect-ai-url-title"
-          className="text-headline text-text-primary"
+          className="text-title-2 text-text-primary"
         >
           {m.connect_ai_url_title()}
         </h2>

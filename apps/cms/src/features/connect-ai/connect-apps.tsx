@@ -21,6 +21,13 @@ import {
 import type { McpConnectInput } from '#/lib/mcp-install'
 import { m } from '#/paraglide/messages'
 
+import {
+  GuideDisclosure,
+  GuideOptional,
+  GuideStep,
+  GuideSteps,
+  GuideUrl,
+} from './guide-steps'
 import { CodeBlock } from './key-reveal'
 
 /** The AI apps with a guide on Connect AI, in the order people use them. */
@@ -66,11 +73,11 @@ export function ConnectApps({
   const choose = (value: string) => setApp(value as ConnectApp)
 
   return (
-    <section className="grid gap-4" aria-labelledby="connect-ai-apps-title">
-      <div className="grid gap-0.5 px-1">
+    <section className="grid gap-5" aria-labelledby="connect-ai-apps-title">
+      <div className="grid gap-1">
         <h2
           id="connect-ai-apps-title"
-          className="text-headline text-text-primary"
+          className="text-title-2 text-text-primary"
         >
           {m.connect_ai_apps_title()}
         </h2>
@@ -79,7 +86,7 @@ export function ConnectApps({
         </p>
       </div>
 
-      <Tabs value={app} onValueChange={choose} className="gap-4">
+      <Tabs value={app} onValueChange={choose} className="gap-5">
         <div className="md:hidden">
           <Select value={app} onValueChange={choose}>
             <SelectTrigger
@@ -99,7 +106,7 @@ export function ConnectApps({
           </Select>
         </div>
         <div className="hidden md:block">
-          <TabsList className="flex-wrap">
+          <TabsList className="w-full">
             {CONNECT_APPS.map((item) => (
               <TabsTrigger
                 key={item}
@@ -112,132 +119,178 @@ export function ConnectApps({
           </TabsList>
         </div>
 
-        <TabsContent value="chatgpt">
-          <Steps
-            steps={[
-              m.connect_ai_chatgpt_1(),
-              m.connect_ai_chatgpt_2(),
-              m.connect_ai_chatgpt_3({ site: siteName }),
-              m.connect_ai_chatgpt_4(),
-              m.connect_ai_chatgpt_5(),
-            ]}
-          />
-        </TabsContent>
+        <GuideCard value="chatgpt">
+          <GuideSteps>
+            <GuideStep number={1} text={m.connect_ai_chatgpt_1()} />
+            <GuideStep number={2} text={m.connect_ai_chatgpt_2()} />
+            <GuideStep
+              number={3}
+              text={m.connect_ai_chatgpt_3({ site: siteName })}
+            >
+              <GuideUrl url={input.url} />
+            </GuideStep>
+            <GuideStep number={4} text={m.connect_ai_chatgpt_4()} />
+            <GuideStep number={5} text={m.connect_ai_chatgpt_5()} />
+          </GuideSteps>
+        </GuideCard>
 
-        <TabsContent value="claude">
-          <Steps
-            steps={[
-              m.connect_ai_claude_1(),
-              m.connect_ai_claude_2(),
-              m.connect_ai_claude_3({ site: siteName }),
-              m.connect_ai_claude_4(),
-            ]}
-          />
-          <p className="text-callout text-text-secondary">
+        <GuideCard value="claude">
+          <GuideSteps>
+            <GuideStep number={1} text={m.connect_ai_claude_1()} />
+            <GuideStep number={2} text={m.connect_ai_claude_2()} />
+            <GuideStep
+              number={3}
+              text={m.connect_ai_claude_3({ site: siteName })}
+            >
+              <GuideUrl url={input.url} />
+            </GuideStep>
+            <GuideStep number={4} text={m.connect_ai_claude_4()} />
+          </GuideSteps>
+          <p className="border-t border-border-default pt-5 text-callout text-text-secondary">
             {m.connect_ai_claude_note()}
           </p>
-        </TabsContent>
+        </GuideCard>
 
-        <TabsContent value="claude-code">
-          <Steps
-            steps={[m.connect_ai_claude_code_1(), m.connect_ai_claude_code_2()]}
-          />
-          <CodeBlock
-            text={claudeCodeConnectCommand(input)}
-            copyLabel={m.connect_ai_reveal_copy_command()}
-            testId="connect-ai-command"
-            wrap
-          />
+        <GuideCard value="claude-code">
+          <GuideSteps>
+            <GuideStep number={1} text={m.connect_ai_claude_code_1()}>
+              <CodeBlock
+                text={claudeCodeConnectCommand(input)}
+                copyLabel={m.connect_ai_reveal_copy_command()}
+                testId="connect-ai-command"
+                wrap
+              />
+            </GuideStep>
+            <GuideStep number={2} text={m.connect_ai_claude_code_2()} />
+          </GuideSteps>
           <SkillsHint url={input.url} app="claude-code" />
-        </TabsContent>
+        </GuideCard>
 
-        <TabsContent value="cursor">
-          <Steps steps={[m.connect_ai_cursor_1(), m.connect_ai_cursor_2()]} />
-          <div>
-            <Button asChild size="lg" className="min-h-11 w-full sm:w-auto">
-              <a
-                href={cursorConnectLink(input)}
-                data-testid="connect-ai-add-cursor"
-              >
-                <ArrowSquareOut />
-                {m.connect_ai_reveal_add_cursor()}
-              </a>
-            </Button>
-          </div>
-          <details className="group/fallback grid gap-3">
-            <summary className="min-h-11 cursor-pointer list-none text-callout text-text-secondary underline-offset-4 hover:underline [&::-webkit-details-marker]:hidden">
-              {m.connect_ai_cursor_fallback()}
-            </summary>
-            <CodeBlock
-              text={connectorJsonConfig(input)}
-              copyLabel={m.connect_ai_reveal_copy_config()}
-              testId="connect-ai-cursor-config"
-            />
-          </details>
+        <GuideCard value="cursor">
+          <GuideSteps>
+            <GuideStep number={1} text={m.connect_ai_cursor_1()}>
+              <div>
+                <Button asChild className="w-full sm:w-auto">
+                  <a
+                    href={cursorConnectLink(input)}
+                    data-testid="connect-ai-add-cursor"
+                  >
+                    <ArrowSquareOut />
+                    {m.connect_ai_reveal_add_cursor()}
+                  </a>
+                </Button>
+              </div>
+              <GuideDisclosure summary={m.connect_ai_cursor_fallback()}>
+                <CodeBlock
+                  text={connectorJsonConfig(input)}
+                  copyLabel={m.connect_ai_reveal_copy_config()}
+                  testId="connect-ai-cursor-config"
+                />
+              </GuideDisclosure>
+            </GuideStep>
+            <GuideStep number={2} text={m.connect_ai_cursor_2()} />
+          </GuideSteps>
           <SkillsHint url={input.url} app="cursor" />
-        </TabsContent>
+        </GuideCard>
 
-        <TabsContent value="vscode">
-          <Steps steps={[m.connect_ai_vscode_1(), m.connect_ai_vscode_2()]} />
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Button asChild size="lg" className="min-h-11 w-full sm:w-auto">
-              <a
-                href={vscodeConnectLink(input)}
-                data-testid="connect-ai-add-vscode"
-              >
-                <ArrowSquareOut />
-                {m.connect_ai_reveal_add_vscode()}
-              </a>
-            </Button>
-            <Button
-              asChild
-              variant="secondary"
-              size="lg"
-              className="min-h-11 w-full sm:w-auto"
-            >
-              <a href={vscodeConnectLink(input, { insiders: true })}>
-                {m.connect_ai_reveal_add_vscode_insiders()}
-              </a>
-            </Button>
-          </div>
+        <GuideCard value="vscode">
+          <GuideSteps>
+            <GuideStep number={1} text={m.connect_ai_vscode_1()}>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button asChild className="w-full sm:w-auto">
+                  <a
+                    href={vscodeConnectLink(input)}
+                    data-testid="connect-ai-add-vscode"
+                  >
+                    <ArrowSquareOut />
+                    {m.connect_ai_reveal_add_vscode()}
+                  </a>
+                </Button>
+                <Button
+                  asChild
+                  variant="secondary"
+                  className="w-full sm:w-auto"
+                >
+                  <a href={vscodeConnectLink(input, { insiders: true })}>
+                    {m.connect_ai_reveal_add_vscode_insiders()}
+                  </a>
+                </Button>
+              </div>
+            </GuideStep>
+            <GuideStep number={2} text={m.connect_ai_vscode_2()} />
+          </GuideSteps>
           <SkillsHint url={input.url} app="vscode" />
-        </TabsContent>
+        </GuideCard>
 
-        <TabsContent value="other">
-          <p className="text-callout text-text-secondary">
-            {m.connect_ai_other_body()}
-          </p>
-          <details className="group/fallback grid gap-3">
-            <summary className="min-h-11 cursor-pointer list-none text-callout text-text-secondary underline-offset-4 hover:underline [&::-webkit-details-marker]:hidden">
-              {m.connect_ai_other_note()}
-            </summary>
-            <CodeBlock
-              text={connectorJsonConfig(input)}
-              copyLabel={m.connect_ai_reveal_copy_config()}
-              testId="connect-ai-generic-config"
-            />
-          </details>
+        <GuideCard value="other">
+          <GuideSteps>
+            <GuideStep text={m.connect_ai_other_body()}>
+              <GuideUrl url={input.url} />
+              <GuideDisclosure summary={m.connect_ai_other_note()}>
+                <CodeBlock
+                  text={connectorJsonConfig(input)}
+                  copyLabel={m.connect_ai_reveal_copy_config()}
+                  testId="connect-ai-generic-config"
+                />
+              </GuideDisclosure>
+            </GuideStep>
+          </GuideSteps>
           <SkillsHint url={input.url} app="other" />
-        </TabsContent>
+        </GuideCard>
       </Tabs>
-
-      <div className="grid gap-2 border-t border-border-default pt-5">
-        <div className="grid gap-0.5">
-          <h3 className="text-headline text-text-primary">
-            {m.connect_ai_reveal_prompt_title()}
-          </h3>
-          <p className="text-callout text-text-secondary">
-            {m.connect_ai_reveal_prompt_body()}
-          </p>
-        </div>
-        <CodeBlock
-          text={connectSetupPrompt({ siteName, url: input.url })}
-          copyLabel={m.connect_ai_reveal_copy_prompt()}
-          testId="connect-ai-prompt"
-          wrap
-        />
-      </div>
     </section>
+  )
+}
+
+/**
+ * "Or paste this into your AI": a prompt any app can follow to connect
+ * itself. Its own section, because it is an alternative to the guides.
+ */
+export function ConnectPrompt({
+  url,
+  siteName,
+}: {
+  url: string
+  siteName: string
+}) {
+  return (
+    <section className="grid gap-5" aria-labelledby="connect-ai-prompt-title">
+      <div className="grid gap-1">
+        <h2
+          id="connect-ai-prompt-title"
+          className="text-title-2 text-text-primary"
+        >
+          {m.connect_ai_reveal_prompt_title()}
+        </h2>
+        <p className="text-callout text-text-secondary">
+          {m.connect_ai_reveal_prompt_body()}
+        </p>
+      </div>
+      <CodeBlock
+        text={connectSetupPrompt({ siteName, url })}
+        copyLabel={m.connect_ai_reveal_copy_prompt()}
+        testId="connect-ai-prompt"
+        wrap
+      />
+    </section>
+  )
+}
+
+/** One app's guide, in a card under the tabs. */
+function GuideCard({
+  value,
+  children,
+}: {
+  value: ConnectApp
+  children: React.ReactNode
+}) {
+  return (
+    <TabsContent
+      value={value}
+      className="grid grid-cols-[minmax(0,1fr)] gap-6 p-5 surface-card sm:p-6"
+    >
+      {children}
+    </TabsContent>
   )
 }
 
@@ -247,29 +300,16 @@ export function ConnectApps({
  */
 function SkillsHint({ url, app }: { url: string; app: ConnectApp }) {
   return (
-    <div className="grid gap-2 border-t border-border-default pt-4">
-      <p className="text-callout text-text-secondary">
-        {m.connect_ai_skills_hint()}
-      </p>
+    <GuideOptional
+      title={m.connect_ai_skills_title()}
+      description={m.connect_ai_skills_hint()}
+    >
       <CodeBlock
         text={skillsInstallCommand(url)}
         copyLabel={m.connect_ai_reveal_copy_command()}
         testId={`connect-ai-skills-${app}`}
         wrap
       />
-    </div>
-  )
-}
-
-/** Numbered plain-language steps for one app. */
-function Steps({ steps }: { steps: string[] }) {
-  return (
-    <ol className="grid gap-2.5 ps-5 text-callout text-text-primary marker:font-semibold marker:text-text-secondary list-decimal">
-      {steps.map((step) => (
-        <li key={step} className="ps-1">
-          {step}
-        </li>
-      ))}
-    </ol>
+    </GuideOptional>
   )
 }

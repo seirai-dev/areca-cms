@@ -513,8 +513,8 @@ function EntryEditorView({
             >
               <p>
                 {editor.conflict
-                  ? 'Another user changed this draft. Your changes are kept in this browser.'
-                  : 'A recoverable draft is saved in this browser.'}
+                  ? m.editor_draft_conflict_notice()
+                  : m.editor_draft_recovered_notice()}
               </p>
               <div className="flex flex-wrap gap-4">
                 <button
@@ -522,14 +522,14 @@ function EntryEditorView({
                   className="underline"
                   onClick={() => void editor.reloadServerDraft()}
                 >
-                  Reload server draft
+                  {m.editor_reload_server_draft()}
                 </button>
                 <button
                   type="button"
                   className="underline"
                   onClick={() => void editor.reapplyRecoveredDraft()}
                 >
-                  Reapply recovered draft to latest version
+                  {m.editor_reapply_recovered_draft()}
                 </button>
                 {!editor.conflict && (
                   <button
@@ -537,7 +537,7 @@ function EntryEditorView({
                     className="underline"
                     onClick={editor.discardRecoveredDraft}
                   >
-                    Discard recovered draft
+                    {m.editor_discard_recovered_draft()}
                   </button>
                 )}
               </div>

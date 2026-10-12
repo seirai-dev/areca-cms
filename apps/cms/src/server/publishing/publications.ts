@@ -70,9 +70,7 @@ async function replayRequest(
     previous.operation !== operation ||
     previous.payload !== payload
   ) {
-    throw new ConflictError(
-      'Request key was already used for a different publishing request',
-    )
+    throw new ConflictError(m.server_publication_request_key_reused())
   }
   const publications = await tx
     .select()
@@ -85,9 +83,7 @@ async function replayRequest(
   const pub = publications.at(0)
   const job = jobs.at(0)
   if (!pub || !job)
-    throw new ConflictError(
-      'Original publishing request is no longer available',
-    )
+    throw new ConflictError(m.server_publication_request_unavailable())
   return { publication: pub, job }
 }
 
@@ -120,9 +116,7 @@ async function assertDispatchResolved(tx: RequestTx, siteId: string) {
     )
     .limit(1)
   if (uncertainJobs.length > 0)
-    throw new ConflictError(
-      'An earlier deployment has an uncertain outcome; reconcile it before publishing again',
-    )
+    throw new ConflictError(m.server_publication_uncertain_reconcile_first())
 }
 
 export async function requestPublication(input: {
@@ -168,9 +162,7 @@ export async function requestPublication(input: {
     ) {
       return {
         ok: false as const,
-        errors: [
-          'Production publishing requires a deployment target and a publication-aware health URL.',
-        ],
+        errors: [m.server_publication_deployment_required()],
       }
     }
     if (input.schedulerFingerprint) {
@@ -211,9 +203,7 @@ export async function requestPublication(input: {
       )
         return {
           ok: false as const,
-          errors: [
-            'Scheduled release retries are paused or waiting for their next attempt',
-          ],
+          errors: [m.server_scheduled_release_waiting_retry()],
         }
       if (retry?.approvalFingerprint !== input.schedulerFingerprint) {
         await tx

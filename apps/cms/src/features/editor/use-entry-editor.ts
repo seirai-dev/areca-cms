@@ -227,9 +227,7 @@ export function useEntryEditor({
     try {
       persistDraft(localStorage, recoveryKey, data, versionRef.current)
     } catch {
-      setFormError(
-        'Browser-local draft recovery is unavailable. Keep this page open until your changes save.',
-      )
+      setFormError(m.editor_draft_recovery_unavailable())
     }
   }, [dataJson, dirty, recoveryKey, recoveryUserId, entryId, hydratedId])
 
@@ -300,9 +298,7 @@ export function useEntryEditor({
           versionRef.current,
         )
       } catch {
-        setFormError(
-          'Browser-local draft recovery is unavailable. Keep this page open until your changes save.',
-        )
+        setFormError(m.editor_draft_recovery_unavailable())
       }
       if (slugField && key === slugField.key) setSlugManual(true)
       setFieldErrors((errors) => {
@@ -345,9 +341,7 @@ export function useEntryEditor({
         versionRef.current,
       )
     } catch {
-      setFormError(
-        'Browser-local draft recovery is unavailable. Keep this page open until your changes save.',
-      )
+      setFormError(m.editor_draft_recovery_unavailable())
     }
   }
 
@@ -744,7 +738,7 @@ export function useEntryEditor({
     mutationFn: async (revisionId: string) => {
       const id = await ensureSaved()
       if (!id)
-        throw new Error('Save or resolve your draft conflict before restoring.')
+        throw new Error(m.editor_save_or_resolve_conflict_before_restore())
       const restored = await restoreRevisionFn({
         data: {
           entryId: entryIdRef.current!,

@@ -1,4 +1,5 @@
 import sharp from 'sharp'
+import { m } from '#/paraglide/messages'
 import { AssetValidationError } from './errors'
 
 const FORMATS: Record<string, string> = {
@@ -40,9 +41,7 @@ export async function validateImageBytes(buffer: Buffer, mimeType: string) {
       height: metadata.pageHeight ?? metadata.height,
     }
   } catch {
-    throw new AssetValidationError(
-      'Upload a valid image whose contents match its file type (maximum 40 million pixels)',
-    )
+    throw new AssetValidationError(m.server_invalid_image_contents())
   }
 }
 

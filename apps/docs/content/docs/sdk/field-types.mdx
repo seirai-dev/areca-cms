@@ -169,7 +169,7 @@ publishedAt: string | null
 
 **Choice.** One value from a list.
 
-- **Editor:** with four or fewer options, editors see a segmented control. Optional fields in that case also get a **Clear choice** link. With more options, editors see a dropdown.
+- **Editor:** with four or fewer short options, editors see a segmented control. With more options, or labels too long to fit side by side, they see a dropdown. Optional fields get a **Clear choice** link either way.
 - **Settings:** `options`, an array of up to 200 strings. Each option can be up to 200 characters.
 - **Validation:** when `options` is set, the value must be one of them. Without `options`, any string of up to 500 characters is accepted.
 - **Pulled value:** `string`. If you remove an option that entries use, those entries need a new value before they can be published.

@@ -54,7 +54,7 @@ export function useGoLive(siteId: string) {
   const mutation = useMutation({
     mutationKey: ['go-live', siteId],
     mutationFn: async (options: { urgent?: boolean } = {}) => {
-      if (!actorId) throw new Error('Sign in before publishing')
+      if (!actorId) throw new Error(m.golive_sign_in_before_publishing())
       const priority = options.urgent ? 100 : 0
       const identity = publishingRequestIdentity(
         actorId,
@@ -99,7 +99,7 @@ export function useRollback(siteId: string) {
   const invalidate = useInvalidateGoLive(siteId)
   return useMutation({
     mutationFn: async (publicationId: string) => {
-      if (!actorId) throw new Error('Sign in before restoring a release')
+      if (!actorId) throw new Error(m.golive_sign_in_before_restoring())
       const identity = publishingRequestIdentity(
         actorId,
         siteId,

@@ -1,14 +1,6 @@
-import { fieldAria, joinDescribedBy } from '#/components/ui/field-aria'
+import { fieldAria } from '#/components/ui/field-aria'
 import { FormField } from '#/components/ui/form-field'
 import { Input } from '#/components/ui/input'
-import { SegmentedControl } from '#/components/ui/segmented-control'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '#/components/ui/select'
 import { Switch } from '#/components/ui/switch'
 import { Textarea } from '#/components/ui/textarea'
 import {
@@ -16,10 +8,10 @@ import {
   toDatetimeLocalValue,
 } from '#/lib/content/utils'
 import type { Field } from '#/lib/types'
-import { m } from '#/paraglide/messages'
 
 import { ImageWell } from './image-well'
 import { ReferencePicker } from './reference-picker'
+import { SelectFieldControl } from './select-field'
 
 function fieldId(field: Field) {
   return `field-${field.key}`
@@ -30,9 +22,10 @@ const text = (value: unknown) => (typeof value === 'string' ? value : '')
 /**
  * One structured field in the details panel (brief §3.5): label on top,
  * then the control. Booleans are a switch row, short choice lists a
- * segmented control, images a thumbnail well, references a searchable
- * picker. The control carries `id="field-{key}"` (so labels resolve) and the
- * wrapper `data-field="{key}"` (so errors can scroll into view).
+ * segmented control when it fits (see `SelectFieldControl`), images a
+ * thumbnail well, references a searchable picker. The control carries
+ * `id="field-{key}"` (so labels resolve) and the wrapper `data-field="{key}"`
+ * (so errors can scroll into view).
  */
 export function FieldControl({
   field,
@@ -51,6 +44,18 @@ export function FieldControl({
 }) {
   const id = fieldId(field)
   const invalid = Boolean(error)
+
+  if (field.type === 'select') {
+    return (
+      <SelectFieldControl
+        field={field}
+        id={id}
+        value={value}
+        onChange={onChange}
+        error={error}
+      />
+    )
+  }
 
   if (field.type === 'boolean') {
     const checked = value === true
@@ -99,73 +104,6 @@ export function FieldControl({
 
   let control: React.ReactNode
   switch (field.type) {
-    case 'select': {
-      const options = field.options ?? []
-      const current = typeof value === 'string' && value ? value : ''
-      control =
-        options.length > 0 && options.length <= 4 ? (
-          <div className="grid gap-1" role="group">
-            <SegmentedControl
-              fullWidth
-              size="sm"
-              aria-label={field.label}
-              value={current}
-              onValueChange={(next) => onChange(next)}
-              options={options.map((option) => ({
-                value: option,
-                label: option,
-                testId: `${id}-${option}`,
-              }))}
-              data-testid={id}
-            />
-            {current && !field.required ? (
-              <button
-                type="button"
-                onClick={() => onChange('')}
-                className="w-fit text-caption font-normal text-text-muted hover:text-text-primary hover:underline"
-              >
-                {m.editor_clear_choice()}
-              </button>
-            ) : null}
-          </div>
-        ) : (
-          <div className="grid gap-1">
-            <Select value={current} onValueChange={(next) => onChange(next)}>
-              <SelectTrigger
-                id={id}
-                className="w-full"
-                {...fieldAria({
-                  invalid,
-                  required: field.required,
-                  describedBy: joinDescribedBy(
-                    field.description ? `${id}-description` : undefined,
-                    error ? `${id}-error` : undefined,
-                  ),
-                })}
-              >
-                <SelectValue placeholder={m.editor_select_placeholder()} />
-              </SelectTrigger>
-              <SelectContent>
-                {options.map((option) => (
-                  <SelectItem key={option} value={option}>
-                    {option}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {current && !field.required ? (
-              <button
-                type="button"
-                onClick={() => onChange('')}
-                className="w-fit text-caption font-normal text-text-muted hover:text-text-primary hover:underline"
-              >
-                {m.editor_clear_choice()}
-              </button>
-            ) : null}
-          </div>
-        )
-      break
-    }
     case 'image':
       control = (
         <div role="group">
@@ -284,12 +222,7 @@ export function FieldControl({
     <div data-field={field.key} className="grid grid-cols-[minmax(0,1fr)]">
       <FormField
         label={field.label}
-        htmlFor={
-          field.type === 'image' ||
-          (field.type === 'select' && (field.options?.length ?? 0) <= 4)
-            ? undefined
-            : id
-        }
+        htmlFor={field.type === 'image' ? undefined : id}
         required={field.required}
         description={field.description}
         error={error}

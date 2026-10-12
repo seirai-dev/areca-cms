@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { m } from '#/paraglide/messages'
 import { ID_MAX_LENGTH, URL_MAX_LENGTH } from '#/lib/content-limits'
 import type { ImageValue, SeoMeta } from '#/lib/types'
 
@@ -56,7 +57,7 @@ const httpUrl = z
         return false
       }
     },
-    { message: 'Must be an http(s) URL' },
+    { error: () => m.server_seo_http_url_required() },
   )
 
 /** Optional URL: empty string means "unset". */
@@ -81,7 +82,7 @@ const rawJsonLd = z
         return false
       }
     },
-    { message: 'Must be a JSON object or an array of objects' },
+    { error: () => m.server_seo_json_object_required() },
   )
   .optional()
 

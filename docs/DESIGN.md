@@ -150,8 +150,8 @@ All in [`apps/cms/src/components/ui`](../apps/cms/src/components/ui). Use them; 
 | --- | --- |
 | `FormField` | Label on top, control, hint or error below; wires `htmlFor`/`aria-describedby`. |
 | `Input`, `Textarea`, `Label` | Text entry (36px, 10px radius, accent focus ring). |
-| `Select` | Choosing one of many (more than four options). |
-| `SegmentedControl` | Choosing one of two to four, with a sliding thumb: role switches, view toggles, filters, Light · Dark · Auto. `semantics="radio"` or `"tabs"`. |
+| `Select` | Choosing one of many (more than four options, or labels too long to fit as segments). |
+| `SegmentedControl` | Choosing one of two to four, with a sliding thumb: role switches, view toggles, filters, Light · Dark · Auto. `semantics="radio"` or `"tabs"`. Only when every label fits its segment; select fields in the editor measure this and fall back to `Select`. |
 | `RadioCards` / `RadioCard` | A choice that needs a sentence of explanation: invite roles, fonts. |
 | `Switch` | Instant on/off that saves immediately (content type enabled, agency access). |
 | `Checkbox` | Selection in lists (select mode). |
@@ -253,7 +253,7 @@ Actions: **Mark as ready** (`publishEntryFn`), **Move back to draft** (`unpublis
 
 - Every user-visible string goes through Paraglide (`m.*` from `#/paraglide/messages`). No literals in JSX, `aria-label`s or toasts.
 - Keys use area prefixes: `shell_`, `overview_`, `collection_`, `editor_`, `golive_`, `activity_`, `library_`, `people_`, `settings_`, `agency_`, `auth_`, `content_model_`. Reuse an existing key when the English still fits. Older prefixes (`admin_`, `sites_`, `content_`, `shared_`) are still used by reused keys; server-side error messages use `server_`.
-- Never edit `messages/*.json` by hand. Add keys with `node apps/cms/scripts/i18n-add.mjs keys.json` (English; nl and tr get the English as a placeholder, the product decision "English only for now") and remove them with `--remove key…`. The script writes all three locales atomically.
+- Add keys with `node apps/cms/scripts/i18n-add.mjs keys.json` and remove them with `--remove key…`. The script writes all three locales atomically. Then translate the new values in `nl.json` and `tr.json`; English placeholders are temporary. Keep translations short and simple while preserving meaning and `{params}`.
 - `src/lib/i18n.test.ts` fails when en, nl and tr drift (key sets, empty values, `{params}`).
 - `pnpm --filter @areca/cms typecheck` recompiles Paraglide before `tsc`.
 - Counts use explicit `_one` / `_other` keys; dates and times use `Intl` with the current locale.

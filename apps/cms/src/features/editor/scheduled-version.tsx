@@ -5,6 +5,7 @@ import { assetFileUrl } from '#/lib/content/utils'
 import { queryKeys } from '#/lib/content/query-keys'
 import type { EntryData, Field } from '#/lib/types'
 import { getEntryFn } from '#/server/fn/content'
+import { m } from '#/paraglide/messages'
 
 import { RichTextPreview } from './rich-text/rich-text-preview'
 
@@ -28,16 +29,17 @@ export function ScheduledVersion({
       data-testid="scheduled-version"
     >
       <summary className="cursor-pointer text-callout font-medium text-text-primary">
-        View approved scheduled version
+        {m.editor_scheduled_version_view()}
       </summary>
       <div className="mt-4 grid gap-5">
         <p className="text-callout text-text-secondary">
-          This content and address will be released when the schedule is due.
-          Changes in the editor remain drafts until approved again.
+          {m.editor_scheduled_version_description()}
         </p>
         <dl className="grid gap-5">
           <div className="grid gap-1">
-            <dt className="text-overline text-text-muted">Approved address</dt>
+            <dt className="text-overline text-text-muted">
+              {m.editor_scheduled_version_address()}
+            </dt>
             <dd className="break-words text-body text-text-primary">{slug}</dd>
           </div>
           {fields
@@ -73,7 +75,11 @@ function ScheduledField({
   organizationId: string
 }) {
   if (value == null || value === '')
-    return <span className="text-text-muted">No value</span>
+    return (
+      <span className="text-text-muted">
+        {m.editor_scheduled_version_no_value()}
+      </span>
+    )
   if (field.type === 'richtext') return <RichTextPreview value={value} />
   if (field.type === 'image' && typeof value === 'string')
     return <ScheduledImage id={value} organizationId={organizationId} />
@@ -82,7 +88,11 @@ function ScheduledField({
   if (typeof value === 'boolean') return <>{value ? 'Yes' : 'No'}</>
   if (typeof value === 'string' || typeof value === 'number')
     return <>{String(value)}</>
-  return <span className="text-text-muted">Content unavailable</span>
+  return (
+    <span className="text-text-muted">
+      {m.editor_scheduled_version_content_unavailable()}
+    </span>
+  )
 }
 
 function ScheduledImage({
@@ -94,9 +104,12 @@ function ScheduledImage({
 }) {
   const query = useAsset(id)
   const image = query.data
-  if (query.isPending) return <span role="status">Loading image…</span>
+  if (query.isPending)
+    return (
+      <span role="status">{m.editor_scheduled_version_loading_image()}</span>
+    )
   if (!image || image.organizationId !== organizationId)
-    return <span>Image unavailable</span>
+    return <span>{m.editor_scheduled_version_image_unavailable()}</span>
   return (
     <figure className="grid gap-2">
       <img
@@ -125,13 +138,18 @@ function ScheduledReference({
     queryFn: () => getEntryFn({ data: { id } }),
   })
   const target = query.data
-  if (query.isPending) return <span role="status">Loading reference…</span>
+  if (query.isPending)
+    return (
+      <span role="status">
+        {m.editor_scheduled_version_loading_reference()}
+      </span>
+    )
   if (
     !target ||
     target.siteId !== siteId ||
     target.collectionKey !== field.collection
   )
-    return <span>Reference unavailable</span>
+    return <span>{m.editor_scheduled_version_reference_unavailable()}</span>
   const name = target.draftData.title ?? target.draftData.name
   return <>{typeof name === 'string' ? name : target.slug}</>
 }

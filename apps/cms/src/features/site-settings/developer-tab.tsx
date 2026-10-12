@@ -84,7 +84,7 @@ export function DeveloperTab({
 
       <SettingsSection
         id="token"
-        title="Build token (read only)"
+        title={m.settings_build_token_title()}
         description={m.settings_token_description()}
       >
         {token ? (
@@ -125,8 +125,8 @@ export function DeveloperTab({
       </SettingsSection>
 
       <SettingsSection
-        title="Schema-write token"
-        description="Use only for manifest updates. Never add this token to website builds."
+        title={m.settings_schema_token_title()}
+        description={m.settings_schema_token_description()}
       >
         {schemaToken ? (
           <TokenReveal
@@ -136,9 +136,9 @@ export function DeveloperTab({
           />
         ) : (
           <ConfirmDialog
-            title="Rotate schema-write token?"
-            description="Existing schema integrations will need the new token."
-            confirmLabel="Rotate schema token"
+            title={m.settings_schema_token_rotate_title()}
+            description={m.settings_schema_token_rotate_description()}
+            confirmLabel={m.settings_schema_token_rotate()}
             variant="destructive"
             onConfirm={async () => {
               try {
@@ -150,7 +150,7 @@ export function DeveloperTab({
             }}
           >
             <Button variant="outline" loading={settings.rotate.isPending}>
-              Rotate schema token
+              {m.settings_schema_token_rotate()}
             </Button>
           </ConfirmDialog>
         )}

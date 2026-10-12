@@ -171,11 +171,11 @@ function GoLivePanelBody({
       {release.data?.publishingMode === 'demo' ? (
         <Section>
           <p data-testid="demo-publication-label" role="status">
-            Demo mode ·{' '}
+            {m.golive_demo_mode()} ·{' '}
             {release.data.demo
-              ? 'Demo publication ready'
-              : 'No demo publication yet'}{' '}
-            · Never production live
+              ? m.golive_demo_publication_ready()
+              : m.golive_no_demo_publication()}{' '}
+            · {m.golive_never_production_live()}
           </p>
         </Section>
       ) : (
