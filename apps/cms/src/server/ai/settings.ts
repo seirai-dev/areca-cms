@@ -4,6 +4,7 @@ import { db } from '#/db'
 import { aiSettings } from '#/db/schema'
 import { env } from '#/env'
 import { DEFAULT_SEO_SYSTEM_PROMPT } from '#/lib/ai-seo'
+import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
 import { ValidationError } from '#/server/content/errors'
 import {
@@ -71,15 +72,14 @@ export async function saveAiSettings(input: {
       throw new ValidationError([
         {
           path: 'apiKey',
-          message:
-            'Set AI_SETTINGS_ENCRYPTION_KEY on the server before saving an API key',
+          message: m.server_ai_encryption_key_missing(),
         },
       ])
     }
     const valid = await verifyOpenRouterKey(enteredKey, input.fetch)
     if (!valid) {
       throw new ValidationError([
-        { path: 'apiKey', message: 'OpenRouter rejected this API key' },
+        { path: 'apiKey', message: m.server_ai_key_rejected() },
       ])
     }
     encryptedApiKey = encryptSecret(enteredKey, key, ENCRYPTION_CONTEXT)
@@ -92,7 +92,9 @@ export async function saveAiSettings(input: {
   // A key without a model cannot generate anything. Only checked for a new
   // key, so existing setups can still be edited or have their key removed.
   if (enteredKey && !model) {
-    throw new ValidationError([{ path: 'model', message: 'Choose a model' }])
+    throw new ValidationError([
+      { path: 'model', message: m.server_ai_choose_model() },
+    ])
   }
   const prompt =
     input.systemPrompt === undefined

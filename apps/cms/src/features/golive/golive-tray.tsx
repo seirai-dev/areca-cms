@@ -233,8 +233,9 @@ export function GoLiveTray({
         className="grid gap-2 rounded-control border border-border-default p-3"
       >
         <button type="button" onClick={() => panel.open('golive')}>
-          Demo mode · {release.data.demo ? 'Demo ready' : 'Not published'} ·
-          Never production live
+          {m.golive_demo_mode()} ·{' '}
+          {release.data.demo ? m.golive_demo_ready() : m.golive_not_published()}{' '}
+          · {m.golive_never_production_live()}
         </button>
         {canPublish ? (
           <button
@@ -242,7 +243,7 @@ export function GoLiveTray({
             disabled={isPending || Boolean(release.data.activeJob)}
             onClick={() => void handleGoLive()}
           >
-            Publish demo
+            {m.golive_publish_demo()}
           </button>
         ) : null}
       </div>

@@ -621,7 +621,7 @@ The editor title input is 40/48, 700, -0.025em. Keep the `text-ds-*` utility mec
 4. **i18n:**
    - Every user-visible string goes through `m.*` (Paraglide).
    - New keys use area prefixes (`shell_`, `overview_`, `collection_`, `editor_`, `golive_`, `activity_`, `library_`, `people_`, `settings_`, `agency_`, `auth_`).
-   - Add them to `messages/en.json`. For **nl/tr, write the English text as a placeholder**; this is the product decision "English only for now".
+   - Add them to `messages/en.json` and translate every key into Dutch (`nl`) and Turkish (`tr`). Keep wording short and simple while preserving meaning and interpolation parameters.
    - Use `node apps/cms/scripts/i18n-add.mjs <json-file>`, which merges keys into all three locales atomically, so parallel work does not clobber the files.
    - Reuse existing keys when the English copy still fits.
    - Dead keys are pruned at the end.

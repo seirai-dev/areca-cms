@@ -134,10 +134,12 @@ export function DeploymentTab({
   return (
     <div data-testid="settings-deployment">
       <SettingsSection
-        title="Publishing mode"
-        description="Production releases require deployment and verification of the publication ID. Demo releases never claim to be production live."
+        title={m.settings_publishing_mode_title()}
+        description={m.settings_publishing_mode_description()}
       >
-        <label htmlFor="publishing-mode">Mode</label>
+        <label htmlFor="publishing-mode">
+          {m.settings_publishing_mode_label()}
+        </label>
         <select
           id="publishing-mode"
           data-testid="publishing-mode"
@@ -147,11 +149,13 @@ export function DeploymentTab({
           }
           className="rounded-control border border-border-default p-2"
         >
-          <option value="production">Production</option>
-          <option value="demo">Demo — no production deployment</option>
+          <option value="production">
+            {m.settings_publishing_mode_production()}
+          </option>
+          <option value="demo">{m.settings_publishing_mode_demo()}</option>
         </select>
         {site.publishingMode === 'demo' ? (
-          <Tag tone="warning">Demo mode · never production live</Tag>
+          <Tag tone="warning">{m.settings_publishing_mode_demo_warning()}</Tag>
         ) : null}
       </SettingsSection>
       <SettingsSection

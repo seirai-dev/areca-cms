@@ -5,6 +5,7 @@ import type { IncomingMessage, ClientRequest, RequestOptions } from 'node:http'
 import { isIP } from 'node:net'
 
 import { AppError } from '#/server/http/app-error'
+import { m } from '#/paraglide/messages'
 
 import { AssetValidationError, MAX_SIZE_BYTES, uploadAsset } from './index'
 import type { Asset } from './index'
@@ -16,25 +17,36 @@ const USER_AGENT = 'ArecaCMS/1.0 (+asset-import)'
 const ACCEPT = 'image/*,application/pdf'
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308])
 
-export const PRIVATE_ADDRESS_MESSAGE =
-  "That address is private or local and can't be downloaded"
-export const UNSUPPORTED_SCHEME_MESSAGE = 'Only http and https links are supported'
-export const TIMEOUT_MESSAGE = 'The download timed out'
-export const REDIRECT_LIMIT_MESSAGE = 'The link redirected too many times'
-export const UNSUPPORTED_FILE_MESSAGE =
-  'Unsupported file type. Use a JPEG, PNG, WebP, GIF or PDF file.'
-export const WEB_PAGE_MESSAGE =
-  'The link returned a web page (text/html), not an image. Use a direct image URL.'
+// Compatibility exports use the English catalog; request errors resolve their
+// locale at the point of use below.
+export const PRIVATE_ADDRESS_MESSAGE = m.server_remote_private_address(
+  {},
+  { locale: 'en' },
+)
+export const UNSUPPORTED_SCHEME_MESSAGE = m.server_remote_unsupported_scheme(
+  {},
+  { locale: 'en' },
+)
+export const TIMEOUT_MESSAGE = m.server_remote_timeout({}, { locale: 'en' })
+export const REDIRECT_LIMIT_MESSAGE = m.server_remote_redirect_limit(
+  {},
+  { locale: 'en' },
+)
+export const UNSUPPORTED_FILE_MESSAGE = m.server_remote_unsupported_file(
+  {},
+  { locale: 'en' },
+)
+export const WEB_PAGE_MESSAGE = m.server_remote_web_page({}, { locale: 'en' })
 
 /** Message for a non-2xx answer. Names the host and status so the agent can tell the user what happened. */
 export function httpStatusMessage(status: number, host: string): string {
   if (status >= 400 && status < 500) {
-    return `The link didn't return a downloadable file (HTTP ${status} from ${host}). Check the URL points directly to an image or PDF file.`
+    return m.server_remote_http_client_error({ status: String(status), host })
   }
   if (status >= 500) {
-    return `The server at ${host} failed (HTTP ${status}). It may be temporarily down: try again later, or use a different link.`
+    return m.server_remote_http_server_error({ status: String(status), host })
   }
-  return `The link didn't return a downloadable file (HTTP ${status} from ${host}). Check the URL points directly to an image or PDF file.`
+  return m.server_remote_http_client_error({ status: String(status), host })
 }
 
 export class RemoteFetchError extends AppError {
@@ -135,7 +147,11 @@ function isPublicIPv6(groups: number[]): boolean {
   // IPv4-compatible ::a.b.c.d (deprecated) and the unspecified / loopback addresses
   if (groups.slice(0, 6).every((n) => n === 0)) return false
   // NAT64 well-known prefix 64:ff9b::/96 carries an IPv4 address in the low 32 bits
-  if (g(0) === 0x64 && g(1) === 0xff9b && [2, 3, 4, 5].every((i) => g(i) === 0)) {
+  if (
+    g(0) === 0x64 &&
+    g(1) === 0xff9b &&
+    [2, 3, 4, 5].every((i) => g(i) === 0)
+  ) {
     return isPublicIPv4([g(6) >> 8, g(6) & 0xff, g(7) >> 8, g(7) & 0xff])
   }
   // 6to4 2002::/16 embeds an IPv4 address in the next 32 bits
@@ -172,14 +188,21 @@ export function isPublicAddress(ip: string): boolean {
 // Media type and filename helpers
 // ---------------------------------------------------------------------------
 
-const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+const PNG_SIGNATURE = Buffer.from([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+])
 
 /** Detects the media type from the file's leading bytes. Null when not a supported type. */
 export function sniffMimeType(bytes: Buffer): string | null {
   if (bytes.length >= 8 && bytes.subarray(0, 8).equals(PNG_SIGNATURE)) {
     return 'image/png'
   }
-  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+  if (
+    bytes.length >= 3 &&
+    bytes[0] === 0xff &&
+    bytes[1] === 0xd8 &&
+    bytes[2] === 0xff
+  ) {
     return 'image/jpeg'
   }
   const head = bytes.subarray(0, 6).toString('latin1')
@@ -191,13 +214,19 @@ export function sniffMimeType(bytes: Buffer): string | null {
   ) {
     return 'image/webp'
   }
-  if (bytes.length >= 5 && bytes.subarray(0, 5).toString('latin1') === '%PDF-') {
+  if (
+    bytes.length >= 5 &&
+    bytes.subarray(0, 5).toString('latin1') === '%PDF-'
+  ) {
     return 'application/pdf'
   }
   return null
 }
 
-const EXTENSIONS_BY_MIME: Record<string, { preferred: string; accepted: string[] }> = {
+const EXTENSIONS_BY_MIME: Record<
+  string,
+  { preferred: string; accepted: string[] }
+> = {
   'image/jpeg': { preferred: 'jpg', accepted: ['jpg', 'jpeg'] },
   'image/png': { preferred: 'png', accepted: ['png'] },
   'image/webp': { preferred: 'webp', accepted: ['webp'] },
@@ -229,7 +258,10 @@ function withMimeExtension(name: string, mimeType: string | null): string {
   return `${name}.${info.preferred}`
 }
 
-function cleanFilename(raw: string | null | undefined, mimeType: string | null): string | undefined {
+function cleanFilename(
+  raw: string | null | undefined,
+  mimeType: string | null,
+): string | undefined {
   const cleaned = raw ? sanitizeFilename(raw) : ''
   return cleaned ? withMimeExtension(cleaned, mimeType) : undefined
 }
@@ -270,7 +302,10 @@ export function deriveFilename(input: {
 }): string {
   const mimeType = input.mimeType ?? null
   const fromHeader = input.contentDisposition
-    ? cleanFilename(filenameFromContentDisposition(input.contentDisposition), mimeType)
+    ? cleanFilename(
+        filenameFromContentDisposition(input.contentDisposition),
+        mimeType,
+      )
     : undefined
   return (
     fromHeader ??
@@ -294,13 +329,13 @@ function parseRemoteUrl(raw: string, allowPrivateNetwork: boolean): URL {
   try {
     url = new URL(raw)
   } catch {
-    throw new RemoteFetchError("That isn't a valid web address")
+    throw new RemoteFetchError(m.server_remote_invalid_address())
   }
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    throw new RemoteFetchError(UNSUPPORTED_SCHEME_MESSAGE)
+    throw new RemoteFetchError(m.server_remote_unsupported_scheme())
   }
   if (url.username || url.password) {
-    throw new RemoteFetchError('Links with a username or password are not supported')
+    throw new RemoteFetchError(m.server_remote_credentials_unsupported())
   }
   const port = url.port
     ? Number(url.port)
@@ -309,13 +344,13 @@ function parseRemoteUrl(raw: string, allowPrivateNetwork: boolean): URL {
       : 80
   if (!ALLOWED_PORTS.has(port)) {
     throw new RemoteFetchError(
-      `Port ${port} is not allowed. Use 80, 443, 8080 or 8443`,
+      m.server_remote_port_not_allowed({ port: String(port) }),
     )
   }
   const host = unbracket(url.hostname)
-  if (!host) throw new RemoteFetchError("That isn't a valid web address")
+  if (!host) throw new RemoteFetchError(m.server_remote_invalid_address())
   if (isIP(host) && !allowPrivateNetwork && !isPublicAddress(host)) {
-    throw new RemoteFetchError(PRIVATE_ADDRESS_MESSAGE)
+    throw new RemoteFetchError(m.server_remote_private_address())
   }
   return url
 }
@@ -346,14 +381,20 @@ function createSafeLookup(allowPrivateNetwork: boolean) {
         return
       }
       if (records.length === 0) {
-        callback(new RemoteFetchError('The domain name could not be resolved'))
+        callback(new RemoteFetchError(m.server_remote_domain_unresolved()))
         return
       }
-      if (!allowPrivateNetwork && records.some((r) => !isPublicAddress(r.address))) {
-        callback(new RemoteFetchError(PRIVATE_ADDRESS_MESSAGE))
+      if (
+        !allowPrivateNetwork &&
+        records.some((r) => !isPublicAddress(r.address))
+      ) {
+        callback(new RemoteFetchError(m.server_remote_private_address()))
         return
       }
-      const family = options.family === 4 || options.family === 6 ? options.family : undefined
+      const family =
+        options.family === 4 || options.family === 6
+          ? options.family
+          : undefined
       const pool = family ? records.filter((r) => r.family === family) : records
       if (options.all) {
         callback(null, pool)
@@ -361,7 +402,7 @@ function createSafeLookup(allowPrivateNetwork: boolean) {
       }
       const chosen = pool.at(0)
       if (!chosen) {
-        callback(new RemoteFetchError('The domain name could not be resolved'))
+        callback(new RemoteFetchError(m.server_remote_domain_unresolved()))
         return
       }
       callback(null, chosen.address, chosen.family)
@@ -370,10 +411,14 @@ function createSafeLookup(allowPrivateNetwork: boolean) {
 }
 
 function dnsFailureMessage(error: NodeJS.ErrnoException): string {
-  if (error.code === 'ENOTFOUND' || error.code === 'EAI_AGAIN' || error.code === 'ENODATA') {
-    return 'The domain name could not be resolved'
+  if (
+    error.code === 'ENOTFOUND' ||
+    error.code === 'EAI_AGAIN' ||
+    error.code === 'ENODATA'
+  ) {
+    return m.server_remote_domain_unresolved()
   }
-  return 'Could not reach the server'
+  return m.server_remote_unreachable()
 }
 
 /** Mutable state shared by the hops of one download, so the timeout can stop whichever step is running. */
@@ -420,9 +465,9 @@ function toConnectionError(error: unknown): Error {
   if (error instanceof RemoteFetchError) return error
   const code = (error as NodeJS.ErrnoException | undefined)?.code
   if (code === 'ENOTFOUND' || code === 'EAI_AGAIN') {
-    return new RemoteFetchError('The domain name could not be resolved')
+    return new RemoteFetchError(m.server_remote_domain_unresolved())
   }
-  return new RemoteFetchError('Could not reach the server')
+  return new RemoteFetchError(m.server_remote_unreachable())
 }
 
 function formatLimit(bytes: number): string {
@@ -449,7 +494,11 @@ function readBody(
     response.on('data', (chunk: Buffer) => {
       total += chunk.length
       if (total > maxBytes) {
-        fail(new RemoteFetchError(`The file is larger than ${formatLimit(maxBytes)}`))
+        fail(
+          new RemoteFetchError(
+            m.server_remote_file_too_large({ limit: formatLimit(maxBytes) }),
+          ),
+        )
         return
       }
       chunks.push(chunk)
@@ -460,7 +509,9 @@ function readBody(
       resolve(Buffer.concat(chunks, total))
     })
     response.on('error', (error) => fail(toConnectionError(error)))
-    response.on('close', () => fail(new RemoteFetchError('The download was interrupted')))
+    response.on('close', () =>
+      fail(new RemoteFetchError(m.server_remote_interrupted())),
+    )
   })
 }
 
@@ -484,7 +535,8 @@ export async function fetchRemoteFile(
 
   const transfer: Transfer = {}
   const timer = setTimeout(
-    () => abortTransfer(transfer, new RemoteFetchError(TIMEOUT_MESSAGE)),
+    () =>
+      abortTransfer(transfer, new RemoteFetchError(m.server_remote_timeout())),
     timeoutMs,
   )
   try {
@@ -497,9 +549,12 @@ export async function fetchRemoteFile(
       if (REDIRECT_STATUSES.has(status) && location) {
         response.destroy()
         if (redirects >= maxRedirects) {
-          throw new RemoteFetchError(REDIRECT_LIMIT_MESSAGE)
+          throw new RemoteFetchError(m.server_remote_redirect_limit())
         }
-        current = parseRemoteUrl(new URL(location, current).href, allowPrivateNetwork)
+        current = parseRemoteUrl(
+          new URL(location, current).href,
+          allowPrivateNetwork,
+        )
         continue
       }
 
@@ -509,15 +564,22 @@ export async function fetchRemoteFile(
       }
 
       const declared = Number(response.headers['content-length'])
-      if (response.headers['content-length'] !== undefined && declared > maxBytes) {
+      if (
+        response.headers['content-length'] !== undefined &&
+        declared > maxBytes
+      ) {
         response.destroy()
-        throw new RemoteFetchError(`The file is larger than ${formatLimit(maxBytes)}`)
+        throw new RemoteFetchError(
+          m.server_remote_file_too_large({ limit: formatLimit(maxBytes) }),
+        )
       }
 
       const bytes = await readBody(response, maxBytes, transfer)
       const mimeType = sniffMimeType(bytes)
       const contentDisposition = response.headers['content-disposition'] ?? null
-      const contentType = response.headers['content-type']?.split(';')[0]?.trim().toLowerCase() || null
+      const contentType =
+        response.headers['content-type']?.split(';')[0]?.trim().toLowerCase() ||
+        null
       return {
         bytes,
         contentType,
@@ -536,20 +598,34 @@ export async function fetchRemoteFile(
 
 /** True when the bytes look like an HTML page (a link to a web page, not a file). */
 export function looksLikeHtml(bytes: Buffer): boolean {
-  const head = bytes.subarray(0, 512).toString('latin1').trimStart().toLowerCase()
+  const head = bytes
+    .subarray(0, 512)
+    .toString('latin1')
+    .trimStart()
+    .toLowerCase()
   return head.startsWith('<!doctype html') || /<html[\s>]/.test(head)
 }
 
 /** Explains why the downloaded bytes are not a supported file. */
-export function unsupportedDownloadMessage(remote: Pick<RemoteFile, 'bytes' | 'contentType'>): string {
+export function unsupportedDownloadMessage(
+  remote: Pick<RemoteFile, 'bytes' | 'contentType'>,
+): string {
   const declared = remote.contentType ?? ''
-  if (declared === 'text/html' || declared === 'application/xhtml+xml' || looksLikeHtml(remote.bytes)) {
-    return WEB_PAGE_MESSAGE
+  if (
+    declared === 'text/html' ||
+    declared === 'application/xhtml+xml' ||
+    looksLikeHtml(remote.bytes)
+  ) {
+    return m.server_remote_web_page()
   }
-  if (declared && !declared.startsWith('image/') && declared !== 'application/pdf') {
-    return `The link returned a file of type ${declared}, not an image or PDF. Use a direct image URL.`
+  if (
+    declared &&
+    !declared.startsWith('image/') &&
+    declared !== 'application/pdf'
+  ) {
+    return m.server_remote_wrong_mime({ mimeType: declared })
   }
-  return UNSUPPORTED_FILE_MESSAGE
+  return m.server_remote_unsupported_file()
 }
 
 export async function uploadAssetFromUrl(

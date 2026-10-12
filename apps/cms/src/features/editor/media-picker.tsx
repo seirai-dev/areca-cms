@@ -116,9 +116,7 @@ export function MediaPickerDialog({
   function pick(file: File | null | undefined) {
     if (!file || uploadMutation.isPending) return
     if (imagesOnly && !isPickerImage(file.type)) {
-      toast.error(
-        'Choose a JPEG, PNG, WebP or GIF image. PDFs cannot be used here.',
-      )
+      toast.error(m.media_picker_image_required())
       return
     }
     uploadMutation.mutate(file)

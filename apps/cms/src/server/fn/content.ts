@@ -90,7 +90,7 @@ const entryStatusSchema = z.enum([
 const entryDataSchema = z
   .record(z.string(), z.unknown())
   .refine((data) => Object.keys(data).length <= MAX_FIELDS_PER_COLLECTION, {
-    message: 'Too many fields',
+    error: () => m.server_too_many_fields(),
   })
 
 const entryFn = { strict: { output: false } as const }

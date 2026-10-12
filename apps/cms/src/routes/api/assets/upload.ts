@@ -3,6 +3,7 @@ import '@tanstack/react-start'
 
 import { securityErrorCode } from '#/lib/security-errors'
 import { getSession, requireOrgMember } from '#/lib/session.server'
+import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
 import { AssetValidationError, uploadAsset } from '#/server/assets'
 import { parseLimitedFormData, UploadTooLargeError } from '#/server/http/upload'
@@ -16,7 +17,7 @@ export const Route = createFileRoute('/api/assets/upload')({
       POST: async ({ request }) => {
         const session = await getSession()
         if (!session) {
-          return new Response('Unauthorized', { status: 401 })
+          return new Response(m.server_unauthorized(), { status: 401 })
         }
 
         let form: FormData
@@ -24,7 +25,7 @@ export const Route = createFileRoute('/api/assets/upload')({
           form = await parseLimitedFormData(request, MAX_UPLOAD_BODY_BYTES)
         } catch (error) {
           if (error instanceof UploadTooLargeError) {
-            return new Response('File exceeds 20 MB', { status: 413 })
+            return new Response(m.server_file_exceeds_20mb(), { status: 413 })
           }
           throw error
         }
@@ -33,10 +34,12 @@ export const Route = createFileRoute('/api/assets/upload')({
         const altText = form.get('altText')
 
         if (!(file instanceof File)) {
-          return new Response('file is required', { status: 400 })
+          return new Response(m.server_upload_file_required(), { status: 400 })
         }
         if (typeof organizationId !== 'string' || !organizationId) {
-          return new Response('organizationId is required', { status: 400 })
+          return new Response(m.server_organization_id_required(), {
+            status: 400,
+          })
         }
 
         try {

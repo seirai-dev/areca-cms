@@ -290,13 +290,16 @@ export function validateCollectionDefinitions(
   )
   for (const def of defs) {
     if (!isSafeIdentifier(def.key))
-      issues.push({ path: def.key, message: 'Unsafe collection identifier' })
+      issues.push({
+        path: def.key,
+        message: m.server_unsafe_collection_identifier(),
+      })
     const folded = def.key.toLowerCase()
     const previous = foldedKeys.get(folded)
     if (previous !== undefined)
       issues.push({
         path: def.key,
-        message: `Collection "${def.key}" conflicts with "${previous}". Collection names must be distinct even when letter case is ignored.`,
+        message: m.server_collection_name_conflict({ key: def.key, previous }),
       })
     foldedKeys.set(folded, def.key)
     const keys = new Set<string>()
@@ -304,14 +307,14 @@ export function validateCollectionDefinitions(
       if (!isSafeIdentifier(field.key) || keys.has(field.key))
         issues.push({
           path: `${def.key}.${field.key}`,
-          message: 'Unsafe or duplicate field identifier',
+          message: m.server_unsafe_or_duplicate_field_identifier(),
         })
       keys.add(field.key)
       for (const reference of [field.collection, field.after]) {
         if (reference !== undefined && !isSafeIdentifier(reference))
           issues.push({
             path: `${def.key}.${field.key}`,
-            message: 'Unsafe field reference identifier',
+            message: m.server_unsafe_field_reference_identifier(),
           })
       }
       if (

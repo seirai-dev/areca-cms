@@ -250,7 +250,7 @@ function SlugEditor({
           autoCorrect="off"
           spellCheck={false}
           className="h-full min-w-0 flex-1 bg-transparent text-text-primary outline-none placeholder:text-text-muted"
-          placeholder="my-page"
+          placeholder={m.editor_slug_placeholder()}
         />
         {after ? (
           <span className="shrink-0 text-text-muted">{after}</span>

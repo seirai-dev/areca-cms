@@ -272,7 +272,7 @@ export function validateEntryData(
         ok: false,
         errors: unknown.slice(0, 20).map((key) => ({
           path: key,
-          message: `Unknown field "${key}"`,
+          message: m.server_unknown_field({ field: key }),
         })),
       }
     }
@@ -282,7 +282,9 @@ export function validateEntryData(
         errors: [
           {
             path: '',
-            message: `Entry data is larger than ${ENTRY_DATA_MAX_BYTES} bytes or nested too deeply`,
+            message: m.server_entry_data_too_large({
+              bytes: String(ENTRY_DATA_MAX_BYTES),
+            }),
           },
         ],
       }
@@ -455,7 +457,7 @@ export async function validateContentOwnership(
     if (!found)
       errors.push({
         path: `${SEO_KEY}.ogImage`,
-        message: 'Asset not found in this organization',
+        message: m.server_asset_not_found_in_organization(),
       })
   }
   for (const field of fields) {
@@ -466,7 +468,7 @@ export async function validateContentOwnership(
     ) {
       errors.push({
         path: field.key,
-        message: 'Embedded asset not found in this organization',
+        message: m.server_embedded_asset_not_found_in_organization(),
       })
     }
     if (typeof value !== 'string' || !value) continue
@@ -502,7 +504,7 @@ export async function validateContentOwnership(
       if (!found)
         errors.push({
           path: field.key,
-          message: 'Asset not found in this organization',
+          message: m.server_asset_not_found_in_organization(),
         })
     }
   }
