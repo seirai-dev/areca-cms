@@ -2,27 +2,40 @@ import type { ReactNode } from 'react'
 import { HeadContent, Outlet, Scripts, createRootRoute } from '@tanstack/react-router'
 import { PageMessage } from '../components/cms-image.tsx'
 import { SiteFooter, SiteHeader } from '../components/site-chrome.tsx'
-import { pageHead, SITE_DESCRIPTION } from '../lib/seo.ts'
+import { loadCompanyInfo } from '../lib/queries.ts'
+import { SITE_DESCRIPTION, SITE_NAME } from '../lib/seo.ts'
 import appCss from '../styles.css?url'
 
 export const Route = createRootRoute({
-  head: () => ({
-    meta: [
-      { charSet: 'utf-8' },
-      { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-      ...pageHead({ description: SITE_DESCRIPTION }).meta,
-    ],
-    links: [
-      { rel: 'stylesheet', href: appCss },
-      { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
-    ],
-  }),
+  loader: () => loadCompanyInfo(),
+  // Site-wide defaults come from the company info section; pages override them.
+  head: ({ loaderData }) => {
+    const name = loaderData?.company.name ?? SITE_NAME
+    const tagline = loaderData?.company.tagline
+    return {
+      meta: [
+        { charSet: 'utf-8' },
+        { name: 'viewport', content: 'width=device-width, initial-scale=1' },
+        { title: name },
+        { name: 'description', content: tagline ?? SITE_DESCRIPTION },
+        { property: 'og:title', content: name },
+        { property: 'og:description', content: tagline ?? SITE_DESCRIPTION },
+        { property: 'og:type', content: 'website' },
+        { property: 'og:site_name', content: name },
+      ],
+      links: [
+        { rel: 'stylesheet', href: appCss },
+        { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
+      ],
+    }
+  },
   component: RootLayout,
   notFoundComponent: NotFound,
   shellComponent: RootDocument,
 })
 
 function RootLayout() {
+  const { company } = Route.useLoaderData()
   return (
     <>
       <a
@@ -35,7 +48,7 @@ function RootLayout() {
       <main id="main" className="min-h-[70vh]">
         <Outlet />
       </main>
-      <SiteFooter />
+      <SiteFooter company={company} />
     </>
   )
 }

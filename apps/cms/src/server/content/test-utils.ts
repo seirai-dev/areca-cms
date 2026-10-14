@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { eq } from 'drizzle-orm'
 
 import { db } from '#/db'
-import { collection, organization, site, user } from '#/db/schema'
+import { collection, entry, organization, site, user } from '#/db/schema'
 import type { Field } from '#/lib/types'
 
 export const sampleRichText = {
@@ -96,6 +96,64 @@ export async function createTestCollection(
     .returning()
   if (!col) throw new Error('Failed to create collection')
   return col
+}
+
+export function globalFields(): Field[] {
+  return [
+    {
+      key: 'email',
+      label: 'Email',
+      type: 'text',
+      required: true,
+      group: 'Contact',
+    },
+    { key: 'phone', label: 'Phone', type: 'text', group: 'Contact' },
+  ]
+}
+
+/**
+ * Site content section as the storage contract describes it: one `collection`
+ * row with kind 'global' and exactly one entry with slug '$global'.
+ */
+export async function createTestGlobal(
+  siteId: string,
+  input: {
+    key?: string
+    label?: string
+    fields?: Field[]
+    seoEnabled?: boolean
+    previewPath?: string | null
+    enabled?: boolean
+  } = {},
+) {
+  return db.transaction(async (tx) => {
+    const [col] = await tx
+      .insert(collection)
+      .values({
+        siteId,
+        key: input.key ?? 'companyInfo',
+        label: input.label ?? 'Company info',
+        routePattern: '',
+        kind: 'global',
+        fields: input.fields ?? globalFields(),
+        enabled: input.enabled ?? true,
+        seoEnabled: input.seoEnabled ?? false,
+        previewPath: input.previewPath ?? null,
+      })
+      .returning()
+    if (!col) throw new Error('Failed to create global')
+    const [row] = await tx
+      .insert(entry)
+      .values({
+        siteId,
+        collectionId: col.id,
+        slug: '$global',
+        status: 'draft',
+      })
+      .returning()
+    if (!row) throw new Error('Failed to create global entry')
+    return { collection: col, entry: row }
+  })
 }
 
 export async function cleanupTestSite(input: {

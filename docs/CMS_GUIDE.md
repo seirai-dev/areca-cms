@@ -6,7 +6,7 @@ This guide is for client owners, editors, and agency staff who write and manage 
 
 After signing in, the workspace switcher at the top of the sidebar opens your recent sites and the sites you can access. A client member can work across that client's sites. Agency admins can also open the Agency workspace. Search (⌘K on Mac, Ctrl+K elsewhere) finds pages and common actions. On a phone, use the bottom tabs for Overview, Content, Library, and More.
 
-The site **Overview** shows work that needs attention, shortcuts to create entries, recent edits, and (for owners and admins) recent activity. The site sidebar lists each content type, the shared Library, and links you are allowed to use.
+The site **Overview** shows work that needs attention, shortcuts to create entries, recent edits, and (for owners and admins) recent activity. The site sidebar lists each content type, the site's Site content sections, the shared Library, and links you are allowed to use.
 
 ![A current collection screen](screenshots/current-collection.png)
 
@@ -49,6 +49,24 @@ Use **Go live** in the site sidebar or Overview to review the site release. The 
 Owners can request a rollback from a prior successful release in the Go-live panel. Areca queues a new, high-priority build using that release's saved snapshot and content hash. It does not build a new snapshot from today's drafts or erase newer drafts. A failed rollback can be retried.
 
 ![Go-live panel with changes and release history](screenshots/current-releases.png)
+
+## Edit site content
+
+Some copy is not a list: company details, the home page text, stats. The site's developers or agency define these as **Site content** sections. Each section appears in the sidebar's **Site content** group, with one item per section, such as Company info or Home page. Search (⌘K or Ctrl+K) also lists them under **Go to**. If the agency has not enabled any sections for the site, the group does not appear.
+
+A section is a single form. Fields that share a group heading, such as **Contact**, appear together under that heading. Changes save automatically, the same as entries. A section with **Search & social (SEO)** has an SEO panel, filled in the same way as an entry's.
+
+The top bar has these actions:
+
+- **Mark as ready** approves the current draft for the next Go live. Owners do this, like entries.
+- **Schedule** and **Cancel schedule** work the same way as for entries. Owners do this.
+- **Discard draft** throws away your unsaved changes to the draft and goes back to the version that is ready or live. It is not available until the section has been marked ready once. Editors and owners can use it.
+- **Preview** opens the page that shows the section, with your draft. It appears only when the section has a preview page set. If it is missing, ask the agency to add one.
+- **History** lists earlier versions. Owners can restore one.
+
+Sections have no unpublish, archive or delete action. To remove a section, ask an agency admin.
+
+A section with required fields must be marked ready at least once before the site can go live. The Go-live panel lists the section by its name, such as **Company info**, when its changes are included.
 
 ## Connect an AI app
 

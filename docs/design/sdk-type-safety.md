@@ -53,7 +53,7 @@ Pull fails (before writing anything) when:
   camel key (message names both raw keys);
 - two camel collection keys differ only by case (existing rule, now on camel keys);
 - a camel collection key is one of the content object's reserved names:
-  `resolve`, `href`, `preview`. These are reserved for **collection keys only**
+  `resolve`, `href`, `preview`, `globals`, `previewGlobals`. These are reserved for **collection keys only**
   (field keys may use them): add an `isReservedCollectionKey` check in both
   `packages/site-sdk/src/identifiers.ts` (used by `manifestFromConfig` and the
   pull) and `apps/cms/src/lib/content-identifiers.ts` (used where collection

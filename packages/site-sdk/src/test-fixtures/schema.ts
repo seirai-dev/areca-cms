@@ -74,3 +74,59 @@ export const schema = {
     },
   },
 } as const
+
+/**
+ * Mirrors the `globalSchema` export that `areca pull` generates for the
+ * site-content globals (docs/design/site-content-globals.md, SDK section).
+ */
+export const globalSchema = {
+  /** Company info */
+  companyInfo: {
+    key: 'company-info',
+    label: 'Company info',
+    seo: false,
+    fields: {
+      /** Email */
+      email: { key: 'email', label: 'Email', type: 'text', required: true, group: 'Contact' },
+      /** Phone number */
+      phoneNumber: {
+        key: 'phone-number',
+        label: 'Phone number',
+        type: 'text',
+        required: false,
+        group: 'Contact',
+      },
+      /** Plan */
+      plan: {
+        key: 'plan',
+        label: 'Plan',
+        type: 'select',
+        required: false,
+        options: ['basic', 'pro'],
+      },
+      /** Featured author */
+      featuredAuthor: {
+        key: 'featured-author',
+        label: 'Featured author',
+        type: 'reference',
+        required: false,
+        collection: 'authors',
+      },
+      /** Founded */
+      founded: { key: 'founded', label: 'Founded', type: 'date', required: false },
+    },
+  },
+  /** Home page */
+  homePage: {
+    key: 'home-page',
+    label: 'Home page',
+    seo: true,
+    previewPath: '/',
+    fields: {
+      /** Hero title */
+      heroTitle: { key: 'hero-title', label: 'Hero title', type: 'text', required: true },
+      /** Hero image */
+      heroImage: { key: 'hero-image', label: 'Hero image', type: 'image', required: false },
+    },
+  },
+} as const

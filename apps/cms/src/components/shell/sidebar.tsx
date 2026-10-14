@@ -32,6 +32,7 @@ import {
 import { KbdCombo, useModifierKey } from '#/components/ui/kbd'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Hint } from '#/components/ui/tooltip'
+import { SiteContentGroup } from '#/features/globals/site-content-nav'
 import { latestJobsQuery } from '#/features/golive/queries'
 import { GoLiveTray } from '#/features/golive/golive-tray'
 import {
@@ -319,6 +320,11 @@ function SiteNav({
           />
         </div>
         <ContentGroup
+          site={site}
+          collapsed={collapsed}
+          onNavigate={onNavigate}
+        />
+        <SiteContentGroup
           site={site}
           collapsed={collapsed}
           onNavigate={onNavigate}

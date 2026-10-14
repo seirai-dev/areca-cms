@@ -26,18 +26,38 @@ in the local schema-authoring environment and out of build/deploy secrets.
 
 | Method and path                                | Authorization                  | Purpose                              | Success body                        |
 | ---------------------------------------------- | ------------------------------ | ------------------------------------ | ----------------------------------- |
-| `GET /api/sites/manifest`                      | Site token                     | Read the site's content schema       | `{ "collections": { ... } }`        |
+| `GET /api/sites/manifest`                      | Site token                     | Read the site's content schema       | `{ "collections": { ... }, "globals"?: { ... } }` |
 | `POST /api/sites/manifest`                     | Schema token                   | Create or update the site's schema   | `{ "ok": true }`                    |
 | `GET /api/sites/snapshot/current`              | Site token                     | Get the current publication snapshot | `Snapshot` object                   |
-| `GET /api/sites/preview?token=<preview-token>` | Signed, expiring preview token | Get one draft entry                  | `{ "collection", "slug", "entry" }` |
+| `GET /api/sites/preview?token=<preview-token>` | Signed, expiring preview token | Get one draft entry or site content section | `{ "kind", ... }` (see below) |
 
-The POST body is the manifest shape, with a `collections` object. The SDK
-converts `areca.config.ts` to that body; collection labels are preserved when
-provided. A snapshot contains `publicationId`, `siteKey`, `createdAt`, `hash`,
-and a `collections` map of entry arrays. Preview requests are authorized by the signed,
-expiring query token; the SDK also sends its standard site-token bearer header,
-but the preview route validates the preview token itself. Preview requests
-return a `PreviewResult` containing the collection key, slug, and entry.
+The POST body is the manifest shape, with a `collections` object and an
+optional `globals` object for site content sections. The SDK converts
+`areca.config.ts` to that body; collection labels are preserved when provided.
+A push is a full sync: a push without `globals` disables every site content
+section (their content is kept).
+
+`GET /api/sites/manifest` lists only the enabled sections, and it leaves out the
+`globals` key when there are none. Each section is `{ label?, fields, seo?,
+previewPath? }`. `fields` has no `slug` fields and may use `group`.
+
+A snapshot contains `publicationId`, `siteKey`, `createdAt`, `hash`, and a
+`collections` map of entry arrays. When the site has enabled site content
+sections, it also has `globals` (keyed by raw CMS key, each `{ id, publishedAt,
+data, seo? }`) and `globalSchema` (the schema of exactly those sections). Both
+are absent when there are none. The `hash` covers `{ collections, globals }`
+when there are sections, and only `collections` otherwise, so sites without
+sections keep their existing hashes.
+
+Preview requests are authorized by the signed, expiring query token; the SDK
+also sends its standard site-token bearer header, but the preview route
+validates the preview token itself. The response depends on what the token was
+issued for:
+
+- An entry token returns `{ "kind": "entry", "collection", "slug", "entry" }`.
+  Older CMS versions omit `kind`.
+- A site content token returns `{ "kind": "global", "global", "entry" }`, where
+  `global` is the raw section key and `entry` is the section's draft.
 
 Without a `publicationId` query parameter, the snapshot endpoint returns the
 authenticated site's latest publication by creation time with status `live`,
@@ -97,7 +117,8 @@ determined by the separate opaque preview token passed to `fetchPreview()`.
 
 The `@areca-cms/site-sdk/pull` subpath exports `pullContent({ outDir, client? })`
 and `readContent<T>(outDir, collectionKey)`. `pullContent` fetches the current
-snapshot and writes `manifest.json` plus one JSON array per collection. It
+snapshot and writes `manifest.json`, one JSON array per collection, and
+`_globals.json` when there are site content sections. It
 fails if no publication exists. `readContent` reads one collection array and
 reports a helpful message if the file has not been generated yet.
 
@@ -132,7 +153,8 @@ manifests return `400`; oversized bodies return `413`.
 
 The package root exports `ArecaClient`, `ArecaClientOptions`, `SiteManifest`,
 `Snapshot`, `SnapshotEntry`, `PreviewResult`, `PulledContentManifest`, schema
-types, and `ImageValue`, `RichTextValue`, `ReferenceValue`, and `SeoMeta`.
+types, and `ImageValue`, `RichTextValue`, `ReferenceValue`, and `SeoMeta`. Site
+content adds `GlobalConfig`, `SnapshotGlobal` and `PreviewGlobalResult`.
 Collection field values are application-defined, so pair `SnapshotEntry` with
 your own `data` type:
 

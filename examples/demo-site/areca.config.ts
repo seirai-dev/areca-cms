@@ -89,4 +89,46 @@ export default defineSiteContent({
       ],
     },
   },
+  globals: {
+    companyInfo: {
+      label: 'Company info',
+      fields: [
+        { key: 'name', label: 'Name', type: 'text', required: true },
+        { key: 'tagline', label: 'Tagline', type: 'textarea' },
+        { key: 'address', label: 'Address', type: 'textarea', group: 'Contact' },
+        { key: 'email', label: 'Email', type: 'text', group: 'Contact' },
+        { key: 'phone', label: 'Phone', type: 'text', group: 'Contact' },
+        { key: 'instagramUrl', label: 'Instagram', type: 'url', group: 'Contact' },
+        { key: 'foundedYear', label: 'Founded', type: 'number' },
+      ],
+    },
+    homePage: {
+      label: 'Home page',
+      seo: true,
+      previewPath: '/',
+      fields: [
+        { key: 'heroEyebrow', label: 'Hero eyebrow', type: 'text', required: true },
+        { key: 'heroIntro', label: 'Hero intro', type: 'textarea', required: true },
+        {
+          key: 'featuredCoffee',
+          label: 'Featured coffee',
+          type: 'reference',
+          collection: 'coffees',
+        },
+      ],
+    },
+    aboutPage: {
+      label: 'About page',
+      seo: true,
+      previewPath: '/about',
+      fields: [
+        { key: 'heading', label: 'Heading', type: 'text', required: true },
+        { key: 'body', label: 'Body', type: 'richtext', required: true },
+        { key: 'image', label: 'Image', type: 'image' },
+        { key: 'foundedYear', label: 'Founded', type: 'number', group: 'Numbers' },
+        { key: 'roasterCapacityKg', label: 'Roaster capacity (kg)', type: 'number', group: 'Numbers' },
+        { key: 'originsCount', label: 'Origins bought from', type: 'number', group: 'Numbers' },
+      ],
+    },
+  },
 })

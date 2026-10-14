@@ -19,14 +19,23 @@ import {
   REQUIRED_SLUG_FIELD,
   withRequiredSlugField,
 } from '#/lib/collection-fields'
+import { GLOBAL_GROUP_MAX_LENGTH } from '#/lib/globals'
 import type { Field, FieldType } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 
 /**
  * Pure helpers of the schema editor (moved from the old
- * `components/admin/collection-form.tsx`, behaviour unchanged): field drafts,
- * key suggestions, the dirty fingerprint and per-row validation.
+ * `components/admin/collection-form.tsx`): field drafts, key suggestions, the
+ * dirty fingerprint and per-row validation.
+ *
+ * `kind` picks the rules: `collection` (default) forces the locked slug row
+ * and has no group headings; `global` (site content section) has no slug row,
+ * forbids the slug type and allows an optional `group` heading per field.
  */
+
+export type SchemaKind = 'collection' | 'global'
+
+export type SchemaOptions = { kind?: SchemaKind }
 
 export type FieldDraft = {
   /** Stable identity for reordering; never sent to the server. */
@@ -40,6 +49,8 @@ export type FieldDraft = {
   description: string
   /** False until the user edits the key by hand, so it follows the label. */
   keyTouched: boolean
+  /** Site content only: visual heading above this field ('' when unset). */
+  group: string
 }
 
 export type CollectionDraft = {
@@ -51,7 +62,10 @@ export type CollectionDraft = {
 }
 
 export type FieldErrors = Partial<
-  Record<number, { key?: string; label?: string }>
+  Record<
+    number,
+    { key?: string; label?: string; type?: string; group?: string }
+  >
 >
 
 export const FIELD_TYPE_ICONS: Record<FieldType, IconComponent> = {
@@ -176,6 +190,7 @@ export function emptyFieldDraft(type: FieldType = 'text'): FieldDraft {
     collection: '',
     description: '',
     keyTouched: false,
+    group: '',
   }
 }
 
@@ -190,40 +205,58 @@ function toFieldDraft(field: Field): FieldDraft {
     collection: field.collection ?? '',
     description: field.description ?? '',
     keyTouched: true,
+    group: field.group ?? '',
   }
 }
 
-export function draftsFromFields(fields: Field[] | undefined) {
+export function draftsFromFields(
+  fields: Field[] | undefined,
+  { kind = 'collection' }: SchemaOptions = {},
+) {
+  if (kind === 'global') return (fields ?? []).map(toFieldDraft)
   return withRequiredSlugField(fields ?? [REQUIRED_SLUG_FIELD]).map(
     toFieldDraft,
   )
 }
 
-export function fieldsFromDrafts(drafts: FieldDraft[]): Field[] {
-  return drafts.map((field) => ({
-    key: field.key.trim(),
-    label: field.label.trim(),
-    type: field.type,
-    required: field.required || undefined,
-    description: field.description.trim() || undefined,
-    options:
-      field.type === 'select'
-        ? field.options.filter((option) => option.trim().length > 0)
-        : undefined,
-    collection:
-      field.type === 'reference'
-        ? field.collection.trim() || undefined
-        : undefined,
-  }))
+export function fieldsFromDrafts(
+  drafts: FieldDraft[],
+  { kind = 'collection' }: SchemaOptions = {},
+): Field[] {
+  return drafts.map((field) => {
+    const saved: Field = {
+      key: field.key.trim(),
+      label: field.label.trim(),
+      type: field.type,
+      required: field.required || undefined,
+      description: field.description.trim() || undefined,
+      options:
+        field.type === 'select'
+          ? field.options.filter((option) => option.trim().length > 0)
+          : undefined,
+      collection:
+        field.type === 'reference'
+          ? field.collection.trim() || undefined
+          : undefined,
+    }
+    if (kind === 'global') saved.group = field.group.trim() || undefined
+    return saved
+  })
 }
 
 /** Comparable shape for the dirty check: ids and UI-only flags dropped. */
-export function draftFingerprint(drafts: FieldDraft[]) {
-  return JSON.stringify(fieldsFromDrafts(drafts))
+export function draftFingerprint(
+  drafts: FieldDraft[],
+  options: SchemaOptions = {},
+) {
+  return JSON.stringify(fieldsFromDrafts(drafts, options))
 }
 
-/** Returns per-row errors for empty keys or labels. */
-export function validateFieldDrafts(drafts: FieldDraft[]): FieldErrors {
+/** Per-row errors: empty keys or labels; in sections, slug type and group length. */
+export function validateFieldDrafts(
+  drafts: FieldDraft[],
+  { kind = 'collection' }: SchemaOptions = {},
+): FieldErrors {
   const errors: FieldErrors = {}
   drafts.forEach((field, index) => {
     if (!field.key.trim()) {
@@ -236,6 +269,20 @@ export function validateFieldDrafts(drafts: FieldDraft[]): FieldErrors {
       errors[index] = {
         ...errors[index],
         label: m.admin_collection_field_label_required(),
+      }
+    }
+    if (kind === 'global') {
+      if (field.type === 'slug') {
+        errors[index] = {
+          ...errors[index],
+          type: m.globals_slug_forbidden(),
+        }
+      }
+      if (field.group.trim().length > GLOBAL_GROUP_MAX_LENGTH) {
+        errors[index] = {
+          ...errors[index],
+          group: m.globals_group_too_long({ max: GLOBAL_GROUP_MAX_LENGTH }),
+        }
       }
     }
   })

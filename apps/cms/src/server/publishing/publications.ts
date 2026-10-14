@@ -19,6 +19,7 @@ import { env } from '#/env'
 import { lockOrganizationForMutation } from '#/server/admin/organization-lock'
 import { assetMutationLock } from '#/server/assets/usage'
 import { buildSnapshot } from '#/server/content/snapshot'
+import { sectionBlockers } from '#/server/content/globals'
 import {
   ConflictError,
   NotFoundError,
@@ -638,8 +639,10 @@ export async function getSiteReleaseStatus(siteId: string) {
         .limit(1)
 
   const diff = await diffApprovedRelease(siteId)
+  const blockers = await sectionBlockers(siteId)
 
   return {
+    blockers,
     live,
     publishingMode: existingSite.publishingMode,
     demo,

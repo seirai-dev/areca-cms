@@ -83,6 +83,14 @@ unchanged (each row carries a side-effect probe).
 | `getPreviewUrlFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
 | `upsertCollectionFn` | `content.ts` | `agency` | agency admin (MFA) |
 | `deleteCollectionFn` | `content.ts` | `agency` | agency admin (MFA) |
+| `listGlobalsFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA); disabled site content only for agency admin |
+| `getGlobalFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA); disabled site content only for agency admin |
+| `getGlobalPreviewUrlFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA); disabled site content only for agency admin |
+| `updateGlobalDraftFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA); disabled site content only for agency admin |
+| `discardGlobalDraftFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA); disabled site content only for agency admin |
+| `upsertGlobalFn` | `content.ts` | `agency` | agency admin (MFA) |
+| `setGlobalEnabledFn` | `content.ts` | `agency` | agency admin (MFA) |
+| `deleteGlobalFn` | `content.ts` | `agency` | agency admin (MFA) |
 | `listAssetsFn` | `assets.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
 | `getAssetFn` | `assets.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
 | `updateAssetFn` | `assets.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
@@ -167,10 +175,12 @@ listings, direct calls, cross-site ids, go-live and the agency schema tools.
 
 | Access | Who may call it | Tools |
 | --- | --- | --- |
-| everyone | any site member (editor, owner, agency admin) | `get_site_info`, `get_collection_schema`, `list_entries`, `get_entry`, `create_entry`, `update_entry`, `list_revisions`, `get_preview_url`, `list_assets`, `get_asset`, `upload_asset_from_url`, `update_asset_alt`, `get_release_status`, `list_publications`, `get_build_job` |
-| owner | owner or agency admin | `mark_ready`, `unpublish_entry`, `archive_entry`, `schedule_entry`, `cancel_schedule`, `delete_entry`, `restore_revision`, `delete_asset` |
-| go-live | a key with `allowGoLive` (the key flag and a non-editor live role) | `go_live`, `rollback`, `cancel_build` |
-| agency | agency admin only | `upsert_collection`, `delete_collection` |
+| everyone | any site member (editor, owner, agency admin) | `get_site_info`, `get_collection_schema`, `list_entries`, `get_entry`, `create_entry`, `update_entry`, `list_revisions`, `get_preview_url`, `list_assets`, `get_asset`, `upload_asset_from_url`, `update_asset_alt`, `get_release_status`, `list_publications`, `get_build_job`, `get_global`, `update_global`, `discard_global_draft` |
+| owner | owner or agency admin | `mark_ready`, `unpublish_entry`, `archive_entry`, `cancel_schedule`, `delete_entry`, `restore_revision`, `delete_asset` |
+| go-live | a key with `allowGoLive` (the key flag and a non-editor live role) | `go_live`, `rollback`, `cancel_build`, `schedule_entry` |
+| agency | agency admin only | `upsert_collection`, `delete_collection`, `upsert_global`, `delete_global` |
+
+Site content (globals) is reached by key through `get_global`, `update_global` and `discard_global_draft`. The section's entry id then works with the owner and go-live tools above. Editors and owners do not see disabled sections; a disabled section answers "not found" for them, as in the CMS. `update_global` refuses `seo` on a section without SEO, and `upsert_global` refuses `slug` fields and the reserved key `globals`.
 
 Ids sent by an AI are checked against the key's site (`scope.ts`). An entry,
 build job or publication on another site answers the same "not found" as a
@@ -200,6 +210,7 @@ identically for existing and missing organizations.
 ## Notes
 
 - Org owners cannot change their own collection schema (agency-only), by design.
+- Site content (globals) reuses the entry functions for ready, schedule, cancel schedule, history and restore, called with the section's entry id (`publishEntryFn`, `scheduleEntryFn`, `cancelScheduleFn`, `listRevisionsFn`, `restoreRevisionFn`). `unpublishEntryFn`, `archiveEntryFn` and `deleteEntryFn` refuse section entries. The entry id of a disabled section answers "not found" to editors and owners, in these functions and in the MCP entry tools, as the section does by key.
 - `deleteSiteFn` is a step-up action like deleting an organization (the UI
   runs it through `useStepUp().run`).
 - Only six rows still tolerate a non-authorization failure for allowed callers:

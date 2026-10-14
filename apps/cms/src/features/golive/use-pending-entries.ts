@@ -13,6 +13,7 @@ export type PendingEntry = {
   scheduledAt: string | Date | null
   kind: 'ready' | 'scheduled' | 'removal'
   exists: boolean
+  global: boolean
 }
 
 /**

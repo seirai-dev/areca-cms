@@ -80,6 +80,7 @@ import {
   useReconcileDeployment,
   useResolveUncertainDeployment,
 } from './use-go-live'
+import { canGoLive } from './go-live-gate'
 import { usePendingEntries } from './use-pending-entries'
 import type { PendingEntry } from './use-pending-entries'
 import { useReleaseStatus } from './use-release-status'
@@ -161,6 +162,11 @@ function GoLivePanelBody({
   const release = useReleaseStatus(site.id)
   const { goLive, isPending, errors, clearErrors } = useGoLive(site.id)
   const [urgent, setUrgent] = React.useState(false)
+  const blocked = (release.data?.blockers?.length ?? 0) > 0
+  const goLiveAllowed = canGoLive({
+    canPublish,
+    blockers: release.data?.blockers,
+  })
   const pending = usePendingEntries({
     siteId: site.id,
     enabled: release.state !== 'loading',
@@ -190,6 +196,14 @@ function GoLivePanelBody({
             onDismiss={clearErrors}
           />
         </Section>
+      ) : release.data?.blockers && release.data.blockers.length > 0 ? (
+        <Section>
+          <ErrorChecklist
+            siteId={site.id}
+            errors={release.data.blockers}
+            onDismiss={() => undefined}
+          />
+        </Section>
       ) : null}
 
       <Section
@@ -210,7 +224,7 @@ function GoLivePanelBody({
           <label
             className={cn(
               'flex items-center justify-between gap-4 rounded-[12px] bg-background-subtle px-3.5 py-3',
-              !canPublish && 'opacity-60',
+              !goLiveAllowed && 'opacity-60',
             )}
           >
             <span className="grid gap-0.5">
@@ -225,14 +239,20 @@ function GoLivePanelBody({
             <Switch
               checked={urgent}
               onCheckedChange={setUrgent}
-              disabled={!canPublish}
+              disabled={!goLiveAllowed}
               data-testid="golive-urgent"
               aria-label={m.golive_urgent()}
             />
           </label>
           <Hint
-            label={canPublish ? null : editorPublishReason()}
-            wrapDisabled={!canPublish}
+            label={
+              goLiveAllowed
+                ? null
+                : blocked
+                  ? m.golive_blocked_reason()
+                  : editorPublishReason()
+            }
+            wrapDisabled={!goLiveAllowed}
             className="w-full"
           >
             <Button
@@ -240,7 +260,7 @@ function GoLivePanelBody({
               size="lg"
               className="w-full"
               data-testid="publish-site-confirm"
-              disabled={!canPublish || release.state === 'going-live'}
+              disabled={!goLiveAllowed || release.state === 'going-live'}
               loading={isPending}
               onClick={() => void goLive({ urgent })}
             >
@@ -250,9 +270,9 @@ function GoLivePanelBody({
                 : m.golive_go_live()}
             </Button>
           </Hint>
-          {!canPublish ? (
+          {!goLiveAllowed ? (
             <p className="text-center text-callout text-text-secondary">
-              {editorPublishReason()}
+              {blocked ? m.golive_blocked_reason() : editorPublishReason()}
             </p>
           ) : null}
         </div>
@@ -496,6 +516,18 @@ function PendingRow({
 
   if (!entry.exists) {
     return <div className={className}>{body}</div>
+  }
+
+  if (entry.global) {
+    return (
+      <Link
+        to="/sites/$siteId/globals/$globalKey"
+        params={{ siteId, globalKey: entry.collectionKey }}
+        className={className}
+      >
+        {body}
+      </Link>
+    )
   }
 
   return (

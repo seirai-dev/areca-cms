@@ -18,13 +18,30 @@ Open a site and use **Settings**:
 | Deployment | Select **Production** or **Demo** mode, configure a Dokploy application and health-check URL for Production, or intentionally use Demo mode without a production deployment. |
 | Developer | Site token, token rotation, project connection state, and integration guidance. Rotating a token immediately invalidates the old token. |
 | AI | Site-specific writing instructions appended to the agency's shared AI prompt. |
-| Content | Review, enable, disable, create, or edit the site's content types and fields. |
+| Content | Review, enable, disable, create, or edit the site's content types, fields and Site content sections. |
 
 On a client detail page, the tabs are **Sites**, **People**, **Deployment**, and **Settings**. Client **Settings** only renames the client or opens its delete area; the **Deployment** tab manages that client's Dokploy URL and API credential. Site-specific options are on that site's Settings tabs above.
 
 Content types normally sync from the site's project manifest. The agency can also configure them in Content settings; see [Content schema reference](CONTENT_SCHEMA.md) for field types and schema behavior. To manage them, open **Settings › Content**. Use a row switch to enable or disable a type, select a row to edit its fields and route, or choose **New content type** to create one. Disabling a type keeps its entries in the CMS but excludes them from new site snapshots. Avoid deleting a site or organization as a cleanup shortcut: site deletion archives content history, and organization deletion removes that organization's data.
 
 ![Developer settings and separate credential controls](screenshots/current-developer-settings.png)
+
+### Site content sections
+
+Site content holds single sets of values that are not lists, such as company details, the home page or stats. Each section has its own fields, and editors only fill them in. You define sections; the editor's UI calls them **Site content**.
+
+Sections appear in **Settings › Content**, in a **Site content** part below the content types. From there, you can:
+
+- **New section** (or **Add section** in the sidebar's Site content group): name the section, then add its fields. The key cannot be `globals`, `previewGlobals`, `resolve`, `href` or `preview`.
+- Set the **label** shown to editors, and turn on **Search & social (SEO)** to give the section a title, description and social preview, the way entries have.
+- Set the **preview path**, such as `/` or `/about`. The CMS opens that page on the site with a signed `arecaPreview` token to show the draft. Without a path, editors cannot preview the section. The path must start with `/` and contain no query string or hash.
+- Add fields with the same types as content type fields, except **slug**. For each field you can set a **Group heading**, such as **Contact**. Fields that share a heading are shown together under it in the editor. The heading is only for editors; the site still gets a flat list of values.
+- **Enable or disable** a section with its switch. A disabled section is hidden from editors and left out of the next release. Its content is kept, and enabling it again brings it back.
+- **Delete section** (in the section's sheet, under **Settings › Content**). Its content is archived in the deleted-content archive, not erased. The site's code must stop reading the section before you delete it.
+
+Enabled sections with required fields must be marked ready by an owner before the site can go live. Check the section's content after changing its fields.
+
+Sections can also be created and changed from code with `globals` in `areca.config.ts`. Pushing the config is a full sync: a section that is left out is disabled, and its content is kept.
 
 ## Connect deployment
 

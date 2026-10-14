@@ -6,7 +6,7 @@
 
 | Tool | Access | Inputs | Returns |
 | --- | --- | --- | --- |
-| `get_site_info` | all | none | `site` (name, slug, productionUrl, publishingMode), `you` (role, capabilities), `cannotDo[]`, `collections[]`, `guide`. **Call first.** |
+| `get_site_info` | all | none | `site` (name, slug, productionUrl, publishingMode), `you` (role, capabilities), `cannotDo[]`, `collections[]`, `globals[]` (site content: key, label, enabled, fieldCount, seo, previewPath), `guide`. **Call first.** |
 | `get_collection_schema` | all | `collection*` | Per-field key, type, required, format, options; example `fields` and `seo` payloads; SEO guide |
 
 ## Entries
@@ -20,6 +20,16 @@
 | `list_revisions` | all | `id*` | Revision id, note, createdAt, createdBy |
 | `get_preview_url` | all | `id*` | `{ url }`, signed, about 1 hour. Fails without a site production URL. |
 
+## Site content (globals)
+
+Single sections such as company info or the home page. Editors and owners see enabled sections only; agency admins see all of them. The `id` returned here is the entry id for the workflow tools below.
+
+| Tool | Access | Inputs | Returns |
+| --- | --- | --- | --- |
+| `get_global` | all | `global*` (key from `get_site_info`) | `id`, `key`, `label`, `status`, `live`, `pendingRelease`, `version`, `editedSinceReady`, `previewAvailable`, `values` (rich text as Markdown, images as `{assetId,url,alt}`, references as `{entryId}`), `seo` (only with SEO on), `fields` (format of each field), `example` |
+| `update_global` | all | `global*`, `fields?`, `seo?` (at least one; refused without SEO on the section), `expectedVersion?` | Updated draft + `previewUrl`. Keys you leave out keep their values. |
+| `discard_global_draft` | all | `global*` | Draft reset to the ready values, kept in history. Refused when the section was never ready. |
+
 ## Workflow
 
 | Tool | Access | Inputs | Effect |
@@ -31,6 +41,8 @@
 | `delete_entry` | owner | `id*` | Deletes permanently. Destructive. |
 | `restore_revision` | owner | `id*`, `revisionId*`, `expectedVersion?` | Copies a revision into the draft and returns `skippedFields`. Doesn't mark it ready. |
 | `schedule_entry` | go-live | `id*`, `publishAt*` (future ISO 8601 with offset), `timezone*` (IANA, e.g. `Europe/Amsterdam`) | Goes live at that time, together with the site's other ready changes |
+
+`mark_ready`, `schedule_entry`, `cancel_schedule`, `list_revisions`, `restore_revision` and `get_preview_url` also take a site content section's `id`. `unpublish_entry`, `archive_entry` and `delete_entry` refuse it: change the section instead.
 
 ## Library (assets)
 
@@ -59,6 +71,8 @@
 | --- | --- | --- | --- |
 | `upsert_collection` | agency | `key*`, `label*`, `routePattern*`, `fields*` (up to 100: `key*`, `label*`, `type*`, `required?`, `options?`, `collection?`, `description?`, `after?`), `enabled?` | Creates the collection or **replaces** its field list. Prefer `areca.config.ts` + `areca manifest push` when the site syncs its schema from code. |
 | `delete_collection` | agency | `key*` | Deletes the collection and its entries. Destructive. |
+| `upsert_global` | agency | `key*`, `label*`, `fields*` (as `upsert_collection`, plus `group?` heading; no `slug` type), `seo?`, `previewPath?` (e.g. `/about`, `""` removes it), `enabled?` | Creates the site content section or **replaces** its fields, SEO setting, preview path and enabled flag. Keeps its content. |
+| `delete_global` | agency | `key*` | Deletes the section. Its content is kept in the deleted-content archive. Destructive. |
 
 ## Prompt
 

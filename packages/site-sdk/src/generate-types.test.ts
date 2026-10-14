@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import ts from 'typescript'
 import { generateContentTypes } from './generate-types.js'
-import type { CollectionConfig } from './types.js'
+import type { CollectionConfig, GlobalConfig } from './types.js'
 
 const previousEnv = process.env.ARECA_CONTENT_DIR
 afterEach(() => {
@@ -85,9 +85,12 @@ export const schema = {
   },
 } as const
 
+export const globalSchema = {} as const
+
 declare module '@areca-cms/site-sdk' {
   interface Register {
     schema: typeof schema
+    globals: typeof globalSchema
   }
 }
 
@@ -96,6 +99,7 @@ export type BlogPostsEntry = Entry<'blogPosts'>
 
 export const content = createContent({
   schema,
+  globalSchema,
   dir: process.env.ARECA_CONTENT_DIR ?? 'src/generated/content',
 })
 `
@@ -220,17 +224,114 @@ import type { Entry } from '@areca-cms/site-sdk'
 
 export const schema = {} as const
 
+export const globalSchema = {} as const
+
 declare module '@areca-cms/site-sdk' {
   interface Register {
     schema: typeof schema
+    globals: typeof globalSchema
   }
 }
 
 export const content = createContent({
   schema,
+  globalSchema,
   dir: process.env.ARECA_CONTENT_DIR ?? 'src/generated/content',
 })
 `,
+    )
+  })
+})
+
+describe('generateContentTypes: globals', () => {
+  const globalSchema: Record<string, GlobalConfig> = {
+    'company-info': {
+      label: 'Company info',
+      fields: [
+        { key: 'email', label: 'Email', type: 'text', required: true, group: 'Contact' },
+        { key: 'phone-number', label: 'Phone number', type: 'text' },
+        {
+          key: 'featured-author',
+          label: 'Featured author',
+          type: 'reference',
+          collection: 'authors',
+        },
+      ],
+    },
+    'home-page': {
+      label: 'Home page',
+      seo: true,
+      previewPath: '/',
+      fields: [{ key: 'hero-title', label: 'Hero title', type: 'text', required: true }],
+    },
+  }
+
+  it('emits globalSchema with the camel key, raw key, label, seo flag and camel fields', () => {
+    const source = generateContentTypes({ schema, globalSchema, dir: 'x' })
+    expect(source).toContain('export const globalSchema = {')
+    const { exports } = evaluate(source)
+    expect(exports.globalSchema).toMatchObject({
+      companyInfo: {
+        key: 'company-info',
+        label: 'Company info',
+        seo: false,
+        fields: {
+          email: { key: 'email', type: 'text', required: true },
+          phoneNumber: { key: 'phone-number', type: 'text', required: false },
+          featuredAuthor: {
+            key: 'featured-author',
+            type: 'reference',
+            required: false,
+            collection: 'authors',
+          },
+        },
+      },
+      homePage: {
+        key: 'home-page',
+        label: 'Home page',
+        seo: true,
+        fields: {
+          heroTitle: { key: 'hero-title', type: 'text', required: true },
+        },
+      },
+    })
+  })
+
+  it('registers globals next to schema in the Register augmentation', () => {
+    const source = generateContentTypes({ schema, globalSchema, dir: 'x' })
+    expect(source).toContain('    schema: typeof schema\n    globals: typeof globalSchema\n')
+  })
+
+  it('exports a Global type per section, named after the camel key', () => {
+    const source = generateContentTypes({ schema, globalSchema, dir: 'x' })
+    expect(source).toContain("export type CompanyInfoGlobal = Global<'companyInfo'>")
+    expect(source).toContain("export type HomePageGlobal = Global<'homePage'>")
+    expect(source).toContain("import type { Entry, Global } from '@areca-cms/site-sdk'")
+  })
+
+  it('passes globalSchema to createContent', () => {
+    const source = generateContentTypes({ schema, globalSchema, dir: 'x' })
+    const { options } = evaluate(source)
+    expect(options).toHaveProperty('globalSchema')
+    expect(Object.keys((options as unknown as { globalSchema: object }).globalSchema)).toEqual([
+      'companyInfo',
+      'homePage',
+    ])
+  })
+
+  it('emits an empty globalSchema when there are no globals, and still passes it', () => {
+    const source = generateContentTypes({ schema, dir: 'x' })
+    expect(source).toContain('export const globalSchema = {} as const')
+    expect(source).toContain('    globals: typeof globalSchema')
+    expect((evaluate(source).options as unknown as { globalSchema: object }).globalSchema).toEqual(
+      {},
+    )
+  })
+
+  it('produces the same text regardless of global insertion order', () => {
+    const reversed = Object.fromEntries(Object.entries(globalSchema).reverse())
+    expect(generateContentTypes({ schema, globalSchema: reversed, dir: 'x' })).toBe(
+      generateContentTypes({ schema, globalSchema, dir: 'x' }),
     )
   })
 })

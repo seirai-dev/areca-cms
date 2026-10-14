@@ -276,3 +276,93 @@ describe('manifestPull', () => {
     }
   })
 })
+
+describe('diffManifests: globals', () => {
+  const remoteWithGlobals: SiteManifest = {
+    ...remote,
+    globals: {
+      companyInfo: {
+        label: 'Company info',
+        fields: [{ key: 'email', label: 'Email', type: 'text', required: true }],
+      },
+      homePage: { label: 'Home page', seo: true, fields: [] },
+    },
+  }
+
+  it('reports every CMS global as added when there is no local config', () => {
+    expect(diffManifests(undefined, remoteWithGlobals).globals?.added).toEqual([
+      'companyInfo',
+      'homePage',
+    ])
+  })
+
+  it('reports a local global the CMS no longer has as removed', () => {
+    const local: SiteContentConfig = {
+      siteKey: 'demo',
+      collections: {},
+      globals: { legacyInfo: { label: 'Legacy', fields: [] } },
+    }
+    expect(diffManifests(local, { collections: {} }).globals?.removed).toEqual(['legacyInfo'])
+  })
+
+  it('reports nothing about globals when neither side has any', () => {
+    expect(diffManifests(undefined, remote)).not.toHaveProperty('globals')
+  })
+})
+
+describe('manifestPull: globals', () => {
+  it('writes the CMS globals into the config and reports them as added', async () => {
+    const dir = makeDir()
+    try {
+      const name = writeConfig(dir, { siteKey: 'acme-site', collections: {} })
+      const result = await manifestPull({
+        cwd: dir,
+        configPath: name,
+        client: makeClient({
+          ...remote,
+          globals: {
+            companyInfo: {
+              label: 'Company info',
+              fields: [
+                { key: 'email', label: 'Email', type: 'text', required: true, group: 'Contact' },
+              ],
+            },
+          },
+        }),
+        interactive: false,
+      })
+
+      expect(result.diff.globals?.added).toEqual(['companyInfo'])
+      const written = readFileSync(join(dir, name), 'utf8')
+      expect(written).toContain('  globals: {\n')
+      expect(written).toContain("    companyInfo: {\n      label: 'Company info',")
+      expect(written).toContain("{ key: 'email', label: 'Email', type: 'text', required: true, group: 'Contact' },")
+      expect(written).toBe(result.source)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('drops a local global the CMS no longer lists, and reports it as removed', async () => {
+    const dir = makeDir()
+    try {
+      const name = writeConfig(dir, {
+        siteKey: 'acme-site',
+        collections: {},
+        globals: { legacy: { label: 'Legacy', fields: [] } },
+      })
+      const result = await manifestPull({
+        cwd: dir,
+        configPath: name,
+        yes: true,
+        client: makeClient(remote),
+        interactive: false,
+      })
+
+      expect(result.diff.globals?.removed).toEqual(['legacy'])
+      expect(readFileSync(join(dir, name), 'utf8')).not.toContain('legacy')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})

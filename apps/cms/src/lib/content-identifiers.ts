@@ -12,13 +12,31 @@ const reserved = new Set([
 ])
 
 /**
- * Names the generated content object uses for its own methods. Only collection
- * keys are restricted; a field may still be called `preview`, `href` or `resolve`.
+ * Names the generated content object uses for its own members. Only collection
+ * and site content keys are restricted; a field may still be called `preview`,
+ * `href` or `resolve`. `globals` is the generated accessor for site content.
+ * Stored lowercase; `previewglobals` is `content.previewGlobals` folded.
  */
-const reservedCollectionKeys = new Set(['resolve', 'href', 'preview'])
+const reservedCollectionKeys = new Set([
+  'resolve',
+  'href',
+  'preview',
+  'globals',
+  'previewglobals',
+])
+
+/**
+ * The key's name as a member of the generated object: the SDK camelCases
+ * `preview-globals` and `preview_globals` to `previewGlobals` before it checks
+ * reserved names. Dropping separators and lowercasing gives the same fold as
+ * `toCamelKey` followed by a lowercase compare.
+ */
+function memberNameForm(key: string): string {
+  return key.replace(/[-_]/g, '').toLowerCase()
+}
 
 export function isReservedCollectionKey(key: string): boolean {
-  return reservedCollectionKeys.has(key.toLowerCase())
+  return reservedCollectionKeys.has(memberNameForm(key))
 }
 
 export function isSafeIdentifier(value: string): boolean {

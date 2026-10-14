@@ -139,6 +139,11 @@ Tools are registered per request for the caller's role, so a tool the caller can
 | Publishing | `go_live` | go-live key | `note?` (up to 500 characters) |
 | Publishing | `rollback` | go-live key | `publicationId` |
 | Publishing | `cancel_build` | go-live key | `jobId` (queued builds only) |
+| Site content | `get_global` | everyone | `global` (key; disabled sections are agency-only) |
+| Site content | `update_global` | everyone | `global`, `fields?`, `seo?` (refused unless the section has SEO on), `expectedVersion?` |
+| Site content | `discard_global_draft` | everyone | `global` (refused until the section was ready once) |
+| Site content | `upsert_global` | agency admin | `key`, `label`, `fields` (complete list; `group?` heading per field; no `slug`), `seo?`, `previewPath?`, `enabled?` |
+| Site content | `delete_global` | agency admin | `key` (content kept in the deleted-content archive) |
 | Workflow | `mark_ready` | owner | `id` (does not publish) |
 | Workflow | `unpublish_entry` | owner | `id` |
 | Workflow | `archive_entry` | owner | `id` |
@@ -148,6 +153,8 @@ Tools are registered per request for the caller's role, so a tool the caller can
 | Workflow | `restore_revision` | owner | `id`, `revisionId`, `expectedVersion?` (does not publish) |
 | Schema | `upsert_collection` | agency admin | `key`, `label`, `routePattern`, `fields` (complete list), `enabled?` |
 | Schema | `delete_collection` | agency admin | `key` (deletes its entries) |
+
+Site content (globals) are single sections of values, such as company info or the home page. They are not collections: `create_entry` and `list_entries` refuse their keys. `get_site_info` lists them under `globals`; the `id` that `get_global` returns works with `mark_ready`, `schedule_entry`, `cancel_schedule`, `list_revisions`, `restore_revision` and `get_preview_url`. `unpublish_entry`, `archive_entry` and `delete_entry` refuse it. A section's preview is its `previewPath` on the site with a signed `arecaPreview` token, so `get_preview_url` needs that path to be set.
 
 Prompt: `write_post` (arguments `collection`, `topic`) walks the model through reading the schema, drafting Markdown, filling SEO, adding images with alt text, creating a draft and sharing the preview URL. It does not mark ready or go live unless asked.
 
@@ -194,6 +201,8 @@ Call `get_collection_schema` for the exact format of each field. Summary:
 | `slug` | Lowercase letters, numbers and dashes; unique per collection; up to 200 characters |
 | `boolean` / `number` | JSON `true`/`false` or a JSON number |
 | `url` | Absolute `http` or `https` URL |
+
+A site content section (`get_global`) uses the same types, except `slug`. `fields` on `upsert_global` may set `group`, a heading shown above the field in the editor; collection fields may not.
 
 To clear a field on update, send an empty string `""` (for any type; an empty text field is stored as empty). Do not send `null` or omit the key expecting a clear, because omitted keys keep their value. Unknown field keys are refused and the error lists the valid keys.
 

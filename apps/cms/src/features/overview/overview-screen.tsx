@@ -21,6 +21,7 @@ import { UserAvatar } from '#/components/ui/avatar'
 import { Button } from '#/components/ui/button'
 import { Card } from '#/components/ui/card'
 import { ConnectAiCard } from '#/features/connect-ai/connect-ai-card'
+import { GLOBAL_ROUTE } from '#/features/globals/site-content'
 import { greeting, greetingName } from '#/features/overview/greeting'
 import { EmptyState } from '#/components/ui/empty-state'
 import { InsetList, InsetRow } from '#/components/ui/inset-list'
@@ -36,6 +37,7 @@ import {
 } from '#/components/ui/status-pill'
 import { ActivityList } from '#/features/activity/activity-list'
 import { entryLiveState } from '#/features/golive/entry-live-state'
+import { canGoLive } from '#/features/golive/go-live-gate'
 import { GoLiveButton, changesReadyLabel } from '#/features/golive/golive-tray'
 import { useGoLive } from '#/features/golive/use-go-live'
 import { usePendingEntries } from '#/features/golive/use-pending-entries'
@@ -288,6 +290,11 @@ function AttentionStrip({
   const release = useReleaseStatus(site.id)
   const panel = usePanel()
   const { goLive, isPending } = useGoLive(site.id)
+  const blocked = (release.data?.blockers?.length ?? 0) > 0
+  const goLiveAllowed = canGoLive({
+    canPublish,
+    blockers: release.data?.blockers,
+  })
   const pending = usePendingEntries({
     siteId: site.id,
     enabled: release.state !== 'loading',
@@ -361,12 +368,22 @@ function AttentionStrip({
                     className="truncate text-callout text-text-secondary"
                   >
                     <Link
-                      to="/sites/$siteId/c/$collectionKey/$entryId"
-                      params={{
-                        siteId: site.id,
-                        collectionKey: entry.collectionKey,
-                        entryId: entry.id,
-                      }}
+                      {...(entry.global
+                        ? {
+                            to: GLOBAL_ROUTE,
+                            params: {
+                              siteId: site.id,
+                              globalKey: entry.collectionKey,
+                            },
+                          }
+                        : {
+                            to: '/sites/$siteId/c/$collectionKey/$entryId' as const,
+                            params: {
+                              siteId: site.id,
+                              collectionKey: entry.collectionKey,
+                              entryId: entry.id,
+                            },
+                          })}
                       className="hover:text-text-primary hover:underline"
                     >
                       {entry.title}
@@ -379,7 +396,8 @@ function AttentionStrip({
         </div>
         <div className="flex items-center gap-2">
           <GoLiveButton
-            canPublish={canPublish}
+            canPublish={goLiveAllowed}
+            blocked={blocked}
             pending={isPending}
             testId="overview-go-live"
             fullWidth={false}

@@ -209,6 +209,17 @@ A `richtext` field holds a `RichTextValue`. It contains the Markdown source, a p
 
 Each entry can have a `seo` object with its title, description, canonical URL, social data and JSON-LD. Convert it into page head tags with the helpers in `@areca-cms/site-sdk/seo`. See [SEO](/docs/sdk/seo).
 
+## Site content
+
+Single sections of values, such as company details, are read from `content.globals`, not from a collection. Each section is an object of its fields, keyed by its camelCase key:
+
+```ts
+const company = content.globals.companyInfo
+const home = content.globals.homePage // includes $seo when the section has SEO on
+```
+
+Sections have no list, slug or route, so there is nothing to query. Use `content.resolve()` on a reference field of a section, the same as on an entry. For previews and the typed globals, see [site content](/docs/sdk/globals).
+
 ## Read the files directly
 
 `content` is built on `readContent`, from `@areca-cms/site-sdk/pull`. Use `readContent` when you need the raw entries of one collection and do not need the query methods. It takes the folder and a camelCase collection key, and returns the typed entries:

@@ -51,6 +51,7 @@ import { Route as AppSitesSiteIdTeamRouteImport } from './routes/_app/sites/$sit
 import { Route as ApiAdminBrandingUploadRouteImport } from './routes/api/admin/branding/upload'
 import { Route as ApiSitesSnapshotCurrentRouteImport } from './routes/api/sites/snapshot/current'
 import { Route as AppSitesSiteIdCCollectionKeyRouteImport } from './routes/_app/sites/$siteId/c/$collectionKey'
+import { Route as AppSitesSiteIdGlobalsGlobalKeyRouteImport } from './routes/_app/sites/$siteId/globals/$globalKey'
 import { Route as ApiAssetsFilePrefixFilenameRouteImport } from './routes/api/assets/file/$prefix/$filename'
 import { Route as AppSitesSiteIdCCollectionKeyIndexRouteImport } from './routes/_app/sites/$siteId/c/$collectionKey/index'
 import { Route as AppSitesSiteIdCCollectionKeyEntryIdRouteImport } from './routes/_app/sites/$siteId/c/$collectionKey/$entryId'
@@ -266,6 +267,12 @@ const AppSitesSiteIdCCollectionKeyRoute =
     path: '/c/$collectionKey',
     getParentRoute: () => AppSitesSiteIdRoute,
   } as any)
+const AppSitesSiteIdGlobalsGlobalKeyRoute =
+  AppSitesSiteIdGlobalsGlobalKeyRouteImport.update({
+    id: '/globals/$globalKey',
+    path: '/globals/$globalKey',
+    getParentRoute: () => AppSitesSiteIdRoute,
+  } as any)
 const ApiAssetsFilePrefixFilenameRoute =
   ApiAssetsFilePrefixFilenameRouteImport.update({
     id: '/api/assets/file/$prefix/$filename',
@@ -333,6 +340,7 @@ export interface FileRoutesByFullPath {
   '/agency/clients/': typeof AppAgencyClientsIndexRoute
   '/sites/$siteId/': typeof AppSitesSiteIdIndexRoute
   '/sites/$siteId/c/$collectionKey': typeof AppSitesSiteIdCCollectionKeyRouteWithChildren
+  '/sites/$siteId/globals/$globalKey': typeof AppSitesSiteIdGlobalsGlobalKeyRoute
   '/api/assets/file/$prefix/$filename': typeof ApiAssetsFilePrefixFilenameRoute
   '/sites/$siteId/c/$collectionKey/$entryId': typeof AppSitesSiteIdCCollectionKeyEntryIdRoute
   '/sites/$siteId/c/$collectionKey/new': typeof AppSitesSiteIdCCollectionKeyNewRoute
@@ -377,6 +385,7 @@ export interface FileRoutesByTo {
   '/api/sites/snapshot/current': typeof ApiSitesSnapshotCurrentRoute
   '/agency/clients': typeof AppAgencyClientsIndexRoute
   '/sites/$siteId': typeof AppSitesSiteIdIndexRoute
+  '/sites/$siteId/globals/$globalKey': typeof AppSitesSiteIdGlobalsGlobalKeyRoute
   '/api/assets/file/$prefix/$filename': typeof ApiAssetsFilePrefixFilenameRoute
   '/sites/$siteId/c/$collectionKey/$entryId': typeof AppSitesSiteIdCCollectionKeyEntryIdRoute
   '/sites/$siteId/c/$collectionKey/new': typeof AppSitesSiteIdCCollectionKeyNewRoute
@@ -426,6 +435,7 @@ export interface FileRoutesById {
   '/_app/agency/clients/': typeof AppAgencyClientsIndexRoute
   '/_app/sites/$siteId/': typeof AppSitesSiteIdIndexRoute
   '/_app/sites/$siteId/c/$collectionKey': typeof AppSitesSiteIdCCollectionKeyRouteWithChildren
+  '/_app/sites/$siteId/globals/$globalKey': typeof AppSitesSiteIdGlobalsGlobalKeyRoute
   '/api/assets/file/$prefix/$filename': typeof ApiAssetsFilePrefixFilenameRoute
   '/_app/sites/$siteId/c/$collectionKey/$entryId': typeof AppSitesSiteIdCCollectionKeyEntryIdRoute
   '/_app/sites/$siteId/c/$collectionKey/new': typeof AppSitesSiteIdCCollectionKeyNewRoute
@@ -475,6 +485,7 @@ export interface FileRouteTypes {
     | '/agency/clients/'
     | '/sites/$siteId/'
     | '/sites/$siteId/c/$collectionKey'
+    | '/sites/$siteId/globals/$globalKey'
     | '/api/assets/file/$prefix/$filename'
     | '/sites/$siteId/c/$collectionKey/$entryId'
     | '/sites/$siteId/c/$collectionKey/new'
@@ -519,6 +530,7 @@ export interface FileRouteTypes {
     | '/api/sites/snapshot/current'
     | '/agency/clients'
     | '/sites/$siteId'
+    | '/sites/$siteId/globals/$globalKey'
     | '/api/assets/file/$prefix/$filename'
     | '/sites/$siteId/c/$collectionKey/$entryId'
     | '/sites/$siteId/c/$collectionKey/new'
@@ -567,6 +579,7 @@ export interface FileRouteTypes {
     | '/_app/agency/clients/'
     | '/_app/sites/$siteId/'
     | '/_app/sites/$siteId/c/$collectionKey'
+    | '/_app/sites/$siteId/globals/$globalKey'
     | '/api/assets/file/$prefix/$filename'
     | '/_app/sites/$siteId/c/$collectionKey/$entryId'
     | '/_app/sites/$siteId/c/$collectionKey/new'
@@ -888,6 +901,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSitesSiteIdCCollectionKeyRouteImport
       parentRoute: typeof AppSitesSiteIdRoute
     }
+    '/_app/sites/$siteId/globals/$globalKey': {
+      id: '/_app/sites/$siteId/globals/$globalKey'
+      path: '/globals/$globalKey'
+      fullPath: '/sites/$siteId/globals/$globalKey'
+      preLoaderRoute: typeof AppSitesSiteIdGlobalsGlobalKeyRouteImport
+      parentRoute: typeof AppSitesSiteIdRoute
+    }
     '/api/assets/file/$prefix/$filename': {
       id: '/api/assets/file/$prefix/$filename'
       path: '/api/assets/file/$prefix/$filename'
@@ -974,6 +994,7 @@ interface AppSitesSiteIdRouteChildren {
   AppSitesSiteIdTeamRoute: typeof AppSitesSiteIdTeamRoute
   AppSitesSiteIdIndexRoute: typeof AppSitesSiteIdIndexRoute
   AppSitesSiteIdCCollectionKeyRoute: typeof AppSitesSiteIdCCollectionKeyRouteWithChildren
+  AppSitesSiteIdGlobalsGlobalKeyRoute: typeof AppSitesSiteIdGlobalsGlobalKeyRoute
 }
 
 const AppSitesSiteIdRouteChildren: AppSitesSiteIdRouteChildren = {
@@ -988,6 +1009,7 @@ const AppSitesSiteIdRouteChildren: AppSitesSiteIdRouteChildren = {
   AppSitesSiteIdIndexRoute: AppSitesSiteIdIndexRoute,
   AppSitesSiteIdCCollectionKeyRoute:
     AppSitesSiteIdCCollectionKeyRouteWithChildren,
+  AppSitesSiteIdGlobalsGlobalKeyRoute: AppSitesSiteIdGlobalsGlobalKeyRoute,
 }
 
 const AppSitesSiteIdRouteWithChildren = AppSitesSiteIdRoute._addFileChildren(

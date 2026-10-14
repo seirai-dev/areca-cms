@@ -8,7 +8,7 @@ metadata:
 
 # Areca MCP
 
-Every Areca site has its own remote MCP server. Through it an AI can read and write that site's content: entries, the media Library, releases and, for agency admins, content types. It edits CMS content and is separate from the `@areca-cms/site-sdk` website code (see the `areca-sdk` skill).
+Every Areca site has its own remote MCP server. Through it an AI can read and write that site's content: entries, site content (single sections such as company info), the media Library, releases and, for agency admins, content types and site content structure. It edits CMS content and is separate from the `@areca-cms/site-sdk` website code (see the `areca-sdk` skill).
 
 ## Connect
 
@@ -20,8 +20,8 @@ Every Areca site has its own remote MCP server. Through it an AI can read and wr
 
 ## First calls (always)
 
-1. `get_site_info`: returns your role, what you **cannot** do, the collections and the site's publishing mode.
-2. `get_collection_schema({ collection })`: returns exact field formats, an example payload and SEO guidance. Call it before every first write to a collection.
+1. `get_site_info`: returns your role, what you **cannot** do, the collections, the site content sections (`globals`) and the site's publishing mode.
+2. `get_collection_schema({ collection })`: returns exact field formats, an example payload and SEO guidance. Call it before every first write to a collection. For a site content section, `get_global({ global })` gives the same information.
 
 Tools your role can't use are not listed at all. If the user asks for one of those actions, explain who can do it and don't look for workarounds.
 
@@ -37,7 +37,7 @@ schedule_entry            -> scheduled goes live at a set time (also publishes o
 - `status`: `draft` | `ready` | `scheduled` | `archived`. To answer "what is live" use the flags: `live` (on the production site now), `pendingRelease` (approved changes waiting for the next go live) and `editedSinceReady`.
 - Drafts are safe. Nothing changes the live site until an entry is marked ready **and** a go live happens.
 - Only call `mark_ready`, `go_live`, `schedule_entry`, `rollback`, `delete_*` or `archive_entry` when the user explicitly asks.
-- Writes return a `version`. Pass it as `expectedVersion` on the next `update_entry`. On a version conflict, call `get_entry`, reapply the change and retry.
+- Writes return a `version`. Pass it as `expectedVersion` on the next `update_entry` or `update_global`. On a version conflict, call `get_entry` (or `get_global`), reapply the change and retry.
 - Show the user the `previewUrl` that create and update return (it's signed and valid for about 1 hour). If the site has no production URL, preview isn't available.
 
 ## Roles
@@ -47,7 +47,7 @@ schedule_entry            -> scheduled goes live at a set time (also publishes o
 | editor | read everything, create and edit drafts, upload images, edit alt text, preview |
 | owner | everything an editor can, plus `mark_ready`, `unpublish_entry`, `archive_entry`, `cancel_schedule`, `delete_entry`, `restore_revision`, `delete_asset` |
 | + go-live permission | `go_live`, `schedule_entry`, `rollback`, `cancel_build`. Granted per connection or key with "Allow going live" (owners and agency admins only). |
-| agency admin | everything above, plus `upsert_collection` and `delete_collection` (needs 2FA) |
+| agency admin | everything above, plus `upsert_collection`, `delete_collection`, `upsert_global` and `delete_global` (needs 2FA) |
 
 ## Writing content
 
@@ -56,7 +56,8 @@ schedule_entry            -> scheduled goes live at a set time (also publishes o
 - **Field values:** `image` and `reference` take ids, `date` is `YYYY-MM-DD`, `datetime` is ISO 8601 with an offset, `select` must match an option exactly, and `slug` is lowercase with dashes and unique. Date fields are content only and never schedule an entry.
 - **Clearing:** use `""` for a field or SEO text, `[]` for SEO lists and `false` for `noindex`/`nofollow`. Avoid `null` (`seo` rejects it). A key you leave out keeps its value.
 - **SEO on every new entry:** `seo.title` (50-60 chars), `seo.description` (140-160), `focusKeyphrase`, `summary` (2-3 sentences) and 3-5 `keyTakeaways`. Add `faq` only when the body really answers those questions.
-- **Schema:** if the site project has `areca.config.ts`, change the schema there and push it with the SDK rather than calling `upsert_collection`. `upsert_collection` replaces the whole field list.
+- **Site content (globals):** single sections such as company info or the home page. Read one with `get_global({ global })` and change it with `update_global({ global, fields?, seo?, expectedVersion? })`. It is not a collection, so `create_entry` and `list_entries` do not apply. Its `id` (from `get_global`) works with `mark_ready`, `schedule_entry`, `cancel_schedule`, `list_revisions`, `restore_revision` and `get_preview_url`. Use `discard_global_draft` to go back to the ready values. `seo` is only accepted when the section has SEO on.
+- **Schema:** if the site project has `areca.config.ts`, change the schema there and push it with the SDK rather than calling `upsert_collection` or `upsert_global`. Both replace the whole field list.
 
 Full formats, the SEO object, limits and errors are in [references/content.md](references/content.md). Every tool with its inputs is in [references/tools.md](references/tools.md).
 

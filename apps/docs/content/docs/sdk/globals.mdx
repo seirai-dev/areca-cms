@@ -1,0 +1,183 @@
+---
+title: Site content (globals)
+description: Declare single sections of values such as company details or home-page copy, read them with content.globals, add SEO, and show a section draft in preview.
+---
+
+Some copy is not a list of entries. Company details, the home-page hero and the About page text each exist once per site. Areca calls these **site content sections**, or **globals** in code. Each section is a set of fields, the same as a collection's fields, but it has no slug and no route. Editors fill it in, and your site reads it as one object.
+
+In the CMS the sections appear under **Site content**. This page covers the SDK side. For the editor's view, see [Site content](/docs/cms/site-content).
+
+## Declare a section
+
+Add a `globals` object next to `collections` in `areca.config.ts`. Each key is a section key, and each value describes the section:
+
+```ts title="areca.config.ts"
+import { defineSiteContent } from '@areca-cms/site-sdk'
+
+export default defineSiteContent({
+  siteKey: 'acme-site',
+  collections: {
+    /* ... */
+  },
+  globals: {
+    companyInfo: {
+      label: 'Company info',
+      fields: [
+        { key: 'name', label: 'Name', type: 'text', required: true },
+        { key: 'tagline', label: 'Tagline', type: 'textarea' },
+        { key: 'email', label: 'Email', type: 'text', group: 'Contact' },
+        { key: 'phone', label: 'Phone', type: 'text', group: 'Contact' },
+        { key: 'foundedYear', label: 'Founded', type: 'number' },
+      ],
+    },
+    homePage: {
+      label: 'Home page',
+      seo: true,
+      previewPath: '/',
+      fields: [
+        { key: 'heroEyebrow', label: 'Hero eyebrow', type: 'text', required: true },
+        { key: 'heroIntro', label: 'Hero intro', type: 'textarea', required: true },
+        { key: 'featuredCoffee', label: 'Featured coffee', type: 'reference', collection: 'coffees' },
+      ],
+    },
+  },
+})
+```
+
+A section takes these options:
+
+| Option | Required | Description |
+| --- | --- | --- |
+| `label` | No | The name editors see, such as "Company info". If you omit it, the CMS shows the section key. |
+| `fields` | Yes | The fields. The same types as collection fields, except `slug`. |
+| `seo` | No | Set to `true` to give the section a search and social panel. Default `false`. See [SEO](#seo). |
+| `previewPath` | No | The page that shows this section, such as `/` or `/about`. See [preview](#preview). |
+
+The section key follows the same rules as a collection key. It may not be `globals`, `previewGlobals`, `resolve`, `href` or `preview`. A section key and a collection key must also be different. See [identifiers](/docs/sdk/defining-content#identifiers).
+
+### Fields and groups
+
+A section field can set `group`, a heading shown above the field in the editor. Fields with the same heading in a row are shown together, such as the `Contact` fields above. The heading is only for editors. Your code still gets one flat object.
+
+`group` is not allowed on collection fields. Reference fields work as they do in collections, so a section can point to entries, but a collection cannot point to a section.
+
+### Sections and the manifest
+
+`areca manifest push` sends sections with the rest of the schema. A push is a full sync, so a section left out of the config is **disabled**: editors can no longer see it, it is left out of the next release, and its content is kept. Enable it again by adding it back.
+
+`GET /api/sites/manifest` lists only enabled sections. A site with none has no `globals` key in the response.
+
+## Read values
+
+After `areca pull`, `areca.gen.ts` exposes the sections on `content.globals`:
+
+```ts title="src/lib/site.ts"
+import { content } from '../generated/content/areca.gen'
+
+export function getCompany() {
+  return content.globals.companyInfo
+}
+```
+
+Each section comes back as a flat object of its field values, using camelCase names:
+
+```ts
+const company = content.globals.companyInfo
+company.name // string
+company.email // string | null | undefined, because the field is optional
+company.foundedYear // number | null | undefined
+```
+
+A new pull is picked up without restarting the process, the same as for collections. The values follow the same nullability rules as entries: a required field is never empty, and an optional field can be `null`, missing or `''`.
+
+A reference field in a section works like any other reference. Pass it to `content.resolve()` to get the entry:
+
+```ts
+const featured = content.resolve(content.globals.homePage.featuredCoffee)
+```
+
+### Typed sections
+
+When `areca.gen.ts` is generated, each section has a type. Use the type for a prop or a helper:
+
+```ts
+import type { CompanyInfoGlobal } from '../generated/content/areca.gen'
+
+function footerText(company: CompanyInfoGlobal) {
+  return `${company.name}, ${company.email ?? 'no email'}`
+}
+```
+
+Each section has an exported type named after it, such as `CompanyInfoGlobal` and `HomePageGlobal`, from `areca.gen.ts`. The SDK exports `Global<'key'>` and `Globals` for any section key. `globalSchema` in `areca.gen.ts` describes each section with its label, `seo` setting and fields.
+
+Without a registered schema, `content.globals` is typed as `Record<string, Record<string, unknown>>`. Run `areca pull` to get the typed version.
+
+## SEO
+
+Set `seo: true` on a section to give editors a search and social panel, filled in the same way as an entry's. The published values then include `$seo`, which has the same shape as an entry's `seo`:
+
+```ts
+import { seoHead } from '@areca-cms/site-sdk'
+
+const home = content.globals.homePage
+const head = seoHead(home.$seo, { titleTemplate: '%s · Acme', siteName: 'Acme' })
+```
+
+Sections without `seo: true` have no `$seo` key. See [SEO helpers](/docs/sdk/seo) for the helper functions.
+
+## Preview
+
+A section can show a draft on the page where it appears. Set `previewPath` to that page, for example `/about`. An editor who previews the section opens the CMS and gets a link to `<your site><previewPath>?arecaPreview=<token>`. Sections without a `previewPath` have no preview link, and the CMS explains why.
+
+On the page, read the token from the query string and call `previewGlobals`. It takes three kinds of argument:
+
+```ts
+const preview = await content.previewGlobals(token) // a token string
+const preview = await content.previewGlobals(result) // a PreviewResult from getPreviewEntry
+const preview = await content.previewGlobals(null) // falsy: the published values
+```
+
+It returns a `GlobalsPreview` (exported from the package root):
+
+```ts
+{
+  globals: Globals<G>, // always typed, like content.globals
+  previewing: GlobalKey<G> | null, // camelCase key of the section the token targets
+  complete: boolean, // false when the draft did not pass validation
+  issues: string[], // "<field>: <problem>" lines, empty when complete
+}
+```
+
+A valid draft replaces its section in `globals`. An incomplete draft (a required field empty, a wrong type, an image or reference that does not resolve) keeps the published section, so `globals.companyInfo.logo.url` never reads a null. Check `previewing` and `complete` to tell editors what happened. A falsy value or a token for an entry returns the published values with `previewing: null` and `complete: true`.
+
+An invalid or expired token makes the CMS request fail, and `previewGlobals` throws. Catch the error and serve the published values, as the demo site does, so a stale link shows the live page instead of an error.
+
+Because preview reads the CMS, the page must also send the preview headers from `previewHeaders()` (`X-Robots-Tag` and `Cache-Control`) and must not be cached.
+
+A page that shows one section should use the draft only when `previewing` is that section, and show a note when `complete` is `false`. The demo site's `readGlobals` helper in `examples/demo-site/src/lib/queries.ts` shows this pattern.
+
+Keep preview server-side. Never log the token or the draft response. See [draft preview](/docs/sdk/preview) for the full route setup.
+
+## Files on disk
+
+`areca pull` writes the published sections to `_globals.json` in the publication folder, keyed by camelCase section key. Each entry holds the section's ID, publication time, raw values and `seo` when enabled. `manifest.json` lists the sections as `globals`, and the key is absent when there are none. Read the file yourself with `readGlobalsFile` from `@areca-cms/site-sdk/pull`:
+
+```ts
+import { readContentManifest, readGlobalsFile } from '@areca-cms/site-sdk/pull'
+
+const manifest = readContentManifest('src/generated/content')
+const globals = readGlobalsFile('src/generated/content', manifest)
+```
+
+Most sites do not need this. `content.globals` does the same work with the types applied. The files are part of the publication, so ship `src/generated/content/` with the server build, as you do for collections.
+
+## Go-live rule
+
+A section with required fields must be marked ready in the CMS at least once before the site can go live. If it has never been ready, or its ready values fail validation, the release is blocked, and the CMS names the section. A section with no required fields goes out as `{}` until someone marks it ready, so your code should handle empty values. Use optional chaining or a fallback for them.
+
+## Related
+
+- [Defining your content](/docs/sdk/defining-content): the config options that sections share with collections.
+- [Typed content](/docs/sdk/typed-content): how `areca pull` generates the types.
+- [Reading content](/docs/sdk/reading-content): the same patterns for collection entries.
+- [Site content in the CMS](/docs/cms/site-content): what editors see and do.

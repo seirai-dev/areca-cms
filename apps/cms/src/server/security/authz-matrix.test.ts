@@ -754,6 +754,53 @@ describe.skipIf(!runnable)(
   },
 )
 
+describe.skipIf(!runnable)('disabled site content reached by entry id', () => {
+  let w: World
+  beforeAll(async () => {
+    w = await seedWorld()
+  }, 60_000)
+  afterAll(async () => {
+    await w?.destroy()
+  })
+
+  const call = (fn: unknown, data: unknown, actor: ActorName) =>
+    callServerFn(
+      fn as Parameters<typeof callServerFn>[0],
+      data,
+      w.sessions[actor],
+    )
+
+  it('answers NotFound to editors and owners for a disabled section entry, but not to agency admins', async () => {
+    const { contentFns } = await fns()
+    const section = await w.fresh.global('X')
+    await db
+      .update(collection)
+      .set({ enabled: false })
+      .where(eq(collection.id, section.collection.id))
+    const id = section.entry.id
+    const attempts = [
+      ['getEntryFn', contentFns.getEntryFn, { id }],
+      [
+        'updateDraftFn',
+        contentFns.updateDraftFn,
+        { id, data: {}, expectedVersion: 1 },
+      ],
+      ['listRevisionsFn', contentFns.listRevisionsFn, { entryId: id }],
+      ['publishEntryFn', contentFns.publishEntryFn, { id }],
+      ['cancelScheduleFn', contentFns.cancelScheduleFn, { id }],
+    ] as const
+    for (const actor of ['editorX', 'ownerX'] as const) {
+      for (const [name, fn, data] of attempts) {
+        const out = await call(fn, data, actor)
+        expect(classify(out.error), `${actor} ${name}`).toBe('not-found')
+      }
+    }
+
+    const agency = await call(contentFns.getEntryFn, { id }, 'adminMfa')
+    expect(agency.error).toBeUndefined()
+    expect(agency.result).toMatchObject({ id, slug: '$global' })
+  })
+})
 describe.skipIf(!runnable)('error shape that reaches the client', () => {
   let w: World
   beforeAll(async () => {

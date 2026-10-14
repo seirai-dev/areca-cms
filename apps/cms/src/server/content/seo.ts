@@ -54,6 +54,10 @@ export function buildEntrySeo(input: {
   converted: Record<string, unknown>
   slug: string
   routePattern: string
+  /** Canonical URL for pages that are not addressed by route pattern (site content). */
+  url?: string | null
+  /** Title used when the editor leaves SEO title empty. Defaults to the entry title. */
+  title?: string
   site: { name: string; productionUrl: string }
   ogImage: ImageValue | null
   publishedAt: Date | null
@@ -65,13 +69,16 @@ export function buildEntrySeo(input: {
   const publishedAt = input.publishedAt?.toISOString() ?? null
   return resolveEntrySeo({
     seo: readEntrySeo(input.data),
-    title: entryTitle(input.data, input.fields, input.slug),
+    title: input.title ?? entryTitle(input.data, input.fields, input.slug),
     fallbackDescription: fallbackDescription(input.fields, input.data),
-    url: entryPublicUrl(
-      input.site.productionUrl,
-      input.routePattern,
-      input.slug,
-    ),
+    url:
+      input.url !== undefined
+        ? input.url
+        : entryPublicUrl(
+            input.site.productionUrl,
+            input.routePattern,
+            input.slug,
+          ),
     site: { name: input.site.name, url: input.site.productionUrl },
     ogImage: input.ogImage,
     heroImage: heroField

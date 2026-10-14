@@ -59,6 +59,7 @@ Areca adds a required `slug` field as the first field of every collection, so yo
 | --- | --- | --- |
 | `siteKey` | Yes | The key of the CMS site, as shown on the site's Developer tab. `areca init` and `areca manifest pull` use it. The push does not send it, because the schema token already identifies the site. |
 | `collections` | Yes | An object whose keys are collection keys and whose values are collection definitions. It can be empty. |
+| `globals` | No | An object whose keys are site content section keys, such as `companyInfo`. Each section holds a single set of values, not a list. See [site content](/docs/sdk/globals). |
 
 ## Collection options
 
@@ -82,6 +83,7 @@ Each entry in `fields` is an object with these options:
 | `options` | Only for `select` | The choices for a `select` field. Up to 200 options, each up to 200 characters. Other types do not accept it. |
 | `collection` | Yes for `reference`, otherwise not allowed | The key of the collection the reference can point to. It must be a collection key of the same config. Your editor suggests the keys as you type. |
 | `after` | Only for `date` and `datetime` | The key of another date or datetime field in the same collection. This value must be on or after that field's value. Your editor suggests only the keys of date fields. |
+| `group` | No, and only in site content | A heading shown above the field in the editor, such as `Contact`. Consecutive fields with the same heading share it. The SDK value stays flat. Collection fields may not set `group`. See [site content](/docs/sdk/globals#fields-and-groups). |
 
 The SDK checks identifiers before it sends anything. The CMS validates the whole manifest when it receives it, including the length and count limits above.
 
@@ -126,7 +128,7 @@ Identifiers are the names you choose for collections and fields: the keys of `co
 - They start with an ASCII letter. After that they can contain letters, digits, `_` and `-`.
 - They are at most 64 characters long.
 - They must not be a reserved name. The reserved names are `__proto__`, `prototype`, `constructor`, `manifest`, `con`, `prn`, `aux`, `nul`, `com1` to `com9`, and `lpt1` to `lpt9`. The check ignores case, so `MANIFEST` is reserved too.
-- A collection key must not be `resolve`, `href` or `preview`. The content object in your code uses those names for its own methods. This check ignores case. Field keys may use these names.
+- A collection key or site content key must not be `resolve`, `href`, `preview`, `globals` or `previewGlobals`. Camel-cased forms count too, so `preview-globals` is refused. The content object in your code uses those names for its own methods. This check ignores case. Field keys may use these names.
 - A field key must be unique within its collection.
 - In your code, keys are camelCase, so two keys that differ only in their dashes or underscores (`blog-posts` and `blog_posts`) collide. The pull refuses them. See [typed content](/docs/sdk/typed-content#names-that-the-pull-refuses).
 
@@ -143,9 +145,13 @@ If an identifier breaks the rules, `areca manifest push` stops with an error suc
 
 Entries and `slug` fields have a second, separate rule: the value must be lowercase letters and digits, with single hyphens between parts. There are no leading or trailing hyphens, and the value can be up to 200 characters. Examples: `hello-world`, `2026-roadmap`.
 
+## Site content sections
+
+Site content sections go under `globals`, beside `collections`. They use the same field options, with two differences: a section has no `slug` field, and a field may set `group`. A section can also set `label`, `seo` (default `false`) and `previewPath`. See [site content](/docs/sdk/globals) for the full example and rules.
+
 ## Changing the config
 
-Edit `areca.config.ts` and run `areca manifest push`. The push replaces the definition of each collection it lists, and it disables any collection it leaves out. For what happens to existing content, see [syncing the schema](/docs/sdk/schema-sync).
+Edit `areca.config.ts` and run `areca manifest push`. The push replaces the definition of each collection or site content section it lists, and it disables any it leaves out. Disabled sections keep their content. For what happens to existing content, see [syncing the schema](/docs/sdk/schema-sync).
 
 If your collections were created in the CMS, you can copy them into a config file with `areca manifest pull`. See [CLI reference](/docs/sdk/cli).
 
@@ -154,3 +160,4 @@ If your collections were created in the CMS, you can copy them into a config fil
 - [Field types](/docs/sdk/field-types): every field type, its options and the values it produces.
 - [Syncing the schema](/docs/sdk/schema-sync): push the config and understand what changes.
 - [Reading content](/docs/sdk/reading-content): use the typed entries in your site.
+- [Site content](/docs/sdk/globals): single sections of values, such as company details.

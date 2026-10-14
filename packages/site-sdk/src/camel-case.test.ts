@@ -195,7 +195,7 @@ describe('camelizeSnapshot', () => {
     expect(Object.keys(collections)).toEqual(['hrefLink'])
   })
 
-  it.each(['resolve', 'href', 'preview'])(
+  it.each(['resolve', 'href', 'preview', 'previewGlobals', 'preview-globals'])(
     'rejects the reserved collection name %s',
     (name) => {
       const message = messageOf(() =>
@@ -306,5 +306,65 @@ describe('camelizeSnapshot', () => {
         },
       ),
     ).toThrow(/only by case/)
+  })
+})
+
+describe('camelizeSnapshot: globals', () => {
+  const globalSnapshot = (): Snapshot => ({
+    publicationId: 'pub',
+    siteKey: 'site',
+    createdAt: '',
+    hash: 'h',
+    collections: {},
+    schema: {},
+    globalSchema: {
+      'company-info': {
+        label: 'Company info',
+        seo: false,
+        fields: [
+          { key: 'phone-number', label: 'Phone number', type: 'text' },
+          { key: 'featured-author', label: 'Featured', type: 'reference', collection: 'authors' },
+        ],
+      },
+    },
+    globals: {
+      'company-info': {
+        id: 'g1',
+        publishedAt: null,
+        data: {
+          'phone-number': '+31 20 000',
+          'featured-author': { collection: 'authors', slug: 'ada', id: 'a1' },
+        },
+      },
+    },
+  })
+
+  it('camelizes global keys and the field keys of each global', () => {
+    const { globals } = camelizeSnapshot(globalSnapshot(), {})
+    expect(Object.keys(globals ?? {})).toEqual(['companyInfo'])
+    expect(globals?.companyInfo?.data).toEqual({
+      phoneNumber: '+31 20 000',
+      featuredAuthor: { collection: 'authors', slug: 'ada', id: 'a1' },
+    })
+    expect(globals?.companyInfo?.id).toBe('g1')
+  })
+
+  it('does not mutate the global snapshot it receives', () => {
+    const input = globalSnapshot()
+    camelizeSnapshot(input, {})
+    expect(Object.keys(input.globals ?? {})).toEqual(['company-info'])
+    expect(input.globals?.['company-info']?.data).toHaveProperty('phone-number')
+  })
+
+  it('leaves a snapshot without globals unchanged in shape', () => {
+    const { globals } = camelizeSnapshot({ ...globalSnapshot(), globals: undefined }, {})
+    expect(globals).toBeUndefined()
+  })
+
+  it('rejects a global key that camelises to a reserved name', () => {
+    const input = globalSnapshot()
+    input.globals = { preview: { id: 'g', publishedAt: null, data: {} } }
+    input.globalSchema = { preview: { label: 'P', seo: false, fields: [] } }
+    expect(() => camelizeSnapshot(input, {})).toThrow(/preview/)
   })
 })

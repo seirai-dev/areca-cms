@@ -165,3 +165,53 @@ export default defineSiteContent({
     }
   })
 })
+
+describe('generateConfigSource: globals', () => {
+  const withGlobals: SiteContentConfig = {
+    siteKey: 'acme-site',
+    collections: {},
+    globals: {
+      companyInfo: {
+        label: 'Company info',
+        fields: [
+          { key: 'email', label: 'Email', type: 'text', required: true, group: 'Contact' },
+        ],
+      },
+      homePage: {
+        label: 'Home page',
+        seo: true,
+        previewPath: '/about',
+        fields: [{ key: 'heroTitle', label: 'Hero title', type: 'text' }],
+      },
+    },
+  }
+
+  it('writes a globals block with each section, its group and its seo and previewPath', () => {
+    const source = generateConfigSource(withGlobals)
+    expect(source).toContain('  globals: {\n')
+    expect(source).toContain("    companyInfo: {\n      label: 'Company info',\n")
+    expect(source).toContain("{ key: 'email', label: 'Email', type: 'text', required: true, group: 'Contact' },")
+    expect(source).toContain("    homePage: {\n      label: 'Home page',\n      seo: true,\n      previewPath: '/about',\n")
+  })
+
+  it('writes the globals block after the collections block', () => {
+    const source = generateConfigSource(withGlobals)
+    expect(source.indexOf('  collections:')).toBeLessThan(source.indexOf('  globals: {'))
+  })
+
+  it('omits the globals block when there are no globals', () => {
+    expect(generateConfigSource({ ...withGlobals, globals: {} })).not.toContain('globals')
+    expect(generateConfigSource({ siteKey: 'demo', collections: {} })).not.toContain('globals')
+  })
+
+  it('sorts globals by key', () => {
+    const source = generateConfigSource({
+      ...withGlobals,
+      globals: {
+        zeta: { fields: [] },
+        alpha: { fields: [] },
+      },
+    })
+    expect(source.indexOf('    alpha: {')).toBeLessThan(source.indexOf('    zeta: {'))
+  })
+})

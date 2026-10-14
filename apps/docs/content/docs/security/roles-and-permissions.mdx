@@ -15,6 +15,7 @@ Agency admins can:
 
 - Create, rename and delete clients, and add, configure and delete sites.
 - Define and change content types (the UI may say "content type" for a collection), including their fields and routes.
+- Create, change, enable, disable and delete site content sections (single sections of copy, such as company details), including their fields, SEO setting and preview path.
 - Set the deployment target for each site and store the deployment credentials for each client.
 - Create and rotate site tokens for the site projects.
 - Manage branding and AI settings for the whole instance.
@@ -32,6 +33,7 @@ Two rules apply to agency admins specifically:
 An owner runs publishing for one client. Owners can do everything an editor can, and also:
 
 - Mark entries as ready, move them back to draft, schedule and cancel schedules, archive them, and delete them.
+- Mark site content sections as ready, and schedule them. Owners can also restore earlier versions of a section.
 - Restore an earlier version of an entry.
 - Go live, roll back to an earlier release, and cancel a build that is still queued.
 - Delete files from the client's Library.
@@ -47,11 +49,12 @@ An editor writes content for one client:
 
 - See the client's content types and entries, and create new entries.
 - Edit and save drafts, and open a preview of a draft.
+- Edit site content sections, discard their drafts and preview them.
 - Upload files to the Library and edit their descriptions, including alt text.
 - Ask for AI SEO suggestions and alt text.
 - Connect an AI app to the site by approving it on the consent screen, or with a personal key. The app does what the editor can do, and the editor can disconnect it or revoke the key at any time. See [Connect AI](/docs/cms/connect-ai).
 
-Editors cannot mark entries as ready, schedule, archive, delete, restore, or go live. They cannot see People, Settings, or the activity log.
+Editors cannot mark entries or site content as ready, schedule, archive, delete, restore, or go live. They cannot see People, Settings, or the activity log.
 
 ## Summary
 
@@ -64,6 +67,9 @@ Editors cannot mark entries as ready, schedule, archive, delete, restore, or go 
 | Upload files and edit alt text | ✓ | ✓ | ✓ |
 | Connect an AI app (OAuth or personal key) | ✓ | ✓ | ✓ |
 | Mark as ready, schedule, archive, delete entries | – | ✓ | ✓ |
+| Edit and discard site content drafts | ✓ | ✓ | ✓ |
+| Mark site content as ready and schedule it | – | ✓ | ✓ |
+| Create and change site content sections | – | – | ✓ |
 | Restore earlier versions | – | ✓ | ✓ |
 | Let an AI app or key publish | – | ✓ | ✓ |
 | Go live and roll back | – | ✓ | ✓ |

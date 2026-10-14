@@ -38,7 +38,7 @@ For how tokens are stored and rotated, see [Tokens](/docs/security/tokens).
 | `GET` | `/api/sites/manifest` | Site token | Read the site's content definitions. |
 | `POST` | `/api/sites/manifest` | Schema token | Replace the site's content definitions. |
 | `GET` | `/api/sites/snapshot/current` | Site token | Read the current publication. |
-| `GET` | `/api/sites/preview?token=...` | Preview token | Read one draft entry. |
+| `GET` | `/api/sites/preview?token=...` | Preview token | Read one draft entry or site content section. |
 | `GET` | `/api/assets/file/...` | None | Serve a Library file. |
 | `GET` | `/api/health` | None | Liveness check. |
 | `GET` | `/api/health/ready` | None | Readiness check. |
@@ -47,7 +47,7 @@ The `/api/sites/` endpoints all return `Cache-Control: no-store`, and they are r
 
 ## GET /api/sites/manifest
 
-Returns the enabled collections for the site. Use it to see what the CMS has, for example to check that your config matches.
+Returns the enabled collections and site content sections for the site. Use it to see what the CMS has, for example to check that your config matches.
 
 **Request**
 
@@ -76,6 +76,8 @@ Returns the enabled collections for the site. Use it to see what the CMS has, fo
 
 Only enabled collections are listed. Each collection's `fields` always starts with the built-in `slug` field. Field objects use the same properties as in [Field types](/docs/sdk/field-types).
 
+Enabled site content sections are listed under `globals`, keyed by section key. Each has `label` (optional), `fields`, `seo` (optional) and `previewPath` (optional). Their fields have no `slug`, and may set `group`. The `globals` key is omitted when the site has no enabled sections. See [site content](/docs/sdk/globals).
+
 **Errors**
 
 | Status | Body | Cause |
@@ -85,7 +87,9 @@ Only enabled collections are listed. Each collection's `fields` always starts wi
 
 ## POST /api/sites/manifest
 
-Replaces the site's content definitions with the collections in the body. This is what `areca manifest push` sends. Use the schema token, not the site token.
+Replaces the site's content definitions with the collections and site content sections in the body. This is what `areca manifest push` sends. Use the schema token, not the site token.
+
+The push is a full sync. A body without `globals` disables every site content section, and their content is kept. A section left out of `globals` is disabled in the same way.
 
 **Request**
 
@@ -142,6 +146,8 @@ The CMS chooses the publication in this order:
 1. The publication of a build that is running or deploying for the site.
 2. Otherwise, the live publication.
 3. For a site in Demo mode, the demo publication.
+
+When the site has enabled site content sections, the response also has `globals` (keyed by raw section key, each with `id`, `publishedAt`, `data` and `seo` when SEO is on) and `globalSchema` (the schema of those sections). Both keys are absent when there are none. A site without sections has the same `hash` as before.
 
 **Request**
 
@@ -213,7 +219,7 @@ Each entry also has an `seo` object, which is omitted above for brevity. Snapsho
 
 ## GET /api/sites/preview
 
-Returns one draft entry, so you can preview it on your site before it goes live. Editors start a preview from the CMS. Read [Preview](/docs/cms/preview) for the editor's side.
+Returns one draft entry or site content section, so you can preview it on your site before it goes live. Editors start a preview from the CMS. Read [Preview](/docs/cms/preview) for the editor's side.
 
 **Request**
 
@@ -239,7 +245,23 @@ The preview token is signed and expires after one hour. Do not create tokens you
 }
 ```
 
-The `entry` is the draft version, with the same value shapes as a snapshot entry.
+The `entry` is the draft version, with the same value shapes as a snapshot entry. Entry responses have `"kind": "entry"`. Older CMS versions omit `kind`.
+
+A token for a site content section returns the section's draft, with no slug or route:
+
+```json
+{
+  "kind": "global",
+  "global": "homePage",
+  "entry": {
+    "id": "ent_12",
+    "publishedAt": null,
+    "data": { "heroIntro": "Draft intro" }
+  }
+}
+```
+
+`global` is the raw section key. The `entry` has the section's values and, when SEO is on, `seo`.
 
 **Errors**
 

@@ -1,5 +1,5 @@
 import { seoHead } from '@areca-cms/site-sdk'
-import type { SnapshotEntry } from '@areca-cms/site-sdk'
+import type { SeoMeta, SnapshotEntry } from '@areca-cms/site-sdk'
 
 export const SITE_NAME = 'Northbound Coffee Co.'
 export const SITE_DESCRIPTION =
@@ -47,4 +47,22 @@ export function pageHead(page: PageMeta): { meta: HeadMeta[] } {
 export function entryHead(entry: SnapshotEntry, fallback: PageMeta) {
   if (entry.seo) return seoHead(entry.seo, siteOptions)
   return pageHead(fallback)
+}
+
+/**
+ * Head for a site content section: its SEO block when the section has SEO on,
+ * otherwise the page fallback.
+ */
+export function sectionHead(seo: SeoMeta | null | undefined, fallback: PageMeta) {
+  if (seo) return seoHead(seo, siteOptions)
+  return pageHead(fallback)
+}
+
+/** Marks a head as a draft: not indexable, whatever the page's SEO block says. */
+export function noindexHead<H extends { meta: ReadonlyArray<object> }>(head: H): H {
+  const meta = head.meta.filter((entry) => (entry as { name?: string }).name !== 'robots')
+  return {
+    ...head,
+    meta: [...meta, { name: 'robots', content: 'noindex, nofollow' }],
+  } as H
 }

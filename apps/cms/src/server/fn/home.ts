@@ -78,6 +78,7 @@ export const getHomeActivityFn = createServerFn({
     .where(
       and(
         eq(entry.status, 'scheduled'),
+        eq(collection.kind, 'collection'),
         isNotNull(entry.scheduledAt),
         ...(scope ? [scope] : []),
       ),

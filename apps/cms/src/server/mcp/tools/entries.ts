@@ -22,6 +22,7 @@ import { McpNotFoundError } from '../errors'
 import {
   signPreviewToken,
   buildPreviewUrl,
+  buildGlobalPreviewUrl,
 } from '#/server/content/preview-token'
 
 import type { AssetLookup } from '../entry-format'
@@ -29,6 +30,7 @@ import {
   AGENT_STATUSES,
   collectAssetIds,
   formatEntry,
+  formatGlobal,
   formatSnapshotFields,
   ASSET_FILE_PREFIX,
   mergeSeo,
@@ -38,8 +40,14 @@ import {
   toStoredFields,
 } from '../entry-format'
 import type { McpActor } from '../keys'
-import { loadCollectionInSite, loadEntryInSite, loadSiteRow } from '../scope'
+import {
+  loadCollectionInSite,
+  loadContentInSite,
+  loadEntryInSite,
+  loadSiteRow,
+} from '../scope'
 import { releaseFlags } from '../release-flags'
+import type { ReleaseState } from '../release-state'
 import { loadReleaseState } from '../release-state'
 import { seoInputSchema, fieldsInputSchema, idSchema } from '../schemas'
 import type { ToolRegistry } from '../tool-kit'
@@ -50,7 +58,7 @@ const collectionKey = z
   .max(ID_MAX_LENGTH)
   .describe('Collection key from get_site_info, e.g. "posts".')
 
-const expectedVersion = z
+export const expectedVersion = z
   .number()
   .int()
   .positive()
@@ -66,7 +74,7 @@ function seoPatch(
   return seoPatchFromInput(seo)
 }
 
-async function assetLookupFor(
+export async function assetLookupFor(
   actor: McpActor,
   fields: Field[],
   inputs: Record<string, unknown>,
@@ -112,20 +120,53 @@ async function assetLookupForData(
   })
 }
 
+/** The content a preview link opens: a collection entry, or a site content section on its page. */
+type PreviewSource = {
+  kind: 'collection' | 'global'
+  key: string
+  previewPath: string | null
+}
+
 async function previewUrlFor(
   actor: McpActor,
-  collection: string,
+  source: PreviewSource,
   slug: string,
 ): Promise<string | null> {
   const siteRow = await loadSiteRow(actor)
   if (!siteRow.productionUrl) return null
+  if (source.kind === 'global') {
+    if (!source.previewPath) return null
+    const token = signPreviewToken({
+      siteId: siteRow.id,
+      global: source.key,
+      secret: siteRow.previewSecret,
+    })
+    return buildGlobalPreviewUrl(siteRow.productionUrl, source.previewPath, token)
+  }
   const token = signPreviewToken({
     siteId: siteRow.id,
-    collection,
+    collection: source.key,
     slug,
     secret: siteRow.previewSecret,
   })
-  return buildPreviewUrl(siteRow.productionUrl, collection, slug, token)
+  return buildPreviewUrl(siteRow.productionUrl, source.key, slug, token)
+}
+
+/** The live version of an entry as the production site serves it now, if it is live. */
+function liveEntryFor(
+  release: ReleaseState,
+  source: PreviewSource,
+  id: string,
+): { id?: string; data: Record<string, unknown> } | undefined {
+  const snapshot = release.liveSnapshot
+  if (!snapshot) return undefined
+  if (source.kind === 'global') {
+    const live = snapshot.globals?.[source.key]
+    return live?.id === id ? live : undefined
+  }
+  // A key can be missing from a snapshot taken before the collection existed.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+  return snapshot.collections[source.key]?.find((item) => item.id === id)
 }
 
 export async function formatStoredEntry(
@@ -135,17 +176,20 @@ export async function formatStoredEntry(
 ) {
   const row = await getEntry(id)
   if (!row) throw new McpNotFoundError('This entry no longer exists.')
-  const col = await loadCollectionInSite(actor, row.collectionKey)
-  const assets = await assetLookupForData(actor, col.fields, [
+  const content = await loadContentInSite(actor, row.collectionKey)
+  const assets = await assetLookupForData(actor, content.fields, [
     row.draftData,
     row.publishedData ?? {},
   ])
   const siteRow = await loadSiteRow(actor)
   const release = await loadReleaseState(actor.siteId)
+  const source: PreviewSource = {
+    kind: content.kind,
+    key: content.key,
+    previewPath: content.previewPath,
+  }
   const liveEntry = options.includePublished
-    ? release.liveSnapshot?.collections[row.collectionKey]?.find(
-        (item) => item.id === row.id,
-      )
+    ? liveEntryFor(release, source, row.id)
     : undefined
   if (liveEntry) {
     const keys = new Set<string>()
@@ -166,19 +210,23 @@ export async function formatStoredEntry(
     for (const [key, value] of liveAssets.byStorageKey)
       assets.byStorageKey.set(key, value)
   }
-  const formatted = formatEntry({
+  const input = {
     entry: row,
-    fields: col.fields,
-    ctx: { assets, assetUrl: (storageKey) => assetUrl({ storageKey }) },
+    fields: content.fields,
+    ctx: { assets, assetUrl: (storageKey: string) => assetUrl({ storageKey }) },
     release: releaseFlags(release, row.id),
     previewAvailable: Boolean(siteRow.productionUrl),
     includePublished: options.includePublished ?? false,
     liveFields: liveEntry ? formatSnapshotFields(liveEntry.data, assets) : null,
-  })
+  }
+  const formatted =
+    content.kind === 'global'
+      ? formatGlobal({ ...input, global: content })
+      : formatEntry(input)
   if (!options.withPreview) return formatted
   return {
     ...formatted,
-    previewUrl: await previewUrlFor(actor, row.collectionKey, row.slug),
+    previewUrl: await previewUrlFor(actor, source, row.slug),
   }
 }
 
@@ -383,7 +431,21 @@ export function registerEntryTools(registry: ToolRegistry): void {
     annotations: { readOnlyHint: true, idempotentHint: true },
     run: async (input, actor) => {
       const entry = await loadEntryInSite(actor, input.id)
-      const url = await previewUrlFor(actor, entry.collectionKey, entry.slug)
+      const content = await loadContentInSite(actor, entry.collectionKey)
+      if (content.kind === 'global' && !content.previewPath) {
+        throw new ValidationError([
+          {
+            path: '',
+            message:
+              'This site content has no preview page, so previews are not available. An agency admin can set its preview path in the CMS.',
+          },
+        ])
+      }
+      const url = await previewUrlFor(
+        actor,
+        { kind: content.kind, key: content.key, previewPath: content.previewPath },
+        entry.slug,
+      )
       if (!url) {
         throw new ValidationError([
           {
@@ -398,7 +460,7 @@ export function registerEntryTools(registry: ToolRegistry): void {
   })
 }
 
-function assertSiteImages(
+export function assertSiteImages(
   fields: Field[],
   data: EntryData,
   lookup: AssetLookup,

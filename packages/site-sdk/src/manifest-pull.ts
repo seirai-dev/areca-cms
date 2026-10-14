@@ -5,7 +5,12 @@ import { type ArecaClient, createArecaClient } from './client.js'
 import { manifestFromConfig } from './config.js'
 import { generateConfigSource } from './generate-config.js'
 import { loadConfig } from './load-config.js'
-import type { CollectionConfig, SiteContentConfig, SiteManifest } from './types.js'
+import type {
+  CollectionConfig,
+  GlobalConfig,
+  SiteContentConfig,
+  SiteManifest,
+} from './types.js'
 
 export class ManifestPullCancelledError extends Error {
   constructor() {
@@ -14,10 +19,15 @@ export class ManifestPullCancelledError extends Error {
   }
 }
 
-export type ManifestDiff = {
+export type KeyDiff = {
   added: string[]
   changed: string[]
   removed: string[]
+}
+
+export type ManifestDiff = KeyDiff & {
+  /** Site content sections. Only present when either side has any. */
+  globals?: KeyDiff
 }
 
 export type ManifestPullOptions = {
@@ -38,29 +48,43 @@ export type ManifestPullResult = {
 
 /**
  * Compares the local config (normalised through `manifestFromConfig`) with a
- * manifest fetched from the CMS. `changed` means the collection exists on both
- * sides but is not deep-equal.
+ * manifest fetched from the CMS. `changed` means the collection (or site
+ * content section) exists on both sides but is not deep-equal.
  */
 export function diffManifests(
   local: SiteContentConfig | undefined,
   remote: SiteManifest,
 ): ManifestDiff {
-  const localCollections = local ? manifestFromConfig(local).collections : {}
+  const normalized = local ? manifestFromConfig(local) : undefined
+  const diff: ManifestDiff = compareKeys(normalized?.collections ?? {}, remote.collections)
+
+  const localGlobals = normalized?.globals ?? {}
+  const remoteGlobals = remote.globals ?? {}
+  if (Object.keys(localGlobals).length > 0 || Object.keys(remoteGlobals).length > 0) {
+    diff.globals = compareKeys(localGlobals, remoteGlobals)
+  }
+  return diff
+}
+
+function compareKeys(
+  local: Record<string, CollectionConfig | GlobalConfig>,
+  remote: Record<string, CollectionConfig | GlobalConfig>,
+): KeyDiff {
   const added: string[] = []
   const changed: string[] = []
   const removed: string[] = []
 
-  for (const key of Object.keys(remote.collections).sort()) {
-    const before = localCollections[key]
+  for (const key of Object.keys(remote).sort()) {
+    const before = local[key]
     if (!before) {
       added.push(key)
-    } else if (!deepEqual(normalize(before), normalize(remote.collections[key] as CollectionConfig))) {
+    } else if (!deepEqual(normalize(before), normalize(remote[key]!))) {
       changed.push(key)
     }
   }
 
-  for (const key of Object.keys(localCollections).sort()) {
-    if (!remote.collections[key]) removed.push(key)
+  for (const key of Object.keys(local).sort()) {
+    if (!remote[key]) removed.push(key)
   }
 
   return { added, changed, removed }
@@ -71,6 +95,9 @@ export function formatManifestDiff(diff: ManifestDiff): string {
   for (const key of diff.added) lines.push(`  + ${key}`)
   for (const key of diff.changed) lines.push(`  ~ ${key}`)
   for (const key of diff.removed) lines.push(`  - ${key}`)
+  for (const key of diff.globals?.added ?? []) lines.push(`  + ${key} (site content)`)
+  for (const key of diff.globals?.changed ?? []) lines.push(`  ~ ${key} (site content)`)
+  for (const key of diff.globals?.removed ?? []) lines.push(`  - ${key} (site content)`)
   return lines.length > 0 ? lines.join('\n') : '  (no changes)'
 }
 
@@ -89,7 +116,9 @@ export async function manifestPull(options: ManifestPullOptions): Promise<Manife
   }
 
   const diff = diffManifests(existing, manifest)
-  const existingCount = existing ? Object.keys(existing.collections).length : 0
+  const existingCount = existing
+    ? Object.keys(existing.collections).length + Object.keys(existing.globals ?? {}).length
+    : 0
   const interactive = options.interactive ?? Boolean(process.stdin.isTTY)
 
   if (existingCount > 0 && options.yes !== true) {
@@ -113,6 +142,7 @@ export async function manifestPull(options: ManifestPullOptions): Promise<Manife
     // Local settings survive a re-render; only collections come from the CMS.
     ...(existing?.assets !== undefined ? { assets: existing.assets } : {}),
     collections: manifest.collections,
+    globals: manifest.globals,
   })
   writeFileSync(absConfigPath, source, 'utf8')
 
@@ -124,8 +154,8 @@ export async function manifestPull(options: ManifestPullOptions): Promise<Manife
   }
 }
 
-function normalize(collection: CollectionConfig): unknown {
-  return JSON.parse(JSON.stringify(collection)) as unknown
+function normalize(definition: CollectionConfig | GlobalConfig): unknown {
+  return JSON.parse(JSON.stringify(definition)) as unknown
 }
 
 function deepEqual(a: unknown, b: unknown): boolean {

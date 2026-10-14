@@ -18,6 +18,7 @@ import type { BuildJobStatus } from '#/lib/types'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
+import { canGoLive } from './go-live-gate'
 import { useGoLive } from './use-go-live'
 import { useReleaseStatus } from './use-release-status'
 import type { GoLiveState, ReleaseStatus } from './use-release-status'
@@ -146,6 +147,7 @@ export function IndeterminateBar({ className }: { className?: string }) {
 
 function GoLiveButton({
   canPublish,
+  blocked = false,
   onGoLive,
   pending,
   label = m.golive_go_live(),
@@ -156,6 +158,8 @@ function GoLiveButton({
   fullWidth = true,
 }: {
   canPublish: boolean
+  /** Sections block go live; the reason says to fix them, not who may publish. */
+  blocked?: boolean
   onGoLive: () => void
   pending: boolean
   label?: string
@@ -186,7 +190,7 @@ function GoLiveButton({
   if (canPublish) return button
   return (
     <Hint
-      label={editorPublishReason()}
+      label={blocked ? m.golive_blocked_reason() : editorPublishReason()}
       side="top"
       wrapDisabled
       className={fullWidth ? 'w-full' : undefined}
@@ -207,7 +211,7 @@ function GoLiveButton({
  */
 export function GoLiveTray({
   siteId,
-  canPublish,
+  canPublish: canPublishRole,
   collapsed = false,
 }: {
   siteId: string
@@ -215,6 +219,12 @@ export function GoLiveTray({
   collapsed?: boolean
 }) {
   const release = useReleaseStatus(siteId)
+  // A blocked site (site content never marked ready) cannot go live yet.
+  const blocked = (release.data?.blockers?.length ?? 0) > 0
+  const canPublish = canGoLive({
+    canPublish: canPublishRole,
+    blockers: release.data?.blockers,
+  })
   const { goLive, isPending } = useGoLive(siteId)
   const panel = usePanel()
   const reduce = useReducedMotion()
@@ -346,6 +356,7 @@ export function GoLiveTray({
                   />
                   <GoLiveButton
                     canPublish={canPublish}
+                    blocked={blocked}
                     pending={isPending}
                     onGoLive={() => void handleGoLive()}
                   />
@@ -362,6 +373,7 @@ export function GoLiveTray({
                   />
                   <GoLiveButton
                     canPublish={canPublish}
+                    blocked={blocked}
                     pending={isPending}
                     onGoLive={() => void handleGoLive()}
                   />
@@ -393,6 +405,7 @@ export function GoLiveTray({
                   </div>
                   <GoLiveButton
                     canPublish={canPublish}
+                    blocked={blocked}
                     pending={isPending}
                     variant="secondary"
                     label={m.golive_try_again()}

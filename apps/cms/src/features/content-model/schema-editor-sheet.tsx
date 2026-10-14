@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import {
+  Globe,
   Lock,
   Plus,
   SlidersHorizontal,
@@ -34,6 +35,7 @@ import { m } from '#/paraglide/messages'
 import { listCollectionsFn } from '#/server/fn/content'
 
 import { FieldFormPanel, FieldList } from './schema-fields'
+import type { SchemaKind } from './schema-drafts'
 import { useSchemaEditor } from './use-schema-editor'
 import type { CollectionRecord, SchemaSegment } from './use-schema-editor'
 
@@ -45,6 +47,10 @@ export type { CollectionRecord, SchemaSegment }
  * reorder, click to edit, type tiles for new ones); **Settings** holds the
  * name, key, route, the on/off switch and the danger zone. Opened from
  * Settings › Content, and from a collection's ⋯ › Edit structure.
+ *
+ * `kind="global"` edits a site content section instead: no slug row, no
+ * route or on/off switch (the section list has the switch), and Settings
+ * holds the SEO toggle and the preview path.
  */
 export function SchemaEditorSheet({
   open,
@@ -52,6 +58,7 @@ export function SchemaEditorSheet({
   siteId,
   collection,
   initialSegment,
+  kind = 'collection',
   onCreated,
   onDeleted,
 }: {
@@ -61,6 +68,7 @@ export function SchemaEditorSheet({
   /** `null` opens the editor in create mode. */
   collection: CollectionRecord | null
   initialSegment?: SchemaSegment
+  kind?: SchemaKind
   onCreated?: (key: string) => void
   onDeleted?: () => void
 }) {
@@ -70,9 +78,12 @@ export function SchemaEditorSheet({
     siteId,
     collection,
     initialSegment,
+    kind,
     onCreated,
     onDeleted,
   })
+  const isGlobal = kind === 'global'
+  const prefix = isGlobal ? 'global' : 'collection'
   const reduce = useReducedMotion()
   const collectionsQuery = useQuery({
     queryKey: queryKeys.collections(siteId),
@@ -84,11 +95,13 @@ export function SchemaEditorSheet({
     label: item.label,
   }))
 
-  const Icon = collection
-    ? collectionIcon(collection.key, collection.label)
-    : editor.label
-      ? collectionIcon(editor.key, editor.label)
-      : Stack
+  const Icon = isGlobal
+    ? Globe
+    : collection
+      ? collectionIcon(collection.key, collection.label)
+      : editor.label
+        ? collectionIcon(editor.key, editor.label)
+        : Stack
 
   const fieldCount = editor.fields.length
   const panelMotion = reduce
@@ -109,7 +122,7 @@ export function SchemaEditorSheet({
           else editor.requestClose()
         }}
         size="lg"
-        data-testid="collection-drawer"
+        data-testid={isGlobal ? 'global-drawer' : 'collection-drawer'}
         headerStart={
           <InsetIcon tone="accent" className="mt-0.5 size-9 rounded-[10px]">
             <Icon weight="fill" />
@@ -117,15 +130,24 @@ export function SchemaEditorSheet({
         }
         title={
           editor.creating
-            ? editor.label.trim() || m.settings_new_content_type()
+            ? editor.label.trim() ||
+              (isGlobal
+                ? m.globals_new_section()
+                : m.settings_new_content_type())
             : collection?.label
         }
         description={
           editor.creating ? (
-            m.content_schema_create_description()
+            isGlobal ? (
+              m.globals_schema_create_description()
+            ) : (
+              m.content_schema_create_description()
+            )
           ) : (
             <span className="text-mono">
-              {collection?.key} · {collection?.routePattern}
+              {isGlobal
+                ? collection?.key
+                : `${collection?.key} · ${collection?.routePattern}`}
             </span>
           )
         }
@@ -164,7 +186,7 @@ export function SchemaEditorSheet({
               </Button>
               <Button
                 type="button"
-                data-testid="save-collection"
+                data-testid={isGlobal ? 'save-global' : 'save-collection'}
                 loading={editor.saving}
                 disabled={!editor.dirty && !editor.creating}
                 onClick={editor.save}
@@ -172,8 +194,12 @@ export function SchemaEditorSheet({
                 {editor.saving
                   ? m.admin_saving()
                   : editor.creating
-                    ? m.content_schema_create()
-                    : m.admin_collection_save()}
+                    ? isGlobal
+                      ? m.globals_schema_create()
+                      : m.content_schema_create()
+                    : isGlobal
+                      ? m.globals_schema_save()
+                      : m.admin_collection_save()}
               </Button>
             </div>
           </div>
@@ -216,7 +242,9 @@ export function SchemaEditorSheet({
                         })}
                   </p>
                   <p className="text-callout text-text-secondary">
-                    {m.content_schema_fields_hint()}
+                    {isGlobal
+                      ? m.globals_schema_fields_hint()
+                      : m.content_schema_fields_hint()}
                   </p>
                 </div>
                 <Button
@@ -242,6 +270,7 @@ export function SchemaEditorSheet({
                       errors={editor.fieldErrors[editor.editing.index]}
                       pickingType={editor.editing.picking}
                       collectionKeys={collectionKeys}
+                      kind={kind}
                       onChange={(patch) =>
                         editor.editing &&
                         editor.patchField(editor.editing.index, patch)
@@ -263,6 +292,7 @@ export function SchemaEditorSheet({
                         editor.setEditing({ index, picking: false })
                       }
                       onRemove={editor.removeField}
+                      kind={kind}
                     />
                   </motion.div>
                 )}
@@ -272,21 +302,31 @@ export function SchemaEditorSheet({
             <div className="grid gap-6">
               <section className="grid gap-2">
                 <h3 className="px-1 text-overline text-text-muted">
-                  {m.content_schema_identity()}
+                  {isGlobal
+                    ? m.globals_schema_identity()
+                    : m.content_schema_identity()}
                 </h3>
                 <div className="grid gap-4 surface-card p-4">
                   <FormField
                     label={m.content_schema_name()}
-                    htmlFor="collection-label"
+                    htmlFor={`${prefix}-label`}
                     error={editor.labelError ?? undefined}
-                    hint={m.content_schema_name_hint()}
+                    hint={
+                      isGlobal
+                        ? m.globals_schema_name_hint()
+                        : m.content_schema_name_hint()
+                    }
                     required
                   >
                     <Input
-                      id="collection-label"
-                      data-testid="collection-label"
+                      id={`${prefix}-label`}
+                      data-testid={`${prefix}-label`}
                       value={editor.label}
-                      placeholder={m.content_schema_name_placeholder()}
+                      placeholder={
+                        isGlobal
+                          ? m.globals_schema_name_placeholder()
+                          : m.content_schema_name_placeholder()
+                      }
                       autoFocus={editor.creating}
                       aria-invalid={editor.labelError ? true : undefined}
                       onChange={(event) =>
@@ -296,11 +336,13 @@ export function SchemaEditorSheet({
                   </FormField>
                   <FormField
                     label={m.admin_collection_key()}
-                    htmlFor="collection-key"
+                    htmlFor={`${prefix}-key`}
                     hint={
                       editor.creating
                         ? m.content_schema_key_hint()
-                        : m.admin_collection_key_locked_hint()
+                        : isGlobal
+                          ? m.globals_schema_key_locked_hint()
+                          : m.admin_collection_key_locked_hint()
                     }
                     trailing={
                       editor.creating ? null : (
@@ -312,8 +354,8 @@ export function SchemaEditorSheet({
                     }
                   >
                     <Input
-                      id="collection-key"
-                      data-testid="collection-key"
+                      id={`${prefix}-key`}
+                      data-testid={`${prefix}-key`}
                       readOnly={!editor.creating}
                       className="font-mono text-[13px]"
                       spellCheck={false}
@@ -324,55 +366,107 @@ export function SchemaEditorSheet({
                       }
                     />
                   </FormField>
-                  <FormField
-                    label={m.admin_collection_route()}
-                    htmlFor="collection-route"
-                    hint={m.content_schema_route_hint()}
-                  >
-                    <Input
-                      id="collection-route"
-                      data-testid="collection-route"
-                      className="font-mono text-[13px]"
-                      spellCheck={false}
-                      autoCapitalize="off"
-                      placeholder="/pages/$slug"
-                      value={editor.routePattern}
-                      onChange={(event) =>
-                        editor.patchMeta({ routePattern: event.target.value })
-                      }
-                    />
-                  </FormField>
+                  {isGlobal ? null : (
+                    <FormField
+                      label={m.admin_collection_route()}
+                      htmlFor="collection-route"
+                      hint={m.content_schema_route_hint()}
+                    >
+                      <Input
+                        id="collection-route"
+                        data-testid="collection-route"
+                        className="font-mono text-[13px]"
+                        spellCheck={false}
+                        autoCapitalize="off"
+                        placeholder="/pages/$slug"
+                        value={editor.routePattern}
+                        onChange={(event) =>
+                          editor.patchMeta({ routePattern: event.target.value })
+                        }
+                      />
+                    </FormField>
+                  )}
                 </div>
               </section>
 
-              <section className="grid gap-2">
-                <h3 className="px-1 text-overline text-text-muted">
-                  {m.content_schema_availability()}
-                </h3>
-                <label className="flex cursor-pointer items-center justify-between gap-4 surface-card px-4 py-3.5">
-                  <span className="flex min-w-0 items-center gap-3">
-                    <InsetIcon tone={editor.enabled ? 'success' : 'neutral'}>
-                      <SlidersHorizontal />
-                    </InsetIcon>
-                    <span className="grid gap-0.5">
-                      <span className="text-[14px] leading-5 font-medium text-text-primary">
-                        {editor.enabled
-                          ? m.content_schema_on()
-                          : m.content_schema_off()}
+              {isGlobal ? (
+                <section className="grid gap-2">
+                  <h3 className="px-1 text-overline text-text-muted">
+                    {m.globals_seo_section()}
+                  </h3>
+                  <div className="grid gap-4 surface-card p-4">
+                    <label className="flex cursor-pointer items-center justify-between gap-4">
+                      <span className="grid gap-0.5">
+                        <span className="text-[14px] leading-5 font-medium text-text-primary">
+                          {m.globals_seo_label()}
+                        </span>
+                        <span className="text-callout text-text-secondary">
+                          {m.globals_seo_hint()}
+                        </span>
                       </span>
-                      <span className="text-callout text-text-secondary">
-                        {m.content_schema_enabled_hint()}
+                      <Switch
+                        checked={editor.seo}
+                        onCheckedChange={editor.setSeo}
+                        aria-label={m.globals_seo_label()}
+                        data-testid="global-seo"
+                      />
+                    </label>
+                    <FormField
+                      label={m.globals_preview_path_label()}
+                      htmlFor="global-preview-path"
+                      error={editor.previewPathError ?? undefined}
+                      hint={m.globals_preview_path_hint()}
+                    >
+                      <Input
+                        id="global-preview-path"
+                        data-testid="global-preview-path"
+                        className="font-mono text-[13px]"
+                        spellCheck={false}
+                        autoCapitalize="off"
+                        placeholder="/about"
+                        aria-invalid={
+                          editor.previewPathError ? true : undefined
+                        }
+                        value={editor.previewPath}
+                        onChange={(event) =>
+                          editor.patchMeta({ previewPath: event.target.value })
+                        }
+                      />
+                    </FormField>
+                  </div>
+                </section>
+              ) : null}
+
+              {isGlobal ? null : (
+                <section className="grid gap-2">
+                  <h3 className="px-1 text-overline text-text-muted">
+                    {m.content_schema_availability()}
+                  </h3>
+                  <label className="flex cursor-pointer items-center justify-between gap-4 surface-card px-4 py-3.5">
+                    <span className="flex min-w-0 items-center gap-3">
+                      <InsetIcon tone={editor.enabled ? 'success' : 'neutral'}>
+                        <SlidersHorizontal />
+                      </InsetIcon>
+                      <span className="grid gap-0.5">
+                        <span className="text-[14px] leading-5 font-medium text-text-primary">
+                          {editor.enabled
+                            ? m.content_schema_on()
+                            : m.content_schema_off()}
+                        </span>
+                        <span className="text-callout text-text-secondary">
+                          {m.content_schema_enabled_hint()}
+                        </span>
                       </span>
                     </span>
-                  </span>
-                  <Switch
-                    checked={editor.enabled}
-                    onCheckedChange={editor.setEnabled}
-                    aria-label={m.admin_collection_enabled()}
-                    data-testid="collection-enabled"
-                  />
-                </label>
-              </section>
+                    <Switch
+                      checked={editor.enabled}
+                      onCheckedChange={editor.setEnabled}
+                      aria-label={m.admin_collection_enabled()}
+                      data-testid="collection-enabled"
+                    />
+                  </label>
+                </section>
+              )}
 
               {!editor.creating && collection ? (
                 <section className="grid gap-2">
@@ -381,20 +475,28 @@ export function SchemaEditorSheet({
                   </h3>
                   <div className="flex flex-col gap-3 rounded-card border border-border-error/40 bg-background-surface p-4 sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-callout text-text-secondary">
-                      {m.sites_delete_collection_description({
-                        label: collection.label,
-                      })}
+                      {isGlobal
+                        ? m.globals_delete_description({
+                            label: collection.label,
+                          })
+                        : m.sites_delete_collection_description({
+                            label: collection.label,
+                          })}
                     </p>
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
                       className="shrink-0 text-text-error hover:bg-status-error-bg hover:text-text-error"
-                      data-testid="delete-collection"
+                      data-testid={
+                        isGlobal ? 'delete-global' : 'delete-collection'
+                      }
                       onClick={() => editor.setDeleteOpen(true)}
                     >
                       <Trash />
-                      {m.content_schema_delete()}
+                      {isGlobal
+                        ? m.globals_delete_button()
+                        : m.content_schema_delete()}
                     </Button>
                   </div>
                 </section>
@@ -435,11 +537,23 @@ export function SchemaEditorSheet({
       <ConfirmDialog
         open={editor.deleteOpen}
         onOpenChange={editor.setDeleteOpen}
-        title={m.sites_delete_collection_title()}
-        description={m.sites_delete_collection_description({
-          label: collection?.label ?? editor.key,
-        })}
-        confirmLabel={m.content_schema_delete()}
+        title={
+          isGlobal
+            ? m.globals_delete_title()
+            : m.sites_delete_collection_title()
+        }
+        description={
+          isGlobal
+            ? m.globals_delete_description({
+                label: collection?.label ?? editor.key,
+              })
+            : m.sites_delete_collection_description({
+                label: collection?.label ?? editor.key,
+              })
+        }
+        confirmLabel={
+          isGlobal ? m.globals_delete_button() : m.content_schema_delete()
+        }
         confirmText={editor.key}
         variant="destructive"
         onConfirm={async () => {

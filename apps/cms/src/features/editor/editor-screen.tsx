@@ -28,6 +28,7 @@ import {
   entryUiStatus,
   isEditedSinceReady,
 } from '#/features/golive/entry-live-state'
+import { canGoLive } from '#/features/golive/go-live-gate'
 import { useReleaseStatus } from '#/features/golive/use-release-status'
 import { usePanel } from '#/features/shell/panel'
 import { useIsMobile, useMediaQuery } from '#/hooks/use-mobile'
@@ -461,6 +462,12 @@ function EntryEditorView({
         }
         onMarkReady={editor.markReady}
         onGoLiveNow={() => void goLiveNow()}
+        goLiveBlocked={
+          !canGoLive({
+            canPublish: canManage,
+            blockers: release.data?.blockers,
+          })
+        }
         onSchedule={() => setScheduleOpen(true)}
         onCancelSchedule={editor.cancelSchedule}
         onUnpublish={editor.unpublish}

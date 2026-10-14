@@ -4,6 +4,10 @@ import '@tanstack/react-start'
 import { z } from 'zod'
 
 import {
+  GLOBAL_GROUP_MAX_LENGTH,
+  GLOBAL_PREVIEW_PATH_MAX_LENGTH,
+} from '#/lib/globals'
+import {
   FIELD_DESCRIPTION_MAX_LENGTH,
   FIELD_LABEL_MAX_LENGTH,
   FIELD_MAX_OPTIONS,
@@ -15,6 +19,7 @@ import {
 } from '#/lib/content-limits'
 import type { FieldType, SiteManifest } from '#/lib/types'
 import { listCollections, syncManifest } from '#/server/content/collections'
+import { listGlobals } from '#/server/content/globals'
 import { authenticateSite } from '#/server/content/site-auth'
 
 const fieldTypes = [
@@ -46,6 +51,11 @@ const fieldSchema = z.strictObject({
   after: z.string().min(1).max(FIELD_OPTION_MAX_LENGTH).optional(),
 })
 
+/** Site content fields are collection fields plus an editor-only group heading. */
+const globalFieldSchema = fieldSchema.extend({
+  group: z.string().min(1).max(GLOBAL_GROUP_MAX_LENGTH).optional(),
+})
+
 const manifestSchema = z.strictObject({
   collections: z.record(
     z.string().refine(isSafeIdentifier, 'Unsafe identifier'),
@@ -55,6 +65,17 @@ const manifestSchema = z.strictObject({
       fields: z.array(fieldSchema).max(MAX_FIELDS_PER_COLLECTION),
     }),
   ),
+  globals: z
+    .record(
+      z.string().refine(isSafeIdentifier, 'Unsafe identifier'),
+      z.strictObject({
+        label: z.string().max(FIELD_LABEL_MAX_LENGTH).optional(),
+        fields: z.array(globalFieldSchema).max(MAX_FIELDS_PER_COLLECTION),
+        seo: z.boolean().optional(),
+        previewPath: z.string().max(GLOBAL_PREVIEW_PATH_MAX_LENGTH).optional(),
+      }),
+    )
+    .optional(),
 })
 
 const NO_STORE = { 'Cache-Control': 'no-store' }
@@ -113,7 +134,22 @@ export async function getSitesManifest(request: Request) {
     }
   }
 
-  return json({ collections } satisfies SiteManifest)
+  const sections = await listGlobals(site.id, { enabledOnly: true })
+  const globals: NonNullable<SiteManifest['globals']> = {}
+  for (const row of sections) {
+    globals[row.key] = {
+      label: row.label,
+      fields: row.fields,
+      seo: row.seoEnabled,
+      ...(row.previewPath ? { previewPath: row.previewPath } : {}),
+    }
+  }
+
+  return json({
+    collections,
+    // Omitted when there are no enabled sections.
+    ...(Object.keys(globals).length > 0 ? { globals } : {}),
+  } satisfies SiteManifest)
 }
 
 export async function postSitesManifest(request: Request) {
@@ -148,6 +184,16 @@ export async function postSitesManifest(request: Request) {
     Object.keys(body.collections).some((key) => !isSafeIdentifier(key))
   ) {
     return json({ error: 'Invalid collection identifier' }, 400)
+  }
+  if (
+    body &&
+    typeof body === 'object' &&
+    'globals' in body &&
+    body.globals &&
+    typeof body.globals === 'object' &&
+    Object.keys(body.globals).some((key) => !isSafeIdentifier(key))
+  ) {
+    return json({ error: 'Invalid site content identifier' }, 400)
   }
   if (
     body &&

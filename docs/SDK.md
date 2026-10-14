@@ -121,6 +121,38 @@ frontend route pattern; it does not generate routes. Add frontend routes
 yourself. See [Content schema](CONTENT_SCHEMA.md) for every field type,
 settings, key limits, and synchronization behavior.
 
+## Site content
+
+Site content sections hold single sets of values, such as company details or home-page copy. Declare them under `globals` next to `collections`:
+
+```ts
+export default defineSiteContent({
+  siteKey: "acme-site",
+  collections: { /* ... */ },
+  globals: {
+    companyInfo: {
+      label: "Company info",
+      fields: [
+        { key: "name", label: "Name", type: "text", required: true },
+        { key: "email", label: "Email", type: "text", group: "Contact" },
+      ],
+    },
+    homePage: { label: "Home page", seo: true, previewPath: "/", fields: [/* ... */] },
+  },
+});
+```
+
+`seo` and `previewPath` are optional. The schema rules are in [Content schema](CONTENT_SCHEMA.md#site-content-globals). After a pull, read the values with `content.globals`:
+
+```ts
+import { content } from "../generated/content/areca.gen";
+
+const company = content.globals.companyInfo; // { name, email, ... }
+const home = content.globals.homePage; // { heroIntro, ..., $seo } when seo is on
+```
+
+Each section comes back as a flat object of its values. A section with `seo: true` also has `$seo`, the same shape as an entry's `seo`. Sections the CMS has not made ready yet can be `{}` when they have no required fields. See the [site content guide](/docs/sdk/globals) in the documentation site for the full API, and for how to show a draft.
+
 ## Send the schema to the CMS
 
 From the website project root, run:
@@ -250,7 +282,7 @@ only offer the operators that fit each field type. `get` and `byId` return
 Collection and field names are camelCase in code. The config keeps the raw keys,
 so `blog-posts` in `areca.config.ts` is `content.blogPosts` and `cover_image` is
 `entry.data.coverImage`. The pull refuses keys that collide after this conversion,
-and the names `resolve`, `href` and `preview` cannot be collection keys. See
+and the names `resolve`, `href`, `preview`, `globals` and `previewGlobals` cannot be collection keys. See
 the typed content guide in the documentation site (`apps/docs/content/docs/sdk/typed-content.mdx`).
 
 Each entry has `id`, `slug`, `publishedAt`, `collection`, `data` and optional
@@ -421,6 +453,15 @@ helper returns `X-Robots-Tag: noindex, nofollow` and `Cache-Control: no-store`.
 Also set a robots meta tag if your framework renders HTML metadata. Never cache
 or log the preview token or draft response. Show a useful message for invalid
 or expired tokens and entries that no longer exist.
+
+A preview token can also be for a site content section. Its result has `kind: "global"` and a `global` key instead of `collection` and `slug`. Use `content.previewGlobals()` to overlay the draft on the published values:
+
+```ts
+const preview = await content.previewGlobals(token); // string, PreviewResult, or null
+// { globals, previewing, complete, issues }
+```
+
+`previewGlobals` takes the token string, a `PreviewResult` from `getPreviewEntry`, or `null`/`undefined`. It returns `globals` (always typed like `content.globals`), `previewing` (the camelCase key of the section the token targets, or `null`), `complete`, and `issues`. A valid draft is overlaid on its section. An incomplete draft (for example a cleared required image) keeps the published section, sets `complete` to `false`, and lists the problems in `issues` as `<field>: <problem>`. A falsy value or an entry token returns the published `content.globals` with `previewing: null` and `complete: true`. Preview a section on the page it is shown on: the CMS opens `<site><previewPath>?arecaPreview=<token>` for a section with a `previewPath`, so the route reads `arecaPreview` from the query string.
 
 The demo route at `/__preview/$collection/$slug` shows complete TanStack Start
 handling, including query validation, server-side fetch, response headers, and

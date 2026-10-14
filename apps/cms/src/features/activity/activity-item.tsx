@@ -5,7 +5,9 @@ import { CheckCircle, XCircle } from '@phosphor-icons/react'
 import { SystemAvatar, UserAvatar } from '#/components/ui/avatar'
 import { Tag } from '#/components/ui/tag'
 import { RelativeTime, TimelineItem } from '#/components/ui/timeline'
+import { GLOBAL_ROUTE } from '#/features/globals/site-content'
 import { queryKeys } from '#/lib/content/query-keys'
+import { GLOBAL_ENTRY_SLUG } from '#/lib/globals'
 import type { EntryData } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 import { getEntryFn } from '#/server/fn/content'
@@ -20,6 +22,8 @@ type EntryRef = {
   title: string | null
   collectionKey: string
   siteId: string
+  /** A site content section: its key is `collectionKey`, the link goes to the section. */
+  global: boolean
 }
 
 /** A readable title from entry data without its schema. */
@@ -63,6 +67,7 @@ export function useActivityEntries(rows: ReadonlyArray<ActivityLike>) {
       title: titleOf(entry.draftData),
       collectionKey: entry.collectionKey,
       siteId: entry.siteId,
+      global: entry.slug === GLOBAL_ENTRY_SLUG,
     })
   })
   return map
@@ -94,12 +99,22 @@ export function ActivityTimelineItem({
   const target = parts.target ? (
     parts.named && entry ? (
       <Link
-        to="/sites/$siteId/c/$collectionKey/$entryId"
-        params={{
-          siteId: entry.siteId,
-          collectionKey: entry.collectionKey,
-          entryId: row.targetId,
-        }}
+        {...(entry.global
+          ? {
+              to: GLOBAL_ROUTE,
+              params: {
+                siteId: entry.siteId,
+                globalKey: entry.collectionKey,
+              },
+            }
+          : {
+              to: '/sites/$siteId/c/$collectionKey/$entryId' as const,
+              params: {
+                siteId: entry.siteId,
+                collectionKey: entry.collectionKey,
+                entryId: row.targetId,
+              },
+            })}
         className="text-text-primary hover:underline"
       >
         {parts.target}

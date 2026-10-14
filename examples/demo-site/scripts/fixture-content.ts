@@ -8,8 +8,10 @@ import {
   type ArecaClient,
   type CollectionConfig,
   type RichTextValue,
+  type SeoMeta,
   type Snapshot,
   type SnapshotEntry,
+  type SnapshotGlobal,
 } from '@areca-cms/site-sdk'
 import { pullContent } from '@areca-cms/site-sdk/pull'
 import config from '../areca.config.ts'
@@ -20,6 +22,10 @@ const CONTENT_OUT = 'src/generated/content'
 const CONTENT_DIR = process.env.ARECA_CONTENT_DIR ?? join(process.cwd(), CONTENT_OUT)
 
 export const FIXTURE_PUBLICATION_ID = 'pub_fixture_northbound'
+
+/** The brand name in the copy below; the CMS company info section holds the same value. */
+const COMPANY_NAME = 'Northbound Coffee Co.'
+const HOME_DESCRIPTION = 'Small-batch specialty coffee, roasted in Bergen, Norway on a 15 kg Giesen.'
 
 export const FIXTURE_SLUGS = {
   articles: [
@@ -120,6 +126,34 @@ function publicationSchema(): Record<string, CollectionConfig> {
       },
     ]),
   )
+}
+
+/** A complete SEO block, as the CMS resolves it for a site content section with SEO on. */
+function seo(title: string, description: string): SeoMeta {
+  return {
+    title,
+    description,
+    canonicalUrl: null,
+    robots: { index: true, follow: true, content: 'index, follow' },
+    focusKeyphrase: null,
+    openGraph: {
+      type: 'website',
+      title,
+      description,
+      url: null,
+      siteName: COMPANY_NAME,
+      image: null,
+      publishedTime: null,
+      modifiedTime: null,
+    },
+    twitter: { card: 'summary', title, description, image: null },
+    author: null,
+    summary: null,
+    keyTakeaways: [],
+    faq: [],
+    about: [],
+    jsonLd: [],
+  }
 }
 
 /** Serves one snapshot to `pullContent`; the other client calls are never made. */
@@ -314,6 +348,57 @@ export async function writeFixtureContent(outDir = CONTENT_DIR, mediaDir = MEDIA
     },
   ]
 
+  const globals: Record<string, SnapshotGlobal> = {
+    companyInfo: {
+      id: 'ent_global_company_info',
+      publishedAt: '2026-10-01T10:00:00.000Z',
+      data: {
+        name: COMPANY_NAME,
+        tagline:
+          'Buying direct from the farms we know, roasting small batches by hand on the Bergen coast.',
+        address: 'Strandkaien 14, 5013 Bergen, Norway',
+        email: 'hello@northbound.example',
+        phone: null,
+        instagramUrl: null,
+        foundedYear: 2016,
+      },
+    },
+    homePage: {
+      id: 'ent_global_home_page',
+      publishedAt: '2026-10-01T10:00:00.000Z',
+      data: {
+        heroEyebrow: 'Roasters in Bergen, Norway',
+        heroIntro: `${COMPANY_NAME} buys directly from producers and roasts every lot in small batches on a 15 kg Giesen. Here is what we have on the shelf this season.`,
+        featuredCoffee: { collection: 'coffees', slug: ethiopia, id: 'ent_coffee_ethiopia' },
+      },
+      seo: seo('Specialty coffee roasted in Bergen', HOME_DESCRIPTION),
+    },
+    aboutPage: {
+      id: 'ent_global_about_page',
+      publishedAt: '2026-10-01T10:00:00.000Z',
+      data: {
+        heading: 'A small roastery on the Bergen harbour.',
+        body: richText(
+          [
+            'Northbound Coffee Co. started in 2016 with one secondhand roaster and a notebook of cupping scores.',
+            'We are still a small team in Bergen, Norway, and we still roast every batch ourselves.',
+            '> We set aside any batch that is not ready.',
+            'We roast on a 15 kg Giesen in batches small enough to watch closely. That lets us profile each lot by hand, slow the roast when a coffee needs time, and set aside any batch that is not ready. Roasted coffee is sold within a few weeks, with the roast date on the bag.',
+            'We buy direct. Our buyer agrees prices with producers before harvest, cups samples at origin and shares roasting feedback both ways. Read more about the farms in the [journal](/journal), or meet the [people](/team) behind each lot.',
+          ].join('\n\n'),
+        ),
+        image: imageValue('heroHuila', 'Rows of coffee trees on a hillside in Huila'),
+        foundedYear: 2016,
+        roasterCapacityKg: 15,
+        originsCount: 3,
+      },
+      seo: seo(
+        'About',
+        'Northbound Coffee Co. is a small roastery in Bergen, Norway, founded in 2016. We buy direct and roast in small batches.',
+      ),
+    },
+  }
+
   const snapshot: Snapshot = {
     publicationId: FIXTURE_PUBLICATION_ID,
     siteKey: config.siteKey,
@@ -321,6 +406,8 @@ export async function writeFixtureContent(outDir = CONTENT_DIR, mediaDir = MEDIA
     hash: 'fixture-northbound-sha256',
     collections: { articles, coffees, authors },
     schema: publicationSchema(),
+    globals,
+    globalSchema: manifestFromConfig(config).globals ?? {},
   }
 
   mkdirSync(outDir, { recursive: true })
@@ -336,6 +423,6 @@ const isCli = process.argv[1]?.replace(/\\/g, '/').endsWith('scripts/fixture-con
 if (isCli) {
   await writeFixtureContent()
   console.log(
-    `Wrote fixture publication ${FIXTURE_PUBLICATION_ID} (articles, coffees, authors) and areca.gen.ts to ${CONTENT_DIR}`,
+    `Wrote fixture publication ${FIXTURE_PUBLICATION_ID} (articles, coffees, authors, site content) and areca.gen.ts to ${CONTENT_DIR}`,
   )
 }

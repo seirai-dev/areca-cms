@@ -23,13 +23,67 @@ import {
 const loose = { strict: { output: false } as const }
 const slugInput = z.object({ slug: z.string().min(1) })
 
-/** Home: the newest journal entries and the first coffees in the shop order. */
-export const loadHome = createServerFn({ method: 'GET', ...loose }).handler(
-  () => ({
-    articles: getArticles().slice(0, 3),
-    coffees: getCoffees().slice(0, 3),
-  }),
+/**
+ * Search params of pages that can show a site content draft. The CMS opens
+ * `<page>?arecaPreview=<token>`; anything else is ignored.
+ */
+export const sitePreviewSearch = z.object({
+  arecaPreview: z.string().optional().catch(undefined),
+})
+const previewInput = z.object({ arecaPreview: z.string().optional() })
+
+/**
+ * Site content for a page that shows `section`. A token for that section
+ * shows its draft (`preview: true`); when the draft is incomplete, the published
+ * values stay and `incomplete: true` is set. A missing, invalid or other-section
+ * token serves the published values. Any request with a token is not indexable
+ * and not cacheable.
+ */
+async function readGlobals(token: string | undefined, section: 'homePage' | 'aboutPage') {
+  if (!token) return { globals: content.globals, preview: false, incomplete: false, noindex: false }
+  const headers = previewHeaders()
+  setResponseHeader('X-Robots-Tag', headers['X-Robots-Tag'])
+  setResponseHeader('Cache-Control', headers['Cache-Control'])
+  try {
+    // previewGlobals fetches the token once. Its `previewing` says which section
+    // the token targets; only that section's page is changed by the preview.
+    const { globals, previewing, complete } = await content.previewGlobals(token)
+    if (previewing === section) {
+      return { globals, preview: true, incomplete: !complete, noindex: true }
+    }
+  } catch {
+    // An expired or mistyped link shows the published page instead of an error.
+  }
+  return { globals: content.globals, preview: false, incomplete: false, noindex: true }
+}
+
+/** Company details for the header and footer on every page. */
+export const loadCompanyInfo = createServerFn({ method: 'GET', ...loose }).handler(
+  () => ({ company: content.globals.companyInfo }),
 )
+
+/** Home: hero copy, the featured coffee, the newest journal entries and the first coffees in the shop order. */
+export const loadHome = createServerFn({ method: 'GET', ...loose })
+  .validator(previewInput)
+  .handler(async ({ data }) => {
+    const { globals, preview, incomplete, noindex } = await readGlobals(data.arecaPreview, 'homePage')
+    return {
+      home: globals.homePage,
+      featuredCoffee: content.resolve(globals.homePage.featuredCoffee),
+      articles: getArticles().slice(0, 3),
+      coffees: getCoffees().slice(0, 3),
+      preview,
+      incomplete,
+      noindex,
+    }
+  })
+
+export const loadAbout = createServerFn({ method: 'GET', ...loose })
+  .validator(previewInput)
+  .handler(async ({ data }) => {
+    const { globals, preview, incomplete, noindex } = await readGlobals(data.arecaPreview, 'aboutPage')
+    return { about: globals.aboutPage, preview, incomplete, noindex }
+  })
 
 export const loadCoffees = createServerFn({ method: 'GET', ...loose }).handler(
   () => getCoffees(),

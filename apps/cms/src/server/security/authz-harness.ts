@@ -32,6 +32,7 @@ import { createEntry } from '#/server/content/entries'
 import { ForbiddenError, NotFoundError } from '#/server/content/errors'
 import {
   createTestCollection,
+  createTestGlobal,
   createTestSite,
   sampleRichText,
 } from '#/server/content/test-utils'
@@ -227,6 +228,14 @@ export async function seedWorld() {
     })
   }
 
+  async function freshGlobal(side: Side = 'X', key?: string) {
+    const { ctx } = sides[side]
+    return createTestGlobal(ctx.site.id, {
+      key: key ?? `g${crypto.randomUUID().replace(/-/g, '').slice(0, 8)}`,
+      label: 'Company info',
+    })
+  }
+
   async function freshAsset(side: Side = 'X') {
     const { ctx } = sides[side]
     const [row] = await db
@@ -362,16 +371,14 @@ export async function seedWorld() {
   for (const actor of ['adminMfa', 'adminStale'] as const) {
     const principal = sessions[actor]!
     const id = `local-mfa:${principal.session.id}`
-    await db
-      .insert(verification)
-      .values({
-        id,
-        identifier: id,
-        value: principal.user.id,
-        createdAt: principal.session.createdAt,
-        updatedAt: principal.session.createdAt,
-        expiresAt: principal.session.expiresAt,
-      })
+    await db.insert(verification).values({
+      id,
+      identifier: id,
+      value: principal.user.id,
+      createdAt: principal.session.createdAt,
+      updatedAt: principal.session.createdAt,
+      expiresAt: principal.session.expiresAt,
+    })
   }
 
   // Fixtures every tenant owns ----------------------------------------------
@@ -454,6 +461,7 @@ export async function seedWorld() {
       org: freshOrg,
       site: freshSite,
       collection: freshCollection,
+      global: freshGlobal,
       asset: freshAsset,
       publication: freshPublication,
       job: freshJob,

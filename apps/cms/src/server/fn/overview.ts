@@ -90,7 +90,12 @@ export const getSitesOverviewFn = createServerFn({
       count: sql<number>`cast(count(*) as int)`,
     })
     .from(collection)
-    .where(inArray(collection.siteId, siteIds))
+    .where(
+      and(
+        inArray(collection.siteId, siteIds),
+        eq(collection.kind, 'collection'),
+      ),
+    )
     .groupBy(collection.siteId)
 
   const entryCounts = await db

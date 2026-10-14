@@ -1,76 +1,138 @@
 import { resolve } from 'node:path'
-import { camelizeEntry, toCamelKey } from './camel-case.js'
+import { camelizeData, camelizeEntry, toCamelKey } from './camel-case.js'
 import { createArecaClient, type ArecaClient } from './client.js'
 import { isReservedCollectionKey } from './identifiers.js'
 import { getPreviewEntry } from './preview.js'
-import { readContent, readContentManifest } from './pull.js'
+import { readContent, readContentManifest, readGlobalsFile } from './pull.js'
 import type {
   CollectionKey,
   Content,
   ContentSchema,
+  GlobalSchema,
+  GlobalKey,
+  Globals,
+  GlobalsPreview,
   PreviewEntry,
 } from './schema-types.js'
-import type { Field, PulledContentManifest, SnapshotEntry } from './types.js'
+import type {
+  Field,
+  PreviewResult,
+  PulledContentManifest,
+  SnapshotEntry,
+  SnapshotGlobal,
+} from './types.js'
 import { entryIssues } from './validate-snapshot.js'
+
+/** What the generated schema says about one field, read without type parameters. */
+type LooseField = {
+  key: string
+  type: string
+  label?: string
+  required?: boolean
+  options?: readonly string[]
+  collection?: string
+}
 
 /** What the generated schema says about one collection, read without type parameters. */
 type LooseCollection = {
   key: string
   label?: string
   route: string
-  fields: Record<
-    string,
-    {
-      key: string
-      type: string
-      label?: string
-      required?: boolean
-      options?: readonly string[]
-      collection?: string
-    }
-  >
+  fields: Record<string, LooseField>
+}
+
+/** What the generated `globalSchema` says about one site content section. */
+type LooseGlobal = {
+  key: string
+  label?: string
+  seo: boolean
+  previewPath?: string
+  fields: Record<string, LooseField>
 }
 
 type Row = SnapshotEntry
 type Condition = Record<string, unknown>
 type Criteria = Array<[string, 'asc' | 'desc']>
 
+/** Cache slot for the site content of a generation. Collection keys never start with `_`. */
+const GLOBALS_SLOT = '_globals'
+
 /**
  * Typed content object bound to a pulled content directory (Node only).
- * `schema` comes from the generated `areca.gen.ts`. Reads happen per call,
- * so a new `areca pull` is picked up without restarting the process.
+ * `schema` and `globalSchema` come from the generated `areca.gen.ts`. Reads
+ * happen per call, so a new `areca pull` is picked up without restarting the
+ * process.
  */
-export function createContent<const S extends ContentSchema>(options: {
+export function createContent<
+  const S extends ContentSchema,
+  const G extends GlobalSchema = GlobalSchema,
+>(options: {
   schema: S
+  globalSchema?: G
   dir: string
-}): Content<S> {
+}): Content<S, G> {
   const schema = options.schema as unknown as Record<string, LooseCollection>
+  const globalSchema = (options.globalSchema ?? {}) as unknown as Record<string, LooseGlobal>
   for (const name of Object.keys(schema)) {
     if (isReservedCollectionKey(name)) {
-      throw new Error(`Collection "${name}" uses a reserved name (resolve, href, preview)`)
+      throw new Error(
+        `Collection "${name}" uses a reserved name (resolve, href, preview, globals, previewGlobals)`,
+      )
     }
   }
 
-  // Parsed collections for one generation. A new generation drops them all.
+  // Parsed files for one generation. A new generation drops them all.
   let cachedGeneration: string | undefined
-  let cache = new Map<string, Row[]>()
+  let cache = new Map<string, unknown>()
 
-  function rows(collection: string): Row[] {
-    const dir = resolve(options.dir)
-    const manifest = readManifest(dir)
-    if (!Object.hasOwn(manifest.collections, collection)) return []
+  /** The cache for the generation of `manifest`; a new generation starts empty. */
+  function cacheFor(manifest: PulledContentManifest): Map<string, unknown> {
     const generation = manifest.generation ?? ''
     if (generation !== cachedGeneration) {
       cache = new Map()
       cachedGeneration = generation
     }
-    let entries = cache.get(collection)
+    return cache
+  }
+
+  function rows(collection: string): Row[] {
+    const dir = resolve(options.dir)
+    const manifest = readManifest(dir)
+    if (!Object.hasOwn(manifest.collections, collection)) return []
+    const memo = cacheFor(manifest)
+    let entries = memo.get(collection) as Row[] | undefined
     if (entries === undefined) {
       // The collection is in the schema, so it is a registered key.
       entries = readContent(dir, collection as CollectionKey, manifest) as unknown as Row[]
-      cache.set(collection, entries)
+      memo.set(collection, entries)
     }
     return entries
+  }
+
+  /** The published site content of the current generation, keyed by raw key. */
+  function globalRecords(): Record<string, SnapshotGlobal> {
+    const dir = resolve(options.dir)
+    const manifest = readManifest(dir)
+    const memo = cacheFor(manifest)
+    let records = memo.get(GLOBALS_SLOT) as Record<string, SnapshotGlobal> | undefined
+    if (records === undefined) {
+      records = readGlobalsFile(dir, manifest)
+      memo.set(GLOBALS_SLOT, records)
+    }
+    return records
+  }
+
+  /** One section as the SDK returns it: its field values, plus `$seo` when SEO is on. */
+  function globalValue(definition: LooseGlobal, record: SnapshotGlobal): Record<string, unknown> {
+    return definition.seo ? { ...record.data, $seo: record.seo } : { ...record.data }
+  }
+
+  function publishedGlobals(): Record<string, Record<string, unknown>> {
+    const values: Record<string, Record<string, unknown>> = {}
+    for (const [camel, record] of Object.entries(globalRecords())) {
+      values[camel] = globalValue(globalSchema[camel] ?? { key: '', seo: false, fields: {} }, record)
+    }
+    return values
   }
 
   function findById(collection: string, id: string): Row | null {
@@ -138,6 +200,11 @@ export function createContent<const S extends ContentSchema>(options: {
   ): Promise<PreviewEntry<S>> {
     const client = previewOptions?.client ?? createArecaClient()
     const result = await getPreviewEntry({ token, client })
+    if (result.kind === 'global') {
+      throw new Error(
+        `Preview token is for site content "${result.global}". Use previewGlobals() for it.`,
+      )
+    }
     const collection = Object.keys(schema).find(
       (name) => schema[name]!.key === result.collection,
     )
@@ -178,15 +245,73 @@ export function createContent<const S extends ContentSchema>(options: {
     } as unknown as PreviewEntry<S>
   }
 
+  async function previewGlobals(
+    source: string | PreviewResult | null | undefined,
+    previewOptions?: { client?: ArecaClient },
+  ): Promise<GlobalsPreview<G>> {
+    const published = publishedGlobals() as unknown as Globals<G>
+    const unchanged: GlobalsPreview<G> = { globals: published, previewing: null, complete: true, issues: [] }
+    if (!source) return unchanged
+    // A PreviewResult from getPreviewEntry / client.fetchPreview is used as is, so the CMS is asked once.
+    const result =
+      typeof source === 'string'
+        ? await getPreviewEntry({
+            token: source,
+            client: previewOptions?.client ?? createArecaClient(),
+          })
+        : source
+    if (result.kind !== 'global') return unchanged
+    const camel = Object.keys(globalSchema).find(
+      (name) => globalSchema[name]!.key === result.global,
+    )
+    if (camel === undefined) {
+      throw new Error(
+        `Preview section "${result.global}" is not in the generated schema. Run \`areca pull\` to refresh the types.`,
+      )
+    }
+    const definition = globalSchema[camel]!
+    const previewing = camel as GlobalKey<G>
+    // Validate the raw draft, as the pull validates a publication, before camelising it.
+    const camelByRaw = new Map(
+      Object.entries(definition.fields).map(([name, field]) => [field.key, name]),
+    )
+    const issues = entryIssues(result.entry.data, wireFields(schema, definition)).map(
+      (issue) => `${camelByRaw.get(issue.field) ?? toCamelKey(issue.field)}: ${issue.problem}`,
+    )
+    if (issues.length > 0) {
+      // An incomplete draft never reaches typed code: the published section stays.
+      return { globals: published, previewing, complete: false, issues }
+    }
+    const fields = Object.entries(definition.fields).map(([name, field]) => ({
+      raw: field.key,
+      camel: name,
+      type: field.type,
+    }))
+    const draft: SnapshotGlobal = {
+      ...result.entry,
+      data: camelizeData(result.entry.data, fields),
+    }
+    return {
+      globals: { ...published, [camel]: globalValue(definition, draft) } as unknown as Globals<G>,
+      previewing,
+      complete: true,
+      issues: [],
+    }
+  }
+
   const content: Record<string, unknown> = {
     resolve: resolveRef,
     href: (ref: { collection: string; slug: string }) => hrefFor(ref.collection, ref.slug),
     preview,
+    previewGlobals,
+    get globals() {
+      return publishedGlobals()
+    },
   }
   for (const collection of Object.keys(schema)) {
     content[collection] = collectionApi(collection)
   }
-  return content as unknown as Content<S>
+  return content as unknown as Content<S, G>
 }
 
 type QueryOptions = {
@@ -198,10 +323,13 @@ type QueryOptions = {
 }
 
 /**
- * The raw field list of one generated collection, as the pull validates it:
+ * The raw field list of one generated collection or site content section, as the pull validates it:
  * raw keys, and reference targets mapped back from camel to the raw key.
  */
-function wireFields(schema: Record<string, LooseCollection>, definition: LooseCollection): Field[] {
+function wireFields(
+  schema: Record<string, LooseCollection>,
+  definition: Pick<LooseCollection, 'fields'>,
+): Field[] {
   return Object.values(definition.fields).map((field) => {
     const target =
       field.collection === undefined

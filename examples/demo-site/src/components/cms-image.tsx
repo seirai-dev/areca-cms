@@ -30,10 +30,11 @@ export function CmsImage({
   )
 }
 
-export function PreviewBanner() {
+/** Marks a page that shows draft content. `incomplete` says the draft could not be shown, so the live version is. */
+export function PreviewBanner({ incomplete = false }: { incomplete?: boolean }) {
   return (
     <p className="mb-8 rounded-full border border-accent-strong/40 bg-accent-strong/10 px-5 py-2.5 text-center text-xs font-semibold uppercase tracking-[0.18em] text-accent-strong">
-      PREVIEW - draft content
+      {incomplete ? 'PREVIEW - incomplete draft, showing the live version' : 'PREVIEW - draft content'}
     </p>
   )
 }

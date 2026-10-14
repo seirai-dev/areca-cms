@@ -2,6 +2,7 @@ import type {
   AssetsConfig,
   CollectionConfig,
   Field,
+  GlobalConfig,
   SiteContentConfig,
 } from './types.js'
 
@@ -16,6 +17,7 @@ const FIELD_KEY_ORDER = [
   'options',
   'collection',
   'description',
+  'group',
   'after',
 ] as const
 
@@ -48,6 +50,16 @@ export function generateConfigSource(config: SiteContentConfig): string {
     lines.push('  },')
   }
 
+  const globals = config.globals ?? {}
+  const globalKeys = Object.keys(globals).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+  if (globalKeys.length > 0) {
+    lines.push('  globals: {')
+    for (const key of globalKeys) {
+      lines.push(...globalLines(key, globals[key] as GlobalConfig))
+    }
+    lines.push('  },')
+  }
+
   lines.push('})')
   return `${lines.join('\n')}\n`
 }
@@ -73,25 +85,46 @@ function collectionLines(key: string, collection: CollectionConfig): string[] {
     lines.push(`      label: ${quote(collection.label)},`)
   }
 
-  if (collection.fields.length === 0) {
-    lines.push('      fields: [],')
-  } else {
-    lines.push('      fields: [')
-    for (const field of collection.fields) {
-      lines.push(...fieldLines(field, '        '))
-    }
-    lines.push('      ],')
-  }
+  lines.push(...fieldsLines(collection.fields))
 
   lines.push('    },')
   return lines
 }
 
+function globalLines(key: string, global: GlobalConfig): string[] {
+  const lines = [`    ${propertyKey(key)}: {`]
+
+  if (global.label !== undefined) {
+    lines.push(`      label: ${quote(global.label)},`)
+  }
+  if (global.seo !== undefined) {
+    lines.push(`      seo: ${global.seo},`)
+  }
+  if (global.previewPath !== undefined) {
+    lines.push(`      previewPath: ${quote(global.previewPath)},`)
+  }
+
+  lines.push(...fieldsLines(global.fields))
+
+  lines.push('    },')
+  return lines
+}
+
+function fieldsLines(fields: readonly Field[]): string[] {
+  if (fields.length === 0) return ['      fields: [],']
+  return [
+    '      fields: [',
+    ...fields.flatMap((field) => fieldLines(field, '        ')),
+    '      ],',
+  ]
+}
+
 function fieldLines(field: Field, indent: string): string[] {
   const entries = fieldEntries(field)
-  const inline = `${indent}{ ${entries.map(([k, v]) => `${k}: ${v}`).join(', ')} },`
-  if (inline.length <= MAX_LINE_WIDTH) {
-    return [inline]
+  // The width is that of the object itself: indent and trailing comma are not counted.
+  const body = `{ ${entries.map(([k, v]) => `${k}: ${v}`).join(', ')} }`
+  if (body.length <= MAX_LINE_WIDTH) {
+    return [`${indent}${body},`]
   }
 
   return [

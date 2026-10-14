@@ -32,7 +32,7 @@ This page covers the whole flow and what your site needs to build. For what edit
 </Step>
 </Steps>
 
-Two things are fixed by the CMS and cannot be changed on your side. The path must be `/__preview/<collection>/<slug>`, because the CMS builds that URL. The token is valid for one entry only, so changing the slug in the address bar does not reveal another draft.
+For entries, two things are fixed by the CMS and cannot be changed on your side. The path must be `/__preview/<collection>/<slug>`, because the CMS builds that URL. The token is valid for one entry only, so changing the slug in the address bar does not reveal another draft. Site content sections use their own page, described in [Site content previews](#site-content-previews).
 
 ## The token
 
@@ -63,7 +63,7 @@ If `ARECA_SITE_TOKEN` is missing, `getPreviewEntry()` throws `Missing ARECA_SITE
 
 | Helper | Signature | Returns |
 | --- | --- | --- |
-| `getPreviewEntry` | `({ token, client? }) => Promise<PreviewResult>` | `{ collection, slug, entry }` |
+| `getPreviewEntry` | `({ token, client? }) => Promise<PreviewResult>` | `{ kind: 'entry', collection, slug, entry }` or `{ kind: 'global', global, entry }` |
 | `previewHeaders` | `() => { 'X-Robots-Tag': 'noindex, nofollow', 'Cache-Control': 'no-store' }` | Headers for the response |
 
 `entry` has the same shape as a published entry, so the view you use for published pages works for drafts too. The optional `client` argument exists for tests. Leave it out in your app.
@@ -170,6 +170,31 @@ prerender: {
 ```
 
 A prerendered preview page would be a copy of a draft, written to disk and served to anyone who requests the file.
+
+## Site content previews
+
+A token for a site content section works differently. The CMS opens the section's **preview path** on your site, not `/__preview`. For a section with `previewPath: '/about'`, the link is `<production URL>/about?arecaPreview=<token>`. The page at that path reads the token and shows the draft for that section only.
+
+```ts
+import { content } from '../generated/content/areca.gen'
+import { getPreviewEntry, previewHeaders } from '@areca-cms/site-sdk'
+
+export async function loadAboutPage(token: string | undefined) {
+  if (!token) return { about: content.globals.aboutPage, preview: false, incomplete: false }
+  // Send previewHeaders() on this response too (see the headers above).
+  try {
+    const { globals, previewing, complete } = await content.previewGlobals(token)
+    if (previewing === 'aboutPage') {
+      return { about: globals.aboutPage, preview: true, incomplete: !complete }
+    }
+  } catch {
+    // An expired or mistyped link shows the published page.
+  }
+  return { about: content.globals.aboutPage, preview: false, incomplete: false }
+}
+```
+
+`content.previewGlobals()` returns `previewing`, the section the token targets, so the page can check it matches. When `complete` is `false`, the page shows the published section and a note, as in the example above. A section's draft is shown on its preview path only. An entry token on that page is ignored. The rules for noindex, caching and the token in the URL are the same as for entries. See [site content](/docs/sdk/globals#preview) for the full API.
 
 ## Security
 

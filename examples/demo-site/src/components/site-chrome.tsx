@@ -1,6 +1,6 @@
 import { Link, useRouterState } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
-import { SITE_NAME } from '../lib/seo.ts'
+import type { CompanyInfoGlobal } from '../generated/content/areca.gen.ts'
 import { Wordmark } from './brand.tsx'
 
 const NAV = [
@@ -94,15 +94,17 @@ function MobileNav() {
   )
 }
 
-export function SiteFooter() {
+export function SiteFooter({ company }: { company: CompanyInfoGlobal }) {
   return (
     <footer className="bg-brand text-brand-ink">
       <div className="mx-auto grid max-w-6xl gap-12 px-5 py-16 sm:px-8 md:grid-cols-12 md:py-20">
         <div className="md:col-span-5">
           <Wordmark inverse />
-          <p className="mt-6 max-w-sm font-display text-2xl leading-snug text-brand-ink/90">
-            Buying direct from the farms we know, roasting small batches by hand on the Bergen coast.
-          </p>
+          {company.tagline ? (
+            <p className="mt-6 max-w-sm font-display text-2xl leading-snug text-brand-ink/90">
+              {company.tagline}
+            </p>
+          ) : null}
         </div>
         <nav aria-label="Footer" className="md:col-span-3">
           <h2 className="text-[0.7rem] font-medium uppercase tracking-[0.18em] text-brand-ink/60">Explore</h2>
@@ -118,17 +120,36 @@ export function SiteFooter() {
         </nav>
         <div className="md:col-span-4">
           <h2 className="text-[0.7rem] font-medium uppercase tracking-[0.18em] text-brand-ink/60">Roastery</h2>
-          <address className="mt-4 not-italic text-sm leading-7">
-            {SITE_NAME}
-            <br />
-            Strandkaien 14, 5013 Bergen, Norway
+          <address className="mt-4 space-y-1 not-italic text-sm leading-7">
+            <span className="block">{company.name}</span>
+            {company.address ? <span className="block whitespace-pre-line">{company.address}</span> : null}
+            {company.email ? (
+              <a href={`mailto:${company.email}`} className="block underline decoration-brand-ink/30 underline-offset-4 transition-colors hover:decoration-brand-ink">
+                {company.email}
+              </a>
+            ) : null}
+            {company.phone ? (
+              <a href={`tel:${company.phone.replace(/\s+/g, '')}`} className="block underline decoration-brand-ink/30 underline-offset-4 transition-colors hover:decoration-brand-ink">
+                {company.phone}
+              </a>
+            ) : null}
+            {company.instagramUrl ? (
+              <a
+                href={company.instagramUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block underline decoration-brand-ink/30 underline-offset-4 transition-colors hover:decoration-brand-ink"
+              >
+                Instagram
+              </a>
+            ) : null}
           </address>
         </div>
       </div>
       <div className="border-t border-brand-ink/15">
         <div className="mx-auto flex max-w-6xl flex-col gap-2 px-5 py-6 text-xs text-brand-ink/70 sm:flex-row sm:justify-between sm:px-8">
           <p>
-            © {new Date().getUTCFullYear()} {SITE_NAME}
+            © {new Date().getUTCFullYear()} {company.name}
           </p>
           <p>
             Content managed in Areca CMS and prerendered at build time — no requests to the CMS at runtime.

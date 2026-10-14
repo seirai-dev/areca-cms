@@ -56,14 +56,14 @@ export function FormField({
       data-invalid={error ? 'true' : undefined}
     >
       <div className="flex items-baseline justify-between gap-3">
-        <Label htmlFor={htmlFor} className="gap-1">
-          {label}
+        <span className="inline-flex items-baseline gap-1">
+          <Label htmlFor={htmlFor}>{label}</Label>
           {required ? (
             <span aria-hidden="true" className="text-text-muted">
               *
             </span>
           ) : null}
-        </Label>
+        </span>
         {trailing ? (
           <span className="text-caption font-normal text-text-muted">
             {trailing}

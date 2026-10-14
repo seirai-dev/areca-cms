@@ -3,6 +3,7 @@ import { and, desc, eq, gt, inArray } from 'drizzle-orm'
 import { db } from '#/db'
 import { collection, entry, publication, site, user } from '#/db/schema'
 import { entryTitle } from '#/lib/content/utils'
+import { globalsAsEntryLists } from '#/lib/globals'
 import type { Field, Snapshot, SnapshotEntry } from '#/lib/types'
 import { buildSnapshot } from '#/server/content/snapshot'
 
@@ -53,6 +54,8 @@ export type PendingReleaseChange = {
   scheduledAt: string | Date | null
   kind: 'ready' | 'scheduled' | 'removal'
   exists: boolean
+  /** A site content section: links to its section editor, not a collection. */
+  global: boolean
 }
 
 type IndexedEntry = ReleaseDiffEntry &
@@ -127,6 +130,20 @@ export function pendingCountFromDiff(input: {
 }) {
   if (!input.candidateOk) return input.hasBaseline ? 1 : 0
   return input.adds + input.updates + input.removals
+}
+
+/**
+ * Collections and site content sections keyed alike, so a release diff treats
+ * a section like any other content item. Null when there is no snapshot.
+ */
+function releaseContent(
+  snapshot: Pick<Snapshot, 'collections' | 'globals'> | null | undefined,
+): Record<string, SnapshotEntry[]> | null {
+  if (!snapshot) return null
+  return {
+    ...snapshot.collections,
+    ...globalsAsEntryLists(snapshot.globals),
+  }
 }
 
 function indexCollections(
@@ -219,6 +236,8 @@ async function listScheduledUpcoming(
       publishedData: entry.publishedData,
       draftData: entry.draftData,
       collectionKey: collection.key,
+      collectionKind: collection.kind,
+      collectionEnabled: collection.enabled,
     })
     .from(entry)
     .innerJoin(collection, eq(entry.collectionId, collection.id))
@@ -233,13 +252,15 @@ async function listScheduledUpcoming(
   const upcoming: ScheduledUpcoming[] = []
   for (const row of rows) {
     if (pendingIds.has(row.id)) continue
+    // A disabled section never ships, so it is not upcoming for anyone.
+    if (row.collectionKind === 'global' && !row.collectionEnabled) continue
     if (!row.scheduledAt) continue
     upcoming.push({
       id: row.id,
       slug: row.scheduledSlug ?? row.publishedSlug ?? row.slug,
       collectionKey: row.collectionKey,
       scheduledAt: row.scheduledAt,
-      data: (row.scheduledData ?? row.publishedData ?? row.draftData),
+      data: row.scheduledData ?? row.publishedData ?? row.draftData,
     })
   }
   return upcoming
@@ -258,12 +279,17 @@ export async function diffApprovedRelease(
   const demo =
     publishingMode === 'demo' ? await latestPublication(siteId, 'demo') : null
   const baseline = comparisonSnapshot(publishingMode, live, demo)
-  const liveIndex = indexCollections(baseline?.collections)
+  const baselineContent = releaseContent(baseline)
+  const liveIndex = indexCollections(baselineContent)
 
-  const built = await buildSnapshot(siteId)
-  const candidate = built.ok ? built.snapshot.collections : null
+  // Blocked sections (never ready) must not hide the other changes; the
+  // Go-live request itself still builds without this option and refuses.
+  const built = await buildSnapshot(siteId, db, {
+    allowNeverReadySections: true,
+  })
+  const candidate = built.ok ? releaseContent(built.snapshot) : null
   const { adds, updates, removals } = built.ok
-    ? diffSnapshotCollections(candidate, baseline?.collections)
+    ? diffSnapshotCollections(candidate, baselineContent)
     : { adds: [], updates: [], removals: [] }
 
   const pendingIds = new Set(
@@ -291,12 +317,14 @@ export async function diffApprovedRelease(
   }
 }
 
+/** A section has no entry title of its own, so its label names the change. */
 function titleOf(
   data: Record<string, unknown>,
-  fields: Field[] | undefined,
+  col: { kind: string; label: string; fields: Field[] } | undefined,
   slug: string,
 ) {
-  return entryTitle(data, fields ?? [], slug)
+  if (col?.kind === 'global') return col.label
+  return entryTitle(data, col?.fields ?? [], slug)
 }
 
 export async function listPendingReleaseChanges(
@@ -306,6 +334,7 @@ export async function listPendingReleaseChanges(
   const collections = await db
     .select({
       key: collection.key,
+      kind: collection.kind,
       label: collection.label,
       fields: collection.fields,
     })
@@ -342,7 +371,7 @@ export async function listPendingReleaseChanges(
     const row = byId.get(item.id)
     changes.push({
       id: item.id,
-      title: titleOf(item.data, col?.fields, item.slug),
+      title: titleOf(item.data, col, item.slug),
       slug: item.slug,
       collectionKey: item.collectionKey,
       collectionLabel: col?.label ?? item.collectionKey,
@@ -351,6 +380,7 @@ export async function listPendingReleaseChanges(
       scheduledAt: row?.scheduledAt ?? null,
       kind,
       exists: Boolean(row),
+      global: col?.kind === 'global',
     })
   }
 
@@ -363,7 +393,7 @@ export async function listPendingReleaseChanges(
     const row = byId.get(item.id)
     changes.push({
       id: item.id,
-      title: titleOf(item.data, col?.fields, item.slug),
+      title: titleOf(item.data, col, item.slug),
       slug: item.slug,
       collectionKey: item.collectionKey,
       collectionLabel: col?.label ?? item.collectionKey,
@@ -372,6 +402,7 @@ export async function listPendingReleaseChanges(
       scheduledAt: item.scheduledAt,
       kind: 'scheduled',
       exists: Boolean(row),
+      global: col?.kind === 'global',
     })
   }
 

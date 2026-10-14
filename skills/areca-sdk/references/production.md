@@ -26,6 +26,8 @@ try {
 }
 ```
 
+A site content section preview is different. The CMS opens the section's `previewPath` on the site (for example `/about`) with `?arecaPreview=<token>`, not `/__preview`. `getPreviewEntry` returns `{ kind: "global", global, entry }` for that token. Read the token on the page, then call `content.previewGlobals(token)` (or pass the `PreviewGlobalResult`). It returns `{ globals, previewing, complete, issues }`: `globals` has the section replaced by its draft when the draft is complete, and the published section otherwise. Use the draft only when `previewing` is this page's section, and show a note when `complete` is `false`. An expired or mistyped token makes the fetch throw, so catch it and serve the published values. Set `previewHeaders()` on the response as for entries.
+
 `getPreviewEntry` needs `ARECA_CMS_URL` and `ARECA_SITE_TOKEN` at runtime. Exclude `/__preview` from prerendering and CDN caching. In TanStack Start, wrap the fetch in a `createServerFn` handler.
 
 ## Health route (Production mode)
@@ -86,7 +88,7 @@ await pullContent({ outDir: "src/generated/content", client });
 | `400` / `413` on push | Invalid schema, or the manifest is over 256 KiB |
 | `No content file for collection` | Run `areca pull`, then check the collection key |
 | `Unsafe collection or field identifier` | Rename the key to match `^[A-Za-z][A-Za-z0-9_-]{0,63}$` |
-| `Collection key "<key>" is reserved` / `resolve`, `href`, `preview` | Collections cannot use these names, because the content object uses them. Rename the collection. Field keys may keep them. |
+| `Collection key "<key>" is reserved` / `resolve`, `href`, `preview`, `globals`, `previewGlobals` | Collections cannot use these names, because the content object uses them. Rename the collection. Field keys may keep them. |
 | `Collection keys ... both map to` / `Field keys ... both map to` | Two keys have the same camelCase name, such as `blog-posts` and `blog_posts`. Rename one. |
 | `Publication does not match its schema` | An entry breaks its schema. Each line names the entry, field and problem. Fix the entry or the schema, publish, and pull again. Nothing is written. |
 | `Warning: Publication <id> has no embedded schema` | An older publication. Types use the current schema. Go live again to embed it. |

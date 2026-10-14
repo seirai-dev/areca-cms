@@ -8,7 +8,7 @@ import {
   publication,
 } from '#/db/schema'
 import { SEO_KEY } from '#/lib/seo'
-import type { EntryData, Field } from '#/lib/types'
+import type { EntryData, Field, SnapshotGlobal } from '#/lib/types'
 import { loadAssetLookup } from './index'
 import type { Asset } from './index'
 import { richTextAssetRefs } from './richtext-ownership'
@@ -88,22 +88,30 @@ export async function siteAssets(
     }).storageKeys)
       storageKeys.add(key)
   }
+  const collectPublished = (row: {
+    data: Record<string, unknown>
+    seo?: SnapshotGlobal['seo']
+  }) => {
+    for (const value of Object.values(row.data)) {
+      collectImage(value)
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        const richText = value as { json?: { type?: unknown } | null }
+        if (richText.json?.type === 'doc') {
+          for (const key of richTextAssetRefs(richText.json).storageKeys)
+            storageKeys.add(key)
+        }
+      }
+    }
+    collectImage(row.seo?.openGraph.image)
+    collectImage(row.seo?.twitter.image)
+  }
   for (const { snapshot } of publications) {
     for (const rows of Object.values(snapshot.collections)) {
-      for (const row of rows) {
-        for (const value of Object.values(row.data)) {
-          collectImage(value)
-          if (value && typeof value === 'object' && !Array.isArray(value)) {
-            const richText = value as { json?: { type?: unknown } | null }
-            if (richText.json?.type === 'doc') {
-              for (const key of richTextAssetRefs(richText.json).storageKeys)
-                storageKeys.add(key)
-            }
-          }
-        }
-        collectImage(row.seo?.openGraph.image)
-        collectImage(row.seo?.twitter.image)
-      }
+      for (const row of rows) collectPublished(row)
+    }
+    // Site content sections ship with the release too, so their media counts.
+    for (const global of Object.values(snapshot.globals ?? {})) {
+      collectPublished(global)
     }
   }
   const lookup = await loadAssetLookup(organizationId, {

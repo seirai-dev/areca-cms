@@ -19,6 +19,8 @@ type FieldBase = {
   label: string
   required?: boolean
   description?: string
+  /** Visual heading in the CMS editor, site content only. Stays flat in the SDK. */
+  group?: string
 }
 
 /**
@@ -43,9 +45,25 @@ export type CollectionConfig = {
   fields: readonly Field[]
 }
 
+/**
+ * A site content section: a single-instance set of fields (company info,
+ * home-page copy). Like a collection, but with no slug and no route.
+ */
+export type GlobalConfig = {
+  label?: string
+  /** No `slug` fields. `group` is allowed. */
+  fields: readonly Field[]
+  /** Gives the section a `$seo` panel, exposed as `$seo` on the SDK value. Default `false`. */
+  seo?: boolean
+  /** Page that previews the section, e.g. `/about`. */
+  previewPath?: string
+}
+
 export type SiteContentConfig = {
   siteKey: string
   collections: Record<string, CollectionConfig>
+  /** Site content sections, keyed by raw CMS key. */
+  globals?: Record<string, GlobalConfig>
   /** Where `areca pull` copies media. Local only: never sent to the CMS. */
   assets?: AssetsConfig
 }
@@ -70,6 +88,8 @@ export type AssetsConfig = {
 /** POST /api/sites/manifest body */
 export type SiteManifest = {
   collections: Record<string, CollectionConfig>
+  /** Omitted when there are no enabled site content sections. */
+  globals?: Record<string, GlobalConfig>
 }
 
 /**
@@ -162,6 +182,21 @@ export type Snapshot = {
    * CMS key. Absent from publications made before schemas were embedded.
    */
   schema?: Record<string, CollectionConfig>
+  /** Enabled site content sections, keyed by raw CMS key. Absent when there are none. */
+  globals?: Record<string, SnapshotGlobal>
+  /** Schema for exactly the sections in `globals`, keyed by raw CMS key. */
+  globalSchema?: Record<string, GlobalConfig>
+}
+
+/** One site content section as published. */
+export type SnapshotGlobal = {
+  /** Entry id. */
+  id: string
+  publishedAt: string | null
+  /** Raw CMS keys, same value encoding as entries. */
+  data: Record<string, unknown>
+  /** Only when the section has SEO enabled. */
+  seo?: SeoMeta
 }
 
 /** A media file referenced by a publication. */
@@ -175,17 +210,31 @@ export type SnapshotAsset = {
   size: number
 }
 
-export type PreviewResult = {
+/** Preview of a collection entry. `kind` is missing from older CMS versions. */
+export type PreviewEntryResult = {
+  kind?: 'entry'
   collection: string
   slug: string
   entry: SnapshotEntry
 }
+
+/** Preview of a site content section. */
+export type PreviewGlobalResult = {
+  kind: 'global'
+  /** Raw CMS key of the section. */
+  global: string
+  entry: SnapshotGlobal
+}
+
+export type PreviewResult = PreviewEntryResult | PreviewGlobalResult
 
 export type PulledContentManifest = {
   publicationId: string
   hash: string
   createdAt: string
   collections: Record<string, number>
+  /** Camel keys of the site content sections in `_globals.json`. Absent when there are none. */
+  globals?: string[]
   /** Immutable directory under `.publications`; absent in legacy flat output. */
   generation?: string
   /** Present when media was copied locally. */

@@ -48,6 +48,7 @@ The demo lives in the `examples/demo-site` folder of the Areca repository. It is
       <Folder name="routes" defaultOpen>
         <File name="__root.tsx" />
         <File name="index.tsx" />
+        <File name="about.tsx" />
         <File name="blog/index.tsx" />
         <File name="blog/$slug.tsx" />
         <File name="api/health.ts" />
@@ -127,6 +128,8 @@ const article = await loadArticle({ data: { slug: params.slug } })
 
 `areca.gen.ts` is written by `areca pull` and committed to the repository. See [typed content](/docs/sdk/typed-content) and [Reading content](/docs/sdk/reading-content) for the full reading API.
 
+The site content sections are read from `content.globals` instead of a collection. `loadCompanyInfo` supplies the company details for the header and footer on every page, `loadHome` the home-page hero, and `loadAbout` the About page. The home and About pages also pass the value of `?arecaPreview` to `previewGlobals`. See [site content](/docs/sdk/globals).
+
 ## Render articles
 
 `/blog/$slug` loads one article in its loader and throws `notFound()` when the slug is unknown. Its `head()` sets the page title and, when there is one, the description from the excerpt. The demo does not call `seoHead`; see [SEO helpers](/docs/sdk/seo) for the full version.
@@ -166,6 +169,8 @@ Published articles are plain HTML files after the build. The `verify:prerender` 
 ## The preview route
 
 `src/routes/[__preview]/$collection/$slug.tsx` handles the URL that the CMS opens for a draft. Its server function calls `getPreviewEntry` with the token from the query string, and sets the `previewHeaders()` on the response. The page then shows a banner and the same `ArticleView` as published articles. Errors show a message. The route is excluded from prerendering.
+
+The home page (`/`) and the About page (`/about`) show site content drafts instead. Their `previewPath` is set in `areca.config.ts`, so the CMS opens `/?arecaPreview=<token>` or `/about?arecaPreview=<token>`. Each page reads the token, sets the preview headers and overlays the draft only when the token is for that section. A stale link shows the published page.
 
 For the full pattern, including headers, security and error handling, see [Draft preview](/docs/sdk/preview).
 

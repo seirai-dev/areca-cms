@@ -37,6 +37,7 @@ const SENTENCES: Partial<Record<string, Sentence>> = {
   'entry.schedule': (target) => m.activity_entry_schedule({ target }),
   'entry.cancel_schedule': (target) =>
     m.activity_entry_cancel_schedule({ target }),
+  'entry.discard': (target) => m.activity_entry_discard({ target }),
   'entry.delete': (target) => m.activity_entry_delete({ target }),
   'entry.ai_seo_generate': (target) =>
     m.activity_entry_ai_seo_generate({ target }),
@@ -82,6 +83,9 @@ const SENTENCES: Partial<Record<string, Sentence>> = {
   'manifest.sync': () => m.activity_manifest_sync(),
   'collection.upsert': (target) => m.activity_collection_upsert({ target }),
   'collection.delete': (target) => m.activity_collection_delete({ target }),
+  'global.upsert': (target) => m.activity_global_upsert({ target }),
+  'global.set_enabled': (target) => m.activity_global_set_enabled({ target }),
+  'global.delete': (target) => m.activity_global_delete({ target }),
   'mcp_key.create': (target) => m.activity_mcp_key_create({ target }),
   'mcp_key.revoke': (target) => m.activity_mcp_key_revoke({ target }),
   'mcp_connection.create': (target) =>

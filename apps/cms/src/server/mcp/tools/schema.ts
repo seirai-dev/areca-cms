@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { isSafeIdentifier } from '#/lib/content-identifiers'
+import { GLOBAL_GROUP_MAX_LENGTH } from '#/lib/globals'
 import {
   FIELD_DESCRIPTION_MAX_LENGTH,
   FIELD_LABEL_MAX_LENGTH,
@@ -33,8 +34,12 @@ const FIELD_TYPES = [
   'url',
 ] as const satisfies readonly FieldType[]
 
-/** Same rules as the agency schema server function (server/fn/content.ts). */
-const fieldSchema = z.object({
+/**
+ * Same rules as the agency schema server function (server/fn/content.ts).
+ * Shared with upsert_global, which also takes `group`; collections reject it
+ * in the backend (validateContentDefinitions).
+ */
+export const fieldSchema = z.object({
   key: z
     .string()
     .refine(
@@ -83,6 +88,14 @@ const fieldSchema = z.object({
     .optional()
     .describe(
       'For date or datetime fields: the key of another date field this must be on or after.',
+    ),
+  group: z
+    .string()
+    .min(1)
+    .max(GLOBAL_GROUP_MAX_LENGTH)
+    .optional()
+    .describe(
+      'Site content (upsert_global) only: a heading shown above this field in the editor. Collection fields must not set it.',
     ),
 })
 

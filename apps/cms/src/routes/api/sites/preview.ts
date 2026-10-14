@@ -4,7 +4,10 @@ import { eq } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { site } from '#/db/schema'
-import { buildPreviewEntry } from '#/server/content/snapshot'
+import {
+  buildPreviewEntry,
+  buildPreviewGlobal,
+} from '#/server/content/snapshot'
 import {
   decodePreviewToken,
   verifyPreviewToken,
@@ -46,6 +49,18 @@ export async function getSitesPreview(request: Request) {
     return previewJson({ error: 'Unauthorized' }, 401)
   }
 
+  if (payload.global !== undefined) {
+    const section = await buildPreviewGlobal(payload.siteId, payload.global)
+    if (!section) {
+      return previewJson({ error: 'Not found' }, 404)
+    }
+    return previewJson({
+      kind: 'global' as const,
+      global: payload.global,
+      entry: section,
+    })
+  }
+
   const entry = await buildPreviewEntry(
     payload.siteId,
     payload.collection,
@@ -56,6 +71,7 @@ export async function getSitesPreview(request: Request) {
   }
 
   return previewJson({
+    kind: 'entry' as const,
     collection: payload.collection,
     slug: payload.slug,
     entry,

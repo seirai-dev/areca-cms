@@ -91,7 +91,7 @@ describe.skipIf(!hasDb)('listInboundReferences', () => {
         })
         .returning()
 
-      const inbound = await listInboundReferences(target!.id)
+      const inbound = await listInboundReferences(target!.id, false)
       expect(inbound.map((row) => row.id)).toEqual([referrer!.id])
       expect(inbound[0]).toMatchObject({
         title: 'Notes',
@@ -100,8 +100,8 @@ describe.skipIf(!hasDb)('listInboundReferences', () => {
         status: 'draft',
       })
 
-      expect(await listInboundReferences(other!.id)).toEqual([])
-      expect(await listInboundReferences(referrer!.id)).toEqual([])
+      expect(await listInboundReferences(other!.id, false)).toEqual([])
+      expect(await listInboundReferences(referrer!.id, false)).toEqual([])
     })
   })
 })

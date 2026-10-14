@@ -8,7 +8,7 @@ import {
   isPastInstant,
   parseOffsetInstant,
 } from '#/lib/schedule-time'
-import type { EntryData, EntryStatus, Field } from '#/lib/types'
+import type { ContentKind, EntryData, EntryStatus, Field } from '#/lib/types'
 import { SEO_KEY } from '#/lib/seo'
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
@@ -18,6 +18,7 @@ import { assetMutationLock } from '#/server/assets/usage'
 import { archiveDeletedContent } from './deletion-archive'
 import { getCollection } from './collections.ts'
 import { ConflictError, NotFoundError, ValidationError } from './errors.ts'
+import { assertSectionSeo, sectionSeoIssue } from './globals.ts'
 import {
   resolveSlug,
   SLUG_PATTERN,
@@ -197,6 +198,9 @@ export async function updateDraft(
   if (!validated.ok) {
     throw new ValidationError(validated.errors)
   }
+  if (ctx.collection.kind === 'global') {
+    assertSectionSeo(ctx.collection, validated.data)
+  }
   const images = await importEntryImages(ctx, validated.data, actorId)
   const parsed = { ...validated, data: images.data }
 
@@ -306,6 +310,17 @@ export async function restoreRevision(
     )
     const restoredData = prepared.data
     const skippedFields = prepared.skippedFields
+    // A revision saved while SEO was on keeps the current draft's SEO (none)
+    // when the section has SEO off now, as a skipped field, not an error.
+    const seoIssue =
+      ctx.collection.kind === 'global' && prepared.restoredKeys.has(SEO_KEY)
+        ? sectionSeoIssue(ctx.collection, restoredData)
+        : null
+    if (seoIssue) {
+      prepared.restoredKeys.delete(SEO_KEY)
+      keepCurrentRevisionField(restoredData, ctx.entry.draftData, SEO_KEY)
+      skippedFields.push({ key: SEO_KEY, label: 'SEO', reason: seoIssue })
+    }
     for (const key of prepared.restoredKeys) {
       const field = ctx.collection.fields.find((item) => item.key === key)
       const errors = await validateContentOwnership(
@@ -539,6 +554,7 @@ export async function publishEntry(id: string, actorId: string) {
 
 export async function unpublishEntry(id: string, actorId: string) {
   const ctx = await loadEntryContext(id)
+  assertCollectionEntry(ctx.collection)
   const now = new Date()
   const [updated] = await db
     .update(entry)
@@ -578,6 +594,7 @@ export async function unpublishEntry(id: string, actorId: string) {
 
 export async function archiveEntry(id: string, actorId: string) {
   const ctx = await loadEntryContext(id)
+  assertCollectionEntry(ctx.collection)
   const now = new Date()
   const [updated] = await db
     .update(entry)
@@ -742,6 +759,7 @@ export async function cancelSchedule(id: string, actorId: string) {
 
 export async function deleteEntry(id: string, actorId: string) {
   const ctx = await loadEntryContext(id)
+  assertCollectionEntry(ctx.collection)
   return db.transaction(async (tx) => {
     await archiveDeletedContent(tx, ctx.site.organizationId, 'entry', id)
     await audit(
@@ -797,7 +815,11 @@ async function loadCollectionContext(siteId: string, collectionKey: string) {
     .from(collection)
     .innerJoin(site, eq(collection.siteId, site.id))
     .where(
-      and(eq(collection.siteId, siteId), eq(collection.key, collectionKey)),
+      and(
+        eq(collection.siteId, siteId),
+        eq(collection.key, collectionKey),
+        eq(collection.kind, 'collection'),
+      ),
     )
     .limit(1)
   if (!row) {
@@ -821,6 +843,22 @@ async function loadEntryContext(
     throw new NotFoundError(m.server_entry_not_found())
   }
   return row
+}
+
+/**
+ * A section's single entry is never unpublished, archived or deleted: the
+ * section is disabled or deleted as a whole (`globals.ts`).
+ */
+function assertCollectionEntry(target: { kind: ContentKind }) {
+  if (target.kind === 'global') {
+    throw new ValidationError([
+      {
+        path: '',
+        message:
+          'Site content cannot be unpublished, archived or deleted as an entry. Disable or delete the section instead.',
+      },
+    ])
+  }
 }
 
 function importEntryImages(

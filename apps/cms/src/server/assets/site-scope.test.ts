@@ -216,6 +216,65 @@ describe.skipIf(!process.env.DATABASE_URL)('site AI media boundary', () => {
     }
   })
 
+  it('grants media that a published site content section still ships, from its data and SEO', async () => {
+    const ctx = await createTestSite()
+    try {
+      const rows = await db
+        .insert(asset)
+        .values(
+          ['hero', 'og', 'unused'].map((name) => ({
+            organizationId: ctx.org.id,
+            storageKey: `${ctx.org.id}/${name}.png`,
+            originalFilename: `${name}.png`,
+            mimeType: 'image/png',
+            size: 1,
+          })),
+        )
+        .returning()
+      const media = (index: number) => ({
+        url: `https://cms.test/api/assets/file/${rows[index].storageKey}`,
+        mimeType: 'image/png',
+        alt: '',
+        width: null,
+        height: null,
+      })
+      const publicationId = crypto.randomUUID()
+      await db.insert(publication).values({
+        id: publicationId,
+        siteId: ctx.site.id,
+        status: 'superseded',
+        publishingMode: 'demo',
+        snapshotHash: 'globals-scope',
+        snapshot: {
+          publicationId,
+          siteKey: ctx.site.slug,
+          createdAt: new Date().toISOString(),
+          hash: 'globals-scope',
+          collections: {},
+          globals: {
+            homePage: {
+              id: crypto.randomUUID(),
+              publishedAt: new Date().toISOString(),
+              data: { hero: media(0) },
+              seo: {
+                openGraph: { image: media(1) },
+                twitter: { image: null },
+                jsonLd: [],
+              } as never,
+            },
+          },
+        },
+      })
+      expect(
+        new Set(
+          (await siteAssets(ctx.org.id, ctx.site.id)).map((row) => row.id),
+        ),
+      ).toEqual(new Set([rows[0].id, rows[1].id]))
+    } finally {
+      await cleanupTestSite(ctx)
+    }
+  })
+
   it('filters PDFs before pagination and reaches a third image page', async () => {
     const ctx = await createTestSite()
     try {

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { listCollections } from '#/server/content/collections'
+import { listGlobals } from '#/server/content/globals'
 
 import { credentialPhrase } from '../guard'
 import type { ToolRegistry } from '../tool-kit'
@@ -48,6 +49,7 @@ function writingGuide(actor: McpActor): string {
       : 'mark_ready marks an entry ready (approves it for the next release). It does not change the live site.'
   return [
     'Workflow: 1) get_collection_schema for the collection you need. 2) create_entry with fields and seo (rich text as Markdown). 3) get_preview_url to check it. 4) update_entry to revise (pass the version from get_entry as expectedVersion).',
+    'Site content (globals) is not a collection: read a section with get_global and change it with update_global (pass expectedVersion from get_global). Its id works with mark_ready and the other workflow tools.',
     'Images: upload_asset_from_url with a public image URL, then use the returned assetId in image fields, seo.ogImage, or ![alt](asset:<assetId>) in Markdown. Always give alt text.',
     'Drafts are safe. ' +
       approval +
@@ -63,12 +65,15 @@ export function registerSiteTools(registry: ToolRegistry): void {
     name: 'get_site_info',
     title: 'Get site info',
     description:
-      'Call this first. Returns the site this AI connection is for (name, slug, production URL, publishing mode), your role and what you may do, every collection with its route and whether it is enabled, and a short guide for writing content. Read-only.',
+      'Call this first. Returns the site this AI connection is for (name, slug, production URL, publishing mode), your role and what you may do, every collection with its route and whether it is enabled, the site content sections (globals) with their keys, and a short guide for writing content. Read-only.',
     inputSchema: z.object({}),
     annotations: { readOnlyHint: true, idempotentHint: true },
     run: async (_input, actor) => {
       const siteRow = await loadSiteRow(actor)
       const collections = await listCollections(actor.siteId)
+      const globals = await listGlobals(actor.siteId, {
+        enabledOnly: actor.role !== 'agency',
+      })
       const isOwner = actor.role !== 'editor'
       return {
         cannotDo: cannotDoFor(actor),
@@ -95,6 +100,7 @@ export function registerSiteTools(registry: ToolRegistry): void {
             deleteAssets: isOwner,
             goLive: actor.allowGoLive,
             changeCollectionSchema: actor.role === 'agency',
+            changeSiteContentStructure: actor.role === 'agency',
           },
         },
         collections: collections.map((col) => ({
@@ -103,6 +109,14 @@ export function registerSiteTools(registry: ToolRegistry): void {
           route: col.routePattern,
           enabled: col.enabled,
           fieldCount: col.fields.length,
+        })),
+        globals: globals.map((global) => ({
+          key: global.key,
+          label: global.label,
+          enabled: global.enabled,
+          fieldCount: global.fields.length,
+          seo: global.seoEnabled,
+          previewPath: global.previewPath,
         })),
         guide: writingGuide(actor),
       }

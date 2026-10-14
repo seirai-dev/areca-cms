@@ -41,6 +41,8 @@ A push replaces the schema on the CMS side for the collections in your file:
 - **A disabled collection can come back.** Add its key to the config and push again. It is enabled again, with its entries.
 - **Entry values are not migrated.** Values stay as they are. A new field starts empty, and values under a removed field are no longer published.
 
+The same rules apply to the `globals` object of site content sections. Listed sections are updated, and a section left out of the file is **disabled**: editors cannot see it, it is left out of new releases, and its values are kept. Adding it back enables it again. Pushing a config with no `globals` key disables every section. See [site content](/docs/sdk/globals).
+
 ### What happens to existing content
 
 Changing a field can make existing entries invalid. Areca checks the published entries again each time you go live:
@@ -58,7 +60,7 @@ This has a consequence for schema changes. A push changes the schema the CMS hol
 
 Publications made before schemas were embedded have no schema. The pull then uses the schema the CMS holds now, and it prints a warning that asks you to go live again. Until you do, the types match the current schema, and a publication made from an older schema can fail the pull.
 
-Collection keys `resolve`, `href` and `preview` are reserved, because the content object in your code uses these names. A push that lists one of them fails with `Collection key "<key>" is reserved`, and nothing is sent. Rename the collection in `areca.config.ts`. Field keys may use these names.
+Collection keys `resolve`, `href`, `preview` and `globals` are reserved, because the content object in your code uses these names. A push that lists one of them fails with `Collection key "<key>" is reserved`, and nothing is sent. Rename the collection in `areca.config.ts`. Field keys may use these names.
 
 ## Pull the schema
 

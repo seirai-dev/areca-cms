@@ -1,12 +1,50 @@
 import { describe, expect, it } from 'vitest'
 
+// Assumed API (preview-token.ts): signPreviewToken also accepts { siteId, global, secret }
+// for a site content section (payload gains optional `global`), and
+// buildGlobalPreviewUrl(productionUrl, previewPath, token) builds
+// `<site><previewPath>?arecaPreview=<token>`.
 import {
+  buildGlobalPreviewUrl,
   buildPreviewUrl,
   signPreviewToken,
   verifyPreviewToken,
 } from './preview-token.ts'
 
 const secret = 'preview-secret'
+
+describe('global preview token', () => {
+  it('signs and verifies a token for a site content section', () => {
+    const token = signPreviewToken({
+      siteId: 'site_1',
+      global: 'companyInfo',
+      secret,
+    })
+    expect(verifyPreviewToken(token, secret)).toMatchObject({
+      siteId: 'site_1',
+      global: 'companyInfo',
+    })
+  })
+
+  it('rejects an expired section token', () => {
+    const token = signPreviewToken({
+      siteId: 'site_1',
+      global: 'companyInfo',
+      secret,
+      ttlSec: -5,
+    })
+    expect(verifyPreviewToken(token, secret)).toBeNull()
+  })
+
+  it('builds the section preview URL on the preview path, with the token as a query', () => {
+    expect(
+      buildGlobalPreviewUrl('http://localhost:3001/', '/about', 'tok'),
+    ).toBe('http://localhost:3001/about?arecaPreview=tok')
+    expect(buildGlobalPreviewUrl('http://localhost:3001', '/', 'tok')).toBe(
+      'http://localhost:3001/?arecaPreview=tok',
+    )
+  })
+})
 
 describe('preview token', () => {
   it('signs and verifies a token', () => {

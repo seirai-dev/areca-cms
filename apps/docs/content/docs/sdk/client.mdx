@@ -160,7 +160,7 @@ function manifestFromConfig(config: SiteContentConfig): SiteManifest
 
 - `Unsafe collection or field identifier: <value>` when a collection key, field key, or a field's `collection` or `after` value is not a safe identifier.
 - `Duplicate field identifier: <key>` when two fields in one collection share a key.
-- `Collection key "<key>" is reserved: resolve, href and preview cannot be collection keys` when a collection is named `resolve`, `href` or `preview`, in any case.
+- `Collection key "<key>" is reserved: resolve, href and preview cannot be collection keys` when a collection is named `resolve`, `href`, `preview`, `globals` or `previewGlobals`, in any case.
 
 ```ts
 import { manifestFromConfig } from '@areca-cms/site-sdk'

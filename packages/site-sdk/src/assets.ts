@@ -16,9 +16,10 @@ import {
 import { isAbsolute, join, posix, relative, resolve } from 'node:path'
 import type {
   AssetsConfig,
+  SeoMeta,
   Snapshot,
   SnapshotAsset,
-  SnapshotEntry,
+  SnapshotGlobal,
 } from './types.js'
 
 import { DEFAULT_ASSETS_DIR } from './args.js'
@@ -141,6 +142,29 @@ export function localizeCollections(
   files: Map<string, string>,
   options: { publicPath: string; siteUrl?: string | null },
 ): Snapshot['collections'] {
+  const localize = localizeEntry(files, options)
+  return Object.fromEntries(
+    Object.entries(collections).map(([key, entries]) => [key, entries.map(localize)]),
+  )
+}
+
+/** Same rewriting as `localizeCollections`, for site content sections. */
+export function localizeGlobals(
+  globals: Record<string, SnapshotGlobal>,
+  files: Map<string, string>,
+  options: { publicPath: string; siteUrl?: string | null },
+): Record<string, SnapshotGlobal> {
+  const localize = localizeEntry(files, options)
+  return Object.fromEntries(
+    Object.entries(globals).map(([key, global]) => [key, localize(global)]),
+  )
+}
+
+/** Rewrites the URLs of one entry or section; `data` and `seo` are the only parts that hold them. */
+function localizeEntry(
+  files: Map<string, string>,
+  options: { publicPath: string; siteUrl?: string | null },
+) {
   const local = (prefix: string) => (value: string) =>
     value.includes('/api/assets/file/')
       ? value.replace(ASSET_FILE_URL, (match, key: string) => {
@@ -152,18 +176,11 @@ export function localizeCollections(
   const absoluteUrl = options.siteUrl
     ? local(`${options.siteUrl.replace(/\/+$/, '')}${options.publicPath}`)
     : relativeUrl
-  return Object.fromEntries(
-    Object.entries(collections).map(([key, entries]) => [
-      key,
-      entries.map(
-        (entry): SnapshotEntry => ({
-          ...entry,
-          data: mapStrings(entry.data, relativeUrl),
-          ...(entry.seo ? { seo: mapStrings(entry.seo, absoluteUrl) } : {}),
-        }),
-      ),
-    ]),
-  )
+  return <T extends { data: Record<string, unknown>; seo?: SeoMeta }>(entry: T): T => ({
+    ...entry,
+    data: mapStrings(entry.data, relativeUrl),
+    ...(entry.seo ? { seo: mapStrings(entry.seo, absoluteUrl) } : {}),
+  })
 }
 
 function mapStrings<T>(value: T, map: (value: string) => string): T {
