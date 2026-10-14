@@ -26,6 +26,13 @@ describe('isReservedCollectionKey', () => {
     },
   )
 
+  it.each(['globals', 'Globals', 'GLOBALS'])(
+    'rejects the collection key %s (reserved for site content)',
+    (name) => {
+      expect(isReservedCollectionKey(name)).toBe(true)
+    },
+  )
+
   it.each(['articles', 'resolved', 'previewText'])('accepts %s', (name) => {
     expect(isReservedCollectionKey(name)).toBe(false)
   })

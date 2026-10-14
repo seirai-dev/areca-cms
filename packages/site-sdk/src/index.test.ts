@@ -581,3 +581,106 @@ function authHeader(init?: RequestInit): string | null {
   const headers = new Headers(init?.headers)
   return headers.get('Authorization')
 }
+
+describe('manifestFromConfig: globals', () => {
+  const withGlobals: SiteContentConfig = {
+    ...sampleConfig,
+    globals: {
+      companyInfo: {
+        label: 'Company info',
+        fields: [
+          { key: 'email', label: 'Email', type: 'text', required: true, group: 'Contact' },
+        ],
+      },
+      homePage: {
+        label: 'Home page',
+        seo: true,
+        previewPath: '/',
+        fields: [{ key: 'heroTitle', label: 'Hero title', type: 'text' }],
+      },
+    },
+  }
+
+  it('emits no globals key when the config has none', () => {
+    expect(manifestFromConfig(sampleConfig)).not.toHaveProperty('globals')
+  })
+
+  it('emits no globals key for an empty globals map', () => {
+    expect(manifestFromConfig({ ...sampleConfig, globals: {} })).not.toHaveProperty('globals')
+  })
+
+  it('emits the globals with their label, group, seo and previewPath', () => {
+    expect(manifestFromConfig(withGlobals).globals).toEqual({
+      companyInfo: {
+        label: 'Company info',
+        fields: [
+          { key: 'email', label: 'Email', type: 'text', required: true, group: 'Contact' },
+        ],
+      },
+      homePage: {
+        label: 'Home page',
+        seo: true,
+        previewPath: '/',
+        fields: [{ key: 'heroTitle', label: 'Hero title', type: 'text' }],
+      },
+    })
+  })
+
+  it('still emits the collections next to the globals', () => {
+    expect(manifestFromConfig(withGlobals).collections).toEqual(
+      manifestFromConfig(sampleConfig).collections,
+    )
+  })
+
+  it.each(['globals', 'resolve', 'href', 'preview'])(
+    'rejects the reserved global key "%s"',
+    (key) => {
+      expect(() =>
+        manifestFromConfig({
+          ...sampleConfig,
+          globals: { [key]: { fields: [] } },
+        }),
+      ).toThrow(/reserved/)
+    },
+  )
+
+  it('rejects a collection key named globals', () => {
+    expect(() =>
+      manifestFromConfig({
+        siteKey: 'demo',
+        collections: { globals: { route: '/$slug', fields: [] } },
+      }),
+    ).toThrow(/reserved/)
+  })
+
+  it('rejects a global key that is not a safe identifier', () => {
+    expect(() =>
+      manifestFromConfig({ ...sampleConfig, globals: { 'bad key': { fields: [] } } }),
+    ).toThrow()
+  })
+
+  it('rejects a slug field in a global', () => {
+    expect(() =>
+      manifestFromConfig({
+        ...sampleConfig,
+        globals: {
+          info: { fields: [{ key: 'slug', label: 'Slug', type: 'slug', required: true }] },
+        },
+      }),
+    ).toThrow(/slug/)
+  })
+
+  it('rejects a group on a collection field', () => {
+    expect(() =>
+      manifestFromConfig({
+        siteKey: 'demo',
+        collections: {
+          articles: {
+            route: '/blog/$slug',
+            fields: [{ key: 'title', label: 'Title', type: 'text', group: 'Main' }],
+          },
+        },
+      }),
+    ).toThrow(/group/)
+  })
+})

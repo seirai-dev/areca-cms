@@ -114,6 +114,72 @@ content.blogPosts.all({ where: { category: 'nope' } })
 content.blogPosts.all({ with: { title: true } })
 `
 
+/** Site-content globals, raw keys, as a publication snapshot carries them. */
+const rawGlobalSchema: NonNullable<Snapshot['globalSchema']> = {
+  'company-info': {
+    label: 'Company info',
+    seo: false,
+    fields: [
+      { key: 'email', label: 'Email', type: 'text', required: true, group: 'Contact' },
+      { key: 'phone-number', label: 'Phone number', type: 'text', group: 'Contact' },
+      { key: 'plan', label: 'Plan', type: 'select', options: ['basic', 'pro'] },
+      {
+        key: 'featured-author',
+        label: 'Featured author',
+        type: 'reference',
+        collection: 'authors',
+      },
+    ],
+  },
+  'home-page': {
+    label: 'Home page',
+    seo: true,
+    previewPath: '/',
+    fields: [{ key: 'hero-title', label: 'Hero title', type: 'text', required: true }],
+  },
+}
+
+const globalsSnapshot: Snapshot = {
+  ...snapshot,
+  globalSchema: rawGlobalSchema,
+  globals: {
+    'company-info': {
+      id: 'g-company',
+      publishedAt: null,
+      data: { email: 'hi@acme.test', plan: 'pro' },
+    },
+    'home-page': {
+      id: 'g-home',
+      publishedAt: null,
+      data: { 'hero-title': 'Welcome' },
+    },
+  },
+}
+
+/* Plain source: no template literals, so the app text needs no escaping. */
+const globalsAppSource = `import { expectTypeOf } from 'vitest'
+import type { Entry, SeoMeta } from '@areca-cms/site-sdk'
+import { content, type CompanyInfoGlobal } from './areca.gen.js'
+
+const info = content.globals.companyInfo
+expectTypeOf(info).toEqualTypeOf<CompanyInfoGlobal>()
+expectTypeOf(info.email).toEqualTypeOf<string>()
+expectTypeOf(info.phoneNumber).toEqualTypeOf<string | null | undefined>()
+expectTypeOf(info.plan).toEqualTypeOf<'basic' | 'pro' | null | undefined>()
+expectTypeOf(content.resolve(info.featuredAuthor)).toEqualTypeOf<Entry<'authors'> | null>()
+expectTypeOf(content.globals.homePage.heroTitle).toEqualTypeOf<string>()
+expectTypeOf(content.globals.homePage.$seo).toEqualTypeOf<SeoMeta>()
+
+// @ts-expect-error there is no global called nope
+content.globals.nope
+// @ts-expect-error raw CMS global keys are not exposed
+content.globals['company-info']
+// @ts-expect-error $seo only exists on globals with seo enabled
+content.globals.companyInfo.$seo
+// @ts-expect-error camelCase field keys only
+content.globals.companyInfo['phone-number']
+`
+
 /** Compiles the root files against the real SDK sources and returns the formatted diagnostics. */
 function compileDiagnostics(rootNames: string[], cwd: string): string {
   const program = ts.createProgram({
@@ -155,6 +221,30 @@ describe('generated content object compiles in an app', () => {
       expect(generated).toContain('interface Register')
       writeFileSync(join(workDir, 'areca.gen.ts'), generated)
       writeFileSync(join(workDir, 'app.ts'), appSource)
+
+      const output = compileDiagnostics(
+        [join(workDir, 'app.ts'), join(workDir, 'areca.gen.ts')],
+        workDir,
+      )
+      if (output !== '') console.error(output)
+      expect(output).toBe('')
+    } finally {
+      rmSync(workDir, { recursive: true, force: true })
+    }
+  }, 60_000)
+
+  it('types content.globals from the generated globalSchema with zero diagnostics', () => {
+    const workDir = mkdtempSync(join(tmpdir(), 'areca-typed-globals-'))
+    try {
+      expect(globalsSnapshot.globalSchema).toEqual(rawGlobalSchema)
+      const generated = generateContentTypes({
+        schema: rawSchema,
+        globalSchema: rawGlobalSchema,
+        dir: 'src/generated/content',
+      })
+      expect(generated).toContain('globals: typeof globalSchema')
+      writeFileSync(join(workDir, 'areca.gen.ts'), generated)
+      writeFileSync(join(workDir, 'app.ts'), globalsAppSource)
 
       const output = compileDiagnostics(
         [join(workDir, 'app.ts'), join(workDir, 'areca.gen.ts')],

@@ -4,13 +4,14 @@ import {
   Client,
   StreamableHTTPClientTransport,
 } from '@modelcontextprotocol/client'
-import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { db } from '#/db'
 import {
   asset,
   auditLog,
   collection,
+  deletedContentArchive,
   entry,
   membership,
   mcpKey,
@@ -18,6 +19,7 @@ import {
   site,
   user,
 } from '#/db/schema'
+import type { Field } from '#/lib/types'
 import { createEntry } from '#/server/content/entries'
 import {
   cleanupTestSite,
@@ -1189,5 +1191,593 @@ describe.skipIf(!hasDb)('MCP server', () => {
         .set({ fields: world.col.fields })
         .where(eq(collection.id, world.col.id))
     }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Site content (globals). Sections are stored as `collection` rows with
+// kind = 'global' and exactly one entry with slug '$global'. These tests seed
+// them directly so they do not depend on the agency tools they also cover.
+// ---------------------------------------------------------------------------
+
+const GLOBAL_ENTRY_SLUG = '$global'
+
+const COMPANY_FIELDS: Field[] = [
+  { key: 'email', label: 'Email', type: 'text', required: true },
+  { key: 'phone', label: 'Phone', type: 'text' },
+  { key: 'about', label: 'About', type: 'richtext' },
+]
+
+const COMPANY_DATA = {
+  email: 'hello@example.com',
+  phone: '+31 20 123 4567',
+  about: sampleRichText,
+}
+
+type GlobalSeed = {
+  key: string
+  label: string
+  fields?: Field[]
+  enabled?: boolean
+  seoEnabled?: boolean
+  previewPath?: string | null
+  draftData?: Record<string, unknown>
+  publishedData?: Record<string, unknown> | null
+  status?: 'draft' | 'published'
+}
+
+async function seedGlobal(w: World, seed: GlobalSeed) {
+  const [row] = await db
+    .insert(collection)
+    .values({
+      siteId: w.ctx.site.id,
+      key: seed.key,
+      label: seed.label,
+      routePattern: '',
+      fields: seed.fields ?? COMPANY_FIELDS,
+      enabled: seed.enabled ?? true,
+      kind: 'global',
+      seoEnabled: seed.seoEnabled ?? false,
+      previewPath: seed.previewPath ?? null,
+    })
+    .returning()
+  if (!row) throw new Error('global insert failed')
+  const [created] = await db
+    .insert(entry)
+    .values({
+      siteId: w.ctx.site.id,
+      collectionId: row.id,
+      slug: GLOBAL_ENTRY_SLUG,
+      status: seed.status ?? 'draft',
+      draftData: seed.draftData ?? {},
+      publishedData: seed.publishedData ?? null,
+      publishedAt: seed.publishedData ? new Date() : null,
+      createdBy: w.owner,
+      updatedBy: w.owner,
+    })
+    .returning()
+  if (!created) throw new Error('global entry insert failed')
+  return { collectionId: row.id, entryId: created.id }
+}
+
+/** companyInfo (enabled, no SEO, no preview), homePage (SEO, preview "/"), retiredNotes (disabled). */
+async function seedSiteContent(w: World) {
+  const company = await seedGlobal(w, {
+    key: 'companyInfo',
+    label: 'Company info',
+    draftData: COMPANY_DATA,
+  })
+  const home = await seedGlobal(w, {
+    key: 'homePage',
+    label: 'Home page',
+    fields: [{ key: 'heading', label: 'Heading', type: 'text' }],
+    seoEnabled: true,
+    previewPath: '/',
+    draftData: { heading: 'Welcome' },
+  })
+  const retired = await seedGlobal(w, {
+    key: 'retiredNotes',
+    label: 'Retired notes',
+    fields: [{ key: 'note', label: 'Note', type: 'text' }],
+    enabled: false,
+    draftData: { note: 'Old' },
+  })
+  return { company, home, retired }
+}
+
+async function clientFor(
+  w: World,
+  role: Role,
+  name: string,
+  options: { allowGoLive?: boolean } = {},
+) {
+  const userId =
+    role === 'editor' ? w.editor : role === 'agency' ? w.agency : w.owner
+  const { token } = await w.keyFor(userId, role, {
+    name,
+    allowGoLive: options.allowGoLive,
+  })
+  return connect(token)
+}
+
+/** Like call(), for tools that return a JSON array (data is only set for objects). */
+async function callArray(
+  client: Client,
+  name: string,
+  args: Record<string, unknown> = {},
+): Promise<Record<string, unknown>[]> {
+  const result = await client.callTool({ name, arguments: args })
+  expect(result.isError).toBeFalsy()
+  const first = result.content[0]
+  const parsed: unknown = JSON.parse(first?.type === 'text' ? first.text : 'null')
+  return Array.isArray(parsed) ? (parsed as Record<string, unknown>[]) : []
+}
+
+describe.skipIf(!hasDb)('site content (globals)', () => {
+  let w: World
+
+  beforeEach(async () => {
+    w = await buildWorld()
+  })
+
+  afterEach(async () => {
+    await w.cleanup()
+  })
+
+  it('lists enabled sections in get_site_info, hiding disabled ones from editors and owners', async () => {
+    await seedSiteContent(w)
+    const enabledShape = [
+      expect.objectContaining({
+        key: 'companyInfo',
+        label: 'Company info',
+        enabled: true,
+        fieldCount: 3,
+        seo: false,
+        previewPath: null,
+      }),
+      expect.objectContaining({
+        key: 'homePage',
+        label: 'Home page',
+        enabled: true,
+        fieldCount: 1,
+        seo: true,
+        previewPath: '/',
+      }),
+    ]
+
+    const editorInfo = await call(
+      await clientFor(w, 'editor', 'Globals info editor'),
+      'get_site_info',
+    )
+    expect(editorInfo.isError).toBe(false)
+    const editorGlobals = editorInfo.data?.globals as { key: string }[]
+    expect(editorGlobals).toEqual(expect.arrayContaining(enabledShape))
+    expect(editorGlobals.map((item) => item.key)).not.toContain('retiredNotes')
+    expect(String(editorInfo.data?.guide)).toMatch(/site content|global/i)
+
+    // Globals are not collections: they never appear in the collections list.
+    const collectionKeys = (
+      editorInfo.data?.collections as { key: string }[]
+    ).map((item) => item.key)
+    expect(collectionKeys).toContain('posts')
+    expect(collectionKeys).not.toContain('companyInfo')
+    expect(collectionKeys).not.toContain('homePage')
+
+    const ownerInfo = await call(
+      await clientFor(w, 'owner', 'Globals info owner'),
+      'get_site_info',
+    )
+    const ownerGlobals = ownerInfo.data?.globals as { key: string }[]
+    expect(ownerGlobals).toEqual(expect.arrayContaining(enabledShape))
+    expect(ownerGlobals.map((item) => item.key)).not.toContain('retiredNotes')
+
+    const agencyInfo = await call(
+      await clientFor(w, 'agency', 'Globals info agency'),
+      'get_site_info',
+    )
+    const agencyGlobals = agencyInfo.data?.globals as {
+      key: string
+      enabled: boolean
+    }[]
+    expect(agencyGlobals).toEqual(expect.arrayContaining(enabledShape))
+    expect(agencyGlobals).toContainEqual(
+      expect.objectContaining({ key: 'retiredNotes', enabled: false }),
+    )
+  })
+
+  it('offers the global tools to every role, and the definition tools only to agency admins', async () => {
+    const readWrite = ['get_global', 'update_global', 'discard_global_draft']
+    const definition = ['upsert_global', 'delete_global']
+
+    for (const role of ['editor', 'owner'] as const) {
+      const names = await toolNames(await clientFor(w, role, `Vis ${role}`))
+      expect(names).toEqual(expect.arrayContaining(readWrite))
+      for (const name of definition) expect(names).not.toContain(name)
+    }
+
+    const agencyNames = await toolNames(await clientFor(w, 'agency', 'Vis agency'))
+    expect(agencyNames).toEqual(expect.arrayContaining([...readWrite, ...definition]))
+  })
+
+  it('returns a section with status, schema, values, and SEO and preview only when they apply', async () => {
+    const { company, home } = await seedSiteContent(w)
+    const client = await clientFor(w, 'editor', 'Get global')
+
+    const read = await call(client, 'get_global', { global: 'companyInfo' })
+    expect(read.isError).toBe(false)
+    expect(read.data).toMatchObject({
+      id: company.entryId,
+      key: 'companyInfo',
+      label: 'Company info',
+      status: 'draft',
+      live: false,
+      pendingRelease: false,
+      version: 1,
+      editedSinceReady: false,
+      previewAvailable: false,
+    })
+    expect(
+      (read.data?.fields as { key: string; type: string; required: boolean }[]).map(
+        (field) => [field.key, field.type, field.required],
+      ),
+    ).toEqual([
+      ['email', 'text', true],
+      ['phone', 'text', false],
+      ['about', 'richtext', false],
+    ])
+    expect(read.data).toHaveProperty('example')
+    expect(read.data?.values).toMatchObject({
+      email: 'hello@example.com',
+      phone: '+31 20 123 4567',
+    })
+    // Rich text comes back as Markdown, not as the stored editor document.
+    expect(String((read.data?.values as Record<string, unknown>).about)).toContain(
+      'Hello world',
+    )
+    expect(read.data).not.toHaveProperty('seo')
+
+    const withSeo = await call(client, 'get_global', { global: 'homePage' })
+    expect(withSeo.isError).toBe(false)
+    expect(withSeo.data).toMatchObject({
+      id: home.entryId,
+      status: 'draft',
+      previewAvailable: true,
+      values: { heading: 'Welcome' },
+    })
+    expect(withSeo.data).toHaveProperty('seo')
+
+    const unknown = await call(client, 'get_global', { global: 'nope' })
+    expect(unknown.isError).toBe(true)
+    expect(unknown.text).toContain('nope')
+
+    const disabledForEditor = await call(client, 'get_global', {
+      global: 'retiredNotes',
+    })
+    expect(disabledForEditor.isError).toBe(true)
+
+    const agencyRead = await call(
+      await clientFor(w, 'agency', 'Get global agency'),
+      'get_global',
+      { global: 'retiredNotes' },
+    )
+    expect(agencyRead.isError).toBe(false)
+    expect(agencyRead.data).toMatchObject({ key: 'retiredNotes' })
+  })
+
+  it('previews a section through its previewPath and refuses when there is none', async () => {
+    const { company, home } = await seedSiteContent(w)
+    const owner = await clientFor(w, 'owner', 'Global preview')
+
+    const preview = await call(owner, 'get_preview_url', { id: home.entryId })
+    expect(preview.isError).toBe(false)
+    expect(String(preview.data?.url)).toMatch(/\/\?arecaPreview=/)
+
+    const none = await call(owner, 'get_preview_url', { id: company.entryId })
+    expect(none.isError).toBe(true)
+  })
+
+  it('updates only the fields sent, stores rich text from Markdown, and checks the version', async () => {
+    const { company } = await seedSiteContent(w)
+    const client = await clientFor(w, 'editor', 'Update global')
+
+    const updated = await call(client, 'update_global', {
+      global: 'companyInfo',
+      fields: { email: 'team@example.com' },
+      expectedVersion: 1,
+    })
+    expect(updated.isError).toBe(false)
+    const after = await storedEntry(company.entryId)
+    expect(after.draftData.email).toBe('team@example.com')
+    expect(after.draftData.phone).toBe(COMPANY_DATA.phone)
+    expect(after.draftData.about).toEqual(COMPANY_DATA.about)
+    expect(after.draftVersion).toBe(2)
+
+    const markdown = await call(client, 'update_global', {
+      global: 'companyInfo',
+      fields: { about: '## Our story\n\nWe roast **slowly**.' },
+    })
+    expect(markdown.isError).toBe(false)
+    const stored = await storedEntry(company.entryId)
+    expect((stored.draftData.about as { type: string }).type).toBe('doc')
+    const read = await call(client, 'get_global', { global: 'companyInfo' })
+    expect(read.data?.values).toMatchObject({ email: 'team@example.com' })
+    expect(String((read.data?.values as Record<string, unknown>).about)).toContain(
+      '## Our story',
+    )
+
+    const stale = await call(client, 'update_global', {
+      global: 'companyInfo',
+      fields: { phone: 'Too late' },
+      expectedVersion: 1,
+    })
+    expect(stale.isError).toBe(true)
+    expect(stale.text).toMatch(/get_(global|entry)/)
+    expect((await storedEntry(company.entryId)).draftData.phone).toBe(
+      COMPANY_DATA.phone,
+    )
+  })
+
+  it('refuses seo on a section without SEO, and saves it on one with SEO', async () => {
+    const { company } = await seedSiteContent(w)
+    const client = await clientFor(w, 'editor', 'Global seo')
+
+    const refused = await call(client, 'update_global', {
+      global: 'companyInfo',
+      seo: { title: 'Not allowed here' },
+    })
+    expect(refused.isError).toBe(true)
+    expect(refused.text).toMatch(/SEO/i)
+    expect((await storedEntry(company.entryId)).draftData).not.toHaveProperty(
+      '$seo',
+    )
+
+    const saved = await call(client, 'update_global', {
+      global: 'homePage',
+      seo: { title: 'Home title' },
+    })
+    expect(saved.isError).toBe(false)
+    const home = await call(client, 'get_global', { global: 'homePage' })
+    expect(home.data?.seo).toMatchObject({ title: 'Home title' })
+  })
+
+  it('discards the draft back to the ready values, and refuses when the section was never ready', async () => {
+    const { company } = await seedSiteContent(w)
+    const owner = await clientFor(w, 'owner', 'Discard owner')
+    const ready = await call(owner, 'mark_ready', { id: company.entryId })
+    expect(ready.isError).toBe(false)
+
+    const editor = await clientFor(w, 'editor', 'Discard editor')
+    const edit = await call(editor, 'update_global', {
+      global: 'companyInfo',
+      fields: { email: 'draft@example.com' },
+    })
+    expect(edit.isError).toBe(false)
+    const edited = await call(editor, 'get_global', { global: 'companyInfo' })
+    expect(edited.data).toMatchObject({
+      editedSinceReady: true,
+      values: { email: 'draft@example.com' },
+    })
+
+    const discarded = await call(editor, 'discard_global_draft', {
+      global: 'companyInfo',
+    })
+    expect(discarded.isError).toBe(false)
+    const after = await call(editor, 'get_global', { global: 'companyInfo' })
+    expect(after.data?.values).toMatchObject({
+      email: COMPANY_DATA.email,
+      phone: COMPANY_DATA.phone,
+    })
+    expect(after.data).toMatchObject({ editedSinceReady: false })
+    expect(Number(after.data?.version)).toBeGreaterThan(
+      Number(edited.data?.version),
+    )
+
+    const revisions = await callArray(editor, 'list_revisions', {
+      id: company.entryId,
+    })
+    expect(revisions.map((rev) => rev.note)).toContain('discard')
+
+    await seedGlobal(w, {
+      key: 'aboutPage',
+      label: 'About page',
+      fields: [{ key: 'heading', label: 'Heading', type: 'text' }],
+      draftData: { heading: 'Draft only' },
+    })
+    const never = await call(editor, 'discard_global_draft', {
+      global: 'aboutPage',
+    })
+    expect(never.isError).toBe(true)
+  })
+
+  it('lets owners approve, schedule and restore a section by its entry id, and keeps editors from approving', async () => {
+    const { company } = await seedSiteContent(w)
+    const id = company.entryId
+
+    const editor = await clientFor(w, 'editor', 'Workflow editor')
+    let refused: CallOutcome | Error
+    try {
+      refused = await call(editor, 'mark_ready', { id })
+    } catch (error) {
+      refused = error as Error
+    }
+    expect(refused instanceof Error || refused.isError).toBe(true)
+    expect((await storedEntry(id)).status).toBe('draft')
+
+    const owner = await clientFor(w, 'owner', 'Workflow owner', {
+      allowGoLive: true,
+    })
+    const ready = await call(owner, 'mark_ready', { id })
+    expect(ready.isError).toBe(false)
+    expect(ready.data).toMatchObject({
+      status: 'ready',
+      live: false,
+      pendingRelease: true,
+    })
+
+    const edit = await call(owner, 'update_global', {
+      global: 'companyInfo',
+      fields: { phone: '+31 20 999 0000' },
+    })
+    expect(edit.isError).toBe(false)
+
+    const scheduled = await call(owner, 'schedule_entry', {
+      id,
+      publishAt: FUTURE,
+      timezone: 'Europe/Amsterdam',
+    })
+    expect(scheduled.isError).toBe(false)
+    expect((await storedEntry(id)).status).toBe('scheduled')
+
+    const cancelled = await call(owner, 'cancel_schedule', { id })
+    expect(cancelled.isError).toBe(false)
+    expect(cancelled.data?.status).toBe('ready')
+
+    const revisions = await callArray(owner, 'list_revisions', { id })
+    expect(revisions.length).toBeGreaterThan(0)
+    const restored = await call(owner, 'restore_revision', {
+      id,
+      revisionId: String(revisions.at(-1)?.id),
+    })
+    expect(restored.isError).toBe(false)
+  })
+
+  it('refuses unpublish, archive and delete on a section, and treats sections as unknown collections', async () => {
+    const { company } = await seedSiteContent(w)
+    const owner = await clientFor(w, 'owner', 'Refuse owner')
+
+    for (const name of ['unpublish_entry', 'archive_entry', 'delete_entry']) {
+      const outcome = await call(owner, name, { id: company.entryId })
+      expect(outcome.isError, name).toBe(true)
+      expect(outcome.text, name).toMatch(/site content|global/i)
+    }
+    // The section's entry survives every refused call.
+    expect((await storedEntry(company.entryId)).slug).toBe(GLOBAL_ENTRY_SLUG)
+
+    const created = await call(owner, 'create_entry', {
+      collection: 'companyInfo',
+      fields: { email: 'nope@example.com' },
+    })
+    expect(created.isError).toBe(true)
+    expect(created.text).toContain('No collection "companyInfo"')
+
+    const schema = await call(owner, 'get_collection_schema', {
+      collection: 'companyInfo',
+    })
+    expect(schema.isError).toBe(true)
+    expect(schema.text).toContain('No collection "companyInfo"')
+
+    const listed = await call(owner, 'list_entries', {
+      collection: 'companyInfo',
+    })
+    expect(listed.isError).toBe(true)
+    expect(listed.text).toContain('No collection "companyInfo"')
+  })
+
+  it('lets an agency admin create, redefine and delete a section, keeping one entry for it', async () => {
+    const agency = await clientFor(w, 'agency', 'Globals agency')
+
+    const created = await call(agency, 'upsert_global', {
+      key: 'footerInfo',
+      label: 'Footer',
+      fields: [{ key: 'copyright', label: 'Copyright', type: 'text' }],
+      seo: false,
+      enabled: true,
+    })
+    expect(created.isError).toBe(false)
+
+    const [col] = await db
+      .select()
+      .from(collection)
+      .where(
+        and(
+          eq(collection.siteId, w.ctx.site.id),
+          eq(collection.key, 'footerInfo'),
+        ),
+      )
+    expect(col).toMatchObject({ kind: 'global', label: 'Footer', enabled: true })
+    const entries = await db
+      .select()
+      .from(entry)
+      .where(eq(entry.collectionId, col!.id))
+    expect(entries.map((item) => item.slug)).toEqual([GLOBAL_ENTRY_SLUG])
+    const entryId = entries[0]!.id
+
+    const redefined = await call(agency, 'upsert_global', {
+      key: 'footerInfo',
+      label: 'Footer',
+      fields: [
+        { key: 'copyright', label: 'Copyright', type: 'text' },
+        { key: 'phone', label: 'Phone', type: 'text', group: 'Contact' },
+      ],
+      seo: false,
+    })
+    expect(redefined.isError).toBe(false)
+    const read = await call(agency, 'get_global', { global: 'footerInfo' })
+    expect(read.data?.id).toBe(entryId)
+    expect(
+      (read.data?.fields as { key: string }[]).map((field) => field.key),
+    ).toEqual(['copyright', 'phone'])
+    const afterRedefine = await db
+      .select()
+      .from(entry)
+      .where(eq(entry.collectionId, col!.id))
+    expect(afterRedefine).toHaveLength(1)
+
+    const withSlug = await call(agency, 'upsert_global', {
+      key: 'badInfo',
+      label: 'Bad',
+      fields: [{ key: 'slug', label: 'Slug', type: 'slug' }],
+    })
+    expect(withSlug.isError).toBe(true)
+    expect(withSlug.text).toMatch(/slug/i)
+
+    const reserved = await call(agency, 'upsert_global', {
+      key: 'globals',
+      label: 'Globals',
+      fields: [{ key: 'copyright', label: 'Copyright', type: 'text' }],
+    })
+    expect(reserved.isError).toBe(true)
+
+    const groupedCollection = await call(agency, 'upsert_collection', {
+      key: 'grouped',
+      label: 'Grouped',
+      routePattern: '/grouped/$slug',
+      fields: [
+        { key: 'slug', label: 'Slug', type: 'slug' },
+        { key: 'title', label: 'Title', type: 'text', group: 'Main' },
+      ],
+    })
+    expect(groupedCollection.isError).toBe(true)
+
+    const deleted = await call(agency, 'delete_global', { key: 'footerInfo' })
+    expect(deleted.isError).toBe(false)
+    const remaining = await db
+      .select()
+      .from(collection)
+      .where(
+        and(
+          eq(collection.siteId, w.ctx.site.id),
+          eq(collection.key, 'footerInfo'),
+        ),
+      )
+    expect(remaining).toHaveLength(0)
+    const archived = await db
+      .select()
+      .from(deletedContentArchive)
+      .where(
+        inArray(deletedContentArchive.entityId, [col!.id, entryId]),
+      )
+    expect(archived.length).toBeGreaterThan(0)
+    expect(
+      (await call(agency, 'get_global', { global: 'footerInfo' })).isError,
+    ).toBe(true)
+  })
+
+  it('mentions site content in the server instructions for editors and agency admins', async () => {
+    const editor = await clientFor(w, 'editor', 'Instr globals editor')
+    expect(editor.getInstructions()).toMatch(/site content|globals/i)
+
+    const agency = await clientFor(w, 'agency', 'Instr globals agency')
+    expect(agency.getInstructions()).toMatch(/site content|globals/i)
   })
 })

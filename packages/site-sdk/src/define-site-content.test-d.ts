@@ -134,3 +134,114 @@ describe('defineSiteContent: field type', () => {
     defineSiteContent({ siteKey: 's', collections: { posts: { route: '/p/$slug', fields: [{ key: 'title', label: 'T', type: 'nope' }] } } })
   })
 })
+
+describe('defineSiteContent: globals', () => {
+  it('accepts globals next to collections and stays assignable to SiteContentConfig', () => {
+    const config = defineSiteContent({
+      siteKey: 'acme',
+      collections: {
+        authors: {
+          route: '/authors/$slug',
+          fields: [{ key: 'slug', label: 'Slug', type: 'slug', required: true }],
+        },
+      },
+      globals: {
+        companyInfo: {
+          label: 'Company info',
+          fields: [
+            { key: 'email', label: 'Email', type: 'text', required: true, group: 'Contact' },
+            { key: 'featured', label: 'Featured', type: 'reference', collection: 'authors' },
+            { key: 'opens', label: 'Opens', type: 'date' },
+            { key: 'closes', label: 'Closes', type: 'datetime', after: 'opens' },
+            { key: 'plan', label: 'Plan', type: 'select', options: ['basic', 'pro'] },
+          ],
+        },
+        homePage: {
+          label: 'Home page',
+          seo: true,
+          previewPath: '/',
+          fields: [{ key: 'heroTitle', label: 'Hero title', type: 'text' }],
+        },
+      },
+    })
+    assertType<SiteContentConfig>(config)
+  })
+
+  it('accepts every field type except slug in a global', () => {
+    const config = defineSiteContent({
+      siteKey: 'acme',
+      collections: {
+        authors: { route: '/authors/$slug', fields: [] },
+      },
+      globals: {
+        all: {
+          fields: [
+            { key: 'text', label: 'Text', type: 'text', group: 'G' },
+            { key: 'textarea', label: 'Textarea', type: 'textarea', group: 'G' },
+            { key: 'richtext', label: 'Rich text', type: 'richtext', group: 'G' },
+            { key: 'image', label: 'Image', type: 'image', group: 'G' },
+            { key: 'date', label: 'Date', type: 'date', group: 'G' },
+            { key: 'datetime', label: 'Datetime', type: 'datetime', group: 'G' },
+            { key: 'select', label: 'Select', type: 'select', group: 'G' },
+            { key: 'boolean', label: 'Boolean', type: 'boolean', group: 'G' },
+            { key: 'number', label: 'Number', type: 'number', group: 'G' },
+            { key: 'url', label: 'Url', type: 'url', group: 'G' },
+            { key: 'reference', label: 'Reference', type: 'reference', collection: 'authors' },
+          ],
+        },
+      },
+    })
+    assertType<SiteContentConfig>(config)
+  })
+})
+
+describe('defineSiteContent: globals rejections', () => {
+  it('rejects slug in a global', () => {
+    // @ts-expect-error slug fields are not allowed in globals
+    defineSiteContent({ siteKey: 's', collections: {}, globals: { info: { fields: [{ key: 'slug', label: 'Slug', type: 'slug', required: true }] } } })
+  })
+
+  it('rejects a reference in a global to a key that is not a collection', () => {
+    // @ts-expect-error a global reference must target a collection key
+    defineSiteContent({ siteKey: 's', collections: { authors: { route: '/a/$slug', fields: [] } }, globals: { info: { fields: [{ key: 'author', label: 'A', type: 'reference', collection: 'missing' }] } } })
+  })
+
+  it('rejects a reference in a global to another global', () => {
+    // @ts-expect-error globals cannot be reference targets
+    defineSiteContent({ siteKey: 's', collections: { authors: { route: '/a/$slug', fields: [] } }, globals: { info: { fields: [] }, page: { fields: [{ key: 'info', label: 'I', type: 'reference', collection: 'info' }] } } })
+  })
+
+  it('rejects a collection reference to a global key', () => {
+    // @ts-expect-error collections may not reference globals
+    defineSiteContent({ siteKey: 's', collections: { posts: { route: '/p/$slug', fields: [{ key: 'info', label: 'I', type: 'reference', collection: 'info' }] } }, globals: { info: { fields: [] } } })
+  })
+
+  it('rejects after in a global pointing to a text field', () => {
+    // @ts-expect-error after must name a date field of the same global
+    defineSiteContent({ siteKey: 's', collections: {}, globals: { info: { fields: [{ key: 'title', label: 'Title', type: 'text' }, { key: 'ends', label: 'Ends', type: 'date', after: 'title' }] } } })
+  })
+
+  it('rejects after in a global pointing to a date field of another global', () => {
+    // @ts-expect-error after must point to a field of the same global
+    defineSiteContent({ siteKey: 's', collections: {}, globals: { other: { fields: [{ key: 'starts', label: 'Starts', type: 'date' }] }, info: { fields: [{ key: 'ends', label: 'Ends', type: 'date', after: 'starts' }] } } })
+  })
+
+  it('accepts after pointing to a date field of the same global', () => {
+    defineSiteContent({ siteKey: 's', collections: {}, globals: { info: { fields: [{ key: 'starts', label: 'Starts', type: 'date' }, { key: 'ends', label: 'Ends', type: 'date', after: 'starts' }] } } })
+  })
+
+  it('rejects group on a collection field', () => {
+    // @ts-expect-error group is only allowed on global fields
+    defineSiteContent({ siteKey: 's', collections: { posts: { route: '/p/$slug', fields: [{ key: 'title', label: 'T', type: 'text', group: 'Main' }] } } })
+  })
+
+  it('rejects an unknown field type in a global', () => {
+    // @ts-expect-error nope is not a field type
+    defineSiteContent({ siteKey: 's', collections: {}, globals: { info: { fields: [{ key: 'title', label: 'T', type: 'nope' }] } } })
+  })
+
+  it('rejects options on a text field in a global', () => {
+    // @ts-expect-error options are only allowed on select fields
+    defineSiteContent({ siteKey: 's', collections: {}, globals: { info: { fields: [{ key: 'title', label: 'T', type: 'text', options: ['a'] }] } } })
+  })
+})

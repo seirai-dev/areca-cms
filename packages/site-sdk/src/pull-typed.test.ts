@@ -282,3 +282,166 @@ describe('areca pull --types (CLI)', () => {
     expect(existsSync(types)).toBe(true)
   })
 })
+
+describe('pullContent with site content globals', () => {
+  const ORG = '0b9e8f7a-1111-4222-8333-944455556666'
+  const LOGO_ID = '3f2a91c0-aaaa-4bbb-8ccc-dddddddddddd'
+  const LOGO = {
+    id: `asset-${LOGO_ID}`,
+    storageKey: `${ORG}/${LOGO_ID}.png`,
+    url: `https://cms.test/api/assets/file/${ORG}/${LOGO_ID}.png`,
+    filename: 'Logo.png',
+    mimeType: 'image/png',
+    size: 3,
+  }
+
+  const globalSchema: NonNullable<Snapshot['globalSchema']> = {
+    'company-info': {
+      label: 'Company info',
+      seo: false,
+      fields: [
+        { key: 'email', label: 'Email', type: 'text', required: true, group: 'Contact' },
+        { key: 'phone-number', label: 'Phone number', type: 'text', group: 'Contact' },
+        { key: 'plan', label: 'Plan', type: 'select', options: ['basic', 'pro'] },
+        {
+          key: 'featured-author',
+          label: 'Featured author',
+          type: 'reference',
+          collection: 'authors',
+        },
+      ],
+    },
+    'home-page': {
+      label: 'Home page',
+      seo: true,
+      previewPath: '/',
+      fields: [
+        { key: 'hero-title', label: 'Hero title', type: 'text', required: true },
+        { key: 'hero-image', label: 'Hero image', type: 'image' },
+      ],
+    },
+  }
+
+  function globalSnapshot(heroUrl = IMAGE.url, extra: Partial<Snapshot> = {}): Snapshot {
+    return {
+      ...snapshot('Hello'),
+      globalSchema,
+      globals: {
+        'company-info': {
+          id: 'g-company',
+          publishedAt: '2026-01-01T00:00:00.000Z',
+          data: {
+            email: 'hi@acme.test',
+            'phone-number': '',
+            plan: 'pro',
+            'featured-author': { collection: 'authors', slug: 'ada', id: 'a1' },
+          },
+        },
+        'home-page': {
+          id: 'g-home',
+          publishedAt: null,
+          data: {
+            'hero-title': 'Welcome',
+            'hero-image': { ...IMAGE, url: heroUrl },
+          },
+          seo: { title: 'Home' } as never,
+        },
+      },
+      ...extra,
+    }
+  }
+
+  it('writes _globals.json keyed by camel key with camelised data, and lists the globals in the manifest', async () => {
+    const outDir = directory()
+    serve(globalSnapshot())
+    const result = await pullContent({ outDir, client: cmsClient() })
+
+    expect(result.warnings).toEqual([])
+    expect(generationFiles(outDir)).toContain('_globals.json')
+    const { generation } = readContentManifest(outDir)
+    const written = JSON.parse(
+      readFileSync(join(outDir, '.publications', generation!, '_globals.json'), 'utf8'),
+    )
+    expect(written).toEqual({
+      companyInfo: {
+        id: 'g-company',
+        publishedAt: '2026-01-01T00:00:00.000Z',
+        data: {
+          email: 'hi@acme.test',
+          phoneNumber: '',
+          plan: 'pro',
+          featuredAuthor: { collection: 'authors', slug: 'ada', id: 'a1' },
+        },
+      },
+      homePage: {
+        id: 'g-home',
+        publishedAt: null,
+        data: { heroTitle: 'Welcome', heroImage: { ...IMAGE } },
+        seo: { title: 'Home' },
+      },
+    })
+    expect(readContentManifest(outDir).globals?.slice().sort()).toEqual(['companyInfo', 'homePage'])
+    expect(readContentManifest(outDir).collections).not.toHaveProperty('companyInfo')
+  })
+
+  it('writes the generated globalSchema and passes it to createContent', async () => {
+    const outDir = directory()
+    serve(globalSnapshot())
+    const result = await pullContent({ outDir, client: cmsClient() })
+
+    const gen = readFileSync(result.typesPath, 'utf8')
+    expect(gen).toContain('export const globalSchema = {')
+    expect(gen).toContain("key: 'company-info'")
+    expect(gen).toContain('export type CompanyInfoGlobal = Global<')
+  })
+
+  it('writes no _globals.json and no globals key when the snapshot has no globals', async () => {
+    const outDir = directory()
+    serve(snapshot())
+    await pullContent({ outDir, client: cmsClient() })
+
+    expect(generationFiles(outDir)).not.toContain('_globals.json')
+    expect(readContentManifest(outDir)).not.toHaveProperty('globals')
+    expect(readFileSync(join(outDir, 'areca.gen.ts'), 'utf8')).toContain(
+      'export const globalSchema = {} as const',
+    )
+  })
+
+  it('rejects global data that does not match its schema before writing anything', async () => {
+    const outDir = directory()
+    const broken = globalSnapshot()
+    broken.globals!['company-info']!.data = { 'phone-number': '+31' }
+    serve(broken)
+    await expect(pullContent({ outDir, client: cmsClient() })).rejects.toThrow(
+      /company-info[^\n]*email: is required/,
+    )
+    expect(existsSync(join(outDir, 'manifest.json'))).toBe(false)
+  })
+
+  it('copies media used by globals locally and points the global at the local file', async () => {
+    const root = directory()
+    const outDir = join(root, 'content')
+    const assets = { dir: join(root, 'public/areca'), publicPath: '/areca' }
+    const value = globalSnapshot(LOGO.url, { assets: [LOGO] })
+    const calls: string[] = []
+    globalThis.fetch = async (input) => {
+      const url = new URL(String(input))
+      calls.push(url.pathname)
+      if (url.pathname === '/api/sites/snapshot/current') return jsonResponse(value)
+      if (url.pathname.startsWith('/api/assets/file/')) {
+        return new Response(new Uint8Array([1, 2, 3]))
+      }
+      return new Response('not found', { status: 404 })
+    }
+
+    const result = await pullContent({ outDir, client: cmsClient(), assets })
+
+    expect(result.localAssets).toMatchObject({ total: 1, downloaded: 1 })
+    const { generation } = readContentManifest(outDir)
+    const written = JSON.parse(
+      readFileSync(join(outDir, '.publications', generation!, '_globals.json'), 'utf8'),
+    )
+    expect(written.homePage.data.heroImage.url).toMatch(/^\/areca\/logo-[^/]+\.png$/)
+    expect(readdirSync(assets.dir)).toHaveLength(1)
+  })
+})

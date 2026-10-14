@@ -627,3 +627,172 @@ describe('createContent: preview', () => {
     )
   })
 })
+
+describe('createContent: globals', () => {
+  // Generated shape of the site-content globals: camel keys, raw `key` kept for the CMS.
+  const globalSchema = {
+    companyInfo: {
+      key: 'company-info',
+      label: 'Company info',
+      seo: false,
+      fields: {
+        email: { key: 'email', type: 'text', required: true },
+        phoneNumber: { key: 'phone-number', type: 'text', required: false },
+      },
+    },
+    homePage: {
+      key: 'home-page',
+      label: 'Home page',
+      seo: true,
+      previewPath: '/',
+      fields: {
+        heroTitle: { key: 'hero-title', type: 'text', required: true },
+      },
+    },
+  } as const
+
+  const SEO = { title: 'Home | Acme' } as never
+
+  function withGlobals(email = 'hi@acme.test'): Snapshot {
+    return {
+      ...rawSnapshot(),
+      globalSchema: {
+        'company-info': {
+          label: 'Company info',
+          seo: false,
+          fields: [
+            { key: 'email', label: 'Email', type: 'text', required: true },
+            { key: 'phone-number', label: 'Phone number', type: 'text' },
+          ],
+        },
+        'home-page': {
+          label: 'Home page',
+          seo: true,
+          previewPath: '/',
+          fields: [{ key: 'hero-title', label: 'Hero title', type: 'text', required: true }],
+        },
+      },
+      globals: {
+        'company-info': {
+          id: 'g1',
+          publishedAt: '2026-03-01T00:00:00.000Z',
+          data: { email, 'phone-number': '+31 20 000' },
+        },
+        'home-page': {
+          id: 'g2',
+          publishedAt: null,
+          data: { 'hero-title': 'Welcome' },
+          seo: SEO,
+        },
+      },
+    }
+  }
+
+  it('returns the pulled data of each global under its camel key', async () => {
+    const outDir = directory()
+    await publish(outDir, withGlobals())
+    const content = createContent({ schema, globalSchema, dir: outDir })
+
+    expect(content.globals.companyInfo.email).toBe('hi@acme.test')
+    expect(content.globals.companyInfo.phoneNumber).toBe('+31 20 000')
+    expect(content.globals.homePage.heroTitle).toBe('Welcome')
+  })
+
+  it('adds $seo only to globals with seo enabled', async () => {
+    const outDir = directory()
+    await publish(outDir, withGlobals())
+    const content = createContent({ schema, globalSchema, dir: outDir })
+
+    expect(content.globals.homePage.$seo).toEqual(SEO)
+    expect(content.globals.companyInfo).not.toHaveProperty('$seo')
+  })
+
+  it('picks up a new generation on the next read', async () => {
+    const outDir = directory()
+    await publish(outDir, withGlobals('first@acme.test'))
+    const content = createContent({ schema, globalSchema, dir: outDir })
+    expect(content.globals.companyInfo.email).toBe('first@acme.test')
+
+    await publish(outDir, withGlobals('second@acme.test'))
+    expect(content.globals.companyInfo.email).toBe('second@acme.test')
+  })
+
+  it('rejects globals as a collection name, like resolve, href and preview', () => {
+    expect(() =>
+      createContent({
+        schema: { ...schema, globals: schema.pages } as unknown as typeof schema,
+        dir: directory(),
+      }),
+    ).toThrow(/reserved/)
+  })
+
+  it('previewGlobals replaces the drafted section for a global preview token', async () => {
+    const outDir = directory()
+    await publish(outDir, withGlobals())
+    const content = createContent({ schema, globalSchema, dir: outDir })
+    fakeCms()
+    served.preview = {
+      kind: 'global',
+      global: 'company-info',
+      entry: {
+        id: 'g1',
+        publishedAt: null,
+        data: { email: 'draft@acme.test', 'phone-number': '' },
+      },
+    }
+
+    const globals = await content.previewGlobals('tok', { client: clientFor() })
+
+    expect(previewRequests).toEqual(['?token=tok'])
+    expect(globals.companyInfo.email).toBe('draft@acme.test')
+    expect(globals.companyInfo.phoneNumber).toBe('')
+    expect(globals.homePage).toEqual(content.globals.homePage)
+  })
+
+  it('previewGlobals returns the published globals without a request for a falsy token', async () => {
+    const outDir = directory()
+    await publish(outDir, withGlobals())
+    const content = createContent({ schema, globalSchema, dir: outDir })
+    fakeCms()
+
+    for (const token of [null, undefined, '']) {
+      expect(await content.previewGlobals(token, { client: clientFor() })).toEqual(
+        content.globals,
+      )
+    }
+    expect(previewRequests).toEqual([])
+  })
+
+  it('previewGlobals ignores an entry preview token and returns the published globals', async () => {
+    const outDir = directory()
+    await publish(outDir, withGlobals())
+    const content = createContent({ schema, globalSchema, dir: outDir })
+    fakeCms()
+    served.preview = {
+      kind: 'entry',
+      collection: 'blog-posts',
+      slug: 'alpha',
+      entry: rawSnapshot().collections['blog-posts']![0],
+    }
+
+    expect(await content.previewGlobals('tok', { client: clientFor() })).toEqual(content.globals)
+    expect(previewRequests).toEqual(['?token=tok'])
+  })
+
+  it('preview() still returns the entry for a kind: entry response', async () => {
+    const outDir = directory()
+    await publish(outDir, withGlobals())
+    const content = createContent({ schema, globalSchema, dir: outDir })
+    fakeCms()
+    served.preview = {
+      kind: 'entry',
+      collection: 'blog-posts',
+      slug: 'alpha',
+      entry: rawSnapshot().collections['blog-posts']![0],
+    }
+
+    const result = await content.preview('tok', { client: clientFor() })
+    expect(result.collection).toBe('blogPosts')
+    expect(result.entry.collection).toBe('blogPosts')
+  })
+})

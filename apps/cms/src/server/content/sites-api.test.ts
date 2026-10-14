@@ -1,9 +1,10 @@
+import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
 import { db } from '#/db'
 import { buildJob, collection, publication } from '#/db/schema'
 import type { SiteManifest, Snapshot } from '#/lib/types'
-import { createEntry } from '#/server/content/entries'
+import { createEntry, updateDraft } from '#/server/content/entries'
 import { signPreviewToken } from '#/server/content/preview-token'
 import {
   getSitesManifest,
@@ -14,6 +15,7 @@ import { getSitesSnapshotCurrent } from '#/routes/api/sites/snapshot/current'
 
 import {
   createTestCollection,
+  createTestGlobal,
   sampleRichText,
   withTestSite,
 } from './test-utils.ts'
@@ -213,10 +215,12 @@ describe.skipIf(!hasDb)('site API routes', () => {
       expect(preview.status).toBe(200)
       expect(preview.headers.get('X-Robots-Tag')).toBe('noindex')
       const previewJson = (await preview.json()) as {
+        kind: string
         collection: string
         slug: string
         entry: { id: string }
       }
+      expect(previewJson.kind).toBe('entry')
       expect(previewJson.collection).toBe('articles')
       expect(previewJson.slug).toBe(created.slug)
       expect(previewJson.entry.id).toBe(created.id)
@@ -327,6 +331,141 @@ describe.skipIf(!hasDb)('site API routes', () => {
         expect(json.publicationId).toBe(liveA.id)
         expect(json.hash).toBe('hash-a')
         expect(json.publicationId).not.toBe(foreign.id)
+      })
+    })
+  })
+
+  it('syncs site content sections through the manifest route and lists only enabled ones over GET', async () => {
+    await withTestSite(async (fixtures) => {
+      const post = (body: unknown) =>
+        postSitesManifest(
+          new Request('http://cms.test/api/sites/manifest', {
+            method: 'POST',
+            headers: {
+              ...bearer(fixtures.schemaToken),
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(body),
+          }),
+        )
+      const get = () =>
+        getSitesManifest(
+          new Request('http://cms.test/api/sites/manifest', {
+            headers: bearer(fixtures.token),
+          }),
+        )
+
+      const synced = await post({
+        collections: {},
+        globals: {
+          companyInfo: {
+            label: 'Company info',
+            fields: [
+              {
+                key: 'email',
+                label: 'Email',
+                type: 'text',
+                required: true,
+                group: 'Contact',
+              },
+            ],
+          },
+        },
+      })
+      expect(synced.status).toBe(200)
+      const json = (await (await get()).json()) as SiteManifest
+      expect(Object.keys(json.globals ?? {})).toEqual(['companyInfo'])
+      expect(json.globals?.companyInfo).toMatchObject({
+        label: 'Company info',
+        fields: [expect.objectContaining({ key: 'email', group: 'Contact' })],
+      })
+
+      const withdrawn = await post({ collections: {} })
+      expect(withdrawn.status).toBe(200)
+      const after = (await (await get()).json()) as Record<string, unknown>
+      expect(after).not.toHaveProperty('globals')
+      const [row] = await db
+        .select()
+        .from(collection)
+        .where(eq(collection.siteId, fixtures.site.id))
+      expect(row).toMatchObject({
+        key: 'companyInfo',
+        kind: 'global',
+        enabled: false,
+      })
+    })
+  })
+
+  it('rejects section manifests with slug fields, unsafe keys, or an 81-character group', async () => {
+    await withTestSite(async (fixtures) => {
+      const post = (globals: unknown) =>
+        postSitesManifest(
+          new Request('http://cms.test/api/sites/manifest', {
+            method: 'POST',
+            headers: {
+              ...bearer(fixtures.schemaToken),
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ collections: {}, globals }),
+          }),
+        )
+      const field = { key: 'email', label: 'Email', type: 'text' }
+
+      expect(
+        (
+          await post({
+            companyInfo: {
+              label: 'Company info',
+              fields: [{ key: 'slug', label: 'Slug', type: 'slug' }],
+            },
+          })
+        ).status,
+      ).toBe(400)
+      for (const key of ['globals', '../escape', 'constructor'])
+        expect(
+          (await post({ [key]: { label: 'Section', fields: [field] } })).status,
+        ).toBe(400)
+      expect(
+        (
+          await post({
+            companyInfo: {
+              label: 'Company info',
+              fields: [{ ...field, group: 'g'.repeat(81) }],
+            },
+          })
+        ).status,
+      ).toBe(400)
+    })
+  })
+
+  it('previews a section draft through a global preview token', async () => {
+    await withTestSite(async (fixtures) => {
+      const section = await createTestGlobal(fixtures.site.id, {
+        key: 'companyInfo',
+      })
+      await updateDraft(
+        section.entry.id,
+        { email: 'preview@x.test' },
+        fixtures.actor.id,
+        section.entry.draftVersion,
+      )
+
+      const token = signPreviewToken({
+        siteId: fixtures.site.id,
+        global: 'companyInfo',
+        secret: fixtures.previewSecret,
+      })
+      const preview = await getSitesPreview(
+        new Request(
+          `http://cms.test/api/sites/preview?token=${encodeURIComponent(token)}`,
+        ),
+      )
+      expect(preview.status).toBe(200)
+      expect(preview.headers.get('X-Robots-Tag')).toBe('noindex')
+      expect(await preview.json()).toMatchObject({
+        kind: 'global',
+        global: 'companyInfo',
+        entry: { id: section.entry.id, data: { email: 'preview@x.test' } },
       })
     })
   })

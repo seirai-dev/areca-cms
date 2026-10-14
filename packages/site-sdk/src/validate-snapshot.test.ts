@@ -236,3 +236,72 @@ describe('validateSnapshot', () => {
     expect(message).not.toContain('articles/e20.')
   })
 })
+
+describe('validateSnapshot: globals', () => {
+  const globalSchema: NonNullable<Snapshot['globalSchema']> = {
+    'company-info': {
+      label: 'Company info',
+      seo: false,
+      fields: [
+        { key: 'email', label: 'Email', type: 'text', required: true },
+        { key: 'phone-number', label: 'Phone number', type: 'text' },
+        { key: 'plan', label: 'Plan', type: 'select', options: ['basic', 'pro'] },
+      ],
+    },
+  }
+
+  function withGlobal(data: Record<string, unknown>): Snapshot {
+    return {
+      publicationId: 'pub',
+      siteKey: 'site',
+      createdAt: '',
+      hash: 'h',
+      collections: {},
+      schema: {},
+      globalSchema,
+      globals: {
+        'company-info': { id: 'g1', publishedAt: null, data },
+      },
+    }
+  }
+
+  it('accepts a global whose data matches its schema', () => {
+    expect(() =>
+      validateSnapshot(withGlobal({ email: 'hi@acme.test', 'phone-number': '', plan: 'pro' }), {}),
+    ).not.toThrow()
+  })
+
+  it('names the global and field when a required field is missing', () => {
+    expect(() => validateSnapshot(withGlobal({ 'phone-number': '+31' }), {})).toThrow(
+      /company-info[^\n]*email: is required/,
+    )
+  })
+
+  it('rejects a select value outside the options of a global field', () => {
+    expect(() => validateSnapshot(withGlobal({ email: 'a@b.c', plan: 'gold' }), {})).toThrow(
+      /company-info[^\n]*plan: must be one of/,
+    )
+  })
+
+  it('rejects unknown fields in a global', () => {
+    expect(() =>
+      validateSnapshot(withGlobal({ email: 'a@b.c', nope: 1 }), {}),
+    ).toThrow(/company-info[^\n]*nope: unknown field/)
+  })
+
+  it('reports global problems together with collection problems', () => {
+    const snapshot: Snapshot = {
+      ...withGlobal({}),
+      collections: { authors: [{ id: 'a', slug: 'ada', publishedAt: null, data: {} }] },
+      schema: {
+        authors: {
+          route: '/authors/$slug',
+          fields: [{ key: 'name', label: 'Name', type: 'text', required: true }],
+        },
+      },
+    }
+    expect(() => validateSnapshot(snapshot, snapshot.schema!)).toThrow(
+      /authors\/ada\.name: is required[\s\S]*company-info[^\n]*email: is required/,
+    )
+  })
+})

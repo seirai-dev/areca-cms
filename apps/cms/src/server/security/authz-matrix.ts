@@ -43,6 +43,7 @@ import * as overviewFns from '#/server/fn/overview'
 import * as publishingFns from '#/server/fn/publishing'
 import * as securityFns from '#/server/fn/security'
 import * as setupFns from '#/server/fn/setup'
+import { publishEntry, updateDraft } from '#/server/content/entries'
 import { sampleRichText } from '#/server/content/test-utils'
 
 import type { ActorName, Expected, Policy, World } from './authz-harness'
@@ -580,6 +581,119 @@ export const ROWS: Row[] = [
       return {
         data: { siteId: w.X.site.id, key: c.key },
         untouched: exists(collection, eq(collection.id, c.id)),
+      }
+    },
+  },
+
+  // Site content (globals): docs/design/site-content-globals.md, "Server functions".
+  {
+    name: 'listGlobalsFn',
+    hidden: true,
+    fn: contentFns.listGlobalsFn,
+    policy: 'org-editor',
+    prepare: async (w) => {
+      await w.fresh.global('X')
+      return { data: { siteId: w.X.site.id } }
+    },
+  },
+  {
+    name: 'getGlobalFn',
+    hidden: true,
+    fn: contentFns.getGlobalFn,
+    policy: 'org-editor',
+    prepare: async (w) => {
+      const g = await w.fresh.global('X')
+      return { data: { siteId: w.X.site.id, key: g.collection.key } }
+    },
+  },
+  {
+    name: 'updateGlobalDraftFn',
+    hidden: true,
+    fn: contentFns.updateGlobalDraftFn,
+    policy: 'org-editor',
+    prepare: async (w) => {
+      const g = await w.fresh.global('X')
+      return {
+        data: {
+          siteId: w.X.site.id,
+          key: g.collection.key,
+          data: { email: 'defaced@x.test' },
+          expectedVersion: g.entry.draftVersion,
+        },
+        untouched: entryUntouched(g.entry.id, {
+          draftVersion: g.entry.draftVersion,
+        }),
+      }
+    },
+  },
+  {
+    name: 'discardGlobalDraftFn',
+    hidden: true,
+    fn: contentFns.discardGlobalDraftFn,
+    policy: 'org-editor',
+    prepare: async (w) => {
+      // Discard needs a ready section: publish one, then leave a newer draft.
+      const g = await w.fresh.global('X')
+      const actor = w.users.ownerX.id
+      await updateDraft(
+        g.entry.id,
+        { email: 'ready@x.test' },
+        actor,
+        g.entry.draftVersion,
+      )
+      await publishEntry(g.entry.id, actor)
+      await updateDraft(g.entry.id, { email: 'changed@x.test' }, actor, 2)
+      return {
+        data: { siteId: w.X.site.id, key: g.collection.key },
+        untouched: entryUntouched(g.entry.id, { draftVersion: 3 }),
+      }
+    },
+  },
+  {
+    name: 'upsertGlobalFn',
+    fn: contentFns.upsertGlobalFn,
+    policy: 'agency',
+    note: 'Section structure is agency-only, like collection schemas.',
+    prepare: (w) => {
+      const key = `g${uniq()}`
+      return {
+        data: {
+          siteId: w.X.site.id,
+          key,
+          label: 'Injected',
+          fields: [{ key: 'email', label: 'Email', type: 'text' }],
+        },
+        untouched: absent(
+          collection,
+          and(eq(collection.siteId, w.X.site.id), eq(collection.key, key)),
+        ),
+      }
+    },
+  },
+  {
+    name: 'deleteGlobalFn',
+    fn: contentFns.deleteGlobalFn,
+    policy: 'agency',
+    prepare: async (w) => {
+      const g = await w.fresh.global('X')
+      return {
+        data: { siteId: w.X.site.id, key: g.collection.key },
+        untouched: exists(collection, eq(collection.id, g.collection.id)),
+      }
+    },
+  },
+  {
+    name: 'setGlobalEnabledFn',
+    fn: contentFns.setGlobalEnabledFn,
+    policy: 'agency',
+    prepare: async (w) => {
+      const g = await w.fresh.global('X')
+      return {
+        data: { siteId: w.X.site.id, key: g.collection.key, enabled: false },
+        untouched: exists(
+          collection,
+          and(eq(collection.id, g.collection.id), eq(collection.enabled, true)),
+        ),
       }
     },
   },
