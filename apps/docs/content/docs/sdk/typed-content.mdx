@@ -144,6 +144,8 @@ const cover = entry.data.coverImage || null
 
 Because the values are not normalised, `content.blogPosts.all({ where: { subtitle: { isNull: true } } })` matches all three empty cases at once. The query helpers treat `null`, `''` and a missing key as empty, but they do not change the entry.
 
+Draft entries from `content.preview()` follow the same shapes, with one difference. A draft can leave a required field empty, so an incomplete draft is a `DraftEntry`, and every one of its fields has the optional type from the table, whether or not the field is required. A complete draft is a normal `Entry`. See [Draft preview](/docs/sdk/preview).
+
 ## Validation happens at pull time
 
 The types are checked when you pull, and only then. At runtime the SDK reads the JSON files as they are. This keeps reads fast, and it means a bad publication never reaches your site: the pull fails, and your types and content stay on the last good publication.

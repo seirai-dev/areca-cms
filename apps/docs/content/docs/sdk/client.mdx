@@ -336,7 +336,11 @@ await content.preview(token, { client }) // PreviewEntry<S>
 
 - **`resolve(ref)`** accepts a `ReferenceValue<C>`, or `''`, `null` or `undefined`. It finds the entry by `id` in the target collection. It returns `null` for an empty value or for an entry that is not in the pulled publication.
 - **`href(ref)`** accepts a `ReferenceValue<C>` or an entry. It replaces `$slug` in the target's route with the slug, URL-encoded. The result is typed as a template literal, such as `` `/blog/${string}` ``.
-- **`preview(token, options?)`** calls `getPreviewEntry`, using the same options. It maps the raw collection key to its camelCase name, and it converts the entry the same way as a pull. The result is a `PreviewEntry<S>`, so `switch (result.collection)` narrows `result.entry`. A collection that is not in the generated schema throws `Preview collection "<key>" is not in the generated schema. Run areca pull to refresh the types.`
+- **`preview(token, options?)`** calls `getPreviewEntry`, using the same options. It validates the raw draft against the schema with the same rules as a pull, then maps the raw collection key to its camelCase name and converts the entry the same way. The result is a `PreviewEntry<S>`, a union narrowed by `collection` and `complete`:
+  - `complete: true`: `entry` is an `Entry<C, S>` and `issues` is `[]`.
+  - `complete: false`: `entry` is a `DraftEntry<C, S>`, where every field has its optional type, and `issues` is a list of `<camelField>: <problem>` strings, such as `editor: is required`.
+
+  An incomplete draft is returned, not thrown. A collection that is not in the generated schema throws `Preview collection "<key>" is not in the generated schema. Run areca pull to refresh the types.`
 
 ### Run-time behaviour
 
@@ -510,7 +514,8 @@ These types are exported from the main entry point, and most of them describe th
 | `Where<C, S>`, `OrderBy<C, S>`, `QueryOptions<C, S>`, `QueryResult<C, O, S>` | The options of `all` and `first`, and the entries they return. |
 | `RoutePath<R>`, `Href<C, S>` | A route with `$slug` replaced by `${string}`, and the route of a collection. |
 | `Content<S>`, `CollectionApi<C, S>` | The content object, and the methods of one collection. |
-| `PreviewEntry<S>` | The result of `content.preview`, a union narrowed by `collection`. |
+| `DraftEntryData<C, S>`, `DraftEntry<C, S>` | The data and entry of an incomplete preview draft. Every field has its optional type. |
+| `PreviewEntry<S>` | The result of `content.preview`: a complete `Entry` with no issues, or a `DraftEntry` with issues. Narrow it with `collection` and `complete`. |
 | `SiteContentConfig` | The shape of `areca.config.ts`: `siteKey` and `collections`. |
 | `CollectionConfig` | One collection: `route`, optional `label`, and `fields`. |
 | `Field` | One field definition, as a union discriminated on `type`. |

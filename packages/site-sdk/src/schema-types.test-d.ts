@@ -3,12 +3,15 @@ import type {
   AnyEntry,
   CollectionKey,
   ContentSchema,
+  DraftEntry,
+  DraftEntryData,
   Entry,
   EntryData,
   FieldKey,
   FieldValue,
   Href,
   ImageValue,
+  PreviewEntry,
   ReferenceValue,
   RegisteredSchema,
   RichTextValue,
@@ -186,6 +189,91 @@ describe('Entry', () => {
   })
 })
 
+describe('DraftEntryData', () => {
+  it('has the same keys as EntryData', () => {
+    expectTypeOf<keyof DraftEntryData<'notes', V>>().toEqualTypeOf<keyof EntryData<'notes', V>>()
+  })
+
+  it('types every required field as its optional value', () => {
+    expectTypeOf<DraftEntryData<'notes', V>['text']>().toEqualTypeOf<string | null | undefined>()
+    expectTypeOf<DraftEntryData<'notes', V>['textarea']>().toEqualTypeOf<
+      string | null | undefined
+    >()
+    expectTypeOf<DraftEntryData<'notes', V>['url']>().toEqualTypeOf<string | null | undefined>()
+    expectTypeOf<DraftEntryData<'notes', V>['slug']>().toEqualTypeOf<string | null | undefined>()
+    expectTypeOf<DraftEntryData<'notes', V>['select']>().toEqualTypeOf<
+      'a' | 'b' | '' | null | undefined
+    >()
+    expectTypeOf<DraftEntryData<'notes', V>['plainSelect']>().toEqualTypeOf<
+      string | null | undefined
+    >()
+    expectTypeOf<DraftEntryData<'notes', V>['date']>().toEqualTypeOf<string | null | undefined>()
+    expectTypeOf<DraftEntryData<'notes', V>['datetime']>().toEqualTypeOf<
+      string | null | undefined
+    >()
+    expectTypeOf<DraftEntryData<'notes', V>['number']>().toEqualTypeOf<number | null | undefined>()
+    expectTypeOf<DraftEntryData<'notes', V>['boolean']>().toEqualTypeOf<
+      boolean | null | undefined
+    >()
+    expectTypeOf<DraftEntryData<'notes', V>['image']>().toEqualTypeOf<
+      ImageValue | '' | null | undefined
+    >()
+    expectTypeOf<DraftEntryData<'notes', V>['reference']>().toEqualTypeOf<
+      ReferenceValue<'authors'> | '' | null | undefined
+    >()
+    expectTypeOf<DraftEntryData<'notes', V>['richtext']>().toEqualTypeOf<
+      RichTextValue | '' | null | undefined
+    >()
+  })
+
+  it('keeps the optional values of optional fields', () => {
+    expectTypeOf<DraftEntryData<'notes', V>['optionalImage']>().toEqualTypeOf<
+      ImageValue | '' | null | undefined
+    >()
+    expectTypeOf<DraftEntryData<'notes', V>['optionalText']>().toEqualTypeOf<
+      string | null | undefined
+    >()
+  })
+
+  it('types the blog post fields of the fixture schema', () => {
+    expectTypeOf<DraftEntryData<'blogPosts', S>['title']>().toEqualTypeOf<
+      string | null | undefined
+    >()
+    expectTypeOf<DraftEntryData<'blogPosts', S>['editor']>().toEqualTypeOf<
+      ReferenceValue<'authors'> | '' | null | undefined
+    >()
+    expectTypeOf<DraftEntryData<'blogPosts', S>['featured']>().toEqualTypeOf<
+      boolean | null | undefined
+    >()
+  })
+})
+
+describe('DraftEntry', () => {
+  it('mirrors Entry with draft data', () => {
+    expectTypeOf<DraftEntry<'blogPosts', S>['id']>().toEqualTypeOf<string>()
+    expectTypeOf<DraftEntry<'blogPosts', S>['slug']>().toEqualTypeOf<string>()
+    expectTypeOf<DraftEntry<'blogPosts', S>['publishedAt']>().toEqualTypeOf<string | null>()
+    expectTypeOf<DraftEntry<'blogPosts', S>['collection']>().toEqualTypeOf<'blogPosts'>()
+    expectTypeOf<DraftEntry<'blogPosts', S>['seo']>().toEqualTypeOf<SeoMeta | undefined>()
+    expectTypeOf<DraftEntry<'blogPosts', S>['data']>().toEqualTypeOf<
+      DraftEntryData<'blogPosts', S>
+    >()
+  })
+})
+
+describe('PreviewEntry on the fixture schema', () => {
+  it('is complete with no issues, or a draft with issues', () => {
+    expectTypeOf<PreviewEntry<S>>().toEqualTypeOf<
+      | { collection: 'blogPosts'; slug: string; complete: true; entry: Entry<'blogPosts', S>; issues: [] }
+      | { collection: 'blogPosts'; slug: string; complete: false; entry: DraftEntry<'blogPosts', S>; issues: string[] }
+      | { collection: 'authors'; slug: string; complete: true; entry: Entry<'authors', S>; issues: [] }
+      | { collection: 'authors'; slug: string; complete: false; entry: DraftEntry<'authors', S>; issues: string[] }
+      | { collection: 'pages'; slug: string; complete: true; entry: Entry<'pages', S>; issues: [] }
+      | { collection: 'pages'; slug: string; complete: false; entry: DraftEntry<'pages', S>; issues: string[] }
+    >()
+  })
+})
+
 describe('keys', () => {
   it('lists collection keys', () => {
     expectTypeOf<CollectionKey<S>>().toEqualTypeOf<'blogPosts' | 'authors' | 'pages'>()
@@ -247,5 +335,8 @@ describe('unregistered fallback', () => {
     expectTypeOf<Entry<string>['data']>().not.toBeNever()
     expectTypeOf<AnyEntry>().not.toBeNever()
     expectTypeOf<Href<string>>().toEqualTypeOf<string>()
+    expectTypeOf<DraftEntry<string>['data']>().not.toBeNever()
+    expectTypeOf<DraftEntryData<string>>().not.toBeNever()
+    expectTypeOf<PreviewEntry>().not.toBeNever()
   })
 })

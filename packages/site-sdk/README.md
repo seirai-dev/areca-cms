@@ -172,7 +172,8 @@ Each collection has `all`, `first`, `get`, `byId` and `href`. `all` and `first`
 accept `where` (equality, and operators that fit each field type), `orderBy`,
 `limit`, `offset` and `with` (one level of references). `content.resolve(ref)`
 follows a reference, and `content.href(...)` builds the route. Use `content.preview(token)`
-for draft previews. The module reads the folder you pulled into, or
+for draft previews. It returns `complete: true` with an `Entry`, or `complete: false` with a
+`DraftEntry` and a list of `issues`. The module reads the folder you pulled into, or
 `ARECA_CONTENT_DIR` when it is set.
 
 Collection and field names are camelCase in code: `blog-posts` is

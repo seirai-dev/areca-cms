@@ -34,17 +34,8 @@ export function validateSnapshot(
     if (!config) throw new Error(`Collection "${collection}" has no schema`)
     for (const entry of entries) {
       const prefix = `${collection}/${entry.slug}`
-      if (!isRecord(entry.data)) {
-        problems.push(`${prefix}.data: must be an object`)
-        continue
-      }
-      const known = new Set(config.fields.map((field) => field.key))
-      for (const key of Object.keys(entry.data)) {
-        if (!known.has(key)) problems.push(`${prefix}.${key}: unknown field`)
-      }
-      for (const field of config.fields) {
-        const problem = fieldProblem(entry.data, field)
-        if (problem !== undefined) problems.push(`${prefix}.${field.key}: ${problem}`)
+      for (const issue of entryIssues(entry.data, config.fields)) {
+        problems.push(`${prefix}.${issue.field}: ${issue.problem}`)
       }
     }
   }
@@ -58,6 +49,28 @@ export function validateSnapshot(
       ...(more > 0 ? [`...and ${more} more`] : []),
     ].join('\n'),
   )
+}
+
+/** One problem with a raw entry. `field` is the raw CMS key, or `data` when the data is not an object. */
+export type EntryIssue = { field: string; problem: string }
+
+/**
+ * Checks one raw entry's `data` against its fields (spec section 3). Returns
+ * the problems in field order, unknown keys first; empty when valid. Used by
+ * `validateSnapshot` and by `content.preview()`.
+ */
+export function entryIssues(data: unknown, fields: readonly Field[]): EntryIssue[] {
+  if (!isRecord(data)) return [{ field: 'data', problem: 'must be an object' }]
+  const issues: EntryIssue[] = []
+  const known = new Set(fields.map((field) => field.key))
+  for (const key of Object.keys(data)) {
+    if (!known.has(key)) issues.push({ field: key, problem: 'unknown field' })
+  }
+  for (const field of fields) {
+    const problem = fieldProblem(data, field)
+    if (problem !== undefined) issues.push({ field: field.key, problem })
+  }
+  return issues
 }
 
 /** Returns the problem with one field's value, or `undefined` when it is valid. */

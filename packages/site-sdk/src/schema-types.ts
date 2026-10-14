@@ -234,8 +234,41 @@ export type Href<C extends string = string, S extends ContentSchema = Registered
 
 /* ---------- content object ---------- */
 
+/** Value of a draft field: the optional variant, whatever `required` says (drafts may leave required fields empty). */
+type DraftValueOf<D> = D extends ContentSchemaField
+  ? FieldType extends D['type']
+    ? unknown
+    : PresentValue<D> | OptionalEmpty<D> | null | undefined
+  : unknown
+
+/** Draft entry data: one key per field, every value optional. Homomorphic so hovers keep the field JSDoc. */
+export type DraftEntryData<
+  C extends string = string,
+  S extends ContentSchema = RegisteredSchema,
+> = {
+  [K in keyof CollectionOf<C, S>['fields']]: DraftValueOf<FieldDef<C, K, S>>
+}
+
+/** An entry built from unpublished draft data; see `PreviewEntry`. */
+export type DraftEntry<C extends string = string, S extends ContentSchema = RegisteredSchema> = {
+  id: string
+  slug: string
+  publishedAt: string | null
+  collection: C
+  data: DraftEntryData<C, S>
+  seo?: SeoMeta
+}
+
+/**
+ * Result of `content.preview()`. A complete draft has the same shape as a
+ * published entry. An incomplete one (required fields empty, references or
+ * images unresolvable) is still returned, with `issues` as
+ * `<field>: <problem>` lines using camel field keys.
+ */
 export type PreviewEntry<S extends ContentSchema = RegisteredSchema> = {
-  [C in CollectionKey<S>]: { collection: C; slug: string; entry: Entry<C, S> }
+  [C in CollectionKey<S>]:
+    | { collection: C; slug: string; complete: true; entry: Entry<C, S>; issues: [] }
+    | { collection: C; slug: string; complete: false; entry: DraftEntry<C, S>; issues: string[] }
 }[CollectionKey<S>]
 
 export type CollectionApi<C extends string = string, S extends ContentSchema = RegisteredSchema> = {

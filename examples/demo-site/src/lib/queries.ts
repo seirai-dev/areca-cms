@@ -82,8 +82,10 @@ export type PreviewData =
   | { collection: 'coffees'; entry: CoffeesEntry; articles: ArticlesEntry[] }
   | { collection: 'authors'; entry: AuthorsEntry; articles: ArticlesEntry[] }
 
+/** A complete draft renders like a published entry; an incomplete one lists what is missing. */
 export type PreviewLoad =
-  | { ok: true; preview: PreviewData }
+  | { ok: true; complete: true; preview: PreviewData }
+  | { ok: true; complete: false; collection: string; issues: string[] }
   | { ok: false; error: string }
 
 /**
@@ -98,8 +100,7 @@ export const loadPreview = createServerFn({ method: 'GET', ...loose })
     setResponseHeader('X-Robots-Tag', headers['X-Robots-Tag'])
     setResponseHeader('Cache-Control', headers['Cache-Control'])
     try {
-      const preview = await content.preview(data.token)
-      return { ok: true, preview: toPreviewData(preview) }
+      return toPreviewLoad(await content.preview(data.token))
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Failed to fetch preview'
@@ -107,7 +108,14 @@ export const loadPreview = createServerFn({ method: 'GET', ...loose })
     }
   })
 
-function toPreviewData(result: PreviewEntry): PreviewData {
+function toPreviewLoad(result: PreviewEntry): PreviewLoad {
+  if (!result.complete) {
+    return { ok: true, complete: false, collection: result.collection, issues: result.issues }
+  }
+  return { ok: true, complete: true, preview: toPreviewData(result) }
+}
+
+function toPreviewData(result: Extract<PreviewEntry, { complete: true }>): PreviewData {
   switch (result.collection) {
     case 'articles':
       return {

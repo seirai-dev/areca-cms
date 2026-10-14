@@ -1,6 +1,6 @@
 import { describe, expectTypeOf, it } from 'vitest'
 import { createContent } from './content.js'
-import type { Content, Entry, Href } from './index.js'
+import type { Content, DraftEntry, Entry, Href, ReferenceValue } from './index.js'
 import { readContent } from './pull.js'
 import { schema } from './test-fixtures/schema.js'
 
@@ -86,22 +86,58 @@ describe('href', () => {
 })
 
 describe('preview', () => {
-  it('narrows entry on collection', () => {
-    if (preview.collection === 'authors') {
-      expectTypeOf(preview.entry).toEqualTypeOf<Entry<'authors', S>>()
+  it('narrows a complete result to Entry and no issues, collection first', () => {
+    if (preview.collection === 'blogPosts' && preview.complete) {
+      expectTypeOf(preview.entry).toEqualTypeOf<Entry<'blogPosts', S>>()
+      expectTypeOf(preview.issues).toEqualTypeOf<[]>()
     }
   })
 
-  it('narrows entry in a switch', () => {
+  it('narrows a complete result in the other order', () => {
+    if (preview.complete && preview.collection === 'blogPosts') {
+      expectTypeOf(preview.entry).toEqualTypeOf<Entry<'blogPosts', S>>()
+      expectTypeOf(preview.issues).toEqualTypeOf<[]>()
+    }
+  })
+
+  it('narrows an incomplete result to a draft entry with string issues', () => {
+    if (preview.collection === 'blogPosts' && !preview.complete) {
+      expectTypeOf(preview.entry).toEqualTypeOf<DraftEntry<'blogPosts', S>>()
+      expectTypeOf(preview.entry.data.title).toEqualTypeOf<string | null | undefined>()
+      expectTypeOf(preview.entry.data.editor).toEqualTypeOf<
+        ReferenceValue<'authors'> | '' | null | undefined
+      >()
+      expectTypeOf(preview.issues).toEqualTypeOf<string[]>()
+    }
+  })
+
+  it('narrows an incomplete result in the other order', () => {
+    if (!preview.complete && preview.collection === 'blogPosts') {
+      expectTypeOf(preview.entry).toEqualTypeOf<DraftEntry<'blogPosts', S>>()
+      expectTypeOf(preview.issues).toEqualTypeOf<string[]>()
+    }
+  })
+
+  it('narrows in a switch on collection, then complete', () => {
     switch (preview.collection) {
       case 'blogPosts':
-        expectTypeOf(preview.entry).toEqualTypeOf<Entry<'blogPosts', S>>()
+        if (preview.complete) {
+          expectTypeOf(preview.entry).toEqualTypeOf<Entry<'blogPosts', S>>()
+        } else {
+          expectTypeOf(preview.entry).toEqualTypeOf<DraftEntry<'blogPosts', S>>()
+        }
         break
       case 'authors':
-        expectTypeOf(preview.entry).toEqualTypeOf<Entry<'authors', S>>()
+        if (preview.complete) {
+          expectTypeOf(preview.entry).toEqualTypeOf<Entry<'authors', S>>()
+        } else {
+          expectTypeOf(preview.entry).toEqualTypeOf<DraftEntry<'authors', S>>()
+        }
         break
       case 'pages':
-        expectTypeOf(preview.entry).toEqualTypeOf<Entry<'pages', S>>()
+        expectTypeOf(preview.entry).toEqualTypeOf<
+          Entry<'pages', S> | DraftEntry<'pages', S>
+        >()
         break
     }
   })

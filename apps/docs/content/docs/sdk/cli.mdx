@@ -130,7 +130,7 @@ Media: 12 file(s) in public/areca (3 downloaded)
 Types: src/generated/content/areca.gen.ts
 ```
 
-The counts use the collection keys from your config. The `Types:` line shows where `areca.gen.ts` was written. Warnings, such as the one for a publication without an embedded schema, go to stderr after it.
+The counts use the camelCase collection keys, so a config key `blog-posts` prints as `blogPosts`. The `Types:` line shows where `areca.gen.ts` was written. Warnings, such as the one for a publication without an embedded schema, go to stderr after it.
 
 The folders then contain:
 

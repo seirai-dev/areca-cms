@@ -282,10 +282,27 @@ Runtime behaviour:
 - A collection missing from the pulled publication returns `[]` (not a throw).
 - `resolve` looks up by `id` in the target collection.
 - `href` substitutes `$slug` with the entry/ref slug (URI-encoded).
-- `preview` calls `getPreviewEntry`, applies the same camelCase transform
-  (using `schema[*].key` to map raw → camel), and returns
-  `PreviewEntry<S>` = `{ [C in CollectionKey<S>]: { collection: C; slug: string; entry: Entry<C, S> } }[CollectionKey<S>]`
-  so `switch (result.collection)` narrows `result.entry`. Unknown raw collection → throw.
+- `preview` calls `getPreviewEntry`. Preview data is a **draft** (the CMS builds
+  it non-strictly from `draftData`: required fields may be empty, unresolvable
+  references/images arrive as `null`). So `preview` validates the raw draft
+  against the schema with the same per-entry rules as the pull (§3), then
+  applies the camelCase transform (using `schema[*].key` to map raw → camel),
+  and returns a result discriminated on both `collection` and `complete`
+  (decision of 2026-10-14, after PR #24 review):
+
+  ```ts
+  type DraftEntryData<C, S> = { [K in keyof S[C]['fields']]: /* optional-row value of K, regardless of `required` */ }
+  type DraftEntry<C, S> = Omit<Entry<C, S>, 'data'> & { data: DraftEntryData<C, S> } // written as a plain object type
+  type PreviewEntry<S> = {
+    [C in CollectionKey<S>]:
+      | { collection: C; slug: string; complete: true; entry: Entry<C, S>; issues: [] }
+      | { collection: C; slug: string; complete: false; entry: DraftEntry<C, S>; issues: string[] }
+  }[CollectionKey<S>]
+  ```
+
+  `DraftEntryData` must be homomorphic (hover JSDoc). `issues` use camel field
+  keys: `"<camelField>: <problem>"`. A complete draft can be rendered with the
+  same components as a published entry. Unknown raw collection → throw.
 
 `readContent` (in `./pull`) becomes typed:
 `readContent<C extends CollectionKey>(outDir: string, collectionKey: C, manifest?: PulledContentManifest): Entry<C>[]`

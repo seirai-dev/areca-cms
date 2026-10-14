@@ -72,12 +72,23 @@ If `ARECA_SITE_TOKEN` is missing, `getPreviewEntry()` throws `Missing ARECA_SITE
 
 ## Typed preview
 
-If your site has the generated `areca.gen.ts`, `content.preview(token)` makes the same request, and returns the entry with the camelCase names and types of your site. Its `collection` is the camelCase key, so a `switch` on it narrows `entry`:
+If your site has the generated `areca.gen.ts`, `content.preview(token)` makes the same request, and returns the entry with the camelCase names and types of your site. Its `collection` is the camelCase key.
+
+The draft is checked against the schema before it is returned, with the same rules as a pull. Editors can save a draft with required fields empty, and a reference or image that points at nothing arrives as `null`. So the result also has a `complete` flag:
+
+- `complete: true`: the draft matches the schema. `entry` is an `Entry`, the same type as a published entry, and `issues` is `[]`.
+- `complete: false`: the draft is incomplete. `entry` is a `DraftEntry`, where every field is typed as optional. `issues` lists the problems as `<field>: <problem>`, using camelCase field names, such as `title: is required`.
+
+Check `complete` before you treat `entry` as published content:
 
 ```ts
 import { content } from '../generated/content/areca.gen'
 
 const result = await content.preview(token)
+if (!result.complete) {
+  // result.issues: ['title: is required', 'editor: is required']
+  return <p>This draft is incomplete: {result.issues.join(', ')}</p>
+}
 switch (result.collection) {
   case 'blogPosts': // result.entry is Entry<'blogPosts'>
     break
@@ -86,7 +97,7 @@ switch (result.collection) {
 }
 ```
 
-It throws the same errors as `getPreviewEntry`. A draft from a collection that is not in the generated types throws `Preview collection "<key>" is not in the generated schema`. Run `areca pull` to refresh the types. See [reading content](/docs/sdk/reading-content) for the content object.
+An incomplete draft is not an error, so the call does not throw for it. It throws the same errors as `getPreviewEntry`. A draft from a collection that is not in the generated types throws `Preview collection "<key>" is not in the generated schema`. Run `areca pull` to refresh the types. See [reading content](/docs/sdk/reading-content) for the content object.
 
 ## Build the preview route
 
@@ -140,7 +151,7 @@ function PreviewPage() {
 }
 ```
 
-Replace the status text and the body with your own components. The demo site renders the same article view for drafts and published pages, with an extra banner.
+Replace the status text and the body with your own components. The demo site renders a complete draft with the same article view as a published page, with an extra banner. For an incomplete draft it lists the `issues` instead.
 
 Notes on the example:
 

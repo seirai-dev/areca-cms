@@ -52,7 +52,8 @@ Typed content types (main entry, generated against `Register`):
 | `Href<C, S>` | the route type of collection `C`, such as `` `/blog/${string}` `` |
 | `Content<S>` | the content object: one property per collection, plus `resolve`, `href` and `preview` |
 | `CollectionApi<C, S>` | `all`, `first`, `get`, `byId` and `href` of one collection |
-| `PreviewEntry<S>` | the union returned by `content.preview`, narrowed by `collection` |
+| `PreviewEntry<S>` | the union returned by `content.preview`, narrowed by `collection` and `complete`: `{ collection, slug, complete: true, entry: Entry, issues: [] }` or `{ collection, slug, complete: false, entry: DraftEntry, issues: string[] }` |
+| `DraftEntry<C, S>`, `DraftEntryData<C, S>` | the entry of an incomplete preview draft; every field has its optional type, whether or not it is required |
 
 ## `@areca-cms/site-sdk/content` (Node only)
 
@@ -60,7 +61,7 @@ Typed content types (main entry, generated against `Register`):
 | --- | --- | --- |
 | `createContent` | `<const S extends ContentSchema>(options: { schema: S; dir: string }) => Content<S>` | Builds the typed content object. `areca.gen.ts` calls it; use it only for another folder or schema. `dir` is resolved against `process.cwd()` on each call. Throws for a collection named `resolve`, `href` or `preview` |
 
-`content` (exported by `areca.gen.ts`) has one property per collection: `all(options?)`, `first(options?)`, `get(slug)`, `byId(id)`, `href(entryOrSlug)`. It also has `resolve(ref)` (returns `Entry | null`), `href(ref)` and `preview(token, { client? })`. Queries run in memory. `get` and `byId` return `undefined` for unknown values. A collection missing from the publication returns `[]`.
+`content` (exported by `areca.gen.ts`) has one property per collection: `all(options?)`, `first(options?)`, `get(slug)`, `byId(id)`, `href(entryOrSlug)`. It also has `resolve(ref)` (returns `Entry | null`), `href(ref)` and `preview(token, { client? })` (returns `PreviewEntry<S>`; check `complete` before using `entry` as published content). Queries run in memory. `get` and `byId` return `undefined` for unknown values. A collection missing from the publication returns `[]`.
 
 ## `@areca-cms/site-sdk/pull` (Node only)
 

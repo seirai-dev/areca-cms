@@ -9,6 +9,8 @@ export type {
   ContentSchema,
   ContentSchemaCollection,
   ContentSchemaField,
+  DraftEntry,
+  DraftEntryData,
   Entry,
   EntryData,
   FieldKey,

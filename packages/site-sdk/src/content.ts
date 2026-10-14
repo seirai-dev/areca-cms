@@ -1,5 +1,5 @@
 import { resolve } from 'node:path'
-import { camelizeEntry } from './camel-case.js'
+import { camelizeEntry, toCamelKey } from './camel-case.js'
 import { createArecaClient, type ArecaClient } from './client.js'
 import { isReservedCollectionKey } from './identifiers.js'
 import { getPreviewEntry } from './preview.js'
@@ -10,13 +10,25 @@ import type {
   ContentSchema,
   PreviewEntry,
 } from './schema-types.js'
-import type { PulledContentManifest, SnapshotEntry } from './types.js'
+import type { Field, PulledContentManifest, SnapshotEntry } from './types.js'
+import { entryIssues } from './validate-snapshot.js'
 
 /** What the generated schema says about one collection, read without type parameters. */
 type LooseCollection = {
   key: string
+  label?: string
   route: string
-  fields: Record<string, { key: string; type: string; collection?: string }>
+  fields: Record<
+    string,
+    {
+      key: string
+      type: string
+      label?: string
+      required?: boolean
+      options?: readonly string[]
+      collection?: string
+    }
+  >
 }
 
 type Row = SnapshotEntry
@@ -134,13 +146,36 @@ export function createContent<const S extends ContentSchema>(options: {
         `Preview collection "${result.collection}" is not in the generated schema. Run \`areca pull\` to refresh the types.`,
       )
     }
-    const fields = Object.entries(schema[collection]!.fields).map(([camel, field]) => ({
+    const definition = schema[collection]!
+    const camelByRaw = new Map(
+      Object.entries(definition.fields).map(([camel, field]) => [field.key, camel]),
+    )
+    // Validate the raw draft, as the pull validates a publication, before camelising it.
+    const issues = entryIssues(result.entry.data, wireFields(schema, definition)).map(
+      (issue) => `${camelByRaw.get(issue.field) ?? toCamelKey(issue.field)}: ${issue.problem}`,
+    )
+    const fields = Object.entries(definition.fields).map(([camel, field]) => ({
       raw: field.key,
       camel,
       type: field.type,
     }))
     const entry = camelizeEntry(result.entry, collection, fields)
-    return { collection, slug: result.slug, entry } as unknown as PreviewEntry<S>
+    if (issues.length === 0) {
+      return {
+        collection,
+        slug: result.slug,
+        complete: true,
+        issues: [],
+        entry,
+      } as unknown as PreviewEntry<S>
+    }
+    return {
+      collection,
+      slug: result.slug,
+      complete: false,
+      issues,
+      entry,
+    } as unknown as PreviewEntry<S>
   }
 
   const content: Record<string, unknown> = {
@@ -160,6 +195,27 @@ type QueryOptions = {
   limit?: number
   offset?: number
   with?: Record<string, boolean | undefined>
+}
+
+/**
+ * The raw field list of one generated collection, as the pull validates it:
+ * raw keys, and reference targets mapped back from camel to the raw key.
+ */
+function wireFields(schema: Record<string, LooseCollection>, definition: LooseCollection): Field[] {
+  return Object.values(definition.fields).map((field) => {
+    const target =
+      field.collection === undefined
+        ? undefined
+        : (schema[field.collection]?.key ?? field.collection)
+    return {
+      key: field.key,
+      label: field.label ?? field.key,
+      type: field.type,
+      required: field.required,
+      options: field.options,
+      collection: target,
+    } as Field
+  })
 }
 
 function readManifest(dir: string): PulledContentManifest {

@@ -86,12 +86,13 @@ export async function pullContent(
   }
   // Key checks run before any schema lookup, so unsafe keys fail first.
   const camelKeys = camelCollectionKeys(Object.keys(snapshot.collections))
-  mkdirSync(options.outDir, { recursive: true })
-  const base = realpathSync(options.outDir)
-  // Keep the legacy guards even though new pulls no longer replace flat files.
-  const manifestPath = containedPath(base, 'manifest')
-  for (const camel of camelKeys.values()) containedPath(base, camel)
   const typesPath = options.types ?? join(options.outDir, 'areca.gen.ts')
+  // Keep the legacy guards even though new pulls no longer replace flat files.
+  // These only inspect paths that already exist, so nothing is created yet.
+  assertExistingOutputsSafe(options.outDir, [
+    'manifest',
+    ...camelKeys.values(),
+  ])
   assertNotSymbolicLink(typesPath, 'Types output must not be a symbolic link')
   const warnings: string[] = []
 
@@ -136,9 +137,13 @@ export async function pullContent(
     }
   }
   // Created only once the publication is valid, so a rejected pull leaves no trace.
-  const publications = safeDirectory(base, '.publications', true)
+  mkdirSync(options.outDir, { recursive: true })
+  const base = realpathSync(options.outDir)
+  const manifestPath = containedPath(base, 'manifest')
+  let publications: string
   let stage: string
   try {
+    publications = safeDirectory(base, '.publications', true)
     stage = mkdtempSync(join(publications, 'publication-'))
   } catch (error) {
     media?.rollback()
@@ -301,6 +306,21 @@ function writeTextAtomically(filePath: string, text: string): void {
   } finally {
     rmSync(temporary, { force: true })
   }
+}
+
+/**
+ * Runs the containment and symlink checks against an out dir that already
+ * exists. A missing out dir has no links to refuse, so nothing is created.
+ */
+function assertExistingOutputsSafe(outDir: string, keys: string[]): void {
+  let base: string
+  try {
+    base = realpathSync(outDir)
+  } catch (error) {
+    if (isNodeError(error) && error.code === 'ENOENT') return
+    throw error
+  }
+  for (const key of keys) containedPath(base, key)
 }
 
 function assertNotSymbolicLink(filePath: string, message: string): void {

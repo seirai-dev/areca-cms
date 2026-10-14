@@ -525,6 +525,18 @@ describe('createContent: caching and generations', () => {
 })
 
 describe('createContent: preview', () => {
+  // The same schema with a required reference, so a draft can be missing one.
+  const draftSchema = {
+    ...schema,
+    blogPosts: {
+      ...schema.blogPosts,
+      fields: {
+        ...schema.blogPosts.fields,
+        editor: { key: 'editor', type: 'reference', required: true, collection: 'authors' },
+      },
+    },
+  } as const
+
   it('fetches the preview and returns the camelized entry narrowed by collection', async () => {
     fakeCms()
     served.preview = {
@@ -538,6 +550,8 @@ describe('createContent: preview', () => {
     expect(previewRequests).toEqual(['?token=tok'])
     expect(result.collection).toBe('blogPosts')
     expect(result.slug).toBe('alpha')
+    expect(result.complete).toBe(true)
+    expect(result.issues).toEqual([])
     expect(result.entry.collection).toBe('blogPosts')
     expect(result.entry.data).toMatchObject({
       title: 'Alpha Guide',
@@ -560,6 +574,48 @@ describe('createContent: preview', () => {
     expect(result.entry.data).toMatchObject({
       favoritePost: { collection: 'blogPosts', slug: 'alpha', id: 'p1' },
     })
+  })
+
+  it('returns an incomplete draft with camel issue keys and the entry still camelized', async () => {
+    fakeCms()
+    served.preview = {
+      collection: 'blog-posts',
+      slug: 'draft',
+      entry: {
+        id: 'p9',
+        slug: 'draft',
+        publishedAt: null,
+        data: {
+          slug: 'draft',
+          title: '',
+          featured: true,
+          'published-on': 'soon',
+          'cover-image': null,
+          author: null,
+          editor: null,
+        },
+      },
+    }
+    const content = createContent({ schema: draftSchema, dir: directory() })
+    const result = await content.preview('tok', { client: clientFor() })
+
+    expect(result.collection).toBe('blogPosts')
+    expect(result.complete).toBe(false)
+    expect(result.issues).toEqual([
+      'title: is required',
+      'publishedOn: must be a YYYY-MM-DD date',
+      'editor: is required',
+    ])
+    expect(result.entry.collection).toBe('blogPosts')
+    expect(result.entry.data).toMatchObject({
+      slug: 'draft',
+      title: '',
+      publishedOn: 'soon',
+      coverImage: null,
+      editor: null,
+      featured: true,
+    })
+    expect(result.entry.data).not.toHaveProperty('published-on')
   })
 
   it('throws for a collection that is not in the schema', async () => {

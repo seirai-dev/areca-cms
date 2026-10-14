@@ -210,6 +210,21 @@ describe('pullContent with a published schema', () => {
     expect(existsSync(join(outDir, '.publications'))).toBe(false)
     expect(existsSync(join(outDir, 'areca.gen.ts'))).toBe(false)
   })
+
+  it('creates no out dir or types parent when a first pull fails validation', async () => {
+    const root = directory()
+    const outDir = join(root, 'nested', 'content')
+    const types = join(root, 'types', 'deeper', 'areca.gen.ts')
+    const broken = snapshot()
+    broken.collections['blog-posts']![0]!.data = { slug: 'hello' }
+    serve(broken)
+    await expect(
+      pullContent({ outDir, types, client: cmsClient() }),
+    ).rejects.toThrow(/title/)
+    expect(existsSync(join(root, 'nested'))).toBe(false)
+    expect(existsSync(outDir)).toBe(false)
+    expect(existsSync(join(root, 'types'))).toBe(false)
+  })
 })
 
 describe('pullContent without an embedded schema', () => {

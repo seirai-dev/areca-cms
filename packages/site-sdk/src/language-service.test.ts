@@ -84,7 +84,7 @@ function hoverText(appBody: string): string {
 }
 
 const header = `import { createContent } from './content.js'
-import { defineSiteContent } from './index.js'
+import { defineSiteContent, type DraftEntry } from './index.js'
 import { schema } from './test-fixtures/schema.js'
 `
 
@@ -134,6 +134,13 @@ describe('hover on entry data', () => {
   it('shows the JSDoc of the generated schema field', () => {
     const text = hoverText(`${contentSetup}const post = content.blogPosts.first()!
 post.data.ti|tle
+`)
+    expect(text).toContain('Shown as the page heading')
+  }, TIMEOUT)
+
+  it('shows the JSDoc of the generated schema field on a draft entry', () => {
+    const text = hoverText(`declare const draft: DraftEntry<'blogPosts', typeof schema>
+draft.data.ti|tle
 `)
     expect(text).toContain('Shown as the page heading')
   }, TIMEOUT)
