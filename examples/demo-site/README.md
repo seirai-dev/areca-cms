@@ -77,6 +77,32 @@ also has a `noindex, nofollow` robots meta tag. Invalid or expired tokens and
 missing entries render an error message. The preview URL token is temporary:
 do not log or store it.
 
+## Site content (globals)
+
+`areca.config.ts` defines three site content sections under `globals`:
+`companyInfo` (name, tagline, contact, founding year), `homePage` (hero copy and
+a featured coffee reference, with SEO) and `aboutPage` (heading, rich-text body,
+image and the Numbers stats, with SEO). `areca pull` writes them to
+`_globals.json`, and `areca.gen.ts` exports `globalSchema` and the `CompanyInfoGlobal`,
+`HomePageGlobal` and `AboutPageGlobal` types.
+
+`content.globals.<key>` is a synchronous read of the published values:
+
+- `src/routes/__root.tsx` loads `companyInfo` for the site-wide head defaults
+  and the footer (`site-chrome.tsx`).
+- `src/routes/index.tsx` renders the hero from `homePage` and uses its
+  `$seo` for the page head. `src/routes/about.tsx` renders `aboutPage` the same way.
+- `SITE_NAME` and `SITE_DESCRIPTION` in `src/lib/seo.ts` stay as fallbacks and
+  for the title suffix on pages that do not read a section.
+
+Each section's `previewPath` (`/` and `/about`) is where the CMS opens a draft of
+that section. The pages accept `?arecaPreview=<token>`, and
+`content.previewGlobals(token)` overlays the draft when the token is for that
+page's section. Other tokens, invalid tokens and missing tokens serve the
+published values. Any request with a token gets `noindex, nofollow` (header and
+meta) and `Cache-Control: no-store`. The draft banner appears only when the
+draft is shown.
+
 ## Local fixture mode
 
 To run without a CMS, write the checked-in demo fixture content:
@@ -109,7 +135,7 @@ commands:
 | `pnpm --filter @areca/demo-site test` | Run demo-site unit tests. |
 | `pnpm --filter @areca/demo-site verify:prerender` | Confirm generated article HTML exists. |
 | `pnpm --filter @areca/demo-site content:pull` | Pull published CMS content. |
-| `pnpm --filter @areca/demo-site content:fixture` | Write local fixture content. |
+| `pnpm --filter @areca/demo-site content:fixture` | Write local fixture content (articles, coffees, team and site content). |
 
 ## Docker
 

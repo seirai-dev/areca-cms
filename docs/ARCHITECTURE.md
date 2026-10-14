@@ -18,6 +18,14 @@ A collection describes its fields and route, such as Articles at `/blog/$slug`. 
 
 Pushing a manifest changes the CMS schema; it does not build page components. Your website still implements its routes and rendering. A schema change may make older content invalid, so review entries before the next release. See [content schemas](CONTENT_SCHEMA.md).
 
+## Site content (globals)
+
+Site content sections hold single sets of values, such as company details or the home page. Agencies define them with the same fields as collections, except `slug`. Editors fill them in. In the CMS they are **Site content** (code and API: **globals**), and the schema is declared in `areca.config.ts` under `globals` or created in the CMS.
+
+Storage reuses the collection tables. Each section is a `collection` row with `kind = 'global'`, `seo_enabled` and an optional `preview_path`. It has exactly one `entry` row with the constant slug `$global`, created in the same transaction. That entry follows the same draft, ready, scheduled and live rules as any entry, so revisions, scheduling, release diff, Go live and activity work unchanged. Globals never use `archived`, and collection-only actions (unpublish, archive, delete entry, create entry) refuse them.
+
+A disabled section is hidden from editors and left out of the next snapshot. Its content is kept. Deleting a section is agency-only and archives its content.
+
 ## Draft, approved, scheduled, and live content
 
 An entry can hold different versions at the same time:
@@ -61,13 +69,17 @@ A release records the whole site's snapshot, build steps, logs, and status. Rest
 
 A snapshot contains collection arrays of entries with stable IDs, approved slugs, dates, and resolved data. Image fields become URL/dimension/alt-text objects; references become collection/slug/ID objects; rich text includes JSON, Markdown, a Markdown document, and HTML. Resolved SEO is a separate optional `entry.seo` object for compatibility with older snapshots.
 
-`areca pull` writes one JSON file per collection and `manifest.json` with publication ID, hash, creation time, and counts. Read these files at build time or import them through your framework. Keep the SDK token on the build/server side.
+A snapshot also carries enabled site content sections as `globals`, keyed by raw CMS key, with their schema in `globalSchema`. Each section has its entry ID, publication time, values and optional `seo`. Sites without sections have no `globals` key, and their hash is computed as before.
+
+`areca pull` writes one JSON file per collection, `_globals.json` for site content (when there are sections), and `manifest.json` with publication ID, hash, creation time, and counts. Read these files at build time or import them through your framework. Keep the SDK token on the build/server side.
 
 Snapshot metadata is immutable. Assets are still external resources: retained publications protect referenced media from cleanup, and public asset delivery depends on the CMS/storage deployment. See [asset retention](ASSET_RETENTION.md).
 
 ## Preview
 
 The CMS creates an expiring signed token scoped to a site, collection, and draft slug. The website's preview route passes it to the SDK, fetches the draft, and renders the result. Preview is a server-side live CMS request and must return no-index and no-cache headers. It does not mark anything ready or live.
+
+A site content section gets a token scoped to that section instead. Its preview link is the section's `previewPath` on the site, with `?arecaPreview=<token>`, and the site overlays the draft only on the page that shows it. The response has `kind: "global"`.
 
 Anyone holding a valid preview link can view that draft until it expires. Avoid recording real preview tokens in documentation or screenshots.
 

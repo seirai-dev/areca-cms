@@ -161,12 +161,58 @@ rendering. Entries also have `id`, `slug`, `publishedAt`, and optional resolved
 `seo` metadata. See [the SDK guide](SDK.md) for pulling,
 rendering, preview, and SEO examples.
 
+## Site content (globals)
+
+Some copy is not a list of entries: company details, home-page hero text, stats. Declare these as **site content** sections under `globals`. Each section is a single set of fields, keyed by its own name, and has no slug or route:
+
+```ts
+export default defineSiteContent({
+  siteKey: "acme-site",
+  collections: {
+    /* ... */
+  },
+  globals: {
+    companyInfo: {
+      label: "Company info",
+      fields: [
+        { key: "name", label: "Name", type: "text", required: true },
+        { key: "email", label: "Email", type: "text", group: "Contact" },
+        { key: "phone", label: "Phone", type: "text", group: "Contact" },
+      ],
+    },
+    homePage: {
+      label: "Home page",
+      seo: true,
+      previewPath: "/",
+      fields: [
+        { key: "heroIntro", label: "Hero intro", type: "textarea", required: true },
+        { key: "featured", label: "Featured coffee", type: "reference", collection: "coffees" },
+      ],
+    },
+  },
+});
+```
+
+- A section takes the same field types as a collection, except `slug`. Its key follows the same identifier rules as a collection key, and may not be `globals`, `resolve`, `href` or `preview`.
+- `label` is the name editors see in the **Site content** group. `seo: true` adds a search and social panel, exposed to your code as `$seo`. The default is `false`.
+- `previewPath` is the page that shows the section in preview, such as `/about`. Without it, editors cannot preview the section.
+- `group` is a heading shown above a field in the editor, for example "Contact". Fields that share a heading are grouped together. The heading is only for editors. Your code still gets a flat list of values. `group` is not allowed on collection fields.
+- A reference field in a section may point at a collection. A collection field may not point at a section.
+
+Sections are pushed with the rest of the manifest, and a push is a full sync. A section left out of the push is disabled: hidden from editors, excluded from the next publication, and its content is kept. Use `areca manifest pull` to bring sections made in the CMS back into the config.
+
+Before the first Go live, a section with required fields must be marked ready in the CMS, or the release is blocked. Sections with no required fields publish as empty values until someone marks them ready.
+
+See [the SDK guide](SDK.md#site-content) for how to read sections in code.
+
 ## Key restrictions
 
 Keys must match `[A-Za-z][A-Za-z0-9_-]{0,63}`. Keys are case-sensitive for CMS
 data, but reserved names are checked without regard to case. Reserved names
 include `manifest`, `__proto__`, `prototype`, `constructor`, and Windows device
-names such as `CON` and `LPT1`. Rename invalid existing keys in the CMS before
+names such as `CON` and `LPT1`. Collection and site content keys also cannot be
+`resolve`, `href`, `preview` or `globals`, because the content object uses those names.
+Field keys may use them. Rename invalid existing keys in the CMS before
 syncing or pulling. The SDK also guards output paths and rejects symbolic-link
 targets while writing generated files.
 

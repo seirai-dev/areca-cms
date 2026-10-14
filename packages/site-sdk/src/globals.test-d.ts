@@ -6,6 +6,7 @@ import type {
   Global,
   GlobalKey,
   Globals,
+  PreviewResult,
   ReferenceValue,
   SeoMeta,
 } from './index.js'
@@ -37,7 +38,7 @@ describe('globals: field values', () => {
   })
 
   it('a select field is the literal union of its options when optional', () => {
-    expectTypeOf(content.globals.companyInfo.plan).toEqualTypeOf<'basic' | 'pro' | null | undefined>()
+    expectTypeOf(content.globals.companyInfo.plan).toEqualTypeOf<'basic' | 'pro' | '' | null | undefined>()
   })
 
   it('an optional date field is a string, null or undefined', () => {
@@ -109,6 +110,21 @@ describe('globals: preview', () => {
   it('previewGlobals resolves to the same typed globals object', () => {
     expectTypeOf(content.previewGlobals('token')).resolves.toEqualTypeOf<Globals<G>>()
     expectTypeOf(content.previewGlobals(null)).resolves.toEqualTypeOf<Globals<G>>()
+  })
+
+  it('previewGlobals accepts a token, a PreviewResult, or a falsy value', () => {
+    const result: PreviewResult = {
+      kind: 'global',
+      global: 'company-info',
+      entry: { id: 'g1', publishedAt: null, data: {} },
+    }
+    expectTypeOf(content.previewGlobals(result)).resolves.toEqualTypeOf<Globals<G>>()
+    expectTypeOf(content.previewGlobals(undefined)).resolves.toEqualTypeOf<Globals<G>>()
+    expectTypeOf(content.previewGlobals('token', { client: undefined })).resolves.toEqualTypeOf<
+      Globals<G>
+    >()
+    // @ts-expect-error an entry-kind result is not a string or null
+    content.previewGlobals({ kind: 'entry' })
   })
 })
 

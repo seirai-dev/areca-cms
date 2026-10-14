@@ -1,30 +1,42 @@
-import { Link, createFileRoute } from '@tanstack/react-router'
-import { CmsImage } from '../components/cms-image.tsx'
+import { createFileRoute } from '@tanstack/react-router'
+import { ArticleBody } from '../components/article-body.tsx'
+import { CmsImage, PreviewBanner } from '../components/cms-image.tsx'
 import { Eyebrow } from '../components/ui.tsx'
-import { loadHome } from '../lib/queries.ts'
-import { pageHead } from '../lib/seo.ts'
+import { loadAbout, sitePreviewSearch } from '../lib/queries.ts'
+import { noindexHead, sectionHead } from '../lib/seo.ts'
 
 export const Route = createFileRoute('/about')({
-  loader: () => loadHome(),
-  head: () =>
-    pageHead({
+  validateSearch: (search) => sitePreviewSearch.parse(search),
+  loaderDeps: ({ search }) => ({ arecaPreview: search.arecaPreview }),
+  loader: ({ deps }) => loadAbout({ data: { arecaPreview: deps.arecaPreview } }),
+  head: ({ loaderData }) => {
+    const head = sectionHead(loaderData?.about.$seo, {
       title: 'About',
       description:
         'Northbound Coffee Co. is a small roastery in Bergen, Norway, founded in 2016. We buy direct and roast in small batches.',
-    }),
+    })
+    return loaderData?.noindex ? noindexHead(head) : head
+  },
   component: About,
 })
 
 function About() {
-  const { articles, coffees } = Route.useLoaderData()
-  const image = articles[1]?.data.heroImage ?? articles[0]?.data.heroImage ?? coffees[0]?.data.image ?? null
+  const { about, preview } = Route.useLoaderData()
+  const { heading, body, image, foundedYear, roasterCapacityKg, originsCount } = about
+  const stats = [
+    { label: 'Founded', value: foundedYear == null ? null : String(foundedYear) },
+    { label: 'Roaster capacity', value: roasterCapacityKg == null ? null : `${roasterCapacityKg} kg` },
+    { label: 'Origins bought from', value: originsCount == null ? null : String(originsCount) },
+  ].flatMap((stat) => (stat.value === null ? [] : [{ label: stat.label, value: stat.value }]))
 
   return (
     <article className="mx-auto max-w-6xl px-5 pb-28 pt-16 sm:px-8 md:pt-24">
+      {preview ? <PreviewBanner /> : null}
+
       <header className="max-w-4xl">
         <Eyebrow>About</Eyebrow>
         <h1 className="mt-5 font-display text-5xl leading-[1.02] tracking-tight text-ink md:text-7xl">
-          A small roastery on the Bergen harbour.
+          {heading}
         </h1>
       </header>
 
@@ -37,33 +49,22 @@ function About() {
           </figure>
         ) : null}
 
-        <div className={`${image ? 'md:col-span-6 md:col-start-7' : 'md:col-span-8'} space-y-7 text-lg leading-[1.8] text-ink/90`}>
-          <p className="font-display text-2xl leading-snug text-ink md:text-3xl">
-            Northbound Coffee Co. started in 2016 with one secondhand roaster and a notebook of cupping scores.
-          </p>
-          <p>
-            We are still a small team in Bergen, Norway, and we still roast every batch ourselves.
-          </p>
-          <blockquote className="border-l-2 border-accent py-1 pl-7 font-display text-2xl italic leading-snug text-ink md:text-3xl">
-            We set aside any batch that is not ready.
-          </blockquote>
-          <p>
-            We roast on a 15 kg Giesen in batches small enough to watch closely. That lets us profile each lot by
-            hand, slow the roast when a coffee needs time, and set aside any batch that is not ready. Roasted coffee
-            is sold within a few weeks, with the roast date on the bag.
-          </p>
-          <p>
-            We buy direct. Our buyer agrees prices with producers before harvest, cups samples at origin and shares
-            roasting feedback both ways. Read more about the farms in the{' '}
-            <Link to="/journal" className="font-medium text-ink underline decoration-accent/60 underline-offset-[5px] transition-colors hover:text-accent-strong hover:decoration-accent-strong">
-              journal
-            </Link>
-            , or meet the{' '}
-            <Link to="/team" className="font-medium text-ink underline decoration-accent/60 underline-offset-[5px] transition-colors hover:text-accent-strong hover:decoration-accent-strong">
-              people
-            </Link>{' '}
-            behind each lot.
-          </p>
+        <div className={image ? 'md:col-span-6 md:col-start-7' : 'md:col-span-8'}>
+          {stats.length ? (
+            <dl className="grid grid-cols-3 gap-6 border-y border-line py-8">
+              {stats.map((stat) => (
+                <div key={stat.label}>
+                  <dt className="text-[0.7rem] font-medium uppercase tracking-[0.14em] text-muted">
+                    {stat.label}
+                  </dt>
+                  <dd className="mt-2 font-display text-3xl tracking-tight text-ink md:text-4xl">
+                    {stat.value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
+          <ArticleBody body={body} />
         </div>
       </div>
     </article>

@@ -179,7 +179,7 @@ for draft previews. It returns `complete: true` with an `Entry`, or `complete: f
 Collection and field names are camelCase in code: `blog-posts` is
 `content.blogPosts`, and `cover_image` is `entry.data.coverImage`. The config keeps
 the raw keys. The pull fails on keys that collide after this conversion, and
-`resolve`, `href` and `preview` cannot be collection keys.
+`resolve`, `href`, `preview` and `globals` cannot be collection keys.
 
 Each entry has `id`, `slug`, `publishedAt`, `collection`, `data` and optional
 `seo`. Optional fields can be `null`, missing or `""`, and the types show each
@@ -193,6 +193,49 @@ several collections from one publication.
 `readContent()` reads files at runtime, so the generated directory must ship with
 the server build or container, including `.publications/`. Use the content object
 from server code only, never from a browser bundle.
+
+## Site content (globals)
+
+Site content sections hold single-instance copy that is not a list of entries:
+company details, home-page text, stats. The CMS defines them (or
+`areca.config.ts` does, under `globals`), and `areca pull` writes them next to
+the collections.
+
+```ts
+import { content } from "../generated/content/areca.gen";
+
+const info = content.globals.companyInfo;
+info.email; // string: required fields are never null
+info.phoneNumber; // string | null | undefined, like any optional field
+content.globals.homePage.$seo; // only on sections with seo: true
+```
+
+Each section is typed like an entry's `data` with no `slug`. Field keys are
+camelCase, and `$seo` is added when the section has SEO on. `group` on a field
+only changes the CMS editor layout, so it does not appear in the SDK value.
+`await content.previewGlobals(source)` returns the same object with the section
+replaced by its draft when `source` is a site content preview token. `source`
+can also be a preview result from `getPreviewEntry(...)`, in which case no
+request is made. A falsy token, or an entry preview, returns the published values.
+
+```ts
+export const config = defineSiteContent({
+  siteKey: "demo",
+  collections: { /* ... */ },
+  globals: {
+    companyInfo: {
+      label: "Company info",
+      fields: [
+        { key: "email", label: "Email", type: "text", required: true, group: "Contact" },
+      ],
+    },
+    homePage: { label: "Home page", seo: true, previewPath: "/", fields: [/* ... */] },
+  },
+});
+```
+
+Sections cannot use `slug` fields. References in a section can point to
+collections, but collections cannot point to a section.
 
 ## Render rich text
 
@@ -320,8 +363,8 @@ available. The CLI prints the error and exits non-zero.
 Collection and field keys start with an ASCII letter and contain at most 64
 ASCII letters, digits, `_`, or `-`. Reserved names include `manifest`,
 `constructor`, `prototype`, `__proto__`, and Windows device names. Collection
-keys cannot be `resolve`, `href` or `preview`, because the content object uses
-those names. Field types
+keys cannot be `resolve`, `href`, `preview` or `globals`, because the content
+object uses those names. Site content keys follow the same rules. Field types
 are `text`, `textarea`, `richtext`, `image`, `date`, `datetime`, `select`,
 `reference`, `slug`, `boolean`, `number`, and `url`. `select` uses `options`,
 `reference` uses `collection`, and date ordering can use `after` to refer to

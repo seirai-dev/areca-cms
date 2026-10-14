@@ -14,6 +14,7 @@ import {
 } from '#/components/ui/select'
 import { Switch } from '#/components/ui/switch'
 import { Textarea } from '#/components/ui/textarea'
+import { globalPublicUrl } from '#/lib/globals'
 import {
   SEO_DESCRIPTION_TARGET,
   SEO_KEY,
@@ -53,6 +54,28 @@ const GROUP_OF: Record<keyof EntrySeo, GroupKey> = {
 }
 
 const fieldId = (key: string) => `seo-${key}`
+
+/**
+ * The address shown in the search preview. An entry needs a slug; a site
+ * content section has no slug, so its address is its preview path (or none).
+ */
+export function previewAddress({
+  canonicalUrl,
+  global,
+  productionUrl,
+  routePattern,
+  slug,
+}: {
+  canonicalUrl?: string | null
+  global: boolean
+  productionUrl: string
+  routePattern: string
+  slug: string
+}): string | null {
+  if (canonicalUrl?.trim()) return canonicalUrl
+  if (global) return globalPublicUrl(productionUrl, routePattern)
+  return slug ? entryPublicUrl(productionUrl, routePattern, slug) : null
+}
 
 /** Text of a TipTap document, for the description fallback preview. */
 export function plainTextOf(doc: unknown): string {
@@ -157,10 +180,13 @@ function SearchPreview({
   url,
   title,
   description,
+  global,
 }: {
   url: string | null
   title: string
   description: string | null
+  /** A site content section has an address only when it has a preview path. */
+  global: boolean
 }) {
   return (
     <div
@@ -168,9 +194,11 @@ function SearchPreview({
       aria-label={m.editor_seo_preview_label()}
       data-testid="seo-search-preview"
     >
-      <span className="truncate text-caption font-normal text-text-muted">
-        {url ?? m.editor_seo_preview_no_url()}
-      </span>
+      {url || !global ? (
+        <span className="truncate text-caption font-normal text-text-muted">
+          {url ?? m.editor_seo_preview_no_url()}
+        </span>
+      ) : null}
       <span className="line-clamp-2 text-[15px] leading-5 font-medium text-text-accent">
         {truncateText(title, SEO_TITLE_TARGET + 5)}
       </span>
@@ -264,18 +292,23 @@ export function SeoPanel({
   fallbackDescription,
   aiEnabled,
   onGenerate,
+  global = false,
 }: {
   seo: EntrySeo
   onChange: (next: EntrySeo | undefined) => void
   errors: Record<string, string>
   organizationId: string
   productionUrl: string
+  /** Entries: the route pattern. Site content sections: the preview path. */
   routePattern: string
   slug: string
+  /** The entry title, or the section name for a site content section. */
   entryTitle: string
   fallbackDescription: string | null
   aiEnabled: boolean
   onGenerate: () => void
+  /** A site content section: no slug, address is the preview path. */
+  global?: boolean
 }) {
   const [open, setOpen] = React.useState<Record<GroupKey, boolean>>({
     search: true,
@@ -316,11 +349,13 @@ export function SeoPanel({
     return count > 0 ? m.editor_seo_group_filled({ count }) : undefined
   }
 
-  const url = seo.canonicalUrl?.trim()
-    ? seo.canonicalUrl
-    : slug
-      ? entryPublicUrl(productionUrl, routePattern, slug)
-      : null
+  const url = previewAddress({
+    canonicalUrl: seo.canonicalUrl,
+    global,
+    productionUrl,
+    routePattern,
+    slug,
+  })
   const previewTitle = seo.title?.trim() || entryTitle
   const previewDescription =
     seo.description?.trim() || seo.summary?.trim() || fallbackDescription
@@ -359,6 +394,7 @@ export function SeoPanel({
         url={url}
         title={previewTitle}
         description={previewDescription}
+        global={global}
       />
 
       <Group
@@ -373,7 +409,9 @@ export function SeoPanel({
           htmlFor={fieldId('title')}
           error={err('title')}
           trailing={<Counter value={previewTitle} target={SEO_TITLE_TARGET} />}
-          hint={m.editor_seo_title_hint()}
+          hint={
+            global ? m.globals_seo_title_hint() : m.editor_seo_title_hint()
+          }
         >
           <Input
             id={fieldId('title')}

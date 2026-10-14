@@ -6,6 +6,7 @@ import { useTheme } from 'next-themes'
 import {
   CircleHalf,
   MagnifyingGlass,
+  Notebook,
   Plus,
   Pulse,
   RocketLaunch,
@@ -32,6 +33,11 @@ import { Kbd } from '#/components/ui/kbd'
 import { EntryStatusPill } from '#/components/ui/status-pill'
 import { Spinner } from '#/components/ui/spinner'
 import { entryUiStatus } from '#/features/golive/entry-live-state'
+import {
+  GLOBAL_ROUTE,
+  siteContentNavItems,
+} from '#/features/globals/site-content'
+import { useSiteGlobals } from '#/features/globals/use-globals'
 import { useReleaseStatus } from '#/features/golive/use-release-status'
 import { usePanel } from '#/features/shell/panel'
 import { useDebouncedValue } from '#/hooks/use-debounced-value'
@@ -81,6 +87,10 @@ export function CommandPalette() {
     enabled: Boolean(inSite) && paletteOpen,
   })
   const collections = (collectionsQuery.data ?? []).filter((c) => c.enabled)
+  const globalsQuery = useSiteGlobals(paletteOpen ? inSite?.id : undefined)
+  const sections = siteContentNavItems(globalsQuery.data ?? [], {
+    isAgencyAdmin: false,
+  })
 
   const searching = needle.length >= 2 && Boolean(inSite)
   const hits = useQueries({
@@ -251,6 +261,25 @@ export function CommandPalette() {
                 </CommandItem>
               )
             })}
+            {sections.map((section) => (
+              <CommandItem
+                key={`global-${section.key}`}
+                value={`go ${section.label} ${section.key}`}
+                onSelect={() =>
+                  go({
+                    to: GLOBAL_ROUTE,
+                    params: {
+                      siteId: inSite.id,
+                      globalKey: section.key,
+                    },
+                  })
+                }
+              >
+                <Notebook />
+                {section.label}
+                <CommandMeta>{m.globals_nav_group()}</CommandMeta>
+              </CommandItem>
+            ))}
           </CommandGroup>
         ) : null}
 

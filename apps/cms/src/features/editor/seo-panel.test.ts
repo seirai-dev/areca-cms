@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { compactSeo, plainTextOf } from './seo-panel'
+import { compactSeo, plainTextOf, previewAddress } from './seo-panel'
 
 describe('plainTextOf', () => {
   it('joins text across blocks and collapses whitespace', () => {
@@ -78,5 +78,55 @@ describe('compactSeo', () => {
     })
     expect(out).not.toHaveProperty('description')
     expect(out).not.toHaveProperty('nofollow')
+  })
+})
+
+describe('previewAddress', () => {
+  const base = {
+    productionUrl: 'https://example.test',
+    routePattern: '/blog/$slug',
+    slug: 'hello',
+  }
+
+  it('uses the production URL and slug for an entry', () => {
+    expect(previewAddress({ ...base, global: false })).toBe(
+      'https://example.test/blog/hello',
+    )
+  })
+
+  it('shows no address for an entry without a slug', () => {
+    expect(previewAddress({ ...base, slug: '', global: false })).toBeNull()
+  })
+
+  it('uses the preview path as the address of a site content section', () => {
+    expect(
+      previewAddress({
+        productionUrl: 'https://example.test',
+        routePattern: '/about',
+        slug: '',
+        global: true,
+      }),
+    ).toBe('https://example.test/about')
+  })
+
+  it('shows no address for a section without a preview path', () => {
+    expect(
+      previewAddress({
+        productionUrl: 'https://example.test',
+        routePattern: '',
+        slug: '',
+        global: true,
+      }),
+    ).toBeNull()
+  })
+
+  it('prefers an explicit canonical URL', () => {
+    expect(
+      previewAddress({
+        ...base,
+        canonicalUrl: 'https://canonical.test/x',
+        global: true,
+      }),
+    ).toBe('https://canonical.test/x')
   })
 })

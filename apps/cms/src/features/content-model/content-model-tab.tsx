@@ -2,9 +2,10 @@ import * as React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
-import { CaretRight, Plus, Stack } from '@phosphor-icons/react'
+import { CaretRight, Globe, Plus, Stack } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
+import { globalsQueryKey, useSiteGlobals } from '#/features/globals/use-globals'
 import { errorMessage } from '#/lib/admin/helpers'
 import { queryKeys } from '#/lib/content/query-keys'
 import { Tag } from '#/components/ui/tag'
@@ -18,12 +19,17 @@ import { Switch } from '#/components/ui/switch'
 import { collectionIcon } from '#/lib/site-nav'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
-import { listCollectionsFn, upsertCollectionFn } from '#/server/fn/content'
+import {
+  listCollectionsFn,
+  setGlobalEnabledFn,
+  upsertCollectionFn,
+} from '#/server/fn/content'
 
 import { SchemaEditorSheet } from './schema-editor-sheet'
 import type { CollectionRecord } from './schema-editor-sheet'
 
 type ContentType = CollectionRecord & { id: string }
+type SiteSection = CollectionRecord & { id: string }
 
 /**
  * Settings › Content (brief §3.10): the site's content types as one inset
@@ -36,6 +42,10 @@ export function ContentModelTab({ siteId }: { siteId: string }) {
     collection: CollectionRecord | null
   } | null>(null)
   const [sheetOpen, setSheetOpen] = React.useState(false)
+  const [sectionSheet, setSectionSheet] = React.useState<{
+    section: CollectionRecord | null
+  } | null>(null)
+  const [sectionSheetOpen, setSectionSheetOpen] = React.useState(false)
 
   const query = useQuery({
     queryKey: queryKeys.collections(siteId),
@@ -43,9 +53,17 @@ export function ContentModelTab({ siteId }: { siteId: string }) {
   })
   const collections = (query.data ?? []) as ContentType[]
 
+  const globalsQuery = useSiteGlobals(siteId)
+  const sections = (globalsQuery.data ?? []) as SiteSection[]
+
   function openSheet(collection: CollectionRecord | null) {
     setSheet({ collection })
     setSheetOpen(true)
+  }
+
+  function openSectionSheet(section: CollectionRecord | null) {
+    setSectionSheet({ section })
+    setSectionSheetOpen(true)
   }
 
   return (
@@ -113,6 +131,71 @@ export function ContentModelTab({ siteId }: { siteId: string }) {
         )}
       </InsetGroup>
 
+      <InsetGroup
+        title={m.settings_globals_title()}
+        description={m.settings_globals_description()}
+        actions={
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            data-testid="new-global"
+            onClick={() => openSectionSheet(null)}
+          >
+            <Plus weight="bold" />
+            {m.settings_new_global()}
+          </Button>
+        }
+      >
+        {globalsQuery.isError ? (
+          <QueryError
+            title={m.globals_load_error()}
+            error={globalsQuery.error}
+            onRetry={() => void globalsQuery.refetch()}
+            retrying={globalsQuery.isFetching}
+          />
+        ) : globalsQuery.isLoading ? (
+          <div className="overflow-hidden surface-card" aria-busy="true">
+            <div className="flex items-center gap-3 px-4 py-3">
+              <Skeleton className="size-8 rounded-[9px]" />
+              <div className="grid flex-1 gap-1.5">
+                <Skeleton className="h-3.5 w-32" />
+                <Skeleton className="h-3 w-48" />
+              </div>
+              <Skeleton className="h-6 w-10 rounded-full" />
+            </div>
+          </div>
+        ) : sections.length === 0 ? (
+          <div data-testid="global-types">
+            <EmptyState
+              card
+              icon={<Globe weight="duotone" />}
+              title={m.settings_globals_empty_title()}
+              description={m.settings_globals_empty_description()}
+              action={
+                <Button type="button" onClick={() => openSectionSheet(null)}>
+                  <Plus weight="bold" />
+                  {m.settings_new_global()}
+                </Button>
+              }
+            />
+          </div>
+        ) : (
+          <div data-testid="global-types">
+            <Stagger as="ul" className="overflow-hidden surface-card">
+              {sections.map((section) => (
+                <SectionRow
+                  key={section.id}
+                  siteId={siteId}
+                  section={section}
+                  onOpen={() => openSectionSheet(section)}
+                />
+              ))}
+            </Stagger>
+          </div>
+        )}
+      </InsetGroup>
+
       <SchemaEditorSheet
         open={sheetOpen}
         onOpenChange={setSheetOpen}
@@ -126,7 +209,122 @@ export function ContentModelTab({ siteId }: { siteId: string }) {
           })
         }
       />
+
+      <SchemaEditorSheet
+        kind="global"
+        open={sectionSheetOpen}
+        onOpenChange={setSectionSheetOpen}
+        siteId={siteId}
+        collection={sectionSheet?.section ?? null}
+        initialSegment={sectionSheet?.section ? 'fields' : 'settings'}
+      />
     </div>
+  )
+}
+
+/** One site content section: open it, or switch it on and off for editors. */
+function SectionRow({
+  siteId,
+  section,
+  onOpen,
+}: {
+  siteId: string
+  section: SiteSection
+  onOpen: () => void
+}) {
+  const queryClient = useQueryClient()
+  const setEnabledFn = useServerFn(setGlobalEnabledFn)
+  const count = section.fields.length
+
+  const toggle = useMutation({
+    mutationFn: (enabled: boolean) =>
+      setEnabledFn({ data: { siteId, key: section.key, enabled } }),
+    onMutate: async (enabled) => {
+      const key = globalsQueryKey(siteId)
+      await queryClient.cancelQueries({ queryKey: key })
+      const previous = queryClient.getQueryData<SiteSection[]>(key)
+      queryClient.setQueryData<SiteSection[]>(key, (list) =>
+        list?.map((item) =>
+          item.key === section.key ? { ...item, enabled } : item,
+        ),
+      )
+      return { previous }
+    },
+    onSuccess: (_result, enabled) =>
+      toast.success(
+        enabled
+          ? m.globals_toggled_on({ label: section.label })
+          : m.globals_toggled_off({ label: section.label }),
+      ),
+    onError: (error, _enabled, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(globalsQueryKey(siteId), context.previous)
+      }
+      toast.error(errorMessage(error))
+    },
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: globalsQueryKey(siteId) }),
+  })
+
+  return (
+    <StaggerItem
+      as="li"
+      className="relative after:absolute after:right-0 after:bottom-0 after:left-[60px] after:h-px after:bg-border-default last:after:hidden"
+    >
+      <div
+        data-testid={`global-row-${section.key}`}
+        className="flex min-h-[64px] items-center gap-3 pr-4 transition-colors duration-150 hover:bg-surface-state-hover"
+      >
+        <button
+          type="button"
+          onClick={onOpen}
+          className="flex min-w-0 flex-1 items-center gap-3 self-stretch py-3 pl-4 text-left outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-border-focus"
+        >
+          <InsetIcon tone={section.enabled ? 'accent' : 'neutral'}>
+            <Globe weight={section.enabled ? 'fill' : 'regular'} />
+          </InsetIcon>
+          <span className="grid min-w-0 flex-1 gap-0.5">
+            <span className="flex min-w-0 items-center gap-2">
+              <span
+                className={cn(
+                  'truncate text-[14px] leading-5 font-medium',
+                  section.enabled ? 'text-text-primary' : 'text-text-secondary',
+                )}
+              >
+                {section.label}
+              </span>
+              {section.enabled ? null : (
+                <Tag tone="outline">{m.shell_collection_off()}</Tag>
+              )}
+            </span>
+            <span className="truncate text-mono text-text-muted">
+              {section.key}
+            </span>
+          </span>
+          <span className="hidden shrink-0 text-callout text-text-secondary tnum sm:inline">
+            {count === 1
+              ? m.settings_field_count_one({ count })
+              : m.settings_field_count_other({ count })}
+          </span>
+          <CaretRight
+            weight="bold"
+            className="hidden size-3.5 shrink-0 text-icon-muted sm:block"
+          />
+        </button>
+        <Switch
+          checked={section.enabled}
+          disabled={toggle.isPending}
+          onCheckedChange={(value) => toggle.mutate(value)}
+          aria-label={m.globals_enabled_label({ label: section.label })}
+          title={
+            section.enabled
+              ? m.content_model_switch_off_hint()
+              : m.content_model_switch_on_hint()
+          }
+          data-testid={`global-enabled-${section.key}`}
+        />
+      </div>
+    </StaggerItem>
   )
 }
 

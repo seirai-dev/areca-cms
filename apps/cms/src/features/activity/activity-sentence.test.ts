@@ -243,3 +243,55 @@ describe('asset uploads in the activity log', () => {
     ).toBe('Sanne de Vries uploaded a file to the Library')
   })
 })
+
+describe('site content (globals) in the activity log', () => {
+  // Section upserts, toggles and deletes target the section's collection row
+  // (targetType 'collection', meta.key/label); discards target the entry.
+  it('tells a section being saved, switched on/off and deleted', () => {
+    const section = { targetType: 'collection', targetId: 'c1' } as const
+    const saved = activityText(
+      row({
+        ...section,
+        action: 'global.upsert',
+        meta: { key: 'companyInfo', label: 'Company info', kind: 'global' },
+      }),
+    )
+    const toggled = activityText(
+      row({
+        ...section,
+        action: 'global.set_enabled',
+        meta: { key: 'companyInfo', enabled: false },
+      }),
+      null,
+    )
+    const deleted = activityText(
+      row({
+        ...section,
+        action: 'global.delete',
+        meta: { key: 'companyInfo', label: 'Company info', kind: 'global' },
+      }),
+    )
+    for (const text of [saved, toggled, deleted]) {
+      expect(text).toContain('Sanne de Vries')
+      expect(text).not.toMatch(/global[ ._](upsert|set_enabled|delete)/)
+    }
+    expect(saved).toContain('Company info')
+    expect(deleted).toContain('Company info')
+  })
+
+  it('tells a discarded draft of a section', () => {
+    const text = activityText(
+      row({
+        action: 'entry.discard',
+        targetType: 'entry',
+        targetId: 'e1',
+        meta: { key: 'companyInfo' },
+      }),
+      'Company info',
+    )
+    expect(text).toContain('Sanne de Vries')
+    expect(text).toContain('Company info')
+    expect(text).toMatch(/discard/i)
+    expect(text).not.toMatch(/entry[ ._]discard/)
+  })
+})

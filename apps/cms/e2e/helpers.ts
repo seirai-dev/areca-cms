@@ -504,3 +504,49 @@ export async function waitForInviteLink(email: string, timeout = 30_000) {
   }
   throw new Error(`No invitation e-mail for ${email} in Mailpit`)
 }
+
+/* ------------------------------------------------------------------------
+   Site content (globals)
+------------------------------------------------------------------------ */
+
+/** A section config as `areca manifest push` sends it (`globals` key). */
+export type GlobalManifestConfig = {
+  label?: string
+  fields: object[]
+  seo?: boolean
+  previewPath?: string
+}
+
+/** One required email and an optional phone, both under a "Contact" heading. */
+export const COMPANY_INFO_GLOBAL: GlobalManifestConfig = {
+  label: 'Company info',
+  fields: [
+    {
+      key: 'email',
+      label: 'Email',
+      type: 'text',
+      required: true,
+      group: 'Contact',
+    },
+    { key: 'phone', label: 'Phone', type: 'text', group: 'Contact' },
+  ],
+}
+
+/** The Articles manifest plus site content sections. */
+export function manifestWithGlobals(
+  globals: Record<string, GlobalManifestConfig>,
+): object {
+  return { ...ARTICLES_MANIFEST, globals }
+}
+
+/**
+ * Pushes a manifest to a site created by `createIsolatedAcmeSite` (which
+ * signs out, leaving the page on the CMS origin). Uses the schema token.
+ */
+export async function pushSiteManifest(
+  page: Page,
+  site: CreatedSite,
+  manifest: object,
+) {
+  await pushManifest(new URL(page.url()).origin, site.schemaToken, manifest)
+}

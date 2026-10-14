@@ -607,6 +607,16 @@ export const ROWS: Row[] = [
     },
   },
   {
+    name: 'getGlobalPreviewUrlFn',
+    hidden: true,
+    fn: contentFns.getGlobalPreviewUrlFn,
+    policy: 'org-editor',
+    prepare: async (w) => {
+      const g = await w.fresh.global('X')
+      return { data: { siteId: w.X.site.id, key: g.collection.key } }
+    },
+  },
+  {
     name: 'updateGlobalDraftFn',
     hidden: true,
     fn: contentFns.updateGlobalDraftFn,

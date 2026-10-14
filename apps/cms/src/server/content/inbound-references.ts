@@ -1,12 +1,11 @@
 import { and, eq, or, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
-import { entry } from '#/db/schema'
+import { collection, entry } from '#/db/schema'
 import { entryTitle } from '#/lib/content/utils'
 import type { EntryData, EntryStatus } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 
-import { listCollections } from './collections.ts'
 import { NotFoundError } from './errors.ts'
 
 export type InboundReference = {
@@ -58,7 +57,15 @@ export async function listInboundReferences(
     throw new NotFoundError(m.server_entry_not_found())
   }
 
-  const collections = await listCollections(target.siteId)
+  // Site content sections count too: their fields can reference entries.
+  const collections = await db
+    .select({
+      id: collection.id,
+      key: collection.key,
+      fields: collection.fields,
+    })
+    .from(collection)
+    .where(eq(collection.siteId, target.siteId))
   const found: InboundReference[] = []
   const seen = new Set<string>()
 

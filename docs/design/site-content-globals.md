@@ -191,7 +191,7 @@ Runtime (`createContent({ schema, globalSchema?, dir })`):
 - Route: `/sites/$siteId/globals/$globalKey`: single-form editor reusing the
   entry editor pieces (field controls, autosave, conflict handling, recovery,
   history panel, schedule form, SEO panel when enabled). Fields with a `group`
-  render under a heading when the group changes. Top bar: Mark ready,
+  render under a heading when the group changes. Top bar: Mark as ready,
   Schedule/Cancel schedule, Discard draft, Preview (if `previewPath`), History.
   No unpublish/archive/delete.
 - Settings → Content: a "Site content" section listing sections with enable

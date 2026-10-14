@@ -15,6 +15,7 @@ import {
 import type {
   AuditMeta,
   BuildJobStatus,
+  ContentKind,
   DeploymentTarget,
   EntryData,
   EntryStatus,
@@ -236,6 +237,12 @@ export const collection = pgTable(
     routePattern: text('route_pattern').notNull(),
     fields: jsonb('fields').$type<Field[]>().notNull(),
     enabled: boolean('enabled').notNull().default(true),
+    /** `global` rows are site content sections; each has one `$global` entry. */
+    kind: text('kind').$type<ContentKind>().notNull().default('collection'),
+    /** Globals only: resolved SEO is shipped. Collections always have SEO. */
+    seoEnabled: boolean('seo_enabled').notNull().default(false),
+    /** Globals only: site path that previews the section, e.g. `/about`. */
+    previewPath: text('preview_path'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

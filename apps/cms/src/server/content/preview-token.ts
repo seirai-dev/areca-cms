@@ -1,25 +1,42 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 
+/** A token previews one entry (`collection` + `slug`) or one site content section (`global`). */
 export type PreviewTokenPayload = {
   siteId: string
-  collection: string
-  slug: string
   exp: number
-}
+} & (
+  | { global?: undefined; collection: string; slug: string }
+  | { global: string; collection?: undefined; slug?: undefined }
+)
 
-export function signPreviewToken(input: {
+type PreviewTokenInput = {
   siteId: string
-  collection: string
-  slug: string
   secret: string
   ttlSec?: number
-}): string {
+  /** Entry preview: collection key and slug. */
+  collection?: string
+  slug?: string
+  /** Site content section preview: raw section key. Takes precedence. */
+  global?: string
+}
+
+export function signPreviewToken(input: PreviewTokenInput): string {
   const ttlSec = input.ttlSec ?? 3600
-  const payload: PreviewTokenPayload = {
-    siteId: input.siteId,
-    collection: input.collection,
-    slug: input.slug,
-    exp: Math.floor(Date.now() / 1000) + ttlSec,
+  const exp = Math.floor(Date.now() / 1000) + ttlSec
+  let payload: PreviewTokenPayload
+  if (input.global !== undefined) {
+    payload = { siteId: input.siteId, global: input.global, exp }
+  } else if (input.collection !== undefined && input.slug !== undefined) {
+    payload = {
+      siteId: input.siteId,
+      collection: input.collection,
+      slug: input.slug,
+      exp,
+    }
+  } else {
+    throw new Error(
+      'A preview token needs a site content key or a collection and slug',
+    )
   }
   const payloadB64 = Buffer.from(JSON.stringify(payload), 'utf8').toString(
     'base64url',
@@ -44,44 +61,35 @@ export function verifyPreviewToken(
     .digest('base64url')
   if (!safeEqual(sig, expected)) return null
 
+  const payload = parsePayload(payloadB64)
+  if (!payload) return null
+  if (payload.exp < Math.floor(Date.now() / 1000)) return null
+  return payload
+}
+
+export function decodePreviewToken(token: string): PreviewTokenPayload | null {
+  const dot = token.indexOf('.')
+  if (dot <= 0) return null
+  return parsePayload(token.slice(0, dot))
+}
+
+/** Shape check for a decoded payload. Unknown shapes are not tokens. */
+function parsePayload(payloadB64: string): PreviewTokenPayload | null {
   try {
     const parsed = JSON.parse(
       Buffer.from(payloadB64, 'base64url').toString('utf8'),
-    ) as Partial<PreviewTokenPayload>
-    if (
-      typeof parsed.siteId !== 'string' ||
-      typeof parsed.collection !== 'string' ||
-      typeof parsed.slug !== 'string' ||
-      typeof parsed.exp !== 'number'
-    ) {
+    ) as Partial<
+      Record<'siteId' | 'collection' | 'slug' | 'global' | 'exp', unknown>
+    >
+    if (typeof parsed.siteId !== 'string' || typeof parsed.exp !== 'number') {
       return null
     }
-    if (parsed.exp < Math.floor(Date.now() / 1000)) return null
-    return {
-      siteId: parsed.siteId,
-      collection: parsed.collection,
-      slug: parsed.slug,
-      exp: parsed.exp,
+    if (typeof parsed.global === 'string') {
+      return { siteId: parsed.siteId, global: parsed.global, exp: parsed.exp }
     }
-  } catch {
-    return null
-  }
-}
-
-export function decodePreviewToken(
-  token: string,
-): PreviewTokenPayload | null {
-  const dot = token.indexOf('.')
-  if (dot <= 0) return null
-  try {
-    const parsed = JSON.parse(
-      Buffer.from(token.slice(0, dot), 'base64url').toString('utf8'),
-    ) as Partial<PreviewTokenPayload>
     if (
-      typeof parsed.siteId !== 'string' ||
       typeof parsed.collection !== 'string' ||
-      typeof parsed.slug !== 'string' ||
-      typeof parsed.exp !== 'number'
+      typeof parsed.slug !== 'string'
     ) {
       return null
     }
@@ -104,6 +112,19 @@ export function buildPreviewUrl(
 ) {
   const base = productionUrl.replace(/\/+$/, '')
   return `${base}/__preview/${collection}/${slug}?token=${encodeURIComponent(token)}`
+}
+
+/**
+ * Preview URL for a site content section: the site's own page at `previewPath`
+ * with the token in `arecaPreview`, so the site can render the draft in place.
+ */
+export function buildGlobalPreviewUrl(
+  productionUrl: string,
+  previewPath: string,
+  token: string,
+) {
+  const base = productionUrl.replace(/\/+$/, '')
+  return `${base}${previewPath}?arecaPreview=${encodeURIComponent(token)}`
 }
 
 function safeEqual(a: string, b: string) {

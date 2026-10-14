@@ -26,6 +26,8 @@ try {
 }
 ```
 
+A site content section preview is different. The CMS opens the section's `previewPath` on the site (for example `/about`) with `?arecaPreview=<token>`, not `/__preview`. `getPreviewEntry` returns `{ kind: "global", global, entry }` for that token. Read the token on the page, then call `content.previewGlobals(token)` (or pass the `PreviewGlobalResult`), which returns the published values with that section replaced by its draft. An expired or mistyped token makes the fetch throw, so catch it and serve the published values. Set `previewHeaders()` on the response as for entries.
+
 `getPreviewEntry` needs `ARECA_CMS_URL` and `ARECA_SITE_TOKEN` at runtime. Exclude `/__preview` from prerendering and CDN caching. In TanStack Start, wrap the fetch in a `createServerFn` handler.
 
 ## Health route (Production mode)

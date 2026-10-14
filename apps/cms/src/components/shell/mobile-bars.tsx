@@ -8,6 +8,7 @@ import {
   House,
   ImageSquare,
   MagnifyingGlass,
+  Notebook,
   Palette,
   Pulse,
   RocketLaunch,
@@ -36,6 +37,11 @@ import {
 } from '#/components/ui/sheet'
 import { Tag } from '#/components/ui/tag'
 import { GoLivePill } from '#/features/golive/golive-tray'
+import {
+  GLOBAL_ROUTE,
+  siteContentNavItems,
+} from '#/features/globals/site-content'
+import { useSiteGlobals } from '#/features/globals/use-globals'
 import { usePanel } from '#/features/shell/panel'
 import { canManageSite, collectionIcon } from '#/lib/site-nav'
 import { cn } from '#/lib/utils'
@@ -214,6 +220,7 @@ export function MobileTabBar() {
             </SheetHeader>
             <SheetBody className="pt-0">
               <MobileCollections siteId={site.id} onNavigate={close} />
+              <MobileSiteContent siteId={site.id} onNavigate={close} />
             </SheetBody>
           </SheetContent>
         </Sheet>
@@ -374,6 +381,50 @@ export function MobileTabBar() {
   }
 
   return null
+}
+
+/** Site content sections in the mobile Content sheet (same rules as the sidebar group). */
+function MobileSiteContent({
+  siteId,
+  onNavigate,
+}: {
+  siteId: string
+  onNavigate: () => void
+}) {
+  const { me } = useShell()
+  const isAgency = me.user.isAgencyAdmin
+  const query = useSiteGlobals(siteId)
+  const items = siteContentNavItems(query.data ?? [], {
+    isAgencyAdmin: isAgency,
+  })
+  if (items.length === 0) return null
+  return (
+    <div className="mt-6 grid gap-2" data-testid="site-content-group-mobile">
+      <p className="px-1 text-callout text-text-secondary">
+        {m.globals_nav_group()}
+      </p>
+      <InsetList>
+        {items.map((item) => (
+          <SheetRowLink
+            key={item.key}
+            link={{
+              to: GLOBAL_ROUTE,
+              params: { siteId, globalKey: item.key },
+            }}
+            icon={<Notebook />}
+            tone={item.enabled ? 'accent' : 'neutral'}
+            label={item.label}
+            onClick={onNavigate}
+            trailing={
+              item.enabled ? null : (
+                <Tag tone="outline">{m.shell_collection_off()}</Tag>
+              )
+            }
+          />
+        ))}
+      </InsetList>
+    </div>
+  )
 }
 
 function MobileCollections({

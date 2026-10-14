@@ -1,4 +1,4 @@
-import type { CollectionConfig, Field, Snapshot } from './types.js'
+import type { CollectionConfig, Field, GlobalConfig, Snapshot } from './types.js'
 
 /** Most problems listed in one error. */
 const MAX_PROBLEMS = 20
@@ -22,7 +22,8 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/
 /**
  * Checks a raw publication against its schema (spec section 3), before any
  * key is camelised or anything is written. Throws one error that lists up to
- * 20 problems as `<collection>/<slug>.<field>: <problem>`.
+ * 20 problems as `<collection>/<slug>.<field>: <problem>`, and
+ * `globals/<key>.<field>: <problem>` for site content sections.
  */
 export function validateSnapshot(
   snapshot: Snapshot,
@@ -37,6 +38,13 @@ export function validateSnapshot(
       for (const issue of entryIssues(entry.data, config.fields)) {
         problems.push(`${prefix}.${issue.field}: ${issue.problem}`)
       }
+    }
+  }
+  for (const [key, global] of Object.entries(snapshot.globals ?? {})) {
+    const config: GlobalConfig | undefined = snapshot.globalSchema?.[key]
+    if (!config) throw new Error(`Global "${key}" has no schema`)
+    for (const issue of entryIssues(global.data, config.fields)) {
+      problems.push(`globals/${key}.${issue.field}: ${issue.problem}`)
     }
   }
   if (problems.length === 0) return

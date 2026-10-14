@@ -27,7 +27,7 @@ import {
   fieldTypeName,
   keyFromLabel,
 } from './schema-drafts'
-import type { FieldDraft, FieldErrors } from './schema-drafts'
+import type { FieldDraft, FieldErrors, SchemaKind } from './schema-drafts'
 
 /* -------------------------------------------------------------------------
    Type tiles
@@ -131,9 +131,27 @@ function RowText({ field, index }: { field: FieldDraft; index: number }) {
   )
 }
 
-function RowType({ field, index }: { field: FieldDraft; index: number }) {
+function RowType({
+  field,
+  index,
+  group,
+}: {
+  field: FieldDraft
+  index: number
+  /** Site content only: the field's group heading, shown as a muted tag. */
+  group?: string
+}) {
   return (
     <>
+      {group ? (
+        <Tag
+          tone="neutral"
+          className="max-w-[140px] shrink-0 truncate"
+          data-testid={`field-group-tag-${index}`}
+        >
+          {group}
+        </Tag>
+      ) : null}
       <span
         className="hidden shrink-0 text-callout text-text-secondary sm:inline"
         data-testid={`field-type-${index}`}
@@ -181,12 +199,14 @@ function FieldListRow({
   field,
   index,
   invalid,
+  group,
   onOpen,
   onRemove,
 }: {
   field: FieldDraft
   index: number
   invalid: boolean
+  group?: string
   onOpen: () => void
   onRemove: () => void
 }) {
@@ -237,7 +257,7 @@ function FieldListRow({
           <Icon />
         </InsetIcon>
         <RowText field={field} index={index} />
-        <RowType field={field} index={index} />
+        <RowType field={field} index={index} group={group} />
       </button>
       <Hint label={m.admin_collection_remove_field()}>
         <Button
@@ -256,8 +276,9 @@ function FieldListRow({
 }
 
 /**
- * The reorderable field list, as one inset card. Row 0 is the locked slug
- * field; every other row opens the field form.
+ * The reorderable field list, as one inset card. In a collection row 0 is the
+ * locked slug field; every other row opens the field form. A site content
+ * section has no slug row, so its rows start at 0.
  */
 export function FieldList({
   fields,
@@ -265,35 +286,45 @@ export function FieldList({
   onChange,
   onOpen,
   onRemove,
+  kind = 'collection',
 }: {
   fields: FieldDraft[]
   errors: FieldErrors
   onChange: (next: FieldDraft[]) => void
   onOpen: (index: number) => void
   onRemove: (index: number) => void
+  kind?: SchemaKind
 }) {
-  const [slug, ...rest] = fields
+  const isGlobal = kind === 'global'
+  const slug = isGlobal ? undefined : fields[0]
+  const rest = isGlobal ? fields : fields.slice(1)
+  const offsetBase = isGlobal ? 0 : 1
 
   return (
     <div className="overflow-hidden surface-card" data-testid="field-list">
-      <ol>
-        <SlugRow field={slug} />
-      </ol>
+      {slug ? (
+        <ol>
+          <SlugRow field={slug} />
+        </ol>
+      ) : null}
       <Reorder.Group
         axis="y"
         as="ol"
         values={rest}
-        onReorder={(next: FieldDraft[]) => onChange([slug, ...next])}
+        onReorder={(next: FieldDraft[]) =>
+          onChange(slug ? [slug, ...next] : next)
+        }
         className="relative"
       >
         {rest.map((field, offset) => {
-          const index = offset + 1
+          const index = offset + offsetBase
           return (
             <FieldListRow
               key={field.id}
               field={field}
               index={index}
               invalid={Boolean(errors[index])}
+              group={isGlobal ? field.group.trim() || undefined : undefined}
               onOpen={() => onOpen(index)}
               onRemove={() => onRemove(index)}
             />
@@ -351,6 +382,7 @@ export function FieldFormPanel({
   errors,
   pickingType,
   collectionKeys,
+  kind = 'collection',
   onChange,
   onBack,
   onRemove,
@@ -361,10 +393,12 @@ export function FieldFormPanel({
   pickingType: boolean
   /** The site's collections, for the reference target picker. */
   collectionKeys: { key: string; label: string }[]
+  kind?: SchemaKind
   onChange: (patch: Partial<FieldDraft>) => void
   onBack: () => void
   onRemove: () => void
 }) {
+  const isGlobal = kind === 'global'
   if (pickingType) {
     return (
       <div className="grid gap-4" data-testid="field-type-picker">
@@ -536,6 +570,23 @@ export function FieldFormPanel({
             onChange={(event) => onChange({ description: event.target.value })}
           />
         </FormField>
+        {isGlobal ? (
+          <FormField
+            label={m.globals_group_label()}
+            htmlFor={`field-group-${index}`}
+            error={errors?.group}
+            hint={m.globals_group_hint()}
+          >
+            <Input
+              id={`field-group-${index}`}
+              data-testid={`field-group-${index}`}
+              value={field.group}
+              placeholder={m.globals_group_placeholder()}
+              aria-invalid={errors?.group ? true : undefined}
+              onChange={(event) => onChange({ group: event.target.value })}
+            />
+          </FormField>
+        ) : null}
       </div>
 
       <label className="flex cursor-pointer items-center justify-between gap-4 surface-card px-4 py-3">
@@ -565,6 +616,11 @@ export function FieldFormPanel({
           onPick={(type) => onChange({ type })}
           testId={`field-type-${index}`}
         />
+        {errors?.type ? (
+          <p role="alert" className="px-1 text-caption text-text-error">
+            {errors.type}
+          </p>
+        ) : null}
       </div>
 
       <div>

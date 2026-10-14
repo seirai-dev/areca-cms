@@ -779,6 +779,45 @@ describe('createContent: globals', () => {
     expect(previewRequests).toEqual(['?token=tok'])
   })
 
+  it('previewGlobals overlays a PreviewResult without a request', async () => {
+    const outDir = directory()
+    await publish(outDir, withGlobals())
+    const content = createContent({ schema, globalSchema, dir: outDir })
+    fakeCms()
+    const result = {
+      kind: 'global' as const,
+      global: 'company-info',
+      entry: {
+        id: 'g1',
+        publishedAt: null,
+        data: { email: 'draft@acme.test', 'phone-number': '' },
+      },
+    }
+
+    const globals = await content.previewGlobals(result, { client: clientFor() })
+
+    expect(previewRequests).toEqual([])
+    expect(globals.companyInfo.email).toBe('draft@acme.test')
+    expect(globals.companyInfo.phoneNumber).toBe('')
+    expect(globals.homePage).toEqual(content.globals.homePage)
+  })
+
+  it('previewGlobals returns the published globals for an entry PreviewResult without a request', async () => {
+    const outDir = directory()
+    await publish(outDir, withGlobals())
+    const content = createContent({ schema, globalSchema, dir: outDir })
+    fakeCms()
+    const result = {
+      kind: 'entry' as const,
+      collection: 'blog-posts',
+      slug: 'alpha',
+      entry: rawSnapshot().collections['blog-posts']![0],
+    }
+
+    expect(await content.previewGlobals(result, { client: clientFor() })).toEqual(content.globals)
+    expect(previewRequests).toEqual([])
+  })
+
   it('preview() still returns the entry for a kind: entry response', async () => {
     const outDir = directory()
     await publish(outDir, withGlobals())

@@ -17,6 +17,7 @@ import {
   downloadAssets,
   localAssetFileNames,
   localizeCollections,
+  localizeGlobals,
   pruneGenerations,
   writeAssetIndex,
   type MediaChanges,
@@ -31,8 +32,10 @@ import { createArecaClient, type ArecaClient } from './client.js'
 import type { CollectionKey, Entry } from './schema-types.js'
 import type {
   CollectionConfig,
+  GlobalConfig,
   PulledContentManifest,
   Snapshot,
+  SnapshotGlobal,
 } from './types.js'
 import { validateSnapshot } from './validate-snapshot.js'
 
@@ -105,9 +108,10 @@ export async function pullContent(
   }
   // Raw keys, before anything is camelised or written.
   validateSnapshot(snapshot, schema)
-  const camelized = camelizeSnapshot(snapshot, schema).collections
+  const camelized = camelizeSnapshot(snapshot, schema)
 
-  let collections = camelized
+  let collections = camelized.collections
+  let globals: Record<string, SnapshotGlobal> = camelized.globals ?? {}
   let localAssets: PullContentResult['localAssets']
   let assetFiles: string[] | undefined
   let media: MediaChanges | undefined
@@ -125,10 +129,12 @@ export async function pullContent(
       options.assets.dir,
       client.fetchAsset,
     )
-    collections = localizeCollections(camelized, files, {
+    const localOptions = {
       publicPath: options.assets.publicPath,
       siteUrl: snapshot.siteUrl,
-    })
+    }
+    collections = localizeCollections(collections, files, localOptions)
+    globals = localizeGlobals(globals, files, localOptions)
     assetFiles = [...files.values()]
     localAssets = {
       dir: options.assets.dir,
@@ -151,10 +157,13 @@ export async function pullContent(
   }
   const generation = relative(publications, stage)
   const temporaryManifest = join(base, `.manifest-${randomUUID()}.tmp`)
+  // Site content is one file per generation, and only when there is some.
+  const hasGlobals = Object.keys(globals).length > 0
   try {
     for (const [key, entries] of Object.entries(collections)) {
       writeJson(containedPath(stage, key), entries)
     }
+    if (hasGlobals) writeJson(containedPath(stage, '_globals'), globals)
     if (assetFiles && options.assets) {
       writeAssetIndex(stage, base, options.assets.dir, assetFiles)
     }
@@ -168,6 +177,7 @@ export async function pullContent(
           entries.length,
         ]),
       ),
+      ...(hasGlobals ? { globals: Object.keys(globals) } : {}),
       generation,
       ...(assetFiles && options.assets
         ? {
@@ -206,6 +216,7 @@ export async function pullContent(
     typesPath,
     generateContentTypes({
       schema,
+      globalSchema: snapshot.globalSchema ?? {},
       dir: options.contentDir ?? options.outDir,
     }),
   )
@@ -223,6 +234,36 @@ export function readContentManifest(outDir: string): PulledContentManifest {
   return JSON.parse(
     readFileSync(containedPath(outDir, 'manifest'), 'utf8'),
   ) as PulledContentManifest
+}
+
+/** The site content sections of one generation, keyed by camel key. Empty when the publication has none. */
+export function readGlobalsFile(
+  outDir: string,
+  capturedManifest: PulledContentManifest,
+): Record<string, SnapshotGlobal> {
+  if (capturedManifest.globals === undefined) return {}
+  const directory = generationDirectory(outDir, capturedManifest)
+  try {
+    return JSON.parse(
+      readFileSync(containedPath(directory, '_globals'), 'utf8'),
+    ) as Record<string, SnapshotGlobal>
+  } catch (error) {
+    if (isNodeError(error) && error.code === 'ENOENT') {
+      throw new Error(`No site content file in ${outDir}. Run \`areca pull\` first.`)
+    }
+    throw error
+  }
+}
+
+/** Where the files of a manifest's generation live; the out dir itself for legacy flat output. */
+function generationDirectory(outDir: string, manifest: PulledContentManifest | undefined): string {
+  if (manifest?.generation === undefined) return outDir
+  if (!/^publication-[A-Za-z0-9_-]+$/.test(manifest.generation)) {
+    throw new Error('Unsafe content generation identifier')
+  }
+  const base = realpathSync(outDir)
+  const publications = safeDirectory(base, '.publications')
+  return safeDirectory(publications, manifest.generation)
 }
 
 export function readContent<C extends CollectionKey>(
@@ -246,15 +287,7 @@ export function readContent<C extends CollectionKey>(
         `Collection "${collectionKey}" is not in the current publication`,
       )
     }
-    let directory = outDir
-    if (manifest?.generation !== undefined) {
-      if (!/^publication-[A-Za-z0-9_-]+$/.test(manifest.generation)) {
-        throw new Error('Unsafe content generation identifier')
-      }
-      const base = realpathSync(outDir)
-      const publications = safeDirectory(base, '.publications')
-      directory = safeDirectory(publications, manifest.generation)
-    }
+    const directory = generationDirectory(outDir, manifest)
     return JSON.parse(
       readFileSync(containedPath(directory, collectionKey), 'utf8'),
     ) as Entry<C>[]

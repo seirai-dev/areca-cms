@@ -9,7 +9,7 @@ The types shown here are the ones `areca.gen.ts` gives each field after `areca p
 
 ## Summary
 
-There are 12 field types. The last two columns give the TypeScript type of a value in `data`, for a required field and for an optional one.
+There are 12 field types. Site content sections use the same types, except `slug`. The last two columns give the TypeScript type of a value in `data`, for a required field and for an optional one.
 
 | Type | Label in the CMS | Required value | Optional value | Main limit |
 | --- | --- | --- | --- | --- |
@@ -42,6 +42,7 @@ Every field accepts these settings. Type-specific settings are listed in each se
 | `options` | `string[]` | No | Choices for a `select` field. Ignored by other types. |
 | `collection` | `string` | For `reference` | The key of the collection a link can point to. Without it, the CMS refuses to save a value. |
 | `after` | `string` | No | For `date` and `datetime` only. The key of another date or datetime field in the same entry. This field's value must be on or after that field's value. |
+| `group` | `string` | No | A heading shown above the field in the editor, up to 80 characters. Only for site content sections; collection fields may not set it. The SDK value is unchanged. See [site content](/docs/sdk/globals#fields-and-groups). |
 
 Optional fields that editors never filled can be `null` or missing from the pulled JSON. Check for both when you render.
 
@@ -210,6 +211,8 @@ Every collection has a required slug field, named `slug`, added automatically as
 - **Pulled value:** `string`.
 
 The value of the slug field becomes the entry's slug, so it is what replaces `$slug` in the collection's `route`.
+
+Site content sections have no slug. A `slug` field in a `globals` section is refused, and the push fails with an error. The CMS does not add one.
 
 ```ts
 slug: string

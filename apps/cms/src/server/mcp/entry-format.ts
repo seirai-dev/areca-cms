@@ -4,6 +4,7 @@ import { SEO_KEY } from '#/lib/seo'
 import { isEditedSinceReady } from '#/features/golive/entry-live-state'
 import type { EntryData, EntryStatus, Field } from '#/lib/types'
 
+import { describeField, EXAMPLE_SEO, exampleFields } from './schema-docs'
 import type { ReleaseFlags } from './release-flags'
 import {
   markdownToRichText,
@@ -327,6 +328,64 @@ export function formatEntry(input: {
           approvedFields: formatFields(fields, entry.publishedData ?? {}, ctx),
         }
       : {}),
+  }
+}
+
+/**
+ * A site content section as an agent reads it: the entry's state, its values
+ * under `values` (not `fields`, which holds the schema in get_global), and
+ * `seo` only when the section has SEO. `key` and `label` name the section.
+ */
+export function formatGlobal(input: {
+  entry: EntryForFormat
+  global: {
+    key: string
+    label: string
+    fields: Field[]
+    seoEnabled: boolean
+    previewPath: string | null
+  }
+  ctx: FormatContext
+  release: ReleaseFlags
+  previewAvailable: boolean
+  includePublished: boolean
+  liveFields?: Record<string, unknown> | null
+}) {
+  const { global } = input
+  const view = formatEntry({
+    entry: input.entry,
+    fields: global.fields,
+    ctx: input.ctx,
+    release: input.release,
+    previewAvailable: input.previewAvailable,
+    includePublished: input.includePublished,
+    liveFields: input.liveFields,
+  })
+  const {
+    collection: _collection,
+    slug: _slug,
+    fields: values,
+    seo,
+    ...shared
+  } = view
+  return {
+    ...shared,
+    key: global.key,
+    label: global.label,
+    previewAvailable: global.previewPath !== null && input.previewAvailable,
+    values,
+    ...(global.seoEnabled ? { seo } : {}),
+  }
+}
+
+/** Schema part of get_global: field formats and a payload to copy. */
+export function describeGlobal(fields: Field[], seoEnabled: boolean) {
+  return {
+    fields: fields.map(describeField),
+    example: {
+      fields: exampleFields(fields),
+      ...(seoEnabled ? { seo: EXAMPLE_SEO } : {}),
+    },
   }
 }
 

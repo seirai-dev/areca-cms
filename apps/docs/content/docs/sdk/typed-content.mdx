@@ -96,7 +96,7 @@ The pull stops before it writes any file when:
 - Two collection keys map to the same camelCase name. The message names both raw keys, for example `Collection keys blog-posts and blog_posts both map to "blogPosts"`. Rename one of them in the CMS and in `areca.config.ts`.
 - Two field keys in one collection map to the same name.
 - Two collection names differ only by case, such as `Articles` and `articles`. The files would collide on Mac and Windows.
-- A collection name is `resolve`, `href` or `preview` (compared without case). The content object uses these names for its own methods. Field names may use them.
+- A collection or site content name is `resolve`, `href`, `preview` or `globals` (compared without case). The content object uses these names for its own methods. Field names may use them.
 
 ## What the pull checks
 
@@ -160,9 +160,19 @@ Warning: Publication <id> has no embedded schema; types use the current CMS sche
 
 The types are still correct for the current schema, but a publication made from an older schema could contain fields that the current schema does not describe, and the pull rejects it. Go live again to embed the schema in the next publication, and the warning goes away.
 
+## Site content types
+
+Site content sections (`globals`) get their own types, in the same file. `areca.gen.ts` exports `globalSchema`, which describes each section's label, `seo` setting and fields, and it adds `globals: typeof globalSchema` to the registered types. For each section there is an exported type, named after it:
+
+```ts
+import type { CompanyInfoGlobal, HomePageGlobal } from '../generated/content/areca.gen'
+```
+
+`content.globals.companyInfo` is typed as `CompanyInfoGlobal`, and the value has the section's fields with their nullability. A section with `seo: true` also has `$seo`. With no sections, `globalSchema` is an empty object and `content.globals` has no keys. See [site content](/docs/sdk/globals).
+
 ## Reserved names
 
-The content object has three methods of its own: `resolve`, `href` and `preview`. A collection cannot take one of these names. `areca manifest push` and `areca pull` reject them as collection keys, and the check ignores case. Field keys may still be named `href` or `preview`.
+The content object has four names of its own: `resolve`, `href`, `preview` and `globals`. A collection or site content section cannot take one of these names. `areca manifest push` and `areca pull` reject them as keys, and the check ignores case. Field keys may still be named `href`, `preview` or `globals`.
 
 ## Related
 

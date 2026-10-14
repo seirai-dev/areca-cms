@@ -147,3 +147,21 @@ publish-type controls disabled with the reason ("Only owners can publish…").
 - Rate limits: `/api/mcp` and `/api/mcp/<site>` allow 120 requests a minute per access token or key, plus 600 a minute per client IP when the IP is known (behind a trusted proxy). They are exempt from the general writes limit, because one AI session makes many small requests.
 - The server is stateless with JSON responses, so no session state is stored between requests.
 - **Consequences for hosting.** `APP_URL` and `BETTER_AUTH_URL` must be the same public HTTPS origin, because the connector URL, the issuer and the discovery documents are built from them. A reverse proxy must forward `/.well-known/*`, `/api/auth/*` and `/api/mcp/*`. ChatGPT and Claude connect from the internet, so a LAN-only CMS cannot serve them, and Claude Code, Cursor and VS Code need HTTPS for any address other than `localhost`.
+
+## Site content (globals), 2026-10-14
+
+Agreed decisions for single-instance content sections. The full contract, including storage, wire formats and roles, is in [design/site-content-globals.md](design/site-content-globals.md).
+
+- **Shape.** A site can have several named sections (`companyInfo`, `homePage`). Each has its own fields, using the same field types as collections except `slug`. The CMS UI calls them **Site content**; code, SDK and API call them **globals**.
+- **Schema source.** Agencies can define sections in the CMS or in `areca.config.ts` (`globals: {}`). A manifest push is a full sync: an omitted section is disabled and its content kept. `GET /api/sites/manifest` lists only enabled sections and omits `globals` when there are none.
+- **Storage.** Sections reuse the `collection` and `entry` tables with `kind = 'global'`. Each has exactly one entry, with the constant slug `$global`. Revisions, scheduling, release diff, Go live and activity work unchanged. `archived` is never used for globals.
+- **Publishing.** Same flow as entries: draft autosave, owner marks ready, ships with the next Go live, and appears in pending changes. Go live is blocked while an enabled section with required fields has never been made ready. Sections without required fields ship `{}` until first ready.
+- **Features.** Revisions and restore, scheduling, discard draft, and live preview. No unpublish, archive or delete of the single entry; a section is removed through its enable flag (hidden, content kept) or by agency delete (content archived).
+- **Groups.** An optional `group` on a section field is a visual heading in the editor only. It is not allowed on collection fields, and the SDK value stays flat.
+- **SEO.** Opt-in per section with `seo: true`. The SDK exposes it as `$seo` on the section value. Entries get no automatic fallback from it.
+- **SDK shape.** `content.globals.<camelKey>` returns the camelCased field values, plus `$seo` when SEO is on. Typegen emits `globalSchema`, `Register.globals` and a `<Name>Global` type per section.
+- **Preview.** A section has an optional `previewPath` such as `/about`. The CMS opens `<site><previewPath>?arecaPreview=<token>`, and the site overlays the draft with `content.previewGlobals(...)`. Without a `previewPath`, preview is unavailable for that section.
+- **References.** Section fields may reference collection entries. Collections may not reference sections.
+- **Roles.** Editors edit and discard drafts and view history. Owners also mark ready, schedule, restore and go live. Agency admins also create and edit fields, enable or disable, set SEO and preview path, and delete. Server functions and MCP tools follow the same split.
+- **MCP.** Dedicated tools `get_global`, `update_global`, `discard_global_draft`, `upsert_global` and `delete_global`. Existing workflow tools accept a section's entry `id`. `unpublish_entry`, `archive_entry` and `delete_entry` refuse section ids.
+- **Snapshot.** Enabled sections are published in `globals`, with their schema in `globalSchema`. A site without sections keeps the same hash as before.

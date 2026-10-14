@@ -25,11 +25,12 @@ export async function loadReleaseState(siteId: string): Promise<ReleaseState> {
   ]
   return {
     liveSnapshot: live?.snapshot ?? null,
-    liveIds: new Set(
-      Object.values(live?.snapshot.collections ?? {}).flatMap((items) =>
+    liveIds: new Set([
+      ...Object.values(live?.snapshot.collections ?? {}).flatMap((items) =>
         items.map((item) => item.id),
       ),
-    ),
+      ...Object.values(live?.snapshot.globals ?? {}).map((item) => item.id),
+    ]),
     pendingIds: new Set(pending.map((item) => item.id)),
   }
 }

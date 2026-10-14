@@ -4,6 +4,7 @@ import { and, desc, eq } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { publication } from '#/db/schema'
+import { globalsAsEntryLists } from '#/lib/globals'
 import type { Snapshot } from '#/lib/types'
 import { snapshotAssets } from '#/server/assets/published-assets'
 import { authenticateSite } from '#/server/content/site-auth'
@@ -58,7 +59,10 @@ export async function getSitesSnapshotCurrent(request: Request) {
     // Publications stored before the asset list existed get it computed.
     assets:
       pub.snapshot.assets ??
-      (await snapshotAssets(site.organizationId, pub.snapshot.collections)),
+      (await snapshotAssets(site.organizationId, {
+        ...pub.snapshot.collections,
+        ...globalsAsEntryLists(pub.snapshot.globals),
+      })),
     siteUrl: siteOrigin(site.productionUrl),
   }
 

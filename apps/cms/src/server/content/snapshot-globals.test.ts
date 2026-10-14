@@ -135,10 +135,18 @@ describe.skipIf(!hasDb)('buildSnapshot site content', () => {
 
   it('embeds the schema of every enabled section and leaves disabled ones out', async () => {
     await withTestSite(async (ctx) => {
-      await createTestGlobal(ctx.site.id, {
+      // Required fields block go live until the section is ready, so mark it ready first.
+      const info = await createTestGlobal(ctx.site.id, {
         key: 'companyInfo',
         label: 'Company info',
       })
+      await updateDraft(
+        info.entry.id,
+        { email: 'hello@x.test' },
+        ctx.actor.id,
+        info.entry.draftVersion,
+      )
+      await publishEntry(info.entry.id, ctx.actor.id)
       await createTestGlobal(ctx.site.id, {
         key: 'retired',
         label: 'Retired',
@@ -345,6 +353,25 @@ describe.skipIf(!hasDb)('buildSnapshot site content', () => {
       })
       await expect(
         buildPreviewGlobal(ctx.site.id, 'missing'),
+      ).resolves.toBeNull()
+    })
+  })
+
+  it('refuses to preview a disabled section, even one with a draft', async () => {
+    await withTestSite(async (ctx) => {
+      const section = await createTestGlobal(ctx.site.id, {
+        key: 'companyInfo',
+        enabled: false,
+      })
+      await updateDraft(
+        section.entry.id,
+        { email: 'hidden@x.test' },
+        ctx.actor.id,
+        section.entry.draftVersion,
+      )
+
+      await expect(
+        buildPreviewGlobal(ctx.site.id, 'companyInfo'),
       ).resolves.toBeNull()
     })
   })

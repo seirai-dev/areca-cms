@@ -24,6 +24,7 @@ import {
   entry,
   entryRevision,
 } from '#/db/schema'
+import { SEO_KEY } from '#/lib/seo'
 
 import {
   listCollections,
@@ -36,6 +37,7 @@ import {
   deleteEntry,
   listEntries,
   publishEntry,
+  restoreRevision,
   scheduleEntry,
   unpublishEntry,
   updateDraft,
@@ -518,6 +520,105 @@ describe.skipIf(!hasDb)('site content globals (server layer)', () => {
           ctx.actor.id,
         ),
       ).rejects.toThrow()
+    })
+  })
+
+  it('refuses $seo in a draft while the section has SEO off, and keeps the draft as it was', async () => {
+    await withTestSite(async (ctx) => {
+      const global = await upsertGlobal(ctx.site.id, companyInfo, ctx.actor.id)
+      const row = await sectionEntry(global.id)
+
+      await expect(
+        updateDraft(
+          row.id,
+          { email: 'seo@x.test', [SEO_KEY]: { title: 'Not allowed' } },
+          ctx.actor.id,
+          row.draftVersion,
+        ),
+      ).rejects.toThrow()
+
+      const after = await sectionEntry(global.id)
+      expect(after.draftData).not.toHaveProperty(SEO_KEY)
+      expect(after.draftVersion).toBe(row.draftVersion)
+    })
+  })
+
+  it('strips $seo from the draft when SEO is switched off, and leaves the ready SEO alone', async () => {
+    await withTestSite(async (ctx) => {
+      const home = {
+        ...companyInfo,
+        key: 'homePage',
+        label: 'Home page',
+        seo: true,
+      }
+      const global = await upsertGlobal(ctx.site.id, home, ctx.actor.id)
+      const row = await sectionEntry(global.id)
+      await updateDraft(
+        row.id,
+        { email: 'ready@x.test', [SEO_KEY]: { title: 'Ready SEO' } },
+        ctx.actor.id,
+        row.draftVersion,
+      )
+      await publishEntry(row.id, ctx.actor.id)
+      const ready = await sectionEntry(global.id)
+      await updateDraft(
+        row.id,
+        { email: 'draft@x.test', [SEO_KEY]: { title: 'Draft SEO' } },
+        ctx.actor.id,
+        ready.draftVersion,
+      )
+
+      await upsertGlobal(ctx.site.id, { ...home, seo: false }, ctx.actor.id)
+
+      const after = await sectionEntry(global.id)
+      expect(after.draftData).toMatchObject({ email: 'draft@x.test' })
+      expect(after.draftData).not.toHaveProperty(SEO_KEY)
+      expect(after.publishedData).toMatchObject({
+        [SEO_KEY]: { title: 'Ready SEO' },
+      })
+    })
+  })
+
+  it('restores a revision that has $seo into a section with SEO off as a skipped field', async () => {
+    await withTestSite(async (ctx) => {
+      const home = {
+        ...companyInfo,
+        key: 'homePage',
+        label: 'Home page',
+        seo: true,
+      }
+      const global = await upsertGlobal(ctx.site.id, home, ctx.actor.id)
+      const row = await sectionEntry(global.id)
+      await updateDraft(
+        row.id,
+        { email: 'seo@x.test', [SEO_KEY]: { title: 'Old SEO' } },
+        ctx.actor.id,
+        row.draftVersion,
+      )
+      const revisions = await db
+        .select()
+        .from(entryRevision)
+        .where(eq(entryRevision.entryId, row.id))
+      const withSeo = revisions.find(
+        (revision) => revision.data && SEO_KEY in revision.data,
+      )
+      expect(withSeo).toBeDefined()
+
+      await upsertGlobal(ctx.site.id, { ...home, seo: false }, ctx.actor.id)
+      const current = await sectionEntry(global.id)
+      const restored = await restoreRevision(
+        row.id,
+        withSeo!.id,
+        ctx.actor.id,
+        current.draftVersion,
+      )
+
+      expect(restored.skippedFields).toEqual([
+        expect.objectContaining({ key: SEO_KEY }),
+      ])
+      const after = await sectionEntry(global.id)
+      expect(after.draftData).not.toHaveProperty(SEO_KEY)
+      expect(after.draftData).toMatchObject({ email: 'seo@x.test' })
     })
   })
 

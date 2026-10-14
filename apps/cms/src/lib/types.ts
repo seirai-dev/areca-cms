@@ -24,7 +24,12 @@ export type Field = {
   description?: string
   /** Other date/datetime field key that this value must be on or after. */
   after?: string
+  /** Visual heading in the editor only (site content sections). Max 80 characters. */
+  group?: string
 }
+
+/** `collection` = a list of entries; `global` = a single site content section. */
+export type ContentKind = 'collection' | 'global'
 
 export type MembershipRole = 'owner' | 'editor'
 
@@ -116,6 +121,13 @@ export type Snapshot = {
   hash: string
   collections: Record<string, SnapshotEntry[]>
   /**
+   * Enabled site content sections, keyed by raw key. Absent when there are
+   * none. Included in `hash` together with `collections`.
+   */
+  globals?: Record<string, SnapshotGlobal>
+  /** Schema for exactly the sections above. Absent when there are none. */
+  globalSchema?: Record<string, GlobalConfig>
+  /**
    * Collection schema for exactly the collections above, keyed by raw key.
    * Same shape as the manifest. Outside `hash`. Absent in publications stored
    * before it existed; consumers fall back to the live manifest.
@@ -129,6 +141,23 @@ export type Snapshot = {
   assets?: SnapshotAsset[]
   /** The site's production URL, added when served (not stored). */
   siteUrl?: string | null
+}
+
+/** One site content section as a snapshot ships it (single entry, raw keys). */
+export type SnapshotGlobal = {
+  id: string
+  publishedAt: string | null
+  data: Record<string, unknown>
+  /** Present only when the section has SEO turned on. */
+  seo?: SeoMeta
+}
+
+/** Section schema in a manifest or snapshot. Same field rules as collections, minus slug. */
+export type GlobalConfig = {
+  label?: string
+  fields: Field[]
+  seo?: boolean
+  previewPath?: string
 }
 
 export type SnapshotSchema = Record<
@@ -170,6 +199,8 @@ export type SiteManifest = {
       fields: Field[]
     }
   >
+  /** Site content sections. Omitted or empty when none. A push omitting them disables them. */
+  globals?: Record<string, GlobalConfig>
 }
 
 export type EntryData = Record<string, unknown>

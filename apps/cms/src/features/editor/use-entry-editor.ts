@@ -27,7 +27,9 @@ import {
   cancelScheduleFn,
   createEntryFn,
   deleteEntryFn,
+  discardGlobalDraftFn,
   getEntryFn,
+  getGlobalPreviewUrlFn,
   getPreviewUrlFn,
   listRevisionsFn,
   publishEntryFn,
@@ -35,6 +37,7 @@ import {
   scheduleEntryFn,
   unpublishEntryFn,
   updateDraftFn,
+  updateGlobalDraftFn,
 } from '#/server/fn/content'
 
 /** Same rule as the server's `SLUG_PATTERN`. */
@@ -115,6 +118,7 @@ const sleep = (ms: number) =>
 export function useEntryEditor({
   siteId,
   collectionKey,
+  globalKey,
   fields,
   entryId: routeEntryId,
   onCreated,
@@ -123,6 +127,12 @@ export function useEntryEditor({
 }: {
   siteId: string
   collectionKey: string
+  /**
+   * Site content (globals): the section key. The editor then saves through
+   * the section functions, previews the section and can discard its draft.
+   * `entryId` is then the section's one entry, which always exists.
+   */
+  globalKey?: string
   fields: Field[]
   entryId?: string
   /** A new entry got its server row; the host swaps the URL. */
@@ -166,12 +176,16 @@ export function useEntryEditor({
   })
 
   const previewQuery = useQuery({
-    queryKey: queryKeys.previewUrl(siteId, collectionKey, entry?.slug ?? ''),
+    queryKey: globalKey
+      ? (['global-preview', siteId, globalKey] as const)
+      : queryKeys.previewUrl(siteId, collectionKey, entry?.slug ?? ''),
     queryFn: () =>
-      getPreviewUrlFn({
-        data: { siteId, collection: collectionKey, slug: entry!.slug },
-      }),
-    enabled: Boolean(entry?.slug),
+      globalKey
+        ? getGlobalPreviewUrlFn({ data: { siteId, key: globalKey } })
+        : getPreviewUrlFn({
+            data: { siteId, collection: collectionKey, slug: entry!.slug },
+          }),
+    enabled: globalKey ? Boolean(entry) : Boolean(entry?.slug),
     staleTime: 5 * 60 * 1000,
   })
 
@@ -401,6 +415,10 @@ export function useEntryEditor({
     const snapshot = dataRef.current
     const submitted = JSON.stringify(snapshot)
     const id = entryIdRef.current
+    if (globalKey && !id) {
+      setStatus('blocked')
+      return 'blocked'
+    }
     if (!id) {
       const slug = slugField ? snapshot[slugField.key] : undefined
       if (typeof slug !== 'string' || !SLUG_PATTERN.test(slug)) {
@@ -412,13 +430,26 @@ export function useEntryEditor({
     try {
       const payload = payloadFromData(snapshot)
       const saved = (
-        id
-          ? await updateDraftFn({
-              data: { id, data: payload, expectedVersion: versionRef.current },
+        globalKey
+          ? await updateGlobalDraftFn({
+              data: {
+                siteId,
+                key: globalKey,
+                data: payload,
+                expectedVersion: versionRef.current,
+              },
             })
-          : await createEntryFn({
-              data: { siteId, collectionKey, data: payload },
-            })
+          : id
+            ? await updateDraftFn({
+                data: {
+                  id,
+                  data: payload,
+                  expectedVersion: versionRef.current,
+                },
+              })
+            : await createEntryFn({
+                data: { siteId, collectionKey, data: payload },
+              })
       ) as EntryRecord & ImageImportResult
       versionRef.current = saved.draftVersion
       const serverData = initialEntryData(fieldsRef.current, saved.draftData)
@@ -492,6 +523,7 @@ export function useEntryEditor({
     slugField,
     siteId,
     collectionKey,
+    globalKey,
     queryClient,
     setBaseline,
     setData,
@@ -734,6 +766,40 @@ export function useEntryEditor({
     onError: actionError(m.editor_could_not_delete()),
   })
 
+  /** Site content: back to the ready version. No confirmation, by design. */
+  const discardMutation = useMutation({
+    mutationFn: async () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
+        timerRef.current = null
+      }
+      // A save already in flight must land before the draft is replaced.
+      await runningRef.current?.catch(() => undefined)
+      return discardGlobalDraftFn({ data: { siteId, key: globalKey! } })
+    },
+    onSuccess: async (discarded) => {
+      const record = discarded as EntryRecord
+      hydrate(record, true)
+      conflictRef.current = false
+      setConflict(false)
+      setRecoveredDraft(null)
+      setFieldErrors({})
+      setFormError(null)
+      try {
+        localStorage.removeItem(recoveryKeyRef.current)
+      } catch {
+        /* best effort */
+      }
+      queryClient.setQueryData(
+        queryKeys.entry(record.id),
+        (old: EntryRecord | undefined) => ({ ...old, ...record }),
+      )
+      toast.success(m.globals_discarded())
+      await invalidateEntry(record.id)
+    },
+    onError: actionError(m.globals_could_not_discard()),
+  })
+
   const restoreMutation = useMutation({
     mutationFn: async (revisionId: string) => {
       const id = await ensureSaved()
@@ -793,7 +859,8 @@ export function useEntryEditor({
     unpublishMutation.isPending ||
     archiveMutation.isPending ||
     deleteMutation.isPending ||
-    restoreMutation.isPending
+    restoreMutation.isPending ||
+    discardMutation.isPending
   const loading =
     Boolean(routeEntryId) &&
     (entryQuery.isLoading || hydratedId !== routeEntryId)
@@ -872,6 +939,8 @@ export function useEntryEditor({
     archive: () => archiveMutation.mutate(),
     remove: () => deleteMutation.mutateAsync(),
     restore: (revisionId: string) => restoreMutation.mutateAsync(revisionId),
+    discard: () => discardMutation.mutateAsync(),
+    discardPending: discardMutation.isPending,
     restoreSkippedFields,
     blocker,
     leaveAnyway: () => {

@@ -1,6 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { setResponseHeader } from '@tanstack/react-start/server'
-import { previewHeaders } from '@areca-cms/site-sdk'
+import { getPreviewEntry, previewHeaders, toCamelKey } from '@areca-cms/site-sdk'
 import type { PreviewEntry } from '@areca-cms/site-sdk'
 import { z } from 'zod'
 import { content } from '../generated/content/areca.gen.ts'
@@ -23,13 +23,65 @@ import {
 const loose = { strict: { output: false } as const }
 const slugInput = z.object({ slug: z.string().min(1) })
 
-/** Home: the newest journal entries and the first coffees in the shop order. */
-export const loadHome = createServerFn({ method: 'GET', ...loose }).handler(
-  () => ({
-    articles: getArticles().slice(0, 3),
-    coffees: getCoffees().slice(0, 3),
-  }),
+/**
+ * Search params of pages that can show a site content draft. The CMS opens
+ * `<page>?arecaPreview=<token>`; anything else is ignored.
+ */
+export const sitePreviewSearch = z.object({
+  arecaPreview: z.string().optional().catch(undefined),
+})
+const previewInput = z.object({ arecaPreview: z.string().optional() })
+
+/**
+ * Site content for a page that shows `section`. A token for that section
+ * replaces it with the draft (`preview: true`). A missing, invalid or
+ * other-section token serves the published values. Any request with a token is
+ * not indexable and not cacheable.
+ */
+async function readGlobals(token: string | undefined, section: 'homePage' | 'aboutPage') {
+  if (!token) return { globals: content.globals, preview: false, noindex: false }
+  const headers = previewHeaders()
+  setResponseHeader('X-Robots-Tag', headers['X-Robots-Tag'])
+  setResponseHeader('Cache-Control', headers['Cache-Control'])
+  try {
+    // Fetch the preview once. Only a token for this page's section changes the
+    // page; previewGlobals would overlay any section, so check the target first.
+    const preview = await getPreviewEntry({ token })
+    if (preview.kind === 'global' && toCamelKey(preview.global) === section) {
+      return { globals: await content.previewGlobals(preview), preview: true, noindex: true }
+    }
+  } catch {
+    // An expired or mistyped link shows the published page instead of an error.
+  }
+  return { globals: content.globals, preview: false, noindex: true }
+}
+
+/** Company details for the header and footer on every page. */
+export const loadCompanyInfo = createServerFn({ method: 'GET', ...loose }).handler(
+  () => ({ company: content.globals.companyInfo }),
 )
+
+/** Home: hero copy, the featured coffee, the newest journal entries and the first coffees in the shop order. */
+export const loadHome = createServerFn({ method: 'GET', ...loose })
+  .validator(previewInput)
+  .handler(async ({ data }) => {
+    const { globals, preview, noindex } = await readGlobals(data.arecaPreview, 'homePage')
+    return {
+      home: globals.homePage,
+      featuredCoffee: content.resolve(globals.homePage.featuredCoffee),
+      articles: getArticles().slice(0, 3),
+      coffees: getCoffees().slice(0, 3),
+      preview,
+      noindex,
+    }
+  })
+
+export const loadAbout = createServerFn({ method: 'GET', ...loose })
+  .validator(previewInput)
+  .handler(async ({ data }) => {
+    const { globals, preview, noindex } = await readGlobals(data.arecaPreview, 'aboutPage')
+    return { about: globals.aboutPage, preview, noindex }
+  })
 
 export const loadCoffees = createServerFn({ method: 'GET', ...loose }).handler(
   () => getCoffees(),

@@ -19,6 +19,10 @@ Unknown field keys are refused, and the error lists the valid ones. Entry data i
 
 **Clearing on update:** use `""` for fields and SEO text, `false` for `noindex`/`nofollow`, `[]` for `keyTakeaways`/`faq`/`about`, and an empty `name` for `author`. Don't use `null`: fields accept it, but `seo` rejects it. A key you leave out keeps its value.
 
+## Site content (globals)
+
+A section has the same field types as a collection, except `slug`. Its fields can set `group`, a heading shown above the field in the CMS editor (not in the data). Collection fields cannot set `group`. A section stores one set of values, so there is no create and no list: read it with `get_global` and change it with `update_global`. `seo` is only accepted on a section that has SEO turned on; `get_global` shows whether it does. `get_global` returns `previewAvailable: true` only when the section has a `previewPath` and the site has a production URL.
+
 ## Rich text Markdown
 
 - Use `##` for sections and `###` or `####` for subsections. Other heading levels are clamped.
@@ -63,7 +67,10 @@ Unknown SEO keys are refused. There is no SEO-generation tool, so you write thes
 | `Could not import the file:` | Ask the user for a direct, public file link |
 | `Only site owners…` / `Going live…` / `Only agency admins…` | Tell the user who can do it, e.g. an owner presses Go live in the CMS |
 | `No entry with id…` (or asset/job/publication) | Use the list tools to find valid ids |
-| `No collection "…" on this site` | Use one of the listed keys (see `get_site_info`) |
+| `No collection "…" on this site` | Use one of the listed keys (see `get_site_info`). Site content keys are not collections: use `get_global`. |
+| `No site content "…" on this site` | Use one of the `globals` keys from `get_site_info`. Disabled sections are not listed to editors and owners. |
+| `… has no SEO` | The section has SEO off, so drop `seo`. Ask an agency admin to turn SEO on if it is needed. |
+| `… has no preview page` | Preview needs a `previewPath` on the section. An agency admin sets it. |
 | `Something went wrong on the Areca server (ref …)` | Nothing is confirmed saved. Retry once, then report the ref. |
 
 HTTP: `401` = token or key invalid, expired, revoked or for another site, so reconnect. `403 mfa_required` = the agency admin must enable 2FA. `429` = wait `Retry-After` seconds (120/min per credential, plus 600/min per client IP when the CMS trusts its proxy).

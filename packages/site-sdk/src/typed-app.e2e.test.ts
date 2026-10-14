@@ -165,7 +165,7 @@ const info = content.globals.companyInfo
 expectTypeOf(info).toEqualTypeOf<CompanyInfoGlobal>()
 expectTypeOf(info.email).toEqualTypeOf<string>()
 expectTypeOf(info.phoneNumber).toEqualTypeOf<string | null | undefined>()
-expectTypeOf(info.plan).toEqualTypeOf<'basic' | 'pro' | null | undefined>()
+expectTypeOf(info.plan).toEqualTypeOf<'basic' | 'pro' | '' | null | undefined>()
 expectTypeOf(content.resolve(info.featuredAuthor)).toEqualTypeOf<Entry<'authors'> | null>()
 expectTypeOf(content.globals.homePage.heroTitle).toEqualTypeOf<string>()
 expectTypeOf(content.globals.homePage.$seo).toEqualTypeOf<SeoMeta>()

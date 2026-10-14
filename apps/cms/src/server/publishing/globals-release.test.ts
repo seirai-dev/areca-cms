@@ -3,13 +3,21 @@
 // section's raw key and collectionLabel = the section label.
 import { describe, expect, it } from 'vitest'
 
+import { buildSnapshot } from '#/server/content/snapshot'
 import {
+  createEntry,
   publishEntry,
   scheduleEntry,
   updateDraft,
 } from '#/server/content/entries'
-import { createTestGlobal, withTestSite } from '#/server/content/test-utils'
+import {
+  createTestCollection,
+  createTestGlobal,
+  sampleRichText,
+  withTestSite,
+} from '#/server/content/test-utils'
 
+import { getSiteReleaseStatus, requestPublication } from './publications.ts'
 import {
   diffApprovedRelease,
   listPendingReleaseChanges,
@@ -93,6 +101,70 @@ describe.skipIf(!hasDb)('release changes for site content', () => {
 
       const changes = await listPendingReleaseChanges(ctx.site.id)
       expect(changes.map((change) => change.id)).not.toContain(section.entry.id)
+    })
+  })
+
+  it('still lists ready changes while another section blocks go live', async () => {
+    await withTestSite(async (ctx) => {
+      await createTestCollection(ctx.site.id)
+      const company = await createTestGlobal(ctx.site.id, {
+        key: 'companyInfo',
+        label: 'Company info',
+      })
+      // Required fields, never marked ready: this is the go-live blocker.
+      await createTestGlobal(ctx.site.id, {
+        key: 'opening',
+        label: 'Opening hours',
+        fields: [{ key: 'weekdays', label: 'Weekdays', type: 'text', required: true }],
+      })
+      await updateDraft(
+        company.entry.id,
+        { email: 'blocked@x.test' },
+        ctx.actor.id,
+        company.entry.draftVersion,
+      )
+      await publishEntry(company.entry.id, ctx.actor.id)
+      const article = await createEntry({
+        siteId: ctx.site.id,
+        collectionKey: 'articles',
+        data: {
+          title: 'Ready article',
+          slug: `ready-${ctx.suffix}`,
+          body: sampleRichText,
+        },
+        actorId: ctx.actor.id,
+      })
+      await publishEntry(article.id, ctx.actor.id)
+
+      expect((await buildSnapshot(ctx.site.id)).ok).toBe(false)
+
+      const status = await getSiteReleaseStatus(ctx.site.id)
+      expect(status.blockers).toHaveLength(1)
+      expect(status.pendingEntries).toBe(2)
+
+      const changes = await listPendingReleaseChanges(ctx.site.id)
+      expect(changes).toContainEqual(
+        expect.objectContaining({
+          id: company.entry.id,
+          kind: 'ready',
+          global: true,
+          collectionLabel: 'Company info',
+          title: 'Company info',
+        }),
+      )
+      expect(changes).toContainEqual(
+        expect.objectContaining({ id: article.id, kind: 'ready', global: false }),
+      )
+
+      const diff = await diffApprovedRelease(ctx.site.id)
+      expect(diff.pendingCount).toBe(2)
+
+      // The server still refuses to request a release while blocked.
+      const requested = await requestPublication({
+        siteId: ctx.site.id,
+        actorId: ctx.actor.id,
+      })
+      expect(requested.ok).toBe(false)
     })
   })
 })

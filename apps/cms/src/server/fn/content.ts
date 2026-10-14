@@ -1,5 +1,9 @@
 import { isSafeIdentifier } from '#/lib/content-identifiers'
 import {
+  GLOBAL_GROUP_MAX_LENGTH,
+  GLOBAL_PREVIEW_PATH_MAX_LENGTH,
+} from '#/lib/globals'
+import {
   FIELD_DESCRIPTION_MAX_LENGTH,
   FIELD_LABEL_MAX_LENGTH,
   FIELD_MAX_OPTIONS,
@@ -46,6 +50,16 @@ import { listInboundReferences } from '#/server/content/inbound-references'
 import { NotFoundError } from '#/server/content/errors'
 import { pageLimitSchema, pageOffsetSchema } from '#/server/pagination'
 import {
+  deleteGlobal,
+  discardGlobalDraft,
+  getGlobalEntry,
+  isHiddenSectionEntry,
+  listGlobals,
+  setGlobalEnabled,
+  upsertGlobal,
+} from '#/server/content/globals'
+import {
+  buildGlobalPreviewUrl,
   buildPreviewUrl,
   signPreviewToken,
 } from '#/server/content/preview-token'
@@ -78,6 +92,11 @@ const fieldSchema = z.object({
   collection: z.string().max(FIELD_OPTION_MAX_LENGTH).optional(),
   description: z.string().max(FIELD_DESCRIPTION_MAX_LENGTH).optional(),
   after: z.string().min(1).max(FIELD_OPTION_MAX_LENGTH).optional(),
+})
+
+/** Site content fields: collection field rules plus an editor-only group heading. */
+const globalFieldSchema = fieldSchema.extend({
+  group: z.string().min(1).max(GLOBAL_GROUP_MAX_LENGTH).optional(),
 })
 
 const entryStatusSchema = z.enum([
@@ -135,10 +154,30 @@ async function requireSiteAccess(
   return { session, site: found }
 }
 
+/**
+ * A site content section the caller may use. Disabled sections are hidden
+ * from editors and owners; only the agency sees and edits them.
+ */
+async function requireGlobalAccess(siteId: string, key: string) {
+  const access = await requireSiteAccess(siteId)
+  const found = await getGlobalEntry(siteId, key)
+  if (!found || (!found.global.enabled && !access.session.user.isAgencyAdmin)) {
+    throw new NotFoundError(m.server_not_found())
+  }
+  return { ...access, ...found }
+}
+
 async function requireEntryAccess(entryId: string, role?: 'owner') {
-  await requireUser()
+  const viewer = await requireUser()
   const existing = await getEntry(entryId)
   if (!existing) {
+    throw new NotFoundError(m.server_entry_not_found())
+  }
+  // A disabled section is NotFound by id too, before the role check, so an
+  // editor gets the same answer as an owner. Same rule as requireGlobalAccess.
+  if (
+    await isHiddenSectionEntry(existing.collectionId, viewer.user.isAgencyAdmin)
+  ) {
     throw new NotFoundError(m.server_entry_not_found())
   }
   const access = await requireSiteAccess(
@@ -389,5 +428,175 @@ export const deleteCollectionFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const session = await requireAgencyAdmin()
     await deleteCollection(data.siteId, data.key, session.user.id)
+    return { ok: true as const }
+  })
+
+// Site content (globals) --------------------------------------------------
+// Sections reuse the entry functions above for ready / schedule / restore /
+// history (they take the section's entry id). The functions below add the
+// section-level reads, the draft and discard, and the agency-only structure.
+
+export const listGlobalsFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ siteId: z.string().min(1).max(ID_MAX_LENGTH) }))
+  .handler(async ({ data }) => {
+    const { session } = await requireSiteAccess(data.siteId)
+    return listGlobals(data.siteId, {
+      enabledOnly: !session.user.isAgencyAdmin,
+    })
+  })
+
+export const getGlobalFn = createServerFn({ method: 'GET', ...entryFn })
+  .validator(
+    z.object({
+      siteId: z.string().min(1).max(ID_MAX_LENGTH),
+      key: z.string().min(1).max(ID_MAX_LENGTH),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const { global, entry } = await requireGlobalAccess(data.siteId, data.key)
+    const names = await userNames([entry.createdBy, entry.updatedBy])
+    return {
+      global,
+      entry: {
+        ...entry,
+        createdByName: entry.createdBy
+          ? (names.get(entry.createdBy) ?? null)
+          : null,
+        updatedByName: entry.updatedBy
+          ? (names.get(entry.updatedBy) ?? null)
+          : null,
+      },
+    }
+  })
+
+export const updateGlobalDraftFn = createServerFn({
+  method: 'POST',
+  ...entryFn,
+})
+  .validator(
+    z.object({
+      siteId: z.string().min(1).max(ID_MAX_LENGTH),
+      key: z.string().min(1).max(ID_MAX_LENGTH),
+      data: entryDataSchema,
+      expectedVersion: z.number().int().positive(),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const { session, entry } = await requireGlobalAccess(data.siteId, data.key)
+    return updateDraft(
+      entry.id,
+      data.data,
+      session.user.id,
+      data.expectedVersion,
+    )
+  })
+
+export const discardGlobalDraftFn = createServerFn({
+  method: 'POST',
+  ...entryFn,
+})
+  .validator(
+    z.object({
+      siteId: z.string().min(1).max(ID_MAX_LENGTH),
+      key: z.string().min(1).max(ID_MAX_LENGTH),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const { session } = await requireGlobalAccess(data.siteId, data.key)
+    return discardGlobalDraft(data.siteId, data.key, session.user.id)
+  })
+
+/**
+ * The section's preview URL on the site (`previewPath` + token), or null when
+ * the agency has not set a preview path.
+ */
+export const getGlobalPreviewUrlFn = createServerFn({ method: 'GET' })
+  .validator(
+    z.object({
+      siteId: z.string().min(1).max(ID_MAX_LENGTH),
+      key: z.string().min(1).max(ID_MAX_LENGTH),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const { site: found, global } = await requireGlobalAccess(
+      data.siteId,
+      data.key,
+    )
+    if (!global.previewPath) return null
+    const token = signPreviewToken({
+      siteId: found.id,
+      global: data.key,
+      secret: found.previewSecret,
+    })
+    return {
+      token,
+      url: buildGlobalPreviewUrl(
+        found.productionUrl,
+        global.previewPath,
+        token,
+      ),
+    }
+  })
+
+export const upsertGlobalFn = createServerFn({ method: 'POST' })
+  .validator(
+    z.object({
+      siteId: z.string().min(1).max(ID_MAX_LENGTH),
+      key: z.string().refine(isSafeIdentifier, 'Unsafe identifier'),
+      label: z.string().trim().min(1).max(FIELD_LABEL_MAX_LENGTH),
+      fields: z.array(globalFieldSchema).max(MAX_FIELDS_PER_COLLECTION),
+      seo: z.boolean().optional(),
+      previewPath: z
+        .string()
+        .max(GLOBAL_PREVIEW_PATH_MAX_LENGTH)
+        .nullable()
+        .optional(),
+      enabled: z.boolean().optional(),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const session = await requireAgencyAdmin()
+    return upsertGlobal(
+      data.siteId,
+      {
+        key: data.key,
+        label: data.label,
+        fields: data.fields,
+        seo: data.seo,
+        previewPath: data.previewPath,
+        enabled: data.enabled,
+      },
+      session.user.id,
+    )
+  })
+
+export const setGlobalEnabledFn = createServerFn({ method: 'POST' })
+  .validator(
+    z.object({
+      siteId: z.string().min(1).max(ID_MAX_LENGTH),
+      key: z.string().min(1).max(ID_MAX_LENGTH),
+      enabled: z.boolean(),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const session = await requireAgencyAdmin()
+    return setGlobalEnabled(
+      data.siteId,
+      data.key,
+      data.enabled,
+      session.user.id,
+    )
+  })
+
+export const deleteGlobalFn = createServerFn({ method: 'POST' })
+  .validator(
+    z.object({
+      siteId: z.string().min(1).max(ID_MAX_LENGTH),
+      key: z.string().min(1).max(ID_MAX_LENGTH),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const session = await requireAgencyAdmin()
+    await deleteGlobal(data.siteId, data.key, session.user.id)
     return { ok: true as const }
   })

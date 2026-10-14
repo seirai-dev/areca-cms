@@ -17,6 +17,8 @@ import {
  */
 
 export type ReleaseStatusData = {
+  /** Messages for what blocks a go live (site content never marked ready). */
+  blockers?: string[]
   publishingMode?: 'production' | 'demo'
   demo?: { id: string; createdAt: string | Date } | null
   live: {

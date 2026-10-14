@@ -129,6 +129,6 @@ function run(command, args) {
 await ensureDatabase()
 await clearRateLimits()
 run('pnpm', ['exec', 'drizzle-kit', 'migrate'])
-run('pnpm', ['-s', 's3:init'])
+run('pnpm', ['run', 's3:init'])
 console.log(`[e2e] isolated stack: ${origin} · db ${new URL(databaseUrl).pathname.slice(1)} · bucket ${env.S3_BUCKET} · ${env.REDIS_URL}`)
 run('pnpm', ['exec', 'playwright', 'test', ...process.argv.slice(2)])

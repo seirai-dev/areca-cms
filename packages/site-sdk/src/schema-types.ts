@@ -2,12 +2,13 @@ import type { ArecaClient } from './client.js'
 import type {
   FieldType,
   ImageValue,
+  PreviewResult,
   ReferenceValue,
   RichTextValue,
   SeoMeta,
 } from './types.js'
 
-/** Augmented by the generated `areca.gen.ts` with `interface Register { schema: typeof schema }`. */
+/** Augmented by the generated `areca.gen.ts` with `schema` and `globals` (the site content schema). */
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface Register {}
 
@@ -20,6 +21,8 @@ export type ContentSchemaField = {
   collection?: string
   label?: string
   description?: string
+  /** Editor heading for site content fields. */
+  group?: string
 }
 
 export type ContentSchemaCollection = {
@@ -31,10 +34,26 @@ export type ContentSchemaCollection = {
 
 export type ContentSchema = { readonly [collectionKey: string]: ContentSchemaCollection }
 
+/** One site content section, as the generated `globalSchema` declares it. */
+export type ContentGlobalSchema = {
+  key: string
+  label?: string
+  seo: boolean
+  previewPath?: string
+  fields: { readonly [fieldKey: string]: ContentSchemaField }
+}
+
+export type GlobalSchema = { readonly [globalKey: string]: ContentGlobalSchema }
+
 /** Registered schema, or the loose `ContentSchema` when nothing is registered. */
 export type RegisteredSchema = Register extends { schema: infer S extends ContentSchema }
   ? S
   : ContentSchema
+
+/** Registered site content schema, or the loose `GlobalSchema` when nothing is registered. */
+export type RegisteredGlobalSchema = Register extends { globals: infer G extends GlobalSchema }
+  ? G
+  : GlobalSchema
 
 export type CollectionKey<S extends ContentSchema = RegisteredSchema> = keyof S & string
 
@@ -232,6 +251,36 @@ export type Href<C extends string = string, S extends ContentSchema = Registered
   CollectionOf<C, S>['route']
 >
 
+/* ---------- site content (globals) ---------- */
+
+/** The schema entry of one site content section; the loose one for unknown keys. */
+type GlobalOf<K extends string, G extends GlobalSchema> = K extends keyof G
+  ? G[K] extends infer D extends ContentGlobalSchema
+    ? D
+    : never
+  : ContentGlobalSchema
+
+export type GlobalKey<G extends GlobalSchema = RegisteredGlobalSchema> = keyof G & string
+
+/** Field values of one site content section, typed exactly like entry data. Homomorphic so hovers keep the field JSDoc. */
+export type GlobalData<K extends string = string, G extends GlobalSchema = RegisteredGlobalSchema> = {
+  [F in keyof GlobalOf<K, G>['fields']]: ValueOf<GlobalOf<K, G>['fields'][F]>
+}
+
+/** `$seo` exists only on sections with `seo: true`. */
+type GlobalSeo<K extends string, G extends GlobalSchema> = GlobalOf<K, G> extends { seo: true }
+  ? { $seo: SeoMeta }
+  : unknown
+
+/** One site content section as the SDK returns it: its field values, plus `$seo` when SEO is on. */
+export type Global<K extends string = string, G extends GlobalSchema = RegisteredGlobalSchema> = GlobalData<K, G> &
+  GlobalSeo<K, G>
+
+/** All site content sections, keyed by camel key. */
+export type Globals<G extends GlobalSchema = RegisteredGlobalSchema> = {
+  [K in GlobalKey<G>]: Global<K, G>
+}
+
 /* ---------- content object ---------- */
 
 /** Value of a draft field: the optional variant, whatever `required` says (drafts may leave required fields empty). */
@@ -279,7 +328,10 @@ export type CollectionApi<C extends string = string, S extends ContentSchema = R
   href(entryOrSlug: Entry<C, S> | string): Href<C, S>
 }
 
-export type Content<S extends ContentSchema = RegisteredSchema> = {
+export type Content<
+  S extends ContentSchema = RegisteredSchema,
+  G extends GlobalSchema = RegisteredGlobalSchema,
+> = {
   [C in CollectionKey<S>]: CollectionApi<C, S>
 } & {
   resolve(ref: '' | null | undefined): null
@@ -288,4 +340,16 @@ export type Content<S extends ContentSchema = RegisteredSchema> = {
   ): Entry<C, S> | null
   href<C extends CollectionKey<S>>(ref: ReferenceValue<C> | Entry<C, S>): Href<C, S>
   preview(token: string, options?: { client?: ArecaClient }): Promise<PreviewEntry<S>>
+  /** Published site content, keyed by camel key. Reads follow the pulled generation. */
+  readonly globals: Globals<G>
+  /**
+   * Published site content, with the section replaced by its draft when `source`
+   * is a site content preview token, or a preview result from `getPreviewEntry` /
+   * `client.fetchPreview` (no request is made for a result). A falsy token, or an
+   * entry preview, returns the published values.
+   */
+  previewGlobals(
+    source: string | PreviewResult | null | undefined,
+    options?: { client?: ArecaClient },
+  ): Promise<Globals<G>>
 }

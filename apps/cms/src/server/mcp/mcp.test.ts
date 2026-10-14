@@ -1464,6 +1464,41 @@ describe.skipIf(!hasDb)('site content (globals)', () => {
     expect(agencyRead.data).toMatchObject({ key: 'retiredNotes' })
   })
 
+  it('treats a disabled section entry as not found by entry id, for owners; agency admins still reach it', async () => {
+    const { retired } = await seedSiteContent(w)
+    const id = retired.entryId
+    const owner = await clientFor(w, 'owner', 'Retired by id owner', {
+      allowGoLive: true,
+    })
+    const publishAt = new Date(Date.now() + 86_400_000).toISOString()
+    const attempts: [string, Record<string, unknown>][] = [
+      ['get_entry', { id }],
+      ['mark_ready', { id }],
+      ['schedule_entry', { id, publishAt, timezone: 'UTC' }],
+      ['list_revisions', { id }],
+      [
+        'restore_revision',
+        { id, revisionId: 'rev-missing', expectedVersion: 1 },
+      ],
+      ['get_preview_url', { id }],
+    ]
+    for (const [name, args] of attempts) {
+      const out = await call(owner, name, args)
+      expect(out.isError, name).toBe(true)
+      expect(out.text, name).toMatch(/No (entry with id|site content)/)
+    }
+
+    const [row] = await db
+      .select()
+      .from(entry)
+      .where(eq(entry.id, id))
+    expect(row).toMatchObject({ status: 'draft' })
+
+    const agency = await clientFor(w, 'agency', 'Retired by id agency')
+    const revisions = await call(agency, 'list_revisions', { id })
+    expect(revisions.isError).toBe(false)
+  })
+
   it('previews a section through its previewPath and refuses when there is none', async () => {
     const { company, home } = await seedSiteContent(w)
     const owner = await clientFor(w, 'owner', 'Global preview')

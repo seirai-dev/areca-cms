@@ -148,6 +148,13 @@
       "when": 1791714987671,
       "tag": "0020_asset_source_url",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1791986240547,
+      "tag": "0021_site_content_globals",
+      "breakpoints": true
     }
   ]
 }

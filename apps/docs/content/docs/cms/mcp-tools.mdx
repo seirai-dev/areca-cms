@@ -151,7 +151,7 @@ Every tool returns text or JSON. Ids come from earlier tool results. Inputs mark
 
 | Tool | Access | Inputs | What it does |
 | --- | --- | --- | --- |
-| `get_site_info` | Everyone | None | Returns the site, your role and capabilities, `cannotDo` (what this key may not do, in plain sentences), every collection, and a short writing guide. Call it first. |
+| `get_site_info` | Everyone | None | Returns the site, your role and capabilities, `cannotDo` (what this key may not do, in plain sentences), every collection, every site content section (`globals`: key, label, enabled, field count, `seo`, `previewPath`), and a short writing guide. Call it first. |
 | `get_collection_schema` | Everyone | `collection` (required) | Returns each field's key, label, type, required flag, format, options or referenced collection, and an example `fields` and `seo` payload. |
 
 ### Entries
@@ -164,6 +164,20 @@ Every tool returns text or JSON. Ids come from earlier tool results. Inputs mark
 | `update_entry` | Everyone | `id` (required), `fields`, `seo`, `expectedVersion` | Changes only the keys you send. Clear a field with `""`, and an SEO key with `""`, `false` or `[]`. See [clearing values](#clearing-values). Send at least one of `fields` or `seo`. Editing a ready entry does not change the live site. |
 | `list_revisions` | Everyone | `id` (required) | Lists the history of an entry: revision id, note, time and author. |
 | `get_preview_url` | Everyone | `id` (required) | Returns a signed preview link for an entry, drafts included. It expires after about one hour. Fails when the site has no production URL. |
+
+### Site content
+
+Site content sections (globals) are single sets of values, such as company details or the home page. They are not collections, so `create_entry` and `list_entries` refuse their keys. Use the section key with the tools below, and the section's entry `id` (from `get_global`) with the workflow tools.
+
+| Tool | Access | Inputs | What it does |
+| --- | --- | --- | --- |
+| `get_global` | Everyone | `global` (required, the section key) | Returns the section's `id`, `key`, `label`, `status`, `live`, `pendingRelease`, `version`, `editedSinceReady`, `fields`, an `example`, `values`, `seo` (when SEO is on) and `previewAvailable`. Disabled sections are for agency admins only. |
+| `update_global` | Everyone | `global` (required), `fields`, `seo`, `expectedVersion` | Changes only the keys you send, like `update_entry`. `seo` is refused unless the section has SEO on. |
+| `discard_global_draft` | Everyone | `global` (required) | Sets the draft back to the ready version, or the scheduled version. Refused until the section has been ready once. |
+| `upsert_global` | Agency admin | `key` (required), `label`, `fields` (complete list), `seo`, `previewPath`, `enabled` | Creates or changes a section. `fields` may set `group`, the editor heading for a field; collection fields may not. `slug` fields are refused. |
+| `delete_global` | Agency admin | `key` (required) | Deletes a section. Its content is kept in the deleted-content archive. |
+
+`mark_ready`, `schedule_entry`, `cancel_schedule`, `list_revisions`, `restore_revision` and `get_preview_url` accept the section's entry `id`. `unpublish_entry`, `archive_entry` and `delete_entry` refuse it. The preview of a section is its `previewPath` on the site, so `get_preview_url` needs that path to be set.
 
 ### Library
 

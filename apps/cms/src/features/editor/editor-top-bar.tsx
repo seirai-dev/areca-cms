@@ -81,6 +81,7 @@ export function EditorTopBar({
   onGenerateSeo,
   onMarkReady,
   onGoLiveNow,
+  goLiveBlocked = false,
   onSchedule,
   onCancelSchedule,
   onUnpublish,
@@ -121,6 +122,8 @@ export function EditorTopBar({
   onGenerateSeo?: () => void
   onMarkReady: () => void
   onGoLiveNow: () => void
+  /** A blocked site cannot go live; the menu item stays visible but disabled. */
+  goLiveBlocked?: boolean
   onSchedule: () => void
   onCancelSchedule: () => void
   onUnpublish: () => void
@@ -188,7 +191,11 @@ export function EditorTopBar({
     >
       <DropdownMenuContent align="end" className="w-72">
         {primary === 'mark' || primary === 'ready' ? (
-          <DropdownMenuItem onSelect={onGoLiveNow} data-testid="go-live-now">
+          <DropdownMenuItem
+            onSelect={onGoLiveNow}
+            disabled={goLiveBlocked}
+            data-testid="go-live-now"
+          >
             <RocketLaunch />
             {primary === 'mark'
               ? m.editor_mark_ready_go_live()

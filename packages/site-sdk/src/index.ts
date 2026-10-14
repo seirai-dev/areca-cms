@@ -6,6 +6,7 @@ export type {
   CollectionApi,
   CollectionKey,
   Content,
+  ContentGlobalSchema,
   ContentSchema,
   ContentSchemaCollection,
   ContentSchemaField,
@@ -15,17 +16,24 @@ export type {
   EntryData,
   FieldKey,
   FieldValue,
+  Global,
+  GlobalData,
+  GlobalKey,
+  Globals,
+  GlobalSchema,
   Href,
   OrderBy,
   PreviewEntry,
   QueryOptions,
   QueryResult,
   Register,
+  RegisteredGlobalSchema,
   RegisteredSchema,
   RoutePath,
   Where,
 } from './schema-types.js'
 export { getPreviewEntry, previewHeaders } from './preview.js'
+export { toCamelKey } from './camel-case.js'
 export { seoHead, seoHeadHtml, seoJsonLd } from './seo.js'
 export type { HeadLink, HeadMeta, HeadScript, SeoHeadOptions, SeoHeadResult } from './seo.js'
 export { richTextDocument, richTextHtml, richTextMarkdown } from './rich-text.js'
@@ -34,7 +42,10 @@ export type {
   CollectionConfig,
   Field,
   FieldType,
+  GlobalConfig,
   ImageValue,
+  PreviewEntryResult,
+  PreviewGlobalResult,
   PreviewResult,
   PulledContentManifest,
   ReferenceValue,
@@ -45,4 +56,5 @@ export type {
   Snapshot,
   SnapshotAsset,
   SnapshotEntry,
+  SnapshotGlobal,
 } from './types.js'

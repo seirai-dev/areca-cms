@@ -97,6 +97,10 @@ Deleting a content type removes it, along with all of its entries and their revi
 Before you delete a content type, check that its entries are not needed. If the website project still defines the content type, the next push will create it again, but its entries won't come back.
 </Callout>
 
+## Site content sections
+
+Single sections of copy, such as company details or the home page, are not content types. They are managed the same way, with their own list under **Settings › Content**: **Site content**. Agency admins create and change them there, and the website declares them under `globals` in `areca.config.ts`. See [Site content](/docs/cms/site-content) for editors and [Site content (globals)](/docs/sdk/globals) for developers.
+
 ## Related
 
 - [Site settings](/docs/cms/site-settings): the Content tab and the other tabs.
