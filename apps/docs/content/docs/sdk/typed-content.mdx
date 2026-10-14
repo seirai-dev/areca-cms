@@ -1,0 +1,186 @@
+---
+title: Typed content
+description: How areca pull generates areca.gen.ts, so every collection, field, value, reference and route is typed in your site, with camelCase names and validation at pull time.
+---
+
+`areca pull` does more than download content. It also writes `areca.gen.ts`, a TypeScript module that describes your content schema and exports a ready `content` object. After one pull, your editor knows the collections, fields, field values, select options, reference targets and routes of your site. Autocompletion and type errors work in your own code, with no hand-written types, explicit generics or `as` casts.
+
+This guide explains the workflow, the names the SDK uses in code, and what the pull checks. For the methods on `content`, see [Reading content](/docs/sdk/reading-content).
+
+## The workflow
+
+<Steps>
+<Step>
+
+**Define the schema.** Describe your collections in `areca.config.ts` and push them with `areca manifest push`. You can use raw keys such as `blog-posts` here.
+
+</Step>
+<Step>
+
+**Publish.** Editors publish a release. Going live embeds the collection schema in the publication, so the pull knows the fields of the content it downloads.
+
+</Step>
+<Step>
+
+**Pull.** Run `areca pull`. It downloads the publication, checks it against its schema, and writes the JSON files and `areca.gen.ts`. The pull writes `areca.gen.ts` only after the content is in place, so a failed pull leaves the previous types as they were.
+
+</Step>
+<Step>
+
+**Commit the generated module.** Commit `areca.gen.ts`, and keep the JSON files out of Git. The module is small and has no secrets. Your editor and your type checker need it, even in CI jobs that do not pull.
+
+</Step>
+<Step>
+
+**Import `content`.** Use the typed object anywhere in server code:
+
+```ts title="src/lib/content.ts"
+import { content } from '../generated/content/areca.gen'
+
+export const articles = content.blogPosts.all({
+  where: { category: 'news' },
+  orderBy: { publishedOn: 'desc' },
+})
+```
+
+Type `content.` and the editor lists your collections. Type `where: { ` and it lists the fields of that collection, with the operators each field type supports.
+
+</Step>
+</Steps>
+
+The default location of the module is `src/generated/content/areca.gen.ts`, next to the pulled files. Use `--types <path>` to write it somewhere else:
+
+```bash
+pnpm exec areca pull --out src/generated/content --types src/generated/areca.gen.ts
+```
+
+After a successful pull, the CLI prints the path of the file it wrote:
+
+```text
+Pulled publication <publication-id> (<snapshot-hash>): blogPosts=12, authors=4
+Types: src/generated/content/areca.gen.ts
+```
+
+The summary line uses the same camelCase names as the files and the code.
+
+Do not edit `areca.gen.ts` by hand. Every pull rewrites it, and your changes would be lost. To change the types, change the schema in the CMS or in `areca.config.ts`, publish, and pull again.
+
+## Names in code are camelCase
+
+Your config and the CMS keep the raw keys you chose, such as `blog-posts` or `cover_image`. Code uses camelCase names, and the pull converts them. The pulled JSON, the generated schema and every read API use the camelCase names, so `blog-posts` becomes `blogPosts`:
+
+| Raw key | Name in code |
+| --- | --- |
+| `blog-posts` | `blogPosts` |
+| `cover_image` | `coverImage` |
+| `title` | `title` |
+| `heroImage` | `heroImage` |
+| `a-b-c` | `aBC` |
+
+The rule: split the key at each `-` or `_`, keep the first part as it is, upper-case the first letter of every later part, and join the parts. Empty parts are dropped. A key that is already camelCase does not change.
+
+The conversion applies in these places:
+
+- **Collections.** `content.blogPosts` is the API for the `blog-posts` collection. `readContent` takes `'blogPosts'`.
+- **Data keys.** Each entry's `data` uses the camelCase field names. A field `cover_image` is `entry.data.coverImage`.
+- **Files.** The pulled file for `blog-posts` is `blogPosts.json`.
+- **References.** A reference value's `collection` is the camelCase key of the target, for example `'authors'` or `'blogPosts'`.
+- **Entries.** Each pulled entry has a `collection` property with its camelCase collection key. The types use it to tell collections apart.
+
+The `id`, `slug`, `publishedAt` and `seo` properties do not change.
+
+### Names that the pull refuses
+
+The pull stops before it writes any file when:
+
+- Two collection keys map to the same camelCase name. The message names both raw keys, for example `Collection keys blog-posts and blog_posts both map to "blogPosts"`. Rename one of them in the CMS and in `areca.config.ts`.
+- Two field keys in one collection map to the same name.
+- Two collection names differ only by case, such as `Articles` and `articles`. The files would collide on Mac and Windows.
+- A collection name is `resolve`, `href` or `preview` (compared without case). The content object uses these names for its own methods. Field names may use them.
+
+## What the pull checks
+
+Before anything is written, the pull compares every entry with the schema of its publication. It uses the raw keys for this check, so it reports the names you chose. Each problem is one line in the form `<collection>/<slug>.<field>: <problem>`:
+
+```text
+Publication does not match its schema:
+blog-posts/hello-world.title: is required
+blog-posts/hello-world.category: must be one of "news", "guides"
+authors/ada.photo: must be an image object
+```
+
+The checks are:
+
+- `data` must be an object, and it must not contain keys that the schema does not define.
+- A required field must be present, must not be `null`, and must not be `''`.
+- Every value must have the shape of its field type. For example, a `date` must be `YYYY-MM-DD`, a `select` with options must use one of them, and a `reference` must point to its own target collection.
+
+The pull lists up to 20 problems and then stops with an error that names how many more there are. Nothing is written, so the previous content and types stay in place.
+
+If a problem is in the content, fix the entry in the CMS and publish again. If the schema is wrong, change `areca.config.ts`, push, and publish a new release, because the publication keeps the schema it was made with.
+
+## Nullability mirrors the data
+
+The types describe the values that the CMS sends. They do not normalise them. For each optional field, every shape the CMS can send is in the type, so the compiler forces you to handle it:
+
+| Field type | Required | Optional |
+| --- | --- | --- |
+| `text`, `textarea`, `url`, `slug` | `string` | `string \| null \| undefined` |
+| `select` with `options` | `'a' \| 'b'` | `'a' \| 'b' \| '' \| null \| undefined` |
+| `select` without `options` | `string` | `string \| null \| undefined` |
+| `date`, `datetime` | `string` | `string \| null \| undefined` |
+| `number` | `number` | `number \| null \| undefined` |
+| `boolean` | `boolean` | `boolean \| null \| undefined` |
+| `image` | `ImageValue` | `ImageValue \| '' \| null \| undefined` |
+| `reference` | `ReferenceValue<'authors'>` | `ReferenceValue<'authors'> \| '' \| null \| undefined` |
+| `richtext` | `RichTextValue` | `RichTextValue \| '' \| null \| undefined` |
+
+A missing key counts as `undefined`. An optional field can be `''`, and a required field never is, because the pull rejects it. Check for the empty cases before you use the value:
+
+```ts
+const subtitle = entry.data.subtitle?.trim() ?? ''
+const cover = entry.data.coverImage || null
+```
+
+Because the values are not normalised, `content.blogPosts.all({ where: { subtitle: { isNull: true } } })` matches all three empty cases at once. The query helpers treat `null`, `''` and a missing key as empty, but they do not change the entry.
+
+Draft entries from `content.preview()` follow the same shapes, with one difference. A draft can leave a required field empty, so an incomplete draft is a `DraftEntry`, and every one of its fields has the optional type from the table, whether or not the field is required. A complete draft is a normal `Entry`. See [Draft preview](/docs/sdk/preview).
+
+## Validation happens at pull time
+
+The types are checked when you pull, and only then. At runtime the SDK reads the JSON files as they are. This keeps reads fast, and it means a bad publication never reaches your site: the pull fails, and your types and content stay on the last good publication.
+
+## Older publications
+
+Publications made before schemas were embedded in them have no schema. In that case the pull uses the schema the CMS has now and prints a warning:
+
+```text
+Warning: Publication <id> has no embedded schema; types use the current CMS schema. Go live again to embed it.
+```
+
+The types are still correct for the current schema, but a publication made from an older schema could contain fields that the current schema does not describe, and the pull rejects it. Go live again to embed the schema in the next publication, and the warning goes away.
+
+## Reserved names
+
+The content object has three methods of its own: `resolve`, `href` and `preview`. A collection cannot take one of these names. `areca manifest push` and `areca pull` reject them as collection keys, and the check ignores case. Field keys may still be named `href` or `preview`.
+
+## Related
+
+- [Reading content](/docs/sdk/reading-content): query entries with `content`, follow references and build links.
+- [Pulling content](/docs/sdk/pulling-content): the pull, its output and its safety checks.
+- [Defining your content](/docs/sdk/defining-content): the rules for collection and field keys.
+- [Field types](/docs/sdk/field-types): the values each field type produces.
+- [JavaScript API reference](/docs/sdk/client): the types and functions that `areca.gen.ts` uses.
+
+## Migrating from 0.3
+
+Version 0.4.0 introduces typed content. Upgrade `@areca-cms/site-sdk`, then work through these changes:
+
+- **`readContent` no longer takes a type parameter.** Replace `readContent<Article>(dir, 'articles')` with `readContent(dir, 'articles')`, which returns typed entries. For queries, use the `content` object from `areca.gen.ts`.
+- **Use the camelCase names.** `blog-posts` becomes `blogPosts`, so the file is `blogPosts.json`, a field `cover_image` is `data.coverImage`, and reference `collection` values, `manifest.json` keys and `readContent` keys use the camel names. Update any path or key you wrote by hand. `areca.config.ts` and the CMS keep the raw keys.
+- **Rename colliding keys.** The pull stops when two collection keys, two field keys in one collection, or two collection names differing only by case map to the same name.
+- **Rename reserved collections.** `resolve`, `href` and `preview` cannot be collection keys. Field keys may keep these names.
+- **Fix configs that no longer compile.** `defineSiteContent` is stricter: a `reference` needs `collection`, `options` is only allowed on `select`, `after` is only allowed on `date` and `datetime` and must name a date key, and a collection `route` must contain `$slug`.
+- **Expect a `collection` property on entries.** Each entry carries its camelCase collection key.
+- **Commit the generated types.** `areca.gen.ts` must be tracked by Git while the JSON files stay ignored. Replace a whole-folder line such as `src/generated/content/` with `src/generated/content/*` and `!src/generated/content/areca.gen.ts`. `areca init` writes these lines for new projects.
+- **Publish the schema again.** The types follow the schema embedded in the publication. Push your schema, go live, and run `areca pull` again.

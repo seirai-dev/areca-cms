@@ -201,11 +201,18 @@ function writeSiteFiles(
     options.assets !== 'keep' && options.assets.download !== false
       ? (options.assets.dir ?? DEFAULT_ASSETS_DIR)
       : undefined
-  ensureGitignore(join(cwd, '.gitignore'), [
-    '.env.local',
-    gitignoreOutDir(options.outDir),
-    ...(mediaDir ? [gitignoreOutDir(mediaDir)] : []),
-  ])
+  ensureGitignore(
+    join(cwd, '.gitignore'),
+    [
+      '.env.local',
+      // Pulled JSON is ignored; areca.gen.ts is committed (negation after `*`).
+      `${trimSlash(options.outDir)}/*`,
+      `!${trimSlash(options.outDir)}/areca.gen.ts`,
+      ...(mediaDir ? [gitignoreOutDir(mediaDir)] : []),
+    ],
+    // Ignoring the whole directory would also hide areca.gen.ts.
+    [gitignoreOutDir(options.outDir)],
+  )
   writeEmptyGeneratedContent(join(cwd, options.outDir))
   writePackageJson(
     packageJsonPath,
@@ -516,23 +523,36 @@ function upsertEnvLocal(
   writeFileSync(filePath, `${next.join('\n')}\n`, 'utf8')
 }
 
-function ensureGitignore(filePath: string, entries: string[]): void {
+function ensureGitignore(
+  filePath: string,
+  entries: string[],
+  replaced: string[] = [],
+): void {
   const original = readOptionalUtf8(filePath) ?? ''
-  const existing = new Set(
-    original
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0),
+  const lines = original.split(/\r?\n/)
+  if (lines.at(-1) === '') lines.pop()
+  // Only legacy lines are dropped; the rest of the file is kept as written.
+  const kept = lines.filter(
+    (line) => !replaced.some((legacy) => sameIgnore(line.trim(), legacy)),
   )
+  const existing = new Set(kept.map((line) => line.trim()).filter((line) => line.length > 0))
 
   const toAdd = entries.filter((entry) => !hasGitignoreEntry(existing, entry))
-  if (toAdd.length === 0) {
+  if (toAdd.length === 0 && kept.length === lines.length) {
     if (original.length === 0) writeFileSync(filePath, '', 'utf8')
     return
   }
 
-  const prefix = original.length > 0 && !original.endsWith('\n') ? '\n' : ''
-  writeFileSync(filePath, `${original}${prefix}${toAdd.join('\n')}\n`, 'utf8')
+  const body = [...kept, ...toAdd]
+  writeFileSync(filePath, body.length > 0 ? `${body.join('\n')}\n` : '', 'utf8')
+}
+
+function sameIgnore(line: string, entry: string): boolean {
+  return trimSlash(line.replace(/^\//, '')) === trimSlash(entry.replace(/^\//, ''))
+}
+
+function trimSlash(value: string): string {
+  return value.replace(/\/+$/, '')
 }
 
 function hasGitignoreEntry(existing: Set<string>, entry: string): boolean {

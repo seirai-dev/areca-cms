@@ -1,11 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { ArticleCard } from '../../components/article-card.tsx'
 import { Eyebrow } from '../../components/ui.tsx'
-import { loadJournal, loadTeam } from '../../lib/queries.ts'
+import { loadJournal } from '../../lib/queries.ts'
 import { pageHead } from '../../lib/seo.ts'
 
 export const Route = createFileRoute('/journal/')({
-  loader: async () => ({ articles: await loadJournal(), authors: await loadTeam() }),
+  loader: async () => ({ articles: await loadJournal() }),
   head: () =>
     pageHead({
       title: 'Journal',
@@ -16,10 +16,8 @@ export const Route = createFileRoute('/journal/')({
 })
 
 function JournalIndex() {
-  const { articles, authors } = Route.useLoaderData()
+  const { articles } = Route.useLoaderData()
   const [lead, ...rest] = articles
-  const authorOf = (article: (typeof articles)[number]) =>
-    authors.find((author) => author.id === article.data.author?.id) ?? null
 
   return (
     <div className="mx-auto max-w-6xl px-5 pb-28 pt-16 sm:px-8 md:pt-24">
@@ -35,7 +33,7 @@ function JournalIndex() {
 
       {lead ? (
         <div className="mt-16 border-t border-line pt-16">
-          <ArticleCard article={lead} variant="feature" author={authorOf(lead)} />
+          <ArticleCard article={lead} variant="feature" author={lead.data.author} />
         </div>
       ) : null}
 
@@ -47,7 +45,7 @@ function JournalIndex() {
               <div key={article.id} className={span.className}>
                 <ArticleCard
                   article={article}
-                  author={authorOf(article)}
+                  author={article.data.author}
                   variant={span.fullWidth ? 'row' : 'default'}
                 />
               </div>

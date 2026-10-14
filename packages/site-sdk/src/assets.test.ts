@@ -68,6 +68,16 @@ function snapshotWith(assets: SnapshotAsset[] | undefined): Snapshot {
     hash: 'h',
     siteUrl: 'https://www.acme.test',
     ...(assets ? { assets } : {}),
+    schema: {
+      articles: {
+        route: '/blog/$slug',
+        label: 'Articles',
+        fields: [
+          { key: 'hero', label: 'Hero', type: 'image' },
+          { key: 'body', label: 'Body', type: 'richtext' },
+        ],
+      },
+    },
     collections: {
       articles: [
         {
@@ -202,11 +212,10 @@ describe('pullContent with local media', () => {
       'brochure-2026-7e1d2c3b.pdf',
       'hero-banner-3f2a91c0.jpg',
     ])
-    const [entry] = readContent<{ data: { hero: { url: string } } }>(
-      outDir,
-      'articles',
-    )
-    expect(entry!.data.hero.url).toBe('/areca/hero-banner-3f2a91c0.jpg')
+    const [entry] = readContent(outDir, 'articles')
+    expect(entry?.data).toMatchObject({
+      hero: { url: '/areca/hero-banner-3f2a91c0.jpg' },
+    })
     expect(readContentManifest(outDir).assets).toEqual({
       publicPath: '/areca',
       count: 2,

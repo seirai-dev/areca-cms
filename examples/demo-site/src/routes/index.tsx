@@ -1,5 +1,4 @@
 import { Link, createFileRoute } from '@tanstack/react-router'
-import type { Author } from '../lib/content.ts'
 import { ArticleCard } from '../components/article-card.tsx'
 import { AuthorCard } from '../components/author-card.tsx'
 import { CoffeeCard } from '../components/coffee-card.tsx'
@@ -77,7 +76,7 @@ function Home() {
               <ArticleCard
                 article={lead}
                 variant="lead"
-                author={authorFor(lead.data.author?.id, authors)}
+                author={lead.data.author}
               />
               <div className="flex flex-col gap-10 self-start">
                 {rest.map((article) => (
@@ -118,9 +117,4 @@ function Home() {
       </section>
     </div>
   )
-}
-
-function authorFor(id: string | undefined, authors: Author[]): Author | null {
-  if (!id) return null
-  return authors.find((author) => author.id === id) ?? null
 }

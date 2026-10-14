@@ -33,16 +33,21 @@ function PreviewPage() {
     return <PreviewMessage title="Preview unavailable" body={result.error} />
   }
 
-  const { preview } = result
-  if (preview.collection !== collection) {
+  const draftCollection = result.complete ? result.preview.collection : result.collection
+  if (draftCollection !== collection) {
     return (
       <PreviewMessage
         title="Preview unavailable"
-        body={`The link points at "${collection}" but the draft is a "${preview.collection}".`}
+        body={`The link points at "${collection}" but the draft is a "${draftCollection}".`}
       />
     )
   }
 
+  if (!result.complete) {
+    return <PreviewIncomplete issues={result.issues} />
+  }
+
+  const { preview } = result
   switch (preview.collection) {
     case 'articles':
       return (
@@ -58,6 +63,20 @@ function PreviewPage() {
     case 'authors':
       return <AuthorView author={preview.entry} articles={preview.articles} preview />
   }
+}
+
+function PreviewIncomplete({ issues }: { issues: string[] }) {
+  return (
+    <PageMessage title="Draft is incomplete">
+      <PreviewBanner />
+      <p>The CMS cannot show this draft as a page until these fields are fixed:</p>
+      <ul className="mt-4 list-disc space-y-1 pl-5 font-mono text-sm">
+        {issues.map((issue) => (
+          <li key={issue}>{issue}</li>
+        ))}
+      </ul>
+    </PageMessage>
+  )
 }
 
 function PreviewError({ error }: ErrorComponentProps) {

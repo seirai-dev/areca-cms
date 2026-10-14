@@ -3,13 +3,21 @@ import { join } from 'node:path'
 import { crc32, deflateSync } from 'node:zlib'
 import { renderHtml } from '@tanstack/markdown/html'
 import { parseMarkdown } from '@tanstack/markdown/parser'
-import type { PulledContentManifest, RichTextValue } from '@areca-cms/site-sdk'
 import {
-  CONTENT_DIR,
-  type Article,
-  type Author,
-  type Coffee,
-} from '../src/lib/content.ts'
+  manifestFromConfig,
+  type ArecaClient,
+  type CollectionConfig,
+  type RichTextValue,
+  type Snapshot,
+  type SnapshotEntry,
+} from '@areca-cms/site-sdk'
+import { pullContent } from '@areca-cms/site-sdk/pull'
+import config from '../areca.config.ts'
+
+/** Where `areca pull --out` writes in this app, so areca.gen.ts gets the same dir literal. */
+const CONTENT_OUT = 'src/generated/content'
+/** Same default as src/lib/content.ts; not imported from there because that module needs the generated file. */
+const CONTENT_DIR = process.env.ARECA_CONTENT_DIR ?? join(process.cwd(), CONTENT_OUT)
 
 export const FIXTURE_PUBLICATION_ID = 'pub_fixture_northbound'
 
@@ -97,13 +105,43 @@ function imageValue(key: ImageKey, alt: string) {
   }
 }
 
-export interface FixtureContent {
-  articles: Article[]
-  coffees: Coffee[]
-  authors: Author[]
+/** The schema the CMS embeds in a publication: a required slug field first, any other slug field dropped. */
+function publicationSchema(): Record<string, CollectionConfig> {
+  const { collections } = manifestFromConfig(config)
+  return Object.fromEntries(
+    Object.entries(collections).map(([key, collection]) => [
+      key,
+      {
+        ...collection,
+        fields: [
+          { key: 'slug', label: 'Slug', type: 'slug', required: true },
+          ...collection.fields.filter((field) => field.key !== 'slug'),
+        ],
+      },
+    ]),
+  )
 }
 
-export function writeFixtureContent(outDir = CONTENT_DIR, mediaDir = MEDIA_DIR): FixtureContent {
+/** Serves one snapshot to `pullContent`; the other client calls are never made. */
+function fixtureClient(snapshot: Snapshot): ArecaClient {
+  const unused = (): never => {
+    throw new Error('The fixture client only serves the fixture snapshot.')
+  }
+  return {
+    syncManifest: unused,
+    fetchManifest: unused,
+    fetchSnapshot: async () => snapshot,
+    fetchPreview: unused,
+    fetchAsset: unused,
+  }
+}
+
+/**
+ * Writes the fixture as a CMS publication (raw keys, embedded schema) and runs
+ * it through `pullContent`, so the files, manifest and areca.gen.ts are what
+ * `areca pull` produces.
+ */
+export async function writeFixtureContent(outDir = CONTENT_DIR, mediaDir = MEDIA_DIR): Promise<void> {
   mkdirSync(mediaDir, { recursive: true })
   for (const image of Object.values(IMAGES)) {
     const [width, height] = image.size
@@ -114,7 +152,7 @@ export function writeFixtureContent(outDir = CONTENT_DIR, mediaDir = MEDIA_DIR):
   const [ethiopia, brazil, colombia] = FIXTURE_SLUGS.coffees
   const [ethiopiaArticle, huilaArticle, bergenArticle] = FIXTURE_SLUGS.articles
 
-  const authors: Author[] = [
+  const authors: SnapshotEntry[] = [
     {
       id: 'ent_author_ingrid',
       slug: ingrid,
@@ -141,7 +179,7 @@ export function writeFixtureContent(outDir = CONTENT_DIR, mediaDir = MEDIA_DIR):
     },
   ]
 
-  const coffees: Coffee[] = [
+  const coffees: SnapshotEntry[] = [
     {
       id: 'ent_coffee_ethiopia',
       slug: ethiopia,
@@ -216,7 +254,7 @@ export function writeFixtureContent(outDir = CONTENT_DIR, mediaDir = MEDIA_DIR):
     },
   ]
 
-  const articles: Article[] = [
+  const articles: SnapshotEntry[] = [
     {
       id: 'ent_article_ethiopia',
       slug: ethiopiaArticle,
@@ -276,32 +314,28 @@ export function writeFixtureContent(outDir = CONTENT_DIR, mediaDir = MEDIA_DIR):
     },
   ]
 
-  const manifest: PulledContentManifest = {
+  const snapshot: Snapshot = {
     publicationId: FIXTURE_PUBLICATION_ID,
-    hash: 'fixture-northbound-sha256',
+    siteKey: config.siteKey,
     createdAt: '2026-10-01T10:00:00.000Z',
-    collections: {
-      articles: articles.length,
-      coffees: coffees.length,
-      authors: authors.length,
-    },
-    assets: { publicPath: '/areca', count: Object.keys(IMAGES).length },
+    hash: 'fixture-northbound-sha256',
+    collections: { articles, coffees, authors },
+    schema: publicationSchema(),
   }
 
   mkdirSync(outDir, { recursive: true })
-  const write = (name: string, value: unknown) =>
-    writeFileSync(join(outDir, name), `${JSON.stringify(value, null, 2)}\n`, 'utf8')
-  write('manifest.json', manifest)
-  write('articles.json', articles)
-  write('coffees.json', coffees)
-  write('authors.json', authors)
-  return { articles, coffees, authors }
+  await pullContent({
+    outDir,
+    client: fixtureClient(snapshot),
+    publicationId: FIXTURE_PUBLICATION_ID,
+    contentDir: CONTENT_OUT,
+  })
 }
 
 const isCli = process.argv[1]?.replace(/\\/g, '/').endsWith('scripts/fixture-content.ts')
 if (isCli) {
-  const { articles, coffees, authors } = writeFixtureContent()
+  await writeFixtureContent()
   console.log(
-    `Wrote fixture publication ${FIXTURE_PUBLICATION_ID} (${articles.length} articles, ${coffees.length} coffees, ${authors.length} authors) to ${CONTENT_DIR}`,
+    `Wrote fixture publication ${FIXTURE_PUBLICATION_ID} (articles, coffees, authors) and areca.gen.ts to ${CONTENT_DIR}`,
   )
 }

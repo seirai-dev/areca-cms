@@ -1,68 +1,13 @@
 import { join } from 'node:path'
-import { readContent, readContentManifest } from '@areca-cms/site-sdk/pull'
-import type {
-  ImageValue,
-  PulledContentManifest,
-  ReferenceValue,
-  RichTextValue,
-  SnapshotEntry,
-} from '@areca-cms/site-sdk'
+import { readContentManifest } from '@areca-cms/site-sdk/pull'
+import type { PulledContentManifest } from '@areca-cms/site-sdk'
+import { referenceId } from './references.ts'
+import { content } from '../generated/content/areca.gen.ts'
+import type { ArticlesEntry, AuthorsEntry, CoffeesEntry } from '../generated/content/areca.gen.ts'
 
-/** Pulled content. Tests point ARECA_CONTENT_DIR elsewhere so they never touch a real pull. */
+/** Pulled content directory, as `areca.gen.ts` resolves it. Tests point ARECA_CONTENT_DIR elsewhere. */
 export const CONTENT_DIR =
   process.env.ARECA_CONTENT_DIR ?? join(process.cwd(), 'src/generated/content')
-
-export type ArticleCategory =
-  | 'origin-stories'
-  | 'brewing'
-  | 'roastery-news'
-  | 'sustainability'
-export type CoffeeProcess = 'washed' | 'natural' | 'honey' | 'anaerobic'
-export type RoastLevel = 'light' | 'medium' | 'medium-dark' | 'dark'
-
-/** Fields mirror areca.config.ts. Optional CMS fields may arrive as null. */
-export interface ArticleData {
-  title: string
-  slug: string
-  excerpt: string | null
-  body: RichTextValue | null
-  heroImage: ImageValue | null
-  category: ArticleCategory | null
-  author: ReferenceValue | null
-  featuredCoffee: ReferenceValue | null
-  publishedAt: string | null
-}
-
-export interface CoffeeData {
-  name: string
-  slug: string
-  origin: string
-  region: string | null
-  producer: string | null
-  process: CoffeeProcess | null
-  roastLevel: RoastLevel | null
-  tastingNotes: string | null
-  altitude: number | null
-  /** EUR per 250 g. */
-  price: number | null
-  limited: boolean
-  harvestDate: string | null
-  image: ImageValue | null
-  description: RichTextValue | null
-  shopUrl: string | null
-}
-
-export interface AuthorData {
-  name: string
-  slug: string
-  role: string | null
-  bio: string | null
-  portrait: ImageValue | null
-}
-
-export type Article = SnapshotEntry & { data: ArticleData }
-export type Coffee = SnapshotEntry & { data: CoffeeData }
-export type Author = SnapshotEntry & { data: AuthorData }
 
 /** Captures the manifest once so every read in a call sees the same generation. */
 export function getManifest(): PulledContentManifest {
@@ -78,88 +23,59 @@ export function getManifest(): PulledContentManifest {
   }
 }
 
-/** A collection missing from the publication reads as empty, so a partial CMS still builds. */
-function readCollection<T extends SnapshotEntry>(
-  key: string,
-  manifest: PulledContentManifest,
-): T[] {
-  if (!Object.hasOwn(manifest.collections ?? {}, key)) return []
-  return readContent<T>(CONTENT_DIR, key, manifest)
+/**
+ * Newest journal entry first, by the article's date or else its publish time.
+ * Each article carries its author (expanded one level, null when unset).
+ */
+export function getArticles() {
+  return content.articles
+    .all({ with: { author: true } })
+    .sort((a, b) => timestamp(articleDate(b)) - timestamp(articleDate(a)))
 }
 
-export function getArticles(): Article[] {
-  const manifest = getManifest()
-  return readCollection<Article>('articles', manifest).sort(
-    (a, b) => timestamp(articleDate(b)) - timestamp(articleDate(a)),
-  )
+export function getArticle(slug: string): ArticlesEntry | null {
+  return content.articles.get(slug) ?? null
 }
 
-export function getArticle(slug: string): Article | null {
-  return getArticles().find((article) => article.slug === slug) ?? null
-}
-
-export function getCoffees(): Coffee[] {
-  const manifest = getManifest()
-  return readCollection<Coffee>('coffees', manifest).sort(
+/** Limited lots first, then by name. */
+export function getCoffees(): CoffeesEntry[] {
+  return content.coffees.all().sort(
     (a, b) =>
       Number(b.data.limited) - Number(a.data.limited) ||
       a.data.name.localeCompare(b.data.name, 'en'),
   )
 }
 
-export function getCoffee(slug: string): Coffee | null {
-  return getCoffees().find((coffee) => coffee.slug === slug) ?? null
+export function getCoffee(slug: string): CoffeesEntry | null {
+  return content.coffees.get(slug) ?? null
 }
 
-export function getAuthors(): Author[] {
-  const manifest = getManifest()
-  return readCollection<Author>('authors', manifest).sort((a, b) =>
-    a.data.name.localeCompare(b.data.name, 'en'),
-  )
+export function getAuthors(): AuthorsEntry[] {
+  return content.authors
+    .all()
+    .sort((a, b) => a.data.name.localeCompare(b.data.name, 'en'))
 }
 
-export function getAuthor(slug: string): Author | null {
-  return getAuthors().find((author) => author.slug === slug) ?? null
-}
-
-/** Resolves an article's author reference by id. */
-export function authorFor(
-  article: Article,
-  authors: Author[] = getAuthors(),
-): Author | null {
-  const id = article.data.author?.id
-  if (!id) return null
-  return authors.find((author) => author.id === id) ?? null
-}
-
-/** Resolves an article's featured coffee reference by id. */
-export function coffeeFor(
-  article: Article,
-  coffees: Coffee[] = getCoffees(),
-): Coffee | null {
-  const id = article.data.featuredCoffee?.id
-  if (!id) return null
-  return coffees.find((coffee) => coffee.id === id) ?? null
+export function getAuthor(slug: string): AuthorsEntry | null {
+  return content.authors.get(slug) ?? null
 }
 
 export function articlesByAuthor(
   authorId: string,
-  articles: Article[] = getArticles(),
-): Article[] {
-  return articles.filter((article) => article.data.author?.id === authorId)
+  articles: ArticlesEntry[] = getArticles(),
+): ArticlesEntry[] {
+  return articles.filter((article) => referenceId(article.data.author) === authorId)
 }
 
 export function articlesFeaturingCoffee(
   coffeeId: string,
-  articles: Article[] = getArticles(),
-): Article[] {
-  return articles.filter(
-    (article) => article.data.featuredCoffee?.id === coffeeId,
-  )
+  articles: ArticlesEntry[] = getArticles(),
+): ArticlesEntry[] {
+  return articles.filter((article) => referenceId(article.data.featuredCoffee) === coffeeId)
 }
 
 /** Splits the comma-separated tasting notes field into trimmed, non-empty notes. */
-export function tastingNotes(coffee: Coffee): string[] {
+export function tastingNotes(coffee: CoffeesEntry): string[] {
   return (coffee.data.tastingNotes ?? '')
     .split(',')
     .map((note) => note.trim())
@@ -175,11 +91,11 @@ export function listPrerenderPages(): string[] {
   return pages
 }
 
-function articleDate(article: Article): string | null {
+function articleDate(article: ArticlesEntry): string | null {
   return article.data.publishedAt ?? article.publishedAt
 }
 
-function timestamp(raw: string | null): number {
+function timestamp(raw: string | null | undefined): number {
   if (!raw) return 0
   const value = Date.parse(raw)
   return Number.isNaN(value) ? 0 : value

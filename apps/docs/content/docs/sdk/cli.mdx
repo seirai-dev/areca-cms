@@ -78,7 +78,7 @@ Paths are relative to the current directory.
 | `areca.config.ts` (or the `--config` path) | Created if missing, or with `--force`, with the `assets` settings and an empty `collections` object. If the file exists, `init` adds an `assets` block after `siteKey` when there is none. If there is one, the interactive prompt shows it and asks before replacing it; without a prompt it is kept unless you pass a media flag. When the file cannot be edited safely, `init` prints the block to paste. |
 | `.env.example` | Created only if missing, or with `--force`. Sets `ARECA_CMS_URL` to the CMS URL, and lists `ARECA_SITE_TOKEN` and `ARECA_SCHEMA_TOKEN` with empty values. It contains no secrets. |
 | `.env.local` | Always updated. Sets `ARECA_CMS_URL` and `ARECA_SITE_TOKEN`. Other lines are kept. |
-| `.gitignore` | Adds `.env.local`, the `--out` folder and the media folder if they are not already listed. Media is downloaded again by every pull, like the content. |
+| `.gitignore` | Adds `.env.local`, `<out>/*` (the pulled files), `!<out>/areca.gen.ts` (so the generated types are committed) and the media folder, if they are not already listed. An older `<out>/` line is replaced, because it would also hide the types file. Media is downloaded again by every pull, like the content. |
 | `<out>/manifest.json` | Created with empty values, so the folder exists before the first pull. |
 | `package.json` | Adds `sync-manifest` (`areca manifest push`) and `content:pull` (`areca pull --out <out>`) scripts if they are missing or blank. If `dev` exists and does not already use `--env-file` or `areca run`, it becomes `areca run -- <dev command>`. |
 
@@ -107,8 +107,11 @@ areca pull --out src/generated/content
 | `--out <dir>` | path | `src/generated/content` | Folder for the output. Created if missing. Relative paths are resolved from the current directory. |
 | `--publication <id>` | string | Live publication | Pull this exact publication. `ARECA_SNAPSHOT_ID` does the same in go-live builds. |
 | `--config <path>` | path | `areca.config.ts` | Config file to read the `assets` settings from. Without this flag a missing file is fine and the defaults apply. |
+| `--types <path>` | path | `<out>/areca.gen.ts` | Where to write the generated types and `content` module. Relative paths are resolved from the current directory. |
 
 The media settings come from `assets` in the config file: by default files go to `public/areca` and the content uses `/areca/<file>`. See [local media](/docs/sdk/pulling-content#media).
+
+The generated module is described in [typed content](/docs/sdk/typed-content).
 
 ### Environment variables
 
@@ -124,12 +127,16 @@ On success it prints one line, for example:
 ```text
 Pulled publication pub_1 (abc123): articles=1, pages=0
 Media: 12 file(s) in public/areca (3 downloaded)
+Types: src/generated/content/areca.gen.ts
 ```
+
+The counts use the camelCase collection keys, so a config key `blog-posts` prints as `blogPosts`. The `Types:` line shows where `areca.gen.ts` was written. Warnings, such as the one for a publication without an embedded schema, go to stderr after it.
 
 The folders then contain:
 
 ```text
 src/generated/content/
+  areca.gen.ts                   the types and the content object (commit this)
   manifest.json                  points at the current generation
   .publications/
     publication-Ab12Cd/
@@ -163,6 +170,8 @@ Each collection file is an array of entries. See [Pulling content](/docs/sdk/pul
 - **Cleanup does not fail a pull.** Old generations are removed after the new one is live. If that fails, the pull still succeeds and prints a warning.
 - **Older CMS versions.** If the CMS does not list media files, the pull prints a warning and keeps the CMS URLs.
 - **Collection names must be safe identifiers.** `pull` refuses a collection whose key is not a safe identifier, before it writes any file. See [identifier rules](/docs/sdk/errors-and-limits#identifier-rules).
+- **Entries are checked against the schema.** `pull` checks every entry before it writes any file, and it refuses names that collide in camelCase. See [what the pull checks](/docs/sdk/typed-content#what-the-pull-checks).
+- **Types follow the content.** `areca.gen.ts` is written after the new content is live. If the pull fails, the types stay as they were.
 - **No publication, no output.** If the site has never gone live, the command fails with the 404 message and writes nothing new. See [Errors and limits](/docs/sdk/errors-and-limits#no-publication).
 
 ## areca manifest push
@@ -292,8 +301,10 @@ Cancelling `init` exits with `0` and prints `Operation cancelled.` That is easy 
 | `ARECA_SITE_TOKEN` | `pull`, `manifest push`, `manifest pull` | Site token. Required by every command that talks to the CMS. |
 | `ARECA_SCHEMA_TOKEN` | `manifest push` | Schema token, used only for the push. |
 | `ARECA_SITE_KEY` | `manifest pull` | Site key, used only when the config file is missing or has no `siteKey`. |
+| `ARECA_SNAPSHOT_ID` | `pull` | The publication to pull, unless `--publication` is given. Empty or `0` selects the live publication. |
+| `ARECA_CONTENT_DIR` | The generated module, at run time | The content folder that `content` reads. The default is the `--out` folder that `pull` used. It is not read by the CLI. |
 
-The `ARECA_SNAPSHOT_ID` variable is not read by the SDK. It is only used as a Docker build argument to bust the build cache. See [Go-live builds](/docs/sdk/go-live-builds).
+Areca's deployments also set `ARECA_SNAPSHOT_ID` as a Docker build argument, which changes on every release and so stops Docker from reusing an older pull. See [Go-live builds](/docs/sdk/go-live-builds).
 
 For the CMS's own environment variables, see [Configuration](/docs/self-hosting/configuration).
 

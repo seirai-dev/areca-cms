@@ -30,6 +30,7 @@ import { convertRichText, validateRichText } from '#/server/richtext'
 import { getCollection, listCollections } from './collections.ts'
 import { NotFoundError, ValidationError } from './errors.ts'
 import { buildEntrySeo } from './seo.ts'
+import { buildSnapshotSchema } from './snapshot-schema.ts'
 import { pickDeclaredFields, validateEntryData } from './validation.ts'
 
 type IncludedEntry = {
@@ -294,6 +295,8 @@ export async function buildSnapshot(
     createdAt: now.toISOString(),
     hash,
     collections,
+    // Outside the hash: it describes the collections, it is not content.
+    schema: buildSnapshotSchema(enabled),
     // Outside the hash: it is derived from the collections.
     assets: await snapshotAssets(
       existingSite.organizationId,

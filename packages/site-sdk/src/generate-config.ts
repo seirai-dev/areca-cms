@@ -103,9 +103,11 @@ function fieldLines(field: Field, indent: string): string[] {
 
 function fieldEntries(field: Field): Array<[string, string]> {
   const entries: Array<[string, string]> = []
+  // Every key in FIELD_KEY_ORDER exists on at least one Field variant.
+  const values: Partial<Record<(typeof FIELD_KEY_ORDER)[number], string | boolean | readonly string[]>> = field
 
   for (const key of FIELD_KEY_ORDER) {
-    const value = field[key]
+    const value = values[key]
     if (value === undefined) continue
     entries.push([propertyKey(key), renderValue(value)])
   }
@@ -113,10 +115,10 @@ function fieldEntries(field: Field): Array<[string, string]> {
   return entries
 }
 
-function renderValue(value: string | boolean | string[]): string {
+function renderValue(value: string | boolean | readonly string[]): string {
   if (typeof value === 'boolean') return String(value)
-  if (Array.isArray(value)) return `[${value.map((item) => quote(item)).join(', ')}]`
-  return quote(value)
+  if (typeof value === 'string') return quote(value)
+  return `[${value.map((item) => quote(item)).join(', ')}]`
 }
 
 function propertyKey(key: string): string {

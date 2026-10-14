@@ -5,6 +5,7 @@ import { relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DEFAULT_CONFIG_PATH, parseArgs, usage } from './args.js'
 import { resolveAssetsConfig } from './assets.js'
+import { camelCollectionKeys } from './camel-case.js'
 import { createArecaClient } from './client.js'
 import { loadLocalEnv } from './env.js'
 import { InitCancelledError, initSite } from './init.js'
@@ -67,11 +68,15 @@ export async function run(
       const assets = resolveAssetsConfig(config?.assets, cwd)
       const snapshot = await pullContent({
         outDir: resolve(cwd, parsed.outDir),
+        contentDir: parsed.outDir,
         publicationId: parsed.publicationId,
+        ...(parsed.typesPath ? { types: resolve(cwd, parsed.typesPath) } : {}),
         ...(assets ? { assets } : {}),
       })
+      // Print camelCase keys, the names used in the pulled files and in code.
+      const camelKeys = camelCollectionKeys(Object.keys(snapshot.collections))
       const counts = Object.entries(snapshot.collections)
-        .map(([key, entries]) => `${key}=${entries.length}`)
+        .map(([key, entries]) => `${camelKeys.get(key)}=${entries.length}`)
         .join(', ')
       console.log(
         `Pulled publication ${snapshot.publicationId} (${snapshot.hash})${counts ? `: ${counts}` : ''}`,
@@ -82,6 +87,7 @@ export async function run(
           `Media: ${total} file(s) in ${relative(cwd, dir) || '.'} (${downloaded} downloaded)`,
         )
       }
+      console.log(`Types: ${relative(cwd, snapshot.typesPath) || snapshot.typesPath}`)
       for (const warning of snapshot.warnings) console.warn(`Warning: ${warning}`)
       return 0
     }

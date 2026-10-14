@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
 import { db } from '#/db'
-import { asset, entry } from '#/db/schema'
+import { asset, collection, entry } from '#/db/schema'
 import type { Field } from '#/lib/types'
 
 import {
@@ -11,6 +11,7 @@ import {
   scheduleEntry,
   updateDraft,
 } from './entries.ts'
+import { listCollections } from './collections.ts'
 import { buildSnapshot, buildPreviewEntry } from './snapshot.ts'
 import {
   createTestCollection,
@@ -129,6 +130,80 @@ describe.skipIf(!hasDb)('buildSnapshot', () => {
       const preview = await buildPreviewEntry(ctx.site.id, 'articles', slug)
       expect(preview?.data).not.toHaveProperty('$seo')
       expect(preview?.seo?.description).toBe('Search snippet')
+    })
+  })
+
+  it('embeds the schema of every enabled collection, matching the manifest', async () => {
+    await withTestSite(async (ctx) => {
+      await createTestCollection(ctx.site.id, { routePattern: '/blog/$slug' })
+      await createTestCollection(ctx.site.id, {
+        key: 'notes',
+        routePattern: '/notes/$slug',
+        fields: [
+          { key: 'title', label: 'Title', type: 'text', required: true },
+        ],
+      })
+      await createTestCollection(ctx.site.id, {
+        key: 'retired',
+        routePattern: '/old/$slug',
+      })
+      await db
+        .update(collection)
+        .set({ enabled: false })
+        .where(eq(collection.key, 'retired'))
+
+      const result = await buildSnapshot(ctx.site.id)
+      expect(result.ok).toBe(true)
+      if (!result.ok) return
+
+      const enabled = await listCollections(ctx.site.id, { enabledOnly: true })
+      const expected = Object.fromEntries(
+        enabled.map((col) => [
+          col.key,
+          { route: col.routePattern, label: col.label, fields: col.fields },
+        ]),
+      )
+      expect(Object.keys(result.snapshot.schema ?? {}).sort()).toEqual(
+        Object.keys(result.snapshot.collections).sort(),
+      )
+      expect(result.snapshot.schema).toEqual(expected)
+      expect(result.snapshot.schema?.notes?.fields[0]?.key).toBe('slug')
+    })
+  })
+
+  it('keeps the hash independent of the schema', async () => {
+    await withTestSite(async (ctx) => {
+      await createTestCollection(ctx.site.id, { routePattern: '/blog/$slug' })
+      const created = await createEntry({
+        siteId: ctx.site.id,
+        collectionKey: 'articles',
+        data: {
+          title: 'Stable',
+          slug: `hash-${ctx.suffix}`,
+          body: sampleRichText,
+        },
+        actorId: ctx.actor.id,
+      })
+      await publishEntry(created.id, ctx.actor.id)
+
+      const before = await buildSnapshot(ctx.site.id)
+      expect(before.ok).toBe(true)
+      if (!before.ok) return
+
+      // A label change alters only the schema, not the published collections.
+      await db
+        .update(collection)
+        .set({ label: 'Renamed articles' })
+        .where(eq(collection.siteId, ctx.site.id))
+
+      const after = await buildSnapshot(ctx.site.id)
+      expect(after.ok).toBe(true)
+      if (!after.ok) return
+
+      expect(after.snapshot.collections).toEqual(before.snapshot.collections)
+      expect(after.hash).toBe(before.hash)
+      expect(after.snapshot.schema?.articles?.label).toBe('Renamed articles')
+      expect(before.snapshot.schema?.articles?.label).toBe('Articles')
     })
   })
 

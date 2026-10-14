@@ -70,16 +70,17 @@ pnpm exec areca manifest push
 pnpm exec areca pull
 ```
 
-The default output is `src/generated/content/`. Use `readContent()` from a
-server loader or build script to read the JSON snapshot. Do not import the
-site token or call the CMS from a public browser bundle.
+The default output is `src/generated/content/`. The pull also writes
+`areca.gen.ts` there, which exports a typed `content` object for reading the
+snapshot from a server loader or build script. Commit that file. Do not import
+the site token or call the CMS from a public browser bundle.
 
 ## CLI
 
 | Command                                               | Purpose                                                                                                 |
 | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | `areca init`                                          | Create frontend config and environment-file scaffolding.                                                |
-| `areca pull [--out <directory>] [--publication <id>] [--config <path>]` | Download the current published snapshot and its media; default output is `src/generated/content`. |
+| `areca pull [--out <directory>] [--publication <id>] [--config <path>] [--types <path>]` | Download the current published snapshot and its media, and write `areca.gen.ts`; default output is `src/generated/content`. |
 | `areca manifest push [config]`                        | Send the local config to the CMS. Default config is `./areca.config.ts`. Requires `ARECA_SCHEMA_TOKEN`. |
 | `areca manifest pull [--config <path>] [--yes]`       | Replace the local config with enabled CMS collections.                                                  |
 | `areca sync-manifest [config]`                        | Deprecated alias for `areca manifest push`.                                                             |
@@ -105,16 +106,17 @@ content in the CMS before adding it to a production build. Pulls write an immuta
 
 ```text
 src/generated/content/
+├── areca.gen.ts        # types and the content object (commit this)
 ├── manifest.json       # publication ID, hash, counts, and generation pointer
 └── .publications/
     └── publication-<generation>/
-        ├── articles.json
-        └── .assets.json  # media files this generation uses
+        ├── blogPosts.json  # one file per collection, named by its camelCase key
+        └── .assets.json    # media files this generation uses
 public/areca/
 └── hero-banner-3f2a91c0.jpg
 ```
 
-Use `readContent()` instead of importing a flat `<collection>.json` file. It follows
+Use the `content` object, or `readContent()`, instead of importing a flat `<collection>.json` file. It follows
 the current manifest and rejects collections absent from that publication. Legacy
 flat outputs remain readable. A failed pull preserves the complete prior generation.
 The current generation and the two before it are kept for readers that captured
@@ -153,49 +155,44 @@ The generated files should usually be ignored by Git and created during local
 development or the build. Pull rejects unsafe collection names and refuses
 symbolic-link output files.
 
-## Read snapshot content
+## Read typed content
 
-Use the `@areca-cms/site-sdk/pull` export from server-side code:
-
-```ts
-import { readContent } from "@areca-cms/site-sdk/pull";
-import type {
-  ImageValue,
-  RichTextValue,
-  SnapshotEntry,
-} from "@areca-cms/site-sdk";
-
-type Article = SnapshotEntry & {
-  data: { title: string; body: RichTextValue; cover: ImageValue | null };
-};
-
-const articles = readContent<Article>("src/generated/content", "articles");
-const article = articles.find((item) => item.slug === "hello-world");
-```
-
-Each entry has `id`, `slug`, `publishedAt`, `data`, and optional `seo`. The
-CMS schema supplies the `data` fields; define a TypeScript type for the content
-your site expects. Images include a URL, dimensions, alt text, and MIME type.
-References include the target collection, slug, and ID.
-
-For one-time content loads in Node, the client can pull files directly:
+`areca pull` also writes `src/generated/content/areca.gen.ts`. It is generated
+from the schema of the published content, and it exports a typed `content`
+object. Commit it. The pulled JSON stays out of Git.
 
 ```ts
-import { createArecaClient } from "@areca-cms/site-sdk";
-import { pullContent } from "@areca-cms/site-sdk/pull";
+import { content } from "../generated/content/areca.gen";
 
-const client = createArecaClient();
-const snapshot = await pullContent({ outDir: "src/generated/content", client });
-console.log(snapshot.publicationId);
+export const articles = content.articles.all({ limit: 10 });
+export const article = content.articles.get("hello-world"); // undefined if unknown
 ```
 
-`readContentManifest(directory)` captures the current publication pointer. Pass it
-as the third argument to each `readContent()` call when reading multiple collections
-that must belong to one publication.
+Each collection has `all`, `first`, `get`, `byId` and `href`. `all` and `first`
+accept `where` (equality, and operators that fit each field type), `orderBy`,
+`limit`, `offset` and `with` (one level of references). `content.resolve(ref)`
+follows a reference, and `content.href(...)` builds the route. Use `content.preview(token)`
+for draft previews. It returns `complete: true` with an `Entry`, or `complete: false` with a
+`DraftEntry` and a list of `issues`. The module reads the folder you pulled into, or
+`ARECA_CONTENT_DIR` when it is set.
 
-`readContent<T>(directory, collectionKey, capturedManifest?)` reads the collection array and
-returns it as `T[]`. If the content has not been pulled, it explains that you
-need to run `areca pull` first.
+Collection and field names are camelCase in code: `blog-posts` is
+`content.blogPosts`, and `cover_image` is `entry.data.coverImage`. The config keeps
+the raw keys. The pull fails on keys that collide after this conversion, and
+`resolve`, `href` and `preview` cannot be collection keys.
+
+Each entry has `id`, `slug`, `publishedAt`, `collection`, `data` and optional
+`seo`. Optional fields can be `null`, missing or `""`, and the types show each
+case. The pull checks every entry against the schema before it writes anything.
+
+For low-level access, `readContent(directory, "blogPosts")` from
+`@areca-cms/site-sdk/pull` returns the typed entries of one collection. Capture
+`readContentManifest(directory)` once and pass it as the third argument to read
+several collections from one publication.
+
+`readContent()` reads files at runtime, so the generated directory must ship with
+the server build or container, including `.publications/`. Use the content object
+from server code only, never from a browser bundle.
 
 ## Render rich text
 
@@ -322,7 +319,9 @@ available. The CLI prints the error and exits non-zero.
 
 Collection and field keys start with an ASCII letter and contain at most 64
 ASCII letters, digits, `_`, or `-`. Reserved names include `manifest`,
-`constructor`, `prototype`, `__proto__`, and Windows device names. Field types
+`constructor`, `prototype`, `__proto__`, and Windows device names. Collection
+keys cannot be `resolve`, `href` or `preview`, because the content object uses
+those names. Field types
 are `text`, `textarea`, `richtext`, `image`, `date`, `datetime`, `select`,
 `reference`, `slug`, `boolean`, `number`, and `url`. `select` uses `options`,
 `reference` uses `collection`, and date ordering can use `after` to refer to
@@ -333,6 +332,7 @@ for complete field details and examples.
 
 - `@areca-cms/site-sdk`: client, schema helpers and types, preview, SEO, and
   rich-text helpers.
-- `@areca-cms/site-sdk/pull`: `pullContent()` and `readContent()`.
+- `@areca-cms/site-sdk/pull`: `pullContent()`, `readContent()` and `readContentManifest()`.
+- `@areca-cms/site-sdk/content`: `createContent()`, the typed content object (Node only).
 - `@areca-cms/site-sdk/seo`: SEO helpers and types.
 - `@areca-cms/site-sdk/rich-text`: rich-text helpers.

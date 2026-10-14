@@ -5,6 +5,8 @@ export type ParsedArgs =
       publicationId?: string
       /** Set only when passed; the default config may be absent. */
       configPath?: string
+      /** Where areca.gen.ts is written. Default `<out>/areca.gen.ts`. */
+      typesPath?: string
     }
   | { command: 'sync-manifest'; configPath: string }
   | { command: 'manifest-pull'; configPath: string; yes: boolean }
@@ -66,6 +68,7 @@ function parsePullArgs(args: string[]): ParsedArgs {
   let outDir = DEFAULT_PULL_OUT_DIR
   let publicationId: string | undefined
   let configPath: string | undefined
+  let typesPath: string | undefined
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i]
@@ -73,6 +76,13 @@ function parsePullArgs(args: string[]): ParsedArgs {
       const value = readFlagValue(args, i, '--config')
       if (value.error) return value.error
       configPath = value.value
+      i += 1
+      continue
+    }
+    if (arg === '--types') {
+      const value = readFlagValue(args, i, '--types')
+      if (value.error) return value.error
+      typesPath = value.value
       i += 1
       continue
     }
@@ -98,6 +108,7 @@ function parsePullArgs(args: string[]): ParsedArgs {
     outDir,
     ...(publicationId ? { publicationId } : {}),
     ...(configPath ? { configPath } : {}),
+    ...(typesPath ? { typesPath } : {}),
   }
 }
 
@@ -284,7 +295,7 @@ export function usage(): string {
   return `Usage:
   areca init [--cms-url <url>] [--token <token>] [--site-key <key>] [--out ${DEFAULT_PULL_OUT_DIR}] [--config ${DEFAULT_CONFIG_PATH}]
              [--assets-dir ${DEFAULT_ASSETS_DIR}] [--assets-public-path /areca] [--no-assets] [--yes|-y] [--force]
-  areca pull [--out ${DEFAULT_PULL_OUT_DIR}] [--publication <id>] [--config ${DEFAULT_CONFIG_PATH}]
+  areca pull [--out ${DEFAULT_PULL_OUT_DIR}] [--publication <id>] [--config ${DEFAULT_CONFIG_PATH}] [--types <path>]
   areca manifest push [${DEFAULT_SYNC_MANIFEST_PATH}]
   areca manifest pull [--config ${DEFAULT_SYNC_MANIFEST_PATH}] [--yes|-y]
   areca sync-manifest [${DEFAULT_SYNC_MANIFEST_PATH}]   (deprecated alias for manifest push)

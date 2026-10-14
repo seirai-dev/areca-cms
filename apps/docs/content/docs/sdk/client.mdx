@@ -3,11 +3,11 @@ title: JavaScript API reference
 description: Every export of @areca-cms/site-sdk and its subpaths, with signatures, parameters, return types, errors and examples.
 ---
 
-The SDK has one main entry point and three subpath entry points. Import from the entry point that matches what you need. The SDK is ESM only, has no framework dependency, and needs Node.js 22.6 or later on the server.
+The SDK has one main entry point and four subpath entry points. Import from the entry point that matches what you need. The SDK is ESM only, has no framework dependency, and needs Node.js 22.6 or later on the server. Most sites use the generated `content` object from `areca.gen.ts`, so they import these functions only when they need them. See [typed content](/docs/sdk/typed-content).
 
 <Callout type="warn" title="Keep the site token on the server">
 
-`createArecaClient`, `pullContent` and `readContent` read server-only settings. `pullContent` and `readContent` also use the file system. Do not import them into browser code, and never put a site token or schema token in a client bundle.
+`createArecaClient`, `pullContent`, `readContent`, `readContentManifest` and `createContent` read server-only settings. The last four also use the file system. Do not import them into browser code, and never put a site token or schema token in a client bundle.
 
 </Callout>
 
@@ -16,11 +16,12 @@ The SDK has one main entry point and three subpath entry points. Import from the
 | Import path | Exports |
 | --- | --- |
 | `@areca-cms/site-sdk` | `createArecaClient`, `defineSiteContent`, `manifestFromConfig`, `getPreviewEntry`, `previewHeaders`, `seoHead`, `seoHeadHtml`, `seoJsonLd`, `richTextDocument`, `richTextMarkdown`, `richTextHtml`, and the types listed in [Types](#types) |
-| `@areca-cms/site-sdk/pull` | `pullContent`, `readContent`, and the type `PullContentOptions` |
+| `@areca-cms/site-sdk/pull` | `pullContent`, `readContent`, `readContentManifest`, and the types `PullContentOptions`, `PullContentResult` and `ResolvedAssets` |
+| `@areca-cms/site-sdk/content` | `createContent` (Node only). Its types are exported from the main entry point. |
 | `@areca-cms/site-sdk/seo` | `seoHead`, `seoHeadHtml`, `seoJsonLd`, and the types `HeadMeta`, `HeadLink`, `HeadScript`, `SeoHeadOptions`, `SeoHeadResult` |
 | `@areca-cms/site-sdk/rich-text` | `richTextDocument`, `richTextMarkdown`, `richTextHtml` |
 
-The main entry point does not export `pullContent` or `readContent`. Import them from `@areca-cms/site-sdk/pull`. The CLI helpers and the internal modules are not part of the public API.
+The main entry point does not export `pullContent`, `readContent` or `createContent`. Import them from `@areca-cms/site-sdk/pull` and `@areca-cms/site-sdk/content`. The CLI helpers and the internal modules are not part of the public API.
 
 ## createArecaClient
 
@@ -95,19 +96,29 @@ for (const [key, collection] of Object.entries(manifest.collections)) {
 
 ## defineSiteContent
 
-Returns the config object you pass in, with its type inferred. It does not validate anything. Use it in `areca.config.ts` so your editor checks the shape.
+Returns the config object you pass in, with its literal types, so your editor and the TypeScript compiler check it. It does not read or send anything. Use it in `areca.config.ts`.
 
 ```ts
-function defineSiteContent<T extends SiteContentConfig>(config: T): T
+function defineSiteContent<
+  const TCollections extends {
+    [K in keyof TCollections]: CollectionInput<keyof TCollections & string, TCollections[K]>
+  },
+>(config: { siteKey: string; collections: TCollections; assets?: AssetsConfig }): {
+  siteKey: string
+  collections: TCollections
+  assets?: AssetsConfig
+}
 ```
 
 | Parameter | Type | Description |
 | --- | --- | --- |
-| `config` | `SiteContentConfig` | The site's `siteKey` and `collections`. |
+| `config.siteKey` | `string` | The site key, as shown in the CMS. |
+| `config.collections` | object | The collection definitions. Field types, `options`, reference targets, `after` keys and routes are checked at compile time. |
+| `config.assets` | `AssetsConfig`, optional | Where `areca pull` copies media. Local only, never sent to the CMS. |
 
-**Returns:** the same object, typed as `T`.
+**Returns:** the same object, typed with its literal values. It is assignable to `SiteContentConfig`, so `manifestFromConfig` and the CLI accept it.
 
-**Throws:** nothing. Invalid identifiers only fail later, in `manifestFromConfig`, `areca manifest push` or `areca manifest pull`.
+**Throws:** nothing at run time. The compile-time rules are listed in [authoring rules](/docs/sdk/defining-content#authoring-rules). Identifier and reserved-name rules are checked later, by `manifestFromConfig`, `areca manifest push` and `areca pull`.
 
 ```ts title="areca.config.ts"
 import { defineSiteContent } from '@areca-cms/site-sdk'
@@ -115,10 +126,17 @@ import { defineSiteContent } from '@areca-cms/site-sdk'
 export default defineSiteContent({
   siteKey: 'acme-site',
   collections: {
+    authors: {
+      route: '/authors/$slug',
+      fields: [{ key: 'name', label: 'Name', type: 'text', required: true }],
+    },
     articles: {
       route: '/blog/$slug',
       label: 'Articles',
-      fields: [{ key: 'title', label: 'Title', type: 'text', required: true }],
+      fields: [
+        { key: 'title', label: 'Title', type: 'text', required: true },
+        { key: 'author', label: 'Author', type: 'reference', collection: 'authors' },
+      ],
     },
   },
 })
@@ -142,6 +160,7 @@ function manifestFromConfig(config: SiteContentConfig): SiteManifest
 
 - `Unsafe collection or field identifier: <value>` when a collection key, field key, or a field's `collection` or `after` value is not a safe identifier.
 - `Duplicate field identifier: <key>` when two fields in one collection share a key.
+- `Collection key "<key>" is reserved: resolve, href and preview cannot be collection keys` when a collection is named `resolve`, `href` or `preview`, in any case.
 
 ```ts
 import { manifestFromConfig } from '@areca-cms/site-sdk'
@@ -152,7 +171,7 @@ const body = manifestFromConfig(config)
 
 ## pullContent
 
-Downloads the current publication and writes it to a folder. It is the function behind `areca pull`. Import it from `@areca-cms/site-sdk/pull`.
+Downloads the current publication and writes it to a folder, together with `areca.gen.ts`. It is the function behind `areca pull`. Import it from `@areca-cms/site-sdk/pull`.
 
 ```ts
 function pullContent(options: PullContentOptions): Promise<PullContentResult>
@@ -164,61 +183,173 @@ function pullContent(options: PullContentOptions): Promise<PullContentResult>
 | `options.client` | `ArecaClient` | `createArecaClient()` | Client to use. Pass one in tests. |
 | `options.publicationId` | `string` | `ARECA_SNAPSHOT_ID`, else live | Exact publication to pull. |
 | `options.assets` | `{ dir: string; publicPath: string }` | None | Copy media into the absolute folder `dir` and point the content at `publicPath`. Without it, media URLs point at the CMS. `areca pull` fills this in from `areca.config.ts`. |
+| `options.types` | `string` | `<outDir>/areca.gen.ts` | Where to write the generated module. The CLI passes `--types` here. |
+| `options.contentDir` | `string` | `outDir` | The folder written into the module as its default `dir`, relative to the app's working directory. The CLI passes `--out` as given. |
 
-**Returns:** the snapshot that was written, with media URLs rewritten, plus `localAssets` (`{ dir, total, downloaded }`) when media was copied and `warnings` (for example when the CMS does not list media).
+**Returns:** a `PullContentResult`. It is the snapshot as the CMS sent it, with `schema` set to the schema that was used. It also has `localAssets` (`{ dir, total, downloaded }`) when media was copied, `warnings` (for example, when the CMS does not list media, or the publication has no embedded schema), and `typesPath`, the module that was written.
 
-The function downloads media first, then writes one `<collection>.json` file per collection into a new folder under `.publications`, and finally points `manifest.json` at it in one rename. It keeps the current folder and the two before it, and deletes older folders and the media files only they used. It checks every collection key before it writes any file.
+The function validates the publication against its schema before anything else. Then it downloads media, writes one `<camelKey>.json` file per collection into a new folder under `.publications`, and switches `manifest.json` to it in one rename. Last, it writes `areca.gen.ts`. It keeps the current folder and the two before it, and deletes older folders and the media files only they used.
 
 **Throws:**
 
 - Every error from `fetchSnapshot`, including the "No publication exists" message.
-- `Unsafe collection or field identifier: <key>` when a collection key is not a safe identifier. No file is written.
+- `Unsafe collection or field identifier: <key>` when a key is not a safe identifier.
+- `Collection keys <a> and <b> both map to "<name>"`, `Field keys <a> and <b> in <collection> both map to "<name>"`, and `Collection "<key>" uses the reserved name "<name>"` when keys collide in camelCase or use a reserved name. Nothing is written.
+- `Publication does not match its schema:`, followed by one line per problem, up to 20. Nothing is written.
 - `Output path escapes content directory` when a target path leaves `outDir`.
-- `Content output must not be a symbolic link` when a target file is a symlink.
+- `Content output must not be a symbolic link` when a target file is a symlink. `Types output must not be a symbolic link` does the same for the types file.
 - `Failed to download N media file(s); the previous content is unchanged.` followed by one line per file.
 - File-system errors, such as permission errors.
 
-A failed pull leaves `manifest.json` pointing at the previous complete publication, and removes the media files it had downloaded.
+If the pull fails before the switch, `manifest.json` and `areca.gen.ts` still describe the previous complete publication, and the media files it had downloaded are removed.
 
 ```ts
 import { pullContent } from '@areca-cms/site-sdk/pull'
 
 const snapshot = await pullContent({ outDir: 'src/generated/content' })
-console.log(snapshot.publicationId, snapshot.hash)
+console.log(snapshot.publicationId, snapshot.hash, snapshot.typesPath)
 ```
 
 ## readContent
 
-Reads one collection file that `pullContent` wrote. It is synchronous, so you can call it in a server loader or at build time.
+Reads one collection file that `pullContent` wrote. It is synchronous, so you can call it in a server loader or at build time. The `content` object uses it for every read.
 
 ```ts
-function readContent<T = SnapshotEntry>(outDir: string, collectionKey: string): T[]
+function readContent<C extends CollectionKey>(
+  outDir: string,
+  collectionKey: C,
+  manifest?: PulledContentManifest,
+): Entry<C>[]
 ```
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
 | `outDir` | `string` | None (required) | The folder that `pullContent` wrote into. |
-| `collectionKey` | `string` | None (required) | The collection key, for example `articles`. |
-| `T` | type parameter | `SnapshotEntry` | The type of the entry objects. The SDK does not check the JSON against `T`. |
+| `collectionKey` | `CollectionKey` | None (required) | The camelCase collection key, for example `blogPosts`. With a registered schema, other keys are a type error. |
+| `manifest` | `PulledContentManifest` | Read from `outDir` | A manifest captured with `readContentManifest`, so that several reads come from one publication. |
 
-**Returns:** an array of entries, in the order the CMS sent them. An empty array is valid.
+**Returns:** the entries of the collection as `Entry<C>[]`, in the pulled order. The type follows from the collection key, so there is no type parameter. An empty array is valid.
 
 **Throws:**
 
 - `Unsafe collection or field identifier: <key>` when the key is not a safe identifier.
-- `No content file for collection "<key>" in <outDir>. Run areca pull first.` when the folder is missing.
-- `No content file for collection "<key>" at <path>. Run areca pull first.` when the collection file is missing.
+- `Collection "<key>" is not in the current publication` when the manifest does not list the collection.
+- `No content file for collection "<key>" in <outDir>. Run areca pull first.` when the file is missing.
 - `Output path escapes content directory` or `Content output must not be a symbolic link`, as for `pullContent`.
 - A `SyntaxError` if the file is not valid JSON.
 
 ```ts
 import { readContent } from '@areca-cms/site-sdk/pull'
-import type { SnapshotEntry } from '@areca-cms/site-sdk'
 
-type Article = SnapshotEntry & { data: { title: string; publishedAt?: string } }
-
-const articles = readContent<Article>('src/generated/content', 'articles')
+const articles = readContent('src/generated/content', 'blogPosts') // Entry<'blogPosts'>[]
 ```
+
+## readContentManifest
+
+Reads `manifest.json` from a content folder. Capture it once and pass it to several `readContent` calls, so that all of them come from the same publication.
+
+```ts
+function readContentManifest(outDir: string): PulledContentManifest
+```
+
+**Returns:** the parsed `PulledContentManifest`. **Throws:** the file-system error when `manifest.json` is missing, such as `ENOENT`.
+
+## createContent
+
+Builds the typed content object for one schema and one folder. The generated `areca.gen.ts` calls it with the generated schema, so most code imports `content` instead. Use `createContent` only to bind another folder or another schema, for example in tests. Import it from `@areca-cms/site-sdk/content`, which is Node only.
+
+```ts
+import { createContent } from '@areca-cms/site-sdk/content'
+
+function createContent<const S extends ContentSchema>(options: { schema: S; dir: string }): Content<S>
+```
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `options.schema` | `ContentSchema` | The schema, as `areca.gen.ts` declares it. |
+| `options.dir` | `string` | The content folder. It is resolved against `process.cwd()` on each call. |
+
+**Returns:** the `Content<S>` object described below.
+
+**Throws:** `Collection "<name>" uses a reserved name (resolve, href, preview)` when the schema has a collection with one of those names.
+
+## The content object
+
+`content` has one property for each collection, and three methods of its own:
+
+| Member | Description |
+| --- | --- |
+| `content.<collection>` | The collection's methods: `all`, `first`, `get`, `byId` and `href`. |
+| `content.resolve(ref)` | The entry that a reference points to, or `null`. |
+| `content.href(ref)` | The route of a reference's target, or of an entry. |
+| `content.preview(token, options?)` | A draft entry for a preview link. |
+
+### Collection methods
+
+| Method | Returns | Description |
+| --- | --- | --- |
+| `all(options?)` | `QueryResult<C, O>[]` | The entries that match `where`, sorted by `orderBy`, and sliced by `offset` and `limit`. |
+| `first(options?)` | `QueryResult<C, O> \| undefined` | The first entry of `all(options)`. |
+| `get(slug)` | `Entry<C> \| undefined` | The entry with this slug. |
+| `byId(id)` | `Entry<C> \| undefined` | The entry with this ID. |
+| `href(entryOrSlug)` | `Href<C>` | The route for an entry, or for a slug. |
+
+`all` and `first` take the query options below. `get` and `byId` return `undefined` for an unknown value. They do not throw.
+
+### Query options
+
+| Option | Type | Description |
+| --- | --- | --- |
+| `where` | `Where<C>` | Keys are the collection's field keys. Several keys are combined with AND. |
+| `orderBy` | `OrderBy<C>` | An object `{ field: 'asc' \| 'desc' }`, or an array of them for tie-breakers, applied in order. Only sortable fields are accepted. |
+| `limit` | `number` | The maximum number of entries. |
+| `offset` | `number` | The number of entries to skip first. |
+| `with` | `{ [field]?: true }` | Expands reference fields one level deep. Only reference fields are accepted. |
+
+A direct value in `where` means equality. An operator object combines operators. Each field type accepts only the operators in this table:
+
+| Field type | Operators |
+| --- | --- |
+| `text`, `textarea`, `url`, `slug` | `eq`, `ne`, `in`, `notIn`, `contains` (case-insensitive), `isNull` when optional |
+| `select` | `eq`, `ne`, `in`, `notIn`, `isNull` when optional. `in` and `notIn` take the options, when the field has them. |
+| `date`, `datetime` | `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `isNull` when optional |
+| `number` | `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `isNull` when optional |
+| `boolean` | `eq`, `ne`, `isNull` when optional |
+| `image`, `richtext`, `reference` | `isNull`, when optional |
+
+- `isNull: true` matches `null`, `''` and a missing key. `isNull: false` matches the rest.
+- `gt`, `gte`, `lt` and `lte` never match an empty value. `ne` and `notIn` do match one.
+- `datetime` values compare by the instant they name, so offsets do not matter. `date` values compare as text.
+- `contains` only matches text fields. It ignores case.
+
+Sorting uses the same comparisons. Empty values sort last in both directions, and entries that tie on every key keep their pulled order. Without `orderBy`, the order is the pulled order, which is newest `publishedAt` first from the CMS.
+
+`with` returns a copy of each entry. A field that is required and expanded is `Entry | null`. An optional one is `Entry | null | undefined`, because a missing value stays `undefined`.
+
+### resolve, href and preview
+
+```ts
+content.resolve(ref) // Entry<C> | null
+content.href(ref) // Href<C>
+await content.preview(token, { client }) // PreviewEntry<S>
+```
+
+- **`resolve(ref)`** accepts a `ReferenceValue<C>`, or `''`, `null` or `undefined`. It finds the entry by `id` in the target collection. It returns `null` for an empty value or for an entry that is not in the pulled publication.
+- **`href(ref)`** accepts a `ReferenceValue<C>` or an entry. It replaces `$slug` in the target's route with the slug, URL-encoded. The result is typed as a template literal, such as `` `/blog/${string}` ``.
+- **`preview(token, options?)`** calls `getPreviewEntry`, using the same options. It validates the raw draft against the schema with the same rules as a pull, then maps the raw collection key to its camelCase name and converts the entry the same way. The result is a `PreviewEntry<S>`, a union narrowed by `collection` and `complete`:
+  - `complete: true`: `entry` is an `Entry<C, S>` and `issues` is `[]`.
+  - `complete: false`: `entry` is a `DraftEntry<C, S>`, where every field has its optional type, and `issues` is a list of `<camelField>: <problem>` strings, such as `editor: is required`.
+
+  An incomplete draft is returned, not thrown. A collection that is not in the generated schema throws `Preview collection "<key>" is not in the generated schema. Run areca pull to refresh the types.`
+
+### Run-time behaviour
+
+- `content` reads `manifest.json` in `dir` on every call. This is cheap. The parsed collections are cached by publication generation, so a new pull is picked up without restarting the process.
+- A collection that the publication does not contain returns `[]`.
+- If there is no `manifest.json`, the call throws `No content in <dir>. Run areca pull first.`
+- `dir` is resolved against `process.cwd()` at call time.
+- Queries never change the cached data. `with` and sorting work on copies.
+- An unknown operator in `where` throws `Unknown where operator "<name>"`.
 
 ## getPreviewEntry
 
@@ -366,28 +497,53 @@ function richTextHtml(value: RichTextValue | null | undefined): string
 
 ## Types
 
-These types are exported from the main entry point. The types from the subpaths are listed with their functions above.
+These types are exported from the main entry point, and most of them describe the typed content object. Types from the subpaths are listed with their functions above. The generated module registers the schema with `Register`, so the types below know your collections and fields without an import from the generated file.
 
 | Type | Description |
 | --- | --- |
-| `ArecaClient` | The object returned by `createArecaClient`. |
-| `ArecaClientOptions` | Options for `createArecaClient`. |
+| `Register` | An empty interface that `areca.gen.ts` augments with `schema`. |
+| `ContentSchema`, `ContentSchemaCollection`, `ContentSchemaField` | The shape of a schema, as the generated module declares it. |
+| `RegisteredSchema` | The registered schema, or `ContentSchema` when nothing is registered. |
+| `CollectionKey<S>` | The camelCase keys of the collections. |
+| `FieldKey<C, S>` | The field keys of collection `C`. |
+| `FieldValue<C, F, S>` | The value type of one field. See [field types](/docs/sdk/field-types). |
+| `EntryData<C, S>` | The `data` of an entry of collection `C`. |
+| `Entry<C, S>` | One entry of collection `C`. Its `collection` is `C`. |
+| `AnyEntry<S>` | An entry of any collection. Narrow it with `collection`. |
+| `ReferenceValue<C>` | A reference to collection `C`. Without a type argument, `C` is `string`. |
+| `Where<C, S>`, `OrderBy<C, S>`, `QueryOptions<C, S>`, `QueryResult<C, O, S>` | The options of `all` and `first`, and the entries they return. |
+| `RoutePath<R>`, `Href<C, S>` | A route with `$slug` replaced by `${string}`, and the route of a collection. |
+| `Content<S>`, `CollectionApi<C, S>` | The content object, and the methods of one collection. |
+| `DraftEntryData<C, S>`, `DraftEntry<C, S>` | The data and entry of an incomplete preview draft. Every field has its optional type. |
+| `PreviewEntry<S>` | The result of `content.preview`: a complete `Entry` with no issues, or a `DraftEntry` with issues. Narrow it with `collection` and `complete`. |
 | `SiteContentConfig` | The shape of `areca.config.ts`: `siteKey` and `collections`. |
 | `CollectionConfig` | One collection: `route`, optional `label`, and `fields`. |
-| `Field` | One field definition. |
+| `Field` | One field definition, as a union discriminated on `type`. |
 | `FieldType` | The 12 field type names. See [Field types](/docs/sdk/field-types). |
+| `ArecaClient` | The object returned by `createArecaClient`. |
+| `ArecaClientOptions` | Options for `createArecaClient`. |
 | `SiteManifest` | The request and response body for `/api/sites/manifest`: `{ collections }`. |
-| `Snapshot` | The publication: `publicationId`, `siteKey`, `createdAt`, `hash`, and `collections`. |
-| `SnapshotEntry` | One entry: `id`, `slug`, `publishedAt`, `data`, and optional `seo`. |
-| `PreviewResult` | `{ collection, slug, entry }` from a preview. |
+| `Snapshot` | The publication: `publicationId`, `siteKey`, `createdAt`, `hash`, `collections`, and the optional `assets`, `siteUrl` and `schema`. |
+| `SnapshotEntry` | One entry as the CMS sent it: `id`, `slug`, `publishedAt`, `data`, and optional `seo`. |
+| `PreviewResult` | `{ collection, slug, entry }` from `getPreviewEntry`. |
 | `PulledContentManifest` | The shape of `manifest.json` written by `pullContent`. |
 | `RichTextValue` | A `richtext` value: `json`, `markdown`, `document` and `html`. |
 | `ImageValue` | An `image` value: `url`, `width`, `height`, `alt` and `mimeType`. |
-| `ReferenceValue` | A `reference` value: `collection`, `slug` and `id`. |
 | `SeoMeta` | The `seo` object on an entry. |
 | `HeadMeta`, `HeadLink`, `HeadScript`, `SeoHeadOptions`, `SeoHeadResult` | Types for the SEO helpers. Also exported from `@areca-cms/site-sdk/seo`. |
 
 ```ts
+interface Register { schema: typeof schema } // set by areca.gen.ts
+type Entry<C extends string, S = RegisteredSchema> = {
+  id: string
+  slug: string
+  publishedAt: string | null
+  collection: C
+  data: EntryData<C, S>
+  seo?: SeoMeta
+}
+type ReferenceValue<C extends string = string> = { collection: C; slug: string; id: string }
+
 type SiteContentConfig = {
   siteKey: string
   collections: Record<string, CollectionConfig>
@@ -399,16 +555,11 @@ type AssetsConfig = {
   publicPath?: string  // derived for folders under public/
 }
 type CollectionConfig = { route: string; label?: string; fields: Field[] }
-type Field = {
-  key: string
-  label: string
-  type: FieldType
-  required?: boolean
-  options?: string[]
-  collection?: string
-  description?: string
-  after?: string
-}
+type Field =
+  | { key: string; label: string; type: 'text' | 'textarea' | 'richtext' | 'image' | 'slug' | 'boolean' | 'number' | 'url'; required?: boolean; description?: string }
+  | { key: string; label: string; type: 'select'; options?: string[]; required?: boolean; description?: string }
+  | { key: string; label: string; type: 'reference'; collection: string; required?: boolean; description?: string }
+  | { key: string; label: string; type: 'date' | 'datetime'; after?: string; required?: boolean; description?: string }
 
 type SiteManifest = { collections: Record<string, CollectionConfig> }
 
@@ -420,6 +571,7 @@ type Snapshot = {
   collections: Record<string, SnapshotEntry[]>
   assets?: SnapshotAsset[]  // missing from older CMS versions
   siteUrl?: string | null   // the site's production URL
+  schema?: Record<string, CollectionConfig> // raw keys; missing from publications made before schemas were embedded
 }
 
 type SnapshotAsset = {
@@ -435,7 +587,7 @@ type SnapshotEntry = {
   id: string
   slug: string
   publishedAt: string | null
-  data: Record<string, unknown> // your own types go here
+  data: Record<string, unknown> // the raw field values, keyed by the raw field keys
   seo?: SeoMeta               // missing in snapshots from older CMS versions
 }
 
@@ -445,7 +597,7 @@ type PulledContentManifest = {
   publicationId: string
   hash: string
   createdAt: string
-  collections: Record<string, number> // entry counts per collection
+  collections: Record<string, number> // entry counts per camelCase collection key
   generation?: string                 // folder under .publications
   assets?: { publicPath: string; count: number } // when media was copied
 }
@@ -464,13 +616,12 @@ type ImageValue = {
   alt: string
   mimeType: string
 }
-
-type ReferenceValue = { collection: string; slug: string; id: string }
 ```
 
 `SeoMeta` has these top-level keys: `title`, `description`, `canonicalUrl`, `robots`, `focusKeyphrase`, `openGraph`, `twitter`, `author`, `summary`, `keyTakeaways`, `faq`, `about`, and `jsonLd`. The CMS fills them in. The SDK does not render `summary`, `keyTakeaways` or `faq`. Render them on the page yourself, as [SEO](/docs/sdk/seo) explains.
 
-The SDK does not generate types from your schema. `SnapshotEntry.data` is `Record<string, unknown>`, so write an interface for each collection and cast with it, as [Reading content](/docs/sdk/reading-content) shows.
+`SnapshotEntry` is the raw entry. The typed entries of your site are `Entry<C>`, from `content` or `readContent`. See [typed content](/docs/sdk/typed-content).
+
 
 ## Related
 

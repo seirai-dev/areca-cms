@@ -20,14 +20,31 @@ An identifier must:
 
 Reserved names are `__proto__`, `prototype`, `constructor`, `manifest`, `con`, `prn`, `aux`, `nul`, `com1` to `com9`, and `lpt1` to `lpt9`.
 
+A collection key must also not be `resolve`, `href` or `preview`, because the content object uses those names. Field keys may use them.
+
 The same rule applies to a field's `collection` and `after` values.
 
 | Message | Meaning | What to do |
 | --- | --- | --- |
 | `Unsafe collection or field identifier: <value>` | The value breaks the rules above. | Rename the key in your config and push again. See [renaming keys](/docs/sdk/defining-content#identifiers). |
 | `Duplicate field identifier: <key>` | Two fields in one collection have the same key. | Rename one of them. |
+| `Collection key "<key>" is reserved: resolve, href and preview cannot be collection keys` | The collection is named `resolve`, `href` or `preview`. | Rename the collection. |
 
 These errors appear from `areca manifest push` and `areca manifest pull`, and from `areca pull` and `readContent` when a collection key in the content is not safe. A collection key that is not safe is refused before any file is written.
+
+## Typed content errors
+
+`areca pull` and `pullContent` also check names and values in camelCase. These checks run before anything is written. See [typed content](/docs/sdk/typed-content) for the rules.
+
+| Message | Meaning | What to do |
+| --- | --- | --- |
+| `Collection keys <a> and <b> both map to "<name>". Rename one of them.` | Two collection keys have the same camelCase name, such as `blog-posts` and `blog_posts`. | Rename one of them in the config, push, and publish. |
+| `Field keys <a> and <b> in <collection> both map to "<name>". Rename one of them.` | Two field keys in one collection have the same camelCase name. | Rename one of them, push, and publish. |
+| `Collection "<key>" uses the reserved name "<name>"` | A collection is named `resolve`, `href` or `preview`. | Rename the collection. |
+| `Publication does not match its schema:` | Each following line is `<collection>/<slug>.<field>: <problem>`, for example `is required` or `must be a YYYY-MM-DD date`. Up to 20 lines are listed, then `...and N more`. | Fix the entry in the CMS, or fix the schema and publish again. |
+| `Types output must not be a symbolic link` | The `areca.gen.ts` path is a symlink. | Delete the symlink and pull again. |
+
+A warning, not an error, appears when the publication has no embedded schema: `Publication <id> has no embedded schema; types use the current CMS schema. Go live again to embed it.` The pull still succeeds.
 
 ## Output path errors
 

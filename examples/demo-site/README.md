@@ -52,14 +52,16 @@ environment. Routine content pulls and builds use the read-only site token.
 
 ## How the site reads content
 
-`src/lib/content.ts` reads `articles`, `coffees` and `authors` from
-`src/generated/content` with `readContent()`, types the records, sorts them,
-and resolves references by id. The TanStack server functions in
-`src/lib/queries.ts` expose the content to route loaders. Routes: `/coffees`
-and `/coffees/$slug`, `/journal` and `/journal/$slug`, `/team` and
-`/team/$slug`, and `/about`. Rich text is rendered from the SDK's TanStack
-Markdown document. Update the route and UI types if you change the collection
-fields.
+`areca pull` writes `src/generated/content/areca.gen.ts` next to the pulled
+JSON. That file is committed: it holds the schema, the entry types
+(`ArticlesEntry`, `AuthorsEntry`, `CoffeesEntry`) and a typed `content` object.
+`src/lib/content.ts` sorts the entries and `src/lib/queries.ts` exposes them to
+route loaders through `content.articles`, `content.coffees`, `content.authors`,
+`content.resolve()` and `content.preview()`. The pulled JSON stays ignored by
+git. Routes: `/coffees` and `/coffees/$slug`, `/journal` and `/journal/$slug`,
+`/team` and `/team/$slug`, and `/about`. Rich text is rendered from the SDK's
+TanStack Markdown document. After you change `areca.config.ts`, run
+`content:pull` or `content:fixture` again so `areca.gen.ts` matches the schema.
 
 Vite prerenders the home page, every list and detail page, and `/about`.
 It excludes `/__preview` and `/api` routes. `/api/health` reports the snapshot

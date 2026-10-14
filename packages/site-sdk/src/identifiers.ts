@@ -18,6 +18,14 @@ export function isSafeIdentifier(value: string): boolean {
   )
 }
 
+/** Names the generated content object uses itself, so collections cannot take them. */
+const reservedCollectionKeys = new Set(['resolve', 'href', 'preview'])
+
+/** Case-insensitive. Field keys may use these names; collection keys may not. */
+export function isReservedCollectionKey(key: string): boolean {
+  return reservedCollectionKeys.has(key.toLowerCase())
+}
+
 export function assertSafeIdentifier(value: string): void {
   if (!isSafeIdentifier(value))
     throw new Error(`Unsafe collection or field identifier: ${value}`)

@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router'
-import type { Article, Coffee } from '../lib/content.ts'
+import type { ArticlesEntry, CoffeesEntry } from '../generated/content/areca.gen.ts'
 import { ArticleBody } from './article-body.tsx'
 import { ArticleCard } from './article-card.tsx'
 import { CmsImage, PreviewBanner } from './cms-image.tsx'
@@ -12,8 +12,8 @@ export function CoffeeView({
   articles,
   preview = false,
 }: {
-  coffee: Coffee
-  articles: Article[]
+  coffee: CoffeesEntry
+  articles: ArticlesEntry[]
   preview?: boolean
 }) {
   const { data } = coffee

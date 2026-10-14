@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -68,6 +68,8 @@ describe('areca-sdk covers @areca-cms/site-sdk', () => {
     const env = new Set<string>()
     for (const file of readdirSync(join(repo, sdk, 'src'))) {
       if (file.endsWith('.test.ts')) continue
+      // Fixture folders such as test-fixtures/ hold no source to scan.
+      if (!statSync(join(repo, sdk, 'src', file)).isFile()) continue
       for (const [name] of read(`${sdk}/src/${file}`).matchAll(/ARECA_[A-Z_]+/g)) env.add(name)
     }
     expect([...env].filter((name) => !text.includes(name))).toEqual([])

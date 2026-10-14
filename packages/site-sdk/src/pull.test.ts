@@ -34,11 +34,22 @@ function snapshot(
   publicationId: string,
   collections: Snapshot['collections'],
 ): Snapshot {
+  // Every collection gets a schema with a title field, so entries validate.
+  const schema = Object.fromEntries(
+    Object.keys(collections).map((key) => [
+      key,
+      {
+        route: '/$slug',
+        fields: [{ key: 'title', label: 'Title', type: 'text' as const }],
+      },
+    ]),
+  )
   return {
     publicationId,
     hash: publicationId,
     createdAt: '',
     siteKey: 'site',
+    schema,
     collections,
   }
 }
@@ -53,6 +64,8 @@ const article = (title: string) => ({
   publishedAt: null,
   data: { title },
 })
+// Pulled entries also carry the camel collection key.
+const pulled = (title: string) => ({ ...article(title), collection: 'articles' })
 
 it('keeps the previous complete generation when staging another publication fails', async () => {
   const outDir = directory()
@@ -61,21 +74,27 @@ it('keeps the previous complete generation when staging another publication fail
     client: client(snapshot('old', { articles: [article('old')] })),
   })
   const previous = readContentManifest(outDir)
-  const cyclic: unknown[] = []
-  cyclic.push(cyclic)
+  // Passes validation, then fails to serialise.
+  const cyclic: Record<string, unknown> = {
+    id: 'x',
+    slug: 's',
+    publishedAt: null,
+    data: {},
+  }
+  cyclic.seo = cyclic
   await expect(
     pullContent({
       outDir,
       client: client(
         snapshot('new', {
           articles: [article('new')],
-          broken: cyclic as Snapshot['collections'][string],
+          broken: [cyclic] as unknown as Snapshot['collections'][string],
         }),
       ),
     }),
   ).rejects.toThrow(/circular/i)
   expect(readContentManifest(outDir)).toEqual(previous)
-  expect(readContent(outDir, 'articles')).toEqual([article('old')])
+  expect(readContent(outDir, 'articles')).toEqual([pulled('old')])
   expect(readdirSync(join(outDir, '.publications'))).toEqual([
     previous.generation,
   ])
@@ -92,8 +111,8 @@ it('captured readers stay on one generation after another pull switches the poin
     outDir,
     client: client(snapshot('new', { articles: [article('new')] })),
   })
-  expect(readContent(outDir, 'articles')).toEqual([article('new')])
-  expect(readContent(outDir, 'articles', captured)).toEqual([article('old')])
+  expect(readContent(outDir, 'articles')).toEqual([pulled('new')])
+  expect(readContent(outDir, 'articles', captured)).toEqual([pulled('old')])
   expect(readContent(outDir, 'pages', captured)).toEqual([])
   expect(() => readContent(outDir, 'pages')).toThrow(
     /not in the current publication/,

@@ -1,22 +1,23 @@
 import { createServerFn } from '@tanstack/react-start'
 import { setResponseHeader } from '@tanstack/react-start/server'
-import { getPreviewEntry, previewHeaders } from '@areca-cms/site-sdk'
-import type { PreviewResult } from '@areca-cms/site-sdk'
+import { previewHeaders } from '@areca-cms/site-sdk'
+import type { PreviewEntry } from '@areca-cms/site-sdk'
 import { z } from 'zod'
+import { content } from '../generated/content/areca.gen.ts'
+import type {
+  ArticlesEntry,
+  AuthorsEntry,
+  CoffeesEntry,
+} from '../generated/content/areca.gen.ts'
 import {
   articlesByAuthor,
   articlesFeaturingCoffee,
-  authorFor,
-  coffeeFor,
   getArticle,
   getArticles,
   getAuthor,
   getAuthors,
   getCoffee,
   getCoffees,
-  type Article,
-  type Author,
-  type Coffee,
 } from './content.ts'
 
 const loose = { strict: { output: false } as const }
@@ -56,8 +57,8 @@ export const loadArticle = createServerFn({ method: 'GET', ...loose })
     if (!article) return null
     return {
       article,
-      author: authorFor(article),
-      coffee: coffeeFor(article),
+      author: content.resolve(article.data.author),
+      coffee: content.resolve(article.data.featuredCoffee),
     }
   })
 
@@ -77,12 +78,14 @@ export const loadAuthor = createServerFn({ method: 'GET', ...loose })
   })
 
 export type PreviewData =
-  | { collection: 'articles'; entry: Article; author: Author | null; coffee: Coffee | null }
-  | { collection: 'coffees'; entry: Coffee; articles: Article[] }
-  | { collection: 'authors'; entry: Author; articles: Article[] }
+  | { collection: 'articles'; entry: ArticlesEntry; author: AuthorsEntry | null; coffee: CoffeesEntry | null }
+  | { collection: 'coffees'; entry: CoffeesEntry; articles: ArticlesEntry[] }
+  | { collection: 'authors'; entry: AuthorsEntry; articles: ArticlesEntry[] }
 
+/** A complete draft renders like a published entry; an incomplete one lists what is missing. */
 export type PreviewLoad =
-  | { ok: true; preview: PreviewData }
+  | { ok: true; complete: true; preview: PreviewData }
+  | { ok: true; complete: false; collection: string; issues: string[] }
   | { ok: false; error: string }
 
 /**
@@ -97,8 +100,7 @@ export const loadPreview = createServerFn({ method: 'GET', ...loose })
     setResponseHeader('X-Robots-Tag', headers['X-Robots-Tag'])
     setResponseHeader('Cache-Control', headers['Cache-Control'])
     try {
-      const preview = await getPreviewEntry({ token: data.token })
-      return { ok: true, preview: toPreviewData(preview) }
+      return toPreviewLoad(await content.preview(data.token))
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Failed to fetch preview'
@@ -106,34 +108,33 @@ export const loadPreview = createServerFn({ method: 'GET', ...loose })
     }
   })
 
-function toPreviewData(result: PreviewResult): PreviewData {
+function toPreviewLoad(result: PreviewEntry): PreviewLoad {
+  if (!result.complete) {
+    return { ok: true, complete: false, collection: result.collection, issues: result.issues }
+  }
+  return { ok: true, complete: true, preview: toPreviewData(result) }
+}
+
+function toPreviewData(result: Extract<PreviewEntry, { complete: true }>): PreviewData {
   switch (result.collection) {
-    case 'articles': {
-      const entry = result.entry as Article
+    case 'articles':
       return {
         collection: 'articles',
-        entry,
-        author: authorFor(entry),
-        coffee: coffeeFor(entry),
+        entry: result.entry,
+        author: content.resolve(result.entry.data.author),
+        coffee: content.resolve(result.entry.data.featuredCoffee),
       }
-    }
-    case 'coffees': {
-      const entry = result.entry as Coffee
+    case 'coffees':
       return {
         collection: 'coffees',
-        entry,
-        articles: articlesFeaturingCoffee(entry.id),
+        entry: result.entry,
+        articles: articlesFeaturingCoffee(result.entry.id),
       }
-    }
-    case 'authors': {
-      const entry = result.entry as Author
+    case 'authors':
       return {
         collection: 'authors',
-        entry,
-        articles: articlesByAuthor(entry.id),
+        entry: result.entry,
+        articles: articlesByAuthor(result.entry.id),
       }
-    }
-    default:
-      throw new Error(`Collection "${result.collection}" is not rendered on this site.`)
   }
 }

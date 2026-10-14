@@ -32,6 +32,7 @@ The demo lives in the `examples/demo-site` folder of the Areca repository. It is
     </Folder>
     <Folder name="src" defaultOpen>
       <Folder name="generated/content" defaultOpen>
+        <File name="areca.gen.ts" />
         <File name="manifest.json" />
         <File name="articles.json" />
       </Folder>
@@ -109,7 +110,7 @@ For the pull options, see [Pulling content](/docs/sdk/pulling-content).
 
 ## Read the content
 
-`src/lib/content.ts` reads the snapshot with `readContent` from the `pull` entry point, types the records, and exposes four functions:
+`src/lib/content.ts` reads the snapshot through the typed `content` object in `src/generated/content/areca.gen.ts`, so the records are typed without any hand-written types, and exposes four functions:
 
 | Function | What it does |
 | --- | --- |
@@ -124,7 +125,7 @@ For the pull options, see [Pulling content](/docs/sdk/pulling-content).
 const article = await loadArticle({ data: { slug: params.slug } })
 ```
 
-See [Reading content](/docs/sdk/reading-content) for the full reading API.
+`areca.gen.ts` is written by `areca pull` and committed to the repository. See [typed content](/docs/sdk/typed-content) and [Reading content](/docs/sdk/reading-content) for the full reading API.
 
 ## Render articles
 

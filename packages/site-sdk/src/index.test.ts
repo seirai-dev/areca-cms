@@ -63,6 +63,20 @@ const sampleSnapshot: Snapshot = {
   siteKey: 'demo',
   createdAt: '2026-01-01T00:00:00.000Z',
   hash: 'abc123',
+  schema: {
+    articles: {
+      route: '/blog/$slug',
+      label: 'Articles',
+      fields: [
+        { key: 'title', label: 'Title', type: 'text', required: true },
+        { key: 'body', label: 'Body', type: 'richtext' },
+      ],
+    },
+    pages: {
+      route: '/$slug',
+      fields: [{ key: 'title', label: 'Title', type: 'text' }],
+    },
+  },
   collections: {
     articles: [sampleEntry],
     pages: [],
@@ -83,7 +97,26 @@ afterEach(() => {
 
 describe('defineSiteContent', () => {
   it('returns the config as-is', () => {
-    expect(defineSiteContent(sampleConfig)).toBe(sampleConfig)
+    // An inline literal: the typed config needs literal keys and types.
+    const input = defineSiteContent({
+      siteKey: 'demo',
+      collections: {
+        articles: {
+          route: '/blog/$slug',
+          label: 'Articles',
+          fields: [
+            { key: 'title', label: 'Title', type: 'text', required: true },
+            { key: 'body', label: 'Body', type: 'richtext' },
+          ],
+        },
+        pages: {
+          route: '/$slug',
+          fields: [{ key: 'title', label: 'Title', type: 'text' }],
+        },
+      },
+    })
+    expect(input).toEqual(sampleConfig)
+    expect(defineSiteContent(input)).toBe(input)
   })
 })
 
@@ -272,7 +305,11 @@ describe('pullContent / readContent', () => {
           siteToken: 't',
         }),
       })
-      expect(snapshot).toEqual({ ...sampleSnapshot, warnings: [] })
+      expect(snapshot).toEqual({
+        ...sampleSnapshot,
+        typesPath: join(outDir, 'areca.gen.ts'),
+        warnings: [],
+      })
 
       const manifest = JSON.parse(
         readFileSync(join(outDir, 'manifest.json'), 'utf8'),
@@ -285,7 +322,9 @@ describe('pullContent / readContent', () => {
       })
       expect(manifest.generation).toMatch(/^publication-/)
 
-      expect(readContent(outDir, 'articles')).toEqual([sampleEntry])
+      expect(readContent(outDir, 'articles')).toEqual([
+        { ...sampleEntry, collection: 'articles' },
+      ])
       expect(readContent(outDir, 'pages')).toEqual([])
     } finally {
       rmSync(outDir, { recursive: true, force: true })
@@ -331,6 +370,7 @@ describe('preview helpers', () => {
           fetchManifest: vi.fn(),
           fetchSnapshot: vi.fn(),
           fetchPreview,
+          fetchAsset: vi.fn(),
         },
       }),
     ).resolves.toEqual(preview)
@@ -480,6 +520,51 @@ describe('run', () => {
       expect(err.mock.calls.flat().join(' ')).toMatch(/No publication exists/)
     } finally {
       err.mockRestore()
+      rmSync(outDir, { recursive: true, force: true })
+    }
+  })
+
+  it('prints collection counts with camelCase keys', async () => {
+    process.env.ARECA_CMS_URL = 'https://cms.example.com'
+    process.env.ARECA_SITE_TOKEN = 'site-token'
+    const snapshot = {
+      publicationId: 'pub_1',
+      siteKey: 'demo',
+      createdAt: '',
+      hash: 'abc123',
+      siteUrl: 'https://www.example.com',
+      schema: {
+        'blog-posts': { route: '/blog/$slug', label: 'Posts', fields: [] },
+        authors: { route: '/authors/$slug', label: 'Authors', fields: [] },
+      },
+      collections: {
+        'blog-posts': [
+          { id: 'a', slug: 'one', publishedAt: null, data: {} },
+          { id: 'b', slug: 'two', publishedAt: null, data: {} },
+        ],
+        authors: [{ id: 'c', slug: 'ada', publishedAt: null, data: {} }],
+      },
+    }
+    globalThis.fetch = async (input) =>
+      new URL(String(input)).pathname === '/api/sites/snapshot/current'
+        ? jsonResponse(snapshot)
+        : jsonResponse({ error: 'not found' }, 404)
+
+    const cwd = mkdtempSync(join(tmpdir(), 'areca-site-sdk-cwd-'))
+    const outDir = mkdtempSync(join(tmpdir(), 'areca-site-sdk-'))
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    try {
+      await expect(
+        run(['pull', '--out', outDir, '--types', join(outDir, 'areca.gen.ts')], {
+          cwd,
+        }),
+      ).resolves.toBe(0)
+      const printed = log.mock.calls.flat().join('\n')
+      expect(printed).toContain('Pulled publication pub_1 (abc123): blogPosts=2, authors=1')
+      expect(printed).not.toContain('blog-posts=')
+    } finally {
+      log.mockRestore()
+      rmSync(cwd, { recursive: true, force: true })
       rmSync(outDir, { recursive: true, force: true })
     }
   })

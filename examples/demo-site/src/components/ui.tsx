@@ -31,7 +31,7 @@ export function Eyebrow({
 }
 
 /** Pill naming an article category. */
-export function CategoryPill({ category }: { category: string | null }) {
+export function CategoryPill({ category }: { category: string | null | undefined }) {
   const label = formatLabel(category)
   if (!label) return null
   return (
@@ -46,7 +46,7 @@ export function RoastScale({
   level,
   className = '',
 }: {
-  level: string | null
+  level: string | null | undefined
   className?: string
 }) {
   const steps = ['light', 'medium', 'medium-dark', 'dark']

@@ -7,7 +7,7 @@ Your content model lives in `areca.config.ts`, at the root of the website projec
 
 In the CMS, a collection is called a **content type**. This guide uses "collection" throughout, because that is the name in the code.
 
-The config file uses `defineSiteContent`, which checks the shape of your config at compile time and returns it unchanged.
+The config file uses `defineSiteContent`. It checks the config at compile time, so your editor shows a mistake as you type it, and it returns the config unchanged. The rules are listed in [authoring rules](#authoring-rules) below.
 
 ## An example: articles and authors
 
@@ -64,7 +64,7 @@ Areca adds a required `slug` field as the first field of every collection, so yo
 
 | Option | Required | Description |
 | --- | --- | --- |
-| `route` | Yes | The frontend route pattern for entries, such as `/blog/$slug`. `$slug` is replaced by each entry's slug. It can be up to 500 characters. The SDK records the pattern for the CMS, but it does not generate routes. You still write the route in your framework. |
+| `route` | Yes | The frontend route pattern for entries, such as `/blog/$slug`. It must contain `$slug`, which is replaced by each entry's slug. It can be up to 500 characters. The SDK records the pattern for the CMS, but it does not generate routes. You still write the route in your framework. |
 | `label` | No | The name editors see in the CMS, such as "Articles". It can be up to 200 characters. If you omit it, the CMS shows the collection key. |
 | `fields` | Yes | The list of fields. A collection can have up to 100 fields. |
 
@@ -74,16 +74,50 @@ Each entry in `fields` is an object with these options:
 
 | Option | Required | Description |
 | --- | --- | --- |
-| `key` | Yes | The identifier for the field. It is the name of the field's value in pulled data. See [identifiers](#identifiers). |
+| `key` | Yes | The identifier for the field. It is the name of the field's value in pulled data. In your code it becomes camelCase, so `cover_image` is `coverImage`. See [identifiers](#identifiers). |
 | `label` | Yes | The label editors see. It can be up to 200 characters. |
 | `type` | Yes | One of the twelve field types, such as `text`, `richtext` or `reference`. See [field types](/docs/sdk/field-types) for each one. |
 | `required` | No | Set to `true` to require a value. Editors can save a draft without it, but the entry cannot be marked ready or go live until they fill it in. |
 | `description` | No | Help text shown to editors. It can be up to 1,000 characters. |
-| `options` | No | The choices for a `select` field. Up to 200 options, each up to 200 characters. |
-| `collection` | No | For a `reference` field, the key of the collection it can point to. |
-| `after` | No | For a `date` or `datetime` field, the key of another date field. This value must be on or after that field's value. |
+| `options` | Only for `select` | The choices for a `select` field. Up to 200 options, each up to 200 characters. Other types do not accept it. |
+| `collection` | Yes for `reference`, otherwise not allowed | The key of the collection the reference can point to. It must be a collection key of the same config. Your editor suggests the keys as you type. |
+| `after` | Only for `date` and `datetime` | The key of another date or datetime field in the same collection. This value must be on or after that field's value. Your editor suggests only the keys of date fields. |
 
 The SDK checks identifiers before it sends anything. The CMS validates the whole manifest when it receives it, including the length and count limits above.
+
+### Authoring rules
+
+`defineSiteContent` enforces the first five rules with the TypeScript compiler, so your editor reports a mistake as you type. The last rule is checked when you push or pull:
+
+- **`type` is one of the twelve field types.** Your editor suggests them.
+- **Options depend on the type.** `options` is only allowed on `select`. `collection` is required on `reference`, and only allowed there. `after` is only allowed on `date` and `datetime`.
+- **References point at real collections.** A reference's `collection` must be the key of a collection in the same config. Your editor suggests those keys.
+- **`after` names a date field.** It must be the key of a `date` or `datetime` field in the same collection. Your editor suggests only those keys.
+- **Routes contain `$slug`.** A collection's `route` must include the text `$slug`, so each entry has its own URL.
+- **Keys are identifiers.** The SDK checks them against the identifier rules when you push or pull, as described above.
+
+```ts title="areca.config.ts"
+import { defineSiteContent } from '@areca-cms/site-sdk'
+
+export default defineSiteContent({
+  siteKey: 'acme-site',
+  collections: {
+    authors: {
+      route: '/authors', // error: a route must contain $slug
+      fields: [{ key: 'name', label: 'Name', type: 'text', required: true }],
+    },
+    articles: {
+      route: '/blog/$slug',
+      fields: [
+        { key: 'author', label: 'Author', type: 'reference', collection: 'writers' }, // error: no collection called writers
+        { key: 'category', label: 'Category', type: 'text', options: ['news'] }, // error: options only on select
+        { key: 'updatedOn', label: 'Updated on', type: 'date', after: 'title' }, // error: title is not a date field
+      ],
+    },
+  },
+})
+```
+
 
 ## Identifiers
 
@@ -92,7 +126,9 @@ Identifiers are the names you choose for collections and fields: the keys of `co
 - They start with an ASCII letter. After that they can contain letters, digits, `_` and `-`.
 - They are at most 64 characters long.
 - They must not be a reserved name. The reserved names are `__proto__`, `prototype`, `constructor`, `manifest`, `con`, `prn`, `aux`, `nul`, `com1` to `com9`, and `lpt1` to `lpt9`. The check ignores case, so `MANIFEST` is reserved too.
+- A collection key must not be `resolve`, `href` or `preview`. The content object in your code uses those names for its own methods. This check ignores case. Field keys may use these names.
 - A field key must be unique within its collection.
+- In your code, keys are camelCase, so two keys that differ only in their dashes or underscores (`blog-posts` and `blog_posts`) collide. The pull refuses them. See [typed content](/docs/sdk/typed-content#names-that-the-pull-refuses).
 
 Identifiers are also used as names in the output. Each collection becomes a file named after its key, such as `articles.json`. For that reason, pick names that you will keep.
 

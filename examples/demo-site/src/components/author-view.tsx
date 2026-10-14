@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router'
-import type { Article, Author } from '../lib/content.ts'
+import type { ArticlesEntry, AuthorsEntry } from '../generated/content/areca.gen.ts'
 import { ArticleCard } from './article-card.tsx'
 import { CmsImage, PreviewBanner } from './cms-image.tsx'
 import { Eyebrow, SectionHeading } from './ui.tsx'
@@ -9,8 +9,8 @@ export function AuthorView({
   articles,
   preview = false,
 }: {
-  author: Author
-  articles: Article[]
+  author: AuthorsEntry
+  articles: ArticlesEntry[]
   preview?: boolean
 }) {
   const { data } = author
