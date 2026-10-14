@@ -20,6 +20,7 @@ export type {
   GlobalData,
   GlobalKey,
   Globals,
+  GlobalsPreview,
   GlobalSchema,
   Href,
   OrderBy,

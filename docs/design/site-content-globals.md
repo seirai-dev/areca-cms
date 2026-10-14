@@ -58,9 +58,9 @@ globals.
 (max 80 chars). Validation rejects `group` on collection fields and rejects
 `slug` fields in globals.
 
-Reserved keys: `globals` joins `resolve`, `href`, `preview` as a reserved
+Reserved keys: `globals` and `previewGlobals` join `resolve`, `href`, `preview` as reserved
 **collection** key. Global keys follow the same identifier rules as
-collection keys and may not be `globals`, `resolve`, `href`, `preview`.
+collection keys and may not be `globals`, `previewGlobals`, `resolve`, `href`, `preview`.
 
 Reference fields (`type: 'reference'`) in either kind must target a
 `kind = 'collection'` key.
@@ -175,12 +175,17 @@ Runtime (`createContent({ schema, globalSchema?, dir })`):
   each value is the typed field data (`EntryData`-style mapping) plus
   `$seo: SeoMeta` when the global has `seo: true`. Reads follow the same
   per-generation caching as collections.
-- `await content.previewGlobals(token: string | null | undefined, options?)`
-  returns the same object; when `token` is a valid global preview token the
-  matching section is replaced by the draft (after camelCasing and asset URL
-  handling). A falsy token returns `content.globals`. Entry tokens are ignored
-  (returns `content.globals`).
-- Types: `Global<K>`, `GlobalKey`, `Globals` exported from the package root.
+- `await content.previewGlobals(source: string | PreviewResult | null | undefined, options?)`
+  returns `GlobalsPreview<G>` = `{ globals, previewing, complete, issues }`.
+  `previewing` is the camel key of the section the token targets, or `null` for
+  a falsy token, an entry token or any other result kind. A draft is validated
+  with the same validator as `content.preview()`, against the section's schema
+  (camel issue keys, `<field>: <problem>`). A valid draft replaces the section
+  in `globals` (after camelCasing and asset URL handling). An invalid draft keeps
+  the published section, sets `complete: false` and returns the issues. A falsy
+  token or an entry token returns `{ globals: content.globals, previewing: null,
+  complete: true, issues: [] }`.
+- Types: `Global<K>`, `GlobalKey`, `Globals`, `GlobalsPreview` exported from the package root.
   Without a registered schema, `content.globals` is `Record<string, Record<string, unknown>>`.
 
 ## CMS UI

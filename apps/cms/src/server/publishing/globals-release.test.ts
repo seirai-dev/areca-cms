@@ -1,8 +1,11 @@
 // Assumed API: diffApprovedRelease(siteId).pendingCount and listPendingReleaseChanges(siteId)
 // include site-content sections (kind 'ready' or 'scheduled'), with collectionKey = the
 // section's raw key and collectionLabel = the section label.
+import { and, eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
+import { db } from '#/db'
+import { collection } from '#/db/schema'
 import { buildSnapshot } from '#/server/content/snapshot'
 import {
   createEntry,
@@ -83,6 +86,59 @@ describe.skipIf(!hasDb)('release changes for site content', () => {
           collectionLabel: 'Company info',
         }),
       )
+    })
+  })
+
+  it('leaves a disabled section out of scheduled and pending changes for everyone', async () => {
+    await withTestSite(async (ctx) => {
+      const scheduled = await createTestGlobal(ctx.site.id, {
+        key: 'companyInfo',
+        label: 'Company info',
+      })
+      await updateDraft(
+        scheduled.entry.id,
+        { email: 'later@x.test' },
+        ctx.actor.id,
+        scheduled.entry.draftVersion,
+      )
+      await scheduleEntry(
+        scheduled.entry.id,
+        new Date(Date.now() + 86_400_000).toISOString(),
+        'UTC',
+        ctx.actor.id,
+      )
+      const ready = await createTestGlobal(ctx.site.id, {
+        key: 'homePage',
+        label: 'Home page',
+      })
+      await updateDraft(
+        ready.entry.id,
+        { email: 'ready@x.test' },
+        ctx.actor.id,
+        ready.entry.draftVersion,
+      )
+      await publishEntry(ready.entry.id, ctx.actor.id)
+
+      // Disable both sections after they were queued: they never ship.
+      await db
+        .update(collection)
+        .set({ enabled: false })
+        .where(
+          and(
+            eq(collection.siteId, ctx.site.id),
+            eq(collection.kind, 'global'),
+          ),
+        )
+
+      const diff = await diffApprovedRelease(ctx.site.id)
+      expect(diff.scheduledUpcoming.map((item) => item.id)).not.toContain(
+        scheduled.entry.id,
+      )
+      const changes = await listPendingReleaseChanges(ctx.site.id)
+      expect(changes.map((change) => change.id)).not.toContain(
+        scheduled.entry.id,
+      )
+      expect(changes.map((change) => change.id)).not.toContain(ready.entry.id)
     })
   })
 

@@ -9,7 +9,9 @@ import type {
   Content,
   ContentSchema,
   GlobalSchema,
+  GlobalKey,
   Globals,
+  GlobalsPreview,
   PreviewEntry,
 } from './schema-types.js'
 import type {
@@ -74,7 +76,7 @@ export function createContent<
   for (const name of Object.keys(schema)) {
     if (isReservedCollectionKey(name)) {
       throw new Error(
-        `Collection "${name}" uses a reserved name (resolve, href, preview, globals)`,
+        `Collection "${name}" uses a reserved name (resolve, href, preview, globals, previewGlobals)`,
       )
     }
   }
@@ -246,9 +248,10 @@ export function createContent<
   async function previewGlobals(
     source: string | PreviewResult | null | undefined,
     previewOptions?: { client?: ArecaClient },
-  ): Promise<Globals<G>> {
-    const published = publishedGlobals()
-    if (!source) return published as unknown as Globals<G>
+  ): Promise<GlobalsPreview<G>> {
+    const published = publishedGlobals() as unknown as Globals<G>
+    const unchanged: GlobalsPreview<G> = { globals: published, previewing: null, complete: true, issues: [] }
+    if (!source) return unchanged
     // A PreviewResult from getPreviewEntry / client.fetchPreview is used as is, so the CMS is asked once.
     const result =
       typeof source === 'string'
@@ -257,7 +260,7 @@ export function createContent<
             client: previewOptions?.client ?? createArecaClient(),
           })
         : source
-    if (result.kind !== 'global') return published as unknown as Globals<G>
+    if (result.kind !== 'global') return unchanged
     const camel = Object.keys(globalSchema).find(
       (name) => globalSchema[name]!.key === result.global,
     )
@@ -267,6 +270,18 @@ export function createContent<
       )
     }
     const definition = globalSchema[camel]!
+    const previewing = camel as GlobalKey<G>
+    // Validate the raw draft, as the pull validates a publication, before camelising it.
+    const camelByRaw = new Map(
+      Object.entries(definition.fields).map(([name, field]) => [field.key, name]),
+    )
+    const issues = entryIssues(result.entry.data, wireFields(schema, definition)).map(
+      (issue) => `${camelByRaw.get(issue.field) ?? toCamelKey(issue.field)}: ${issue.problem}`,
+    )
+    if (issues.length > 0) {
+      // An incomplete draft never reaches typed code: the published section stays.
+      return { globals: published, previewing, complete: false, issues }
+    }
     const fields = Object.entries(definition.fields).map(([name, field]) => ({
       raw: field.key,
       camel: name,
@@ -277,9 +292,11 @@ export function createContent<
       data: camelizeData(result.entry.data, fields),
     }
     return {
-      ...published,
-      [camel]: globalValue(definition, draft),
-    } as unknown as Globals<G>
+      globals: { ...published, [camel]: globalValue(definition, draft) } as unknown as Globals<G>,
+      previewing,
+      complete: true,
+      issues: [],
+    }
   }
 
   const content: Record<string, unknown> = {
@@ -306,10 +323,13 @@ type QueryOptions = {
 }
 
 /**
- * The raw field list of one generated collection, as the pull validates it:
+ * The raw field list of one generated collection or site content section, as the pull validates it:
  * raw keys, and reference targets mapped back from camel to the raw key.
  */
-function wireFields(schema: Record<string, LooseCollection>, definition: LooseCollection): Field[] {
+function wireFields(
+  schema: Record<string, LooseCollection>,
+  definition: Pick<LooseCollection, 'fields'>,
+): Field[] {
   return Object.values(definition.fields).map((field) => {
     const target =
       field.collection === undefined

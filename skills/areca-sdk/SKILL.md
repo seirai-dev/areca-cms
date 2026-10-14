@@ -80,7 +80,7 @@ export default defineSiteContent({
 - Field types: `text`, `textarea`, `richtext`, `image`, `date`, `datetime`, `select` (`options`), `reference` (`collection`, required), `slug`, `boolean`, `number`, `url`. Optional per field: `required`, `description`, `after` (only on `date` or `datetime`, naming another date key in the same collection).
 - `defineSiteContent` checks these at compile time: `options` only on `select`, `collection` required on `reference` and must be a collection key of the same config, `after` must name a date key, and `route` must contain `$slug`.
 - Keys match `^[A-Za-z][A-Za-z0-9_-]{0,63}$`. Collection keys must be unique case-insensitively. Reserved: `manifest`, `constructor`, `prototype`, `__proto__`, and Windows device names (`con`, `prn`, `aux`, `nul`, `com1`, `lpt1`, ...).
-- Collection keys cannot be `resolve`, `href` or `preview` (any case), because the content object uses those names. Field keys may use them.
+- Collection keys cannot be `resolve`, `href`, `preview`, `globals` or `previewGlobals` (any case, and `preview-globals` too), because the content object uses those names. Field keys may use them.
 - In code, keys are camelCase: `blog-posts` is `content.blogPosts`, `cover_image` is `entry.data.coverImage`. The pull fails when two keys collide after this conversion (`blog-posts` and `blog_posts`).
 - A push is the **full** manifest. Collections left out are disabled (their entries are kept). The CMS adds a required `slug` field if one is missing. Limits: 100 collections, 100 fields each, 256 KiB.
 - `areca manifest pull --config areca.config.ts [--yes]` regenerates the config from the CMS. It replaces the whole file and keeps `siteKey` and `assets`. Without a TTY it needs `--yes` if the config already has collections.
@@ -100,7 +100,7 @@ globals: {
 },
 ```
 
-- A global is one set of fields with no slug and no route. Its key follows the same identifier rules as a collection key and may not be `globals`, `resolve`, `href` or `preview`.
+- A global is one set of fields with no slug and no route. Its key follows the same identifier rules as a collection key and may not be `globals`, `previewGlobals`, `resolve`, `href` or `preview`.
 - `seo: true` adds a `$seo` value. `previewPath` is the page that shows the draft. Both are optional.
 - `group` is an editor heading only. The SDK value stays flat, and collection fields may not set `group`.
 - Sections may reference collections, not the other way round. A push is a full sync: a section left out is disabled and its content is kept.
@@ -155,7 +155,7 @@ const author = content.resolve(article.data.author); // Entry<"authors"> | null
 - The content object reads files at runtime, so ship `src/generated/content/` (including `.publications/`) with the server build or container. For TanStack Start, call it inside a `createServerFn` handler, never in route or component code.
 - Low-level: `readContent(dir, "blogPosts")` from `@areca-cms/site-sdk/pull` returns the typed entries of one collection and takes no type parameter. Use `readContentManifest(dir)` once when reading several collections from one publication.
 - `content.globals.<camelKey>` returns a section as a flat object of its field values, plus `$seo` when SEO is on. Types: `CompanyInfoGlobal` (exported from `areca.gen.ts`), and `Global<K>`, `Globals`, `GlobalKey`, `GlobalData` and `GlobalSchema` from the package root. Without a registered schema, the value is typed as a loose record.
-- `content.previewGlobals(token)` returns the same object with the section's draft in place when the token is a section preview token. It also accepts a `PreviewResult` or `null`.
+- `content.previewGlobals(token)` returns `{ globals, previewing, complete, issues }`. `previewing` is the camel key of the section the token targets (or `null`). A valid draft is in `globals`; an incomplete one keeps the published section, with `complete: false` and `issues` listing the problems. It also accepts a `PreviewResult` or `null`.
 
 ## Rich text
 
@@ -181,7 +181,7 @@ import { richTextDocument } from "@areca-cms/site-sdk";
 
 Read [references/production.md](references/production.md) when the user needs any of these:
 
-- A draft preview route: `getPreviewEntry` and `previewHeaders` at `/__preview/<collection>/<slug>?token=`, or `content.preview(token)` for a typed result. A site content section previews on its `previewPath` with `?arecaPreview=<token>`, and `content.previewGlobals(token)` returns the page's values with the draft in place.
+- A draft preview route: `getPreviewEntry` and `previewHeaders` at `/__preview/<collection>/<slug>?token=`, or `content.preview(token)` for a typed result. A site content section previews on its `previewPath` with `?arecaPreview=<token>`, and `content.previewGlobals(token)` returns the page's values, with the draft in place when it is complete and `previewing` is the page's section.
 - The production health route that Go live waits for.
 - Docker or CI builds with `ARECA_SNAPSHOT_ID`.
 - The CMS settings needed: production URL, deployment target, publishing mode.

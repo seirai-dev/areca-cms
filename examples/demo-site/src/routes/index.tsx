@@ -22,7 +22,7 @@ export const Route = createFileRoute('/')({
 })
 
 function Home() {
-  const { articles, coffees, authors, home, featuredCoffee, preview } = Route.useLoaderData()
+  const { articles, coffees, authors, home, featuredCoffee, preview, incomplete } = Route.useLoaderData()
   const heroImage = articles[0]?.data.heroImage ?? coffees[0]?.data.image ?? null
   const [lead, ...rest] = articles
 
@@ -30,7 +30,7 @@ function Home() {
     <div>
       {preview ? (
         <div className="mx-auto max-w-6xl px-5 pt-6 sm:px-8">
-          <PreviewBanner />
+          <PreviewBanner incomplete={incomplete} />
         </div>
       ) : null}
 

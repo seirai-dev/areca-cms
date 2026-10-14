@@ -638,6 +638,7 @@ describe('createContent: globals', () => {
       fields: {
         email: { key: 'email', type: 'text', required: true },
         phoneNumber: { key: 'phone-number', type: 'text', required: false },
+        logo: { key: 'logo', type: 'image', required: true },
       },
     },
     homePage: {
@@ -663,6 +664,7 @@ describe('createContent: globals', () => {
           fields: [
             { key: 'email', label: 'Email', type: 'text', required: true },
             { key: 'phone-number', label: 'Phone number', type: 'text' },
+            { key: 'logo', label: 'Logo', type: 'image', required: true },
           ],
         },
         'home-page': {
@@ -676,7 +678,7 @@ describe('createContent: globals', () => {
         'company-info': {
           id: 'g1',
           publishedAt: '2026-03-01T00:00:00.000Z',
-          data: { email, 'phone-number': '+31 20 000' },
+          data: { email, 'phone-number': '+31 20 000', logo: IMAGE },
         },
         'home-page': {
           id: 'g2',
@@ -726,7 +728,16 @@ describe('createContent: globals', () => {
     ).toThrow(/reserved/)
   })
 
-  it('previewGlobals replaces the drafted section for a global preview token', async () => {
+  it('rejects previewGlobals as a collection name, since it is a content member', () => {
+    expect(() =>
+      createContent({
+        schema: { ...schema, previewGlobals: schema.pages } as unknown as typeof schema,
+        dir: directory(),
+      }),
+    ).toThrow(/reserved/)
+  })
+
+  it('previewGlobals overlays a valid draft and names the previewed section', async () => {
     const outDir = directory()
     await publish(outDir, withGlobals())
     const content = createContent({ schema, globalSchema, dir: outDir })
@@ -737,28 +748,83 @@ describe('createContent: globals', () => {
       entry: {
         id: 'g1',
         publishedAt: null,
-        data: { email: 'draft@acme.test', 'phone-number': '' },
+        data: { email: 'draft@acme.test', 'phone-number': '', logo: IMAGE },
       },
     }
 
-    const globals = await content.previewGlobals('tok', { client: clientFor() })
+    const preview = await content.previewGlobals('tok', { client: clientFor() })
 
     expect(previewRequests).toEqual(['?token=tok'])
-    expect(globals.companyInfo.email).toBe('draft@acme.test')
-    expect(globals.companyInfo.phoneNumber).toBe('')
-    expect(globals.homePage).toEqual(content.globals.homePage)
+    expect(preview.previewing).toBe('companyInfo')
+    expect(preview.complete).toBe(true)
+    expect(preview.issues).toEqual([])
+    expect(preview.globals.companyInfo.email).toBe('draft@acme.test')
+    expect(preview.globals.companyInfo.phoneNumber).toBe('')
+    expect(preview.globals.homePage).toEqual(content.globals.homePage)
   })
 
-  it('previewGlobals returns the published globals without a request for a falsy token', async () => {
+  it('previewGlobals keeps the published section for an incomplete draft and lists the issues', async () => {
+    const outDir = directory()
+    await publish(outDir, withGlobals())
+    const content = createContent({ schema, globalSchema, dir: outDir })
+    fakeCms()
+    served.preview = {
+      kind: 'global',
+      global: 'company-info',
+      entry: {
+        id: 'g1',
+        publishedAt: null,
+        data: { email: '', 'phone-number': '+31 99', logo: null },
+      },
+    }
+
+    const preview = await content.previewGlobals('tok', { client: clientFor() })
+
+    expect(preview.previewing).toBe('companyInfo')
+    expect(preview.complete).toBe(false)
+    expect(preview.issues).toEqual(['email: is required', 'logo: is required'])
+    // The published section stays typed and readable: the required image is still an object.
+    expect(preview.globals.companyInfo).toEqual(content.globals.companyInfo)
+    expect(preview.globals.companyInfo.logo.url).toBe(IMAGE.url)
+    expect(preview.globals.companyInfo.email).toBe('hi@acme.test')
+    expect(preview.globals.homePage).toEqual(content.globals.homePage)
+  })
+
+  it('previewGlobals reports wrong field types under camel keys', async () => {
+    const outDir = directory()
+    await publish(outDir, withGlobals())
+    const content = createContent({ schema, globalSchema, dir: outDir })
+    fakeCms()
+    served.preview = {
+      kind: 'global',
+      global: 'company-info',
+      entry: {
+        id: 'g1',
+        publishedAt: null,
+        data: { email: 'draft@acme.test', 'phone-number': 42, logo: IMAGE },
+      },
+    }
+
+    const preview = await content.previewGlobals('tok', { client: clientFor() })
+
+    expect(preview.complete).toBe(false)
+    expect(preview.issues).toEqual(['phoneNumber: must be a string'])
+    expect(preview.globals.companyInfo.email).toBe('hi@acme.test')
+  })
+
+  it('previewGlobals returns the published globals and no section for a falsy token without a request', async () => {
     const outDir = directory()
     await publish(outDir, withGlobals())
     const content = createContent({ schema, globalSchema, dir: outDir })
     fakeCms()
 
     for (const token of [null, undefined, '']) {
-      expect(await content.previewGlobals(token, { client: clientFor() })).toEqual(
-        content.globals,
-      )
+      expect(await content.previewGlobals(token, { client: clientFor() })).toEqual({
+        globals: content.globals,
+        previewing: null,
+        complete: true,
+        issues: [],
+      })
     }
     expect(previewRequests).toEqual([])
   })
@@ -775,11 +841,16 @@ describe('createContent: globals', () => {
       entry: rawSnapshot().collections['blog-posts']![0],
     }
 
-    expect(await content.previewGlobals('tok', { client: clientFor() })).toEqual(content.globals)
+    expect(await content.previewGlobals('tok', { client: clientFor() })).toEqual({
+      globals: content.globals,
+      previewing: null,
+      complete: true,
+      issues: [],
+    })
     expect(previewRequests).toEqual(['?token=tok'])
   })
 
-  it('previewGlobals overlays a PreviewResult without a request', async () => {
+  it('previewGlobals overlays a valid PreviewResult without a request', async () => {
     const outDir = directory()
     await publish(outDir, withGlobals())
     const content = createContent({ schema, globalSchema, dir: outDir })
@@ -790,16 +861,36 @@ describe('createContent: globals', () => {
       entry: {
         id: 'g1',
         publishedAt: null,
-        data: { email: 'draft@acme.test', 'phone-number': '' },
+        data: { email: 'draft@acme.test', 'phone-number': '', logo: IMAGE },
       },
     }
 
-    const globals = await content.previewGlobals(result, { client: clientFor() })
+    const preview = await content.previewGlobals(result, { client: clientFor() })
 
     expect(previewRequests).toEqual([])
-    expect(globals.companyInfo.email).toBe('draft@acme.test')
-    expect(globals.companyInfo.phoneNumber).toBe('')
-    expect(globals.homePage).toEqual(content.globals.homePage)
+    expect(preview.previewing).toBe('companyInfo')
+    expect(preview.complete).toBe(true)
+    expect(preview.globals.companyInfo.email).toBe('draft@acme.test')
+    expect(preview.globals.homePage).toEqual(content.globals.homePage)
+  })
+
+  it('previewGlobals falls back for an incomplete PreviewResult without a request', async () => {
+    const outDir = directory()
+    await publish(outDir, withGlobals())
+    const content = createContent({ schema, globalSchema, dir: outDir })
+    fakeCms()
+    const result = {
+      kind: 'global' as const,
+      global: 'company-info',
+      entry: { id: 'g1', publishedAt: null, data: { email: '', logo: null } },
+    }
+
+    const preview = await content.previewGlobals(result, { client: clientFor() })
+
+    expect(previewRequests).toEqual([])
+    expect(preview.complete).toBe(false)
+    expect(preview.issues).toEqual(['email: is required', 'logo: is required'])
+    expect(preview.globals.companyInfo.email).toBe('hi@acme.test')
   })
 
   it('previewGlobals returns the published globals for an entry PreviewResult without a request', async () => {
@@ -814,7 +905,12 @@ describe('createContent: globals', () => {
       entry: rawSnapshot().collections['blog-posts']![0],
     }
 
-    expect(await content.previewGlobals(result, { client: clientFor() })).toEqual(content.globals)
+    expect(await content.previewGlobals(result, { client: clientFor() })).toEqual({
+      globals: content.globals,
+      previewing: null,
+      complete: true,
+      issues: [],
+    })
     expect(previewRequests).toEqual([])
   })
 

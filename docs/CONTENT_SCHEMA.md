@@ -193,7 +193,7 @@ export default defineSiteContent({
 });
 ```
 
-- A section takes the same field types as a collection, except `slug`. Its key follows the same identifier rules as a collection key, and may not be `globals`, `resolve`, `href` or `preview`.
+- A section takes the same field types as a collection, except `slug`. Its key follows the same identifier rules as a collection key, and may not be `globals`, `previewGlobals`, `resolve`, `href` or `preview`.
 - `label` is the name editors see in the **Site content** group. `seo: true` adds a search and social panel, exposed to your code as `$seo`. The default is `false`.
 - `previewPath` is the page that shows the section in preview, such as `/about`. Without it, editors cannot preview the section.
 - `group` is a heading shown above a field in the editor, for example "Contact". Fields that share a heading are grouped together. The heading is only for editors. Your code still gets a flat list of values. `group` is not allowed on collection fields.
@@ -211,7 +211,7 @@ Keys must match `[A-Za-z][A-Za-z0-9_-]{0,63}`. Keys are case-sensitive for CMS
 data, but reserved names are checked without regard to case. Reserved names
 include `manifest`, `__proto__`, `prototype`, `constructor`, and Windows device
 names such as `CON` and `LPT1`. Collection and site content keys also cannot be
-`resolve`, `href`, `preview` or `globals`, because the content object uses those names.
+`resolve`, `href`, `preview`, `globals` or `previewGlobals` (compared after camelCase, so `preview-globals` is also refused), because the content object uses those names.
 Field keys may use them. Rename invalid existing keys in the CMS before
 syncing or pulling. The SDK also guards output paths and rejects symbolic-link
 targets while writing generated files.

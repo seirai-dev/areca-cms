@@ -6,6 +6,7 @@ import type {
   Global,
   GlobalKey,
   Globals,
+  GlobalsPreview,
   PreviewResult,
   ReferenceValue,
   SeoMeta,
@@ -107,9 +108,26 @@ describe('globals: keys', () => {
 })
 
 describe('globals: preview', () => {
-  it('previewGlobals resolves to the same typed globals object', () => {
-    expectTypeOf(content.previewGlobals('token')).resolves.toEqualTypeOf<Globals<G>>()
-    expectTypeOf(content.previewGlobals(null)).resolves.toEqualTypeOf<Globals<G>>()
+  it('previewGlobals resolves to a GlobalsPreview with typed globals', () => {
+    expectTypeOf(content.previewGlobals('token')).resolves.toEqualTypeOf<GlobalsPreview<G>>()
+    expectTypeOf(content.previewGlobals(null)).resolves.toEqualTypeOf<GlobalsPreview<G>>()
+    expectTypeOf<GlobalsPreview<G>['globals']>().toEqualTypeOf<Globals<G>>()
+  })
+
+  it('previewing is the camel key of the previewed section, or null', () => {
+    expectTypeOf<GlobalsPreview<G>['previewing']>().toEqualTypeOf<GlobalKey<G> | null>()
+    expectTypeOf<GlobalsPreview<G>['previewing']>().toEqualTypeOf<'companyInfo' | 'homePage' | null>()
+  })
+
+  it('complete is a boolean and issues are the preview issue lines', () => {
+    expectTypeOf<GlobalsPreview<G>['complete']>().toEqualTypeOf<boolean>()
+    expectTypeOf<GlobalsPreview<G>['issues']>().toEqualTypeOf<string[]>()
+  })
+
+  it('the previewed globals are still typed for a draft that may be incomplete', async () => {
+    const preview = await content.previewGlobals('token')
+    expectTypeOf(preview.globals.companyInfo.email).toEqualTypeOf<string>()
+    expectTypeOf(preview.globals.homePage.$seo).toEqualTypeOf<SeoMeta>()
   })
 
   it('previewGlobals accepts a token, a PreviewResult, or a falsy value', () => {
@@ -118,10 +136,10 @@ describe('globals: preview', () => {
       global: 'company-info',
       entry: { id: 'g1', publishedAt: null, data: {} },
     }
-    expectTypeOf(content.previewGlobals(result)).resolves.toEqualTypeOf<Globals<G>>()
-    expectTypeOf(content.previewGlobals(undefined)).resolves.toEqualTypeOf<Globals<G>>()
+    expectTypeOf(content.previewGlobals(result)).resolves.toEqualTypeOf<GlobalsPreview<G>>()
+    expectTypeOf(content.previewGlobals(undefined)).resolves.toEqualTypeOf<GlobalsPreview<G>>()
     expectTypeOf(content.previewGlobals('token', { client: undefined })).resolves.toEqualTypeOf<
-      Globals<G>
+      GlobalsPreview<G>
     >()
     // @ts-expect-error an entry-kind result is not a string or null
     content.previewGlobals({ kind: 'entry' })

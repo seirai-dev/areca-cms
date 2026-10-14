@@ -128,7 +128,7 @@ Identifiers are the names you choose for collections and fields: the keys of `co
 - They start with an ASCII letter. After that they can contain letters, digits, `_` and `-`.
 - They are at most 64 characters long.
 - They must not be a reserved name. The reserved names are `__proto__`, `prototype`, `constructor`, `manifest`, `con`, `prn`, `aux`, `nul`, `com1` to `com9`, and `lpt1` to `lpt9`. The check ignores case, so `MANIFEST` is reserved too.
-- A collection key or site content key must not be `resolve`, `href`, `preview` or `globals`. The content object in your code uses those names for its own methods. This check ignores case. Field keys may use these names.
+- A collection key or site content key must not be `resolve`, `href`, `preview`, `globals` or `previewGlobals`. Camel-cased forms count too, so `preview-globals` is refused. The content object in your code uses those names for its own methods. This check ignores case. Field keys may use these names.
 - A field key must be unique within its collection.
 - In your code, keys are camelCase, so two keys that differ only in their dashes or underscores (`blog-posts` and `blog_posts`) collide. The pull refuses them. See [typed content](/docs/sdk/typed-content#names-that-the-pull-refuses).
 

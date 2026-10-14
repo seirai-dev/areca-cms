@@ -33,7 +33,20 @@ describe('isReservedCollectionKey', () => {
     },
   )
 
-  it.each(['articles', 'resolved', 'previewText'])('accepts %s', (name) => {
+  // The SDK camelCases keys (`preview-globals` -> `previewGlobals`) before it
+  // checks reserved names, so the CMS must reject the raw spellings too.
+  it.each([
+    'previewGlobals',
+    'previewglobals',
+    'PreviewGlobals',
+    'preview-globals',
+    'preview_globals',
+    'Preview-Globals',
+  ])('rejects the collection key %s (reserved for the previewGlobals member)', (name) => {
+    expect(isReservedCollectionKey(name)).toBe(true)
+  })
+
+  it.each(['articles', 'resolved', 'previewText', 'preview-text'])('accepts %s', (name) => {
     expect(isReservedCollectionKey(name)).toBe(false)
   })
 })

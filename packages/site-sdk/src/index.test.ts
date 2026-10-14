@@ -632,13 +632,25 @@ describe('manifestFromConfig: globals', () => {
     )
   })
 
-  it.each(['globals', 'resolve', 'href', 'preview'])(
+  it.each(['globals', 'resolve', 'href', 'preview', 'previewGlobals', 'preview-globals'])(
     'rejects the reserved global key "%s"',
     (key) => {
       expect(() =>
         manifestFromConfig({
           ...sampleConfig,
           globals: { [key]: { fields: [] } },
+        }),
+      ).toThrow(/reserved/)
+    },
+  )
+
+  it.each(['previewGlobals', 'preview-globals', 'preview_globals'])(
+    'rejects the collection key "%s", which camelCases to the reserved previewGlobals',
+    (key) => {
+      expect(() =>
+        manifestFromConfig({
+          siteKey: 'demo',
+          collections: { [key]: { route: '/$slug', fields: [] } },
         }),
       ).toThrow(/reserved/)
     },

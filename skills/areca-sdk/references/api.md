@@ -7,7 +7,7 @@ ESM only. Import paths and their exports:
 | Export | Signature | Notes |
 | --- | --- | --- |
 | `defineSiteContent` | `<const T extends {...}, const G extends {...}>(config: { siteKey; collections: T; globals?: G; assets? }) => same object` | Identity helper for `areca.config.ts`. Checks at compile time: `options` only on `select`, `collection` required on `reference` and must be a collection key, `after` must name a date key, `route` contains `$slug`. Globals take the same fields, with no `slug`, and may set `group` |
-| `manifestFromConfig` | `(config: SiteContentConfig) => SiteManifest` | Validates identifiers, duplicates and reserved keys (`resolve`, `href`, `preview`, `globals`), returns `{ collections }` plus `globals` only when there are sections |
+| `manifestFromConfig` | `(config: SiteContentConfig) => SiteManifest` | Validates identifiers, duplicates and reserved keys (`resolve`, `href`, `preview`, `globals`, `previewGlobals`), returns `{ collections }` plus `globals` only when there are sections |
 | `createArecaClient` | `(options?: { cmsUrl?; siteToken?; schemaToken? }) => ArecaClient` | Falls back to `ARECA_CMS_URL`, `ARECA_SITE_TOKEN`, `ARECA_SCHEMA_TOKEN`; URL and site token required at creation |
 | `getPreviewEntry` | `({ token: string; client?: ArecaClient }) => Promise<PreviewResult>` | `PreviewResult` = `PreviewEntryResult` `{ kind: 'entry', collection, slug, entry }` or `PreviewGlobalResult` `{ kind: 'global', global, entry }`. Needs `ARECA_CMS_URL` and `ARECA_SITE_TOKEN` (or pass `client`). |
 | `toCamelKey` | `(raw: string) => string` | Converts a raw CMS key such as `blog-posts` or `company_info` to its code name (`blogPosts`, `companyInfo`) |
@@ -60,6 +60,7 @@ Typed content types (main entry, generated against `Register`):
 | `GlobalData<K, G>` | the field values of section `K` |
 | `Global<K, G>` | one section: `GlobalData<K>`, plus `$seo: SeoMeta` when the section has `seo: true` |
 | `Globals<G>` | the object returned by `content.globals` and `previewGlobals`, one `Global` per section |
+| `GlobalsPreview<G>` | the result of `previewGlobals`: `{ globals, previewing, complete, issues }` |
 | `CollectionApi<C, S>` | `all`, `first`, `get`, `byId` and `href` of one collection |
 | `PreviewEntry<S>` | the union returned by `content.preview`, narrowed by `collection` and `complete`: `{ collection, slug, complete: true, entry: Entry, issues: [] }` or `{ collection, slug, complete: false, entry: DraftEntry, issues: string[] }` |
 | `DraftEntry<C, S>`, `DraftEntryData<C, S>` | the entry of an incomplete preview draft; every field has its optional type, whether or not it is required |
@@ -68,7 +69,7 @@ Typed content types (main entry, generated against `Register`):
 
 | Export | Signature | Notes |
 | --- | --- | --- |
-| `createContent` | `<const S extends ContentSchema, const G extends GlobalSchema>(options: { schema: S; globalSchema?: G; dir: string }) => Content<S, G>` | Builds the typed content object. `areca.gen.ts` calls it; use it only for another folder or schema. `dir` is resolved against `process.cwd()` on each call. Throws for a collection named `resolve`, `href`, `preview` or `globals` |
+| `createContent` | `<const S extends ContentSchema, const G extends GlobalSchema>(options: { schema: S; globalSchema?: G; dir: string }) => Content<S, G>` | Builds the typed content object. `areca.gen.ts` calls it; use it only for another folder or schema. `dir` is resolved against `process.cwd()` on each call. Throws for a collection named `resolve`, `href`, `preview`, `globals` or `previewGlobals` |
 
 `content` (exported by `areca.gen.ts`) has one property per collection: `all(options?)`, `first(options?)`, `get(slug)`, `byId(id)`, `href(entryOrSlug)`. It also has `resolve(ref)` (returns `Entry | null`), `href(ref)` and `preview(token, { client? })` (returns `PreviewEntry<S>`; check `complete` before using `entry` as published content). Queries run in memory. `get` and `byId` return `undefined` for unknown values. A collection missing from the publication returns `[]`. `content.globals` is the object of enabled site content sections, keyed by camelCase key, and `content.previewGlobals(source, { client? })` returns it with one section replaced by its draft (see Site content below).
 
@@ -77,7 +78,7 @@ Typed content types (main entry, generated against `Register`):
 | Export | Where | Notes |
 | --- | --- | --- |
 | `content.globals` | `areca.gen.ts` | `{ [camelKey]: Global }`. Read per call, from the current generation |
-| `content.previewGlobals` | `areca.gen.ts` | `(source: string \| PreviewResult \| null \| undefined, { client? }) => Promise<Globals>`. A falsy source returns the published values. An entry result is ignored |
+| `content.previewGlobals` | `areca.gen.ts` | `(source: string \| PreviewResult \| null \| undefined, { client? }) => Promise<GlobalsPreview>`. A falsy source or an entry result returns the published values with `previewing: null`. A draft that fails validation keeps the published section, with `complete: false` and `issues` |
 | `readGlobalsFile` | `@areca-cms/site-sdk/pull` | `(outDir, manifest: PulledContentManifest) => Record<string, SnapshotGlobal>`. Reads `_globals.json` for the generation. Throws when the manifest lists globals but the file is missing |
 | `PulledContentManifest.globals` | `@areca-cms/site-sdk/pull` | Optional `string[]` of camel keys, absent when there are no sections |
 

@@ -282,7 +282,7 @@ only offer the operators that fit each field type. `get` and `byId` return
 Collection and field names are camelCase in code. The config keeps the raw keys,
 so `blog-posts` in `areca.config.ts` is `content.blogPosts` and `cover_image` is
 `entry.data.coverImage`. The pull refuses keys that collide after this conversion,
-and the names `resolve`, `href` and `preview` cannot be collection keys. See
+and the names `resolve`, `href`, `preview`, `globals` and `previewGlobals` cannot be collection keys. See
 the typed content guide in the documentation site (`apps/docs/content/docs/sdk/typed-content.mdx`).
 
 Each entry has `id`, `slug`, `publishedAt`, `collection`, `data` and optional
@@ -457,10 +457,11 @@ or expired tokens and entries that no longer exist.
 A preview token can also be for a site content section. Its result has `kind: "global"` and a `global` key instead of `collection` and `slug`. Use `content.previewGlobals()` to overlay the draft on the published values:
 
 ```ts
-const globals = await content.previewGlobals(token); // string, PreviewResult, or null
+const preview = await content.previewGlobals(token); // string, PreviewResult, or null
+// { globals, previewing, complete, issues }
 ```
 
-`previewGlobals` takes the token string, a `PreviewResult` from `getPreviewEntry`, or `null`/`undefined`. A falsy value returns the published `content.globals`. An entry token is ignored and also returns the published values. Preview a section on the page it is shown on: the CMS opens `<site><previewPath>?arecaPreview=<token>` for a section with a `previewPath`, so the route reads `arecaPreview` from the query string.
+`previewGlobals` takes the token string, a `PreviewResult` from `getPreviewEntry`, or `null`/`undefined`. It returns `globals` (always typed like `content.globals`), `previewing` (the camelCase key of the section the token targets, or `null`), `complete`, and `issues`. A valid draft is overlaid on its section. An incomplete draft (for example a cleared required image) keeps the published section, sets `complete` to `false`, and lists the problems in `issues` as `<field>: <problem>`. A falsy value or an entry token returns the published `content.globals` with `previewing: null` and `complete: true`. Preview a section on the page it is shown on: the CMS opens `<site><previewPath>?arecaPreview=<token>` for a section with a `previewPath`, so the route reads `arecaPreview` from the query string.
 
 The demo route at `/__preview/$collection/$slug` shows complete TanStack Start
 handling, including query validation, server-side fetch, response headers, and

@@ -229,8 +229,8 @@ export const listInboundReferencesFn = createServerFn({
 })
   .validator(z.object({ id: z.string().min(1).max(ID_MAX_LENGTH) }))
   .handler(async ({ data }) => {
-    await requireEntryAccess(data.id)
-    return listInboundReferences(data.id)
+    const { session } = await requireEntryAccess(data.id)
+    return listInboundReferences(data.id, session.user.isAgencyAdmin)
   })
 
 export const getEntryFn = createServerFn({ method: 'GET', ...entryFn })

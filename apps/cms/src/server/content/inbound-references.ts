@@ -44,9 +44,14 @@ function jsonFieldEquals(
  * Same-site entries whose draft, published, or scheduled JSON stores this
  * id on a `type: 'reference'` field. Used to warn before delete; this pass
  * does not block the delete.
+ *
+ * `viewerIsAgency` decides whether disabled site content sections count and
+ * show. Editors and owners never see them, as in the CMS, so their results
+ * carry no id, key or title from a disabled section.
  */
 export async function listInboundReferences(
   entryId: string,
+  viewerIsAgency: boolean,
 ): Promise<InboundReference[]> {
   const [target] = await db
     .select({ id: entry.id, siteId: entry.siteId })
@@ -63,6 +68,8 @@ export async function listInboundReferences(
       id: collection.id,
       key: collection.key,
       fields: collection.fields,
+      kind: collection.kind,
+      enabled: collection.enabled,
     })
     .from(collection)
     .where(eq(collection.siteId, target.siteId))
@@ -70,6 +77,7 @@ export async function listInboundReferences(
   const seen = new Set<string>()
 
   for (const col of collections) {
+    if (!viewerIsAgency && col.kind === 'global' && !col.enabled) continue
     const keys = col.fields
       .filter((field) => field.type === 'reference')
       .map((field) => field.key)

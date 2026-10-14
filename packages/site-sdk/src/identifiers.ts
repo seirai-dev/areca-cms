@@ -20,9 +20,17 @@ export function isSafeIdentifier(value: string): boolean {
 
 /**
  * Names the generated content object uses itself, so collection and site
- * content keys cannot take them.
+ * content keys cannot take them. Stored lowercase: the check is
+ * case-insensitive. `previewglobals` is the camelCase of `preview-globals`
+ * and `preview_globals`, the member name `content.previewGlobals`.
  */
-const reservedCollectionKeys = new Set(['resolve', 'href', 'preview', 'globals'])
+const reservedCollectionKeys = new Set([
+  'resolve',
+  'href',
+  'preview',
+  'globals',
+  'previewglobals',
+])
 
 /** Case-insensitive. Field keys may use these names; collection and global keys may not. */
 export function isReservedCollectionKey(key: string): boolean {

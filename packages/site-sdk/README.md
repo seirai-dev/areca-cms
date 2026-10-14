@@ -179,7 +179,7 @@ for draft previews. It returns `complete: true` with an `Entry`, or `complete: f
 Collection and field names are camelCase in code: `blog-posts` is
 `content.blogPosts`, and `cover_image` is `entry.data.coverImage`. The config keeps
 the raw keys. The pull fails on keys that collide after this conversion, and
-`resolve`, `href`, `preview` and `globals` cannot be collection keys.
+`resolve`, `href`, `preview`, `globals` and `previewGlobals` cannot be collection keys.
 
 Each entry has `id`, `slug`, `publishedAt`, `collection`, `data` and optional
 `seo`. Optional fields can be `null`, missing or `""`, and the types show each
@@ -213,10 +213,32 @@ content.globals.homePage.$seo; // only on sections with seo: true
 Each section is typed like an entry's `data` with no `slug`. Field keys are
 camelCase, and `$seo` is added when the section has SEO on. `group` on a field
 only changes the CMS editor layout, so it does not appear in the SDK value.
-`await content.previewGlobals(source)` returns the same object with the section
-replaced by its draft when `source` is a site content preview token. `source`
-can also be a preview result from `getPreviewEntry(...)`, in which case no
-request is made. A falsy token, or an entry preview, returns the published values.
+`await content.previewGlobals(source)` returns a `GlobalsPreview` (exported
+from the package root):
+
+```ts
+type GlobalsPreview<G> = {
+  globals: Globals<G>; // always typed; the published section when the draft is incomplete
+  previewing: GlobalKey<G> | null; // camel key of the section the token targets
+  complete: boolean; // false when the draft failed validation
+  issues: string[]; // "<field>: <problem>" with camel keys, empty when complete
+};
+```
+
+`source` is a site content preview token, or a preview result from
+`getPreviewEntry(...)` (no request is made then). A valid draft is overlaid on
+its section. An incomplete draft (a required field empty, a wrong type, an image
+or reference that does not match) keeps the published section, so typed access
+such as `.image.url` never reads a null. A falsy token or an entry preview
+returns the published values with `previewing: null` and `complete: true`.
+
+```ts
+const preview = await content.previewGlobals(token);
+if (preview.previewing === "homePage" && !preview.complete) {
+  // show "incomplete draft, showing the live version" with preview.issues
+}
+const home = preview.globals.homePage;
+```
 
 ```ts
 export const config = defineSiteContent({
@@ -363,7 +385,7 @@ available. The CLI prints the error and exits non-zero.
 Collection and field keys start with an ASCII letter and contain at most 64
 ASCII letters, digits, `_`, or `-`. Reserved names include `manifest`,
 `constructor`, `prototype`, `__proto__`, and Windows device names. Collection
-keys cannot be `resolve`, `href`, `preview` or `globals`, because the content
+keys cannot be `resolve`, `href`, `preview`, `globals` or `previewGlobals`, because the content
 object uses those names. Site content keys follow the same rules. Field types
 are `text`, `textarea`, `richtext`, `image`, `date`, `datetime`, `select`,
 `reference`, `slug`, `boolean`, `number`, and `url`. `select` uses `options`,

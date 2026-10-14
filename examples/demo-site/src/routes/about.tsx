@@ -21,7 +21,7 @@ export const Route = createFileRoute('/about')({
 })
 
 function About() {
-  const { about, preview } = Route.useLoaderData()
+  const { about, preview, incomplete } = Route.useLoaderData()
   const { heading, body, image, foundedYear, roasterCapacityKg, originsCount } = about
   const stats = [
     { label: 'Founded', value: foundedYear == null ? null : String(foundedYear) },
@@ -31,7 +31,7 @@ function About() {
 
   return (
     <article className="mx-auto max-w-6xl px-5 pb-28 pt-16 sm:px-8 md:pt-24">
-      {preview ? <PreviewBanner /> : null}
+      {preview ? <PreviewBanner incomplete={incomplete} /> : null}
 
       <header className="max-w-4xl">
         <Eyebrow>About</Eyebrow>

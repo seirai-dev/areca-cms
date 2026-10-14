@@ -1708,6 +1708,28 @@ describe.skipIf(!hasDb)('site content (globals)', () => {
     expect(listed.text).toContain('No collection "companyInfo"')
   })
 
+  it('does not reveal a disabled section through the "No collection" hint', async () => {
+    await seedSiteContent(w)
+    const owner = await clientFor(w, 'owner', 'Hint owner')
+    const editor = await clientFor(w, 'editor', 'Hint editor')
+
+    for (const actor of [owner, editor]) {
+      const disabled = await call(actor, 'get_collection_schema', {
+        collection: 'retiredNotes',
+      })
+      const missing = await call(actor, 'get_collection_schema', {
+        collection: 'nothingLikeThis',
+      })
+      expect(disabled.isError).toBe(true)
+      expect(missing.isError).toBe(true)
+      expect(disabled.text).not.toMatch(/site content|get_global|update_global/)
+      // Same message as for a key that does not exist, bar the key itself.
+      expect(disabled.text.replaceAll('retiredNotes', 'KEY')).toBe(
+        missing.text.replaceAll('nothingLikeThis', 'KEY'),
+      )
+    }
+  })
+
   it('lets an agency admin create, redefine and delete a section, keeping one entry for it', async () => {
     const agency = await clientFor(w, 'agency', 'Globals agency')
 

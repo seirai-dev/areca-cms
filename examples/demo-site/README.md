@@ -98,7 +98,7 @@ image and the Numbers stats, with SEO). `areca pull` writes them to
 Each section's `previewPath` (`/` and `/about`) is where the CMS opens a draft of
 that section. The pages accept `?arecaPreview=<token>`, and
 `content.previewGlobals(token)` overlays the draft when the token is for that
-page's section. Other tokens, invalid tokens and missing tokens serve the
+page's section. When that draft is incomplete, the published values stay and the banner says so. Other tokens, invalid tokens and missing tokens serve the
 published values. Any request with a token gets `noindex, nofollow` (header and
 meta) and `Cache-Control: no-store`. The draft banner appears only when the
 draft is shown.

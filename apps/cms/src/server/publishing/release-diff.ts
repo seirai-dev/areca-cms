@@ -236,6 +236,8 @@ async function listScheduledUpcoming(
       publishedData: entry.publishedData,
       draftData: entry.draftData,
       collectionKey: collection.key,
+      collectionKind: collection.kind,
+      collectionEnabled: collection.enabled,
     })
     .from(entry)
     .innerJoin(collection, eq(entry.collectionId, collection.id))
@@ -250,6 +252,8 @@ async function listScheduledUpcoming(
   const upcoming: ScheduledUpcoming[] = []
   for (const row of rows) {
     if (pendingIds.has(row.id)) continue
+    // A disabled section never ships, so it is not upcoming for anyone.
+    if (row.collectionKind === 'global' && !row.collectionEnabled) continue
     if (!row.scheduledAt) continue
     upcoming.push({
       id: row.id,

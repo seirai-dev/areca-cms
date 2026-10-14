@@ -56,7 +56,11 @@ export async function loadCollectionInSite(actor: McpActor, key: string) {
   const row = await getCollection(actor.siteId, key)
   if (!row) {
     const keys = (await listCollections(actor.siteId)).map((col) => col.key)
-    const isGlobal = (await getGlobal(actor.siteId, key)) !== null
+    // Same visibility as loadGlobalInSite: a disabled section is unknown to
+    // editors and owners, so the hint must not reveal it to them.
+    const global = await getGlobal(actor.siteId, key)
+    const isGlobal =
+      global !== null && (global.enabled || actor.role === 'agency')
     const hint = isGlobal
       ? ` "${key}" is site content, not a collection: use get_global and update_global.`
       : ''

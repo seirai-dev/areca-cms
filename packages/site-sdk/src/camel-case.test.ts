@@ -195,7 +195,7 @@ describe('camelizeSnapshot', () => {
     expect(Object.keys(collections)).toEqual(['hrefLink'])
   })
 
-  it.each(['resolve', 'href', 'preview'])(
+  it.each(['resolve', 'href', 'preview', 'previewGlobals', 'preview-globals'])(
     'rejects the reserved collection name %s',
     (name) => {
       const message = messageOf(() =>

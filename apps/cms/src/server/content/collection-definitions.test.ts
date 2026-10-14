@@ -40,6 +40,21 @@ describe('validateCollectionDefinitions (globals rules)', () => {
     expect(issues).toEqual([expect.objectContaining({ path: 'globals' })])
   })
 
+  it.each(['previewGlobals', 'preview-globals', 'preview_globals'])(
+    'rejects the collection key %s, which camelCases to the reserved previewGlobals',
+    (key) => {
+      const issues = issuesOf(() =>
+        validateCollectionDefinitions([
+          {
+            key,
+            fields: [{ key: 'title', label: 'Title', type: 'text' }],
+          },
+        ]),
+      )
+      expect(issues).toEqual([expect.objectContaining({ path: key })])
+    },
+  )
+
   it('still accepts a collection without groups', () => {
     expect(() =>
       validateCollectionDefinitions([

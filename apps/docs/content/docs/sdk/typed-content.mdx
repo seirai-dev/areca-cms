@@ -96,7 +96,7 @@ The pull stops before it writes any file when:
 - Two collection keys map to the same camelCase name. The message names both raw keys, for example `Collection keys blog-posts and blog_posts both map to "blogPosts"`. Rename one of them in the CMS and in `areca.config.ts`.
 - Two field keys in one collection map to the same name.
 - Two collection names differ only by case, such as `Articles` and `articles`. The files would collide on Mac and Windows.
-- A collection or site content name is `resolve`, `href`, `preview` or `globals` (compared without case). The content object uses these names for its own methods. Field names may use them.
+- A collection or site content name is `resolve`, `href`, `preview`, `globals` or `previewGlobals` (compared without case, after camelCase, so `preview-globals` is also refused). The content object uses these names for its own methods. Field names may use them.
 
 ## What the pull checks
 
@@ -172,7 +172,7 @@ import type { CompanyInfoGlobal, HomePageGlobal } from '../generated/content/are
 
 ## Reserved names
 
-The content object has four names of its own: `resolve`, `href`, `preview` and `globals`. A collection or site content section cannot take one of these names. `areca manifest push` and `areca pull` reject them as keys, and the check ignores case. Field keys may still be named `href`, `preview` or `globals`.
+The content object has five names of its own: `resolve`, `href`, `preview`, `globals` and `previewGlobals`. A collection or site content section cannot take one of these names. `areca manifest push` and `areca pull` reject them as keys, and the check ignores case. Field keys may still be named `href`, `preview` or `globals`.
 
 ## Related
 
@@ -189,7 +189,7 @@ Version 0.4.0 introduces typed content. Upgrade `@areca-cms/site-sdk`, then work
 - **`readContent` no longer takes a type parameter.** Replace `readContent<Article>(dir, 'articles')` with `readContent(dir, 'articles')`, which returns typed entries. For queries, use the `content` object from `areca.gen.ts`.
 - **Use the camelCase names.** `blog-posts` becomes `blogPosts`, so the file is `blogPosts.json`, a field `cover_image` is `data.coverImage`, and reference `collection` values, `manifest.json` keys and `readContent` keys use the camel names. Update any path or key you wrote by hand. `areca.config.ts` and the CMS keep the raw keys.
 - **Rename colliding keys.** The pull stops when two collection keys, two field keys in one collection, or two collection names differing only by case map to the same name.
-- **Rename reserved collections.** `resolve`, `href` and `preview` cannot be collection keys. Field keys may keep these names.
+- **Rename reserved collections.** `resolve`, `href`, `preview`, `globals` and `previewGlobals` cannot be collection keys. Field keys may keep these names.
 - **Fix configs that no longer compile.** `defineSiteContent` is stricter: a `reference` needs `collection`, `options` is only allowed on `select`, `after` is only allowed on `date` and `datetime` and must name a date key, and a collection `route` must contain `$slug`.
 - **Expect a `collection` property on entries.** Each entry carries its camelCase collection key.
 - **Commit the generated types.** `areca.gen.ts` must be tracked by Git while the JSON files stay ignored. Replace a whole-folder line such as `src/generated/content/` with `src/generated/content/*` and `!src/generated/content/areca.gen.ts`. `areca init` writes these lines for new projects.

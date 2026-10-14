@@ -281,6 +281,21 @@ export type Globals<G extends GlobalSchema = RegisteredGlobalSchema> = {
   [K in GlobalKey<G>]: Global<K, G>
 }
 
+/**
+ * Result of `content.previewGlobals()`. `globals` is always typed like the
+ * published values. `previewing` is the camel key of the section the token
+ * targets, or null for a falsy token, an entry token, or a result of another
+ * kind. When the draft fails validation, `globals` keeps the published section,
+ * `complete` is false and `issues` lists the problems as `<field>: <problem>`
+ * with camel field keys (the same lines `content.preview()` gives).
+ */
+export type GlobalsPreview<G extends GlobalSchema = RegisteredGlobalSchema> = {
+  globals: Globals<G>
+  previewing: GlobalKey<G> | null
+  complete: boolean
+  issues: string[]
+}
+
 /* ---------- content object ---------- */
 
 /** Value of a draft field: the optional variant, whatever `required` says (drafts may leave required fields empty). */
@@ -345,11 +360,12 @@ export type Content<
   /**
    * Published site content, with the section replaced by its draft when `source`
    * is a site content preview token, or a preview result from `getPreviewEntry` /
-   * `client.fetchPreview` (no request is made for a result). A falsy token, or an
-   * entry preview, returns the published values.
+   * `client.fetchPreview` (no request is made for a result). A draft that does not
+   * pass validation keeps the published section and reports `issues`. A falsy token,
+   * or an entry preview, returns the published values with `previewing` null.
    */
   previewGlobals(
     source: string | PreviewResult | null | undefined,
     options?: { client?: ArecaClient },
-  ): Promise<Globals<G>>
+  ): Promise<GlobalsPreview<G>>
 }

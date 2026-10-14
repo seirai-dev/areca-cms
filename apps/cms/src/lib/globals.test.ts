@@ -38,7 +38,17 @@ describe('isValidGlobalKey', () => {
     },
   )
 
-  it.each(['globals', 'Globals', 'resolve', 'href', 'preview', 'Preview'])(
+  it.each([
+    'globals',
+    'Globals',
+    'resolve',
+    'href',
+    'preview',
+    'Preview',
+    'previewGlobals',
+    'preview-globals',
+    'preview_globals',
+  ])(
     'rejects the reserved key %s',
     (key) => {
       expect(isValidGlobalKey(key)).toBe(false)

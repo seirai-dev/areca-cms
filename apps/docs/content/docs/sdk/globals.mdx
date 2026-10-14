@@ -53,7 +53,7 @@ A section takes these options:
 | `seo` | No | Set to `true` to give the section a search and social panel. Default `false`. See [SEO](#seo). |
 | `previewPath` | No | The page that shows this section, such as `/` or `/about`. See [preview](#preview). |
 
-The section key follows the same rules as a collection key. It may not be `globals`, `resolve`, `href` or `preview`. A section key and a collection key must also be different. See [identifiers](/docs/sdk/defining-content#identifiers).
+The section key follows the same rules as a collection key. It may not be `globals`, `previewGlobals`, `resolve`, `href` or `preview`. A section key and a collection key must also be different. See [identifiers](/docs/sdk/defining-content#identifiers).
 
 ### Fields and groups
 
@@ -129,21 +129,32 @@ Sections without `seo: true` have no `$seo` key. See [SEO helpers](/docs/sdk/seo
 
 A section can show a draft on the page where it appears. Set `previewPath` to that page, for example `/about`. An editor who previews the section opens the CMS and gets a link to `<your site><previewPath>?arecaPreview=<token>`. Sections without a `previewPath` have no preview link, and the CMS explains why.
 
-On the page, read the token from the query string and let `previewGlobals` overlay the draft. It takes three kinds of argument:
+On the page, read the token from the query string and call `previewGlobals`. It takes three kinds of argument:
 
 ```ts
-const globals = await content.previewGlobals(token) // a token string
-const globals = await content.previewGlobals(preview) // a PreviewResult from getPreviewEntry
-const globals = await content.previewGlobals(null) // falsy: the published values
+const preview = await content.previewGlobals(token) // a token string
+const preview = await content.previewGlobals(result) // a PreviewResult from getPreviewEntry
+const preview = await content.previewGlobals(null) // falsy: the published values
 ```
 
-It returns the same shape as `content.globals`. The section the token is for is replaced with the draft, and the others stay published. A token for an entry returns the published values.
+It returns a `GlobalsPreview` (exported from the package root):
+
+```ts
+{
+  globals: Globals<G>, // always typed, like content.globals
+  previewing: GlobalKey<G> | null, // camelCase key of the section the token targets
+  complete: boolean, // false when the draft did not pass validation
+  issues: string[], // "<field>: <problem>" lines, empty when complete
+}
+```
+
+A valid draft replaces its section in `globals`. An incomplete draft (a required field empty, a wrong type, an image or reference that does not resolve) keeps the published section, so `globals.companyInfo.logo.url` never reads a null. Check `previewing` and `complete` to tell editors what happened. A falsy value or a token for an entry returns the published values with `previewing: null` and `complete: true`.
 
 An invalid or expired token makes the CMS request fail, and `previewGlobals` throws. Catch the error and serve the published values, as the demo site does, so a stale link shows the live page instead of an error.
 
 Because preview reads the CMS, the page must also send the preview headers from `previewHeaders()` (`X-Robots-Tag` and `Cache-Control`) and must not be cached.
 
-If the page should show the draft only for its own section, check `preview.kind` and `preview.global` before you overlay. `previewGlobals` overlays whichever section the token is for, so a page that shows one section should compare the target first. The demo site's `readGlobals` helper in `examples/demo-site/src/lib/queries.ts` shows this pattern.
+A page that shows one section should use the draft only when `previewing` is that section, and show a note when `complete` is `false`. The demo site's `readGlobals` helper in `examples/demo-site/src/lib/queries.ts` shows this pattern.
 
 Keep preview server-side. Never log the token or the draft response. See [draft preview](/docs/sdk/preview) for the full route setup.
 

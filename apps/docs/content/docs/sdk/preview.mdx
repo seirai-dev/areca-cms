@@ -180,21 +180,21 @@ import { content } from '../generated/content/areca.gen'
 import { getPreviewEntry, previewHeaders } from '@areca-cms/site-sdk'
 
 export async function loadAboutPage(token: string | undefined) {
-  if (!token) return { about: content.globals.aboutPage, preview: false }
+  if (!token) return { about: content.globals.aboutPage, preview: false, incomplete: false }
   // Send previewHeaders() on this response too (see the headers above).
   try {
-    const result = await getPreviewEntry({ token })
-    if (result.kind === 'global' && result.global === 'aboutPage') {
-      return { about: (await content.previewGlobals(result)).aboutPage, preview: true }
+    const { globals, previewing, complete } = await content.previewGlobals(token)
+    if (previewing === 'aboutPage') {
+      return { about: globals.aboutPage, preview: true, incomplete: !complete }
     }
   } catch {
     // An expired or mistyped link shows the published page.
   }
-  return { about: content.globals.aboutPage, preview: false }
+  return { about: content.globals.aboutPage, preview: false, incomplete: false }
 }
 ```
 
-`content.previewGlobals()` also accepts the token string directly. The example reads the token first so it can check that the section matches the page. A section's draft is shown on its preview path only. An entry token on that page is ignored. The rules for noindex, caching and the token in the URL are the same as for entries. See [site content](/docs/sdk/globals#preview) for the full API.
+`content.previewGlobals()` returns `previewing`, the section the token targets, so the page can check it matches. When `complete` is `false`, the page shows the published section and a note, as in the example above. A section's draft is shown on its preview path only. An entry token on that page is ignored. The rules for noindex, caching and the token in the URL are the same as for entries. See [site content](/docs/sdk/globals#preview) for the full API.
 
 ## Security
 

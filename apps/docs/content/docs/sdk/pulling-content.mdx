@@ -192,7 +192,7 @@ pnpm exec areca run -- "node scripts/build.mjs --label 'site build'"
 The pull has several built-in checks. You do not need to add them yourself, but they affect what you can do:
 
 - **Collection keys are checked.** A key that breaks the [identifier rules](/docs/sdk/defining-content#identifiers) stops the pull with an `Unsafe collection or field identifier` error.
-- **Names must be unique in code.** Keys that map to the same camelCase name, and collection names that are `resolve`, `href` or `preview`, stop the pull. See [typed content](/docs/sdk/typed-content#names-that-the-pull-refuses).
+- **Names must be unique in code.** Keys that map to the same camelCase name, and collection names that are reserved (`resolve`, `href`, `preview`, `globals` or `previewGlobals`), stop the pull. See [typed content](/docs/sdk/typed-content#names-that-the-pull-refuses).
 - **The content must match its schema.** Every entry is checked before anything is written. See [what the pull checks](/docs/sdk/typed-content#what-the-pull-checks).
 - **Files must stay in the output directory.** The pull refuses any path that would be written outside the output directory.
 - **Symbolic links are refused.** The pull does not write to a file that is a symlink, and it fails with `Content output must not be a symbolic link`. `readContent` refuses symlinked files too.
@@ -210,7 +210,7 @@ Keep the output directory inside your project, and do not commit the pulled JSON
 | `401` | The site token is wrong, or it was rotated. Update `ARECA_SITE_TOKEN`. |
 | `Publication does not match its schema:` | An entry breaks its schema. The lines list `<collection>/<slug>.<field>: <problem>`. Fix the entry in the CMS, or fix the schema, then publish and pull again. Nothing was changed. |
 | `Collection keys ... both map to "<name>"` or `Field keys ... both map to "<name>"` | Two keys have the same camelCase name. Rename one of them in `areca.config.ts`, push, and publish. |
-| `Collection "<name>" uses the reserved name` | A collection cannot be called `resolve`, `href` or `preview`. Rename it. |
+| `Collection "<name>" uses the reserved name` | A collection cannot be called `resolve`, `href`, `preview`, `globals` or `previewGlobals`. Rename it. |
 | `Warning: Publication <id> has no embedded schema` | The publication was made before schemas were embedded, so the types use the current schema. Go live again to embed it. |
 | `Failed to download N media file(s)` | The listed files could not be fetched from `ARECA_CMS_URL`. Check that the CMS serves `/api/assets/file/` from that address, then run the pull again. Nothing was changed. |
 | `Pulled, but cleaning up older content failed` | The new content is live. Removing an older generation or its media failed, usually because of file permissions. Fix the permissions; the next pull cleans up again. |
