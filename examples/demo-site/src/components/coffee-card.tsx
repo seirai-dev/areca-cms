@@ -1,10 +1,10 @@
 import { Link } from '@tanstack/react-router'
-import type { Coffee } from '../lib/content.ts'
+import type { CoffeesEntry } from '../generated/content/areca.gen.ts'
 import { CmsImage } from './cms-image.tsx'
 import { formatLabel, formatPrice, splitTastingNotes } from './formatters.ts'
 import { RoastScale, TastingChips } from './ui.tsx'
 
-export function CoffeeCard({ coffee }: { coffee: Coffee }) {
+export function CoffeeCard({ coffee }: { coffee: CoffeesEntry }) {
   const { data } = coffee
   const price = formatPrice(data.price)
   const notes = splitTastingNotes(coffee.data.tastingNotes).slice(0, 3)

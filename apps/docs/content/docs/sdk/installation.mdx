@@ -109,13 +109,15 @@ Init creates or updates these files in the website project:
 | `areca.config.ts` | A `defineSiteContent` call with your site key and an empty `collections` object. Existing files are not overwritten unless you pass `--force`. |
 | `.env.example` | `ARECA_CMS_URL`, `ARECA_SITE_TOKEN` and `ARECA_SCHEMA_TOKEN` with empty token values. It contains no secrets, so you can commit it as a template. Existing files are not overwritten unless you pass `--force`. |
 | `.env.local` | `ARECA_CMS_URL` and `ARECA_SITE_TOKEN`. Existing lines for these keys are updated, and other lines are kept. |
-| `.gitignore` | Adds `.env.local` and the generated content directory, `src/generated/content/`, if they are not already listed. |
+| `.gitignore` | Adds `.env.local`, and ignores the generated content directory's pulled files (`src/generated/content/*`) while keeping `src/generated/content/areca.gen.ts` tracked. |
 | `src/generated/content/manifest.json` | An empty placeholder manifest. Run `areca pull` to replace it with published content. |
 | `package.json` | Adds a `sync-manifest` script (`areca manifest push`) and a `content:pull` script (`areca pull`), unless those scripts already exist. If you have a `dev` script that does not load env files, init wraps it in `areca run --`. |
 
 Init does not add `.env` to `.gitignore`. Add it yourself if you keep secrets there.
 
 The `--out` and `--config` flags change the generated directory and the config path. The defaults are `src/generated/content` and `areca.config.ts`.
+
+Init does not create `areca.gen.ts`. The first `areca pull` writes it. Commit it once it exists. If your `.gitignore` already lists the whole content directory from an older version of Areca, such as `src/generated/content/`, change that line to `src/generated/content/*` and add `!src/generated/content/areca.gen.ts`. Otherwise the types file stays out of Git.
 
 ## Environment variables
 

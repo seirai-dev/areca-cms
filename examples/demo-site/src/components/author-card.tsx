@@ -1,9 +1,9 @@
 import { Link } from '@tanstack/react-router'
-import type { Author } from '../lib/content.ts'
+import type { AuthorsEntry } from '../generated/content/areca.gen.ts'
 import { CmsImage } from './cms-image.tsx'
 import { Eyebrow } from './ui.tsx'
 
-export function AuthorCard({ author }: { author: Author }) {
+export function AuthorCard({ author }: { author: AuthorsEntry }) {
   const { data } = author
   return (
     <article className="group flex flex-col">

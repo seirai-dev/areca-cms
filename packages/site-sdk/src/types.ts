@@ -14,22 +14,33 @@ export type FieldType =
   | 'number'
   | 'url'
 
-export type Field = {
+type FieldBase = {
   key: string
   label: string
-  type: FieldType
   required?: boolean
-  options?: string[]
-  collection?: string
   description?: string
-  /** Other date/datetime field key that this value must be on or after. */
-  after?: string
 }
+
+/**
+ * Wire field, discriminated on `type`. `options` only exists on `select`,
+ * `collection` is required on `reference`, `after` only on `date`/`datetime`.
+ */
+export type Field =
+  | (FieldBase & {
+      type: 'text' | 'textarea' | 'richtext' | 'image' | 'slug' | 'boolean' | 'number' | 'url'
+    })
+  | (FieldBase & { type: 'select'; options?: readonly string[] })
+  | (FieldBase & { type: 'reference'; collection: string })
+  | (FieldBase & {
+      type: 'date' | 'datetime'
+      /** Other date/datetime field key (same collection) that this value must be on or after. */
+      after?: string
+    })
 
 export type CollectionConfig = {
   route: string
   label?: string
-  fields: Field[]
+  fields: readonly Field[]
 }
 
 export type SiteContentConfig = {
@@ -82,8 +93,8 @@ export type ImageValue = {
   mimeType: string
 }
 
-export type ReferenceValue = {
-  collection: string
+export type ReferenceValue<C extends string = string> = {
+  collection: C
   slug: string
   id: string
 }
@@ -93,6 +104,8 @@ export type SnapshotEntry = {
   slug: string
   publishedAt: string | null
   data: Record<string, unknown>
+  /** Camel collection key. Set by `areca pull` on every pulled entry. */
+  collection?: string
   /**
    * Resolved SEO/GEO head data. CMS versions with SEO support always send it;
    * snapshots from older CMS versions do not have it.
@@ -144,6 +157,11 @@ export type Snapshot = {
   assets?: SnapshotAsset[]
   /** The site's production URL, used to make SEO image URLs absolute. */
   siteUrl?: string | null
+  /**
+   * Field schema for exactly the collections in `collections`, keyed by raw
+   * CMS key. Absent from publications made before schemas were embedded.
+   */
+  schema?: Record<string, CollectionConfig>
 }
 
 /** A media file referenced by a publication. */

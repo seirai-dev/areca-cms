@@ -3,7 +3,7 @@ import { createElement, type ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { seoHead, type SeoMeta } from '@areca-cms/site-sdk'
 import { ArticleView } from '../components/article-view.tsx'
-import type { Article, Author, Coffee } from './content.ts'
+import type { ArticlesEntry, AuthorsEntry, CoffeesEntry } from '../generated/content/areca.gen.ts'
 import { entryHead, pageHead, SITE_NAME } from './seo.ts'
 
 // Route links need a router; render them as plain anchors for markup checks.
@@ -81,7 +81,7 @@ const article = {
     featuredCoffee: null,
     publishedAt: '2026-10-01T10:00:00Z',
   },
-} as unknown as Article
+} as unknown as ArticlesEntry
 
 const author = {
   id: 'ent_author',
@@ -94,7 +94,7 @@ const author = {
     bio: 'Profiles every lot.',
     portrait: null,
   },
-} as unknown as Author
+} as unknown as AuthorsEntry
 
 const coffee = {
   id: 'ent_coffee',
@@ -109,7 +109,7 @@ const coffee = {
     image: null,
     description: null,
   },
-} as unknown as Coffee
+} as unknown as CoffeesEntry
 
 const fallback = { title: 'Field title', description: 'Field excerpt', type: 'article' as const }
 

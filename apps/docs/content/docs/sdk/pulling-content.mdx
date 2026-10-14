@@ -5,7 +5,9 @@ description: Download the latest published snapshot with areca pull, understand 
 
 Your site builds from a copy of the published content, not from live CMS requests. `areca pull` downloads the current published snapshot into JSON files in your project, and copies every image and file the content uses into your public folder. Your site then reads those files while it builds and while it serves pages, so neither content nor media depend on the CMS being up. See [media](#media).
 
-Run the pull before every build. Because the files are created during the build, they should be ignored by Git. `areca init` adds the default output and media directories to `.gitignore` for you.
+Each pull also writes `areca.gen.ts`, a TypeScript module with the types of your content and a ready `content` object. That file is the exception to the rule above: commit it, so your editor and CI know the types. See [typed content](/docs/sdk/typed-content).
+
+Run the pull before every build. The pulled JSON is created during the build, so it should be ignored by Git. `areca init` adds the default output and media directories to `.gitignore` for you, and keeps `areca.gen.ts` out of the ignored files.
 
 ## Run the pull
 
@@ -19,9 +21,20 @@ The default output directory is `src/generated/content`. Use `--out` to choose a
 ```text
 Pulled publication <publication-id> (<snapshot-hash>): articles=12, authors=4
 Media: 31 file(s) in public/areca (5 downloaded)
+Types: src/generated/content/areca.gen.ts
 ```
 
-The pull fails if the site has no published content yet. Publish content in the CMS, then run the pull again.
+The counts use the collection keys from your config, such as `blog-posts`. The files and the code use the camelCase names, such as `blogPosts`. The pull fails if the site has no published content yet, or if an entry does not match its schema. Publish content in the CMS, then run the pull again. See [what the pull checks](/docs/sdk/typed-content#what-the-pull-checks).
+
+### Choose where the types go
+
+`areca.gen.ts` is written next to the pulled files by default. Use `--types` to write it elsewhere. The path is relative to the current directory:
+
+```bash
+pnpm exec areca pull --out src/generated/content --types src/generated/areca.gen.ts
+```
+
+The module's `content` object reads the folder you passed to `--out`, unless `ARECA_CONTENT_DIR` is set when the module loads. The CLI writes the folder as you typed it, so pass a relative path that is correct from the project root.
 
 ### From code
 
@@ -35,8 +48,10 @@ const snapshot = await pullContent({
   outDir: 'src/generated/content',
   assets: { dir: resolve('public/areca'), publicPath: '/areca' },
 })
-console.log(snapshot.publicationId, snapshot.localAssets)
+console.log(snapshot.publicationId, snapshot.localAssets, snapshot.typesPath)
 ```
+
+The options `types` (where to write `areca.gen.ts`, default `<outDir>/areca.gen.ts`) and `contentDir` (the folder written into the module, default `outDir`) control the generated module. See [the client reference](/docs/sdk/client#pullcontent).
 
 ## Add the pull to your build
 
@@ -55,7 +70,7 @@ With this setup, `pnpm build` pulls the latest content first. In CI, set `ARECA_
 
 ## Output layout
 
-Each pull writes one JSON file for each collection into a new folder under `.publications`, then points `manifest.json` at it. Media goes to the media folder.
+Each pull writes one JSON file for each collection into a new folder under `.publications`, then points `manifest.json` at it. Media goes to the media folder, and the types go to `areca.gen.ts`.
 
 <Files>
   <Folder name="public" defaultOpen>
@@ -66,10 +81,11 @@ Each pull writes one JSON file for each collection into a new folder under `.pub
   <Folder name="src" defaultOpen>
     <Folder name="generated" defaultOpen>
       <Folder name="content" defaultOpen>
+        <File name="areca.gen.ts" />
         <File name="manifest.json" />
         <Folder name=".publications" defaultOpen>
           <Folder name="publication-Ab12Cd" defaultOpen>
-            <File name="articles.json" />
+            <File name="blogPosts.json" />
             <File name="authors.json" />
             <File name=".assets.json" />
           </Folder>
@@ -79,7 +95,9 @@ Each pull writes one JSON file for each collection into a new folder under `.pub
   </Folder>
 </Files>
 
-Each collection file, such as `articles.json`, is an array of entries. Each entry has the entry's `id`, `slug`, `publishedAt` (an ISO timestamp, or `null`), its `data` and, when the CMS sends it, its `seo` block. Your site reads these entries with [`readContent`](/docs/sdk/reading-content), which follows `manifest.json` to the right folder.
+Each collection file, such as `blogPosts.json`, is an array of entries. The file is named after the collection's camelCase key, so `blog-posts` becomes `blogPosts.json`. Each entry has the entry's `id`, `slug`, `publishedAt` (an ISO timestamp, or `null`), its `collection`, its `data` and, when the CMS sends it, its `seo` block. The keys of `data` are camelCase too. Your site reads these entries with [`content`](/docs/sdk/reading-content), which follows `manifest.json` to the right folder.
+
+`areca.gen.ts` describes the schema of the publication, and it exports the `content` object. Commit it. [Typed content](/docs/sdk/typed-content) explains the names and the checks.
 
 ### manifest.json
 
@@ -90,11 +108,13 @@ Each collection file, such as `articles.json`, is an array of entries. Each entr
 | `publicationId` | The ID of the publication the snapshot came from. |
 | `hash` | A hash of the snapshot contents. The same content gives the same hash. |
 | `createdAt` | When the snapshot was created. |
-| `collections` | An object that maps each collection key to its number of entries. |
+| `collections` | An object that maps each collection's camelCase key to its number of entries. |
 | `generation` | The folder under `.publications` that holds this snapshot. |
 | `assets` | `{ publicPath, count }` when media was copied locally. |
 
 The `collections` object is also the list of collections in the snapshot. Use its keys, not the directory listing, to find out which collections are current.
+
+`areca.gen.ts` is not listed here. It describes the schema rather than one pull, and it is rewritten on every pull after the content has been switched.
 
 ## Media
 
@@ -172,11 +192,13 @@ pnpm exec areca run -- "node scripts/build.mjs --label 'site build'"
 The pull has several built-in checks. You do not need to add them yourself, but they affect what you can do:
 
 - **Collection keys are checked.** A key that breaks the [identifier rules](/docs/sdk/defining-content#identifiers) stops the pull with an `Unsafe collection or field identifier` error.
+- **Names must be unique in code.** Keys that map to the same camelCase name, and collection names that are `resolve`, `href` or `preview`, stop the pull. See [typed content](/docs/sdk/typed-content#names-that-the-pull-refuses).
+- **The content must match its schema.** Every entry is checked before anything is written. See [what the pull checks](/docs/sdk/typed-content#what-the-pull-checks).
 - **Files must stay in the output directory.** The pull refuses any path that would be written outside the output directory.
 - **Symbolic links are refused.** The pull does not write to a file that is a symlink, and it fails with `Content output must not be a symbolic link`. `readContent` refuses symlinked files too.
 - **Output directories are created as needed.** The pull creates the output directory if it does not exist.
 
-Keep the output directory inside your project, and do not commit it. Pulled content is build input, and a fresh pull replaces it.
+Keep the output directory inside your project, and do not commit the pulled JSON. Pulled content is build input, and a fresh pull replaces it. Do commit `areca.gen.ts`.
 
 ## Troubleshooting
 
@@ -186,6 +208,10 @@ Keep the output directory inside your project, and do not commit it. Pulled cont
 | `Missing ARECA_CMS_URL` or `Missing ARECA_SITE_TOKEN` | Set the variables in the environment, or in `.env.local` in the directory where you run the command. |
 | `Failed to reach CMS` | Check that `ARECA_CMS_URL` is correct and that the CMS is running. |
 | `401` | The site token is wrong, or it was rotated. Update `ARECA_SITE_TOKEN`. |
+| `Publication does not match its schema:` | An entry breaks its schema. The lines list `<collection>/<slug>.<field>: <problem>`. Fix the entry in the CMS, or fix the schema, then publish and pull again. Nothing was changed. |
+| `Collection keys ... both map to "<name>"` or `Field keys ... both map to "<name>"` | Two keys have the same camelCase name. Rename one of them in `areca.config.ts`, push, and publish. |
+| `Collection "<name>" uses the reserved name` | A collection cannot be called `resolve`, `href` or `preview`. Rename it. |
+| `Warning: Publication <id> has no embedded schema` | The publication was made before schemas were embedded, so the types use the current schema. Go live again to embed it. |
 | `Failed to download N media file(s)` | The listed files could not be fetched from `ARECA_CMS_URL`. Check that the CMS serves `/api/assets/file/` from that address, then run the pull again. Nothing was changed. |
 | `Pulled, but cleaning up older content failed` | The new content is live. Removing an older generation or its media failed, usually because of file permissions. Fix the permissions; the next pull cleans up again. |
 | `assets.dir must be a folder inside the project` | Use a path relative to the project root that stays inside it, such as `public/areca`. |

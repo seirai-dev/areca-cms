@@ -1,10 +1,10 @@
-import type { Coffee } from '../lib/content.ts'
+import type { CoffeesEntry } from '../generated/content/areca.gen.ts'
 import { formatAltitude, formatDate, formatLabel } from './formatters.ts'
 
 /** Definition list of a coffee's facts with hairline dividers; empty values are omitted. */
-export function CoffeeSpecs({ coffee }: { coffee: Coffee }) {
+export function CoffeeSpecs({ coffee }: { coffee: CoffeesEntry }) {
   const { data } = coffee
-  const rows: Array<[string, string | null]> = [
+  const rows: Array<[string, string | null | undefined]> = [
     ['Origin', [data.origin, data.region].filter(Boolean).join(', ') || null],
     ['Producer', data.producer],
     ['Process', formatLabel(data.process)],

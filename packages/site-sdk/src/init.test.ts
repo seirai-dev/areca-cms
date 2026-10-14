@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { spawnSync } from 'node:child_process'
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -175,8 +177,9 @@ describe('initSite', () => {
         'ARECA_CMS_URL=http://localhost:3000\nARECA_SITE_TOKEN=site-token\n',
       )
       expect(readUtf8(join(dir, '.gitignore'))).toBe(
-        '.env.local\nsrc/generated/content/\npublic/areca/\n',
+        '.env.local\nsrc/generated/content/*\n!src/generated/content/areca.gen.ts\npublic/areca/\n',
       )
+      expectGitignoreKeepsTypes(dir, 'src/generated/content')
       expect(
         JSON.parse(readUtf8(join(dir, 'src/generated/content/manifest.json'))),
       ).toEqual({
@@ -364,7 +367,7 @@ export default defineSiteContent({
     const dir = makeSiteDir()
     writeFileSync(
       join(dir, '.gitignore'),
-      'node_modules/\n.env.local\nsrc/generated/content/\npublic/areca\n',
+      'node_modules/\n.env.local\nsrc/generated/content/*\n!src/generated/content/areca.gen.ts\npublic/areca\n',
       'utf8',
     )
     try {
@@ -376,8 +379,25 @@ export default defineSiteContent({
         siteKey: 'acme-site',
       })
       expect(readUtf8(join(dir, '.gitignore'))).toBe(
-        'node_modules/\n.env.local\nsrc/generated/content/\npublic/areca\n',
+        'node_modules/\n.env.local\nsrc/generated/content/*\n!src/generated/content/areca.gen.ts\npublic/areca\n',
       )
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('un-ignores areca.gen.ts when an older init left the whole directory ignored', async () => {
+    const dir = makeSiteDir()
+    writeFileSync(join(dir, '.gitignore'), '.env.local\nsrc/generated/content/\n', 'utf8')
+    try {
+      await initSite({
+        cwd: dir,
+        yes: true,
+        cmsUrl: 'http://localhost:3000',
+        token: 'site-token',
+        siteKey: 'acme-site',
+      })
+      expectGitignoreKeepsTypes(dir, 'src/generated/content')
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
@@ -487,7 +507,10 @@ export default defineSiteContent({
         scripts: Record<string, string>
       }
       expect(pkg.scripts['content:pull']).toBe('areca pull --out tmp/content')
-      expect(readUtf8(join(dir, '.gitignore'))).toContain('tmp/content/')
+      expect(readUtf8(join(dir, '.gitignore'))).toContain(
+        'tmp/content/*\n!tmp/content/areca.gen.ts\n',
+      )
+      expectGitignoreKeepsTypes(dir, 'tmp/content')
       expect(existsSync(join(dir, 'tmp/content/manifest.json'))).toBe(true)
     } finally {
       rmSync(dir, { recursive: true, force: true })
@@ -733,6 +756,43 @@ function makeSiteDir(pkg: Record<string, unknown> = {}): string {
 
 function readUtf8(filePath: string): string {
   return readFileSync(filePath, 'utf8')
+}
+
+/**
+ * Asks git (the real gitignore engine) whether files in `outDir` are ignored:
+ * pulled JSON and the manifest must be, `areca.gen.ts` must not be.
+ */
+function expectGitignoreKeepsTypes(dir: string, outDir: string): void {
+  spawnSync('git', ['init', '-q'], { cwd: dir })
+  const ignoredFiles = [
+    `${outDir}/manifest.json`,
+    `${outDir}/.publications/publication-x/blogPosts.json`,
+    '.env.local',
+  ]
+  const typesFile = `${outDir}/areca.gen.ts`
+  for (const file of [...ignoredFiles, typesFile]) {
+    // Never overwrite files init wrote: callers read them afterwards.
+    if (existsSync(join(dir, file))) continue
+    mkdirSync(join(dir, file, '..'), { recursive: true })
+    writeFileSync(join(dir, file), '', 'utf8')
+  }
+  for (const file of ignoredFiles) {
+    expect(gitIgnored(dir, file), `${file} should be ignored`).toBe(true)
+  }
+  expect(gitIgnored(dir, typesFile), `${typesFile} must not be ignored`).toBe(
+    false,
+  )
+}
+
+function gitIgnored(dir: string, file: string): boolean {
+  const result = spawnSync(
+    'git',
+    ['-C', dir, 'check-ignore', '-q', '--no-index', file],
+    { encoding: 'utf8' },
+  )
+  if (result.status === 0) return true
+  if (result.status === 1) return false
+  throw new Error(`git check-ignore failed: ${result.stderr}`)
 }
 
 it('uses custom config and quoted output paths in generated scripts', async () => {

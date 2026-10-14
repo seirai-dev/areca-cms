@@ -1,93 +1,169 @@
 ---
 title: Reading content
-description: Read pulled entries with readContent, type them to your schema, resolve references and images, and fetch from the CMS directly when you need to.
+description: Query pulled entries with the typed content object from areca.gen.ts, filter and sort them, follow references and build links, and drop down to readContent when you need the raw files.
 ---
 
-After the [pull](/docs/sdk/pulling-content), your site reads entries from the local files with `readContent`. This guide shows how to list and find entries with types, how references and images appear in the data, and when to call the CMS client directly.
+After the [pull](/docs/sdk/pulling-content), your site reads entries from the local files. The pull also writes `areca.gen.ts`, which exports a typed `content` object. Use it for everything in your site: list collections, find entries by slug or ID, filter and sort, follow references and build links. Every collection, field, value and route is typed, so your editor completes them as you type. See [typed content](/docs/sdk/typed-content) for how the module is generated.
 
-`readContent` reads files from disk, so it runs only in Node.js code: a server function, a server route, or a build script. Never import it into code that runs in the browser.
+`content` reads files from disk, so it runs only in Node.js code: a server function, a server route, or a build script. Never import it into code that runs in the browser.
 
-## Read a collection
+## Import content
 
-`readContent` is in `@areca-cms/site-sdk/pull`. It takes the output directory and a collection key, and returns the entries of that collection:
-
-```ts
-import { readContent } from '@areca-cms/site-sdk/pull'
-import type { SnapshotEntry } from '@areca-cms/site-sdk'
-
-const entries = readContent<SnapshotEntry>('src/generated/content', 'articles')
-```
-
-The function is synchronous. It reads and parses the file each time you call it. If you call it on every request, read the collection once and keep the result in a module-level variable. The files only change when you pull again.
-
-The path is resolved from the process's working directory, so run your code from the project root or pass an absolute path. If the file is missing, `readContent` throws an error that tells you to run `areca pull` first.
-
-## Type your entries
-
-The SDK does not generate types from your schema. Declare a type for each collection that matches its fields. Put these types in one module, so every page imports the same ones:
+The default location of the module is next to the pulled files:
 
 ```ts title="src/lib/content.ts"
-import { readContent } from '@areca-cms/site-sdk/pull'
-import type {
-  ImageValue,
-  ReferenceValue,
-  RichTextValue,
-  SnapshotEntry,
-} from '@areca-cms/site-sdk'
-
-const CONTENT_DIR = 'src/generated/content'
-
-export type Author = SnapshotEntry & {
-  data: {
-    name: string
-    bio?: string | null
-    photo?: ImageValue | null
-  }
-}
-
-export type Article = SnapshotEntry & {
-  data: {
-    title: string
-    excerpt?: string | null
-    body: RichTextValue
-    cover?: ImageValue | null
-    author?: ReferenceValue | null
-    category?: 'news' | 'guides' | 'updates' | null
-    publishedOn?: string | null
-    updatedOn?: string | null
-  }
-}
-
-export function getAuthors(): Author[] {
-  return readContent<Author>(CONTENT_DIR, 'authors')
-}
-
-export function getArticles(): Article[] {
-  return readContent<Article>(CONTENT_DIR, 'articles')
-}
+import { content } from '../generated/content/areca.gen'
 ```
 
-The types describe what the CMS sends, but nothing checks them at runtime. If your schema changes, update the types too. A field that you mark `required` is always present in published entries. Optional fields can be missing, `null` or empty, so check them before you use them.
+`content` reads `manifest.json` on every call, so a new pull is picked up without restarting the process. It keeps each collection in memory after the first read, for the publication it came from. The files only change when you pull again, so this is cheap.
 
-## List and find entries
+The folder is the one you passed to `areca pull --out`. To read the files from another location, set `ARECA_CONTENT_DIR` before the module loads. This is useful in a container, where the working directory differs from the one you pulled in.
 
-Do not rely on the order of entries from `readContent`, so sort them yourself. Find one entry by its `slug`, which is the value used in your route:
+## List entries
+
+Each collection is a property of `content`, named after its camelCase key. Every collection has the same four read methods:
 
 ```ts title="src/lib/content.ts"
-export function getArticlesNewestFirst(): Article[] {
-  return [...getArticles()].sort((a, b) => {
-    const left = Date.parse(a.data.publishedOn ?? '') || 0
-    const right = Date.parse(b.data.publishedOn ?? '') || 0
-    return right - left
+const all = content.blogPosts.all() // every entry, in the pulled order
+const newest = content.blogPosts.first() // the first entry, or undefined
+const bySlug = content.blogPosts.get('hello-world') // by slug, or undefined
+const byId = content.blogPosts.byId('a1b2c3') // by ID, or undefined
+```
+
+The pulled order is the order the CMS sends: newest `publishedAt` first. Do not rely on it for anything else, and use `orderBy` when you need a specific order.
+
+`get` and `byId` return `undefined` for an unknown value. Return `null` or throw a not-found error from your route, so the page can show a 404.
+
+## Filter, sort and paginate
+
+`all` and `first` take the same options. The work happens in memory, on the entries already in your files:
+
+```ts title="src/lib/content.ts"
+export function getNewsArticles() {
+  return content.blogPosts.all({
+    where: { category: 'news', publishedOn: { isNull: false } },
+    orderBy: [{ publishedOn: 'desc' }, { title: 'asc' }],
+    limit: 10,
+    offset: 0,
   })
 }
+```
 
-export function findArticle(slug: string): Article | undefined {
-  return getArticles().find((article) => article.slug === slug)
+| Option | Description |
+| --- | --- |
+| `where` | Keeps the entries whose fields match. Keys are the collection's field names. Several keys must all match. |
+| `orderBy` | Sorts by one or more fields. An object such as `{ publishedOn: 'desc' }`, or an array of objects for tie-breakers, applied in order. |
+| `limit` | The maximum number of entries to return. |
+| `offset` | The number of entries to skip first. Use it with `limit` to paginate. |
+| `with` | Expands reference fields into the entries they point to. See [references](#references). |
+
+### where
+
+A direct value means equality. For a few fields, operators are available. The editor only offers the ones that fit the field type:
+
+| Field type | Operators |
+| --- | --- |
+| `text`, `textarea`, `url`, `slug` | `eq`, `ne`, `in`, `notIn`, `contains` (case-insensitive), `isNull` when optional |
+| `select` | `eq`, `ne`, `in`, `notIn` (the values are the options, when the field has them), `isNull` when optional |
+| `date`, `datetime` | `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `isNull` when optional |
+| `number` | `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `isNull` when optional |
+| `boolean` | `eq`, `ne`, `isNull` when optional |
+| `image`, `richtext`, `reference` | `isNull`, when optional |
+
+```ts
+content.blogPosts.all({
+  where: {
+    featured: true, // equality
+    category: { in: ['news', 'guides'] },
+    publishedOn: { gte: '2026-01-01', lt: '2027-01-01' },
+    title: { contains: 'release' },
+    coverImage: { isNull: false },
+  },
+})
+```
+
+Some details that affect results:
+
+- **Empty values.** `null`, `''` and a missing key all count as empty. `isNull: true` matches all three. `gt`, `gte`, `lt` and `lte` never match an empty value. `ne` and `notIn` do match one.
+- **Datetimes** compare as points in time, so `2026-03-01T09:00:00+02:00` equals `2026-03-01T07:00:00Z`. `date` values compare as text, which is correct for `YYYY-MM-DD`.
+- **`isNull` only works on optional fields.** A required field is never empty, so the type checker does not accept the operator for it.
+
+### orderBy
+
+Sort by the text, number, date, datetime, boolean and select fields. Images, rich text and references are not sortable:
+
+```ts
+content.blogPosts.all({ orderBy: { publishedOn: 'desc' } })
+content.blogPosts.all({ orderBy: [{ category: 'asc' }, { publishedOn: 'desc' }] })
+```
+
+Empty values always sort last, in both directions. Entries that tie on every key keep their pulled order.
+
+## References
+
+A `reference` field holds a `ReferenceValue`, with the target's `collection` key, `slug` and `id`. Use `content.resolve` to get the target entry. It matches on `id`, so it still works when the target's slug has changed:
+
+```ts title="src/lib/content.ts"
+import type { Entry } from '@areca-cms/site-sdk'
+import { content } from '../generated/content/areca.gen'
+
+export function getAuthorOf(article: Entry<'blogPosts'>) {
+  return content.resolve(article.data.author) // Entry<'authors'> | null
 }
 ```
 
-Call `findArticle` from your route, and return `undefined` or `null` for an unknown slug so the route can show a 404.
+`resolve` accepts `''`, `null` and `undefined` as well, and returns `null` for them. Each reference field has its target collection in its type, so `resolve` returns an entry of that collection.
+
+To load the target with the entry, add `with`. Only fields you list are expanded, and only one level deep:
+
+```ts
+const posts = content.blogPosts.all({ with: { author: true } })
+posts[0]?.data.author?.data.name // the author's name, or undefined when there is none
+```
+
+An expanded field is `Entry | null` when the field is required. It is `Entry | null | undefined` when the field is optional, because a missing field stays `undefined`. Use `resolve` on a reference inside an expanded entry if you need a second level.
+
+## Build links
+
+Each collection's route has a `$slug` placeholder. The typed helpers fill it in and return a template-literal type, so the link is checked against the route:
+
+```ts
+content.blogPosts.href(entry) // '/blog/hello-world', typed as `/blog/${string}`
+content.blogPosts.href('hello-world') // the same, from a slug
+const author = article.data.author
+if (author) content.href(author) // '/authors/ada', from a reference
+```
+
+`href` URL-encodes the slug. Use these helpers instead of building the path yourself, so a route change in the schema reaches your links.
+
+## Entry shape
+
+Each entry has the same shape in every collection:
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `id` | `string` | The entry's ID. Use it to find the entry from a reference. |
+| `slug` | `string` | The entry's slug. |
+| `publishedAt` | `string` or `null` | The publication time, as an ISO timestamp. |
+| `collection` | `string` | The camelCase key of the entry's collection. The types use it to tell collections apart. |
+| `data` | object | The field values, keyed by camelCase field name. |
+| `seo` | `SeoMeta`, optional | The SEO data for the entry. Older publications do not include it. |
+
+The values in `data` depend on the field type. See [field types](/docs/sdk/field-types) for the exact types, including which fields can be empty:
+
+| Field type | Value in `data` |
+| --- | --- |
+| `text`, `textarea`, `url`, `slug` | `string` |
+| `select` | `string`, or one of the options when the field has them |
+| `date` | `string` in `YYYY-MM-DD` format |
+| `datetime` | `string` as an ISO timestamp |
+| `number` | `number` |
+| `boolean` | `boolean` |
+| `image` | `ImageValue` |
+| `reference` | `ReferenceValue` |
+| `richtext` | `RichTextValue` |
+
+Optional fields can also be `null`, missing or `''`, as [typed content](/docs/sdk/typed-content#nullability-mirrors-the-data) explains.
 
 ## Call it from a server function
 
@@ -96,63 +172,18 @@ In TanStack Start, route loaders can run in the browser during navigation. Wrap 
 ```ts title="src/lib/queries.ts"
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
-import { findArticle, getArticlesNewestFirst } from './content'
+import { content } from './content'
 
 export const loadArticles = createServerFn({ method: 'GET' }).handler(() =>
-  getArticlesNewestFirst(),
+  content.blogPosts.all({ orderBy: { publishedOn: 'desc' } }),
 )
 
 export const loadArticle = createServerFn({ method: 'GET' })
   .validator(z.object({ slug: z.string().min(1) }))
-  .handler(({ data }) => findArticle(data.slug) ?? null)
+  .handler(({ data }) => content.blogPosts.get(data.slug) ?? null)
 ```
 
 The loader then calls `loadArticle({ data: { slug } })`. Other frameworks have an equivalent for code that runs only on the server, such as an API route, a server component or a loader that runs in Node.js.
-
-## Entry shape
-
-Each entry has the same shape:
-
-| Property | Type | Description |
-| --- | --- | --- |
-| `id` | `string` | The entry's ID. Use it to find the entry from a reference. |
-| `slug` | `string` | The entry's slug. |
-| `publishedAt` | `string` or `null` | The publication time, as an ISO timestamp. |
-| `data` | object | The field values, keyed by field key. |
-| `seo` | `SeoMeta`, optional | The SEO data for the entry. Older snapshots do not include it. |
-
-The values in `data` depend on the field type:
-
-| Field type | Value in `data` |
-| --- | --- |
-| `text`, `textarea`, `select`, `slug`, `url` | `string` |
-| `number` | `number` |
-| `boolean` | `boolean` |
-| `date` | `string` in `YYYY-MM-DD` format |
-| `datetime` | `string` as an ISO timestamp |
-| `image` | `ImageValue`, or `null` |
-| `reference` | `ReferenceValue`, or `null` |
-| `richtext` | `RichTextValue` |
-
-See [field types](/docs/sdk/field-types) for the options that affect each type.
-
-## References
-
-A `reference` field holds a `ReferenceValue`, with the `collection` key, the target entry's `slug` and its `id`. Go live checks that every reference points to an entry in the same snapshot, so the target is available when you pull.
-
-To get the referenced entry, search its collection by `id`:
-
-```ts title="src/lib/content.ts"
-export function getAuthorFor(article: Article): Author | undefined {
-  const ref = article.data.author
-  if (!ref) return undefined
-  return readContent<Author>(CONTENT_DIR, ref.collection).find(
-    (author) => author.id === ref.id,
-  )
-}
-```
-
-Search by `id` rather than `slug`. An entry keeps its ID even if its slug changes.
 
 ## Images
 
@@ -178,6 +209,20 @@ A `richtext` field holds a `RichTextValue`. It contains the Markdown source, a p
 
 Each entry can have a `seo` object with its title, description, canonical URL, social data and JSON-LD. Convert it into page head tags with the helpers in `@areca-cms/site-sdk/seo`. See [SEO](/docs/sdk/seo).
 
+## Read the files directly
+
+`content` is built on `readContent`, from `@areca-cms/site-sdk/pull`. Use `readContent` when you need the raw entries of one collection and do not need the query methods. It takes the folder and a camelCase collection key, and returns the typed entries:
+
+```ts
+import { readContent } from '@areca-cms/site-sdk/pull'
+
+const articles = readContent('src/generated/content', 'blogPosts') // Entry<'blogPosts'>[]
+```
+
+`readContent` is synchronous and reads the file each time you call it. There is no type parameter, because the collection key sets the type. To read several collections from one publication, capture the manifest once with `readContentManifest` and pass it as the third argument. `content` does this for you.
+
+If the file is missing, `readContent` throws an error that tells you to run `areca pull` first. A collection that the publication does not contain is also an error.
+
 ## Fetch from the CMS directly
 
 Pulling is the normal way to read content. Use the client when you need the manifest or the current snapshot in memory, for example in a one-off script:
@@ -194,16 +239,17 @@ const snapshot = await client.fetchSnapshot()
 
 ## Deploy the content files
 
-`readContent` reads files at runtime, so the files must be in the deployed output. If you run your site in a container, copy the generated directory into the runtime image. For example:
+`content` and `readContent` read files at runtime, so the files must be in the deployed output. If you run your site in a container, copy the generated directory into the runtime image. For example:
 
 ```dockerfile title="Dockerfile"
 COPY --from=build /app/src/generated ./src/generated
 ```
 
-If the files are missing in production, `readContent` throws, so check this step in your first deployment.
+If the files are missing in production, reads throw, so check this step in your first deployment.
 
 ## Related
 
+- [Typed content](/docs/sdk/typed-content): how `areca.gen.ts` is generated and what the pull checks.
 - [Pulling content at build time](/docs/sdk/pulling-content): create the files that this page reads.
 - [Field types](/docs/sdk/field-types): the types and options for each field.
 - [Rich text](/docs/sdk/rich-text) and [SEO](/docs/sdk/seo): render the richer values.

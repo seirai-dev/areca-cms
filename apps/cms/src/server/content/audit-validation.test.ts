@@ -96,6 +96,22 @@ describe('audit content validation regressions', () => {
     ).toThrow(/conflicts/)
   })
 
+  it('rejects reserved content object names as collection keys only', () => {
+    for (const key of ['preview', 'Href', 'resolve']) {
+      expect(() =>
+        validateCollectionDefinitions([{ key, fields: [] }]),
+      ).toThrow(/reserved/)
+    }
+    expect(() =>
+      validateCollectionDefinitions([
+        {
+          key: 'articles',
+          fields: [{ key: 'preview', label: 'Preview', type: 'text' }],
+        },
+      ]),
+    ).not.toThrow()
+  })
+
   it('rejects references missing an enabled target', () => {
     const reference: Field = {
       key: 'author',

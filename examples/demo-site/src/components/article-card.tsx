@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router'
-import type { Article, Author } from '../lib/content.ts'
+import type { ArticlesEntry, AuthorsEntry } from '../generated/content/areca.gen.ts'
 import { CmsImage } from './cms-image.tsx'
 import { formatDate } from './formatters.ts'
 import { CategoryPill } from './ui.tsx'
@@ -14,8 +14,8 @@ export function ArticleCard({
   author = null,
   variant = 'default',
 }: {
-  article: Article
-  author?: Author | null
+  article: ArticlesEntry
+  author?: AuthorsEntry | null
   variant?: 'default' | 'feature' | 'lead' | 'row'
 }) {
   const { data } = article

@@ -302,8 +302,8 @@ importers:
   examples/demo-site:
     dependencies:
       '@areca-cms/site-sdk':
-        specifier: ^0.3.0
-        version: 0.3.0(react@19.3.0)
+        specifier: workspace:*
+        version: link:../../packages/site-sdk
       '@fontsource-variable/fraunces':
         specifier: ^5.3.0
         version: 5.3.0
@@ -421,16 +421,6 @@ packages:
       zod: ^3.25.18 || ^4.0.0
     peerDependenciesMeta:
       zod:
-        optional: true
-
-  '@areca-cms/site-sdk@0.3.0':
-    resolution: {integrity: sha512-YHSBaVaUDIz77V3K9Ic0wsf3/Grf1E87LIAp9upgiUEPmgnBm0+33y73iMIL2b3EmomePV3/6HJAVOaXsHCFNg==}
-    engines: {node: '>=22.6.0'}
-    hasBin: true
-    peerDependencies:
-      react: ^18.0.0 || ^19.0.0
-    peerDependenciesMeta:
-      react:
         optional: true
 
   '@authenio/xml-encryption@2.0.2':
@@ -6099,15 +6089,6 @@ snapshots:
   '@ag-ui/core@1.0.0(zod@4.6.5)':
     optionalDependencies:
       zod: 4.6.5
-
-  '@areca-cms/site-sdk@0.3.0(react@19.3.0)':
-    dependencies:
-      '@clack/prompts': 1.8.1
-      '@tanstack/markdown': 1.0.0(react@19.3.0)
-    optionalDependencies:
-      react: 19.3.0
-    transitivePeerDependencies:
-      - octane
 
   '@authenio/xml-encryption@2.0.2':
     dependencies:

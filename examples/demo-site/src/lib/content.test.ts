@@ -2,12 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { writeFixtureContent, FIXTURE_SLUGS } from '../../scripts/fixture-content.ts'
+import { content } from '../generated/content/areca.gen.ts'
 import {
   CONTENT_DIR,
   articlesByAuthor,
   articlesFeaturingCoffee,
-  authorFor,
-  coffeeFor,
   getArticle,
   getArticles,
   getAuthor,
@@ -18,14 +17,15 @@ import {
   listPrerenderPages,
   tastingNotes,
 } from './content.ts'
+import { referenceId } from './references.ts'
 
 const [ethiopiaArticle, huilaArticle, bergenArticle] = FIXTURE_SLUGS.articles
 const [ethiopia, brazil, colombia] = FIXTURE_SLUGS.coffees
 const [ingrid, matti] = FIXTURE_SLUGS.authors
 
 describe('content access', () => {
-  it('reads articles newest first by publishedAt', () => {
-    writeFixtureContent()
+  it('reads articles newest first by publishedAt', async () => {
+    await writeFixtureContent()
     const articles = getArticles()
 
     expect(articles.map((article) => article.slug)).toEqual([
@@ -38,21 +38,21 @@ describe('content access', () => {
     expect(articles[0]?.data.heroImage).toBeNull()
   })
 
-  it('returns a single article by slug and null when missing', () => {
-    writeFixtureContent()
+  it('returns a single article by slug and null when missing', async () => {
+    await writeFixtureContent()
     expect(getArticle(huilaArticle)?.data.category).toBe('origin-stories')
     expect(getArticle('does-not-exist')).toBeNull()
   })
 
-  it('orders coffees limited first, then by name', () => {
-    writeFixtureContent()
+  it('orders coffees limited first, then by name', async () => {
+    await writeFixtureContent()
     expect(getCoffees().map((coffee) => coffee.slug)).toEqual([ethiopia, brazil, colombia])
     expect(getCoffee(brazil)?.data.process).toBe('honey')
     expect(getCoffee('does-not-exist')).toBeNull()
   })
 
-  it('orders authors by name and finds one by slug', () => {
-    writeFixtureContent()
+  it('orders authors by name and finds one by slug', async () => {
+    await writeFixtureContent()
     expect(getAuthors().map((author) => author.data.name)).toEqual([
       'Ingrid Solberg',
       'Matti Haugen',
@@ -61,15 +61,16 @@ describe('content access', () => {
     expect(getAuthor('does-not-exist')).toBeNull()
   })
 
-  it('resolves references by id', () => {
-    writeFixtureContent()
+  it('resolves references by id', async () => {
+    await writeFixtureContent()
     const articles = getArticles()
     const huila = getArticle(huilaArticle)!
     const bergen = getArticle(bergenArticle)!
 
-    expect(authorFor(huila)?.slug).toBe(matti)
-    expect(coffeeFor(huila)?.slug).toBe(colombia)
-    expect(coffeeFor(bergen)).toBeNull()
+    expect(content.resolve(huila.data.author)?.slug).toBe(matti)
+    expect(content.resolve(huila.data.featuredCoffee)?.slug).toBe(colombia)
+    expect(content.resolve(bergen.data.featuredCoffee)).toBeNull()
+    expect(content.resolve(bergen.data.author)?.slug).toBe(ingrid)
     expect(articlesByAuthor(getAuthor(ingrid)!.id, articles).map((a) => a.slug)).toEqual([
       bergenArticle,
       ethiopiaArticle,
@@ -79,8 +80,22 @@ describe('content access', () => {
     ).toEqual([ethiopiaArticle])
   })
 
-  it('splits tasting notes on commas, trims and drops empties', () => {
-    writeFixtureContent()
+  it('reads a reference id only when the field is set', () => {
+    expect(referenceId({ id: 'ent_1' })).toBe('ent_1')
+    expect(referenceId('')).toBeUndefined()
+    expect(referenceId(null)).toBeUndefined()
+    expect(referenceId(undefined)).toBeUndefined()
+  })
+
+  it('builds hrefs from the schema routes', async () => {
+    await writeFixtureContent()
+    expect(content.coffees.href(ethiopia)).toBe(`/coffees/${ethiopia}`)
+    expect(content.authors.href(matti)).toBe(`/team/${matti}`)
+    expect(content.articles.href(getArticle(huilaArticle)!)).toBe(`/journal/${huilaArticle}`)
+  })
+
+  it('splits tasting notes on commas, trims and drops empties', async () => {
+    await writeFixtureContent()
     const coffee = getCoffee(ethiopia)!
     expect(tastingNotes(coffee)).toEqual(['blueberry', 'jasmine', 'cacao nib'])
 
@@ -92,8 +107,8 @@ describe('content access', () => {
     expect(tastingNotes({ ...coffee, data: { ...coffee.data, tastingNotes: null } })).toEqual([])
   })
 
-  it('lists every prerender page', () => {
-    writeFixtureContent()
+  it('lists every prerender page', async () => {
+    await writeFixtureContent()
     expect(listPrerenderPages()).toEqual([
       '/',
       '/coffees',
@@ -111,8 +126,8 @@ describe('content access', () => {
     ])
   })
 
-  it('reads the fixture publication id and collection counts from the manifest', () => {
-    writeFixtureContent()
+  it('reads the fixture publication id and collection counts from the manifest', async () => {
+    await writeFixtureContent()
     expect(getManifest()).toMatchObject({
       publicationId: 'pub_fixture_northbound',
       collections: { articles: 3, coffees: 3, authors: 2 },
@@ -121,8 +136,8 @@ describe('content access', () => {
 })
 
 describe('missing content', () => {
-  it('returns an empty list for a collection absent from the manifest', () => {
-    writeFixtureContent()
+  it('returns an empty list for a collection absent from the manifest', async () => {
+    await writeFixtureContent()
     const manifestPath = join(CONTENT_DIR, 'manifest.json')
     const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
     delete manifest.collections.coffees
@@ -134,13 +149,13 @@ describe('missing content', () => {
       expect(listPrerenderPages()).not.toContain(`/coffees/${ethiopia}`)
       expect(getArticles()).toHaveLength(3)
     } finally {
-      writeFixtureContent()
+      await writeFixtureContent()
     }
   })
 
-  it('throws a clear error when the manifest is absent', () => {
+  it('throws a clear error when the manifest is absent', async () => {
     rmSync(CONTENT_DIR, { recursive: true, force: true })
     expect(() => getArticles()).toThrow(/areca pull/)
-    writeFixtureContent()
+    await writeFixtureContent()
   })
 })

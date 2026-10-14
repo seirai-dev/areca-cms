@@ -6,7 +6,10 @@ import { collection, site } from '#/db/schema'
 import type { Field, SiteManifest } from '#/lib/types'
 import { withRequiredSlugField } from '#/lib/collection-fields'
 import { m } from '#/paraglide/messages'
-import { isSafeIdentifier } from '#/lib/content-identifiers'
+import {
+  isReservedCollectionKey,
+  isSafeIdentifier,
+} from '#/lib/content-identifiers'
 import { audit } from '#/server/audit'
 
 import { NotFoundError, ValidationError } from './errors.ts'
@@ -293,6 +296,11 @@ export function validateCollectionDefinitions(
       issues.push({
         path: def.key,
         message: m.server_unsafe_collection_identifier(),
+      })
+    else if (isReservedCollectionKey(def.key))
+      issues.push({
+        path: def.key,
+        message: `"${def.key}" is reserved for the generated content API. Choose another collection key.`,
       })
     const folded = def.key.toLowerCase()
     const previous = foldedKeys.get(folded)

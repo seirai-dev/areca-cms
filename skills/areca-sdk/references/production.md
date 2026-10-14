@@ -17,6 +17,7 @@ import { getPreviewEntry, previewHeaders } from "@areca-cms/site-sdk";
 try {
   const { collection, slug, entry } = await getPreviewEntry({ token });
   // render `entry` (same shape as SnapshotEntry) with the normal template
+  // (with the generated content object, `content.preview(token)` returns the typed entry)
   // and set every header from previewHeaders() plus <meta name="robots" content="noindex">
 } catch (error) {
   // Plain Error, no status field. The message holds the status:
@@ -85,5 +86,9 @@ await pullContent({ outDir: "src/generated/content", client });
 | `400` / `413` on push | Invalid schema, or the manifest is over 256 KiB |
 | `No content file for collection` | Run `areca pull`, then check the collection key |
 | `Unsafe collection or field identifier` | Rename the key to match `^[A-Za-z][A-Za-z0-9_-]{0,63}$` |
+| `Collection key "<key>" is reserved` / `resolve`, `href`, `preview` | Collections cannot use these names, because the content object uses them. Rename the collection. Field keys may keep them. |
+| `Collection keys ... both map to` / `Field keys ... both map to` | Two keys have the same camelCase name, such as `blog-posts` and `blog_posts`. Rename one. |
+| `Publication does not match its schema` | An entry breaks its schema. Each line names the entry, field and problem. Fix the entry or the schema, publish, and pull again. Nothing is written. |
+| `Warning: Publication <id> has no embedded schema` | An older publication. Types use the current schema. Go live again to embed it. |
 | `Expected publication X, received Y` | Pinned pull mismatch. Check `ARECA_SNAPSHOT_ID`. |
 | TS config import fails | Use Node 24, or run through `tsx` |

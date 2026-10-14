@@ -35,6 +35,10 @@
       "types": "./dist/pull.d.ts",
       "import": "./dist/pull.js"
     },
+    "./content": {
+      "types": "./dist/content.d.ts",
+      "import": "./dist/content.js"
+    },
     "./rich-text": {
       "types": "./dist/rich-text.d.ts",
       "import": "./dist/rich-text.js"
@@ -64,7 +68,8 @@
     "build": "pnpm run clean && tsc && node --eval \"require('node:fs').chmodSync('dist/cli.js', 0o755)\"",
     "prepack": "pnpm test && pnpm run build",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run && tsc --noEmit -p tsconfig.test.json",
+    "test:types": "vitest run --typecheck.only"
   },
   "devDependencies": {
     "@types/node": "^24.13.4",

@@ -62,7 +62,8 @@ pnpm exec areca init
 
 Enter the CMS base URL, site token, and site key. The command creates a starter
 `areca.config.ts`, `.env.example`, updates the gitignored `.env.local`, adds
-generated content to `.gitignore`, creates an empty generated manifest, and
+the pulled content to `.gitignore` (keeping `areca.gen.ts` tracked), creates an
+empty generated manifest, and
 adds `sync-manifest` and `content:pull` package scripts when those scripts are
 not already defined. If the project has a `dev` script that does not load env
 files, init wraps it with `areca run --` so `.env.local` is available.
@@ -162,8 +163,10 @@ Pull its snapshot into your website project:
 pnpm exec areca pull
 ```
 
-By default, the CLI writes `src/generated/content/manifest.json` and one JSON
-array per collection, such as `articles.json`. Add a build step to pull content
+By default, the CLI writes `src/generated/content/manifest.json`, one JSON array
+per collection (named after its camelCase key, such as `articles.json`), and the
+typed module `src/generated/content/areca.gen.ts`. Commit the module and keep the
+JSON out of Git. Add a build step to pull content
 before prerendering or compiling the site. A pull fails if the CMS has no
 publication; publish from the CMS before building. The SDK rejects unsafe
 collection keys and symbolic-link output files.
@@ -218,58 +221,61 @@ runs `areca pull`; keep the site token mounted as a BuildKit secret. See
 [`examples/demo-site/Dockerfile`](../examples/demo-site/Dockerfile) and the
 [deployment guide](DEPLOYMENT.md) for the working setup.
 
-## Read entries in a server loader
+## Read typed entries in a server loader
 
-Pulls now write immutable collection files under
-`src/generated/content/.publications/publication-<generation>/` and atomically
-replace `manifest.json` with the generation pointer. Use SDK readers rather
-than direct flat JSON imports. A failed pull keeps the previous whole publication;
-removed collections become unavailable on the next successful pull. Legacy flat
-outputs remain readable. Prior generations are retained for active readers; prune
-an unused output directory by deleting it and pulling again.
-
-Capture `readContentManifest(directory)` once and pass it as the third argument
-to `readContent(directory, collectionKey, manifest)` when loading several
-collections from a single publication.
-
-`readContent()` is exported from `@areca-cms/site-sdk/pull`. Define a type for
-the fields used by your UI; the schema does not generate application types:
+`areca pull` also writes `src/generated/content/areca.gen.ts`. That module is
+generated from the schema of the published content and exports a typed
+`content` object. Commit it, so your editor and type checker know the types.
+The pulled JSON stays out of Git.
 
 ```ts
-import { readContent } from "@areca-cms/site-sdk/pull";
-import type {
-  ImageValue,
-  RichTextValue,
-  SnapshotEntry,
-} from "@areca-cms/site-sdk";
-
-type Article = SnapshotEntry & {
-  data: {
-    title: string;
-    body: RichTextValue;
-    cover: ImageValue | null;
-  };
-};
+// src/lib/content.ts: server-only module, imported from a server function.
+import { content } from "../generated/content/areca.gen";
 
 export function getArticles() {
-  return readContent<Article>("src/generated/content", "articles");
+  return content.articles.all();
+}
+
+export function findArticle(slug: string) {
+  return content.articles.get(slug);
 }
 ```
 
-Entries include `id`, `slug`, `publishedAt`, `data`, and optional `seo`. Image
-values include a URL, nullable dimensions, alt text, and MIME type. `areca pull`
-copies media into `public/areca` by default and sets the URL to the local path
-(`/areca/<name>-<id>.<ext>`); configure it with `assets` in `areca.config.ts`. Rich text
-includes Markdown source, a TanStack Markdown AST, its original JSON, and
-static HTML. Reference values contain their target collection, slug, and ID.
-Optional fields and image values should be checked before rendering.
+Type `content.` and your editor lists the collections. The `where`, `orderBy`,
+`limit`, `offset` and `with` options use the field names of each collection, and
+only offer the operators that fit each field type. `get` and `byId` return
+`undefined` for an unknown value. `resolve(ref)` follows a reference, and
+`href(entry)` builds the route from the collection's `route`.
 
-For TanStack Start, call the content reader from a server function and use that
-function from the route loader. The demo site shows this pattern in
+Collection and field names are camelCase in code. The config keeps the raw keys,
+so `blog-posts` in `areca.config.ts` is `content.blogPosts` and `cover_image` is
+`entry.data.coverImage`. The pull refuses keys that collide after this conversion,
+and the names `resolve`, `href` and `preview` cannot be collection keys. See
+the typed content guide in the documentation site (`apps/docs/content/docs/sdk/typed-content.mdx`).
+
+Each entry has `id`, `slug`, `publishedAt`, `collection`, `data` and optional
+`seo`. Optional fields can be `null`, missing or `''`, and the types show each
+case, so check them before you render. Image values include a URL, nullable
+dimensions, alt text and MIME type. Rich text includes Markdown source, a TanStack
+Markdown AST, its original JSON, and static HTML.
+
+The pull validates every entry against the schema before it writes anything. A
+mismatch fails the pull and leaves the previous content and types in place.
+Publications made before schemas were embedded fall back to the current CMS schema,
+and the pull prints a warning. Go live again to embed the schema.
+
+For lower-level access, `readContent(directory, "blogPosts")` from
+`@areca-cms/site-sdk/pull` returns the typed entries of one collection. It takes
+no type parameter, because the collection key sets the type. Capture
+`readContentManifest(directory)` once and pass it as the third argument when you
+read several collections from one publication. `content` does this for you.
+
+`content` and `readContent()` read files at runtime, so ship `src/generated/content/`
+(including `.publications/`) with the server build or container. Set
+`ARECA_CONTENT_DIR` if the files live somewhere else at run time. For TanStack
+Start, call the content object inside a `createServerFn` handler, never in route
+or component code. The demo site shows this pattern in
 `examples/demo-site/src/lib/content.ts` and `src/lib/queries.ts`.
-Since `readContent()` reads files at runtime, include
-`src/generated/content/` in your deployed server output or container. The demo
-Dockerfile copies that directory into its runtime image.
 
 ## Render rich text
 
@@ -316,22 +322,11 @@ the server route loader, returns a not-found response for an unknown slug, and
 uses that loader result for metadata:
 
 ```tsx
-// src/lib/content.ts: filesystem access used only by the server function below.
-import { readContent } from "@areca-cms/site-sdk/pull";
-import type {
-  ImageValue,
-  RichTextValue,
-  SnapshotEntry,
-} from "@areca-cms/site-sdk";
-
-export type Article = SnapshotEntry & {
-  data: { title: string; body: RichTextValue; cover: ImageValue | null };
-};
+// src/lib/content.ts: server-only module, imported by the server function below.
+import { content } from "../generated/content/areca.gen";
 
 export function findArticle(slug: string) {
-  return readContent<Article>("src/generated/content", "articles").find(
-    (article) => article.slug === slug,
-  );
+  return content.articles.get(slug);
 }
 ```
 
@@ -390,9 +385,8 @@ function ArticlePage() {
 }
 ```
 
-Keep the file-reading helper inside a module used by the server function's
-handler. Do not import `readContent()` into the route component or browser
-loader code. This follows the demo's server-function pattern: the route calls
+Keep the content module inside the server function's handler. Do not import
+`content` into the route component or browser loader code. This follows the demo's server-function pattern: the route calls
 `loadArticle()`, and only its handler reads the generated files.
 
 The helper maps CMS SEO data to title, description, canonical link, robots,
@@ -528,6 +522,8 @@ options object when you do not want to use environment variables.
 | `429` / too many requests                         | Wait for the `Retry-After` seconds in the response, then retry. Site manifest and snapshot routes allow 300 requests per minute per token.                                                                |
 | No publication exists                             | Publish content in the CMS, then rerun `areca pull`.                                                                                                                                                      |
 | No content file for collection                    | Pull content first and confirm the collection key matches the schema.                                                                                                                                     |
+| `Publication does not match its schema`           | Each line names an entry, field and problem. Fix the entry or the schema, publish, and pull again. The pull writes nothing when it fails.                                                                  |
+| `Collection keys ... both map to`                 | Two keys have the same camelCase name, such as `blog-posts` and `blog_posts`. Rename one of them in `areca.config.ts`.                                                                                     |
 | TypeScript config import fails                    | Use Node 24 or run the CLI through `tsx`, as suggested in the error.                                                                                                                                      |
 
 The client does not retry failed HTTP requests. Network errors include the CMS
@@ -543,7 +539,7 @@ remaining schema limits and rate-limit response details.
 
 ```text
 areca init [--cms-url <url>] [--token <token>] [--site-key <key>] [--yes] [--force]
-areca pull [--out <directory>]
+areca pull [--out <directory>] [--types <path>]
 areca manifest push [config]
 areca manifest pull [--config <path>] [--yes]
 areca run -- <command>

@@ -18,7 +18,7 @@ Areca's Dokploy integration sets these values on your application before each de
 | `ARECA_SITE_TOKEN` | BuildKit secret | No, you set it once | Authenticating `areca pull` during the build |
 | `ARECA_SITE_TOKEN` and `ARECA_CMS_URL` | Runtime environment | No, you set it once | Only needed if the running site serves [draft previews](/docs/sdk/preview) |
 
-`ARECA_SNAPSHOT_ID` holds the publication ID. The SDK does not read it. Its only job is to change the Docker build input, so a rebuild cannot reuse a cached pull from an earlier publication. Your Dockerfile must declare it as an `ARG`, as shown below.
+`ARECA_SNAPSHOT_ID` holds the publication ID. `areca pull` reads it and pulls exactly that publication. It also changes the Docker build input, so a rebuild cannot reuse a cached pull from an earlier publication. Your Dockerfile must declare it as an `ARG`, as shown below.
 
 <Callout type="warn" title="Keep the site token out of build arguments">
 

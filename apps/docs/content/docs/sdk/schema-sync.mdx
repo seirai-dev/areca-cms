@@ -50,6 +50,16 @@ Changing a field can make existing entries invalid. Areca checks the published e
 
 Before you remove a collection or make a field required, check which entries use it. Fill in or update those entries first, then push. Test the change on a non-production site when you can. For a reference field, also check that the entries it points to are still included in the snapshot.
 
+### The schema in a publication
+
+Each time content goes live, Areca embeds the schema of the collections in that publication. The pull uses this embedded schema to check the entries and to generate `areca.gen.ts`, so the types always match the content they describe. See [typed content](/docs/sdk/typed-content).
+
+This has a consequence for schema changes. A push changes the schema the CMS holds, but your types change only when a publication made after the push is pulled. After you push a change, go live, then pull.
+
+Publications made before schemas were embedded have no schema. The pull then uses the schema the CMS holds now, and it prints a warning that asks you to go live again. Until you do, the types match the current schema, and a publication made from an older schema can fail the pull.
+
+Collection keys `resolve`, `href` and `preview` are reserved, because the content object in your code uses these names. A push that lists one of them fails with `Collection key "<key>" is reserved`, and nothing is sent. Rename the collection in `areca.config.ts`. Field keys may use these names.
+
 ## Pull the schema
 
 ```bash
@@ -107,6 +117,8 @@ Store the schema token as a secret in the protected environment only. Node 24 le
 | `Missing ARECA_SCHEMA_TOKEN` | Set the schema-write token in the environment that runs the push. |
 | `Missing ARECA_SITE_TOKEN` or `Missing ARECA_CMS_URL` | Both are needed to start the client, even for a push. |
 | `Unsafe collection or field identifier` | Fix the key so it follows the [identifier rules](/docs/sdk/defining-content#identifiers). |
+| `Collection key "<key>" is reserved` | A collection cannot be called `resolve`, `href` or `preview`. Rename it. |
+| `Collection keys ... both map to` | Two collection keys have the same camelCase name in code. Rename one of them. The push does not check this, so the pull reports it. |
 | `400` | The CMS rejected the schema. The response lists the issues. A manifest can have at most 100 collections. |
 | `413` | The manifest is larger than 256 KiB. |
 | `401` | The token is wrong, or it was rotated. A push needs the schema token. A pull needs the site token. |

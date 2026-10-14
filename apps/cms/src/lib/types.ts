@@ -116,6 +116,12 @@ export type Snapshot = {
   hash: string
   collections: Record<string, SnapshotEntry[]>
   /**
+   * Collection schema for exactly the collections above, keyed by raw key.
+   * Same shape as the manifest. Outside `hash`. Absent in publications stored
+   * before it existed; consumers fall back to the live manifest.
+   */
+  schema?: SnapshotSchema
+  /**
    * Every media file the content references, so a site can copy them into
    * its own repository. Publications stored before this field existed get it
    * computed when they are served.
@@ -124,6 +130,11 @@ export type Snapshot = {
   /** The site's production URL, added when served (not stored). */
   siteUrl?: string | null
 }
+
+export type SnapshotSchema = Record<
+  string,
+  { route: string; label?: string; fields: Field[] }
+>
 
 /** Wire contract — matches `@areca-cms/site-sdk` `SnapshotAsset`. */
 export type SnapshotAsset = {

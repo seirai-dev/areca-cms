@@ -6,8 +6,8 @@ ESM only. Import paths and their exports:
 
 | Export | Signature | Notes |
 | --- | --- | --- |
-| `defineSiteContent` | `<T extends SiteContentConfig>(config: T) => T` | Identity helper for `areca.config.ts` default export |
-| `manifestFromConfig` | `(config: SiteContentConfig) => SiteManifest` | Validates identifiers and duplicates, returns `{ collections }` |
+| `defineSiteContent` | `<const T extends {...}>(config: { siteKey; collections: T; assets? }) => same object` | Identity helper for `areca.config.ts`. Checks at compile time: `options` only on `select`, `collection` required on `reference` and must be a collection key, `after` must name a date key, `route` contains `$slug` |
+| `manifestFromConfig` | `(config: SiteContentConfig) => SiteManifest` | Validates identifiers, duplicates and reserved collection keys (`resolve`, `href`, `preview`), returns `{ collections }` |
 | `createArecaClient` | `(options?: { cmsUrl?; siteToken?; schemaToken? }) => ArecaClient` | Falls back to `ARECA_CMS_URL`, `ARECA_SITE_TOKEN`, `ARECA_SCHEMA_TOKEN`; URL and site token required at creation |
 | `getPreviewEntry` | `({ token: string; client?: ArecaClient }) => Promise<PreviewResult>` | `PreviewResult` = `{ collection, slug, entry }`. Needs `ARECA_CMS_URL` and `ARECA_SITE_TOKEN` (or pass `client`). |
 | `previewHeaders` | `() => { 'X-Robots-Tag': 'noindex, nofollow'; 'Cache-Control': 'no-store' }` | Apply to preview responses |
@@ -29,17 +29,52 @@ ESM only. Import paths and their exports:
 | `fetchSnapshot(opts?: { publicationId?: string }): Promise<Snapshot>` | `GET /api/sites/snapshot/current[?publicationId=]` | site token |
 | `fetchPreview(token: string): Promise<PreviewResult>` | `GET /api/sites/preview?token=` | signed preview token |
 
-Types: `ArecaClient`, `ArecaClientOptions`, `SiteContentConfig`, `CollectionConfig` (`{ route; label?; fields: Field[] }`), `Field` (`{ key; label; type: FieldType; required?; options?; collection?; description?; after? }`), `FieldType`, `SiteManifest`, `Snapshot` (`{ publicationId, siteKey, createdAt, hash, collections: Record<string, SnapshotEntry[]>, assets?: SnapshotAsset[], siteUrl? }`), `SnapshotAsset` (`{ id, storageKey, url, filename, mimeType, size }`), `AssetsConfig` (`{ download?, dir?, publicPath? }`), `SnapshotEntry` (`{ id, slug, publishedAt: string | null, data: Record<string, unknown>, seo?: SeoMeta }`), `ImageValue`, `ReferenceValue`, `RichTextValue`, `SeoMeta`, `PreviewResult`, `PulledContentManifest`, `HeadMeta`, `HeadLink`, `HeadScript`, `SeoHeadOptions`, `SeoHeadResult`.
+Types from the main entry: `ArecaClient`, `ArecaClientOptions`, `SiteContentConfig`, `AssetsConfig` (`{ download?, dir?, publicPath? }`), `CollectionConfig` (`{ route; label?; fields: Field[] }`), `Field` (a union discriminated on `type`: `reference` requires `collection`, `select` takes `options`, `date` and `datetime` take `after`), `FieldType`, `SiteManifest`, `Snapshot` (`{ publicationId, siteKey, createdAt, hash, collections, assets?, siteUrl?, schema? }`), `SnapshotAsset` (`{ id, storageKey, url, filename, mimeType, size }`), `SnapshotEntry` (the raw entry: `{ id, slug, publishedAt: string | null, data: Record<string, unknown>, seo? }`), `ImageValue`, `ReferenceValue<C = string>` (`{ collection: C; slug; id }`), `RichTextValue`, `SeoMeta`, `PreviewResult`, `PulledContentManifest`, `HeadMeta`, `HeadLink`, `HeadScript`, `SeoHeadOptions`, `SeoHeadResult`.
+
+Typed content types (main entry, generated against `Register`):
+
+| Export | Meaning |
+| --- | --- |
+| `Register` | Interface that `areca.gen.ts` augments with `schema: typeof schema` |
+| `ContentSchema`, `ContentSchemaCollection`, `ContentSchemaField` | Shape of the generated schema (`key`, `label?`, `route`, `fields`; field `key`, `type`, `required`, `options?`, `collection?`) |
+| `RegisteredSchema` | The registered schema, or `ContentSchema` when nothing is registered |
+| `CollectionKey<S>` | camelCase collection keys |
+| `FieldKey<C, S>` | field keys of collection `C` |
+| `FieldValue<C, F, S>` | value type of one field, with null, missing and `''` where the CMS sends them |
+| `EntryData<C, S>` | `data` of collection `C` |
+| `Entry<C, S>` | `{ id, slug, publishedAt, collection: C, data, seo? }` |
+| `AnyEntry<S>` | union of the entries of every collection, discriminated on `collection` |
+| `Where<C, S>` | `where` option: field keys with equality or operator objects |
+| `OrderBy<C, S>` | `orderBy` option: sortable field keys with `'asc' \| 'desc'`, or an array |
+| `QueryOptions<C, S>` | `where`, `orderBy`, `limit`, `offset`, `with` |
+| `QueryResult<C, O, S>` | the entry type returned for query options `O`, with expanded references |
+| `RoutePath<R>` | a route with `$slug` replaced by `${string}` |
+| `Href<C, S>` | the route type of collection `C`, such as `` `/blog/${string}` `` |
+| `Content<S>` | the content object: one property per collection, plus `resolve`, `href` and `preview` |
+| `CollectionApi<C, S>` | `all`, `first`, `get`, `byId` and `href` of one collection |
+| `PreviewEntry<S>` | the union returned by `content.preview`, narrowed by `collection` |
+
+## `@areca-cms/site-sdk/content` (Node only)
+
+| Export | Signature | Notes |
+| --- | --- | --- |
+| `createContent` | `<const S extends ContentSchema>(options: { schema: S; dir: string }) => Content<S>` | Builds the typed content object. `areca.gen.ts` calls it; use it only for another folder or schema. `dir` is resolved against `process.cwd()` on each call. Throws for a collection named `resolve`, `href` or `preview` |
+
+`content` (exported by `areca.gen.ts`) has one property per collection: `all(options?)`, `first(options?)`, `get(slug)`, `byId(id)`, `href(entryOrSlug)`. It also has `resolve(ref)` (returns `Entry | null`), `href(ref)` and `preview(token, { client? })`. Queries run in memory. `get` and `byId` return `undefined` for unknown values. A collection missing from the publication returns `[]`.
 
 ## `@areca-cms/site-sdk/pull` (Node only)
 
 | Export | Signature | Notes |
 | --- | --- | --- |
-| `pullContent` | `({ outDir: string; client?: ArecaClient; publicationId?: string; assets?: { dir: string; publicPath: string } }) => Promise<PullContentResult>` | With `assets`, downloads media into `dir` (absolute) and rewrites URLs to `publicPath`. Writes `outDir/.publications/publication-<random>/<collection>.json`, then atomically swaps `manifest.json`, which records the `publicationId`. Keeps the current and two previous generations. Defaults `publicationId` to `ARECA_SNAPSHOT_ID`. A failed pull keeps the previous generation. Result (`PullContentResult`) adds `localAssets?` and `warnings`. The `assets` option type is `ResolvedAssets`. |
-| `readContentManifest` | `(outDir: string) => PulledContentManifest` | `{ publicationId, hash, createdAt, collections counts, ... }` |
-| `readContent` | `<T = SnapshotEntry>(outDir: string, collectionKey: string, manifest?: PulledContentManifest) => T[]` | Throws `No content file for collection "x" ... Run \`areca pull\` first.` |
+| `pullContent` | `(options: PullContentOptions) => Promise<PullContentResult>` | Validates the publication against its schema, writes `outDir/.publications/publication-<random>/<camelCollection>.json`, switches `manifest.json`, then writes the types file. Keeps the current and two previous generations. Defaults `publicationId` to `ARECA_SNAPSHOT_ID`. A failed pull before the switch keeps the previous generation |
+| `readContentManifest` | `(outDir: string) => PulledContentManifest` | `{ publicationId, hash, createdAt, collections counts, generation?, assets? }` |
+| `readContent` | `<C extends CollectionKey>(outDir: string, collectionKey: C, manifest?: PulledContentManifest) => Entry<C>[]` | Typed by the collection key, no type parameter. Throws `No content file for collection "x" ... Run \`areca pull\` first.` |
 
-Type: `PullContentOptions`.
+`PullContentOptions` = `{ outDir: string; client?: ArecaClient; publicationId?: string; assets?: ResolvedAssets; types?: string /* default <outDir>/areca.gen.ts */; contentDir?: string /* written into the module, default outDir */ }`.
+
+`ResolvedAssets` = `{ dir: string /* absolute */; publicPath: string }`.
+
+`PullContentResult` = the snapshot as the CMS sent it, plus `schema`, `localAssets?` (`{ dir, total, downloaded }`), `warnings: string[]` and `typesPath`.
 
 ## Other subpaths
 
@@ -64,5 +99,3 @@ Type: `PullContentOptions`.
 ```
 
 `seo` is missing on snapshots from older CMS versions. `seoHead` and `seoHeadHtml` then return empty head data.
-
-`PulledContentManifest` = `{ publicationId, hash, createdAt, collections: Record<string, number>, generation? }`.

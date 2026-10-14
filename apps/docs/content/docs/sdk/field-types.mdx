@@ -5,26 +5,28 @@ description: Every field type in an Areca content type, with its settings, valid
 
 Use this page to choose a field type for each property of a content type, and to learn what your site receives when it pulls content. Each field has a `type`, a few shared settings, and some type-specific settings.
 
-Areca does not generate TypeScript types from your schema. The types shown here describe the JSON values in the pulled files (`SnapshotEntry.data`). Write an interface for each collection in your site project. See [Reading content](/docs/sdk/reading-content) for an example.
+The types shown here are the ones `areca.gen.ts` gives each field after `areca pull`. Each field type maps to one TypeScript type, and the optional value shapes listed in the table are the ones the CMS sends. See [typed content](/docs/sdk/typed-content) for how the types are generated, and [reading content](/docs/sdk/reading-content) for the queries that use them.
 
 ## Summary
 
-There are 12 field types.
+There are 12 field types. The last two columns give the TypeScript type of a value in `data`, for a required field and for an optional one.
 
-| Type | Label in the CMS | Value in pulled content | Main limit |
-| --- | --- | --- | --- |
-| `text` | Short text | `string` | 1,000 characters |
-| `textarea` | Long text | `string` | 50,000 characters |
-| `richtext` | Rich text | `RichTextValue` | Entry data up to 1 MiB |
-| `image` | Image | `ImageValue` or `null` | Library file |
-| `date` | Date | `string` (`YYYY-MM-DD`) | Valid calendar date |
-| `datetime` | Date and time | `string` (ISO 8601) | 64 characters |
-| `select` | Choice | `string` | Up to 200 options |
-| `reference` | Link to entry | `ReferenceValue` or `null` | Requires `collection` |
-| `slug` | Slug | `string` | 200 characters, lowercase |
-| `boolean` | Yes / no | `boolean` | None |
-| `number` | Number | `number` or `null` | None |
-| `url` | Web address | `string` | 2,048 characters, `http` or `https` |
+| Type | Label in the CMS | Required value | Optional value | Main limit |
+| --- | --- | --- | --- | --- |
+| `text` | Short text | `string` | `string \| null \| undefined` | 1,000 characters |
+| `textarea` | Long text | `string` | `string \| null \| undefined` | 50,000 characters |
+| `richtext` | Rich text | `RichTextValue` | `RichTextValue \| '' \| null \| undefined` | Entry data up to 1 MiB |
+| `image` | Image | `ImageValue` | `ImageValue \| '' \| null \| undefined` | Library file |
+| `date` | Date | `string` (`YYYY-MM-DD`) | `string \| null \| undefined` | Valid calendar date |
+| `datetime` | Date and time | `string` (ISO 8601) | `string \| null \| undefined` | 64 characters |
+| `select` | Choice | `'a' \| 'b'` with `options`, otherwise `string` | With `options`: `'a' \| 'b' \| '' \| null \| undefined`. Otherwise: `string \| null \| undefined` | Up to 200 options |
+| `reference` | Link to entry | `ReferenceValue<'target'>` | `ReferenceValue<'target'> \| '' \| null \| undefined` | Requires `collection` |
+| `slug` | Slug | `string` | `string \| null \| undefined` | 200 characters, lowercase |
+| `boolean` | Yes / no | `boolean` | `boolean \| null \| undefined` | None |
+| `number` | Number | `number` | `number \| null \| undefined` | None |
+| `url` | Web address | `string` | `string \| null \| undefined` | 2,048 characters, `http` or `https` |
+
+A missing key in the pulled JSON is the same as `undefined`. A required field is always present, never `null` and never `''`, because the pull rejects those values. An optional field can have any of the shapes in its column. Each collection's field keys are camelCase in code, so a field `cover_image` is `entry.data.coverImage`. The `key` you set in the config is the raw name.
 
 ## Shared settings
 
@@ -129,7 +131,7 @@ type RichTextValue = {
 
 - **Validation:** the value must be a file in the same client's Library. The CMS checks this when the entry is saved.
 - **Library files:** JPEG, PNG, WebP, GIF and PDF, up to 20 MB each.
-- **Pulled value:** an `ImageValue` object, or `null` when the field is empty.
+- **Pulled value:** an `ImageValue` object. An optional field that is empty can be `null`, missing or `''`.
 
 ```ts
 type ImageValue = {
@@ -186,17 +188,17 @@ When `options` is set, you can narrow the type in your interface to the same lit
 
 - **Settings:** `collection` is the key of the target collection. It is required.
 - **Validation:** the linked entry must exist in that collection. Saving a draft does not check whether the linked entry is published. Publishing the entry does.
-- **Pulled value:** a `ReferenceValue`, or `null` when the linked entry is not part of the snapshot.
+- **Pulled value:** a `ReferenceValue`. An optional field that is empty can be `null`, missing or `''`.
 
 ```ts
-type ReferenceValue = {
-  collection: string   // key of the target collection
+type ReferenceValue<C extends string = string> = {
+  collection: C        // camelCase key of the target collection, e.g. 'blogPosts'
   slug: string         // the target entry's slug
   id: string           // the target entry's ID
 }
 ```
 
-To link to an article from a page, make the page's `related` field a `reference` with `collection: 'articles'`. Then build the link from `slug` and the target collection's route.
+To link to an article from a page, make the page's `related` field a `reference` with `collection: 'articles'`. In your site, `content.resolve(page.data.related)` returns the target entry, and `content.href(...)` builds its link from the target collection's route. See [reading content](/docs/sdk/reading-content#references).
 
 ## slug
 
@@ -264,7 +266,8 @@ Site API rate limits are covered in [Errors and limits](/docs/sdk/errors-and-lim
 ## Related
 
 - [Defining content](/docs/sdk/defining-content) shows how to write a `fields` list.
-- [Reading content](/docs/sdk/reading-content) shows how to type the pulled values.
+- [Typed content](/docs/sdk/typed-content) explains the generated types and camelCase names.
+- [Reading content](/docs/sdk/reading-content) shows how to query the typed values.
 - [Rich text](/docs/sdk/rich-text) renders `richtext` values.
 - [SEO](/docs/sdk/seo) explains the `seo` object that each entry carries.
 - [CLI reference](/docs/sdk/cli) covers `areca manifest push`, which sends these definitions to the CMS.

@@ -3,9 +3,12 @@ WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@11.18.0 --activate
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY examples/demo-site/package.json ./examples/demo-site/
+COPY packages/site-sdk/package.json ./packages/site-sdk/
 RUN pnpm install --frozen-lockfile --filter @areca/demo-site...
 
 FROM deps AS build
+COPY packages/site-sdk ./packages/site-sdk
+RUN pnpm --filter @areca-cms/site-sdk build
 COPY examples/demo-site ./examples/demo-site
 ARG ARECA_CMS_URL
 ENV ARECA_CMS_URL=$ARECA_CMS_URL

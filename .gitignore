@@ -14,7 +14,11 @@ dist-ssr
 __unconfig*
 todos.json
 **/src/paraglide/
-**/src/generated/
+**/src/generated/*
+# Pulled content is ignored; the generated types file is committed (see docs/design/sdk-type-safety.md).
+!**/src/generated/content/
+**/src/generated/content/*
+!**/src/generated/content/areca.gen.ts
 examples/demo-site/public/areca/
 playwright-report
 test-results

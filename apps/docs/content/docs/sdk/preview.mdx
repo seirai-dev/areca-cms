@@ -70,6 +70,24 @@ If `ARECA_SITE_TOKEN` is missing, `getPreviewEntry()` throws `Missing ARECA_SITE
 
 `getPreviewEntry` throws when the CMS returns an error. The message includes the status code and the CMS's error text, for example `Failed to fetch preview (401): Unauthorized`.
 
+## Typed preview
+
+If your site has the generated `areca.gen.ts`, `content.preview(token)` makes the same request, and returns the entry with the camelCase names and types of your site. Its `collection` is the camelCase key, so a `switch` on it narrows `entry`:
+
+```ts
+import { content } from '../generated/content/areca.gen'
+
+const result = await content.preview(token)
+switch (result.collection) {
+  case 'blogPosts': // result.entry is Entry<'blogPosts'>
+    break
+  case 'authors': // result.entry is Entry<'authors'>
+    break
+}
+```
+
+It throws the same errors as `getPreviewEntry`. A draft from a collection that is not in the generated types throws `Preview collection "<key>" is not in the generated schema`. Run `areca pull` to refresh the types. See [reading content](/docs/sdk/reading-content) for the content object.
+
 ## Build the preview route
 
 The example uses TanStack Start, like the [demo site](/docs/sdk/example-site). The data fetch runs in a server function, so the token and site token never reach the browser beyond the URL.

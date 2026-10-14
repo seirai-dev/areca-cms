@@ -8,8 +8,9 @@ The site SDK, `@areca-cms/site-sdk`, is the package your website uses to talk to
 The SDK covers the developer side of the content workflow:
 
 - **Schema push.** It sends the content model you define in `areca.config.ts` to the CMS, so editors see the same collections and fields in the CMS.
-- **Build-time pull.** It downloads the latest published snapshot into local JSON files while your site builds.
-- **Reading content.** It reads those files from your server code, with typed entries.
+- **Build-time pull.** It downloads the latest published snapshot into local JSON files while your site builds, and checks it against the schema.
+- **Typed content.** It generates `areca.gen.ts` from the schema, so every collection, field, value, reference and route is typed in your code.
+- **Reading content.** A typed `content` object queries the local files from your server code: `all`, `first`, `get`, `where`, `orderBy`, references and links.
 - **Rich text.** It turns a rich text value into a Markdown document, Markdown source or static HTML.
 - **SEO.** It turns each entry's SEO data into page title, meta tags, links and JSON-LD.
 - **Preview.** It fetches a draft entry with a signed token, so editors can see unpublished changes on your site.
@@ -50,11 +51,12 @@ Install the package once. It exposes one command-line tool, `areca`, and four im
 | Import | What it provides |
 | --- | --- |
 | `@areca-cms/site-sdk` | `defineSiteContent`, `manifestFromConfig`, `createArecaClient`, `getPreviewEntry`, `previewHeaders`, the SEO and rich text helpers, and the TypeScript types |
-| `@areca-cms/site-sdk/pull` | `pullContent` and `readContent` |
+| `@areca-cms/site-sdk/pull` | `pullContent`, `readContent` and `readContentManifest` |
+| `@areca-cms/site-sdk/content` | `createContent`, which builds the typed content object (Node only) |
 | `@areca-cms/site-sdk/seo` | `seoHead`, `seoHeadHtml` and `seoJsonLd` |
 | `@areca-cms/site-sdk/rich-text` | `richTextDocument`, `richTextMarkdown` and `richTextHtml` |
 
-The root entry does not re-export `pullContent` or `readContent`. Import them from `@areca-cms/site-sdk/pull`.
+The root entry does not re-export `pullContent`, `readContent` or `createContent`. Import them from their subpaths. Most sites read content through the `content` object in `areca.gen.ts`, which needs none of them.
 
 ## Requirements
 
@@ -77,8 +79,11 @@ The root entry does not re-export `pullContent` or `readContent`. Import them fr
   <Card title="Pulling content at build time" href="/docs/sdk/pulling-content">
     Download the published snapshot before your site builds.
   </Card>
+  <Card title="Typed content" href="/docs/sdk/typed-content">
+    How `areca.gen.ts` types every collection, field and route.
+  </Card>
   <Card title="Reading content" href="/docs/sdk/reading-content">
-    Read entries in your server code with typed results.
+    Query entries with the typed `content` object.
   </Card>
   <Card title="Example site" href="/docs/sdk/example-site">
     Run the demo site that ships with the repository.

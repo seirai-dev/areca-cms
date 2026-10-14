@@ -6,6 +6,7 @@ import { pullContent } from './pull.js'
 import { manifestFromConfig } from './config.js'
 import { createArecaClient } from './client.js'
 import type { ArecaClient } from './client.js'
+import { isReservedCollectionKey } from './identifiers.js'
 const dirs: string[] = []
 afterEach(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true })
@@ -23,7 +24,7 @@ function client(key: string): ArecaClient {
       hash: 'h',
       collections: { [key]: [] },
     }),
-  } as ArecaClient
+  } as unknown as ArecaClient
 }
 it.each([
   '../escape',
@@ -40,6 +41,48 @@ it.each([
   await expect(pullContent({ outDir, client: client(key) })).rejects.toThrow(/Unsafe/)
   expect(existsSync(join(outDir, 'manifest.json'))).toBe(false)
 })
+it.each(['resolve', 'href', 'preview', 'Preview', 'HREF'])(
+  'rejects reserved collection key %s before writing',
+  async (key) => {
+    const outDir = dir()
+    await expect(pullContent({ outDir, client: client(key) })).rejects.toThrow()
+    expect(existsSync(join(outDir, 'manifest.json'))).toBe(false)
+    expect(() =>
+      manifestFromConfig({
+        siteKey: 'x',
+        collections: { [key]: { route: '/:slug', fields: [] } },
+      }),
+    ).toThrow()
+  },
+)
+
+it('recognises reserved collection keys case-insensitively and nothing else', () => {
+  for (const key of ['resolve', 'href', 'preview', 'Preview', 'RESOLVE']) {
+    expect(isReservedCollectionKey(key)).toBe(true)
+  }
+  for (const key of ['previews', 'resolved', 'hrefs', 'blogPosts']) {
+    expect(isReservedCollectionKey(key)).toBe(false)
+  }
+})
+
+it('accepts reserved words as field keys', () => {
+  expect(() =>
+    manifestFromConfig({
+      siteKey: 'x',
+      collections: {
+        articles: {
+          route: '/:slug',
+          fields: [
+            { key: 'resolve', type: 'text', label: 'R' },
+            { key: 'href', type: 'text', label: 'H' },
+            { key: 'preview', type: 'text', label: 'P' },
+          ],
+        },
+      },
+    }),
+  ).not.toThrow()
+})
+
 it('refuses existing symbolic link destination', async () => {
   const outDir = dir(),
     outside = join(dir(), 'outside.json')

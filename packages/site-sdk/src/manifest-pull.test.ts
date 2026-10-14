@@ -48,6 +48,7 @@ function makeClient(manifest: SiteManifest = remote): ArecaClient {
     syncManifest: vi.fn(),
     fetchManifest: vi.fn().mockResolvedValue(manifest),
     fetchSnapshot: vi.fn(),
+    fetchAsset: vi.fn(),
     fetchPreview: vi.fn(),
   }
 }

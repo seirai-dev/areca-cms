@@ -12,7 +12,7 @@ import {
   renameSync,
   rmSync,
 } from 'node:fs'
-import { join, resolve, relative, isAbsolute } from 'node:path'
+import { basename, dirname, join, resolve, relative, isAbsolute } from 'node:path'
 import {
   downloadAssets,
   localAssetFileNames,
@@ -24,12 +24,17 @@ import {
 } from './assets.js'
 
 export type { ResolvedAssets } from './assets.js'
-import {
-  assertSafeIdentifier,
-  assertUniqueCollectionIdentifiers,
-} from './identifiers.js'
+import { camelCollectionKeys, camelizeSnapshot } from './camel-case.js'
+import { generateContentTypes } from './generate-types.js'
+import { assertSafeIdentifier } from './identifiers.js'
 import { createArecaClient, type ArecaClient } from './client.js'
-import type { PulledContentManifest, Snapshot, SnapshotEntry } from './types.js'
+import type { CollectionKey, Entry } from './schema-types.js'
+import type {
+  CollectionConfig,
+  PulledContentManifest,
+  Snapshot,
+} from './types.js'
+import { validateSnapshot } from './validate-snapshot.js'
 
 /** Older generations kept next to the current one for readers that captured them. */
 const PREVIOUS_GENERATIONS_KEPT = 2
@@ -43,6 +48,13 @@ export type PullContentOptions = {
    * CMS URLs. The `areca pull` CLI resolves this from areca.config.ts.
    */
   assets?: ResolvedAssets
+  /** Where `areca.gen.ts` is written. Default `<outDir>/areca.gen.ts`. */
+  types?: string
+  /**
+   * The content directory as written into `areca.gen.ts`, relative to the
+   * app's working directory. Default `outDir`. The CLI passes `--out` as given.
+   */
+  contentDir?: string
 }
 
 export type PullContentResult = Snapshot & {
@@ -50,9 +62,15 @@ export type PullContentResult = Snapshot & {
   localAssets?: { dir: string; total: number; downloaded: number }
   /** Set when the CMS does not list media, so URLs still point at it. */
   warnings: string[]
+  /** The generated types file that was written. */
+  typesPath: string
 }
 
-/** Stage immutable files, then switch the manifest pointer in one atomic rename. */
+/**
+ * Stage immutable files, then switch the manifest pointer in one atomic rename.
+ * Validation runs before anything is staged, so a bad publication leaves the
+ * previous generation and types file untouched.
+ */
 export async function pullContent(
   options: PullContentOptions,
 ): Promise<PullContentResult> {
@@ -66,15 +84,29 @@ export async function pullContent(
       `Expected publication ${publicationId}, received ${snapshot.publicationId}`,
     )
   }
-  assertUniqueCollectionIdentifiers(Object.keys(snapshot.collections))
+  // Key checks run before any schema lookup, so unsafe keys fail first.
+  const camelKeys = camelCollectionKeys(Object.keys(snapshot.collections))
   mkdirSync(options.outDir, { recursive: true })
   const base = realpathSync(options.outDir)
   // Keep the legacy guards even though new pulls no longer replace flat files.
   const manifestPath = containedPath(base, 'manifest')
-  for (const key of Object.keys(snapshot.collections)) containedPath(base, key)
-  const publications = safeDirectory(base, '.publications', true)
+  for (const camel of camelKeys.values()) containedPath(base, camel)
+  const typesPath = options.types ?? join(options.outDir, 'areca.gen.ts')
+  assertNotSymbolicLink(typesPath, 'Types output must not be a symbolic link')
   const warnings: string[] = []
-  let collections = snapshot.collections
+
+  let schema: Record<string, CollectionConfig> | undefined = snapshot.schema
+  if (schema === undefined) {
+    schema = (await client.fetchManifest()).collections
+    warnings.push(
+      `Publication ${snapshot.publicationId} has no embedded schema; types use the current CMS schema. Go live again to embed it.`,
+    )
+  }
+  // Raw keys, before anything is camelised or written.
+  validateSnapshot(snapshot, schema)
+  const camelized = camelizeSnapshot(snapshot, schema).collections
+
+  let collections = camelized
   let localAssets: PullContentResult['localAssets']
   let assetFiles: string[] | undefined
   let media: MediaChanges | undefined
@@ -92,7 +124,7 @@ export async function pullContent(
       options.assets.dir,
       client.fetchAsset,
     )
-    collections = localizeCollections(snapshot.collections, files, {
+    collections = localizeCollections(camelized, files, {
       publicPath: options.assets.publicPath,
       siteUrl: snapshot.siteUrl,
     })
@@ -103,6 +135,8 @@ export async function pullContent(
       downloaded: media.downloaded,
     }
   }
+  // Created only once the publication is valid, so a rejected pull leaves no trace.
+  const publications = safeDirectory(base, '.publications', true)
   let stage: string
   try {
     stage = mkdtempSync(join(publications, 'publication-'))
@@ -162,11 +196,20 @@ export async function pullContent(
     const detail = error instanceof Error ? error.message : String(error)
     warnings.push(`Pulled, but cleaning up older content failed: ${detail}`)
   }
+  // Types follow the content swap, so a failed pull never leaves them ahead.
+  writeTextAtomically(
+    typesPath,
+    generateContentTypes({
+      schema,
+      dir: options.contentDir ?? options.outDir,
+    }),
+  )
   return {
     ...snapshot,
-    collections,
+    schema,
     ...(localAssets ? { localAssets } : {}),
     warnings,
+    typesPath,
   }
 }
 
@@ -177,11 +220,11 @@ export function readContentManifest(outDir: string): PulledContentManifest {
   ) as PulledContentManifest
 }
 
-export function readContent<T = SnapshotEntry>(
+export function readContent<C extends CollectionKey>(
   outDir: string,
-  collectionKey: string,
+  collectionKey: C,
   capturedManifest?: PulledContentManifest,
-): T[] {
+): Entry<C>[] {
   assertSafeIdentifier(collectionKey)
   try {
     let manifest = capturedManifest
@@ -209,7 +252,7 @@ export function readContent<T = SnapshotEntry>(
     }
     return JSON.parse(
       readFileSync(containedPath(directory, collectionKey), 'utf8'),
-    ) as T[]
+    ) as Entry<C>[]
   } catch (error) {
     if (isNodeError(error) && error.code === 'ENOENT') {
       throw new Error(
@@ -227,6 +270,10 @@ function configuredPublicationId(): string | undefined {
 }
 
 function writeJson(filePath: string, value: unknown, exclusive = false): void {
+  writeText(filePath, `${JSON.stringify(value, null, 2)}\n`, exclusive)
+}
+
+function writeText(filePath: string, text: string, exclusive = false): void {
   const fd = openSync(
     filePath,
     constants.O_WRONLY |
@@ -235,9 +282,32 @@ function writeJson(filePath: string, value: unknown, exclusive = false): void {
       constants.O_NOFOLLOW,
   )
   try {
-    writeFileSync(fd, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+    writeFileSync(fd, text, 'utf8')
   } finally {
     closeSync(fd)
+  }
+}
+
+/** Writes through a temporary file in the same directory, then renames it over the target. */
+function writeTextAtomically(filePath: string, text: string): void {
+  mkdirSync(dirname(filePath), { recursive: true })
+  const temporary = join(
+    dirname(filePath),
+    `.${basename(filePath)}.${randomUUID()}.tmp`,
+  )
+  try {
+    writeText(temporary, text, true)
+    renameSync(temporary, filePath)
+  } finally {
+    rmSync(temporary, { force: true })
+  }
+}
+
+function assertNotSymbolicLink(filePath: string, message: string): void {
+  try {
+    if (lstatSync(filePath).isSymbolicLink()) throw new Error(message)
+  } catch (error) {
+    if (!isNodeError(error) || error.code !== 'ENOENT') throw error
   }
 }
 

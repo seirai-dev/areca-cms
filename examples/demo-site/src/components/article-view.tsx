@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router'
-import type { Article, Author, Coffee } from '../lib/content.ts'
+import type { ArticlesEntry, AuthorsEntry, CoffeesEntry } from '../generated/content/areca.gen.ts'
 import { ArticleBody } from './article-body.tsx'
 import { CmsImage, PreviewBanner } from './cms-image.tsx'
 import { formatDate, formatPrice, splitTastingNotes } from './formatters.ts'
@@ -13,9 +13,9 @@ export function ArticleView({
   coffee,
   preview = false,
 }: {
-  article: Article
-  author: Author | null
-  coffee: Coffee | null
+  article: ArticlesEntry
+  author: AuthorsEntry | null
+  coffee: CoffeesEntry | null
   preview?: boolean
 }) {
   const { data, seo } = article
@@ -143,7 +143,7 @@ export function ArticleView({
   )
 }
 
-function FeaturedCoffee({ coffee }: { coffee: Coffee }) {
+function FeaturedCoffee({ coffee }: { coffee: CoffeesEntry }) {
   const { data } = coffee
   const price = formatPrice(data.price)
   const notes = splitTastingNotes(coffee.data.tastingNotes).slice(0, 3)
@@ -177,7 +177,7 @@ function FeaturedCoffee({ coffee }: { coffee: Coffee }) {
   )
 }
 
-function AuthorBio({ author }: { author: Author }) {
+function AuthorBio({ author }: { author: AuthorsEntry }) {
   const { data } = author
   return (
     <section aria-label="About the author" className="mt-24 flex flex-col gap-6 rounded-3xl bg-brand p-8 text-brand-ink sm:flex-row sm:items-center md:p-10">
