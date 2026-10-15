@@ -235,6 +235,27 @@ export const ROWS: Row[] = [
     },
   },
   {
+    name: 'setSiteLanguagesFn',
+    fn: adminFns.setSiteLanguagesFn,
+    policy: 'agency',
+    prepare: async (w) => {
+      const s = await w.fresh.site()
+      return {
+        data: { id: s.id, main: 'nl', all: ['nl', 'en'] },
+        untouched: exists(site, and(eq(site.id, s.id), isNull(site.languages))),
+      }
+    },
+  },
+  {
+    name: 'previewMainLanguageChangeFn',
+    fn: adminFns.previewMainLanguageChangeFn,
+    policy: 'agency',
+    prepare: async (w) => {
+      const s = await w.fresh.site()
+      return { data: { id: s.id, main: 'en' } }
+    },
+  },
+  {
     name: 'rotateSiteTokenFn',
     fn: adminFns.rotateSiteTokenFn,
     policy: 'agency-fresh',

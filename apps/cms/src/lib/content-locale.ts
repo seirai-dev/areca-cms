@@ -5,6 +5,9 @@
  * Every read or write of `$i18n` / `$locale` goes through this module.
  * See docs/design/content-languages.md.
  */
+import { z } from 'zod'
+
+import { LOCALE_TAG_MAX_LENGTH } from './content-limits.ts'
 import { isEmptyRichText } from './rich-text-empty.ts'
 import { SEO_KEY } from './seo.ts'
 import type { EntryData, Field, FieldType } from './types.ts'
@@ -286,3 +289,23 @@ export function resolveChain(
   const first = usable[0]
   return first ? { locale: first, isFallback: true } : null
 }
+
+/** Canonical BCP 47 form of a tag (`nl-be` to `nl-BE`), or null when invalid. */
+export function canonicalLocale(tag: string): string | null {
+  try {
+    return Intl.getCanonicalLocales(tag).at(0) ?? null
+  } catch {
+    return null
+  }
+}
+
+export function isValidLocaleTag(tag: string): boolean {
+  return canonicalLocale(tag) !== null
+}
+
+/** A language code as accepted in manifests and settings. */
+export const localeTagSchema = z
+  .string()
+  .min(1)
+  .max(LOCALE_TAG_MAX_LENGTH)
+  .refine(isValidLocaleTag, 'Invalid language code')

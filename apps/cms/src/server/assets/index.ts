@@ -199,14 +199,34 @@ export async function getAsset(
   return row
 }
 
+/**
+ * Sets the alt text. Without `locale`, or with the site's main language, this
+ * is `alt`. Any other language is `altI18n[locale]`; an empty value removes
+ * that language's alt, so the site falls back to the main alt.
+ */
 export async function updateAsset(
   id: string,
-  patch: { altText: string },
+  patch: {
+    altText: string
+    locale?: string | null
+    mainLocale?: string | null
+  },
   organizationId: string,
 ): Promise<Asset> {
+  const translation =
+    patch.locale && patch.locale !== patch.mainLocale ? patch.locale : null
   const [row] = await db
     .update(asset)
-    .set({ altText: patch.altText })
+    .set(
+      translation
+        ? {
+            altI18n:
+              patch.altText.trim() === ''
+                ? sql`${asset.altI18n} - ${translation}::text`
+                : sql`jsonb_set(${asset.altI18n}, ARRAY[${translation}::text], to_jsonb(${patch.altText}::text), true)`,
+          }
+        : { altText: patch.altText },
+    )
     .where(and(eq(asset.id, id), eq(asset.organizationId, organizationId)))
     .returning()
   if (!row) {

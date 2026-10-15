@@ -15,8 +15,10 @@ import {
   MANIFEST_MAX_BYTES,
   MANIFEST_MAX_COLLECTIONS,
   MAX_FIELDS_PER_COLLECTION,
+  MAX_SITE_LANGUAGES,
   ROUTE_PATTERN_MAX_LENGTH,
 } from '#/lib/content-limits'
+import { localeTagSchema } from '#/lib/content-locale'
 import type { FieldType, SiteManifest } from '#/lib/types'
 import { listCollections, syncManifest } from '#/server/content/collections'
 import { listGlobals } from '#/server/content/globals'
@@ -49,6 +51,7 @@ const fieldSchema = z.strictObject({
   collection: z.string().max(FIELD_OPTION_MAX_LENGTH).optional(),
   description: z.string().max(FIELD_DESCRIPTION_MAX_LENGTH).optional(),
   after: z.string().min(1).max(FIELD_OPTION_MAX_LENGTH).optional(),
+  translatable: z.boolean().optional(),
 })
 
 /** Site content fields are collection fields plus an editor-only group heading. */
@@ -56,13 +59,28 @@ const globalFieldSchema = fieldSchema.extend({
   group: z.string().min(1).max(GLOBAL_GROUP_MAX_LENGTH).optional(),
 })
 
+const languagesSchema = z.strictObject({
+  main: localeTagSchema,
+  all: z.array(localeTagSchema).min(1).max(MAX_SITE_LANGUAGES),
+})
+
+const requiredLanguagesSchema = z.array(localeTagSchema).max(MAX_SITE_LANGUAGES)
+
 const manifestSchema = z.strictObject({
+  languages: languagesSchema.optional(),
   collections: z.record(
     z.string().refine(isSafeIdentifier, 'Unsafe identifier'),
     z.strictObject({
       route: z.string().min(1).max(ROUTE_PATTERN_MAX_LENGTH),
       label: z.string().max(FIELD_LABEL_MAX_LENGTH).optional(),
       fields: z.array(fieldSchema).max(MAX_FIELDS_PER_COLLECTION),
+      routes: z
+        .record(
+          localeTagSchema,
+          z.string().min(1).max(ROUTE_PATTERN_MAX_LENGTH),
+        )
+        .optional(),
+      requiredLanguages: requiredLanguagesSchema.optional(),
     }),
   ),
   globals: z
@@ -73,6 +91,7 @@ const manifestSchema = z.strictObject({
         fields: z.array(globalFieldSchema).max(MAX_FIELDS_PER_COLLECTION),
         seo: z.boolean().optional(),
         previewPath: z.string().max(GLOBAL_PREVIEW_PATH_MAX_LENGTH).optional(),
+        requiredLanguages: requiredLanguagesSchema.optional(),
       }),
     )
     .optional(),
@@ -131,6 +150,10 @@ export async function getSitesManifest(request: Request) {
       route: row.routePattern,
       label: row.label,
       fields: row.fields,
+      ...(row.localizedRoutes ? { routes: row.localizedRoutes } : {}),
+      ...(row.requiredLanguages.length > 0
+        ? { requiredLanguages: row.requiredLanguages }
+        : {}),
     }
   }
 
@@ -142,10 +165,14 @@ export async function getSitesManifest(request: Request) {
       fields: row.fields,
       seo: row.seoEnabled,
       ...(row.previewPath ? { previewPath: row.previewPath } : {}),
+      ...(row.requiredLanguages.length > 0
+        ? { requiredLanguages: row.requiredLanguages }
+        : {}),
     }
   }
 
   return json({
+    ...(site.languages ? { languages: site.languages } : {}),
     collections,
     // Omitted when there are no enabled sections.
     ...(Object.keys(globals).length > 0 ? { globals } : {}),

@@ -1,4 +1,5 @@
 import { isSafeIdentifier } from '#/lib/content-identifiers'
+import { localeTagSchema } from '#/lib/content-locale'
 import {
   GLOBAL_GROUP_MAX_LENGTH,
   GLOBAL_PREVIEW_PATH_MAX_LENGTH,
@@ -10,6 +11,7 @@ import {
   FIELD_OPTION_MAX_LENGTH,
   ID_MAX_LENGTH,
   MAX_FIELDS_PER_COLLECTION,
+  MAX_SITE_LANGUAGES,
   ROUTE_PATTERN_MAX_LENGTH,
   SCHEDULE_FIELD_MAX_LENGTH,
   SEARCH_MAX_LENGTH,
@@ -92,6 +94,7 @@ const fieldSchema = z.object({
   collection: z.string().max(FIELD_OPTION_MAX_LENGTH).optional(),
   description: z.string().max(FIELD_DESCRIPTION_MAX_LENGTH).optional(),
   after: z.string().min(1).max(FIELD_OPTION_MAX_LENGTH).optional(),
+  translatable: z.boolean().optional(),
 })
 
 /** Site content fields: collection field rules plus an editor-only group heading. */
@@ -405,6 +408,17 @@ export const upsertCollectionFn = createServerFn({ method: 'POST' })
       routePattern: z.string().min(1).max(ROUTE_PATTERN_MAX_LENGTH),
       fields: z.array(fieldSchema).max(MAX_FIELDS_PER_COLLECTION),
       enabled: z.boolean().optional(),
+      requiredLanguages: z
+        .array(localeTagSchema)
+        .max(MAX_SITE_LANGUAGES)
+        .optional(),
+      localizedRoutes: z
+        .record(
+          localeTagSchema,
+          z.string().min(1).max(ROUTE_PATTERN_MAX_LENGTH),
+        )
+        .nullable()
+        .optional(),
     }),
   )
   .handler(async ({ data }) => {
@@ -415,6 +429,8 @@ export const upsertCollectionFn = createServerFn({ method: 'POST' })
       routePattern: data.routePattern,
       fields: data.fields,
       enabled: data.enabled,
+      requiredLanguages: data.requiredLanguages,
+      localizedRoutes: data.localizedRoutes,
     })
   })
 
@@ -552,6 +568,10 @@ export const upsertGlobalFn = createServerFn({ method: 'POST' })
         .nullable()
         .optional(),
       enabled: z.boolean().optional(),
+      requiredLanguages: z
+        .array(localeTagSchema)
+        .max(MAX_SITE_LANGUAGES)
+        .optional(),
     }),
   )
   .handler(async ({ data }) => {
@@ -565,6 +585,7 @@ export const upsertGlobalFn = createServerFn({ method: 'POST' })
         seo: data.seo,
         previewPath: data.previewPath,
         enabled: data.enabled,
+        requiredLanguages: data.requiredLanguages,
       },
       session.user.id,
     )

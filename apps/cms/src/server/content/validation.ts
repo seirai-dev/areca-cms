@@ -13,6 +13,13 @@ import {
   TEXT_MAX_LENGTH,
   URL_MAX_LENGTH,
 } from '#/lib/content-limits'
+import {
+  I18N_KEY,
+  LOCALE_KEY,
+  SLUG_KEY,
+  isTranslatable,
+  isValidLocaleTag,
+} from '#/lib/content-locale'
 import { isEmptyRichText } from '#/lib/rich-text-empty'
 import { SEO_KEY, entrySeoSchema, readEntrySeo } from '#/lib/seo'
 import type { EntryData, Field } from '#/lib/types'
@@ -194,7 +201,11 @@ export function findUnknownKeys(
 ): string[] {
   const declared = new Set(fields.map((field) => field.key))
   return Object.keys(data).filter(
-    (key) => key !== SEO_KEY && !declared.has(key),
+    (key) =>
+      key !== SEO_KEY &&
+      key !== I18N_KEY &&
+      key !== LOCALE_KEY &&
+      !declared.has(key),
   )
 }
 
@@ -277,7 +288,12 @@ export function validateEntryData(
   const hasSeo = record[SEO_KEY] != null
   const result = buildEntrySchema(fields, options).safeParse(data)
   const seoResult = hasSeo ? entrySeoSchema.safeParse(record[SEO_KEY]) : null
-  if (!result.success || (seoResult && !seoResult.success)) {
+  const languageErrors = validateLanguageData(fields, record)
+  if (
+    !result.success ||
+    (seoResult && !seoResult.success) ||
+    languageErrors.length
+  ) {
     return {
       ok: false,
       errors: [
@@ -291,18 +307,117 @@ export function validateEntryData(
             message: issue.message,
           }),
         ),
+        ...languageErrors,
       ],
     }
   }
 
   const parsed = result.data as EntryData
   if (seoResult?.success) parsed[SEO_KEY] = seoResult.data
+  // Language data is not in the field schema, so zod strips it. Keep it as written.
+  if (record[LOCALE_KEY] !== undefined) parsed[LOCALE_KEY] = record[LOCALE_KEY]
+  if (record[I18N_KEY] !== undefined) parsed[I18N_KEY] = record[I18N_KEY]
   const dateErrors = validateDateOrder(fields, parsed)
   if (dateErrors.length > 0) {
     return { ok: false, errors: dateErrors }
   }
 
   return { ok: true, data: parsed }
+}
+
+/** Errors in the language keys (`$locale`, `$i18n`) of a write. */
+export function validateLanguageData(
+  fields: Field[],
+  record: Record<string, unknown>,
+): FieldError[] {
+  return [...validateLocaleKey(record), ...validateTranslations(fields, record)]
+}
+
+function validateLocaleKey(record: Record<string, unknown>): FieldError[] {
+  const value = record[LOCALE_KEY]
+  if (value === undefined || value === null) return []
+  if (typeof value === 'string' && isValidLocaleTag(value)) return []
+  return [{ path: LOCALE_KEY, message: 'Invalid language code' }]
+}
+
+/**
+ * Each `$i18n.<locale>` slot holds only translatable fields, `$seo` and
+ * `$slug`. Its values use the same per-field schemas as the base, in partial
+ * mode: a translation may be incomplete while it is a draft.
+ */
+function validateTranslations(
+  fields: Field[],
+  record: Record<string, unknown>,
+): FieldError[] {
+  const translations = record[I18N_KEY]
+  if (translations === undefined || translations === null) return []
+  if (typeof translations !== 'object' || Array.isArray(translations)) {
+    return [{ path: I18N_KEY, message: m.server_expected_object() }]
+  }
+  const translatable = fields.filter(isTranslatable)
+  const translatableKeys = new Set(translatable.map((field) => field.key))
+  // A language may be a partial draft, so nothing in its slot is required.
+  const slotSchema = buildEntrySchema(
+    translatable.map((field) => ({ ...field, required: false })),
+    { mode: 'partial' },
+  )
+  const errors: FieldError[] = []
+
+  for (const [locale, slot] of Object.entries(translations)) {
+    const path = `${I18N_KEY}.${locale}`
+    if (!isValidLocaleTag(locale)) {
+      errors.push({ path, message: 'Invalid language code' })
+      continue
+    }
+    if (slot === undefined || slot === null) continue
+    if (typeof slot !== 'object' || Array.isArray(slot)) {
+      errors.push({ path, message: m.server_expected_object() })
+      continue
+    }
+    const values = slot as Record<string, unknown>
+    for (const key of Object.keys(values)) {
+      if (key === SEO_KEY || key === SLUG_KEY || translatableKeys.has(key))
+        continue
+      errors.push({
+        path: `${path}.${key}`,
+        message: m.server_unknown_field({ field: key }),
+      })
+    }
+    const parsed = slotSchema.safeParse(values)
+    if (!parsed.success) {
+      errors.push(
+        ...parsed.error.issues.map((issue) => ({
+          path: [path, ...issue.path].join('.'),
+          message: issue.message,
+        })),
+      )
+    }
+    const slug = values[SLUG_KEY]
+    if (slug !== undefined && slug !== null && slug !== '') {
+      if (
+        typeof slug !== 'string' ||
+        !SLUG_PATTERN.test(slug) ||
+        slug.length > SLUG_MAX_LENGTH
+      ) {
+        errors.push({
+          path: `${path}.${SLUG_KEY}`,
+          message: m.server_invalid_slug(),
+        })
+      }
+    }
+    if (values[SEO_KEY] != null) {
+      const seo = entrySeoSchema.safeParse(values[SEO_KEY])
+      if (!seo.success) {
+        errors.push(
+          ...seo.error.issues.map((issue) => ({
+            path: [path, SEO_KEY, ...issue.path].join('.'),
+            message: issue.message,
+          })),
+        )
+      }
+    }
+  }
+  return errors
 }
 
 function validateDateOrder(fields: Field[], data: EntryData): FieldError[] {

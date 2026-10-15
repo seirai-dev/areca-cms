@@ -25,10 +25,18 @@ export class ConflictError extends AppError {
   }
 }
 
+/** Required translatable fields still empty in one content language. */
+export type LanguageBlockerDetail = { locale: string; missing: string[] }
+
 export class ValidationError extends AppError {
   readonly status = 400
   readonly errors: { path: string; message: string }[]
-  constructor(errors: { path: string; message: string }[]) {
+  /** Structured language gaps behind a lifecycle refusal, when there are any. */
+  readonly blockers: LanguageBlockerDetail[]
+  constructor(
+    errors: { path: string; message: string }[],
+    options: { blockers?: LanguageBlockerDetail[] } = {},
+  ) {
     const text =
       errors
         .map((e) => (e.path ? `${e.path}: ${e.message}` : e.message))
@@ -36,5 +44,6 @@ export class ValidationError extends AppError {
     super(text)
     this.name = 'ValidationError'
     this.errors = errors
+    this.blockers = options.blockers ?? []
   }
 }
