@@ -190,7 +190,6 @@ describe.skipIf(!hasDb)('asset alt per language', () => {
         altText: 'Main alt',
       })
       .returning()
-    if (!row) throw new Error('insert failed')
     return row
   }
 

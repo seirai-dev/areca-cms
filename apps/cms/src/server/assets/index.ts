@@ -119,7 +119,7 @@ export async function uploadAsset(input: {
     await storage.put(storageKey, input.file.buffer, mimeType)
     return await db.transaction(async (tx) => {
       await assetMutationLock(tx, input.organizationId)
-      const [row] = await tx
+      const row = (await tx
         .insert(asset)
         .values({
           organizationId: input.organizationId,
@@ -135,6 +135,7 @@ export async function uploadAsset(input: {
           createdBy: input.actorId,
         })
         .returning()
+      ).at(0)
       if (!row) throw new Error(m.server_failed_to_insert_asset())
       await completeObjectUpload(tx, storageKey)
       return row
@@ -215,7 +216,7 @@ export async function updateAsset(
 ): Promise<Asset> {
   const translation =
     patch.locale && patch.locale !== patch.mainLocale ? patch.locale : null
-  const [row] = await db
+  const row = (await db
     .update(asset)
     .set(
       translation
@@ -229,6 +230,7 @@ export async function updateAsset(
     )
     .where(and(eq(asset.id, id), eq(asset.organizationId, organizationId)))
     .returning()
+  ).at(0)
   if (!row) {
     throw new NotFoundError(m.server_asset_not_found())
   }
@@ -329,10 +331,11 @@ export async function assetUsage(
 ): Promise<number> {
   return db.transaction(async (tx) => {
     await assetMutationLock(tx, organizationId)
-    const [existing] = await tx
+    const existing = (await tx
       .select()
       .from(asset)
       .where(and(eq(asset.id, id), eq(asset.organizationId, organizationId)))
+    ).at(0)
     return existing ? retainedAssetUsage(tx, existing) : 0
   })
 }
@@ -344,10 +347,11 @@ export async function deleteAsset(
 ): Promise<void> {
   await db.transaction(async (tx) => {
     await assetMutationLock(tx, organizationId)
-    const [existing] = await tx
+    const existing = (await tx
       .select()
       .from(asset)
       .where(and(eq(asset.id, id), eq(asset.organizationId, organizationId)))
+    ).at(0)
     if (!existing) throw new NotFoundError(m.server_asset_not_found())
     const usage = await retainedAssetUsage(tx, existing)
     if (usage > 0) throw new AssetInUseError(usage)
@@ -369,7 +373,7 @@ export function assetUrl(assetRow: Pick<Asset, 'storageKey'>): string {
  * alt. Without a locale this is the main alt.
  */
 function altFor(row: Asset, locale?: string | null): string {
-  const translated = locale ? row.altI18n?.[locale] : undefined
+  const translated = locale ? row.altI18n[locale] : undefined
   return translated || row.altText || ''
 }
 

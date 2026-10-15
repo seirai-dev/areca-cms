@@ -32,7 +32,7 @@ async function foreignAsset(orgId: string, suffix: string) {
       size: 1,
     })
     .returning()
-  return row!
+  return row
 }
 
 describe.skipIf(!hasDb)('ownership of language slots', () => {

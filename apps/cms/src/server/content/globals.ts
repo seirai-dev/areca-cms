@@ -308,7 +308,7 @@ export async function upsertGlobal(
       await tx
         .update(entry)
         .set({
-          draftData: withoutSeoEverywhere(draft?.draftData ?? {}),
+          draftData: withoutSeoEverywhere(draft.draftData),
           draftVersion: sql`${entry.draftVersion} + 1`,
           updatedAt: now,
         })

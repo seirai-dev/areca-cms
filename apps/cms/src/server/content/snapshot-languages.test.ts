@@ -60,7 +60,7 @@ async function setupVacancies(suffix: string, siteId: string) {
       altI18n: { en: 'English alt' },
     })
     .returning()
-  return image!
+  return image
 }
 
 describe.skipIf(!hasDb)('buildSnapshot with content languages', () => {
@@ -107,7 +107,7 @@ describe.skipIf(!hasDb)('buildSnapshot with content languages', () => {
 
       const snapshot = result.snapshot
       expect(snapshot.languages).toEqual(languages)
-      const item = snapshot.collections.vacancies?.[0]
+      const item = snapshot.collections.vacancies.at(0)
       expect(item).toBeDefined()
       if (!item) return
 
@@ -135,7 +135,7 @@ describe.skipIf(!hasDb)('buildSnapshot with content languages', () => {
       })
 
       // Language internals never reach shipped data.
-      for (const view of [item.data, en?.data, item.locales?.nl?.data]) {
+      for (const view of [item.data, en?.data, item.locales?.nl.data]) {
         expect(view).not.toHaveProperty('$i18n')
         expect(view).not.toHaveProperty('$locale')
         expect(view).not.toHaveProperty('$slug')
@@ -148,7 +148,7 @@ describe.skipIf(!hasDb)('buildSnapshot with content languages', () => {
         requiredLanguages: ['en'],
       })
       expect(
-        snapshot.schema?.vacancies?.fields.find((f) => f.key === 'summary'),
+        snapshot.schema?.vacancies.fields.find((f) => f.key === 'summary'),
       ).toMatchObject({ translatable: true })
     } finally {
       await cleanupTestSite(ctx)
@@ -221,10 +221,11 @@ describe.skipIf(!hasDb)('buildSnapshot with content languages', () => {
       const result = await buildSnapshot(ctx.site.id)
       expect(result.ok).toBe(true)
       if (!result.ok) return
-      const item = result.snapshot.collections.vacancies?.[0]
-      expect(item?.locale).toBe('nl')
-      expect(item?.data.title).toBe('Backend ontwikkelaar')
-      expect(item?.locales?.en?.data.title).toBe('Backend developer')
+      const item = result.snapshot.collections.vacancies.at(0)
+      if (!item) throw new Error('expected a vacancy item')
+      expect(item.locale).toBe('nl')
+      expect(item.data.title).toBe('Backend ontwikkelaar')
+      expect(item.locales?.en.data.title).toBe('Backend developer')
     } finally {
       await cleanupTestSite(ctx)
     }
@@ -268,7 +269,7 @@ describe.skipIf(!hasDb)('buildSnapshot with content languages', () => {
       expect(after.ok).toBe(true)
       if (!after.ok) return
       expect(after.hash).not.toBe(before.hash)
-      expect(after.snapshot.collections.vacancies?.[0]?.locales?.en?.data.title)
+      expect(after.snapshot.collections.vacancies.at(0)?.locales?.en.data.title)
         .toBe('Backend engineer')
     } finally {
       await cleanupTestSite(ctx)
@@ -301,7 +302,7 @@ describe.skipIf(!hasDb)('buildSnapshot with content languages', () => {
       expect(global?.locale).toBe('nl')
       expect(global?.data).toMatchObject({ email: 'info@example.com' })
       expect(Object.keys(global?.locales ?? {})).toEqual(['nl', 'en'])
-      expect(global?.locales?.en?.data).toMatchObject({
+      expect(global?.locales?.en.data).toMatchObject({
         email: 'hello@example.com',
       })
       expect(global?.locales?.en).not.toHaveProperty('slug')
@@ -335,7 +336,7 @@ describe.skipIf(!hasDb)('buildSnapshot with content languages', () => {
       if (!result.ok) return
       const { snapshot } = result
       expect(snapshot).not.toHaveProperty('languages')
-      const item = snapshot.collections.vacancies?.[0]
+      const item = snapshot.collections.vacancies.at(0)
       expect(item).not.toHaveProperty('locale')
       expect(item).not.toHaveProperty('locales')
       const schema = snapshot.schema?.vacancies
@@ -392,7 +393,7 @@ describe.skipIf(!hasDb)('preview with content languages', () => {
           $i18n: { en: { title: 'Draft English', $slug: enSlug } },
         },
         ctx.actor.id,
-        row!.draftVersion,
+        row.draftVersion,
       )
 
       const en = await buildPreviewEntry(ctx.site.id, 'vacancies', slug, 'en')
@@ -473,9 +474,12 @@ describe.skipIf(!hasDb)('section SEO off with language slots', () => {
         fields: globalFields(),
         seo: false,
       })
-      const [after] = await db.select().from(entry).where(eq(entry.id, row.id))
-      expect(after?.draftData).not.toHaveProperty('$seo')
-      expect(after?.draftData).toMatchObject({
+      const after = (
+        await db.select().from(entry).where(eq(entry.id, row.id))
+      ).at(0)
+      if (!after) throw new Error('expected the global draft')
+      expect(after.draftData).not.toHaveProperty('$seo')
+      expect(after.draftData).toMatchObject({
         $i18n: { en: { email: 'hello@example.com' } },
       })
     } finally {

@@ -65,7 +65,7 @@ describe.skipIf(!hasDb)('section blockers with languages', () => {
       // Filling the language clears the blocker.
       const current = (
         await db.select().from(entry).where(eq(entry.id, row.id)).limit(1)
-      )[0]!
+      )[0]
       await updateDraft(
         row.id,
         {

@@ -76,14 +76,14 @@ describe('languageBlockers', () => {
 describe('formatLanguageBlockers', () => {
   it('names the language and the missing fields', () => {
     const text = formatLanguageBlockers([
-      { locale: 'en', missing: [fields[0]!, fields[1]!] },
+      { locale: 'en', missing: [fields[0], fields[1]] },
     ])
     expect(text).toBe('English is missing: Title, Body')
   })
 
   it('uses the given names when provided', () => {
     const text = formatLanguageBlockers(
-      [{ locale: 'nl-BE', missing: [fields[0]!] }],
+      [{ locale: 'nl-BE', missing: [fields[0]] }],
       { 'nl-BE': 'Vlaams' },
     )
     expect(text).toBe('Vlaams is missing: Title')
@@ -91,7 +91,7 @@ describe('formatLanguageBlockers', () => {
 
   it('falls back to the tag for an unknown language', () => {
     const text = formatLanguageBlockers([
-      { locale: 'zz-ZZ-x-test', missing: [fields[0]!] },
+      { locale: 'zz-ZZ-x-test', missing: [fields[0]] },
     ])
     expect(text).toContain('is missing: Title')
   })
@@ -110,7 +110,6 @@ describe.skipIf(!hasDb)('validateLocaleSlugs', () => {
       .insert(entry)
       .values({ siteId, collectionId, slug, draftData })
       .returning()
-    if (!row) throw new Error('insert failed')
     return row
   }
 

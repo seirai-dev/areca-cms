@@ -77,7 +77,7 @@ describe.skipIf(!hasDb)('setSiteLanguages', () => {
             eq(auditLog.action, 'site.languages_update'),
           ),
         )
-      expect(row?.action).toBe('site.languages_update')
+      expect(row.action).toBe('site.languages_update')
     } finally {
       await cleanupTestSite(ctx)
     }
@@ -144,8 +144,8 @@ describe.skipIf(!hasDb)('setSiteLanguages', () => {
         .select()
         .from(entry)
         .where(eq(entry.id, created.id))
-      expect(row?.draftData.$locale).toBe('nl')
-      expect(row?.publishedData?.$locale).toBe('nl')
+      expect(row.draftData.$locale).toBe('nl')
+      expect(row.publishedData?.$locale).toBe('nl')
       const revisions = await db
         .select()
         .from(entryRevision)
@@ -186,7 +186,7 @@ describe.skipIf(!hasDb)('setSiteLanguages', () => {
         .select()
         .from(entry)
         .where(eq(entry.id, created.id))
-      expect(row?.draftData.$i18n).toEqual({ fr: { title: 'Développeur' } })
+      expect(row.draftData.$i18n).toEqual({ fr: { title: 'Développeur' } })
     } finally {
       await cleanupTestSite(ctx)
     }

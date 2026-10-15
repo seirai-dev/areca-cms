@@ -235,7 +235,8 @@ export function pickDeclaredFields(
 
 function entryDataTooLarge(data: unknown): boolean {
   try {
-    const json = JSON.stringify(data)
+    // JSON.stringify returns undefined for undefined input, despite its string type.
+    const json = JSON.stringify(data) as string | undefined
     return Buffer.byteLength(json ?? '', 'utf8') > ENTRY_DATA_MAX_BYTES
   } catch {
     // Unserializable or nested past the engine's stack: reject either way.
@@ -482,7 +483,7 @@ export async function validateReferences(
       continue
     }
 
-    const [ref] = await db
+    const ref = (await db
       .select({
         id: entry.id,
         status: entry.status,
@@ -492,6 +493,7 @@ export async function validateReferences(
       .from(entry)
       .where(and(eq(entry.id, value), eq(entry.collectionId, refCollection.id)))
       .limit(1)
+    ).at(0)
 
     if (!ref) {
       errors.push({
@@ -572,7 +574,7 @@ export async function validateContentOwnership(
           siteId,
           organizationId,
           fields,
-          slot as EntryData,
+          slot,
           `${I18N_KEY}.${locale}.`,
           connection,
         )),
@@ -594,13 +596,14 @@ async function ownershipErrors(
   const errors: FieldError[] = []
   const ogImage = readEntrySeo(data).ogImage
   if (ogImage) {
-    const [found] = await connection
+    const found = (await connection
       .select({ id: asset.id })
       .from(asset)
       .where(
         and(eq(asset.id, ogImage), eq(asset.organizationId, organizationId)),
       )
       .limit(1)
+    ).at(0)
     if (!found)
       errors.push({
         path: `${prefix}${SEO_KEY}.ogImage`,
@@ -620,7 +623,7 @@ async function ownershipErrors(
     }
     if (typeof value !== 'string' || !value) continue
     if (field.type === 'reference') {
-      const [found] = field.collection
+      const found = (field.collection
         ? await connection
             .select({ id: entry.id })
             .from(entry)
@@ -634,6 +637,7 @@ async function ownershipErrors(
             )
             .limit(1)
         : []
+      ).at(0)
       if (!found)
         errors.push({
           path: `${prefix}${field.key}`,
@@ -641,13 +645,14 @@ async function ownershipErrors(
         })
     }
     if (field.type === 'image') {
-      const [found] = await connection
+      const found = (await connection
         .select({ id: asset.id })
         .from(asset)
         .where(
           and(eq(asset.id, value), eq(asset.organizationId, organizationId)),
         )
         .limit(1)
+      ).at(0)
       if (!found)
         errors.push({
           path: `${prefix}${field.key}`,

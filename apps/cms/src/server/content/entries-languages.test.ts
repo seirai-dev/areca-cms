@@ -155,7 +155,7 @@ describe.skipIf(!hasDb)('entry lifecycle with languages', () => {
         .where(eq(entry.id, created.id))
       const current = (
         await db.select().from(entry).where(eq(entry.id, created.id)).limit(1)
-      )[0]!
+      )[0]
       const saved = await updateDraft(
         created.id,
         {
