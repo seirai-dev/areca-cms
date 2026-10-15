@@ -2,6 +2,13 @@
 
 All notable changes to `@areca-cms/site-sdk`.
 
+## 0.5.0 (2026-10-15)
+
+### Features
+
+- **sdk:** match the CMS language wire shape and cover it end to end (a08a89f)
+- **sdk:** content languages in the SDK (702fd90)
+
 ## Unreleased
 
 ### Features
