@@ -9,6 +9,7 @@ import type {
   AuthorsEntry,
   CoffeesEntry,
 } from '../generated/content/areca.gen.ts'
+import { SITE_DESCRIPTION, SITE_NAME } from './seo.ts'
 import {
   articlesByAuthor,
   articlesFeaturingCoffee,
@@ -22,6 +23,49 @@ import {
 
 const loose = { strict: { output: false } as const }
 const slugInput = z.object({ slug: z.string().min(1) })
+
+/**
+ * Site content sections as a publication may lack them: a section with no
+ * content is left out of the snapshot, so every read goes through this type.
+ */
+type Sections = Partial<typeof content.globals>
+
+/** Used when the company info section is missing. */
+const COMPANY_FALLBACK = { name: SITE_NAME }
+
+/** Used when the home page section is missing: the hero shows the default intro and no eyebrow. */
+const HOME_FALLBACK = {
+  heroEyebrow: null,
+  heroIntro: SITE_DESCRIPTION,
+  featuredCoffee: null,
+  $seo: null,
+}
+
+/** Used when the about page section is missing: a minimal page with the site name as heading. */
+const ABOUT_FALLBACK = {
+  heading: SITE_NAME,
+  body: null,
+  image: null,
+  foundedYear: null,
+  roasterCapacityKg: null,
+  originsCount: null,
+  $seo: null,
+}
+
+/** Company details with fallbacks for a missing section. */
+export function companyFrom(globals: Sections) {
+  return { ...COMPANY_FALLBACK, ...globals.companyInfo }
+}
+
+/** Home page copy with fallbacks for a missing section. */
+export function homeFrom(globals: Sections) {
+  return globals.homePage ?? HOME_FALLBACK
+}
+
+/** About page copy with fallbacks for a missing section. */
+export function aboutFrom(globals: Sections) {
+  return globals.aboutPage ?? ABOUT_FALLBACK
+}
 
 /**
  * Search params of pages that can show a site content draft. The CMS opens
@@ -39,7 +83,10 @@ const previewInput = z.object({ arecaPreview: z.string().optional() })
  * token serves the published values. Any request with a token is not indexable
  * and not cacheable.
  */
-async function readGlobals(token: string | undefined, section: 'homePage' | 'aboutPage') {
+async function readGlobals(
+  token: string | undefined,
+  section: 'homePage' | 'aboutPage',
+): Promise<{ globals: Sections; preview: boolean; incomplete: boolean; noindex: boolean }> {
   if (!token) return { globals: content.globals, preview: false, incomplete: false, noindex: false }
   const headers = previewHeaders()
   setResponseHeader('X-Robots-Tag', headers['X-Robots-Tag'])
@@ -59,7 +106,7 @@ async function readGlobals(token: string | undefined, section: 'homePage' | 'abo
 
 /** Company details for the header and footer on every page. */
 export const loadCompanyInfo = createServerFn({ method: 'GET', ...loose }).handler(
-  () => ({ company: content.globals.companyInfo }),
+  () => ({ company: companyFrom(content.globals) }),
 )
 
 /** Home: hero copy, the featured coffee, the newest journal entries and the first coffees in the shop order. */
@@ -67,9 +114,10 @@ export const loadHome = createServerFn({ method: 'GET', ...loose })
   .validator(previewInput)
   .handler(async ({ data }) => {
     const { globals, preview, incomplete, noindex } = await readGlobals(data.arecaPreview, 'homePage')
+    const home = homeFrom(globals)
     return {
-      home: globals.homePage,
-      featuredCoffee: content.resolve(globals.homePage.featuredCoffee),
+      home,
+      featuredCoffee: content.resolve(home.featuredCoffee),
       articles: getArticles().slice(0, 3),
       coffees: getCoffees().slice(0, 3),
       preview,
@@ -82,7 +130,7 @@ export const loadAbout = createServerFn({ method: 'GET', ...loose })
   .validator(previewInput)
   .handler(async ({ data }) => {
     const { globals, preview, incomplete, noindex } = await readGlobals(data.arecaPreview, 'aboutPage')
-    return { about: globals.aboutPage, preview, incomplete, noindex }
+    return { about: aboutFrom(globals), preview, incomplete, noindex }
   })
 
 export const loadCoffees = createServerFn({ method: 'GET', ...loose }).handler(
