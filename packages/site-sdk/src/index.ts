@@ -1,6 +1,7 @@
 export { createArecaClient } from './client.js'
 export type { ArecaClient, ArecaClientOptions } from './client.js'
 export { defineSiteContent, manifestFromConfig } from './config.js'
+export { matchLocale } from './locale.js'
 export type {
   AnyEntry,
   CollectionApi,
@@ -14,15 +15,19 @@ export type {
   DraftEntryData,
   Entry,
   EntryData,
+  EntryLocale,
   FieldKey,
   FieldValue,
   Global,
   GlobalData,
   GlobalKey,
+  GlobalLocale,
   Globals,
   GlobalsPreview,
   GlobalSchema,
   Href,
+  Locale,
+  LocaleOptions,
   OrderBy,
   PreviewEntry,
   QueryOptions,
@@ -44,7 +49,9 @@ export type {
   Field,
   FieldType,
   GlobalConfig,
+  I18nConfig,
   ImageValue,
+  LocalizedValues,
   PreviewEntryResult,
   PreviewGlobalResult,
   PreviewResult,
@@ -53,6 +60,7 @@ export type {
   RichTextValue,
   SeoMeta,
   SiteContentConfig,
+  SiteLanguages,
   SiteManifest,
   Snapshot,
   SnapshotAsset,

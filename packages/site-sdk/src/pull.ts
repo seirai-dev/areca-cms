@@ -26,7 +26,7 @@ import {
 
 export type { ResolvedAssets } from './assets.js'
 import { camelCollectionKeys, camelizeSnapshot } from './camel-case.js'
-import { generateContentTypes } from './generate-types.js'
+import { generateContentTypes, paraglideSpecifier } from './generate-types.js'
 import { assertSafeIdentifier } from './identifiers.js'
 import { createArecaClient, type ArecaClient } from './client.js'
 import type { CollectionKey, Entry } from './schema-types.js'
@@ -58,6 +58,11 @@ export type PullContentOptions = {
    * app's working directory. Default `outDir`. The CLI passes `--out` as given.
    */
   contentDir?: string
+  /**
+   * Absolute path to the Paraglide runtime (`i18n.paraglide` in the config).
+   * When set, `areca.gen.ts` passes its `getLocale` to `createContent`.
+   */
+  paraglide?: string
 }
 
 export type PullContentResult = Snapshot & {
@@ -171,6 +176,7 @@ export async function pullContent(
       publicationId: snapshot.publicationId,
       hash: snapshot.hash,
       createdAt: snapshot.createdAt,
+      ...(snapshot.languages !== undefined ? { languages: snapshot.languages } : {}),
       collections: Object.fromEntries(
         Object.entries(collections).map(([key, entries]) => [
           key,
@@ -218,6 +224,10 @@ export async function pullContent(
       schema,
       globalSchema: snapshot.globalSchema ?? {},
       dir: options.contentDir ?? options.outDir,
+      languages: snapshot.languages ?? null,
+      ...(options.paraglide !== undefined
+        ? { paraglideImport: paraglideSpecifier(typesPath, options.paraglide) }
+        : {}),
     }),
   )
   return {

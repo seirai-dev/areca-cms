@@ -1,4 +1,4 @@
-import type { CollectionConfig, Field, GlobalConfig, Snapshot } from './types.js'
+import type { CollectionConfig, Field, GlobalConfig, LocalizedValues, Snapshot } from './types.js'
 
 /** Most problems listed in one error. */
 const MAX_PROBLEMS = 20
@@ -38,6 +38,7 @@ export function validateSnapshot(
       for (const issue of entryIssues(entry.data, config.fields)) {
         problems.push(`${prefix}.${issue.field}: ${issue.problem}`)
       }
+      problems.push(...localeProblems(prefix, entry.locales, config.fields))
     }
   }
   for (const [key, global] of Object.entries(snapshot.globals ?? {})) {
@@ -46,6 +47,7 @@ export function validateSnapshot(
     for (const issue of entryIssues(global.data, config.fields)) {
       problems.push(`globals/${key}.${issue.field}: ${issue.problem}`)
     }
+    problems.push(...localeProblems(`globals/${key}`, global.locales, config.fields))
   }
   if (problems.length === 0) return
   const listed = problems.slice(0, MAX_PROBLEMS)
@@ -173,4 +175,19 @@ function isNumberOrNull(value: unknown): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/** Problems in the per-language data of one entry or section, as `<prefix>.<locale>.<field>: <problem>`. */
+function localeProblems(
+  prefix: string,
+  locales: Record<string, LocalizedValues> | undefined,
+  fields: readonly Field[],
+): string[] {
+  const problems: string[] = []
+  for (const [tag, values] of Object.entries(locales ?? {})) {
+    for (const issue of entryIssues(values.data, fields)) {
+      problems.push(`${prefix}.${tag}.${issue.field}: ${issue.problem}`)
+    }
+  }
+  return problems
 }

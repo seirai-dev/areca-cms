@@ -18,7 +18,8 @@ export type ArecaClient = {
   syncManifest: (config: SiteContentConfig) => Promise<{ ok: true }>
   fetchManifest: () => Promise<SiteManifest>
   fetchSnapshot: (options?: { publicationId?: string }) => Promise<Snapshot>
-  fetchPreview: (token: string) => Promise<PreviewResult>
+  /** `locale` asks the CMS for the preview resolved in that language. */
+  fetchPreview: (token: string, options?: { locale?: string }) => Promise<PreviewResult>
   /** Downloads a media file listed in `Snapshot.assets`. */
   fetchAsset: (asset: SnapshotAsset) => Promise<Uint8Array>
 }
@@ -124,8 +125,10 @@ export function createArecaClient(
       return snapshot
     },
 
-    async fetchPreview(token) {
-      const url = `${cmsUrl}/api/sites/preview?${new URLSearchParams({ token })}`
+    async fetchPreview(token, options = {}) {
+      const params = new URLSearchParams({ token })
+      if (options.locale !== undefined) params.set('locale', options.locale)
+      const url = `${cmsUrl}/api/sites/preview?${params}`
       const res = await cmsFetch(url, {
         method: 'GET',
         headers,

@@ -3,7 +3,9 @@ import type {
   CollectionConfig,
   Field,
   GlobalConfig,
+  I18nConfig,
   SiteContentConfig,
+  SiteLanguages,
 } from './types.js'
 
 const MAX_LINE_WIDTH = 80
@@ -19,6 +21,7 @@ const FIELD_KEY_ORDER = [
   'description',
   'group',
   'after',
+  'translatable',
 ] as const
 
 /**
@@ -34,6 +37,12 @@ export function generateConfigSource(config: SiteContentConfig): string {
     `  siteKey: ${quote(config.siteKey)},`,
   ]
 
+  if (config.languages !== undefined) {
+    lines.push(...languagesLines(config.languages, '  '))
+  }
+  if (config.i18n !== undefined) {
+    lines.push(...i18nLines(config.i18n, '  '))
+  }
   if (config.assets !== undefined) {
     lines.push(...assetsConfigLines(config.assets, '  '))
   }
@@ -78,11 +87,42 @@ export function assetsConfigLines(
   return [`${indent}assets: {`, ...entries, `${indent}},`]
 }
 
+/** The `languages: { ... },` block of an areca.config.ts, indented by `indent`. */
+export function languagesLines(languages: SiteLanguages, indent: string): string[] {
+  const all = languages.all.map((tag) => quote(tag))
+  const inline = `${indent}languages: { main: ${quote(languages.main)}, all: [${all.join(', ')}] },`
+  if (inline.length <= MAX_LINE_WIDTH) return [inline]
+  return [
+    `${indent}languages: {`,
+    `${indent}  main: ${quote(languages.main)},`,
+    `${indent}  all: [`,
+    ...all.map((tag) => `${indent}    ${tag},`),
+    `${indent}  ],`,
+    `${indent}},`,
+  ]
+}
+
+/** The `i18n: { ... },` block of an areca.config.ts, indented by `indent`. */
+function i18nLines(i18n: I18nConfig, indent: string): string[] {
+  if (i18n.paraglide === undefined) return [`${indent}i18n: {},`]
+  return [`${indent}i18n: { paraglide: ${quote(i18n.paraglide)} },`]
+}
+
 function collectionLines(key: string, collection: CollectionConfig): string[] {
   const lines = [`    ${propertyKey(key)}: {`, `      route: ${quote(collection.route)},`]
 
   if (collection.label !== undefined) {
     lines.push(`      label: ${quote(collection.label)},`)
+  }
+  if (collection.routes !== undefined && Object.keys(collection.routes).length > 0) {
+    lines.push('      routes: {')
+    for (const [tag, pattern] of Object.entries(collection.routes)) {
+      lines.push(`        ${propertyKey(tag)}: ${quote(pattern)},`)
+    }
+    lines.push('      },')
+  }
+  if (collection.requiredLanguages !== undefined && collection.requiredLanguages.length > 0) {
+    lines.push(`      requiredLanguages: ${renderValue(collection.requiredLanguages)},`)
   }
 
   lines.push(...fieldsLines(collection.fields))
@@ -102,6 +142,9 @@ function globalLines(key: string, global: GlobalConfig): string[] {
   }
   if (global.previewPath !== undefined) {
     lines.push(`      previewPath: ${quote(global.previewPath)},`)
+  }
+  if (global.requiredLanguages !== undefined && global.requiredLanguages.length > 0) {
+    lines.push(`      requiredLanguages: ${renderValue(global.requiredLanguages)},`)
   }
 
   lines.push(...fieldsLines(global.fields))

@@ -14,7 +14,11 @@ export function previewHeaders(): {
 export async function getPreviewEntry(options: {
   token: string
   client?: ArecaClient
+  /** Language to preview in. Omit for the CMS default. */
+  locale?: string
 }): Promise<PreviewResult> {
   const client = options.client ?? createArecaClient()
-  return client.fetchPreview(options.token)
+  return options.locale === undefined
+    ? client.fetchPreview(options.token)
+    : client.fetchPreview(options.token, { locale: options.locale })
 }

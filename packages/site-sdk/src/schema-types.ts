@@ -8,9 +8,40 @@ import type {
   SeoMeta,
 } from './types.js'
 
-/** Augmented by the generated `areca.gen.ts` with `schema` and `globals` (the site content schema). */
+/**
+ * Augmented by the generated `areca.gen.ts` with `schema`, `globals` and, on
+ * multi-language sites, `languages`.
+ */
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface Register {}
+
+/**
+ * A language of the site: the registered union, or `string` when no languages
+ * are registered (single-language site, or no generated types yet).
+ */
+export type Locale = Register extends { languages: infer L extends { readonly all: readonly string[] } }
+  ? L['all'][number]
+  : string
+
+/** Language fields of an entry. `locales` lists the complete languages it can be served in. */
+export type EntryLocale = {
+  /** Language this entry is served in. `und` on sites without languages. */
+  locale: Locale
+  /** True when served from the fallback chain rather than the requested language. */
+  isFallback: boolean
+  /** Languages with a complete translation of this entry. */
+  locales: Locale[]
+  /** The entry's URL in each of `locales`, by its per-language slug and route pattern. */
+  alternates: Partial<Record<Locale, string>>
+}
+
+/** Per-call language options of every collection method. */
+export type LocaleOptions = {
+  /** Language to read. Default: the `in()` scope, then the resolver, then the main language. */
+  locale?: Locale
+  /** Serve the fallback chain when the language is missing. Default `true`. `false` excludes such entries. */
+  fallback?: boolean
+}
 
 /** One field of the content schema, as embedded in a publication (camelCase keys are applied by the SDK types, not here). */
 export type ContentSchemaField = {
@@ -23,12 +54,18 @@ export type ContentSchemaField = {
   description?: string
   /** Editor heading for site content fields. */
   group?: string
+  /** Stored per language. Absent means the type default. */
+  translatable?: boolean
 }
 
 export type ContentSchemaCollection = {
   key: string
   label?: string
   route: string
+  /** Per-language route patterns. */
+  routes?: { readonly [locale: string]: string }
+  /** Languages besides main that must be complete before going live. */
+  requiredLanguages?: readonly string[]
   fields: { readonly [fieldKey: string]: ContentSchemaField }
 }
 
@@ -40,6 +77,7 @@ export type ContentGlobalSchema = {
   label?: string
   seo: boolean
   previewPath?: string
+  requiredLanguages?: readonly string[]
   fields: { readonly [fieldKey: string]: ContentSchemaField }
 }
 
@@ -139,7 +177,7 @@ export type Entry<C extends string = string, S extends ContentSchema = Registere
   collection: C
   data: EntryData<C, S>
   seo?: SeoMeta
-}
+} & EntryLocale
 
 export type AnyEntry<S extends ContentSchema = RegisteredSchema> = {
   [C in CollectionKey<S>]: Entry<C, S>
@@ -226,7 +264,7 @@ type ExpandedEntry<C extends string, W, S extends ContentSchema> = {
         : Entry<ReferenceTarget<FieldDef<C, F, S>>, S> | null | undefined
       : EntryData<C, S>[F]
   }
-}
+} & EntryLocale
 
 export type QueryResult<
   C extends string = string,
@@ -272,9 +310,18 @@ type GlobalSeo<K extends string, G extends GlobalSchema> = GlobalOf<K, G> extend
   ? { $seo: SeoMeta }
   : unknown
 
-/** One site content section as the SDK returns it: its field values, plus `$seo` when SEO is on. */
+/** Language meta of a site content section, next to its values. */
+export type GlobalLocale = {
+  /** Language the values are in. */
+  $locale: Locale
+  /** True when the values come from the fallback chain rather than the requested language. */
+  $isFallback: boolean
+}
+
+/** One site content section as the SDK returns it: its field values, plus `$seo` when SEO is on, and `$locale`/`$isFallback`. */
 export type Global<K extends string = string, G extends GlobalSchema = RegisteredGlobalSchema> = GlobalData<K, G> &
-  GlobalSeo<K, G>
+  GlobalSeo<K, G> &
+  GlobalLocale
 
 /** All site content sections, keyed by camel key. */
 export type Globals<G extends GlobalSchema = RegisteredGlobalSchema> = {
@@ -321,7 +368,7 @@ export type DraftEntry<C extends string = string, S extends ContentSchema = Regi
   collection: C
   data: DraftEntryData<C, S>
   seo?: SeoMeta
-}
+} & EntryLocale
 
 /**
  * Result of `content.preview()`. A complete draft has the same shape as a
@@ -336,10 +383,14 @@ export type PreviewEntry<S extends ContentSchema = RegisteredSchema> = {
 }[CollectionKey<S>]
 
 export type CollectionApi<C extends string = string, S extends ContentSchema = RegisteredSchema> = {
-  all<const O extends QueryOptions<C, S> = {}>(options?: O & QueryOptions<C, S>): QueryResult<C, O, S>[]
-  first<const O extends QueryOptions<C, S> = {}>(options?: O & QueryOptions<C, S>): QueryResult<C, O, S> | undefined
-  get(slug: string): Entry<C, S> | undefined
-  byId(id: string): Entry<C, S> | undefined
+  all<const O extends QueryOptions<C, S> & LocaleOptions = {}>(
+    options?: O & QueryOptions<C, S> & LocaleOptions,
+  ): QueryResult<C, O, S>[]
+  first<const O extends QueryOptions<C, S> & LocaleOptions = {}>(
+    options?: O & QueryOptions<C, S> & LocaleOptions,
+  ): QueryResult<C, O, S> | undefined
+  get(slug: string, options?: LocaleOptions): Entry<C, S> | undefined
+  byId(id: string, options?: LocaleOptions): Entry<C, S> | undefined
   href(entryOrSlug: Entry<C, S> | string): Href<C, S>
 }
 
@@ -354,7 +405,19 @@ export type Content<
     ref: ReferenceValue<C> | '' | null | undefined,
   ): Entry<C, S> | null
   href<C extends CollectionKey<S>>(ref: ReferenceValue<C> | Entry<C, S>): Href<C, S>
-  preview(token: string, options?: { client?: ArecaClient }): Promise<PreviewEntry<S>>
+  preview(
+    token: string,
+    options?: { client?: ArecaClient; locale?: Locale },
+  ): Promise<PreviewEntry<S>>
+  /**
+   * A view of this content that reads `locale` by default. Per-call `locale`
+   * options still win. Same shape: collections, globals, resolve, href, preview.
+   */
+  in(locale: Locale): Content<S, G>
+  /** Site languages, main first in `all` order, or null on a single-language site. */
+  readonly languages: { main: Locale; all: Locale[] } | null
+  /** Picks the site language for a tag, an Accept-Language header or a list of tags. */
+  matchLocale(input: string | readonly string[] | null | undefined): Locale | undefined
   /** Published site content, keyed by camel key. Reads follow the pulled generation. */
   readonly globals: Globals<G>
   /**
@@ -366,6 +429,6 @@ export type Content<
    */
   previewGlobals(
     source: string | PreviewResult | null | undefined,
-    options?: { client?: ArecaClient },
+    options?: { client?: ArecaClient; locale?: Locale },
   ): Promise<GlobalsPreview<G>>
 }
