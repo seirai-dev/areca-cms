@@ -38,6 +38,18 @@ export function toolError(text: string): CallToolResult {
  * id that the server log also records.
  */
 export function toToolError(error: unknown): CallToolResult {
+  if (error instanceof ValidationError && error.blockers.length > 0) {
+    // Language gaps: name each language and its fields, and say how to fill them.
+    const fix = error.blockers
+      .map(
+        (blocker) =>
+          `Set locale "${blocker.locale}" and fill in: ${blocker.missing.join(', ')}.`,
+      )
+      .join(' ')
+    return toolError(
+      `Not ready yet. ${error.message}. ${fix} Write each one with update_entry (or update_global) and retry. Nothing was changed.`,
+    )
+  }
   if (error instanceof ValidationError) {
     return toolError(
       `Validation failed. ${error.message}. Fix these fields and call the tool again. Call get_collection_schema for the expected formats.`,

@@ -152,18 +152,18 @@ Every tool returns text or JSON. Ids come from earlier tool results. Inputs mark
 | Tool | Access | Inputs | What it does |
 | --- | --- | --- | --- |
 | `get_site_info` | Everyone | None | Returns the site, your role and capabilities, `cannotDo` (what this key may not do, in plain sentences), every collection, every site content section (`globals`: key, label, enabled, field count, `seo`, `previewPath`), and a short writing guide. Call it first. |
-| `get_collection_schema` | Everyone | `collection` (required) | Returns each field's key, label, type, required flag, format, options or referenced collection, and an example `fields` and `seo` payload. |
+| `get_collection_schema` | Everyone | `collection` (required) | Returns each field's key, label, type, required flag, format, options or referenced collection, and an example `fields` and `seo` payload. On a site with languages, each field also says whether it is `translatable`, and an example `update_entry` call with a `locale` shows how to write one language. |
 
 ### Entries
 
 | Tool | Access | Inputs | What it does |
 | --- | --- | --- | --- |
-| `list_entries` | Everyone | `collection` (required), `status` (`draft`, `ready`, `scheduled`, `archived`), `search`, `limit` (1 to 100, default 20), `offset` | Lists entry summaries with id, slug, status, `live`, `pendingRelease`, title and version, plus `total` and `nextOffset`. |
-| `get_entry` | Everyone | `id` (required), `includePublished` | Returns one entry with `fields`, `seo`, `status`, `live`, `pendingRelease`, `approvedAt` and `version`. With `includePublished`, also returns `liveFields`, the version visitors see now. See [reading entries](#reading-entries). |
-| `create_entry` | Everyone | `collection` (required), `fields`, `seo` | Creates a draft and returns the entry and its `previewUrl`. Put the slug in `fields`, under the collection's field of type `slug` (usually `slug`). It must be unique in the collection. |
-| `update_entry` | Everyone | `id` (required), `fields`, `seo`, `expectedVersion` | Changes only the keys you send. Clear a field with `""`, and an SEO key with `""`, `false` or `[]`. See [clearing values](#clearing-values). Send at least one of `fields` or `seo`. Editing a ready entry does not change the live site. |
+| `list_entries` | Everyone | `collection` (required), `status` (`draft`, `ready`, `scheduled`, `archived`), `search`, `limit` (1 to 100, default 20), `offset`, `missingLanguage` (languages sites) | Lists entry summaries with id, slug, status, `live`, `pendingRelease`, title and version, plus `total` and `nextOffset`. `missingLanguage` keeps only entries whose draft is not complete in that language, such as "Missing translation: English". |
+| `get_entry` | Everyone | `id` (required), `includePublished`, `locale` (languages sites) | Returns one entry with `fields`, `seo`, `status`, `live`, `pendingRelease`, `approvedAt` and `version`. With `locale`, the values, `seo` and `slug` of that language. Without it, the main language plus `translations`: each other language's `complete` flag and `missing` fields. With `includePublished`, also returns `liveFields`, the version visitors see now. See [reading entries](#reading-entries). |
+| `create_entry` | Everyone | `collection` (required), `fields`, `seo`, `slug`, `locale` (languages sites) | Creates a draft and returns the entry and its `previewUrl`. Put the slug in `fields`, under the collection's field of type `slug` (usually `slug`), or send it as `slug`. It must be unique in the collection. With a `locale` other than the main language, the values go to that language; the entry then has no main-language content yet, so it cannot be marked ready until the main language is filled in. |
+| `update_entry` | Everyone | `id` (required), `fields`, `seo`, `slug`, `locale` (languages sites), `expectedVersion` | Changes only the keys you send. Clear a field with `""`, and an SEO key with `""`, `false` or `[]`. See [clearing values](#clearing-values). Send at least one of `fields`, `seo` or `slug`. With `locale`, the changes apply to that language, and shared fields change in every language (listed in `sharedFieldsUpdated`). Editing a ready entry does not change the live site. |
 | `list_revisions` | Everyone | `id` (required) | Lists the history of an entry: revision id, note, time and author. |
-| `get_preview_url` | Everyone | `id` (required) | Returns a signed preview link for an entry, drafts included. It expires after about one hour. Fails when the site has no production URL. |
+| `get_preview_url` | Everyone | `id` (required), `locale` (languages sites) | Returns a signed preview link for an entry, drafts included, in the given language when one is set. It expires after about one hour. Fails when the site has no production URL. |
 
 ### Site content
 
@@ -171,10 +171,10 @@ Site content sections (globals) are single sets of values, such as company detai
 
 | Tool | Access | Inputs | What it does |
 | --- | --- | --- | --- |
-| `get_global` | Everyone | `global` (required, the section key) | Returns the section's `id`, `key`, `label`, `status`, `live`, `pendingRelease`, `version`, `editedSinceReady`, `fields`, an `example`, `values`, `seo` (when SEO is on) and `previewAvailable`. Disabled sections are for agency admins only. |
-| `update_global` | Everyone | `global` (required), `fields`, `seo`, `expectedVersion` | Changes only the keys you send, like `update_entry`. `seo` is refused unless the section has SEO on. |
+| `get_global` | Everyone | `global` (required, the section key), `locale` (languages sites) | Returns the section's `id`, `key`, `label`, `status`, `live`, `pendingRelease`, `version`, `editedSinceReady`, `fields`, an `example`, `values`, `seo` (when SEO is on) and `previewAvailable`. With `locale`, the values of that language; without it, `translations` for the other languages. Disabled sections are for agency admins only. |
+| `update_global` | Everyone | `global` (required), `fields`, `seo`, `locale` (languages sites), `expectedVersion` | Changes only the keys you send, like `update_entry`, and takes `locale` the same way. `seo` is refused unless the section has SEO on. |
 | `discard_global_draft` | Everyone | `global` (required) | Sets the draft back to the ready version, or the scheduled version. Refused until the section has been ready once. |
-| `upsert_global` | Agency admin | `key` (required), `label`, `fields` (complete list), `seo`, `previewPath`, `enabled` | Creates or changes a section. `fields` may set `group`, the editor heading for a field; collection fields may not. `slug` fields are refused. |
+| `upsert_global` | Agency admin | `key` (required), `label`, `fields` (complete list), `seo`, `previewPath`, `enabled`, `requiredLanguages` | Creates or changes a section. `fields` may set `group`, the editor heading for a field; collection fields may not. `slug` fields are refused. On a site with languages, a field may set `translatable`, and `requiredLanguages` lists the languages the section must be complete in. |
 | `delete_global` | Agency admin | `key` (required) | Deletes a section. Its content is kept in the deleted-content archive. |
 
 `mark_ready`, `schedule_entry`, `cancel_schedule`, `list_revisions`, `restore_revision` and `get_preview_url` accept the section's entry `id`. `unpublish_entry`, `archive_entry` and `delete_entry` refuse it. The preview of a section is its `previewPath` on the site, so `get_preview_url` needs that path to be set.
@@ -186,7 +186,7 @@ Site content sections (globals) are single sets of values, such as company detai
 | `list_assets` | Everyone | `search`, `limit` (1 to 100, default 20), `offset` | Lists images and PDFs in the client's Library, with `assetId`, filename, alt text and URL. |
 | `get_asset` | Everyone | `id` (required) | Returns one asset with size, alt text and `usageCount`. |
 | `upload_asset_from_url` | Everyone | `url` (required), `altText`, `filename` | Imports a public image or PDF and returns its `assetId`. See [uploads from a URL](#uploads-from-a-url). |
-| `update_asset_alt` | Everyone | `id` (required), `altText` (required; empty clears it) | Sets the alt text of an asset. |
+| `update_asset_alt` | Everyone | `id` (required), `altText` (required; empty clears it), `locale` (languages sites) | Sets the alt text of an asset, for the main language or for `locale`. |
 | `delete_asset` | Owner | `id` (required) | Deletes an asset. Refused while an entry, revision or published snapshot uses it; the error says how many. |
 
 ### Publishing
@@ -204,7 +204,7 @@ Site content sections (globals) are single sets of values, such as company detai
 
 | Tool | Access | Inputs | What it does |
 | --- | --- | --- | --- |
-| `mark_ready` | Owner | `id` (required) | Approves the current draft for the next release. Checks required fields and names any that are missing. It returns a message that the entry is approved and goes live with the next release. It does not change the live site. |
+| `mark_ready` | Owner | `id` (required) | Approves the current draft for the next release. Checks required fields and names any that are missing. On a site with languages it also names the languages that are not complete, and the fields, and says to fill them with `update_entry` and `locale`. It returns a message that the entry is approved and goes live with the next release. It does not change the live site. |
 | `unpublish_entry` | Owner | `id` (required) | Withdraws the entry from the release: its status becomes `draft` and the approved version is dropped. The draft is kept. The live site stops showing it at the next go live. |
 | `archive_entry` | Owner | `id` (required) | Archives the entry. The live site is updated at the next go live. |
 | `schedule_entry` | Go-live permission | `id` (required), `publishAt` (required; ISO 8601 with an offset, in the future), `timezone` (required; IANA name such as `Europe/Amsterdam`) | Sets the status to `scheduled`. The entry goes live at that time without a `go_live` call. Date fields in the content do not schedule anything. |
@@ -212,11 +212,17 @@ Site content sections (globals) are single sets of values, such as company detai
 | `delete_entry` | Owner | `id` (required) | Deletes the entry. Use `archive_entry` when unsure. |
 | `restore_revision` | Owner | `id` (required), `revisionId` (required), `expectedVersion` | Copies an earlier revision into the draft. It does not mark the entry ready and does not change the live site. |
 
+### Languages (agency admins)
+
+| Tool | Access | Inputs | What it does |
+| --- | --- | --- | --- |
+| `set_site_languages` | Agency | `main` (required), `all` (required, every language in order, including `main`) | Sets the site's languages and its main language. Removing a language hides it but keeps its text. Changing the main language deletes nothing, but entries not complete in the new main language cannot be marked ready until they are. The result reports the `gaps`. |
+
 ### Content types (agency admins)
 
 | Tool | Access | Inputs | What it does |
 | --- | --- | --- | --- |
-| `upsert_collection` | Agency | `key`, `label`, `routePattern`, `fields` (the complete list), `enabled` | Creates a collection, or replaces its label, route, fields and enabled flag. A slug field is added if none exists. Fields replace the whole list, so send every field. |
+| `upsert_collection` | Agency | `key`, `label`, `routePattern`, `fields` (the complete list), `enabled`, `requiredLanguages`, `routes` (languages sites) | Creates a collection, or replaces its label, route, fields and enabled flag. A slug field is added if none exists. Fields replace the whole list, so send every field. On a languages site, a field may set `translatable`, `requiredLanguages` lists the languages that must be complete before ready, and `routes` gives a route pattern per language (each contains `$slug`, without the language prefix). |
 | `delete_collection` | Agency | `key` (required) | Deletes a collection and its entries. |
 
 If the site syncs its content types from code, the next manifest push replaces changes made with these tools. Prefer changing the site's configuration.
@@ -224,6 +230,12 @@ If the site syncs its content types from code, the next manifest push replaces c
 ### Prompt
 
 The server offers one prompt, `write_post`, with the arguments `collection` and `topic`. It asks the model to read the site and collection schema, draft the content in Markdown, fill in SEO, upload or find images with alt text, create a draft, share the preview URL, and not mark the entry ready or go live unless asked.
+
+## Languages
+
+On a site with several languages, every content tool that reads or writes text takes an optional `locale` (a code from `get_site_info`). Leave it out for the main language. Write one language per call: `fields`, `seo` and `slug` apply to that language. Fields that are not translatable are shared, so they change everywhere; `update_entry` and `update_global` list them in `sharedFieldsUpdated`. Check the other languages with `get_entry`. Its `translations` value gives each language's `complete` flag and `missing` fields.
+
+On a site with one language nothing here changes, and a `locale` is refused with a clear message.
 
 ## Reading entries
 

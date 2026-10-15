@@ -2,9 +2,15 @@ import type { Asset } from '#/server/assets'
 import { ValidationError } from '#/server/content/errors'
 import { SEO_KEY } from '#/lib/seo'
 import { isEditedSinceReady } from '#/features/golive/entry-live-state'
-import type { EntryData, EntryStatus, Field } from '#/lib/types'
+import { isTranslatable } from '#/lib/content-locale'
+import type { EntryData, EntryStatus, Field, SiteLanguages } from '#/lib/types'
 
-import { describeField, EXAMPLE_SEO, exampleFields } from './schema-docs'
+import {
+  describeField,
+  EXAMPLE_SEO,
+  exampleFields,
+  translationExample,
+} from './schema-docs'
 import type { ReleaseFlags } from './release-flags'
 import {
   markdownToRichText,
@@ -379,13 +385,33 @@ export function formatGlobal(input: {
 }
 
 /** Schema part of get_global: field formats and a payload to copy. */
-export function describeGlobal(fields: Field[], seoEnabled: boolean) {
+export function describeGlobal(
+  fields: Field[],
+  seoEnabled: boolean,
+  languages: SiteLanguages | null = null,
+) {
   return {
-    fields: fields.map(describeField),
+    fields: fields.map((field) =>
+      describeField(
+        field,
+        languages ? { translatable: isTranslatable(field) } : {},
+      ),
+    ),
     example: {
       fields: exampleFields(fields),
       ...(seoEnabled ? { seo: EXAMPLE_SEO } : {}),
     },
+    ...(languages
+      ? {
+          translation: translationExample({
+            ...languages,
+            fields,
+            seoEnabled,
+            tool: 'update_global',
+            target: { global: '<section key>' },
+          }),
+        }
+      : {}),
   }
 }
 

@@ -1,7 +1,10 @@
 import { z } from 'zod'
 
+import { isTranslatable } from '#/lib/content-locale'
 import { listCollections } from '#/server/content/collections'
 import { listGlobals } from '#/server/content/globals'
+import { languageName, loadSiteLanguages } from '#/server/content/locale-validation'
+import type { Field, SiteLanguages } from '#/lib/types'
 
 import { credentialPhrase } from '../guard'
 import type { ToolRegistry } from '../tool-kit'
@@ -14,6 +17,7 @@ import {
   EXAMPLE_SEO,
   SEO_GUIDE,
   STATUS_GUIDE,
+  translationExample,
 } from '../schema-docs'
 
 /**
@@ -42,7 +46,23 @@ export function cannotDoFor(actor: McpActor): string[] {
   return out
 }
 
-function writingGuide(actor: McpActor): string {
+/** The site's languages as agents read them: codes, English names, main. */
+export function languageSummary(languages: SiteLanguages) {
+  return {
+    main: languages.main,
+    all: languages.all,
+    names: Object.fromEntries(
+      languages.all.map((code) => [code, languageName(code)]),
+    ),
+  }
+}
+
+const LANGUAGES_GUIDE = [
+  'Languages: this site publishes in several languages. The main language is the fallback. To write a translation, call update_entry (or update_global) once per language with locale set to that language: fields, seo and slug apply to that language. Shared fields (translatable false) change in every language, and the response lists them in sharedFieldsUpdated.',
+  'Check the other languages with get_entry: translations shows, for each language, whether it is complete and which required fields are missing. Ready is blocked until every required language is complete.',
+].join(' ')
+
+function writingGuide(actor: McpActor, languages: SiteLanguages | null): string {
   const approval =
     actor.role === 'editor'
       ? 'You cannot mark entries ready. When the user asks for approval or publishing, explain that a site owner must mark it ready in the CMS.'
@@ -57,6 +77,7 @@ function writingGuide(actor: McpActor): string {
     STATUS_GUIDE,
     DATES_NOTE,
     SEO_GUIDE,
+    ...(languages ? [LANGUAGES_GUIDE] : []),
   ].join('\n')
 }
 
@@ -70,6 +91,7 @@ export function registerSiteTools(registry: ToolRegistry): void {
     annotations: { readOnlyHint: true, idempotentHint: true },
     run: async (_input, actor) => {
       const siteRow = await loadSiteRow(actor)
+      const languages = await loadSiteLanguages(actor.siteId)
       const collections = await listCollections(actor.siteId)
       const globals = await listGlobals(actor.siteId, {
         enabledOnly: actor.role !== 'agency',
@@ -77,6 +99,7 @@ export function registerSiteTools(registry: ToolRegistry): void {
       const isOwner = actor.role !== 'editor'
       return {
         cannotDo: cannotDoFor(actor),
+        ...(languages ? { languages: languageSummary(languages) } : {}),
         site: {
           id: siteRow.id,
           name: siteRow.name,
@@ -109,6 +132,9 @@ export function registerSiteTools(registry: ToolRegistry): void {
           route: col.routePattern,
           enabled: col.enabled,
           fieldCount: col.fields.length,
+          ...(languages
+            ? languageInfo(languages, col.requiredLanguages, col.fields, col.localizedRoutes)
+            : {}),
         })),
         globals: globals.map((global) => ({
           key: global.key,
@@ -117,8 +143,11 @@ export function registerSiteTools(registry: ToolRegistry): void {
           fieldCount: global.fields.length,
           seo: global.seoEnabled,
           previewPath: global.previewPath,
+          ...(languages
+            ? languageInfo(languages, global.requiredLanguages, global.fields)
+            : {}),
         })),
-        guide: writingGuide(actor),
+        guide: writingGuide(actor, languages),
       }
     },
   })
@@ -139,16 +168,33 @@ export function registerSiteTools(registry: ToolRegistry): void {
     annotations: { readOnlyHint: true, idempotentHint: true },
     run: async (input, actor) => {
       const col = await loadCollectionInSite(actor, input.collection)
+      const languages = await loadSiteLanguages(actor.siteId)
       return {
         collection: col.key,
         label: col.label,
         route: col.routePattern,
         enabled: col.enabled,
-        fields: col.fields.map(describeField),
+        fields: col.fields.map((field) =>
+          describeField(
+            field,
+            languages ? { translatable: isTranslatable(field) } : {},
+          ),
+        ),
         example: {
           fields: exampleFields(col.fields),
           seo: EXAMPLE_SEO,
         },
+        ...(languages
+          ? {
+              translation: translationExample({
+                ...languages,
+                fields: col.fields,
+                seoEnabled: true,
+                tool: 'update_entry',
+                target: { id: '<entryId from list_entries>' },
+              }),
+            }
+          : {}),
         seo: {
           keys: 'Object with optional keys: title, description, focusKeyphrase, canonicalUrl, noindex, nofollow, ogTitle, ogDescription, ogImage, twitterCard, schemaType, summary, keyTakeaways, faq, about, author, jsonLd. To clear a key on update: empty string for text, false for noindex/nofollow, empty array for lists.',
           guide: SEO_GUIDE,
@@ -164,4 +210,27 @@ export function registerSiteTools(registry: ToolRegistry): void {
       }
     },
   })
+}
+
+/**
+ * Per-collection or section language facts for get_site_info: the languages
+ * it must be complete in, the fields stored per language, and (collections
+ * only) the per-language route patterns.
+ */
+function languageInfo(
+  languages: SiteLanguages,
+  requiredLanguages: string[],
+  fields: Field[],
+  localizedRoutes?: Record<string, string> | null,
+) {
+  const required = requiredLanguages.filter((code) => languages.all.includes(code))
+  return {
+    requiredLanguages: required,
+    translatableFields: fields
+      .filter(isTranslatable)
+      .map((field) => field.key),
+    ...(localizedRoutes && Object.keys(localizedRoutes).length > 0
+      ? { routes: localizedRoutes }
+      : {}),
+  }
 }

@@ -1,3 +1,4 @@
+import { isTranslatable } from '#/lib/content-locale'
 import type { Field, FieldType } from '#/lib/types'
 
 /**
@@ -23,12 +24,17 @@ const TYPE_FORMAT: Record<FieldType, string> = {
   url: 'Absolute http or https URL, e.g. https://example.com/page.',
 }
 
-export function describeField(field: Field): {
+export function describeField(
+  field: Field,
+  /** Only on sites with languages: whether the field is stored per language. */
+  options: { translatable?: boolean } = {},
+): {
   key: string
   label: string
   type: FieldType
   required: boolean
   format: string
+  translatable?: boolean
   options?: string[]
   referencesCollection?: string
   description?: string
@@ -40,6 +46,9 @@ export function describeField(field: Field): {
     type: field.type,
     required: field.required === true,
     format: formatFor(field),
+    ...(options.translatable !== undefined
+      ? { translatable: options.translatable }
+      : {}),
     ...(field.options?.length ? { options: field.options } : {}),
     ...(field.type === 'reference' && field.collection
       ? { referencesCollection: field.collection }
@@ -154,3 +163,31 @@ export const SEO_GUIDE = [
   'Write SEO for every entry: title (about 50-60 characters), description (140-160 characters), focusKeyphrase, summary (2-3 sentences), 3-5 keyTakeaways, and faq only when the body answers real questions.',
   'Set ogImage to an uploaded asset id when there is a suitable image.',
 ].join(' ')
+
+/**
+ * Multi-language sites: how to write one language, as a copyable call. The
+ * example uses the first non-main language and only its translatable fields.
+ */
+export function translationExample(input: {
+  main: string
+  all: string[]
+  fields: Field[]
+  seoEnabled: boolean
+  tool: 'update_entry' | 'update_global'
+  target: Record<string, string>
+}): { note: string; example: { tool: string; arguments: Record<string, unknown> } } {
+  const other = input.all.find((code) => code !== input.main) ?? input.main
+  const translatable = input.fields.filter(isTranslatable)
+  return {
+    note: `Write one language per call: pass locale ("${other}" in the example). Translatable fields and seo are stored per language; other fields are shared, so changing them in one language changes every language.`,
+    example: {
+      tool: input.tool,
+      arguments: {
+        ...input.target,
+        locale: other,
+        fields: exampleFields(translatable),
+        ...(input.seoEnabled ? { seo: EXAMPLE_SEO } : {}),
+      },
+    },
+  }
+}

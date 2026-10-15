@@ -122,16 +122,16 @@ Tools are registered per request for the caller's role, so a tool the caller can
 | --- | --- | --- | --- |
 | Site | `get_site_info` | everyone | none |
 | Site | `get_collection_schema` | everyone | `collection` |
-| Entries | `list_entries` | everyone | `collection`, `status?` (`draft`, `ready`, `scheduled`, `archived`), `search?`, `limit?` (1 to 100, default 20), `offset?` |
-| Entries | `get_entry` | everyone | `id`, `includePublished?` (adds `liveFields`) |
-| Entries | `create_entry` | everyone | `collection`, `fields?`, `seo?` |
-| Entries | `update_entry` | everyone | `id`, `fields?`, `seo?`, `expectedVersion?` (at least one of `fields` or `seo`) |
+| Entries | `list_entries` | everyone | `collection`, `status?` (`draft`, `ready`, `scheduled`, `archived`), `search?`, `limit?` (1 to 100, default 20), `offset?`, `missingLanguage?` (languages sites: entries not complete in that language) |
+| Entries | `get_entry` | everyone | `id`, `includePublished?` (adds `liveFields`), `locale?` (languages sites: that language's values; without it, the main language plus `translations`) |
+| Entries | `create_entry` | everyone | `collection`, `fields?`, `seo?`, `slug?`, `locale?` (languages sites: the language `fields`, `seo` and `slug` apply to; default main) |
+| Entries | `update_entry` | everyone | `id`, `fields?`, `seo?`, `slug?`, `locale?` (languages sites), `expectedVersion?` (at least one of `fields`, `seo` or `slug`) |
 | Entries | `list_revisions` | everyone | `id` |
-| Entries | `get_preview_url` | everyone | `id` (about 1 hour; needs a production URL) |
+| Entries | `get_preview_url` | everyone | `id`, `locale?` (languages sites; about 1 hour; needs a production URL) |
 | Library | `list_assets` | everyone | `search?`, `limit?`, `offset?` |
 | Library | `get_asset` | everyone | `id` (includes `usageCount`) |
 | Library | `upload_asset_from_url` | everyone | `url`, `altText?`, `filename?` |
-| Library | `update_asset_alt` | everyone | `id`, `altText` (empty clears) |
+| Library | `update_asset_alt` | everyone | `id`, `altText` (empty clears), `locale?` (languages sites: alt text for that language) |
 | Library | `delete_asset` | owner | `id` (refused while in use) |
 | Publishing | `get_release_status` | everyone | none |
 | Publishing | `list_publications` | everyone | `limit?` (1 to 50, default 10) |
@@ -139,10 +139,10 @@ Tools are registered per request for the caller's role, so a tool the caller can
 | Publishing | `go_live` | go-live key | `note?` (up to 500 characters) |
 | Publishing | `rollback` | go-live key | `publicationId` |
 | Publishing | `cancel_build` | go-live key | `jobId` (queued builds only) |
-| Site content | `get_global` | everyone | `global` (key; disabled sections are agency-only) |
-| Site content | `update_global` | everyone | `global`, `fields?`, `seo?` (refused unless the section has SEO on), `expectedVersion?` |
+| Site content | `get_global` | everyone | `global` (key; disabled sections are agency-only), `locale?` (languages sites) |
+| Site content | `update_global` | everyone | `global`, `fields?`, `seo?` (refused unless the section has SEO on), `locale?` (languages sites), `expectedVersion?` |
 | Site content | `discard_global_draft` | everyone | `global` (refused until the section was ready once) |
-| Site content | `upsert_global` | agency admin | `key`, `label`, `fields` (complete list; `group?` heading per field; no `slug`), `seo?`, `previewPath?`, `enabled?` |
+| Site content | `upsert_global` | agency admin | `key`, `label`, `fields` (complete list; `group?` heading per field; `translatable?` per field on languages sites; no `slug`), `seo?`, `previewPath?`, `enabled?`, `requiredLanguages?` |
 | Site content | `delete_global` | agency admin | `key` (content kept in the deleted-content archive) |
 | Workflow | `mark_ready` | owner | `id` (does not publish) |
 | Workflow | `unpublish_entry` | owner | `id` |
@@ -151,8 +151,11 @@ Tools are registered per request for the caller's role, so a tool the caller can
 | Workflow | `cancel_schedule` | owner | `id` |
 | Workflow | `delete_entry` | owner | `id` |
 | Workflow | `restore_revision` | owner | `id`, `revisionId`, `expectedVersion?` (does not publish) |
-| Schema | `upsert_collection` | agency admin | `key`, `label`, `routePattern`, `fields` (complete list), `enabled?` |
+| Schema | `upsert_collection` | agency admin | `key`, `label`, `routePattern`, `fields` (complete list; `translatable?` per field), `enabled?`, `requiredLanguages?`, `routes?` (route per language, each with `$slug`) |
+| Languages | `set_site_languages` | agency admin | `main`, `all` (every language, in order, including `main`) |
 | Schema | `delete_collection` | agency admin | `key` (deletes its entries) |
+
+On a site without languages none of the `locale`, `translations`, `missingLanguage`, `translatable` or `requiredLanguages` parameters appear, and their results are unchanged.
 
 Site content (globals) are single sections of values, such as company info or the home page. They are not collections: `create_entry` and `list_entries` refuse their keys. `get_site_info` lists them under `globals`; the `id` that `get_global` returns works with `mark_ready`, `schedule_entry`, `cancel_schedule`, `list_revisions`, `restore_revision` and `get_preview_url`. `unpublish_entry`, `archive_entry` and `delete_entry` refuse it. A section's preview is its `previewPath` on the site with a signed `arecaPreview` token, so `get_preview_url` needs that path to be set.
 
@@ -183,6 +186,14 @@ A `ready` entry can still have `live: false` until the next go live. Editing a r
 `get_release_status` returns `pendingChanges`: entries marked ready but not live, scheduled entries, and entries withdrawn since the last go live.
 
 `get_site_info` returns `cannotDo`, a list of sentences describing what this key may not do (for example, "Go live: going live is not enabled for this key"), so the model can tell the user who can act.
+
+## Languages
+
+A site can publish in several languages. `get_site_info` lists them under `languages` (codes, English names and the main language). Write one language per call: pass `locale`, and `fields`, `seo` and `slug` apply to that language. Fields that are not translatable are shared, so changing them in one language changes every language, and the response lists them in `sharedFieldsUpdated`. Check the other languages with `get_entry`: `translations` gives each language's `complete` flag and its `missing` fields. `mark_ready` and `schedule_entry` refuse an entry until every required language is complete, and the error names the languages and fields.
+
+`set_site_languages` changes the languages (agency admins only). Removing a language hides it and keeps its text. Changing the main language deletes nothing, but entries not complete in the new main language cannot be marked ready until they are; the result reports how many.
+
+Translating with AI is not a tool. It runs in the CMS, from the editor's language bar, and fills empty fields only.
 
 ## Field formats
 

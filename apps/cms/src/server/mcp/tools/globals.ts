@@ -8,6 +8,8 @@ import {
 } from '#/lib/content-limits'
 import { GLOBAL_PREVIEW_PATH_MAX_LENGTH } from '#/lib/globals'
 import { SEO_KEY } from '#/lib/seo'
+import type { EntryData } from '#/lib/types'
+import { loadSiteLanguages } from '#/server/content/locale-validation'
 import {
   assertSectionSeo,
   deleteGlobal,
@@ -27,17 +29,19 @@ import {
 } from '../entry-format'
 import { McpNotFoundError } from '../errors'
 import type { McpActor } from '../keys'
+import { applyLocaleWrite, resolveLocale, withSharedNote } from '../locales'
 import {
   assertSiteImages,
   assetLookupFor,
   expectedVersion,
   formatStoredEntry,
+  localeInput,
   withImportWarnings,
 } from './entries'
 import { loadGlobalInSite } from '../scope'
 import { fieldsInputSchema, seoInputSchema } from '../schemas'
 import type { ToolRegistry } from '../tool-kit'
-import { fieldSchema } from './schema'
+import { fieldSchema, requiredLanguagesInput } from './schema'
 
 /**
  * Site content (globals): single sections such as company info or the home
@@ -68,14 +72,19 @@ export function registerGlobalTools(registry: ToolRegistry): void {
     name: 'get_global',
     title: 'Get site content',
     description:
-      'Returns one site content section (a single set of values, such as company info or the home page): id, key, label, status (draft, ready or scheduled), live (on the production site now), pendingRelease (approved changes waiting for the next go live), version, editedSinceReady, fields (the format of each field), example, values (rich text as Markdown, images as {assetId,url,alt}, references as {entryId}), seo (only when the section has SEO), and previewAvailable. Use the returned id with mark_ready, schedule_entry, cancel_schedule, list_revisions, restore_revision and get_preview_url. Read-only.',
-    inputSchema: z.object({ global: globalKey }),
+      'Returns one site content section (a single set of values, such as company info or the home page): id, key, label, status (draft, ready or scheduled), live (on the production site now), pendingRelease (approved changes waiting for the next go live), version, editedSinceReady, fields (the format of each field), example, values (rich text as Markdown, images as {assetId,url,alt}, references as {entryId}), seo (only when the section has SEO), and previewAvailable. On a site with languages, locale returns that language\'s values; without it you get the main language plus translations, the completeness of each other language. Use the returned id with mark_ready, schedule_entry, cancel_schedule, list_revisions, restore_revision and get_preview_url. Read-only.',
+    inputSchema: z.object({ global: globalKey, locale: localeInput }),
     annotations: { readOnlyHint: true, idempotentHint: true },
     run: async (input, actor) => {
       const section = await loadSection(actor, input.global)
+      const languages = await loadSiteLanguages(actor.siteId)
+      const target = resolveLocale(languages, input.locale)
       return {
-        ...(await formatStoredEntry(actor, section.entry.id)),
-        ...describeGlobal(section.global.fields, section.global.seoEnabled),
+        ...(await formatStoredEntry(actor, section.entry.id, {
+          locale: target?.locale,
+          translations: input.locale === undefined,
+        })),
+        ...describeGlobal(section.global.fields, section.global.seoEnabled, languages),
       }
     },
   })
@@ -89,6 +98,7 @@ export function registerGlobalTools(registry: ToolRegistry): void {
       global: globalKey,
       fields: fieldsInputSchema.optional(),
       seo: seoInputSchema.optional(),
+      locale: localeInput,
       expectedVersion,
     }),
     annotations: {
@@ -103,6 +113,8 @@ export function registerGlobalTools(registry: ToolRegistry): void {
         ])
       }
       const { global, entry } = await loadSection(actor, input.global)
+      const languages = await loadSiteLanguages(actor.siteId)
+      const target = resolveLocale(languages, input.locale)
       if (input.seo !== undefined) {
         assertSectionSeo(global, { [SEO_KEY]: input.seo })
       }
@@ -111,24 +123,48 @@ export function registerGlobalTools(registry: ToolRegistry): void {
       const assets = await assetLookupFor(actor, global.fields, inputs, patch)
       const converted = toStoredFields(global.fields, inputs, assets)
       assertSiteImages(global.fields, converted, assets)
-      const data = pickDeclaredFields(global.fields, entry.draftData)
-      if (!global.seoEnabled) delete data[SEO_KEY]
-      Object.assign(data, converted)
-      const seo = mergeSeo(
-        (data[SEO_KEY] as Record<string, unknown> | undefined) ?? undefined,
-        patch,
-      )
-      if (seo) data[SEO_KEY] = seo
-      else delete data[SEO_KEY]
+      let data: EntryData
+      let shared: string[] = []
+      if (languages && target) {
+        const written = applyLocaleWrite({
+          fields: global.fields,
+          languages,
+          locale: target.locale,
+          stored: entry.draftData,
+          converted,
+          seo: patch,
+          seoEnabled: global.seoEnabled,
+        })
+        data = written.data
+        shared = written.sharedFieldsUpdated
+      } else {
+        data = pickDeclaredFields(global.fields, entry.draftData)
+        if (!global.seoEnabled) delete data[SEO_KEY]
+        Object.assign(data, converted)
+        const seo = mergeSeo(
+          (data[SEO_KEY] as Record<string, unknown> | undefined) ?? undefined,
+          patch,
+        )
+        if (seo) data[SEO_KEY] = seo
+        else delete data[SEO_KEY]
+      }
       const updated = await updateDraft(
         entry.id,
         data,
         actor.userId,
         input.expectedVersion ?? entry.draftVersion,
       )
-      return withImportWarnings(
-        await formatStoredEntry(actor, entry.id, { withPreview: true }),
-        updated.importWarnings,
+      return withSharedNote(
+        withImportWarnings(
+          await formatStoredEntry(actor, entry.id, {
+            withPreview: true,
+            locale: target?.locale,
+            translations: true,
+          }),
+          updated.importWarnings,
+        ),
+        target,
+        shared,
       )
     },
   })
@@ -184,6 +220,7 @@ export function registerGlobalTools(registry: ToolRegistry): void {
         .boolean()
         .optional()
         .describe('false hides the section from editing. Default true.'),
+      requiredLanguages: requiredLanguagesInput,
     }),
     access: 'agency',
     deniedMessage:
@@ -203,9 +240,11 @@ export function registerGlobalTools(registry: ToolRegistry): void {
           seo: input.seo,
           previewPath: input.previewPath,
           enabled: input.enabled,
+          requiredLanguages: input.requiredLanguages,
         },
         actor.userId,
       )
+      const languages = await loadSiteLanguages(actor.siteId)
       return {
         key: row.key,
         label: row.label,
@@ -213,6 +252,9 @@ export function registerGlobalTools(registry: ToolRegistry): void {
         seo: row.seoEnabled,
         previewPath: row.previewPath,
         fieldKeys: row.fields.map((field) => field.key),
+        ...(languages
+          ? { requiredLanguages: row.requiredLanguages }
+          : {}),
       }
     },
   })

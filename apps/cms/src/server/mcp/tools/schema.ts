@@ -8,7 +8,9 @@ import {
   FIELD_MAX_OPTIONS,
   FIELD_OPTION_MAX_LENGTH,
   ID_MAX_LENGTH,
+  LOCALE_TAG_MAX_LENGTH,
   MAX_FIELDS_PER_COLLECTION,
+  MAX_SITE_LANGUAGES,
   ROUTE_PATTERN_MAX_LENGTH,
 } from '#/lib/content-limits'
 import type { FieldType } from '#/lib/types'
@@ -16,8 +18,10 @@ import {
   deleteCollection,
   upsertCollection,
 } from '#/server/content/collections'
+import { loadSiteLanguages } from '#/server/content/locale-validation'
 
 import type { ToolRegistry } from '../tool-kit'
+import { languageSummary } from './site'
 
 const FIELD_TYPES = [
   'text',
@@ -40,6 +44,12 @@ const FIELD_TYPES = [
  * in the backend (validateContentDefinitions).
  */
 export const fieldSchema = z.object({
+  translatable: z
+    .boolean()
+    .optional()
+    .describe(
+      'Only on sites with languages: true stores the field per language, false shares it across languages. Text, textarea, richtext and url are per language by default; the others are shared.',
+    ),
   key: z
     .string()
     .refine(
@@ -99,6 +109,33 @@ export const fieldSchema = z.object({
     ),
 })
 
+/** Languages that must be complete before an entry can be marked ready. */
+export const requiredLanguagesInput = z
+  .array(z.string().min(1).max(LOCALE_TAG_MAX_LENGTH))
+  .max(MAX_SITE_LANGUAGES)
+  .optional()
+  .describe(
+    'Languages besides the main one that must be complete before an entry is marked ready, e.g. ["en"]. Omit to keep the current list. Ignored on a site without languages.',
+  )
+
+/** Route patterns per language. Each one starts with "/" and holds $slug. */
+const localizedRoutesInput = z
+  .record(
+    z.string().min(1).max(LOCALE_TAG_MAX_LENGTH),
+    z
+      .string()
+      .min(1)
+      .max(ROUTE_PATTERN_MAX_LENGTH)
+      .refine(
+        (pattern) => pattern.startsWith('/') && pattern.includes('$slug'),
+        'A route starts with / and contains $slug, e.g. "/vacatures/$slug"',
+      ),
+  )
+  .optional()
+  .describe(
+    'Route per language, e.g. {"nl": "/vacatures/$slug"}. Languages not listed use routePattern. Patterns do not contain the language prefix; the site adds it. Send {} to remove them all. Ignored on a site without languages.',
+  )
+
 const SCHEMA_WARNING =
   'Warning: if this site syncs its schema from code (an areca manifest push), the next push replaces collections changed here. Prefer changing areca.config.ts when the site has one.'
 
@@ -133,6 +170,8 @@ export function registerSchemaTools(registry: ToolRegistry): void {
         .boolean()
         .optional()
         .describe('false hides the collection from editing. Default true.'),
+      requiredLanguages: requiredLanguagesInput,
+      routes: localizedRoutesInput,
     }),
     access: 'agency',
     deniedMessage:
@@ -151,15 +190,30 @@ export function registerSchemaTools(registry: ToolRegistry): void {
           routePattern: input.routePattern,
           fields: input.fields,
           enabled: input.enabled,
+          requiredLanguages: input.requiredLanguages,
+          localizedRoutes:
+            input.routes === undefined
+              ? undefined
+              : Object.keys(input.routes).length > 0
+                ? input.routes
+                : null,
         },
         actor.userId,
       )
+      const languages = await loadSiteLanguages(actor.siteId)
       return {
         key: row.key,
         label: row.label,
         route: row.routePattern,
         enabled: row.enabled,
         fieldKeys: row.fields.map((field) => field.key),
+        ...(languages
+          ? {
+              languages: languageSummary(languages),
+              requiredLanguages: row.requiredLanguages,
+              routes: row.localizedRoutes,
+            }
+          : {}),
       }
     },
   })

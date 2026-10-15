@@ -7,7 +7,11 @@ import {
   richTextAssetRefs,
 } from '#/server/assets/richtext-ownership'
 import { SEO_KEY } from '#/lib/seo'
-import { ID_MAX_LENGTH, SEARCH_MAX_LENGTH } from '#/lib/content-limits'
+import {
+  ID_MAX_LENGTH,
+  SEARCH_MAX_LENGTH,
+  SLUG_MAX_LENGTH,
+} from '#/lib/content-limits'
 import type { EntryData, Field } from '#/lib/types'
 import {
   createEntry,
@@ -18,12 +22,23 @@ import {
 } from '#/server/content/entries'
 import { pickDeclaredFields } from '#/server/content/validation'
 import { ValidationError } from '#/server/content/errors'
+import { loadSiteLanguages } from '#/server/content/locale-validation'
 import { McpNotFoundError } from '../errors'
 import {
   signPreviewToken,
   buildPreviewUrl,
   buildGlobalPreviewUrl,
 } from '#/server/content/preview-token'
+import {
+  applyLocaleWrite,
+  localeView,
+  resolveLocale,
+  slugFieldKey,
+  translationStatuses,
+  withSharedNote,
+  withSlugInput,
+} from '../locales'
+import type { LocaleTarget } from '../locales'
 
 import type { AssetLookup } from '../entry-format'
 import {
@@ -120,6 +135,25 @@ async function assetLookupForData(
   })
 }
 
+/** The URL slug. With a non-main locale it is that language's own slug. */
+const slugInput = z
+  .string()
+  .max(SLUG_MAX_LENGTH)
+  .optional()
+  .describe(
+    "The URL slug, lowercase letters, numbers and dashes. Same as fields.<slug field>. With a locale other than main it is that language's own slug; send an empty string to fall back to the main slug.",
+  )
+
+/** Language input shared by the content tools. Optional; the main language when left out. */
+export const localeInput = z
+  .string()
+  .min(1)
+  .max(35)
+  .optional()
+  .describe(
+    'Language to read or write, a BCP 47 code from get_site_info (e.g. "en"). Leave it out for the main language. Only on sites with languages.',
+  )
+
 /** The content a preview link opens: a collection entry, or a site content section on its page. */
 type PreviewSource = {
   kind: 'collection' | 'global'
@@ -131,6 +165,7 @@ async function previewUrlFor(
   actor: McpActor,
   source: PreviewSource,
   slug: string,
+  locale?: string,
 ): Promise<string | null> {
   const siteRow = await loadSiteRow(actor)
   if (!siteRow.productionUrl) return null
@@ -140,16 +175,23 @@ async function previewUrlFor(
       siteId: siteRow.id,
       global: source.key,
       secret: siteRow.previewSecret,
+      locale,
     })
-    return buildGlobalPreviewUrl(siteRow.productionUrl, source.previewPath, token)
+    return buildGlobalPreviewUrl(
+      siteRow.productionUrl,
+      source.previewPath,
+      token,
+      locale,
+    )
   }
   const token = signPreviewToken({
     siteId: siteRow.id,
     collection: source.key,
     slug,
     secret: siteRow.previewSecret,
+    locale,
   })
-  return buildPreviewUrl(siteRow.productionUrl, source.key, slug, token)
+  return buildPreviewUrl(siteRow.productionUrl, source.key, slug, token, locale)
 }
 
 /** The live version of an entry as the production site serves it now, if it is live. */
@@ -169,14 +211,42 @@ function liveEntryFor(
   return snapshot.collections[source.key]?.find((item) => item.id === id)
 }
 
+/**
+ * The entry as an agent reads it. On a site with languages, `locale` picks the
+ * language whose values are shown (the main language when omitted), and
+ * `translations` adds the completeness of every other language.
+ */
 export async function formatStoredEntry(
   actor: McpActor,
   id: string,
-  options: { includePublished?: boolean; withPreview?: boolean } = {},
+  options: {
+    includePublished?: boolean
+    withPreview?: boolean
+    /** Language code of the view. Passed only when the caller chose one. */
+    locale?: string
+    /** Add `translations` (status of every non-main language). */
+    translations?: boolean
+  } = {},
 ) {
   const row = await getEntry(id)
   if (!row) throw new McpNotFoundError('This entry no longer exists.')
   const content = await loadContentInSite(actor, row.collectionKey)
+  const languages = await loadSiteLanguages(actor.siteId)
+  const localeCode = languages ? (options.locale ?? languages.main) : undefined
+  const view =
+    languages && localeCode
+      ? localeView(row.draftData, languages, content.fields, localeCode, row.slug)
+      : null
+  const published =
+    languages && localeCode
+      ? localeView(
+          row.publishedData ?? {},
+          languages,
+          content.fields,
+          localeCode,
+          row.slug,
+        ).data
+      : row.publishedData
   const assets = await assetLookupForData(actor, content.fields, [
     row.draftData,
     row.publishedData ?? {},
@@ -211,7 +281,9 @@ export async function formatStoredEntry(
       assets.byStorageKey.set(key, value)
   }
   const input = {
-    entry: row,
+    entry: view
+      ? { ...row, draftData: view.data, publishedData: published, slug: view.slug }
+      : row,
     fields: content.fields,
     ctx: { assets, assetUrl: (storageKey: string) => assetUrl({ storageKey }) },
     release: releaseFlags(release, row.id),
@@ -223,10 +295,28 @@ export async function formatStoredEntry(
     content.kind === 'global'
       ? formatGlobal({ ...input, global: content })
       : formatEntry(input)
-  if (!options.withPreview) return formatted
+  const localized = {
+    ...(localeCode ? { locale: localeCode } : {}),
+    ...(languages && options.translations
+      ? {
+          translations: translationStatuses(
+            row.draftData,
+            languages,
+            content.fields,
+          ),
+        }
+      : {}),
+  }
+  if (!options.withPreview) return { ...formatted, ...localized }
   return {
     ...formatted,
-    previewUrl: await previewUrlFor(actor, source, row.slug),
+    ...localized,
+    previewUrl: await previewUrlFor(
+      actor,
+      source,
+      view?.slug ?? row.slug,
+      options.locale,
+    ),
   }
 }
 
@@ -236,6 +326,16 @@ export function withImportWarnings<T extends object>(
   warnings: string[],
 ): T | (T & { warnings: string[] }) {
   return warnings.length > 0 ? { ...result, warnings } : result
+}
+
+/** Import warnings plus, for a non-main language, the shared fields it changed. */
+function withWriteNotes<T extends object>(
+  result: T,
+  warnings: string[],
+  target: LocaleTarget | null,
+  shared: string[],
+) {
+  return withSharedNote(withImportWarnings(result, warnings), target, shared)
 }
 
 export function registerEntryTools(registry: ToolRegistry): void {
@@ -270,18 +370,26 @@ export function registerEntryTools(registry: ToolRegistry): void {
         .min(0)
         .optional()
         .describe('Number of entries to skip. Default 0.'),
+      missingLanguage: localeInput.describe(
+        'Only entries whose draft is not complete in this language (a required field is empty there), e.g. "en". Only on sites with languages.',
+      ),
     }),
     annotations: { readOnlyHint: true, idempotentHint: true },
     run: async (input, actor) => {
       const col = await loadCollectionInSite(actor, input.collection)
       const limit = input.limit ?? 20
       const offset = input.offset ?? 0
+      const target = resolveLocale(
+        await loadSiteLanguages(actor.siteId),
+        input.missingLanguage,
+      )
       const [result, release] = await Promise.all([
         listEntries(actor.siteId, col.key, {
           status: input.status ? storedStatus(input.status) : undefined,
           search: input.search,
           limit,
           offset,
+          missingLanguage: target?.locale,
         }),
         loadReleaseState(actor.siteId),
       ])
@@ -299,19 +407,26 @@ export function registerEntryTools(registry: ToolRegistry): void {
     name: 'get_entry',
     title: 'Get entry',
     description:
-      'Returns one entry: status (draft, ready, scheduled or archived), live (on the production site now; demo previews do not count), pendingRelease (approved changes waiting for the next go live), approvedAt, fields (rich text as Markdown, images as {assetId,url,alt}, references as {entryId}), seo, and version (pass it to update_entry as expectedVersion). Set includePublished to also get liveFields, the version visitors see now. Read-only.',
+      'Returns one entry: status (draft, ready, scheduled or archived), live (on the production site now; demo previews do not count), pendingRelease (approved changes waiting for the next go live), approvedAt, fields (rich text as Markdown, images as {assetId,url,alt}, references as {entryId}), seo, and version (pass it to update_entry as expectedVersion). On a site with languages, locale returns that language\'s values (slug and seo included); without it you get the main language plus translations, the completeness of each other language and its missing fields. Set includePublished to also get liveFields, the version visitors see now. Read-only.',
     inputSchema: z.object({
       id: idSchema('entry'),
       includePublished: z
         .boolean()
         .optional()
         .describe('Also return liveFields, the version visitors see now.'),
+      locale: localeInput,
     }),
     annotations: { readOnlyHint: true, idempotentHint: true },
     run: async (input, actor) => {
       const entry = await loadEntryInSite(actor, input.id)
+      const target = resolveLocale(
+        await loadSiteLanguages(actor.siteId),
+        input.locale,
+      )
       return formatStoredEntry(actor, entry.id, {
         includePublished: input.includePublished,
+        locale: target?.locale,
+        translations: input.locale === undefined,
       })
     },
   })
@@ -325,6 +440,8 @@ export function registerEntryTools(registry: ToolRegistry): void {
       collection: collectionKey,
       fields: fieldsInputSchema.optional(),
       seo: seoInputSchema.optional(),
+      slug: slugInput,
+      locale: localeInput,
     }),
     annotations: {
       readOnlyHint: false,
@@ -333,22 +450,50 @@ export function registerEntryTools(registry: ToolRegistry): void {
     },
     run: async (input, actor) => {
       const col = await loadCollectionInSite(actor, input.collection)
-      const inputs = input.fields ?? {}
+      const languages = await loadSiteLanguages(actor.siteId)
+      const target = resolveLocale(languages, input.locale)
+      const inputs = withSlugInput(col.fields, input.fields ?? {}, input.slug)
       const seo = seoPatch(input.seo)
       const assets = await assetLookupFor(actor, col.fields, inputs, seo)
-      const data = toStoredFields(col.fields, inputs, assets)
-      assertSiteImages(col.fields, data, assets)
-      const merged = mergeSeo(undefined, seo)
-      if (merged) data[SEO_KEY] = merged
+      const converted = toStoredFields(col.fields, inputs, assets)
+      assertSiteImages(col.fields, converted, assets)
+      let data = converted
+      let shared: string[] = []
+      if (languages && target) {
+        const written = applyLocaleWrite({
+          fields: col.fields,
+          languages,
+          locale: target.locale,
+          stored: {},
+          converted,
+          seo,
+        })
+        data = written.data
+        shared = written.sharedFieldsUpdated
+        // The entry needs a main slug to exist: a first language's slug is used for it.
+        const slugKey = slugFieldKey(col.fields)
+        if (!target.isMain && slugKey && typeof converted[slugKey] === 'string') {
+          data[slugKey] = converted[slugKey]
+        }
+      } else {
+        const merged = mergeSeo(undefined, seo)
+        if (merged) data[SEO_KEY] = merged
+      }
       const created = await createEntry({
         siteId: actor.siteId,
         collectionKey: col.key,
         data,
         actorId: actor.userId,
       })
-      return withImportWarnings(
-        await formatStoredEntry(actor, created.id, { withPreview: true }),
+      return withWriteNotes(
+        await formatStoredEntry(actor, created.id, {
+          withPreview: true,
+          locale: target?.locale,
+          translations: true,
+        }),
         created.importWarnings,
+        target,
+        shared,
       )
     },
   })
@@ -357,11 +502,13 @@ export function registerEntryTools(registry: ToolRegistry): void {
     name: 'update_entry',
     title: 'Update entry',
     description:
-      'Changes a draft. Only the fields and seo keys you send change; others stay as they are. Clear a field by sending an empty string or null; clear an seo key with an empty string (text), false (boolean) or an empty array (list). Pass expectedVersion from get_entry to avoid overwriting newer changes. Changing the slug changes the entry URL. Editing a ready entry does not change the live site: mark it ready again to approve the new version. Returns the saved entry.',
+      'Changes a draft. Only the fields and seo keys you send change; others stay as they are. Clear a field by sending an empty string or null; clear an seo key with an empty string (text), false (boolean) or an empty array (list). On a site with languages, locale says which language the fields, seo and slug belong to (the main language when left out). Write one language per call: shared fields (not translatable) change in every language, and the response lists them in sharedFieldsUpdated. Pass expectedVersion from get_entry to avoid overwriting newer changes. Changing the slug changes the entry URL (in a non-main language, only that language\'s URL). Editing a ready entry does not change the live site: mark it ready again to approve the new version. Returns the saved entry.',
     inputSchema: z.object({
       id: idSchema('entry'),
       fields: fieldsInputSchema.optional(),
       seo: seoInputSchema.optional(),
+      slug: slugInput,
+      locale: localeInput,
       expectedVersion,
     }),
     annotations: {
@@ -370,35 +517,62 @@ export function registerEntryTools(registry: ToolRegistry): void {
       idempotentHint: true,
     },
     run: async (input, actor) => {
-      if (input.fields === undefined && input.seo === undefined) {
+      if (
+        input.fields === undefined &&
+        input.seo === undefined &&
+        input.slug === undefined
+      ) {
         throw new ValidationError([
           { path: '', message: 'Nothing to update. Pass fields and/or seo' },
         ])
       }
       const entry = await loadEntryInSite(actor, input.id)
       const col = await loadCollectionInSite(actor, entry.collectionKey)
-      const inputs = input.fields ?? {}
+      const languages = await loadSiteLanguages(actor.siteId)
+      const target = resolveLocale(languages, input.locale)
+      const inputs = withSlugInput(col.fields, input.fields ?? {}, input.slug)
       const patch = seoPatch(input.seo)
       const assets = await assetLookupFor(actor, col.fields, inputs, patch)
       const converted = toStoredFields(col.fields, inputs, assets)
       assertSiteImages(col.fields, converted, assets)
-      const data = pickDeclaredFields(col.fields, entry.draftData)
-      Object.assign(data, converted)
-      const seo = mergeSeo(
-        (data[SEO_KEY] as Record<string, unknown> | undefined) ?? undefined,
-        patch,
-      )
-      if (seo) data[SEO_KEY] = seo
-      else delete data[SEO_KEY]
+      let data: EntryData
+      let shared: string[] = []
+      if (languages && target) {
+        const written = applyLocaleWrite({
+          fields: col.fields,
+          languages,
+          locale: target.locale,
+          stored: entry.draftData,
+          converted,
+          seo: patch,
+        })
+        data = written.data
+        shared = written.sharedFieldsUpdated
+      } else {
+        data = pickDeclaredFields(col.fields, entry.draftData)
+        Object.assign(data, converted)
+        const seo = mergeSeo(
+          (data[SEO_KEY] as Record<string, unknown> | undefined) ?? undefined,
+          patch,
+        )
+        if (seo) data[SEO_KEY] = seo
+        else delete data[SEO_KEY]
+      }
       const updated = await updateDraft(
         entry.id,
         data,
         actor.userId,
         input.expectedVersion ?? entry.draftVersion,
       )
-      return withImportWarnings(
-        await formatStoredEntry(actor, entry.id, { withPreview: true }),
+      return withWriteNotes(
+        await formatStoredEntry(actor, entry.id, {
+          withPreview: true,
+          locale: target?.locale,
+          translations: true,
+        }),
         updated.importWarnings,
+        target,
+        shared,
       )
     },
   })
@@ -427,11 +601,15 @@ export function registerEntryTools(registry: ToolRegistry): void {
     title: 'Get preview URL',
     description:
       'Returns a preview link for an entry, including drafts, so you or the user can see it on the site design before it goes live. The link is signed and expires after about an hour; call again for a fresh one.',
-    inputSchema: z.object({ id: idSchema('entry') }),
+    inputSchema: z.object({ id: idSchema('entry'), locale: localeInput }),
     annotations: { readOnlyHint: true, idempotentHint: true },
     run: async (input, actor) => {
       const entry = await loadEntryInSite(actor, input.id)
       const content = await loadContentInSite(actor, entry.collectionKey)
+      const target = resolveLocale(
+        await loadSiteLanguages(actor.siteId),
+        input.locale,
+      )
       if (content.kind === 'global' && !content.previewPath) {
         throw new ValidationError([
           {
@@ -445,6 +623,7 @@ export function registerEntryTools(registry: ToolRegistry): void {
         actor,
         { kind: content.kind, key: content.key, previewPath: content.previewPath },
         entry.slug,
+        target?.locale,
       )
       if (!url) {
         throw new ValidationError([
