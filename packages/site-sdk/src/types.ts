@@ -21,6 +21,11 @@ type FieldBase = {
   description?: string
   /** Visual heading in the CMS editor, site content only. Stays flat in the SDK. */
   group?: string
+  /**
+   * Stored per language. Absent means the type default: text, textarea,
+   * richtext and url are translatable; the others are shared.
+   */
+  translatable?: boolean
 }
 
 /**
@@ -43,6 +48,10 @@ export type CollectionConfig = {
   route: string
   label?: string
   fields: readonly Field[]
+  /** Per-language route patterns, e.g. `{ nl: '/vacatures/$slug' }`. Each must contain `$slug`. */
+  routes?: Readonly<Record<string, string>>
+  /** Languages besides the main one that must be complete before the entry goes live. */
+  requiredLanguages?: readonly string[]
 }
 
 /**
@@ -57,15 +66,36 @@ export type GlobalConfig = {
   seo?: boolean
   /** Page that previews the section, e.g. `/about`. */
   previewPath?: string
+  /** Languages besides the main one that must be complete before the section goes live. */
+  requiredLanguages?: readonly string[]
+}
+
+/** Site languages. `main` is the fallback; `all` is ordered and includes `main`. */
+export type SiteLanguages = {
+  main: string
+  all: readonly string[]
 }
 
 export type SiteContentConfig = {
   siteKey: string
+  /** Content languages. Omit to leave the site's language setting alone (single-language). */
+  languages?: SiteLanguages
   collections: Record<string, CollectionConfig>
   /** Site content sections, keyed by raw CMS key. */
   globals?: Record<string, GlobalConfig>
   /** Where `areca pull` copies media. Local only: never sent to the CMS. */
   assets?: AssetsConfig
+  /** SDK-only settings, never sent to the CMS. */
+  i18n?: I18nConfig
+}
+
+/**
+ * SDK-only language settings. `paraglide` is the Paraglide runtime module
+ * (e.g. `./src/paraglide/runtime.js`). `areca pull` then passes its `getLocale`
+ * to the generated content object.
+ */
+export type I18nConfig = {
+  paraglide?: string
 }
 
 /**
@@ -87,6 +117,8 @@ export type AssetsConfig = {
 
 /** POST /api/sites/manifest body */
 export type SiteManifest = {
+  /** Omitted leaves the site's language setting alone. */
+  languages?: SiteLanguages
   collections: Record<string, CollectionConfig>
   /** Omitted when there are no enabled site content sections. */
   globals?: Record<string, GlobalConfig>
@@ -131,6 +163,19 @@ export type SnapshotEntry = {
    * snapshots from older CMS versions do not have it.
    */
   seo?: SeoMeta
+  /** Language of `data`, `slug` and `seo`. Absent on single-language sites and old snapshots. */
+  locale?: string
+  /** Complete languages only, main included when complete. Absent on single-language sites and old snapshots. */
+  locales?: Record<string, LocalizedValues>
+}
+
+/** One language of an entry or site content section, as published. */
+export type LocalizedValues = {
+  /** Per-language slug. Only on collection entries. */
+  slug?: string
+  /** Full flat view: shared and translatable fields, camel-cased by `areca pull`. */
+  data: Record<string, unknown>
+  seo?: SeoMeta
 }
 
 /** Wire contract: matches the CMS `SeoMeta`. */
@@ -172,6 +217,8 @@ export type Snapshot = {
   siteKey: string
   createdAt: string
   hash: string
+  /** Content languages. Absent on single-language sites. */
+  languages?: SiteLanguages
   collections: Record<string, SnapshotEntry[]>
   /** Every media file the content references. Absent from older CMS versions. */
   assets?: SnapshotAsset[]
@@ -197,6 +244,10 @@ export type SnapshotGlobal = {
   data: Record<string, unknown>
   /** Only when the section has SEO enabled. */
   seo?: SeoMeta
+  /** Language of `data` and `seo`. Absent on single-language sites and old snapshots. */
+  locale?: string
+  /** Complete languages only, main included when complete. */
+  locales?: Record<string, LocalizedValues>
 }
 
 /** A media file referenced by a publication. */
@@ -210,12 +261,33 @@ export type SnapshotAsset = {
   size: number
 }
 
+/** Completeness of one site language in a draft preview. */
+export type PreviewLocaleStatus = {
+  complete: boolean
+  /** Labels of the missing required fields, e.g. `Title`. */
+  missing: string[]
+}
+
+/**
+ * A draft entry in preview. `locales` has the snapshot shape (shipped
+ * languages only); `localeStatus` lists every site language. Both are absent
+ * on single-language sites.
+ */
+export type PreviewSnapshotEntry = SnapshotEntry & {
+  localeStatus?: Record<string, PreviewLocaleStatus>
+}
+
+/** A draft section in preview. Same language fields as `PreviewSnapshotEntry`. */
+export type PreviewSnapshotGlobal = SnapshotGlobal & {
+  localeStatus?: Record<string, PreviewLocaleStatus>
+}
+
 /** Preview of a collection entry. `kind` is missing from older CMS versions. */
 export type PreviewEntryResult = {
   kind?: 'entry'
   collection: string
   slug: string
-  entry: SnapshotEntry
+  entry: PreviewSnapshotEntry
 }
 
 /** Preview of a site content section. */
@@ -223,7 +295,7 @@ export type PreviewGlobalResult = {
   kind: 'global'
   /** Raw CMS key of the section. */
   global: string
-  entry: SnapshotGlobal
+  entry: PreviewSnapshotGlobal
 }
 
 export type PreviewResult = PreviewEntryResult | PreviewGlobalResult
@@ -235,6 +307,8 @@ export type PulledContentManifest = {
   collections: Record<string, number>
   /** Camel keys of the site content sections in `_globals.json`. Absent when there are none. */
   globals?: string[]
+  /** The site's content languages. Absent on single-language sites. */
+  languages?: SiteLanguages
   /** Immutable directory under `.publications`; absent in legacy flat output. */
   generation?: string
   /** Present when media was copied locally. */

@@ -119,7 +119,7 @@ export async function uploadAsset(input: {
     await storage.put(storageKey, input.file.buffer, mimeType)
     return await db.transaction(async (tx) => {
       await assetMutationLock(tx, input.organizationId)
-      const [row] = await tx
+      const row = (await tx
         .insert(asset)
         .values({
           organizationId: input.organizationId,
@@ -135,6 +135,7 @@ export async function uploadAsset(input: {
           createdBy: input.actorId,
         })
         .returning()
+      ).at(0)
       if (!row) throw new Error(m.server_failed_to_insert_asset())
       await completeObjectUpload(tx, storageKey)
       return row
@@ -199,16 +200,37 @@ export async function getAsset(
   return row
 }
 
+/**
+ * Sets the alt text. Without `locale`, or with the site's main language, this
+ * is `alt`. Any other language is `altI18n[locale]`; an empty value removes
+ * that language's alt, so the site falls back to the main alt.
+ */
 export async function updateAsset(
   id: string,
-  patch: { altText: string },
+  patch: {
+    altText: string
+    locale?: string | null
+    mainLocale?: string | null
+  },
   organizationId: string,
 ): Promise<Asset> {
-  const [row] = await db
+  const translation =
+    patch.locale && patch.locale !== patch.mainLocale ? patch.locale : null
+  const row = (await db
     .update(asset)
-    .set({ altText: patch.altText })
+    .set(
+      translation
+        ? {
+            altI18n:
+              patch.altText.trim() === ''
+                ? sql`${asset.altI18n} - ${translation}::text`
+                : sql`jsonb_set(${asset.altI18n}, ARRAY[${translation}::text], to_jsonb(${patch.altText}::text), true)`,
+          }
+        : { altText: patch.altText },
+    )
     .where(and(eq(asset.id, id), eq(asset.organizationId, organizationId)))
     .returning()
+  ).at(0)
   if (!row) {
     throw new NotFoundError(m.server_asset_not_found())
   }
@@ -309,10 +331,11 @@ export async function assetUsage(
 ): Promise<number> {
   return db.transaction(async (tx) => {
     await assetMutationLock(tx, organizationId)
-    const [existing] = await tx
+    const existing = (await tx
       .select()
       .from(asset)
       .where(and(eq(asset.id, id), eq(asset.organizationId, organizationId)))
+    ).at(0)
     return existing ? retainedAssetUsage(tx, existing) : 0
   })
 }
@@ -324,10 +347,11 @@ export async function deleteAsset(
 ): Promise<void> {
   await db.transaction(async (tx) => {
     await assetMutationLock(tx, organizationId)
-    const [existing] = await tx
+    const existing = (await tx
       .select()
       .from(asset)
       .where(and(eq(asset.id, id), eq(asset.organizationId, organizationId)))
+    ).at(0)
     if (!existing) throw new NotFoundError(m.server_asset_not_found())
     const usage = await retainedAssetUsage(tx, existing)
     if (usage > 0) throw new AssetInUseError(usage)
@@ -344,12 +368,21 @@ export function assetUrl(assetRow: Pick<Asset, 'storageKey'>): string {
   return `${env.APP_URL}/api/assets/file/${assetRow.storageKey}`
 }
 
-function toResolvedAssetValue(row: Asset): ResolvedAssetValue {
+/**
+ * Alt text for a language: the translation when it is set, else the main
+ * alt. Without a locale this is the main alt.
+ */
+function altFor(row: Asset, locale?: string | null): string {
+  const translated = locale ? row.altI18n[locale] : undefined
+  return translated || row.altText || ''
+}
+
+function toResolvedAssetValue(row: Asset, locale?: string | null): ResolvedAssetValue {
   return {
     url: assetUrl(row),
     width: row.width,
     height: row.height,
-    alt: row.altText ?? '',
+    alt: altFor(row, locale),
     mimeType: row.mimeType,
   }
 }
@@ -358,9 +391,10 @@ export async function resolveAssetValue(
   assetId: string,
   organizationId: string,
   connection: Pick<typeof db, 'select'> = db,
+  locale?: string | null,
 ): Promise<ResolvedAssetValue | null> {
   const row = await getAsset(assetId, organizationId, connection)
-  return row ? toResolvedAssetValue(row) : null
+  return row ? toResolvedAssetValue(row, locale) : null
 }
 
 /**
@@ -409,9 +443,10 @@ export async function loadAssetLookup(
 export function resolveAssetFromLookup(
   lookup: AssetLookup,
   assetId: string,
+  locale?: string | null,
 ): ResolvedAssetValue | null {
   const row = lookup.byId.get(assetId)
-  return row ? toResolvedAssetValue(row) : null
+  return row ? toResolvedAssetValue(row, locale) : null
 }
 
 export function storageKeyFromRequest(request: Request): string | undefined {

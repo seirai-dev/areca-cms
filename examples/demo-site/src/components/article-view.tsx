@@ -1,4 +1,5 @@
 import { Link } from '@tanstack/react-router'
+import { m } from '#/paraglide/messages'
 import type { ArticlesEntry, AuthorsEntry, CoffeesEntry } from '../generated/content/areca.gen.ts'
 import { ArticleBody } from './article-body.tsx'
 import { CmsImage, PreviewBanner } from './cms-image.tsx'
@@ -58,7 +59,7 @@ export function ArticleView({
                 <CmsImage image={author.data.portrait} className="size-12 rounded-full object-cover" />
               ) : null}
               <p className="text-sm text-muted">
-                By{' '}
+                {m.by()}{' '}
                 <Link
                   to="/team/$slug"
                   params={{ slug: author.slug }}
@@ -73,15 +74,15 @@ export function ArticleView({
         </header>
 
         {seo?.summary ? (
-          <section aria-label="Article summary" className="mt-12 rounded-2xl bg-surface p-6 ring-1 ring-line md:p-8">
-            <h2 className={ASIDE_HEADING}>Summary</h2>
+          <section aria-label={m.aria_article_summary()} className="mt-12 rounded-2xl bg-surface p-6 ring-1 ring-line md:p-8">
+            <h2 className={ASIDE_HEADING}>{m.article_summary()}</h2>
             <p className="mt-3 text-base leading-7 text-ink/90">{seo.summary}</p>
           </section>
         ) : null}
 
         {seo?.keyTakeaways.length ? (
-          <section aria-label="Key takeaways" className="mt-6 rounded-2xl bg-surface p-6 ring-1 ring-line md:p-8">
-            <h2 className={ASIDE_HEADING}>Key takeaways</h2>
+          <section aria-label={m.aria_key_takeaways()} className="mt-6 rounded-2xl bg-surface p-6 ring-1 ring-line md:p-8">
+            <h2 className={ASIDE_HEADING}>{m.key_takeaways()}</h2>
             <ul className="mt-4 space-y-3">
               {seo.keyTakeaways.map((takeaway) => (
                 <li key={takeaway} className="flex gap-3 text-base leading-7 text-ink/90">
@@ -100,7 +101,7 @@ export function ArticleView({
         {seo?.faq.length ? (
           <section className="mt-24" aria-labelledby="faq-heading">
             <h2 id="faq-heading" className="border-b border-line pb-5 font-display text-3xl tracking-tight text-ink md:text-4xl">
-              Frequently asked questions
+              {m.faq_title()}
             </h2>
             <dl className="divide-y divide-line">
               {seo.faq.map((item) => (
@@ -115,7 +116,7 @@ export function ArticleView({
 
         {seo?.about.length ? (
           <footer className="mt-16 border-t border-line pt-8">
-            <h2 className={ASIDE_HEADING}>Topics</h2>
+            <h2 className={ASIDE_HEADING}>{m.topics()}</h2>
             <ul className="mt-4 flex flex-wrap gap-2">
               {seo.about.map((topic) => (
                 <li key={topic.name}>
@@ -151,7 +152,7 @@ function FeaturedCoffee({ coffee }: { coffee: CoffeesEntry }) {
   return (
     <section className="mt-24" aria-labelledby="featured-coffee">
       <h2 id="featured-coffee" className={ASIDE_HEADING}>
-        Featured coffee
+        {m.featured_coffee()}
       </h2>
       <Link
         to="/coffees/$slug"
@@ -169,7 +170,11 @@ function FeaturedCoffee({ coffee }: { coffee: CoffeesEntry }) {
           {notes.length ? <p className="mt-2 text-sm text-muted">{notes.join(', ')}</p> : null}
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm">
             <RoastScale level={data.roastLevel} />
-            {price ? <span className="font-medium text-ink">{price} / 250 g</span> : null}
+            {price ? (
+              <span className="font-medium text-ink">
+                {price} {m.price_per_250g()}
+              </span>
+            ) : null}
           </div>
         </div>
       </Link>
@@ -180,12 +185,12 @@ function FeaturedCoffee({ coffee }: { coffee: CoffeesEntry }) {
 function AuthorBio({ author }: { author: AuthorsEntry }) {
   const { data } = author
   return (
-    <section aria-label="About the author" className="mt-24 flex flex-col gap-6 rounded-3xl bg-brand p-8 text-brand-ink sm:flex-row sm:items-center md:p-10">
+    <section aria-label={m.aria_about_author()} className="mt-24 flex flex-col gap-6 rounded-3xl bg-brand p-8 text-brand-ink sm:flex-row sm:items-center md:p-10">
       {data.portrait ? (
         <CmsImage image={data.portrait} className="size-24 shrink-0 rounded-2xl object-cover" />
       ) : null}
       <div>
-        <p className="text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-brand-ink/70">Written by</p>
+        <p className="text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-brand-ink/70">{m.written_by()}</p>
         <p className="mt-2 font-display text-2xl">
           {data.name}
           {data.role ? <span className="text-brand-ink/70"> · {data.role}</span> : null}
@@ -196,7 +201,7 @@ function AuthorBio({ author }: { author: AuthorsEntry }) {
           params={{ slug: author.slug }}
           className="mt-5 inline-block text-sm font-medium underline decoration-brand-ink/40 underline-offset-4 transition-colors hover:decoration-brand-ink"
         >
-          More from {data.name}
+          {m.more_from({ name: data.name })}
         </Link>
       </div>
     </section>

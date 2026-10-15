@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
 import type { ImageValue } from '@areca-cms/site-sdk'
+import { m } from '#/paraglide/messages'
 import { buttonSecondary, Eyebrow } from './ui.tsx'
 
 /**
@@ -34,7 +35,7 @@ export function CmsImage({
 export function PreviewBanner({ incomplete = false }: { incomplete?: boolean }) {
   return (
     <p className="mb-8 rounded-full border border-accent-strong/40 bg-accent-strong/10 px-5 py-2.5 text-center text-xs font-semibold uppercase tracking-[0.18em] text-accent-strong">
-      {incomplete ? 'PREVIEW - incomplete draft, showing the live version' : 'PREVIEW - draft content'}
+      {incomplete ? m.preview_banner_incomplete() : m.preview_banner()}
     </p>
   )
 }
@@ -56,7 +57,7 @@ export function PageMessage({
       </h1>
       {children ? <div className="mt-6 max-w-xl text-lg leading-8 text-muted">{children}</div> : null}
       <Link to="/" className={`${buttonSecondary} mt-10`}>
-        Back to the roastery
+        {m.back_to_roastery()}
       </Link>
     </div>
   )

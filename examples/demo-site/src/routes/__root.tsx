@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react'
 import { HeadContent, Outlet, Scripts, createRootRoute } from '@tanstack/react-router'
+import { m } from '#/paraglide/messages'
 import { PageMessage } from '../components/cms-image.tsx'
 import { SiteFooter, SiteHeader } from '../components/site-chrome.tsx'
+import { currentLocale } from '../lib/i18n.ts'
 import { loadCompanyInfo } from '../lib/queries.ts'
 import { SITE_DESCRIPTION, SITE_NAME } from '../lib/seo.ts'
 import appCss from '../styles.css?url'
@@ -42,7 +44,7 @@ function RootLayout() {
         href="#main"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-full focus:bg-primary focus:px-5 focus:py-3 focus:text-sm focus:font-medium focus:text-on-primary"
       >
-        Skip to content
+        {m.skip_to_content()}
       </a>
       <SiteHeader />
       <main id="main" className="min-h-[70vh]">
@@ -55,15 +57,15 @@ function RootLayout() {
 
 function NotFound() {
   return (
-    <PageMessage eyebrow="Error 404" title="Off the map.">
-      That page is not on the Northbound Coffee Co. site.
+    <PageMessage eyebrow={m.error_404_eyebrow()} title={m.error_404_title()}>
+      {m.error_404_body()}
     </PageMessage>
   )
 }
 
 function RootDocument({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang={currentLocale()}>
       <head>
         <HeadContent />
         <meta name="color-scheme" content="light dark" />

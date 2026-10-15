@@ -49,8 +49,16 @@ export async function getSitesPreview(request: Request) {
     return previewJson({ error: 'Unauthorized' }, 401)
   }
 
+  // `?locale=` wins over the locale in the token.
+  const locale =
+    new URL(request.url).searchParams.get('locale') || payload.locale || null
+
   if (payload.global !== undefined) {
-    const section = await buildPreviewGlobal(payload.siteId, payload.global)
+    const section = await buildPreviewGlobal(
+      payload.siteId,
+      payload.global,
+      locale,
+    )
     if (!section) {
       return previewJson({ error: 'Not found' }, 404)
     }
@@ -65,6 +73,7 @@ export async function getSitesPreview(request: Request) {
     payload.siteId,
     payload.collection,
     payload.slug,
+    locale,
   )
   if (!entry) {
     return previewJson({ error: 'Not found' }, 404)

@@ -2,12 +2,44 @@ import * as React from 'react'
 
 import { fieldAria, joinDescribedBy } from '#/components/ui/field-aria'
 import type { FieldErrorMap } from '#/lib/content/utils'
+import { isTranslatable } from '#/lib/content-locale'
+import { uiLanguageName } from '#/lib/site-languages'
 import type { EntryData, Field } from '#/lib/types'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
+import { MainReference } from './main-reference'
+import { SharedMarker, translateProps, useLocaleFields } from './locale-fields'
+import type { LocaleFields } from './locale-fields'
 import { RichTextEditor } from './rich-text/rich-text-editor'
 import { RichTextPreview } from './rich-text/rich-text-preview'
+
+/** Main-language reference under a translatable field, when not on main. */
+function referenceFor(
+  locale: LocaleFields | null,
+  field: Field,
+  onCopy: (value: unknown) => void,
+) {
+  if (!locale || locale.isMain || !isTranslatable(field)) return null
+  return (
+    <MainReference
+      fieldKey={field.key}
+      type={field.type}
+      value={locale.mainView[field.key]}
+      mainCode={locale.main.toUpperCase()}
+      mainName={locale.mainName}
+      onCopy={onCopy}
+      {...translateProps(locale, field)}
+    />
+  )
+}
+
+/** "Same in all languages" for a shared canvas field, when not on main. */
+function sharedFor(locale: LocaleFields | null, field: Field) {
+  return locale && !locale.isMain && !isTranslatable(field) ? (
+    <SharedMarker />
+  ) : null
+}
 
 /** Grow a textarea with its content. */
 function useAutoGrow(
@@ -49,6 +81,7 @@ export function EditorCanvas({
   transitionName?: string
 }) {
   const firstBodyRef = React.useRef<HTMLElement | null>(null)
+  const locale = useLocaleFields()
   const titleValue =
     titleField && typeof data[titleField.key] === 'string'
       ? (data[titleField.key] as string)
@@ -62,13 +95,16 @@ export function EditorCanvas({
     >
       {titleField ? (
         <div
-          className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1.5"
+          className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2"
           data-field={titleField.key}
           data-invalid={errors[titleField.key] ? 'true' : undefined}
         >
           <label htmlFor={`field-${titleField.key}`} className="sr-only">
             {titleField.label}
           </label>
+          {referenceFor(locale, titleField, (value) =>
+            onChange(titleField.key, value),
+          )}
           <textarea
             ref={titleRef}
             id={`field-${titleField.key}`}
@@ -93,7 +129,13 @@ export function EditorCanvas({
                 ? `field-${titleField.key}-error`
                 : undefined,
             })}
-            placeholder={m.editor_untitled()}
+            placeholder={
+              locale && !locale.isMain
+                ? m.editor_title_in_language({
+                    language: uiLanguageName(locale.active),
+                  })
+                : m.editor_untitled()
+            }
             className="block w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-editor-title text-balance text-text-primary outline-none placeholder:text-text-disabled"
             style={
               transitionName
@@ -123,7 +165,7 @@ export function EditorCanvas({
         return (
           <div
             key={field.key}
-            className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1"
+            className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2"
             data-field={field.key}
             data-invalid={errors[field.key] ? 'true' : undefined}
             data-canvas-body={index === 0 ? '' : undefined}
@@ -138,11 +180,19 @@ export function EditorCanvas({
                 }
               : {})}
           >
+            {/* Only the untitled body reads reference-first; a labelled textarea
+                puts the reference under its label (see CanvasTextarea). */}
+            {field.type === 'richtext'
+              ? referenceFor(locale, field, (value) =>
+                  onChange(field.key, value),
+                )
+              : null}
             {field.type === 'richtext' ? (
-              <>
+              <div className="grid min-w-0 gap-1">
                 <label htmlFor={`field-${field.key}`} className="sr-only">
                   {field.label}
                 </label>
+                {sharedFor(locale, field)}
                 <RichTextEditor
                   id={`field-${field.key}`}
                   label={field.label}
@@ -153,7 +203,7 @@ export function EditorCanvas({
                   previewing={previewing}
                   preview={<RichTextPreview value={data[field.key]} />}
                 />
-              </>
+              </div>
             ) : (
               <CanvasTextarea
                 field={field}
@@ -162,6 +212,10 @@ export function EditorCanvas({
                 invalid={Boolean(errors[field.key])}
                 describedBy={describedBy}
                 innerRef={index === 0 ? firstBodyRef : undefined}
+                shared={sharedFor(locale, field)}
+                reference={referenceFor(locale, field, (value) =>
+                  onChange(field.key, value),
+                )}
               />
             )}
             {field.description ? (
@@ -195,6 +249,8 @@ function CanvasTextarea({
   invalid,
   describedBy,
   innerRef,
+  shared,
+  reference,
 }: {
   field: Field
   value: unknown
@@ -202,19 +258,25 @@ function CanvasTextarea({
   invalid: boolean
   describedBy?: string
   innerRef?: React.RefObject<HTMLElement | null>
+  shared?: React.ReactNode
+  reference?: React.ReactNode
 }) {
   const ref = React.useRef<HTMLTextAreaElement>(null)
   const text = typeof value === 'string' ? value : ''
   useAutoGrow(ref, text)
   return (
-    <>
+    <div className="grid min-w-0 gap-1">
       <label
         htmlFor={`field-${field.key}`}
         className="text-overline text-text-muted"
       >
         {field.label}
         {field.required ? <span aria-hidden="true"> *</span> : null}
+        {shared ? (
+          <span className="ml-2 inline-flex align-middle">{shared}</span>
+        ) : null}
       </label>
+      {reference ? <div className="mb-1">{reference}</div> : null}
       <textarea
         ref={(node) => {
           ref.current = node
@@ -236,6 +298,6 @@ function CanvasTextarea({
           'block min-h-7 w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-body-lg text-text-primary outline-none placeholder:text-text-disabled',
         )}
       />
-    </>
+    </div>
   )
 }

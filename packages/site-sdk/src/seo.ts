@@ -5,7 +5,7 @@ export type HeadMeta =
   | { name: string; content: string }
   | { property: string; content: string }
 
-export type HeadLink = { rel: string; href: string }
+export type HeadLink = { rel: string; href: string; hreflang?: string }
 
 export type HeadScript = { type: string; children: string }
 
@@ -14,6 +14,18 @@ export type SeoHeadOptions = {
   titleTemplate?: string | ((title: string) => string)
   /** Overrides `og:site_name`. */
   siteName?: string
+  /** Language of this page, e.g. `nl-BE`. Sets `og:locale`. */
+  locale?: string
+  /**
+   * The same page in other languages, by language tag, e.g. `entry.alternates`.
+   * Each becomes a `hreflang` link and an `og:locale:alternate`. The locale
+   * itself is included when present.
+   */
+  alternates?: Partial<Record<string, string>>
+  /** The site's main language. Its alternate also becomes `hreflang="x-default"`. */
+  main?: string
+  /** Origin used to make relative alternate hrefs absolute, e.g. `https://acme.nl`. */
+  siteUrl?: string | null
 }
 
 export type SeoHeadResult = {
@@ -46,6 +58,26 @@ export function seoJsonLd(seo: SeoMeta | null | undefined): string[] {
       .replace(/\u2028/g, '\\u2028')
       .replace(/\u2029/g, '\\u2029'),
   )
+}
+
+/**
+ * `og:locale` form of a language tag: `nl` stays `nl`, `nl-BE` becomes
+ * `nl_BE`. Scripts are dropped, since Open Graph has no slot for them.
+ */
+export function ogLocale(tag: string): string {
+  const [language = '', ...rest] = tag.split('-')
+  const region = rest.find((part) => /^[A-Za-z]{2}$|^\d{3}$/.test(part))
+  return region === undefined ? language.toLowerCase() : `${language.toLowerCase()}_${region.toUpperCase()}`
+}
+
+/** An alternate href made absolute with the site origin, when it is relative. */
+function absoluteHref(href: string, siteUrl: string | null | undefined): string {
+  if (!siteUrl || !href.startsWith('/')) return href
+  try {
+    return new URL(href, siteUrl).toString()
+  } catch {
+    return href
+  }
 }
 
 /** Head data shaped for TanStack Router's `head()` route option. */
@@ -110,11 +142,29 @@ export function seoHead(
     image(tw.image, 'twitter')
   }
 
+  languageHead(result, options)
   result.scripts = seoJsonLd(seo).map((children) => ({
     type: 'application/ld+json',
     children,
   }))
   return result
+}
+
+/** `og:locale`, `og:locale:alternate` and the `hreflang` links, when the page is localized. */
+function languageHead(result: SeoHeadResult, options: SeoHeadOptions): void {
+  const { locale, main, siteUrl } = options
+  if (locale !== undefined) result.meta.push({ property: 'og:locale', content: ogLocale(locale) })
+  for (const [tag, href] of Object.entries(options.alternates ?? {})) {
+    if (href === undefined || href === null || href === '') continue
+    result.links.push({ rel: 'alternate', hreflang: tag, href: absoluteHref(href, siteUrl) })
+    if (tag !== locale) {
+      result.meta.push({ property: 'og:locale:alternate', content: ogLocale(tag) })
+    }
+  }
+  const fallback = main === undefined ? undefined : options.alternates?.[main]
+  if (fallback) {
+    result.links.push({ rel: 'alternate', hreflang: 'x-default', href: absoluteHref(fallback, siteUrl) })
+  }
 }
 
 function escapeHtml(value: string): string {
@@ -142,7 +192,8 @@ export function seoHeadHtml(seo: SeoMeta | null | undefined, options: SeoHeadOpt
     }
   }
   for (const link of head.links) {
-    lines.push(`<link rel="${escapeHtml(link.rel)}" href="${escapeHtml(link.href)}">`)
+    const hreflang = link.hreflang === undefined ? '' : ` hreflang="${escapeHtml(link.hreflang)}"`
+    lines.push(`<link rel="${escapeHtml(link.rel)}"${hreflang} href="${escapeHtml(link.href)}">`)
   }
   for (const script of head.scripts) {
     // children is already escaped for inline script use

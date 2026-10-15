@@ -52,12 +52,18 @@ import {
 } from '#/lib/site-nav'
 import type { MeSite } from '#/lib/site-nav'
 import type { Field } from '#/lib/types'
+import { isMultilingual, nonMainLanguages } from '#/lib/site-languages'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 import { listCollectionsFn } from '#/server/fn/content'
 import type { Me } from '#/server/fn/me'
 
-import { CollectionSearch, StatusFilterControl } from './collection-controls'
+import {
+  CollectionSearch,
+  MissingLanguageFilter,
+  StatusFilterControl,
+} from './collection-controls'
+import { entryCoverage } from './entry-coverage'
 import { EntryCard, EntryListRow } from './entry-item'
 import {
   useCollectionEntries,
@@ -77,6 +83,7 @@ type CollectionRecord = {
   routePattern: string
   enabled: boolean
   fields: Field[]
+  requiredLanguages?: string[]
 }
 
 /**
@@ -89,10 +96,15 @@ export function CollectionScreen({
   me,
   site,
   collectionKey,
+  missingLanguage = null,
+  onMissingLanguageChange,
 }: {
   me: Me
   site: MeSite
   collectionKey: string
+  /** `?missing=` from the URL: "Missing translation" language tag. */
+  missingLanguage?: string | null
+  onMissingLanguageChange?: (value: string | null) => void
 }) {
   const isAdmin = me.user.isAgencyAdmin
   const collectionsQuery = useQuery({
@@ -147,6 +159,8 @@ export function CollectionScreen({
       me={me}
       site={site}
       collection={collection}
+      missingLanguage={missingLanguage}
+      onMissingLanguageChange={onMissingLanguageChange}
     />
   )
 }
@@ -155,10 +169,14 @@ function CollectionView({
   me,
   site,
   collection,
+  missingLanguage,
+  onMissingLanguageChange,
 }: {
   me: Me
   site: MeSite
   collection: CollectionRecord
+  missingLanguage: string | null
+  onMissingLanguageChange?: (value: string | null) => void
 }) {
   const navigate = useNavigate()
   const siteId = site.id
@@ -183,15 +201,29 @@ function CollectionView({
   )
   const [sheet, setSheet] = React.useState<SchemaSegment | null>(null)
 
+  // Coverage chips and the "Missing translation" filter exist only on a
+  // multilingual site; a stale `?missing=` is ignored.
+  const languages = site.languages ?? null
+  const multilingual = isMultilingual(languages)
+  const requiredLanguages = collection.requiredLanguages ?? []
+  const missingFilter =
+    multilingual &&
+    missingLanguage &&
+    nonMainLanguages(languages).includes(missingLanguage)
+      ? missingLanguage
+      : undefined
+
   const { query, rows, total } = useCollectionEntries({
     siteId,
     collectionKey: collection.key,
     status,
     search,
+    missingLanguage: missingFilter,
   })
   const bulk = useEntryBulkActions(siteId, collection.key)
 
-  const filtersActive = status !== 'all' || search !== ''
+  const filtersActive =
+    status !== 'all' || search !== '' || missingFilter !== undefined
   const singular = singularLabel(collection.label)
   const plural = collection.label.toLocaleLowerCase()
   const selectedRows = rows.filter((row) => selected.has(row.id))
@@ -380,13 +412,33 @@ function CollectionView({
         </div>
       ) : null}
 
-      <StatusFilterControl
-        value={status}
-        onChange={(next) => {
-          setStatus(next)
-          setSelected(new Set())
-        }}
-      />
+      {multilingual ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <StatusFilterControl
+            value={status}
+            onChange={(next) => {
+              setStatus(next)
+              setSelected(new Set())
+            }}
+          />
+          <MissingLanguageFilter
+            value={missingFilter ?? null}
+            languages={nonMainLanguages(languages)}
+            onChange={(next) => {
+              onMissingLanguageChange?.(next)
+              setSelected(new Set())
+            }}
+          />
+        </div>
+      ) : (
+        <StatusFilterControl
+          value={status}
+          onChange={(next) => {
+            setStatus(next)
+            setSelected(new Set())
+          }}
+        />
+      )}
 
       {query.isError ? (
         <QueryError
@@ -407,7 +459,9 @@ function CollectionView({
             description={
               search
                 ? m.collection_nothing_matches_description()
-                : m.collection_nothing_matches_status()
+                : missingFilter && status === 'all'
+                  ? m.coverage_nothing_missing()
+                  : m.collection_nothing_matches_status()
             }
             data-testid="collection-empty-filtered"
             action={
@@ -417,6 +471,7 @@ function CollectionView({
                 onClick={() => {
                   setStatus('all')
                   setSearchInput('')
+                  onMissingLanguageChange?.(null)
                 }}
               >
                 {m.editor_clear_filters()}
@@ -463,7 +518,7 @@ function CollectionView({
         >
           {view === 'cards' ? (
             <Stagger
-              key={`cards-${status}-${search}`}
+              key={`cards-${status}-${search}-${missingFilter ?? ''}`}
               className="grid grid-cols-1 gap-4 min-[520px]:grid-cols-2 lg:grid-cols-3"
               aria-label={m.editor_entries_caption({ name: collection.label })}
               role="list"
@@ -487,13 +542,23 @@ function CollectionView({
                     onToggleSelect={() => toggle(row.id)}
                     onAction={onItemAction}
                     muted={!collection.enabled}
+                    coverage={
+                      languages && multilingual
+                        ? entryCoverage(
+                            row.draftData,
+                            collection.fields,
+                            languages,
+                            requiredLanguages,
+                          )
+                        : undefined
+                    }
                   />
                 </StaggerItem>
               ))}
             </Stagger>
           ) : (
             <Stagger
-              key={`list-${status}-${search}`}
+              key={`list-${status}-${search}-${missingFilter ?? ''}`}
               className="-mx-2 grid gap-px"
               role="list"
               aria-label={m.editor_entries_caption({ name: collection.label })}
@@ -517,6 +582,16 @@ function CollectionView({
                     onToggleSelect={() => toggle(row.id)}
                     onAction={onItemAction}
                     muted={!collection.enabled}
+                    coverage={
+                      languages && multilingual
+                        ? entryCoverage(
+                            row.draftData,
+                            collection.fields,
+                            languages,
+                            requiredLanguages,
+                          )
+                        : undefined
+                    }
                   />
                 </StaggerItem>
               ))}

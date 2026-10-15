@@ -1,4 +1,5 @@
 import { isSafeIdentifier } from '#/lib/content-identifiers'
+import { localeTagSchema } from '#/lib/content-locale'
 import {
   GLOBAL_GROUP_MAX_LENGTH,
   GLOBAL_PREVIEW_PATH_MAX_LENGTH,
@@ -10,6 +11,7 @@ import {
   FIELD_OPTION_MAX_LENGTH,
   ID_MAX_LENGTH,
   MAX_FIELDS_PER_COLLECTION,
+  MAX_SITE_LANGUAGES,
   ROUTE_PATTERN_MAX_LENGTH,
   SCHEDULE_FIELD_MAX_LENGTH,
   SEARCH_MAX_LENGTH,
@@ -92,6 +94,7 @@ const fieldSchema = z.object({
   collection: z.string().max(FIELD_OPTION_MAX_LENGTH).optional(),
   description: z.string().max(FIELD_DESCRIPTION_MAX_LENGTH).optional(),
   after: z.string().min(1).max(FIELD_OPTION_MAX_LENGTH).optional(),
+  translatable: z.boolean().optional(),
 })
 
 /** Site content fields: collection field rules plus an editor-only group heading. */
@@ -208,6 +211,8 @@ export const listEntriesFn = createServerFn({ method: 'GET', ...entryFn })
       status: entryStatusSchema.optional(),
       referenceTargets: z.boolean().optional(),
       search: z.string().max(SEARCH_MAX_LENGTH).optional(),
+      /** Only entries not complete in this language. */
+      missingLanguage: localeTagSchema.optional(),
       limit: pageLimitSchema.optional(),
       offset: pageOffsetSchema.optional(),
     }),
@@ -218,6 +223,7 @@ export const listEntriesFn = createServerFn({ method: 'GET', ...entryFn })
       status: data.status,
       referenceTargets: data.referenceTargets,
       search: data.search,
+      missingLanguage: data.missingLanguage,
       limit: data.limit,
       offset: data.offset,
     })
@@ -375,6 +381,8 @@ export const getPreviewUrlFn = createServerFn({ method: 'GET' })
       siteId: z.string().min(1).max(ID_MAX_LENGTH),
       collection: z.string().min(1).max(ID_MAX_LENGTH),
       slug: z.string().min(1).max(SLUG_MAX_LENGTH),
+      /** Language to preview. Omitted = main language. */
+      locale: localeTagSchema.optional(),
     }),
   )
   .handler(async ({ data }) => {
@@ -384,6 +392,7 @@ export const getPreviewUrlFn = createServerFn({ method: 'GET' })
       collection: data.collection,
       slug: data.slug,
       secret: found.previewSecret,
+      locale: data.locale,
     })
     return {
       token,
@@ -392,6 +401,7 @@ export const getPreviewUrlFn = createServerFn({ method: 'GET' })
         data.collection,
         data.slug,
         token,
+        data.locale,
       ),
     }
   })
@@ -405,6 +415,17 @@ export const upsertCollectionFn = createServerFn({ method: 'POST' })
       routePattern: z.string().min(1).max(ROUTE_PATTERN_MAX_LENGTH),
       fields: z.array(fieldSchema).max(MAX_FIELDS_PER_COLLECTION),
       enabled: z.boolean().optional(),
+      requiredLanguages: z
+        .array(localeTagSchema)
+        .max(MAX_SITE_LANGUAGES)
+        .optional(),
+      localizedRoutes: z
+        .record(
+          localeTagSchema,
+          z.string().min(1).max(ROUTE_PATTERN_MAX_LENGTH),
+        )
+        .nullable()
+        .optional(),
     }),
   )
   .handler(async ({ data }) => {
@@ -415,6 +436,8 @@ export const upsertCollectionFn = createServerFn({ method: 'POST' })
       routePattern: data.routePattern,
       fields: data.fields,
       enabled: data.enabled,
+      requiredLanguages: data.requiredLanguages,
+      localizedRoutes: data.localizedRoutes,
     })
   })
 
@@ -515,6 +538,8 @@ export const getGlobalPreviewUrlFn = createServerFn({ method: 'GET' })
     z.object({
       siteId: z.string().min(1).max(ID_MAX_LENGTH),
       key: z.string().min(1).max(ID_MAX_LENGTH),
+      /** Language to preview. Omitted = main language. */
+      locale: localeTagSchema.optional(),
     }),
   )
   .handler(async ({ data }) => {
@@ -527,6 +552,7 @@ export const getGlobalPreviewUrlFn = createServerFn({ method: 'GET' })
       siteId: found.id,
       global: data.key,
       secret: found.previewSecret,
+      locale: data.locale,
     })
     return {
       token,
@@ -534,6 +560,7 @@ export const getGlobalPreviewUrlFn = createServerFn({ method: 'GET' })
         found.productionUrl,
         global.previewPath,
         token,
+        data.locale,
       ),
     }
   })
@@ -552,6 +579,10 @@ export const upsertGlobalFn = createServerFn({ method: 'POST' })
         .nullable()
         .optional(),
       enabled: z.boolean().optional(),
+      requiredLanguages: z
+        .array(localeTagSchema)
+        .max(MAX_SITE_LANGUAGES)
+        .optional(),
     }),
   )
   .handler(async ({ data }) => {
@@ -565,6 +596,7 @@ export const upsertGlobalFn = createServerFn({ method: 'POST' })
         seo: data.seo,
         previewPath: data.previewPath,
         enabled: data.enabled,
+        requiredLanguages: data.requiredLanguages,
       },
       session.user.id,
     )

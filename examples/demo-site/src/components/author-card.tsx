@@ -22,8 +22,7 @@ export function AuthorCard({ author }: { author: AuthorsEntry }) {
         </Link>
       ) : null}
       <div className="mt-6">
-        {data.role ? <Eyebrow>{data.role}</Eyebrow> : null}
-        <h2 className="mt-2 font-display text-3xl leading-tight tracking-tight text-ink">
+        {data.role ? <Eyebrow>{data.role}</Eyebrow> : null}        <h2 className="mt-2 font-display text-3xl leading-tight tracking-tight text-ink">
           <Link to="/team/$slug" params={{ slug: author.slug }} className="transition-colors hover:text-accent-strong">
             {data.name}
           </Link>

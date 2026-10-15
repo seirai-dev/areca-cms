@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { seoHead, type SeoMeta } from '@areca-cms/site-sdk'
 import { ArticleView } from '../components/article-view.tsx'
 import type { ArticlesEntry, AuthorsEntry, CoffeesEntry } from '../generated/content/areca.gen.ts'
-import { entryHead, pageHead, SITE_NAME } from './seo.ts'
+import { entryHead, pageHead, SITE_NAME, SITE_URL } from './seo.ts'
 
 // Route links need a router; render them as plain anchors for markup checks.
 vi.mock('@tanstack/react-router', () => ({
@@ -154,6 +154,26 @@ describe('demo CMS SEO integration', () => {
     expect(head.meta).toContainEqual({ property: 'og:type', content: 'article' })
   })
 
+  it('makes hreflang alternates absolute on pages without a canonical URL', () => {
+    const alternates = { en: '/en/coffees', nl: '/nl/koffie' }
+    const head = pageHead({ title: 'Coffees' }, alternates)
+    expect(head.links).toEqual([
+      { rel: 'alternate', hreflang: 'en', href: `${SITE_URL}/en/coffees` },
+      { rel: 'alternate', hreflang: 'nl', href: `${SITE_URL}/nl/koffie` },
+      { rel: 'alternate', hreflang: 'x-default', href: `${SITE_URL}/en/coffees` },
+    ])
+  })
+
+  it('makes entry alternates absolute when the entry has no canonical URL', () => {
+    const head = entryHead({ ...article, seo: { ...seo, canonicalUrl: null } }, fallback, {
+      en: '/coffees/entry',
+      nl: '/nl/koffie/entry',
+    })
+    const hrefs = head.links.map((link) => link.href)
+    expect(hrefs.length).toBeGreaterThan(0)
+    for (const href of hrefs) expect(href).toMatch(/^https:\/\//)
+  })
+
   it('gives owned pages a title, description, website type and site name', () => {
     expect(pageHead({ title: 'Coffees', description: 'Shop.' }).meta).toEqual([
       { title: `Coffees · ${SITE_NAME}` },
@@ -162,6 +182,7 @@ describe('demo CMS SEO integration', () => {
       { property: 'og:description', content: 'Shop.' },
       { property: 'og:type', content: 'website' },
       { property: 'og:site_name', content: SITE_NAME },
+      { property: 'og:locale', content: 'en_GB' },
     ])
     expect(pageHead({}).meta[0]).toEqual({ title: SITE_NAME })
   })

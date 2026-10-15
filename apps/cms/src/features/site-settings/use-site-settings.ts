@@ -10,6 +10,7 @@ import {
   getDokployCredentialStatusFn,
   getSiteFn,
   rotateSiteTokenFn,
+  setSiteLanguagesFn,
   updateSiteFn,
   verifyDokployCredentialsFn,
 } from '#/server/fn/admin'
@@ -25,6 +26,7 @@ export function useSiteSettings(siteId: string) {
   const router = useRouter()
   const getSite = useServerFn(getSiteFn)
   const updateSite = useServerFn(updateSiteFn)
+  const setLanguagesFn = useServerFn(setSiteLanguagesFn)
   const rotateSiteToken = useServerFn(rotateSiteTokenFn)
   const deleteSite = useServerFn(deleteSiteFn)
   const stepUp = useStepUp()
@@ -48,6 +50,12 @@ export function useSiteSettings(siteId: string) {
     onSuccess: refresh,
   })
 
+  const setLanguages = useMutation({
+    mutationFn: (input: { main: string; all: string[] }) =>
+      setLanguagesFn({ data: { id: siteId, ...input } }),
+    onSuccess: refresh,
+  })
+
   const rotate = useMutation({
     mutationFn: (privilege: 'build' | 'schema' = 'build') =>
       stepUp.run(() => rotateSiteToken({ data: { id: siteId, privilege } })),
@@ -57,7 +65,7 @@ export function useSiteSettings(siteId: string) {
     mutationFn: () => stepUp.run(() => deleteSite({ data: { id: siteId } })),
   })
 
-  return { site, update, rotate, remove }
+  return { site, update, setLanguages, rotate, remove }
 }
 
 /**
@@ -83,4 +91,19 @@ export function useDokployApplications(organizationId: string) {
     retry: false,
   })
   return { status, applications }
+}
+
+/**
+ * The site's languages for admin screens that are not the settings page
+ * (the schema editor). Shares the settings query, so a save there is seen
+ * here. `null` on a single-language site.
+ */
+export function useSiteLanguages(siteId: string, enabled = true) {
+  const getSite = useServerFn(getSiteFn)
+  const query = useQuery({
+    queryKey: adminQueryKeys.site(siteId),
+    queryFn: () => getSite({ data: { id: siteId } }),
+    enabled,
+  })
+  return query.data?.languages ?? null
 }

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { and, desc, eq, ilike, isNotNull, or, sql } from 'drizzle-orm'
+import { and, desc, eq, ilike, inArray, isNotNull, or, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { collection, entry, entryRevision, site, user } from '#/db/schema'
@@ -8,7 +8,20 @@ import {
   isPastInstant,
   parseOffsetInstant,
 } from '#/lib/schedule-time'
-import type { ContentKind, EntryData, EntryStatus, Field } from '#/lib/types'
+import type {
+  ContentKind,
+  EntryData,
+  EntryStatus,
+  Field,
+  SiteLanguages,
+} from '#/lib/types'
+import {
+  I18N_KEY,
+  LOCALE_KEY,
+  localeStatus,
+  normalizeBase,
+  readLocale,
+} from '#/lib/content-locale'
 import { SEO_KEY } from '#/lib/seo'
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
@@ -20,13 +33,79 @@ import { getCollection } from './collections.ts'
 import { ConflictError, NotFoundError, ValidationError } from './errors.ts'
 import { assertSectionSeo, sectionSeoIssue } from './globals.ts'
 import {
+  formatLanguageBlockers,
+  languageBlockers,
+  localeCtxFor,
+  toLanguageBlockerDetail,
+  validateLocaleSlugs,
+} from './locale-validation.ts'
+import {
   resolveSlug,
   SLUG_PATTERN,
   pickDeclaredFields,
   validateEntryData,
+  validateLanguageData,
   validateReferences,
   validateContentOwnership,
 } from './validation.ts'
+
+/**
+ * Stored data in the shape a site with languages expects: the base holds the
+ * main language. Single-language sites are returned unchanged.
+ */
+function normalizeEntryData(
+  ctx: {
+    site: { languages: SiteLanguages | null }
+    collection: { fields: Field[] }
+  },
+  data: EntryData,
+): EntryData {
+  const languages = ctx.site.languages
+  if (!languages) return data
+  return normalizeBase(data, localeCtxFor(languages, ctx.collection.fields))
+}
+
+/**
+ * Checks that an entry can go live and returns what to store. Single-language
+ * sites keep the strict validation of the whole entry. On a site with
+ * languages, the shared fields and the main language are strictly valid, and
+ * every required language is complete. `referenceData` is the flat view that
+ * reference targets are checked against.
+ */
+function prepareReadyData(
+  ctx: {
+    site: { languages: SiteLanguages | null }
+    collection: { fields: Field[]; requiredLanguages: string[] }
+  },
+  data: EntryData,
+): { stored: EntryData; referenceData: EntryData } {
+  const languages = ctx.site.languages
+  if (!languages) {
+    const parsed = validateEntryData(ctx.collection.fields, data)
+    if (!parsed.ok) throw new ValidationError(parsed.errors)
+    return { stored: parsed.data, referenceData: data }
+  }
+  const mainView = readLocale(
+    data,
+    languages.main,
+    localeCtxFor(languages, ctx.collection.fields),
+  )
+  const strict = validateEntryData(ctx.collection.fields, mainView)
+  if (!strict.ok) throw new ValidationError(strict.errors)
+  const blockers = languageBlockers({
+    data,
+    fields: ctx.collection.fields,
+    languages,
+    requiredLanguages: ctx.collection.requiredLanguages,
+  })
+  if (blockers.length > 0) {
+    throw new ValidationError(
+      [{ path: '', message: formatLanguageBlockers(blockers) }],
+      { blockers: toLanguageBlockerDetail(blockers) },
+    )
+  }
+  return { stored: data, referenceData: mainView }
+}
 
 export async function listEntries(
   siteId: string,
@@ -36,6 +115,12 @@ export async function listEntries(
     /** Approved reference targets only; do not combine with `status`. */
     referenceTargets?: boolean
     search?: string
+    /**
+     * Entries whose draft is not complete in this language (any state:
+     * empty, partial or missing a required field). Ignored when the site has
+     * no such language, so a stale filter in a URL still shows the list.
+     */
+    missingLanguage?: string
     limit?: number
     offset?: number
   } = {},
@@ -63,6 +148,42 @@ export async function listEntries(
     filters.push(
       or(ilike(entry.slug, term), sql`${entry.draftData}::text ilike ${term}`)!,
     )
+  }
+
+  if (options.missingLanguage) {
+    const siteRow = (
+      await db
+        .select({ languages: site.languages })
+        .from(site)
+        .where(eq(site.id, siteId))
+        .limit(1)
+    ).at(0)
+    const languages = siteRow?.languages
+    if (languages?.all.includes(options.missingLanguage)) {
+      // Completeness is computed from the draft JSON (required translatable
+      // fields, with the same rules as validation), so the matching ids are
+      // collected first and then filtered in SQL. Keeps paging and `total`
+      // exact. Cost grows with the collection size; only paid when the
+      // filter is on.
+      const ctx = {
+        main: languages.main,
+        all: languages.all,
+        fields: col.fields,
+      }
+      const candidates = await db
+        .select({ id: entry.id, draftData: entry.draftData })
+        .from(entry)
+        .where(and(...filters))
+      const missing = candidates
+        .filter(
+          (row) =>
+            !localeStatus(row.draftData, options.missingLanguage!, ctx)
+              .complete,
+        )
+        .map((row) => row.id)
+      if (missing.length === 0) return { items: [], total: 0 }
+      filters.push(inArray(entry.id, missing))
+    }
   }
 
   const where = and(...filters)
@@ -112,13 +233,19 @@ export async function createEntry(input: {
     throw new NotFoundError(m.server_collection_not_found())
   }
 
-  const validated = validateEntryData(ctx.collection.fields, input.data, {
-    mode: 'partial',
-    write: true,
-  })
+  const validated = validateEntryData(
+    ctx.collection.fields,
+    normalizeEntryData(ctx, input.data),
+    { mode: 'partial', write: true },
+  )
   if (!validated.ok) {
     throw new ValidationError(validated.errors)
   }
+  const slugErrors = await validateLocaleSlugs({
+    collectionId: ctx.collection.id,
+    data: validated.data,
+  })
+  if (slugErrors.length) throw new ValidationError(slugErrors)
   const images = await importEntryImages(ctx, validated.data, input.actorId)
   const parsed = { ...validated, data: images.data }
 
@@ -191,13 +318,20 @@ export async function updateDraft(
   expectedVersion: number,
 ) {
   const ctx = await loadEntryContext(id)
-  const validated = validateEntryData(ctx.collection.fields, data, {
-    mode: 'partial',
-    write: true,
-  })
+  const validated = validateEntryData(
+    ctx.collection.fields,
+    normalizeEntryData(ctx, data),
+    { mode: 'partial', write: true },
+  )
   if (!validated.ok) {
     throw new ValidationError(validated.errors)
   }
+  const slugErrors = await validateLocaleSlugs({
+    collectionId: ctx.collection.id,
+    entryId: id,
+    data: validated.data,
+  })
+  if (slugErrors.length) throw new ValidationError(slugErrors)
   if (ctx.collection.kind === 'global') {
     assertSectionSeo(ctx.collection, validated.data)
   }
@@ -411,6 +545,23 @@ export function prepareRevisionRestore(
   const skippedFields: SkippedRevisionField[] = []
   const restoredKeys = new Set<string>()
   for (const key of Object.keys(historical)) {
+    if (key === I18N_KEY || key === LOCALE_KEY) {
+      // Language keys come back as a whole: the revision's languages replace the draft's.
+      const languageErrors = validateLanguageData(fields, {
+        [key]: historical[key],
+      })
+      if (languageErrors.length > 0) {
+        skippedFields.push({
+          key,
+          label: key,
+          reason: languageErrors.map((error) => error.message).join('; '),
+        })
+        continue
+      }
+      data[key] = historical[key]
+      restoredKeys.add(key)
+      continue
+    }
     const field = fields.find((item) => item.key === key)
     if (!field && key !== SEO_KEY) {
       skippedFields.push({
@@ -477,15 +628,12 @@ export async function publishEntry(id: string, actorId: string) {
   const ctx = await loadEntryContext(id)
   // Drafts saved before external images were imported are caught up here.
   const images = await importEntryImages(ctx, ctx.entry.draftData, actorId)
-  const draftData = images.data
-  const parsed = validateEntryData(ctx.collection.fields, draftData)
-  if (!parsed.ok) {
-    throw new ValidationError(parsed.errors)
-  }
+  const draftData = normalizeEntryData(ctx, images.data)
+  const ready = prepareReadyData(ctx, draftData)
   const refErrors = await validateReferences(
     ctx.site.id,
     ctx.collection.fields,
-    draftData,
+    ready.referenceData,
   )
   if (refErrors.length > 0) {
     throw new ValidationError(refErrors)
@@ -505,9 +653,11 @@ export async function publishEntry(id: string, actorId: string) {
     const [updated] = await tx
       .update(entry)
       .set({
-        ...(images.imported > 0 ? { draftData } : {}),
+        ...(images.imported > 0 || draftData !== images.data
+          ? { draftData }
+          : {}),
         status: 'published',
-        publishedData: parsed.data,
+        publishedData: ready.stored,
         publishedSlug: ctx.entry.slug,
         publishedAt: now,
         scheduledData: null,
@@ -652,7 +802,7 @@ export async function scheduleEntry(
     ])
   }
   const images = await importEntryImages(ctx, ctx.entry.draftData, actorId)
-  const draftData = images.data
+  const draftData = normalizeEntryData(ctx, images.data)
 
   return db.transaction(async (tx) => {
     await assetMutationLock(tx, ctx.site.organizationId)
@@ -664,15 +814,16 @@ export async function scheduleEntry(
       tx,
     )
     if (ownershipErrors.length) throw new ValidationError(ownershipErrors)
-    const validated = validateEntryData(ctx.collection.fields, draftData)
-    if (!validated.ok) throw new ValidationError(validated.errors)
+    const ready = prepareReadyData(ctx, draftData)
     const now = new Date()
     const [updated] = await tx
       .update(entry)
       .set({
-        ...(images.imported > 0 ? { draftData } : {}),
+        ...(images.imported > 0 || draftData !== images.data
+          ? { draftData }
+          : {}),
         status: 'scheduled',
-        scheduledData: validated.data,
+        scheduledData: ready.stored,
         scheduledSlug: ctx.entry.slug,
         scheduledVersion: randomUUID(),
         scheduledAt: when,

@@ -1,4 +1,5 @@
 import { createFileRoute, type ErrorComponentProps } from '@tanstack/react-router'
+import { m } from '#/paraglide/messages'
 import { z } from 'zod'
 import { ArticleView } from '../../../components/article-view.tsx'
 import { AuthorView } from '../../../components/author-view.tsx'
@@ -30,15 +31,15 @@ function PreviewPage() {
   const result = Route.useLoaderData()
 
   if (!result.ok) {
-    return <PreviewMessage title="Preview unavailable" body={result.error} />
+    return <PreviewMessage title={m.preview_unavailable()} body={result.error} />
   }
 
   const draftCollection = result.complete ? result.preview.collection : result.collection
   if (draftCollection !== collection) {
     return (
       <PreviewMessage
-        title="Preview unavailable"
-        body={`The link points at "${collection}" but the draft is a "${draftCollection}".`}
+        title={m.preview_unavailable()}
+        body={m.preview_mismatch({ collection, draft: draftCollection })}
       />
     )
   }
@@ -67,9 +68,9 @@ function PreviewPage() {
 
 function PreviewIncomplete({ issues }: { issues: string[] }) {
   return (
-    <PageMessage title="Draft is incomplete">
+    <PageMessage title={m.preview_incomplete_title()}>
       <PreviewBanner />
-      <p>The CMS cannot show this draft as a page until these fields are fixed:</p>
+      <p>{m.preview_incomplete_body()}</p>
       <ul className="mt-4 list-disc space-y-1 pl-5 font-mono text-sm">
         {issues.map((issue) => (
           <li key={issue}>{issue}</li>
@@ -80,8 +81,8 @@ function PreviewIncomplete({ issues }: { issues: string[] }) {
 }
 
 function PreviewError({ error }: ErrorComponentProps) {
-  const body = error instanceof Error ? error.message : 'Failed to load preview'
-  return <PreviewMessage title="Preview unavailable" body={body} />
+  const body = error instanceof Error ? error.message : m.preview_loading_failed()
+  return <PreviewMessage title={m.preview_unavailable()} body={body} />
 }
 
 function PreviewMessage({ title, body }: { title: string; body: string }) {

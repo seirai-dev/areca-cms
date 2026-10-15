@@ -7,6 +7,7 @@ import { ToolRegistry } from './tool-kit'
 import { registerAssetTools } from './tools/assets'
 import { registerEntryTools } from './tools/entries'
 import { registerEntryWorkflowTools } from './tools/entry-workflow'
+import { registerLanguageTools } from './tools/languages'
 import { registerGlobalTools } from './tools/globals'
 import { registerPublishingTools } from './tools/publishing'
 import { registerSchemaTools } from './tools/schema'
@@ -41,7 +42,7 @@ function roleInstruction(actor: Pick<McpActor, 'role' | 'allowGoLive' | 'credent
   }
   if (actor.role === 'agency') {
     lines.push(
-      'You can also change collection schemas (upsert_collection, delete_collection) and site content sections (upsert_global, delete_global). If the site syncs its schema from code, prefer changing areca.config.ts.',
+      'You can also change collection schemas (upsert_collection, delete_collection) and site content sections (upsert_global, delete_global). If the site syncs its schema from code, prefer changing areca.config.ts. set_site_languages changes the site languages.',
     )
   }
   return lines
@@ -93,6 +94,7 @@ export function createArecaMcpServer(actor: McpActor): McpServer {
   registerAssetTools(registry)
   registerPublishingTools(registry)
   registerSchemaTools(registry)
+  registerLanguageTools(registry)
 
   server.registerPrompt(
     'write_post',

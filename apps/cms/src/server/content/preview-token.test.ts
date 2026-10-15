@@ -101,3 +101,39 @@ describe('preview token', () => {
     ).toBe('http://localhost:3001/__preview/articles/hello?token=tok')
   })
 })
+
+describe('preview locale', () => {
+  it('carries an optional locale in the token payload', () => {
+    const token = signPreviewToken({
+      siteId: 'site_1',
+      collection: 'articles',
+      slug: 'hello',
+      locale: 'en',
+      secret,
+    })
+    expect(verifyPreviewToken(token, secret)).toMatchObject({ locale: 'en' })
+  })
+
+  it('leaves the locale out of a token that has none', () => {
+    const token = signPreviewToken({
+      siteId: 'site_1',
+      collection: 'articles',
+      slug: 'hello',
+      secret,
+    })
+    expect(verifyPreviewToken(token, secret)).not.toHaveProperty('locale')
+  })
+
+  it('appends &locale to entry and section preview URLs when given', () => {
+    expect(
+      buildPreviewUrl('http://localhost:3001', 'articles', 'hello', 'tok', 'en'),
+    ).toBe('http://localhost:3001/__preview/articles/hello?token=tok&locale=en')
+    expect(
+      buildPreviewUrl('http://localhost:3001', 'articles', 'hello', 'tok'),
+    ).toBe('http://localhost:3001/__preview/articles/hello?token=tok')
+    expect(
+      buildGlobalPreviewUrl('http://localhost:3001', '/about', 'tok', 'nl-BE'),
+    ).toBe('http://localhost:3001/about?arecaPreview=tok&locale=nl-BE')
+  })
+})
+

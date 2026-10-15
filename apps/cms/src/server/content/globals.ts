@@ -3,6 +3,7 @@ import { and, asc, eq, sql } from 'drizzle-orm'
 import { db } from '#/db'
 import { collection, entry, entryRevision, site } from '#/db/schema'
 import { GLOBAL_ENTRY_SLUG } from '#/lib/globals'
+import { I18N_KEY } from '#/lib/content-locale'
 import { SEO_KEY } from '#/lib/seo'
 import type { EntryData, Field } from '#/lib/types'
 import { m } from '#/paraglide/messages'
@@ -15,6 +16,11 @@ import {
   validateContentDefinitions,
 } from './content-definitions.ts'
 import { ConflictError, NotFoundError, ValidationError } from './errors.ts'
+import {
+  formatLanguageBlockers,
+  languageBlockers,
+  normalizeRequiredLanguages,
+} from './locale-validation.ts'
 
 /**
  * Site content sections ("globals"). A section is a `collection` row with
@@ -30,6 +36,8 @@ export type GlobalInput = {
   seo?: boolean
   previewPath?: string | null
   enabled?: boolean
+  /** Languages besides main that must be complete before going live. */
+  requiredLanguages?: string[]
 }
 
 /**
@@ -40,8 +48,42 @@ export function sectionSeoIssue(
   global: { label: string; seoEnabled: boolean },
   data: Record<string, unknown>,
 ): string | null {
-  if (global.seoEnabled || data[SEO_KEY] == null) return null
+  if (global.seoEnabled || !hasAnySeo(data)) return null
   return `${global.label} has no SEO. Only sections with SEO turned on can save seo; an agency admin can turn it on.`
+}
+
+/** `$seo` in the base or in any language slot. */
+function hasAnySeo(data: Record<string, unknown>): boolean {
+  if (data[SEO_KEY] != null) return true
+  const translations = data[I18N_KEY]
+  if (!translations || typeof translations !== 'object') return false
+  return Object.values(translations).some(
+    (slot) =>
+      slot !== null &&
+      typeof slot === 'object' &&
+      (slot as Record<string, unknown>)[SEO_KEY] != null,
+  )
+}
+
+/**
+ * Draft data without `$seo`, in the base and in every `$i18n.<locale>` slot.
+ * A slot left empty by that is dropped.
+ */
+function withoutSeoEverywhere(data: EntryData): EntryData {
+  const { [SEO_KEY]: _seo, ...rest } = data
+  const translations = data[I18N_KEY]
+  if (!translations || typeof translations !== 'object') return rest
+  const next: Record<string, EntryData> = {}
+  for (const [locale, slot] of Object.entries(translations)) {
+    if (slot === null || typeof slot !== 'object' || Array.isArray(slot)) {
+      next[locale] = slot as EntryData
+      continue
+    }
+    const { [SEO_KEY]: _slotSeo, ...slotRest } = slot as EntryData
+    if (Object.keys(slotRest).length > 0) next[locale] = slotRest
+  }
+  if (Object.keys(next).length > 0) rest[I18N_KEY] = next
+  return rest
 }
 
 export function assertSectionSeo(
@@ -193,6 +235,10 @@ export async function upsertGlobal(
   const now = new Date()
   const enabled = input.enabled ?? true
   const seoEnabled = input.seo ?? false
+  const requiredLanguages =
+    input.requiredLanguages === undefined
+      ? undefined
+      : normalizeRequiredLanguages(input.requiredLanguages)
 
   await db.transaction(async (tx) => {
     await tx
@@ -225,6 +271,7 @@ export async function upsertGlobal(
           enabled,
           seoEnabled,
           previewPath,
+          requiredLanguages: requiredLanguages ?? [],
           updatedAt: now,
         })
         .onConflictDoUpdate({
@@ -235,6 +282,7 @@ export async function upsertGlobal(
             enabled,
             seoEnabled,
             previewPath,
+            ...(requiredLanguages !== undefined ? { requiredLanguages } : {}),
             updatedAt: now,
           },
         })
@@ -247,10 +295,20 @@ export async function upsertGlobal(
     // Turning SEO off must not leave stale SEO in the draft for a later ready.
     // Ready and scheduled data are stripped when the snapshot is built.
     if (previous?.seoEnabled && !seoEnabled) {
+      const [draft] = await tx
+        .select({ draftData: entry.draftData })
+        .from(entry)
+        .where(
+          and(
+            eq(entry.collectionId, row.id),
+            eq(entry.slug, GLOBAL_ENTRY_SLUG),
+          ),
+        )
+        .limit(1)
       await tx
         .update(entry)
         .set({
-          draftData: sql`${entry.draftData} - ${SEO_KEY}`,
+          draftData: withoutSeoEverywhere(draft.draftData),
           draftVersion: sql`${entry.draftVersion} + 1`,
           updatedAt: now,
         })
@@ -498,6 +556,8 @@ export async function sectionBlockers(
     .select({
       label: collection.label,
       fields: collection.fields,
+      requiredLanguages: collection.requiredLanguages,
+      languages: site.languages,
       status: entry.status,
       scheduledAt: entry.scheduledAt,
       publishedData: entry.publishedData,
@@ -505,6 +565,7 @@ export async function sectionBlockers(
     })
     .from(collection)
     .innerJoin(entry, eq(entry.collectionId, collection.id))
+    .innerJoin(site, eq(site.id, collection.siteId))
     .where(
       and(
         eq(collection.siteId, siteId),
@@ -525,9 +586,19 @@ export async function sectionBlockers(
         : due
           ? row.scheduledData
           : row.publishedData
-    if (data != null) return []
-    return [
-      `Site content "${row.label}" has required fields and has never been marked ready.`,
-    ]
+    if (data == null) {
+      return [
+        `Site content "${row.label}" has required fields and has never been marked ready.`,
+      ]
+    }
+    // The ready version must be complete in the main language and every required language.
+    const gaps = languageBlockers({
+      data,
+      fields: row.fields,
+      languages: row.languages,
+      requiredLanguages: row.requiredLanguages,
+    })
+    if (gaps.length === 0) return []
+    return [`Site content "${row.label}": ${formatLanguageBlockers(gaps)}`]
   })
 }

@@ -10,7 +10,15 @@ import {
 } from '@phosphor-icons/react'
 
 import { Kbd } from '#/components/ui/kbd'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '#/components/ui/select'
 import { SegmentedControl } from '#/components/ui/segmented-control'
+import { uiLanguageName } from '#/lib/site-languages'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
@@ -143,5 +151,51 @@ export function StatusFilterControl({
         ]}
       />
     </div>
+  )
+}
+
+const ANY_LANGUAGE = '__any__'
+
+/**
+ * "Missing translation: <language>" next to the status filter (multilingual
+ * sites only). `value` is a language tag, or null for any language.
+ */
+export function MissingLanguageFilter({
+  value,
+  languages,
+  onChange,
+}: {
+  value: string | null
+  /** Non-main languages of the site, in site order. */
+  languages: string[]
+  onChange: (value: string | null) => void
+}) {
+  return (
+    <Select
+      value={value ?? ANY_LANGUAGE}
+      onValueChange={(next) => onChange(next === ANY_LANGUAGE ? null : next)}
+    >
+      <SelectTrigger
+        aria-label={m.coverage_missing_filter()}
+        data-testid="missing-language-filter"
+        className="h-9 w-auto min-w-44 text-[14px]"
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={ANY_LANGUAGE} data-testid="missing-language-any">
+          {m.coverage_missing_any()}
+        </SelectItem>
+        {languages.map((locale) => (
+          <SelectItem
+            key={locale}
+            value={locale}
+            data-testid={`missing-language-${locale}`}
+          >
+            {m.coverage_missing_in({ language: uiLanguageName(locale) })}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   )
 }

@@ -44,6 +44,12 @@ import {
   updateSite,
 } from '#/server/admin/sites'
 import { AI_PROMPT_MAX_LENGTH } from '#/server/ai/settings'
+import {
+  previewMainChange,
+  setSiteLanguages,
+} from '#/server/admin/site-languages'
+import { localeTagSchema } from '#/lib/content-locale'
+import { MAX_SITE_LANGUAGES } from '#/lib/content-limits'
 import { NotFoundError } from '#/server/content/errors'
 import { pageLimitSchema, pageOffsetSchema } from '#/server/pagination'
 
@@ -211,6 +217,34 @@ export const updateSiteFn = createServerFn({ method: 'POST', ...adminFn })
     const session = await requireAgencyAdmin()
     const { id, ...patch } = data
     return updateSite(id, patch, session.user.id)
+  })
+
+export const setSiteLanguagesFn = createServerFn({ method: 'POST', ...adminFn })
+  .validator(
+    z.object({
+      id: z.string().min(1),
+      main: localeTagSchema,
+      all: z.array(localeTagSchema).min(1).max(MAX_SITE_LANGUAGES),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const session = await requireAgencyAdmin()
+    return setSiteLanguages(
+      data.id,
+      { main: data.main, all: data.all },
+      session.user.id,
+    )
+  })
+
+/** Entries and sections that would lack the new main language. */
+export const previewMainLanguageChangeFn = createServerFn({
+  method: 'GET',
+  ...adminFn,
+})
+  .validator(z.object({ id: z.string().min(1), main: localeTagSchema }))
+  .handler(async ({ data }) => {
+    await requireAgencyAdmin()
+    return { gaps: await previewMainChange(data.id, data.main) }
   })
 
 export const rotateSiteTokenFn = createServerFn({

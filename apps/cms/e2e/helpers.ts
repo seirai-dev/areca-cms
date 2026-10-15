@@ -1,3 +1,6 @@
+import { realpathSync } from 'node:fs'
+import { createRequire } from 'node:module'
+
 import { expect, request as playwrightRequest } from '@playwright/test'
 import type { APIRequestContext, Locator, Page } from '@playwright/test'
 
@@ -549,4 +552,55 @@ export async function pushSiteManifest(
   manifest: object,
 ) {
   await pushManifest(new URL(page.url()).origin, site.schemaToken, manifest)
+}
+
+/** Same serializer as Start, so stubbed replies decode like real ones. */
+const require = createRequire(
+  realpathSync(
+    new URL(
+      '../node_modules/@tanstack/react-start/package.json',
+      import.meta.url,
+    ),
+  ),
+)
+// eslint-disable-next-line import/no-commonjs -- Resolve Start's own transitive serializer without adding an application dependency.
+const { toJSON } = require('seroval') as {
+  toJSON: (value: unknown) => { t: unknown }
+}
+
+/**
+ * Stubs AI availability and the translate server function, so the editor
+ * shows the AI actions and the reply is fixed. Nothing reaches a provider.
+ * `translated` is read at request time, so a test can change the reply.
+ */
+export async function stubAi(page: Page, translated: Record<string, string>) {
+  const ids = new Map<string, string>()
+  for (const file of ['/src/server/fn/ai.ts', '/src/server/fn/translate.ts']) {
+    const source = await (await page.request.get(file)).text()
+    for (const match of source.matchAll(/createClientRpc\("([^"]+)"\)/g)) {
+      const id = match[1]
+      const decoded = JSON.parse(Buffer.from(id, 'base64url').toString()) as {
+        export: string
+      }
+      ids.set(decoded.export.split('_createServerFn')[0], id)
+    }
+  }
+  const availability = ids.get('getAiAvailabilityFn')
+  const translate = ids.get('translateContentFn')
+  expect(availability && translate).toBeTruthy()
+  const reply = (result: unknown) => ({
+    status: 200,
+    headers: {
+      'content-type': 'application/json',
+      'x-tss-serialized': 'true',
+    },
+    body: JSON.stringify(toJSON({ result, error: undefined, context: {} }).t),
+  })
+  await page.route(`**/_serverFn/${availability}**`, (route) =>
+    route.fulfill(reply({ enabled: true })),
+  )
+  await page.route(`**/_serverFn/${translate}**`, (route) =>
+    route.fulfill(reply({ values: { ...translated }, skipped: [] })),
+  )
+  await page.route('https://openrouter.ai/**', (route) => route.abort())
 }

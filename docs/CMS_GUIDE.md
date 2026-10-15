@@ -68,6 +68,18 @@ Sections have no unpublish, archive or delete action. To remove a section, ask a
 
 A section with required fields must be marked ready at least once before the site can go live. The Go-live panel lists the section by its name, such as **Company info**, when its changes are included.
 
+## Content languages
+
+A site can publish in several languages. An agency admin sets them in **Settings → Languages** and chooses the main language. The main language is the fallback: visitors see it when a translation is missing.
+
+- The entry editor has a language bar under the top bar. Each language shows whether it is complete, has missing fields, or is not started. Select a language to write it. Shared fields are marked "Same in all languages".
+- **Translate empty fields** fills the empty translatable fields from the main language with the agency's AI. It saves nothing: review the draft, then save.
+- An entry can't be marked ready until the languages the site requires are complete. The error names the language and the missing fields.
+- The entry list shows coverage per language, and the **Missing translation** filter lists the entries that lack one.
+- Changing the main language deletes nothing. Removing a language hides it and keeps its text.
+
+The full guide, including translatable fields and URL paths, is the **Languages** page of the docs site (`apps/docs/content/docs/cms/languages.mdx`). The design is in `docs/design/content-languages.md`.
+
 ## Connect an AI app
 
 Connect AI lets an AI app you use, such as ChatGPT, Claude, Claude Code, Cursor or VS Code, read and write one site as you. Open **Connect AI** in the site's sidebar or from the card on the Overview. Copy the site's connector URL into your app, then sign in to Areca in the browser and select **Allow** on the consent screen. Owners and agency admins can also tick **Allow going live**, which lets the app publish the whole site and is off by default. Connected apps are listed on the same page, and you can disconnect any of them at any time. Personal keys, for scripts, are under **Advanced: personal keys**.
@@ -108,7 +120,7 @@ Agency admins can access all sites and manage agency-wide access from Agency ›
 
 Owners can open site Activity from the sidebar or the activity panel. It records content, people, and release actions. Agency admins can view the instance-wide activity log in Agency › Activity.
 
-The account menu controls Light, Dark, or Auto appearance, interface language, keyboard shortcuts, Account, and sign-out. In Account you can enable two-factor authentication or regenerate recovery codes. Accounts without a required second factor can also disable it; agency admins must keep it enabled. Changing the interface language does not translate authored content.
+The account menu controls Light, Dark, or Auto appearance, interface language, keyboard shortcuts, Account, and sign-out. In Account you can enable two-factor authentication or regenerate recovery codes. Accounts without a required second factor can also disable it; agency admins must keep it enabled. Changing the interface language does not translate authored content. To publish the same content in more languages, see [Content languages](#content-languages).
 
 ## Using Areca on a phone
 

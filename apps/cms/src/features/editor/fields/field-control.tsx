@@ -9,6 +9,10 @@ import {
 } from '#/lib/content/utils'
 import type { Field } from '#/lib/types'
 
+import { isTranslatable } from '#/lib/content-locale'
+import { MainReference } from '../main-reference'
+import { SharedMarker, translateProps, useLocaleFields } from '../locale-fields'
+
 import { ImageWell } from './image-well'
 import { ReferencePicker } from './reference-picker'
 import { SelectFieldControl } from './select-field'
@@ -44,6 +48,26 @@ export function FieldControl({
 }) {
   const id = fieldId(field)
   const invalid = Boolean(error)
+  // Content languages: the main value under translatable fields, and a
+  // "Same in all languages" marker on shared ones. Both are null on
+  // single-language sites and on the main language.
+  const locale = useLocaleFields()
+  const notMain = locale !== null && !locale.isMain
+  const translatable = isTranslatable(field)
+  const shared = notMain && !translatable ? <SharedMarker /> : null
+  // Labelled fields read label, then this reference, then the input.
+  const reference =
+    notMain && translatable ? (
+      <MainReference
+        fieldKey={field.key}
+        type={field.type}
+        value={locale.mainView[field.key]}
+        mainCode={locale.main.toUpperCase()}
+        mainName={locale.mainName}
+        onCopy={(next) => onChange(next)}
+        {...translateProps(locale, field)}
+      />
+    ) : null
 
   if (field.type === 'select') {
     return (
@@ -53,6 +77,8 @@ export function FieldControl({
         value={value}
         onChange={onChange}
         error={error}
+        trailing={shared}
+        reference={reference}
       />
     )
   }
@@ -64,24 +90,30 @@ export function FieldControl({
       <div
         data-field={field.key}
         data-invalid={invalid ? 'true' : undefined}
-        className="grid gap-1.5"
+        className="grid gap-2"
       >
         <div className="flex items-center justify-between gap-4 rounded-[10px] border border-border-default bg-background-surface px-3 py-2.5">
-          <label htmlFor={id} className="grid min-w-0 cursor-pointer gap-0.5">
-            <span className="text-[14px] leading-5 font-medium text-text-primary">
-              {field.label}
-              {field.required ? (
-                <span aria-hidden="true" className="ml-1 text-text-muted">
-                  *
+          <div className="grid min-w-0 gap-2">
+            <label htmlFor={id} className="grid min-w-0 cursor-pointer gap-0.5">
+              <span className="text-[14px] leading-5 font-medium text-text-primary">
+                {field.label}
+                {field.required ? (
+                  <span aria-hidden="true" className="ml-1 text-text-muted">
+                    *
+                  </span>
+                ) : null}
+                {shared ? (
+                  <span className="ml-2 inline-flex">{shared}</span>
+                ) : null}
+              </span>
+              {field.description ? (
+                <span className="text-caption font-normal text-text-muted">
+                  {field.description}
                 </span>
               ) : null}
-            </span>
-            {field.description ? (
-              <span className="text-caption font-normal text-text-muted">
-                {field.description}
-              </span>
-            ) : null}
-          </label>
+            </label>
+            {reference}
+          </div>
           <Switch
             id={id}
             checked={checked}
@@ -225,7 +257,9 @@ export function FieldControl({
         htmlFor={field.type === 'image' ? undefined : id}
         required={field.required}
         description={field.description}
+        reference={reference}
         error={error}
+        trailing={shared}
       >
         {control}
       </FormField>

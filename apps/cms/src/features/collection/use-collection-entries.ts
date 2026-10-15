@@ -52,15 +52,22 @@ export function useCollectionEntries({
   collectionKey,
   status,
   search,
+  missingLanguage,
 }: {
   siteId: string
   collectionKey: string
   status: StatusFilter
   search: string
+  /** Only entries not complete in this language (multilingual sites). */
+  missingLanguage?: string
 }) {
   const query = useInfiniteQuery({
     queryKey: [
-      ...queryKeys.entries(siteId, collectionKey, { status, search }),
+      ...queryKeys.entries(siteId, collectionKey, {
+        status,
+        search,
+        missingLanguage,
+      }),
       'paged',
     ],
     initialPageParam: 0,
@@ -71,6 +78,7 @@ export function useCollectionEntries({
           collectionKey,
           status: status === 'all' ? undefined : status,
           search: search || undefined,
+          missingLanguage,
           limit: PAGE_SIZE,
           offset: pageParam,
         },

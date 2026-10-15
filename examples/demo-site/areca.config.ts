@@ -2,6 +2,10 @@ import { defineSiteContent } from '@areca-cms/site-sdk'
 
 export default defineSiteContent({
   siteKey: 'demo-app-areca',
+  // English is the main language (the fallback). Dutch is served under /nl.
+  // Keep in step with project.inlang/settings.json and src/lib/locale-routes.ts.
+  languages: { main: 'en', all: ['en', 'nl'] },
+  i18n: { paraglide: './src/paraglide/runtime.js' },
   assets: {
     download: true,
     dir: 'public/areca',
@@ -9,6 +13,8 @@ export default defineSiteContent({
   collections: {
     articles: {
       route: '/journal/$slug',
+      // Dutch journal pages live under /nl/journaal/<slug> (see locale-routes.ts).
+      routes: { nl: '/journaal/$slug' },
       label: 'Journal',
       fields: [
         { key: 'title', label: 'Title', type: 'text', required: true },
@@ -39,9 +45,11 @@ export default defineSiteContent({
     },
     coffees: {
       route: '/coffees/$slug',
+      routes: { nl: '/koffie/$slug' },
       label: 'Coffees',
       fields: [
-        { key: 'name', label: 'Name', type: 'text', required: true },
+        // The product name is the same in every language.
+        { key: 'name', label: 'Name', type: 'text', required: true, translatable: false },
         { key: 'slug', label: 'Slug', type: 'slug', required: true },
         { key: 'origin', label: 'Country of origin', type: 'text', required: true },
         { key: 'region', label: 'Region', type: 'text' },
@@ -69,19 +77,21 @@ export default defineSiteContent({
           label: 'Altitude (m above sea level)',
           type: 'number',
         },
-        { key: 'price', label: 'Price per 250 g (EUR)', type: 'number' },
+        // Prices are the same in every language.
+        { key: 'price', label: 'Price per 250 g (EUR)', type: 'number', translatable: false },
         { key: 'limited', label: 'Limited release', type: 'boolean' },
         { key: 'harvestDate', label: 'Harvest date', type: 'date' },
         { key: 'image', label: 'Image', type: 'image' },
         { key: 'description', label: 'Description', type: 'richtext' },
-        { key: 'shopUrl', label: 'Shop link', type: 'url' },
+        // Shop links point at the same shop in every language.
+        { key: 'shopUrl', label: 'Shop link', type: 'url', translatable: false },
       ],
     },
     authors: {
       route: '/team/$slug',
       label: 'Team',
       fields: [
-        { key: 'name', label: 'Name', type: 'text', required: true },
+        { key: 'name', label: 'Name', type: 'text', required: true, translatable: false },
         { key: 'slug', label: 'Slug', type: 'slug', required: true },
         { key: 'role', label: 'Role', type: 'text' },
         { key: 'bio', label: 'Bio', type: 'textarea' },
@@ -93,12 +103,13 @@ export default defineSiteContent({
     companyInfo: {
       label: 'Company info',
       fields: [
-        { key: 'name', label: 'Name', type: 'text', required: true },
+        { key: 'name', label: 'Name', type: 'text', required: true, translatable: false },
         { key: 'tagline', label: 'Tagline', type: 'textarea' },
         { key: 'address', label: 'Address', type: 'textarea', group: 'Contact' },
-        { key: 'email', label: 'Email', type: 'text', group: 'Contact' },
-        { key: 'phone', label: 'Phone', type: 'text', group: 'Contact' },
-        { key: 'instagramUrl', label: 'Instagram', type: 'url', group: 'Contact' },
+        // Contact details are the same in every language.
+        { key: 'email', label: 'Email', type: 'text', group: 'Contact', translatable: false },
+        { key: 'phone', label: 'Phone', type: 'text', group: 'Contact', translatable: false },
+        { key: 'instagramUrl', label: 'Instagram', type: 'url', group: 'Contact', translatable: false },
         { key: 'foundedYear', label: 'Founded', type: 'number' },
       ],
     },

@@ -139,8 +139,10 @@ export async function manifestPull(options: ManifestPullOptions): Promise<Manife
 
   const source = generateConfigSource({
     siteKey,
-    // Local settings survive a re-render; only collections come from the CMS.
+    // Local settings survive a re-render; collections and languages come from the CMS.
     ...(existing?.assets !== undefined ? { assets: existing.assets } : {}),
+    ...(existing?.i18n !== undefined ? { i18n: existing.i18n } : {}),
+    ...(manifest.languages !== undefined ? { languages: manifest.languages } : {}),
     collections: manifest.collections,
     globals: manifest.globals,
   })

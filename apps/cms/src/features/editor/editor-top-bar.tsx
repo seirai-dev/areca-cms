@@ -18,6 +18,7 @@ import {
   TextAa,
   Sparkle,
   Trash,
+  WarningCircle,
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
@@ -91,6 +92,8 @@ export function EditorTopBar({
   onToggleDetails,
   entryId,
   scheduleAnchor,
+  languageBar,
+  readyBlock = null,
 }: {
   siteId: string
   collectionKey: string
@@ -134,6 +137,14 @@ export function EditorTopBar({
   entryId?: string
   /** Wraps the split button so the schedule popover can anchor to it. */
   scheduleAnchor: (node: React.ReactElement) => React.ReactElement
+  /** The language bar, rendered as the second row of the sticky header. */
+  languageBar?: React.ReactNode
+  /**
+   * Set when a required language blocks ready and schedule. The primary
+   * action is disabled, and the menu offers the reason, which switches to
+   * that language.
+   */
+  readyBlock?: { message: string; onFix: () => void } | null
 }) {
   const reduce = useReducedMotion()
   const mod = useModifierKey()
@@ -156,16 +167,19 @@ export function EditorTopBar({
     ) : (
       <CheckCircle weight="bold" className="max-sm:hidden" />
     )
-  const primaryDisabled = !canManage || busy || primary !== 'mark'
+  const primaryDisabled =
+    !canManage || busy || primary !== 'mark' || readyBlock !== null
   const primaryReason = !canManage
     ? editorPublishReason()
-    : primary === 'new'
-      ? m.editor_mark_ready_new_reason()
-      : primary === 'ready'
-        ? m.editor_ready_reason()
-        : primary === 'live'
-          ? m.editor_live_reason()
-          : ''
+    : readyBlock
+      ? readyBlock.message
+      : primary === 'new'
+        ? m.editor_mark_ready_new_reason()
+        : primary === 'ready'
+          ? m.editor_ready_reason()
+          : primary === 'live'
+            ? m.editor_live_reason()
+            : ''
 
   const split = (
     <SplitButton
@@ -190,10 +204,23 @@ export function EditorTopBar({
       triggerProps={{ 'data-testid': 'publish-menu' }}
     >
       <DropdownMenuContent align="end" className="w-72">
+        {readyBlock ? (
+          <>
+            <DropdownMenuItem
+              onSelect={readyBlock.onFix}
+              data-testid="ready-blocker"
+              className="whitespace-normal text-status-warning"
+            >
+              <WarningCircle weight="fill" />
+              {readyBlock.message}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        ) : null}
         {primary === 'mark' || primary === 'ready' ? (
           <DropdownMenuItem
             onSelect={onGoLiveNow}
-            disabled={goLiveBlocked}
+            disabled={goLiveBlocked || readyBlock !== null}
             data-testid="go-live-now"
           >
             <RocketLaunch />
@@ -202,7 +229,11 @@ export function EditorTopBar({
               : m.editor_go_live_now()}
           </DropdownMenuItem>
         ) : null}
-        <DropdownMenuItem onSelect={onSchedule} data-testid="schedule-entry">
+        <DropdownMenuItem
+          onSelect={onSchedule}
+          disabled={readyBlock !== null}
+          data-testid="schedule-entry"
+        >
           <CalendarDots />
           {m.editor_schedule_ellipsis()}
         </DropdownMenuItem>
@@ -489,7 +520,9 @@ export function EditorTopBar({
             {primaryReason ? (
               <Hint
                 label={primaryReason}
-                wrapDisabled={primaryDisabled && !canManage}
+                wrapDisabled={
+                  primaryDisabled && (!canManage || readyBlock !== null)
+                }
               >
                 {scheduleAnchor(split)}
               </Hint>
@@ -527,6 +560,7 @@ export function EditorTopBar({
           </Hint>
         </div>
       </div>
+      {languageBar}
     </header>
   )
 }

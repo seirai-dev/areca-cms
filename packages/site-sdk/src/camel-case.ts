@@ -7,6 +7,7 @@ import type {
   CollectionConfig,
   Field,
   GlobalConfig,
+  LocalizedValues,
   Snapshot,
   SnapshotEntry,
   SnapshotGlobal,
@@ -86,7 +87,7 @@ function camelKeys(rawKeys: string[], noun: 'Collection' | 'Global'): Map<string
     assertSafeIdentifier(camel)
     if (isReservedCollectionKey(camel)) {
       throw new Error(
-        `${noun} "${raw}" uses the reserved name "${camel}". resolve, href, preview, globals and previewGlobals are reserved.`,
+        `${noun} "${raw}" uses the reserved name "${camel}". resolve, href, preview, globals, previewGlobals, in, languages and matchLocale are reserved.`,
       )
     }
     const previous = rawByCamel.get(camel)
@@ -124,14 +125,32 @@ function camelFields(
 
 /**
  * Re-keys one entry: `data` keys and reference targets become camel, and
- * `collection` is set. Other fields are shared with the input, not copied.
+ * `collection` is set. Per-language values are re-keyed the same way. Other
+ * fields are shared with the input, not copied.
  */
 export function camelizeEntry(
   entry: SnapshotEntry,
   collection: string,
   fields: readonly CamelField[],
 ): SnapshotEntry {
-  return { ...entry, collection, data: camelizeData(entry.data, fields) }
+  return {
+    ...entry,
+    collection,
+    data: camelizeData(entry.data, fields),
+    ...(entry.locales !== undefined ? { locales: camelizeLocales(entry.locales, fields) } : {}),
+  }
+}
+
+/** Re-keys the `data` of every language; slugs and SEO are unchanged. */
+export function camelizeLocales(
+  locales: Record<string, LocalizedValues>,
+  fields: readonly CamelField[],
+): Record<string, LocalizedValues> {
+  const result: Record<string, LocalizedValues> = {}
+  for (const [tag, values] of Object.entries(locales)) {
+    result[tag] = { ...values, data: camelizeData(values.data, fields) }
+  }
+  return result
 }
 
 /** Re-keys one `data` object: camel field keys, camel reference targets. */
@@ -195,7 +214,13 @@ function camelizeGlobals(
   for (const [raw, global] of Object.entries(globals)) {
     const plan = plans.get(raw)
     if (!plan) throw new Error(`Global "${raw}" has no schema`)
-    result[plan.camel] = { ...global, data: camelizeData(global.data, plan.fields) }
+    result[plan.camel] = {
+      ...global,
+      data: camelizeData(global.data, plan.fields),
+      ...(global.locales !== undefined
+        ? { locales: camelizeLocales(global.locales, plan.fields) }
+        : {}),
+    }
   }
   return result
 }

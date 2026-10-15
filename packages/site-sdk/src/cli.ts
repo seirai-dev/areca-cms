@@ -11,6 +11,7 @@ import { loadLocalEnv } from './env.js'
 import { InitCancelledError, initSite } from './init.js'
 import { loadConfig } from './load-config.js'
 import { ManifestPullCancelledError, manifestPull } from './manifest-pull.js'
+import { paraglideWarnings } from './paraglide.js'
 import { pullContent } from './pull.js'
 
 type RunOptions = {
@@ -72,6 +73,7 @@ export async function run(
         publicationId: parsed.publicationId,
         ...(parsed.typesPath ? { types: resolve(cwd, parsed.typesPath) } : {}),
         ...(assets ? { assets } : {}),
+        ...(config?.i18n?.paraglide ? { paraglide: resolve(cwd, config.i18n.paraglide) } : {}),
       })
       // Print camelCase keys, the names used in the pulled files and in code.
       const camelKeys = camelCollectionKeys(Object.keys(snapshot.collections))
@@ -89,6 +91,9 @@ export async function run(
       }
       console.log(`Types: ${relative(cwd, snapshot.typesPath) || snapshot.typesPath}`)
       for (const warning of snapshot.warnings) console.warn(`Warning: ${warning}`)
+      for (const warning of paraglideWarnings(cwd, snapshot.languages)) {
+        console.warn(`Warning: ${warning}`)
+      }
       return 0
     }
 

@@ -7,6 +7,7 @@ import type { Field, SiteManifest } from '#/lib/types'
 import { withRequiredSlugField } from '#/lib/collection-fields'
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
+import { applySiteLanguages } from '#/server/admin/site-languages'
 
 import {
   assertKindsUnchanged,
@@ -14,6 +15,7 @@ import {
   validateContentDefinitions,
 } from './content-definitions.ts'
 import { ensureGlobalEntry } from './globals.ts'
+import { normalizeRequiredLanguages } from './locale-validation.ts'
 import { NotFoundError, ValidationError } from './errors.ts'
 
 export async function listCollections(
@@ -94,6 +96,10 @@ export async function syncManifest(siteId: string, manifest: SiteManifest) {
       .from(site)
       .where(eq(site.id, siteId))
       .for('update')
+    // Omitted languages leave the site's setting alone.
+    if (manifest.languages) {
+      await applySiteLanguages(tx, siteId, manifest.languages)
+    }
     const existing = await tx
       .select()
       .from(collection)
@@ -115,6 +121,10 @@ export async function syncManifest(siteId: string, manifest: SiteManifest) {
           routePattern: def.route,
           fields: withRequiredSlugField(def.fields),
           enabled: true,
+          requiredLanguages: normalizeRequiredLanguages(
+            def.requiredLanguages ?? [],
+          ),
+          localizedRoutes: def.routes ?? null,
           updatedAt: now,
         })
         .onConflictDoUpdate({
@@ -124,6 +134,10 @@ export async function syncManifest(siteId: string, manifest: SiteManifest) {
             routePattern: def.route,
             fields: withRequiredSlugField(def.fields),
             enabled: true,
+            requiredLanguages: normalizeRequiredLanguages(
+              def.requiredLanguages ?? [],
+            ),
+            localizedRoutes: def.routes ?? null,
             updatedAt: now,
           },
         })
@@ -141,6 +155,9 @@ export async function syncManifest(siteId: string, manifest: SiteManifest) {
           enabled: true,
           seoEnabled: def.seo ?? false,
           previewPath: def.previewPath ?? null,
+          requiredLanguages: normalizeRequiredLanguages(
+            def.requiredLanguages ?? [],
+          ),
           updatedAt: now,
         })
         .onConflictDoUpdate({
@@ -151,6 +168,9 @@ export async function syncManifest(siteId: string, manifest: SiteManifest) {
             enabled: true,
             seoEnabled: def.seo ?? false,
             previewPath: def.previewPath ?? null,
+            requiredLanguages: normalizeRequiredLanguages(
+              def.requiredLanguages ?? [],
+            ),
             updatedAt: now,
           },
         })
@@ -208,6 +228,10 @@ export async function upsertCollection(
     routePattern: string
     fields: Field[]
     enabled?: boolean
+    /** Languages besides main that must be complete. Left unchanged when omitted. */
+    requiredLanguages?: string[]
+    /** Per-language route patterns. Left unchanged when omitted; null clears them. */
+    localizedRoutes?: Record<string, string> | null
   },
   actorId?: string,
 ) {
@@ -261,6 +285,10 @@ export async function upsertCollection(
         routePattern: input.routePattern,
         fields,
         enabled,
+        requiredLanguages: normalizeRequiredLanguages(
+          input.requiredLanguages ?? [],
+        ),
+        localizedRoutes: input.localizedRoutes ?? null,
         updatedAt: now,
       })
       .onConflictDoUpdate({
@@ -270,6 +298,16 @@ export async function upsertCollection(
           routePattern: input.routePattern,
           fields,
           enabled,
+          ...(input.requiredLanguages !== undefined
+            ? {
+                requiredLanguages: normalizeRequiredLanguages(
+                  input.requiredLanguages,
+                ),
+              }
+            : {}),
+          ...(input.localizedRoutes !== undefined
+            ? { localizedRoutes: input.localizedRoutes }
+            : {}),
           updatedAt: now,
         },
       })

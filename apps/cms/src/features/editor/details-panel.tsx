@@ -18,7 +18,13 @@ import { getLocale } from '#/paraglide/runtime'
 
 import { FieldControl } from './fields/field-control'
 import { EntryHistory } from './history'
+import { LanguageRing } from './language-ring'
+import { languageStateKey } from './language-state'
+import type { LocaleSummary } from './language-state'
 import type { EntryRecord, RevisionRecord } from './use-entry-editor'
+
+/** One language in the Status block. */
+export type LanguageRow = { summary: LocaleSummary; name: string }
 
 function Section({
   title,
@@ -73,6 +79,10 @@ export function DetailsPanel({
   onRestore,
   onCancelSchedule,
   seoPanel,
+  languageRows,
+  onSelectLanguage,
+  slugPlaceholder,
+  slugHelper,
 }: {
   siteId: string
   organizationId: string
@@ -98,6 +108,13 @@ export function DetailsPanel({
   onCancelSchedule: () => void
   /** The built-in SEO & discovery block (see `SeoPanel`). */
   seoPanel?: React.ReactNode
+  /** Content languages: one row per language in the Status block. */
+  languageRows?: LanguageRow[]
+  onSelectLanguage?: (code: string) => void
+  /** Slug placeholder (the main slug) while a translation has no slug of its own. */
+  slugPlaceholder?: string
+  /** Helper under the slug, replacing the default rules. */
+  slugHelper?: string
 }) {
   return (
     <div
@@ -113,6 +130,8 @@ export function DetailsPanel({
             error={errors[slugField.key]}
             host={displayHost(productionUrl)}
             routePattern={routePattern}
+            placeholder={slugPlaceholder}
+            helper={slugHelper}
             showReset={
               slugManual &&
               Boolean(titleField) &&
@@ -154,6 +173,8 @@ export function DetailsPanel({
           isNew={isNew}
           canManage={canManage}
           onCancelSchedule={onCancelSchedule}
+          languageRows={languageRows}
+          onSelectLanguage={onSelectLanguage}
         />
       </Section>
 
@@ -187,6 +208,8 @@ function SlugEditor({
   routePattern,
   showReset,
   onReset,
+  placeholder,
+  helper,
 }: {
   field: Field
   value: unknown
@@ -196,6 +219,8 @@ function SlugEditor({
   routePattern: string
   showReset: boolean
   onReset: () => void
+  placeholder?: string
+  helper?: string
 }) {
   const id = `field-${field.key}`
   const [before, after = ''] = routePattern.includes('$slug')
@@ -250,7 +275,7 @@ function SlugEditor({
           autoCorrect="off"
           spellCheck={false}
           className="h-full min-w-0 flex-1 bg-transparent text-text-primary outline-none placeholder:text-text-muted"
-          placeholder={m.editor_slug_placeholder()}
+          placeholder={placeholder ?? m.editor_slug_placeholder()}
         />
         {after ? (
           <span className="shrink-0 text-text-muted">{after}</span>
@@ -262,7 +287,7 @@ function SlugEditor({
         </p>
       ) : (
         <p className="text-caption font-normal text-text-muted">
-          {m.editor_slug_rules()}
+          {helper ?? m.editor_slug_rules()}
         </p>
       )}
     </div>
@@ -286,18 +311,93 @@ function Row({
   )
 }
 
+/** Language state as words: "Complete", "2 missing", "Not started", "Optional". */
+function languageStateText(summary: LocaleSummary): string {
+  switch (languageStateKey(summary)) {
+    case 'complete':
+      return m.editor_language_state_complete()
+    case 'not_started':
+      return m.editor_language_state_not_started()
+    case 'optional':
+      return m.editor_language_state_optional()
+    case 'missing':
+      return m.editor_language_state_missing({
+        count: summary.missing.length,
+      })
+  }
+}
+
+function LanguageList({
+  rows,
+  onSelect,
+}: {
+  rows: LanguageRow[]
+  onSelect?: (code: string) => void
+}) {
+  return (
+    <section
+      aria-label={m.editor_language_status_heading()}
+      className="grid gap-1.5"
+      data-testid="details-languages"
+    >
+      <h3 className="text-caption font-medium text-text-muted">
+        {m.editor_language_status_heading()}
+      </h3>
+      <ul className="grid gap-0.5">
+        {rows.map(({ summary, name }) => (
+          <li key={summary.locale}>
+            <button
+              type="button"
+              onClick={() => onSelect?.(summary.locale)}
+              className="flex min-h-7 w-full items-center gap-2 rounded-[8px] px-1.5 text-left hover:bg-surface-state-hover"
+              data-testid={`details-language-${summary.locale}`}
+            >
+              <LanguageRing
+                state={summary.state}
+                fraction={summary.fraction}
+                warning={summary.warning}
+              />
+              <span className="min-w-0 flex-1 truncate text-callout text-text-primary">
+                {name}
+                {summary.required ? (
+                  <span className="ml-1.5 text-caption text-text-muted">
+                    {m.editor_language_required_hint()}
+                  </span>
+                ) : null}
+              </span>
+              <span
+                className={
+                  summary.warning
+                    ? 'text-caption text-text-warning'
+                    : 'text-caption text-text-muted'
+                }
+              >
+                {languageStateText(summary)}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
 function StatusBlock({
   entry,
   live,
   isNew,
   canManage,
   onCancelSchedule,
+  languageRows,
+  onSelectLanguage,
 }: {
   entry: EntryRecord | null
   live: LiveMembership
   isNew: boolean
   canManage: boolean
   onCancelSchedule: () => void
+  languageRows?: LanguageRow[]
+  onSelectLanguage?: (code: string) => void
 }) {
   if (isNew || !entry) {
     return (
@@ -307,6 +407,9 @@ function StatusBlock({
           live={live}
           long
         />
+        {languageRows && languageRows.length > 0 ? (
+          <LanguageList rows={languageRows} onSelect={onSelectLanguage} />
+        ) : null}
         <p className="text-callout text-text-muted">
           {m.editor_status_new_hint()}
         </p>
@@ -326,6 +429,9 @@ function StatusBlock({
   return (
     <div className="grid gap-3">
       <EntryPill entry={entry} live={live} long testId="details-entry-status" />
+      {languageRows && languageRows.length > 0 ? (
+        <LanguageList rows={languageRows} onSelect={onSelectLanguage} />
+      ) : null}
       {entry.status === 'scheduled' && scheduledLabel ? (
         <p className="flex flex-wrap items-center gap-x-1.5 text-callout text-text-secondary">
           <span>

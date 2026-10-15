@@ -13,6 +13,14 @@ import {
   TEXT_MAX_LENGTH,
   URL_MAX_LENGTH,
 } from '#/lib/content-limits'
+import {
+  I18N_KEY,
+  LOCALE_KEY,
+  SLUG_KEY,
+  isTranslatable,
+  isValidLocaleTag,
+} from '#/lib/content-locale'
+import { isEmptyRichText } from '#/lib/rich-text-empty'
 import { SEO_KEY, entrySeoSchema, readEntrySeo } from '#/lib/seo'
 import type { EntryData, Field } from '#/lib/types'
 import { m } from '#/paraglide/messages'
@@ -41,25 +49,6 @@ function isIsoDateTime(value: string) {
   )
 }
 
-export function isEmptyRichText(value: unknown): boolean {
-  if (value == null || value === '') return true
-  if (typeof value !== 'object' || Array.isArray(value)) return false
-  const doc = value as { type?: string; content?: unknown[] }
-  if (doc.type !== 'doc') return false
-  const content = doc.content ?? []
-  if (!Array.isArray(content)) return false
-  if (content.length === 0) return true
-  return content.every((node) => {
-    if (!node || typeof node !== 'object' || Array.isArray(node)) return false
-    const item = node as { type?: string; content?: unknown[] }
-    return (
-      item.type === 'paragraph' &&
-      (item.content === undefined ||
-        (Array.isArray(item.content) && item.content.length === 0))
-    )
-  })
-}
-
 function wrap(
   schema: z.ZodType,
   field: Field,
@@ -82,17 +71,21 @@ function schemaForField(field: Field, mode: SchemaMode): z.ZodType {
     case 'textarea': {
       const max = field.type === 'text' ? TEXT_MAX_LENGTH : TEXTAREA_MAX_LENGTH
       if (field.required) {
-        return z.string().min(1, m.server_required()).max(max)
+        // A draft may leave a required value out (a translation can be saved
+        // before the main language is filled in). Blank strings still fail.
+        const required = z.string().min(1, m.server_required()).max(max)
+        return mode === 'partial' ? required.optional() : required
       }
       return wrap(z.string().max(max), field, mode, true)
     }
     case 'slug':
       if (field.required) {
-        return z
+        const required = z
           .string()
           .min(1, m.server_required())
           .max(SLUG_MAX_LENGTH)
           .regex(SLUG_PATTERN, m.server_invalid_slug())
+        return mode === 'partial' ? required.optional() : required
       }
       return wrap(
         z
@@ -212,7 +205,11 @@ export function findUnknownKeys(
 ): string[] {
   const declared = new Set(fields.map((field) => field.key))
   return Object.keys(data).filter(
-    (key) => key !== SEO_KEY && !declared.has(key),
+    (key) =>
+      key !== SEO_KEY &&
+      key !== I18N_KEY &&
+      key !== LOCALE_KEY &&
+      !declared.has(key),
   )
 }
 
@@ -238,7 +235,8 @@ export function pickDeclaredFields(
 
 function entryDataTooLarge(data: unknown): boolean {
   try {
-    const json = JSON.stringify(data)
+    // JSON.stringify returns undefined for undefined input, despite its string type.
+    const json = JSON.stringify(data) as string | undefined
     return Buffer.byteLength(json ?? '', 'utf8') > ENTRY_DATA_MAX_BYTES
   } catch {
     // Unserializable or nested past the engine's stack: reject either way.
@@ -295,7 +293,12 @@ export function validateEntryData(
   const hasSeo = record[SEO_KEY] != null
   const result = buildEntrySchema(fields, options).safeParse(data)
   const seoResult = hasSeo ? entrySeoSchema.safeParse(record[SEO_KEY]) : null
-  if (!result.success || (seoResult && !seoResult.success)) {
+  const languageErrors = validateLanguageData(fields, record)
+  if (
+    !result.success ||
+    (seoResult && !seoResult.success) ||
+    languageErrors.length
+  ) {
     return {
       ok: false,
       errors: [
@@ -309,18 +312,117 @@ export function validateEntryData(
             message: issue.message,
           }),
         ),
+        ...languageErrors,
       ],
     }
   }
 
   const parsed = result.data as EntryData
   if (seoResult?.success) parsed[SEO_KEY] = seoResult.data
+  // Language data is not in the field schema, so zod strips it. Keep it as written.
+  if (record[LOCALE_KEY] !== undefined) parsed[LOCALE_KEY] = record[LOCALE_KEY]
+  if (record[I18N_KEY] !== undefined) parsed[I18N_KEY] = record[I18N_KEY]
   const dateErrors = validateDateOrder(fields, parsed)
   if (dateErrors.length > 0) {
     return { ok: false, errors: dateErrors }
   }
 
   return { ok: true, data: parsed }
+}
+
+/** Errors in the language keys (`$locale`, `$i18n`) of a write. */
+export function validateLanguageData(
+  fields: Field[],
+  record: Record<string, unknown>,
+): FieldError[] {
+  return [...validateLocaleKey(record), ...validateTranslations(fields, record)]
+}
+
+function validateLocaleKey(record: Record<string, unknown>): FieldError[] {
+  const value = record[LOCALE_KEY]
+  if (value === undefined || value === null) return []
+  if (typeof value === 'string' && isValidLocaleTag(value)) return []
+  return [{ path: LOCALE_KEY, message: 'Invalid language code' }]
+}
+
+/**
+ * Each `$i18n.<locale>` slot holds only translatable fields, `$seo` and
+ * `$slug`. Its values use the same per-field schemas as the base, in partial
+ * mode: a translation may be incomplete while it is a draft.
+ */
+function validateTranslations(
+  fields: Field[],
+  record: Record<string, unknown>,
+): FieldError[] {
+  const translations = record[I18N_KEY]
+  if (translations === undefined || translations === null) return []
+  if (typeof translations !== 'object' || Array.isArray(translations)) {
+    return [{ path: I18N_KEY, message: m.server_expected_object() }]
+  }
+  const translatable = fields.filter(isTranslatable)
+  const translatableKeys = new Set(translatable.map((field) => field.key))
+  // A language may be a partial draft, so nothing in its slot is required.
+  const slotSchema = buildEntrySchema(
+    translatable.map((field) => ({ ...field, required: false })),
+    { mode: 'partial' },
+  )
+  const errors: FieldError[] = []
+
+  for (const [locale, slot] of Object.entries(translations)) {
+    const path = `${I18N_KEY}.${locale}`
+    if (!isValidLocaleTag(locale)) {
+      errors.push({ path, message: 'Invalid language code' })
+      continue
+    }
+    if (slot === undefined || slot === null) continue
+    if (typeof slot !== 'object' || Array.isArray(slot)) {
+      errors.push({ path, message: m.server_expected_object() })
+      continue
+    }
+    const values = slot as Record<string, unknown>
+    for (const key of Object.keys(values)) {
+      if (key === SEO_KEY || key === SLUG_KEY || translatableKeys.has(key))
+        continue
+      errors.push({
+        path: `${path}.${key}`,
+        message: m.server_unknown_field({ field: key }),
+      })
+    }
+    const parsed = slotSchema.safeParse(values)
+    if (!parsed.success) {
+      errors.push(
+        ...parsed.error.issues.map((issue) => ({
+          path: [path, ...issue.path].join('.'),
+          message: issue.message,
+        })),
+      )
+    }
+    const slug = values[SLUG_KEY]
+    if (slug !== undefined && slug !== null && slug !== '') {
+      if (
+        typeof slug !== 'string' ||
+        !SLUG_PATTERN.test(slug) ||
+        slug.length > SLUG_MAX_LENGTH
+      ) {
+        errors.push({
+          path: `${path}.${SLUG_KEY}`,
+          message: m.server_invalid_slug(),
+        })
+      }
+    }
+    if (values[SEO_KEY] != null) {
+      const seo = entrySeoSchema.safeParse(values[SEO_KEY])
+      if (!seo.success) {
+        errors.push(
+          ...seo.error.issues.map((issue) => ({
+            path: [path, SEO_KEY, ...issue.path].join('.'),
+            message: issue.message,
+          })),
+        )
+      }
+    }
+  }
+  return errors
 }
 
 function validateDateOrder(fields: Field[], data: EntryData): FieldError[] {
@@ -381,7 +483,7 @@ export async function validateReferences(
       continue
     }
 
-    const [ref] = await db
+    const ref = (await db
       .select({
         id: entry.id,
         status: entry.status,
@@ -391,6 +493,7 @@ export async function validateReferences(
       .from(entry)
       .where(and(eq(entry.id, value), eq(entry.collectionId, refCollection.id)))
       .limit(1)
+    ).at(0)
 
     if (!ref) {
       errors.push({
@@ -436,7 +539,15 @@ export function resolveSlug(
   return typeof value === 'string' && value.length > 0 ? value : undefined
 }
 
-/** Drafts may be incomplete, but supplied IDs must belong to their authorized scope. */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+/**
+ * Drafts may be incomplete, but supplied IDs must belong to their authorized
+ * scope. Checks the base values and every `$i18n.<locale>` slot, so a
+ * translation cannot point at another organization's asset or entry.
+ */
 export async function validateContentOwnership(
   siteId: string,
   organizationId: string,
@@ -444,19 +555,58 @@ export async function validateContentOwnership(
   data: EntryData,
   connection: Pick<typeof db, 'select'> = db,
 ) {
+  const errors: FieldError[] = [
+    ...(await ownershipErrors(
+      siteId,
+      organizationId,
+      fields,
+      data,
+      '',
+      connection,
+    )),
+  ]
+  const translations = data[I18N_KEY]
+  if (isPlainObject(translations)) {
+    for (const [locale, slot] of Object.entries(translations)) {
+      if (!isPlainObject(slot)) continue
+      errors.push(
+        ...(await ownershipErrors(
+          siteId,
+          organizationId,
+          fields,
+          slot,
+          `${I18N_KEY}.${locale}.`,
+          connection,
+        )),
+      )
+    }
+  }
+  return errors
+}
+
+/** Ownership of one scope: the base, or one language slot (`prefix`). */
+async function ownershipErrors(
+  siteId: string,
+  organizationId: string,
+  fields: Field[],
+  data: EntryData,
+  prefix: string,
+  connection: Pick<typeof db, 'select'>,
+): Promise<FieldError[]> {
   const errors: FieldError[] = []
   const ogImage = readEntrySeo(data).ogImage
   if (ogImage) {
-    const [found] = await connection
+    const found = (await connection
       .select({ id: asset.id })
       .from(asset)
       .where(
         and(eq(asset.id, ogImage), eq(asset.organizationId, organizationId)),
       )
       .limit(1)
+    ).at(0)
     if (!found)
       errors.push({
-        path: `${SEO_KEY}.ogImage`,
+        path: `${prefix}${SEO_KEY}.ogImage`,
         message: m.server_asset_not_found_in_organization(),
       })
   }
@@ -467,13 +617,13 @@ export async function validateContentOwnership(
       !(await richTextAssetsAuthorized(value, organizationId, connection))
     ) {
       errors.push({
-        path: field.key,
+        path: `${prefix}${field.key}`,
         message: m.server_embedded_asset_not_found_in_organization(),
       })
     }
     if (typeof value !== 'string' || !value) continue
     if (field.type === 'reference') {
-      const [found] = field.collection
+      const found = (field.collection
         ? await connection
             .select({ id: entry.id })
             .from(entry)
@@ -487,23 +637,25 @@ export async function validateContentOwnership(
             )
             .limit(1)
         : []
+      ).at(0)
       if (!found)
         errors.push({
-          path: field.key,
+          path: `${prefix}${field.key}`,
           message: m.server_referenced_entry_not_found(),
         })
     }
     if (field.type === 'image') {
-      const [found] = await connection
+      const found = (await connection
         .select({ id: asset.id })
         .from(asset)
         .where(
           and(eq(asset.id, value), eq(asset.organizationId, organizationId)),
         )
         .limit(1)
+      ).at(0)
       if (!found)
         errors.push({
-          path: field.key,
+          path: `${prefix}${field.key}`,
           message: m.server_asset_not_found_in_organization(),
         })
     }

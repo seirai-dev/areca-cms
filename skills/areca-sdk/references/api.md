@@ -12,6 +12,7 @@ ESM only. Import paths and their exports:
 | `getPreviewEntry` | `({ token: string; client?: ArecaClient }) => Promise<PreviewResult>` | `PreviewResult` = `PreviewEntryResult` `{ kind: 'entry', collection, slug, entry }` or `PreviewGlobalResult` `{ kind: 'global', global, entry }`. Needs `ARECA_CMS_URL` and `ARECA_SITE_TOKEN` (or pass `client`). |
 | `toCamelKey` | `(raw: string) => string` | Converts a raw CMS key such as `blog-posts` or `company_info` to its code name (`blogPosts`, `companyInfo`) |
 | `previewHeaders` | `() => { 'X-Robots-Tag': 'noindex, nofollow'; 'Cache-Control': 'no-store' }` | Apply to preview responses |
+| `matchLocale` | `(input: string \| readonly string[] \| null \| undefined, languages: SiteLanguages \| null \| undefined) => string \| undefined` | Picks a site language from a tag, a list of tags or an `Accept-Language` header: exact match, then subtag, then `languages.main`. Returns `undefined` without languages |
 | `seoHead` | `(seo: SeoMeta \| null \| undefined, options?: SeoHeadOptions) => { title, meta, links, scripts }` | TanStack Router `head()` shape |
 | `seoHeadHtml` | `(seo, options?) => string` | Escaped `<head>` HTML |
 | `seoJsonLd` | `(seo) => string[]` | Escaped JSON-LD strings |
@@ -19,7 +20,7 @@ ESM only. Import paths and their exports:
 | `richTextMarkdown` | `(value) => string` | `''` when empty |
 | `richTextHtml` | `(value) => string` | Static HTML; trusted CMS output only |
 
-`SeoHeadOptions` = `{ titleTemplate?: string /* contains %s */ | ((title: string) => string); siteName?: string }`.
+`SeoHeadOptions` = `{ titleTemplate?: string /* contains %s */ | ((title: string) => string); siteName?: string; locale?: string; alternates?: Partial<Record<string, string>>; main?: string }`. `locale` sets `og:locale`, `alternates` become `hreflang` links and `og:locale:alternate`, and `main` makes its alternate `x-default`.
 
 `ArecaClient` methods (plain `fetch`, no retries or caching):
 
@@ -29,6 +30,8 @@ ESM only. Import paths and their exports:
 | `syncManifest(config): Promise<{ ok: true }>` | `POST /api/sites/manifest` | schema token |
 | `fetchSnapshot(opts?: { publicationId?: string }): Promise<Snapshot>` | `GET /api/sites/snapshot/current[?publicationId=]` | site token |
 | `fetchPreview(token: string): Promise<PreviewResult>` | `GET /api/sites/preview?token=` | signed preview token |
+
+Language types from the main entry: `SiteLanguages` (`{ main; all }`), `I18nConfig` (`{ paraglide? }`), `LocalizedValues` (`{ slug?; data; seo? }`, one language of an entry as published), `PreviewLocaleStatus` (`{ complete; missing }`), `PreviewSnapshotEntry` and `PreviewSnapshotGlobal` (the preview snapshot with `localeStatus`).
 
 Types from the main entry: `ArecaClient`, `ArecaClientOptions`, `SiteContentConfig`, `AssetsConfig` (`{ download?, dir?, publicPath? }`), `CollectionConfig` (`{ route; label?; fields: Field[] }`), `Field` (a union discriminated on `type`: `reference` requires `collection`, `select` takes `options`, `date` and `datetime` take `after`), `FieldType`, `SiteManifest`, `Snapshot` (`{ publicationId, siteKey, createdAt, hash, collections, assets?, siteUrl?, schema? }`), `SnapshotAsset` (`{ id, storageKey, url, filename, mimeType, size }`), `SnapshotEntry` (the raw entry: `{ id, slug, publishedAt: string | null, data: Record<string, unknown>, seo? }`), `ImageValue`, `ReferenceValue<C = string>` (`{ collection: C; slug; id }`), `RichTextValue`, `SeoMeta`, `PreviewResult`, `PulledContentManifest`, `HeadMeta`, `HeadLink`, `HeadScript`, `SeoHeadOptions`, `SeoHeadResult`.
 
@@ -52,6 +55,10 @@ Typed content types (main entry, generated against `Register`):
 | `QueryOptions<C, S>` | `where`, `orderBy`, `limit`, `offset`, `with` |
 | `QueryResult<C, O, S>` | the entry type returned for query options `O`, with expanded references |
 | `RoutePath<R>` | a route with `$slug` replaced by `${string}` |
+| `Locale` | union of the site's language codes, from the generated `Register` (`string` without languages) |
+| `EntryLocale` | `{ locale; isFallback; locales; alternates }` added to each entry on a languages site |
+| `GlobalLocale` | `{ $locale; $isFallback }` added to each section value on a languages site |
+| `LocaleOptions` | per-call options: `{ locale?: Locale; fallback?: boolean }` (`fallback` defaults to `true`) |
 | `Href<C, S>` | the route type of collection `C`, such as `` `/blog/${string}` `` |
 | `Content<S, G>` | the content object: one property per collection, plus `resolve`, `href`, `preview`, `globals` and `previewGlobals` |
 | `ContentGlobalSchema` | one site content section in the generated `globalSchema`: `key`, `label?`, `seo`, `previewPath?`, `fields` |
@@ -100,7 +107,7 @@ Typed content types (main entry, generated against `Register`):
 
 ## Other subpaths
 
-- `@areca-cms/site-sdk/seo`: `seoHead`, `seoHeadHtml`, `seoJsonLd` and their types.
+- `@areca-cms/site-sdk/seo`: `seoHead`, `seoHeadHtml`, `seoJsonLd`, `ogLocale(tag)` (`nl-BE` gives `nl_BE` for `og:locale`) and their types.
 - `@areca-cms/site-sdk/rich-text`: `richTextDocument`, `richTextMarkdown`, `richTextHtml`.
 - `@areca-cms/site-sdk/rich-text-react`: `richTextComponents(components?: MarkdownComponents) => MarkdownComponents`. Wraps `img` so editor sizes are kept. Needs `react` (optional peer) and `@tanstack/markdown@1.0.0`.
 

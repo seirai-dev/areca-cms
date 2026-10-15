@@ -4,9 +4,12 @@ import { useServerFn } from '@tanstack/react-start'
 import { toast } from 'sonner'
 
 import { globalsQueryKey } from '#/features/globals/use-globals'
+import { useSiteLanguages } from '#/features/site-settings/use-site-settings'
 import { errorMessage } from '#/lib/admin/helpers'
 import { queryKeys } from '#/lib/content/query-keys'
+import { ROUTE_PATTERN_MAX_LENGTH } from '#/lib/content-limits'
 import { isValidPreviewPath } from '#/lib/globals'
+import { isMultilingual } from '#/lib/site-languages'
 import type { Field } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 import {
@@ -21,6 +24,9 @@ import {
   draftsFromFields,
   emptyFieldDraft,
   fieldsFromDrafts,
+  localizedRoutesFrom,
+  requiredLanguagesFrom,
+  routesDraftFrom,
   slugifyKey,
   validateFieldDrafts,
 } from './schema-drafts'
@@ -39,6 +45,10 @@ export type CollectionRecord = {
   fields: Field[]
   seoEnabled?: boolean
   previewPath?: string | null
+  /** Languages besides main that must be complete (site languages only). */
+  requiredLanguages?: string[]
+  /** Per-language route patterns (collections only). */
+  localizedRoutes?: Record<string, string> | null
 }
 
 export type SchemaSegment = 'fields' | 'settings'
@@ -55,6 +65,8 @@ function fingerprint(
     seo: boolean
     previewPath: string
     fields: FieldDraft[]
+    requiredLanguages: string[]
+    routes: Record<string, string>
   },
   kind: SchemaKind,
 ) {
@@ -66,6 +78,10 @@ function fingerprint(
     next.seo,
     next.previewPath,
     draftFingerprint(next.fields, { kind }),
+    [...next.requiredLanguages].sort(),
+    Object.entries(next.routes)
+      .filter(([, pattern]) => pattern.trim() !== '')
+      .sort(([a], [b]) => a.localeCompare(b)),
   ])
 }
 
@@ -102,6 +118,9 @@ export function useSchemaEditor({
   onDeleted?: () => void
 }) {
   const queryClient = useQueryClient()
+  // Admin-only screen; the same query as the settings page, so it stays in step.
+  const languages = useSiteLanguages(siteId, open)
+  const multilingual = isMultilingual(languages)
   const upsertCollection = useServerFn(upsertCollectionFn)
   const deleteCollection = useServerFn(deleteCollectionFn)
   const upsertGlobal = useServerFn(upsertGlobalFn)
@@ -121,6 +140,9 @@ export function useSchemaEditor({
   const [fields, setFields] = useState<FieldDraft[]>(() =>
     draftsFromFields(undefined, { kind }),
   )
+  const [requiredLanguages, setRequiredLanguages] = useState<string[]>([])
+  const [routes, setRoutes] = useState<Record<string, string>>({})
+  const [routeError, setRouteError] = useState<string | null>(null)
   const [labelError, setLabelError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [editing, setEditing] = useState<EditingField>(null)
@@ -142,6 +164,11 @@ export function useSchemaEditor({
     setPreviewPath(previewPathOf(collection))
     setPreviewPathError(null)
     setFields(nextFields)
+    const nextRequired = [...(collection?.requiredLanguages ?? [])]
+    const nextRoutes = routesDraftFrom(collection?.localizedRoutes)
+    setRequiredLanguages(nextRequired)
+    setRoutes(nextRoutes)
+    setRouteError(null)
     setLabelError(null)
     setFieldErrors({})
     setEditing(null)
@@ -157,6 +184,8 @@ export function useSchemaEditor({
           seo: Boolean(collection?.seoEnabled),
           previewPath: previewPathOf(collection),
           fields: nextFields,
+          requiredLanguages: nextRequired,
+          routes: nextRoutes,
         },
         kind,
       ),
@@ -165,7 +194,17 @@ export function useSchemaEditor({
   }, [open, collection?.key])
 
   const current = fingerprint(
-    { key, label, routePattern, enabled, seo, previewPath, fields },
+    {
+      key,
+      label,
+      routePattern,
+      enabled,
+      seo,
+      previewPath,
+      fields,
+      requiredLanguages,
+      routes,
+    },
     kind,
   )
   const dirty = current !== baseline
@@ -187,6 +226,9 @@ export function useSchemaEditor({
       seo: boolean
       previewPath: string
       fields: Field[]
+      /** Sent only on a multilingual site; omitted leaves the server as is. */
+      requiredLanguages?: string[]
+      localizedRoutes?: Record<string, string> | null
     }) =>
       isGlobal
         ? upsertGlobal({
@@ -198,6 +240,7 @@ export function useSchemaEditor({
               seo: draft.seo,
               previewPath: draft.previewPath || null,
               enabled: draft.enabled,
+              requiredLanguages: draft.requiredLanguages,
             },
           })
         : upsertCollection({
@@ -208,6 +251,8 @@ export function useSchemaEditor({
               routePattern: draft.routePattern,
               fields: draft.fields,
               enabled: draft.enabled,
+              requiredLanguages: draft.requiredLanguages,
+              localizedRoutes: draft.localizedRoutes,
             },
           }),
     onSuccess: async (_result, draft) => {
@@ -247,13 +292,21 @@ export function useSchemaEditor({
       isGlobal && trimmedPreviewPath && !isValidPreviewPath(trimmedPreviewPath)
         ? m.globals_preview_path_invalid()
         : null
+    const nextRouteError =
+      multilingual &&
+      Object.values(routes).some(
+        (pattern) => pattern.trim().length > ROUTE_PATTERN_MAX_LENGTH,
+      )
+        ? m.languages_route_too_long({ max: ROUTE_PATTERN_MAX_LENGTH })
+        : null
+    setRouteError(nextRouteError)
     setLabelError(trimmedLabel ? null : m.admin_collection_label_required())
     setPreviewPathError(nextPreviewPathError)
     setFieldErrors(nextFieldErrors)
     const badFields = Object.keys(nextFieldErrors)
       .map(Number)
       .sort((a, b) => a - b)
-    if (!trimmedLabel || nextPreviewPathError) {
+    if (!trimmedLabel || nextPreviewPathError || nextRouteError) {
       setSegmentState('settings')
       setEditing(null)
       return
@@ -276,6 +329,17 @@ export function useSchemaEditor({
       seo,
       previewPath: trimmedPreviewPath,
       fields: fieldsFromDrafts(fields, { kind }),
+      ...(multilingual
+        ? {
+            requiredLanguages: requiredLanguagesFrom(
+              requiredLanguages,
+              languages,
+            ),
+            ...(isGlobal
+              ? {}
+              : { localizedRoutes: localizedRoutesFrom(routes, languages) }),
+          }
+        : {}),
     })
   }
 
@@ -337,6 +401,20 @@ export function useSchemaEditor({
     setFieldErrors({})
   }
 
+  /** Toggles a language in or out of the required set (main is never listed). */
+  function toggleRequiredLanguage(locale: string) {
+    setRequiredLanguages((list) =>
+      list.includes(locale)
+        ? list.filter((item) => item !== locale)
+        : [...list, locale],
+    )
+  }
+
+  function setLocalizedRoute(locale: string, pattern: string) {
+    setRoutes((previous) => ({ ...previous, [locale]: pattern }))
+    setRouteError(null)
+  }
+
   function removeField(index: number) {
     // The collection's slug row (always first) cannot be removed.
     if (!isGlobal && index === 0) return
@@ -375,6 +453,14 @@ export function useSchemaEditor({
     previewPath,
     previewPathError,
     fields,
+    /** The site's languages, or null on a single-language site. */
+    languages,
+    multilingual,
+    requiredLanguages,
+    toggleRequiredLanguage,
+    routes,
+    setLocalizedRoute,
+    routeError,
     labelError,
     fieldErrors,
     editing,

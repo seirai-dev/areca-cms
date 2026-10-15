@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { collection, entry, organization, site, user } from '#/db/schema'
-import type { Field } from '#/lib/types'
+import type { Field, SiteLanguages } from '#/lib/types'
 
 export const sampleRichText = {
   type: 'doc' as const,
@@ -32,7 +32,9 @@ export function articleFields(): Field[] {
   ]
 }
 
-export async function createTestSite() {
+export async function createTestSite(
+  input: { languages?: SiteLanguages | null } = {},
+) {
   const suffix = crypto.randomUUID()
   const [org] = await db
     .insert(organization)
@@ -64,6 +66,7 @@ export async function createTestSite() {
       schemaTokenHash: createHash('sha256').update(schemaToken).digest('hex'),
       productionUrl: 'http://localhost:3999',
       previewSecret,
+      languages: input.languages ?? null,
     })
     .returning()
   if (!createdSite) throw new Error('Failed to create site')
@@ -81,7 +84,13 @@ export async function createTestSite() {
 
 export async function createTestCollection(
   siteId: string,
-  input: { key?: string; routePattern?: string; fields?: Field[] } = {},
+  input: {
+    key?: string
+    routePattern?: string
+    fields?: Field[]
+    requiredLanguages?: string[]
+    localizedRoutes?: Record<string, string> | null
+  } = {},
 ) {
   const [col] = await db
     .insert(collection)
@@ -92,6 +101,8 @@ export async function createTestCollection(
       routePattern: input.routePattern ?? '/blog/$slug',
       fields: input.fields ?? articleFields(),
       enabled: true,
+      requiredLanguages: input.requiredLanguages ?? [],
+      localizedRoutes: input.localizedRoutes ?? null,
     })
     .returning()
   if (!col) throw new Error('Failed to create collection')
@@ -124,6 +135,7 @@ export async function createTestGlobal(
     seoEnabled?: boolean
     previewPath?: string | null
     enabled?: boolean
+    requiredLanguages?: string[]
   } = {},
 ) {
   return db.transaction(async (tx) => {
@@ -139,6 +151,7 @@ export async function createTestGlobal(
         enabled: input.enabled ?? true,
         seoEnabled: input.seoEnabled ?? false,
         previewPath: input.previewPath ?? null,
+        requiredLanguages: input.requiredLanguages ?? [],
       })
       .returning()
     if (!col) throw new Error('Failed to create global')

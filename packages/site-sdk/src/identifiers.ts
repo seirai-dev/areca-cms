@@ -23,6 +23,7 @@ export function isSafeIdentifier(value: string): boolean {
  * content keys cannot take them. Stored lowercase: the check is
  * case-insensitive. `previewglobals` is the camelCase of `preview-globals`
  * and `preview_globals`, the member name `content.previewGlobals`.
+ * `in`, `languages` and `matchlocale` are the language members.
  */
 const reservedCollectionKeys = new Set([
   'resolve',
@@ -30,6 +31,9 @@ const reservedCollectionKeys = new Set([
   'preview',
   'globals',
   'previewglobals',
+  'in',
+  'languages',
+  'matchlocale',
 ])
 
 /** Case-insensitive. Field keys may use these names; collection and global keys may not. */

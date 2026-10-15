@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
 import {
   ArrowLeft,
@@ -8,6 +9,7 @@ import {
   ClockCounterClockwise,
   DotsThree,
   Eye,
+  WarningCircle,
 } from '@phosphor-icons/react'
 
 import { Button } from '#/components/ui/button'
@@ -75,6 +77,8 @@ export function GlobalEditorTopBar({
   onScheduleSubmit,
   onCancelSchedule,
   onOpenHistory,
+  languageBar,
+  readyBlock = null,
 }: {
   siteId: string
   label: string
@@ -110,17 +114,23 @@ export function GlobalEditorTopBar({
   onScheduleSubmit: (at: Date, timeZone: string) => void
   onCancelSchedule: () => void
   onOpenHistory: () => void
+  /** The language bar, rendered as the second row of the sticky header. */
+  languageBar?: ReactNode
+  /** A required language blocks ready: the reason is clickable and switches to it. */
+  readyBlock?: { message: string; onFix: () => void } | null
 }) {
   const mobile = useIsMobile()
   // Ready, unchanged since: the button says so and stays disabled.
   const readyDone = hasReady && !markable && backendStatus === 'published'
-  const markDisabled = !canManage || busy || readyDone
+  const markDisabled = !canManage || busy || readyDone || readyBlock !== null
 
   const markReason = !canManage
     ? editorPublishReason()
     : readyDone
       ? m.editor_ready_reason()
-      : null
+      : readyBlock
+        ? readyBlock.message
+        : null
 
   // Reasons for disabled secondary actions, shown in the ⋯ menu on phones
   // (where there is no hover tooltip).
@@ -269,7 +279,24 @@ export function GlobalEditorTopBar({
               )
             ) : null}
 
-            <Hint label={markReason ?? ''}>
+            {readyBlock ? (
+              // The reason lives in tooltips, not in the bar: the section
+              // title keeps its room. The icon switches to the language.
+              <Hint label={readyBlock.message}>
+                <Button
+                  type="button"
+                  variant="quiet"
+                  size="icon-sm"
+                  onClick={readyBlock.onFix}
+                  aria-label={readyBlock.message}
+                  data-testid="ready-blocker"
+                  className="text-status-warning"
+                >
+                  <WarningCircle weight="fill" />
+                </Button>
+              </Hint>
+            ) : null}
+            <Hint label={markReason ?? ''} wrapDisabled={readyBlock !== null}>
               <Button
                 type="button"
                 variant={readyDone ? 'secondary' : 'primary'}
@@ -391,6 +418,7 @@ export function GlobalEditorTopBar({
           ) : null}
         </Popover>
       </div>
+      {languageBar}
     </header>
   )
 }

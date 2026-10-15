@@ -898,3 +898,25 @@ html.dark,
     }
   }
 }
+
+/* AI translation: fields it fills fade an accent highlight out (1.2s). The
+   class is added and removed by translate-flash in use-ai-translation.tsx. */
+@keyframes translate-flash {
+  from {
+    background-color: var(--color-accent-soft);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
+.translate-flash {
+  animation: translate-flash 1.2s ease-out;
+  border-radius: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .translate-flash {
+    animation: none;
+  }
+}

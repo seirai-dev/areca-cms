@@ -10,7 +10,10 @@ import { assetUrl, assetUsage, deleteAsset, updateAsset } from '#/server/assets'
 import { siteAssets } from '#/server/assets/site-scope'
 import { uploadAssetFromUrl } from '#/server/assets/remote'
 import { audit } from '#/server/audit'
+import { loadSiteLanguages } from '#/server/content/locale-validation'
 import { McpNotFoundError } from '../errors'
+import { resolveLocale } from '../locales'
+import { localeInput } from './entries'
 
 import { idSchema } from '../schemas'
 import type { ToolRegistry } from '../tool-kit'
@@ -164,13 +167,14 @@ export function registerAssetTools(registry: ToolRegistry): void {
     name: 'update_asset_alt',
     title: 'Update alt text',
     description:
-      'Sets the alt text of an asset: one sentence describing what the image shows, for screen readers and search. Pass an empty string to clear it.',
+      'Sets the alt text of an asset: one sentence describing what the image shows, for screen readers and search. Pass an empty string to clear it. On a site with languages, locale sets the alt text for that language (the main alt is used where a language has none).',
     inputSchema: z.object({
       id: idSchema('asset'),
       altText: z
         .string()
         .max(ALT_TEXT_MAX_LENGTH)
         .describe('The new alt text. Empty string clears it.'),
+      locale: localeInput,
     }),
     annotations: {
       readOnlyHint: false,
@@ -179,9 +183,15 @@ export function registerAssetTools(registry: ToolRegistry): void {
     },
     run: async (input, actor) => {
       await requireAsset(actor, input.id)
+      const languages = await loadSiteLanguages(actor.siteId)
+      const target = resolveLocale(languages, input.locale)
       const row = await updateAsset(
         input.id,
-        { altText: input.altText },
+        {
+          altText: input.altText,
+          locale: target?.locale ?? null,
+          mainLocale: languages?.main ?? null,
+        },
         actor.organizationId,
       )
       await audit({
@@ -193,7 +203,12 @@ export function registerAssetTools(registry: ToolRegistry): void {
         targetId: row.id,
         meta: { filename: row.originalFilename },
       })
-      return describeAsset(row)
+      return {
+        ...describeAsset(row),
+        ...(target && !target.isMain
+          ? { locale: target.locale, localeAlt: row.altI18n[target.locale] || '' }
+          : {}),
+      }
     },
   })
 

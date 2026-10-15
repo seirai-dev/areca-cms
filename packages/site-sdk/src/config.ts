@@ -4,7 +4,9 @@ import type {
   AssetsConfig,
   CollectionConfig,
   GlobalConfig,
+  I18nConfig,
   SiteContentConfig,
+  SiteLanguages,
   SiteManifest,
 } from './types.js'
 
@@ -23,6 +25,8 @@ type FieldAuthorBase = {
   label: string
   required?: boolean
   description?: string
+  /** Stored per language. Default: on for text, textarea, richtext and url; off for the rest. */
+  translatable?: boolean
 }
 
 /** Keys of the date and datetime fields in a collection's `fields` tuple. */
@@ -81,6 +85,10 @@ type FieldInput<CollectionKeys extends string, Owner, IsGlobal extends boolean> 
 type CollectionInput<CollectionKeys extends string, Collection> = {
   label?: string
   route: `${string}$slug${string}`
+  /** Per-language route patterns. Each must contain `$slug`; keys must be in `languages.all`. */
+  routes?: { readonly [locale: string]: `${string}$slug${string}` }
+  /** Languages besides main that must be complete before going live. */
+  requiredLanguages?: readonly string[]
   fields: readonly FieldInput<CollectionKeys, Collection, false>[]
 }
 
@@ -88,6 +96,8 @@ type GlobalInput<CollectionKeys extends string, Global> = {
   label?: string
   seo?: boolean
   previewPath?: `/${string}`
+  /** Languages besides main that must be complete before going live. */
+  requiredLanguages?: readonly string[]
   fields: readonly FieldInput<CollectionKeys, Global, true>[]
 }
 
@@ -105,22 +115,34 @@ export function defineSiteContent<
   } = {},
 >(config: {
   siteKey: string
+  /** Content languages. Omit for a single-language site. */
+  languages?: SiteLanguages
   collections: TCollections
   globals?: TGlobals
   assets?: AssetsConfig
+  /** SDK-only settings, such as the Paraglide runtime. Never sent to the CMS. */
+  i18n?: I18nConfig
 }): {
   siteKey: string
+  languages?: SiteLanguages
   collections: TCollections
   globals?: TGlobals
   assets?: AssetsConfig
+  i18n?: I18nConfig
 } {
   return config
 }
 
+/**
+ * The manifest the CMS receives: collections, site content sections and
+ * languages. `i18n` and `assets` stay local. Throws on invalid languages,
+ * routes and required languages, like the pull does for names.
+ */
 export function manifestFromConfig(config: SiteContentConfig): SiteManifest {
   const collections: SiteManifest['collections'] = {}
   // Throws on reserved, colliding and case-only names, like the pull does.
   camelCollectionKeys(Object.keys(config.collections))
+  checkLanguages(config)
 
   for (const [key, collection] of Object.entries(config.collections)) {
     assertSafeIdentifier(key)
@@ -129,11 +151,18 @@ export function manifestFromConfig(config: SiteContentConfig): SiteManifest {
       route: collection.route,
       fields: collection.fields,
       ...(collection.label !== undefined ? { label: collection.label } : {}),
+      ...(collection.routes !== undefined ? { routes: { ...collection.routes } } : {}),
+      ...(collection.requiredLanguages !== undefined
+        ? { requiredLanguages: [...collection.requiredLanguages] }
+        : {}),
     }
   }
 
   const globals = globalsManifest(config.globals ?? {})
   return {
+    ...(config.languages !== undefined
+      ? { languages: { main: config.languages.main, all: [...config.languages.all] } }
+      : {}),
     collections,
     ...(Object.keys(globals).length > 0 ? { globals } : {}),
   }
@@ -151,9 +180,72 @@ function globalsManifest(globals: Record<string, GlobalConfig>): Record<string, 
       ...(global.label !== undefined ? { label: global.label } : {}),
       ...(global.seo !== undefined ? { seo: global.seo } : {}),
       ...(global.previewPath !== undefined ? { previewPath: global.previewPath } : {}),
+      ...(global.requiredLanguages !== undefined
+        ? { requiredLanguages: [...global.requiredLanguages] }
+        : {}),
     }
   }
   return result
+}
+
+/**
+ * Canonical form of a BCP 47 tag (`nl-be` becomes `nl-BE`). Throws for a
+ * tag the platform does not accept.
+ */
+function canonicalTag(tag: string, owner: string): string {
+  try {
+    return Intl.getCanonicalLocales(tag)[0]!
+  } catch {
+    throw new Error(`Invalid language tag "${tag}" in ${owner}`)
+  }
+}
+
+/**
+ * Validates `languages` and every per-language setting that refers to it.
+ * Tags are compared in canonical form, so `NL` and `nl` count as one language.
+ */
+function checkLanguages(config: SiteContentConfig): void {
+  const { languages } = config
+  const all = languages ? languages.all.map((tag) => canonicalTag(tag, 'languages.all')) : []
+  if (languages) {
+    const main = canonicalTag(languages.main, 'languages.main')
+    if (all.length === 0) throw new Error('languages.all must list at least one language')
+    const seen = new Set<string>()
+    for (const tag of all) {
+      if (seen.has(tag)) throw new Error(`languages.all has a duplicate language: ${tag}`)
+      seen.add(tag)
+    }
+    if (!seen.has(main)) {
+      throw new Error(`The main language "${languages.main}" must be listed in languages.all`)
+    }
+  }
+
+  const check = (tag: string, owner: string) => {
+    if (!languages) {
+      throw new Error(`${owner} needs languages. Set languages in the config first.`)
+    }
+    const canonical = canonicalTag(tag, owner)
+    if (!all.includes(canonical)) {
+      throw new Error(`${owner} language "${tag}" is not in languages.all`)
+    }
+  }
+
+  for (const [key, collection] of Object.entries(config.collections)) {
+    for (const [tag, pattern] of Object.entries(collection.routes ?? {})) {
+      check(tag, `routes of collection "${key}"`)
+      if (!pattern.includes('$slug')) {
+        throw new Error(`The route for "${tag}" in collection "${key}" must contain $slug`)
+      }
+    }
+    for (const tag of collection.requiredLanguages ?? []) {
+      check(tag, `requiredLanguages of collection "${key}"`)
+    }
+  }
+  for (const [key, global] of Object.entries(config.globals ?? {})) {
+    for (const tag of global.requiredLanguages ?? []) {
+      check(tag, `requiredLanguages of site content "${key}"`)
+    }
+  }
 }
 
 function checkFields(

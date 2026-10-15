@@ -6,6 +6,7 @@ const state = vi.hoisted(() => ({
   entry: null as unknown,
   global: null as unknown,
   verify: null as unknown,
+  calls: [] as unknown[],
 }))
 
 vi.mock('#/db', () => ({
@@ -16,8 +17,14 @@ vi.mock('#/db', () => ({
   },
 }))
 vi.mock('#/server/content/snapshot', () => ({
-  buildPreviewEntry: async () => state.entry,
-  buildPreviewGlobal: async () => state.global,
+  buildPreviewEntry: async (...args: unknown[]) => {
+    state.calls.push(['entry', args])
+    return state.entry
+  },
+  buildPreviewGlobal: async (...args: unknown[]) => {
+    state.calls.push(['global', args])
+    return state.global
+  },
 }))
 vi.mock('#/server/content/preview-token', () => ({
   decodePreviewToken: (token: string) =>
@@ -27,10 +34,15 @@ vi.mock('#/server/content/preview-token', () => ({
 
 import { getSitesPreview } from './preview'
 
-const req = (token?: string) =>
-  new Request(
-    `http://cms.test/api/sites/preview${token ? `?token=${token}` : ''}`,
+const req = (token?: string, locale?: string) => {
+  const params = new URLSearchParams()
+  if (token) params.set('token', token)
+  if (locale) params.set('locale', locale)
+  const query = params.toString()
+  return new Request(
+    `http://cms.test/api/sites/preview${query ? `?${query}` : ''}`,
   )
+}
 
 function expectNoStore(res: Response) {
   expect(res.headers.get('Cache-Control')).toBe('no-store, private')
@@ -111,5 +123,26 @@ describe('preview API caching', () => {
     const res = await getSitesPreview(req('t'))
     expect(res.status).toBe(404)
     expectNoStore(res)
+  })
+
+  it('passes ?locale= to the entry preview, and it wins over the token locale', async () => {
+    state.verify = { siteId: 'site-1', collection: 'posts', slug: 'a', locale: 'fr' }
+    state.calls = []
+    await getSitesPreview(req('t', 'en'))
+    expect(state.calls.at(-1)).toEqual(['entry', ['site-1', 'posts', 'a', 'en']])
+  })
+
+  it('falls back to the token locale when the query has none', async () => {
+    state.verify = { siteId: 'site-1', collection: 'posts', slug: 'a', locale: 'fr' }
+    state.calls = []
+    await getSitesPreview(req('t'))
+    expect(state.calls.at(-1)).toEqual(['entry', ['site-1', 'posts', 'a', 'fr']])
+  })
+
+  it('passes the locale to a section preview', async () => {
+    state.verify = { siteId: 'site-1', global: 'companyInfo', locale: 'nl' }
+    state.calls = []
+    await getSitesPreview(req('t'))
+    expect(state.calls.at(-1)).toEqual(['global', ['site-1', 'companyInfo', 'nl']])
   })
 })

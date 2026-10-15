@@ -24,6 +24,7 @@ import { QueryError } from '#/components/ui/query-error'
 import { Skeleton } from '#/components/ui/skeleton'
 import { SlideOver } from '#/components/ui/slide-over'
 import { entryTransitionName } from '#/features/collection/entry-item'
+import { baseLocale, readLocale, SLUG_KEY } from '#/lib/content-locale'
 import {
   entryUiStatus,
   isEditedSinceReady,
@@ -43,14 +44,31 @@ import { listCollectionsFn, listInboundReferencesFn } from '#/server/fn/content'
 import type { Me } from '#/server/fn/me'
 
 import { AiSeoDialog } from './ai-seo-dialog'
+import { TranslateLanguageButton } from './translate-language-button'
+import { useAiTranslation } from './use-ai-translation'
 
 import { DetailsPanel } from './details-panel'
+import type { LanguageRow } from './details-panel'
 import { EditorCanvas } from './editor-canvas'
 import { EditorTopBar } from './editor-top-bar'
 import type { PrimaryState } from './editor-top-bar'
+import { LanguageBar } from './language-bar'
+import { LanguageFade } from './language-fade'
+import { uiLanguageName } from '#/lib/site-languages'
+import {
+  blockersFor,
+  fieldLabels,
+  localeContext,
+  localeSummaries,
+  requiredLocales,
+} from './language-state'
+import type { LocaleBlocker } from './language-state'
+import { LocaleFieldsContext } from './locale-fields'
+import type { LocaleFields } from './locale-fields'
 import { ScheduledVersion } from './scheduled-version'
 import { ScheduleForm } from './schedule-form'
 import { SeoPanel, plainTextOf } from './seo-panel'
+import { useContentLanguage } from './use-content-language'
 import { useEntryEditor } from './use-entry-editor'
 
 type CollectionRecord = {
@@ -59,6 +77,8 @@ type CollectionRecord = {
   routePattern: string
   enabled: boolean
   fields: Field[]
+  /** Languages besides main that must be complete before going live. */
+  requiredLanguages?: string[]
 }
 
 const DETAILS_KEY = 'areca.editor.details'
@@ -195,6 +215,122 @@ function EntryEditorView({
     onRevealError: (key) => revealField(key),
   })
   const { entry, data, titleField, slugField } = editor
+
+  // Content languages (multilingual sites only; null otherwise). The editor
+  // keeps the full entry in `data`; the fields show one language of it.
+  const lang = useContentLanguage({ siteId, languages: site.languages })
+  const active = lang.active
+  const ctx = React.useMemo(
+    () => (lang.languages ? localeContext(lang.languages, fields) : null),
+    [lang.languages, fields],
+  )
+  const requiredLanguages = collection.requiredLanguages ?? []
+  const requiredKey = requiredLanguages.join('|')
+  const required = lang.languages
+    ? requiredLocales(lang.languages, requiredLanguages)
+    : []
+  const summaries = React.useMemo(
+    () => (ctx ? localeSummaries(data, ctx, required) : []),
+    // `requiredKey` stands in for the contents of `required`.
+    [data, ctx, requiredKey],
+  )
+  const view = React.useMemo(
+    () => (ctx && active ? readLocale(data, active, ctx) : data),
+    [data, ctx, active],
+  )
+  const mainView = React.useMemo(
+    () => (ctx ? readLocale(data, lang.main, ctx) : data),
+    [data, ctx, lang.main],
+  )
+  const notMainLocale = Boolean(ctx && active && !lang.isMain)
+  const aiQuery = useQuery({
+    queryKey: queryKeys.aiAvailability(),
+    queryFn: () => getAiAvailabilityFn(),
+    staleTime: 30_000,
+  })
+  // AI translation needs AI set up and a saved entry (the server reads it).
+  const translateEnabled =
+    aiQuery.data?.enabled === true && Boolean(editor.entryId)
+  const translate = useAiTranslation({
+    siteId,
+    entryId: editor.entryId ?? '',
+    fields,
+    main: lang.main,
+    active: active ?? lang.main,
+    source: mainView,
+    target: view,
+    seoEnabled: true,
+    applyPatch: (patch) => {
+      if (ctx && active) editor.updateLocaleFields(patch, active, ctx)
+    },
+    save: editor.save,
+  })
+
+  const localeFields: LocaleFields | null =
+    ctx && active
+      ? {
+          active,
+          main: lang.main,
+          mainName: uiLanguageName(lang.main),
+          mainView,
+          isMain: lang.isMain,
+          onTranslateField: translateEnabled ? translate.translateField : null,
+          translatingKey:
+            translate.pendingScope === 'language'
+              ? null
+              : translate.pendingScope,
+        }
+      : null
+  const blockers: LocaleBlocker[] = ctx ? blockersFor(data, ctx, required) : []
+  const blocker: LocaleBlocker | null =
+    editor.serverBlockers.at(0) ?? blockers.at(0) ?? null
+
+  // A required language that blocks ready: switch to it and focus the first
+  // missing field.
+  function focusBlocker(item: LocaleBlocker) {
+    lang.setActive(item.locale)
+    const first = item.missing[0]
+    if (first) requestAnimationFrame(() => revealField(first))
+  }
+
+  const readyBlock = blocker
+    ? {
+        message: m.editor_language_blocker({
+          language: uiLanguageName(blocker.locale),
+          fields: fieldLabels(blocker.missing, fields).join(', '),
+        }),
+        onFix: () => focusBlocker(blocker),
+      }
+    : null
+
+  // Writes the active language. On the main language (and single-language
+  // sites) this is the ordinary update, which also keeps the slug in step
+  // with the title.
+  function onLocaleChange(key: string, value: unknown) {
+    if (!ctx || !active) {
+      editor.updateField(key, value)
+      return
+    }
+    if (lang.isMain && baseLocale(data, ctx) === lang.main) {
+      editor.updateField(key, value)
+      return
+    }
+    editor.updateLocaleField(
+      !lang.isMain && key === slugField?.key ? SLUG_KEY : key,
+      value,
+      active,
+      ctx,
+    )
+  }
+
+  const languageRows: LanguageRow[] | undefined =
+    lang.languages && ctx
+      ? summaries.map((summary) => ({
+          summary,
+          name: uiLanguageName(summary.locale),
+        }))
+      : undefined
+  const mainSlugValue = slugField ? mainView[slugField.key] : undefined
   const inboundQuery = useQuery({
     queryKey: queryKeys.inboundReferences(editor.entryId ?? ''),
     queryFn: () => listInboundReferencesFn({ data: { id: editor.entryId! } }),
@@ -202,12 +338,6 @@ function EntryEditorView({
   })
   const inboundTitles = (inboundQuery.data ?? []).map((row) => row.title)
   const [aiOpen, setAiOpen] = React.useState(false)
-  const aiQuery = useQuery({
-    queryKey: queryKeys.aiAvailability(),
-    queryFn: () => getAiAvailabilityFn(),
-    staleTime: 30_000,
-  })
-
   const canvasFields = fields.filter(
     (field) =>
       field.key !== titleField?.key &&
@@ -304,9 +434,9 @@ function EntryEditorView({
 
   const title =
     titleField &&
-    typeof data[titleField.key] === 'string' &&
-    (data[titleField.key] as string).trim()
-      ? (data[titleField.key] as string)
+    typeof view[titleField.key] === 'string' &&
+    (view[titleField.key] as string).trim()
+      ? (view[titleField.key] as string)
       : m.editor_untitled()
   const uiStatus = entry ? entryUiStatus(entry, live) : 'draft'
   const editedSinceReady = entry
@@ -341,20 +471,33 @@ function EntryEditorView({
     }
   }
 
-  const seo = readEntrySeo(data)
-  const slugValue = slugField ? data[slugField.key] : undefined
+  const seo = readEntrySeo(view)
+  // A translation without its own slug uses the main slug.
+  const ownSlug = view[SLUG_KEY]
+  const slugValue = slugField
+    ? notMainLocale
+      ? typeof ownSlug === 'string' && ownSlug
+        ? ownSlug
+        : mainSlugValue
+      : view[slugField.key]
+    : undefined
   const excerptField = fields.find(
     (field) =>
       field.type === 'textarea' &&
-      typeof data[field.key] === 'string' &&
-      (data[field.key] as string).trim(),
+      typeof view[field.key] === 'string' &&
+      (view[field.key] as string).trim(),
   )
   const bodyField = fields.find((field) => field.type === 'richtext')
   const fallbackDescription = excerptField
-    ? (data[excerptField.key] as string)
+    ? (view[excerptField.key] as string)
     : bodyField
-      ? plainTextOf(data[bodyField.key]) || null
+      ? plainTextOf(view[bodyField.key]) || null
       : null
+  // The slug field edits the language's own `$slug` on translations.
+  const detailsData =
+    slugField && notMainLocale
+      ? { ...view, [slugField.key]: typeof ownSlug === 'string' ? ownSlug : '' }
+      : view
 
   const details = (
     <DetailsPanel
@@ -365,11 +508,19 @@ function EntryEditorView({
       fields={panelFields}
       slugField={slugField}
       titleField={titleField}
-      data={data}
+      data={detailsData}
       errors={editor.fieldErrors}
-      onChange={editor.updateField}
-      slugManual={editor.slugManual}
+      onChange={onLocaleChange}
+      slugManual={editor.slugManual && !notMainLocale}
       onResetSlug={editor.resetSlugFromTitle}
+      slugPlaceholder={
+        notMainLocale && typeof mainSlugValue === 'string'
+          ? mainSlugValue
+          : undefined
+      }
+      slugHelper={notMainLocale ? m.editor_language_slug_helper() : undefined}
+      languageRows={languageRows}
+      onSelectLanguage={lang.setActive}
       entry={entry}
       live={live}
       isNew={editor.isNew}
@@ -385,7 +536,7 @@ function EntryEditorView({
       seoPanel={
         <SeoPanel
           seo={seo}
-          onChange={(next) => editor.updateField(SEO_KEY, next)}
+          onChange={(next) => onLocaleChange(SEO_KEY, next)}
           errors={editor.fieldErrors}
           organizationId={site.organizationId}
           productionUrl={site.productionUrl}
@@ -421,324 +572,370 @@ function EntryEditorView({
 
   const hasErrors = editor.errorCount > 0 || Boolean(editor.formError)
 
-  return (
-    <div
-      data-testid="entry-editor"
-      data-ready={editor.ready ? 'true' : 'false'}
-      data-dirty={editor.dirty ? 'true' : 'false'}
-      data-entry-id={editor.entryId}
-      style={{ '--editor-bar-h': '56px' } as React.CSSProperties}
-      className="-mb-6 min-h-[calc(100dvh-3rem)]"
-    >
-      <EditorTopBar
-        siteId={siteId}
-        collectionKey={collection.key}
-        collectionLabel={collection.label}
-        title={title}
-        showTitle={!titleVisible}
-        uiStatus={uiStatus}
-        backendStatus={entry?.status ?? 'draft'}
-        scheduledAt={entry?.scheduledAt}
-        editedSinceReady={editedSinceReady}
-        saveStatus={editor.status}
-        isNew={editor.isNew}
-        lastSavedAt={editor.lastSavedAt}
-        updatedAt={entry?.updatedAt}
-        errorCount={editor.errorCount}
-        onSave={() => void editor.save()}
-        previewUrl={editor.previewUrl}
-        canManage={canManage}
-        primary={primary}
-        busy={editor.busy}
-        primaryPending={editor.markReadyPending || editor.goLiveNowPending}
-        scheduled={entry?.status === 'scheduled'}
-        canUnpublish={entry?.status === 'published'}
-        canArchive={entry?.status !== 'archived'}
-        hasRichText={canvasFields.some((field) => field.type === 'richtext')}
-        previewing={previewing}
-        onTogglePreviewing={() => setPreviewing((value) => !value)}
-        onGenerateSeo={
-          aiQuery.data?.enabled === true ? () => setAiOpen(true) : undefined
-        }
-        onMarkReady={editor.markReady}
-        onGoLiveNow={() => void goLiveNow()}
-        goLiveBlocked={
-          !canGoLive({
-            canPublish: canManage,
-            blockers: release.data?.blockers,
-          })
-        }
-        onSchedule={() => setScheduleOpen(true)}
-        onCancelSchedule={editor.cancelSchedule}
-        onUnpublish={editor.unpublish}
-        onArchive={editor.archive}
-        onDelete={() => setDeleteOpen(true)}
-        detailsOpen={detailsOpen}
-        onToggleDetails={toggleDetails}
-        entryId={editor.entryId}
-        scheduleAnchor={(node) =>
-          mobile ? (
-            node
-          ) : (
-            <Popover open={scheduleOpen} onOpenChange={setScheduleOpen}>
-              <PopoverAnchor asChild>{node}</PopoverAnchor>
-              <PopoverContent
-                align="end"
-                sideOffset={10}
-                className="w-[360px] p-5"
-                data-testid="schedule-popover"
-              >
-                <div className="mb-4 grid gap-0.5">
-                  <p className="text-headline text-text-primary">
-                    {m.editor_schedule_title()}
-                  </p>
-                  <p className="text-callout text-text-secondary">
-                    {m.editor_schedule_description()}
-                  </p>
-                </div>
-                {scheduleForm}
-              </PopoverContent>
-            </Popover>
-          )
+  const languageBar =
+    lang.languages && ctx && active ? (
+      <LanguageBar
+        main={lang.main}
+        active={active}
+        summaries={summaries}
+        fields={fields}
+        onSelect={lang.setActive}
+        trailing={
+          translateEnabled && !lang.isMain ? (
+            <TranslateLanguageButton
+              label={m.editor_translate_language({
+                language: uiLanguageName(lang.main),
+              })}
+              running={translate.pendingScope === 'language'}
+              disabled={!translate.hasSource}
+              disabledReason={m.editor_translate_add_source({
+                language: uiLanguageName(lang.main),
+              })}
+              onClick={translate.translateLanguage}
+            />
+          ) : undefined
         }
       />
+    ) : undefined
 
+  const canvas = (
+    <EditorCanvas
+      titleField={titleField}
+      canvasFields={canvasFields}
+      data={view}
+      errors={editor.fieldErrors}
+      onChange={onLocaleChange}
+      organizationId={site.organizationId}
+      previewing={previewing}
+      titleRef={titleRef}
+      transitionName={
+        editor.entryId ? entryTransitionName(editor.entryId) : undefined
+      }
+    />
+  )
+
+  return (
+    <LocaleFieldsContext.Provider value={localeFields}>
       <div
-        className={cn(
-          'grid grid-cols-[minmax(0,1fr)] items-start gap-10 pb-24',
-          desktop && detailsOpen && 'lg:grid-cols-[minmax(0,1fr)_340px]',
-        )}
+        data-testid="entry-editor"
+        data-ready={editor.ready ? 'true' : 'false'}
+        data-dirty={editor.dirty ? 'true' : 'false'}
+        data-entry-id={editor.entryId}
+        style={
+          {
+            // Sticky offsets below the header: 56px row, plus the 44px language row.
+            '--editor-bar-h': languageBar ? '100px' : '56px',
+          } as React.CSSProperties
+        }
+        className="-mb-6 min-h-[calc(100dvh-3rem)]"
       >
-        <section
-          className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6 px-1 pt-4 sm:pt-10"
-          aria-label={m.editor_canvas_label()}
+        <EditorTopBar
+          languageBar={languageBar}
+          readyBlock={readyBlock}
+          siteId={siteId}
+          collectionKey={collection.key}
+          collectionLabel={collection.label}
+          title={title}
+          showTitle={!titleVisible}
+          uiStatus={uiStatus}
+          backendStatus={entry?.status ?? 'draft'}
+          scheduledAt={entry?.scheduledAt}
+          editedSinceReady={editedSinceReady}
+          saveStatus={editor.status}
+          isNew={editor.isNew}
+          lastSavedAt={editor.lastSavedAt}
+          updatedAt={entry?.updatedAt}
+          errorCount={editor.errorCount}
+          onSave={() => void editor.save()}
+          previewUrl={editor.previewUrl}
+          canManage={canManage}
+          primary={primary}
+          busy={editor.busy}
+          primaryPending={editor.markReadyPending || editor.goLiveNowPending}
+          scheduled={entry?.status === 'scheduled'}
+          canUnpublish={entry?.status === 'published'}
+          canArchive={entry?.status !== 'archived'}
+          hasRichText={canvasFields.some((field) => field.type === 'richtext')}
+          previewing={previewing}
+          onTogglePreviewing={() => setPreviewing((value) => !value)}
+          onGenerateSeo={
+            aiQuery.data?.enabled === true ? () => setAiOpen(true) : undefined
+          }
+          onMarkReady={editor.markReady}
+          onGoLiveNow={() => void goLiveNow()}
+          goLiveBlocked={
+            !canGoLive({
+              canPublish: canManage,
+              blockers: release.data?.blockers,
+            })
+          }
+          onSchedule={() => setScheduleOpen(true)}
+          onCancelSchedule={editor.cancelSchedule}
+          onUnpublish={editor.unpublish}
+          onArchive={editor.archive}
+          onDelete={() => setDeleteOpen(true)}
+          detailsOpen={detailsOpen}
+          onToggleDetails={toggleDetails}
+          entryId={editor.entryId}
+          scheduleAnchor={(node) =>
+            mobile ? (
+              node
+            ) : (
+              <Popover open={scheduleOpen} onOpenChange={setScheduleOpen}>
+                <PopoverAnchor asChild>{node}</PopoverAnchor>
+                <PopoverContent
+                  align="end"
+                  sideOffset={10}
+                  className="w-[360px] p-5"
+                  data-testid="schedule-popover"
+                >
+                  <div className="mb-4 grid gap-0.5">
+                    <p className="text-headline text-text-primary">
+                      {m.editor_schedule_title()}
+                    </p>
+                    <p className="text-callout text-text-secondary">
+                      {m.editor_schedule_description()}
+                    </p>
+                  </div>
+                  {scheduleForm}
+                </PopoverContent>
+              </Popover>
+            )
+          }
+        />
+
+        <div
+          className={cn(
+            'grid grid-cols-[minmax(0,1fr)] items-start gap-10 pb-24',
+            desktop && detailsOpen && 'lg:grid-cols-[minmax(0,1fr)_340px]',
+          )}
         >
-          {editor.conflict || editor.recoveredDraft ? (
-            <div
-              role="alert"
-              className="mx-auto grid w-full max-w-[720px] gap-3 rounded-card border border-border-error/30 p-4"
-            >
-              <p>
-                {editor.conflict
-                  ? m.editor_draft_conflict_notice()
-                  : m.editor_draft_recovered_notice()}
-              </p>
-              <div className="flex flex-wrap gap-4">
-                <button
-                  type="button"
-                  className="underline"
-                  onClick={() => void editor.reloadServerDraft()}
-                >
-                  {m.editor_reload_server_draft()}
-                </button>
-                <button
-                  type="button"
-                  className="underline"
-                  onClick={() => void editor.reapplyRecoveredDraft()}
-                >
-                  {m.editor_reapply_recovered_draft()}
-                </button>
-                {!editor.conflict && (
+          <section
+            className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6 px-1 pt-4 sm:pt-10"
+            aria-label={m.editor_canvas_label()}
+          >
+            {editor.conflict || editor.recoveredDraft ? (
+              <div
+                role="alert"
+                className="mx-auto grid w-full max-w-[720px] gap-3 rounded-card border border-border-error/30 p-4"
+              >
+                <p>
+                  {editor.conflict
+                    ? m.editor_draft_conflict_notice()
+                    : m.editor_draft_recovered_notice()}
+                </p>
+                <div className="flex flex-wrap gap-4">
                   <button
                     type="button"
                     className="underline"
-                    onClick={editor.discardRecoveredDraft}
+                    onClick={() => void editor.reloadServerDraft()}
                   >
-                    {m.editor_discard_recovered_draft()}
+                    {m.editor_reload_server_draft()}
                   </button>
-                )}
+                  <button
+                    type="button"
+                    className="underline"
+                    onClick={() => void editor.reapplyRecoveredDraft()}
+                  >
+                    {m.editor_reapply_recovered_draft()}
+                  </button>
+                  {!editor.conflict && (
+                    <button
+                      type="button"
+                      className="underline"
+                      onClick={editor.discardRecoveredDraft}
+                    >
+                      {m.editor_discard_recovered_draft()}
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          ) : null}
-          {editor.restoreSkippedFields.length > 0 ? (
-            <section
-              role="status"
-              className="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"
-            >
-              <h2 className="font-semibold">
-                {m.editor_revision_skipped_fields()}
-              </h2>
-              <p className="mt-1">{m.editor_revision_keep_current()}</p>
-              <ul className="mt-3 list-disc space-y-1 pl-5">
-                {editor.restoreSkippedFields.map((field) => (
-                  <li key={field.key}>
-                    <strong>{field.label}</strong>: {field.reason}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ) : null}
-          {entry?.status === 'scheduled' &&
-          entry.scheduledData &&
-          entry.scheduledSlug ? (
-            <ScheduledVersion
-              fields={fields}
-              data={entry.scheduledData}
-              slug={entry.scheduledSlug}
-              siteId={siteId}
-              organizationId={site.organizationId}
-            />
-          ) : null}
-          {hasErrors ? (
-            <div
-              role="alert"
-              data-testid="editor-errors"
-              className="mx-auto flex w-full max-w-[720px] items-start gap-3 rounded-card border border-border-error/30 bg-status-error-bg px-4 py-3 text-[14px] leading-5 text-text-primary"
-            >
-              <WarningCircle
-                weight="fill"
-                className="mt-0.5 size-4 shrink-0 text-icon-error"
-              />
-              <span className="grid gap-0.5">
-                <span className="font-medium">
-                  {editor.errorCount > 0
-                    ? editor.errorCount === 1
-                      ? m.editor_save_fix_one()
-                      : m.editor_save_fix_other({ count: editor.errorCount })
-                    : m.editor_save_failed()}
-                </span>
-                {editor.formError ? (
-                  <span className="text-callout text-text-secondary">
-                    {editor.formError}
-                  </span>
-                ) : null}
-              </span>
-            </div>
-          ) : null}
-          {previewing ? (
-            <div className="mx-auto flex w-full max-w-[720px] items-center justify-between gap-3 rounded-[12px] bg-accent-soft px-4 py-2.5 text-callout text-accent-text">
-              <span>{m.editor_previewing_formatting()}</span>
-              <button
-                type="button"
-                className="font-medium hover:underline"
-                onClick={() => setPreviewing(false)}
+            ) : null}
+            {editor.restoreSkippedFields.length > 0 ? (
+              <section
+                role="status"
+                className="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"
               >
-                {m.editor_back_to_editing()}
-              </button>
-            </div>
-          ) : null}
-          <EditorCanvas
-            titleField={titleField}
-            canvasFields={canvasFields}
-            data={data}
-            errors={editor.fieldErrors}
-            onChange={editor.updateField}
-            organizationId={site.organizationId}
-            previewing={previewing}
-            titleRef={titleRef}
-            transitionName={
-              editor.entryId ? entryTransitionName(editor.entryId) : undefined
-            }
-          />
-        </section>
+                <h2 className="font-semibold">
+                  {m.editor_revision_skipped_fields()}
+                </h2>
+                <p className="mt-1">{m.editor_revision_keep_current()}</p>
+                <ul className="mt-3 list-disc space-y-1 pl-5">
+                  {editor.restoreSkippedFields.map((field) => (
+                    <li key={field.key}>
+                      <strong>{field.label}</strong>: {field.reason}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+            {entry?.status === 'scheduled' &&
+            entry.scheduledData &&
+            entry.scheduledSlug ? (
+              <ScheduledVersion
+                fields={fields}
+                data={entry.scheduledData}
+                slug={entry.scheduledSlug}
+                siteId={siteId}
+                organizationId={site.organizationId}
+              />
+            ) : null}
+            {hasErrors ? (
+              <div
+                role="alert"
+                data-testid="editor-errors"
+                className="mx-auto flex w-full max-w-[720px] items-start gap-3 rounded-card border border-border-error/30 bg-status-error-bg px-4 py-3 text-[14px] leading-5 text-text-primary"
+              >
+                <WarningCircle
+                  weight="fill"
+                  className="mt-0.5 size-4 shrink-0 text-icon-error"
+                />
+                <span className="grid gap-0.5">
+                  <span className="font-medium">
+                    {editor.errorCount > 0
+                      ? editor.errorCount === 1
+                        ? m.editor_save_fix_one()
+                        : m.editor_save_fix_other({ count: editor.errorCount })
+                      : m.editor_save_failed()}
+                  </span>
+                  {editor.formError ? (
+                    <span className="text-callout text-text-secondary">
+                      {editor.formError}
+                    </span>
+                  ) : null}
+                </span>
+              </div>
+            ) : null}
+            {previewing ? (
+              <div className="mx-auto flex w-full max-w-[720px] items-center justify-between gap-3 rounded-[12px] bg-accent-soft px-4 py-2.5 text-callout text-accent-text">
+                <span>{m.editor_previewing_formatting()}</span>
+                <button
+                  type="button"
+                  className="font-medium hover:underline"
+                  onClick={() => setPreviewing(false)}
+                >
+                  {m.editor_back_to_editing()}
+                </button>
+              </div>
+            ) : null}
+            {active ? (
+              <LanguageFade locale={active}>{canvas}</LanguageFade>
+            ) : (
+              canvas
+            )}
+          </section>
 
-        {desktop && detailsOpen ? (
-          <aside
-            className="sticky top-[72px] -mr-2 max-h-[calc(100dvh-88px)] overflow-y-auto pr-2 pb-6 scroll-quiet"
-            aria-label={m.editor_entry_details()}
+          {desktop && detailsOpen ? (
+            <aside
+              className="sticky top-[calc(var(--editor-bar-h,56px)+16px)] -mr-2 max-h-[calc(100dvh-var(--editor-bar-h,56px)-32px)] overflow-y-auto pr-2 pb-6 scroll-quiet"
+              aria-label={m.editor_entry_details()}
+            >
+              {details}
+            </aside>
+          ) : null}
+        </div>
+
+        {!desktop ? (
+          <SlideOver
+            open={sheetOpen}
+            onOpenChange={setSheetOpen}
+            title={m.editor_entry_details()}
+            description={title}
+            data-testid="details-sheet"
+            bodyClassName="bg-background-default pt-2"
           >
             {details}
-          </aside>
+          </SlideOver>
         ) : null}
+
+        {mobile ? (
+          <SlideOver
+            open={scheduleOpen}
+            onOpenChange={setScheduleOpen}
+            title={m.editor_schedule_title()}
+            description={m.editor_schedule_description()}
+            data-testid="schedule-sheet"
+            fit
+          >
+            {scheduleForm}
+          </SlideOver>
+        ) : null}
+
+        {translate.dialog}
+
+        <AiSeoDialog
+          open={aiOpen}
+          onOpenChange={setAiOpen}
+          siteId={siteId}
+          collectionKey={collection.key}
+          entryId={editor.entryId}
+          data={view}
+          seo={seo}
+          onApply={(next) => onLocaleChange(SEO_KEY, next)}
+        />
+
+        <ConfirmDialog
+          open={deleteOpen}
+          onOpenChange={setDeleteOpen}
+          title={m.editor_delete_entry_title()}
+          description={
+            inboundTitles.length > 0
+              ? `${m.editor_delete_entry_description()} ${m.editor_delete_entry_inbound(
+                  {
+                    titles: inboundTitles.join(', '),
+                  },
+                )}`
+              : m.editor_delete_entry_description()
+          }
+          confirmLabel={m.editor_delete()}
+          variant="destructive"
+          onConfirm={async () => {
+            await editor.remove().catch(() => undefined)
+          }}
+        />
+
+        <ConfirmDialog
+          open={restoreId !== null}
+          onOpenChange={(open) => {
+            if (!open) setRestoreId(null)
+          }}
+          title={m.editor_restore_revision_title()}
+          description={m.editor_restore_revision_description()}
+          confirmLabel={m.editor_restore()}
+          onConfirm={async () => {
+            if (restoreId)
+              await editor.restore(restoreId).catch(() => undefined)
+          }}
+        />
+
+        <AlertDialog open={editor.blocker.status === 'blocked'}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {m.editor_leave_unsaved_title()}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {editor.status === 'blocked'
+                  ? m.editor_leave_unsaved_new()
+                  : m.editor_leave_unsaved_failed()}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => editor.blocker.reset?.()}>
+                {m.editor_stay()}
+              </AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                onClick={editor.leaveAnyway}
+                data-testid="discard-changes"
+              >
+                {m.editor_leave_anyway()}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
-
-      {!desktop ? (
-        <SlideOver
-          open={sheetOpen}
-          onOpenChange={setSheetOpen}
-          title={m.editor_entry_details()}
-          description={title}
-          data-testid="details-sheet"
-          bodyClassName="bg-background-default pt-2"
-        >
-          {details}
-        </SlideOver>
-      ) : null}
-
-      {mobile ? (
-        <SlideOver
-          open={scheduleOpen}
-          onOpenChange={setScheduleOpen}
-          title={m.editor_schedule_title()}
-          description={m.editor_schedule_description()}
-          data-testid="schedule-sheet"
-          fit
-        >
-          {scheduleForm}
-        </SlideOver>
-      ) : null}
-
-      <AiSeoDialog
-        open={aiOpen}
-        onOpenChange={setAiOpen}
-        siteId={siteId}
-        collectionKey={collection.key}
-        entryId={editor.entryId}
-        data={data}
-        seo={seo}
-        onApply={(next) => editor.updateField(SEO_KEY, next)}
-      />
-
-      <ConfirmDialog
-        open={deleteOpen}
-        onOpenChange={setDeleteOpen}
-        title={m.editor_delete_entry_title()}
-        description={
-          inboundTitles.length > 0
-            ? `${m.editor_delete_entry_description()} ${m.editor_delete_entry_inbound(
-                {
-                  titles: inboundTitles.join(', '),
-                },
-              )}`
-            : m.editor_delete_entry_description()
-        }
-        confirmLabel={m.editor_delete()}
-        variant="destructive"
-        onConfirm={async () => {
-          await editor.remove().catch(() => undefined)
-        }}
-      />
-
-      <ConfirmDialog
-        open={restoreId !== null}
-        onOpenChange={(open) => {
-          if (!open) setRestoreId(null)
-        }}
-        title={m.editor_restore_revision_title()}
-        description={m.editor_restore_revision_description()}
-        confirmLabel={m.editor_restore()}
-        onConfirm={async () => {
-          if (restoreId) await editor.restore(restoreId).catch(() => undefined)
-        }}
-      />
-
-      <AlertDialog open={editor.blocker.status === 'blocked'}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {m.editor_leave_unsaved_title()}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {editor.status === 'blocked'
-                ? m.editor_leave_unsaved_new()
-                : m.editor_leave_unsaved_failed()}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => editor.blocker.reset?.()}>
-              {m.editor_stay()}
-            </AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              onClick={editor.leaveAnyway}
-              data-testid="discard-changes"
-            >
-              {m.editor_leave_anyway()}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
+    </LocaleFieldsContext.Provider>
   )
 }
 

@@ -9,6 +9,8 @@ import {
   shouldKeepEditorOpen,
 } from './draft-recovery'
 import { authClient } from '#/lib/auth-client'
+import { readLocale, writeLocale } from '#/lib/content-locale'
+import type { LocaleCtx } from '#/lib/content-locale'
 import { queryKeys } from '#/lib/content/query-keys'
 import {
   errorMessage,
@@ -22,6 +24,7 @@ import { isEditedSinceReady } from '#/features/golive/entry-live-state'
 import { useGoLive, useInvalidateGoLive } from '#/features/golive/use-go-live'
 import type { EntryData, EntryStatus, Field } from '#/lib/types'
 import { m } from '#/paraglide/messages'
+import type { LocaleBlocker } from './language-state'
 import {
   archiveEntryFn,
   cancelScheduleFn,
@@ -207,6 +210,10 @@ export function useEntryEditor({
   const [hydratedId, setHydratedId] = React.useState<string | undefined>()
   const [slugManual, setSlugManual] = React.useState(false)
   const [fieldErrors, setFieldErrors] = React.useState<FieldErrorMap>({})
+  /** Language gaps the server refused a ready or schedule for (multilingual sites). */
+  const [serverBlockers, setServerBlockers] = React.useState<LocaleBlocker[]>(
+    [],
+  )
   const [formError, setFormError] = React.useState<string | null>(null)
   const [status, setStatus] = React.useState<SaveStatus>('idle')
   const versionRef = React.useRef<number>(1)
@@ -290,6 +297,34 @@ export function useEntryEditor({
     hydrate(entry, false)
   }, [entry, hydratedId, hydrate, titleField])
 
+  /** Stores `next` as the whole entry, clearing errors for the touched keys. */
+  const commitData = React.useCallback(
+    (next: EntryData, touched: string[]) => {
+      setServerBlockers((current) => (current.length > 0 ? [] : current))
+      setData(next)
+      try {
+        persistDraft(
+          localStorage,
+          recoveryKeyRef.current,
+          next,
+          versionRef.current,
+        )
+      } catch {
+        setFormError(m.editor_draft_recovery_unavailable())
+      }
+      setFieldErrors((errors) => {
+        const stale = Object.keys(errors).filter((path) =>
+          touched.some((item) => path === item || path.startsWith(`${item}.`)),
+        )
+        if (stale.length === 0) return errors
+        const copy = { ...errors }
+        for (const item of stale) delete copy[item]
+        return copy
+      })
+    },
+    [setData],
+  )
+
   const updateField = React.useCallback(
     (key: string, value: unknown) => {
       const prev = dataRef.current
@@ -303,35 +338,41 @@ export function useEntryEditor({
       ) {
         next[slugField.key] = slugify(value)
       }
-      setData(next)
-      try {
-        persistDraft(
-          localStorage,
-          recoveryKeyRef.current,
-          next,
-          versionRef.current,
-        )
-      } catch {
-        setFormError(m.editor_draft_recovery_unavailable())
-      }
       if (slugField && key === slugField.key) setSlugManual(true)
-      setFieldErrors((errors) => {
-        const touched = [
-          key,
-          ...(slugField && key === titleField?.key && !slugManual
-            ? [slugField.key]
-            : []),
-        ]
-        const stale = Object.keys(errors).filter((path) =>
-          touched.some((item) => path === item || path.startsWith(`${item}.`)),
-        )
-        if (stale.length === 0) return errors
-        const copy = { ...errors }
-        for (const item of stale) delete copy[item]
-        return copy
-      })
+      commitData(next, [
+        key,
+        ...(slugField && key === titleField?.key && !slugManual
+          ? [slugField.key]
+          : []),
+      ])
     },
-    [slugManual, slugField, titleField, setData],
+    [slugManual, slugField, titleField, commitData],
+  )
+
+  /**
+   * Writes one language of the entry (content languages). Shared fields and
+   * the other languages are left as they are. Use `updateField` for the main
+   * language, which also keeps the slug in step with the title.
+   */
+  const updateLocaleFields = React.useCallback(
+    (patch: EntryData, locale: string, ctx: LocaleCtx) => {
+      const prev = dataRef.current
+      const next = writeLocale(
+        prev,
+        locale,
+        { ...readLocale(prev, locale, ctx), ...patch },
+        ctx,
+      )
+      commitData(next, Object.keys(patch))
+    },
+    [commitData],
+  )
+
+  /** One key of `updateLocaleFields`. */
+  const updateLocaleField = React.useCallback(
+    (key: string, value: unknown, locale: string, ctx: LocaleCtx) =>
+      updateLocaleFields({ [key]: value }, locale, ctx),
+    [updateLocaleFields],
   )
 
   function resetSlugFromTitle() {
@@ -655,6 +696,10 @@ export function useEntryEditor({
         setFieldErrors(parsed.fieldErrors)
         reveal(parsed.fieldErrors)
       }
+      const blockers = (error as { blockers?: unknown } | null)?.blockers
+      if (Array.isArray(blockers) && blockers.length > 0) {
+        setServerBlockers(blockers as LocaleBlocker[])
+      }
       toast.error(parsed.formError ?? errorMessage(error, fallback))
     }
   }
@@ -913,6 +958,9 @@ export function useEntryEditor({
     slugField,
     data,
     updateField,
+    updateLocaleField,
+    updateLocaleFields,
+    serverBlockers,
     slugManual,
     resetSlugFromTitle,
     fieldErrors,

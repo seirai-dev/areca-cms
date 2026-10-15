@@ -72,6 +72,40 @@ describe('buildEntrySchema / validateEntryData', () => {
     expect(emptyRich.ok).toBe(true)
   })
 
+  it('accepts a missing required text, textarea or slug in partial mode', () => {
+    // Drafts may be incomplete: a translation can be saved while the main
+    // language is still empty (the value is absent, not blank).
+    const fields: Field[] = [
+      { key: 'title', label: 'Title', type: 'text', required: true },
+      { key: 'summary', label: 'Summary', type: 'textarea', required: true },
+      { key: 'slug', label: 'Slug', type: 'slug', required: true },
+    ]
+    const missing = validateEntryData(fields, {}, { mode: 'partial' })
+    expect(missing.ok).toBe(true)
+
+    const partial = validateEntryData(
+      fields,
+      { title: 'Only the title' },
+      { mode: 'partial' },
+    )
+    expect(partial.ok).toBe(true)
+  })
+
+  it('still requires them when missing in strict mode', () => {
+    const fields: Field[] = [
+      { key: 'title', label: 'Title', type: 'text', required: true },
+      { key: 'summary', label: 'Summary', type: 'textarea', required: true },
+      { key: 'slug', label: 'Slug', type: 'slug', required: true },
+    ]
+    const result = validateEntryData(fields, {}, { mode: 'strict' })
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    const paths = result.errors.map((e) => e.path)
+    expect(paths).toEqual(
+      expect.arrayContaining(['title', 'summary', 'slug']),
+    )
+  })
+
   it('rejects empty richtext on publish', () => {
     const result = validateEntryData(
       allFields,

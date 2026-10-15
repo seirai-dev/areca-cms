@@ -9,6 +9,7 @@ const site = (id: string) => ({
   organizationId: 'org',
   organizationName: 'Org',
   productionUrl: 'https://example.com',
+  languages: null,
 })
 
 const user = (isAgencyAdmin: boolean) => ({

@@ -20,7 +20,7 @@ Every Areca site has its own remote MCP server. Through it an AI can read and wr
 
 ## First calls (always)
 
-1. `get_site_info`: returns your role, what you **cannot** do, the collections, the site content sections (`globals`) and the site's publishing mode.
+1. `get_site_info`: returns your role, what you **cannot** do, the collections, the site content sections (`globals`), the site's publishing mode and, on a multilingual site, its `languages`.
 2. `get_collection_schema({ collection })`: returns exact field formats, an example payload and SEO guidance. Call it before every first write to a collection. For a site content section, `get_global({ global })` gives the same information.
 
 Tools your role can't use are not listed at all. If the user asks for one of those actions, explain who can do it and don't look for workarounds.
@@ -47,7 +47,7 @@ schedule_entry            -> scheduled goes live at a set time (also publishes o
 | editor | read everything, create and edit drafts, upload images, edit alt text, preview |
 | owner | everything an editor can, plus `mark_ready`, `unpublish_entry`, `archive_entry`, `cancel_schedule`, `delete_entry`, `restore_revision`, `delete_asset` |
 | + go-live permission | `go_live`, `schedule_entry`, `rollback`, `cancel_build`. Granted per connection or key with "Allow going live" (owners and agency admins only). |
-| agency admin | everything above, plus `upsert_collection`, `delete_collection`, `upsert_global` and `delete_global` (needs 2FA) |
+| agency admin | everything above, plus `upsert_collection`, `delete_collection`, `upsert_global`, `delete_global` and `set_site_languages` (needs 2FA) |
 
 ## Writing content
 
@@ -59,7 +59,18 @@ schedule_entry            -> scheduled goes live at a set time (also publishes o
 - **Site content (globals):** single sections such as company info or the home page. Read one with `get_global({ global })` and change it with `update_global({ global, fields?, seo?, expectedVersion? })`. It is not a collection, so `create_entry` and `list_entries` do not apply. Its `id` (from `get_global`) works with `mark_ready`, `schedule_entry`, `cancel_schedule`, `list_revisions`, `restore_revision` and `get_preview_url`. Use `discard_global_draft` to go back to the ready values. `seo` is only accepted when the section has SEO on.
 - **Schema:** if the site project has `areca.config.ts`, change the schema there and push it with the SDK rather than calling `upsert_collection` or `upsert_global`. Both replace the whole field list.
 
-Full formats, the SEO object, limits and errors are in [references/content.md](references/content.md). Every tool with its inputs is in [references/tools.md](references/tools.md).
+Full formats, the SEO object, limits and errors are in [references/content.md](references/content.md). Every tool with its inputs is in [references/tools.md](references/tools.md). Multilingual details are in [references/languages.md](references/languages.md).
+
+## Multilingual sites
+
+Only when `get_site_info` returns `languages`. The main language is the fallback; each other language is written on its own.
+
+1. `get_site_info`: note `languages.main`, `languages.all` and each collection's `requiredLanguages`.
+2. `create_entry` or `update_entry` (or `update_global`) for the main language, with no `locale`.
+3. One `update_entry({ id, locale, fields, seo, slug, expectedVersion })` call per other language. Check `sharedFieldsUpdated` in each response: those fields changed in every language.
+4. `get_entry({ id })` and read `translations`. Fill any missing required fields until each language is `complete`.
+
+`mark_ready` refuses an entry until every required language is complete. Only mark ready when the user asks. Details, the `translatable` rules and the errors are in [references/languages.md](references/languages.md).
 
 ## Errors
 
@@ -68,6 +79,8 @@ Tool errors come back as normal results with `isError: true` and a message that 
 - `Validation failed`: call `get_collection_schema`.
 - `changed since you last read it`: call `get_entry` and retry.
 - `Only site owners…` or `Going live…`: tell the user who can do it.
+- `is not one of this site's languages`: use a code from `get_site_info`. `This site has one language`: drop `locale`.
+- A refusal from `mark_ready` or `schedule_entry` that names languages: fill in those languages with `update_entry` and `locale`.
 - `Something went wrong on the Areca server (ref …)`: nothing is confirmed saved. Retry once, then report the ref.
 
 Over HTTP, `401` means sign in again or reconnect. `403 mfa_required` means the agency admin must turn on 2FA. `429` means wait for `Retry-After` (120 requests/min per credential).

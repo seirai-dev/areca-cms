@@ -4,6 +4,8 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 export type PreviewTokenPayload = {
   siteId: string
   exp: number
+  /** Language to preview. Absent = main language. The preview URL may override it. */
+  locale?: string
 } & (
   | { global?: undefined; collection: string; slug: string }
   | { global: string; collection?: undefined; slug?: undefined }
@@ -18,6 +20,8 @@ type PreviewTokenInput = {
   slug?: string
   /** Site content section preview: raw section key. Takes precedence. */
   global?: string
+  /** Language to preview (BCP 47). Omitted from the token when unset. */
+  locale?: string
 }
 
 export function signPreviewToken(input: PreviewTokenInput): string {
@@ -38,6 +42,7 @@ export function signPreviewToken(input: PreviewTokenInput): string {
       'A preview token needs a site content key or a collection and slug',
     )
   }
+  if (input.locale !== undefined) payload.locale = input.locale
   const payloadB64 = Buffer.from(JSON.stringify(payload), 'utf8').toString(
     'base64url',
   )
@@ -79,13 +84,22 @@ function parsePayload(payloadB64: string): PreviewTokenPayload | null {
     const parsed = JSON.parse(
       Buffer.from(payloadB64, 'base64url').toString('utf8'),
     ) as Partial<
-      Record<'siteId' | 'collection' | 'slug' | 'global' | 'exp', unknown>
+      Record<'siteId' | 'collection' | 'slug' | 'global' | 'exp' | 'locale', unknown>
     >
     if (typeof parsed.siteId !== 'string' || typeof parsed.exp !== 'number') {
       return null
     }
+    const locale =
+      typeof parsed.locale === 'string' && parsed.locale !== ''
+        ? { locale: parsed.locale }
+        : {}
     if (typeof parsed.global === 'string') {
-      return { siteId: parsed.siteId, global: parsed.global, exp: parsed.exp }
+      return {
+        siteId: parsed.siteId,
+        global: parsed.global,
+        exp: parsed.exp,
+        ...locale,
+      }
     }
     if (
       typeof parsed.collection !== 'string' ||
@@ -98,6 +112,7 @@ function parsePayload(payloadB64: string): PreviewTokenPayload | null {
       collection: parsed.collection,
       slug: parsed.slug,
       exp: parsed.exp,
+      ...locale,
     }
   } catch {
     return null
@@ -109,9 +124,14 @@ export function buildPreviewUrl(
   collection: string,
   slug: string,
   token: string,
+  locale?: string | null,
 ) {
   const base = productionUrl.replace(/\/+$/, '')
-  return `${base}/__preview/${collection}/${slug}?token=${encodeURIComponent(token)}`
+  return `${base}/__preview/${collection}/${slug}?token=${encodeURIComponent(token)}${localeParam(locale)}`
+}
+
+function localeParam(locale: string | null | undefined) {
+  return locale ? `&locale=${encodeURIComponent(locale)}` : ''
 }
 
 /**
@@ -122,9 +142,10 @@ export function buildGlobalPreviewUrl(
   productionUrl: string,
   previewPath: string,
   token: string,
+  locale?: string | null,
 ) {
   const base = productionUrl.replace(/\/+$/, '')
-  return `${base}${previewPath}?arecaPreview=${encodeURIComponent(token)}`
+  return `${base}${previewPath}?arecaPreview=${encodeURIComponent(token)}${localeParam(locale)}`
 }
 
 function safeEqual(a: string, b: string) {

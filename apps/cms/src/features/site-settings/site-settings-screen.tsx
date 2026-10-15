@@ -17,10 +17,12 @@ import { AiTab } from './ai-tab'
 import { DeploymentTab } from './deployment-tab'
 import { DeveloperTab } from './developer-tab'
 import { GeneralTab } from './general-tab'
+import { LanguagesTab } from './languages-tab'
 import { useSiteSettings } from './use-site-settings'
 
 export const SETTINGS_TABS = [
   'general',
+  'languages',
   'deployment',
   'developer',
   'ai',
@@ -30,7 +32,7 @@ export type SettingsTab = (typeof SETTINGS_TABS)[number]
 
 /**
  * Site settings (brief §3.10), agency admins only: underline tabs
- * General · Deployment · Developer · AI · Content, addressable as `?tab=`.
+ * General · Languages · Deployment · Developer · AI · Content, addressable as `?tab=`.
  * Test ids: `site-settings`, `settings-tab-{tab}`, `site-header-slug`.
  */
 export function SiteSettingsScreen({
@@ -46,6 +48,7 @@ export function SiteSettingsScreen({
   const record = settings.site.data
   const labels: Record<SettingsTab, string> = {
     general: m.settings_tab_general(),
+    languages: m.settings_tab_languages(),
     deployment: m.settings_tab_deployment(),
     developer: m.settings_tab_developer(),
     ai: m.settings_tab_ai(),
@@ -98,6 +101,11 @@ export function SiteSettingsScreen({
         <TabsContent value="general">
           {body((r) => (
             <GeneralTab site={r} settings={settings} />
+          ))}
+        </TabsContent>
+        <TabsContent value="languages">
+          {body((r) => (
+            <LanguagesTab site={r} settings={settings} />
           ))}
         </TabsContent>
         <TabsContent value="deployment">

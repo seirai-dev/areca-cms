@@ -36,6 +36,10 @@ export const FIELD_DESCRIPTION_MAX_LENGTH = 1_000
 export const FIELD_OPTION_MAX_LENGTH = 200
 export const FIELD_MAX_OPTIONS = 200
 export const ROUTE_PATTERN_MAX_LENGTH = 500
+/** A BCP 47 language tag, e.g. `nl-BE`. */
+export const LOCALE_TAG_MAX_LENGTH = 35
+/** Languages a site can have, main included. */
+export const MAX_SITE_LANGUAGES = 20
 
 /** Manifest / collection definition limits. */
 export const MANIFEST_MAX_BYTES = 256 * 1024

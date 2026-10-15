@@ -53,6 +53,7 @@ const publicSiteColumns = {
   deploymentTarget: site.deploymentTarget,
   lastManifest: site.lastManifest,
   aiPrompt: site.aiPrompt,
+  languages: site.languages,
   createdAt: site.createdAt,
   updatedAt: site.updatedAt,
 }
