@@ -1,0 +1,284 @@
+---
+title: Multilingual sites
+description: Show a site's content in several languages with the SDK. Start with Paraglide, then use the same pattern with i18next, next-intl, vue-i18n or Lingui. Covers fallbacks, per-call locales, hreflang and preview.
+---
+
+When the CMS site has [content languages](/docs/cms/languages), the SDK gives each entry the language it serves, the languages it has and the page address in each of them. Your site decides which language a visitor sees. The SDK does the rest: it picks the translation, falls back to the main language when one is missing, and builds the hreflang links.
+
+The SDK doesn't pick a language for you. Pass it one of three ways, from the most general to the most specific:
+
+1. **A resolver** when the site is created: `createContent({ locale: () => ... })`. Every read uses it.
+2. **A scope** for a block of code: `content.in('nl')` returns the same content, read in Dutch.
+3. **A call option**: `content.articles.all({ locale: 'nl' })`.
+
+A call option wins over a scope, a scope wins over the resolver, and the resolver wins over the main language.
+
+The examples below assume a schema with a `articles` collection, its route in Dutch (`/journaal/$slug`) and the main language `en`. The CMS side is described in [Languages](/docs/cms/languages).
+
+## Configure the languages
+
+`areca.config.ts` declares the languages. `areca pull` reads them, and the manifest push sends them to the CMS with the schema:
+
+```ts
+// areca.config.ts
+import { defineSiteContent } from '@areca-cms/site-sdk'
+
+export default defineSiteContent({
+  siteKey: 'acme',
+  languages: { main: 'en', all: ['en', 'nl'] },
+  i18n: { paraglide: './src/paraglide/runtime.js' },
+  collections: {
+    articles: {
+      route: '/journal/$slug',
+      routes: { nl: '/journaal/$slug' },
+      fields: [
+        { key: 'title', label: 'Title', type: 'text', required: true },
+        { key: 'slug', label: 'Slug', type: 'slug', required: true },
+        { key: 'price', label: 'Price', type: 'number', translatable: false },
+      ],
+    },
+  },
+})
+```
+
+- `languages.main` is the fallback. `languages.all` is the order of the language switcher and the last step of the fallback chain, and it includes `main`.
+- `routes` holds each language's route pattern. It has no language prefix: the site adds it, for example `/nl/journaal/<slug>`.
+- `translatable` overrides the default for a field. Text, long text, rich text and URL are translated by default; the other types are shared.
+- `i18n.paraglide` is the Paraglide runtime. When it is set, `areca pull` makes `content` read the current language from Paraglide.
+
+`areca pull` warns when `project.inlang/settings.json` disagrees with `languages`.
+
+## Quick start with Paraglide
+
+Paraglide JS (from inlang) is the recommended setup. It is the same major version the CMS uses, and `areca pull` supports it directly.
+
+1. Add the compiler and its project file:
+
+   ```bash
+   pnpm add @inlang/paraglide-js
+   ```
+
+   ```json
+   // project.inlang/settings.json
+   {
+     "baseLocale": "en",
+     "locales": ["en", "nl"],
+     "modules": [
+       "https://cdn.jsdelivr.net/npm/@inlang/plugin-message-format@4/dist/index.js"
+     ],
+     "plugin.inlang.messageFormat": { "pathPattern": "./messages/{locale}.json" }
+   }
+   ```
+
+   Keep `locales` the same as `languages.all` in `areca.config.ts`.
+
+2. Add the Vite plugin. The locale comes from the URL prefix only, so prerendered pages never depend on a cookie or the browser's language:
+
+   ```ts
+   // vite.config.ts
+   import { paraglideVitePlugin } from '@inlang/paraglide-js'
+
+   export default defineConfig({
+     plugins: [
+       paraglideVitePlugin({
+         project: './project.inlang',
+         outdir: './src/paraglide',
+         strategy: ['url', 'baseLocale'],
+       }),
+       tanstackStart({ server: { entry: 'server.ts' } }),
+       // ...
+     ],
+   })
+   ```
+
+   Compile the runtime before anything imports the generated content, such as the Vite config or a test run: `paraglide-js compile --project ./project.inlang --outdir ./src/paraglide`. Pull content after that, so the generated `areca.gen.ts` can import the runtime.
+
+3. Wrap the server entry in Paraglide's middleware, so server rendering and prerendering see the language in the URL:
+
+   ```ts
+   // src/server.ts
+   import { createStartHandler, defaultStreamHandler } from '@tanstack/react-start/server'
+   import { paraglideMiddleware } from '#/paraglide/server.js'
+
+   const startFetch = createStartHandler(defaultStreamHandler)
+
+   export default {
+     fetch: (req, ...args) => paraglideMiddleware(req, () => startFetch(req, ...args)),
+   }
+   ```
+
+4. Localize the router's URLs, so `<Link to="/journal/$slug">` renders `/nl/journaal/<slug>` in Dutch:
+
+   ```ts
+   // src/router.tsx
+   import { createRouter } from '@tanstack/react-router'
+   import { deLocalizeUrl, localizeUrl } from '#/paraglide/runtime'
+
+   export function getRouter() {
+     return createRouter({
+       routeTree,
+       rewrite: {
+         input: ({ url }) => deLocalizeUrl(url),
+         output: ({ url }) => localizeUrl(url),
+       },
+     })
+   }
+   ```
+
+   Routes are written once, in the main language. The page segment (`journal` and `journaal`) needs its own mapping. The demo site keeps the translated segments in one module and applies them in these two functions, with the same table used for prerendering and the CMS's alternate paths. See `examples/demo-site/src/lib/locale-routes.ts`.
+
+5. Read content in the current language. The generated `content` already uses `getLocale`, so `content.articles.all()` returns the Dutch version under `/nl`.
+
+6. Put the UI strings in `messages/en.json` and `messages/nl.json` and use `m.key()`. Use `getLocale()` for `Intl` formatting of dates and prices.
+
+Prerender both trees. Crawl links from the home page, or list every language's paths explicitly. Each entry's `alternates` gives its path in every language it has.
+
+## Read content in a language
+
+Every entry and section carries the language it is served in:
+
+| Field | Meaning |
+| --- | --- |
+| `entry.locale` | The language of `data`, `slug` and `seo`. |
+| `entry.isFallback` | `true` when the entry is served in a language other than the one asked for. |
+| `entry.locales` | The languages the entry has complete translations in. |
+| `entry.alternates` | The entry's path in each of those languages, for example `{ en: '/journal/backend', nl: '/journaal/backend' }`. |
+| `content.languages` | `{ main, all }`, or `null` on a single-language site. |
+
+Sections (`content.globals`) carry the same information as `$locale` and `$isFallback`, and their values stay flat.
+
+```ts
+// Dutch only, falling back to the main language when no translation is complete
+const dutch = content.in('nl')
+const posts = dutch.articles.all({ orderBy: { title: 'asc' } })
+
+// Only the entries that really exist in Dutch
+const onlyDutch = content.articles.all({ locale: 'nl', fallback: false })
+
+// One entry, looked up by its Dutch slug
+const post = content.articles.get('backend-ontwikkelaar', { locale: 'nl' })
+if (post?.isFallback) {
+  // show the main-language text with a note, or send the visitor to the English page
+}
+```
+
+`fallback` defaults to `true`. With `fallback: false`, `all` leaves out entries that have no translation in the requested language, and `get` returns `undefined` for them.
+
+Filters and sorting (`where`, `orderBy`) run on the language's own values, so a Dutch title sorts with the Dutch title.
+
+### How the language is chosen
+
+For the active language, the SDK tries, in order:
+
+1. the `locale` in the call (`all({ locale })`, `get(slug, { locale })`);
+2. the scope from `content.in(locale)`;
+3. the resolver from `createContent({ locale })`;
+4. the main language.
+
+For a requested language, the entry is served from the first complete language of this chain: the exact tag, its language subtag (`nl-BE` gives `nl`), the main language, then the first complete language in site order.
+
+## Use another i18n library
+
+`areca pull` only wires Paraglide. For any other library, create your own content object from the generated schema and give it a resolver:
+
+```ts
+// src/content.ts
+import { createContent } from '@areca-cms/site-sdk/content'
+import { schema, globalSchema } from './generated/content/areca.gen.ts'
+import i18next from 'i18next'
+
+export const content = createContent({
+  schema,
+  globalSchema,
+  dir: 'src/generated/content',
+  // Called on every read. Return undefined to use the main language.
+  locale: () => i18next.resolvedLanguage,
+})
+```
+
+The resolver is called on each read, so it follows the library's current language. Use the same pattern for the other libraries:
+
+| Library | Resolver |
+| --- | --- |
+| i18next | `locale: () => i18next.resolvedLanguage` |
+| vue-i18n (Composition API) | `locale: () => i18n.global.locale.value` |
+| Lingui | `locale: () => i18n.locale` (from `@lingui/core`) |
+| next-intl | Read the language from the request and pass it per call, below. |
+
+### Server frameworks with a request language
+
+A request's language is only known inside the request, so don't rely on a global resolver. Read it per request and pass it, either through a scope or per call:
+
+```ts
+// next-intl, in a server component or route handler
+import { getLocale } from 'next-intl/server'
+import { content } from '@/content'
+
+export default async function Page() {
+  const locale = await getLocale()
+  const articles = content.in(locale).articles.all()
+  // or: content.articles.all({ locale })
+  return /* ... */
+}
+```
+
+Without a resolver, the SDK serves the main language, so a missing `locale` never breaks a page.
+
+## Alternate links and hreflang
+
+`entry.alternates` gives the page in every language. Pass it to `seoHead` with the page's language and the main language to get `hreflang` links, `og:locale` and `og:locale:alternate`:
+
+```ts
+import { seoHead } from '@areca-cms/site-sdk'
+
+export const head = ({ entry }) =>
+  seoHead(entry.seo, {
+    locale: entry.locale,
+    alternates: entry.alternates,
+    main: content.languages?.main,
+  })
+```
+
+`seoHead` adds `hreflang` for every alternate, and an `x-default` link to the main language. Relative alternate paths are made absolute from the site's origin when the entry's SEO data has a canonical URL. For other pages, build the same alternates from the path in each language and pass them to `seoHead` or your own head function.
+
+Set the `lang` attribute of the document to the page's language (`entry.locale`, or the Paraglide locale on pages that aren't entries).
+
+## Match the visitor's language
+
+`content.matchLocale` picks a site language from a tag, a list of tags, or an `Accept-Language` header. It tries an exact match, then the language subtag, then the main language:
+
+```ts
+content.matchLocale('nl-BE')                       // 'nl'
+content.matchLocale('de;q=0.9, en-GB;q=0.8')       // 'en'
+content.matchLocale(request.headers.get('accept-language')) // 'en' when nothing matches
+```
+
+Use it to redirect a first visit to the right language, or as the resolver for a server route. The pure function `matchLocale(input, languages)` from `@areca-cms/site-sdk` takes the languages explicitly.
+
+## Preview in a language
+
+The CMS opens preview links with `&locale=<code>` for the language being edited. Pass it to the preview call:
+
+```ts
+const result = await content.preview(token, { locale: url.searchParams.get('locale') ?? undefined })
+```
+
+`getPreviewEntry({ token, locale })` does the same without the content object. The result's entry is in that language, and `localeStatus` lists each site language with its `complete` flag and `missing` fields. Use it to show an incomplete draft in the language it was written in.
+
+Preview responses are draft content. Keep them out of caches and search engines, as described in [Preview](/docs/sdk/preview).
+
+## Checklist
+
+- `languages` in `areca.config.ts` matches the site languages in the CMS and `project.inlang/settings.json`.
+- Routes per language are set in `routes`, and the router maps the same segments.
+- Shared fields (prices, contact details, product names) are `translatable: false`, so a translation can't drift from them.
+- Pages prerender in every language, and each page links to its alternates.
+- Untranslated entries either fall back with a note or are left out with `fallback: false`.
+
+## Related
+
+- [Languages](/docs/cms/languages) for the CMS side.
+- [Reading content](/docs/sdk/reading-content) for queries.
+- [SEO](/docs/sdk/seo) for the head helpers.
+- [Preview](/docs/sdk/preview) for draft previews.
+- [Typed content](/docs/sdk/typed-content) for the generated `Locale` type.

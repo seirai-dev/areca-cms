@@ -553,6 +553,35 @@ required to create a client. `syncManifest()` also requires
 `ARECA_SCHEMA_TOKEN`. Pass `cmsUrl`, `siteToken`, and `schemaToken` in the
 options object when you do not want to use environment variables.
 
+## Languages
+
+A site with content languages (`languages` in `areca.config.ts`) serves each entry in one language and tells you which one:
+
+```ts
+// areca.config.ts
+export default defineSiteContent({
+  siteKey: 'acme',
+  languages: { main: 'en', all: ['en', 'nl'] },
+  i18n: { paraglide: './src/paraglide/runtime.js' },
+  collections: {
+    articles: {
+      route: '/journal/$slug',
+      routes: { nl: '/journaal/$slug' },   // no language prefix; the site adds it
+      fields: [/* ... */],
+    },
+  },
+})
+```
+
+- `areca pull` makes `content` read the current language from Paraglide when `i18n.paraglide` is set, and it generates the `Locale` union. It warns when `project.inlang/settings.json` disagrees with `languages`.
+- Without Paraglide, create the content object with `createContent({ schema, globalSchema, dir, locale: () => currentLanguage() })`. The resolver is called on each read.
+- Per call: `content.articles.all({ locale: 'nl' })`, `content.articles.get(slug, { locale: 'nl' })`. Scope: `content.in('nl')`. A call wins over a scope, a scope over the resolver, and the resolver over the main language.
+- `fallback: false` leaves out entries without a complete translation in the requested language. By default they are served in the chain's language with `entry.isFallback === true`.
+- `entry.locale`, `entry.locales` and `entry.alternates` (the entry's path in each language) feed `seoHead(seo, { locale, alternates, main })`, which adds `hreflang` links and `og:locale`.
+- `content.matchLocale(acceptLanguage)` picks a site language for a visitor, and `content.preview(token, { locale })` previews a draft in a language.
+
+The guide, with the Paraglide quickstart and recipes for i18next, next-intl, vue-i18n and Lingui, is the **Multilingual sites** page of the docs site (`apps/docs/content/docs/sdk/multilingual.mdx`).
+
 ## Common errors
 
 | Message or behavior                               | What to check                                                                                                                                                                                             |
