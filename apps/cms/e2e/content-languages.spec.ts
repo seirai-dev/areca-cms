@@ -9,6 +9,7 @@
  *   translatable field, and its Copy action)
  * - `publish-now`, `publish-menu`, `ready-blocker` (ready gating)
  * - `entry-editor` (`data-ready`, `data-dirty`)
+ * - `translate-language` (AI "Translate from <main>"), `translate-field-<key>`
  *
  * Not run against the main dev database. Runs only through
  * `pnpm test:e2e:isolated`, which uses its own database (see the script).
@@ -29,6 +30,7 @@ import {
   richText,
   signOut,
   startNewEntry,
+  stubAi,
   titleInput,
   uniqueSuffix,
   waitForSaved,
@@ -192,4 +194,45 @@ test('a translated title is still there after a reload in that language', async 
   expect(
     consoleErrors.filter((text) => text.includes('Maximum update depth')),
   ).toEqual([])
+})
+
+test('AI translates the empty fields of a language, and one field on request', async ({
+  page,
+}) => {
+  test.setTimeout(240_000)
+  const suffix = uniqueSuffix()
+  const { siteSlug } = await createMultilingualSite(page, `ct-${suffix}`)
+  const translated: Record<string, string> = {
+    title: `Translated title ${suffix}`,
+  }
+  await stubAi(page, translated)
+
+  await login(page, OWNER)
+  await openSite(page, siteSlug)
+  await openCollection(page, 'articles')
+  await startNewEntry(page)
+  await writeArticle(page, `Nederlandse titel ${suffix}`, 'Nederlandse tekst')
+  await waitForSaved(page)
+
+  // Dutch is the main language: no translate action there.
+  await expect(page.getByTestId('translate-language')).toHaveCount(0)
+
+  await page.getByTestId('language-tab-en').click()
+  await page.getByTestId('translate-language').click()
+  await expect(titleInput(page)).toHaveValue(`Translated title ${suffix}`)
+  await expect(
+    page.getByText(
+      'Translated 1 field from Dutch. Review before marking ready.',
+    ),
+  ).toBeVisible()
+  await waitForSaved(page)
+
+  // Per field: the English title is filled, so the replace confirm comes first.
+  translated.title = `Second title ${suffix}`
+  await page.getByTestId('translate-field-title').click()
+  await expect(
+    page.getByText('Replace the English text with a new translation?'),
+  ).toBeVisible()
+  await page.getByRole('button', { name: 'Replace', exact: true }).click()
+  await expect(titleInput(page)).toHaveValue(`Second title ${suffix}`)
 })

@@ -46,7 +46,8 @@ export function languageTooltip(
  * warning tone when incomplete. Roving tabindex: arrows, Home and End move
  * within the bar. Sits inside the sticky header, under the 56px row.
  *
- * `trailing` is a slot for a future "Translate empty fields" action.
+ * `trailing` holds the "Translate from <main>" action. With it, the shared
+ * hint hides first when the bar is too narrow for both (container query).
  */
 export function LanguageBar({
   main,
@@ -97,7 +98,10 @@ export function LanguageBar({
   return (
     <div
       data-testid="language-bar"
-      className="flex h-11 min-w-0 items-stretch gap-3 px-3 md:px-4"
+      className={cn(
+        'flex h-11 min-w-0 items-stretch gap-3 px-3 md:px-4',
+        trailing && '@container',
+      )}
       style={{ height: LANGUAGE_BAR_HEIGHT }}
     >
       <div
@@ -191,7 +195,13 @@ export function LanguageBar({
         })}
       </div>
       {isMain ? null : (
-        <p className="hidden shrink-0 items-center self-center text-[13px] leading-[18px] text-text-muted md:flex">
+        <p
+          className={cn(
+            'hidden shrink-0 items-center self-center text-[13px] leading-[18px] text-text-muted',
+            // With the translate action, the hint needs room for both.
+            trailing ? '@min-[52rem]:flex' : 'md:flex',
+          )}
+        >
           {m.editor_language_shared_hint()}
         </p>
       )}

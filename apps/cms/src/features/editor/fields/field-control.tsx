@@ -11,7 +11,7 @@ import type { Field } from '#/lib/types'
 
 import { isTranslatable } from '#/lib/content-locale'
 import { MainReference } from '../main-reference'
-import { SharedMarker, useLocaleFields } from '../locale-fields'
+import { SharedMarker, translateProps, useLocaleFields } from '../locale-fields'
 
 import { ImageWell } from './image-well'
 import { ReferencePicker } from './reference-picker'
@@ -55,6 +55,7 @@ export function FieldControl({
   const notMain = locale !== null && !locale.isMain
   const translatable = isTranslatable(field)
   const shared = notMain && !translatable ? <SharedMarker /> : null
+  // Labelled fields read label, then this reference, then the input.
   const reference =
     notMain && translatable ? (
       <MainReference
@@ -64,11 +65,12 @@ export function FieldControl({
         mainCode={locale.main.toUpperCase()}
         mainName={locale.mainName}
         onCopy={(next) => onChange(next)}
+        {...translateProps(locale, field)}
       />
     ) : null
 
   if (field.type === 'select') {
-    const select = (
+    return (
       <SelectFieldControl
         field={field}
         id={id}
@@ -76,15 +78,8 @@ export function FieldControl({
         onChange={onChange}
         error={error}
         trailing={shared}
+        reference={reference}
       />
-    )
-    return reference ? (
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-2">
-        {reference}
-        {select}
-      </div>
-    ) : (
-      select
     )
   }
 
@@ -97,26 +92,28 @@ export function FieldControl({
         data-invalid={invalid ? 'true' : undefined}
         className="grid gap-2"
       >
-        {reference}
         <div className="flex items-center justify-between gap-4 rounded-[10px] border border-border-default bg-background-surface px-3 py-2.5">
-          <label htmlFor={id} className="grid min-w-0 cursor-pointer gap-0.5">
-            <span className="text-[14px] leading-5 font-medium text-text-primary">
-              {field.label}
-              {field.required ? (
-                <span aria-hidden="true" className="ml-1 text-text-muted">
-                  *
+          <div className="grid min-w-0 gap-2">
+            <label htmlFor={id} className="grid min-w-0 cursor-pointer gap-0.5">
+              <span className="text-[14px] leading-5 font-medium text-text-primary">
+                {field.label}
+                {field.required ? (
+                  <span aria-hidden="true" className="ml-1 text-text-muted">
+                    *
+                  </span>
+                ) : null}
+                {shared ? (
+                  <span className="ml-2 inline-flex">{shared}</span>
+                ) : null}
+              </span>
+              {field.description ? (
+                <span className="text-caption font-normal text-text-muted">
+                  {field.description}
                 </span>
               ) : null}
-              {shared ? (
-                <span className="ml-2 inline-flex">{shared}</span>
-              ) : null}
-            </span>
-            {field.description ? (
-              <span className="text-caption font-normal text-text-muted">
-                {field.description}
-              </span>
-            ) : null}
-          </label>
+            </label>
+            {reference}
+          </div>
           <Switch
             id={id}
             checked={checked}
@@ -253,19 +250,14 @@ export function FieldControl({
       )
   }
 
-  // The reference row sits above the field, outside FormField: FormField
-  // only passes its ARIA wiring to a single child element.
   return (
-    <div
-      data-field={field.key}
-      className="grid grid-cols-[minmax(0,1fr)] gap-2"
-    >
-      {reference}
+    <div data-field={field.key} className="grid grid-cols-[minmax(0,1fr)]">
       <FormField
         label={field.label}
         htmlFor={field.type === 'image' ? undefined : id}
         required={field.required}
         description={field.description}
+        reference={reference}
         error={error}
         trailing={shared}
       >

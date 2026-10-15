@@ -2,7 +2,9 @@ import * as React from 'react'
 import { LinkSimple } from '@phosphor-icons/react'
 
 import { m } from '#/paraglide/messages'
-import type { EntryData } from '#/lib/types'
+import type { EntryData, Field } from '#/lib/types'
+
+import { canTranslateField } from './translate-plan'
 
 export type LocaleFields = {
   /** Language being edited. */
@@ -12,6 +14,13 @@ export type LocaleFields = {
   /** Flat view of the main language, for the reference rows. */
   mainView: EntryData
   isMain: boolean
+  /**
+   * AI translate one field into the active language. Null when AI is not set
+   * up (or the entry is not saved yet), which hides the Translate action.
+   */
+  onTranslateField: ((key: string) => void) | null
+  /** Key of the field whose translation is running, if any. */
+  translatingKey: string | null
 }
 
 /**
@@ -34,4 +43,14 @@ export function SharedMarker() {
       {m.editor_language_shared_marker()}
     </span>
   )
+}
+
+/** Translate props for a field's reference row, or nothing when unavailable. */
+export function translateProps(locale: LocaleFields | null, field: Field) {
+  if (!locale?.onTranslateField || !canTranslateField(field)) return {}
+  const onTranslate = locale.onTranslateField
+  return {
+    onTranslate: () => onTranslate(field.key),
+    translating: locale.translatingKey === field.key,
+  }
 }

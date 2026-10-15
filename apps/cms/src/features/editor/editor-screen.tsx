@@ -44,6 +44,8 @@ import { listCollectionsFn, listInboundReferencesFn } from '#/server/fn/content'
 import type { Me } from '#/server/fn/me'
 
 import { AiSeoDialog } from './ai-seo-dialog'
+import { TranslateLanguageButton } from './translate-language-button'
+import { useAiTranslation } from './use-ai-translation'
 
 import { DetailsPanel } from './details-panel'
 import type { LanguageRow } from './details-panel'
@@ -241,6 +243,29 @@ function EntryEditorView({
     [data, ctx, lang.main],
   )
   const notMainLocale = Boolean(ctx && active && !lang.isMain)
+  const aiQuery = useQuery({
+    queryKey: queryKeys.aiAvailability(),
+    queryFn: () => getAiAvailabilityFn(),
+    staleTime: 30_000,
+  })
+  // AI translation needs AI set up and a saved entry (the server reads it).
+  const translateEnabled =
+    aiQuery.data?.enabled === true && Boolean(editor.entryId)
+  const translate = useAiTranslation({
+    siteId,
+    entryId: editor.entryId ?? '',
+    fields,
+    main: lang.main,
+    active: active ?? lang.main,
+    source: mainView,
+    target: view,
+    seoEnabled: true,
+    applyPatch: (patch) => {
+      if (ctx && active) editor.updateLocaleFields(patch, active, ctx)
+    },
+    save: editor.save,
+  })
+
   const localeFields: LocaleFields | null =
     ctx && active
       ? {
@@ -249,6 +274,11 @@ function EntryEditorView({
           mainName: uiLanguageName(lang.main),
           mainView,
           isMain: lang.isMain,
+          onTranslateField: translateEnabled ? translate.translateField : null,
+          translatingKey:
+            translate.pendingScope === 'language'
+              ? null
+              : translate.pendingScope,
         }
       : null
   const blockers: LocaleBlocker[] = ctx ? blockersFor(data, ctx, required) : []
@@ -308,12 +338,6 @@ function EntryEditorView({
   })
   const inboundTitles = (inboundQuery.data ?? []).map((row) => row.title)
   const [aiOpen, setAiOpen] = React.useState(false)
-  const aiQuery = useQuery({
-    queryKey: queryKeys.aiAvailability(),
-    queryFn: () => getAiAvailabilityFn(),
-    staleTime: 30_000,
-  })
-
   const canvasFields = fields.filter(
     (field) =>
       field.key !== titleField?.key &&
@@ -556,6 +580,21 @@ function EntryEditorView({
         summaries={summaries}
         fields={fields}
         onSelect={lang.setActive}
+        trailing={
+          translateEnabled && !lang.isMain ? (
+            <TranslateLanguageButton
+              label={m.editor_translate_language({
+                language: uiLanguageName(lang.main),
+              })}
+              running={translate.pendingScope === 'language'}
+              disabled={!translate.hasSource}
+              disabledReason={m.editor_translate_add_source({
+                language: uiLanguageName(lang.main),
+              })}
+              onClick={translate.translateLanguage}
+            />
+          ) : undefined
+        }
       />
     ) : undefined
 
@@ -821,6 +860,8 @@ function EntryEditorView({
             {scheduleForm}
           </SlideOver>
         ) : null}
+
+        {translate.dialog}
 
         <AiSeoDialog
           open={aiOpen}

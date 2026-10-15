@@ -27,6 +27,7 @@ import {
   openCollection,
   openSite,
   pushManifest,
+  stubAi,
   richText,
   signOut,
   startNewEntry,
@@ -167,6 +168,10 @@ test('multilingual UI screenshots', async ({ page }) => {
   const site = await createSiteOnClientPage(page, 'Verbeek', 'Bakkerij')
   await pushManifest(new URL(page.url()).origin, site.schemaToken, MANIFEST)
   await signOut(page)
+
+  // AI is not set up on the isolated stack. Stub availability (and the
+  // translate reply) so the AI actions show; no request reaches a provider.
+  await stubAi(page, { title: 'Translated title' })
 
   await login(page, OWNER)
   const siteId = await openSite(page, site.siteSlug)

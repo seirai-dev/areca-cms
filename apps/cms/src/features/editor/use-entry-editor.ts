@@ -354,18 +354,25 @@ export function useEntryEditor({
    * the other languages are left as they are. Use `updateField` for the main
    * language, which also keeps the slug in step with the title.
    */
-  const updateLocaleField = React.useCallback(
-    (key: string, value: unknown, locale: string, ctx: LocaleCtx) => {
+  const updateLocaleFields = React.useCallback(
+    (patch: EntryData, locale: string, ctx: LocaleCtx) => {
       const prev = dataRef.current
       const next = writeLocale(
         prev,
         locale,
-        { ...readLocale(prev, locale, ctx), [key]: value },
+        { ...readLocale(prev, locale, ctx), ...patch },
         ctx,
       )
-      commitData(next, [key])
+      commitData(next, Object.keys(patch))
     },
     [commitData],
+  )
+
+  /** One key of `updateLocaleFields`. */
+  const updateLocaleField = React.useCallback(
+    (key: string, value: unknown, locale: string, ctx: LocaleCtx) =>
+      updateLocaleFields({ [key]: value }, locale, ctx),
+    [updateLocaleFields],
   )
 
   function resetSlugFromTitle() {
@@ -952,6 +959,7 @@ export function useEntryEditor({
     data,
     updateField,
     updateLocaleField,
+    updateLocaleFields,
     serverBlockers,
     slugManual,
     resetSlugFromTitle,

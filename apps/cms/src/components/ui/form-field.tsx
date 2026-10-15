@@ -13,7 +13,9 @@ import { cn } from '#/lib/utils'
  * Label + control + help text + error, laid out consistently across the app.
  *
  * - `required` adds a quiet asterisk (visual) and `aria-required` on the control.
- * - `description` renders between label and control; `hint` renders below
+ * - `description` renders between label and control; `reference` (a
+ *   main-language value on a translation) sits directly above the control,
+ *   with 8px to it; `hint` renders below
  *   the control as a whisper (format rules).
  * - `error` renders below with `role="alert"` and is referenced from the
  *   control via `aria-describedby`.
@@ -25,6 +27,7 @@ export function FormField({
   required,
   description,
   hint,
+  reference,
   trailing,
   className,
   children,
@@ -35,6 +38,8 @@ export function FormField({
   required?: boolean
   description?: ReactNode
   hint?: ReactNode
+  /** Between the description and the control. The gap to the control is 8px. */
+  reference?: ReactNode
   /** Right side of the label row ("Reset from title", a counter). */
   trailing?: ReactNode
   className?: string
@@ -75,6 +80,7 @@ export function FormField({
           {description}
         </p>
       ) : null}
+      {reference ? <div className="mb-0.5">{reference}</div> : null}
       {withFieldAria(
         children,
         fieldAria({

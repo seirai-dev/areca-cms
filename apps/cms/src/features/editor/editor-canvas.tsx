@@ -9,7 +9,7 @@ import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
 import { MainReference } from './main-reference'
-import { SharedMarker, useLocaleFields } from './locale-fields'
+import { SharedMarker, translateProps, useLocaleFields } from './locale-fields'
 import type { LocaleFields } from './locale-fields'
 import { RichTextEditor } from './rich-text/rich-text-editor'
 import { RichTextPreview } from './rich-text/rich-text-preview'
@@ -29,6 +29,7 @@ function referenceFor(
       mainCode={locale.main.toUpperCase()}
       mainName={locale.mainName}
       onCopy={onCopy}
+      {...translateProps(locale, field)}
     />
   )
 }
@@ -179,7 +180,13 @@ export function EditorCanvas({
                 }
               : {})}
           >
-            {referenceFor(locale, field, (value) => onChange(field.key, value))}
+            {/* Only the untitled body reads reference-first; a labelled textarea
+                puts the reference under its label (see CanvasTextarea). */}
+            {field.type === 'richtext'
+              ? referenceFor(locale, field, (value) =>
+                  onChange(field.key, value),
+                )
+              : null}
             {field.type === 'richtext' ? (
               <div className="grid min-w-0 gap-1">
                 <label htmlFor={`field-${field.key}`} className="sr-only">
@@ -206,6 +213,9 @@ export function EditorCanvas({
                 describedBy={describedBy}
                 innerRef={index === 0 ? firstBodyRef : undefined}
                 shared={sharedFor(locale, field)}
+                reference={referenceFor(locale, field, (value) =>
+                  onChange(field.key, value),
+                )}
               />
             )}
             {field.description ? (
@@ -240,6 +250,7 @@ function CanvasTextarea({
   describedBy,
   innerRef,
   shared,
+  reference,
 }: {
   field: Field
   value: unknown
@@ -248,6 +259,7 @@ function CanvasTextarea({
   describedBy?: string
   innerRef?: React.RefObject<HTMLElement | null>
   shared?: React.ReactNode
+  reference?: React.ReactNode
 }) {
   const ref = React.useRef<HTMLTextAreaElement>(null)
   const text = typeof value === 'string' ? value : ''
@@ -264,6 +276,7 @@ function CanvasTextarea({
           <span className="ml-2 inline-flex align-middle">{shared}</span>
         ) : null}
       </label>
+      {reference ? <div className="mb-1">{reference}</div> : null}
       <textarea
         ref={(node) => {
           ref.current = node

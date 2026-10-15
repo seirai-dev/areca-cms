@@ -2,6 +2,8 @@ import * as React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { WarningCircle } from '@phosphor-icons/react'
 
+import { queryKeys } from '#/lib/content/query-keys'
+
 import { useShortcut } from '#/components/shell/shortcuts'
 import { NotFoundCard } from '#/components/shell/not-found'
 import {
@@ -35,6 +37,8 @@ import type { LocaleBlocker } from '#/features/editor/language-state'
 import { LocaleFieldsContext } from '#/features/editor/locale-fields'
 import type { LocaleFields } from '#/features/editor/locale-fields'
 import { useContentLanguage } from '#/features/editor/use-content-language'
+import { TranslateLanguageButton } from '#/features/editor/translate-language-button'
+import { useAiTranslation } from '#/features/editor/use-ai-translation'
 import {
   entryUiStatus,
   isEditedSinceReady,
@@ -50,6 +54,7 @@ import type { Field } from '#/lib/types'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 import { readEntrySeo, SEO_KEY } from '#/lib/seo'
+import { getAiAvailabilityFn } from '#/server/fn/ai'
 import { getGlobalFn } from '#/server/fn/content'
 import type { Me } from '#/server/fn/me'
 
@@ -177,6 +182,28 @@ function GlobalEditorView({
     () => (ctx ? readLocale(data, lang.main, ctx) : data),
     [data, ctx, lang.main],
   )
+  // AI translation needs AI set up and a saved section (the server reads it).
+  const aiQuery = useQuery({
+    queryKey: queryKeys.aiAvailability(),
+    queryFn: () => getAiAvailabilityFn(),
+    staleTime: 30_000,
+  })
+  const translateEnabled =
+    aiQuery.data?.enabled === true && Boolean(editor.entryId)
+  const translate = useAiTranslation({
+    siteId,
+    entryId: editor.entryId ?? '',
+    fields,
+    main: lang.main,
+    active: active ?? lang.main,
+    source: mainView,
+    target: view,
+    seoEnabled: global.seoEnabled,
+    applyPatch: (patch) => {
+      if (ctx && active) editor.updateLocaleFields(patch, active, ctx)
+    },
+    save: editor.save,
+  })
   const localeFields: LocaleFields | null =
     ctx && active
       ? {
@@ -185,6 +212,11 @@ function GlobalEditorView({
           mainName: uiLanguageName(lang.main),
           mainView,
           isMain: lang.isMain,
+          onTranslateField: translateEnabled ? translate.translateField : null,
+          translatingKey:
+            translate.pendingScope === 'language'
+              ? null
+              : translate.pendingScope,
         }
       : null
   const blockers = ctx ? blockersFor(data, ctx, required) : []
@@ -273,6 +305,21 @@ function GlobalEditorView({
         summaries={summaries}
         fields={fields}
         onSelect={lang.setActive}
+        trailing={
+          translateEnabled && !lang.isMain ? (
+            <TranslateLanguageButton
+              label={m.editor_translate_language({
+                language: uiLanguageName(lang.main),
+              })}
+              running={translate.pendingScope === 'language'}
+              disabled={!translate.hasSource}
+              disabledReason={m.editor_translate_add_source({
+                language: uiLanguageName(lang.main),
+              })}
+              onClick={translate.translateLanguage}
+            />
+          ) : undefined
+        }
       />
     ) : undefined
 
@@ -509,6 +556,8 @@ function GlobalEditorView({
             onRestore={setRestoreId}
           />
         </SlideOver>
+
+        {translate.dialog}
 
         <ConfirmDialog
           open={restoreId !== null}

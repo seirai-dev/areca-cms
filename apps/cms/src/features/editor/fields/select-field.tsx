@@ -35,6 +35,7 @@ export function SelectFieldControl({
   onChange,
   error,
   trailing,
+  reference,
 }: {
   field: Field
   id: string
@@ -43,6 +44,8 @@ export function SelectFieldControl({
   error?: string
   /** Right side of the label row (e.g. "Same in all languages"). */
   trailing?: React.ReactNode
+  /** Main-language reference, between the label and the choice. */
+  reference?: React.ReactNode
 }) {
   const options = field.options ?? []
   const current = typeof value === 'string' && value ? value : ''
@@ -70,6 +73,7 @@ export function SelectFieldControl({
         description={field.description}
         error={error}
         trailing={trailing}
+        reference={reference}
         className="min-w-0 grid-cols-[minmax(0,1fr)]"
       >
         <div

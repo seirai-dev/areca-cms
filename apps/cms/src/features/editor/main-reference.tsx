@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { CopySimple } from '@phosphor-icons/react'
+import { CopySimple, Translate } from '@phosphor-icons/react'
 
 import { Button } from '#/components/ui/button'
 import { cn } from '#/lib/utils'
@@ -38,6 +38,8 @@ export function MainReference({
   mainCode,
   mainName,
   onCopy,
+  onTranslate,
+  translating = false,
 }: {
   fieldKey: string
   type: string
@@ -47,6 +49,10 @@ export function MainReference({
   /** Name of the main language in the CMS interface language, e.g. "Dutch". */
   mainName: string
   onCopy: (value: unknown) => void
+  /** AI translate this field into the active language. Omit to hide the action. */
+  onTranslate?: () => void
+  /** The translation of this field is running. */
+  translating?: boolean
 }) {
   const text = referenceText(type, value)
   const empty = text === ''
@@ -75,18 +81,34 @@ export function MainReference({
           {mainCode}
         </span>
         {empty ? null : (
-          <Button
-            type="button"
-            variant="quiet"
-            size="xs"
-            aria-label={m.editor_language_copy_label({ language: mainName })}
-            data-testid={`copy-from-main-${fieldKey}`}
-            onClick={() => onCopy(value)}
-            className="-my-1 -mr-1.5 h-6 px-1.5 text-[12px] text-text-secondary"
-          >
-            <CopySimple />
-            {m.editor_language_copy()}
-          </Button>
+          <span className="-my-1 -mr-1.5 flex items-center">
+            <Button
+              type="button"
+              variant="quiet"
+              size="xs"
+              aria-label={m.editor_language_copy_label({ language: mainName })}
+              data-testid={`copy-from-main-${fieldKey}`}
+              onClick={() => onCopy(value)}
+              className="h-6 px-1.5 text-[12px] text-text-secondary"
+            >
+              <CopySimple />
+              {m.editor_language_copy()}
+            </Button>
+            {onTranslate ? (
+              <Button
+                type="button"
+                variant="quiet"
+                size="xs"
+                data-testid={`translate-field-${fieldKey}`}
+                loading={translating}
+                onClick={onTranslate}
+                className="h-6 px-1.5 text-[12px] text-text-secondary"
+              >
+                <Translate />
+                {m.editor_translate_field()}
+              </Button>
+            ) : null}
+          </span>
         )}
       </div>
       {empty ? (
