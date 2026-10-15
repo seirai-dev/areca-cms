@@ -22,6 +22,7 @@ import type {
   Field,
   MembershipRole,
   PublicationStatus,
+  SiteLanguages,
   SiteManifest,
   Snapshot,
 } from '../lib/types.ts'
@@ -221,6 +222,8 @@ export const site = pgTable('site', {
   lastManifest: jsonb('last_manifest').$type<SiteManifest | null>(),
   /** Extra instructions appended to the AI SEO system prompt for this site. */
   aiPrompt: text('ai_prompt'),
+  /** Content languages. Null = single-language site. */
+  languages: jsonb('languages').$type<SiteLanguages | null>(),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 })
@@ -243,6 +246,13 @@ export const collection = pgTable(
     seoEnabled: boolean('seo_enabled').notNull().default(false),
     /** Globals only: site path that previews the section, e.g. `/about`. */
     previewPath: text('preview_path'),
+    /** Languages besides main that must be complete before going live. */
+    requiredLanguages: text('required_languages')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    /** Collections only: per-language route patterns, e.g. `{ nl: '/vacatures/$slug' }`. */
+    localizedRoutes: jsonb('localized_routes').$type<Record<string, string>>(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -336,6 +346,11 @@ export const asset = pgTable(
     altText: text('alt_text'),
     /** External URL a rich-text image was imported from; reused instead of downloading again. */
     sourceUrl: text('source_url'),
+    /** Alt text per content language. `altText` stays the main-language alt. */
+    altI18n: jsonb('alt_i18n')
+      .$type<Record<string, string>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
     createdBy: text('created_by').references(() => user.id, {
       onDelete: 'set null',
     }),

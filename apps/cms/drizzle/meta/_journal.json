@@ -155,6 +155,13 @@
       "when": 1791986240547,
       "tag": "0021_site_content_globals",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1792067265374,
+      "tag": "0022_content_languages",
+      "breakpoints": true
     }
   ]
 }

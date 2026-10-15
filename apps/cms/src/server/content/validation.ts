@@ -13,6 +13,7 @@ import {
   TEXT_MAX_LENGTH,
   URL_MAX_LENGTH,
 } from '#/lib/content-limits'
+import { isEmptyRichText } from '#/lib/rich-text-empty'
 import { SEO_KEY, entrySeoSchema, readEntrySeo } from '#/lib/seo'
 import type { EntryData, Field } from '#/lib/types'
 import { m } from '#/paraglide/messages'
@@ -39,25 +40,6 @@ function isIsoDateTime(value: string) {
     Number(value.slice(11, 13)) < 24 &&
     !Number.isNaN(Date.parse(value))
   )
-}
-
-export function isEmptyRichText(value: unknown): boolean {
-  if (value == null || value === '') return true
-  if (typeof value !== 'object' || Array.isArray(value)) return false
-  const doc = value as { type?: string; content?: unknown[] }
-  if (doc.type !== 'doc') return false
-  const content = doc.content ?? []
-  if (!Array.isArray(content)) return false
-  if (content.length === 0) return true
-  return content.every((node) => {
-    if (!node || typeof node !== 'object' || Array.isArray(node)) return false
-    const item = node as { type?: string; content?: unknown[] }
-    return (
-      item.type === 'paragraph' &&
-      (item.content === undefined ||
-        (Array.isArray(item.content) && item.content.length === 0))
-    )
-  })
 }
 
 function wrap(

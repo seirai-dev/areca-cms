@@ -26,6 +26,14 @@ export type Field = {
   after?: string
   /** Visual heading in the editor only (site content sections). Max 80 characters. */
   group?: string
+  /** Stored per language when true. Absent = the type default (see `content-locale.ts`). */
+  translatable?: boolean
+}
+
+/** Site languages. `main` is the fallback; `all` is ordered and includes `main`. */
+export type SiteLanguages = {
+  main: string
+  all: string[]
 }
 
 /** `collection` = a list of entries; `global` = a single site content section. */
@@ -77,6 +85,19 @@ export type SnapshotEntry = {
    * Always set by current builds; absent in publications stored before it.
    */
   seo?: SeoMeta
+  /** Language of `data`, `slug` and `seo`. Absent on single-language sites. */
+  locale?: string
+  /** Complete languages only, main included when complete. */
+  locales?: Record<
+    string,
+    {
+      /** Per-language slug, or the main slug. */
+      slug: string
+      /** Full flat view: shared + translatable fields. */
+      data: Record<string, unknown>
+      seo?: SeoMeta
+    }
+  >
 }
 
 /** Wire contract — matches `@areca-cms/site-sdk` `SeoMeta`. */
@@ -119,6 +140,8 @@ export type Snapshot = {
   siteKey: string
   createdAt: string
   hash: string
+  /** Site languages. Absent on single-language sites. */
+  languages?: SiteLanguages
   collections: Record<string, SnapshotEntry[]>
   /**
    * Enabled site content sections, keyed by raw key. Absent when there are
@@ -150,6 +173,10 @@ export type SnapshotGlobal = {
   data: Record<string, unknown>
   /** Present only when the section has SEO turned on. */
   seo?: SeoMeta
+  /** Language of `data` and `seo`. Absent on single-language sites. */
+  locale?: string
+  /** Complete languages only, main included when complete. */
+  locales?: Record<string, { data: Record<string, unknown>; seo?: SeoMeta }>
 }
 
 /** Section schema in a manifest or snapshot. Same field rules as collections, minus slug. */
@@ -158,11 +185,20 @@ export type GlobalConfig = {
   fields: Field[]
   seo?: boolean
   previewPath?: string
+  /** Languages besides main that must be complete before going live. */
+  requiredLanguages?: string[]
 }
 
 export type SnapshotSchema = Record<
   string,
-  { route: string; label?: string; fields: Field[] }
+  {
+    route: string
+    label?: string
+    fields: Field[]
+    /** Per-language route patterns. Collections only. */
+    routes?: Record<string, string>
+    requiredLanguages?: string[]
+  }
 >
 
 /** Wire contract — matches `@areca-cms/site-sdk` `SnapshotAsset`. */
@@ -191,12 +227,18 @@ export type ReferenceValue = {
 }
 
 export type SiteManifest = {
+  /** Site languages. Omitted leaves the site's current setting alone. */
+  languages?: SiteLanguages
   collections: Record<
     string,
     {
       route: string
       label?: string
       fields: Field[]
+      /** Per-language route patterns, e.g. `{ nl: '/vacatures/$slug' }`. */
+      routes?: Record<string, string>
+      /** Languages besides main that must be complete before going live. */
+      requiredLanguages?: string[]
     }
   >
   /** Site content sections. Omitted or empty when none. A push omitting them disables them. */
