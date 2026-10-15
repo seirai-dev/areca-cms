@@ -295,7 +295,7 @@ function CollectionView({
 
   return (
     <div
-      className="grid gap-6 pb-24"
+      className="grid min-w-0 grid-cols-1 gap-6 pb-24"
       data-testid="site-content"
       data-ready={ready ? 'true' : 'false'}
       data-collection={collection.key}
@@ -511,7 +511,7 @@ function CollectionView({
       ) : (
         <div
           className={cn(
-            'grid gap-5 transition-opacity duration-150',
+            'grid min-w-0 gap-5 transition-opacity duration-150',
             query.isFetching && !query.isFetchingNextPage && 'opacity-70',
           )}
           aria-busy={query.isFetching}
@@ -524,7 +524,7 @@ function CollectionView({
               role="list"
             >
               {rows.map((row) => (
-                <StaggerItem key={row.id} role="listitem">
+                <StaggerItem key={row.id} role="listitem" className="min-w-0">
                   <EntryCard
                     siteId={siteId}
                     collectionKey={collection.key}
@@ -559,12 +559,12 @@ function CollectionView({
           ) : (
             <Stagger
               key={`list-${status}-${search}-${missingFilter ?? ''}`}
-              className="-mx-2 grid gap-px"
+              className="-mx-2 grid min-w-0 grid-cols-1 gap-px"
               role="list"
               aria-label={m.editor_entries_caption({ name: collection.label })}
             >
               {rows.map((row) => (
-                <StaggerItem key={row.id}>
+                <StaggerItem key={row.id} className="min-w-0">
                   <EntryListRow
                     siteId={siteId}
                     collectionKey={collection.key}
