@@ -65,6 +65,27 @@ function hasAnySeo(data: Record<string, unknown>): boolean {
   )
 }
 
+/**
+ * Draft data without `$seo`, in the base and in every `$i18n.<locale>` slot.
+ * A slot left empty by that is dropped.
+ */
+function withoutSeoEverywhere(data: EntryData): EntryData {
+  const { [SEO_KEY]: _seo, ...rest } = data
+  const translations = data[I18N_KEY]
+  if (!translations || typeof translations !== 'object') return rest
+  const next: Record<string, EntryData> = {}
+  for (const [locale, slot] of Object.entries(translations)) {
+    if (slot === null || typeof slot !== 'object' || Array.isArray(slot)) {
+      next[locale] = slot as EntryData
+      continue
+    }
+    const { [SEO_KEY]: _slotSeo, ...slotRest } = slot as EntryData
+    if (Object.keys(slotRest).length > 0) next[locale] = slotRest
+  }
+  if (Object.keys(next).length > 0) rest[I18N_KEY] = next
+  return rest
+}
+
 export function assertSectionSeo(
   global: { label: string; seoEnabled: boolean },
   data: Record<string, unknown>,
@@ -274,10 +295,20 @@ export async function upsertGlobal(
     // Turning SEO off must not leave stale SEO in the draft for a later ready.
     // Ready and scheduled data are stripped when the snapshot is built.
     if (previous?.seoEnabled && !seoEnabled) {
+      const [draft] = await tx
+        .select({ draftData: entry.draftData })
+        .from(entry)
+        .where(
+          and(
+            eq(entry.collectionId, row.id),
+            eq(entry.slug, GLOBAL_ENTRY_SLUG),
+          ),
+        )
+        .limit(1)
       await tx
         .update(entry)
         .set({
-          draftData: sql`${entry.draftData} - ${SEO_KEY}`,
+          draftData: withoutSeoEverywhere(draft?.draftData ?? {}),
           draftVersion: sql`${entry.draftVersion} + 1`,
           updatedAt: now,
         })

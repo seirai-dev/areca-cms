@@ -533,7 +533,15 @@ export function resolveSlug(
   return typeof value === 'string' && value.length > 0 ? value : undefined
 }
 
-/** Drafts may be incomplete, but supplied IDs must belong to their authorized scope. */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+/**
+ * Drafts may be incomplete, but supplied IDs must belong to their authorized
+ * scope. Checks the base values and every `$i18n.<locale>` slot, so a
+ * translation cannot point at another organization's asset or entry.
+ */
 export async function validateContentOwnership(
   siteId: string,
   organizationId: string,
@@ -541,6 +549,37 @@ export async function validateContentOwnership(
   data: EntryData,
   connection: Pick<typeof db, 'select'> = db,
 ) {
+  const errors: FieldError[] = [
+    ...(await ownershipErrors(siteId, organizationId, fields, data, '', connection)),
+  ]
+  const translations = data[I18N_KEY]
+  if (isPlainObject(translations)) {
+    for (const [locale, slot] of Object.entries(translations)) {
+      if (!isPlainObject(slot)) continue
+      errors.push(
+        ...(await ownershipErrors(
+          siteId,
+          organizationId,
+          fields,
+          slot as EntryData,
+          `${I18N_KEY}.${locale}.`,
+          connection,
+        )),
+      )
+    }
+  }
+  return errors
+}
+
+/** Ownership of one scope: the base, or one language slot (`prefix`). */
+async function ownershipErrors(
+  siteId: string,
+  organizationId: string,
+  fields: Field[],
+  data: EntryData,
+  prefix: string,
+  connection: Pick<typeof db, 'select'>,
+): Promise<FieldError[]> {
   const errors: FieldError[] = []
   const ogImage = readEntrySeo(data).ogImage
   if (ogImage) {
@@ -553,7 +592,7 @@ export async function validateContentOwnership(
       .limit(1)
     if (!found)
       errors.push({
-        path: `${SEO_KEY}.ogImage`,
+        path: `${prefix}${SEO_KEY}.ogImage`,
         message: m.server_asset_not_found_in_organization(),
       })
   }
@@ -564,7 +603,7 @@ export async function validateContentOwnership(
       !(await richTextAssetsAuthorized(value, organizationId, connection))
     ) {
       errors.push({
-        path: field.key,
+        path: `${prefix}${field.key}`,
         message: m.server_embedded_asset_not_found_in_organization(),
       })
     }
@@ -586,7 +625,7 @@ export async function validateContentOwnership(
         : []
       if (!found)
         errors.push({
-          path: field.key,
+          path: `${prefix}${field.key}`,
           message: m.server_referenced_entry_not_found(),
         })
     }
@@ -600,7 +639,7 @@ export async function validateContentOwnership(
         .limit(1)
       if (!found)
         errors.push({
-          path: field.key,
+          path: `${prefix}${field.key}`,
           message: m.server_asset_not_found_in_organization(),
         })
     }

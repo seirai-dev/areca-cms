@@ -364,12 +364,21 @@ export function assetUrl(assetRow: Pick<Asset, 'storageKey'>): string {
   return `${env.APP_URL}/api/assets/file/${assetRow.storageKey}`
 }
 
-function toResolvedAssetValue(row: Asset): ResolvedAssetValue {
+/**
+ * Alt text for a language: the translation when it is set, else the main
+ * alt. Without a locale this is the main alt.
+ */
+function altFor(row: Asset, locale?: string | null): string {
+  const translated = locale ? row.altI18n?.[locale] : undefined
+  return translated || row.altText || ''
+}
+
+function toResolvedAssetValue(row: Asset, locale?: string | null): ResolvedAssetValue {
   return {
     url: assetUrl(row),
     width: row.width,
     height: row.height,
-    alt: row.altText ?? '',
+    alt: altFor(row, locale),
     mimeType: row.mimeType,
   }
 }
@@ -378,9 +387,10 @@ export async function resolveAssetValue(
   assetId: string,
   organizationId: string,
   connection: Pick<typeof db, 'select'> = db,
+  locale?: string | null,
 ): Promise<ResolvedAssetValue | null> {
   const row = await getAsset(assetId, organizationId, connection)
-  return row ? toResolvedAssetValue(row) : null
+  return row ? toResolvedAssetValue(row, locale) : null
 }
 
 /**
@@ -429,9 +439,10 @@ export async function loadAssetLookup(
 export function resolveAssetFromLookup(
   lookup: AssetLookup,
   assetId: string,
+  locale?: string | null,
 ): ResolvedAssetValue | null {
   const row = lookup.byId.get(assetId)
-  return row ? toResolvedAssetValue(row) : null
+  return row ? toResolvedAssetValue(row, locale) : null
 }
 
 export function storageKeyFromRequest(request: Request): string | undefined {

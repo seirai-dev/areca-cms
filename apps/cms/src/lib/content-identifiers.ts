@@ -16,6 +16,8 @@ const reserved = new Set([
  * and site content keys are restricted; a field may still be called `preview`,
  * `href` or `resolve`. `globals` is the generated accessor for site content.
  * Stored lowercase; `previewglobals` is `content.previewGlobals` folded.
+ * `in`, `languages` and `matchlocale` are the content languages members
+ * (`content.in()`, `content.languages`, `content.matchLocale()`).
  */
 const reservedCollectionKeys = new Set([
   'resolve',
@@ -23,6 +25,9 @@ const reservedCollectionKeys = new Set([
   'preview',
   'globals',
   'previewglobals',
+  'in',
+  'languages',
+  'matchlocale',
 ])
 
 /**
