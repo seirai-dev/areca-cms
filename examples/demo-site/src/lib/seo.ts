@@ -7,6 +7,11 @@ export const SITE_NAME = 'Northbound Coffee Co.'
 export const SITE_DESCRIPTION =
   'Small-batch specialty coffee, roasted in Bergen, Norway on a 15 kg Giesen.'
 export const TITLE_TEMPLATE = `%s · ${SITE_NAME}`
+/**
+ * The demo's production origin. Hreflang alternates are absolute URLs, so they
+ * need it on pages without a CMS canonical URL. A canonical URL's origin wins.
+ */
+export const SITE_URL = 'https://areca-demo.emirkaan-web.eu'
 
 const siteOptions = { titleTemplate: TITLE_TEMPLATE, siteName: SITE_NAME }
 
@@ -43,7 +48,7 @@ export function pageHead(page: PageMeta, alternates?: Alternates): {
       { property: 'og:site_name', content: SITE_NAME },
       { property: 'og:locale', content: ogLocale(currentLocale()) },
     ],
-    links: hreflangLinks(alternates),
+    links: hreflangLinks(alternates, SITE_URL),
   }
 }
 
@@ -67,7 +72,7 @@ export function entryHead(entry: HeadEntry, fallback: PageMeta, alternates?: Alt
       locale: entry.locale ?? currentLocale(),
       alternates,
       main: BASE_LOCALE,
-      siteUrl: originOf(entry.seo.canonicalUrl),
+      siteUrl: originOf(entry.seo.canonicalUrl) ?? SITE_URL,
     })
   }
   return pageHead(fallback, alternates)
@@ -88,7 +93,7 @@ export function sectionHead(
       locale: currentLocale(),
       alternates,
       main: BASE_LOCALE,
-      siteUrl: originOf(seo.canonicalUrl),
+      siteUrl: originOf(seo.canonicalUrl) ?? SITE_URL,
     })
   }
   return pageHead(fallback, alternates)

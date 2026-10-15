@@ -33,18 +33,23 @@ export function entryAlternates(alternates: Alternates | undefined): Alternates 
   )
 }
 
-/** `<link rel="alternate" hreflang>` for each language, plus `x-default` for the main language. */
+/**
+ * `<link rel="alternate" hreflang>` for each language, plus `x-default` for the main language.
+ * `origin` makes the paths absolute, as hreflang requires.
+ */
 export function hreflangLinks(
   alternates: Alternates | undefined,
+  origin: string,
 ): Array<{ rel: 'alternate'; hreflang: string; href: string }> {
   if (!alternates) return []
+  const absolute = (href: string) => new URL(href, origin).toString()
   const links = Object.entries(alternates).flatMap(([tag, href]) =>
-    href === undefined ? [] : [{ rel: 'alternate' as const, hreflang: tag, href }],
+    href === undefined ? [] : [{ rel: 'alternate' as const, hreflang: tag, href: absolute(href) }],
   )
   const main = alternates[BASE_LOCALE]
   return main === undefined
     ? links
-    : [...links, { rel: 'alternate' as const, hreflang: 'x-default', href: main }]
+    : [...links, { rel: 'alternate' as const, hreflang: 'x-default', href: absolute(main) }]
 }
 
 /** Origin of an absolute URL (e.g. a page's canonical URL), so relative alternates can be made absolute. */
