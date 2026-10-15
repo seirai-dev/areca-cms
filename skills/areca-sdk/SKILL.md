@@ -1,6 +1,6 @@
 ---
 name: areca-sdk
-description: Connects a website project to Areca CMS with the @areca-cms/site-sdk package. Covers setup, tokens and env vars, areca.config.ts collections, site content globals and field types, the areca CLI (init, manifest push/pull, pull, run), typed content from the generated areca.gen.ts (import { content }), rich text, SEO head tags, draft preview routes and Go-live builds. Use when a project imports @areca-cms/site-sdk, has an areca.config.ts or areca.gen.ts, mentions ARECA_* env vars, or the user wants to add, render or deploy Areca CMS content.
+description: Connects a website project to Areca CMS with the @areca-cms/site-sdk package. Covers setup, tokens and env vars, areca.config.ts collections, site content globals and field types, the areca CLI (init, manifest push/pull, pull, run), typed content from the generated areca.gen.ts (import { content }), rich text, SEO head tags, multilingual sites (languages, locales, hreflang), draft preview routes and Go-live builds. Use when a project imports @areca-cms/site-sdk, has an areca.config.ts or areca.gen.ts, mentions ARECA_* env vars, or the user wants to add, render or deploy Areca CMS content.
 license: MIT
 metadata:
   version: "0.4.0"
@@ -157,6 +157,10 @@ const author = content.resolve(article.data.author); // Entry<"authors"> | null
 - `content.globals.<camelKey>` returns a section as a flat object of its field values, plus `$seo` when SEO is on. Types: `CompanyInfoGlobal` (exported from `areca.gen.ts`), and `Global<K>`, `Globals`, `GlobalKey`, `GlobalData` and `GlobalSchema` from the package root. Without a registered schema, the value is typed as a loose record.
 - `content.previewGlobals(token)` returns `{ globals, previewing, complete, issues }`. `previewing` is the camel key of the section the token targets (or `null`). A valid draft is in `globals`; an incomplete one keeps the published section, with `complete: false` and `issues` listing the problems. It also accepts a `PreviewResult` or `null`.
 
+## Languages
+
+Only when the CMS site has content languages. Set `languages`, `routes`, `requiredLanguages` and `translatable` in `areca.config.ts`. Reads pick a language with `content.in(locale)`, a per-call `{ locale, fallback }` or the `createContent({ locale })` resolver, and fall back to the main language. Entries carry `locale`, `isFallback`, `locales` and `alternates`; globals carry `$locale` and `$isFallback`. `seoHead` takes `locale` and `alternates` for hreflang, and `content.matchLocale` picks a visitor's language. Read [references/languages.md](references/languages.md) for the Paraglide setup, the other i18n libraries, preview with `locale`, and every export.
+
 ## Rich text
 
 ```tsx
@@ -187,7 +191,7 @@ Read [references/production.md](references/production.md) when the user needs an
 - The CMS settings needed: production URL, deployment target, publishing mode.
 - Direct use of `createArecaClient` and error messages.
 
-Read [references/api.md](references/api.md) for every export, type and signature.
+Read [references/api.md](references/api.md) for every export, type and signature, and [references/languages.md](references/languages.md) for languages.
 
 ## Rules
 
