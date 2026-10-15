@@ -6,19 +6,19 @@
 
 | Tool | Access | Inputs | Returns |
 | --- | --- | --- | --- |
-| `get_site_info` | all | none | `site` (name, slug, productionUrl, publishingMode), `you` (role, capabilities), `cannotDo[]`, `collections[]`, `globals[]` (site content: key, label, enabled, fieldCount, seo, previewPath), `guide`. **Call first.** |
-| `get_collection_schema` | all | `collection*` | Per-field key, type, required, format, options; example `fields` and `seo` payloads; SEO guide |
+| `get_site_info` | all | none | `site` (name, slug, productionUrl, publishingMode), `you` (role, capabilities), `cannotDo[]`, `collections[]`, `globals[]` (site content: key, label, enabled, fieldCount, seo, previewPath), `guide`. On a site with languages also `languages` (`main`, `all`, `names`) and, per collection and section, `requiredLanguages`, `translatableFields` and `routes`. **Call first.** |
+| `get_collection_schema` | all | `collection*` | Per-field key, type, required, format, options (and `translatable` on sites with languages); example `fields` and `seo` payloads; SEO guide; `translation` example on sites with languages |
 
 ## Entries
 
 | Tool | Access | Inputs | Returns |
 | --- | --- | --- | --- |
-| `list_entries` | all | `collection*`, `status?` (draft, ready, scheduled, archived), `search?`, `limit?` (1-100, default 20), `offset?` | `items[]` (id, slug, status, live, pendingRelease, title, version), `total`, `nextOffset` |
-| `get_entry` | all | `id*`, `includePublished?` | `fields`, `seo`, `status`, `live`, `pendingRelease`, `editedSinceReady`, `version`. With `includePublished`, also `liveFields` and `approvedFields`. |
-| `create_entry` | all | `collection*`, `fields?`, `seo?` | New draft + `previewUrl` |
-| `update_entry` | all | `id*`, `fields?`, `seo?` (at least one), `expectedVersion?` | Updated draft + `previewUrl`. Keys you leave out keep their values. |
+| `list_entries` | all | `collection*`, `status?` (draft, ready, scheduled, archived), `search?`, `limit?` (1-100, default 20), `offset?`, `missingLanguage?` (languages sites: only entries whose draft is not complete in that language) | `items[]` (id, slug, status, live, pendingRelease, title, version), `total`, `nextOffset` |
+| `get_entry` | all | `id*`, `includePublished?`, `locale?` (languages sites) | `fields`, `seo`, `status`, `live`, `pendingRelease`, `editedSinceReady`, `version`. With `includePublished`, also `liveFields` and `approvedFields`. With `locale`, that language's values (slug and seo included) and `locale`. Without it on a languages site: the main language plus `translations` (`complete` and `missing` for each other language). |
+| `create_entry` | all | `collection*`, `fields?`, `seo?`, `slug?`, `locale?` (languages sites) | New draft + `previewUrl`. `fields`, `seo` and `slug` apply to `locale` (default main). |
+| `update_entry` | all | `id*`, `fields?`, `seo?`, `slug?` (at least one), `locale?` (languages sites), `expectedVersion?` | Updated draft + `previewUrl`. Keys you leave out keep their values. Languages sites: one language per call; `sharedFieldsUpdated` lists the non-translatable fields that changed in every language. |
 | `list_revisions` | all | `id*` | Revision id, note, createdAt, createdBy |
-| `get_preview_url` | all | `id*` | `{ url }`, signed, about 1 hour. Fails without a site production URL. |
+| `get_preview_url` | all | `id*`, `locale?` (languages sites) | `{ url }`, signed, about 1 hour. Fails without a site production URL. |
 
 ## Site content (globals)
 
@@ -26,8 +26,8 @@ Single sections such as company info or the home page. Editors and owners see en
 
 | Tool | Access | Inputs | Returns |
 | --- | --- | --- | --- |
-| `get_global` | all | `global*` (key from `get_site_info`) | `id`, `key`, `label`, `status`, `live`, `pendingRelease`, `version`, `editedSinceReady`, `previewAvailable`, `values` (rich text as Markdown, images as `{assetId,url,alt}`, references as `{entryId}`), `seo` (only with SEO on), `fields` (format of each field), `example` |
-| `update_global` | all | `global*`, `fields?`, `seo?` (at least one; refused without SEO on the section), `expectedVersion?` | Updated draft + `previewUrl`. Keys you leave out keep their values. |
+| `get_global` | all | `global*` (key from `get_site_info`), `locale?` (languages sites) | `id`, `key`, `label`, `status`, `live`, `pendingRelease`, `version`, `editedSinceReady`, `previewAvailable`, `values` (rich text as Markdown, images as `{assetId,url,alt}`, references as `{entryId}`), `seo` (only with SEO on), `fields` (format of each field), `example` |
+| `update_global` | all | `global*`, `fields?`, `seo?` (at least one; refused without SEO on the section), `locale?` (languages sites), `expectedVersion?` | Updated draft + `previewUrl`. Keys you leave out keep their values. |
 | `discard_global_draft` | all | `global*` | Draft reset to the ready values, kept in history. Refused when the section was never ready. |
 
 ## Workflow
@@ -51,7 +51,7 @@ Single sections such as company info or the home page. Editors and owners see en
 | `list_assets` | all | `search?`, `limit?` (1-100), `offset?` | assetId, filename, mimeType, width, height, alt, url |
 | `get_asset` | all | `id*` | Asset + `usageCount` |
 | `upload_asset_from_url` | all | `url*` (direct http(s) file link), `altText?`, `filename?` | Asset with `assetId` + `howToUse` |
-| `update_asset_alt` | all | `id*`, `altText*` (`""` clears) | Asset |
+| `update_asset_alt` | all | `id*`, `altText*` (`""` clears), `locale?` (languages sites: alt text for that language) | Asset |
 | `delete_asset` | owner | `id*` | Refused while the asset is in use |
 
 ## Publishing
@@ -69,10 +69,18 @@ Single sections such as company info or the home page. Editors and owners see en
 
 | Tool | Access | Inputs | Effect |
 | --- | --- | --- | --- |
-| `upsert_collection` | agency | `key*`, `label*`, `routePattern*`, `fields*` (up to 100: `key*`, `label*`, `type*`, `required?`, `options?`, `collection?`, `description?`, `after?`), `enabled?` | Creates the collection or **replaces** its field list. Prefer `areca.config.ts` + `areca manifest push` when the site syncs its schema from code. |
+| `upsert_collection` | agency | `key*`, `label*`, `routePattern*`, `fields*` (up to 100: `key*`, `label*`, `type*`, `required?`, `options?`, `collection?`, `description?`, `after?`, `translatable?` on languages sites), `enabled?`, `requiredLanguages?`, `routes?` (languages sites) | Creates the collection or **replaces** its field list. Prefer `areca.config.ts` + `areca manifest push` when the site syncs its schema from code. |
 | `delete_collection` | agency | `key*` | Deletes the collection and its entries. Destructive. |
-| `upsert_global` | agency | `key*`, `label*`, `fields*` (as `upsert_collection`, plus `group?` heading; no `slug` type), `seo?`, `previewPath?` (e.g. `/about`, `""` removes it), `enabled?` | Creates the site content section or **replaces** its fields, SEO setting, preview path and enabled flag. Keeps its content. |
+| `upsert_global` | agency | `key*`, `label*`, `fields*` (as `upsert_collection`, plus `group?` heading; no `slug` type), `seo?`, `previewPath?` (e.g. `/about`, `""` removes it), `enabled?`, `requiredLanguages?` (languages sites) | Creates the site content section or **replaces** its fields, SEO setting, preview path and enabled flag. Keeps its content. |
 | `delete_global` | agency | `key*` | Deletes the section. Its content is kept in the deleted-content archive. Destructive. |
+
+## Languages (agency)
+
+| Tool | Access | Inputs | Returns |
+| --- | --- | --- | --- |
+| `set_site_languages` | agency | `main*` (must be in `all`), `all*` (every language in display order, including `main`) | `languages` (main, all, names) and `gaps`: entries and sections not complete in the new main language. Removing a language hides it and keeps its text. Languages cannot be turned off once set. |
+
+On a site without languages none of the `locale`, `translations`, `missingLanguage`, `translatable` or `requiredLanguages` parameters appear, and their results are unchanged. See [languages.md](languages.md) for the workflow.
 
 ## Prompt
 
