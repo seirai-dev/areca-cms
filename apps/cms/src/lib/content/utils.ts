@@ -1,3 +1,4 @@
+import { I18N_KEY, LOCALE_KEY } from '#/lib/content-locale'
 import { SEO_KEY } from '#/lib/seo'
 import type { EntryData, Field } from '#/lib/types'
 import { m } from '#/paraglide/messages'
@@ -80,8 +81,12 @@ export function initialEntryData(
     const current = existing?.[field.key]
     data[field.key] = current === undefined ? defaultFieldValue(field) : current
   }
-  // The built-in SEO block rides along with the declared fields.
+  // The built-in SEO block rides along with the declared fields. So do the
+  // translations and the base language (`$i18n`, `$locale`): dropping them
+  // here hid every non-base language after a reload and let autosave erase it.
   if (existing?.[SEO_KEY] != null) data[SEO_KEY] = existing[SEO_KEY]
+  if (existing?.[I18N_KEY] != null) data[I18N_KEY] = existing[I18N_KEY]
+  if (existing?.[LOCALE_KEY] != null) data[LOCALE_KEY] = existing[LOCALE_KEY]
   return data
 }
 

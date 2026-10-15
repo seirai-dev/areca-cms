@@ -31,6 +31,8 @@ import { m } from '#/paraglide/messages'
 
 import { EntryCover, EntryThumb } from './entry-cover'
 import { EntryPill } from './entry-pill'
+import { LocaleChips } from './locale-chips'
+import type { LocaleCoverage } from './entry-coverage'
 import type { BulkAction, EntryRow } from './use-collection-entries'
 
 export type EntryItemProps = {
@@ -46,6 +48,8 @@ export type EntryItemProps = {
   onToggleSelect: () => void
   onAction: (action: BulkAction, row: EntryRow) => void
   muted?: boolean
+  /** Language coverage chips; only on multilingual sites. */
+  coverage?: LocaleCoverage[]
 }
 
 /** Shared-element name: the card/row title morphs into the editor title. */
@@ -236,6 +240,7 @@ export function EntryCard(props: EntryItemProps) {
     onToggleSelect,
     onAction,
     muted,
+    coverage,
   } = props
   const seed = useSeedEntry(row, collectionKey)
 
@@ -249,6 +254,7 @@ export function EntryCard(props: EntryItemProps) {
         >
           {title}
         </h3>
+        {coverage ? <LocaleChips coverage={coverage} /> : null}
         <div className="flex items-center justify-between gap-2">
           <EntryPill entry={row} live={live} size="sm" testId="entry-status" />
           <span className="flex min-w-0 items-center gap-1.5 text-caption font-normal text-text-muted">
@@ -340,6 +346,7 @@ export function EntryListRow(props: EntryItemProps) {
     onToggleSelect,
     onAction,
     muted,
+    coverage,
   } = props
   const seed = useSeedEntry(row, collectionKey)
 
@@ -401,6 +408,11 @@ export function EntryListRow(props: EntryItemProps) {
           {content}
         </EditorLink>
       )}
+      {coverage ? (
+        <span className="hidden shrink-0 sm:block">
+          <LocaleChips coverage={coverage} />
+        </span>
+      ) : null}
       <EntryPill entry={row} live={live} size="sm" testId="entry-status" />
       <span className="hidden w-24 shrink-0 text-right text-caption font-normal text-text-muted tnum md:block">
         <RelativeTime value={row.updatedAt} />

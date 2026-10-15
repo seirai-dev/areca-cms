@@ -66,6 +66,8 @@ export function EditorHost({
         return navigate({
           to: '/sites/$siteId/c/$collectionKey/$entryId',
           params: { siteId: site.id, collectionKey, entryId: id },
+          // Keeps `?lang=` so the editor stays on the same language.
+          search: true,
           replace: true,
           viewTransition: false,
           resetScroll: false,

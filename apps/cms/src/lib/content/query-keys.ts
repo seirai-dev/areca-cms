@@ -6,6 +6,7 @@ export const queryKeys = {
     filters?: {
       status?: string
       search?: string
+      missingLanguage?: string
       referenceTargets?: boolean
       offset?: number
     },

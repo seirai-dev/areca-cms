@@ -1,5 +1,11 @@
 import { Reorder, useDragControls, useReducedMotion } from 'motion/react'
-import { ArrowLeft, DotsSixVertical, Lock, Trash } from '@phosphor-icons/react'
+import {
+  ArrowLeft,
+  DotsSixVertical,
+  Lock,
+  Translate,
+  Trash,
+} from '@phosphor-icons/react'
 
 import { Tag } from '#/components/ui/tag'
 import { Button } from '#/components/ui/button'
@@ -23,6 +29,7 @@ import { m } from '#/paraglide/messages'
 import {
   FIELD_TYPE_ICONS,
   PICKABLE_FIELD_TYPES,
+  draftTranslatable,
   fieldTypeDescription,
   fieldTypeName,
   keyFromLabel,
@@ -135,14 +142,29 @@ function RowType({
   field,
   index,
   group,
+  translatable = false,
 }: {
   field: FieldDraft
   index: number
   /** Site content only: the field's group heading, shown as a muted tag. */
   group?: string
+  /** Multilingual sites: the field is written in every language. */
+  translatable?: boolean
 }) {
   return (
     <>
+      {translatable ? (
+        <Hint label={m.field_translatable_badge()}>
+          <span
+            tabIndex={0}
+            aria-label={m.field_translatable_badge()}
+            className="grid size-5 shrink-0 place-content-center rounded-full text-icon-muted outline-none focus-visible:outline-2 focus-visible:outline-border-focus"
+            data-testid={`field-translatable-badge-${index}`}
+          >
+            <Translate className="size-3.5" />
+          </span>
+        </Hint>
+      ) : null}
       {group ? (
         <Tag
           tone="neutral"
@@ -200,6 +222,7 @@ function FieldListRow({
   index,
   invalid,
   group,
+  translatable,
   onOpen,
   onRemove,
 }: {
@@ -207,6 +230,7 @@ function FieldListRow({
   index: number
   invalid: boolean
   group?: string
+  translatable: boolean
   onOpen: () => void
   onRemove: () => void
 }) {
@@ -257,7 +281,12 @@ function FieldListRow({
           <Icon />
         </InsetIcon>
         <RowText field={field} index={index} />
-        <RowType field={field} index={index} group={group} />
+        <RowType
+          field={field}
+          index={index}
+          group={group}
+          translatable={translatable}
+        />
       </button>
       <Hint label={m.admin_collection_remove_field()}>
         <Button
@@ -287,6 +316,7 @@ export function FieldList({
   onOpen,
   onRemove,
   kind = 'collection',
+  multilingual = false,
 }: {
   fields: FieldDraft[]
   errors: FieldErrors
@@ -294,6 +324,8 @@ export function FieldList({
   onOpen: (index: number) => void
   onRemove: (index: number) => void
   kind?: SchemaKind
+  /** Shows the translatable mark on rows (2+ site languages only). */
+  multilingual?: boolean
 }) {
   const isGlobal = kind === 'global'
   const slug = isGlobal ? undefined : fields[0]
@@ -325,6 +357,7 @@ export function FieldList({
               index={index}
               invalid={Boolean(errors[index])}
               group={isGlobal ? field.group.trim() || undefined : undefined}
+              translatable={multilingual && draftTranslatable(field)}
               onOpen={() => onOpen(index)}
               onRemove={() => onRemove(index)}
             />
@@ -383,6 +416,7 @@ export function FieldFormPanel({
   pickingType,
   collectionKeys,
   kind = 'collection',
+  multilingual = false,
   onChange,
   onBack,
   onRemove,
@@ -394,6 +428,8 @@ export function FieldFormPanel({
   /** The site's collections, for the reference target picker. */
   collectionKeys: { key: string; label: string }[]
   kind?: SchemaKind
+  /** 2+ site languages: shows the Translatable switch. */
+  multilingual?: boolean
   onChange: (patch: Partial<FieldDraft>) => void
   onBack: () => void
   onRemove: () => void
@@ -605,6 +641,29 @@ export function FieldFormPanel({
           onCheckedChange={(value) => onChange({ required: value === true })}
         />
       </label>
+
+      {multilingual && field.type !== 'slug' ? (
+        <label className="flex cursor-pointer items-center justify-between gap-4 surface-card px-4 py-3">
+          <span className="grid gap-0.5">
+            <span className="text-[14px] leading-5 font-medium text-text-primary">
+              {m.field_translatable_label()}
+            </span>
+            <span className="text-callout text-text-secondary">
+              {draftTranslatable(field)
+                ? m.field_translatable_on()
+                : m.field_translatable_off()}
+            </span>
+          </span>
+          <Switch
+            checked={draftTranslatable(field)}
+            data-testid={`field-translatable-${index}`}
+            aria-label={m.field_translatable_label()}
+            onCheckedChange={(value) =>
+              onChange({ translatable: value === true })
+            }
+          />
+        </label>
+      ) : null}
 
       <div className="grid gap-2">
         <p className="px-1 text-overline text-text-muted">

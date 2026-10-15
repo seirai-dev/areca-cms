@@ -34,12 +34,15 @@ export function SelectFieldControl({
   value,
   onChange,
   error,
+  trailing,
 }: {
   field: Field
   id: string
   value: unknown
   onChange: (value: unknown) => void
   error?: string
+  /** Right side of the label row (e.g. "Same in all languages"). */
+  trailing?: React.ReactNode
 }) {
   const options = field.options ?? []
   const current = typeof value === 'string' && value ? value : ''
@@ -66,6 +69,7 @@ export function SelectFieldControl({
         required={field.required}
         description={field.description}
         error={error}
+        trailing={trailing}
         className="min-w-0 grid-cols-[minmax(0,1fr)]"
       >
         <div

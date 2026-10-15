@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { and, desc, eq, ilike, isNotNull, or, sql } from 'drizzle-orm'
+import { and, desc, eq, ilike, inArray, isNotNull, or, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { collection, entry, entryRevision, site, user } from '#/db/schema'
@@ -18,6 +18,7 @@ import type {
 import {
   I18N_KEY,
   LOCALE_KEY,
+  localeStatus,
   normalizeBase,
   readLocale,
 } from '#/lib/content-locale'
@@ -114,6 +115,12 @@ export async function listEntries(
     /** Approved reference targets only; do not combine with `status`. */
     referenceTargets?: boolean
     search?: string
+    /**
+     * Entries whose draft is not complete in this language (any state:
+     * empty, partial or missing a required field). Ignored when the site has
+     * no such language, so a stale filter in a URL still shows the list.
+     */
+    missingLanguage?: string
     limit?: number
     offset?: number
   } = {},
@@ -141,6 +148,42 @@ export async function listEntries(
     filters.push(
       or(ilike(entry.slug, term), sql`${entry.draftData}::text ilike ${term}`)!,
     )
+  }
+
+  if (options.missingLanguage) {
+    const siteRow = (
+      await db
+        .select({ languages: site.languages })
+        .from(site)
+        .where(eq(site.id, siteId))
+        .limit(1)
+    ).at(0)
+    const languages = siteRow?.languages
+    if (languages?.all.includes(options.missingLanguage)) {
+      // Completeness is computed from the draft JSON (required translatable
+      // fields, with the same rules as validation), so the matching ids are
+      // collected first and then filtered in SQL. Keeps paging and `total`
+      // exact. Cost grows with the collection size; only paid when the
+      // filter is on.
+      const ctx = {
+        main: languages.main,
+        all: languages.all,
+        fields: col.fields,
+      }
+      const candidates = await db
+        .select({ id: entry.id, draftData: entry.draftData })
+        .from(entry)
+        .where(and(...filters))
+      const missing = candidates
+        .filter(
+          (row) =>
+            !localeStatus(row.draftData, options.missingLanguage!, ctx)
+              .complete,
+        )
+        .map((row) => row.id)
+      if (missing.length === 0) return { items: [], total: 0 }
+      filters.push(inArray(entry.id, missing))
+    }
   }
 
   const where = and(...filters)

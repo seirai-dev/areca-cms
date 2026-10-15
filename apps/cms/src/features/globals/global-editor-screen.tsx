@@ -20,6 +20,21 @@ import { EditorCanvas } from '#/features/editor/editor-canvas'
 import { EntryHistory } from '#/features/editor/history'
 import { SeoPanel } from '#/features/editor/seo-panel'
 import { useEntryEditor } from '#/features/editor/use-entry-editor'
+import { baseLocale, readLocale } from '#/lib/content-locale'
+import { LanguageBar } from '#/features/editor/language-bar'
+import { LanguageFade } from '#/features/editor/language-fade'
+import { uiLanguageName } from '#/lib/site-languages'
+import {
+  blockersFor,
+  fieldLabels,
+  localeContext,
+  localeSummaries,
+  requiredLocales,
+} from '#/features/editor/language-state'
+import type { LocaleBlocker } from '#/features/editor/language-state'
+import { LocaleFieldsContext } from '#/features/editor/locale-fields'
+import type { LocaleFields } from '#/features/editor/locale-fields'
+import { useContentLanguage } from '#/features/editor/use-content-language'
 import {
   entryUiStatus,
   isEditedSinceReady,
@@ -50,6 +65,8 @@ export type GlobalRecord = {
   seoEnabled: boolean
   previewPath: string | null
   fields: Field[]
+  /** Languages besides main that must be complete before going live. */
+  requiredLanguages?: string[]
 }
 
 export function globalQueryKey(siteId: string, key: string) {
@@ -135,6 +152,85 @@ function GlobalEditorView({
   })
   const { entry, data } = editor
 
+  // Content languages (multilingual sites only; null otherwise).
+  const lang = useContentLanguage({ siteId, languages: site.languages })
+  const active = lang.active
+  const ctx = React.useMemo(
+    () => (lang.languages ? localeContext(lang.languages, fields) : null),
+    [lang.languages, fields],
+  )
+  const requiredLanguages = global.requiredLanguages ?? []
+  const requiredKey = requiredLanguages.join('|')
+  const required = lang.languages
+    ? requiredLocales(lang.languages, requiredLanguages)
+    : []
+  const summaries = React.useMemo(
+    () => (ctx ? localeSummaries(data, ctx, required) : []),
+    // `requiredKey` stands in for the contents of `required`.
+    [data, ctx, requiredKey],
+  )
+  const view = React.useMemo(
+    () => (ctx && active ? readLocale(data, active, ctx) : data),
+    [data, ctx, active],
+  )
+  const mainView = React.useMemo(
+    () => (ctx ? readLocale(data, lang.main, ctx) : data),
+    [data, ctx, lang.main],
+  )
+  const localeFields: LocaleFields | null =
+    ctx && active
+      ? {
+          active,
+          main: lang.main,
+          mainName: uiLanguageName(lang.main),
+          mainView,
+          isMain: lang.isMain,
+        }
+      : null
+  const blockers = ctx ? blockersFor(data, ctx, required) : []
+  const blocker: LocaleBlocker | null =
+    editor.serverBlockers.at(0) ?? blockers.at(0) ?? null
+
+  function focusBlocker(item: LocaleBlocker) {
+    lang.setActive(item.locale)
+    const key = item.missing[0]
+    if (!key) return
+    requestAnimationFrame(() => {
+      const node = document.querySelector<HTMLElement>(
+        `[data-field="${CSS.escape(key)}"]`,
+      )
+      node
+        ?.querySelector<HTMLElement>(
+          'input, textarea, [contenteditable="true"]',
+        )
+        ?.focus()
+    })
+  }
+
+  const readyBlock = blocker
+    ? {
+        message: m.editor_language_blocker({
+          language: uiLanguageName(blocker.locale),
+          fields: fieldLabels(blocker.missing, fields).join(', '),
+        }),
+        onFix: () => focusBlocker(blocker),
+      }
+    : null
+
+  // Writes the active language; the main language (and single-language
+  // sites) use the ordinary update.
+  function onLocaleChange(key: string, value: unknown) {
+    if (!ctx || !active) {
+      editor.updateField(key, value)
+      return
+    }
+    if (lang.isMain && baseLocale(data, ctx) === lang.main) {
+      editor.updateField(key, value)
+      return
+    }
+    editor.updateLocaleField(key, value, active, ctx)
+  }
+
   useShortcut('mod+s', () => void editor.save())
 
   if (editor.loading || !entry) return <GlobalEditorSkeleton />
@@ -169,267 +265,291 @@ function GlobalEditorView({
     if (editor.previewUrl) window.open(editor.previewUrl, '_blank', 'noopener')
   }
 
+  const languageBar =
+    lang.languages && ctx && active ? (
+      <LanguageBar
+        main={lang.main}
+        active={active}
+        summaries={summaries}
+        fields={fields}
+        onSelect={lang.setActive}
+      />
+    ) : undefined
+
   return (
-    <div
-      data-testid="global-editor"
-      data-ready={editor.ready ? 'true' : 'false'}
-      data-dirty={editor.dirty ? 'true' : 'false'}
-      data-entry-id={editor.entryId}
-      style={{ '--editor-bar-h': '56px' } as React.CSSProperties}
-      className="-mb-6 min-h-[calc(100dvh-3rem)]"
-    >
-      <GlobalEditorTopBar
-        siteId={siteId}
-        label={global.label}
-        uiStatus={uiStatus}
-        backendStatus={entry.status}
-        scheduledAt={entry.scheduledAt}
-        editedSinceReady={editedSinceReady}
-        saveStatus={editor.status}
-        lastSavedAt={editor.lastSavedAt}
-        updatedAt={entry.updatedAt}
-        errorCount={editor.errorCount}
-        onSave={() => void editor.save()}
-        canManage={canManage}
-        busy={editor.busy}
-        markReadyPending={editor.markReadyPending}
-        markable={editor.markable}
-        hasReady={hasReady}
-        canDiscard={canDiscard}
-        discardPending={editor.discardPending}
-        onMarkReady={editor.markReady}
-        onDiscard={() => void editor.discard().catch(() => undefined)}
-        discardReason={discardReason}
-        previewAvailable={previewAvailable}
-        previewUrl={editor.previewUrl}
-        previewReason={previewReason}
-        onPreview={openPreview}
-        scheduled={entry.status === 'scheduled'}
-        scheduleOpen={scheduleOpen}
-        onScheduleOpenChange={setScheduleOpen}
-        schedulePending={editor.schedulePending}
-        scheduleInitialAt={
-          entry.scheduledAt ? new Date(entry.scheduledAt) : null
+    <LocaleFieldsContext.Provider value={localeFields}>
+      <div
+        data-testid="global-editor"
+        data-ready={editor.ready ? 'true' : 'false'}
+        data-dirty={editor.dirty ? 'true' : 'false'}
+        data-entry-id={editor.entryId}
+        style={
+          {
+            '--editor-bar-h': languageBar ? '100px' : '56px',
+          } as React.CSSProperties
         }
-        scheduleInitialTimeZone={entry.scheduleTimezone}
-        onScheduleSubmit={async (at, timeZone) => {
-          const result = await editor.schedule(at, timeZone).catch(() => null)
-          if (result) setScheduleOpen(false)
-        }}
-        onCancelSchedule={editor.cancelSchedule}
-        onOpenHistory={() => setHistoryOpen(true)}
-      />
-
-      <section
-        className="mx-auto grid w-full max-w-[720px] gap-8 pt-4 pb-24 sm:pt-8"
-        aria-label={m.globals_canvas_label()}
-        data-testid="global-fields"
+        className="-mb-6 min-h-[calc(100dvh-3rem)]"
       >
-        {editor.conflict || editor.recoveredDraft ? (
-          <div
-            role="alert"
-            className="grid gap-3 rounded-card border border-border-error/30 p-4"
-          >
-            <p>
-              {editor.conflict
-                ? m.editor_draft_conflict_notice()
-                : m.editor_draft_recovered_notice()}
-            </p>
-            <div className="flex flex-wrap gap-4">
-              <button
-                type="button"
-                className="underline"
-                onClick={() => void editor.reloadServerDraft()}
-              >
-                {m.editor_reload_server_draft()}
-              </button>
-              <button
-                type="button"
-                className="underline"
-                onClick={() => void editor.reapplyRecoveredDraft()}
-              >
-                {m.editor_reapply_recovered_draft()}
-              </button>
-              {!editor.conflict && (
-                <button
-                  type="button"
-                  className="underline"
-                  onClick={editor.discardRecoveredDraft}
-                >
-                  {m.editor_discard_recovered_draft()}
-                </button>
-              )}
-            </div>
-          </div>
-        ) : null}
-
-        {editor.restoreSkippedFields.length > 0 ? (
-          <section
-            role="status"
-            className="grid gap-2 rounded-card border border-border-default p-4"
-          >
-            <h2 className="text-headline text-text-primary">
-              {m.editor_revision_skipped_fields()}
-            </h2>
-            <p className="text-callout text-text-secondary">
-              {m.editor_revision_keep_current()}
-            </p>
-            <ul className="list-disc space-y-1 pl-5 text-callout">
-              {editor.restoreSkippedFields.map((field) => (
-                <li key={field.key}>
-                  <strong>{field.label}</strong>: {field.reason}
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
-
-        {hasErrors ? (
-          <div
-            role="alert"
-            data-testid="editor-errors"
-            className="flex items-start gap-3 rounded-card border border-border-error/30 bg-status-error-bg px-4 py-3 text-[14px] leading-5 text-text-primary"
-          >
-            <WarningCircle
-              weight="fill"
-              className="mt-0.5 size-4 shrink-0 text-icon-error"
-            />
-            <span className="grid gap-0.5">
-              <span className="font-medium">
-                {editor.errorCount > 0
-                  ? editor.errorCount === 1
-                    ? m.editor_save_fix_one()
-                    : m.editor_save_fix_other({ count: editor.errorCount })
-                  : m.editor_save_failed()}
-              </span>
-              {editor.formError ? (
-                <span className="text-callout text-text-secondary">
-                  {editor.formError}
-                </span>
-              ) : null}
-            </span>
-          </div>
-        ) : null}
-
-        {fields.length === 0 ? (
-          <p className="rounded-[12px] border border-dashed border-border-strong px-4 py-4 text-center text-callout text-text-secondary">
-            {m.globals_no_fields()}
-          </p>
-        ) : null}
-
-        {groups.map((group, index) => (
-          <div
-            key={`${index}-${group.group ?? ''}`}
-            className={cn('grid gap-6', group.group && 'gap-5')}
-          >
-            {group.group ? (
-              <h2 className="text-headline text-text-primary">{group.group}</h2>
-            ) : null}
-            {group.fields.map((field) =>
-              field.type === 'richtext' ? (
-                <EditorCanvas
-                  key={field.key}
-                  canvasFields={[field]}
-                  data={data}
-                  errors={editor.fieldErrors}
-                  onChange={editor.updateField}
-                  organizationId={site.organizationId}
-                  previewing={false}
-                  titleRef={titleRef}
-                />
-              ) : (
-                <FieldControl
-                  key={field.key}
-                  field={field}
-                  value={data[field.key]}
-                  onChange={(value) => editor.updateField(field.key, value)}
-                  error={editor.fieldErrors[field.key]}
-                  siteId={siteId}
-                  organizationId={site.organizationId}
-                />
-              ),
-            )}
-          </div>
-        ))}
-
-        {seoOn ? (
-          <div className="grid gap-4 border-t border-border-default pt-6">
-            <SeoPanel
-              seo={readEntrySeo(data)}
-              onChange={(next) => editor.updateField(SEO_KEY, next)}
-              errors={editor.fieldErrors}
-              organizationId={site.organizationId}
-              productionUrl={site.productionUrl}
-              routePattern={global.previewPath ?? ''}
-              slug=""
-              entryTitle={global.label}
-              fallbackDescription={null}
-              aiEnabled={false}
-              onGenerate={() => undefined}
-              global
-            />
-          </div>
-        ) : null}
-      </section>
-
-      <SlideOver
-        open={historyOpen}
-        onOpenChange={setHistoryOpen}
-        title={m.globals_history_title()}
-        description={global.label}
-        data-testid="global-history-sheet"
-        bodyClassName="bg-background-default pt-2"
-      >
-        <EntryHistory
-          revisions={editor.revisions}
-          loading={editor.revisionsQuery.isLoading}
-          error={
-            editor.revisionsQuery.isError ? editor.revisionsQuery.error : null
-          }
-          onRetry={() => void editor.revisionsQuery.refetch()}
+        <GlobalEditorTopBar
+          languageBar={languageBar}
+          readyBlock={readyBlock}
+          siteId={siteId}
+          label={global.label}
+          uiStatus={uiStatus}
+          backendStatus={entry.status}
+          scheduledAt={entry.scheduledAt}
+          editedSinceReady={editedSinceReady}
+          saveStatus={editor.status}
+          lastSavedAt={editor.lastSavedAt}
+          updatedAt={entry.updatedAt}
+          errorCount={editor.errorCount}
+          onSave={() => void editor.save()}
           canManage={canManage}
-          onRestore={setRestoreId}
+          busy={editor.busy}
+          markReadyPending={editor.markReadyPending}
+          markable={editor.markable}
+          hasReady={hasReady}
+          canDiscard={canDiscard}
+          discardPending={editor.discardPending}
+          onMarkReady={editor.markReady}
+          onDiscard={() => void editor.discard().catch(() => undefined)}
+          discardReason={discardReason}
+          previewAvailable={previewAvailable}
+          previewUrl={editor.previewUrl}
+          previewReason={previewReason}
+          onPreview={openPreview}
+          scheduled={entry.status === 'scheduled'}
+          scheduleOpen={scheduleOpen}
+          onScheduleOpenChange={setScheduleOpen}
+          schedulePending={editor.schedulePending}
+          scheduleInitialAt={
+            entry.scheduledAt ? new Date(entry.scheduledAt) : null
+          }
+          scheduleInitialTimeZone={entry.scheduleTimezone}
+          onScheduleSubmit={async (at, timeZone) => {
+            const result = await editor.schedule(at, timeZone).catch(() => null)
+            if (result) setScheduleOpen(false)
+          }}
+          onCancelSchedule={editor.cancelSchedule}
+          onOpenHistory={() => setHistoryOpen(true)}
         />
-      </SlideOver>
 
-      <ConfirmDialog
-        open={restoreId !== null}
-        onOpenChange={(open) => {
-          if (!open) setRestoreId(null)
-        }}
-        title={m.editor_restore_revision_title()}
-        description={m.editor_restore_revision_description()}
-        confirmLabel={m.editor_restore()}
-        onConfirm={async () => {
-          if (restoreId) await editor.restore(restoreId).catch(() => undefined)
-        }}
-      />
+        <LanguageFade locale={active ?? ''} enabled={active !== null}>
+          <section
+            className="mx-auto grid w-full max-w-[720px] gap-8 pt-4 pb-24 sm:pt-8"
+            aria-label={m.globals_canvas_label()}
+            data-testid="global-fields"
+          >
+            {editor.conflict || editor.recoveredDraft ? (
+              <div
+                role="alert"
+                className="grid gap-3 rounded-card border border-border-error/30 p-4"
+              >
+                <p>
+                  {editor.conflict
+                    ? m.editor_draft_conflict_notice()
+                    : m.editor_draft_recovered_notice()}
+                </p>
+                <div className="flex flex-wrap gap-4">
+                  <button
+                    type="button"
+                    className="underline"
+                    onClick={() => void editor.reloadServerDraft()}
+                  >
+                    {m.editor_reload_server_draft()}
+                  </button>
+                  <button
+                    type="button"
+                    className="underline"
+                    onClick={() => void editor.reapplyRecoveredDraft()}
+                  >
+                    {m.editor_reapply_recovered_draft()}
+                  </button>
+                  {!editor.conflict && (
+                    <button
+                      type="button"
+                      className="underline"
+                      onClick={editor.discardRecoveredDraft}
+                    >
+                      {m.editor_discard_recovered_draft()}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : null}
 
-      <AlertDialog open={editor.blocker.status === 'blocked'}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {m.editor_leave_unsaved_title()}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {m.editor_leave_unsaved_failed()}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => editor.blocker.reset?.()}>
-              {m.editor_stay()}
-            </AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              onClick={editor.leaveAnyway}
-              data-testid="discard-changes"
-            >
-              {m.editor_leave_anyway()}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
+            {editor.restoreSkippedFields.length > 0 ? (
+              <section
+                role="status"
+                className="grid gap-2 rounded-card border border-border-default p-4"
+              >
+                <h2 className="text-headline text-text-primary">
+                  {m.editor_revision_skipped_fields()}
+                </h2>
+                <p className="text-callout text-text-secondary">
+                  {m.editor_revision_keep_current()}
+                </p>
+                <ul className="list-disc space-y-1 pl-5 text-callout">
+                  {editor.restoreSkippedFields.map((field) => (
+                    <li key={field.key}>
+                      <strong>{field.label}</strong>: {field.reason}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+
+            {hasErrors ? (
+              <div
+                role="alert"
+                data-testid="editor-errors"
+                className="flex items-start gap-3 rounded-card border border-border-error/30 bg-status-error-bg px-4 py-3 text-[14px] leading-5 text-text-primary"
+              >
+                <WarningCircle
+                  weight="fill"
+                  className="mt-0.5 size-4 shrink-0 text-icon-error"
+                />
+                <span className="grid gap-0.5">
+                  <span className="font-medium">
+                    {editor.errorCount > 0
+                      ? editor.errorCount === 1
+                        ? m.editor_save_fix_one()
+                        : m.editor_save_fix_other({ count: editor.errorCount })
+                      : m.editor_save_failed()}
+                  </span>
+                  {editor.formError ? (
+                    <span className="text-callout text-text-secondary">
+                      {editor.formError}
+                    </span>
+                  ) : null}
+                </span>
+              </div>
+            ) : null}
+
+            {fields.length === 0 ? (
+              <p className="rounded-[12px] border border-dashed border-border-strong px-4 py-4 text-center text-callout text-text-secondary">
+                {m.globals_no_fields()}
+              </p>
+            ) : null}
+
+            {groups.map((group, index) => (
+              <div
+                key={`${index}-${group.group ?? ''}`}
+                className={cn('grid gap-6', group.group && 'gap-5')}
+              >
+                {group.group ? (
+                  <h2 className="text-headline text-text-primary">
+                    {group.group}
+                  </h2>
+                ) : null}
+                {group.fields.map((field) =>
+                  field.type === 'richtext' ? (
+                    <EditorCanvas
+                      key={field.key}
+                      canvasFields={[field]}
+                      data={view}
+                      errors={editor.fieldErrors}
+                      onChange={onLocaleChange}
+                      organizationId={site.organizationId}
+                      previewing={false}
+                      titleRef={titleRef}
+                    />
+                  ) : (
+                    <FieldControl
+                      key={field.key}
+                      field={field}
+                      value={view[field.key]}
+                      onChange={(value) => onLocaleChange(field.key, value)}
+                      error={editor.fieldErrors[field.key]}
+                      siteId={siteId}
+                      organizationId={site.organizationId}
+                    />
+                  ),
+                )}
+              </div>
+            ))}
+
+            {seoOn ? (
+              <div className="grid gap-4 border-t border-border-default pt-6">
+                <SeoPanel
+                  seo={readEntrySeo(view)}
+                  onChange={(next) => onLocaleChange(SEO_KEY, next)}
+                  errors={editor.fieldErrors}
+                  organizationId={site.organizationId}
+                  productionUrl={site.productionUrl}
+                  routePattern={global.previewPath ?? ''}
+                  slug=""
+                  entryTitle={global.label}
+                  fallbackDescription={null}
+                  aiEnabled={false}
+                  onGenerate={() => undefined}
+                  global
+                />
+              </div>
+            ) : null}
+          </section>
+        </LanguageFade>
+
+        <SlideOver
+          open={historyOpen}
+          onOpenChange={setHistoryOpen}
+          title={m.globals_history_title()}
+          description={global.label}
+          data-testid="global-history-sheet"
+          bodyClassName="bg-background-default pt-2"
+        >
+          <EntryHistory
+            revisions={editor.revisions}
+            loading={editor.revisionsQuery.isLoading}
+            error={
+              editor.revisionsQuery.isError ? editor.revisionsQuery.error : null
+            }
+            onRetry={() => void editor.revisionsQuery.refetch()}
+            canManage={canManage}
+            onRestore={setRestoreId}
+          />
+        </SlideOver>
+
+        <ConfirmDialog
+          open={restoreId !== null}
+          onOpenChange={(open) => {
+            if (!open) setRestoreId(null)
+          }}
+          title={m.editor_restore_revision_title()}
+          description={m.editor_restore_revision_description()}
+          confirmLabel={m.editor_restore()}
+          onConfirm={async () => {
+            if (restoreId)
+              await editor.restore(restoreId).catch(() => undefined)
+          }}
+        />
+
+        <AlertDialog open={editor.blocker.status === 'blocked'}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {m.editor_leave_unsaved_title()}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {m.editor_leave_unsaved_failed()}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => editor.blocker.reset?.()}>
+                {m.editor_stay()}
+              </AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                onClick={editor.leaveAnyway}
+                data-testid="discard-changes"
+              >
+                {m.editor_leave_anyway()}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+    </LocaleFieldsContext.Provider>
   )
 }
 

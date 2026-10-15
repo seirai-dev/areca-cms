@@ -7,7 +7,7 @@ import { db } from '#/db'
 import { membership, organization, site } from '#/db/schema'
 import { localMfaVerifiedAt } from '#/server/security/local-mfa'
 import { env } from '#/env'
-import type { MembershipRole } from '#/lib/types'
+import type { MembershipRole, SiteLanguages } from '#/lib/types'
 import { getSession, requireUser } from '#/lib/session.server'
 import { m } from '#/paraglide/messages'
 import { acceptInvitation, getInvitation } from '#/server/admin/members'
@@ -40,6 +40,8 @@ export type Me = {
     organizationId: string
     organizationName: string
     productionUrl: string
+    /** Content languages. Null = single-language site. */
+    languages: SiteLanguages | null
   }>
   organizationCount: number
 }
@@ -78,6 +80,7 @@ export const getMeFn = createServerFn({ method: 'GET', ...meFn }).handler(
       organizationId: site.organizationId,
       organizationName: organization.name,
       productionUrl: site.productionUrl,
+      languages: site.languages,
     }
 
     const sites = currentUser.isAgencyAdmin

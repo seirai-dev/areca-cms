@@ -16,6 +16,8 @@ export type LibraryAsset = MediaAsset & {
   size?: number | null
   createdAt?: string | Date
   createdBy?: string | null
+  /** Alt text per language besides main (multilingual sites). */
+  altI18n?: Record<string, string> | null
 }
 
 const LIBRARY_PAGE_SIZE = 40
@@ -222,8 +224,13 @@ export function useAssetMutations(organizationId: string) {
     queryClient.invalidateQueries({ queryKey: ['assets', organizationId] })
 
   const saveAlt = useMutation({
-    mutationFn: (input: { id: string; altText: string }) =>
-      updateAssetFn({ data: input }),
+    mutationFn: (input: {
+      id: string
+      altText: string
+      /** A non-main language; absent writes the main alt text. */
+      locale?: string
+      siteId?: string
+    }) => updateAssetFn({ data: input }),
     onSuccess: async () => {
       toast.success(m.sites_alt_text_saved())
       await invalidate()

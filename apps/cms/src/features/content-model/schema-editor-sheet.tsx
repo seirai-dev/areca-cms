@@ -34,6 +34,10 @@ import { collectionIcon } from '#/lib/site-nav'
 import { m } from '#/paraglide/messages'
 import { listCollectionsFn } from '#/server/fn/content'
 
+import {
+  LocalizedRoutesSection,
+  RequiredLanguagesSection,
+} from './language-settings-fields'
 import { FieldFormPanel, FieldList } from './schema-fields'
 import type { SchemaKind } from './schema-drafts'
 import { useSchemaEditor } from './use-schema-editor'
@@ -271,6 +275,7 @@ export function SchemaEditorSheet({
                       pickingType={editor.editing.picking}
                       collectionKeys={collectionKeys}
                       kind={kind}
+                      multilingual={editor.multilingual}
                       onChange={(patch) =>
                         editor.editing &&
                         editor.patchField(editor.editing.index, patch)
@@ -293,6 +298,7 @@ export function SchemaEditorSheet({
                       }
                       onRemove={editor.removeField}
                       kind={kind}
+                      multilingual={editor.multilingual}
                     />
                   </motion.div>
                 )}
@@ -388,6 +394,24 @@ export function SchemaEditorSheet({
                   )}
                 </div>
               </section>
+
+              {editor.multilingual && editor.languages ? (
+                <RequiredLanguagesSection
+                  languages={editor.languages}
+                  required={editor.requiredLanguages}
+                  onToggle={editor.toggleRequiredLanguage}
+                />
+              ) : null}
+
+              {editor.multilingual && editor.languages && !isGlobal ? (
+                <LocalizedRoutesSection
+                  languages={editor.languages}
+                  mainPattern={editor.routePattern}
+                  routes={editor.routes}
+                  error={editor.routeError}
+                  onChange={editor.setLocalizedRoute}
+                />
+              ) : null}
 
               {isGlobal ? (
                 <section className="grid gap-2">

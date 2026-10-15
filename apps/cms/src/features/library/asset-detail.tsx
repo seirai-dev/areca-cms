@@ -10,6 +10,12 @@ import { CheckDraw } from '#/components/ui/status-pill'
 import { Textarea } from '#/components/ui/textarea'
 import { Hint } from '#/components/ui/tooltip'
 import { absoluteTimeLabel, formatRelativeTime } from '#/lib/relative-time'
+import {
+  isMultilingual,
+  languageEndonym,
+  nonMainLanguages,
+} from '#/lib/site-languages'
+import type { SiteLanguages } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 
 import { fileKind, formatBytes, isImage, isPdf } from './use-library'
@@ -28,6 +34,8 @@ export function AssetDetail({
   canDelete,
   uploaderName,
   mutations,
+  siteId,
+  languages,
 }: {
   asset: LibraryAsset | null
   open: boolean
@@ -35,6 +43,9 @@ export function AssetDetail({
   canDelete: boolean
   uploaderName?: string | null
   mutations: ReturnType<typeof useAssetMutations>
+  /** The site the Library is viewed from; its languages drive per-language alt text. */
+  siteId?: string
+  languages?: SiteLanguages | null
 }) {
   const [confirmOpen, setConfirmOpen] = React.useState(false)
   // Keep showing the last asset while the panel animates out.
@@ -106,6 +117,8 @@ export function AssetDetail({
             key={current.id}
             asset={current}
             mutations={mutations}
+            siteId={isMultilingual(languages) ? siteId : undefined}
+            languages={isMultilingual(languages) ? languages : null}
           />
           <InfoRows asset={current} uploaderName={uploaderName} />
         </div>
@@ -164,15 +177,73 @@ function Preview({ asset }: { asset: LibraryAsset }) {
   )
 }
 
+/**
+ * Alt text of the main language (`#asset-alt`), and on a multilingual site
+ * one field per other language, labelled with its endonym. Each saves on blur
+ * through `updateAssetFn` with the language and site.
+ */
 function DescriptionField({
   asset,
   mutations,
+  siteId,
+  languages,
 }: {
   asset: LibraryAsset
   mutations: ReturnType<typeof useAssetMutations>
+  siteId?: string
+  languages: SiteLanguages | null
 }) {
-  const [value, setValue] = React.useState(asset.altText ?? '')
-  const saved = React.useRef(asset.altText ?? '')
+  const others = languages ? nonMainLanguages(languages) : []
+  return (
+    <div className="grid gap-5">
+      <AltTextField
+        asset={asset}
+        mutations={mutations}
+        siteId={siteId}
+        locale={undefined}
+        label={
+          languages
+            ? languageEndonym(languages.main)
+            : m.library_description_label()
+        }
+        mainBadge={languages ? m.library_alt_main_language() : undefined}
+      />
+      {others.map((locale) => (
+        <AltTextField
+          key={locale}
+          asset={asset}
+          mutations={mutations}
+          siteId={siteId}
+          locale={locale}
+          label={languageEndonym(locale)}
+        />
+      ))}
+    </div>
+  )
+}
+
+function AltTextField({
+  asset,
+  mutations,
+  siteId,
+  locale,
+  label,
+  mainBadge,
+}: {
+  asset: LibraryAsset
+  mutations: ReturnType<typeof useAssetMutations>
+  siteId?: string
+  /** Undefined is the main language (`alt`). */
+  locale: string | undefined
+  label: string
+  mainBadge?: string
+}) {
+  const initial = locale
+    ? (asset.altI18n?.[locale] ?? '')
+    : (asset.altText ?? '')
+  const id = locale ? `asset-alt-${locale}` : 'asset-alt'
+  const [value, setValue] = React.useState(initial)
+  const saved = React.useRef(initial)
   const [state, setState] = React.useState<'idle' | 'saving' | 'saved'>('idle')
   const timer = React.useRef<ReturnType<typeof setTimeout>>(undefined)
   React.useEffect(() => () => clearTimeout(timer.current), [])
@@ -182,7 +253,12 @@ function DescriptionField({
     if (next === saved.current) return
     setState('saving')
     try {
-      await mutations.saveAlt.mutateAsync({ id: asset.id, altText: next })
+      await mutations.saveAlt.mutateAsync({
+        id: asset.id,
+        altText: next,
+        ...(locale ? { locale } : {}),
+        ...(siteId ? { siteId } : {}),
+      })
       saved.current = next
       setState('saved')
       clearTimeout(timer.current)
@@ -196,15 +272,22 @@ function DescriptionField({
     <div className="grid gap-1.5">
       <div className="flex items-center justify-between gap-3">
         <label
-          htmlFor="asset-alt"
-          className="text-[13px] leading-[18px] font-medium text-text-primary"
+          htmlFor={id}
+          className="flex min-w-0 items-baseline gap-2 text-[13px] leading-[18px] font-medium text-text-primary"
         >
-          {m.library_description_label()}
+          <span className="truncate">{label}</span>
+          {mainBadge ? (
+            <span className="text-caption font-normal text-text-muted">
+              {mainBadge}
+            </span>
+          ) : null}
         </label>
         <span
           aria-live="polite"
           className="inline-flex items-center gap-1 text-caption text-text-muted"
-          data-testid="asset-alt-status"
+          data-testid={
+            locale ? `asset-alt-status-${locale}` : 'asset-alt-status'
+          }
         >
           {state === 'saving' ? m.library_saving() : null}
           {state === 'saved' ? (
@@ -220,7 +303,8 @@ function DescriptionField({
         </span>
       </div>
       <Textarea
-        id="asset-alt"
+        id={id}
+        data-testid={id}
         rows={2}
         value={value}
         placeholder={m.library_description_placeholder()}
@@ -234,9 +318,11 @@ function DescriptionField({
         }}
         className="min-h-[60px] resize-none"
       />
-      <p className="text-caption font-normal text-text-muted">
-        {m.library_description_hint()}
-      </p>
+      {locale ? null : (
+        <p className="text-caption font-normal text-text-muted">
+          {m.library_description_hint()}
+        </p>
+      )}
     </div>
   )
 }

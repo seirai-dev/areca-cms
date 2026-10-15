@@ -213,6 +213,10 @@ export function RichTextEditor({
   const [slash, setSlash] = React.useState<SlashState | null>(null)
   const [slashIndex, setSlashIndex] = React.useState(0)
   const slashQueryRef = React.useRef<string | null>(null)
+  // What the transaction listener last applied. Every transaction runs it,
+  // so a no-op must not reach setState: a nested update from a commit is what
+  // trips React's "Maximum update depth exceeded".
+  const slashAppliedRef = React.useRef<SlashState | null>(null)
   const slashKeyRef = React.useRef<(event: KeyboardEvent) => boolean>(
     () => false,
   )
@@ -280,6 +284,23 @@ export function RichTextEditor({
   // Slash menu: `/query` typed at the start of an empty paragraph.
   React.useEffect(() => {
     if (!editor) return
+    const apply = (next: SlashState | null) => {
+      const current = slashAppliedRef.current
+      if (next === null && current === null) return
+      if (
+        next &&
+        current &&
+        current.query === next.query &&
+        current.from === next.from &&
+        current.to === next.to &&
+        current.left === next.left &&
+        current.top === next.top
+      ) {
+        return
+      }
+      slashAppliedRef.current = next
+      setSlash(next)
+    }
     const update = () => {
       const { $from, empty } = editor.state.selection
       if (
@@ -288,7 +309,7 @@ export function RichTextEditor({
         $from.parent.type.name !== 'paragraph'
       ) {
         slashQueryRef.current = null
-        setSlash(null)
+        apply(null)
         return
       }
       const text = $from.parent.textBetween(
@@ -300,32 +321,22 @@ export function RichTextEditor({
       const match = /^\/([\p{L}\d ]{0,24})$/u.exec(text)
       if (!match) {
         slashQueryRef.current = null
-        setSlash(null)
+        apply(null)
         return
       }
       const coords = editor.view.coordsAtPos($from.pos)
       if (slashQueryRef.current !== match[1]) setSlashIndex(0)
       slashQueryRef.current = match[1]
-      const next = {
+      // Option updates also fire transactions: `apply` skips an unchanged menu.
+      apply({
         query: match[1],
         from: $from.start(),
         to: $from.pos,
         left: coords.left,
         top: coords.bottom,
-      }
-      // Bail out when nothing moved: option updates also fire transactions.
-      setSlash((current) =>
-        current &&
-        current.query === next.query &&
-        current.from === next.from &&
-        current.to === next.to &&
-        current.left === next.left &&
-        current.top === next.top
-          ? current
-          : next,
-      )
+      })
     }
-    const hide = () => setSlash(null)
+    const hide = () => apply(null)
     editor.on('transaction', update)
     editor.on('blur', hide)
     return () => {
@@ -430,6 +441,7 @@ export function RichTextEditor({
         .focus()
         .deleteRange({ from: slash.from, to: slash.to })
         .run()
+      slashAppliedRef.current = null
       setSlash(null)
       command.run(editor)
     },
@@ -453,6 +465,7 @@ export function RichTextEditor({
       return true
     }
     if (event.key === 'Escape') {
+      slashAppliedRef.current = null
       setSlash(null)
       return true
     }

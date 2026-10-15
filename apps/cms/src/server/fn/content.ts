@@ -211,6 +211,8 @@ export const listEntriesFn = createServerFn({ method: 'GET', ...entryFn })
       status: entryStatusSchema.optional(),
       referenceTargets: z.boolean().optional(),
       search: z.string().max(SEARCH_MAX_LENGTH).optional(),
+      /** Only entries not complete in this language. */
+      missingLanguage: localeTagSchema.optional(),
       limit: pageLimitSchema.optional(),
       offset: pageOffsetSchema.optional(),
     }),
@@ -221,6 +223,7 @@ export const listEntriesFn = createServerFn({ method: 'GET', ...entryFn })
       status: data.status,
       referenceTargets: data.referenceTargets,
       search: data.search,
+      missingLanguage: data.missingLanguage,
       limit: data.limit,
       offset: data.offset,
     })
@@ -378,6 +381,8 @@ export const getPreviewUrlFn = createServerFn({ method: 'GET' })
       siteId: z.string().min(1).max(ID_MAX_LENGTH),
       collection: z.string().min(1).max(ID_MAX_LENGTH),
       slug: z.string().min(1).max(SLUG_MAX_LENGTH),
+      /** Language to preview. Omitted = main language. */
+      locale: localeTagSchema.optional(),
     }),
   )
   .handler(async ({ data }) => {
@@ -387,6 +392,7 @@ export const getPreviewUrlFn = createServerFn({ method: 'GET' })
       collection: data.collection,
       slug: data.slug,
       secret: found.previewSecret,
+      locale: data.locale,
     })
     return {
       token,
@@ -395,6 +401,7 @@ export const getPreviewUrlFn = createServerFn({ method: 'GET' })
         data.collection,
         data.slug,
         token,
+        data.locale,
       ),
     }
   })
@@ -531,6 +538,8 @@ export const getGlobalPreviewUrlFn = createServerFn({ method: 'GET' })
     z.object({
       siteId: z.string().min(1).max(ID_MAX_LENGTH),
       key: z.string().min(1).max(ID_MAX_LENGTH),
+      /** Language to preview. Omitted = main language. */
+      locale: localeTagSchema.optional(),
     }),
   )
   .handler(async ({ data }) => {
@@ -543,6 +552,7 @@ export const getGlobalPreviewUrlFn = createServerFn({ method: 'GET' })
       siteId: found.id,
       global: data.key,
       secret: found.previewSecret,
+      locale: data.locale,
     })
     return {
       token,
@@ -550,6 +560,7 @@ export const getGlobalPreviewUrlFn = createServerFn({ method: 'GET' })
         found.productionUrl,
         global.previewPath,
         token,
+        data.locale,
       ),
     }
   })

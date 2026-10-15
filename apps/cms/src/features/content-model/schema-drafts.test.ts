@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  draftTranslatable,
   draftsFromFields,
   fieldsFromDrafts,
+  localizedRoutesFrom,
+  requiredLanguagesFrom,
+  routesDraftFrom,
   validateFieldDrafts,
 } from './schema-drafts'
 
@@ -146,5 +150,101 @@ describe('collection mode and group headings', () => {
     const drafts = draftsFromFields(undefined)
     expect(drafts.map((d) => d.type)).toEqual(['slug'])
     expect(fieldsFromDrafts(drafts)[0].group).toBeUndefined()
+  })
+})
+
+describe('translatable fields', () => {
+  it('stores the switch only when it differs from the type default', () => {
+    const fields = [
+      { key: 'title', label: 'Title', type: 'text' as const },
+      {
+        key: 'title2',
+        label: 'Title 2',
+        type: 'text' as const,
+        translatable: false,
+      },
+      {
+        key: 'hero',
+        label: 'Hero',
+        type: 'image' as const,
+        translatable: true,
+      },
+      {
+        key: 'when',
+        label: 'When',
+        type: 'date' as const,
+        translatable: false,
+      },
+    ]
+    const saved = fieldsFromDrafts(draftsFromFields(fields))
+    expect(saved.map((f) => [f.key, f.translatable])).toEqual([
+      ['slug', undefined],
+      ['title', undefined],
+      ['title2', false],
+      ['hero', true],
+      ['when', undefined],
+    ])
+  })
+
+  it('round-trips the explicit value through the draft', () => {
+    const fields = [
+      {
+        key: 'title',
+        label: 'Title',
+        type: 'text' as const,
+        translatable: false,
+      },
+      {
+        key: 'hero',
+        label: 'Hero',
+        type: 'image' as const,
+        translatable: true,
+      },
+    ]
+    const again = fieldsFromDrafts(draftsFromFields(fields))
+    expect(again.filter((f) => f.key !== 'slug')).toEqual(fields)
+  })
+
+  it('follows the new type default when the type changes and no value was set', () => {
+    const [draft] = draftsFromFields([
+      { key: 'x', label: 'X', type: 'text' as const },
+    ]).slice(1)
+    expect(draftTranslatable(draft)).toBe(true)
+    expect(draftTranslatable({ ...draft, type: 'image' })).toBe(false)
+  })
+
+  it('never makes a slug translatable', () => {
+    const [slug] = draftsFromFields(undefined)
+    expect(draftTranslatable(slug)).toBe(false)
+    expect(fieldsFromDrafts([slug])[0].translatable).toBeUndefined()
+  })
+})
+
+describe('required languages and route patterns', () => {
+  const languages = { main: 'nl', all: ['nl', 'en', 'fr'] }
+
+  it('keeps only the non-main site languages, in site order', () => {
+    expect(requiredLanguagesFrom(['fr', 'nl', 'en', 'de'], languages)).toEqual([
+      'en',
+      'fr',
+    ])
+    expect(requiredLanguagesFrom([], languages)).toEqual([])
+  })
+
+  it('drops blank patterns and the main language, and clears when none remain', () => {
+    expect(
+      localizedRoutesFrom(
+        { nl: '/vacatures/$slug', en: ' /vacancies/$slug ', fr: '  ' },
+        languages,
+      ),
+    ).toEqual({ en: '/vacancies/$slug' })
+    expect(localizedRoutesFrom({ en: '', fr: ' ' }, languages)).toBeNull()
+  })
+
+  it('round-trips stored patterns through the draft', () => {
+    const stored = { en: '/vacancies/$slug' }
+    const draft = routesDraftFrom(stored)
+    expect(localizedRoutesFrom(draft, languages)).toEqual(stored)
+    expect(routesDraftFrom(null)).toEqual({})
   })
 })

@@ -286,6 +286,8 @@ export function LibraryScreen({ site, me }: { site: MeSite; me: Me }) {
         canDelete={canDelete}
         uploaderName={nameOf(active?.createdBy)}
         mutations={mutations}
+        siteId={site.id}
+        languages={site.languages}
       />
 
       <DropOverlay visible={dragging} />

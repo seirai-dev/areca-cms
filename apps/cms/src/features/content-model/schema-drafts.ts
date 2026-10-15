@@ -19,8 +19,9 @@ import {
   REQUIRED_SLUG_FIELD,
   withRequiredSlugField,
 } from '#/lib/collection-fields'
+import { TRANSLATABLE_BY_DEFAULT } from '#/lib/content-locale'
 import { GLOBAL_GROUP_MAX_LENGTH } from '#/lib/globals'
-import type { Field, FieldType } from '#/lib/types'
+import type { Field, FieldType, SiteLanguages } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 
 /**
@@ -51,6 +52,11 @@ export type FieldDraft = {
   keyTouched: boolean
   /** Site content only: visual heading above this field ('' when unset). */
   group: string
+  /**
+   * The explicit "Translatable" switch. Undefined follows the field type's
+   * default (`TRANSLATABLE_BY_DEFAULT`). Only written when it differs from it.
+   */
+  translatable?: boolean
 }
 
 export type CollectionDraft = {
@@ -59,6 +65,16 @@ export type CollectionDraft = {
   routePattern: string
   enabled: boolean
   fields: Field[]
+}
+
+/**
+ * Per-language settings of a collection or section, edited next to the
+ * fields. `requiredLanguages` never holds the main language (it is implied).
+ * `routes` holds one pattern per non-main language; blank means "use main".
+ */
+export type LanguageSettingsDraft = {
+  requiredLanguages: string[]
+  routes: Record<string, string>
 }
 
 export type FieldErrors = Partial<
@@ -147,6 +163,22 @@ export function fieldTypeDescription(type: FieldType) {
   }
 }
 
+/** Whether a field draft is written per language, following the type default. */
+export function draftTranslatable(
+  field: Pick<FieldDraft, 'type' | 'translatable'>,
+) {
+  if (field.type === 'slug') return false
+  return field.translatable ?? TRANSLATABLE_BY_DEFAULT[field.type]
+}
+
+/** Whether a field is written per language (the Languages switch). */
+export function fieldTranslatable(field: Field) {
+  return draftTranslatable({
+    type: field.type,
+    translatable: field.translatable,
+  })
+}
+
 let draftSeq = 0
 function nextDraftId() {
   draftSeq += 1
@@ -191,6 +223,7 @@ export function emptyFieldDraft(type: FieldType = 'text'): FieldDraft {
     description: '',
     keyTouched: false,
     group: '',
+    translatable: undefined,
   }
 }
 
@@ -206,6 +239,7 @@ function toFieldDraft(field: Field): FieldDraft {
     description: field.description ?? '',
     keyTouched: true,
     group: field.group ?? '',
+    translatable: field.translatable,
   }
 }
 
@@ -240,8 +274,54 @@ export function fieldsFromDrafts(
           : undefined,
     }
     if (kind === 'global') saved.group = field.group.trim() || undefined
+    // Stored only when it differs from the type default, so a field that
+    // follows its default keeps no key.
+    if (
+      field.translatable !== undefined &&
+      field.type !== 'slug' &&
+      field.translatable !== TRANSLATABLE_BY_DEFAULT[field.type]
+    ) {
+      saved.translatable = field.translatable
+    }
     return saved
   })
+}
+
+/**
+ * Required languages as the server stores them: site languages besides main,
+ * in site order, without duplicates.
+ */
+export function requiredLanguagesFrom(
+  picked: string[],
+  languages: SiteLanguages,
+): string[] {
+  return languages.all.filter(
+    (locale) => locale !== languages.main && picked.includes(locale),
+  )
+}
+
+/**
+ * Route patterns as the server stores them: non-empty, trimmed, non-main
+ * languages only. Null when none are set (clears them on the server).
+ */
+export function localizedRoutesFrom(
+  routes: Partial<Record<string, string>>,
+  languages: SiteLanguages,
+): Record<string, string> | null {
+  const out: Record<string, string> = {}
+  for (const locale of languages.all) {
+    if (locale === languages.main) continue
+    const pattern = routes[locale]?.trim()
+    if (pattern) out[locale] = pattern
+  }
+  return Object.keys(out).length > 0 ? out : null
+}
+
+/** The stored route patterns as the editor's draft (every non-main language). */
+export function routesDraftFrom(
+  stored: Record<string, string> | null | undefined,
+): Record<string, string> {
+  return { ...(stored ?? {}) }
 }
 
 /** Comparable shape for the dirty check: ids and UI-only flags dropped. */

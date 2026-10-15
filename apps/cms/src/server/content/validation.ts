@@ -71,17 +71,21 @@ function schemaForField(field: Field, mode: SchemaMode): z.ZodType {
     case 'textarea': {
       const max = field.type === 'text' ? TEXT_MAX_LENGTH : TEXTAREA_MAX_LENGTH
       if (field.required) {
-        return z.string().min(1, m.server_required()).max(max)
+        // A draft may leave a required value out (a translation can be saved
+        // before the main language is filled in). Blank strings still fail.
+        const required = z.string().min(1, m.server_required()).max(max)
+        return mode === 'partial' ? required.optional() : required
       }
       return wrap(z.string().max(max), field, mode, true)
     }
     case 'slug':
       if (field.required) {
-        return z
+        const required = z
           .string()
           .min(1, m.server_required())
           .max(SLUG_MAX_LENGTH)
           .regex(SLUG_PATTERN, m.server_invalid_slug())
+        return mode === 'partial' ? required.optional() : required
       }
       return wrap(
         z
@@ -550,7 +554,14 @@ export async function validateContentOwnership(
   connection: Pick<typeof db, 'select'> = db,
 ) {
   const errors: FieldError[] = [
-    ...(await ownershipErrors(siteId, organizationId, fields, data, '', connection)),
+    ...(await ownershipErrors(
+      siteId,
+      organizationId,
+      fields,
+      data,
+      '',
+      connection,
+    )),
   ]
   const translations = data[I18N_KEY]
   if (isPlainObject(translations)) {
