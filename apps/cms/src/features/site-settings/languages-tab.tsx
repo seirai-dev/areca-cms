@@ -434,24 +434,29 @@ function AddLanguage({
               </CommandGroup>
             ) : null}
             <CommandGroup>
-              {options.map((tag) => (
-                <CommandItem
-                  key={tag}
-                  value={`${tag} ${languageEndonym(tag)} ${languageEnglishName(tag)}`}
-                  onSelect={() => pick(tag)}
-                  data-testid={`language-option-${tag}`}
-                >
-                  <span className="grid min-w-0 flex-1">
-                    <span className="truncate font-medium">
-                      {languageEndonym(tag)}
+              {options.map((tag) => {
+                const endonym = languageEndonym(tag)
+                const english = languageEnglishName(tag)
+                return (
+                  <CommandItem
+                    key={tag}
+                    value={`${tag} ${endonym} ${english}`}
+                    onSelect={() => pick(tag)}
+                    data-testid={`language-option-${tag}`}
+                  >
+                    <span className="grid min-w-0 flex-1">
+                      <span className="truncate font-medium">{endonym}</span>
+                      {/* Only when it adds something: "British English" twice reads as a bug. */}
+                      {english.toLowerCase() !== endonym.toLowerCase() ? (
+                        <span className="truncate text-caption text-text-secondary">
+                          {english}
+                        </span>
+                      ) : null}
                     </span>
-                    <span className="truncate text-caption text-text-secondary">
-                      {languageEnglishName(tag)}
-                    </span>
-                  </span>
-                  <span className="text-mono text-text-muted">{tag}</span>
-                </CommandItem>
-              ))}
+                    <span className="text-mono text-text-muted">{tag}</span>
+                  </CommandItem>
+                )
+              })}
             </CommandGroup>
           </CommandList>
         </Command>
