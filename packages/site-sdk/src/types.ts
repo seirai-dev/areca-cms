@@ -261,12 +261,33 @@ export type SnapshotAsset = {
   size: number
 }
 
+/** Completeness of one site language in a draft preview. */
+export type PreviewLocaleStatus = {
+  complete: boolean
+  /** Labels of the missing required fields, e.g. `Title`. */
+  missing: string[]
+}
+
+/**
+ * A draft entry in preview. `locales` has the snapshot shape (shipped
+ * languages only); `localeStatus` lists every site language. Both are absent
+ * on single-language sites.
+ */
+export type PreviewSnapshotEntry = SnapshotEntry & {
+  localeStatus?: Record<string, PreviewLocaleStatus>
+}
+
+/** A draft section in preview. Same language fields as `PreviewSnapshotEntry`. */
+export type PreviewSnapshotGlobal = SnapshotGlobal & {
+  localeStatus?: Record<string, PreviewLocaleStatus>
+}
+
 /** Preview of a collection entry. `kind` is missing from older CMS versions. */
 export type PreviewEntryResult = {
   kind?: 'entry'
   collection: string
   slug: string
-  entry: SnapshotEntry
+  entry: PreviewSnapshotEntry
 }
 
 /** Preview of a site content section. */
@@ -274,7 +295,7 @@ export type PreviewGlobalResult = {
   kind: 'global'
   /** Raw CMS key of the section. */
   global: string
-  entry: SnapshotGlobal
+  entry: PreviewSnapshotGlobal
 }
 
 export type PreviewResult = PreviewEntryResult | PreviewGlobalResult
