@@ -31,6 +31,7 @@ import {
 } from '#/db/schema'
 import * as adminFns from '#/server/fn/admin'
 import * as aiFns from '#/server/fn/ai'
+import * as translateFns from '#/server/fn/translate'
 import * as assetFns from '#/server/fn/assets'
 import * as authMethodFns from '#/server/fn/auth-methods'
 import * as brandingFns from '#/server/fn/branding'
@@ -994,6 +995,17 @@ export const ROWS: Row[] = [
       },
     }),
   },
+  {
+    name: 'translateContentFn',
+    hidden: true,
+    fn: translateFns.translateContentFn,
+    policy: 'org-editor',
+    tolerant: true,
+    note: 'Same access as generateEntrySeoFn. Allowed callers get a language or AI setup error (no key in the test world); denied callers must not reach the provider.',
+    prepare: (w) => ({
+      data: { siteId: w.X.site.id, entryId: w.X.entry.id, to: 'nl' },
+    }),
+  },
 
   // ------------------------------------------------- security/auth/setup/me
   {
@@ -1249,4 +1261,5 @@ export const ALL_FN_MODULES = {
   publishing: publishingFns,
   security: securityFns,
   setup: setupFns,
+  translate: translateFns,
 }
