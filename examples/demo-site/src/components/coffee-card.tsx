@@ -1,14 +1,15 @@
 import { Link } from '@tanstack/react-router'
 import type { CoffeesEntry } from '../generated/content/areca.gen.ts'
+import { m } from '#/paraglide/messages'
 import { CmsImage } from './cms-image.tsx'
-import { formatLabel, formatPrice, splitTastingNotes } from './formatters.ts'
+import { formatPrice, processLabel, splitTastingNotes } from './formatters.ts'
 import { RoastScale, TastingChips } from './ui.tsx'
 
 export function CoffeeCard({ coffee }: { coffee: CoffeesEntry }) {
   const { data } = coffee
   const price = formatPrice(data.price)
   const notes = splitTastingNotes(coffee.data.tastingNotes).slice(0, 3)
-  const meta = [data.origin, data.region, formatLabel(data.process)].filter(Boolean).join(' · ')
+  const meta = [data.origin, data.region, processLabel(data.process)].filter(Boolean).join(' · ')
 
   return (
     <article className="group flex flex-col">
@@ -31,7 +32,7 @@ export function CoffeeCard({ coffee }: { coffee: CoffeesEntry }) {
         )}
         {data.limited && data.image ? (
           <span className="absolute left-4 top-4 rounded-full bg-accent-strong px-3 py-1 text-[0.66rem] font-medium uppercase tracking-[0.14em] text-on-accent">
-            Limited
+            {m.limited()}
           </span>
         ) : null}
       </div>
@@ -42,7 +43,7 @@ export function CoffeeCard({ coffee }: { coffee: CoffeesEntry }) {
             {meta}
           </span>
           {data.limited && !data.image ? (
-            <span className="shrink-0 rounded-full bg-accent-strong px-2.5 py-0.5 text-on-accent">Limited</span>
+            <span className="shrink-0 rounded-full bg-accent-strong px-2.5 py-0.5 text-on-accent">{m.limited()}</span>
           ) : null}
         </p>
         <h2 className="mt-2 font-display text-2xl leading-tight tracking-tight text-ink">
@@ -60,7 +61,7 @@ export function CoffeeCard({ coffee }: { coffee: CoffeesEntry }) {
           {price ? (
             <p className="whitespace-nowrap text-sm text-ink">
               <span className="font-medium">{price}</span>
-              <span className="text-muted"> / 250 g</span>
+              <span className="text-muted"> {m.price_per_250g()}</span>
             </p>
           ) : null}
         </div>

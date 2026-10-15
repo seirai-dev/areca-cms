@@ -1,4 +1,5 @@
 import { createFileRoute, notFound } from '@tanstack/react-router'
+import { m } from '#/paraglide/messages'
 import { ArticleView } from '../../components/article-view.tsx'
 import { PageMessage } from '../../components/cms-image.tsx'
 import { loadArticle } from '../../lib/queries.ts'
@@ -12,12 +13,16 @@ export const Route = createFileRoute('/journal/$slug')({
   },
   head: ({ loaderData }) =>
     loaderData
-      ? entryHead(loaderData.article, {
-          title: loaderData.article.data.title,
-          description: loaderData.article.data.excerpt,
-          type: 'article',
-        })
-      : pageHead({ title: 'Article not found' }),
+      ? entryHead(
+          loaderData.article,
+          {
+            title: loaderData.article.data.title,
+            description: loaderData.article.data.excerpt,
+            type: 'article',
+          },
+          loaderData.alternates,
+        )
+      : pageHead({ title: m.article_not_found() }),
   component: JournalArticle,
   notFoundComponent: JournalArticleMissing,
 })
@@ -30,8 +35,8 @@ function JournalArticle() {
 function JournalArticleMissing() {
   const { slug } = Route.useParams()
   return (
-    <PageMessage title="Article not found">
-      No published article with slug “{slug}”.
+    <PageMessage title={m.article_not_found()}>
+      {m.article_not_found_body({ slug })}
     </PageMessage>
   )
 }

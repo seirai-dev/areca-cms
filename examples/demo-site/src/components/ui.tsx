@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
-import { formatLabel } from './formatters.ts'
+import { m } from '#/paraglide/messages'
+import { categoryLabel, ROAST_STEPS, roastLabel } from './formatters.ts'
 
 const BUTTON_BASE =
   'inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-medium tracking-wide transition-colors duration-200'
@@ -32,7 +33,7 @@ export function Eyebrow({
 
 /** Pill naming an article category. */
 export function CategoryPill({ category }: { category: string | null | undefined }) {
-  const label = formatLabel(category)
+  const label = categoryLabel(category)
   if (!label) return null
   return (
     <span className="inline-flex items-center rounded-full border border-fjord/30 px-3 py-1 text-[0.7rem] font-medium uppercase tracking-[0.14em] text-fjord">
@@ -49,25 +50,24 @@ export function RoastScale({
   level: string | null | undefined
   className?: string
 }) {
-  const steps = ['light', 'medium', 'medium-dark', 'dark']
-  const index = level ? steps.indexOf(level) : -1
-  const label = formatLabel(level)
+  const index = level ? ROAST_STEPS.indexOf(level as (typeof ROAST_STEPS)[number]) : -1
+  const label = roastLabel(level)
   if (!label || index < 0) return null
   return (
     <span
       role="img"
-      aria-label={`Roast level ${label.toLowerCase()}, step ${index + 1} of 4`}
+      aria-label={m.aria_roast_level({ level: label.toLowerCase(), step: index + 1, total: ROAST_STEPS.length })}
       className={`inline-flex items-center gap-2.5 text-sm text-ink ${className}`}
     >
       <span className="inline-flex items-center gap-1" aria-hidden="true">
-        {steps.map((step, i) => (
+        {ROAST_STEPS.map((step, i) => (
           <span
             key={step}
             className={`size-2 rounded-full ${i <= index ? 'bg-primary' : 'bg-line ring-1 ring-inset ring-line'}`}
           />
         ))}
       </span>
-      <span>{label} roast</span>
+      <span>{m.roast_label({ level: label })}</span>
     </span>
   )
 }

@@ -1,4 +1,5 @@
 import { createFileRoute, notFound } from '@tanstack/react-router'
+import { m } from '#/paraglide/messages'
 import { CoffeeView } from '../../components/coffee-view.tsx'
 import { PageMessage } from '../../components/cms-image.tsx'
 import { loadCoffee } from '../../lib/queries.ts'
@@ -12,13 +13,17 @@ export const Route = createFileRoute('/coffees/$slug')({
   },
   head: ({ loaderData }) =>
     loaderData
-      ? entryHead(loaderData.coffee, {
-          title: loaderData.coffee.data.name,
-          description: [loaderData.coffee.data.origin, loaderData.coffee.data.region]
-            .filter(Boolean)
-            .join(', '),
-        })
-      : pageHead({ title: 'Coffee not found' }),
+      ? entryHead(
+          loaderData.coffee,
+          {
+            title: loaderData.coffee.data.name,
+            description: [loaderData.coffee.data.origin, loaderData.coffee.data.region]
+              .filter(Boolean)
+              .join(', '),
+          },
+          loaderData.alternates,
+        )
+      : pageHead({ title: m.coffee_not_found() }),
   component: CoffeePage,
   notFoundComponent: CoffeeMissing,
 })
@@ -31,8 +36,8 @@ function CoffeePage() {
 function CoffeeMissing() {
   const { slug } = Route.useParams()
   return (
-    <PageMessage title="Coffee not found">
-      No coffee with slug “{slug}” is on the shelf.
+    <PageMessage title={m.coffee_not_found()}>
+      {m.coffee_not_found_body({ slug })}
     </PageMessage>
   )
 }

@@ -1,17 +1,14 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { m } from '#/paraglide/messages'
 import { ArticleCard } from '../../components/article-card.tsx'
 import { Eyebrow } from '../../components/ui.tsx'
+import { pageAlternates } from '../../lib/i18n.ts'
 import { loadJournal } from '../../lib/queries.ts'
 import { pageHead } from '../../lib/seo.ts'
 
 export const Route = createFileRoute('/journal/')({
   loader: async () => ({ articles: await loadJournal() }),
-  head: () =>
-    pageHead({
-      title: 'Journal',
-      description:
-        'Brewing notes, origin stories and news from the Northbound roastery, newest first.',
-    }),
+  head: () => pageHead({ title: m.journal_title(), description: m.meta_journal_description() }, pageAlternates('/journal')),
   component: JournalIndex,
 })
 
@@ -23,11 +20,11 @@ function JournalIndex() {
     <div className="mx-auto max-w-6xl px-5 pb-28 pt-16 sm:px-8 md:pt-24">
       <header className="grid gap-6 md:grid-cols-12 md:items-end">
         <div className="md:col-span-7">
-          <Eyebrow>Journal</Eyebrow>
-          <h1 className="mt-4 font-display text-5xl leading-[1.02] tracking-tight text-ink md:text-7xl">Journal</h1>
+          <Eyebrow>{m.eyebrow_journal()}</Eyebrow>
+          <h1 className="mt-4 font-display text-5xl leading-[1.02] tracking-tight text-ink md:text-7xl">{m.journal_title()}</h1>
         </div>
         <p className="text-lg leading-8 text-muted md:col-span-4 md:col-start-9">
-          Brewing notes, origin stories and news from the roastery.
+          {m.journal_intro()}
         </p>
       </header>
 

@@ -1,10 +1,11 @@
 import { Link } from '@tanstack/react-router'
+import { m } from '#/paraglide/messages'
 import type { ArticlesEntry, CoffeesEntry } from '../generated/content/areca.gen.ts'
 import { ArticleBody } from './article-body.tsx'
 import { ArticleCard } from './article-card.tsx'
 import { CmsImage, PreviewBanner } from './cms-image.tsx'
 import { CoffeeSpecs } from './coffee-specs.tsx'
-import { formatLabel, formatPrice, splitTastingNotes } from './formatters.ts'
+import { formatPrice, processLabel, splitTastingNotes } from './formatters.ts'
 import { buttonPrimary, Eyebrow, RoastScale, SectionHeading, TastingChips } from './ui.tsx'
 
 export function CoffeeView({
@@ -20,13 +21,13 @@ export function CoffeeView({
   const notes = splitTastingNotes(coffee.data.tastingNotes)
   const price = formatPrice(data.price)
   const origin = [data.origin, data.region].filter(Boolean).join(' · ')
-  const process = formatLabel(data.process)
+  const process = processLabel(data.process)
 
   return (
     <div className="mx-auto max-w-6xl px-5 pb-28 pt-8 sm:px-8 md:pt-14">
       {preview ? <PreviewBanner /> : null}
       <Link to="/coffees" className="text-sm text-muted transition-colors hover:text-ink">
-        ← All coffees
+        {m.back_to_coffees()}
       </Link>
 
       <div className="mt-8 grid gap-12 md:mt-10 md:grid-cols-12 md:gap-16">
@@ -43,7 +44,7 @@ export function CoffeeView({
             <Eyebrow>{[origin, process].filter(Boolean).join(' · ')}</Eyebrow>
             {data.limited ? (
               <span className="mt-4 inline-flex rounded-full bg-accent-strong px-3 py-1 text-[0.66rem] font-medium uppercase tracking-[0.14em] text-on-accent">
-                Limited release
+                {m.limited_release()}
               </span>
             ) : null}
             <h1 className="mt-4 font-display text-5xl leading-[1.02] tracking-tight text-ink md:text-6xl">
@@ -54,7 +55,7 @@ export function CoffeeView({
               {price ? (
                 <p className="text-ink">
                   <span className="font-display text-4xl">{price}</span>
-                  <span className="text-sm text-muted"> / 250 g</span>
+                  <span className="text-sm text-muted"> {m.price_per_250g()}</span>
                 </p>
               ) : null}
               <RoastScale level={data.roastLevel} />
@@ -62,7 +63,7 @@ export function CoffeeView({
 
             {notes.length ? (
               <div className="mt-8">
-                <Eyebrow>Tasting notes</Eyebrow>
+                <Eyebrow>{m.tasting_notes()}</Eyebrow>
                 <TastingChips notes={notes} className="mt-3" />
               </div>
             ) : null}
@@ -78,9 +79,9 @@ export function CoffeeView({
                 target="_blank"
                 className={`${buttonPrimary} mt-9 w-full sm:w-auto`}
               >
-                Buy on the shop
+                {m.buy_on_shop()}
                 <span aria-hidden="true">↗</span>
-                <span className="sr-only">(opens in a new tab)</span>
+                <span className="sr-only">{m.opens_new_tab()}</span>
               </a>
             ) : null}
           </div>
@@ -95,7 +96,7 @@ export function CoffeeView({
 
       {articles.length ? (
         <section className="mt-28 border-t border-line pt-16" aria-labelledby="related-journal">
-          <SectionHeading id="related-journal" eyebrow="Journal" title="Read about this coffee" />
+          <SectionHeading id="related-journal" eyebrow={m.eyebrow_journal()} title={m.read_about_coffee()} />
           <div className="mt-10 grid gap-x-8 gap-y-14 md:grid-cols-2">
             {articles.map((article) => (
               <ArticleCard key={article.id} article={article} />

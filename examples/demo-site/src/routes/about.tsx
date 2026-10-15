@@ -1,7 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { m } from '#/paraglide/messages'
 import { ArticleBody } from '../components/article-body.tsx'
 import { CmsImage, PreviewBanner } from '../components/cms-image.tsx'
 import { Eyebrow } from '../components/ui.tsx'
+import { pageAlternates } from '../lib/i18n.ts'
 import { loadAbout, sitePreviewSearch } from '../lib/queries.ts'
 import { noindexHead, sectionHead } from '../lib/seo.ts'
 
@@ -10,11 +12,11 @@ export const Route = createFileRoute('/about')({
   loaderDeps: ({ search }) => ({ arecaPreview: search.arecaPreview }),
   loader: ({ deps }) => loadAbout({ data: { arecaPreview: deps.arecaPreview } }),
   head: ({ loaderData }) => {
-    const head = sectionHead(loaderData?.about.$seo, {
-      title: 'About',
-      description:
-        'Northbound Coffee Co. is a small roastery in Bergen, Norway, founded in 2016. We buy direct and roast in small batches.',
-    })
+    const head = sectionHead(
+      loaderData?.about.$seo,
+      { title: m.about_title(), description: m.meta_about_description() },
+      pageAlternates('/about'),
+    )
     return loaderData?.noindex ? noindexHead(head) : head
   },
   component: About,
@@ -24,9 +26,9 @@ function About() {
   const { about, preview, incomplete } = Route.useLoaderData()
   const { heading, body, image, foundedYear, roasterCapacityKg, originsCount } = about
   const stats = [
-    { label: 'Founded', value: foundedYear == null ? null : String(foundedYear) },
-    { label: 'Roaster capacity', value: roasterCapacityKg == null ? null : `${roasterCapacityKg} kg` },
-    { label: 'Origins bought from', value: originsCount == null ? null : String(originsCount) },
+    { label: m.stat_founded(), value: foundedYear == null ? null : String(foundedYear) },
+    { label: m.stat_capacity(), value: roasterCapacityKg == null ? null : `${roasterCapacityKg} kg` },
+    { label: m.stat_origins(), value: originsCount == null ? null : String(originsCount) },
   ].flatMap((stat) => (stat.value === null ? [] : [{ label: stat.label, value: stat.value }]))
 
   return (
@@ -34,7 +36,7 @@ function About() {
       {preview ? <PreviewBanner incomplete={incomplete} /> : null}
 
       <header className="max-w-4xl">
-        <Eyebrow>About</Eyebrow>
+        <Eyebrow>{m.eyebrow_about()}</Eyebrow>
         <h1 className="mt-5 font-display text-5xl leading-[1.02] tracking-tight text-ink md:text-7xl">
           {heading}
         </h1>

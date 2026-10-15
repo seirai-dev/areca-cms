@@ -9,6 +9,7 @@ import type {
   AuthorsEntry,
   CoffeesEntry,
 } from '../generated/content/areca.gen.ts'
+import { entryAlternates } from './i18n.ts'
 import { SITE_DESCRIPTION, SITE_NAME } from './seo.ts'
 import {
   articlesByAuthor,
@@ -145,6 +146,7 @@ export const loadCoffee = createServerFn({ method: 'GET', ...loose })
     return {
       coffee,
       articles: articlesFeaturingCoffee(coffee.id),
+      alternates: entryAlternates(coffee.alternates),
     }
   })
 
@@ -161,6 +163,7 @@ export const loadArticle = createServerFn({ method: 'GET', ...loose })
       article,
       author: content.resolve(article.data.author),
       coffee: content.resolve(article.data.featuredCoffee),
+      alternates: entryAlternates(article.alternates),
     }
   })
 
@@ -176,6 +179,7 @@ export const loadAuthor = createServerFn({ method: 'GET', ...loose })
     return {
       author,
       articles: articlesByAuthor(author.id),
+      alternates: entryAlternates(author.alternates),
     }
   })
 

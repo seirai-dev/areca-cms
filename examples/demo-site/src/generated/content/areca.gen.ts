@@ -2,6 +2,7 @@
 /* eslint-disable */
 import { createContent } from '@areca-cms/site-sdk/content'
 import type { Entry, Global } from '@areca-cms/site-sdk'
+import { getLocale } from '../../paraglide/runtime.js'
 
 export const schema = {
   /** Journal */
@@ -9,6 +10,7 @@ export const schema = {
     key: 'articles',
     label: 'Journal',
     route: '/journal/$slug',
+    routes: { nl: '/journaal/$slug' },
     fields: {
       /** Slug */
       slug: { key: 'slug', type: 'slug', required: true },
@@ -39,7 +41,7 @@ export const schema = {
       /** Slug */
       slug: { key: 'slug', type: 'slug', required: true },
       /** Name */
-      name: { key: 'name', type: 'text', required: true },
+      name: { key: 'name', type: 'text', required: true, translatable: false },
       /** Role */
       role: { key: 'role', type: 'text', required: false },
       /** Bio */
@@ -53,11 +55,12 @@ export const schema = {
     key: 'coffees',
     label: 'Coffees',
     route: '/coffees/$slug',
+    routes: { nl: '/koffie/$slug' },
     fields: {
       /** Slug */
       slug: { key: 'slug', type: 'slug', required: true },
       /** Name */
-      name: { key: 'name', type: 'text', required: true },
+      name: { key: 'name', type: 'text', required: true, translatable: false },
       /** Country of origin */
       origin: { key: 'origin', type: 'text', required: true },
       /** Region */
@@ -73,7 +76,7 @@ export const schema = {
       /** Altitude (m above sea level) */
       altitude: { key: 'altitude', type: 'number', required: false },
       /** Price per 250 g (EUR) */
-      price: { key: 'price', type: 'number', required: false },
+      price: { key: 'price', type: 'number', required: false, translatable: false },
       /** Limited release */
       limited: { key: 'limited', type: 'boolean', required: false },
       /** Harvest date */
@@ -83,7 +86,7 @@ export const schema = {
       /** Description */
       description: { key: 'description', type: 'richtext', required: false },
       /** Shop link */
-      shopUrl: { key: 'shopUrl', type: 'url', required: false },
+      shopUrl: { key: 'shopUrl', type: 'url', required: false, translatable: false },
     },
   },
 } as const
@@ -117,17 +120,17 @@ export const globalSchema = {
     seo: false,
     fields: {
       /** Name */
-      name: { key: 'name', type: 'text', required: true },
+      name: { key: 'name', type: 'text', required: true, translatable: false },
       /** Tagline */
       tagline: { key: 'tagline', type: 'textarea', required: false },
       /** Address */
       address: { key: 'address', type: 'textarea', required: false, group: 'Contact' },
       /** Email */
-      email: { key: 'email', type: 'text', required: false, group: 'Contact' },
+      email: { key: 'email', type: 'text', required: false, group: 'Contact', translatable: false },
       /** Phone */
-      phone: { key: 'phone', type: 'text', required: false, group: 'Contact' },
+      phone: { key: 'phone', type: 'text', required: false, group: 'Contact', translatable: false },
       /** Instagram */
-      instagramUrl: { key: 'instagramUrl', type: 'url', required: false, group: 'Contact' },
+      instagramUrl: { key: 'instagramUrl', type: 'url', required: false, group: 'Contact', translatable: false },
       /** Founded */
       foundedYear: { key: 'foundedYear', type: 'number', required: false },
     },
@@ -149,10 +152,14 @@ export const globalSchema = {
   },
 } as const
 
+export const languages = { main: 'en', all: ['en', 'nl'] } as const
+export type Locale = 'en' | 'nl'
+
 declare module '@areca-cms/site-sdk' {
   interface Register {
     schema: typeof schema
     globals: typeof globalSchema
+    languages: typeof languages
   }
 }
 
@@ -166,5 +173,6 @@ export type HomePageGlobal = Global<'homePage'>
 export const content = createContent({
   schema,
   globalSchema,
+  locale: getLocale,
   dir: process.env.ARECA_CONTENT_DIR ?? 'src/generated/content',
 })

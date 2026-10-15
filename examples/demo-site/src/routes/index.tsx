@@ -1,11 +1,13 @@
 import { Link, createFileRoute } from '@tanstack/react-router'
+import { m } from '#/paraglide/messages'
 import { ArticleCard } from '../components/article-card.tsx'
 import { AuthorCard } from '../components/author-card.tsx'
 import { CoffeeCard } from '../components/coffee-card.tsx'
 import { CmsImage, PreviewBanner } from '../components/cms-image.tsx'
 import { buttonGhostOnImage, buttonOnImage, Eyebrow, SectionHeading } from '../components/ui.tsx'
+import { pageAlternates } from '../lib/i18n.ts'
 import { loadHome, loadTeam, sitePreviewSearch } from '../lib/queries.ts'
-import { noindexHead, sectionHead, SITE_DESCRIPTION, SITE_NAME } from '../lib/seo.ts'
+import { noindexHead, sectionHead, SITE_NAME } from '../lib/seo.ts'
 
 export const Route = createFileRoute('/')({
   validateSearch: (search) => sitePreviewSearch.parse(search),
@@ -15,7 +17,11 @@ export const Route = createFileRoute('/')({
     authors: await loadTeam(),
   }),
   head: ({ loaderData }) => {
-    const head = sectionHead(loaderData?.home.$seo, { description: SITE_DESCRIPTION })
+    const head = sectionHead(
+      loaderData?.home.$seo,
+      { description: m.meta_home_description() },
+      pageAlternates('/'),
+    )
     return loaderData?.noindex ? noindexHead(head) : head
   },
   component: Home,
@@ -46,22 +52,22 @@ function Home() {
             </p>
           ) : null}
           <h1 className="mt-5 max-w-4xl font-display text-5xl font-normal leading-[0.98] tracking-tight sm:text-6xl md:text-7xl lg:text-[5.5rem]">
-            Coffee from the source, roasted on the coast.
+            {m.hero_title()}
           </h1>
           <p className="mt-6 max-w-xl text-base leading-7 text-on-image/85 md:text-lg">
             {home.heroIntro}
           </p>
           <div className="mt-9 flex flex-wrap gap-3">
             <Link to="/coffees" className={buttonOnImage}>
-              Shop coffees
+              {m.hero_shop_coffees()}
             </Link>
             <Link to="/journal" className={buttonGhostOnImage}>
-              Read the journal
+              {m.hero_read_journal()}
             </Link>
           </div>
           {featuredCoffee ? (
             <p className="mt-8 text-sm text-on-image/85">
-              Featured this season:{' '}
+              {m.featured_this_season()}{' '}
               <Link
                 to="/coffees/$slug"
                 params={{ slug: featuredCoffee.slug }}
@@ -77,10 +83,10 @@ function Home() {
       <section className="mx-auto max-w-6xl px-5 py-24 sm:px-8 md:py-32" aria-labelledby="home-coffees">
         <SectionHeading
           id="home-coffees"
-          eyebrow="Shop"
-          title="This season's coffees"
+          eyebrow={m.eyebrow_shop()}
+          title={m.home_coffees_title()}
           linkTo="/coffees"
-          linkLabel="All coffees"
+          linkLabel={m.view_all_coffees()}
         />
         <div className="mt-12 grid gap-x-8 gap-y-16 md:grid-cols-3">
           {coffees.map((coffee) => (
@@ -94,10 +100,10 @@ function Home() {
           <div className="mx-auto max-w-6xl px-5 sm:px-8">
             <SectionHeading
               id="home-journal"
-              eyebrow="Journal"
-              title="From the journal"
+              eyebrow={m.eyebrow_journal()}
+              title={m.from_the_journal()}
               linkTo="/journal"
-              linkLabel="All articles"
+              linkLabel={m.view_all_articles()}
             />
             <div className="mt-14 grid gap-14 lg:grid-cols-[1.6fr_1fr] lg:gap-16">
               <ArticleCard
@@ -122,7 +128,13 @@ function Home() {
 
       {authors.length ? (
         <section className="mx-auto max-w-6xl px-5 py-24 sm:px-8 md:py-32" aria-labelledby="home-team">
-          <SectionHeading id="home-team" eyebrow="Team" title="The people behind the roast" linkTo="/team" linkLabel="Meet the team" />
+          <SectionHeading
+            id="home-team"
+            eyebrow={m.eyebrow_team()}
+            title={m.home_team_title()}
+            linkTo="/team"
+            linkLabel={m.meet_team()}
+          />
           <div className="mt-14 grid gap-12 md:grid-cols-3 md:gap-8">
             {authors.map((author) => (
               <AuthorCard key={author.id} author={author} />
@@ -131,15 +143,13 @@ function Home() {
         </section>
       ) : null}
 
-      <section className="bg-brand py-24 text-brand-ink md:py-32" aria-label="Our approach">
+      <section className="bg-brand py-24 text-brand-ink md:py-32" aria-label={m.our_approach()}>
         <figure className="mx-auto max-w-4xl px-5 text-center sm:px-8">
-          <Eyebrow className="!text-brand-ink/70">Our approach</Eyebrow>
+          <Eyebrow className="!text-brand-ink/70">{m.our_approach()}</Eyebrow>
           <blockquote className="mt-8 font-display text-4xl font-normal leading-[1.15] tracking-tight md:text-6xl">
-            <p>
-              “We roast every batch ourselves, and we set aside any lot that isn’t ready.”
-            </p>
+            <p>{m.quote_home()}</p>
           </blockquote>
-          <figcaption className="mt-8 text-sm text-brand-ink/75">{SITE_NAME}, Bergen</figcaption>
+          <figcaption className="mt-8 text-sm text-brand-ink/75">{m.quote_attribution({ name: SITE_NAME })}</figcaption>
         </figure>
       </section>
     </div>

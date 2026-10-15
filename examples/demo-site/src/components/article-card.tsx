@@ -1,4 +1,5 @@
 import { Link } from '@tanstack/react-router'
+import { m } from '#/paraglide/messages'
 import type { ArticlesEntry, AuthorsEntry } from '../generated/content/areca.gen.ts'
 import { CmsImage } from './cms-image.tsx'
 import { formatDate } from './formatters.ts'
@@ -76,7 +77,7 @@ export function ArticleCard({
         <CmsImage image={author.data.portrait} className="size-8 rounded-full object-cover" />
       ) : null}
       <span>
-        By <span className="font-medium text-ink">{author.data.name}</span>
+        {m.by()} <span className="font-medium text-ink">{author.data.name}</span>
       </span>
     </p>
   ) : null
@@ -128,7 +129,7 @@ export function ArticleCard({
               params={{ slug: article.slug }}
               className="text-sm font-medium text-ink underline decoration-line underline-offset-[6px] transition-colors hover:text-accent-strong hover:decoration-accent-strong"
             >
-              Read the story
+              {m.read_story()}
             </Link>
           </p>
         </div>

@@ -162,6 +162,7 @@ describe('demo CMS SEO integration', () => {
       { property: 'og:description', content: 'Shop.' },
       { property: 'og:type', content: 'website' },
       { property: 'og:site_name', content: SITE_NAME },
+      { property: 'og:locale', content: 'en_GB' },
     ])
     expect(pageHead({}).meta[0]).toEqual({ title: SITE_NAME })
   })

@@ -170,6 +170,113 @@ function fixtureClient(snapshot: Snapshot): ArecaClient {
   }
 }
 
+/** One language of an entry or section, as the CMS ships it: its slug (collections), data and SEO. */
+type Translation = { slug?: string; data: Record<string, unknown>; seo?: SeoMeta }
+
+/**
+ * Dutch translations, by raw entry id (`id` in the table above). Entries and
+ * sections without one ship in English only, and visitors to /nl get the
+ * English version with `isFallback` set. `bergen` is left untranslated on
+ * purpose, so the fallback is visible.
+ */
+function dutchTranslations(): Record<string, Translation> {
+  return {
+    ent_article_ethiopia: {
+      slug: 'waarom-we-ethiopische-naturals-lichter-roosteren',
+      data: {
+        title: 'Waarom we Ethiopische naturals lichter roosteren',
+        excerpt:
+          'Natuurlijk verwerkte Ethiopiërs zijn broos en fruitig. Ons branderschema houdt de bosbes en laat de bitterheid achterwege.',
+        body: richText(
+          "Natuurlijk verwerkte koffie bevat meer suiker en fragielere aroma's dan gewassen partijen. Brand je ze te donker, dan wordt het fruit tot jam.\n\n## Onze aanpak\n\nWe stoppen het roosteren ongeveer een minuut eerder dan bij een gewassen Colombiaan en laten de bonen daarna vijf dagen rusten voordat ze de deur uitgaan.\n\n> Als de kop vlak smaakt, brand dan lichter, niet donkerder.\n\nProbeer de Guji natural als filterkoffie op 94 °C met een verhouding van 1:16.",
+        ),
+        heroImage: imageValue('heroEthiopia', 'Koffiekersen drogen op verhoogde bedden in Guji'),
+      },
+    },
+    ent_article_huila: {
+      slug: 'een-jaar-direct-handelen-in-huila',
+      data: {
+        title: 'Een jaar direct handelen in Huila',
+        excerpt:
+          'Prijzen vooraf afgesproken, een proeftafel op de boerderij en wat drie seizoenen samen ons hebben geleerd.',
+        body: richText(
+          'Matti bezocht Finca La Esperanza voor het eerst in 2022. Sindsdien kopen we er elk seizoen, tegen een prijs die we vóór de pluk afspreken.\n\n## Wat er veranderde\n\nDe boerderij houdt nu partijgegevens bij die we kunnen afzetten tegen onze eigen brandnotities. Die terugkoppeling is het echte voordeel van direct handelen.\n\n- Prijzen vóór de oogst afgesproken\n- Monsters geproefd op de boerderij\n- Feedback van beide kanten',
+        ),
+      },
+    },
+    ent_coffee_ethiopia: {
+      data: {
+        origin: 'Ethiopië',
+        tastingNotes: 'bosbes, jasmijn, cacaonib',
+        description: richText(
+          'Twee tot drie weken gedroogd op verhoogde bedden. Deze partij smaakt als een rijpe bessentaart. We branden hem licht zodat de jasmijn in de kop blijft.\n\nDit jaar zijn er maar 60 zakken geïmporteerd.',
+        ),
+      },
+    },
+    ent_global_company_info: {
+      data: {
+        tagline:
+          'Rechtstreeks inkopen bij boerderijen die we kennen, en in kleine batches met de hand roosteren aan de kust van Bergen.',
+      },
+    },
+    ent_global_home_page: {
+      data: {
+        heroEyebrow: 'Branderij in Bergen, Noorwegen',
+        heroIntro: `${COMPANY_NAME} koopt rechtstreeks bij producenten en brandt elke partij in kleine batches op een Giesen van 15 kg. Dit zit er dit seizoen in de winkel.`,
+      },
+      seo: seo('Specialty koffie uit Bergen', 'Specialty koffie in kleine batches, geroosterd in Bergen, Noorwegen, op een Giesen van 15 kg.'),
+    },
+    ent_global_about_page: {
+      data: {
+        heading: 'Een kleine branderij aan de haven van Bergen.',
+        body: richText(
+          [
+            'Northbound Coffee Co. begon in 2016 met één tweedehands brander en een schrift vol cuppingscores.',
+            'We zijn nog steeds een klein team in Bergen, Noorwegen, en we branden elke batch nog steeds zelf.',
+            '> Elke partij die nog niet klaar is, leggen we opzij.',
+            'We branden op een Giesen van 15 kg in batches die klein genoeg zijn om goed in de gaten te houden. Zo kunnen we elke partij met de hand profileren, het roosteren vertragen wanneer een koffie tijd nodig heeft en batches opzijzetten die niet klaar zijn. Geroosterde koffie gaat binnen een paar weken de deur uit, met de roostdatum op de zak.',
+            'We kopen direct in. Onze inkoper spreekt prijzen af met producenten vóór de oogst, proeft monsters op de boerderij en deelt roostersfeedback van beide kanten. Lees meer over de boerderijen in het [journaal](/nl/journaal), of maak kennis met de [mensen](/nl/team) achter elke partij.',
+          ].join('\n\n'),
+        ),
+      },
+      seo: seo(
+        'Over ons',
+        'Northbound Coffee Co. is een kleine branderij in Bergen, Noorwegen, opgericht in 2016. Wij kopen direct in en branden in kleine batches.',
+      ),
+    },
+  }
+}
+
+/**
+ * Adds the language fields to a publication entry or section: `locale` (the
+ * base language, English here) and `locales` with one view per complete
+ * language. A translation's data is merged over the base, so shared fields
+ * (author, price, image) stay the same.
+ */
+function withLocales<T extends SnapshotEntry | SnapshotGlobal>(
+  item: T,
+  translation: Translation | undefined,
+  collection: boolean,
+): T {
+  const base: Translation = { slug: collection ? (item as SnapshotEntry).slug : undefined, data: item.data, seo: item.seo }
+  const en = {
+    ...(collection ? { slug: base.slug } : {}),
+    data: base.data,
+    ...(base.seo ? { seo: base.seo } : {}),
+  }
+  const locales: Record<string, Record<string, unknown>> = { en }
+  if (translation) {
+    const data = { ...base.data, ...translation.data }
+    if (collection && translation.slug) data.slug = translation.slug
+    locales.nl = {
+      ...(collection ? { slug: translation.slug ?? base.slug } : {}),
+      data,
+      ...(translation.seo ? { seo: translation.seo } : {}),
+    }
+  }
+  return { ...item, locale: 'en', locales } as T
+}
+
 /**
  * Writes the fixture as a CMS publication (raw keys, embedded schema) and runs
  * it through `pullContent`, so the files, manifest and areca.gen.ts are what
@@ -399,14 +506,27 @@ export async function writeFixtureContent(outDir = CONTENT_DIR, mediaDir = MEDIA
     },
   }
 
+  const translated = dutchTranslations()
+  const localized = <T extends SnapshotEntry>(items: T[]) =>
+    items.map((item) => withLocales(item, translated[item.id], true))
   const snapshot: Snapshot = {
     publicationId: FIXTURE_PUBLICATION_ID,
     siteKey: config.siteKey,
     createdAt: '2026-10-01T10:00:00.000Z',
     hash: 'fixture-northbound-sha256',
-    collections: { articles, coffees, authors },
+    languages: config.languages,
+    collections: {
+      articles: localized(articles),
+      coffees: localized(coffees),
+      authors: localized(authors),
+    },
     schema: publicationSchema(),
-    globals,
+    globals: Object.fromEntries(
+      Object.entries(globals).map(([key, section]) => [
+        key,
+        withLocales(section, translated[section.id], false),
+      ]),
+    ),
     globalSchema: manifestFromConfig(config).globals ?? {},
   }
 
@@ -416,6 +536,10 @@ export async function writeFixtureContent(outDir = CONTENT_DIR, mediaDir = MEDIA
     client: fixtureClient(snapshot),
     publicationId: FIXTURE_PUBLICATION_ID,
     contentDir: CONTENT_OUT,
+    // The same runtime path `areca pull` resolves from i18n.paraglide.
+    ...(config.i18n?.paraglide
+      ? { paraglide: join(process.cwd(), config.i18n.paraglide) }
+      : {}),
   })
 }
 

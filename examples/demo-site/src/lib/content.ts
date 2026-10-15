@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import { readContentManifest } from '@areca-cms/site-sdk/pull'
 import type { PulledContentManifest } from '@areca-cms/site-sdk'
 import { referenceId } from './references.ts'
+import { LOCALES, localizedPath, prefixLocale } from './locale-routes.ts'
 import { content } from '../generated/content/areca.gen.ts'
 import type { ArticlesEntry, AuthorsEntry, CoffeesEntry } from '../generated/content/areca.gen.ts'
 
@@ -82,13 +83,33 @@ export function tastingNotes(coffee: CoffeesEntry): string[] {
     .filter(Boolean)
 }
 
-/** Every route the static build must prerender. */
+/**
+ * Every route the static build must prerender, in every language: the list
+ * pages, and each entry at its path in each language it has (`alternates`).
+ */
 export function listPrerenderPages(): string[] {
-  const pages = ['/', '/coffees', '/journal', '/team', '/about']
-  for (const coffee of getCoffees()) pages.push(`/coffees/${coffee.slug}`)
-  for (const article of getArticles()) pages.push(`/journal/${article.slug}`)
-  for (const author of getAuthors()) pages.push(`/team/${author.slug}`)
-  return pages
+  const pages = new Set<string>()
+  for (const locale of LOCALES) {
+    for (const path of ['/', '/coffees', '/journal', '/team', '/about']) {
+      pages.add(localizedPath(path, locale))
+    }
+  }
+  for (const coffee of getCoffees()) addEntryPages(pages, `/coffees/${coffee.slug}`, coffee.alternates)
+  for (const article of getArticles()) addEntryPages(pages, `/journal/${article.slug}`, article.alternates)
+  for (const author of getAuthors()) addEntryPages(pages, `/team/${author.slug}`, author.alternates)
+  return [...pages]
+}
+
+/** An entry's page in each language that has it. `alternates` are the CMS route paths of that language. */
+function addEntryPages(
+  pages: Set<string>,
+  basePath: string,
+  alternates: Partial<Record<string, string>> | undefined,
+): void {
+  pages.add(basePath)
+  for (const [tag, path] of Object.entries(alternates ?? {})) {
+    if (path !== undefined) pages.add(prefixLocale(tag, path))
+  }
 }
 
 function articleDate(article: ArticlesEntry): string | null {
