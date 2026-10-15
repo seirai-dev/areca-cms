@@ -40,9 +40,11 @@ function Home() {
         ) : null}
         <div aria-hidden="true" className="absolute inset-0 -z-10 bg-linear-to-t from-[#0c120f]/92 via-[#0c120f]/70 to-[#0c120f]/25" />
         <div className="mx-auto w-full max-w-6xl px-5 pb-16 pt-40 sm:px-8 md:pb-24">
-          <p className="text-[0.72rem] font-medium uppercase tracking-[0.2em] text-on-image/90">
-            {home.heroEyebrow}
-          </p>
+          {home.heroEyebrow ? (
+            <p className="text-[0.72rem] font-medium uppercase tracking-[0.2em] text-on-image/90">
+              {home.heroEyebrow}
+            </p>
+          ) : null}
           <h1 className="mt-5 max-w-4xl font-display text-5xl font-normal leading-[0.98] tracking-tight sm:text-6xl md:text-7xl lg:text-[5.5rem]">
             Coffee from the source, roasted on the coast.
           </h1>

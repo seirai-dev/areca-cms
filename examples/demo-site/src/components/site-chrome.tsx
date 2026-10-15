@@ -94,7 +94,8 @@ function MobileNav() {
   )
 }
 
-export function SiteFooter({ company }: { company: CompanyInfoGlobal }) {
+/** Company details; only the name is guaranteed, the rest is shown when set. */
+export function SiteFooter({ company }: { company: Partial<CompanyInfoGlobal> & { name: string } }) {
   return (
     <footer className="bg-brand text-brand-ink">
       <div className="mx-auto grid max-w-6xl gap-12 px-5 py-16 sm:px-8 md:grid-cols-12 md:py-20">
