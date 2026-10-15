@@ -111,7 +111,7 @@ export function StatusFilterControl({
   onChange: (value: StatusFilter) => void
 }) {
   return (
-    <div className="-mx-4 overflow-x-auto px-4 no-scrollbar md:mx-0 md:px-0">
+    <div className="-mx-4 min-w-0 overflow-x-auto px-4 no-scrollbar md:mx-0 md:px-0">
       <SegmentedControl
         aria-label={m.editor_filter_by_status()}
         value={value}

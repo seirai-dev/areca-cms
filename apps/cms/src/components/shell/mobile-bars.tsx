@@ -2,20 +2,12 @@ import * as React from 'react'
 import { Link, useRouterState } from '@tanstack/react-router'
 import type { LinkOptions } from '@tanstack/react-router'
 import {
-  Buildings,
   DotsThreeCircle,
-  Gear,
-  House,
-  ImageSquare,
   MagnifyingGlass,
   Notebook,
-  Palette,
   Pulse,
   RocketLaunch,
-  Sparkle,
   Stack,
-  Users,
-  UsersThree,
 } from '@phosphor-icons/react'
 import type { Icon } from '@phosphor-icons/react'
 
@@ -43,7 +35,12 @@ import {
 } from '#/features/globals/site-content'
 import { useSiteGlobals } from '#/features/globals/use-globals'
 import { usePanel } from '#/features/shell/panel'
-import { canManageSite, collectionIcon } from '#/lib/site-nav'
+import {
+  agencyNavItems,
+  canManageSite,
+  collectionIcon,
+  siteNavItems,
+} from '#/lib/site-nav'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
@@ -176,6 +173,7 @@ export function MobileTabBar() {
   if (mode === 'site' && site) {
     const inContent = pathname.startsWith(`/sites/${site.id}/c/`)
     const manage = canManageSite(me, site.organizationId)
+    const [overview, library, ...moreItems] = siteNavItems(me, site)
     return (
       <>
         <nav
@@ -184,10 +182,10 @@ export function MobileTabBar() {
           className="fixed inset-x-0 bottom-0 z-navbar flex h-[calc(56px+env(safe-area-inset-bottom))] border-t border-border-default bg-background-default/96 pb-[env(safe-area-inset-bottom)] backdrop-blur-2xl backdrop-saturate-150 md:hidden"
         >
           <TabLink
-            link={{ to: '/sites/$siteId', params: { siteId: site.id } }}
-            icon={House}
-            label={m.shell_nav_overview()}
-            exact
+            link={{ to: overview.to, params: { siteId: site.id } }}
+            icon={overview.icon}
+            label={overview.label}
+            exact={overview.exact}
           />
           <TabButton
             icon={Stack}
@@ -197,9 +195,9 @@ export function MobileTabBar() {
             testId="mobile-content"
           />
           <TabLink
-            link={{ to: '/sites/$siteId/library', params: { siteId: site.id } }}
-            icon={ImageSquare}
-            label={m.shell_nav_library()}
+            link={{ to: library.to, params: { siteId: site.id } }}
+            icon={library.icon}
+            label={library.label}
           />
           <TabButton
             icon={DotsThreeCircle}
@@ -235,37 +233,15 @@ export function MobileTabBar() {
             </SheetHeader>
             <SheetBody className="pt-0">
               <InsetList>
-                <SheetRowLink
-                  link={{
-                    to: '/sites/$siteId/connect-ai',
-                    params: { siteId: site.id },
-                  }}
-                  icon={<Sparkle />}
-                  label={m.shell_nav_connect_ai()}
-                  onClick={close}
-                />
-                {manage ? (
+                {moreItems.map((item) => (
                   <SheetRowLink
-                    link={{
-                      to: '/sites/$siteId/people',
-                      params: { siteId: site.id },
-                    }}
-                    icon={<Users />}
-                    label={m.shell_nav_people()}
+                    key={item.key}
+                    link={{ to: item.to, params: { siteId: site.id } }}
+                    icon={<item.icon />}
+                    label={item.label}
                     onClick={close}
                   />
-                ) : null}
-                {me.user.isAgencyAdmin ? (
-                  <SheetRowLink
-                    link={{
-                      to: '/sites/$siteId/settings',
-                      params: { siteId: site.id },
-                    }}
-                    icon={<Gear />}
-                    label={m.shell_nav_settings()}
-                    onClick={close}
-                  />
-                ) : null}
+                ))}
                 {manage ? (
                   <InsetRow
                     asChild
@@ -313,6 +289,7 @@ export function MobileTabBar() {
   }
 
   if (mode === 'agency') {
+    const [overview, clients, people, ...moreItems] = agencyNavItems()
     return (
       <>
         <nav
@@ -321,20 +298,20 @@ export function MobileTabBar() {
           className="fixed inset-x-0 bottom-0 z-navbar flex h-[calc(56px+env(safe-area-inset-bottom))] border-t border-border-default bg-background-default/96 pb-[env(safe-area-inset-bottom)] backdrop-blur-2xl backdrop-saturate-150 md:hidden"
         >
           <TabLink
-            link={{ to: '/agency' }}
-            icon={House}
-            label={m.shell_nav_overview()}
-            exact
+            link={{ to: overview.to }}
+            icon={overview.icon}
+            label={overview.label}
+            exact={overview.exact}
           />
           <TabLink
-            link={{ to: '/agency/clients' }}
-            icon={Buildings}
-            label={m.shell_nav_clients()}
+            link={{ to: clients.to }}
+            icon={clients.icon}
+            label={clients.label}
           />
           <TabLink
-            link={{ to: '/agency/people' }}
-            icon={UsersThree}
-            label={m.shell_nav_people()}
+            link={{ to: people.to }}
+            icon={people.icon}
+            label={people.label}
           />
           <TabButton
             icon={DotsThreeCircle}
@@ -352,20 +329,17 @@ export function MobileTabBar() {
             <SheetHeader className="border-b-0 pb-2">
               <SheetTitle>{m.shell_more()}</SheetTitle>
             </SheetHeader>
-            <SheetBody className="grid gap-5 pt-0">
+            <SheetBody className="grid auto-rows-max grid-cols-1 content-start gap-5 pt-0">
               <InsetList>
-                <SheetRowLink
-                  link={{ to: '/agency/activity' }}
-                  icon={<Pulse />}
-                  label={m.shell_nav_activity()}
-                  onClick={close}
-                />
-                <SheetRowLink
-                  link={{ to: '/agency/branding' }}
-                  icon={<Palette />}
-                  label={m.shell_nav_branding()}
-                  onClick={close}
-                />
+                {moreItems.map((item) => (
+                  <SheetRowLink
+                    key={item.key}
+                    link={{ to: item.to }}
+                    icon={<item.icon />}
+                    label={item.label}
+                    onClick={close}
+                  />
+                ))}
               </InsetList>
               <div className="grid gap-1">
                 <span className="px-1 text-overline text-text-muted">
