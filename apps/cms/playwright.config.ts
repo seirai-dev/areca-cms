@@ -54,7 +54,7 @@ export default defineConfig({
     },
     {
       name: 'chromium',
-      testIgnore: /setup\.spec\.ts|qa\//,
+      testIgnore: /setup\.spec\.ts|qa\/|docs\//,
       use: chrome,
       dependencies: ['setup'],
     },

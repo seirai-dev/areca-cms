@@ -1,0 +1,40 @@
+---
+title: "Step 6: Pull the content and generate types"
+description: Download the published posts into your project with areca pull, and see the generated types that give your editor autocomplete.
+---
+
+Your website does not ask the CMS for every visitor. Instead, it works from a copy of the published content that lives in your project. The copy is made by **pulling**. A pull downloads the latest release and writes it into files.
+
+The pull also writes a file called `areca.gen.ts`. It describes your posts in code, so your editor knows the names of the fields. This is called **typed content**.
+
+## 6.1 Run the pull
+
+In your project, run the script that init added:
+
+```bash
+pnpm content:pull
+```
+
+The command prints three lines. The first starts with `Pulled publication`, and it lists how many posts it found. The second line is about media (the pictures). The third line says where the types were written.
+
+You should now see these new files and folders:
+
+- `src/generated/content/areca.gen.ts`, the types and the `content` object. You commit this file to Git.
+- `src/generated/content/manifest.json` and a `.publications` folder, the downloaded posts. Git ignores these.
+- `public/areca/`, the downloaded pictures.
+
+## 6.2 Try the content object
+
+Open `src/generated/content/areca.gen.ts` and search for `posts`. You see the fields you wrote in step 3, such as `title` and `coverImage`.
+
+The `content` object is what your code uses to read posts. For example, `content.posts.all()` returns every post, newest first. You will use it in step 7.
+
+<Callout title="When to pull again">
+The website reads the files you pulled. When you go live with new posts, pull again so the website has them. Step 9 shows how to pull automatically on every build.
+</Callout>
+
+<Callout title="If something went wrong">
+- **The pull says there is no publication.** You have not gone live yet. Finish step 5, then pull again.
+- **The pull says a token is missing.** Check `.env.local`. It needs `ARECA_CMS_URL` and `ARECA_SITE_TOKEN`. The pull reads that file for you.
+- **The pull says an entry does not match its schema.** A post was saved before you changed the plan. Change the post in the CMS to match the plan, mark it ready, go live, then pull again.
+</Callout>

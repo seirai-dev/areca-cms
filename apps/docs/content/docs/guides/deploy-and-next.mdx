@@ -1,0 +1,97 @@
+---
+title: "Step 9: Deploy and publish for real"
+description: Make your website pull the latest content on every build, add a health check, and understand what happens when an editor presses Go live.
+---
+
+Until now you ran the website on your computer. For visitors to see it, the website must be deployed. Areca does the deploy for you, every time an owner presses **Go live**. Your part is to set up the website so a build can do its job.
+
+## What happens on Go live
+
+1. Areca freezes the approved content into a release.
+2. Areca starts a build of your website. The build downloads that release with `areca pull`.
+3. Areca deploys the built website.
+4. Areca calls your **health check** address. The release counts as live only when the answer matches the release.
+
+Your agency's developer or admin sets up the server and the build in Dokploy. The details are in [Go-live builds](/docs/sdk/go-live-builds). This step shows the three changes you make in your project.
+
+## 9.1 Pull the content on every build
+
+Open `package.json` and add a `prebuild` line to the `scripts` section, so the pull runs before each build:
+
+```json title="package.json"
+{
+  "scripts": {
+    "prebuild": "areca pull --out src/generated/content"
+  }
+}
+```
+
+Keep the other scripts that are already there. With this line, `pnpm build` always downloads the latest published content first.
+
+## 9.2 Add a health check
+
+The health check is a small page that tells Areca which release your website was built from. Create `src/routes/api/health.ts`:
+
+```ts title="src/routes/api/health.ts"
+import { createFileRoute } from '@tanstack/react-router'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
+export const Route = createFileRoute('/api/health')({
+  server: {
+    handlers: {
+      GET: () => {
+        try {
+          const manifest = JSON.parse(
+            readFileSync(join(process.cwd(), 'src/generated/content/manifest.json'), 'utf8'),
+          )
+          return Response.json({ ok: true, publicationId: manifest.publicationId })
+        } catch {
+          return Response.json({ ok: false, error: 'Content manifest missing' }, { status: 503 })
+        }
+      },
+    },
+  },
+})
+```
+
+The page is public on purpose. It does not show content or any token.
+
+## 9.3 Connect the site in the CMS
+
+In the CMS, open the site's **Settings**, then the **Deployment** tab. Set the **Health check URL** to the address of your deployed site, followed by `/api/health`, for example `https://harborandpine.com/api/health`.
+
+For a real deployment, the site must be in **Production** mode, and the agency admin chooses the application in Dokploy. For practice, use **Demo** mode. A Demo release is built and recorded, but it is never deployed or counted as live.
+
+## 9.4 Publish a change
+
+Edit a post, select **Mark as ready**, then go to **Go live** and select **Go live** again. Watch the release progress until it finishes. Then open the website and check that the change is there.
+
+## Where to next
+
+<Cards>
+  <Card title="Reading content" href="/docs/sdk/reading-content">
+    Filter, sort and link entries, and follow references between collections.
+  </Card>
+  <Card title="Rich text" href="/docs/sdk/rich-text">
+    Style every heading, list and picture in your site's formatted text.
+  </Card>
+  <Card title="Example site" href="/docs/sdk/example-site">
+    A complete website with articles, authors, previews and prerendered pages.
+  </Card>
+  <Card title="Go-live builds" href="/docs/sdk/go-live-builds">
+    The Dockerfile, build secrets and health check that Dokploy uses.
+  </Card>
+  <Card title="Writing entries" href="/docs/cms/writing-entries">
+    Everything editors can do in the entry editor.
+  </Card>
+  <Card title="Going live" href="/docs/cms/going-live">
+    Release statuses, scheduling and rolling back to an earlier release.
+  </Card>
+</Cards>
+
+<Callout title="If something went wrong">
+- **Health check failed.** The address must answer with status 200 and a JSON body that contains the release's `publicationId`. Open the address in your browser to check it, and make sure it does not need a login.
+- **The build says `No content manifest`.** The `prebuild` pull did not run, or it had no token. In Dokploy, the site token must be set as a build secret.
+- **Go live is blocked.** Production mode needs an application and a health check URL. Check the **Deployment** tab.
+</Callout>

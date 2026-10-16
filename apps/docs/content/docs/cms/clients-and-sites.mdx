@@ -34,6 +34,8 @@ Agency admins must use two-factor authentication. Creating a site, rotating a to
 </Step>
 </Steps>
 
+![The New client sheet with the Name field filled in and the suggested Short name shown below it](/screenshots/guide-create-client.png)
+
 ## Create a site
 
 Open the client and select **New site**. The sheet has two steps.
@@ -48,7 +50,11 @@ Open the client and select **New site**. The sheet has two steps.
 
 Select **Create site**.
 
+![The New site sheet, step 1, with the Site name, Short name and Production URL fields filled in for Harbor & Pine Bakery](/screenshots/guide-create-site.png)
+
 **Step 2: connect the site.** Areca shows the site token once, with a ready-to-paste environment snippet. Copy the snippet into the website project's `.env.local` file, or run `areca init` in the project and paste the token when it asks. Then select **I've saved it**.
+
+![The site token shown once in step 2, with the ready-to-paste environment snippet and the I've saved it button](/screenshots/guide-site-token.png)
 
 <Callout type="warn" title="The token is shown once">
 Areca stores only a secure fingerprint of the site token, so it can't be displayed again. If you lose it, rotate it (see below). Rotating also replaces the old token.

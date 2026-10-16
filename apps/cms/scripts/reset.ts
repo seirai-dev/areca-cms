@@ -3,50 +3,17 @@ import {
   ListObjectsV2Command,
   S3Client,
 } from '@aws-sdk/client-s3'
-import { getTableConfig } from 'drizzle-orm/pg-core'
+import { is } from 'drizzle-orm'
+import { getTableConfig, PgTable } from 'drizzle-orm/pg-core'
 
 import { pool } from '#/db'
-import {
-  account,
-  asset,
-  auditLog,
-  branding,
-  buildJob,
-  collection,
-  dokployCredential,
-  entry,
-  entryRevision,
-  invitation,
-  membership,
-  organization,
-  publication,
-  session,
-  site,
-  user,
-  verification,
-} from '#/db/schema'
+import * as schema from '#/db/schema'
 
-const tables = [
-  auditLog,
-  branding,
-  buildJob,
-  publication,
-  asset,
-  entryRevision,
-  entry,
-  collection,
-  site,
-  dokployCredential,
-  invitation,
-  membership,
-  organization,
-  verification,
-  account,
-  session,
-  user,
-]
-
-const tableNames = tables.map((table) => getTableConfig(table).name)
+// Every table the schema declares, so a new table is wiped without editing
+// this file. TRUNCATE ... CASCADE over one statement is FK-safe.
+const tableNames = Object.values(schema).flatMap((value) =>
+  is(value, PgTable) ? [getTableConfig(value).name] : [],
+)
 
 const bucket = process.env.S3_BUCKET
 if (!bucket) {

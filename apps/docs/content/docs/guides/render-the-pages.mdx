@@ -1,0 +1,182 @@
+---
+title: "Step 7: Show the posts on your website"
+description: Build the blog list page and the single post page in TanStack Start, with rich text and pictures from the pulled content.
+---
+
+In this step you build two pages on your website:
+
+- `/blog` lists the posts.
+- `/blog/our-sourdough-starter` shows one post, with its picture and its formatted body.
+
+The code has four files. Read the comments in each file; they explain what each part does.
+
+## 7.1 Read the posts on the server
+
+The `content` object reads files from your computer's disk. Only server code can do that, so the code lives in a **server function**. A server function is code that runs on the server when a page asks for data.
+
+Create `src/lib/blog.ts`:
+
+```ts title="src/lib/blog.ts"
+import { createServerFn } from '@tanstack/react-start'
+import { content } from '../generated/content/areca'
+
+/** Every post, newest first. Runs on the server only. */
+export const getPosts = createServerFn({ method: 'GET' }).handler(async () => {
+  return content.posts.all().map((post) => ({
+    slug: post.slug,
+    title: post.data.title,
+    excerpt: post.data.excerpt ?? '',
+    coverImage: post.data.coverImage || null,
+  }))
+})
+
+/** One post by its slug, or null when there is no such post. */
+export const getPost = createServerFn({ method: 'GET' })
+  .validator((slug: string) => slug)
+  .handler(async ({ data: slug }) => {
+    const post = content.posts.get(slug)
+    if (!post) return null
+    return {
+      title: post.data.title,
+      excerpt: post.data.excerpt ?? '',
+      coverImage: post.data.coverImage || null,
+      body: post.data.body,
+    }
+  })
+```
+
+## 7.2 Show rich text
+
+The body is stored as rich text. The SDK turns it into a document, and a small library draws it. You choose how each part looks.
+
+Create `src/components/article-body.tsx`:
+
+```tsx title="src/components/article-body.tsx"
+import { Markdown } from '@tanstack/markdown/react'
+import type { MarkdownComponents } from '@tanstack/markdown/react'
+import { richTextDocument } from '@areca-cms/site-sdk'
+import type { RichTextValue } from '@areca-cms/site-sdk'
+import { richTextComponents } from '@areca-cms/site-sdk/rich-text-react'
+
+/** How each formatted part looks on your site. Change the classes to restyle. */
+const components = {
+  h2(props) {
+    return <h2 {...props} className="mt-12 text-2xl font-semibold" />
+  },
+  p(props) {
+    return <p {...props} className="mt-5 text-lg leading-8" />
+  },
+  a(props) {
+    return <a {...props} className="underline" />
+  },
+  img(props) {
+    return <img {...props} loading="lazy" className="mt-8 h-auto w-full rounded-xl" />
+  },
+} satisfies MarkdownComponents
+
+export function ArticleBody({ body }: { body: RichTextValue }) {
+  return (
+    <div>
+      <Markdown components={richTextComponents(components)}>
+        {richTextDocument(body)}
+      </Markdown>
+    </div>
+  )
+}
+```
+
+## 7.3 The list page
+
+Create `src/routes/blog/index.tsx`:
+
+```tsx title="src/routes/blog/index.tsx"
+import { createFileRoute, Link } from '@tanstack/react-router'
+import { getPosts } from '../../lib/blog'
+
+export const Route = createFileRoute('/blog/')({
+  loader: () => getPosts(),
+  component: BlogIndex,
+})
+
+function BlogIndex() {
+  const posts = Route.useLoaderData()
+  return (
+    <main className="mx-auto max-w-3xl px-6 py-16">
+      <h1 className="text-4xl font-semibold">Harbor & Pine news</h1>
+      <ul className="mt-10 space-y-10">
+        {posts.map((post) => (
+          <li key={post.slug}>
+            <Link
+              to="/blog/$slug"
+              params={{ slug: post.slug }}
+              className="text-2xl font-semibold underline"
+            >
+              {post.title}
+            </Link>
+            <p className="mt-2 text-neutral-600">{post.excerpt}</p>
+          </li>
+        ))}
+      </ul>
+    </main>
+  )
+}
+```
+
+## 7.4 The post page
+
+Create `src/routes/blog/$slug.tsx`. The `$slug` in the file name matches the `/blog/$slug` route from step 3:
+
+```tsx title="src/routes/blog/$slug.tsx"
+import { createFileRoute, Link, notFound } from '@tanstack/react-router'
+import { ArticleBody } from '../../components/article-body'
+import { getPost } from '../../lib/blog'
+
+export const Route = createFileRoute('/blog/$slug')({
+  loader: async ({ params }) => {
+    const post = await getPost({ data: params.slug })
+    if (!post) throw notFound()
+    return post
+  },
+  component: PostPage,
+})
+
+function PostPage() {
+  const post = Route.useLoaderData()
+  const cover = post.coverImage
+  return (
+    <main className="mx-auto max-w-2xl px-6 py-16">
+      <Link to="/blog" className="text-sm underline">
+        Back to all posts
+      </Link>
+      <h1 className="mt-6 text-4xl font-semibold">{post.title}</h1>
+      {cover ? (
+        <img
+          src={cover.url}
+          alt={cover.alt}
+          width={cover.width ?? undefined}
+          height={cover.height ?? undefined}
+          className="mt-8 h-auto w-full rounded-xl"
+        />
+      ) : null}
+      <ArticleBody body={post.body} />
+    </main>
+  )
+}
+```
+
+## 7.5 Look at your site
+
+Start the website if it is not running:
+
+```bash
+pnpm dev
+```
+
+Open http://localhost:3001/blog. You should see the heading **Harbor & Pine news** and both posts. Select **Our sourdough starter turns ten**. You should see its title, its cover picture, and the body with the heading and the list you wrote in step 5.
+
+<Callout title="If something went wrong">
+- **`Cannot find module '../generated/content/areca'`.** You have not pulled yet. Run `pnpm content:pull` (step 6).
+- **The list is empty.** Check that the posts are live in the CMS, then run `pnpm content:pull` again.
+- **The picture is broken.** Check that the `public/areca` folder has files in it. The pull downloads the pictures there, and `assets` in `areca.config.ts` must keep `download: true`.
+- **An error mentions `fs` or "server only".** Import `content` only in `src/lib/blog.ts`, and only inside the server functions. Never import it into a component or a route file.
+</Callout>

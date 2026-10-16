@@ -5,8 +5,6 @@ description: Set up the authenticator app, see how the agency admin requirement 
 
 Areca uses time-based one-time codes (TOTP) from an authenticator app as its second factor. Agency admins must use one. Two other mechanisms build on it: sign-in asks for a code when two-factor is on, and **step-up** asks for a fresh code before a small set of sensitive actions.
 
-![Two-factor authentication section on the Account page](/screenshots/two-factor-authentication.png)
-
 ## Set up two-factor
 
 Open **Account** and find the **Two-factor authentication** section.
@@ -20,6 +18,8 @@ Open **Account** and find the **Two-factor authentication** section.
 <Step>
 
 **Add the account to your app.** Scan the QR code with an authenticator app, or enter the **Secret key** by hand.
+
+![The two-factor setup step with a QR code to scan in an authenticator app, and the Secret key option](/screenshots/two-factor-setup.png)
 
 </Step>
 <Step>
@@ -39,6 +39,8 @@ Select **New backup codes** on the same section to get a new set. Two-factor sta
 ## Sign-in with a code
 
 When two-factor is on and you sign in with an email and password, Areca asks for the **Authentication code** from your app. If you cannot use the app, select **Use a backup code**.
+
+![The sign-in screen that asks for a code from an authenticator app, with a link to use a backup code](/screenshots/two-factor-authentication.png)
 
 Sign-in with GitHub, Google, Discord, or Microsoft does not ask for an authenticator code. See [social and single sign-on](#social-and-single-sign-on) below.
 
@@ -67,6 +69,8 @@ These actions require step-up:
 - Save or remove a client's deployment credentials.
 - Save a new AI API key, or remove the stored one.
 - Make someone an agency admin, or remove that status.
+
+![The Confirm it's you dialog asking for a six-digit code from an authenticator app before a site token is rotated](/screenshots/step-up-dialog.png)
 
 Step-up checks when your session started and when you last confirmed a code:
 

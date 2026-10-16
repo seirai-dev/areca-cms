@@ -23,3 +23,5 @@ examples/demo-site/public/areca/
 playwright-report
 test-results
 qa-screenshots
+# Downloaded demo images (pnpm db:demo)
+apps/cms/.cache/

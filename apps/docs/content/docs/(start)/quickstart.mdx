@@ -7,6 +7,10 @@ This guide takes you from an empty installation to a first live publish. You sta
 
 You need Docker with Compose v2, Node.js 22.6 or newer for the website project (Node 24 LTS is recommended), and a terminal. For the full Docker options, see the [Docker quickstart](/docs/self-hosting/docker-quickstart).
 
+<Callout title="Want to build the website too?">
+The [Guides](/docs/guides) walk you through a complete website for a fictional bakery, one step at a time. This quickstart is the short version.
+</Callout>
+
 <Steps>
 <Step>
 
@@ -50,6 +54,8 @@ A **client** is the organisation you build for. A **site** belongs to a client a
 In the Agency workspace, select **New client**, enter a name such as `Acme`, and select **Create client**. Check the suggested slug before you save it: it cannot be changed later.
 
 On the client page, open the **Sites** tab and select **New site**. Enter a **Site name** such as `Acme Website`, keep the suggested **Site key** (for example `acme-website`), and set the **Production URL**. For local work, `http://localhost:3001` is the default. Select **Create site**.
+
+![The New site sheet with the site name, short name and Production URL fields filled in](/screenshots/guide-create-site.png)
 
 The next screen shows the **site token**. It is shown only once.
 
@@ -122,6 +128,8 @@ If you are not an owner of the client, the publish controls are disabled and exp
 ### Go live
 
 Going live creates a release: a frozen copy of every ready change on the site. Choose a mode in **Settings › Deployment** first.
+
+![The Go live panel with the release status, the What's changing list and the Releases history](/screenshots/current-releases.png)
 
 <Tabs items={['Demo (local trial)', 'Production']}>
   <Tab value="Demo (local trial)">

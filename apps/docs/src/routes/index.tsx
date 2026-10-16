@@ -3,6 +3,7 @@ import { HomeLayout } from 'fumadocs-ui/layouts/home'
 import {
   BookOpen,
   Code,
+  GraduationCap,
   type LucideIcon,
   Server,
   ShieldCheck,
@@ -18,7 +19,17 @@ const sections: Array<{
   description: string
   href: string
   icon: LucideIcon
+  /** Spans both columns of the grid. */
+  wide?: boolean
 }> = [
+  {
+    title: 'Guides',
+    description:
+      'Step-by-step: connect your first website to Areca, from empty folder to live site.',
+    href: '/docs/guides',
+    icon: GraduationCap,
+    wide: true,
+  },
   {
     title: 'Use the CMS',
     description:
@@ -86,7 +97,7 @@ function Home() {
             <a
               key={section.href}
               href={section.href}
-              className="group flex flex-col gap-2 bg-fd-background p-6 transition-colors hover:bg-fd-card"
+              className={`group flex flex-col gap-2 bg-fd-background p-6 transition-colors hover:bg-fd-card${section.wide ? ' sm:col-span-2' : ''}`}
             >
               <section.icon className="size-5 text-fd-primary" />
               <span className="font-medium">{section.title}</span>
