@@ -1,0 +1,18 @@
+{
+  "title": "Guides",
+  "description": "Step-by-step tutorials. Connect your first website to Areca.",
+  "icon": "GraduationCap",
+  "root": true,
+  "pages": [
+    "index",
+    "create-the-site",
+    "start-the-project",
+    "describe-your-content",
+    "push-the-schema",
+    "write-and-go-live",
+    "pull-the-content",
+    "render-the-pages",
+    "preview-drafts",
+    "deploy-and-next"
+  ]
+}

@@ -1,0 +1,79 @@
+---
+title: "Step 2: Start the project and install the SDK"
+description: Create a TanStack Start website project, install the Areca site SDK, and run areca init to connect the project to the bakery site.
+---
+
+In this step you make the website itself. You use **TanStack Start**, a React framework for websites. Then you add the **Areca site SDK**. The SDK is a small toolkit that talks to the CMS for you. You install it with a package manager called **pnpm**.
+
+## 2.1 Create the website project
+
+Open a terminal in the folder where you keep your projects. Run:
+
+```bash
+pnpm create @tanstack/start@latest harbor-and-pine
+cd harbor-and-pine
+pnpm install
+```
+
+Accept the defaults when the tool asks questions. Use file-based routing. You do not need extra add-ons for this guide.
+
+Next, you move the website to port `3001`. The CMS already uses port `3000` on your computer. Open `vite.config.ts` and add this line inside `defineConfig({ ... })`:
+
+```ts title="vite.config.ts"
+  server: { port: 3001 },
+```
+
+Start the website:
+
+```bash
+pnpm dev
+```
+
+Open http://localhost:3001 in your browser.
+
+You should now see the starter page of TanStack Start. Stop the server with `Ctrl+C` for now.
+
+## 2.2 Install the SDK
+
+Install the Areca SDK, and a small library that displays rich text (formatted text such as headings and lists):
+
+```bash
+pnpm add @areca-cms/site-sdk @tanstack/markdown
+```
+
+You should now see `@areca-cms/site-sdk` listed under `dependencies` in `package.json`.
+
+## 2.3 Connect the project with `areca init`
+
+`areca` is the command-line tool that comes with the SDK. The `init` command asks three questions and writes the connection files.
+
+```bash
+pnpm exec areca init
+```
+
+Answer the prompts:
+
+- **CMS URL:** the address of the CMS, for example `http://localhost:3000`.
+- **Site token:** paste the token from step 1. The prompt hides what you type.
+- **Site key:** `harbor-and-pine`.
+
+When init finishes, it has created or changed these files:
+
+- `.env.local` holds the CMS address and the site token. It is secret, so never commit it. Lock it to your user account:
+
+  ```bash
+  chmod 600 .env.local
+  ```
+
+- `areca.config.ts` is the content plan. It is empty for now. You fill it in step 3.
+- `.env.example` is a template with empty values. It is safe to commit.
+- `package.json` gets two new scripts: `sync-manifest` (sends the plan to the CMS) and `content:pull` (downloads the published content).
+- `.gitignore` lists `.env.local` and the downloaded content files, so Git ignores them.
+
+You should now see a `.env.local` file with two lines in it, `ARECA_CMS_URL` and `ARECA_SITE_TOKEN`, and an empty `areca.config.ts` file.
+
+<Callout title="If something went wrong">
+- **`areca: command not found`.** Run `pnpm install` again, then use `pnpm exec areca` instead of `areca`.
+- **Init rejects the site key.** The key may contain only lowercase letters, numbers and hyphens. Check the Developer tab in the CMS for the exact key.
+- **Port 3000 is already in use.** That is the CMS, not your website. Keep the website on port `3001` as shown in step 2.1.
+</Callout>

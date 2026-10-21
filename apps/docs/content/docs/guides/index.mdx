@@ -1,0 +1,47 @@
+---
+title: Your first Areca website
+description: Build a small news site for a fictional bakery, connect it to Areca, write posts in the CMS and publish them. Plain words, one step at a time.
+---
+
+In this guide you build a small website for a fictional bakery, **Harbor & Pine Bakery**. The site has a list of news posts and one page for each post. Editors write the posts in Areca. Your website shows the posts that are ready.
+
+You do not need to know Areca yet. Each step explains the words it uses.
+
+## The big picture
+
+Think of a restaurant.
+
+- The **CMS** is the kitchen. Editors write the posts and check them.
+- The **site SDK** is the waiter. It takes the posts that are approved and carries them to your website.
+- Your **website** is the dining room. Visitors read the posts there.
+
+A post starts as a **draft**. Visitors never see a draft. When an editor marks a draft as **ready**, it is approved, but still not public. When an owner presses **Go live**, Areca packs every approved post into a **release**. Your website is then built and deployed with those posts, and visitors see them.
+
+## What you need
+
+- **Node.js 22.6 or newer.** Node 24 is recommended. Check with `node --version`.
+- **pnpm**, the tool that installs packages. Check with `pnpm --version`. If it is missing, run `npm install -g pnpm`.
+- **A running Areca CMS.** Your agency may run one for you. To run your own on your computer, follow the [quickstart](/docs/quickstart).
+- **An agency admin account** in the CMS. Only agency admins create clients and sites. Admins sign in with a code from an authenticator app.
+
+## The steps
+
+1. [Create the client and the site](/docs/guides/create-the-site) in the CMS.
+2. [Start the project and install the SDK](/docs/guides/start-the-project) on your computer.
+3. [Describe your content](/docs/guides/describe-your-content) in a config file.
+4. [Send the content plan to the CMS](/docs/guides/push-the-schema).
+5. [Write posts and go live](/docs/guides/write-and-go-live).
+6. [Pull the published content](/docs/guides/pull-the-content) into your project.
+7. [Show the posts on your website](/docs/guides/render-the-pages).
+8. [Preview drafts](/docs/guides/preview-drafts) (optional).
+9. [Deploy and publish for real](/docs/guides/deploy-and-next).
+
+Plan for about an hour and a half. Steps 1 to 7 are the core. You can stop after step 7 and still have a working site.
+
+<Callout title="Words you will see">
+- **Client:** the business you build a website for.
+- **Site:** one website for a client.
+- **Collection:** a kind of content, such as posts. Areca calls it a content type in some screens.
+- **Entry:** one item in a collection, such as one post.
+- **Release:** a frozen set of approved content that goes live together.
+</Callout>

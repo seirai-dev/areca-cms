@@ -1,0 +1,60 @@
+---
+title: "Step 3: Describe your content in code"
+description: Write areca.config.ts with a posts collection for the bakery, and learn what each field type means.
+---
+
+Before the CMS can show a form for posts, it needs a plan. The plan says what a post contains: a title, a short summary, a picture, and the body text. You write the plan in a file called `areca.config.ts`. The plan is code, so your editor can warn you about mistakes as you type.
+
+Open `areca.config.ts` and replace everything in it with this:
+
+```ts title="areca.config.ts"
+import { defineSiteContent } from '@areca-cms/site-sdk'
+
+export default defineSiteContent({
+  siteKey: 'harbor-and-pine',
+  assets: {
+    download: true, // copy pictures into your project so the site serves them itself
+    dir: 'public/areca',
+  },
+  collections: {
+    posts: {
+      route: '/blog/$slug', // the web address of each post
+      label: 'Posts', // the name editors see in the CMS
+      fields: [
+        { key: 'title', label: 'Title', type: 'text', required: true },
+        { key: 'slug', label: 'Slug', type: 'slug', required: true },
+        { key: 'excerpt', label: 'Excerpt', type: 'textarea' },
+        { key: 'coverImage', label: 'Cover image', type: 'image' },
+        { key: 'body', label: 'Body', type: 'richtext', required: true },
+      ],
+    },
+  },
+})
+```
+
+## What each part means
+
+- **`siteKey`** names the site. It must match the site key from step 2.
+- **`assets`** tells the SDK to download pictures into `public/areca`, so your website serves them from its own files.
+- **`collections`** lists the kinds of content. Here there is one: `posts`.
+- **`route`** is the web address pattern. The `$slug` part is replaced by each post's slug. So a post with the slug `our-sourdough-starter` lives at `/blog/our-sourdough-starter`.
+- **`label`** is the name editors see in the CMS.
+- **`fields`** are the boxes an editor fills in.
+
+## The field types
+
+| Type | What it holds | Example |
+| --- | --- | --- |
+| `text` | One short line of text | The title |
+| `slug` | A short name for the web address. Lowercase letters, numbers and hyphens only | `our-sourdough-starter` |
+| `textarea` | Plain text over several lines | The excerpt |
+| `image` | A picture from the CMS library, with alt text and its size | The cover image |
+| `richtext` | Formatted text with headings, lists, links and pictures | The body |
+
+`required: true` means the field must be filled in before a post can be marked ready. A post can still be saved as a draft without it.
+
+<Callout title="If something went wrong">
+- **Your editor shows a red line under `type`.** Check the spelling against the table above. Your editor also suggests the valid types as you type.
+- **`route` is rejected.** Every route must contain `$slug`, for example `/blog/$slug`.
+- **You see a key error.** Keys are the names in the code, so use letters only, as in the example. Do not use spaces.
+</Callout>

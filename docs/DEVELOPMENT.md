@@ -75,6 +75,27 @@ Drizzle's source schema lives in `apps/cms/src/db/schema.ts`; committed migratio
 
 Use [upgrades](UPGRADES.md) for production migration, staging validation, backups, and rollback. `db:reset` erases application data and the configured upload bucket; it is a deliberate local reset tool rather than a setup prerequisite.
 
+## Demo data
+
+`pnpm db:demo` gives you the five sample clients used for screenshots and the docs: Harbor & Pine Bakery, Northwind Cycling Club, Lumen Dental Studio, Fieldnote Architects and Kestrel Outdoor Gear. It first runs `pnpm db:reset`, which erases every application table and empties the upload bucket, then seeds the same content every time from `apps/cms/scripts/demo-data/`. The tooling refuses to run unless `DATABASE_URL` and `S3_ENDPOINT` point at a local host and `NODE_ENV` is not `production`. Downloaded demo images are cached in `apps/cms/.cache/demo-images/`.
+
+Sign in at the `APP_URL` from `apps/cms/.env.local` with:
+
+- `admin@areca.local` / `password123`: agency admin. The seed also enrols this account in two-factor with a fixed demo authenticator secret, because admin pages require a TOTP code (`ADMIN_MFA_REQUIRED` defaults to true).
+
+Demo TOTP secret for `admin@areca.local` (base32): `MFZGKY3BFVSGK3LPFV2G65DQFVZWKY3SMV2A`. Add it to an authenticator app by choosing "Enter a setup key" (account name `admin@areca.local`, time based, 6 digits, 30 seconds, SHA-1), or paste this URI into an app that accepts `otpauth://` links:
+
+```text
+otpauth://totp/Areca%20CMS:admin%40areca.local?secret=MFZGKY3BFVSGK3LPFV2G65DQFVZWKY3SMV2A&issuer=Areca%20CMS
+```
+
+The secret is public and for local demos only. `pnpm db:demo` stores it encrypted with `BETTER_AUTH_SECRET`, and it has no backup codes. Do not reuse it anywhere else.
+- `ruth@harborandpine.com` / `password123`: owner of Harbor & Pine (the other clients follow the same pattern, with an owner and an editor named in `apps/cms/scripts/demo-data/`)
+
+To refresh the documentation screenshots in `apps/docs/public/screenshots/`, run `pnpm db:demo`, then `pnpm docs:screenshots` (the CMS must already be running at the `APP_URL` origin, or set `PLAYWRIGHT_BASE_URL`), then `pnpm db:demo` again, because the capture changes state at the end (a go live, a throwaway client and site, and a pending two-factor enrolment). The spec is `apps/cms/e2e/docs/docs-screenshots.spec.ts`; it is excluded from the `chromium` and `qa` projects.
+
+The `setup` Playwright project (`pnpm test:e2e`) resets the database to the small Acme seed (`pnpm db:seed`), so run `pnpm db:demo` again afterwards. `pnpm test:e2e:isolated` uses its own database and leaves the demo data alone.
+
 ## Releasing packages
 
 `@areca-cms/site-sdk` and `@areca-cms/skills` are published to npm by `.github/workflows/release.yml`, using `scripts/release/release.mjs`. Each package has its own version, tags (`site-sdk-v0.3.0`, `skills-v0.2.0`), `CHANGELOG.md` and release PR.

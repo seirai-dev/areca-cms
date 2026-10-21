@@ -23,6 +23,7 @@
     "test:e2e:qa": "playwright test --project=qa",
     "test:e2e:isolated": "node scripts/e2e-isolated.mjs --project=setup --project=chromium",
     "test:e2e:qa:isolated": "node scripts/e2e-isolated.mjs --project=qa",
+    "docs:screenshots": "playwright test --config=playwright.docs.config.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
@@ -32,6 +33,7 @@
     "db:seed": "pnpm run paraglide:scripts && tsx --env-file=.env.local --import ./scripts/lib/script-runtime.mjs scripts/seed.ts",
     "bench": "pnpm run paraglide:scripts && tsx scripts/benchmark.ts",
     "db:reset": "tsx --env-file=.env.local scripts/reset.ts",
+    "db:demo": "tsx --env-file=.env.local scripts/lib/local-db-guard.ts && pnpm run db:reset && pnpm run paraglide:scripts && tsx --env-file=.env.local --import ./scripts/lib/script-runtime.mjs scripts/demo-seed.ts",
     "s3:init": "tsx --env-file=.env.local scripts/ensure-bucket.ts",
     "assets:import-external": "pnpm run paraglide:scripts && tsx --env-file=.env.local --import ./scripts/lib/script-runtime.mjs scripts/import-external-images.ts"
   },

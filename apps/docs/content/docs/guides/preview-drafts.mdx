@@ -1,0 +1,88 @@
+---
+title: "Step 8: Preview drafts (optional)"
+description: Let editors open a draft post on your website before it goes live, with a preview route that stays out of search engines.
+---
+
+A **preview** shows a draft on the real website, before anyone goes live. Editors use it to check how a post looks. This step is optional. Your site works without it.
+
+Here is how it works. In the CMS, an editor selects **Preview**. The CMS opens a link on your production address, such as `https://harborandpine.com/__preview/posts/our-sourdough-starter?token=...`. Your website then asks the CMS for that draft, using a short-lived token. Each link works for one hour and for one post only.
+
+<Callout title="Preview needs a reachable website">
+The preview link opens your site at its production address. So a preview only works once the site is deployed (step 9), or on a computer that answers at that address. For this guide, try the preview after step 9.
+</Callout>
+
+## 8.1 Add the preview route
+
+Create `src/routes/[__preview]/$collection/$slug.tsx`. The square brackets around `__preview` are part of the name, so the page is served at `/__preview`:
+
+```tsx title="src/routes/[__preview]/$collection/$slug.tsx"
+import { createFileRoute } from '@tanstack/react-router'
+import { createServerFn } from '@tanstack/react-start'
+import { setResponseHeader } from '@tanstack/react-start/server'
+import { getPreviewEntry, previewHeaders } from '@areca-cms/site-sdk'
+import type { RichTextValue } from '@areca-cms/site-sdk'
+import { z } from 'zod'
+import { ArticleBody } from '../../../components/article-body'
+
+/** Asks the CMS for the draft. Runs on the server, so the token stays there. */
+const loadPreview = createServerFn({ method: 'GET', strict: { output: false } })
+  .validator(z.object({ token: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    // Tell browsers and search engines not to keep or index this page.
+    const headers = previewHeaders()
+    setResponseHeader('X-Robots-Tag', headers['X-Robots-Tag'])
+    setResponseHeader('Cache-Control', headers['Cache-Control'])
+    try {
+      const preview = await getPreviewEntry({ token: data.token })
+      return { ok: true as const, preview }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to fetch preview'
+      return { ok: false as const, error: message }
+    }
+  })
+
+export const Route = createFileRoute('/__preview/$collection/$slug')({
+  validateSearch: (search) => z.object({ token: z.string().min(1) }).parse(search),
+  loaderDeps: ({ search }) => ({ token: search.token }),
+  loader: ({ deps }) => loadPreview({ data: { token: deps.token } }),
+  head: () => ({
+    meta: [{ name: 'robots', content: 'noindex, nofollow' }],
+  }),
+  component: PreviewPage,
+})
+
+function PreviewPage() {
+  const result = Route.useLoaderData()
+  if (!result.ok) {
+    return <p role="status">Preview unavailable: {result.error}</p>
+  }
+  const { entry } = result.preview
+  return (
+    <main className="mx-auto max-w-2xl px-6 py-16">
+      <p role="status" className="mb-8 rounded bg-amber-100 px-4 py-2 text-sm">
+        Draft preview. This page is not published.
+      </p>
+      <h1 className="text-4xl font-semibold">{String(entry.data.title ?? entry.slug)}</h1>
+      <ArticleBody body={entry.data.body as RichTextValue} />
+    </main>
+  )
+}
+```
+
+The preview route needs `zod`, which it imports for the token check. Install it once:
+
+```bash
+pnpm add zod
+```
+
+The entry comes from the token, not from the address in the browser. So changing the slug in the address bar does not reveal another draft.
+
+## 8.2 Check the preview
+
+Once the site is deployed (step 9), open a post in the CMS and select **Preview**. You should see the banner **Draft preview. This page is not published.**, the draft's title and its body. Your visitors still see only the live version of the post.
+
+<Callout title="If something went wrong">
+- **The page says Preview unavailable.** The link has expired after one hour, or it was opened for another site. Select **Preview** again in the CMS.
+- **The link opens the wrong site.** Check the **Production URL** in the site's **Settings › General**. Previews open at that address.
+- **You see a 404 page.** Check that the folder is named `[__preview]` with square brackets, exactly as shown.
+</Callout>
