@@ -22,6 +22,11 @@ import { env } from '#/env'
 import { audit } from '#/server/audit'
 import { drainStorageObjectDeletions } from '#/server/assets/storage-cleanup'
 import { cleanupOutbox, processOutbox } from '#/server/mail/outbox'
+import { cleanupNotifications } from '#/server/notifications/notify'
+import {
+  notifyPublicationFailed,
+  notifyPublicationLive,
+} from '#/server/notifications/triggers'
 import {
   markLoopsStarted,
   markLoopsStopped,
@@ -547,6 +552,8 @@ export async function processJob(
         err: error,
       })
     }
+    // Never throws; runs after the commit above, so it cannot fail the job.
+    await notifyPublicationLive(pub.id)
   } catch (error) {
     if (error instanceof DeploymentNotDispatchedError) dispatchUncertain = false
     const message = redactString(
@@ -636,6 +643,7 @@ async function failJob(
       meta: { jobId: job.id, publicationId, error, dispatchUncertain },
     })
   }
+  await notifyPublicationFailed(publicationId, { stuck: dispatchUncertain })
 }
 
 /** Owner/admin entry point: resume the same dispatch, never create another. */
@@ -735,7 +743,7 @@ export async function resolveUncertainDeploymentJob(input: {
     .limit(1)
   if (!actor?.isAgencyAdmin)
     throw new Error('Only agency admins can release an uncertain deployment')
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const [candidate] = await tx
       .select()
       .from(buildJob)
@@ -803,6 +811,8 @@ export async function resolveUncertainDeploymentJob(input: {
     )
     return resolved
   })
+  await notifyPublicationFailed(result.publicationId, { stuck: false })
+  return result
 }
 
 export type JobPool = {
@@ -898,7 +908,7 @@ export async function recoverStaleJobs(
 ) {
   const cutoff = new Date(now.getTime() - olderThanMs)
   // Lock and fence in one transaction. A heartbeat cannot resurrect an expired lease.
-  return db.transaction(async (tx) => {
+  const staleJobs = await db.transaction(async (tx) => {
     const stale = await tx
       .select()
       .from(buildJob)
@@ -953,6 +963,12 @@ export async function recoverStaleJobs(
     }
     return stale
   })
+  for (const job of staleJobs) {
+    await notifyPublicationFailed(job.publicationId, {
+      stuck: Boolean(job.dispatchStartedAt || job.status === 'deploying'),
+    })
+  }
+  return staleJobs
 }
 
 export type WorkerLoopDeps = {
@@ -1126,7 +1142,7 @@ export function startWorker({
       schedule: () => runSchedulerTick(),
       cleanup: () => drainStorageObjectDeletions(),
       mail: () => processOutbox(),
-      mailCleanup: () => cleanupOutbox(),
+      mailCleanup: () => Promise.all([cleanupOutbox(), cleanupNotifications()]),
     },
     { intervalMs },
   )

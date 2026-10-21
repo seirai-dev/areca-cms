@@ -54,6 +54,8 @@ const ROUTE_INVENTORY: Record<string, string> = {
   '/src/routes/api/health.ts': 'GET public liveness',
   '/src/routes/api/health.ready.ts': 'GET public readiness',
   '/src/routes/api/metrics.ts': 'GET bearer METRICS_TOKEN; 404 when unset',
+  '/src/routes/api/notifications.unsubscribe.ts':
+    'POST public one-click unsubscribe; the signed token in the query is the authorization (no cookie)',
   '/src/routes/api/mcp/index.ts':
     'POST/GET/DELETE personal MCP key on /api/mcp (bearer only, re-authenticated each request)',
   '/src/routes/api/mcp/$siteSlug.ts':

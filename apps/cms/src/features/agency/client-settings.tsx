@@ -10,6 +10,7 @@ import { FormField } from '#/components/ui/form-field'
 import { Input } from '#/components/ui/input'
 import { SettingsSection } from '#/components/ui/settings-section'
 import { Hint } from '#/components/ui/tooltip'
+import { OrgNotificationsSection } from '#/features/notifications/org-notifications-section'
 import { useStepUp } from '#/features/security/step-up'
 import { m } from '#/paraglide/messages'
 import { deleteOrganizationFn, updateOrganizationFn } from '#/server/fn/admin'
@@ -118,6 +119,11 @@ export function ClientSettings({
           </div>
         </form>
       </SettingsSection>
+
+      <OrgNotificationsSection
+        organizationId={client.id}
+        organizationName={client.name}
+      />
 
       <SettingsSection
         title={m.admin_org_danger_zone()}

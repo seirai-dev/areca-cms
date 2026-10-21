@@ -130,6 +130,14 @@ unchanged (each row carries a side-effect probe).
 | `denyOAuthConsentFn` | `mcp-oauth.ts` | `user` | any signed-in user may refuse a request addressed to them; the query must be signed by the server |
 | `listMcpConnectionsFn` | `mcp-oauth.ts` | `org-editor` | editors see only their own connected apps; owners and agency admins all on the site |
 | `revokeMcpConnectionFn` | `mcp-oauth.ts` | `org-editor` | editors disconnect their own apps; owners and agency admins any app on the site; others are NotFound |
+| `getMyNotificationsFn` | `notifications.ts` | `user` | the caller's own notification choices and org memberships |
+| `setMyNotificationFn` | `notifications.ts` | `org-editor` | members change their own choice (agency admins for the agency scope); locked events refuse; a non-member admin gets a readable refusal |
+| `getOrgNotificationRulesFn` | `notifications.ts` | `org-owner` | org owner, agency admin (MFA) |
+| `setOrgNotificationRuleFn` | `notifications.ts` | `org-owner` | org owner, agency admin (MFA); agency-locked cells refuse changes |
+| `getAgencyNotificationRulesFn` | `notifications.ts` | `agency` | agency admin (MFA) |
+| `setAgencyNotificationRuleFn` | `notifications.ts` | `agency` | agency admin (MFA); defaults and locks for clients and agency alerts |
+| `getUnsubscribeFn` | `notifications.ts` | `public` | reads a signed unsubscribe link; reveals only its status and event label |
+| `confirmUnsubscribeFn` | `notifications.ts` | `public` | the signed link is the authorization; a locked, expired or invalid link changes nothing |
 
 Per-row exceptions (see `note`/`override` in the matrix): `verifyStepUpFn` needs a
 two-factor session (everyone else gets Forbidden; wrong codes are refused);
@@ -152,6 +160,7 @@ answers NotFound for editors (the matrix override), so existence is not revealed
 | `/api/auth/$` | GET, POST | Better Auth | delegated to Better Auth |
 | `/api/health`, `/api/health/ready` | GET | none | public |
 | `/api/metrics` | GET | `METRICS_TOKEN` bearer | 404 when unset; 401 wrong/missing |
+| `/api/notifications/unsubscribe` | POST | signed unsubscribe token in the query | RFC 8058 one-click: 200 `{ ok }`, 400 for invalid, expired or locked links; no GET |
 | `/api/sites/manifest` | GET | site **build** token | 401 for none/garbage/schema token; only own site's schema |
 | `/api/sites/manifest` | POST | site **schema** token | 401 for build token; writes only the token's own site |
 | `/api/sites/snapshot/current` | GET | site build token | 401 for schema token; only own publication |

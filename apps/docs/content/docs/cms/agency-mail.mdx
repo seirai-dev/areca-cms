@@ -15,10 +15,11 @@ Areca sends these emails through the mail server:
 - **Password reset** links, when someone asks for one from the sign-in page, or an agency admin sends one from **Agency › People**.
 - **Email verification** links, when someone asks to verify their address.
 - **Security notices**, such as a password change, two-factor authentication turned on or off, or a change of role. Account emails can't be turned off. See [your account and sign-in](/docs/cms/account-and-sign-in#security-emails).
+- **Notification emails**, such as a release going live or failing. People choose these themselves, within any defaults and requirements the agency or a client sets. See [notification emails](/docs/cms/notifications).
 
 Each one appears in **Recent emails**, with its type.
 
-Without a mail server, invitations still work, and you can share the link with **Copy link**. The forgot password page tells people to ask an agency admin. Security notices are not sent, and are not queued for later.
+Without a mail server, invitations still work, and you can share the link with **Copy link**. The forgot password page tells people to ask an agency admin. Security notices and notification emails are not sent, and are not queued for later.
 
 ## Before you start
 
@@ -80,6 +81,28 @@ Areca stores the password encrypted, and never shows it again. The field shows *
 
 If the encryption key changes, the saved password cannot be read. Enter the password again.
 
+## Default notifications for clients
+
+The **Default notifications for clients** section sets what each client gets from notification emails, before the client or its members change anything. It has one row for each email, and a column for owners and a column for editors.
+
+Each cell has a switch, to turn the email on or off by default, and a lock. A locked email is required: everyone in every client gets it, and nobody can turn it off.
+
+- Clients can change an unlocked default for their own team. A client's own default takes priority over the agency's.
+- Each change saves as soon as you make it. If it fails, a message tells you.
+- A client sees a locked email as **Required by** your agency's name, and can't change it.
+
+For how the defaults combine with a client's settings and a person's own choice, see [how a setting is decided](/docs/cms/notifications#how-a-setting-is-decided).
+
+## Agency alerts
+
+The **Agency alerts** section sets the emails sent to agency admins when a release fails for any client. It has one row for each alert, with one column for agency admins.
+
+- **Releases failing for any client** is on by default.
+- You can lock an alert, the same way as a client default. Agency admins can't turn a locked alert off.
+- Clients can't change agency alerts.
+
+An agency admin who is also a member of a client gets that client's emails under the client's settings. They get agency alerts under this section. For the full list of emails, see [notification emails](/docs/cms/notifications#which-emails-exist).
+
 ## Recent emails
 
 The **Recent emails** list at the bottom of the page shows the last 50 emails Areca tried to send. Each row shows:
@@ -113,6 +136,7 @@ These are the messages you may see in a toast, on a People invitation, or in Rec
 
 ## Related
 
+- [Notification emails](/docs/cms/notifications): which emails exist, and how people and clients choose them.
 - [Storage and email](/docs/self-hosting/storage-and-email): provider settings, deliverability, and how sending works.
 - [Configuration](/docs/self-hosting/configuration#email): the `SMTP_*` variables.
 - [People and invitations](/docs/cms/people-and-invitations): what an undelivered invitation looks like.

@@ -28,6 +28,11 @@ import type {
   Snapshot,
 } from '../lib/types.ts'
 import type { AdvancedBrandColors } from '../lib/branding.ts'
+import type {
+  EventKey,
+  NotificationPayload,
+  NotificationRole,
+} from '../lib/notifications.ts'
 
 const id = () =>
   text('id')
@@ -391,6 +396,13 @@ export const publication = pgTable(
       .notNull()
       .default('production'),
     wasLive: boolean('was_live').notNull().default(false),
+    /** What started the release: a person, the scheduler, or a rollback. */
+    origin: text('origin')
+      .$type<'manual' | 'scheduled' | 'rollback'>()
+      .notNull()
+      .default('manual'),
+    /** Users who scheduled the entries this release ships. */
+    scheduledBy: jsonb('scheduled_by').$type<string[]>().notNull().default([]),
     createdAt: createdAt(),
     deployedAt: timestamptz('deployed_at'),
   },
@@ -579,6 +591,81 @@ export const emailOutbox = pgTable(
   (t) => [
     index('email_outbox_status_next_attempt_idx').on(t.status, t.nextAttemptAt),
     index('email_outbox_created_at_idx').on(t.createdAt),
+  ],
+)
+
+/**
+ * Notification defaults and locks. `scope` agency rows have no organization;
+ * agency rows also hold the agency-role ('agency') alerts.
+ */
+export const notificationRule = pgTable(
+  'notification_rule',
+  {
+    id: id(),
+    scope: text('scope').$type<'agency' | 'organization'>().notNull(),
+    organizationId: text('organization_id').references(() => organization.id, {
+      onDelete: 'cascade',
+    }),
+    event: text('event').$type<EventKey>().notNull(),
+    role: text('role').$type<NotificationRole>().notNull(),
+    enabled: boolean('enabled').notNull(),
+    locked: boolean('locked').notNull().default(false),
+    updatedBy: text('updated_by').references(() => user.id, {
+      onDelete: 'set null',
+    }),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    unique('notification_rule_scope_unique')
+      .on(t.scope, t.organizationId, t.event, t.role)
+      .nullsNotDistinct(),
+  ],
+)
+
+/** A user's own choice. `organizationId` null holds agency-role choices. */
+export const notificationPreference = pgTable(
+  'notification_preference',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    organizationId: text('organization_id').references(() => organization.id, {
+      onDelete: 'cascade',
+    }),
+    event: text('event').$type<EventKey>().notNull(),
+    enabled: boolean('enabled').notNull(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    unique('notification_preference_unique')
+      .on(t.userId, t.organizationId, t.event)
+      .nullsNotDistinct(),
+  ],
+)
+
+/** One row per recipient per event. Also the source for a future inbox. */
+export const notification = pgTable(
+  'notification',
+  {
+    id: id(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    organizationId: text('organization_id').references(() => organization.id, {
+      onDelete: 'cascade',
+    }),
+    siteId: text('site_id').references(() => site.id, { onDelete: 'set null' }),
+    event: text('event').$type<EventKey>().notNull(),
+    payload: jsonb('payload').$type<NotificationPayload>().notNull(),
+    /** `${event}:${subjectId}:${userId}`: one row per subject and recipient. */
+    dedupeKey: text('dedupe_key'),
+    readAt: timestamptz('read_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('notification_dedupe_key_unique').on(t.dedupeKey).nullsNotDistinct(),
+    index('notification_user_id_idx').on(t.userId),
+    index('notification_created_at_idx').on(t.createdAt),
   ],
 )
 

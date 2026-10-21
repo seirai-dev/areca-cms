@@ -183,6 +183,13 @@
       "when": 1792610403606,
       "tag": "0025_branding_login_tagline",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1792622853814,
+      "tag": "0026_notifications",
+      "breakpoints": true
     }
   ]
 }

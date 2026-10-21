@@ -13,9 +13,13 @@ export type LayoutInput = {
   preheader: string
   heading: string
   paragraphs: string[]
+  /** Short lines shown as a compact list under the paragraphs. */
+  list?: string[]
   button?: { label: string; url: string }
   /** Small grey lines under the card. The app name is added last. */
   footer: string[]
+  /** Small links under the footer lines, separated by a dot. */
+  footerLinks?: { label: string; url: string }[]
   /** Language of the message, for the html lang attribute. */
   lang: string
 }
@@ -70,16 +74,30 @@ export function renderLayout(input: LayoutInput): LayoutOutput {
         `<p class="mail-text" style="margin:0 0 16px;font-family:${font};font-size:15px;line-height:24px;color:${BODY_TEXT};">${escapeHtml(line)}</p>`,
     )
     .join('')
+  const list = input.list?.length
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px;">${input.list
+        .map(
+          (line) =>
+            `<tr><td class="mail-text" style="padding:2px 0;font-family:${font};font-size:14px;line-height:22px;color:${BODY_TEXT};">${escapeHtml(line)}</td></tr>`,
+        )
+        .join('')}</table>`
+    : ''
   const button = input.button
     ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 24px;"><tr><td style="border-radius:8px;background-color:${accent};"><a href="${escapeHtml(input.button.url)}" style="display:inline-block;padding:12px 20px;font-family:${font};font-size:15px;line-height:20px;font-weight:600;color:${buttonTextColor(accent)};text-decoration:none;border-radius:8px;">${escapeHtml(input.button.label)}</a></td></tr></table>`
     : ''
-  const footerLines = [...input.footer, brand.appName]
-  const footer = footerLines
-    .map(
-      (line) =>
-        `<p class="mail-muted" style="margin:0 0 6px;font-family:${font};font-size:12px;line-height:18px;color:${MUTED};">${escapeHtml(line)}</p>`,
-    )
-    .join('')
+  const links = input.footerLinks?.length
+    ? `<p class="mail-muted" style="margin:0 0 6px;font-family:${font};font-size:12px;line-height:18px;color:${MUTED};">${input.footerLinks
+        .map(
+          (link) =>
+            `<a class="mail-muted" href="${escapeHtml(link.url)}" style="color:${MUTED};text-decoration:underline;">${escapeHtml(link.label)}</a>`,
+        )
+        .join(' &middot; ')}</p>`
+    : ''
+  const lineHtml = (line: string) =>
+    `<p class="mail-muted" style="margin:0 0 6px;font-family:${font};font-size:12px;line-height:18px;color:${MUTED};">${escapeHtml(line)}</p>`
+  // Links sit just above the app name.
+  const footer =
+    input.footer.map(lineHtml).join('') + links + lineHtml(brand.appName)
 
   const html = `<!doctype html>
 <html lang="${escapeHtml(input.lang)}">
@@ -108,6 +126,7 @@ export function renderLayout(input: LayoutInput): LayoutOutput {
 ${mark}
 <h1 class="mail-heading" style="margin:0 0 16px;font-family:${font};font-size:20px;line-height:28px;font-weight:600;color:${TEXT};">${escapeHtml(input.heading)}</h1>
 ${paragraphs}
+${list}
 ${button}
 <div class="mail-divider" style="border-top:1px solid #e4e4e7;padding-top:16px;">${footer}</div>
 </td></tr>
@@ -121,8 +140,13 @@ ${button}
   const text = [
     input.heading,
     ...input.paragraphs,
+    ...(input.list?.length ? [input.list.map((line) => `- ${line}`).join('\n')] : []),
     ...(input.button ? [`${input.button.label}: ${input.button.url}`] : []),
-    footerLines.join('\n'),
+    [
+      ...input.footer,
+      ...(input.footerLinks ?? []).map((link) => `${link.label}: ${link.url}`),
+      brand.appName,
+    ].join('\n'),
   ].join('\n\n')
 
   return { html, text }

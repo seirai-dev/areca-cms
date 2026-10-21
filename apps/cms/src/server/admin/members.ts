@@ -18,6 +18,7 @@ import { ConflictError, NotFoundError } from '#/server/content/errors'
 import { AppError } from '#/server/http/app-error'
 import { sendAccountEmail } from '#/server/mail/account-emails'
 import { mailFailureMessage } from '#/server/mail/errors'
+import { notifyInviteAccepted } from '#/server/notifications/triggers'
 import {
   enqueueEmail,
   sendNow,
@@ -525,7 +526,9 @@ export async function acceptInvitation(input: {
     .where(eq(invitation.token, input.token))
     .limit(1)
   if (!identity) throw new NotFoundError(m.server_invitation_not_found())
-  return db.transaction(async (tx) => {
+  // Set only when this call accepted the invitation (replays notify nobody).
+  const newlyAccepted = { invitationId: null as string | null }
+  const result = await db.transaction(async (tx) => {
     await tx.execute(
       sql`select pg_advisory_xact_lock(hashtextextended(${JSON.stringify(['invitation', identity.organizationId, normalizeEmail(identity.email)])}, 0))`,
     )
@@ -598,6 +601,7 @@ export async function acceptInvitation(input: {
       .update(invitation)
       .set({ acceptedAt: new Date() })
       .where(eq(invitation.id, invite.id))
+    newlyAccepted.invitationId = invite.id
     // The link was delivered to this address, so it counts as verified.
     if (invite.deliveryStatus === 'sent') {
       await tx
@@ -618,6 +622,10 @@ export async function acceptInvitation(input: {
     )
     return { organizationId: invite.organizationId, role: member.role }
   })
+  if (newlyAccepted.invitationId) {
+    await notifyInviteAccepted(newlyAccepted.invitationId, input.userId)
+  }
+  return result
 }
 
 export async function listAgencyAdmins() {

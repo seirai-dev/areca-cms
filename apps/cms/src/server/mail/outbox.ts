@@ -69,6 +69,7 @@ export type MailTemplate =
   | 'two_factor_disabled'
   | 'membership_removed'
   | 'membership_role_changed'
+  | 'notification'
 
 export type OutboxStatus = 'queued' | 'sending' | 'sent' | 'failed'
 
@@ -538,6 +539,7 @@ async function sendClaimed(
       subject: rendered.subject,
       text: rendered.text,
       html: rendered.html,
+      headers: rendered.headers,
     }
     messageId = (await sendMail(config, message)).messageId
   } catch (error) {

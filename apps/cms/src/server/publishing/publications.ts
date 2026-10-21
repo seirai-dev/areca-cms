@@ -232,6 +232,21 @@ export async function requestPublication(input: {
     const built = await buildSnapshot(input.siteId, tx)
     if (!built.ok) return { ok: false as const, errors: built.errors }
     const snapshot = { ...built.snapshot, publicationId }
+    const isScheduler = input.note === 'scheduled' || input.actorId === 'system'
+    let scheduledBy = uniqueActorIds(input.scheduledBy ?? [])
+    if (isScheduler && scheduledBy.length === 0) {
+      const owners = await tx
+        .select({ scheduledBy: entry.scheduledBy })
+        .from(entry)
+        .where(
+          and(
+            eq(entry.siteId, input.siteId),
+            eq(entry.status, 'scheduled'),
+            lte(entry.scheduledAt, new Date()),
+          ),
+        )
+      scheduledBy = uniqueActorIds(owners.map((row) => row.scheduledBy))
+    }
     const [pub] = await tx
       .insert(publication)
       .values({
@@ -242,6 +257,8 @@ export async function requestPublication(input: {
         entryVersions: built.entryVersions,
         publishingMode: lockedSite.publishingMode,
         requestedBy: actorId,
+        origin: isScheduler ? 'scheduled' : 'manual',
+        scheduledBy: isScheduler ? scheduledBy : [],
         status: 'pending',
       })
       .returning()
@@ -294,21 +311,6 @@ export async function requestPublication(input: {
       throw new Error(m.server_failed_to_create_build_job())
     }
 
-    const isScheduler = input.note === 'scheduled' || input.actorId === 'system'
-    let scheduledBy = uniqueActorIds(input.scheduledBy ?? [])
-    if (isScheduler && scheduledBy.length === 0) {
-      const owners = await tx
-        .select({ scheduledBy: entry.scheduledBy })
-        .from(entry)
-        .where(
-          and(
-            eq(entry.siteId, input.siteId),
-            eq(entry.status, 'scheduled'),
-            lte(entry.scheduledAt, new Date()),
-          ),
-        )
-      scheduledBy = uniqueActorIds(owners.map((row) => row.scheduledBy))
-    }
     const auditActor =
       isScheduler && scheduledBy.length === 1 ? scheduledBy[0] : actorId
     await audit(
@@ -396,6 +398,7 @@ export async function requestRollback(input: {
         snapshot: { ...pub.snapshot, publicationId: rollbackId },
         snapshotHash: pub.snapshotHash,
         requestedBy: actorId,
+        origin: 'rollback',
         publishingMode: lockedSite.publishingMode,
         entryVersions: [],
         status: 'pending',
