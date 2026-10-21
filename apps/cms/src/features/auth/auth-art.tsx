@@ -7,7 +7,7 @@ import { cn } from '#/lib/utils'
 import { accentTone } from './auth-art-tone'
 
 /**
- * The branded panel beside the auth forms: layered dunes, two soft lights and
+ * The branded panel beside the auth forms: abstract palm fans, two soft lights and
  * a little grain, all drawn from the accent colour (see `.auth-art` in
  * styles.css), with the logo and app name on top and the tagline at the
  * bottom. As a narrow band (`compact`) it keeps only the logo and name.
@@ -54,7 +54,7 @@ export function AuthArt({
         aria-hidden="true"
         className="auth-art-float pointer-events-none absolute top-[30%] left-[-22%] -z-10 size-[55%] rounded-full bg-[radial-gradient(closest-side,var(--art-glow),transparent)] opacity-[calc(var(--art-glow-opacity)*0.6)] blur-3xl [animation-delay:-14s]"
       />
-      {/* Sun, rings and dunes, back to front. */}
+      {/* Cropped palm fans: cut-paper blades and long, curved stems. */}
       <svg
         aria-hidden="true"
         viewBox="0 0 600 800"
@@ -62,61 +62,91 @@ export function AuthArt({
         className="pointer-events-none absolute inset-0 -z-10 size-full"
       >
         <defs>
-          <radialGradient id={`${grainId}-sun`}>
-            <stop offset="0%" stopColor="var(--art-glow)" stopOpacity="0.95" />
-            <stop offset="70%" stopColor="var(--art-glow)" stopOpacity="0.35" />
-            <stop offset="100%" stopColor="var(--art-glow)" stopOpacity="0" />
-          </radialGradient>
+          {/* Each tapered blade meets at the fan's folded base. */}
+          <path
+            id={`${grainId}-blade`}
+            d="M0 0 C-12-40-27-118-19-194 C-15-228-6-255 0-272 C6-255 15-228 19-194 C27-118 12-40 0 0Z"
+          />
+          <g id={`${grainId}-fan`}>
+            <use
+              href={`#${grainId}-blade`}
+              transform="rotate(-80) scale(.76)"
+            />
+            <use
+              href={`#${grainId}-blade`}
+              transform="rotate(-60) scale(.88)"
+            />
+            <use
+              href={`#${grainId}-blade`}
+              transform="rotate(-40) scale(.96)"
+            />
+            <use href={`#${grainId}-blade`} transform="rotate(-20)" />
+            <use href={`#${grainId}-blade`} />
+            <use href={`#${grainId}-blade`} transform="rotate(20)" />
+            <use href={`#${grainId}-blade`} transform="rotate(40) scale(.96)" />
+            <use href={`#${grainId}-blade`} transform="rotate(60) scale(.88)" />
+            <use href={`#${grainId}-blade`} transform="rotate(80) scale(.76)" />
+          </g>
         </defs>
-        <g className="auth-art-drift-alt origin-center">
-          <circle cx="420" cy="262" r="92" fill={`url(#${grainId}-sun)`} />
-          <circle
-            cx="420"
-            cy="262"
-            r="148"
-            fill="none"
-            stroke="var(--art-ink)"
-            strokeOpacity="0.14"
-          />
-          <circle
-            cx="420"
-            cy="262"
-            r="214"
-            fill="none"
-            stroke="var(--art-ink)"
-            strokeOpacity="0.08"
-            strokeDasharray="2 7"
-          />
-        </g>
-        <g className="auth-art-drift origin-bottom">
+        <g className="auth-art-drift-alt origin-bottom">
+          {/* A quieter fan reaches into the panel from the left edge. */}
           <path
+            d="M-48 810 C-8 656 54 462 112 354"
+            fill="none"
+            stroke="var(--art-far)"
+            strokeWidth="7"
+            strokeLinecap="round"
+          />
+          <use
+            href={`#${grainId}-fan`}
+            transform="translate(112 354) rotate(-32) scale(1.12)"
             fill="var(--art-far)"
-            d="M-60 470 C 70 420, 180 404, 290 432 C 392 458, 470 384, 660 356 L 660 820 L -60 820 Z"
           />
         </g>
-        <g className="auth-art-drift-alt origin-bottom [animation-delay:-6s]">
-          {/* The big dune: a lit face and a shaded face meeting at a crest. */}
+        <g className="auth-art-drift origin-bottom [animation-delay:-6s]">
           <path
-            fill="var(--art-back)"
-            d="M-60 610 C 70 566, 196 474, 326 404 C 378 376, 410 370, 442 382 C 522 412, 584 470, 660 506 L 660 820 L -60 820 Z"
+            d="M248 854 C243 716 394 670 410 496"
+            fill="none"
+            stroke="var(--art-shade)"
+            strokeWidth="10"
+            strokeLinecap="round"
           />
           <path
-            fill="var(--art-shade)"
-            d="M442 382 C 402 452, 336 520, 306 602 C 286 662, 302 726, 344 820 L 660 820 L 660 506 C 584 470, 522 412, 442 382 Z"
-          />
-          <path
+            d="M245 854 C240 716 391 670 407 496"
             fill="none"
             stroke="var(--art-glow)"
-            strokeOpacity="0.55"
-            strokeWidth="1.5"
+            strokeOpacity="0.35"
+            strokeWidth="2"
             strokeLinecap="round"
-            d="M-60 610 C 70 566, 196 474, 326 404 C 378 376, 410 370, 442 382"
           />
+          <g transform="translate(410 496) rotate(20) scale(1.18)">
+            <use href={`#${grainId}-fan`} fill="var(--art-back)" />
+            {/* A shaded half-blade gives the folds a little depth. */}
+            <path
+              d="M0 0 C12-40 27-118 19-194 C15-228 6-255 0-272Z"
+              fill="var(--art-shade)"
+            />
+            <path
+              d="M0 0 0-258"
+              stroke="var(--art-glow)"
+              strokeOpacity="0.45"
+              strokeWidth="1"
+            />
+          </g>
         </g>
-        <g className="auth-art-drift origin-bottom [animation-delay:-14s]">
+        {/* A cropped foreground frond balances the tall fan. */}
+        <g className="auth-art-drift-alt origin-bottom [animation-delay:-14s]">
           <path
+            d="M660 862 C576 788 494 717 174 602"
+            fill="none"
+            stroke="var(--art-front)"
+            strokeWidth="8"
+            strokeLinecap="round"
+          />
+          <use
+            href={`#${grainId}-fan`}
+            transform="translate(174 602) rotate(-62) scale(.82)"
             fill="var(--art-front)"
-            d="M-60 706 C 120 652, 262 702, 382 678 C 482 658, 562 672, 660 640 L 660 820 L -60 820 Z"
           />
         </g>
       </svg>
