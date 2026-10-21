@@ -920,3 +920,109 @@ html.dark,
     animation: none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Auth art (features/auth/auth-art.tsx): layered dunes and soft light drawn
+   from the branding accent. Text sits on the "front" dune and the top of the
+   "sky", so those stay pale in light mode and deep in dark mode whatever the
+   accent is. `data-tone="bright"` (a very light accent, e.g. yellow) uses
+   less accent in dark mode so white text keeps its contrast.
+--------------------------------------------------------------------------- */
+.auth-art {
+  --art-ink: #1d1d1f;
+  --art-ink-soft: rgb(29 29 31 / 0.66);
+  --art-sky-top: color-mix(in oklab, var(--color-accent) 34%, #ffffff);
+  --art-sky-bottom: color-mix(in oklab, var(--color-accent) 12%, #ffffff);
+  --art-back: color-mix(in oklab, var(--color-accent) 46%, #ffffff);
+  --art-far: color-mix(in oklab, var(--color-accent) 22%, #ffffff);
+  --art-mid: color-mix(in oklab, var(--color-accent) 24%, #ffffff);
+  --art-shade: color-mix(in oklab, var(--color-accent) 62%, #ffffff);
+  --art-front: color-mix(in oklab, var(--color-accent) 7%, #ffffff);
+  --art-glow: color-mix(in oklab, var(--color-accent) 55%, #ffffff);
+  --art-glow-opacity: 0.55;
+  --art-scrim-top: rgb(255 255 255 / 0.35);
+  --art-scrim-bottom: rgb(255 255 255 / 0.5);
+  --art-grain-opacity: 0.07;
+  --art-chip: rgb(255 255 255 / 0.55);
+  --art-chip-border: rgb(29 29 31 / 0.08);
+}
+/* `:not(.light …)`: a light branding preview inside a dark page stays light. */
+.dark .auth-art:not(.light .auth-art) {
+  --art-ink: #f7f7fa;
+  --art-ink-soft: rgb(247 247 250 / 0.72);
+  --art-sky-top: color-mix(in oklab, var(--color-accent) 58%, #0b0b14);
+  --art-sky-bottom: color-mix(in oklab, var(--color-accent) 30%, #0b0b14);
+  --art-back: color-mix(in oklab, var(--color-accent) 46%, #0b0b14);
+  --art-far: color-mix(in oklab, var(--color-accent) 36%, #0b0b14);
+  --art-mid: color-mix(in oklab, var(--color-accent) 24%, #0b0b14);
+  --art-shade: color-mix(in oklab, var(--color-accent) 20%, #07070c);
+  --art-front: color-mix(in oklab, var(--color-accent) 11%, #08080d);
+  --art-glow: var(--color-accent);
+  --art-glow-opacity: 0.5;
+  --art-scrim-top: rgb(0 0 0 / 0.28);
+  --art-scrim-bottom: rgb(0 0 0 / 0.4);
+  --art-grain-opacity: 0.11;
+  --art-chip: rgb(255 255 255 / 0.12);
+  --art-chip-border: rgb(255 255 255 / 0.14);
+}
+.dark .auth-art[data-tone='bright']:not(.light .auth-art) {
+  --art-sky-top: color-mix(in oklab, var(--color-accent) 30%, #0b0b14);
+  --art-sky-bottom: color-mix(in oklab, var(--color-accent) 16%, #0b0b14);
+  --art-back: color-mix(in oklab, var(--color-accent) 24%, #0b0b14);
+  --art-far: color-mix(in oklab, var(--color-accent) 18%, #0b0b14);
+  --art-mid: color-mix(in oklab, var(--color-accent) 14%, #0b0b14);
+  --art-shade: color-mix(in oklab, var(--color-accent) 10%, #07070c);
+  --art-front: color-mix(in oklab, var(--color-accent) 6%, #08080d);
+  --art-glow-opacity: 0.32;
+}
+/* A very dark accent (navy, near-black) washes out to grey in light mode, so
+   it gets more of itself there. */
+.auth-art[data-tone='deep'] {
+  --art-sky-top: color-mix(in oklab, var(--color-accent) 22%, #ffffff);
+  --art-back: color-mix(in oklab, var(--color-accent) 30%, #ffffff);
+}
+.dark .auth-art[data-tone='deep']:not(.light .auth-art) {
+  --art-sky-top: color-mix(in oklab, var(--color-accent) 70%, #1a1a2a);
+  --art-back: color-mix(in oklab, var(--color-accent) 55%, #1a1a2a);
+}
+
+@keyframes auth-art-drift {
+  from {
+    transform: translate3d(0, 0, 0) scale(1.04);
+  }
+  to {
+    transform: translate3d(-2.5%, 1.2%, 0) scale(1.07);
+  }
+}
+@keyframes auth-art-drift-alt {
+  from {
+    transform: translate3d(0, 0, 0) scale(1.05);
+  }
+  to {
+    transform: translate3d(2%, -1%, 0) scale(1.03);
+  }
+}
+@keyframes auth-art-float {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-8%, 6%, 0);
+  }
+}
+.auth-art-drift {
+  animation: auth-art-drift 34s ease-in-out infinite alternate;
+}
+.auth-art-drift-alt {
+  animation: auth-art-drift-alt 28s ease-in-out infinite alternate;
+}
+.auth-art-float {
+  animation: auth-art-float 40s ease-in-out infinite alternate;
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-art-drift,
+  .auth-art-drift-alt,
+  .auth-art-float {
+    animation: none;
+  }
+}

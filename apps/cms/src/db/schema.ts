@@ -491,6 +491,12 @@ export const branding = pgTable('branding', {
   advancedColors: jsonb('advanced_colors').$type<AdvancedBrandColors>(),
   font: text('font'),
   emailFromName: text('email_from_name'),
+  /** Per-locale sign-in tagline; a missing or null locale uses the built-in text. */
+  loginTagline: jsonb('login_tagline').$type<{
+    en?: string | null
+    nl?: string | null
+    tr?: string | null
+  }>(),
   updatedBy: text('updated_by').references(() => user.id, {
     onDelete: 'set null',
   }),

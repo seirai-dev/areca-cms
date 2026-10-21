@@ -9,16 +9,21 @@ import {
   DEFAULT_APP_NAME,
   DEFAULT_FONT,
   EMPTY_ADVANCED_COLORS,
+  LOGIN_TAGLINE_LOCALES,
+  LOGIN_TAGLINE_MAX_LENGTH,
   hasAdvancedColors,
+  hasLoginTaglines,
   isFontKey,
   normalizeAdvancedColors,
   normalizeHex,
+  normalizeLoginTaglines,
 } from '#/lib/branding'
 import type {
   AdvancedBrandColors,
   BrandColorPalette,
   BrandingView,
   FontKey,
+  LoginTaglines,
 } from '#/lib/branding'
 import { m } from '#/paraglide/messages'
 import { AssetValidationError } from '#/server/assets'
@@ -84,6 +89,7 @@ export function toBrandingView(row: BrandingRow | null): BrandingView {
     advancedColors,
     font,
     emailFromName: row?.emailFromName?.trim() || null,
+    loginTagline: normalizeLoginTaglines(row?.loginTagline),
     customized: false,
   }
   view.customized =
@@ -94,7 +100,8 @@ export function toBrandingView(row: BrandingRow | null): BrandingView {
     view.advancedColorsEnabled ||
     hasAdvancedColors(view.advancedColors) ||
     view.font !== DEFAULT_FONT ||
-    view.emailFromName !== null
+    view.emailFromName !== null ||
+    hasLoginTaglines(view.loginTagline)
   return view
 }
 
@@ -115,6 +122,7 @@ type BrandingPatch = Partial<
     | 'advancedColors'
     | 'font'
     | 'emailFromName'
+    | 'loginTagline'
   >
 >
 
@@ -170,6 +178,7 @@ export async function updateBranding(
     advancedColors?: AdvancedBrandColors | null
     font?: string | null
     emailFromName?: string | null
+    loginTagline?: Partial<LoginTaglines> | null
   },
   actorId: string,
 ): Promise<BrandingView> {
@@ -237,6 +246,20 @@ export async function updateBranding(
       throw new AssetValidationError(m.server_email_sender_max_80())
     }
     patch.emailFromName = name || null
+  }
+
+  if (input.loginTagline !== undefined) {
+    const taglines = normalizeLoginTaglines(input.loginTagline)
+    for (const locale of LOGIN_TAGLINE_LOCALES) {
+      const value = taglines[locale]
+      if (
+        value &&
+        (value.length > LOGIN_TAGLINE_MAX_LENGTH || /[\r\n]/.test(value))
+      ) {
+        throw new AssetValidationError(m.agency_branding_signin_max_80())
+      }
+    }
+    patch.loginTagline = hasLoginTaglines(taglines) ? taglines : null
   }
 
   return upsertBranding(patch, actorId, {
@@ -315,6 +338,7 @@ export async function resetBranding(actorId: string): Promise<BrandingView> {
       advancedColors: null,
       font: null,
       emailFromName: null,
+      loginTagline: null,
     },
     actorId,
     { action: 'branding.reset' },

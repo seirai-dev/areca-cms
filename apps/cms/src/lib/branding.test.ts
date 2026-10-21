@@ -10,8 +10,11 @@ import {
   fontStylesheetUrl,
   hexToOklch,
   isFontKey,
+  loginTaglineFor,
+  loginTaglinesSchema,
   normalizeHex,
   normalizeAdvancedColors,
+  normalizeLoginTaglines,
 } from './branding.ts'
 
 describe('normalizeHex', () => {
@@ -202,5 +205,70 @@ describe('fonts', () => {
     expect(
       brandingCss({ ...DEFAULT_BRANDING, font: 'comic-sans' as never }),
     ).toBe('')
+  })
+})
+
+describe('sign-in tagline', () => {
+  it('returns the trimmed text for the requested language', () => {
+    const branding = {
+      loginTagline: { en: '  Your website  ', nl: 'Je website', tr: null },
+    }
+    expect(loginTaglineFor(branding, 'en')).toBe('Your website')
+    expect(loginTaglineFor(branding, 'nl')).toBe('Je website')
+  })
+
+  it('is null for a language with no text, so the built-in text shows', () => {
+    const branding = { loginTagline: { en: '   ', nl: null, tr: null } }
+    expect(loginTaglineFor(branding, 'en')).toBeNull()
+    expect(loginTaglineFor(branding, 'tr')).toBeNull()
+    expect(loginTaglineFor(DEFAULT_BRANDING, 'nl')).toBeNull()
+  })
+
+  it('is null for a language the app does not ship', () => {
+    expect(loginTaglineFor(DEFAULT_BRANDING, 'de')).toBeNull()
+  })
+
+  it('normalises stored values per language', () => {
+    expect(normalizeLoginTaglines({ en: ' Hi ', nl: '', tr: 4 })).toEqual({
+      en: 'Hi',
+      nl: null,
+      tr: null,
+    })
+    expect(normalizeLoginTaglines(null)).toEqual({
+      en: null,
+      nl: null,
+      tr: null,
+    })
+  })
+})
+
+describe('loginTaglinesSchema', () => {
+  it('trims values and turns empty ones into null', () => {
+    expect(
+      loginTaglinesSchema.parse({ en: '  Hello  ', nl: '   ', tr: '' }),
+    ).toEqual({ en: 'Hello', nl: null, tr: null })
+  })
+
+  it('accepts a missing or null request', () => {
+    expect(loginTaglinesSchema.parse(undefined)).toBeUndefined()
+    expect(loginTaglinesSchema.parse(null)).toBeNull()
+    expect(loginTaglinesSchema.parse({})).toEqual({})
+  })
+
+  it('allows exactly 80 characters and no more', () => {
+    const eighty = 'a'.repeat(80)
+    expect(loginTaglinesSchema.parse({ en: eighty })?.en).toBe(eighty)
+    expect(loginTaglinesSchema.safeParse({ en: `${eighty}a` }).success).toBe(
+      false,
+    )
+  })
+
+  it('rejects line breaks', () => {
+    expect(
+      loginTaglinesSchema.safeParse({ tr: 'Birinci\nikinci' }).success,
+    ).toBe(false)
+    expect(loginTaglinesSchema.safeParse({ tr: 'Birinci\r\n' }).success).toBe(
+      true,
+    )
   })
 })

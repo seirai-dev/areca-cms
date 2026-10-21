@@ -76,13 +76,13 @@ function ConsentProblem({
   return (
     <AuthShell>
       <AuthHeading title={title} description={body} />
-      {error ? <AuthError className="mt-6">{error}</AuthError> : null}
+      {error ? <AuthError>{error}</AuthError> : null}
       {canGoBack ? (
         <Button
           type="button"
-          variant="secondary"
+          variant="accent"
           size="lg"
-          className="mt-7 min-h-11 w-full"
+          className="min-h-11 w-full"
           loading={pending}
           onClick={() => void goBack()}
           data-testid="oauth-consent-back"
@@ -166,7 +166,7 @@ function ConsentRequest({ query, info }: { query: string; info: ConsentOk }) {
         data-testid="oauth-consent"
         data-ready={ready ? 'true' : 'false'}
       >
-        <div className="grid justify-items-center gap-3">
+        <div className="grid gap-3">
           {/* Anonymous client metadata is unverified. Loading its logo before
               approval would contact an app-controlled URL from the browser. */}
           <span
@@ -223,7 +223,7 @@ function ConsentRequest({ query, info }: { query: string; info: ConsentOk }) {
         </section>
 
         {canAllowGoLive ? (
-          <div className="flex items-start gap-3 rounded-card border border-border-default p-4">
+          <div className="flex items-start gap-3">
             <Checkbox
               id={goLiveId}
               checked={goLive}
@@ -261,6 +261,7 @@ function ConsentRequest({ query, info }: { query: string; info: ConsentOk }) {
         <div className="grid gap-2">
           <Button
             type="button"
+            variant="accent"
             size="lg"
             className="min-h-11 w-full"
             loading={pending === 'allow'}

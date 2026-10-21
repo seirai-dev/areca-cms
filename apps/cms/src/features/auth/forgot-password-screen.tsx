@@ -28,13 +28,10 @@ export function ForgotPasswordScreen({ available }: { available: boolean }) {
   if (!available) {
     return (
       <AuthShell>
-        <div
-          className="grid justify-items-center gap-5 text-center"
-          data-testid="forgot-password-unavailable"
-        >
+        <div className="grid gap-5" data-testid="forgot-password-unavailable">
           <span
             aria-hidden="true"
-            className="grid size-14 place-content-center rounded-[18px] bg-background-subtle text-icon-muted ring-8 ring-background-subtle/50"
+            className="grid size-14 place-content-center rounded-[18px] bg-background-subtle text-icon-muted"
           >
             <EnvelopeSimple weight="duotone" className="size-7" />
           </span>
@@ -42,7 +39,7 @@ export function ForgotPasswordScreen({ available }: { available: boolean }) {
             title={m.auth_forgot_unavailable_title()}
             description={m.auth_forgot_unavailable_body()}
           />
-          <Button asChild variant="outline" size="lg" className="w-full">
+          <Button asChild variant="accent" size="lg" className="w-full">
             <Link to="/login">{m.auth_forgot_back()}</Link>
           </Button>
         </div>
@@ -85,13 +82,10 @@ export function ForgotPasswordScreen({ available }: { available: boolean }) {
   if (sentTo !== null) {
     return (
       <AuthShell footer={back}>
-        <div
-          className="grid justify-items-center gap-5 text-center"
-          data-testid="forgot-password-sent"
-        >
+        <div className="grid gap-5" data-testid="forgot-password-sent">
           <span
             aria-hidden="true"
-            className="grid size-14 place-content-center rounded-[18px] bg-status-success-bg text-icon-success ring-8 ring-status-success-bg/50"
+            className="grid size-14 place-content-center rounded-[18px] bg-status-success-bg text-icon-success"
           >
             <EnvelopeSimple weight="duotone" className="size-7" />
           </span>
@@ -111,7 +105,7 @@ export function ForgotPasswordScreen({ available }: { available: boolean }) {
         description={m.auth_forgot_subtitle()}
       />
       <form
-        className="mt-7 grid gap-4"
+        className="grid gap-4"
         method="post"
         data-testid="forgot-password-form"
         data-ready={ready ? 'true' : 'false'}
@@ -137,8 +131,9 @@ export function ForgotPasswordScreen({ available }: { available: boolean }) {
         {error ? <AuthError>{error}</AuthError> : null}
         <Button
           type="submit"
+          variant="accent"
           size="lg"
-          className="mt-1 w-full"
+          className="w-full"
           disabled={!ready}
           loading={pending}
         >

@@ -4,9 +4,11 @@ import type { ReactElement, SVGProps } from 'react'
 import { Button } from '#/components/ui/button'
 import { authClient } from '#/lib/auth-client'
 import type { AuthMethods, SocialProviderId } from '#/lib/auth-providers'
+import { cn } from '#/lib/utils'
+import { m } from '#/paraglide/messages'
+
 import { providerRequest } from './provider-request'
 import { AuthError } from './auth-shell'
-import { m } from '#/paraglide/messages'
 
 function GitHubIcon(props: SVGProps<SVGSVGElement>) {
   return (
@@ -58,17 +60,33 @@ function MicrosoftIcon(props: SVGProps<SVGSVGElement>) {
   )
 }
 
+/** Brand names are proper nouns, so they are not translated. */
 const SOCIALS = {
-  github: { icon: GitHubIcon, label: () => m.auth_continue_with_github() },
-  google: { icon: GoogleIcon, label: () => m.auth_continue_with_google() },
-  discord: { icon: DiscordIcon, label: () => m.auth_continue_with_discord() },
+  github: {
+    icon: GitHubIcon,
+    brand: 'GitHub',
+    label: () => m.auth_continue_with_github(),
+  },
+  google: {
+    icon: GoogleIcon,
+    brand: 'Google',
+    label: () => m.auth_continue_with_google(),
+  },
+  discord: {
+    icon: DiscordIcon,
+    brand: 'Discord',
+    label: () => m.auth_continue_with_discord(),
+  },
 } satisfies Record<
   SocialProviderId,
   {
     icon: (props: SVGProps<SVGSVGElement>) => ReactElement
+    brand: string
     label: () => string
   }
 >
+
+const MICROSOFT_BRAND = 'Microsoft'
 
 /**
  * One full-width outlined button per sign-in provider the server reported as
@@ -121,43 +139,55 @@ export function ProviderSignIn({
     return null
   }
 
+  // Two providers sit side by side. A full "Continue with …" label does not
+  // fit a half-width button, so each shows only its brand name; the full
+  // label stays as the accessible name.
+  const count = methods.socials.length + (sso ? 1 : 0)
+  const compact = count === 2
+
   return (
     <div className="grid gap-2">
       {error ? <AuthError>{error}</AuthError> : null}
-      {methods.socials.map((provider) => {
-        const { icon: Icon, label } = SOCIALS[provider]
-        return (
+      <div className={cn('grid gap-2', compact && 'grid-cols-2')}>
+        {methods.socials.map((provider) => {
+          const { icon: Icon, brand, label } = SOCIALS[provider]
+          return (
+            <Button
+              key={provider}
+              type="button"
+              variant="outline"
+              size="lg"
+              className="w-full justify-center gap-2.5"
+              aria-label={compact ? label() : undefined}
+              disabled={pending !== null && pending !== provider}
+              loading={pending === provider}
+              data-testid={`sign-in-${provider}`}
+              onClick={() => void signIn(provider)}
+            >
+              {pending === provider ? null : <Icon className="size-[18px]" />}
+              {compact ? brand : label()}
+            </Button>
+          )
+        })}
+        {sso ? (
           <Button
-            key={provider}
             type="button"
             variant="outline"
             size="lg"
             className="w-full justify-center gap-2.5"
-            disabled={pending !== null && pending !== provider}
-            loading={pending === provider}
-            data-testid={`sign-in-${provider}`}
-            onClick={() => void signIn(provider)}
+            aria-label={compact ? m.auth_continue_with_microsoft() : undefined}
+            disabled={pending !== null && pending !== 'sso'}
+            loading={pending === 'sso'}
+            data-testid="sign-in-sso"
+            onClick={() => void signIn('sso')}
           >
-            {pending === provider ? null : <Icon className="size-[18px]" />}
-            {label()}
+            {pending === 'sso' ? null : (
+              <MicrosoftIcon className="size-[18px]" />
+            )}
+            {compact ? MICROSOFT_BRAND : m.auth_continue_with_microsoft()}
           </Button>
-        )
-      })}
-      {sso ? (
-        <Button
-          type="button"
-          variant="outline"
-          size="lg"
-          className="w-full justify-center gap-2.5"
-          disabled={pending !== null && pending !== 'sso'}
-          loading={pending === 'sso'}
-          data-testid="sign-in-sso"
-          onClick={() => void signIn('sso')}
-        >
-          {pending === 'sso' ? null : <MicrosoftIcon className="size-[18px]" />}
-          {m.auth_continue_with_microsoft()}
-        </Button>
-      ) : null}
+        ) : null}
+      </div>
     </div>
   )
 }

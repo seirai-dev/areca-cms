@@ -74,7 +74,7 @@ export function ResetPasswordScreen({ token }: { token: string | undefined }) {
           title={m.auth_reset_done_title()}
           description={m.auth_reset_done_body()}
         />
-        <Button asChild size="lg" className="mt-7 w-full">
+        <Button asChild variant="accent" size="lg" className="w-full">
           <Link to="/login" data-testid="reset-password-sign-in">
             {m.auth_sign_in()}
           </Link>
@@ -90,7 +90,7 @@ export function ResetPasswordScreen({ token }: { token: string | undefined }) {
         description={m.auth_reset_subtitle()}
       />
       <form
-        className="mt-7 grid gap-4"
+        className="grid gap-4"
         method="post"
         data-testid="reset-password-form"
         data-ready={ready ? 'true' : 'false'}
@@ -139,8 +139,9 @@ export function ResetPasswordScreen({ token }: { token: string | undefined }) {
         {error ? <AuthError>{error}</AuthError> : null}
         <Button
           type="submit"
+          variant="accent"
           size="lg"
-          className="mt-1 w-full"
+          className="w-full"
           disabled={!ready}
           loading={pending}
         >
@@ -155,13 +156,10 @@ export function ResetPasswordScreen({ token }: { token: string | undefined }) {
 function ResetInvalid() {
   return (
     <AuthShell>
-      <div
-        className="grid justify-items-center gap-5 text-center"
-        data-testid="reset-password-invalid"
-      >
+      <div className="grid gap-5" data-testid="reset-password-invalid">
         <span
           aria-hidden="true"
-          className="grid size-14 place-content-center rounded-[18px] bg-background-subtle text-icon-muted ring-8 ring-background-subtle/50"
+          className="grid size-14 place-content-center rounded-[18px] bg-background-subtle text-icon-muted"
         >
           <LinkBreak weight="duotone" className="size-7" />
         </span>
@@ -169,7 +167,7 @@ function ResetInvalid() {
           title={m.auth_reset_invalid_title()}
           description={m.auth_reset_invalid_body()}
         />
-        <Button asChild variant="outline" size="lg" className="w-full">
+        <Button asChild variant="accent" size="lg" className="w-full">
           <Link to="/forgot-password">{m.auth_reset_request_new()}</Link>
         </Button>
       </div>

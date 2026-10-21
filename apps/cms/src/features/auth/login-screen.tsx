@@ -64,15 +64,13 @@ export function LoginScreen({
           title={m.auth_two_factor_title()}
           description={m.auth_two_factor_subtitle()}
         />
-        <div className="mt-7">
-          <TwoFactorChallenge
-            ready={ready}
-            error={error}
-            pending={pending}
-            onSubmit={(code, kind) => void verifyTwoFactor(code, kind)}
-            onCancel={cancelChallenge}
-          />
-        </div>
+        <TwoFactorChallenge
+          ready={ready}
+          error={error}
+          pending={pending}
+          onSubmit={(code, kind) => void verifyTwoFactor(code, kind)}
+          onCancel={cancelChallenge}
+        />
       </AuthShell>
     )
   }
@@ -89,7 +87,7 @@ export function LoginScreen({
               : m.auth_sign_in_subtitle_providers()
         }
       />
-      <div className="mt-7 grid gap-5">
+      <div className="grid gap-5">
         {methods.emailPassword ? (
           <form
             className="grid gap-4"
@@ -141,8 +139,9 @@ export function LoginScreen({
             {error ? <AuthError>{error}</AuthError> : null}
             <Button
               type="submit"
+              variant="accent"
               size="lg"
-              className="mt-1 w-full"
+              className="w-full"
               disabled={!ready}
               loading={pending}
             >

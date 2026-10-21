@@ -176,6 +176,13 @@
       "when": 1792604167847,
       "tag": "0024_user_locale",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792610403606,
+      "tag": "0025_branding_login_tagline",
+      "breakpoints": true
     }
   ]
 }

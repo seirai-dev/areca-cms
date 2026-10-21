@@ -11,8 +11,14 @@ import {
   isFontKey,
   matchPreset,
   normalizeHex,
+  normalizeLoginTaglines,
 } from '#/lib/branding'
-import type { AdvancedBrandColors, BrandingView, FontKey } from '#/lib/branding'
+import type {
+  AdvancedBrandColors,
+  BrandingView,
+  FontKey,
+  LoginTaglineLocale,
+} from '#/lib/branding'
 import { m } from '#/paraglide/messages'
 import {
   clearBrandingImageFn,
@@ -75,6 +81,9 @@ export function useBrandingForm() {
 
   const [appName, setAppName] = React.useState('')
   const [emailFromName, setEmailFromName] = React.useState('')
+  const [loginTagline, setLoginTagline] = React.useState<
+    Record<LoginTaglineLocale, string>
+  >({ en: '', nl: '', tr: '' })
   const [accent, setAccent] = React.useState('')
   const [font, setFont] = React.useState<FontKey>(DEFAULT_FONT)
   const [advancedEnabled, setAdvancedEnabled] = React.useState(false)
@@ -87,6 +96,11 @@ export function useBrandingForm() {
   const seed = React.useCallback((view: BrandingView) => {
     setAppName(view.appName === DEFAULT_APP_NAME ? '' : view.appName)
     setEmailFromName(view.emailFromName ?? '')
+    setLoginTagline({
+      en: view.loginTagline.en ?? '',
+      nl: view.loginTagline.nl ?? '',
+      tr: view.loginTagline.tr ?? '',
+    })
     setAccent(view.accentColor ?? '')
     setFont(isFontKey(view.font) ? view.font : DEFAULT_FONT)
     setAdvancedEnabled(view.advancedColorsEnabled)
@@ -113,6 +127,7 @@ export function useBrandingForm() {
         data: {
           appName: appName.trim() || null,
           emailFromName: emailFromName.trim() || null,
+          loginTagline: normalizeLoginTaglines(loginTagline),
           accentColor: accent.trim() || null,
           advancedColorsEnabled: advancedEnabled,
           advancedColors: normalizedPalette(advancedColors),
@@ -173,10 +188,13 @@ export function useBrandingForm() {
     }),
   )
   const normalizedAdvanced = normalizedPalette(advancedColors)
+  const normalizedLoginTagline = normalizeLoginTaglines(loginTagline)
 
   const dirty = saved
     ? (appName.trim() || DEFAULT_APP_NAME) !== saved.appName ||
       (emailFromName.trim() || null) !== saved.emailFromName ||
+      JSON.stringify(normalizedLoginTagline) !==
+        JSON.stringify(saved.loginTagline) ||
       (accentHex ?? null) !== saved.accentColor ||
       advancedEnabled !== saved.advancedColorsEnabled ||
       JSON.stringify(normalizedAdvanced) !==
@@ -192,6 +210,7 @@ export function useBrandingForm() {
         advancedColorsEnabled: advancedEnabled,
         advancedColors: normalizedAdvanced,
         font,
+        loginTagline: normalizedLoginTagline,
       }
     : null
 
@@ -207,8 +226,22 @@ export function useBrandingForm() {
     query,
     saved,
     preview,
-    fields: { appName, emailFromName, accent, font, advancedEnabled },
-    set: { setAppName, setEmailFromName, setAccent, setFont },
+    fields: {
+      appName,
+      emailFromName,
+      loginTagline,
+      accent,
+      font,
+      advancedEnabled,
+    },
+    set: {
+      setAppName,
+      setEmailFromName,
+      setLoginTagline: (locale: LoginTaglineLocale, value: string) =>
+        setLoginTagline((draft) => ({ ...draft, [locale]: value })),
+      setAccent,
+      setFont,
+    },
     accentHex,
     accentInvalid,
     activePreset: matchPreset(accentHex, font),

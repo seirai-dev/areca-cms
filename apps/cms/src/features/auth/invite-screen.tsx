@@ -61,7 +61,6 @@ export function InviteScreen({
 
   return (
     <AuthShell
-      showName
       footer={
         !sessionPending && !user ? (
           <>
@@ -85,7 +84,7 @@ export function InviteScreen({
         description={roleLine(invitation.role)}
       />
 
-      <div className="mt-7 grid gap-5" data-testid="invite-card">
+      <div className="grid gap-5" data-testid="invite-card">
         {sessionPending ? (
           <div
             className="grid gap-3"
@@ -120,6 +119,7 @@ export function InviteScreen({
             {invite.error ? <AuthError>{invite.error}</AuthError> : null}
             <Button
               type="button"
+              variant="accent"
               size="lg"
               className="w-full"
               loading={invite.pending === 'accept'}
@@ -203,8 +203,9 @@ export function InviteScreen({
                 {invite.error ? <AuthError>{invite.error}</AuthError> : null}
                 <Button
                   type="submit"
+                  variant="accent"
                   size="lg"
-                  className="mt-1 w-full"
+                  className="w-full"
                   disabled={!ready}
                   loading={invite.pending === 'sign-up'}
                 >
@@ -234,14 +235,11 @@ export function InviteScreen({
 /** Invalid, expired or used link: a friendly card and a way to sign in. */
 export function InviteInvalid() {
   return (
-    <AuthShell showName>
-      <div
-        className="grid justify-items-center gap-5 text-center"
-        data-testid="invite-invalid"
-      >
+    <AuthShell>
+      <div className="grid gap-5" data-testid="invite-invalid">
         <span
           aria-hidden="true"
-          className="grid size-14 place-content-center rounded-[18px] bg-background-subtle text-icon-muted ring-8 ring-background-subtle/50"
+          className="grid size-14 place-content-center rounded-[18px] bg-background-subtle text-icon-muted"
         >
           <LinkBreak weight="duotone" className="size-7" />
         </span>
@@ -249,7 +247,7 @@ export function InviteInvalid() {
           title={m.auth_invite_invalid_title()}
           description={m.auth_invite_invalid_body()}
         />
-        <Button asChild variant="outline" size="lg" className="w-full">
+        <Button asChild variant="accent" size="lg" className="w-full">
           <Link to="/login">{m.auth_go_to_sign_in()}</Link>
         </Button>
       </div>

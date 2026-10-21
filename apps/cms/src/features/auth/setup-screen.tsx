@@ -39,7 +39,7 @@ export function SetupScreen({ methods }: { methods: AuthMethods }) {
         description={m.auth_setup_subtitle()}
       />
       <form
-        className="mt-7 grid gap-4"
+        className="grid gap-4"
         method="post"
         data-testid="setup-form"
         data-ready={ready ? 'true' : 'false'}
@@ -109,8 +109,9 @@ export function SetupScreen({ methods }: { methods: AuthMethods }) {
         {error ? <AuthError>{error}</AuthError> : null}
         <Button
           type="submit"
+          variant="accent"
           size="lg"
-          className="mt-1 w-full"
+          className="w-full"
           disabled={!ready}
           loading={pending}
         >
