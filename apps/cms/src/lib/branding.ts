@@ -76,6 +76,9 @@ export const FONT_KEYS = Object.keys(FONTS) as FontKey[]
 
 export const DEFAULT_FONT: FontKey = 'inter'
 
+/** Iris, the built-in accent in light mode (see `iris` in styles.css). */
+export const DEFAULT_ACCENT = '#5856d6'
+
 export function isFontKey(value: unknown): value is FontKey {
   return typeof value === 'string' && value in FONTS
 }

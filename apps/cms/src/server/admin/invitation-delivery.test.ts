@@ -1,10 +1,20 @@
+import type * as MailConfig from '#/server/mail/config'
+import type * as MailTransport from '#/server/mail/transport'
+/* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 import { eq, inArray } from 'drizzle-orm'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { db } from '#/db'
-import { auditLog, invitation, organization, user } from '#/db/schema'
+import {
+  auditLog,
+  emailOutbox,
+  invitation,
+  organization,
+  user,
+} from '#/db/schema'
 import { ConflictError, NotFoundError } from '#/server/content/errors'
 import { setLogSink } from '#/server/log'
+import { sendNow } from '#/server/mail/outbox'
 
 import {
   InvitationDeliveryError,
@@ -16,29 +26,60 @@ import {
   revokeInvitation,
 } from './members.ts'
 
+// `override` undefined: the real environment (Mailpit). null: no mail
+// configured. An object: that host and port, with an optional password.
 const mail = vi.hoisted(() => ({
-  fail: false,
+  override: undefined as
+    undefined | null | { host: string; port: number; password?: string },
   echoFailure: false,
-  sent: [] as string[],
 }))
-vi.mock('#/adapters/email', () => ({
-  sendEmail: vi.fn(async (opts: { to: string; text: string }) => {
-    if (mail.echoFailure)
-      throw new Error(
-        `SMTP_PASSWORD=smtp-test-secret ${opts.text.match(/https?:\/\/\S+\/invite\/\w+/)?.[0]}\n${opts.text}`,
-      )
-    if (mail.fail)
-      throw new Error('connect ECONNREFUSED smtp.internal:25\nstack')
-    mail.sent.push(opts.text)
-  }),
-}))
+
+vi.mock('#/server/mail/config', async (importOriginal) => {
+  const actual = await importOriginal<typeof MailConfig>()
+  return {
+    ...actual,
+    resolveMailConfig: async () => {
+      if (mail.override === undefined) return actual.resolveMailConfig()
+      if (mail.override === null) return null
+      return {
+        source: 'env' as const,
+        host: mail.override.host,
+        port: mail.override.port,
+        secure: 'none' as const,
+        username: null,
+        password: mail.override.password ?? null,
+        from: 'cms@areca.local',
+        replyTo: null,
+      }
+    },
+  }
+})
+
+vi.mock('#/server/mail/transport', async (importOriginal) => {
+  const actual = await importOriginal<typeof MailTransport>()
+  return {
+    ...actual,
+    sendMail: async (
+      config: Parameters<typeof actual.sendMail>[0],
+      message: Parameters<typeof actual.sendMail>[1],
+    ) => {
+      if (mail.echoFailure) {
+        // SMTP errors can echo the password and the message body with its link.
+        const link = message.text.match(/https?:\/\/\S+\/invite\/\w+/)?.[0]
+        throw new Error(
+          `auth SMTP_PASSWORD=smtp-test-secret ${link}\n${message.text}`,
+        )
+      }
+      return actual.sendMail(config, message)
+    },
+  }
+})
 
 const hasDb = Boolean(process.env.DATABASE_URL)
 
 beforeEach(() => {
-  mail.fail = false
+  mail.override = undefined
   mail.echoFailure = false
-  mail.sent = []
 })
 
 async function fixture() {
@@ -68,29 +109,67 @@ async function fixture() {
   }
 }
 
+/** Outbox rows for one invitation, oldest first. */
+async function outboxFor(invitationId: string) {
+  const rows = await db
+    .select()
+    .from(emailOutbox)
+    .where(eq(emailOutbox.kind, 'invitation'))
+  return rows
+    .filter((row) => row.params.invitationId === invitationId)
+    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+}
+
+/** Waits for Mailpit to receive the newest message to `to`. */
+async function mailpitHtml(to: string) {
+  const base = process.env.MAILPIT_URL ?? 'http://localhost:8025'
+  const deadline = Date.now() + 5000
+  while (Date.now() < deadline) {
+    const res = await fetch(`${base}/api/v1/messages`)
+    const data = (await res.json()) as {
+      messages?: Array<{ ID: string; To?: Array<{ Address?: string }> }>
+    }
+    const hit = data.messages?.find((msg) =>
+      msg.To?.some((addr) => addr.Address === to),
+    )
+    if (hit) {
+      const full = (await (
+        await fetch(`${base}/api/v1/message/${hit.ID}`)
+      ).json()) as {
+        HTML?: string
+        Subject?: string
+      }
+      return full
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  }
+  return null
+}
+
 describe.skipIf(!hasDb)('invitation delivery failures', () => {
-  it('keeps the invitation, marks it failed, and resends with a fresh token', async () => {
+  it('keeps the invitation queued with the reason, retries on resend, and sends once SMTP works', async () => {
     const f = await fixture()
     try {
-      mail.fail = true
-      await expect(
-        inviteMember({
-          organizationId: f.org.id,
-          email: f.email,
-          role: 'editor',
-          actorId: f.actor.id,
-        }),
-      ).rejects.toBeInstanceOf(InvitationDeliveryError)
+      mail.override = { host: 'localhost', port: 1 }
+      const failure = await inviteMember({
+        organizationId: f.org.id,
+        email: f.email,
+        role: 'editor',
+        actorId: f.actor.id,
+      }).catch((error: unknown) => error)
+      expect(failure).toBeInstanceOf(InvitationDeliveryError)
+      expect((failure as Error).message).toContain(
+        "Couldn't reach localhost on port 1",
+      )
 
       const [row] = await listInvitations(f.org.id)
-      expect(row).toMatchObject({ email: f.email, deliveryStatus: 'failed' })
+      expect(row).toMatchObject({ email: f.email, deliveryStatus: 'queued' })
       const [stored] = await db
         .select()
         .from(invitation)
-        .where(eq(invitation.id, row!.id))
-      // First line only, bounded.
-      expect(stored?.lastDeliveryError).toBe(
-        'connect ECONNREFUSED smtp.internal:25',
+        .where(eq(invitation.id, row.id))
+      expect(stored?.lastDeliveryError).toContain(
+        "Couldn't reach localhost on port 1",
       )
       expect(stored?.lastSentAt).toBeNull()
 
@@ -104,25 +183,28 @@ describe.skipIf(!hasDb)('invitation delivery failures', () => {
         }),
       ).rejects.toBeInstanceOf(ConflictError)
 
-      // Resend while SMTP is still down: stays failed, token rotates anyway.
-      await expect(
-        resendInvitation(row!.id, f.actor.id),
-      ).rejects.toBeInstanceOf(InvitationDeliveryError)
+      // Resend while SMTP is still down: stays queued, token rotates, and the
+      // older queued email is superseded so the old link is never sent.
+      await expect(resendInvitation(row.id, f.actor.id)).rejects.toBeInstanceOf(
+        InvitationDeliveryError,
+      )
       const [afterFailedResend] = await db
         .select()
         .from(invitation)
-        .where(eq(invitation.id, row!.id))
-      expect(afterFailedResend?.token).not.toBe(row!.token)
-      expect(afterFailedResend?.deliveryStatus).toBe('failed')
-      expect(await getInvitation(row!.token)).toBeNull()
+        .where(eq(invitation.id, row.id))
+      expect(afterFailedResend?.token).not.toBe(row.token)
+      expect(afterFailedResend?.deliveryStatus).toBe('queued')
+      expect(await getInvitation(row.token)).toBeNull()
+      const outbox = await outboxFor(row.id)
+      expect(outbox.map((o) => o.status)).toEqual(['failed', 'queued'])
 
       // Expire it, then resend with SMTP healthy: fresh expiry, sent.
       await db
         .update(invitation)
         .set({ expiresAt: new Date(Date.now() - 1000) })
-        .where(eq(invitation.id, row!.id))
-      mail.fail = false
-      const resent = await resendInvitation(row!.id, f.actor.id)
+        .where(eq(invitation.id, row.id))
+      mail.override = undefined
+      const resent = await resendInvitation(row.id, f.actor.id)
       expect(resent.deliveryStatus).toBe('sent')
       expect(resent.lastDeliveryError).toBeNull()
       expect(resent.lastSentAt).toBeInstanceOf(Date)
@@ -130,8 +212,11 @@ describe.skipIf(!hasDb)('invitation delivery failures', () => {
       expect(resent.expiresAt.getTime()).toBeGreaterThan(
         Date.now() + 6 * 86_400_000,
       )
-      expect(mail.sent).toHaveLength(1)
-      expect(mail.sent[0]).toContain(`/invite/${resent.token}`)
+
+      const delivered = await mailpitHtml(f.email)
+      expect(delivered?.Subject).toContain(f.org.name)
+      expect(delivered?.HTML).toContain(`/invite/${resent.token}`)
+      expect(delivered?.HTML).toContain('Accept invitation')
 
       const actions = (
         await db
@@ -146,10 +231,10 @@ describe.skipIf(!hasDb)('invitation delivery failures', () => {
     }
   })
 
-  it('revokes an undelivered invitation and refuses resending an accepted one', async () => {
+  it('marks the invitation failed after three attempts and keeps its copy-link token', async () => {
     const f = await fixture()
     try {
-      mail.fail = true
+      mail.override = { host: 'localhost', port: 1 }
       await expect(
         inviteMember({
           organizationId: f.org.id,
@@ -159,14 +244,59 @@ describe.skipIf(!hasDb)('invitation delivery failures', () => {
         }),
       ).rejects.toBeInstanceOf(InvitationDeliveryError)
       const [row] = await listInvitations(f.org.id)
-      await revokeInvitation(row!.id, f.actor.id)
-      expect(await listInvitations(f.org.id)).toHaveLength(0)
-      expect(await getInvitation(row!.token)).toBeNull()
-      await expect(
-        resendInvitation(row!.id, f.actor.id),
-      ).rejects.toBeInstanceOf(NotFoundError)
+      const [queued] = await outboxFor(row.id)
+      expect(queued).toMatchObject({ status: 'queued', attempts: 1 })
 
-      mail.fail = false
+      // Attempts 2 and 3 go through sendNow, which ignores the retry time.
+      await sendNow(queued.id)
+      expect((await listInvitations(f.org.id))[0]?.deliveryStatus).toBe(
+        'queued',
+      )
+      const third = await sendNow(queued.id)
+      expect(third.status).toBe('failed')
+
+      const [stored] = await db
+        .select()
+        .from(invitation)
+        .where(eq(invitation.id, row.id))
+      expect(stored).toMatchObject({ deliveryStatus: 'failed' })
+      expect(stored?.lastDeliveryError).toContain(
+        "Couldn't reach localhost on port 1",
+      )
+      // Still usable: the copy-link token has not changed or expired.
+      expect(await getInvitation(row.token)).toMatchObject({
+        id: row.id,
+        token: row.token,
+      })
+      expect(
+        (await outboxFor(row.id)).map((o) => [o.status, o.attempts]),
+      ).toEqual([['failed', 3]])
+    } finally {
+      await f.cleanup()
+    }
+  })
+
+  it('revokes an undelivered invitation and refuses resending an accepted one', async () => {
+    const f = await fixture()
+    try {
+      mail.override = { host: 'localhost', port: 1 }
+      await expect(
+        inviteMember({
+          organizationId: f.org.id,
+          email: f.email,
+          role: 'owner',
+          actorId: f.actor.id,
+        }),
+      ).rejects.toBeInstanceOf(InvitationDeliveryError)
+      const [row] = await listInvitations(f.org.id)
+      await revokeInvitation(row.id, f.actor.id)
+      expect(await listInvitations(f.org.id)).toHaveLength(0)
+      expect(await getInvitation(row.token)).toBeNull()
+      await expect(resendInvitation(row.id, f.actor.id)).rejects.toBeInstanceOf(
+        NotFoundError,
+      )
+
+      mail.override = undefined
       const ok = await inviteMember({
         organizationId: f.org.id,
         email: f.email,
@@ -191,8 +321,13 @@ describe.skipIf(!hasDb)('invitation delivery failures', () => {
     const lines: string[] = []
     const previousLevel = process.env.LOG_LEVEL
     const restore = setLogSink((_level, line) => lines.push(line))
-    process.env.LOG_LEVEL = 'error'
+    process.env.LOG_LEVEL = 'warn'
     try {
+      mail.override = {
+        host: 'localhost',
+        port: 1,
+        password: 'smtp-test-secret',
+      }
       mail.echoFailure = true
       await expect(
         inviteMember({
@@ -209,11 +344,15 @@ describe.skipIf(!hasDb)('invitation delivery failures', () => {
       expect(row).toBeTruthy()
       expect(row.lastDeliveryError).not.toContain('smtp-test-secret')
       expect(row.lastDeliveryError).not.toContain(row.token)
-      expect(row.lastDeliveryError!.length).toBeLessThanOrEqual(200)
-      expect(lines).toHaveLength(1)
-      expect(lines[0]).not.toContain(row.token)
-      expect(lines[0]).not.toContain('smtp-test-secret')
-      expect(lines[0]).toContain('[redacted]')
+      expect(row.lastDeliveryError!.length).toBeLessThanOrEqual(500)
+
+      const mailLines = lines.filter((line) =>
+        line.includes('mail send failed'),
+      )
+      expect(mailLines).toHaveLength(1)
+      expect(mailLines[0]).not.toContain(row.token)
+      expect(mailLines[0]).not.toContain('smtp-test-secret')
+      expect(mailLines[0]).toContain('[redacted]')
     } finally {
       restore()
       process.env.LOG_LEVEL = previousLevel

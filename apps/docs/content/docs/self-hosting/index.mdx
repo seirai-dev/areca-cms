@@ -35,7 +35,7 @@ A typical deployment has one CMS container and four supporting services. A fifth
 | **PostgreSQL** | Stores everything except uploaded files: clients, sites, entries, revisions, releases and audit history. | Yes (`postgres`) |
 | **Redis** | Holds the shared counters for request rate limits, so limits apply across requests. Nothing else depends on it. If Redis is unavailable, rate limiting fails open and the readiness check reports Redis as degraded, without failing. | Yes (`redis`) |
 | **S3-compatible storage** | Holds uploaded files in the Library and the branding images. The CMS reads and writes this bucket and serves files to browsers and site builds. | Yes, as RustFS (`rustfs`). Any S3-compatible service can replace it. |
-| **Email (SMTP)** | Sends invitation emails. The CMS connects to your relay with the host, port and sender you configure. | No. The Compose file sends mail to Mailpit, a test inbox. |
+| **Email (SMTP)** | Sends invitation emails. Set the mail server in the environment or in **Agency** › **Mail**. Mail is off until one is set. | No. The Compose file sends mail to Mailpit, a test inbox. |
 | **Dokploy host** | Clones each customer site from git, builds it with Docker and runs it. The CMS then checks the site's health URL before it marks the release live. | No. It is a separate server or Dokploy installation you operate. |
 
 Areca stores the website content as immutable snapshots. When an editor goes live, the CMS pins the content, Dokploy builds the site from that snapshot, and the CMS checks the new site before it marks the release live. The [publishing pipeline](/docs/self-hosting/publishing-pipeline) page covers the details.

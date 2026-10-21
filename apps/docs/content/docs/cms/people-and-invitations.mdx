@@ -57,7 +57,9 @@ Agency admins have agency-wide access in addition to these roles. For the full l
 
 Each invitation email contains a link to join the client. The link expires **7 days** after it is created.
 
-If an email isn't delivered, Areca still keeps the invitation. It shows **Email not delivered** in the pending list, and you can select **Send again**. Email delivery depends on how the installation is set up. See [storage and email](/docs/self-hosting/storage-and-email).
+Areca queues each invitation email and tries to send it straight away. If the mail server doesn't accept it, Areca tries again about 1 minute and then about 5 minutes later. If every try fails, the invitation shows **Email not delivered** in the pending list, with the reason in plain language, such as the server rejecting the password. The invitation is kept. Fix the problem, then select **Send again**. See [agency mail](/docs/cms/agency-mail) for the messages, and [storage and email](/docs/self-hosting/storage-and-email) for how sending works.
+
+If your installation has no mail server set up, the invitation is still created. Use **Copy link** to share it another way.
 
 Areca won't create a second invitation for an address that already has a pending one, or invite someone who is already a member. Use **Send again** for a pending invitation instead.
 
@@ -65,7 +67,7 @@ Areca won't create a second invitation for an address that already has a pending
 
 The **Invitations** section lists people who haven't accepted yet. Each row shows when the invitation expires, or **Expired** when the time has passed.
 
-- **Copy link** copies the invitation link, so you can send it another way.
+- **Copy link** copies the invitation link, so you can send it another way. It works whether or not the email was delivered.
 - **Send again** sends a new email with a fresh link and a new 7-day expiry. The previous link stops working.
 - **Revoke** cancels the invitation. Its link stops working straight away. You can invite the same address again later.
 

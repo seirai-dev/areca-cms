@@ -1,0 +1,106 @@
+---
+title: Agency mail
+description: Set the mail server Areca sends email through, verify it, send a test, read recent emails, and fix the common error messages.
+---
+
+Areca sends email, such as invitations, through an SMTP mail server. Agency admins set that server under **Agency › Mail**. You can set it there or in the environment variables. Settings saved in **Agency › Mail** replace the environment settings completely.
+
+Only agency admins can open **Agency › Mail**. For what each variable does, see [configuration](/docs/self-hosting/configuration#email). For provider settings and deliverability, see [storage and email](/docs/self-hosting/storage-and-email#email-providers).
+
+## Before you start
+
+- Get the SMTP details from your mail provider: host, port, encryption, and the username and password if it needs them.
+- Make sure the sending domain is verified with the provider, and that you have an address on it to send from.
+- To save a password, the installation needs an encryption key. Ask your operator to set `SECRETS_ENCRYPTION_KEY`, or `AI_SETTINGS_ENCRYPTION_KEY`. Without a key, the password field is disabled and explains why.
+
+## Status
+
+The top of the page shows where Areca is sending from:
+
+- **Sending with Mail settings.** The settings saved on this page are in use.
+- **Sending with environment settings.** The `SMTP_*` variables are in use.
+- **Mail isn't set up.** Neither place has a mail server. Invitations still work. Share the link with **Copy link** on the People list.
+
+## Use environment settings
+
+The **Use environment settings** switch decides which settings are used.
+
+- **On.** Areca sends with the `SMTP_*` variables. The page shows their values, read-only. The password shows as **Set** or **Not set**.
+- **Off.** Areca sends with the settings in this form. Every field is used as entered. Areca does not fill in gaps from the environment, so an empty username stays empty.
+
+Turn the switch on again to go back to the environment settings.
+
+## Fields
+
+| Field | What to enter |
+| --- | --- |
+| **Host** | The name of the mail server, such as `smtp.postmarkapp.com`. |
+| **Port** | Usually `587`, or `465` for TLS. |
+| **Encryption** | `STARTTLS` for port 587, `TLS` for port 465. Use `None` only for a localhost or private-network host, such as Mailpit. |
+| **Username** | Leave it empty if the server does not need one. |
+| **Password** | Write-only. Enter a new password to replace the saved one. Leave it empty to keep the current password. It is never shown again. |
+| **From address** | The sender address. Use an address on a domain you verified with your provider. |
+| **Reply-to** | Optional. The address replies go to. |
+
+Areca always checks the server's certificate, and gives up on a connection after 15 seconds.
+
+## Verify and test
+
+Both buttons work on the values in the form, so you can check them before you save.
+
+- **Verify connection** connects to the server, starts the secure connection and signs in with the username and password. It does not send an email.
+- **Send test email** sends a message to your own address, the one you are signed in with.
+
+## Save
+
+Select **Save** in the bar at the bottom of the page.
+
+- **Verify first.** Saving needs a successful **Verify connection**. If the check has not passed, Areca asks you to confirm. Select **Save anyway** to save without a passed check. Use it only when you know the settings are right, for example when the provider is temporarily unreachable.
+- **Confirm with your second factor.** Saving asks for a code from your authenticator app. See [two-factor and step-up](/docs/security/two-factor-and-step-up).
+- **Settings replace the environment.** Once you save, Areca sends with these settings, and ignores the `SMTP_*` variables until you turn **Use environment settings** on.
+
+Changes are recorded in [history and activity](/docs/cms/history-and-activity). The record shows who changed the settings, and never shows the password.
+
+## The saved password
+
+Areca stores the password encrypted, and never shows it again. The field shows **Set** once a password is saved. To change the password, enter the new one. To keep it, leave the field empty and save.
+
+If the encryption key changes, the saved password cannot be read. Enter the password again.
+
+## Recent emails
+
+The **Recent emails** list at the bottom of the page shows the last 50 emails Areca tried to send. Each row shows:
+
+- when it was sent
+- who it was sent to
+- what it was, such as an invitation or a test
+- its status: queued, retrying, **sent** or **failed**
+- how many attempts were made
+
+Failed and retrying rows show the reason in plain language. Use the filter to show **All** emails or only **Failed** ones. The row also shows an outbox ID. Use it to find the matching entries in the server log.
+
+A status of **sent** means the mail server accepted the email. It does not confirm delivery to the inbox.
+
+## Troubleshooting errors
+
+These are the messages you may see in a toast, on a People invitation, or in Recent emails. Placeholders such as `host`, `port` and `reply` stand for the values from your installation.
+
+| Message | What to do |
+| --- | --- |
+| Mail isn't set up. An agency admin can add a mail server in Agency › Mail. | Enter a mail server on this page, or set the `SMTP_*` variables and restart. |
+| The mail server rejected the username or password. Check them in Agency › Mail. | Check the username and password with your provider. Some providers use an API key or token as the password. |
+| Couldn't reach `host` on port `port`. Check the host and port, and that no firewall blocks it. | Check the host and port. Make sure the CMS host can reach the server, and that no firewall blocks the port. |
+| `host` didn't answer within 15 seconds. Check the host and port, or try again later. | Check the port. If the server is up, try again later. |
+| The secure connection to `host` failed: `reason`. Check the encryption setting (TLS for port 465, STARTTLS for 587). | The encryption setting does not match the port. Use `TLS` for port 465, and `STARTTLS` for port 587. |
+| `host` doesn't support STARTTLS. Choose TLS or another port. | Set **Encryption** to `TLS` and use port 465, or use a port that supports STARTTLS. |
+| The mail server doesn't allow sending from `from`. Use an address your provider has verified. | Set the From address to an address on a domain you verified with the provider. |
+| The mail server refused to deliver to `to`: `reply` | The recipient address was refused. Check the address. The reply shows the server's reason. |
+| The mail server is limiting how fast we send. We'll try again shortly. | No action is needed. Areca retries automatically. |
+| Sending failed: `reply`. See the server logs for details (search for outbox id `id`). | Read the reply. Search the server log for the outbox ID to see more detail. |
+
+## Related
+
+- [Storage and email](/docs/self-hosting/storage-and-email): provider settings, deliverability, and how sending works.
+- [Configuration](/docs/self-hosting/configuration#email): the `SMTP_*` variables.
+- [People and invitations](/docs/cms/people-and-invitations): what an undelivered invitation looks like.
+- [Two-factor and step-up](/docs/security/two-factor-and-step-up): why saving asks for a code.

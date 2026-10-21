@@ -482,6 +482,10 @@ function Invitations({
                       <Tag tone="warning" data-testid="invitation-undelivered">
                         {m.people_invite_email_failed()}
                       </Tag>
+                    ) : row.deliveryStatus === 'queued' ? (
+                      <Tag tone="neutral" data-testid="invitation-queued">
+                        {m.people_invite_email_queued()}
+                      </Tag>
                     ) : null}
                     {expired ? (
                       <Tag tone="warning">{m.people_invite_expired()}</Tag>

@@ -17,7 +17,6 @@ present even when no Dokploy account has been configured yet.
 | `BETTER_AUTH_URL` | Canonical CMS URL used by authentication callbacks. Include the public scheme and host. It is also the OAuth issuer (`<BETTER_AUTH_URL>/api/auth`) that AI apps sign in with. |
 | `APP_URL` | CMS origin included in invitation and asset URLs, and the origin of each site's connector URL (`/api/mcp/<site-slug>`) shown on the Connect AI page. Set it to the public HTTPS origin, reachable by the browser, any site build that fetches assets, and the AI apps that connect. Use the same origin as `BETTER_AUTH_URL`. |
 | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` | S3-compatible object storage for uploaded assets and branding. |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM` | SMTP server and sender for invitation email. |
 | `DOKPLOY_CREDENTIALS_ENCRYPTION_KEY` | Base64-encoded 32-byte key that encrypts organization Dokploy credentials in PostgreSQL. |
 
 Generate independent secrets rather than reusing example values:
@@ -26,10 +25,6 @@ Generate independent secrets rather than reusing example values:
 openssl rand -hex 32       # BETTER_AUTH_SECRET
 openssl rand -base64 32    # DOKPLOY_CREDENTIALS_ENCRYPTION_KEY
 ```
-
-The current mail adapter uses these three SMTP settings and does not configure
-SMTP username/password authentication. Use a trusted relay reachable from the
-CMS host; do not expose an unauthenticated relay to the public internet.
 
 Keep the Dokploy encryption key with the database backup. There is no automatic
 re-encryption: changing or losing it makes saved Dokploy credentials unreadable.
@@ -92,6 +87,24 @@ key again. Generate it with `openssl rand -base64 32` and retain it securely.
 
 See [integrations](INTEGRATIONS.md) for the site token, schema-write token,
 Dokploy delivery, invitation email behavior, and credential rotation.
+
+## Mail
+
+SMTP is optional at startup. Without a mail server, mail is off until one is set
+in Agency → Mail. Invitations still work, and the link can be shared with Copy link.
+
+| Variable | Purpose |
+| --- | --- |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM` | Mail server and sender. `SMTP_FROM` should be an address on a verified domain. Sending needs a From address, here or in Agency → Mail. |
+| `SMTP_USER`, `SMTP_PASSWORD` | Optional SMTP sign-in. |
+| `SMTP_SECURE` | `starttls` (default; port 587), `tls` (port 465) or `none`. `none` is only for localhost and private-network hosts, and is the default for those. |
+| `SMTP_REPLY_TO` | Optional reply-to address. |
+| `SECRETS_ENCRYPTION_KEY` | Base64-encoded 32-byte key that encrypts the SMTP password saved in Agency → Mail. Falls back to `AI_SETTINGS_ENCRYPTION_KEY`. Generate with `openssl rand -base64 32`. |
+
+Settings saved in Agency → Mail replace the `SMTP_*` variables entirely. The CMS
+always verifies the server certificate and uses 15-second connection timeouts.
+Failed sends are retried about 1 and 5 minutes after the first try. See
+[INTEGRATIONS.md](INTEGRATIONS.md#invitation-recovery) for the delivery behavior.
 
 ## Deployment and safety switches
 

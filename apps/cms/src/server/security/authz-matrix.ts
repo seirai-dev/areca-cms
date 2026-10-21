@@ -31,6 +31,7 @@ import {
 } from '#/db/schema'
 import * as adminFns from '#/server/fn/admin'
 import * as aiFns from '#/server/fn/ai'
+import * as mailFns from '#/server/fn/mail'
 import * as translateFns from '#/server/fn/translate'
 import * as assetFns from '#/server/fn/assets'
 import * as authMethodFns from '#/server/fn/auth-methods'
@@ -102,6 +103,18 @@ const entryUntouched =
   }
 
 const uniq = () => crypto.randomUUID().slice(0, 8)
+
+/** A mail draft pointing at a port nothing listens on: fails fast, sends nothing. */
+function unreachableMailDraft() {
+  return {
+    host: 'localhost',
+    port: 1,
+    secure: 'none' as const,
+    username: null,
+    fromAddress: 'cms@areca.test',
+    replyTo: null,
+  }
+}
 
 export const ROWS: Row[] = [
   // ------------------------------------------------------------- admin.ts
@@ -945,6 +958,54 @@ export const ROWS: Row[] = [
     prepare: () => ({ data: undefined }),
   },
 
+  // ---------------------------------------------------------------- mail.ts
+  {
+    name: 'getMailSettingsFn',
+    fn: mailFns.getMailSettingsFn,
+    policy: 'agency',
+    note: 'Never contains the SMTP password, only whether one is stored.',
+    prepare: () => ({ data: undefined }),
+  },
+  {
+    name: 'verifyMailDraftFn',
+    fn: mailFns.verifyMailDraftFn,
+    policy: 'agency',
+    note: 'Allowed callers get a readable connection failure (nothing listens on port 1).',
+    prepare: () => ({ data: unreachableMailDraft() }),
+  },
+  {
+    name: 'sendTestEmailFn',
+    fn: mailFns.sendTestEmailFn,
+    policy: 'agency',
+    note: 'Sends only to the caller; allowed callers get a readable failure.',
+    prepare: () => ({ data: unreachableMailDraft() }),
+  },
+  {
+    name: 'saveMailSettingsFn',
+    fn: mailFns.saveMailSettingsFn,
+    policy: 'agency-fresh',
+    note: 'Without force, an unverifiable draft is not saved, so the shared test database keeps its mail source.',
+    prepare: () => ({ data: { ...unreachableMailDraft(), force: false } }),
+  },
+  {
+    name: 'useEnvironmentMailFn',
+    fn: mailFns.useEnvironmentMailFn,
+    policy: 'agency-fresh',
+    prepare: () => ({ data: undefined }),
+  },
+  {
+    name: 'listRecentEmailsFn',
+    fn: mailFns.listRecentEmailsFn,
+    policy: 'agency',
+    prepare: () => ({ data: {} }),
+  },
+  {
+    name: 'getMailHealthFn',
+    fn: mailFns.getMailHealthFn,
+    policy: 'agency',
+    prepare: () => ({ data: undefined }),
+  },
+
   // ---------------------------------------------------------------- ai.ts
   {
     name: 'getAiSettingsFn',
@@ -1249,6 +1310,7 @@ export const ROWS: Row[] = [
 export const ALL_FN_MODULES = {
   admin: adminFns,
   ai: aiFns,
+  mail: mailFns,
   assets: assetFns,
   'auth-methods': authMethodFns,
   branding: brandingFns,

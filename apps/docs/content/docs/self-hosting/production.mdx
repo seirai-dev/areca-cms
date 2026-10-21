@@ -118,14 +118,19 @@ The Compose file hard-codes several connections for the local stack. Production 
 | `S3_BUCKET` | `areca` | A private bucket reserved for Areca |
 | `S3_ACCESS_KEY`, `S3_SECRET_KEY` | from `.env` | Credentials with access to that bucket only |
 | `S3_FORCE_PATH_STYLE` | `"true"` | `"true"` for MinIO and RustFS, `"false"` for AWS S3 and most hosted services |
-| `SMTP_HOST`, `SMTP_PORT` | `mailpit`, `1025` | Your mail relay's host and port |
+| `SMTP_HOST`, `SMTP_PORT` | `mailpit`, `1025` | Your mail provider's host and port, or unset if you set up mail in Agency › Mail |
 | `SMTP_FROM` | `cms@areca.local` | A sender address on a domain you control |
 
-Mailpit does not send email. It captures messages so you can read them. In production, invitations must reach real inboxes, so point `SMTP_HOST` at your relay and remove the `mailpit` service and its entry in the `cms` service's `depends_on` list.
+Mailpit does not send email. It captures messages so you can read them. In production, invitations must reach real inboxes, so remove the `mailpit` service and its entry in the `cms` service's `depends_on` list. Then set up a mail server in one of two ways:
+
+- **Use environment variables.** Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`, `SMTP_USER`, `SMTP_PASSWORD` and, if needed, `SMTP_SECURE` and `SMTP_REPLY_TO` in `docker/.env`. The stock `compose.yml` passes all of them to the CMS and falls back to Mailpit only when `SMTP_HOST` is unset.
+- **Set it up in the CMS.** Remove the `SMTP_*` lines from your production copy of `compose.yml`. The CMS then starts with mail off. Sign in as the first admin, and enter the server under **Agency** › **Mail**. Settings saved there replace the environment settings.
+
+The provider sections of [storage and email](/docs/self-hosting/storage-and-email#email-providers) list the host, port and sign-in details for Resend, Postmark, Amazon SES, Mailgun and Google Workspace. Also check the [deliverability](/docs/self-hosting/storage-and-email#deliverability) steps before you invite clients.
 
 If you use external storage, also remove the `rustfs` service, its `rustfs_data` volume and its entry in `depends_on`. The same applies to `postgres` and `redis` if you run them as managed services, but then the CMS needs the matching `DATABASE_URL` and `REDIS_URL` values.
 
-The current mail adapter connects without a username or password, so use a relay that accepts mail only from this host's network. Do not point Areca at an open relay on the internet. See [storage and email](/docs/self-hosting/storage-and-email) for the details.
+Use a mail provider that requires sign-in, with a verified sending domain, or a relay on your private network. Do not point Areca at an open relay on the internet. See [storage and email](/docs/self-hosting/storage-and-email) for the provider settings and the SPF, DKIM and DMARC records.
 
 The bucket must stay private. The CMS reads and writes it, and serves uploaded files to visitors itself. Do not make the bucket public. Anything uploaded to the Library is public by design, so do not upload confidential files. See [asset retention](/docs/self-hosting/asset-retention) for how deleted files are handled.
 
@@ -141,7 +146,7 @@ This catches many operators out. For example, this line in `.env` does nothing:
 WORKER_CONCURRENCY=4   # not passed to the container
 ```
 
-The Compose file currently passes these optional settings to the CMS: `AI_SETTINGS_ENCRYPTION_KEY`, `SETUP_TOKEN`, `METRICS_TOKEN` and the database and readiness timeouts. These settings are **not** passed, so setting them in `.env` has no effect:
+The Compose file currently passes these optional settings to the CMS: the `SMTP_*` mail settings, `SECRETS_ENCRYPTION_KEY`, `AI_SETTINGS_ENCRYPTION_KEY`, `SETUP_TOKEN`, `METRICS_TOKEN` and the database and readiness timeouts. These settings are **not** passed, so setting them in `.env` has no effect:
 
 - `WORKER_ENABLED`, `WORKER_CONCURRENCY`, `WORKER_DRAIN_TIMEOUT_MS`
 - `LOG_LEVEL`
@@ -180,7 +185,7 @@ The Dokploy host builds customer sites and runs their health checks, so it must 
 | Dokploy host | CMS, at `APP_URL` | The site build fetches the content snapshot, and each site fetches its uploaded images |
 | CMS | Dokploy API, at `DOKPLOY_URL` or the URL saved for the client | Deploying, reading deployment status and logs |
 | CMS | Site health URL, such as `https://<site-host>/api/health` | Confirming that the new release is live before the CMS marks it live |
-| CMS | SMTP relay | Invitation emails |
+| CMS | Mail server (SMTP) | Sending email, such as invitations |
 | CMS | S3-compatible storage | Uploaded files and branding |
 | CMS | OpenRouter, `openrouter.ai` | Only if you use AI SEO suggestions |
 
@@ -218,6 +223,7 @@ Keep these values stable, because the data depends on them:
 - `DOKPLOY_CREDENTIALS_ENCRYPTION_KEY` decrypts the Dokploy API keys stored in the database. Changing or losing it means every saved key must be re-entered.
 - `BETTER_AUTH_SECRET` signs sign-in sessions. Changing it signs everyone out and can break two-factor sign-in for existing admins.
 - `AI_SETTINGS_ENCRYPTION_KEY`, if you set it, decrypts the saved OpenRouter key.
+- `SECRETS_ENCRYPTION_KEY`, if you set it, decrypts the SMTP password saved in **Agency** › **Mail**. Without it, the CMS falls back to `AI_SETTINGS_ENCRYPTION_KEY`.
 
 ### What a backup contains
 

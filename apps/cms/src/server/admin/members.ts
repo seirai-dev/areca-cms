@@ -2,7 +2,6 @@
 import { randomBytes } from 'node:crypto'
 import { and, eq, gt, isNull, like, sql } from 'drizzle-orm'
 
-import { sendEmail } from '#/adapters/email'
 import { db } from '#/db'
 import {
   invitation,
@@ -11,27 +10,34 @@ import {
   user,
   verification,
 } from '#/db/schema'
-import { env } from '#/env'
 import type { MembershipRole } from '#/lib/types'
 import { m } from '#/paraglide/messages'
-import { getBranding } from '#/server/admin/branding'
+import { getLocale } from '#/paraglide/runtime'
 import { audit } from '#/server/audit'
 import { ConflictError, NotFoundError } from '#/server/content/errors'
 import { AppError } from '#/server/http/app-error'
-import { collectSecretValues, createLogger, redactError } from '#/server/log'
+import { mailFailureMessage } from '#/server/mail/errors'
+import {
+  enqueueEmail,
+  sendNow,
+  supersedeInvitationEmails,
+} from '#/server/mail/outbox'
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
-const log = createLogger('members')
-
 /**
  * The invitation row exists (and can be resent or revoked) but the email did
- * not go out. A distinct 502 so the UI can tell it from a validation failure.
+ * not go out yet or at all. `reason` is the readable mail error. A distinct
+ * 502 so the UI can tell it from a validation failure.
  */
 export class InvitationDeliveryError extends AppError {
   readonly status = 502
-  constructor(message = m.server_invitation_email_failed()) {
-    super(message)
+  constructor(reason = '') {
+    super(
+      reason
+        ? `${m.server_invitation_email_failed()} ${reason}`
+        : m.server_invitation_email_failed(),
+    )
     this.name = 'InvitationDeliveryError'
   }
 }
@@ -68,14 +74,6 @@ export function assertAgencyAdminCanBeRemoved(adminCount: number) {
   if (adminCount <= 1) {
     throw new ConflictError(m.server_cannot_remove_last_agency_admin())
   }
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
 }
 
 export async function listMembers(organizationId: string) {
@@ -256,8 +254,8 @@ export async function inviteMember(input: {
     const token = newInvitationToken()
     const expiresAt = new Date(Date.now() + INVITE_TTL_MS)
 
-    // Created as "failed" until SMTP accepts the message, so a crash between
-    // the insert and the send leaves a row that can be resent, not a ghost.
+    // Queued in the same transaction, so the invitation and its email are
+    // stored together. A crash before the send leaves a row the worker sends.
     const [row] = await tx
       .insert(invitation)
       .values({
@@ -266,7 +264,7 @@ export async function inviteMember(input: {
         role: input.role,
         token,
         expiresAt,
-        deliveryStatus: 'failed',
+        deliveryStatus: 'queued',
       })
       .returning()
     if (!row) {
@@ -283,63 +281,49 @@ export async function inviteMember(input: {
       },
       tx,
     )
-    return row
+    const outbox = await enqueueInvitation(tx, row)
+    return { row, outboxId: outbox.id }
   })
 
-  return deliverInvitation(created, org.name, input.email)
+  return sendInvitation(created.row.id, created.outboxId)
 }
 
 function newInvitationToken() {
   return randomBytes(32).toString('hex')
 }
 
-/**
- * Sends the invitation email and records the outcome on the row. On failure
- * the row is kept (marked failed) and an InvitationDeliveryError is thrown.
- */
-async function deliverInvitation(
-  row: typeof invitation.$inferSelect,
-  organizationName: string,
-  to: string,
-) {
-  try {
-    const link = `${env.APP_URL}/invite/${row.token}`
-    const brand = await getBranding()
-    await sendEmail({
-      to,
-      fromName: brand.emailFromName ?? brand.appName,
-      subject: m.server_invite_subject({ org: organizationName }),
-      text: `${m.server_invite_body({ org: organizationName, role: row.role })}\n\n${m.server_invite_accept_text({ link })}\n\n— ${brand.appName}`,
-      html: `<p>${escapeHtml(m.server_invite_body({ org: organizationName, role: row.role }))}</p><p><a href="${link}">${m.server_invite_accept()}</a></p><p style="color:#666;font-size:12px">— ${escapeHtml(brand.appName)}</p>`,
-    })
-  } catch (error) {
-    // SMTP failures can echo the message body, including its bearer link.
-    const safeError = redactError(error, [...collectSecretValues(), row.token])
-    log.error('invitation email failed', {
-      invitationId: row.id,
+/** Queues the invitation email in the caller's transaction. */
+async function enqueueInvitation(tx: Tx, row: typeof invitation.$inferSelect) {
+  return enqueueEmail(
+    {
+      kind: 'invitation',
+      template: 'invitation',
+      to: row.email,
+      params: { invitationId: row.id },
+      locale: getLocale(),
       organizationId: row.organizationId,
-      err: safeError,
-    })
-    await db
-      .update(invitation)
-      .set({
-        deliveryStatus: 'failed',
-        lastDeliveryError: safeError.message.split('\n')[0].slice(0, 200),
-      })
-      .where(eq(invitation.id, row.id))
-    throw new InvitationDeliveryError()
-  }
+    },
+    tx,
+  )
+}
 
-  const [sent] = await db
-    .update(invitation)
-    .set({
-      deliveryStatus: 'sent',
-      lastDeliveryError: null,
-      lastSentAt: new Date(),
-    })
-    .where(eq(invitation.id, row.id))
-    .returning()
-  return sent ?? row
+/**
+ * Sends the queued invitation email now. The outbox writes the outcome onto
+ * the invitation row. Anything but "sent" throws with the readable reason; the
+ * row is kept, so it can be resent or left to the worker's retries.
+ */
+async function sendInvitation(invitationId: string, outboxId: string) {
+  const result = await sendNow(outboxId)
+  if (result.status !== 'sent') {
+    throw new InvitationDeliveryError(mailFailureMessage(result.failure))
+  }
+  const [row] = await db
+    .select()
+    .from(invitation)
+    .where(eq(invitation.id, invitationId))
+    .limit(1)
+  if (!row) throw new NotFoundError(m.server_invitation_not_found())
+  return row
 }
 
 export async function listInvitations(organizationId: string) {
@@ -400,7 +384,7 @@ export async function revokeInvitation(id: string, actorId: string) {
  * expired and delivery-failed invitations). The previous link stops working.
  */
 export async function resendInvitation(id: string, actorId: string) {
-  const { row, organizationName } = await db.transaction(async (tx) => {
+  const { row, outboxId } = await db.transaction(async (tx) => {
     const [locked] = await tx
       .select()
       .from(invitation)
@@ -414,7 +398,7 @@ export async function resendInvitation(id: string, actorId: string) {
     }
 
     const [org] = await tx
-      .select({ name: organization.name })
+      .select({ id: organization.id })
       .from(organization)
       .where(eq(organization.id, locked.organizationId))
       .limit(1)
@@ -442,7 +426,7 @@ export async function resendInvitation(id: string, actorId: string) {
       .set({
         token: newInvitationToken(),
         expiresAt: new Date(Date.now() + INVITE_TTL_MS),
-        deliveryStatus: 'failed',
+        deliveryStatus: 'queued',
       })
       .where(eq(invitation.id, id))
       .returning()
@@ -460,10 +444,13 @@ export async function resendInvitation(id: string, actorId: string) {
       },
       tx,
     )
-    return { row: updated, organizationName: org.name }
+    // The new link replaces the old one, so older queued sends must not go out.
+    await supersedeInvitationEmails(updated.id, tx)
+    const outbox = await enqueueInvitation(tx, updated)
+    return { row: updated, outboxId: outbox.id }
   })
 
-  return deliverInvitation(row, organizationName, row.email)
+  return sendInvitation(row.id, outboxId)
 }
 
 export async function getInvitation(token: string) {

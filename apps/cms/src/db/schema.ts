@@ -20,6 +20,7 @@ import type {
   EntryData,
   EntryStatus,
   Field,
+  MailSecure,
   MembershipRole,
   PublicationStatus,
   SiteLanguages,
@@ -193,9 +194,12 @@ export const invitation = pgTable('invitation', {
   token: text('token').notNull().unique(),
   expiresAt: timestamptz('expires_at').notNull(),
   acceptedAt: timestamptz('accepted_at'),
-  /** 'sent' once the email was handed to SMTP; 'failed' keeps the row for resend. */
+  /**
+   * 'sent' once SMTP accepted the email; 'queued' while the outbox still
+   * retries it; 'failed' keeps the row for resend.
+   */
   deliveryStatus: text('delivery_status')
-    .$type<'sent' | 'failed'>()
+    .$type<'sent' | 'queued' | 'failed'>()
     .notNull()
     .default('sent'),
   lastDeliveryError: text('last_delivery_error'),
@@ -506,6 +510,69 @@ export const aiSettings = pgTable('ai_settings', {
   }),
   updatedAt: updatedAt(),
 })
+
+/**
+ * Instance-wide outgoing mail server. Singleton row `default`. When `enabled`
+ * is false the environment SMTP settings are used instead.
+ */
+export const mailSettings = pgTable('mail_settings', {
+  id: text('id').primaryKey(),
+  enabled: boolean('enabled').notNull().default(false),
+  host: text('host'),
+  port: integer('port'),
+  secure: text('secure').$type<MailSecure>(),
+  username: text('username'),
+  /** AES-256-GCM, context `mail-settings:smtp-password`. Never sent to the browser. */
+  encryptedPassword: text('encrypted_password'),
+  fromAddress: text('from_address'),
+  replyTo: text('reply_to'),
+  lastVerifiedAt: timestamptz('last_verified_at'),
+  updatedBy: text('updated_by').references(() => user.id, {
+    onDelete: 'set null',
+  }),
+  updatedAt: updatedAt(),
+})
+
+/**
+ * Transactional email waiting to be sent. Written in the same transaction as
+ * the change that caused it, then delivered by the outbox loop with retries.
+ */
+export const emailOutbox = pgTable(
+  'email_outbox',
+  {
+    id: id(),
+    /** Account email kind or notification event key, or 'test'. */
+    kind: text('kind').notNull(),
+    toAddress: text('to_address').notNull(),
+    userId: text('user_id').references(() => user.id, { onDelete: 'set null' }),
+    organizationId: text('organization_id').references(() => organization.id, {
+      onDelete: 'cascade',
+    }),
+    notificationId: text('notification_id'),
+    subject: text('subject').notNull(),
+    template: text('template').notNull(),
+    /** Secret values (tokens, links) are stored by reference, never here in plain text. */
+    params: jsonb('params').$type<Record<string, unknown>>().notNull(),
+    locale: text('locale').notNull(),
+    status: text('status')
+      .$type<'queued' | 'sending' | 'sent' | 'failed'>()
+      .notNull(),
+    attempts: integer('attempts').notNull().default(0),
+    nextAttemptAt: timestamptz('next_attempt_at'),
+    leaseUntil: timestamptz('lease_until'),
+    lastErrorCode: text('last_error_code'),
+    lastErrorParams: jsonb('last_error_params').$type<Record<string, string>>(),
+    /** Redacted technical detail, at most 500 characters. */
+    lastError: text('last_error'),
+    providerMessageId: text('provider_message_id'),
+    sentAt: timestamptz('sent_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('email_outbox_status_next_attempt_idx').on(t.status, t.nextAttemptAt),
+    index('email_outbox_created_at_idx').on(t.createdAt),
+  ],
+)
 
 /** Durable object cleanup survives row/org deletion and transient storage outages. */
 export const storageObjectDeletion = pgTable('storage_object_deletion', {

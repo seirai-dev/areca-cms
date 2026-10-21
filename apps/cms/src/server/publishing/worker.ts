@@ -21,6 +21,7 @@ import {
 import { env } from '#/env'
 import { audit } from '#/server/audit'
 import { drainStorageObjectDeletions } from '#/server/assets/storage-cleanup'
+import { cleanupOutbox, processOutbox } from '#/server/mail/outbox'
 import {
   markLoopsStarted,
   markLoopsStopped,
@@ -89,6 +90,7 @@ const DEPLOY_TIMEOUT_MS = 15 * 60 * 1000
 const DEPLOY_POLL_MS = 5000
 const HEALTH_TIMEOUT_MS = 2 * 60 * 1000
 const HEALTH_POLL_MS = 5000
+const MAIL_INTERVAL_MS = 5000
 const STALE_JOB_MS = 30 * 60 * 1000
 const STALE_JOB_STATUSES = ['building', 'validating', 'deploying'] as const
 
@@ -97,6 +99,8 @@ type WorkerState = {
   recoveryTimer: ReturnType<typeof setInterval>
   schedulerTimer: ReturnType<typeof setInterval>
   cleanupTimer?: ReturnType<typeof setInterval>
+  mailTimer?: ReturnType<typeof setInterval>
+  mailCleanupTimer?: ReturnType<typeof setInterval>
   pool?: JobPool
   ticking: boolean
   schedulerTicking: boolean
@@ -959,6 +963,10 @@ export type WorkerLoopDeps = {
   schedule: () => Promise<unknown>
   /** Retries durable storage cleanup independently of releases. */
   cleanup?: () => Promise<unknown>
+  /** Sends due emails from the outbox, every 5 s. */
+  mail?: () => Promise<unknown>
+  /** Deletes outbox rows past retention, hourly. */
+  mailCleanup?: () => Promise<unknown>
 }
 
 /**
@@ -969,6 +977,7 @@ export type WorkerLoopDeps = {
  * - recovery: fails jobs whose lease expired
  * - scheduler: turns due scheduled entries into publications
  * - cleanup: retries durable storage object deletions
+ * - mail: sends due outbox emails; mailCleanup: prunes old outbox rows
  */
 export function startWorkerLoops(
   deps: WorkerLoopDeps,
@@ -1041,6 +1050,36 @@ export function startWorkerLoops(
     cleanup()
   }
 
+  if (deps.mail) {
+    let sending = false
+    state.mailTimer = setInterval(() => {
+      if (sending) return
+      sending = true
+      void deps.mail!()
+        .catch((error) =>
+          logger.error('mail outbox tick failed', { err: error }),
+        )
+        .finally(() => {
+          sending = false
+        })
+    }, MAIL_INTERVAL_MS)
+  }
+
+  if (deps.mailCleanup) {
+    let pruning = false
+    const prune = () => {
+      if (pruning) return
+      pruning = true
+      void deps.mailCleanup!()
+        .catch((error) => logger.error('mail cleanup failed', { err: error }))
+        .finally(() => {
+          pruning = false
+        })
+    }
+    state.mailCleanupTimer = setInterval(prune, 60 * 60 * 1000)
+    prune()
+  }
+
   // Boot: recover once, then start processing and scheduling immediately.
   void deps
     .recover()
@@ -1086,6 +1125,8 @@ export function startWorker({
       recover: () => recoverStaleJobs(),
       schedule: () => runSchedulerTick(),
       cleanup: () => drainStorageObjectDeletions(),
+      mail: () => processOutbox(),
+      mailCleanup: () => cleanupOutbox(),
     },
     { intervalMs },
   )
@@ -1124,6 +1165,8 @@ export function stopWorkerLoops(state: WorkerState) {
   clearInterval(state.recoveryTimer)
   clearInterval(state.schedulerTimer)
   clearInterval(state.cleanupTimer)
+  clearInterval(state.mailTimer)
+  clearInterval(state.mailCleanupTimer)
   markLoopsStopped()
 }
 

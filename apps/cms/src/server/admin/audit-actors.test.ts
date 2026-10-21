@@ -1,8 +1,26 @@
+import type * as MailConfig from '#/server/mail/config'
+import type * as MailTransport from '#/server/mail/transport'
 import { eq, inArray, or } from 'drizzle-orm'
 import sharp from 'sharp'
 import { describe, expect, it, vi } from 'vitest'
 
-vi.mock('#/adapters/email', () => ({ sendEmail: vi.fn(async () => {}) }))
+vi.mock('#/server/mail/config', async (importOriginal) => ({
+  ...(await importOriginal<typeof MailConfig>()),
+  resolveMailConfig: async () => ({
+    source: 'env' as const,
+    host: 'mail.test',
+    port: 587,
+    secure: 'starttls' as const,
+    username: null,
+    password: null,
+    from: 'cms@areca.test',
+    replyTo: null,
+  }),
+}))
+vi.mock('#/server/mail/transport', async (importOriginal) => ({
+  ...(await importOriginal<typeof MailTransport>()),
+  sendMail: vi.fn(async () => ({ messageId: 'test-message' })),
+}))
 vi.mock('#/adapters', async (importOriginal) => ({
   ...(await importOriginal<typeof import('#/adapters')>()),
   getStorage: () => ({
@@ -181,7 +199,19 @@ describe.skipIf(!hasDb)(
         await updateBranding({ appName: `Brand ${suffix}` }, admin.id)
         await setBrandingImage(
           'logo',
-          { buffer: await sharp({create:{width:1,height:1,channels:4,background:'#ffffff'}}).png().toBuffer(), mimeType: 'image/png' },
+          {
+            buffer: await sharp({
+              create: {
+                width: 1,
+                height: 1,
+                channels: 4,
+                background: '#ffffff',
+              },
+            })
+              .png()
+              .toBuffer(),
+            mimeType: 'image/png',
+          },
           admin.id,
         )
         await clearBrandingImage('logo', admin.id)

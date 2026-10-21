@@ -1,3 +1,5 @@
+import type * as MailConfig from '#/server/mail/config'
+import type * as MailTransport from '#/server/mail/transport'
 /* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .returning()/.select() are checked defensively */
 
 import { eq } from 'drizzle-orm'
@@ -24,9 +26,22 @@ vi.mock('@tanstack/react-start/server', () => ({
 vi.mock('@tanstack/react-start', async (importOriginal) =>
   (await import('./authz-start-patch')).patchStart(await importOriginal()),
 )
-vi.mock('#/adapters/email', () => ({
-  sendEmail: async () => {},
-  formatFrom: (from: string) => from,
+vi.mock('#/server/mail/config', async (importOriginal) => ({
+  ...(await importOriginal<typeof MailConfig>()),
+  resolveMailConfig: async () => ({
+    source: 'env' as const,
+    host: 'mail.test',
+    port: 587,
+    secure: 'starttls' as const,
+    username: null,
+    password: null,
+    from: 'cms@areca.test',
+    replyTo: null,
+  }),
+}))
+vi.mock('#/server/mail/transport', async (importOriginal) => ({
+  ...(await importOriginal<typeof MailTransport>()),
+  sendMail: async () => ({ messageId: 'test-message' }),
 }))
 
 const dbName = (() => {

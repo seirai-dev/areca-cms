@@ -56,9 +56,21 @@ export const env = createEnv({
     S3_ACCESS_KEY: z.string().min(1),
     S3_SECRET_KEY: z.string().min(1),
     S3_FORCE_PATH_STYLE: z.string().optional(),
-    SMTP_HOST: z.string().min(1),
-    SMTP_PORT: z.coerce.number(),
-    SMTP_FROM: z.string().min(1),
+    // SMTP is optional: the Agency → Mail settings can replace these entirely.
+    // Without either source, sending is off and invites need Copy link.
+    SMTP_HOST: z.string().min(1).optional(),
+    SMTP_PORT: z.coerce.number().int().min(1).max(65_535).optional(),
+    SMTP_FROM: z.string().min(1).optional(),
+    SMTP_USER: z.string().min(1).optional(),
+    SMTP_PASSWORD: z.string().min(1).optional(),
+    // Default: none for localhost / private hosts, otherwise starttls.
+    SMTP_SECURE: z.enum(['starttls', 'tls', 'none']).optional(),
+    SMTP_REPLY_TO: z.string().min(1).optional(),
+    // Encrypts the stored SMTP password. Falls back to AI_SETTINGS_ENCRYPTION_KEY.
+    SECRETS_ENCRYPTION_KEY: z
+      .string()
+      .regex(/^[A-Za-z0-9+/]{43}=$/, 'Must be a base64-encoded 32-byte key')
+      .optional(),
     DOKPLOY_URL: z.string().url().optional(),
     DOKPLOY_API_KEY: z.string().optional(),
     DOKPLOY_CREDENTIALS_ENCRYPTION_KEY: z

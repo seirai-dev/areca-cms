@@ -151,7 +151,8 @@ export function useMembers(organizationId: string) {
             email,
             ok: false,
             error: message,
-            created: message === m.server_invitation_email_failed(),
+            // The server prefixes the reason with this sentence when the row exists.
+            created: message.startsWith(m.server_invitation_email_failed()),
           })
         }
       }
