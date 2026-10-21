@@ -5,6 +5,7 @@ import { db } from '#/db'
 import { buildJob, entry, schedulerBackoff, site } from '#/db/schema'
 import { audit } from '#/server/audit'
 import { createLogger } from '#/server/log'
+import { notifyScheduleFailed } from '#/server/notifications/triggers'
 
 import { requestPublication } from './publications.ts'
 
@@ -179,6 +180,11 @@ export async function runSchedulerTick() {
           errors: result.errors,
           ...(scheduledBy.length ? { scheduledBy } : {}),
         },
+      })
+      await notifyScheduleFailed({
+        siteId,
+        scheduledBy,
+        fingerprint,
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)

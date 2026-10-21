@@ -12,6 +12,7 @@ import { m } from '#/paraglide/messages'
 import type { Me } from '#/server/fn/me'
 
 import { EmailLanguageSection } from './email-language-section'
+import { NotificationsSection } from './notifications-section'
 import { TwoFactorSection } from './two-factor-section'
 
 /**
@@ -127,6 +128,8 @@ export function AccountScreen({ me }: { me: Me }) {
       </SettingsSection>
 
       <EmailLanguageSection locale={me.user.locale} />
+
+      <NotificationsSection />
 
       <TwoFactorSection
         enabled={me.user.twoFactorEnabled}

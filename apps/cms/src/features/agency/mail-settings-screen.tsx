@@ -33,6 +33,10 @@ import {
 } from '#/components/ui/select'
 import { Tag } from '#/components/ui/tag'
 import { EmptyState } from '#/components/ui/empty-state'
+import {
+  AgencyAlertsSection,
+  AgencyClientDefaultsSection,
+} from '#/features/notifications/agency-notification-sections'
 import { absoluteTimeLabel, formatRelativeTime } from '#/lib/relative-time'
 import type { MailSecure } from '#/lib/types'
 import { cn } from '#/lib/utils'
@@ -427,6 +431,9 @@ export function MailSettingsScreen() {
           </FloatingBar>
         </form>
       )}
+
+      {saved ? <AgencyClientDefaultsSection /> : null}
+      {saved ? <AgencyAlertsSection /> : null}
 
       {saved ? <RecentEmailsSection /> : null}
 

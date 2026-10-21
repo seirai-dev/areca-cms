@@ -14,6 +14,7 @@ import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SetupRouteImport } from './routes/setup'
+import { Route as UnsubscribeRouteImport } from './routes/unsubscribe'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppAccountRouteImport } from './routes/_app/account'
 import { Route as AppAgencyRouteImport } from './routes/_app/agency'
@@ -36,6 +37,7 @@ import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiHealthReadyRouteImport } from './routes/api/health.ready'
 import { Route as ApiMcpIndexRouteImport } from './routes/api/mcp/index'
 import { Route as ApiMcpSiteSlugRouteImport } from './routes/api/mcp/$siteSlug'
+import { Route as ApiNotificationsUnsubscribeRouteImport } from './routes/api/notifications.unsubscribe'
 import { Route as ApiSitesManifestRouteImport } from './routes/api/sites/manifest'
 import { Route as ApiSitesPreviewRouteImport } from './routes/api/sites/preview'
 import { Route as AppAgencyClientsIndexRouteImport } from './routes/_app/agency/clients/index'
@@ -82,6 +84,11 @@ const ResetPasswordRoute = ResetPasswordRouteImport.update({
 const SetupRoute = SetupRouteImport.update({
   id: '/setup',
   path: '/setup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const UnsubscribeRoute = UnsubscribeRouteImport.update({
+  id: '/unsubscribe',
+  path: '/unsubscribe',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppIndexRoute = AppIndexRouteImport.update({
@@ -194,6 +201,12 @@ const ApiMcpSiteSlugRoute = ApiMcpSiteSlugRouteImport.update({
   path: '/api/mcp/$siteSlug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiNotificationsUnsubscribeRoute =
+  ApiNotificationsUnsubscribeRouteImport.update({
+    id: '/api/notifications/unsubscribe',
+    path: '/api/notifications/unsubscribe',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiSitesManifestRoute = ApiSitesManifestRouteImport.update({
   id: '/api/sites/manifest',
   path: '/api/sites/manifest',
@@ -322,6 +335,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/setup': typeof SetupRoute
+  '/unsubscribe': typeof UnsubscribeRoute
   '/account': typeof AppAccountRoute
   '/agency': typeof AppAgencyRouteWithChildren
   '/api/health': typeof ApiHealthRouteWithChildren
@@ -339,6 +353,7 @@ export interface FileRoutesByFullPath {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/health/ready': typeof ApiHealthReadyRoute
   '/api/mcp/$siteSlug': typeof ApiMcpSiteSlugRoute
+  '/api/notifications/unsubscribe': typeof ApiNotificationsUnsubscribeRoute
   '/api/sites/manifest': typeof ApiSitesManifestRoute
   '/api/sites/preview': typeof ApiSitesPreviewRoute
   '/admin/': typeof AppAdminIndexRoute
@@ -372,6 +387,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/setup': typeof SetupRoute
+  '/unsubscribe': typeof UnsubscribeRoute
   '/account': typeof AppAccountRoute
   '/api/health': typeof ApiHealthRouteWithChildren
   '/api/metrics': typeof ApiMetricsRoute
@@ -388,6 +404,7 @@ export interface FileRoutesByTo {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/health/ready': typeof ApiHealthReadyRoute
   '/api/mcp/$siteSlug': typeof ApiMcpSiteSlugRoute
+  '/api/notifications/unsubscribe': typeof ApiNotificationsUnsubscribeRoute
   '/api/sites/manifest': typeof ApiSitesManifestRoute
   '/api/sites/preview': typeof ApiSitesPreviewRoute
   '/admin': typeof AppAdminIndexRoute
@@ -422,6 +439,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/setup': typeof SetupRoute
+  '/unsubscribe': typeof UnsubscribeRoute
   '/_app/account': typeof AppAccountRoute
   '/_app/agency': typeof AppAgencyRouteWithChildren
   '/api/health': typeof ApiHealthRouteWithChildren
@@ -440,6 +458,7 @@ export interface FileRoutesById {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/health/ready': typeof ApiHealthReadyRoute
   '/api/mcp/$siteSlug': typeof ApiMcpSiteSlugRoute
+  '/api/notifications/unsubscribe': typeof ApiNotificationsUnsubscribeRoute
   '/api/sites/manifest': typeof ApiSitesManifestRoute
   '/api/sites/preview': typeof ApiSitesPreviewRoute
   '/_app/admin/': typeof AppAdminIndexRoute
@@ -476,6 +495,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/reset-password'
     | '/setup'
+    | '/unsubscribe'
     | '/account'
     | '/agency'
     | '/api/health'
@@ -493,6 +513,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/health/ready'
     | '/api/mcp/$siteSlug'
+    | '/api/notifications/unsubscribe'
     | '/api/sites/manifest'
     | '/api/sites/preview'
     | '/admin/'
@@ -526,6 +547,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/reset-password'
     | '/setup'
+    | '/unsubscribe'
     | '/account'
     | '/api/health'
     | '/api/metrics'
@@ -542,6 +564,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/health/ready'
     | '/api/mcp/$siteSlug'
+    | '/api/notifications/unsubscribe'
     | '/api/sites/manifest'
     | '/api/sites/preview'
     | '/admin'
@@ -575,6 +598,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/reset-password'
     | '/setup'
+    | '/unsubscribe'
     | '/_app/account'
     | '/_app/agency'
     | '/api/health'
@@ -593,6 +617,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/health/ready'
     | '/api/mcp/$siteSlug'
+    | '/api/notifications/unsubscribe'
     | '/api/sites/manifest'
     | '/api/sites/preview'
     | '/_app/admin/'
@@ -628,6 +653,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SetupRoute: typeof SetupRoute
+  UnsubscribeRoute: typeof UnsubscribeRoute
   ApiHealthRoute: typeof ApiHealthRouteWithChildren
   ApiMetricsRoute: typeof ApiMetricsRoute
   InviteTokenRoute: typeof InviteTokenRoute
@@ -635,6 +661,7 @@ export interface RootRouteChildren {
   ApiAssetsUploadRoute: typeof ApiAssetsUploadRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiMcpSiteSlugRoute: typeof ApiMcpSiteSlugRoute
+  ApiNotificationsUnsubscribeRoute: typeof ApiNotificationsUnsubscribeRoute
   ApiSitesManifestRoute: typeof ApiSitesManifestRoute
   ApiSitesPreviewRoute: typeof ApiSitesPreviewRoute
   ApiMcpIndexRoute: typeof ApiMcpIndexRoute
@@ -678,6 +705,13 @@ declare module '@tanstack/react-router' {
       path: '/setup'
       fullPath: '/setup'
       preLoaderRoute: typeof SetupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/unsubscribe': {
+      id: '/unsubscribe'
+      path: '/unsubscribe'
+      fullPath: '/unsubscribe'
+      preLoaderRoute: typeof UnsubscribeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/': {
@@ -832,6 +866,13 @@ declare module '@tanstack/react-router' {
       path: '/api/mcp/$siteSlug'
       fullPath: '/api/mcp/$siteSlug'
       preLoaderRoute: typeof ApiMcpSiteSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/notifications/unsubscribe': {
+      id: '/api/notifications/unsubscribe'
+      path: '/api/notifications/unsubscribe'
+      fullPath: '/api/notifications/unsubscribe'
+      preLoaderRoute: typeof ApiNotificationsUnsubscribeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/sites/manifest': {
@@ -1121,6 +1162,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SetupRoute: SetupRoute,
+  UnsubscribeRoute: UnsubscribeRoute,
   ApiHealthRoute: ApiHealthRouteWithChildren,
   ApiMetricsRoute: ApiMetricsRoute,
   InviteTokenRoute: InviteTokenRoute,
@@ -1128,6 +1170,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAssetsUploadRoute: ApiAssetsUploadRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiMcpSiteSlugRoute: ApiMcpSiteSlugRoute,
+  ApiNotificationsUnsubscribeRoute: ApiNotificationsUnsubscribeRoute,
   ApiSitesManifestRoute: ApiSitesManifestRoute,
   ApiSitesPreviewRoute: ApiSitesPreviewRoute,
   ApiMcpIndexRoute: ApiMcpIndexRoute,

@@ -7,6 +7,8 @@ import type { MeSite } from '#/lib/site-nav'
 import { m } from '#/paraglide/messages'
 import type { Me } from '#/server/fn/me'
 
+import { OrgNotificationsSection } from '#/features/notifications/org-notifications-section'
+
 import { PeopleManager } from './people-manager'
 
 /**
@@ -62,6 +64,10 @@ export function PeopleScreen({
         inviteOpen={inviteOpen}
         onInviteOpenChange={setInviteOpen}
         showInviteButton={false}
+      />
+      <OrgNotificationsSection
+        organizationId={site.organizationId}
+        organizationName={site.organizationName}
       />
     </div>
   )

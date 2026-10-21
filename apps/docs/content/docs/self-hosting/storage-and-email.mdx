@@ -68,6 +68,16 @@ The sender's display name comes from the [branding](/docs/cms/branding) settings
 - **Password reset** links, from the sign-in page or from an agency admin.
 - **Email verification** links.
 - **Security notices**: password changed, two-factor authentication turned on or off, removed from a client, and role changed. These cannot be turned off. See [your account and sign-in](/docs/cms/account-and-sign-in#security-emails).
+- **Notification emails**: releases going live or failing, scheduled entries going live, rollbacks, and accepted invitations. People choose which ones they get. See [notification emails](/docs/cms/notifications).
+
+### What each role receives
+
+- **Everyone** gets account emails, such as invitations, password resets, verification links and security notices. They go to verified and unverified addresses alike.
+- **Owners** get most notification emails: releases going live or failing, scheduled releases that fail, rollbacks, and invitations they sent that were accepted. They can change their own choices, and set defaults for their client.
+- **Editors** get a notification email only when they started the release or scheduled the entries themselves. Owners publish, so most of these emails go to owners.
+- **Agency admins** also get **Releases failing for any client**, by default, for every client.
+
+Notification emails go only to verified addresses. Without a mail server, Areca sends no notification emails. The full list, and how each person can choose, is in [notification emails](/docs/cms/notifications).
 
 ### How sending works
 

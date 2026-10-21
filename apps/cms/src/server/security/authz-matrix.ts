@@ -33,6 +33,7 @@ import * as accountFns from '#/server/fn/account'
 import * as adminFns from '#/server/fn/admin'
 import * as aiFns from '#/server/fn/ai'
 import * as mailFns from '#/server/fn/mail'
+import * as notificationFns from '#/server/fn/notifications'
 import * as translateFns from '#/server/fn/translate'
 import * as assetFns from '#/server/fn/assets'
 import * as authMethodFns from '#/server/fn/auth-methods'
@@ -1007,6 +1008,77 @@ export const ROWS: Row[] = [
     prepare: () => ({ data: undefined }),
   },
 
+  // ---------------------------------------------------------------- notifications.ts
+  {
+    name: 'getMyNotificationsFn',
+    fn: notificationFns.getMyNotificationsFn,
+    policy: 'user',
+    note: 'Only the caller own choices and the org memberships they hold.',
+    prepare: () => ({ data: undefined }),
+  },
+  {
+    name: 'setMyNotificationFn',
+    fn: notificationFns.setMyNotificationFn,
+    policy: 'org-editor',
+    note: 'Members change their own choice. Agency admins outside the org get a readable refusal instead of a write.',
+    prepare: (w) => ({
+      data: {
+        organizationId: w.X.org.id,
+        event: 'release.live',
+        enabled: true,
+      },
+    }),
+  },
+  {
+    name: 'getOrgNotificationRulesFn',
+    fn: notificationFns.getOrgNotificationRulesFn,
+    policy: 'org-owner',
+    prepare: (w) => ({ data: { organizationId: w.X.org.id } }),
+  },
+  {
+    name: 'setOrgNotificationRuleFn',
+    fn: notificationFns.setOrgNotificationRuleFn,
+    policy: 'org-owner',
+    note: 'Clears an override only, so the shared test data keeps its rules.',
+    prepare: (w) => ({
+      data: {
+        organizationId: w.X.org.id,
+        event: 'release.live',
+        role: 'editor',
+        clear: true,
+      },
+    }),
+  },
+  {
+    name: 'getAgencyNotificationRulesFn',
+    fn: notificationFns.getAgencyNotificationRulesFn,
+    policy: 'agency',
+    prepare: () => ({ data: undefined }),
+  },
+  {
+    name: 'setAgencyNotificationRuleFn',
+    fn: notificationFns.setAgencyNotificationRuleFn,
+    policy: 'agency',
+    note: 'Clears an override only, so the shared test data keeps its rules.',
+    prepare: () => ({
+      data: { event: 'release.live', role: 'owner', clear: true },
+    }),
+  },
+  {
+    name: 'getUnsubscribeFn',
+    fn: notificationFns.getUnsubscribeFn,
+    policy: 'public',
+    note: 'Public by design: the unsubscribe page reads a signed link. Reveals only the status of a valid link.',
+    prepare: () => ({ data: { token: 'not-a-real-token' } }),
+  },
+  {
+    name: 'confirmUnsubscribeFn',
+    fn: notificationFns.confirmUnsubscribeFn,
+    policy: 'public',
+    note: 'Public by design: the signed link is the authorization. Invalid links change nothing.',
+    prepare: () => ({ data: { token: 'not-a-real-token' } }),
+  },
+
   // ---------------------------------------------------------------- ai.ts
   {
     name: 'getAiSettingsFn',
@@ -1347,6 +1419,7 @@ export const ROWS: Row[] = [
 
 export const ALL_FN_MODULES = {
   account: accountFns,
+  notifications: notificationFns,
   admin: adminFns,
   ai: aiFns,
   mail: mailFns,

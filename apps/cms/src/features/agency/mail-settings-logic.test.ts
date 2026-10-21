@@ -146,7 +146,9 @@ describe('mailKindLabel', () => {
   it('gives human labels to known kinds and keeps unknown kinds as stored', () => {
     expect(mailKindLabel('invitation')).toBe('Invitation')
     expect(mailKindLabel('test')).toBe('Test email')
-    expect(mailKindLabel('release.stuck')).toBe('release.stuck')
+    expect(mailKindLabel('password_reset')).toBe('Password reset')
+    expect(mailKindLabel('release.stuck')).toBe('A release is stuck')
+    expect(mailKindLabel('something_new')).toBe('something_new')
   })
 })
 

@@ -1,0 +1,130 @@
+---
+title: Notification emails
+description: See which notification emails Areca sends, choose the ones you get, understand the defaults your client and agency set, and unsubscribe from an email you don't want.
+---
+
+Areca sends notification emails when a release goes live or fails, when scheduled entries go live, and when someone accepts an invitation. You choose which of these you get. Your client and your agency can set defaults, and they can make some emails required.
+
+Notification emails are different from account emails. Account emails, such as password resets and security notices, always send, and you can't turn them off. See [account and sign-in](/docs/cms/account-and-sign-in#security-emails).
+
+Notification emails go only to verified email addresses. If your address isn't verified, verify it first. See [verify your email](/docs/cms/account-and-sign-in#verify-your-email).
+
+## Which emails exist
+
+| Email | Who gets it | On by default |
+| --- | --- | --- |
+| **Your release went live** | The person who started the release | On |
+| **Someone else's release went live** | Other owners of the client | Off |
+| **A release failed** | The person who started the release, and owners | On |
+| **A release is stuck** | The person who started the release, and owners | On |
+| **Scheduled entries went live** | The person who scheduled the entries | On |
+| **A scheduled release couldn't start** | Owners | On |
+| **A rollback went live** | Owners | Off |
+| **Someone accepted your invite** | The person who sent the invite | On |
+| **Releases failing for any client** | Agency admins | On |
+
+A few things to know about these emails:
+
+- **Release emails list the entries.** A release email names up to 10 entries that changed, with a count of any others.
+- **Failure emails don't show the raw error.** They say the release didn't go live, and link to **Releases** on the site. Read the cause there. See [going live](/docs/cms/going-live#when-a-release-fails).
+- **One email per event.** Areca doesn't bundle emails into a digest.
+- **Rollbacks have their own email.** The person who started a rollback gets **Your release went live**. Owners get **A rollback went live**, which is off unless you turn it on.
+
+## Choose your emails
+
+Open **Account**, then find the **Notifications** section. You can also go straight to it from a notification email's footer.
+
+- There is one group for each client you belong to. Each group shows your role, for example **Northbound · Owner**.
+- Each email has a switch. Turn it on or off. The change applies straight away.
+- Agency admins also see **Agency alerts**, which covers releases failing for any client.
+- An email that your client or agency requires shows **Required by** and the name of the client or agency. Its switch is on, and you can't turn it off.
+
+If your email address isn't verified, or the installation has no mail server, the page shows a notice. Your choices are still saved. Areca sends no notification emails until both are in place.
+
+Notification emails use your email language. Set it in **Email language** on the same page. If you haven't set one, Areca uses English.
+
+## Defaults for a client
+
+Client defaults set what everyone in a client gets, before anyone makes their own choice. There are two kinds of default: one for owners and one for editors.
+
+**Owners** can set the defaults for their client:
+
+1. Open a site of the client, then select **People**.
+2. Scroll to the **Notifications** section below the people list.
+
+**Agency admins** can set them from the client's page:
+
+1. Open **Agency › Clients**, then open the client.
+2. Select **Settings**, then find the **Notifications** section.
+
+The section shows one row for each email, with a column for owners and a column for editors. Each cell has:
+
+- **A switch.** This sets the default for that role. Members can still choose their own setting, unless the email is required.
+- **A lock.** Locking makes the email required for that role. Members can't turn it off. A lock means **always on**. There is no way to lock an email off. To stop an email for everyone in the client, turn its switch off. Members who want it can still turn it on.
+- **Reset.** A cell that differs from the level above shows **Reset**. Select it to go back to the agency default or the built-in default.
+
+Where the agency has required an email, the cell is read-only and says **Required by** and the agency's name.
+
+The defaults apply to every site in the client. Changes apply to everyone in the client who hasn't made their own choice.
+
+## Agency defaults
+
+Agency admins set the defaults that apply across all clients. Open **Agency › Mail**, then find these two sections:
+
+- **Default notifications for clients.** The same owner and editor rows as the client page. These apply to every client that doesn't set its own default.
+- **Agency alerts.** The emails for releases failing for any client. Clients can't change these.
+
+Areca saves each change as soon as you make it. If a change fails, a message tells you.
+
+An agency lock wins over everything else. A locked email is required in every client, and neither a client owner nor a member can turn it off. The client's page shows **Required by** and the agency's name for that email.
+
+An agency default that isn't locked is a starting point only. A client's own default takes priority over it.
+
+## How a setting is decided
+
+For each email, Areca checks these in order and uses the first one that applies:
+
+1. **Agency lock.** If the agency requires the email for your role, it is on.
+2. **Client lock.** If the client requires the email for your role, it is on.
+3. **Your choice.** The switch you set for that client.
+4. **Client default.** The client's default for your role.
+5. **Agency default.** The agency's default for your role.
+6. **Built-in default.** The default shown in the table at the top of this page.
+
+For example, an agency locks **A release failed** for owners. An owner turns it off, and the client's default is also off. The owner still gets the email, because step 1 applies first.
+
+**Agency alerts** skip the client steps. They use only the agency lock, your choice, the agency default and the built-in default.
+
+## Unsubscribe
+
+Every notification email, except a required one, has an **Unsubscribe** link at the bottom.
+
+- **The link.** Select it to open a page that asks you to turn off that email for that client. Confirm, and the page says **Done. You won't get these emails any more.**
+- **One-click unsubscribe.** Many mail apps show an unsubscribe button for the email. Using it turns the email off the same way, without opening a page.
+
+Unsubscribing turns off only that email, and only for that client. Your other emails, and the same email for other clients, don't change. **Agency alerts** aren't tied to one client. Turning one off stops it for every client.
+
+Unsubscribe links expire after 60 days. If yours has expired, use **Manage notification emails** in the footer instead. Every notification email has that link, and it opens **Account › Notifications**.
+
+A required email has no unsubscribe link. Its footer says **This email is required by** and the name of the client or agency. If you open an unsubscribe link for a required email, the page says so, and nothing changes.
+
+## Who receives emails
+
+- **Only verified addresses.** Areca sends notification emails only to verified addresses. Account emails go to everyone.
+- **People in the client.** Most of these emails go to owners, because owners publish. Editors get one only when they started the release or scheduled the entries themselves. Whoever gets an email still follows their own settings.
+- **Agency admins who aren't members.** If you are an agency admin but not a member of a client, you get that client's emails under the agency settings. This happens when an email is about something you did, such as a release you started or an invitation you sent.
+- **Agency admins who are members.** You get the client's emails under the client's settings, and **Agency alerts** under the agency's settings.
+- **No duplicate failure emails.** If you already got **A release failed** or **A release is stuck** for a release, you don't also get **Releases failing for any client** for the same failure.
+
+## What we keep
+
+- **Notification records** are kept for 30 days, then deleted.
+- **The text of emails** isn't stored. A record holds the event, the client and site, and the names of the entries it refers to.
+
+## Related
+
+- [Account and sign-in](/docs/cms/account-and-sign-in): account emails, verification and your email language.
+- [Going live](/docs/cms/going-live): releases, their statuses and what to do when one fails.
+- [Scheduling](/docs/cms/scheduling): how scheduled entries go live.
+- [People and invitations](/docs/cms/people-and-invitations): who is in a client and who can manage it.
+- [Agency mail](/docs/cms/agency-mail): set up the mail server, and see **Recent emails**.

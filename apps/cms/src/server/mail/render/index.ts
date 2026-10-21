@@ -5,6 +5,7 @@ import type { MailTemplate } from '../outbox.ts'
 
 import * as invitation from './templates/invitation.ts'
 import * as membership from './templates/membership.ts'
+import * as notification from './templates/notification.ts'
 import * as passwordChanged from './templates/password-changed.ts'
 import * as passwordReset from './templates/password-reset.ts'
 import * as passwordResetSso from './templates/password-reset-sso.ts'
@@ -30,6 +31,7 @@ type Renderer = (
 
 const RENDERERS: Record<MailTemplate, Renderer> = {
   invitation: invitation.render,
+  notification: notification.render,
   test: test.render,
   password_reset: passwordReset.render,
   password_reset_sso: passwordResetSso.render,

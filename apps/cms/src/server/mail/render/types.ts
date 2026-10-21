@@ -32,6 +32,8 @@ export type RenderedMail = {
   text: string
   /** Values that must never reach logs or stored errors (tokens, links). */
   secrets: string[]
+  /** Extra message headers, such as List-Unsubscribe for notification emails. */
+  headers?: Record<string, string>
 }
 
 /** The template cannot be sent (for example its invitation was revoked). Never retried. */
