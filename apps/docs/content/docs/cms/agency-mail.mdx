@@ -7,6 +7,19 @@ Areca sends email, such as invitations, through an SMTP mail server. Agency admi
 
 Only agency admins can open **Agency › Mail**. For what each variable does, see [configuration](/docs/self-hosting/configuration#email). For provider settings and deliverability, see [storage and email](/docs/self-hosting/storage-and-email#email-providers).
 
+## What gets sent
+
+Areca sends these emails through the mail server:
+
+- **Invitations** to join a client. See [people and invitations](/docs/cms/people-and-invitations).
+- **Password reset** links, when someone asks for one from the sign-in page, or an agency admin sends one from **Agency › People**.
+- **Email verification** links, when someone asks to verify their address.
+- **Security notices**, such as a password change, two-factor authentication turned on or off, or a change of role. Account emails can't be turned off. See [your account and sign-in](/docs/cms/account-and-sign-in#security-emails).
+
+Each one appears in **Recent emails**, with its type.
+
+Without a mail server, invitations still work, and you can share the link with **Copy link**. The forgot password page tells people to ask an agency admin. Security notices are not sent, and are not queued for later.
+
 ## Before you start
 
 - Get the SMTP details from your mail provider: host, port, encryption, and the username and password if it needs them.

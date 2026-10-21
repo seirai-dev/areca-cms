@@ -19,6 +19,7 @@ test('agency admin can whitelabel the CMS and reset it', async ({ page }) => {
   await page.getByTestId('brand-name').fill(name)
   await page.getByTestId('brand-accent').fill('#1e90ff')
   await page.getByTestId('brand-email-from').fill('Acme Team')
+  await page.getByTestId('brand-signin-en').fill('Your studio, online')
 
   // A preset sets accent and font together; the preview follows immediately.
   await page.getByTestId('brand-preset-indigo').click()
@@ -89,8 +90,13 @@ test('agency admin can whitelabel the CMS and reset it', async ({ page }) => {
 
   // The public sign-in page shows the brand too.
   await signOut(page)
-  await expect(page.getByText(name)).toBeVisible()
+  await expect(
+    page.getByRole('heading', { level: 1, name: new RegExp(name) }),
+  ).toBeVisible()
   await expect(page).toHaveTitle(name)
+  await expect(page.getByTestId('auth-art-tagline')).toHaveText(
+    'Your studio, online',
+  )
 
   // Reset restores the defaults.
   await login(page)

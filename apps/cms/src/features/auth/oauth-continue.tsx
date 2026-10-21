@@ -32,7 +32,7 @@ export function OAuthContinue({ query }: { query: string }) {
         title={m.auth_oauth_continue_title()}
         description={error ? undefined : m.auth_oauth_continue_body()}
       />
-      <div className="mt-7 grid justify-items-center gap-4">
+      <div className="grid gap-4">
         {error ? (
           <AuthError className="w-full">{error}</AuthError>
         ) : (

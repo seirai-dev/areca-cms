@@ -2,6 +2,7 @@
  * Whitelabel branding shared by server and client: defaults, the curated font
  * list, and the accent-colour → palette derivation. Pure, no I/O.
  */
+import { z } from 'zod'
 
 export const DEFAULT_APP_NAME = 'Areca'
 
@@ -163,6 +164,74 @@ export const EMPTY_ADVANCED_COLORS: AdvancedBrandColors = {
   dark: {},
 }
 
+export const LOGIN_TAGLINE_LOCALES = ['en', 'nl', 'tr'] as const
+export type LoginTaglineLocale = (typeof LOGIN_TAGLINE_LOCALES)[number]
+export type LoginTaglines = Record<LoginTaglineLocale, string | null>
+
+export const LOGIN_TAGLINE_MAX_LENGTH = 80
+
+export const EMPTY_LOGIN_TAGLINES: LoginTaglines = {
+  en: null,
+  nl: null,
+  tr: null,
+}
+
+/** Trimmed text, or null when empty or not a string. */
+export function normalizeLoginTagline(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  return value.trim() || null
+}
+
+export function normalizeLoginTaglines(value: unknown): LoginTaglines {
+  const input =
+    value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
+  return {
+    en: normalizeLoginTagline(input.en),
+    nl: normalizeLoginTagline(input.nl),
+    tr: normalizeLoginTagline(input.tr),
+  }
+}
+
+export function hasLoginTaglines(taglines: LoginTaglines) {
+  return LOGIN_TAGLINE_LOCALES.some((locale) => taglines[locale] !== null)
+}
+
+function isLoginTaglineLocale(value: string): value is LoginTaglineLocale {
+  return (LOGIN_TAGLINE_LOCALES as readonly string[]).includes(value)
+}
+
+/**
+ * The agency's sign-in tagline for one interface language, or null when that
+ * language has none and the built-in text should show.
+ */
+export function loginTaglineFor(
+  branding: Pick<BrandingView, 'loginTagline'>,
+  locale: string,
+): string | null {
+  if (!isLoginTaglineLocale(locale)) return null
+  return normalizeLoginTagline(branding.loginTagline[locale])
+}
+
+/** One tagline: trimmed, at most 80 characters, a single line. Empty → null. */
+const loginTaglineValue = z
+  .string()
+  .trim()
+  .max(LOGIN_TAGLINE_MAX_LENGTH)
+  .refine((value) => !/[\r\n]/.test(value), 'Use a single line')
+  .transform((value) => value || null)
+  .nullable()
+  .optional()
+
+/** Request body for the sign-in taglines, per language. */
+export const loginTaglinesSchema = z
+  .object({
+    en: loginTaglineValue,
+    nl: loginTaglineValue,
+    tr: loginTaglineValue,
+  })
+  .nullable()
+  .optional()
+
 /** What the client needs to render the brand. Image URLs are site-relative. */
 export type BrandingView = {
   appName: string
@@ -174,6 +243,8 @@ export type BrandingView = {
   advancedColors: AdvancedBrandColors
   font: FontKey
   emailFromName: string | null
+  /** Sign-in page sentence per interface language; null uses the built-in text. */
+  loginTagline: LoginTaglines
   /** True when any field differs from the built-in defaults. */
   customized: boolean
 }
@@ -188,6 +259,7 @@ export const DEFAULT_BRANDING: BrandingView = {
   advancedColors: EMPTY_ADVANCED_COLORS,
   font: DEFAULT_FONT,
   emailFromName: null,
+  loginTagline: EMPTY_LOGIN_TAGLINES,
   customized: false,
 }
 

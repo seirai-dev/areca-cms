@@ -1,86 +1,74 @@
 import type { ReactNode } from 'react'
 
-import { BrandLogo } from '#/components/brand-mark'
 import { LanguageSwitcher } from '#/components/language-switcher'
 import { ThemeToggle } from '#/components/theme'
+import { loginTaglineFor } from '#/lib/branding'
 import { useBranding } from '#/lib/use-branding'
 import { cn } from '#/lib/utils'
+import { getLocale } from '#/paraglide/runtime'
 import { m } from '#/paraglide/messages'
 
+import { AuthArt } from './auth-art'
+
 /**
- * Auth layout (brief §3.1): a centred 400px card on the soft canvas, a very
- * subtle accent glow at the top, the brand logo tile above the card and a
- * small appearance + language control in the top-right corner.
- *
- * The app name is carried by each page's heading ("Sign in to Areca",
- * "Welcome to Areca"), so the lockup above the card is the tile alone, with
- * the name as its accessible label. `showName` adds the name under the tile
- * for pages whose heading doesn't say it (the invitation).
+ * Auth layout: one rounded panel on the canvas, the branded art on the left
+ * (a short band on phones) and the form on the right, with the appearance and
+ * language controls in the form's top-right corner. Every auth page (sign in,
+ * setup, invitation, password reset, consent) uses it.
  */
 export function AuthShell({
   children,
   footer,
-  showName = false,
 }: {
   children: ReactNode
   footer?: ReactNode
-  showName?: boolean
 }) {
   const branding = useBranding()
+  const tagline =
+    loginTaglineFor(branding, getLocale()) ?? m.auth_tagline_default()
 
   return (
     <div
       data-testid="auth-shell"
-      className="relative isolate flex min-h-svh flex-col overflow-hidden bg-background-default"
+      className="relative isolate flex min-h-svh items-center justify-center overflow-hidden bg-background-default p-3 sm:p-6 lg:p-10"
     >
-      {/* The glow: two soft accent washes, strongest at the top centre. */}
+      {/* A faint wash of the accent behind the panel. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[440px] bg-[radial-gradient(50%_55%_at_50%_0%,var(--color-accent-soft),transparent_75%)] opacity-80"
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute top-[-220px] left-1/2 -z-10 size-[480px] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,var(--color-accent-soft),transparent)] opacity-60 blur-3xl"
+        className="pointer-events-none absolute top-[-30%] left-1/2 -z-10 size-[900px] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,var(--color-accent-soft),transparent)] opacity-70 blur-3xl"
       />
 
-      <div className="flex items-center justify-end gap-0.5 px-4 pt-4 sm:px-6">
-        <ThemeToggle />
-        <LanguageSwitcher compact />
-      </div>
+      <div className="grid w-full max-w-[1040px] animate-in gap-2 rounded-[28px] border border-border-default bg-background-surface p-2 shadow-[0_1px_2px_rgb(0_0_0/0.04),0_40px_80px_-40px_rgb(0_0_0/0.35)] duration-200 fade-in-0 slide-in-from-bottom-1 motion-reduce:animate-none md:min-h-[640px] md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:p-2.5">
+        <AuthArt
+          branding={branding}
+          tagline={tagline}
+          compact
+          className="h-[132px] md:hidden"
+        />
+        <AuthArt
+          branding={branding}
+          tagline={tagline}
+          className="hidden md:block"
+        />
 
-      <main className="flex flex-1 flex-col items-center justify-center px-4 pt-6 pb-16 sm:pb-24">
-        {/* CSS enter (fade + 4px rise, 180ms) so it also plays on SSR-only
-            renders such as the not-found card; off under reduced motion. */}
-        <div className="grid w-full max-w-[400px] animate-in justify-items-center gap-7 duration-200 fade-in-0 slide-in-from-bottom-1 motion-reduce:animate-none">
-          <div className="grid justify-items-center gap-2.5">
-            <span
-              role="img"
-              aria-label={branding.appName}
-              className="rounded-[14px] shadow-[0_8px_24px_-10px_color-mix(in_oklab,var(--color-accent)_60%,transparent)]"
-            >
-              <BrandLogo branding={branding} size="lg" />
-            </span>
-            {showName ? (
-              <span className="text-headline text-text-primary">
-                {branding.appName}
-              </span>
-            ) : null}
+        <div className="relative flex flex-col px-5 pt-14 pb-8 sm:px-10 md:px-12 md:pt-16 md:pb-12 lg:px-16">
+          <div className="absolute top-3 right-3 flex items-center gap-0.5 md:top-4 md:right-4">
+            <ThemeToggle />
+            <LanguageSwitcher compact />
           </div>
-          <div className="w-full rounded-panel border border-border-default bg-background-surface p-6 shadow-[0_1px_2px_rgb(0_0_0/0.04),0_24px_48px_-24px_rgb(0_0_0/0.12)] sm:p-8">
+          <main className="mx-auto my-auto grid w-full max-w-[400px] gap-6">
             {children}
-          </div>
-          {footer ? (
-            <div className="text-center text-callout text-text-secondary">
-              {footer}
-            </div>
-          ) : null}
+            {footer ? (
+              <div className="text-callout text-text-secondary">{footer}</div>
+            ) : null}
+          </main>
         </div>
-      </main>
+      </div>
     </div>
   )
 }
 
-/** Title + one-line description at the top of the card. */
+/** Title + one-line description at the top of the form. */
 export function AuthHeading({
   title,
   description,
@@ -91,10 +79,10 @@ export function AuthHeading({
   className?: string
 }) {
   return (
-    <div className={cn('grid gap-1.5 text-center', className)}>
-      <h1 className="text-title-1 text-balance text-text-primary">{title}</h1>
+    <div className={cn('grid gap-2', className)}>
+      <h1 className="text-display text-balance text-text-primary">{title}</h1>
       {description ? (
-        <p className="text-body text-balance text-text-secondary">
+        <p className="text-body text-pretty text-text-secondary">
           {description}
         </p>
       ) : null}

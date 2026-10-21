@@ -108,6 +108,19 @@ if the worker crashes after SMTP accepts a message but before it records that,
 the email is sent again after the lease expires, so a recipient may get a
 duplicate. A manual resend creates a fresh link.
 
+## Account email
+
+Password reset, email verification and security notices use the same
+`email_outbox` and retry schedule as invitations. Account emails go to every
+address, verified or not. When mail is not configured they are skipped, not
+queued.
+
+The outbox never stores a reset link. When `SECRETS_ENCRYPTION_KEY` or
+`AI_SETTINGS_ENCRYPTION_KEY` is set, the reset token is stored encrypted so a
+retry can rebuild the link. Without a key, a reset email is tried once and is
+not retried. Verification links are created when the email is sent, so they are
+not stored.
+
 ## Secrets and diagnostics
 
 Organization Dokploy API keys are encrypted with AES-256-GCM and organization

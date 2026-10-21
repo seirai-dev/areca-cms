@@ -19,6 +19,10 @@ import {
   useShortcut,
 } from '#/components/shell/shortcuts'
 import { Sidebar } from '#/components/shell/sidebar'
+import {
+  EmailVerifiedNotice,
+  VerifyEmailBanner,
+} from '#/features/account/verify-email-banner'
 import { ActivityPanel } from '#/features/activity/activity-panel'
 import { MailBanners } from '#/features/agency/mail-banners'
 import { GoLivePanel } from '#/features/golive/golive-panel'
@@ -264,6 +268,7 @@ export function AppShell({
                   : 'max-w-(--content-max) px-4 pt-6 pb-16 md:px-8 md:pt-10',
               )}
             >
+              {mode !== 'focus' ? <VerifyEmailBanner me={me} /> : null}
               {me.user.isAgencyAdmin && mode !== 'focus' ? (
                 <MailBanners />
               ) : null}
@@ -275,6 +280,7 @@ export function AppShell({
           {params.siteId ? <SitePanels me={me} siteId={params.siteId} /> : null}
           <CommandPalette />
           <ShortcutsDialog />
+          <EmailVerifiedNotice />
         </div>
       </ShortcutsProvider>
     </ShellContext.Provider>

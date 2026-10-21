@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { MagnifyingGlass, Users, X } from '@phosphor-icons/react'
+import { Key, MagnifyingGlass, Users, X } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
 import {
@@ -34,6 +34,7 @@ import { m } from '#/paraglide/messages'
 import type { Me } from '#/server/fn/me'
 import { resetAdminFactorLockoutFn } from '#/server/fn/security'
 import { setAgencyAdminFn } from '#/server/fn/admin'
+import { sendPasswordResetLinkFn } from '#/server/fn/account'
 
 import { accountsQuery } from './queries'
 import type { AccountRow } from './queries'
@@ -81,6 +82,8 @@ function useAgencyPeople() {
     next: boolean
   } | null>(null)
   const [resetTarget, setResetTarget] = React.useState<AccountRow | null>(null)
+  const [resetLinkTarget, setResetLinkTarget] =
+    React.useState<AccountRow | null>(null)
   const resetLockout = useMutation({
     mutationFn: (userId: string) =>
       stepUp.run(() => resetAdminFactorLockoutFn({ data: { userId } })),
@@ -90,6 +93,28 @@ function useAgencyPeople() {
       await queryClient.invalidateQueries({ queryKey: adminQueryKeys.users })
     },
     onError: (err) => toast.error(errorMessage(err)),
+  })
+  // Sends a reset link (or the provider pointer for SSO-only accounts). A
+  // readable failure is a toast with its reference; the dialog always closes.
+  const sendResetLink = useMutation({
+    mutationFn: (account: AccountRow) =>
+      sendPasswordResetLinkFn({ data: { userId: account.id } }),
+    onSuccess: (result, account) => {
+      setResetLinkTarget(null)
+      if (!result.ok) {
+        toast.error(result.message, {
+          description: result.ref
+            ? m.agency_mail_reference({ id: result.ref })
+            : undefined,
+        })
+        return
+      }
+      toast.success(resetLinkSentMessage(result.status, account))
+    },
+    onError: (err) => {
+      setResetLinkTarget(null)
+      toast.error(errorMessage(err))
+    },
   })
   const mutation = useMutation({
     mutationFn: (input: { userId: string; isAgencyAdmin: boolean }) =>
@@ -113,7 +138,22 @@ function useAgencyPeople() {
     resetTarget,
     setResetTarget,
     resetLockout,
+    resetLinkTarget,
+    setResetLinkTarget,
+    sendResetLink,
   }
+}
+
+/** The success toast says what happened to the link: sent, queued, or the provider pointer. */
+function resetLinkSentMessage(
+  status: 'sent' | 'queued' | 'sso',
+  account: AccountRow,
+) {
+  if (status === 'sso') return m.agency_people_reset_sso({ name: account.name })
+  if (status === 'queued') {
+    return m.agency_people_reset_queued({ email: account.email })
+  }
+  return m.agency_people_reset_sent({ email: account.email })
 }
 
 /**
@@ -130,6 +170,9 @@ export function AgencyPeopleScreen({ me }: { me: Me }) {
     resetTarget,
     setResetTarget,
     resetLockout,
+    resetLinkTarget,
+    setResetLinkTarget,
+    sendResetLink,
   } = useAgencyPeople()
   const [search, setSearch] = React.useState('')
   const [role, setRole] = React.useState<RoleFilter>('all')
@@ -316,6 +359,7 @@ export function AgencyPeopleScreen({ me }: { me: Me }) {
                   account={account}
                   isSelf={account.id === me.user.id}
                   onResetLockout={() => setResetTarget(account)}
+                  onSendResetLink={() => setResetLinkTarget(account)}
                   onToggle={(next) =>
                     setPending({ userId: account.id, name: account.name, next })
                   }
@@ -325,6 +369,27 @@ export function AgencyPeopleScreen({ me }: { me: Me }) {
           )}
         </div>
       )}
+
+      <ConfirmDialog
+        open={resetLinkTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setResetLinkTarget(null)
+        }}
+        title={m.agency_people_reset_title()}
+        description={m.agency_people_reset_body({
+          name: resetLinkTarget?.name ?? m.admin_users_this_user(),
+        })}
+        confirmLabel={m.agency_people_reset_confirm()}
+        onConfirm={async () => {
+          if (resetLinkTarget) {
+            // onError has already reported the failure as a toast.
+            await sendResetLink
+              .mutateAsync(resetLinkTarget)
+              .catch(() => undefined)
+          }
+        }}
+        testId="send-reset-link-dialog"
+      />
 
       <ConfirmDialog
         open={resetTarget !== null}
@@ -381,11 +446,13 @@ function PersonRow({
   isSelf,
   onToggle,
   onResetLockout,
+  onSendResetLink,
 }: {
   account: AccountRow
   isSelf: boolean
   onToggle: (next: boolean) => void
   onResetLockout: () => void
+  onSendResetLink: () => void
 }) {
   const switchId = `agency-access-${account.id}`
   const toggle = (
@@ -411,23 +478,40 @@ function PersonRow({
       }
       subtitle={account.email}
       trailing={
-        <label
-          htmlFor={isSelf ? undefined : switchId}
-          className="flex flex-col-reverse items-center gap-1 md:flex-row md:gap-2.5"
-        >
-          {/* Phones show the label under the switch, so it is never a
-              switch without a name. */}
-          <span className="text-[11px] leading-4 font-medium whitespace-nowrap text-text-muted md:text-callout md:font-normal md:text-text-secondary">
-            {m.agency_people_access()}
-          </span>
-          {isSelf ? (
-            <Hint label={m.admin_users_self_tooltip()} wrapDisabled>
-              {toggle}
-            </Hint>
-          ) : (
-            toggle
+        <span className="flex items-center gap-2 md:gap-4">
+          {isSelf ? null : (
+            <Button
+              type="button"
+              size="xs"
+              variant="quiet"
+              onClick={onSendResetLink}
+              aria-label={m.agency_people_reset_action()}
+              data-testid={`send-reset-link-${account.email}`}
+            >
+              <Key aria-hidden="true" />
+              <span className="hidden md:inline">
+                {m.agency_people_reset_action()}
+              </span>
+            </Button>
           )}
-        </label>
+          <label
+            htmlFor={isSelf ? undefined : switchId}
+            className="flex flex-col-reverse items-center gap-1 md:flex-row md:gap-2.5"
+          >
+            {/* Phones show the label under the switch, so it is never a
+              switch without a name. */}
+            <span className="text-[11px] leading-4 font-medium whitespace-nowrap text-text-muted md:text-callout md:font-normal md:text-text-secondary">
+              {m.agency_people_access()}
+            </span>
+            {isSelf ? (
+              <Hint label={m.admin_users_self_tooltip()} wrapDisabled>
+                {toggle}
+              </Hint>
+            ) : (
+              toggle
+            )}
+          </label>
+        </span>
       }
     >
       {account.isAgencyAdmin && account.factorLockedUntil && !isSelf ? (
@@ -450,7 +534,7 @@ function PersonRow({
           account.memberships.map((item) => (
             <span
               key={item.organizationId}
-              className="inline-flex h-[22px] items-center gap-1 rounded-full border border-border-default bg-background-subtle px-2 text-[12px] leading-4 font-medium text-text-primary"
+              className="inline-flex h-[22px] items-center gap-1 rounded-full border border-border-default bg-background-subtle px-2 text-[12px] leading-4 font-medium whitespace-nowrap text-text-primary"
               data-testid="membership-chip"
             >
               {item.organizationName}

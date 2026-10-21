@@ -1,0 +1,1 @@
+ALTER TABLE "branding" ADD COLUMN "login_tagline" jsonb;

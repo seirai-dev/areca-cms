@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { Link } from '@tanstack/react-router'
 
 import { Button } from '#/components/ui/button'
 import { FormField } from '#/components/ui/form-field'
@@ -20,8 +21,8 @@ import {
 
 /**
  * `/login` (brief §3.1): "Sign in to {app}", email and password, provider
- * buttons under a hairline "or", errors inline in the card. There is no
- * forgotten-password link because that feature does not exist.
+ * buttons under a hairline "or", errors inline in the card. "Forgot password?"
+ * sits beside the password label when email/password sign-in is on.
  */
 export function LoginScreen({
   methods,
@@ -63,15 +64,13 @@ export function LoginScreen({
           title={m.auth_two_factor_title()}
           description={m.auth_two_factor_subtitle()}
         />
-        <div className="mt-7">
-          <TwoFactorChallenge
-            ready={ready}
-            error={error}
-            pending={pending}
-            onSubmit={(code, kind) => void verifyTwoFactor(code, kind)}
-            onCancel={cancelChallenge}
-          />
-        </div>
+        <TwoFactorChallenge
+          ready={ready}
+          error={error}
+          pending={pending}
+          onSubmit={(code, kind) => void verifyTwoFactor(code, kind)}
+          onCancel={cancelChallenge}
+        />
       </AuthShell>
     )
   }
@@ -88,7 +87,7 @@ export function LoginScreen({
               : m.auth_sign_in_subtitle_providers()
         }
       />
-      <div className="mt-7 grid gap-5">
+      <div className="grid gap-5">
         {methods.emailPassword ? (
           <form
             className="grid gap-4"
@@ -114,7 +113,19 @@ export function LoginScreen({
                 onChange={(event) => setEmail(event.target.value)}
               />
             </FormField>
-            <FormField label={m.auth_password()} htmlFor="password">
+            <FormField
+              label={m.auth_password()}
+              htmlFor="password"
+              trailing={
+                <Link
+                  to="/forgot-password"
+                  className="text-caption font-normal text-text-secondary underline-offset-4 hover:text-text-primary hover:underline"
+                  data-testid="forgot-password-link"
+                >
+                  {m.auth_forgot_link()}
+                </Link>
+              }
+            >
               <PasswordInput
                 id="password"
                 name="password"
@@ -128,8 +139,9 @@ export function LoginScreen({
             {error ? <AuthError>{error}</AuthError> : null}
             <Button
               type="submit"
+              variant="accent"
               size="lg"
-              className="mt-1 w-full"
+              className="w-full"
               disabled={!ready}
               loading={pending}
             >

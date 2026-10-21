@@ -2,7 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
 import { requireAgencyAdmin } from '#/lib/session.server'
-import { BRAND_COLOR_KEYS } from '#/lib/branding'
+import { BRAND_COLOR_KEYS, loginTaglinesSchema } from '#/lib/branding'
 import {
   clearBrandingImage,
   getBranding,
@@ -37,6 +37,7 @@ export const updateBrandingFn = createServerFn({
         .optional(),
       font: z.string().max(40).nullable().optional(),
       emailFromName: z.string().max(80).nullable().optional(),
+      loginTagline: loginTaglinesSchema,
     }),
   )
   .handler(async ({ data }) => {

@@ -57,6 +57,8 @@ export const user = pgTable('user', {
   updatedAt: updatedAt(),
   isAgencyAdmin: boolean('is_agency_admin').notNull().default(false),
   twoFactorEnabled: boolean('two_factor_enabled').notNull().default(false),
+  /** Language for account and notification emails. Null = not chosen yet. */
+  locale: text('locale').$type<'en' | 'nl' | 'tr'>(),
 })
 
 export const session = pgTable(
@@ -489,6 +491,12 @@ export const branding = pgTable('branding', {
   advancedColors: jsonb('advanced_colors').$type<AdvancedBrandColors>(),
   font: text('font'),
   emailFromName: text('email_from_name'),
+  /** Per-locale sign-in tagline; a missing or null locale uses the built-in text. */
+  loginTagline: jsonb('login_tagline').$type<{
+    en?: string | null
+    nl?: string | null
+    tr?: string | null
+  }>(),
   updatedBy: text('updated_by').references(() => user.id, {
     onDelete: 'set null',
   }),

@@ -1,0 +1,98 @@
+---
+title: Account and sign-in
+description: Reset a forgotten password, verify your email address, choose the language of account emails, and know which security emails Areca sends you.
+---
+
+Areca sends a few emails to your own address about your account. This page covers how to reset a forgotten password, how to verify your email address, which language the emails use, and which security notices you always get.
+
+Account emails are sent whether or not your address is verified. You can't turn them off.
+
+## Forgot your password
+
+On the sign-in page, select **Forgot password?** next to the password field. Enter your email address, then send the request.
+
+Areca shows the same message whether or not an account exists for that address. It says that, if the account exists, a link was sent.
+
+<Steps>
+<Step>
+
+**Open the email.** The link works for **1 hour**, and only once.
+
+</Step>
+<Step>
+
+**Enter a new password.** Use at least 8 characters, and enter it again to confirm.
+
+</Step>
+<Step>
+
+**Sign in again.** Areca confirms the change. Sign in with the new password.
+
+</Step>
+</Steps>
+
+A few things to know:
+
+- **Every device is signed out.** A reset ends every session on every device, not only the one you use. Sign in again on each device.
+- **Two-factor is still asked.** If two-factor authentication is on, Areca asks for your code at your next sign-in. A reset does not turn it off.
+- **There is a limit.** You can request 3 reset links per hour for each email address. Areca also allows 3 requests per hour from each network address. After that, Areca asks you to wait before you try again.
+- **Expired links.** If the link has expired or was already used, the page says **This link has expired or was already used.** Request a new one from the forgot password page.
+
+### Sign-in with Microsoft or Google
+
+If your account signs in only with Microsoft or Google, it has no password to reset. Areca sends an email instead. It says which provider to use, and links to the sign-in page. No reset link is sent.
+
+### When the link is not available
+
+If the page says **Ask an agency admin to send you a reset link**, Areca can't send the email from that page. Ask an agency admin. They can send you a link from **Agency › People**. See [people and invitations](/docs/cms/people-and-invitations#send-a-password-reset-link).
+
+If your installation has no mail server, nobody can send a reset link until one is set up. If password sign-in is turned off, the sign-in page has no **Forgot password?** link.
+
+## Verify your email
+
+Areca asks you to verify your email address. Until you do, the CMS shows a **Verify your email** banner. The banner does not stop you from working.
+
+<Steps>
+<Step>
+
+**Send the email.** Select **Send verification email** in the banner.
+
+</Step>
+<Step>
+
+**Open the link.** The link is valid for **24 hours**. Areca opens the CMS and shows **Email verified**.
+
+</Step>
+</Steps>
+
+A few things to know:
+
+- You can send up to 3 verification emails per hour.
+- You can dismiss the banner. Areca remembers that in the browser you used, so the banner can show again on another computer.
+- If you joined through an invitation that Areca emailed to you, your address counts as verified. You don't need to verify it again.
+- If the first admin account is created during setup and a mail server is set up, Areca sends that admin a verification email.
+
+## Email language
+
+Account emails are sent in English, Nederlands or Türkçe. To change the language, open **Account** and find the **Email language** section. Choose the language you want.
+
+Areca sets the language once, the first time you open the CMS. It uses your interface language at that time. Changing the interface language later does not change the email language. If the language has not been set, emails are sent in English.
+
+## Security emails
+
+Areca sends these emails when the change happens. You always get them, and you can't turn them off.
+
+- **Password changed.** Sent after your password changes, whether you changed it or reset it. If it wasn't you, the email has a link to reset your password.
+- **Two-factor authentication turned on.** Sent when two-factor authentication is turned on for your account.
+- **Two-factor authentication turned off.** Sent when two-factor authentication is turned off for your account.
+- **Removed from a client.** Sent when someone removes you from a client. It names the client and the person who removed you.
+- **Role changed.** Sent when your role in a client changes, for example from Editor to Owner. It shows the new role.
+
+Areca does not send the removal and role-change emails for a change you made yourself.
+
+## Related
+
+- [Your account](/docs/cms/account): language, appearance and two-factor authentication.
+- [People and invitations](/docs/cms/people-and-invitations): how agency admins send reset links.
+- [Two-factor and step-up](/docs/security/two-factor-and-step-up): when Areca asks for a code.
+- [Troubleshooting](/docs/troubleshooting): if the reset email does not arrive.

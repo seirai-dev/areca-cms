@@ -8,13 +8,16 @@ import {
 } from '@phosphor-icons/react'
 
 import { BrandLogo } from '#/components/brand-mark'
+import { AuthArt } from '#/features/auth/auth-art'
 import {
   brandingPreviewStyle,
   fontEntry,
   fontStylesheetUrl,
+  loginTaglineFor,
 } from '#/lib/branding'
 import type { BrandingView } from '#/lib/branding'
 import { cn } from '#/lib/utils'
+import { getLocale } from '#/paraglide/runtime'
 import { m } from '#/paraglide/messages'
 
 /**
@@ -22,6 +25,9 @@ import { m } from '#/paraglide/messages'
  * button, in light and dark side by side. Each panel re-declares the whole
  * token set (`.light` / `.dark`) plus the draft accent, so both render
  * correctly whatever theme the page itself is in. Tokens only.
+ *
+ * Below the mini app, the sign-in art (what the login page shows) in light and
+ * dark, with the tagline for the language the admin is using.
  */
 export function BrandingPreview({ branding }: { branding: BrandingView }) {
   const fontUrl = fontStylesheetUrl(branding.font)
@@ -50,6 +56,23 @@ export function BrandingPreview({ branding }: { branding: BrandingView }) {
           mode="dark"
           testId="branding-preview-dark"
         />
+      </div>
+      <div className="grid gap-2" data-testid="branding-signin-preview">
+        <h3 className="px-1 text-caption font-normal text-text-muted">
+          {m.agency_branding_signin_title()}
+        </h3>
+        <div className="grid grid-cols-2 gap-3">
+          <SignInArtPanel
+            branding={branding}
+            mode="light"
+            testId="branding-signin-preview-light"
+          />
+          <SignInArtPanel
+            branding={branding}
+            mode="dark"
+            testId="branding-signin-preview-dark"
+          />
+        </div>
       </div>
       <p className="px-1 text-caption font-normal text-text-muted">
         {m.admin_branding_preview_footnote()}
@@ -148,6 +171,37 @@ function PreviewPanel({
           {m.golive_go_live()}
         </span>
       </div>
+    </div>
+  )
+}
+
+function SignInArtPanel({
+  branding,
+  mode,
+  testId,
+}: {
+  branding: BrandingView
+  mode: 'light' | 'dark'
+  testId: string
+}) {
+  return (
+    <div
+      data-testid={testId}
+      data-theme={mode}
+      className={cn(mode, 'min-w-0')}
+      style={{
+        ...brandingPreviewStyle(branding, mode),
+        fontFamily: fontEntry(branding.font).family,
+      }}
+    >
+      <AuthArt
+        branding={branding}
+        tagline={
+          loginTaglineFor(branding, getLocale()) ?? m.auth_tagline_default()
+        }
+        size="sm"
+        className="aspect-[4/5]"
+      />
     </div>
   )
 }

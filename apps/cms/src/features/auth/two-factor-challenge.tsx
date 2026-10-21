@@ -69,8 +69,9 @@ export function TwoFactorChallenge({
       {error ? <AuthError>{error}</AuthError> : null}
       <Button
         type="submit"
+        variant="accent"
         size="lg"
-        className="mt-1 w-full"
+        className="w-full"
         disabled={!ready}
         loading={pending}
       >

@@ -8,16 +8,27 @@ import {
   APIError,
   createAuthMiddleware,
   getSessionFromCtx,
+  isAPIError,
 } from 'better-auth/api'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { twoFactor } from 'better-auth/plugins/two-factor'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
+import { eq } from 'drizzle-orm'
 
 import { db } from '#/db'
 import * as schema from '#/db/schema'
 import { env } from '#/env'
+import { m } from '#/paraglide/messages'
 import { handleLocalFactorRequest } from '#/server/security/factor-http'
 import { MfaRequiredError } from '#/lib/security-errors'
+import { allowKeyedAction } from '#/server/http/rate-limit-store.server'
+import { getClientIp } from '#/server/http/rate-limit'
+import {
+  deliverPasswordReset,
+  sendAccountEmail,
+  sendVerificationEmail,
+} from '#/server/mail/account-emails'
+import { createLogger } from '#/server/log'
 import {
   recordLocalMfaForToken,
   requireAdminLocalMfa,
@@ -71,6 +82,55 @@ async function assertAuthAdminMfa(
   }
 }
 
+const authLog = createLogger('auth')
+
+/**
+ * Account mail must never fail the request that caused it. Notices are queued
+ * rather than sent inline, so the request does not wait on SMTP; the outbox
+ * worker sends them within seconds.
+ */
+async function sendQuietly(label: string, task: () => Promise<unknown>) {
+  try {
+    await task()
+  } catch (error) {
+    authLog.error(`${label} could not be sent`, { err: error })
+  }
+}
+
+// Per email address and per client address. The email budget also covers
+// unknown addresses, so the limit does not reveal which accounts exist.
+const RESET_REQUEST_RULE = { limit: 3, windowSeconds: 60 * 60 } as const
+const VERIFY_REQUEST_RULE = { limit: 3, windowSeconds: 60 * 60 } as const
+
+function bodyEmail(body: unknown) {
+  if (!isRecord(body) || typeof body.email !== 'string') return null
+  return body.email.trim().toLowerCase() || null
+}
+
+/** Throws when either the address or the client IP is over its budget. */
+async function assertMailRequestBudget(
+  ctx: { body?: unknown; request?: Request },
+  scope: string,
+  rule: typeof RESET_REQUEST_RULE,
+  code: string,
+  message: string,
+) {
+  const email = bodyEmail(ctx.body)
+  const ip = ctx.request
+    ? getClientIp(ctx.request, env.RATE_LIMIT_TRUST_PROXY)
+    : 'unknown'
+  const allowed =
+    (!email || (await allowKeyedAction(`${scope}-email`, email, rule))) &&
+    (ip === 'unknown' || (await allowKeyedAction(`${scope}-ip`, ip, rule)))
+  if (!allowed) throw new APIError('TOO_MANY_REQUESTS', { code, message })
+}
+
+/**
+ * Two-factor flips arrive as user updates without the user id. The change is
+ * recorded when the stored value differs, and sent after the update commits.
+ */
+const pendingTwoFactorChanges = new Map<string, boolean>()
+
 const SSO_MANAGEMENT_PATHS = new Set([
   '/sso/register',
   '/sso/update-provider',
@@ -93,6 +153,42 @@ const authBase = betterAuth({
   ],
   emailAndPassword: {
     enabled: emailPasswordEnabled,
+    resetPasswordTokenExpiresIn: 60 * 60,
+    revokeSessionsOnPasswordReset: true,
+    sendResetPassword: async ({ user, token }) => {
+      await sendQuietly('password reset email', () =>
+        deliverPasswordReset({ user, token }),
+      )
+    },
+    onPasswordReset: async ({ user }) => {
+      await sendQuietly('password changed email', () =>
+        sendAccountEmail({
+          kind: 'password_changed',
+          userId: user.id,
+          params: { userId: user.id, at: new Date().toISOString() },
+        }),
+      )
+    },
+  },
+  emailVerification: {
+    sendOnSignUp: false,
+    expiresIn: 60 * 60 * 24,
+    sendVerificationEmail: async ({ user }) => {
+      await sendQuietly('verification email', () =>
+        sendVerificationEmail(user.id),
+      )
+    },
+  },
+  // Mail goes out in the background, so a reset request for an address with an
+  // account takes as long as one without. See `runInBackgroundOrAwait`.
+  advanced: {
+    backgroundTasks: {
+      handler: (task) => {
+        task.catch((error: unknown) => {
+          authLog.error('background auth task failed', { err: error })
+        })
+      },
+    },
   },
   socialProviders,
   account: {
@@ -114,6 +210,38 @@ const authBase = betterAuth({
           })
         },
       },
+      update: {
+        before: async (data, ctx) => {
+          if (typeof data.twoFactorEnabled !== 'boolean') return
+          // Two-factor is only changed by the signed-in user, so the session
+          // names the row. Without one, no notice is sent.
+          const userId = ctx?.context.session?.user.id
+          if (!userId) return
+          const [row] = await db
+            .select({ enabled: schema.user.twoFactorEnabled })
+            .from(schema.user)
+            .where(eq(schema.user.id, userId))
+            .limit(1)
+          // The lookup can come back empty, so the row check stays.
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+          if (row && row.enabled !== data.twoFactorEnabled) {
+            pendingTwoFactorChanges.set(userId, data.twoFactorEnabled)
+          }
+        },
+        after: async (updated) => {
+          const enabled = pendingTwoFactorChanges.get(updated.id)
+          if (enabled === undefined) return
+          pendingTwoFactorChanges.delete(updated.id)
+          if (updated.twoFactorEnabled !== enabled) return
+          await sendQuietly('two-factor email', () =>
+            sendAccountEmail({
+              kind: enabled ? 'two_factor_enabled' : 'two_factor_disabled',
+              userId: updated.id,
+              params: { userId: updated.id, at: new Date().toISOString() },
+            }),
+          )
+        },
+      },
     },
   },
   user: {
@@ -127,6 +255,13 @@ const authBase = betterAuth({
       twoFactorEnabled: {
         type: 'boolean',
         defaultValue: false,
+        input: false,
+      },
+      // Language for account and notification emails. Set by the server, never
+      // from the sign-up body.
+      locale: {
+        type: 'string',
+        required: false,
         input: false,
       },
     },
@@ -165,6 +300,24 @@ const authBase = betterAuth({
           message: 'SSO providers are configured through the environment.',
         })
       }
+      if (ctx.path === '/request-password-reset') {
+        await assertMailRequestBudget(
+          ctx,
+          'password-reset',
+          RESET_REQUEST_RULE,
+          'PASSWORD_RESET_RATE_LIMITED',
+          m.server_password_reset_rate_limited(),
+        )
+      }
+      if (ctx.path === '/send-verification-email') {
+        await assertMailRequestBudget(
+          ctx,
+          'verify-email',
+          VERIFY_REQUEST_RULE,
+          'VERIFICATION_RATE_LIMITED',
+          m.server_verification_email_rate_limited(),
+        )
+      }
       // Without a password there is nothing to confirm before changing
       // two-factor, so a recently created session stands in for it.
       if (TWO_FACTOR_MANAGEMENT_PATHS.has(ctx.path)) {
@@ -183,6 +336,21 @@ const authBase = betterAuth({
       }
     }),
     after: createAuthMiddleware(async (ctx) => {
+      if (ctx.path === '/change-password') {
+        // Runs after failures too, so only a real change is announced.
+        const result: unknown = ctx.context.returned
+        if (isAPIError(result) || !isRecord(result)) return
+        if (!isRecord(result.user) || typeof result.user.id !== 'string') return
+        const userId = result.user.id
+        await sendQuietly('password changed email', () =>
+          sendAccountEmail({
+            kind: 'password_changed',
+            userId,
+            params: { userId, at: new Date().toISOString() },
+          }),
+        )
+        return
+      }
       if (
         ctx.path !== '/two-factor/verify-totp' &&
         ctx.path !== '/two-factor/verify-backup-code'

@@ -8,6 +8,8 @@ import { auth } from '#/lib/auth'
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
 import { ConflictError, ForbiddenError } from '#/server/content/errors'
+import { createLogger } from '#/server/log'
+import { sendVerificationEmail } from '#/server/mail/account-emails'
 
 import {
   resetGeneratedSetupToken,
@@ -16,6 +18,8 @@ import {
 } from './setup-token.ts'
 
 const SETUP_LOCK_KEY = 87236401
+
+const log = createLogger('setup')
 
 async function hasUsers() {
   const [row] = await db.select({ id: user.id }).from(user).limit(1)
@@ -93,5 +97,9 @@ export async function completeSetup(input: {
     return updated
   })
   resetGeneratedSetupToken()
+  // Mail is optional at setup, so it never delays or fails the response.
+  void sendVerificationEmail(result.id).catch((error: unknown) => {
+    log.error('verification email could not be sent', { err: error })
+  })
   return result
 }

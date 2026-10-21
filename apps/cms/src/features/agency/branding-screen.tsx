@@ -4,11 +4,13 @@ import {
   Check,
   ImageSquare,
   Palette,
+  SignIn,
   TextAa,
   UploadSimple,
   X,
 } from '@phosphor-icons/react'
 
+import { LOCALE_LABELS } from '#/components/language-switcher'
 import { Button } from '#/components/ui/button'
 import { ConfirmDialog } from '#/components/ui/confirm-dialog'
 import {
@@ -27,6 +29,8 @@ import {
   DEFAULT_FONT,
   FONTS,
   FONT_KEYS,
+  LOGIN_TAGLINE_LOCALES,
+  LOGIN_TAGLINE_MAX_LENGTH,
   fontStylesheetUrl,
 } from '#/lib/branding'
 import type { FontKey } from '#/lib/branding'
@@ -350,6 +354,37 @@ export function BrandingScreen() {
               description={m.agency_branding_typography_description()}
             >
               <FontList value={fields.font} onChange={set.setFont} />
+            </Section>
+
+            <Section
+              id="sign-in"
+              icon={<SignIn />}
+              title={m.agency_branding_signin_title()}
+              description={m.agency_branding_signin_description()}
+            >
+              {LOGIN_TAGLINE_LOCALES.map((locale) => {
+                const id = `brand-signin-${locale}`
+                const value = fields.loginTagline[locale]
+                return (
+                  <FormField
+                    key={locale}
+                    label={LOCALE_LABELS[locale]}
+                    htmlFor={id}
+                    trailing={`${value.length}/${LOGIN_TAGLINE_MAX_LENGTH}`}
+                  >
+                    <Input
+                      id={id}
+                      data-testid={id}
+                      maxLength={LOGIN_TAGLINE_MAX_LENGTH}
+                      placeholder={m.auth_tagline_default({}, { locale })}
+                      value={value}
+                      onChange={(event) =>
+                        set.setLoginTagline(locale, event.target.value)
+                      }
+                    />
+                  </FormField>
+                )
+              })}
             </Section>
 
             <Section

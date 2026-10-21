@@ -18,6 +18,8 @@ const user = (isAgencyAdmin: boolean) => ({
   email: 'u@example.com',
   isAgencyAdmin,
   twoFactorEnabled: false,
+  emailVerified: true,
+  locale: 'en' as const,
 })
 
 describe('resolveWorkspace', () => {
