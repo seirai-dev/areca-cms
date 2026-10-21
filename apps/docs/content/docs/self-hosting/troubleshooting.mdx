@@ -129,9 +129,9 @@ The CMS checks every setting when it starts. A setting that is missing or malfor
 
 <Accordions>
 <Accordion title="Invitation emails do not arrive">
-**Cause:** The CMS cannot send mail to the SMTP relay, or the relay rejects it. The CMS connects with `SMTP_HOST`, `SMTP_PORT` and `SMTP_FROM` only. It does not send a username or password.
+**Cause:** Mail is not set up, or the mail server cannot be reached, or it rejects the message. The sign-in details, port, encryption setting or From address may be wrong.
 
-**Fix:** Check the CMS log for mail errors. Confirm that the relay accepts unauthenticated mail from the CMS host, and that `SMTP_FROM` is allowed to send. For a local stack, open Mailpit at `http://localhost:8025`, which catches every message. See [storage and email](/docs/self-hosting/storage-and-email).
+**Fix:** Open **Agency** › **Mail**. **Recent emails** shows the reason for each failed email, and **Verify connection** checks the server. Settings there replace the `SMTP_*` variables. The CMS log has the same details under the `mail` component. See [agency mail](/docs/cms/agency-mail) for the messages and [storage and email](/docs/self-hosting/storage-and-email) for provider settings. For a local stack, open Mailpit at `http://localhost:8025`, which catches every message.
 </Accordion>
 <Accordion title="Invitation links point to the wrong host">
 **Cause:** `APP_URL` is set to another address than the one people use.

@@ -247,4 +247,7 @@ export type SiteManifest = {
 
 export type EntryData = Record<string, unknown>
 
+/** SMTP transport security: STARTTLS (587), implicit TLS (465), or none (private hosts only). */
+export type MailSecure = 'starttls' | 'tls' | 'none'
+
 export type AuditMeta = Record<string, unknown>

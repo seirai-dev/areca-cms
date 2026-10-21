@@ -22,9 +22,16 @@ services:
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-areca-demo}
       S3_SECRET_KEY: ${S3_SECRET_KEY:?Set S3_SECRET_KEY in .env}
       S3_FORCE_PATH_STYLE: "true"
-      SMTP_HOST: mailpit
-      SMTP_PORT: "1025"
-      SMTP_FROM: cms@areca.local
+      # Mail defaults to the bundled Mailpit. Point these at your provider, or
+      # leave them and configure Agency → Mail after signing in.
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_FROM: ${SMTP_FROM:-cms@areca.local}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_SECURE: ${SMTP_SECURE:-}
+      SMTP_REPLY_TO: ${SMTP_REPLY_TO:-}
+      SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY:-}
       # Optional operations settings; empty means the CMS default.
       METRICS_TOKEN: ${METRICS_TOKEN:-}
       DB_CONNECT_TIMEOUT_MS: ${DB_CONNECT_TIMEOUT_MS:-}

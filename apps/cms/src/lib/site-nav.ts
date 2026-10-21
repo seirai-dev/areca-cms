@@ -3,6 +3,7 @@ import {
   Briefcase,
   Buildings,
   CalendarBlank,
+  EnvelopeSimple,
   File,
   Gear,
   House,
@@ -151,7 +152,8 @@ export function siteNavItems(me: Me, site: MeSite): SiteNavItem[] {
 ------------------------------------------------------------------------- */
 
 export type AgencyNavItem = {
-  key: 'overview' | 'clients' | 'people' | 'activity' | 'branding' | 'ai'
+  key:
+    'overview' | 'clients' | 'people' | 'activity' | 'branding' | 'ai' | 'mail'
   label: string
   icon: Icon
   to:
@@ -161,6 +163,7 @@ export type AgencyNavItem = {
     | '/agency/activity'
     | '/agency/branding'
     | '/agency/ai'
+    | '/agency/mail'
   exact?: boolean
   testId?: string
 }
@@ -209,6 +212,13 @@ export function agencyNavItems(): AgencyNavItem[] {
       icon: Sparkle,
       to: '/agency/ai',
       testId: 'agency-ai-nav',
+    },
+    {
+      key: 'mail',
+      label: m.shell_nav_mail(),
+      icon: EnvelopeSimple,
+      to: '/agency/mail',
+      testId: 'agency-mail-nav',
     },
   ]
 }

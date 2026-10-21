@@ -85,23 +85,28 @@ require manual investigation; they cannot safely be reconstructed as a new POST.
 
 ## Invitation recovery
 
-Invitation creation persists the invitation and audit record before sending
-email. Sending is synchronous and bounded by the email adapter's timeouts; draft
-saves do not send email or deploy a site. An email failure leaves an invitation
-with failed delivery status and a bounded, redacted delivery diagnostic.
+Invitation creation persists the invitation and audit record, then queues the
+email in `email_outbox`. The request makes one immediate send attempt, bounded
+by the mail adapter's 15-second timeouts. Failed attempts are retried by the
+outbox worker about 1 and 5 minutes later, and then marked failed. Errors that
+waiting cannot fix, such as rejected credentials or a refused recipient, fail
+at once. Draft saves do not send email or deploy a site. A failed row keeps a
+readable, redacted error for the People list and Agency → Mail → Recent emails.
 
 In **People**, owners or agency administrators can resend an invitation, copy
-its acceptance link, or revoke it. A resend rotates the token and renews the
-seven-day expiry, so the old acceptance link stops working even if SMTP still
-fails. Use **Resend** after fixing SMTP; submitting another invitation while one
+its acceptance link, or revoke it. **Copy link** works whether or not the email
+was delivered. A resend rotates the token and renews the seven-day expiry, so
+the old acceptance link stops working even if SMTP still fails. Use **Send
+again** after fixing the mail settings; submitting another invitation while one
 is pending deliberately reports a conflict. A copied link is a bearer capability:
 share it only with its recipient. Acceptance requires the signed-in account's
 email to match the invitation. Accepted or revoked invitations cannot be resent.
 
-There is no background email retry service. Delivery status means the SMTP
-server accepted the message, not that the recipient read it or that it escaped
-spam filtering. A crash during sending can leave failed status even if SMTP
-accepted the message; a manual resend creates a fresh link.
+Delivery status `sent` means the SMTP server accepted the message, not that the
+recipient read it or that it escaped spam filtering. Delivery is at least once:
+if the worker crashes after SMTP accepts a message but before it records that,
+the email is sent again after the lease expires, so a recipient may get a
+duplicate. A manual resend creates a fresh link.
 
 ## Secrets and diagnostics
 
@@ -113,6 +118,9 @@ in production and reject redirects.
 
 Operational JSON logs use the central redactor. Invitation failures additionally
 redact their acceptance token before writing either logs or the stored diagnostic.
+Mail logs use the `mail` component and carry the outbox ID, kind, attempt and
+SMTP response code. SMTP passwords, links and tokens are redacted from logs and
+from the stored error.
 Build log appends are atomic in PostgreSQL: concurrent writers retain all lines
 while under the cap. Each line is bounded to about 8 Ki characters and each job
 log to 256 Ki characters, retaining the tail with one truncation marker.
@@ -127,7 +135,9 @@ Configuring the monitoring system to evaluate those alerts is an operator task.
 For ordinary Dokploy API-key rotation, create a replacement key in Dokploy,
 save it in the organization's CMS settings, verify the connection and then revoke
 the old key. For database, Redis, S3 or SMTP credentials, change the service's
-credential, update the CMS secret configuration and restart the CMS instances.
+credential, update the CMS secret configuration and restart the CMS instances. For the SMTP
+password saved in Agency → Mail, enter the new password there instead; no
+restart is needed.
 Site token rotation invalidates the old token immediately; update the site's
 Dokploy build secrets and local SDK configuration together.
 

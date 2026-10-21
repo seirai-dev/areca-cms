@@ -20,6 +20,7 @@ import {
 } from '#/components/shell/shortcuts'
 import { Sidebar } from '#/components/shell/sidebar'
 import { ActivityPanel } from '#/features/activity/activity-panel'
+import { MailBanners } from '#/features/agency/mail-banners'
 import { GoLivePanel } from '#/features/golive/golive-panel'
 import { useIsMobile, useIsTablet } from '#/hooks/use-mobile'
 import { canManageSite, findSite } from '#/lib/site-nav'
@@ -263,6 +264,9 @@ export function AppShell({
                   : 'max-w-(--content-max) px-4 pt-6 pb-16 md:px-8 md:pt-10',
               )}
             >
+              {me.user.isAgencyAdmin && mode !== 'focus' ? (
+                <MailBanners />
+              ) : null}
               {children}
             </div>
           </main>

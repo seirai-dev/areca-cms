@@ -28,6 +28,7 @@ Generate each secret with `openssl`. Use `openssl rand -hex 32` for `BETTER_AUTH
 openssl rand -hex 32       # BETTER_AUTH_SECRET
 openssl rand -base64 32    # DOKPLOY_CREDENTIALS_ENCRYPTION_KEY
 openssl rand -base64 32    # AI_SETTINGS_ENCRYPTION_KEY, if you use AI settings
+openssl rand -base64 32    # SECRETS_ENCRYPTION_KEY, if you save an SMTP password in Agency › Mail
 ```
 
 An encryption key must be the base64 encoding of exactly 32 bytes: 44 characters, ending in `=`. The CMS rejects any other format.
@@ -98,15 +99,28 @@ Uploaded files and branding images are stored in an S3-compatible bucket. The bu
 
 ## Email
 
-Invitation emails are the only mail the CMS sends. The sender's display name comes from **Agency** > **Branding**. The address comes from `SMTP_FROM`.
+The CMS sends email through an SMTP server. Today it sends invitation emails. The sender's display name comes from **Agency** > **Branding**.
+
+You can set the mail server in two places: in these variables, or in **Agency** > **Mail** after you sign in. Settings saved in **Agency** > **Mail** replace these variables entirely. Turn on **Use environment settings** in that tab to send with these variables again. See [agency mail](/docs/cms/agency-mail).
+
+The CMS starts without any SMTP settings. Until you set a server in one of the two places, mail is off. Invitations still work, and you can share the link with **Copy link**.
 
 | Variable | Required | Default | Meaning |
 | --- | --- | --- | --- |
-| `SMTP_HOST` | Yes | Compose: `mailpit` | Hostname of your mail relay. Compose points it at the Mailpit test inbox, which does not deliver mail. |
-| `SMTP_PORT` | Yes | Compose: `1025` | Port of your mail relay. |
-| `SMTP_FROM` | Yes | Compose: `cms@areca.local` | The sender address on invitation emails. Use an address on a domain you control. |
+| `SMTP_HOST` | No | Compose: `mailpit` | Hostname of your mail server. Compose points it at the Mailpit test inbox, which does not deliver mail. |
+| `SMTP_PORT` | No | Compose: `1025` | Port of your mail server. Use `465` with `tls`, or `587` with `starttls`. |
+| `SMTP_FROM` | No | Compose: `cms@areca.local` | The sender address. Use an address on a domain you have verified with your provider. Sending needs a From address, set here or in **Agency** > **Mail**. |
+| `SMTP_USER` | No | Unset | Username for SMTP sign-in. Leave it unset if your server does not need one. |
+| `SMTP_PASSWORD` | No | Unset | Password for SMTP sign-in. It is kept in the environment file, so protect that file. |
+| `SMTP_SECURE` | No | `starttls`, or `none` for a localhost or private-network host | How the connection is secured. `starttls` is required on the connection (usually port `587`). `tls` uses TLS from the start (usually port `465`). `none` sends without encryption, and is allowed only for localhost and private-network hosts such as Mailpit. |
+| `SMTP_REPLY_TO` | No | Unset | The reply-to address on outgoing email. |
+| `SECRETS_ENCRYPTION_KEY` | No | Unset | Base64-encoded 32-byte key that encrypts the SMTP password saved in **Agency** > **Mail**. If it is unset, the CMS uses `AI_SETTINGS_ENCRYPTION_KEY`. Without either key, you cannot save a password in **Agency** > **Mail**. If you change the key, enter the SMTP password again. |
 
-The CMS connects without a username or password. Use a relay on your private network that accepts mail from the CMS host only. See [storage and email](/docs/self-hosting/storage-and-email).
+The CMS always checks the mail server's certificate. Each connection, greeting and socket has a 15-second timeout.
+
+The stock Compose file passes all of these mail variables to the CMS container. When `SMTP_HOST` is unset it falls back to the bundled Mailpit.
+
+Use a mail server on your private network, or a transactional email provider, and do not expose an open relay to the internet. For provider settings and how to make your mail arrive, see [storage and email](/docs/self-hosting/storage-and-email).
 
 ## Dokploy and deployments
 

@@ -1,9 +1,9 @@
 ---
 title: Storage and email
-description: Configure S3-compatible storage for uploads, serve assets through a CDN, and send invitation email through SMTP.
+description: Configure S3-compatible storage for uploads, serve assets through a CDN, and send email through SMTP, with provider settings and delivery checks.
 ---
 
-Areca needs two outside services. An S3-compatible bucket stores uploaded images and files, and an SMTP relay sends invitation emails. Both are set with environment variables and are required at startup. This page explains how each one is used, and how to check that it works. For every variable, see [configuration](/docs/self-hosting/configuration).
+Areca needs an S3-compatible bucket for uploaded images and files. It also needs an SMTP server to send email, such as invitations. The bucket is required at startup. The mail server is optional: without one, mail is off until you set one up. This page explains how each one is used, and how to check that it works. For every variable, see [configuration](/docs/self-hosting/configuration).
 
 ## S3-compatible storage
 
@@ -56,25 +56,74 @@ Assets stay in storage while any draft, revision, release or archive still refer
 
 ## Email (SMTP)
 
-The CMS sends one kind of email: invitations to join an organization. It uses three variables:
+The CMS sends email through an SMTP server. Today that is invitations to join a client. The server's host, port and encryption come from the `SMTP_*` variables, or from **Agency** > **Mail** after you sign in. Settings saved in **Agency** > **Mail** replace the environment settings completely. For the variables, see [configuration](/docs/self-hosting/configuration#email). For the screen, see [agency mail](/docs/cms/agency-mail).
 
-| Variable | What it is |
-| --- | --- |
-| `SMTP_HOST` | The hostname of your relay. |
-| `SMTP_PORT` | The port, for example `587` for a submission relay. |
-| `SMTP_FROM` | The sender address, for example `cms@agency.example`. Use an address on a domain you control. |
+If you set no server in either place, mail is off. Invitations still work, and you can share the link with **Copy link**.
 
-The mail adapter connects without SMTP user name or password. It opens a plain connection and upgrades to TLS only if the relay offers STARTTLS. Use a relay that the CMS host can reach on a private network, and do not expose an unauthenticated relay to the internet.
+The sender's display name comes from the [branding](/docs/cms/branding) settings. The sender address comes from `SMTP_FROM` or from **Agency** > **Mail**.
 
-If you set a sender name in the [branding](/docs/cms/branding) settings, it is shown as the display name in the From header.
+### How sending works
 
-### How invitations are sent
+When you invite someone, resend an invitation, or send a test, the CMS tries to send the email straight away, so you see the result at once.
 
-Sending is part of the invitation request. The invitation is saved first, so if the relay is down, the invitation still exists. The person who sent it is told that the email could not be sent, and can use **Send again** or **Copy link** from the People list. See [people and invitations](/docs/cms/people-and-invitations).
+If the try fails, the email is queued and tried again. Areca retries about 1 minute after the first try, and again about 5 minutes after that. If the last try fails too, the email is marked **failed**. Some errors will not be fixed by waiting, such as a rejected password or a refused recipient. Those fail at once, without retries.
 
-Areca does not retry failed emails in the background. A delivery status of "sent" means the relay accepted the message. It does not confirm that the message reached an inbox.
+Each connection has a 15-second timeout for connecting, for the server's greeting and for the socket. The CMS always verifies the server's certificate.
 
-Each **Send again** rotates the invitation link, so the old link stops working.
+A status of **sent** means the mail server accepted the message. It does not confirm that the message reached an inbox.
+
+### Where failures show
+
+- **A toast** appears after you send an invitation, resend one, or send a test, if the send fails.
+- **The People list** shows **Email not delivered** on the pending invitation, with the reason in plain language. See [people and invitations](/docs/cms/people-and-invitations).
+- **Recent emails** in **Agency** > **Mail** lists the last 50 emails, with the status and error for each failure. Use the filter to show only failed emails.
+- **A banner** appears for agency admins after three emails in a row fail. It links to Recent emails.
+
+### Find details in the logs
+
+Each send is logged under the `mail` component. Each entry includes the outbox ID, the kind of email, the attempt number, the host and port, and the mail server's response code. It never includes the SMTP password, the invitation link or other tokens.
+
+To find the log entries for one email, copy its outbox ID from the row in **Recent emails**, or from the message in the UI, and search the logs for it.
+
+### Email providers
+
+Most people send through a transactional email provider. Use the values from your provider's dashboard, because they depend on your account. These are the usual settings:
+
+| Provider | Host | Port | Security | Username | Password |
+| --- | --- | --- | --- | --- | --- |
+| Resend | `smtp.resend.com` | `465` or `587` | `tls` on 465, `starttls` on 587 | `resend` | Your Resend API key |
+| Postmark | `smtp.postmarkapp.com` | `587` | `starttls` | Your server API token | The same server API token |
+| Amazon SES | `email-smtp.<region>.amazonaws.com` | `587` | `starttls` | Your SMTP user name | Your SMTP password |
+| Mailgun | `smtp.mailgun.org`, or `smtp.eu.mailgun.org` for EU domains | `587` | `starttls` | `postmaster@` your sending domain | Your domain's SMTP password |
+| Google Workspace | `smtp.gmail.com` | `587` | `starttls` | Your full Google address | An app password |
+
+Notes for each provider:
+
+- **Resend** uses the API key as the password. Create a key with permission to send.
+- **Postmark** uses the same server token for both the username and the password.
+- **Amazon SES** needs SMTP credentials, which you create in the SES console. Do not use your IAM access keys. Replace `<region>` with the region where you verified your domain.
+- **Mailgun** uses the SMTP credentials of the domain you send from. Use the EU host if the domain was created in the EU region.
+- **Google Workspace** needs an app password. Create one in your Google account, which requires 2-step verification to be on.
+
+Set the sender address to an address on a domain you have verified with the provider, such as `cms@agency.example`.
+
+### Deliverability
+
+Email sent from your domain has the best chance of reaching an inbox when the domain proves that the provider may send for it. Set this up once, before you invite clients.
+
+1. **Verify the sending domain** in your provider's dashboard. The provider shows the DNS records to add.
+2. **Add the SPF record.** This is a TXT record on the sending domain that lists the servers allowed to send for it. Use the value your provider gives you. A domain should have only one SPF record.
+3. **Add the DKIM records.** The provider gives you one or more records. They let receivers check that the message was not changed in transit.
+4. **Add a DMARC record** at `_dmarc.<your domain>`, for example:
+
+   ```txt title="DNS TXT record for _dmarc.agency.example"
+   v=DMARC1; p=quarantine; rua=mailto:dmarc@agency.example
+   ```
+
+   `p=quarantine` tells receivers to treat messages that fail SPF and DKIM as suspicious. Some teams start with `p=none` while they read the reports sent to the `rua` address.
+5. **Use a From address on that domain.** Mail from a domain you have not verified can fail these checks, or be refused by the provider. If the provider refuses it, Areca shows the message in [agency mail](/docs/cms/agency-mail#troubleshooting-errors).
+
+The DNS records take effect after they are published, so allow some time before you test. Your provider's dashboard shows when the domain is verified.
 
 ## Test delivery
 
@@ -83,12 +132,17 @@ Test email before you invite real clients:
 <Steps>
 <Step>
 
-**Set the SMTP variables.** For a local stack, the Docker Compose file points the CMS at a Mailpit container on port `1025`. Mailpit's inbox is at `http://localhost:8025`.
+**Set up the mail server.** Either set the `SMTP_*` variables for the stack, or sign in and enter the server in **Agency** > **Mail**. For a local stack, the Docker Compose file points the CMS at a Mailpit container on port `1025`. Mailpit's inbox is at `http://localhost:8025`.
 
 </Step>
 <Step>
 
-**Restart the CMS.** Environment changes apply only after a restart.
+**Restart the CMS if you changed variables.** Environment changes apply only after a restart. Settings saved in **Agency** > **Mail** apply straight away.
+
+</Step>
+<Step>
+
+**Send a test email.** In **Agency** > **Mail**, select **Verify connection**, then **Send test email**. The message goes to your own address.
 
 </Step>
 <Step>
@@ -103,7 +157,7 @@ Test email before you invite real clients:
 </Step>
 <Step>
 
-**Check the logs if it fails.** A failed send is logged with the message `invitation email failed`. The log does not include the invitation link.
+**Check the result if it fails.** Open **Recent emails** in **Agency** > **Mail**. It shows the reason for each failure. The CMS log has the same details under the `mail` component.
 
 </Step>
 </Steps>
@@ -113,6 +167,7 @@ Also check the storage path. Upload a small image in the CMS, and confirm that i
 ## Related
 
 - [Configuration](/docs/self-hosting/configuration): every storage and email variable.
+- [Agency mail](/docs/cms/agency-mail): set up the mail server in the CMS, and read the error messages.
 - [Asset retention](/docs/self-hosting/asset-retention): when stored files are removed.
 - [Production](/docs/self-hosting/production): the checklist before you go live.
 - [Troubleshooting](/docs/self-hosting/troubleshooting): common storage and email errors.

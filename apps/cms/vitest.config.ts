@@ -7,7 +7,6 @@ import { defineConfig } from 'vitest/config'
 // Test files that import the database (or the shared DB test utilities) are
 // detected automatically; list anything else that needs a service here.
 const integrationSuites = [
-  'src/adapters/email/email.test.ts',
   'src/adapters/storage/s3.test.ts',
   'src/db/schema.test.ts',
   'src/server/admin/admin.test.ts',
@@ -19,6 +18,7 @@ const integrationSuites = [
   'src/server/admin/setup.test.ts',
   'src/server/assets/assets.test.ts',
   'src/server/assets/retention.test.ts',
+  'src/server/mail/outbox.db.test.ts',
   'src/server/content/collections.test.ts',
   'src/server/content/entries.test.ts',
   'src/server/content/sites-api.test.ts',
