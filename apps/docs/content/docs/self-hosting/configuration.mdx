@@ -99,7 +99,7 @@ Uploaded files and branding images are stored in an S3-compatible bucket. The bu
 
 ## Email
 
-The CMS sends email through an SMTP server. Today it sends invitation emails. The sender's display name comes from **Agency** > **Branding**.
+The CMS sends email through an SMTP server. It sends invitations, password reset and email verification links, and security notices. The sender's display name comes from **Agency** > **Branding**.
 
 You can set the mail server in two places: in these variables, or in **Agency** > **Mail** after you sign in. Settings saved in **Agency** > **Mail** replace these variables entirely. Turn on **Use environment settings** in that tab to send with these variables again. See [agency mail](/docs/cms/agency-mail).
 
@@ -114,7 +114,7 @@ The CMS starts without any SMTP settings. Until you set a server in one of the t
 | `SMTP_PASSWORD` | No | Unset | Password for SMTP sign-in. It is kept in the environment file, so protect that file. |
 | `SMTP_SECURE` | No | `starttls`, or `none` for a localhost or private-network host | How the connection is secured. `starttls` is required on the connection (usually port `587`). `tls` uses TLS from the start (usually port `465`). `none` sends without encryption, and is allowed only for localhost and private-network hosts such as Mailpit. |
 | `SMTP_REPLY_TO` | No | Unset | The reply-to address on outgoing email. |
-| `SECRETS_ENCRYPTION_KEY` | No | Unset | Base64-encoded 32-byte key that encrypts the SMTP password saved in **Agency** > **Mail**. If it is unset, the CMS uses `AI_SETTINGS_ENCRYPTION_KEY`. Without either key, you cannot save a password in **Agency** > **Mail**. If you change the key, enter the SMTP password again. |
+| `SECRETS_ENCRYPTION_KEY` | No | Unset | Base64-encoded 32-byte key that encrypts the SMTP password saved in **Agency** > **Mail**. It also encrypts the reset token kept in the email queue. If it is unset, the CMS uses `AI_SETTINGS_ENCRYPTION_KEY`. Without either key, you cannot save a password in **Agency** > **Mail**, and reset emails are not retried. If you change the key, enter the SMTP password again. |
 
 The CMS always checks the mail server's certificate. Each connection, greeting and socket has a 15-second timeout.
 

@@ -11,7 +11,7 @@ import { getLocale, locales, setLocale } from '#/paraglide/runtime'
 import type { Locale } from '#/paraglide/runtime'
 import { Check, Globe } from '@phosphor-icons/react'
 
-const LOCALE_LABELS = {
+export const LOCALE_LABELS = {
   en: 'English',
   nl: 'Nederlands',
   tr: 'Türkçe',

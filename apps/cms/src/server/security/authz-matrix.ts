@@ -29,6 +29,7 @@ import {
   site,
   user,
 } from '#/db/schema'
+import * as accountFns from '#/server/fn/account'
 import * as adminFns from '#/server/fn/admin'
 import * as aiFns from '#/server/fn/ai'
 import * as mailFns from '#/server/fn/mail'
@@ -1152,6 +1153,43 @@ export const ROWS: Row[] = [
     prepare: () => ({ data: { token: 'unknown-token' } }),
   },
   {
+    name: 'getPasswordResetAvailabilityFn',
+    fn: accountFns.getPasswordResetAvailabilityFn,
+    policy: 'public',
+    note: 'Public by design: the forgot-password link depends on it. Reveals only whether mail and password sign-in are set up.',
+    prepare: () => ({ data: undefined }),
+  },
+  {
+    name: 'checkPasswordResetTokenFn',
+    fn: accountFns.checkPasswordResetTokenFn,
+    policy: 'public',
+    note: 'Public by design: the reset page checks its link. Reveals only whether a 24-character random token is still valid.',
+    prepare: () => ({ data: { token: 'not-a-real-token' } }),
+  },
+  {
+    name: 'requestVerificationEmailFn',
+    fn: accountFns.requestVerificationEmailFn,
+    policy: 'user',
+    tolerant: true,
+    note: 'Sends to the caller own address only; allowed callers may get a readable mail failure.',
+    prepare: () => ({ data: undefined }),
+  },
+  {
+    name: 'updateEmailLocaleFn',
+    fn: accountFns.updateEmailLocaleFn,
+    policy: 'user',
+    note: 'Changes only the caller own language.',
+    prepare: () => ({ data: { locale: 'en' } }),
+  },
+  {
+    name: 'sendPasswordResetLinkFn',
+    fn: accountFns.sendPasswordResetLinkFn,
+    policy: 'agency',
+    tolerant: true,
+    note: 'Sends to the seeded editor address. Allowed callers may get a readable mail failure.',
+    prepare: (w) => ({ data: { userId: w.users.editorX.id } }),
+  },
+  {
     name: 'getSitesOverviewFn',
     fn: overviewFns.getSitesOverviewFn,
     policy: 'user',
@@ -1308,6 +1346,7 @@ export const ROWS: Row[] = [
 ]
 
 export const ALL_FN_MODULES = {
+  account: accountFns,
   admin: adminFns,
   ai: aiFns,
   mail: mailFns,

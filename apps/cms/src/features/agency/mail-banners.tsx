@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Link } from '@tanstack/react-router'
-import { WarningCircle, X } from '@phosphor-icons/react'
 
+import { BannerRow } from '#/components/shell/banner-row'
 import { Button } from '#/components/ui/button'
 import { m } from '#/paraglide/messages'
 
@@ -66,6 +66,7 @@ export function MailBanners() {
               </Link>
             </Button>
           }
+          dismissLabel={m.shell_mail_dismiss()}
           onDismiss={dismissFailing}
         />
       ) : null}
@@ -79,56 +80,10 @@ export function MailBanners() {
               <Link to="/agency/mail">{m.shell_mail_set_up()}</Link>
             </Button>
           }
+          dismissLabel={m.shell_mail_dismiss()}
           onDismiss={dismissSetup}
         />
       ) : null}
-    </div>
-  )
-}
-
-function BannerRow({
-  tone,
-  testId,
-  message,
-  action,
-  onDismiss,
-}: {
-  tone: 'warning' | 'error'
-  testId: string
-  message: string
-  action: React.ReactNode
-  onDismiss: () => void
-}) {
-  return (
-    <div
-      role={tone === 'error' ? 'alert' : 'status'}
-      data-testid={testId}
-      className={
-        tone === 'error'
-          ? 'flex flex-wrap items-center gap-3 rounded-card bg-status-error-bg px-4 py-3 text-callout text-text-primary'
-          : 'flex flex-wrap items-center gap-3 rounded-card bg-status-warning-bg px-4 py-3 text-callout text-text-primary'
-      }
-    >
-      <WarningCircle
-        className={
-          tone === 'error'
-            ? 'size-4 shrink-0 text-icon-error'
-            : 'size-4 shrink-0 text-icon-warning'
-        }
-      />
-      <span className="min-w-0 flex-1 break-words">{message}</span>
-      <div className="flex items-center gap-1.5">
-        {action}
-        <Button
-          type="button"
-          variant="quiet"
-          size="icon-sm"
-          aria-label={m.shell_mail_dismiss()}
-          onClick={onDismiss}
-        >
-          <X />
-        </Button>
-      </div>
     </div>
   )
 }

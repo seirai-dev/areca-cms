@@ -4,7 +4,13 @@ import type { BrandingView } from '#/lib/branding'
 import type { MailTemplate } from '../outbox.ts'
 
 import * as invitation from './templates/invitation.ts'
+import * as membership from './templates/membership.ts'
+import * as passwordChanged from './templates/password-changed.ts'
+import * as passwordReset from './templates/password-reset.ts'
+import * as passwordResetSso from './templates/password-reset-sso.ts'
 import * as test from './templates/test.ts'
+import * as twoFactor from './templates/two-factor.ts'
+import * as verifyEmail from './templates/verify-email.ts'
 import { MailRenderError } from './types.ts'
 import type {
   Executor,
@@ -25,6 +31,14 @@ type Renderer = (
 const RENDERERS: Record<MailTemplate, Renderer> = {
   invitation: invitation.render,
   test: test.render,
+  password_reset: passwordReset.render,
+  password_reset_sso: passwordResetSso.render,
+  verify_email: verifyEmail.render,
+  password_changed: passwordChanged.render,
+  two_factor_enabled: twoFactor.renderEnabled,
+  two_factor_disabled: twoFactor.renderDisabled,
+  membership_removed: membership.renderRemoved,
+  membership_role_changed: membership.renderRoleChanged,
 }
 
 /** Branding for emails: the logo path becomes an absolute URL for clients. */

@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { useRouter, Link  } from '@tanstack/react-router'
+import { useRouter, Link } from '@tanstack/react-router'
 import { authClient } from '#/lib/auth-client'
 import { verifyStepUpFn } from '#/server/fn/security'
 import { TwoFactorChallenge } from '#/features/auth/two-factor-challenge'
@@ -11,6 +11,7 @@ import { SettingsSection } from '#/components/ui/settings-section'
 import { m } from '#/paraglide/messages'
 import type { Me } from '#/server/fn/me'
 
+import { EmailLanguageSection } from './email-language-section'
 import { TwoFactorSection } from './two-factor-section'
 
 /**
@@ -124,6 +125,8 @@ export function AccountScreen({ me }: { me: Me }) {
           </div>
         </dl>
       </SettingsSection>
+
+      <EmailLanguageSection locale={me.user.locale} />
 
       <TwoFactorSection
         enabled={me.user.twoFactorEnabled}

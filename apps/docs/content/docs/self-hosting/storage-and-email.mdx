@@ -56,11 +56,18 @@ Assets stay in storage while any draft, revision, release or archive still refer
 
 ## Email (SMTP)
 
-The CMS sends email through an SMTP server. Today that is invitations to join a client. The server's host, port and encryption come from the `SMTP_*` variables, or from **Agency** > **Mail** after you sign in. Settings saved in **Agency** > **Mail** replace the environment settings completely. For the variables, see [configuration](/docs/self-hosting/configuration#email). For the screen, see [agency mail](/docs/cms/agency-mail).
+The CMS sends email through an SMTP server. The server's host, port and encryption come from the `SMTP_*` variables, or from **Agency** > **Mail** after you sign in. Settings saved in **Agency** > **Mail** replace the environment settings completely. For the variables, see [configuration](/docs/self-hosting/configuration#email). For the screen, see [agency mail](/docs/cms/agency-mail).
 
-If you set no server in either place, mail is off. Invitations still work, and you can share the link with **Copy link**.
+If you set no server in either place, mail is off. Invitations still work, and you can share the link with **Copy link**. Forgot password tells people to ask an agency admin, and security notices are not sent.
 
 The sender's display name comes from the [branding](/docs/cms/branding) settings. The sender address comes from `SMTP_FROM` or from **Agency** > **Mail**.
+
+### What gets sent
+
+- **Invitations** to join a client.
+- **Password reset** links, from the sign-in page or from an agency admin.
+- **Email verification** links.
+- **Security notices**: password changed, two-factor authentication turned on or off, removed from a client, and role changed. These cannot be turned off. See [your account and sign-in](/docs/cms/account-and-sign-in#security-emails).
 
 ### How sending works
 
@@ -71,6 +78,12 @@ If the try fails, the email is queued and tried again. Areca retries about 1 min
 Each connection has a 15-second timeout for connecting, for the server's greeting and for the socket. The CMS always verifies the server's certificate.
 
 A status of **sent** means the mail server accepted the message. It does not confirm that the message reached an inbox.
+
+### Reset links in the queue
+
+A password reset link is a secret, so the queue does not keep it in plain text. When a key is set, Areca stores the reset token encrypted, using `SECRETS_ENCRYPTION_KEY`, or `AI_SETTINGS_ENCRYPTION_KEY` if that is unset. Generate the key with `openssl rand -base64 32`, and keep it with your database backups.
+
+Without either key, Areca stores no token. A reset email is then tried once, straight away, and is not retried if that try fails. The person must ask for a new link.
 
 ### Where failures show
 

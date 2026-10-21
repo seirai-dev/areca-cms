@@ -57,6 +57,8 @@ export const user = pgTable('user', {
   updatedAt: updatedAt(),
   isAgencyAdmin: boolean('is_agency_admin').notNull().default(false),
   twoFactorEnabled: boolean('two_factor_enabled').notNull().default(false),
+  /** Language for account and notification emails. Null = not chosen yet. */
+  locale: text('locale').$type<'en' | 'nl' | 'tr'>(),
 })
 
 export const session = pgTable(

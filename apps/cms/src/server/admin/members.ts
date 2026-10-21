@@ -16,6 +16,7 @@ import { getLocale } from '#/paraglide/runtime'
 import { audit } from '#/server/audit'
 import { ConflictError, NotFoundError } from '#/server/content/errors'
 import { AppError } from '#/server/http/app-error'
+import { sendAccountEmail } from '#/server/mail/account-emails'
 import { mailFailureMessage } from '#/server/mail/errors'
 import {
   enqueueEmail,
@@ -142,6 +143,21 @@ export async function updateMemberRole(
       tx,
     )
 
+    // Changing your own role needs no email.
+    if (existing.role !== role && actorId !== userId) {
+      await sendAccountEmail({
+        kind: 'membership_role_changed',
+        userId,
+        params: {
+          userId,
+          organizationId,
+          role,
+          previousRole: existing.role,
+        },
+        connection: tx,
+      })
+    }
+
     return updated
   })
 }
@@ -173,6 +189,18 @@ export async function removeMember(
       }
     }
 
+    // Read before the delete so the email can still name the organization.
+    const [org] = await tx
+      .select({ name: organization.name })
+      .from(organization)
+      .where(eq(organization.id, organizationId))
+      .limit(1)
+    const [actor] = await tx
+      .select({ name: user.name })
+      .from(user)
+      .where(eq(user.id, actorId))
+      .limit(1)
+
     await tx.delete(membership).where(eq(membership.id, existing.id))
 
     await audit(
@@ -186,6 +214,20 @@ export async function removeMember(
       },
       tx,
     )
+
+    // Leaving on your own needs no email.
+    if (actorId !== userId) {
+      await sendAccountEmail({
+        kind: 'membership_removed',
+        userId,
+        params: {
+          userId,
+          orgName: org?.name ?? '',
+          actorName: actor?.name ?? '',
+        },
+        connection: tx,
+      })
+    }
   })
 }
 
@@ -556,6 +598,13 @@ export async function acceptInvitation(input: {
       .update(invitation)
       .set({ acceptedAt: new Date() })
       .where(eq(invitation.id, invite.id))
+    // The link was delivered to this address, so it counts as verified.
+    if (invite.deliveryStatus === 'sent') {
+      await tx
+        .update(user)
+        .set({ emailVerified: true })
+        .where(eq(user.id, input.userId))
+    }
     await audit(
       {
         organizationId: invite.organizationId,

@@ -1,17 +1,20 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty; retain defensive lookup and authorization checks. */
 import { createServerFn } from '@tanstack/react-start'
-import { eq, inArray, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { db } from '#/db'
-import { membership, organization, site } from '#/db/schema'
+import { membership, organization, site, user } from '#/db/schema'
 import { localMfaVerifiedAt } from '#/server/security/local-mfa'
 import { env } from '#/env'
 import type { MembershipRole, SiteLanguages } from '#/lib/types'
 import { getSession, requireUser } from '#/lib/session.server'
 import { m } from '#/paraglide/messages'
+import { getLocale } from '#/paraglide/runtime'
 import { acceptInvitation, getInvitation } from '#/server/admin/members'
 import { NotFoundError } from '#/server/content/errors'
+import { mailLocale } from '#/server/mail/render/types'
+import type { MailLocale } from '#/server/mail/render/types'
 
 const meFn = { strict: { output: false } as const }
 
@@ -22,6 +25,9 @@ export type Me = {
     email: string
     isAgencyAdmin: boolean
     twoFactorEnabled: boolean
+    emailVerified: boolean
+    /** Language for account emails. Null only before the first sign-in backfill. */
+    locale: MailLocale | null
   }
   /** An agency admin who must enrol in two-factor before using the app. */
   mfaEnrolmentRequired: boolean
@@ -53,12 +59,25 @@ export const getMeFn = createServerFn({ method: 'GET', ...meFn }).handler(
       return null
     }
 
-    const currentUser = {
+    const currentUser: Me['user'] = {
       id: session.user.id,
       name: session.user.name,
       email: session.user.email,
       isAgencyAdmin: Boolean(session.user.isAgencyAdmin),
       twoFactorEnabled: Boolean(session.user.twoFactorEnabled),
+      emailVerified: Boolean(session.user.emailVerified),
+      locale: session.user.locale ? mailLocale(session.user.locale) : null,
+    }
+
+    // Accounts that predate the language setting take the language they are
+    // using now, once. Later changes come from Account → Email language.
+    if (currentUser.locale === null) {
+      const locale = getLocale()
+      await db
+        .update(user)
+        .set({ locale })
+        .where(and(eq(user.id, currentUser.id), isNull(user.locale)))
+      currentUser.locale = locale
     }
 
     const memberships = await db

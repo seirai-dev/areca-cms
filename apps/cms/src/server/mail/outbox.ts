@@ -58,7 +58,17 @@ import type {
 } from './types.ts'
 
 /** Template names. Each has a renderer in `render/templates/`. */
-export type MailTemplate = 'invitation' | 'test'
+export type MailTemplate =
+  | 'invitation'
+  | 'test'
+  | 'password_reset'
+  | 'password_reset_sso'
+  | 'verify_email'
+  | 'password_changed'
+  | 'two_factor_enabled'
+  | 'two_factor_disabled'
+  | 'membership_removed'
+  | 'membership_role_changed'
 
 export type OutboxStatus = 'queued' | 'sending' | 'sent' | 'failed'
 
@@ -69,6 +79,11 @@ export type EnqueueEmailInput = {
   to: string
   /** Template params. Never put tokens or links here; pass ids instead. */
   params: Record<string, unknown>
+  /**
+   * Values merged over `params` only to render the subject. Never stored.
+   * Tokens that a template needs for its body go to `sendNow` instead.
+   */
+  renderParams?: Record<string, unknown>
   /** Recipient language ('en' | 'nl' | 'tr'). Falls back to 'en'. */
   locale?: string | null
   userId?: string | null
@@ -157,11 +172,11 @@ async function renderSubject(
   connection: Executor,
 ): Promise<string> {
   try {
-    const rendered = await renderTemplate(input.template, input.params, {
-      locale,
-      brand: await getBranding(),
-      connection,
-    })
+    const rendered = await renderTemplate(
+      input.template,
+      { ...input.params, ...input.renderParams },
+      { locale, brand: await getBranding(), connection },
+    )
     return rendered.subject
   } catch (error) {
     log.warn('could not render email subject', { kind: input.kind, err: error })
@@ -169,8 +184,14 @@ async function renderSubject(
   }
 }
 
-/** Claims the row and tries to send it now (attempt 1 for user actions). */
-export async function sendNow(id: string): Promise<SendResult> {
+/**
+ * Claims the row and tries to send it now (attempt 1 for user actions).
+ * `renderParams` are merged over the stored params for this attempt only.
+ */
+export async function sendNow(
+  id: string,
+  opts: { renderParams?: Record<string, unknown> } = {},
+): Promise<SendResult> {
   const [claimed] = await db
     .update(emailOutbox)
     .set({
@@ -180,7 +201,7 @@ export async function sendNow(id: string): Promise<SendResult> {
     })
     .where(and(eq(emailOutbox.id, id), eq(emailOutbox.status, 'queued')))
     .returning()
-  if (claimed) return sendClaimed(claimed)
+  if (claimed) return sendClaimed(claimed, opts.renderParams)
 
   // Already sent, being sent by the worker, or failed: report that state.
   const [current] = await db
@@ -494,7 +515,10 @@ async function failExhaustedRows() {
 }
 
 /** Sends a claimed row (status 'sending') and records the outcome. */
-async function sendClaimed(row: OutboxRow): Promise<SendResult> {
+async function sendClaimed(
+  row: OutboxRow,
+  renderParams?: Record<string, unknown>,
+): Promise<SendResult> {
   let config: MailConfig | null = null
   let secrets: string[] = []
   let messageId: string
@@ -504,7 +528,7 @@ async function sendClaimed(row: OutboxRow): Promise<SendResult> {
     const brand = await getBranding()
     const rendered = await renderTemplate(
       row.template as MailTemplate,
-      row.params,
+      { ...row.params, ...renderParams },
       { locale: mailLocale(row.locale), brand },
     )
     secrets = rendered.secrets

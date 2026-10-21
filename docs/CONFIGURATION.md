@@ -106,6 +106,14 @@ always verifies the server certificate and uses 15-second connection timeouts.
 Failed sends are retried about 1 and 5 minutes after the first try. See
 [INTEGRATIONS.md](INTEGRATIONS.md#invitation-recovery) for the delivery behavior.
 
+Account emails use the same settings: password reset, email verification and
+security notices (password changed, two-factor turned on or off, removed from a
+client, role changed). Without a mail server, security notices are skipped and
+forgot password asks the person to contact an agency admin. The reset token in
+the email queue is encrypted with `SECRETS_ENCRYPTION_KEY`, or
+`AI_SETTINGS_ENCRYPTION_KEY` if that is unset. Without a key, a reset email is
+tried once and never retried.
+
 ## Deployment and safety switches
 
 | Variable | Default | Use |
