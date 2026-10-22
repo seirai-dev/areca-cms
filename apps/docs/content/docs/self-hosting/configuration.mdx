@@ -37,7 +37,13 @@ An encryption key must be the base64 encoding of exactly 32 bytes: 44 characters
 `DOKPLOY_CREDENTIALS_ENCRYPTION_KEY` and `AI_SETTINGS_ENCRYPTION_KEY` are used to decrypt values stored in the database. There is no automatic re-encryption. If you change or lose a key, the saved values become unreadable, and you must enter them again. Keep each key with the matching database backup. See [backup and recovery](/docs/self-hosting/backup-and-recovery).
 </Callout>
 
-The `docker/.env.example` file contains a placeholder for `DOKPLOY_CREDENTIALS_ENCRYPTION_KEY`. It has the right format, but it is all zero bytes, so anyone can decrypt values that use it. Replace it before you start the stack.
+The `docker/.env.example` file leaves `BETTER_AUTH_SECRET` and `DOKPLOY_CREDENTIALS_ENCRYPTION_KEY` empty, so you must generate both. Compose stops with a message if they are missing.
+
+In production (`NODE_ENV=production`), the CMS refuses to start unless these checks pass:
+
+- `REDIS_URL` is set. Compose sets it for you. Outside Compose, set it yourself, for example `redis://redis:6379`.
+- `BETTER_AUTH_SECRET` is a real value. The CMS refuses the example values: `change-me`, and any value starting with `replace-` or `replace_`. It tells you how to generate one, with `openssl rand -hex 32`.
+- No encryption key is all zero bytes. Each one that is set (`DOKPLOY_CREDENTIALS_ENCRYPTION_KEY`, `SECRETS_ENCRYPTION_KEY`, `AI_SETTINGS_ENCRYPTION_KEY`) is refused if it decodes to 32 zero bytes, and the error names it. Generate each one with `openssl rand -base64 32`.
 
 ## Core
 
@@ -103,7 +109,7 @@ The CMS sends email through an SMTP server. It sends invitations, password reset
 
 You can set the mail server in two places: in these variables, or in **Agency** > **Mail** after you sign in. Settings saved in **Agency** > **Mail** replace these variables entirely. Turn on **Use environment settings** in that tab to send with these variables again. See [agency mail](/docs/cms/agency-mail).
 
-The CMS starts without any SMTP settings. Until you set a server in one of the two places, mail is off. Invitations still work, and you can share the link with **Copy link**.
+The CMS starts without any SMTP settings. Until you set a server in one of the two places, mail is off. Invitations still work, and you can share a link with **Regenerate link** on the pending invitation.
 
 | Variable | Required | Default | Meaning |
 | --- | --- | --- | --- |
