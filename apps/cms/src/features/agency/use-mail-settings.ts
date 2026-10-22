@@ -17,7 +17,12 @@ import {
 } from '#/server/fn/mail'
 import type { getMailSettingsStatus } from '#/server/mail/settings'
 
-import { parsePort, portForEncryption } from './mail-settings-logic'
+import {
+  mailFieldProblems,
+  parsePort,
+  portForEncryption,
+} from './mail-settings-logic'
+import type { MailFieldKey } from './mail-settings-logic'
 
 export const mailSettingsQueryKey = ['mail-settings'] as const
 export const mailHealthQueryKey = ['mail-health'] as const
@@ -159,12 +164,20 @@ export function useMailSettings() {
   // Set when verify failed on save; the dialog offers "Save anyway".
   const [saveFailure, setSaveFailure] =
     React.useState<MailActionFailure | null>(null)
+  // Errors show for a field the user has left, or for every field once a save
+  // is attempted. A form that opens prefilled is not yet "touched".
+  const [touched, setTouched] = React.useState<
+    Partial<Record<MailFieldKey, true>>
+  >({})
+  const [saveAttempted, setSaveAttempted] = React.useState(false)
 
   const seed = React.useCallback(
     (view: { settings: MailSettingsView | null }) => {
       const next = fieldsFromSettings(view.settings)
       setFields(next)
       setBaseline(serialize(next))
+      setTouched({})
+      setSaveAttempted(false)
     },
     [],
   )
@@ -197,14 +210,22 @@ export function useMailSettings() {
     setTestFailure(null)
   }, [])
 
-  const portValid = parsePort(fields.port) !== null
-  const hostValid = fields.host.trim().length > 0
-  const fromValid = /^\S+@\S+$/.test(fields.fromAddress.trim())
-  const valid = portValid && hostValid && fromValid
+  const problems = mailFieldProblems(fields)
+  const valid = problems.length === 0
   const dirty =
     serialize(fields) !== baseline ||
     fields.password !== '' ||
     fields.clearPassword
+
+  /** Blur marks a field as touched; its error then stays until it is fixed. */
+  const touch = React.useCallback((key: MailFieldKey) => {
+    setTouched((prev) => (prev[key] ? prev : { ...prev, [key]: true }))
+  }, [])
+
+  /** The error for a field, shown only after the field is touched or on save. */
+  function showError(key: MailFieldKey) {
+    return problems.includes(key) && (saveAttempted || touched[key] === true)
+  }
 
   const verify = useMutation({
     mutationFn: () => verifyMailDraftFn({ data: toDraft(fields) }),
@@ -286,9 +307,12 @@ export function useMailSettings() {
     fields,
     update,
     setSecure,
-    portValid,
-    fromValid,
+    problems,
     valid,
+    touch,
+    showError,
+    /** Called when the user tries to save an invalid form. */
+    revealProblems: () => setSaveAttempted(true),
     dirty,
     verify,
     verifyResult,

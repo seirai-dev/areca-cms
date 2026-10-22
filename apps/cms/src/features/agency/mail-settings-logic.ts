@@ -1,5 +1,6 @@
 import type { MailSecure } from '#/lib/types'
 import { m } from '#/paraglide/messages'
+import { isMailAddress } from '#/server/mail/headers'
 import { MAIL_MAX_ATTEMPTS } from '#/server/mail/types'
 
 /**
@@ -36,6 +37,26 @@ export function parsePort(value: string): number | null {
   if (!/^\d+$/.test(trimmed)) return null
   const port = Number(trimmed)
   return port >= 1 && port <= 65_535 ? port : null
+}
+
+/** The form fields a save depends on, in the order they appear on the form. */
+export type MailFieldKey = 'host' | 'port' | 'fromAddress'
+
+/**
+ * The fields that would block a save, in form order. Empty counts as a
+ * problem. The From check is the server's own (`Name <address>` is valid),
+ * so a value the server accepts never shows as an error here.
+ */
+export function mailFieldProblems(input: {
+  host: string
+  port: string
+  fromAddress: string
+}): MailFieldKey[] {
+  const problems: MailFieldKey[] = []
+  if (input.host.trim() === '') problems.push('host')
+  if (parsePort(input.port) === null) problems.push('port')
+  if (!isMailAddress(input.fromAddress)) problems.push('fromAddress')
+  return problems
 }
 
 export type MailEmailKind =
@@ -124,6 +145,38 @@ export function mailStatusLabel(email: {
       })
     case 'queued':
       return m.agency_mail_status_queued()
+  }
+}
+
+/**
+ * The status on a narrow row: "Retrying 2/3" fits beside the time where the
+ * full "Retrying (attempt 2 of 3)" does not. Other statuses are already short.
+ */
+export function mailStatusCompactLabel(email: {
+  status: 'queued' | 'sending' | 'sent' | 'failed' | 'cancelled'
+  retrying: boolean
+  attempts: number
+}) {
+  if (emailStatusKind(email) !== 'retrying') return mailStatusLabel(email)
+  return m.agency_mail_status_retrying_short({
+    attempt: String(nextAttemptNumber(email.attempts)),
+    max: String(MAIL_MAX_ATTEMPTS),
+  })
+}
+
+/** What a delivery dot means in words, for its tooltip and screen readers. */
+export function timelineStateLabel(state: TimelineState) {
+  switch (state) {
+    case 'done':
+      return m.agency_mail_dot_done()
+    case 'current':
+      return m.agency_mail_dot_current()
+    case 'pending':
+      return m.agency_mail_dot_pending()
+    case 'skipped':
+      return m.agency_mail_dot_skipped()
+    case 'failed':
+      return m.agency_mail_dot_failed()
   }
 }
 
