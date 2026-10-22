@@ -1,9 +1,11 @@
 import { and, eq } from 'drizzle-orm'
+import { hashPassword } from 'better-auth/crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { db, pool } from '#/db'
 import {
   account,
+  auditLog,
   invitation,
   membership,
   organization,
@@ -166,6 +168,62 @@ describe.skipIf(!isolated)(
         }),
       ).rejects.toMatchObject({ statusCode: 403 })
       expect(existing.id).not.toBe(result.user.id)
+    })
+
+    it('answers an existing account and a missing invitation with the same refusal', async () => {
+      const existing = await makeUser()
+      const org = await makeOrg()
+      const invite = await makeInvite(existing, org.id)
+      const withInvite = await auth.api
+        .signUpEmail({
+          body: {
+            name: 'Again',
+            email: existing.email,
+            password: 'password123',
+            invitationToken: invite.token,
+          },
+        })
+        .catch((error: unknown) => error)
+      const withoutInvite = await auth.api
+        .signUpEmail({
+          body: {
+            name: 'Stranger',
+            email: `${crypto.randomUUID()}@audit.test`,
+            password: 'password123',
+            invitationToken: 'incorrect',
+          },
+        })
+        .catch((error: unknown) => error)
+      expect(withInvite).toMatchObject({ statusCode: 403 })
+      expect(withoutInvite).toMatchObject({ statusCode: 403 })
+      expect((withInvite as { body: unknown }).body).toEqual(
+        (withoutInvite as { body: unknown }).body,
+      )
+    })
+
+    it('audits a password sign-in and never records the password', async () => {
+      const person = await makeUser()
+      const password = 'password123'
+      await db.insert(account).values({
+        id: crypto.randomUUID(),
+        accountId: person.id,
+        providerId: 'credential',
+        userId: person.id,
+        password: await hashPassword(password),
+      })
+      await auth.api.signInEmail({ body: { email: person.email, password } })
+      const events = await db
+        .select()
+        .from(auditLog)
+        .where(
+          and(
+            eq(auditLog.actorId, person.id),
+            eq(auditLog.action, 'user.sign_in'),
+          ),
+        )
+      expect(events).toHaveLength(1)
+      expect(events[0]?.meta).toMatchObject({ sessionId: expect.any(String) })
+      expect(JSON.stringify(events[0]?.meta)).not.toContain(password)
     })
 
     it('rolls back bootstrap credentials and admin together after an audit failure', async () => {

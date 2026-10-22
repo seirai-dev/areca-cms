@@ -28,6 +28,7 @@ import {
   sendAccountEmail,
   sendVerificationEmail,
 } from '#/server/mail/account-emails'
+import { audit } from '#/server/audit'
 import { createLogger } from '#/server/log'
 import {
   recordLocalMfaForToken,
@@ -128,6 +129,100 @@ async function assertMailRequestBudget(
   if (!allowed) throw new APIError('TOO_MANY_REQUESTS', { code, message })
 }
 
+type AuthEvent = {
+  action: string
+  userId: string
+  targetType?: string
+  targetId?: string
+  sessionId?: string | null
+  request?: Request
+  ipAddress?: string | null
+  userAgent?: string | null
+  meta?: Record<string, unknown>
+}
+
+/**
+ * Security events for the audit log: who, which account, which session, and
+ * the network origin when the request is known. Never a token, code or secret.
+ * A failed audit write is logged and does not undo or fail the auth request.
+ */
+async function auditAuthEvent(event: AuthEvent) {
+  const network = event.request
+    ? {
+        ipAddress: getClientIp(event.request, env.RATE_LIMIT_TRUST_PROXY),
+        userAgent: event.request.headers.get('user-agent'),
+      }
+    : {
+        ipAddress: event.ipAddress ?? null,
+        userAgent: event.userAgent ?? null,
+      }
+  try {
+    await audit({
+      organizationId: null,
+      actorId: event.userId,
+      action: event.action,
+      targetType: event.targetType ?? 'user',
+      targetId: event.targetId ?? event.userId,
+      meta: {
+        sessionId: event.sessionId ?? null,
+        ...event.meta,
+        ipAddress: network.ipAddress,
+        userAgent: network.userAgent?.slice(0, 255) ?? null,
+      },
+    })
+  } catch (error) {
+    authLog.error(`${event.action} could not be audited`, { err: error })
+  }
+}
+
+const SESSION_REVOKE_PATHS = new Set([
+  '/revoke-session',
+  '/revoke-sessions',
+  '/revoke-other-sessions',
+])
+
+/**
+ * Records a revocation by the signed-in caller. For a single session the
+ * revoked session's id is looked up from the token, which is never logged.
+ */
+async function auditSessionRevocation(
+  ctx: Parameters<Parameters<typeof createAuthMiddleware>[0]>[0],
+) {
+  const caller = await getSessionFromCtx(ctx)
+  if (!caller) return
+  if (ctx.path === '/revoke-session') {
+    const token = isRecord(ctx.body) ? ctx.body.token : undefined
+    const target =
+      typeof token === 'string'
+        ? await ctx.context.internalAdapter.findSession(token)
+        : null
+    if (!target) return
+    await auditAuthEvent({
+      action: 'session.revoke',
+      userId: caller.user.id,
+      targetType: 'session',
+      targetId: target.session.id,
+      sessionId: caller.session.id,
+      request: ctx.request,
+      meta: { revokedUserId: target.user.id },
+    })
+    return
+  }
+  await auditAuthEvent({
+    action:
+      ctx.path === '/revoke-sessions'
+        ? 'session.revoke_all'
+        : 'session.revoke_others',
+    userId: caller.user.id,
+    sessionId: caller.session.id,
+    request: ctx.request,
+  })
+}
+
+/** Sign-in endpoints whose new session is a sign-in (not a session swap). */
+const SIGN_IN_PATH =
+  /^\/(sign-in|sign-up|callback|sso\/callback|oauth2\/callback|two-factor\/verify-)/
+
 /**
  * Two-factor flips arrive as user updates without the user id. The change is
  * recorded when the stored value differs, and sent after the update commits.
@@ -164,6 +259,7 @@ const authBase = betterAuth({
       )
     },
     onPasswordReset: async ({ user }) => {
+      await auditAuthEvent({ action: 'user.password_reset', userId: user.id })
       await sendQuietly('password changed email', () =>
         sendAccountEmail({
           kind: 'password_changed',
@@ -207,6 +303,22 @@ const authBase = betterAuth({
     },
   },
   databaseHooks: {
+    session: {
+      create: {
+        // Every new session that comes from a sign-in endpoint. Session swaps
+        // made by two-factor changes are not sign-ins and are not recorded.
+        after: async (session, context) => {
+          if (!SIGN_IN_PATH.test(context?.path ?? '')) return
+          await auditAuthEvent({
+            action: 'user.sign_in',
+            userId: session.userId,
+            sessionId: session.id,
+            ipAddress: session.ipAddress,
+            userAgent: session.userAgent,
+          })
+        },
+      },
+    },
     user: {
       create: {
         before: async (created, ctx) => {
@@ -240,6 +352,12 @@ const authBase = betterAuth({
           if (enabled === undefined) return
           pendingTwoFactorChanges.delete(updated.id)
           if (updated.twoFactorEnabled !== enabled) return
+          await auditAuthEvent({
+            action: enabled
+              ? 'user.two_factor_enable'
+              : 'user.two_factor_disable',
+            userId: updated.id,
+          })
           await sendQuietly('two-factor email', () =>
             sendAccountEmail({
               kind: enabled ? 'two_factor_enabled' : 'two_factor_disabled',
@@ -331,6 +449,20 @@ const authBase = betterAuth({
           m.server_verification_email_rate_limited(),
         )
       }
+      if (ctx.path === '/sign-out') {
+        const session = await getSessionFromCtx(ctx)
+        if (session) {
+          await auditAuthEvent({
+            action: 'user.sign_out',
+            userId: session.user.id,
+            sessionId: session.session.id,
+            request: ctx.request,
+          })
+        }
+      }
+      if (SESSION_REVOKE_PATHS.has(ctx.path)) {
+        await auditSessionRevocation(ctx)
+      }
       // Without a password there is nothing to confirm before changing
       // two-factor, so a recently created session stands in for it.
       if (TWO_FACTOR_MANAGEMENT_PATHS.has(ctx.path)) {
@@ -355,6 +487,12 @@ const authBase = betterAuth({
         if (isAPIError(result) || !isRecord(result)) return
         if (!isRecord(result.user) || typeof result.user.id !== 'string') return
         const userId = result.user.id
+        await auditAuthEvent({
+          action: 'user.password_change',
+          userId,
+          sessionId: ctx.context.session?.session.id,
+          request: ctx.request,
+        })
         await sendQuietly('password changed email', () =>
           sendAccountEmail({
             kind: 'password_changed',
@@ -362,6 +500,18 @@ const authBase = betterAuth({
             params: { userId, at: new Date().toISOString() },
           }),
         )
+        return
+      }
+      if (ctx.path === '/two-factor/generate-backup-codes') {
+        const session = ctx.context.session
+        if (session && !isAPIError(ctx.context.returned)) {
+          await auditAuthEvent({
+            action: 'user.backup_codes_regenerate',
+            userId: session.user.id,
+            sessionId: session.session.id,
+            request: ctx.request,
+          })
+        }
         return
       }
       if (
