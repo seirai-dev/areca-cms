@@ -6,11 +6,14 @@ import { db } from '#/db'
 import { env } from '#/env'
 import { createLogger, redactString, truncate } from '#/server/log'
 
-import { loopsEnabled, tickAgeSeconds } from './heartbeat'
+import { loopsEnabled, staleLoops, tickAgeSeconds } from './heartbeat'
+import { collectBacklog, evaluateMailBacklog } from './backlog'
+import type { Backlog } from './backlog'
 
 const log = createLogger('health')
 
-export type CheckName = 'db' | 'storage' | 'redis' | 'worker' | 'queue'
+export type CheckName =
+  'db' | 'storage' | 'redis' | 'worker' | 'queue' | 'mail' | 'loops'
 
 export type CheckResult = {
   ok: boolean
@@ -24,7 +27,10 @@ export type CheckResult = {
 }
 
 export type ReadinessReport = {
+  /** False only when a check fails outright. */
   ok: boolean
+  /** True when something needs attention but readiness still passes. */
+  degraded: boolean
   checks: Record<CheckName, CheckResult>
 }
 
@@ -36,6 +42,7 @@ export type ReadinessDeps = {
   checkStorage?: (signal: AbortSignal) => Promise<void>
   checkRedis?: () => Promise<void>
   queueStats?: () => Promise<QueueStats>
+  backlog?: () => Promise<Backlog>
   now?: () => number
 }
 
@@ -218,7 +225,7 @@ export async function runReadinessChecks(
     deps.maxTickAgeSeconds ?? env.READINESS_MAX_TICK_AGE_SECONDS
   const now = deps.now?.()
 
-  const [dbResult, storage, redis, queue] = await Promise.all([
+  const [dbResult, storage, redis, queue, mail, loops] = await Promise.all([
     run('db', async () => {
       await withTimeout(() => (deps.checkDb ?? defaultCheckDb)(), timeoutMs)
     }),
@@ -273,6 +280,36 @@ export async function runReadinessChecks(
         },
       }
     }),
+    run('mail', async () => {
+      try {
+        const backlog = await withTimeout(
+          () => (deps.backlog ?? collectBacklog)(),
+          timeoutMs,
+        )
+        const verdict = evaluateMailBacklog(backlog)
+        return {
+          ok: true,
+          degraded: verdict.degraded,
+          reason: verdict.reason,
+          detail: mailDetail(backlog),
+        }
+      } catch (error) {
+        // A mail problem never fails readiness; the database check reports outages.
+        return { ok: true, degraded: true, reason: shortReason(error) }
+      }
+    }),
+    run('loops', async () => {
+      const stale = staleLoops(now)
+      if (stale.length > 0) {
+        return {
+          ok: true,
+          degraded: true,
+          reason: `no successful run in ${stale.join(', ')}`,
+          detail: { staleLoops: stale.length },
+        }
+      }
+      return { ok: true, detail: { staleLoops: 0 } }
+    }),
   ])
 
   const worker = await run(
@@ -296,9 +333,24 @@ export async function runReadinessChecks(
     },
   )
 
-  const checks = { db: dbResult, storage, redis, worker, queue }
+  const checks = { db: dbResult, storage, redis, worker, queue, mail, loops }
   return {
     ok: Object.values(checks).every((check) => check.ok),
+    degraded: Object.values(checks).some((check) => check.degraded === true),
     checks,
+  }
+}
+
+function mailDetail(backlog: Backlog) {
+  return {
+    pending: backlog.mailPending,
+    oldestPendingAgeSeconds:
+      backlog.mailOldestPendingAgeSeconds == null
+        ? null
+        : Math.round(backlog.mailOldestPendingAgeSeconds),
+    expiredLeases: backlog.mailExpiredLeases,
+    notificationEventsPending: backlog.notificationEventsPending,
+    storageDeletionsPaused: backlog.storageDeletionsPaused,
+    schedulesExhausted: backlog.schedulesExhausted,
   }
 }

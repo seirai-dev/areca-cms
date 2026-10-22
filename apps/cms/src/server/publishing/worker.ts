@@ -31,8 +31,10 @@ import {
 import {
   markLoopsStarted,
   markLoopsStopped,
+  recordLoopSuccess,
   recordTick,
 } from '#/server/ops/heartbeat'
+import type { LoopName } from '#/server/ops/heartbeat'
 import { createLogger, redactString } from '#/server/log'
 
 import { installShutdownHandlers } from './shutdown.ts'
@@ -1083,32 +1085,37 @@ export type WorkerLoopDeps = {
  */
 /**
  * Records each loop tick's promise in `inFlight` until it settles, so shutdown
- * can wait for it. The promise itself is returned unchanged.
+ * can wait for it. A run that resolves also stamps the loop's success clock,
+ * which readiness and metrics read. The promise itself is returned unchanged.
  */
 function trackLoops(
   deps: WorkerLoopDeps,
   inFlight: Set<Promise<unknown>>,
 ): WorkerLoopDeps {
   const track =
-    <T>(run: () => Promise<T>) =>
+    <T>(loop: LoopName, run: () => Promise<T>) =>
     () => {
       const promise = run()
       inFlight.add(promise)
       const done = () => {
         inFlight.delete(promise)
       }
-      promise.then(done, done)
+      promise.then(() => {
+        recordLoopSuccess(loop)
+        done()
+      }, done)
       return promise
     }
   return {
-    processJobs: track(deps.processJobs),
-    recover: track(deps.recover),
-    schedule: track(deps.schedule),
-    cleanup: deps.cleanup && track(deps.cleanup),
-    mail: deps.mail && track(deps.mail),
+    processJobs: track('worker', deps.processJobs),
+    recover: track('recovery', deps.recover),
+    schedule: track('scheduler', deps.schedule),
+    cleanup: deps.cleanup && track('cleanup', deps.cleanup),
+    mail: deps.mail && track('mail', deps.mail),
     notificationEvents:
-      deps.notificationEvents && track(deps.notificationEvents),
-    mailCleanup: deps.mailCleanup && track(deps.mailCleanup),
+      deps.notificationEvents &&
+      track('notifications', deps.notificationEvents),
+    mailCleanup: deps.mailCleanup && track('maintenance', deps.mailCleanup),
   }
 }
 

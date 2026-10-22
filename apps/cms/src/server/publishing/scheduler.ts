@@ -11,6 +11,8 @@ import { requestPublication } from './publications.ts'
 
 const log = createLogger('scheduler')
 export const SCHEDULER_RETRY_DELAYS_MS = [60_000, 5 * 60_000, 15 * 60_000]
+/** Failed attempts after which a schedule stops retrying (paused until an operator acts). */
+export const SCHEDULER_MAX_FAILURES = 4
 const BLOCKING_JOB_STATUSES = [
   'queued',
   'building',
@@ -61,6 +63,13 @@ export async function recordSchedulerFailure(
   if (current && current.approvalFingerprint !== job.schedulerFingerprint)
     return
   const failureCount = (current?.failureCount ?? 0) + 1
+  if (failureCount === SCHEDULER_MAX_FAILURES) {
+    // Stops retrying until an operator retries it from Paused jobs.
+    log.error('scheduled publication paused after four failed attempts', {
+      siteId: job.siteId,
+      reason: error,
+    })
+  }
   await tx
     .insert(schedulerBackoff)
     .values({
@@ -170,7 +179,7 @@ export async function runSchedulerTick({
     const backoff = backoffs.get(siteId)
     if (
       backoff?.approvalFingerprint === fingerprint &&
-      (backoff.failureCount >= 4 ||
+      (backoff.failureCount >= SCHEDULER_MAX_FAILURES ||
         (backoff.nextAttemptAt && backoff.nextAttemptAt > now))
     )
       continue
@@ -266,7 +275,7 @@ async function recordRequestFailure(
           },
         })
     } else if (
-      current.failureCount >= 4 ||
+      current.failureCount >= SCHEDULER_MAX_FAILURES ||
       (current.nextAttemptAt && current.nextAttemptAt > at)
     )
       return

@@ -3,7 +3,9 @@ import { and, eq, isNull, lt, lte, or } from 'drizzle-orm'
 import { getStorage } from '#/adapters'
 import { db } from '#/db'
 import { asset, branding, storageObjectDeletion } from '#/db/schema'
-import { redactString } from '#/server/log'
+import { createLogger, redactString } from '#/server/log'
+
+const log = createLogger('storage')
 
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 export const STORAGE_RETRY_DELAYS_MS = [60_000, 300_000, 900_000]
@@ -143,12 +145,21 @@ export async function drainStorageObjectDeletions(
     } catch (error) {
       const delay = STORAGE_RETRY_DELAYS_MS[job.attempts - 1] as
         number | undefined
+      const message = redactString(
+        error instanceof Error ? error.message : String(error),
+      )
+      if (delay === undefined) {
+        // Paused until an operator retries it or the hourly retry does.
+        log.error('storage deletion paused after four failed attempts', {
+          storageKey: job.storageKey,
+          attempts: job.attempts,
+          reason: message,
+        })
+      }
       await db
         .update(storageObjectDeletion)
         .set({
-          lastError: redactString(
-            error instanceof Error ? error.message : String(error),
-          ),
+          lastError: message,
           nextAttemptAt:
             delay === undefined ? null : new Date(Date.now() + delay),
         })
