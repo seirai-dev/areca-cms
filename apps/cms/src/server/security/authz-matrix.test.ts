@@ -525,8 +525,19 @@ describe.skipIf(!runnable)(
       const noMfa = (await call(meFns.getMeFn, undefined, 'adminNoMfa'))
         .result as {
         mfaEnrolmentRequired: boolean
+        sites: Array<{ id: string }>
+        organizationCount: number
       }
       expect(noMfa.mfaEnrolmentRequired).toBe(true)
+      // Agency-wide data is withheld until local MFA is verified.
+      expect(noMfa.sites).toEqual([])
+      expect(noMfa.organizationCount).toBe(0)
+      const verified = (await call(meFns.getMeFn, undefined, 'adminMfa'))
+        .result as { sites: Array<{ id: string }>; organizationCount: number }
+      expect(verified.sites.map((row) => row.id)).toEqual(
+        expect.arrayContaining([w.X.site.id, w.Y.site.id]),
+      )
+      expect(verified.organizationCount).toBeGreaterThanOrEqual(2)
     })
 
     it('step-up verification only runs for sessions that have two-factor', async () => {
