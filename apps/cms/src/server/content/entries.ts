@@ -639,8 +639,30 @@ function keepCurrentRevisionField(
   else delete data[key]
 }
 
-export async function publishEntry(id: string, actorId: string) {
+/** Approval conflict: the draft moved after the reviewer opened it. */
+const APPROVAL_CONFLICT_MESSAGE =
+  'DRAFT_CONFLICT: Draft changed while approving. Reload and review it.'
+
+/**
+ * The draft version an approval applies to. A caller that sent the version it
+ * reviewed gets a conflict when the draft has moved on; without one, the
+ * version loaded for this request is approved (MCP and bulk callers).
+ */
+function approvedVersion(current: number, expectedVersion: number | undefined) {
+  if (expectedVersion === undefined) return current
+  if (expectedVersion !== current) {
+    throw new ConflictError(APPROVAL_CONFLICT_MESSAGE)
+  }
+  return expectedVersion
+}
+
+export async function publishEntry(
+  id: string,
+  actorId: string,
+  expectedVersion?: number,
+) {
   const ctx = await loadEntryContext(id)
+  const reviewed = approvedVersion(ctx.entry.draftVersion, expectedVersion)
   // Drafts saved before external images were imported are caught up here.
   const images = await importEntryImages(ctx, ctx.entry.draftData, actorId)
   const draftData = normalizeEntryData(ctx, images.data)
@@ -685,16 +707,12 @@ export async function publishEntry(id: string, actorId: string) {
           updatedBy: actorId,
           updatedAt: now,
         })
-        .where(
-          and(eq(entry.id, id), eq(entry.draftVersion, ctx.entry.draftVersion)),
-        )
+        .where(and(eq(entry.id, id), eq(entry.draftVersion, reviewed)))
         .returning()
     ).at(0)
 
     if (!updated) {
-      throw new ConflictError(
-        'DRAFT_CONFLICT: Draft changed while approving. Reload and review it.',
-      )
+      throw new ConflictError(APPROVAL_CONFLICT_MESSAGE)
     }
 
     await writeRevision(id, draftData, actorId, 'publish', tx)
@@ -799,8 +817,10 @@ export async function scheduleEntry(
   scheduledAt: string,
   timezone: string,
   actorId: string,
+  expectedVersion?: number,
 ) {
   const ctx = await loadEntryContext(id)
+  const reviewed = approvedVersion(ctx.entry.draftVersion, expectedVersion)
   if (!timezone) {
     throw new ValidationError([
       { path: 'timezone', message: m.server_timezone_required() },
@@ -854,16 +874,12 @@ export async function scheduleEntry(
           updatedBy: actorId,
           updatedAt: now,
         })
-        .where(
-          and(eq(entry.id, id), eq(entry.draftVersion, ctx.entry.draftVersion)),
-        )
+        .where(and(eq(entry.id, id), eq(entry.draftVersion, reviewed)))
         .returning()
     ).at(0)
 
     if (!updated) {
-      throw new ConflictError(
-        'DRAFT_CONFLICT: Draft changed while approving. Reload and review it.',
-      )
+      throw new ConflictError(APPROVAL_CONFLICT_MESSAGE)
     }
 
     await writeRevision(id, draftData, actorId, 'schedule', tx)

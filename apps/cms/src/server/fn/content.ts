@@ -292,10 +292,16 @@ export const updateDraftFn = createServerFn({ method: 'POST', ...entryFn })
   })
 
 export const publishEntryFn = createServerFn({ method: 'POST', ...entryFn })
-  .validator(z.object({ id: z.string().min(1).max(ID_MAX_LENGTH) }))
+  .validator(
+    z.object({
+      id: z.string().min(1).max(ID_MAX_LENGTH),
+      /** The draft version the reviewer saw; a later version is a conflict. */
+      expectedVersion: z.number().int().positive().optional(),
+    }),
+  )
   .handler(async ({ data }) => {
     const { session } = await requireEntryAccess(data.id, 'owner')
-    return publishEntry(data.id, session.user.id)
+    return publishEntry(data.id, session.user.id, data.expectedVersion)
   })
 
 export const unpublishEntryFn = createServerFn({ method: 'POST', ...entryFn })
@@ -318,6 +324,7 @@ export const scheduleEntryFn = createServerFn({ method: 'POST', ...entryFn })
       id: z.string().min(1).max(ID_MAX_LENGTH),
       scheduledAt: z.string().min(1).max(SCHEDULE_FIELD_MAX_LENGTH),
       timezone: z.string().min(1).max(SCHEDULE_FIELD_MAX_LENGTH),
+      expectedVersion: z.number().int().positive().optional(),
     }),
   )
   .handler(async ({ data }) => {
@@ -327,6 +334,7 @@ export const scheduleEntryFn = createServerFn({ method: 'POST', ...entryFn })
       data.scheduledAt,
       data.timezone,
       session.user.id,
+      data.expectedVersion,
     )
   })
 

@@ -925,6 +925,7 @@
   "editor_drop_to_upload": "Sleep hierheen om te uploaden",
   "editor_entries_caption": "{name}-items",
   "editor_entry_archived": "Item gearchiveerd",
+  "editor_entry_changed_notice": "Dit item is gewijzigd sinds je het hebt geopend. Bekijk de nieuwste versie.",
   "editor_entry_deleted": "Item verwijderd",
   "editor_entry_details": "Itemdetails",
   "editor_entry_id": "Item-ID",

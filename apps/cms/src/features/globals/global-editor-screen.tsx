@@ -58,6 +58,7 @@ import { getAiAvailabilityFn } from '#/server/fn/ai'
 import { getGlobalFn } from '#/server/fn/content'
 import type { Me } from '#/server/fn/me'
 
+import { EditorConflictNotice } from '#/features/editor/conflict-notice'
 import { GlobalEditorTopBar } from './global-editor-top-bar'
 import { groupFields } from './site-content'
 
@@ -387,43 +388,15 @@ function GlobalEditorView({
             aria-label={m.globals_canvas_label()}
             data-testid="global-fields"
           >
-            {editor.conflict || editor.recoveredDraft ? (
-              <div
-                role="alert"
-                className="grid gap-3 rounded-card border border-border-error/30 p-4"
-              >
-                <p>
-                  {editor.conflict
-                    ? m.editor_draft_conflict_notice()
-                    : m.editor_draft_recovered_notice()}
-                </p>
-                <div className="flex flex-wrap gap-4">
-                  <button
-                    type="button"
-                    className="underline"
-                    onClick={() => void editor.reloadServerDraft()}
-                  >
-                    {m.editor_reload_server_draft()}
-                  </button>
-                  <button
-                    type="button"
-                    className="underline"
-                    onClick={() => void editor.reapplyRecoveredDraft()}
-                  >
-                    {m.editor_reapply_recovered_draft()}
-                  </button>
-                  {!editor.conflict && (
-                    <button
-                      type="button"
-                      className="underline"
-                      onClick={editor.discardRecoveredDraft}
-                    >
-                      {m.editor_discard_recovered_draft()}
-                    </button>
-                  )}
-                </div>
-              </div>
-            ) : null}
+            <EditorConflictNotice
+              conflict={editor.conflict}
+              approvalConflict={editor.approvalConflict}
+              recoveredDraft={Boolean(editor.recoveredDraft)}
+              className="grid gap-3 rounded-card border border-border-error/30 p-4"
+              onReload={() => void editor.reloadServerDraft()}
+              onReapply={() => void editor.reapplyRecoveredDraft()}
+              onDiscard={editor.discardRecoveredDraft}
+            />
 
             {editor.restoreSkippedFields.length > 0 ? (
               <section

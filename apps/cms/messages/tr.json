@@ -925,6 +925,7 @@
   "editor_drop_to_upload": "Yüklemek için bırakın",
   "editor_entries_caption": "{name} kayıtları",
   "editor_entry_archived": "Kayıt arşivlendi",
+  "editor_entry_changed_notice": "Bu kayıt, siz açtıktan sonra değişti. En son sürümü inceleyin.",
   "editor_entry_deleted": "Kayıt silindi",
   "editor_entry_details": "Kayıt ayrıntıları",
   "editor_entry_id": "Giriş kimliği",

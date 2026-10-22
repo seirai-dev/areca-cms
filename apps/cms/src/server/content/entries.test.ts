@@ -2,7 +2,7 @@ import { and, eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
 import { db } from '#/db'
-import { auditLog, entryRevision } from '#/db/schema'
+import { auditLog, entry, entryRevision } from '#/db/schema'
 
 import {
   createEntry,
@@ -177,6 +177,79 @@ describe.skipIf(!hasDb)('entries', () => {
       expect(first.draftVersion).toBe(created.draftVersion + 1)
       const revisions = await listRevisions(created.id)
       expect(revisions.filter((row) => row.note === 'update')).toHaveLength(1)
+    })
+  })
+
+  it('approves only the draft version the reviewer saw', async () => {
+    await withTestSite(async (ctx) => {
+      await createTestCollection(ctx.site.id)
+      const created = await createEntry({
+        siteId: ctx.site.id,
+        collectionKey: 'articles',
+        data: {
+          title: 'Reviewed',
+          slug: `reviewed-${ctx.suffix}`,
+          body: sampleRichText,
+        },
+        actorId: ctx.actor.id,
+      })
+      const reviewed = await updateDraft(
+        created.id,
+        { ...created.draftData, title: 'Reviewed copy' },
+        ctx.actor.id,
+        created.draftVersion,
+      )
+      // Another editor saves after the reviewer opened the draft.
+      await updateDraft(
+        created.id,
+        { ...created.draftData, title: 'Newer copy' },
+        ctx.actor.id,
+        reviewed.draftVersion,
+      )
+
+      await expect(
+        publishEntry(created.id, ctx.actor.id, reviewed.draftVersion),
+      ).rejects.toThrow(/DRAFT_CONFLICT/)
+      await expect(
+        scheduleEntry(
+          created.id,
+          new Date(Date.now() + 86_400_000).toISOString(),
+          'UTC',
+          ctx.actor.id,
+          reviewed.draftVersion,
+        ),
+      ).rejects.toBeInstanceOf(ConflictError)
+      const [unchanged] = await db
+        .select()
+        .from(entry)
+        .where(eq(entry.id, created.id))
+      expect(unchanged?.status).toBe('draft')
+      expect(unchanged?.publishedData).toBeNull()
+
+      const approved = await publishEntry(
+        created.id,
+        ctx.actor.id,
+        reviewed.draftVersion + 1,
+      )
+      expect(approved.status).toBe('published')
+    })
+  })
+
+  it('approves the loaded version when no expected version is sent', async () => {
+    await withTestSite(async (ctx) => {
+      await createTestCollection(ctx.site.id)
+      const created = await createEntry({
+        siteId: ctx.site.id,
+        collectionKey: 'articles',
+        data: {
+          title: 'Unversioned',
+          slug: `unversioned-${ctx.suffix}`,
+          body: sampleRichText,
+        },
+        actorId: ctx.actor.id,
+      })
+      const approved = await publishEntry(created.id, ctx.actor.id)
+      expect(approved.status).toBe('published')
     })
   })
 
