@@ -3,11 +3,16 @@ import { APIError } from 'better-auth/api'
 import { REAUTH_REQUIRED } from '#/lib/security-errors'
 import { isFresh } from '#/lib/step-up'
 
-/** Endpoints that enable, disable or re-issue a user's second factor. */
+/**
+ * Endpoints that enable, disable, re-issue or reveal a user's second factor.
+ * `get-totp-uri` returns the TOTP secret, so it gets the same local MFA and
+ * freshness checks as the endpoints that change the factor.
+ */
 export const TWO_FACTOR_MANAGEMENT_PATHS = new Set([
   '/two-factor/enable',
   '/two-factor/disable',
   '/two-factor/generate-backup-codes',
+  '/two-factor/get-totp-uri',
 ])
 
 /**

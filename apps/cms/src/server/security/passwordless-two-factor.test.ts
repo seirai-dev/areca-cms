@@ -1,9 +1,20 @@
 import { describe, expect, it } from 'vitest'
 
-import { assertPasswordlessFresh } from './passwordless-two-factor.ts'
+import {
+  TWO_FACTOR_MANAGEMENT_PATHS,
+  assertPasswordlessFresh,
+} from './passwordless-two-factor.ts'
 
 const now = new Date('2026-10-01T12:00:00Z')
 const ago = (min: number) => new Date(now.getTime() - min * 60_000)
+
+describe('TWO_FACTOR_MANAGEMENT_PATHS', () => {
+  it('guards the endpoint that reveals the TOTP secret', () => {
+    expect(TWO_FACTOR_MANAGEMENT_PATHS.has('/two-factor/get-totp-uri')).toBe(
+      true,
+    )
+  })
+})
 
 describe('assertPasswordlessFresh', () => {
   it('never blocks users who have a password', () => {
