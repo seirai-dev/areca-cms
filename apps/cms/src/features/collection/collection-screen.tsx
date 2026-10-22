@@ -72,9 +72,11 @@ import {
 } from './use-collection-entries'
 import type {
   BulkAction,
+  BulkTarget,
   EntryRow,
   StatusFilter,
 } from './use-collection-entries'
+import { BulkFailuresDialog } from './bulk-failures-dialog'
 
 type CollectionRecord = {
   id: string
@@ -220,7 +222,11 @@ function CollectionView({
     search,
     missingLanguage: missingFilter,
   })
-  const bulk = useEntryBulkActions(siteId, collection.key)
+  // Failed entries stay selected (so they can be retried); the rest clear.
+  const bulk = useEntryBulkActions(siteId, collection.key, {
+    onResult: (result) =>
+      setSelected(new Set(result.failed.map((item) => item.id))),
+  })
 
   const filtersActive =
     status !== 'all' || search !== '' || missingFilter !== undefined
@@ -254,13 +260,26 @@ function CollectionView({
     setSelected(new Set())
   }
 
+  function targetsFor(ids: string[]): BulkTarget[] {
+    return ids.map((id) => {
+      const row = rows.find((item) => item.id === id)
+      return {
+        id,
+        title: row
+          ? entryTitle(row.draftData, collection.fields, row.slug)
+          : m.editor_untitled(),
+        slug: row?.slug ?? '',
+      }
+    })
+  }
+
   function runAction(action: BulkAction, ids: string[]) {
     if (ids.length === 0) return
     if (action === 'delete') {
       setConfirmDelete(ids)
       return
     }
-    bulk.mutate({ action, ids }, { onSuccess: () => setSelected(new Set()) })
+    bulk.mutate({ action, targets: targetsFor(ids) })
   }
 
   function onItemAction(action: BulkAction, row: EntryRow) {
@@ -693,9 +712,18 @@ function CollectionView({
         variant="destructive"
         onConfirm={async () => {
           if (!confirmDelete) return
-          await bulk.mutateAsync({ action: 'delete', ids: confirmDelete })
-          setSelected(new Set())
+          await bulk.mutateAsync({
+            action: 'delete',
+            targets: targetsFor(confirmDelete),
+          })
         }}
+      />
+
+      <BulkFailuresDialog
+        details={bulk.details}
+        pending={bulk.isPending}
+        onClose={bulk.closeDetails}
+        onRetry={bulk.retryFailed}
       />
 
       {isAdmin ? (
