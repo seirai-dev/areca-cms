@@ -23,6 +23,7 @@ import { audit } from '#/server/audit'
 import { drainStorageObjectDeletions } from '#/server/assets/storage-cleanup'
 import { cleanupOutbox, processOutbox } from '#/server/mail/outbox'
 import { cleanupNotifications } from '#/server/notifications/notify'
+import { runRetention } from '#/server/ops/retention'
 import {
   processPublicationEvents,
   queuePublicationEvent,
@@ -1254,7 +1255,8 @@ export function startWorker({
       mail: () => processOutbox({ signal: abort.signal }),
       notificationEvents: () =>
         processPublicationEvents({ signal: abort.signal }),
-      mailCleanup: () => Promise.all([cleanupOutbox(), cleanupNotifications()]),
+      mailCleanup: () =>
+        Promise.all([cleanupOutbox(), cleanupNotifications(), runRetention()]),
     },
     { intervalMs },
   )
