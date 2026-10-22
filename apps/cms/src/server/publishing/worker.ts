@@ -100,6 +100,10 @@ const STALE_JOB_MS = 30 * 60 * 1000
 const STALE_JOB_STATUSES = ['building', 'validating', 'deploying'] as const
 
 type WorkerState = {
+  /** Every loop tick still running. Shutdown waits on these, bounded. */
+  inFlight: Set<Promise<unknown>>
+  /** Aborted when the drain deadline passes: stop and leave rows for recovery. */
+  abort?: AbortController
   timer: ReturnType<typeof setInterval>
   recoveryTimer: ReturnType<typeof setInterval>
   schedulerTimer: ReturnType<typeof setInterval>
@@ -1050,17 +1054,51 @@ export type WorkerLoopDeps = {
  * - cleanup: retries durable storage object deletions
  * - mail: sends due outbox emails; mailCleanup: prunes old outbox rows
  */
-export function startWorkerLoops(
+/**
+ * Records each loop tick's promise in `inFlight` until it settles, so shutdown
+ * can wait for it. The promise itself is returned unchanged.
+ */
+function trackLoops(
   deps: WorkerLoopDeps,
+  inFlight: Set<Promise<unknown>>,
+): WorkerLoopDeps {
+  const track =
+    <T>(run: () => Promise<T>) =>
+    () => {
+      const promise = run()
+      inFlight.add(promise)
+      const done = () => {
+        inFlight.delete(promise)
+      }
+      promise.then(done, done)
+      return promise
+    }
+  return {
+    processJobs: track(deps.processJobs),
+    recover: track(deps.recover),
+    schedule: track(deps.schedule),
+    cleanup: deps.cleanup && track(deps.cleanup),
+    mail: deps.mail && track(deps.mail),
+    notificationEvents:
+      deps.notificationEvents && track(deps.notificationEvents),
+    mailCleanup: deps.mailCleanup && track(deps.mailCleanup),
+  }
+}
+
+export function startWorkerLoops(
+  rawDeps: WorkerLoopDeps,
   {
     intervalMs = 3000,
     schedulerIntervalMs = Math.min(intervalMs, 15_000),
-  } = {},
+  }: { intervalMs?: number; schedulerIntervalMs?: number } = {},
 ): WorkerState {
   markLoopsStarted()
+  const inFlight = new Set<Promise<unknown>>()
+  const deps = trackLoops(rawDeps, inFlight)
   const state = {
     ticking: true,
     schedulerTicking: false,
+    inFlight,
   } as WorkerState
   let recovering = false
 
@@ -1205,19 +1243,23 @@ export function startWorker({
     intervalMs,
     concurrency: env.WORKER_CONCURRENCY,
   })
+  // Aborted only when the drain deadline passes. Loops check it between items.
+  const abort = new AbortController()
   const state = startWorkerLoops(
     {
       processJobs: workerPool.fill,
       recover: () => recoverStaleJobs(),
       schedule: () => runSchedulerTick(),
-      cleanup: () => drainStorageObjectDeletions(),
-      mail: () => processOutbox(),
-      notificationEvents: () => processPublicationEvents(),
+      cleanup: () => drainStorageObjectDeletions(100, { signal: abort.signal }),
+      mail: () => processOutbox({ signal: abort.signal }),
+      notificationEvents: () =>
+        processPublicationEvents({ signal: abort.signal }),
       mailCleanup: () => Promise.all([cleanupOutbox(), cleanupNotifications()]),
     },
     { intervalMs },
   )
   state.pool = workerPool
+  state.abort = abort
   g.__arecaWorker = state
   installShutdownHandlers({
     stop: () => stopWorker({ drainTimeoutMs: env.WORKER_DRAIN_TIMEOUT_MS }),
@@ -1227,9 +1269,11 @@ export function startWorker({
 }
 
 /**
- * Stops the timers, stops claiming, and waits up to `drainTimeoutMs` for
- * in-flight jobs. Jobs still running afterwards keep their lease and are
- * recovered by the next process if it never finishes them.
+ * Stops the timers and stops claiming. Then waits up to `drainTimeoutMs` for
+ * running deployments and every loop tick (mail, storage, notifications,
+ * scheduler, recovery). At the deadline the abort signal is raised, so loops
+ * stop at their next item, and S3 calls are cancelled. Everything left behind
+ * keeps its lease or durable state, and the next process recovers it.
  */
 export async function stopWorker({
   drainTimeoutMs = 30_000,
@@ -1238,13 +1282,44 @@ export async function stopWorker({
   if (!state) return true
   stopWorkerLoops(state)
   g.__arecaWorker = undefined
-  const drained = (await state.pool?.drain(drainTimeoutMs)) ?? true
-  if (!drained) {
+  return drainWorkerState(state, drainTimeoutMs)
+}
+
+/** Waits for a stopped worker's running work, bounded. See `stopWorker`. */
+export async function drainWorkerState(
+  state: WorkerState,
+  drainTimeoutMs = 30_000,
+) {
+  const settled = Promise.all([
+    state.pool?.drain(drainTimeoutMs) ?? Promise.resolve(true),
+    Promise.allSettled([...state.inFlight]),
+  ]).then(([poolDrained]) => poolDrained)
+  const outcome = await raceDeadline(settled, drainTimeoutMs)
+  if (outcome === 'timeout') {
+    state.abort?.abort()
+    logger.warn('worker stopped with work still in flight; aborting', {
+      jobsInFlight: state.pool?.inFlight(),
+      loopsInFlight: state.inFlight.size,
+    })
+    return false
+  }
+  if (!outcome) {
     logger.warn('worker stopped with jobs still in flight', {
       inFlight: state.pool?.inFlight(),
     })
   }
-  return drained
+  return outcome
+}
+
+function raceDeadline<T>(
+  promise: Promise<T>,
+  ms: number,
+): Promise<T | 'timeout'> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const deadline = new Promise<'timeout'>((resolve) => {
+    timer = setTimeout(() => resolve('timeout'), ms)
+  })
+  return Promise.race([promise, deadline]).finally(() => clearTimeout(timer))
 }
 
 export function stopWorkerLoops(state: WorkerState) {

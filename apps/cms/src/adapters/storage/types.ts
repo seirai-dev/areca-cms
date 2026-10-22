@@ -7,5 +7,5 @@ export interface AssetStorageAdapter {
   get: (
     key: string,
   ) => Promise<{ body: ReadableStream | Buffer; contentType?: string } | null>
-  delete: (key: string) => Promise<void>
+  delete: (key: string, opts?: { signal?: AbortSignal }) => Promise<void>
 }

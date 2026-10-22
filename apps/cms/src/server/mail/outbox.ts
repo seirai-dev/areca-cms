@@ -280,14 +280,20 @@ export async function sendNow(
  * sits leased while earlier sends wait their turn.
  */
 export async function processOutbox(
-  /** Tests only: limit the tick to these rows (the table is shared). */
-  opts: { only?: readonly string[] } = {},
+  opts: {
+    /** Tests only: limit the tick to these rows (the table is shared). */
+    only?: readonly string[]
+    /** Raised at shutdown: no new claim starts after it. */
+    signal?: AbortSignal
+  } = {},
 ): Promise<number> {
   await failExhaustedRows()
   const candidates = await dueCandidates(opts.only)
   let claimed = 0
   for (const [index, id] of candidates.entries()) {
+    if (opts.signal?.aborted) break
     if (index > 0) await sleep(SEND_INTERVAL_MS)
+    if (opts.signal?.aborted) break
     try {
       const row = await claimById(id)
       // Another replica claimed it, or it stopped being due: skip it.

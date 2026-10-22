@@ -59,8 +59,12 @@ export async function queuePublicationEvent(
 
 /** Delivers due events. Each claim is a conditional update, so replicas never share one. */
 export async function processPublicationEvents(
-  /** Tests only: limit the tick to these publications (the table is shared). */
-  opts: { only?: readonly string[] } = {},
+  opts: {
+    /** Tests only: limit the tick to these publications (the table is shared). */
+    only?: readonly string[]
+    /** Raised at shutdown: no new event is claimed after it. */
+    signal?: AbortSignal
+  } = {},
 ): Promise<number> {
   const due = await db
     .select()
@@ -78,6 +82,7 @@ export async function processPublicationEvents(
     .limit(BATCH_SIZE)
 
   for (const event of due) {
+    if (opts.signal?.aborted) break
     const claimed = await db
       .update(notificationEvent)
       .set({

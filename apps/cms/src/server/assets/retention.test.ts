@@ -150,7 +150,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
         }),
       ).rejects.toThrow()
       expect(storage.put).toHaveBeenCalledOnce()
-      expect(storage.delete).toHaveBeenCalledWith(storage.put.mock.calls[0][0])
+      expect(storage.delete).toHaveBeenCalledWith(
+        storage.put.mock.calls[0][0],
+        { signal: undefined },
+      )
     })
     it('retains assets used by deleted entry, collection, and site histories', async () => {
       await withTestSite(async (ctx) => {
@@ -348,7 +351,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
           .set({ nextAttemptAt: new Date(Date.now() - 1000) })
           .where(eq(storageObjectDeletion.storageKey, key))
         await drainStorageObjectDeletions()
-        expect(storage.delete).toHaveBeenCalledWith(key)
+        expect(storage.delete).toHaveBeenCalledWith(key, { signal: undefined })
         expect(
           await db
             .select()

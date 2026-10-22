@@ -66,12 +66,13 @@ export async function retryPausedStorageDeletions() {
 
 export async function drainStorageObjectDeletions(
   limit = 100,
-  options: { storageKey?: string } = {},
+  options: { storageKey?: string; signal?: AbortSignal } = {},
 ) {
   let removed = 0
   // Claim one object immediately before deleting it. A batch-wide lease would
   // expire for later objects while earlier network requests were still running.
   for (let i = 0; i < limit; i++) {
+    if (options.signal?.aborted) break
     const now = new Date()
     const job = await db.transaction(async (tx) => {
       const row = (
@@ -136,7 +137,7 @@ export async function drainStorageObjectDeletions(
       eq(storageObjectDeletion.attempts, job.attempts),
     )
     try {
-      await getStorage().delete(job.storageKey)
+      await getStorage().delete(job.storageKey, { signal: options.signal })
       await db.delete(storageObjectDeletion).where(owned)
       removed++
     } catch (error) {
