@@ -117,6 +117,80 @@ export async function confirmedFieldDrops(
   return withContent
 }
 
+/** A field a schema push would remove while entries still hold content for it. */
+export type FieldDrop = {
+  kind: 'collection' | 'global'
+  /** Raw CMS key of the collection or site content section. */
+  key: string
+  /** Raw field key. */
+  field: string
+  /** Entries that hold content for the field, in any version or language. */
+  entries: number
+}
+
+/** Confirmation id of a field drop in a manifest push: `<key>.<field>`. Identifiers never hold a dot. */
+export function fieldDropId(drop: { key: string; field: string }): string {
+  return `${drop.key}.${drop.field}`
+}
+
+/** A manifest push refused because it would delete content it did not confirm. Nothing was written. */
+export class FieldDropsUnconfirmedError extends Error {
+  readonly drops: FieldDrop[]
+
+  constructor(drops: FieldDrop[]) {
+    super(
+      `Removing ${drops.map(fieldDropId).join(', ')} deletes content. Confirm each removal to push the schema.`,
+    )
+    this.name = 'FieldDropsUnconfirmedError'
+    this.drops = drops
+  }
+}
+
+/**
+ * Checks a manifest push against the content it would delete, before anything
+ * is written. A dropped field that holds content is only allowed when the push
+ * confirms it as `<key>.<field>`; otherwise the push is refused with every
+ * unconfirmed drop. Returns the confirmed keys to purge, per collection id.
+ */
+export async function planManifestFieldDrops(
+  tx: DbTx,
+  input: {
+    existing: {
+      id: string
+      key: string
+      kind: 'collection' | 'global'
+      fields: Field[]
+    }[]
+    declared: { key: string; kind: 'collection' | 'global'; fields: Field[] }[]
+    confirmDropFields?: string[]
+  },
+): Promise<Map<string, string[]>> {
+  const confirmed = new Set(input.confirmDropFields ?? [])
+  const unconfirmed: FieldDrop[] = []
+  const purge = new Map<string, string[]>()
+  for (const def of input.declared) {
+    const previous = input.existing.find(
+      (row) => row.key === def.key && row.kind === def.kind,
+    )
+    if (!previous) continue
+    const dropped = droppedFieldKeys(previous.fields, def.fields)
+    if (dropped.length === 0) continue
+    const usage = await fieldKeyUsage(tx, previous.id)
+    for (const field of dropped) {
+      const entries = usage[field] ?? 0
+      if (entries === 0) continue
+      const drop = { kind: def.kind, key: def.key, field, entries }
+      if (confirmed.has(fieldDropId(drop))) {
+        purge.set(previous.id, [...(purge.get(previous.id) ?? []), field])
+      } else {
+        unconfirmed.push(drop)
+      }
+    }
+  }
+  if (unconfirmed.length > 0) throw new FieldDropsUnconfirmedError(unconfirmed)
+  return purge
+}
+
 /** Removes the keys from every stored version of the entries, including translations. */
 function withoutKeys(data: EntryData, keys: string[]): EntryData {
   const next: EntryData = { ...data }

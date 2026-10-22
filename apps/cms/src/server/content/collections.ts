@@ -14,7 +14,11 @@ import {
   assertPreviewPath,
   validateContentDefinitions,
 } from './content-definitions.ts'
-import { confirmedFieldDrops, purgeFieldContent } from './field-data.ts'
+import {
+  confirmedFieldDrops,
+  planManifestFieldDrops,
+  purgeFieldContent,
+} from './field-data.ts'
 import { ensureGlobalEntry } from './globals.ts'
 import { normalizeRequiredLanguages } from './locale-validation.ts'
 import { NotFoundError, ValidationError } from './errors.ts'
@@ -59,7 +63,14 @@ export async function getCollection(siteId: string, key: string) {
   return row ? { ...row, fields: withRequiredSlugField(row.fields) } : null
 }
 
-export async function syncManifest(siteId: string, manifest: SiteManifest) {
+export async function syncManifest(
+  siteId: string,
+  manifest: SiteManifest,
+  options: {
+    /** Field removals the push confirms, as `<collection or section key>.<field key>`. */
+    confirmDropFields?: string[]
+  } = {},
+) {
   const globals = manifest.globals ?? {}
   const keys = Object.keys(manifest.collections)
   const globalKeys = Object.keys(globals)
@@ -112,6 +123,22 @@ export async function syncManifest(siteId: string, manifest: SiteManifest) {
         .map((row) => ({ ...row, enabled: false })),
       ...declaredDefs,
     ])
+    // Refuses a removal that would delete content before anything is written.
+    const purge = await planManifestFieldDrops(tx, {
+      existing,
+      declared: declaredDefs.map((def) => ({
+        key: def.key,
+        kind: def.kind,
+        fields:
+          def.kind === 'collection'
+            ? withRequiredSlugField(def.fields)
+            : def.fields,
+      })),
+      confirmDropFields: options.confirmDropFields,
+    })
+    for (const [collectionId, fieldKeys] of purge) {
+      await purgeFieldContent(tx, collectionId, fieldKeys)
+    }
     for (const [key, def] of Object.entries(manifest.collections)) {
       await tx
         .insert(collection)
