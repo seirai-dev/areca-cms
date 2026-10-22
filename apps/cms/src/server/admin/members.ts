@@ -25,6 +25,7 @@ import {
   sendNow,
   supersedeInvitationEmails,
 } from '#/server/mail/outbox'
+import type { EnqueuedEmail } from '#/server/mail/outbox'
 import { invitationAcceptUrl } from '#/server/mail/render/templates/invitation'
 import { PARAMS_SECRET_CONTEXT } from '#/server/mail/render/templates/password-reset'
 import { revokeMemberMcpConnections } from '#/server/mcp/connections'
@@ -388,10 +389,10 @@ export async function inviteMember(input: {
       tx,
     )
     const outbox = await enqueueInvitation(tx, row, token)
-    return { row, outboxId: outbox.id, token }
+    return { row, outbox, token }
   })
 
-  return sendInvitation(created.row.id, created.outboxId, created.token)
+  return sendInvitation(created.row.id, created.outbox, created.token)
 }
 
 /**
@@ -407,7 +408,8 @@ function newInvitationToken() {
  * Queues the invitation email in the caller's transaction. The outbox never
  * holds the link in plain text: `encryptedToken` is stored only when a secrets
  * key exists, so a retry can rebuild it. The plain token is a render param,
- * used for the subject and the immediate send, and is not stored.
+ * used for the subject and the immediate send, and is not stored. The row is
+ * inserted already claimed: `sendInvitation` sends it right after the commit.
  */
 async function enqueueInvitation(
   tx: Tx,
@@ -429,6 +431,7 @@ async function enqueueInvitation(
       renderParams: { token },
       locale: getLocale(),
       organizationId: row.organizationId,
+      immediate: true,
     },
     tx,
   )
@@ -441,10 +444,13 @@ async function enqueueInvitation(
  */
 async function sendInvitation(
   invitationId: string,
-  outboxId: string,
+  outbox: EnqueuedEmail,
   token: string,
 ) {
-  const result = await sendNow(outboxId, { renderParams: { token } })
+  const result = await sendNow(outbox.id, {
+    renderParams: { token },
+    claimedAttempt: outbox.claimedAttempt,
+  })
   if (result.status !== 'sent') {
     throw new InvitationDeliveryError(mailFailureMessage(result.failure))
   }
@@ -502,12 +508,12 @@ export async function revokeInvitation(id: string, actorId: string) {
  * expired and delivery-failed invitations). The previous link stops working.
  */
 export async function resendInvitation(id: string, actorId: string) {
-  const { row, outboxId, token } = await reissueInvitation(
+  const { row, outbox, token } = await reissueInvitation(
     id,
     actorId,
     'invitation.resend',
   )
-  return sendInvitation(row.id, outboxId, token)
+  return sendInvitation(row.id, outbox, token)
 }
 
 /**
@@ -517,14 +523,14 @@ export async function resendInvitation(id: string, actorId: string) {
  * reason, because the admin may share it another way.
  */
 export async function regenerateInvitationLink(id: string, actorId: string) {
-  const { row, outboxId, token } = await reissueInvitation(
+  const { row, outbox, token } = await reissueInvitation(
     id,
     actorId,
     'invitation.regenerate_link',
   )
   const link = invitationAcceptUrl(token)
   try {
-    await sendInvitation(row.id, outboxId, token)
+    await sendInvitation(row.id, outbox, token)
     return { link, emailSent: true, emailError: null }
   } catch (error) {
     if (!(error instanceof InvitationDeliveryError)) throw error
@@ -605,7 +611,7 @@ async function reissueInvitation(
     // The new link replaces the old one, so older queued sends must not go out.
     await supersedeInvitationEmails(updated.id, tx)
     const outbox = await enqueueInvitation(tx, updated, token)
-    return { row: updated, outboxId: outbox.id, token }
+    return { row: updated, outbox, token }
   })
 }
 

@@ -92,7 +92,15 @@ export type EnqueueEmailInput = {
   userId?: string | null
   organizationId?: string | null
   notificationId?: string | null
+  /**
+   * The caller sends this row itself right after the write (`sendNow` with
+   * `claimedAttempt`). Inserted already claimed, so the worker waits.
+   */
+  immediate?: boolean
 }
+
+/** A new row. `claimedAttempt` is set when the caller owns its first attempt. */
+export type EnqueuedEmail = { id: string; claimedAttempt?: number }
 
 export type SendResult =
   | { status: 'sent'; id: string }
@@ -135,17 +143,24 @@ const log = createLogger('mail')
 const LEASE_MS = 60_000
 /** Renewed well inside the lease while a send is in flight. */
 const LEASE_RENEW_MS = 15_000
+/** The first attempt, made by the immediate sender of user actions. */
+const IMMEDIATE_ATTEMPT = 1
 const BATCH_SIZE = 20
 /** 5 sends per second. */
 const SEND_INTERVAL_MS = 200
 const RECENT_LIMIT = 50
 const RECENT_LIMIT_MAX = 200
 
-/** Inserts a queued row. Pass a transaction to enqueue atomically. */
+/**
+ * Inserts a row. Pass a transaction to enqueue atomically. With `immediate`,
+ * the row is inserted already claimed by the caller (attempt 1, lease set), so
+ * the worker cannot send it while the caller is about to. If the caller never
+ * sends it, the lease expires and the worker takes over.
+ */
 export async function enqueueEmail(
   input: EnqueueEmailInput,
   connection?: unknown,
-): Promise<{ id: string }> {
+): Promise<EnqueuedEmail> {
   const executor = (connection ?? db) as Executor
   const locale = mailLocale(input.locale)
   const subject = await renderSubject(input, locale, executor)
@@ -161,13 +176,24 @@ export async function enqueueEmail(
       template: input.template,
       params: input.params,
       locale,
-      status: 'queued',
-      attempts: 0,
-      nextAttemptAt: new Date(),
+      ...(input.immediate
+        ? {
+            status: 'sending' as const,
+            attempts: IMMEDIATE_ATTEMPT,
+            leaseUntil: leaseFromNow(),
+            nextAttemptAt: null,
+          }
+        : {
+            status: 'queued' as const,
+            attempts: 0,
+            nextAttemptAt: new Date(),
+          }),
     })
     .returning({ id: emailOutbox.id })
   if (!row) throw new Error('Failed to queue email')
-  return { id: row.id }
+  return input.immediate
+    ? { id: row.id, claimedAttempt: IMMEDIATE_ATTEMPT }
+    : { id: row.id }
 }
 
 /** The subject is stored for the log. A render problem must not block queuing. */
@@ -190,23 +216,45 @@ async function renderSubject(
 }
 
 /**
- * Claims the row and tries to send it now (attempt 1 for user actions).
- * `renderParams` are merged over the stored params for this attempt only.
+ * Tries to send a row now (attempt 1 for user actions). `renderParams` are
+ * merged over the stored params for this attempt only.
+ *
+ * With `claimedAttempt` (from `enqueueEmail({ immediate })`), the caller already
+ * owns that attempt, so the row is sent as is. If the lease ran out and the
+ * worker claimed it again, the caller gets that state instead of sending twice.
  */
 export async function sendNow(
   id: string,
-  opts: { renderParams?: Record<string, unknown> } = {},
+  opts: {
+    renderParams?: Record<string, unknown>
+    claimedAttempt?: number
+  } = {},
 ): Promise<SendResult> {
-  const [claimed] = await db
-    .update(emailOutbox)
-    .set({
-      status: 'sending',
-      leaseUntil: new Date(Date.now() + LEASE_MS),
-      attempts: sql`${emailOutbox.attempts} + 1`,
-    })
-    .where(and(eq(emailOutbox.id, id), eq(emailOutbox.status, 'queued')))
-    .returning()
-  if (claimed) return sendClaimed(claimed, opts.renderParams)
+  if (opts.claimedAttempt !== undefined) {
+    const [owned] = await db
+      .select()
+      .from(emailOutbox)
+      .where(
+        and(
+          eq(emailOutbox.id, id),
+          eq(emailOutbox.attempts, opts.claimedAttempt),
+          eq(emailOutbox.status, 'sending'),
+        ),
+      )
+      .limit(1)
+    if (owned) return sendClaimed(owned, opts.renderParams)
+  } else {
+    const [claimed] = await db
+      .update(emailOutbox)
+      .set({
+        status: 'sending',
+        leaseUntil: new Date(Date.now() + LEASE_MS),
+        attempts: sql`${emailOutbox.attempts} + 1`,
+      })
+      .where(and(eq(emailOutbox.id, id), eq(emailOutbox.status, 'queued')))
+      .returning()
+    if (claimed) return sendClaimed(claimed, opts.renderParams)
+  }
 
   // Already sent, being sent by the worker, or failed: report that state.
   const [current] = await db

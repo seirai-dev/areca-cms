@@ -115,6 +115,55 @@ async function mailpitMessage(to: string) {
 }
 
 describe.skipIf(!hasDb)('email outbox', () => {
+  it('keeps an immediate send away from the worker until its lease expires', async () => {
+    const to = `immediate-${crypto.randomUUID()}@areca.local`
+    const queued = await enqueueEmail({
+      kind: 'test',
+      template: 'test',
+      to,
+      params: { host: 'mailpit', sentBy: 'admin@areca.local' },
+      locale: 'en',
+      immediate: true,
+    })
+    expect(queued.claimedAttempt).toBe(1)
+
+    // The worker runs while the caller is about to send: it must not claim.
+    expect(await processOutbox({ only: [queued.id] })).toBe(0)
+    expect(await rowOf(queued.id)).toMatchObject({
+      status: 'sending',
+      attempts: 1,
+    })
+
+    await expect(
+      sendNow(queued.id, { claimedAttempt: queued.claimedAttempt }),
+    ).resolves.toEqual({ status: 'sent', id: queued.id })
+    expect(await rowOf(queued.id)).toMatchObject({
+      status: 'sent',
+      attempts: 1,
+    })
+  })
+
+  it('lets the worker take an immediate row once its lease has lapsed', async () => {
+    const queued = await enqueueEmail({
+      kind: 'test',
+      template: 'test',
+      to: `lapsed-${crypto.randomUUID()}@areca.local`,
+      params: { host: 'mailpit', sentBy: 'admin@areca.local' },
+      locale: 'en',
+      immediate: true,
+    })
+    await db
+      .update(emailOutbox)
+      .set({ leaseUntil: new Date(Date.now() - 1000) })
+      .where(eq(emailOutbox.id, queued.id))
+
+    expect(await processOutbox({ only: [queued.id] })).toBe(1)
+    expect(await rowOf(queued.id)).toMatchObject({
+      status: 'sent',
+      attempts: 2,
+    })
+  })
+
   it('ignores the outcome of a sender whose lease was taken over mid-send', async () => {
     const to = `fenced-${crypto.randomUUID()}@areca.local`
     const { id } = await enqueueEmail({
