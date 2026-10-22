@@ -38,7 +38,9 @@ const config = defineConfig(({ command }) => ({
   // tree never reload pages or mix old server modules with new client ones
   // mid-test. Restart the server to pick up changes.
   server:
-    process.env.VITE_FREEZE === 'true' ? { hmr: false, watch: null } : undefined,
+    process.env.VITE_FREEZE === 'true'
+      ? { hmr: false, watch: null }
+      : undefined,
   plugins: [
     arecaAssetFileDevPlugin(),
     devtools(),

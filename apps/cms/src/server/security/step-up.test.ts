@@ -51,16 +51,14 @@ describe.skipIf(!hasDb)('step-up', () => {
 
   it('passes for a local factor verified in the last ten minutes', async () => {
     const id = `local-mfa:${sessionId}`
-    await db
-      .insert(verification)
-      .values({
-        id,
-        identifier: id,
-        value: userId,
-        createdAt: minutesAgo(2),
-        updatedAt: new Date(),
-        expiresAt: new Date(Date.now() + 60000),
-      })
+    await db.insert(verification).values({
+      id,
+      identifier: id,
+      value: userId,
+      createdAt: minutesAgo(2),
+      updatedAt: new Date(),
+      expiresAt: new Date(Date.now() + 60000),
+    })
     await expect(assertFreshSession(session(minutesAgo(2)))).resolves.toBe(
       undefined,
     )

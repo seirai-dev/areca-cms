@@ -134,23 +134,42 @@ describe('preview API caching', () => {
   })
 
   it('passes ?locale= to the entry preview, and it wins over the token locale', async () => {
-    state.verify = { siteId: 'site-1', collection: 'posts', slug: 'a', locale: 'fr' }
+    state.verify = {
+      siteId: 'site-1',
+      collection: 'posts',
+      slug: 'a',
+      locale: 'fr',
+    }
     state.calls = []
     await getSitesPreview(req('t', 'en'))
-    expect(state.calls.at(-1)).toEqual(['entry', ['site-1', 'posts', 'a', 'en']])
+    expect(state.calls.at(-1)).toEqual([
+      'entry',
+      ['site-1', 'posts', 'a', 'en'],
+    ])
   })
 
   it('falls back to the token locale when the query has none', async () => {
-    state.verify = { siteId: 'site-1', collection: 'posts', slug: 'a', locale: 'fr' }
+    state.verify = {
+      siteId: 'site-1',
+      collection: 'posts',
+      slug: 'a',
+      locale: 'fr',
+    }
     state.calls = []
     await getSitesPreview(req('t'))
-    expect(state.calls.at(-1)).toEqual(['entry', ['site-1', 'posts', 'a', 'fr']])
+    expect(state.calls.at(-1)).toEqual([
+      'entry',
+      ['site-1', 'posts', 'a', 'fr'],
+    ])
   })
 
   it('passes the locale to a section preview', async () => {
     state.verify = { siteId: 'site-1', global: 'companyInfo', locale: 'nl' }
     state.calls = []
     await getSitesPreview(req('t'))
-    expect(state.calls.at(-1)).toEqual(['global', ['site-1', 'companyInfo', 'nl']])
+    expect(state.calls.at(-1)).toEqual([
+      'global',
+      ['site-1', 'companyInfo', 'nl'],
+    ])
   })
 })

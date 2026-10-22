@@ -36,16 +36,18 @@ export async function richTextAssetsAuthorized(
       }
       const prefix = '/api/assets/file/'
       if (path.startsWith(prefix)) {
-        const row = (await connection
-          .select({ id: asset.id })
-          .from(asset)
-          .where(
-            and(
-              eq(asset.organizationId, organizationId),
-              eq(asset.storageKey, path.slice(prefix.length)),
-            ),
-          )
-          .limit(1)).at(0)
+        const row = (
+          await connection
+            .select({ id: asset.id })
+            .from(asset)
+            .where(
+              and(
+                eq(asset.organizationId, organizationId),
+                eq(asset.storageKey, path.slice(prefix.length)),
+              ),
+            )
+            .limit(1)
+        ).at(0)
         if (!row) return false
       }
     }

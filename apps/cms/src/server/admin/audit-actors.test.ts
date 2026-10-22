@@ -94,16 +94,18 @@ describe.skipIf(!hasDb)(
     it('records every admin action, instance-level ones without an organization', async () => {
       const suffix = crypto.randomUUID()
       const mk = async (tag: string, isAgencyAdmin = false) => {
-        const row = (await db
-          .insert(user)
-          .values({
-            id: crypto.randomUUID(),
-            name: tag,
-            email: `${tag}-${suffix}@test.local`,
-            emailVerified: true,
-            isAgencyAdmin,
-          })
-          .returning()).at(0)
+        const row = (
+          await db
+            .insert(user)
+            .values({
+              id: crypto.randomUUID(),
+              name: tag,
+              email: `${tag}-${suffix}@test.local`,
+              emailVerified: true,
+              isAgencyAdmin,
+            })
+            .returning()
+        ).at(0)
         if (!row) throw new Error('user')
         return row
       }

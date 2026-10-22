@@ -84,7 +84,10 @@ function parsePayload(payloadB64: string): PreviewTokenPayload | null {
     const parsed = JSON.parse(
       Buffer.from(payloadB64, 'base64url').toString('utf8'),
     ) as Partial<
-      Record<'siteId' | 'collection' | 'slug' | 'global' | 'exp' | 'locale', unknown>
+      Record<
+        'siteId' | 'collection' | 'slug' | 'global' | 'exp' | 'locale',
+        unknown
+      >
     >
     if (typeof parsed.siteId !== 'string' || typeof parsed.exp !== 'number') {
       return null

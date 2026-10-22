@@ -26,7 +26,9 @@ function parseUri(uri: unknown): URL | null {
 /** `http://localhost`, `http://127.0.0.1` or `http://[::1]`, any port or path. */
 export function isLoopbackHttpRedirect(uri: unknown): boolean {
   const url = parseUri(uri)
-  return url !== null && url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname)
+  return (
+    url !== null && url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname)
+  )
 }
 
 export function isHttpsRedirect(uri: unknown): boolean {

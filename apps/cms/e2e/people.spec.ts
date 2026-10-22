@@ -63,7 +63,9 @@ test('invite several people, accept by e-mail, change a role and revoke', async 
   const results = page.getByTestId('invite-results')
   await expect(results).toBeVisible()
   await expect(results).toContainText("Some invitations weren't sent")
-  await expect(results.getByRole('listitem').filter({ hasText: third })).toContainText('Sent')
+  await expect(
+    results.getByRole('listitem').filter({ hasText: third }),
+  ).toContainText('Sent')
   await expect(
     results.getByRole('listitem').filter({ hasText: second }),
   ).toContainText('already pending')
@@ -78,8 +80,10 @@ test('invite several people, accept by e-mail, change a role and revoke', async 
   const invitee = await browser.newContext()
   const guest = await invitee.newPage()
   await guest.goto(link)
-  await expect(guest.getByRole('heading', { name: `${clientName} invited you` })).toBeVisible()
-  await expect(guest.getByText('You\'ll join as an Editor')).toBeVisible()
+  await expect(
+    guest.getByRole('heading', { name: `${clientName} invited you` }),
+  ).toBeVisible()
+  await expect(guest.getByText("You'll join as an Editor")).toBeVisible()
   await authForm(guest)
   await expect(guest.getByTestId('invite-email')).toHaveValue(first)
   await guest.getByLabel('Name').fill('First Invitee')

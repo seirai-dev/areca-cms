@@ -143,27 +143,15 @@ export async function syncManifest(siteId: string, manifest: SiteManifest) {
         })
     }
     for (const [key, def] of Object.entries(globals)) {
-      const row = (await tx
-        .insert(collection)
-        .values({
-          siteId,
-          key,
-          label: def.label ?? key,
-          routePattern: '',
-          kind: 'global',
-          fields: def.fields,
-          enabled: true,
-          seoEnabled: def.seo ?? false,
-          previewPath: def.previewPath ?? null,
-          requiredLanguages: normalizeRequiredLanguages(
-            def.requiredLanguages ?? [],
-          ),
-          updatedAt: now,
-        })
-        .onConflictDoUpdate({
-          target: [collection.siteId, collection.key],
-          set: {
+      const row = (
+        await tx
+          .insert(collection)
+          .values({
+            siteId,
+            key,
             label: def.label ?? key,
+            routePattern: '',
+            kind: 'global',
             fields: def.fields,
             enabled: true,
             seoEnabled: def.seo ?? false,
@@ -172,9 +160,23 @@ export async function syncManifest(siteId: string, manifest: SiteManifest) {
               def.requiredLanguages ?? [],
             ),
             updatedAt: now,
-          },
-        })
-        .returning({ id: collection.id })).at(0)
+          })
+          .onConflictDoUpdate({
+            target: [collection.siteId, collection.key],
+            set: {
+              label: def.label ?? key,
+              fields: def.fields,
+              enabled: true,
+              seoEnabled: def.seo ?? false,
+              previewPath: def.previewPath ?? null,
+              requiredLanguages: normalizeRequiredLanguages(
+                def.requiredLanguages ?? [],
+              ),
+              updatedAt: now,
+            },
+          })
+          .returning({ id: collection.id })
+      ).at(0)
       if (!row) {
         throw new Error(m.server_failed_to_upsert_collection())
       }

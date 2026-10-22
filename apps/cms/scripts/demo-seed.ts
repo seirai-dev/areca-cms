@@ -448,7 +448,9 @@ async function main() {
   }
   console.log('Demo seed complete.')
   console.log(`Agency admin: ${ADMIN_EMAIL} / ${PASSWORD}`)
-  console.log(`Agency admin TOTP secret (base32): MFZGKY3BFVSGK3LPFV2G65DQFVZWKY3SMV2A`)
+  console.log(
+    `Agency admin TOTP secret (base32): MFZGKY3BFVSGK3LPFV2G65DQFVZWKY3SMV2A`,
+  )
 }
 
 try {

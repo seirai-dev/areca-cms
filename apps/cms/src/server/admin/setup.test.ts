@@ -41,15 +41,17 @@ async function hasUsers() {
 describe.skipIf(!hasDb)('setup', () => {
   async function withExistingUser(body: (suffix: string) => Promise<void>) {
     const suffix = crypto.randomUUID()
-    const existing = (await db
-      .insert(user)
-      .values({
-        id: crypto.randomUUID(),
-        name: `Existing ${suffix}`,
-        email: `existing-${suffix}@test.local`,
-        emailVerified: true,
-      })
-      .returning()).at(0)
+    const existing = (
+      await db
+        .insert(user)
+        .values({
+          id: crypto.randomUUID(),
+          name: `Existing ${suffix}`,
+          email: `existing-${suffix}@test.local`,
+          emailVerified: true,
+        })
+        .returning()
+    ).at(0)
     if (!existing) throw new Error('Failed to create existing user')
     try {
       await body(suffix)

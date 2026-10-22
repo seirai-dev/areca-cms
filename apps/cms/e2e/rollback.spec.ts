@@ -81,12 +81,15 @@ test('owner restores a replaced release from the Go-live panel', async ({
   await expect(
     panel.locator(`[data-release-id="${restoredId}"]`),
   ).toHaveAttribute('data-testid', 'publication-live', { timeout: 45_000 })
-  await expect(
-    panel.locator(`[data-release-id="${liveId}"]`),
-  ).toHaveAttribute('data-testid', 'publication-superseded')
+  await expect(panel.locator(`[data-release-id="${liveId}"]`)).toHaveAttribute(
+    'data-testid',
+    'publication-superseded',
+  )
   await expect(panel.getByTestId('publication-live')).toHaveCount(1)
   await expect(
-    panel.locator(`[data-release-id="${liveId}"]`).getByTestId('publication-menu'),
+    panel
+      .locator(`[data-release-id="${liveId}"]`)
+      .getByTestId('publication-menu'),
   ).toBeVisible()
   // Changes made ready since then stay ready for the next Go live.
   const tray = page.getByTestId('release-status')

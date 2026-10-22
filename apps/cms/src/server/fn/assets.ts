@@ -121,11 +121,13 @@ export const deleteAssetFn = createServerFn({ method: 'POST' })
  * with too low a role gets the 403.
  */
 async function authorizedAsset(id: string, role?: 'owner') {
-  const owner = (await db
-    .select({ organizationId: asset.organizationId })
-    .from(asset)
-    .where(eq(asset.id, id))
-    .limit(1)).at(0)
+  const owner = (
+    await db
+      .select({ organizationId: asset.organizationId })
+      .from(asset)
+      .where(eq(asset.id, id))
+      .limit(1)
+  ).at(0)
   if (!owner) return undefined
   const hidden = new NotFoundError(m.server_asset_not_found())
   try {

@@ -275,10 +275,12 @@ describe('audit publishing regressions', () => {
           )
         expect(job).toBeTruthy()
         await processJob(job, { adapter: failure })
-        const backoff = (await db
-          .select()
-          .from(schedulerBackoff)
-          .where(eq(schedulerBackoff.siteId, ctx.site.id))).at(0)
+        const backoff = (
+          await db
+            .select()
+            .from(schedulerBackoff)
+            .where(eq(schedulerBackoff.siteId, ctx.site.id))
+        ).at(0)
         expect(backoff?.failureCount).toBe(attempt)
         await runSchedulerTick()
         expect(
@@ -309,10 +311,12 @@ describe('audit publishing regressions', () => {
         .set({ scheduledVersion: crypto.randomUUID() })
         .where(eq(entry.id, row.id))
       await runSchedulerTick()
-      const reset = (await db
-        .select()
-        .from(schedulerBackoff)
-        .where(eq(schedulerBackoff.siteId, ctx.site.id))).at(0)
+      const reset = (
+        await db
+          .select()
+          .from(schedulerBackoff)
+          .where(eq(schedulerBackoff.siteId, ctx.site.id))
+      ).at(0)
       expect(reset?.failureCount).toBe(0)
       const [queued] = await db
         .select()

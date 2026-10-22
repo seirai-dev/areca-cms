@@ -68,15 +68,17 @@ async function findMailpitMessage(email: string) {
 }
 
 async function createActor(suffix: string) {
-  const actor = (await db
-    .insert(user)
-    .values({
-      id: crypto.randomUUID(),
-      name: `Admin Actor ${suffix}`,
-      email: `actor-${suffix}@test.local`,
-      emailVerified: true,
-    })
-    .returning()).at(0)
+  const actor = (
+    await db
+      .insert(user)
+      .values({
+        id: crypto.randomUUID(),
+        name: `Admin Actor ${suffix}`,
+        email: `actor-${suffix}@test.local`,
+        emailVerified: true,
+      })
+      .returning()
+  ).at(0)
   if (!actor) throw new Error('Failed to create actor')
   return actor
 }
@@ -169,11 +171,13 @@ describe.skipIf(!hasDb)('admin', () => {
       expect(created.token).toMatch(/^[0-9a-f]{64}$/)
       expect(created).not.toHaveProperty('tokenHash')
 
-      const stored = (await db
-        .select({ tokenHash: site.tokenHash })
-        .from(site)
-        .where(eq(site.id, created.id))
-        .limit(1)).at(0)
+      const stored = (
+        await db
+          .select({ tokenHash: site.tokenHash })
+          .from(site)
+          .where(eq(site.id, created.id))
+          .limit(1)
+      ).at(0)
       expect(stored?.tokenHash).toBe(
         createHash('sha256').update(created.token).digest('hex'),
       )
@@ -181,11 +185,13 @@ describe.skipIf(!hasDb)('admin', () => {
       const rotated = await rotateSiteTokenAdmin(created.id, 'build', actor.id)
       expect(rotated.token).not.toBe(created.token)
 
-      const afterRotate = (await db
-        .select({ tokenHash: site.tokenHash })
-        .from(site)
-        .where(eq(site.id, created.id))
-        .limit(1)).at(0)
+      const afterRotate = (
+        await db
+          .select({ tokenHash: site.tokenHash })
+          .from(site)
+          .where(eq(site.id, created.id))
+          .limit(1)
+      ).at(0)
       expect(afterRotate?.tokenHash).toBe(
         createHash('sha256').update(rotated.token).digest('hex'),
       )
@@ -228,15 +234,17 @@ describe.skipIf(!hasDb)('admin', () => {
   it('invites a member by email, accepts, and refuses removing the last owner', async () => {
     const suffix = crypto.randomUUID()
     const actor = await createActor(suffix)
-    const invitee = (await db
-      .insert(user)
-      .values({
-        id: crypto.randomUUID(),
-        name: `Invitee ${suffix}`,
-        email: `invitee-${suffix}@test.local`,
-        emailVerified: true,
-      })
-      .returning()).at(0)
+    const invitee = (
+      await db
+        .insert(user)
+        .values({
+          id: crypto.randomUUID(),
+          name: `Invitee ${suffix}`,
+          email: `invitee-${suffix}@test.local`,
+          emailVerified: true,
+        })
+        .returning()
+    ).at(0)
     if (!invitee) throw new Error('Failed to create invitee')
 
     const orgIds: string[] = []
@@ -289,26 +297,30 @@ describe.skipIf(!hasDb)('admin', () => {
   it('rejects duplicate invites, existing members, and email-mismatched accepts', async () => {
     const suffix = crypto.randomUUID()
     const actor = await createActor(suffix)
-    const invitee = (await db
-      .insert(user)
-      .values({
-        id: crypto.randomUUID(),
-        name: `Invitee ${suffix}`,
-        email: `invitee-${suffix}@test.local`,
-        emailVerified: true,
-      })
-      .returning()).at(0)
+    const invitee = (
+      await db
+        .insert(user)
+        .values({
+          id: crypto.randomUUID(),
+          name: `Invitee ${suffix}`,
+          email: `invitee-${suffix}@test.local`,
+          emailVerified: true,
+        })
+        .returning()
+    ).at(0)
     if (!invitee) throw new Error('Failed to create invitee')
 
-    const stranger = (await db
-      .insert(user)
-      .values({
-        id: crypto.randomUUID(),
-        name: `Stranger ${suffix}`,
-        email: `stranger-${suffix}@test.local`,
-        emailVerified: true,
-      })
-      .returning()).at(0)
+    const stranger = (
+      await db
+        .insert(user)
+        .values({
+          id: crypto.randomUUID(),
+          name: `Stranger ${suffix}`,
+          email: `stranger-${suffix}@test.local`,
+          emailVerified: true,
+        })
+        .returning()
+    ).at(0)
     if (!stranger) throw new Error('Failed to create stranger')
 
     const orgIds: string[] = []
@@ -362,26 +374,30 @@ describe.skipIf(!hasDb)('admin', () => {
   it('lists users with memberships grouped and sorted by organization name', async () => {
     const suffix = crypto.randomUUID()
     const actor = await createActor(suffix)
-    const member = (await db
-      .insert(user)
-      .values({
-        id: crypto.randomUUID(),
-        name: `Member ${suffix}`,
-        email: `member-${suffix}@test.local`,
-        emailVerified: true,
-      })
-      .returning()).at(0)
+    const member = (
+      await db
+        .insert(user)
+        .values({
+          id: crypto.randomUUID(),
+          name: `Member ${suffix}`,
+          email: `member-${suffix}@test.local`,
+          emailVerified: true,
+        })
+        .returning()
+    ).at(0)
     if (!member) throw new Error('Failed to create member')
 
-    const loner = (await db
-      .insert(user)
-      .values({
-        id: crypto.randomUUID(),
-        name: `Loner ${suffix}`,
-        email: `loner-${suffix}@test.local`,
-        emailVerified: true,
-      })
-      .returning()).at(0)
+    const loner = (
+      await db
+        .insert(user)
+        .values({
+          id: crypto.randomUUID(),
+          name: `Loner ${suffix}`,
+          email: `loner-${suffix}@test.local`,
+          emailVerified: true,
+        })
+        .returning()
+    ).at(0)
     if (!loner) throw new Error('Failed to create loner')
 
     const orgIds: string[] = []

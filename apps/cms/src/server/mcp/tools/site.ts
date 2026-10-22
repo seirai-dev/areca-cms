@@ -3,7 +3,10 @@ import { z } from 'zod'
 import { isTranslatable } from '#/lib/content-locale'
 import { listCollections } from '#/server/content/collections'
 import { listGlobals } from '#/server/content/globals'
-import { languageName, loadSiteLanguages } from '#/server/content/locale-validation'
+import {
+  languageName,
+  loadSiteLanguages,
+} from '#/server/content/locale-validation'
 import type { Field, SiteLanguages } from '#/lib/types'
 
 import { credentialPhrase } from '../guard'
@@ -62,7 +65,10 @@ const LANGUAGES_GUIDE = [
   'Check the other languages with get_entry: translations shows, for each language, whether it is complete and which required fields are missing. Ready is blocked until every required language is complete.',
 ].join(' ')
 
-function writingGuide(actor: McpActor, languages: SiteLanguages | null): string {
+function writingGuide(
+  actor: McpActor,
+  languages: SiteLanguages | null,
+): string {
   const approval =
     actor.role === 'editor'
       ? 'You cannot mark entries ready. When the user asks for approval or publishing, explain that a site owner must mark it ready in the CMS.'
@@ -133,7 +139,12 @@ export function registerSiteTools(registry: ToolRegistry): void {
           enabled: col.enabled,
           fieldCount: col.fields.length,
           ...(languages
-            ? languageInfo(languages, col.requiredLanguages, col.fields, col.localizedRoutes)
+            ? languageInfo(
+                languages,
+                col.requiredLanguages,
+                col.fields,
+                col.localizedRoutes,
+              )
             : {}),
         })),
         globals: globals.map((global) => ({
@@ -223,12 +234,12 @@ function languageInfo(
   fields: Field[],
   localizedRoutes?: Record<string, string> | null,
 ) {
-  const required = requiredLanguages.filter((code) => languages.all.includes(code))
+  const required = requiredLanguages.filter((code) =>
+    languages.all.includes(code),
+  )
   return {
     requiredLanguages: required,
-    translatableFields: fields
-      .filter(isTranslatable)
-      .map((field) => field.key),
+    translatableFields: fields.filter(isTranslatable).map((field) => field.key),
     ...(localizedRoutes && Object.keys(localizedRoutes).length > 0
       ? { routes: localizedRoutes }
       : {}),

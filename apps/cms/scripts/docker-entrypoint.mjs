@@ -81,11 +81,15 @@ await waitForPostgres()
 await runMigrations()
 await ensureBucket()
 
-const child = spawn(process.execPath, [join(appDir, '.output/server/index.mjs')], {
-  cwd: appDir,
-  env: process.env,
-  stdio: 'inherit',
-})
+const child = spawn(
+  process.execPath,
+  [join(appDir, '.output/server/index.mjs')],
+  {
+    cwd: appDir,
+    env: process.env,
+    stdio: 'inherit',
+  },
+)
 
 // The server entry (and with it the publishing worker, scheduler and the
 // first-run setup token) loads on the first request, so make one ourselves

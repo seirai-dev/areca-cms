@@ -365,15 +365,17 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
       const queued = await getPublication(jobs[0].publicationId)
       expect(queued).not.toBeNull()
       expect(queued?.requestedBy).toBeNull()
-      const requested = (await db
-        .select()
-        .from(auditLog)
-        .where(
-          and(
-            eq(auditLog.targetId, queued!.id),
-            eq(auditLog.action, 'publication.requested'),
-          ),
-        )).at(0)
+      const requested = (
+        await db
+          .select()
+          .from(auditLog)
+          .where(
+            and(
+              eq(auditLog.targetId, queued!.id),
+              eq(auditLog.action, 'publication.requested'),
+            ),
+          )
+      ).at(0)
       expect(requested?.actorId).toBe(ctx.actor.id)
       expect(requested?.meta).toEqual(
         expect.objectContaining({
@@ -791,23 +793,27 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
       await scheduleEntry(scheduled.id, dueScheduleIso(), 'UTC', ctx.actor.id)
 
       await runSchedulerTick()
-      const row = (await db
-        .select()
-        .from(schedulerBackoff)
-        .where(eq(schedulerBackoff.siteId, ctx.site.id))
-        .limit(1)).at(0)
+      const row = (
+        await db
+          .select()
+          .from(schedulerBackoff)
+          .where(eq(schedulerBackoff.siteId, ctx.site.id))
+          .limit(1)
+      ).at(0)
       expect(row).toBeDefined()
       expect(row?.lastError).toBeTruthy()
       expect(await listBuildJobs(ctx.site.id)).toHaveLength(0)
-      const failed = (await db
-        .select()
-        .from(auditLog)
-        .where(
-          and(
-            eq(auditLog.siteId, ctx.site.id),
-            eq(auditLog.action, 'publication.scheduled_failed'),
-          ),
-        )).at(0)
+      const failed = (
+        await db
+          .select()
+          .from(auditLog)
+          .where(
+            and(
+              eq(auditLog.siteId, ctx.site.id),
+              eq(auditLog.action, 'publication.scheduled_failed'),
+            ),
+          )
+      ).at(0)
       expect(failed?.actorId).toBe(ctx.actor.id)
       expect(failed?.meta).toEqual(
         expect.objectContaining({ scheduledBy: [ctx.actor.id] }),
@@ -816,11 +822,13 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
       resetSchedulerAttempts()
       await runSchedulerTick()
       expect(await listBuildJobs(ctx.site.id)).toHaveLength(0)
-      const still = (await db
-        .select()
-        .from(schedulerBackoff)
-        .where(eq(schedulerBackoff.siteId, ctx.site.id))
-        .limit(1)).at(0)
+      const still = (
+        await db
+          .select()
+          .from(schedulerBackoff)
+          .where(eq(schedulerBackoff.siteId, ctx.site.id))
+          .limit(1)
+      ).at(0)
       expect(still?.lastAttemptAt.getTime()).toBe(row!.lastAttemptAt.getTime())
     })
   })

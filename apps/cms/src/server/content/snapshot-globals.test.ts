@@ -52,10 +52,9 @@ function collectionsHash(collections: Record<string, SnapshotEntry[]>) {
 }
 
 async function sectionEntry(globalId: string) {
-  const row = (await db
-    .select()
-    .from(entry)
-    .where(eq(entry.collectionId, globalId))).at(0)
+  const row = (
+    await db.select().from(entry).where(eq(entry.collectionId, globalId))
+  ).at(0)
   if (!row) throw new Error('section entry missing')
   return row
 }

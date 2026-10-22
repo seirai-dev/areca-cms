@@ -53,12 +53,19 @@ test('collection: view toggle, status filter and select-mode bulk actions', asyn
   await expect(page.locator('article[data-testid^="entry-"]')).toHaveCount(3)
   await list.click()
   await expect(list).toHaveAttribute('aria-checked', 'true')
-  await expect(page.locator('[role="listitem"][data-testid^="entry-"]')).toHaveCount(3)
+  await expect(
+    page.locator('[role="listitem"][data-testid^="entry-"]'),
+  ).toHaveCount(3)
   // Remembered per collection.
   await page.reload()
   await hydrated(page, page.getByTestId('site-content'))
-  await expect(page.getByTestId('view-list')).toHaveAttribute('aria-checked', 'true')
-  await expect(page.locator('[role="listitem"][data-testid^="entry-"]')).toHaveCount(3)
+  await expect(page.getByTestId('view-list')).toHaveAttribute(
+    'aria-checked',
+    'true',
+  )
+  await expect(
+    page.locator('[role="listitem"][data-testid^="entry-"]'),
+  ).toHaveCount(3)
 
   /* Status filter: the sliding pill control. */
   await page.getByTestId('status-filter-draft').click()
@@ -86,7 +93,9 @@ test('collection: view toggle, status filter and select-mode bulk actions', asyn
     'aria-checked',
     'true',
   )
-  await expect(page.locator('[data-testid^="entry-"][data-entry-id]')).toHaveCount(3)
+  await expect(
+    page.locator('[data-testid^="entry-"][data-entry-id]'),
+  ).toHaveCount(3)
 
   /* Search: `/` focuses it; Escape clears it. */
   await page.getByRole('heading', { level: 1 }).click()
@@ -98,16 +107,25 @@ test('collection: view toggle, status filter and select-mode bulk actions', asyn
   await expect(entry(page, draftA)).toHaveCount(0)
   await page.keyboard.press('Escape')
   await expect(search).toHaveValue('')
-  await expect(page.locator('[data-testid^="entry-"][data-entry-id]')).toHaveCount(3)
+  await expect(
+    page.locator('[data-testid^="entry-"][data-entry-id]'),
+  ).toHaveCount(3)
 
   /* Select mode with the floating action bar. */
   await page.getByTestId('select-mode').click()
-  await expect(page.getByTestId('select-mode')).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByTestId('select-mode')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
   const bar = page.getByTestId('bulk-actions')
   await expect(bar).toBeVisible()
   await expect(bar).toContainText('Select entries')
-  await page.getByRole('button', { name: `Select ${draftA}`, exact: true }).click()
-  await page.getByRole('button', { name: `Select ${draftB}`, exact: true }).click()
+  await page
+    .getByRole('button', { name: `Select ${draftA}`, exact: true })
+    .click()
+  await page
+    .getByRole('button', { name: `Select ${draftB}`, exact: true })
+    .click()
   await expect(bar).toContainText('2 selected')
   await expect(entry(page, draftA)).toHaveAttribute('data-selected', 'true')
 
@@ -120,13 +138,17 @@ test('collection: view toggle, status filter and select-mode bulk actions', asyn
     'data-ui-status',
     'ready',
   )
-  await expect(page.getByTestId('release-status')).toContainText('3 changes ready')
+  await expect(page.getByTestId('release-status')).toContainText(
+    '3 changes ready',
+  )
 
   // Back to draft for one of them.
   await page.getByTestId('bulk-done').click()
   await expect(bar).toBeHidden()
   await page.getByTestId('select-mode').click()
-  await page.getByRole('button', { name: `Select ${draftA}`, exact: true }).click()
+  await page
+    .getByRole('button', { name: `Select ${draftA}`, exact: true })
+    .click()
   await expect(bar).toContainText('1 selected')
   await bar.getByTestId('bulk-draft').click()
   await expect(entry(page, draftA).getByTestId('entry-status')).toHaveAttribute(
@@ -138,7 +160,9 @@ test('collection: view toggle, status filter and select-mode bulk actions', asyn
   await expect(bar).toContainText('Select entries')
 
   // Delete asks first.
-  await page.getByRole('button', { name: `Select ${draftB}`, exact: true }).click()
+  await page
+    .getByRole('button', { name: `Select ${draftB}`, exact: true })
+    .click()
   await bar.getByTestId('bulk-delete').click()
   const confirm = page.getByRole('alertdialog')
   await expect(confirm).toContainText('Delete this entry?')
@@ -162,7 +186,9 @@ test('editors can select entries but bulk actions are disabled with the reason',
   await createArticle(page, title)
   await backToCollection(page)
   await page.getByTestId('select-mode').click()
-  await page.getByRole('button', { name: `Select ${title}`, exact: true }).click()
+  await page
+    .getByRole('button', { name: `Select ${title}`, exact: true })
+    .click()
   const bar = page.getByTestId('bulk-actions')
   await expect(bar).toBeVisible()
   for (const id of ['bulk-ready', 'bulk-draft', 'bulk-delete']) {

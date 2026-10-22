@@ -13,7 +13,9 @@ describe('MCP resource identifiers', () => {
   })
 
   it('accepts only the exact resource of this deployment', () => {
-    expect(siteSlugFromMcpResource(`${base}/api/mcp/acme-site`)).toBe('acme-site')
+    expect(siteSlugFromMcpResource(`${base}/api/mcp/acme-site`)).toBe(
+      'acme-site',
+    )
     for (const bad of [
       `${base}/api/mcp/acme-site/`,
       `${base}/api/mcp/acme-site?x=1`,

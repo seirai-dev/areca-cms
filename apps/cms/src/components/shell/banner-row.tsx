@@ -39,7 +39,9 @@ export function BannerRow({
             : 'size-4 shrink-0 text-icon-warning'
         }
       />
-      <div className="min-w-[min(100%,16rem)] flex-1 break-words">{message}</div>
+      <div className="min-w-[min(100%,16rem)] flex-1 break-words">
+        {message}
+      </div>
       <div className="flex items-center gap-1.5">
         {action}
         <Button

@@ -8,7 +8,8 @@ import type { Field, FieldType } from '#/lib/types'
 
 const TYPE_FORMAT: Record<FieldType, string> = {
   text: 'Single line of plain text, up to 1000 characters.',
-  textarea: 'Plain text, several lines allowed, up to 50000 characters. No Markdown.',
+  textarea:
+    'Plain text, several lines allowed, up to 50000 characters. No Markdown.',
   richtext:
     'Markdown string. Section headings start with ## (### and #### for subsections; other levels are clamped), paragraphs separated by a blank line, **bold**, *italic*, [links](https://...), bullet and numbered lists, > blockquotes, tables, and images as ![alt text](asset:<assetId>). Raw HTML is dropped. Images from a full https URL also work but prefer uploaded assets.',
   image:
@@ -17,7 +18,8 @@ const TYPE_FORMAT: Record<FieldType, string> = {
   datetime:
     'ISO 8601 date and time with an offset, e.g. 2026-10-10T09:00:00+02:00 or 2026-10-10T07:00:00Z. Content only: it does not schedule the entry.',
   select: 'One of the listed options, spelled exactly.',
-  reference: 'Entry id of an entry in the referenced collection. Find ids with list_entries.',
+  reference:
+    'Entry id of an entry in the referenced collection. Find ids with list_entries.',
   slug: 'Lowercase letters, numbers and dashes only, e.g. my-first-post. Unique within the collection.',
   boolean: 'true or false.',
   number: 'A JSON number, e.g. 3 or 4.5.',
@@ -175,7 +177,10 @@ export function translationExample(input: {
   seoEnabled: boolean
   tool: 'update_entry' | 'update_global'
   target: Record<string, string>
-}): { note: string; example: { tool: string; arguments: Record<string, unknown> } } {
+}): {
+  note: string
+  example: { tool: string; arguments: Record<string, unknown> }
+} {
   const other = input.all.find((code) => code !== input.main) ?? input.main
   const translatable = input.fields.filter(isTranslatable)
   return {

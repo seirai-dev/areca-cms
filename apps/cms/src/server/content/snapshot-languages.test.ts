@@ -8,7 +8,11 @@ import type { EntryData, Field } from '#/lib/types'
 
 import { createEntry, publishEntry, updateDraft } from './entries.ts'
 import { upsertGlobal } from './globals.ts'
-import { buildPreviewEntry, buildPreviewGlobal, buildSnapshot } from './snapshot.ts'
+import {
+  buildPreviewEntry,
+  buildPreviewGlobal,
+  buildSnapshot,
+} from './snapshot.ts'
 import {
   createTestCollection,
   createTestGlobal,
@@ -47,9 +51,9 @@ async function setupVacancies(suffix: string, siteId: string) {
   const [image] = await db
     .insert(asset)
     .values({
-      organizationId: (
-        await db.query.site.findFirst({ where: (s, ops) => ops.eq(s.id, siteId) })
-      )!.organizationId,
+      organizationId: (await db.query.site.findFirst({
+        where: (s, ops) => ops.eq(s.id, siteId),
+      }))!.organizationId,
       storageKey: `org-${suffix}/hero-${suffix}.png`,
       originalFilename: 'hero.png',
       mimeType: 'image/png',
@@ -269,8 +273,9 @@ describe.skipIf(!hasDb)('buildSnapshot with content languages', () => {
       expect(after.ok).toBe(true)
       if (!after.ok) return
       expect(after.hash).not.toBe(before.hash)
-      expect(after.snapshot.collections.vacancies.at(0)?.locales?.en.data.title)
-        .toBe('Backend engineer')
+      expect(
+        after.snapshot.collections.vacancies.at(0)?.locales?.en.data.title,
+      ).toBe('Backend engineer')
     } finally {
       await cleanupTestSite(ctx)
     }
@@ -340,7 +345,10 @@ describe.skipIf(!hasDb)('buildSnapshot with content languages', () => {
       expect(item).not.toHaveProperty('locale')
       expect(item).not.toHaveProperty('locales')
       const schema = snapshot.schema?.vacancies
-      expect(schema).toMatchObject({ route: '/vacancies/$slug', label: 'Articles' })
+      expect(schema).toMatchObject({
+        route: '/vacancies/$slug',
+        label: 'Articles',
+      })
       expect(schema).not.toHaveProperty('routes')
       expect(schema).not.toHaveProperty('requiredLanguages')
       const byKey = (fields: Field[]) =>
@@ -384,7 +392,10 @@ describe.skipIf(!hasDb)('preview with content languages', () => {
       })
       await publishEntry(created.id, ctx.actor.id)
       // A draft edit that is not published yet must be what preview shows.
-      const [row] = await db.select().from(entry).where(eq(entry.id, created.id))
+      const [row] = await db
+        .select()
+        .from(entry)
+        .where(eq(entry.id, created.id))
       await updateDraft(
         created.id,
         {
@@ -403,7 +414,10 @@ describe.skipIf(!hasDb)('preview with content languages', () => {
       expect(en?.data.title).toBe('Draft English')
       // `locales` has the snapshot shape (complete languages only).
       expect(Object.keys(en?.locales ?? {})).toEqual(['nl', 'en'])
-      expect(en?.locales?.en).toMatchObject({ slug: enSlug, data: { title: 'Draft English' } })
+      expect(en?.locales?.en).toMatchObject({
+        slug: enSlug,
+        data: { title: 'Draft English' },
+      })
       // Per-language completeness sits beside it.
       expect(en?.localeStatus).toEqual({
         nl: { complete: true, missing: [] },
@@ -463,7 +477,9 @@ describe.skipIf(!hasDb)('section SEO off with language slots', () => {
         {
           email: 'info@example.com',
           $seo: { description: 'Base' },
-          $i18n: { en: { email: 'hello@example.com', $seo: { description: 'EN' } } },
+          $i18n: {
+            en: { email: 'hello@example.com', $seo: { description: 'EN' } },
+          },
         },
         ctx.actor.id,
         row.draftVersion,

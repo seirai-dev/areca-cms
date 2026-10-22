@@ -126,7 +126,13 @@ describe('preview locale', () => {
 
   it('appends &locale to entry and section preview URLs when given', () => {
     expect(
-      buildPreviewUrl('http://localhost:3001', 'articles', 'hello', 'tok', 'en'),
+      buildPreviewUrl(
+        'http://localhost:3001',
+        'articles',
+        'hello',
+        'tok',
+        'en',
+      ),
     ).toBe('http://localhost:3001/__preview/articles/hello?token=tok&locale=en')
     expect(
       buildPreviewUrl('http://localhost:3001', 'articles', 'hello', 'tok'),
@@ -136,4 +142,3 @@ describe('preview locale', () => {
     ).toBe('http://localhost:3001/about?arecaPreview=tok&locale=nl-BE')
   })
 })
-

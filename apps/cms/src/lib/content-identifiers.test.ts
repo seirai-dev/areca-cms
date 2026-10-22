@@ -42,20 +42,39 @@ describe('isReservedCollectionKey', () => {
     'preview-globals',
     'preview_globals',
     'Preview-Globals',
-  ])('rejects the collection key %s (reserved for the previewGlobals member)', (name) => {
-    expect(isReservedCollectionKey(name)).toBe(true)
-  })
+  ])(
+    'rejects the collection key %s (reserved for the previewGlobals member)',
+    (name) => {
+      expect(isReservedCollectionKey(name)).toBe(true)
+    },
+  )
 
   // Content languages add members to the generated content object: `in()`,
   // `languages` and `matchLocale()`.
-  it.each(['in', 'IN', 'languages', 'Languages', 'matchLocale', 'match-locale', 'MATCH_LOCALE'])(
+  it.each([
+    'in',
+    'IN',
+    'languages',
+    'Languages',
+    'matchLocale',
+    'match-locale',
+    'MATCH_LOCALE',
+  ])(
     'rejects the collection key %s (reserved for the content languages API)',
     (name) => {
       expect(isReservedCollectionKey(name)).toBe(true)
     },
   )
 
-  it.each(['articles', 'resolved', 'previewText', 'preview-text', 'inbox', 'languageNotes', 'matchLocales'])('accepts %s', (name) => {
+  it.each([
+    'articles',
+    'resolved',
+    'previewText',
+    'preview-text',
+    'inbox',
+    'languageNotes',
+    'matchLocales',
+  ])('accepts %s', (name) => {
     expect(isReservedCollectionKey(name)).toBe(false)
   })
 })

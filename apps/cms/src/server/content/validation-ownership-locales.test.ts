@@ -18,7 +18,13 @@ const fields: Field[] = [
   { key: 'title', label: 'Title', type: 'text', required: true },
   { key: 'slug', label: 'Slug', type: 'slug', required: true },
   { key: 'cover', label: 'Cover', type: 'image', translatable: true },
-  { key: 'related', label: 'Related', type: 'reference', collection: 'articles', translatable: true },
+  {
+    key: 'related',
+    label: 'Related',
+    type: 'reference',
+    collection: 'articles',
+    translatable: true,
+  },
 ]
 
 async function foreignAsset(orgId: string, suffix: string) {
@@ -42,7 +48,10 @@ describe.skipIf(!hasDb)('ownership of language slots', () => {
     try {
       await createTestCollection(first.site.id, { fields })
       await createTestCollection(second.site.id, { fields })
-      const foreignImage = await foreignAsset(second.org.id, `img-${second.suffix}`)
+      const foreignImage = await foreignAsset(
+        second.org.id,
+        `img-${second.suffix}`,
+      )
       const foreignOg = await foreignAsset(second.org.id, `og-${second.suffix}`)
       const foreignEntry = await createEntry({
         siteId: second.site.id,
@@ -86,7 +95,10 @@ describe.skipIf(!hasDb)('ownership of language slots', () => {
         ctx.site.id,
         ctx.org.id,
         fields,
-        { title: 'Base', $i18n: { fr: { cover: own.id, $seo: { ogImage: own.id } } } },
+        {
+          title: 'Base',
+          $i18n: { fr: { cover: own.id, $seo: { ogImage: own.id } } },
+        },
       )
       expect(errors).toEqual([])
     } finally {
@@ -99,7 +111,10 @@ describe.skipIf(!hasDb)('ownership of language slots', () => {
     const second = await createTestSite()
     try {
       await createTestCollection(first.site.id, { fields })
-      const foreignImage = await foreignAsset(second.org.id, `write-${second.suffix}`)
+      const foreignImage = await foreignAsset(
+        second.org.id,
+        `write-${second.suffix}`,
+      )
       await expect(
         createEntry({
           siteId: first.site.id,

@@ -37,15 +37,24 @@ test('command palette finds entries and pages; keyboard shortcuts navigate', asy
   await expect(list.getByText('Entries', { exact: true })).toBeVisible()
   await result.click()
   await expect(page).toHaveURL(new RegExp(`/c/articles/${entryId}$`))
-  await expect(page.getByTestId('entry-editor')).toHaveAttribute('data-ready', 'true')
+  await expect(page.getByTestId('entry-editor')).toHaveAttribute(
+    'data-ready',
+    'true',
+  )
   await page.getByTestId('editor-back').click()
-  await expect(page.getByTestId('site-content')).toHaveAttribute('data-ready', 'true')
+  await expect(page.getByTestId('site-content')).toHaveAttribute(
+    'data-ready',
+    'true',
+  )
 
   /* The sidebar's Search field opens it too; "Go to" jumps to a page. */
   await page.getByTestId('open-search').click()
   await expect(input).toBeVisible()
   await input.fill('Library')
-  await list.getByRole('option', { name: /Library/ }).first().click()
+  await list
+    .getByRole('option', { name: /Library/ })
+    .first()
+    .click()
   await expect(page).toHaveURL(new RegExp(`/sites/${siteId}/library$`))
   await expect(page.getByTestId('library-page')).toBeVisible()
 

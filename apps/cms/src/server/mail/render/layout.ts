@@ -140,7 +140,9 @@ ${button}
   const text = [
     input.heading,
     ...input.paragraphs,
-    ...(input.list?.length ? [input.list.map((line) => `- ${line}`).join('\n')] : []),
+    ...(input.list?.length
+      ? [input.list.map((line) => `- ${line}`).join('\n')]
+      : []),
     ...(input.button ? [`${input.button.label}: ${input.button.url}`] : []),
     [
       ...input.footer,

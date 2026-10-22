@@ -53,11 +53,13 @@ export async function listInboundReferences(
   entryId: string,
   viewerIsAgency: boolean,
 ): Promise<InboundReference[]> {
-  const target = (await db
-    .select({ id: entry.id, siteId: entry.siteId })
-    .from(entry)
-    .where(eq(entry.id, entryId))
-    .limit(1)).at(0)
+  const target = (
+    await db
+      .select({ id: entry.id, siteId: entry.siteId })
+      .from(entry)
+      .where(eq(entry.id, entryId))
+      .limit(1)
+  ).at(0)
   if (!target) {
     throw new NotFoundError(m.server_entry_not_found())
   }

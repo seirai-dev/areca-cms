@@ -48,7 +48,9 @@ test('preview needs a saved entry; its signed URL serves the draft and rejects t
   const body = (await ok.json()) as { entry: { data: { title?: string } } }
   expect(body.entry.data.title).toBe(title)
 
-  const tampered = token!.endsWith('a') ? `${token!.slice(0, -1)}b` : `${token}a`
+  const tampered = token!.endsWith('a')
+    ? `${token!.slice(0, -1)}b`
+    : `${token}a`
   const denied = await request.get(
     `/api/sites/preview?token=${encodeURIComponent(tampered)}`,
   )

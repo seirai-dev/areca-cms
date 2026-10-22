@@ -201,12 +201,16 @@ async function latestPublication(
   siteId: string,
   status: 'live' | 'demo',
 ): Promise<typeof publication.$inferSelect | null> {
-  const row = (await db
-    .select()
-    .from(publication)
-    .where(and(eq(publication.siteId, siteId), eq(publication.status, status)))
-    .orderBy(desc(publication.createdAt))
-    .limit(1)).at(0)
+  const row = (
+    await db
+      .select()
+      .from(publication)
+      .where(
+        and(eq(publication.siteId, siteId), eq(publication.status, status)),
+      )
+      .orderBy(desc(publication.createdAt))
+      .limit(1)
+  ).at(0)
   return row ?? null
 }
 
@@ -269,11 +273,9 @@ async function listScheduledUpcoming(
 export async function diffApprovedRelease(
   siteId: string,
 ): Promise<ApprovedReleaseDiff> {
-  const existingSite = (await db
-    .select()
-    .from(site)
-    .where(eq(site.id, siteId))
-    .limit(1)).at(0)
+  const existingSite = (
+    await db.select().from(site).where(eq(site.id, siteId)).limit(1)
+  ).at(0)
   const publishingMode = existingSite?.publishingMode ?? 'production'
   const live = await latestPublication(siteId, 'live')
   const demo =

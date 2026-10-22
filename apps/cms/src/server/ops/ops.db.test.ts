@@ -48,8 +48,7 @@ async function withJob(
 }
 
 const logsOf = async (jobId: string) =>
-  (await db.select().from(buildJob).where(eq(buildJob.id, jobId)))[0].logs ??
-  ''
+  (await db.select().from(buildJob).where(eq(buildJob.id, jobId)))[0].logs ?? ''
 
 describe.skipIf(!hasDb)('bounded build logs', () => {
   it('appends timestamped, redacted lines', async () => {

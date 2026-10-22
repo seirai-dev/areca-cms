@@ -443,10 +443,12 @@ async function main() {
   console.error(`Database: ${dbName}  scale=${scale}  runs=${runs}`)
   let seeded: Seeded
   if (args['skip-seed']) {
-    const st = (await db
-      .select()
-      .from(schema.site)
-      .where(eq(schema.site.slug, 'bench-site-0-0'))).at(0)
+    const st = (
+      await db
+        .select()
+        .from(schema.site)
+        .where(eq(schema.site.slug, 'bench-site-0-0'))
+    ).at(0)
     if (!st) throw new Error('No seeded data found; run without --skip-seed.')
     const [a] = await db
       .select()
@@ -568,8 +570,9 @@ async function main() {
     node: process.version,
     platform: `${os.platform()} ${os.arch()}`,
   }
-  const pgv = ((await db.execute<{ v: string }>(sql`select version() as v`))
-    .rows).at(0)
+  const pgv = (
+    await db.execute<{ v: string }>(sql`select version() as v`)
+  ).rows.at(0)
   const dataset = {
     scale,
     ...seeded.counts,
