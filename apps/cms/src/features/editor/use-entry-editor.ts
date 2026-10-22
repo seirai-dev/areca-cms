@@ -34,7 +34,6 @@ import {
   getEntryFn,
   getGlobalPreviewUrlFn,
   getPreviewUrlFn,
-  listRevisionsFn,
   publishEntryFn,
   restoreRevisionFn,
   scheduleEntryFn,
@@ -171,12 +170,6 @@ export function useEntryEditor({
     },
   })
   const entry = (entryQuery.data ?? null) as EntryRecord | null
-
-  const revisionsQuery = useQuery({
-    queryKey: queryKeys.revisions(entryId ?? ''),
-    queryFn: () => listRevisionsFn({ data: { entryId: entryId! } }),
-    enabled: Boolean(entryId),
-  })
 
   const previewQuery = useQuery({
     queryKey: globalKey
@@ -981,8 +974,6 @@ export function useEntryEditor({
     entryQuery,
     loading,
     ready,
-    revisions: (revisionsQuery.data ?? []) as RevisionRecord[],
-    revisionsQuery,
     previewUrl: previewQuery.data?.url,
     titleField,
     slugField,

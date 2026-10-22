@@ -373,16 +373,31 @@ export const deleteEntryFn = createServerFn({ method: 'POST' })
     return { ok: true as const }
   })
 
+/** One history page, newest first, without revision data. */
 export const listRevisionsFn = createServerFn({ method: 'GET', ...entryFn })
-  .validator(z.object({ entryId: z.string().min(1).max(ID_MAX_LENGTH) }))
+  .validator(
+    z.object({
+      entryId: z.string().min(1).max(ID_MAX_LENGTH),
+      cursor: z.string().min(1).max(ID_MAX_LENGTH).nullish(),
+      limit: z.number().int().min(1).max(100).optional(),
+    }),
+  )
   .handler(async ({ data }) => {
     await requireEntryAccess(data.entryId)
-    const revisions = await listRevisions(data.entryId)
-    const names = await userNames(revisions.map((rev) => rev.createdBy))
-    return revisions.map((rev) => ({
-      ...rev,
-      createdByName: rev.createdBy ? (names.get(rev.createdBy) ?? null) : null,
-    }))
+    const page = await listRevisions(data.entryId, {
+      cursor: data.cursor,
+      limit: data.limit,
+    })
+    const names = await userNames(page.items.map((rev) => rev.createdBy))
+    return {
+      items: page.items.map((rev) => ({
+        ...rev,
+        createdByName: rev.createdBy
+          ? (names.get(rev.createdBy) ?? null)
+          : null,
+      })),
+      nextCursor: page.nextCursor,
+    }
   })
 
 export const restoreRevisionFn = createServerFn({ method: 'POST', ...entryFn })

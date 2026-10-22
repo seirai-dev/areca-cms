@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 import { db } from '#/db'
 import { auditLog, entry, entryRevision } from '#/db/schema'
+import { makeUser, removeUsers } from '#/server/notifications/test-utils'
 
 import {
   createEntry,
@@ -62,7 +63,7 @@ describe.skipIf(!hasDb)('entries', () => {
       expect(published.publishedData).toEqual(updated.draftData)
       expect(published.publishedAt).toBeInstanceOf(Date)
 
-      const revisions = await listRevisions(created.id)
+      const { items: revisions } = await listRevisions(created.id)
       expect(revisions.map((rev) => rev.note)).toEqual(
         expect.arrayContaining(['create', 'update', 'publish']),
       )
@@ -175,7 +176,7 @@ describe.skipIf(!hasDb)('entries', () => {
         ),
       ).rejects.toBeInstanceOf(ConflictError)
       expect(first.draftVersion).toBe(created.draftVersion + 1)
-      const revisions = await listRevisions(created.id)
+      const { items: revisions } = await listRevisions(created.id)
       expect(revisions.filter((row) => row.note === 'update')).toHaveLength(1)
     })
   })
@@ -223,8 +224,8 @@ describe.skipIf(!hasDb)('entries', () => {
         .select()
         .from(entry)
         .where(eq(entry.id, created.id))
-      expect(unchanged?.status).toBe('draft')
-      expect(unchanged?.publishedData).toBeNull()
+      expect(unchanged.status).toBe('draft')
+      expect(unchanged.publishedData).toBeNull()
 
       const approved = await publishEntry(
         created.id,
@@ -286,10 +287,161 @@ describe.skipIf(!hasDb)('entries', () => {
       expect(restored.skippedFields).toContainEqual(
         expect.objectContaining({ key: 'removedField' }),
       )
-      const latest = (await listRevisions(created.id)).find(
-        (row) => row.note === 'restore',
+      const { items } = await listRevisions(created.id)
+      const latest = items.find((row) => row.note === 'restore')
+      const [stored] = await db
+        .select()
+        .from(entryRevision)
+        .where(eq(entryRevision.id, latest?.id ?? ''))
+      expect(stored.data).toEqual({ title: 'Old', slug, body: sampleRichText })
+    })
+  })
+})
+
+describe.skipIf(!hasDb)('revision history', () => {
+  it("coalesces one person's autosaves into their latest autosave revision", async () => {
+    await withTestSite(async (ctx) => {
+      await createTestCollection(ctx.site.id)
+      const created = await createEntry({
+        siteId: ctx.site.id,
+        collectionKey: 'articles',
+        data: {
+          title: 'Start',
+          slug: `coalesce-${ctx.suffix}`,
+          body: sampleRichText,
+        },
+        actorId: ctx.actor.id,
+      })
+      const first = await updateDraft(
+        created.id,
+        { ...created.draftData, title: 'One' },
+        ctx.actor.id,
+        created.draftVersion,
       )
-      expect(latest?.data).toEqual({ title: 'Old', slug, body: sampleRichText })
+      const second = await updateDraft(
+        created.id,
+        { ...first.draftData, title: 'Two' },
+        ctx.actor.id,
+        first.draftVersion,
+      )
+
+      const { items } = await listRevisions(created.id)
+      expect(items.map((rev) => rev.note)).toEqual(['update', 'create'])
+      expect(items[0]).toMatchObject({ kind: 'autosave' })
+      const [latest] = await db
+        .select()
+        .from(entryRevision)
+        .where(eq(entryRevision.id, items[0]?.id ?? ''))
+      expect(latest.data).toMatchObject({ title: 'Two' })
+      expect(second.draftVersion).toBe(created.draftVersion + 2)
+    })
+  })
+
+  it("never merges milestones, another person's edits, or autosaves past the window", async () => {
+    await withTestSite(async (ctx) => {
+      await createTestCollection(ctx.site.id)
+      const other = await makeUser({ name: 'Second Editor' })
+      try {
+        const created = await createEntry({
+          siteId: ctx.site.id,
+          collectionKey: 'articles',
+          data: {
+            title: 'Milestones',
+            slug: `milestones-${ctx.suffix}`,
+            body: sampleRichText,
+          },
+          actorId: ctx.actor.id,
+        })
+        const autosave = await updateDraft(
+          created.id,
+          { ...created.draftData, title: 'Mine' },
+          ctx.actor.id,
+          created.draftVersion,
+        )
+        const published = await publishEntry(created.id, ctx.actor.id)
+        const afterPublish = await updateDraft(
+          created.id,
+          { ...published.draftData, title: 'After publish' },
+          ctx.actor.id,
+          published.draftVersion,
+        )
+        const byOther = await updateDraft(
+          created.id,
+          { ...afterPublish.draftData, title: 'Theirs' },
+          other.id,
+          afterPublish.draftVersion,
+        )
+        const { items } = await listRevisions(created.id)
+        expect(items.map((rev) => rev.note)).toEqual([
+          'update',
+          'update',
+          'publish',
+          'update',
+          'create',
+        ])
+        expect(byOther.draftVersion).toBe(afterPublish.draftVersion + 1)
+
+        // The window is measured from the autosave's creation, not its last save.
+        await db
+          .update(entryRevision)
+          .set({ createdAt: new Date(Date.now() - 11 * 60 * 1000) })
+          .where(eq(entryRevision.id, items[0]?.id ?? ''))
+        await updateDraft(
+          created.id,
+          { ...byOther.draftData, title: 'Late' },
+          other.id,
+          byOther.draftVersion,
+        )
+        const later = await listRevisions(created.id)
+        expect(later.items.map((rev) => rev.note).slice(0, 2)).toEqual([
+          'update',
+          'update',
+        ])
+        expect(later.items.length).toBe(items.length + 1)
+        expect(autosave.draftVersion).toBeGreaterThan(0)
+      } finally {
+        await removeUsers([other.id])
+      }
+    })
+  })
+
+  it('pages the history newest first, without revision data', async () => {
+    await withTestSite(async (ctx) => {
+      await createTestCollection(ctx.site.id)
+      const created = await createEntry({
+        siteId: ctx.site.id,
+        collectionKey: 'articles',
+        data: {
+          title: 'Paged',
+          slug: `paged-${ctx.suffix}`,
+          body: sampleRichText,
+        },
+        actorId: ctx.actor.id,
+      })
+      const base = Date.now() - 100 * 60 * 1000
+      await db.insert(entryRevision).values(
+        Array.from({ length: 34 }, (_, index) => ({
+          entryId: created.id,
+          data: { title: `Older ${index}` },
+          createdBy: ctx.actor.id,
+          note: 'publish',
+          kind: 'milestone' as const,
+          createdAt: new Date(base + index * 1000),
+        })),
+      )
+
+      const first = await listRevisions(created.id)
+      expect(first.items).toHaveLength(30)
+      expect(first.items[0]).not.toHaveProperty('data')
+      expect(first.nextCursor).toBe(first.items.at(-1)?.id)
+
+      const second = await listRevisions(created.id, {
+        cursor: first.nextCursor,
+      })
+      expect(second.items).toHaveLength(5)
+      expect(second.nextCursor).toBeNull()
+      const ids = [...first.items, ...second.items].map((rev) => rev.id)
+      expect(new Set(ids).size).toBe(35)
     })
   })
 })

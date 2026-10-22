@@ -523,15 +523,10 @@ function EntryEditorView({
       languageRows={languageRows}
       onSelectLanguage={lang.setActive}
       entry={entry}
+      entryId={editor.entryId}
       live={live}
       isNew={editor.isNew}
       canManage={canManage}
-      revisions={editor.revisions}
-      revisionsLoading={editor.revisionsQuery.isLoading}
-      revisionsError={
-        editor.revisionsQuery.isError ? editor.revisionsQuery.error : null
-      }
-      onRetryRevisions={() => void editor.revisionsQuery.refetch()}
       onRestore={setRestoreId}
       onCancelSchedule={editor.cancelSchedule}
       seoPanel={

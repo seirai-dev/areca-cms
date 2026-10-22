@@ -519,12 +519,7 @@ function GlobalEditorView({
           bodyClassName="bg-background-default pt-2"
         >
           <EntryHistory
-            revisions={editor.revisions}
-            loading={editor.revisionsQuery.isLoading}
-            error={
-              editor.revisionsQuery.isError ? editor.revisionsQuery.error : null
-            }
-            onRetry={() => void editor.revisionsQuery.refetch()}
+            entryId={editor.entryId}
             canManage={canManage}
             onRestore={setRestoreId}
           />
