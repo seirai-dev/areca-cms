@@ -27,6 +27,10 @@ vi.mock('#/server/mail/config', async (importOriginal) => {
   const actual = await importOriginal<typeof MailConfig>()
   return {
     ...actual,
+    isMailConfigured: async () => {
+      if (override.value === undefined) return actual.isMailConfigured()
+      return override.value !== null
+    },
     resolveMailConfig: async () => {
       if (override.value === undefined) return actual.resolveMailConfig()
       if (override.value === null) return null

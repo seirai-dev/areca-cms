@@ -44,6 +44,7 @@ import {
 
 vi.mock('#/server/mail/config', async (importOriginal) => ({
   ...(await importOriginal<typeof MailConfig>()),
+  isMailConfigured: async () => true,
   resolveMailConfig: async () => ({
     source: 'env' as const,
     host: 'mail.test',

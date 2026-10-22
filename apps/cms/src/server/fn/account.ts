@@ -13,7 +13,7 @@ import {
   sendPasswordResetLink,
   sendVerificationEmail,
 } from '#/server/mail/account-emails'
-import { resolveMailConfig } from '#/server/mail/config'
+import { isMailConfigured } from '#/server/mail/config'
 import { mailFailureMessage } from '#/server/mail/errors'
 import { MAIL_LOCALES } from '#/server/mail/render/types'
 import type { MailFailure } from '#/server/mail/types'
@@ -37,7 +37,7 @@ export const getPasswordResetAvailabilityFn = createServerFn({
   if (!emailPasswordEnabled) {
     return { available: false, reason: 'password_sign_in_disabled' as const }
   }
-  if (!(await resolveMailConfig())) {
+  if (!(await isMailConfigured())) {
     return { available: false, reason: 'mail_not_configured' as const }
   }
   return { available: true, reason: 'ok' as const }
@@ -89,7 +89,7 @@ export const requestVerificationEmailFn = createServerFn({
       message: m.server_verification_email_rate_limited(),
     }
   }
-  if (!(await resolveMailConfig())) {
+  if (!(await isMailConfigured())) {
     return { ok: false as const, message: mailFailureMessage(NOT_CONFIGURED) }
   }
   const result = await sendVerificationEmail(session.user.id)

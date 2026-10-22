@@ -21,7 +21,7 @@ import {
   verificationIdentifierForms,
 } from '#/server/security/verification-identifiers'
 
-import { resolveMailConfig } from './config.ts'
+import { isMailConfigured } from './config.ts'
 import { enqueueEmail, sendNow } from './outbox.ts'
 import type { SendResult } from './outbox.ts'
 import { PARAMS_SECRET_CONTEXT } from './render/templates/password-reset.ts'
@@ -88,7 +88,7 @@ async function queueAccountEmail(input: {
   renderParams?: Record<string, unknown>
   connection?: Connection
 }): Promise<{ id: string } | null> {
-  if (!(await resolveMailConfig())) {
+  if (!(await isMailConfigured())) {
     log.info('account email skipped: mail is not configured', {
       kind: input.kind,
       userId: input.userId,
@@ -144,7 +144,7 @@ export async function sendPasswordResetLink(
     .where(eq(user.id, userId))
     .limit(1)
   if (!target) throw new NotFoundError(m.server_user_not_found())
-  if (!(await resolveMailConfig())) return null
+  if (!(await isMailConfigured())) return null
 
   const token = newResetToken()
   await db.insert(verification).values({

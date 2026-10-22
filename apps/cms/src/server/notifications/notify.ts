@@ -15,7 +15,7 @@ import type {
   NotificationRole,
 } from '#/lib/notifications'
 import { createLogger } from '#/server/log'
-import { resolveMailConfig } from '#/server/mail/config'
+import { isMailConfigured } from '#/server/mail/config'
 import { enqueueEmail } from '#/server/mail/outbox'
 
 import {
@@ -94,7 +94,7 @@ async function deliver(input: {
     loadAgencyRules(),
     organizationId ? loadOrganizationRules(organizationId) : null,
     loadUserChoices(userIds),
-    resolveMailConfig().then((config) => config !== null),
+    isMailConfigured(),
   ])
   const usersById = new Map(users.map((row) => [row.id, row]))
 
