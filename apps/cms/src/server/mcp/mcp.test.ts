@@ -697,6 +697,48 @@ describe.skipIf(!hasDb)('MCP server', () => {
     expect(past.isError).toBe(true)
   })
 
+  it('approves only the version the owner reviewed when expectedVersion is sent', async () => {
+    const { token } = await world.keyFor(world.owner, 'owner', {
+      name: 'Reviewed approval',
+      allowGoLive: true,
+    })
+    const client = await connect(token)
+    const created = await call(client, 'create_entry', {
+      collection: 'posts',
+      fields: { title: 'Reviewed', slug: 'reviewed-approval', body: 'First.' },
+    })
+    const { id, version } = created.data as { id: string; version: number }
+
+    await call(client, 'update_entry', {
+      id,
+      fields: { body: 'Changed by someone else.' },
+      expectedVersion: version,
+    })
+    const stale = await call(client, 'mark_ready', {
+      id,
+      expectedVersion: version,
+    })
+    expect(stale.isError).toBe(true)
+    expect((await storedEntry(id)).status).toBe('draft')
+
+    const scheduleStale = await call(client, 'schedule_entry', {
+      id,
+      publishAt: FUTURE,
+      timezone: 'UTC',
+      expectedVersion: version,
+    })
+    expect(scheduleStale.isError).toBe(true)
+    expect((await storedEntry(id)).status).toBe('draft')
+
+    const reviewed = await call(client, 'get_entry', { id })
+    const ready = await call(client, 'mark_ready', {
+      id,
+      expectedVersion: (reviewed.data as { version: number }).version,
+    })
+    expect(ready.isError).toBe(false)
+    expect((await storedEntry(id)).status).toBe('published')
+  })
+
   it('does not reveal entries of another site', async () => {
     const other = await createTestSite()
     try {
@@ -884,6 +926,49 @@ describe.skipIf(!hasDb)('MCP server', () => {
         .set({ languages: null })
         .where(eq(site.id, world.ctx.site.id))
     }
+  })
+
+  it('refuses an agency schema change that would delete a field with content', async () => {
+    const { token } = await world.keyFor(world.agency, 'agency', {
+      name: 'Schema drop',
+    })
+    const client = await connect(token)
+    const created = await call(client, 'create_entry', {
+      collection: 'posts',
+      fields: {
+        title: 'Excerpt holder',
+        slug: 'excerpt-holder-schema',
+        body: 'Body.',
+        excerpt: 'This content would be deleted.',
+      },
+    })
+    expect(created.isError).toBe(false)
+
+    const refused = await call(client, 'upsert_collection', {
+      key: 'posts',
+      label: 'Posts',
+      routePattern: '/blog/$slug',
+      fields: [
+        { key: 'title', label: 'Title', type: 'text', required: true },
+        { key: 'slug', label: 'Slug', type: 'slug', required: true },
+        { key: 'body', label: 'Body', type: 'richtext', required: true },
+      ],
+    })
+    expect(refused.isError).toBe(true)
+    expect(refused.text).toMatch(/excerpt/)
+    expect(refused.text).toMatch(/content/)
+    expect(refused.text).toMatch(/schema was not changed/)
+
+    const [row] = await db
+      .select()
+      .from(collection)
+      .where(
+        and(
+          eq(collection.siteId, world.ctx.site.id),
+          eq(collection.key, 'posts'),
+        ),
+      )
+    expect(row?.fields.map((field) => field.key)).toContain('excerpt')
   })
 
   it('lets an agency admin change the collection schema, scoped to its site', async () => {

@@ -16,6 +16,7 @@ import {
   validateContentDefinitions,
 } from './content-definitions.ts'
 import { ConflictError, NotFoundError, ValidationError } from './errors.ts'
+import { confirmedFieldDrops, purgeFieldContent } from './field-data.ts'
 import {
   formatLanguageBlockers,
   languageBlockers,
@@ -33,6 +34,8 @@ export type GlobalInput = {
   key: string
   label: string
   fields: Field[]
+  /** Keys of fields that are removed together with their content. */
+  confirmDropFields?: string[]
   seo?: boolean
   previewPath?: string | null
   enabled?: boolean
@@ -258,6 +261,12 @@ export async function upsertGlobal(
       ...existing.filter((row) => row.key !== input.key),
       { key: input.key, kind: 'global', fields: input.fields, enabled },
     ])
+    const purgedKeys = await confirmedFieldDrops(tx, {
+      collectionId: previous?.id,
+      before: previous?.fields ?? [],
+      after: input.fields,
+      confirmDropFields: input.confirmDropFields,
+    })
     const row = (
       await tx
         .insert(collection)
@@ -291,6 +300,7 @@ export async function upsertGlobal(
     if (!row) {
       throw new Error(m.server_failed_to_upsert_collection())
     }
+    if (previous) await purgeFieldContent(tx, previous.id, purgedKeys)
     await ensureGlobalEntry(tx, siteId, row.id)
     // Turning SEO off must not leave stale SEO in the draft for a later ready.
     // Ready and scheduled data are stripped when the snapshot is built.

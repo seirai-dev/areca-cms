@@ -457,6 +457,13 @@ export const ROWS: Row[] = [
     prepare: (w) => ({ data: { siteId: w.X.site.id } }),
   },
   {
+    name: 'fieldDataUsageFn',
+    hidden: true,
+    fn: contentFns.fieldDataUsageFn,
+    policy: 'org-editor',
+    prepare: (w) => ({ data: { siteId: w.X.site.id, key: 'articles' } }),
+  },
+  {
     name: 'listEntriesFn',
     hidden: true,
     fn: contentFns.listEntriesFn,

@@ -60,6 +60,7 @@ import {
   setGlobalEnabled,
   upsertGlobal,
 } from '#/server/content/globals'
+import { fieldDataUsageForCollection } from '#/server/content/field-data'
 import {
   buildGlobalPreviewUrl,
   buildPreviewUrl,
@@ -190,6 +191,25 @@ async function requireEntryAccess(entryId: string, role?: 'owner') {
   )
   return { ...access, entry: existing }
 }
+
+/** Field keys the owner confirmed removing together with their content. */
+const confirmDropFieldsSchema = z
+  .array(z.string().min(1).max(FIELD_OPTION_MAX_LENGTH))
+  .max(MAX_FIELDS_PER_COLLECTION)
+  .optional()
+
+/** Content counts per field key of one collection or section (schema editor). */
+export const fieldDataUsageFn = createServerFn({ method: 'GET' })
+  .validator(
+    z.object({
+      siteId: z.string().min(1).max(ID_MAX_LENGTH),
+      key: z.string().min(1).max(ID_MAX_LENGTH),
+    }),
+  )
+  .handler(async ({ data }) => {
+    await requireSiteAccess(data.siteId)
+    return fieldDataUsageForCollection(data.siteId, data.key)
+  })
 
 export const listCollectionsFn = createServerFn({ method: 'GET' })
   .validator(
@@ -434,6 +454,7 @@ export const upsertCollectionFn = createServerFn({ method: 'POST' })
         )
         .nullable()
         .optional(),
+      confirmDropFields: confirmDropFieldsSchema,
     }),
   )
   .handler(async ({ data }) => {
@@ -443,6 +464,7 @@ export const upsertCollectionFn = createServerFn({ method: 'POST' })
       label: data.label,
       routePattern: data.routePattern,
       fields: data.fields,
+      confirmDropFields: data.confirmDropFields,
       enabled: data.enabled,
       requiredLanguages: data.requiredLanguages,
       localizedRoutes: data.localizedRoutes,
@@ -591,6 +613,7 @@ export const upsertGlobalFn = createServerFn({ method: 'POST' })
         .array(localeTagSchema)
         .max(MAX_SITE_LANGUAGES)
         .optional(),
+      confirmDropFields: confirmDropFieldsSchema,
     }),
   )
   .handler(async ({ data }) => {
@@ -601,6 +624,7 @@ export const upsertGlobalFn = createServerFn({ method: 'POST' })
         key: data.key,
         label: data.label,
         fields: data.fields,
+        confirmDropFields: data.confirmDropFields,
         seo: data.seo,
         previewPath: data.previewPath,
         enabled: data.enabled,
