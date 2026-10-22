@@ -9,6 +9,7 @@ import type {
   CollectionConfig,
   GlobalConfig,
   SiteContentConfig,
+  SiteLanguages,
   SiteManifest,
 } from './types.js'
 
@@ -25,14 +26,24 @@ export type KeyDiff = {
   removed: string[]
 }
 
+export type LanguagesDiff = {
+  added: string[]
+  removed: string[]
+  /** Only when both sides have languages and the main one differs. */
+  main?: { from: string; to: string }
+}
+
 export type ManifestDiff = KeyDiff & {
   /** Site content sections. Only present when either side has any. */
   globals?: KeyDiff
+  /** Site languages. Only present when either side has languages. */
+  languages?: LanguagesDiff
 }
 
 export type ManifestPullOptions = {
   cwd?: string
   configPath: string
+  /** Accepts every confirmation: overwriting the config and removing or changing languages. */
   yes?: boolean
   client?: ArecaClient
   /** Overrides the TTY check (tests). */
@@ -63,7 +74,42 @@ export function diffManifests(
   if (Object.keys(localGlobals).length > 0 || Object.keys(remoteGlobals).length > 0) {
     diff.globals = compareKeys(localGlobals, remoteGlobals)
   }
+  const languages = compareLanguages(local?.languages, remote.languages)
+  if (languages) diff.languages = languages
   return diff
+}
+
+function compareLanguages(
+  local: SiteLanguages | undefined,
+  remote: SiteLanguages | undefined,
+): LanguagesDiff | undefined {
+  if (!local && !remote) return undefined
+  const before = local?.all ?? []
+  const after = remote?.all ?? []
+  const main =
+    local && remote && local.main !== remote.main
+      ? { from: local.main, to: remote.main }
+      : undefined
+  return {
+    added: after.filter((language) => !before.includes(language)),
+    removed: before.filter((language) => !after.includes(language)),
+    ...(main ? { main } : {}),
+  }
+}
+
+/**
+ * Language changes that take languages away from the site: a removed language
+ * stops being served, and a new main language changes the fallback chain. Each
+ * one is a sentence, e.g. `remove language de`.
+ */
+export function languageRisks(diff: ManifestDiff): string[] {
+  const risks = (diff.languages?.removed ?? []).map((language) => `remove language ${language}`)
+  if (diff.languages?.main) {
+    risks.push(
+      `change the main language from ${diff.languages.main.from} to ${diff.languages.main.to}`,
+    )
+  }
+  return risks
 }
 
 function compareKeys(
@@ -98,6 +144,12 @@ export function formatManifestDiff(diff: ManifestDiff): string {
   for (const key of diff.globals?.added ?? []) lines.push(`  + ${key} (site content)`)
   for (const key of diff.globals?.changed ?? []) lines.push(`  ~ ${key} (site content)`)
   for (const key of diff.globals?.removed ?? []) lines.push(`  - ${key} (site content)`)
+  for (const language of diff.languages?.added ?? []) lines.push(`  + language ${language}`)
+  for (const language of diff.languages?.removed ?? []) lines.push(`  - language ${language}`)
+  if (diff.languages?.main) {
+    const { from, to } = diff.languages.main
+    lines.push(`  ~ main language ${from} -> ${to}`)
+  }
   return lines.length > 0 ? lines.join('\n') : '  (no changes)'
 }
 
@@ -119,19 +171,28 @@ export async function manifestPull(options: ManifestPullOptions): Promise<Manife
   const existingCount = existing
     ? Object.keys(existing.collections).length + Object.keys(existing.globals ?? {}).length
     : 0
+  const risks = languageRisks(diff)
   const interactive = options.interactive ?? Boolean(process.stdin.isTTY)
 
-  if (existingCount > 0 && options.yes !== true) {
+  // Overwriting a populated config, or taking languages away, needs a yes.
+  // Adding a language only shows up in the diff.
+  if ((existingCount > 0 || risks.length > 0) && options.yes !== true) {
+    const subject = risks.length > 0 ? capitalize(risks.join(' and ')) : undefined
     if (!interactive) {
       throw new Error(
-        `${options.configPath} already defines ${existingCount} collection(s). Re-run with --yes to overwrite it.`,
+        subject
+          ? `${subject} in ${options.configPath}. Re-run with --yes to confirm.`
+          : `${options.configPath} already defines ${existingCount} collection(s). Re-run with --yes to overwrite it.`,
       )
     }
 
     console.log(`Changes to ${options.configPath}:`)
     console.log(formatManifestDiff(diff))
 
-    const answer = await confirm({ message: `Overwrite ${options.configPath}?` })
+    const answer = await confirm({
+      message: subject ? `${subject}. Continue?` : `Overwrite ${options.configPath}?`,
+      initialValue: false,
+    })
     if (isCancel(answer) || answer !== true) {
       throw new ManifestPullCancelledError()
     }
@@ -154,6 +215,10 @@ export async function manifestPull(options: ManifestPullOptions): Promise<Manife
     diff,
     source,
   }
+}
+
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1)
 }
 
 function normalize(definition: CollectionConfig | GlobalConfig): unknown {

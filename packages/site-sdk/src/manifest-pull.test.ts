@@ -7,6 +7,7 @@ import {
   ManifestPullCancelledError,
   diffManifests,
   formatManifestDiff,
+  languageRisks,
   manifestPull,
 } from './manifest-pull.js'
 import type { SiteContentConfig, SiteManifest } from './types.js'
@@ -366,3 +367,172 @@ describe('manifestPull: globals', () => {
     }
   })
 })
+
+describe('diffManifests: languages', () => {
+  const nlEn = { main: 'nl', all: ['nl', 'en'] }
+
+  it('reports added and removed languages and a changed main language', () => {
+    const local: SiteContentConfig = { siteKey: 'acme', languages: nlEn, collections: {} }
+    const diff = diffManifests(local, {
+      languages: { main: 'en', all: ['en', 'nl', 'fr'] },
+      collections: {},
+    })
+    expect(diff.languages).toEqual({
+      added: ['fr'],
+      removed: [],
+      main: { from: 'nl', to: 'en' },
+    })
+    expect(languageRisks(diff)).toEqual(['change the main language from nl to en'])
+  })
+
+  it('reports a language the CMS no longer has as removed and as a risk', () => {
+    const local: SiteContentConfig = { siteKey: 'acme', languages: nlEn, collections: {} }
+    const diff = diffManifests(local, {
+      languages: { main: 'nl', all: ['nl'] },
+      collections: {},
+    })
+    expect(diff.languages).toEqual({ added: [], removed: ['en'] })
+    expect(languageRisks(diff)).toEqual(['remove language en'])
+  })
+
+  it('treats a site that drops all languages as removing each of them', () => {
+    const local: SiteContentConfig = { siteKey: 'acme', languages: nlEn, collections: {} }
+    expect(diffManifests(local, { collections: {} }).languages?.removed).toEqual(['nl', 'en'])
+  })
+
+  it('treats a new main language as a change, not an addition, when both sides have languages', () => {
+    const local: SiteContentConfig = { siteKey: 'acme', languages: nlEn, collections: {} }
+    const diff = diffManifests(local, {
+      languages: { main: 'en', all: ['en', 'nl'] },
+      collections: {},
+    })
+    expect(diff.languages?.added).toEqual([])
+    expect(diff.languages?.main).toEqual({ from: 'nl', to: 'en' })
+  })
+
+  it('leaves languages out of the diff when neither side has any', () => {
+    expect(diffManifests(undefined, remote)).not.toHaveProperty('languages')
+  })
+
+  it('shows language changes instead of "(no changes)"', () => {
+    const local: SiteContentConfig = { siteKey: 'acme', languages: nlEn, collections: {} }
+    const text = formatManifestDiff(
+      diffManifests(local, {
+        languages: { main: 'nl', all: ['nl', 'en', 'fr'] },
+        collections: {},
+      }),
+    )
+    expect(text).toBe('  + language fr')
+    expect(formatManifestDiff(diffManifests(local, { languages: { main: 'en', all: ['en', 'nl'] }, collections: {} }))).toContain('~ main language nl -> en')
+    expect(formatManifestDiff(diffManifests(local, { languages: nlEn, collections: {} }))).toBe('  (no changes)')
+  })
+})
+
+describe('manifestPull: language changes', () => {
+  const withLanguages: SiteContentConfig = {
+    siteKey: 'acme-site',
+    languages: { main: 'nl', all: ['nl', 'en'] },
+    collections: { legacy: { route: '/legacy/$slug', fields: [] } },
+  }
+
+  it('refuses to remove a language without --yes when not a TTY, and keeps the config', async () => {
+    const dir = makeDir()
+    try {
+      const name = writeConfig(dir, withLanguages)
+      const before = readFileSync(join(dir, name), 'utf8')
+      await expect(
+        manifestPull({
+          cwd: dir,
+          configPath: name,
+          client: makeClient({ languages: { main: 'nl', all: ['nl'] }, collections: remote.collections }),
+          interactive: false,
+        }),
+      ).rejects.toThrow(/remove language en.*--yes/i)
+      expect(readFileSync(join(dir, name), 'utf8')).toBe(before)
+      expect(confirmMock).not.toHaveBeenCalled()
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses a main language change without --yes when not a TTY', async () => {
+    const dir = makeDir()
+    try {
+      const name = writeConfig(dir, { siteKey: 'acme-site', languages: { main: 'nl', all: ['nl', 'en'] }, collections: {} })
+      await expect(
+        manifestPull({
+          cwd: dir,
+          configPath: name,
+          client: makeClient({ languages: { main: 'en', all: ['en', 'nl'] }, collections: {} }),
+          interactive: false,
+        }),
+      ).rejects.toThrow(/change the main language from nl to en.*--yes/i)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('writes a language removal with --yes', async () => {
+    const dir = makeDir()
+    try {
+      const name = writeConfig(dir, withLanguages)
+      const result = await manifestPull({
+        cwd: dir,
+        configPath: name,
+        yes: true,
+        client: makeClient({ languages: { main: 'nl', all: ['nl'] }, collections: remote.collections }),
+        interactive: false,
+      })
+      expect(result.diff.languages?.removed).toEqual(['en'])
+      expect(readFileSync(join(dir, name), 'utf8')).not.toContain("'en'")
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('asks on a TTY and writes only when the removal is confirmed', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const remoteWithoutEn = { languages: { main: 'nl', all: ['nl'] }, collections: remote.collections }
+    try {
+      const declined = makeDir()
+      confirmMock.mockResolvedValueOnce(false)
+      const declinedName = writeConfig(declined, withLanguages)
+      const before = readFileSync(join(declined, declinedName), 'utf8')
+      await expect(
+        manifestPull({ cwd: declined, configPath: declinedName, client: makeClient(remoteWithoutEn), interactive: true }),
+      ).rejects.toBeInstanceOf(ManifestPullCancelledError)
+      expect(readFileSync(join(declined, declinedName), 'utf8')).toBe(before)
+      expect(confirmMock).toHaveBeenCalledTimes(1)
+      expect(confirmMock.mock.calls[0]?.[0]).toMatchObject({ initialValue: false })
+      rmSync(declined, { recursive: true, force: true })
+
+      const accepted = makeDir()
+      confirmMock.mockResolvedValueOnce(true)
+      const acceptedName = writeConfig(accepted, withLanguages)
+      await manifestPull({ cwd: accepted, configPath: acceptedName, client: makeClient(remoteWithoutEn), interactive: true })
+      expect(readFileSync(join(accepted, acceptedName), 'utf8')).not.toContain("'en'")
+      rmSync(accepted, { recursive: true, force: true })
+    } finally {
+      log.mockRestore()
+    }
+  })
+
+  it('adds a language without prompting or needing --yes', async () => {
+    const dir = makeDir()
+    try {
+      const name = writeConfig(dir, { siteKey: 'acme-site', collections: {} })
+      const result = await manifestPull({
+        cwd: dir,
+        configPath: name,
+        client: makeClient({ languages: { main: 'nl', all: ['nl', 'fr'] }, collections: {} }),
+        interactive: false,
+      })
+      expect(result.diff.languages?.added).toEqual(['nl', 'fr'])
+      expect(readFileSync(join(dir, name), 'utf8')).toContain("'fr'")
+      expect(confirmMock).not.toHaveBeenCalled()
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
+
