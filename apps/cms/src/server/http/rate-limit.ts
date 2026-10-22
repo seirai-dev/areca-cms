@@ -226,8 +226,9 @@ async function clientIdOf(request: Request): Promise<string | null> {
 
 /**
  * Returns a 429 response when blocked and null when the request may continue.
- * Redis failures deliberately fail open so an infrastructure outage does not
- * take down the CMS; the caller-provided logger still makes that state visible.
+ * The store falls back to in-memory counters when Redis fails, so the budgets
+ * still apply. The catch below only handles unexpected errors, and lets the
+ * request through so one bug does not block every request.
  */
 export async function enforceRequestRateLimit(
   request: Request,

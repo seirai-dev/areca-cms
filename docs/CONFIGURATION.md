@@ -52,7 +52,7 @@ The CMS also accepts these optional URL and storage settings:
 | Variable | Default or effect |
 | --- | --- |
 | `SERVER_URL` | Optional server URL override. Usually leave unset. |
-| `REDIS_URL` | `redis://localhost:6379`; used for shared rate-limit counters. Redis failure is reported as degraded and rate limiting fails open. |
+| `REDIS_URL` | `redis://localhost:6379` outside production. Required in production (no default there). Holds the shared rate-limit counters. While Redis is down, each instance keeps counting in memory with the same budgets, and the health check reports Redis as degraded. |
 | `S3_FORCE_PATH_STYLE` | `false`; set `true` for path-style S3 endpoints such as local RustFS/MinIO. |
 
 ## Authentication and integrations

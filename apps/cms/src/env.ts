@@ -160,6 +160,11 @@ export const env = createEnv({
 // reach a production instance. Failing at boot is cheaper than a forged session.
 if (process.env.NODE_ENV === 'production' && !skipValidation) {
   const problems = productionSecretProblems(env)
+  if (!process.env.REDIS_URL) {
+    problems.push(
+      'REDIS_URL must be set in production, e.g. redis://redis:6379. Shared rate-limit counters depend on it.',
+    )
+  }
   if (problems.length > 0) {
     throw new Error(
       `Refusing to start in production:\n- ${problems.join('\n- ')}`,

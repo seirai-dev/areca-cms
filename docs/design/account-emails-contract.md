@@ -92,7 +92,7 @@ export async function sendVerificationEmail(userId: string): Promise<SendResult 
 - Two-factor on/off → `two_factor_enabled` / `two_factor_disabled`
   (detect the actual change of `user.two_factor_enabled`).
 - `hooks.before` on `/request-password-reset`: 3 per hour per email and 3 per
-  hour per IP (Redis store, fail open); over the limit → `APIError('TOO_MANY_REQUESTS')`
+  hour per IP (Redis store; in-memory counts during an outage); over the limit → `APIError('TOO_MANY_REQUESTS')`
   with `m.server_password_reset_rate_limited()`.
 
 ## Other server changes

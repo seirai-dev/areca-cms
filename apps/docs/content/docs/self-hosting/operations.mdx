@@ -35,7 +35,7 @@ The checks are:
 
 - **db** runs a trivial query against PostgreSQL.
 - **storage** checks that the S3 bucket is reachable.
-- **redis** pings Redis. Rate limiting fails open when Redis is down, so a Redis failure is reported as `degraded` and does not make the instance unready.
+- **redis** pings Redis. When Redis is down, rate limits count in memory on each instance, so a Redis failure is reported as `degraded` and does not make the instance unready.
 - **worker** fails if the publishing worker has not run for longer than `READINESS_MAX_TICK_AGE_SECONDS`. It is checked only when `WORKER_ENABLED` is on. Each process reports its own worker state.
 - **queue** fails if the oldest queued build is older than `READINESS_MAX_QUEUE_AGE_SECONDS`, if a build lease has been expired for longer than the tick age without recovery, or if the scheduler has stopped ticking.
 

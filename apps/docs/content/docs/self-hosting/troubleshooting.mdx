@@ -274,7 +274,7 @@ Three endpoints report the state of the CMS. `/api/health` only tells you that t
 **Fix:** Check whether many people share one address. Without `RATE_LIMIT_TRUST_PROXY=true`, the CMS cannot tell anonymous clients apart, so they all count against one shared limit. If the CMS sits behind a reverse proxy that replaces the forwarding headers, set `RATE_LIMIT_TRUST_PROXY=true`. Never set it when clients can reach the CMS without the proxy, because clients could then send their own address. See [rate limits](/docs/security/rate-limits).
 </Accordion>
 <Accordion title="Rate limiting seems to have stopped working">
-**Cause:** Redis is unreachable. Rate limiting fails open, so requests are allowed through, and the log records the error.
+**Cause:** Redis is unreachable. Rate limits count in memory on each instance, so the budgets still apply but are not shared across instances. The log records the transition once.
 
 **Fix:** Restore Redis, then check the `redis` entry in the readiness response. An alert on `areca_readiness_check_up` for `redis` helps you notice sooner. See [operations](/docs/self-hosting/operations).
 </Accordion>

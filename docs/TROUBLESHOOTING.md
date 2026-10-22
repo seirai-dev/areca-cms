@@ -56,7 +56,7 @@ Open the failed release in the Go-live panel and read **View log**. The website'
 | A publication stays queued | Check `WORKER_ENABLED`, worker logs, database connectivity, queue age, and whether an active or uncertain job blocks the same site. |
 | Dispatch outcome is uncertain | Check the upstream deployment first. Follow [integration recovery](INTEGRATIONS.md); do not repeatedly redeploy or manually delete job rows. |
 | CMS readiness returns 503 | Inspect `/api/health/ready` and [operations](OPERATIONS.md). Database/storage failure, excessive queue age, or stale worker state can fail readiness. |
-| Redis unavailable | Shared rate limiting degrades and fails open with a log; restore Redis and check health diagnostics. |
+| Redis unavailable | Rate limits count in memory on each instance (same budgets, not shared across instances) and a warning is logged; restore Redis and check health diagnostics. |
 | Saved provider key cannot be decrypted | Restore the original encryption key matching the database, or replace the provider credential. Retain stable keys with backups. |
 
 ## AI SEO assistance

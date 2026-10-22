@@ -67,7 +67,7 @@ Migrations run at container start, and they are not subject to these limits. See
 
 | Variable | Required | Default | Meaning |
 | --- | --- | --- | --- |
-| `REDIS_URL` | No | `redis://localhost:6379` (Compose: `redis://redis:6379`) | Redis connection URL. Redis holds the shared counters for [rate limits](/docs/security/rate-limits). If Redis is down, rate limiting fails open, and the readiness check reports Redis as degraded without failing. |
+| `REDIS_URL` | Yes in production | `redis://localhost:6379` outside production (Compose: `redis://redis:6379`) | Redis connection URL. Redis holds the shared counters for [rate limits](/docs/security/rate-limits). The CMS refuses to start in production without it. If Redis is down, each instance keeps counting in memory with the same budgets, and the readiness check reports Redis as degraded without failing. |
 
 ## Auth and sign-in
 
