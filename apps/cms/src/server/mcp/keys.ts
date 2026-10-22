@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .returning()/.select() are checked defensively */
 import { createHash, randomBytes } from 'node:crypto'
-import { and, count, desc, eq, gt, isNull, or, sql } from 'drizzle-orm'
+import { and, count, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { membership, mcpKey, site, user } from '#/db/schema'
@@ -213,6 +213,30 @@ export async function listMcpKeys(input: {
     )
     .orderBy(desc(mcpKey.createdAt))
   return rows.map((row) => toSummary(row.key, row.userName ?? null))
+}
+
+/**
+ * Revokes every active key a user holds on the given sites. Used when they leave
+ * the organization: the keys stay revoked, so rejoining needs new ones.
+ * Returns the number of keys revoked.
+ */
+export async function revokeMemberMcpKeys(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  input: { userId: string; siteIds: string[]; now?: Date },
+): Promise<number> {
+  if (input.siteIds.length === 0) return 0
+  const revoked = await tx
+    .update(mcpKey)
+    .set({ revokedAt: input.now ?? new Date() })
+    .where(
+      and(
+        eq(mcpKey.userId, input.userId),
+        inArray(mcpKey.siteId, input.siteIds),
+        isNull(mcpKey.revokedAt),
+      ),
+    )
+    .returning({ id: mcpKey.id })
+  return revoked.length
 }
 
 export async function revokeMcpKey(input: {

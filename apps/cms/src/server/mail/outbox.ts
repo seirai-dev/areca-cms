@@ -438,6 +438,37 @@ export async function supersedeInvitationEmails(
     )
 }
 
+/**
+ * Cancels a user's queued notification emails for one organization, e.g. after
+ * they leave it. Account emails are not touched.
+ */
+export async function cancelQueuedNotificationEmails(
+  userId: string,
+  organizationId: string,
+  connection?: unknown,
+): Promise<number> {
+  const executor = (connection ?? db) as Executor
+  const cancelled = await executor
+    .update(emailOutbox)
+    .set({
+      status: 'failed',
+      nextAttemptAt: null,
+      leaseUntil: null,
+      lastErrorCode: 'unknown',
+      lastError: 'Cancelled: the recipient left the organization.',
+    })
+    .where(
+      and(
+        eq(emailOutbox.userId, userId),
+        eq(emailOutbox.organizationId, organizationId),
+        eq(emailOutbox.status, 'queued'),
+        isNotNull(emailOutbox.notificationId),
+      ),
+    )
+    .returning({ id: emailOutbox.id })
+  return cancelled.length
+}
+
 /** Claims due rows in one statement; `SKIP LOCKED` keeps replicas apart. */
 async function claimDueRows(only?: readonly string[]): Promise<OutboxRow[]> {
   const scope = only

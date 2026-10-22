@@ -7,6 +7,7 @@ import {
   invitation,
   membership,
   organization,
+  site,
   user,
   verification,
 } from '#/db/schema'
@@ -18,8 +19,11 @@ import { ConflictError, NotFoundError } from '#/server/content/errors'
 import { AppError } from '#/server/http/app-error'
 import { sendAccountEmail } from '#/server/mail/account-emails'
 import { mailFailureMessage } from '#/server/mail/errors'
+import { revokeMemberMcpConnections } from '#/server/mcp/connections'
+import { revokeMemberMcpKeys } from '#/server/mcp/keys'
 import { notifyInviteAccepted } from '#/server/notifications/triggers'
 import {
+  cancelQueuedNotificationEmails,
   enqueueEmail,
   sendNow,
   supersedeInvitationEmails,
@@ -204,6 +208,25 @@ export async function removeMember(
 
     await tx.delete(membership).where(eq(membership.id, existing.id))
 
+    // Leaving also ends what the membership granted: personal MCP keys and app
+    // connections on the organization's sites, and queued notices meant for it.
+    // Revoked keys stay revoked, so a rejoin needs new ones.
+    const siteRows = await tx
+      .select({ id: site.id })
+      .from(site)
+      .where(eq(site.organizationId, organizationId))
+    const siteIds = siteRows.map((row) => row.id)
+    const mcpKeysRevoked = await revokeMemberMcpKeys(tx, { userId, siteIds })
+    const mcpConnectionsRevoked = await revokeMemberMcpConnections(tx, {
+      userId,
+      siteIds,
+    })
+    const notificationsCancelled = await cancelQueuedNotificationEmails(
+      userId,
+      organizationId,
+      tx,
+    )
+
     await audit(
       {
         organizationId,
@@ -212,6 +235,22 @@ export async function removeMember(
         targetType: 'membership',
         targetId: existing.id,
         meta: { userId },
+      },
+      tx,
+    )
+    await audit(
+      {
+        organizationId,
+        actorId,
+        action: 'member.mcp_access_revoke',
+        targetType: 'membership',
+        targetId: existing.id,
+        meta: {
+          userId,
+          mcpKeysRevoked,
+          mcpConnectionsRevoked,
+          notificationsCancelled,
+        },
       },
       tx,
     )
