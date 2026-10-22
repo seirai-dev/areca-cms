@@ -1,6 +1,7 @@
 import * as React from 'react'
 
 import { authClient } from '#/lib/auth-client'
+import { signOutClient } from '#/lib/sign-out'
 import { safeRedirectPath } from '#/lib/safe-redirect'
 import { m } from '#/paraglide/messages'
 import { localizeHref } from '#/paraglide/runtime'
@@ -252,7 +253,7 @@ export function useInvitation(token: string, initialError: string | null) {
   }
 
   async function signOut() {
-    await authClient.signOut()
+    await signOutClient()
     window.location.reload()
   }
 
