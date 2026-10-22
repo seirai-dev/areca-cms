@@ -1,8 +1,6 @@
 import type { MailSecure } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 import { MAIL_MAX_ATTEMPTS } from '#/server/mail/types'
-import { isEventKey } from '#/lib/notifications'
-import { eventLabel } from '#/features/notifications/notification-copy'
 
 /**
  * Pure helpers for Agency → Mail and the shell banners. No React and no
@@ -105,30 +103,6 @@ export function emailTimeline(email: {
     { key: 'retrying', state: retryState },
     { key: 'failed', state: 'failed' },
   ]
-}
-
-/** Human label for an email kind; unknown kinds are shown as stored. */
-const ACCOUNT_KIND_LABELS: Partial<Record<string, () => string>> = {
-  invitation: () => m.agency_mail_kind_invitation(),
-  test: () => m.agency_mail_kind_test(),
-  password_reset: () => m.agency_mail_kind_password_reset(),
-  password_reset_sso: () => m.agency_mail_kind_password_reset_sso(),
-  verify_email: () => m.agency_mail_kind_verify_email(),
-  password_changed: () => m.agency_mail_kind_password_changed(),
-  two_factor_enabled: () => m.agency_mail_kind_two_factor_enabled(),
-  two_factor_disabled: () => m.agency_mail_kind_two_factor_disabled(),
-  membership_removed: () => m.agency_mail_kind_membership_removed(),
-  membership_role_changed: () => m.agency_mail_kind_membership_role_changed(),
-  agency_admin_granted: () => m.agency_mail_kind_agency_admin_granted(),
-  agency_admin_revoked: () => m.agency_mail_kind_agency_admin_revoked(),
-}
-
-/** Account email kinds and notification events, as people read them. */
-export function mailKindLabel(kind: string) {
-  const account = ACCOUNT_KIND_LABELS[kind]
-  if (account) return account()
-  if (isEventKey(kind)) return eventLabel(kind)
-  return kind
 }
 
 export function mailStatusLabel(email: {

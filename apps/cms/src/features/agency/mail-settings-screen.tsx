@@ -17,7 +17,6 @@ import {
 } from '#/components/ui/floating-bar'
 import { FormField } from '#/components/ui/form-field'
 import { Input } from '#/components/ui/input'
-import { InsetList, InsetRow } from '#/components/ui/inset-list'
 import { PageHeader } from '#/components/ui/page-header'
 import { QueryError } from '#/components/ui/query-error'
 import { SegmentedControl } from '#/components/ui/segmented-control'
@@ -46,7 +45,6 @@ import {
   emailStatusKind,
   emailTimeline,
   isMailSecure,
-  mailKindLabel,
   mailStatusLabel,
 } from './mail-settings-logic'
 import type { MailEmailKind, TimelineStep } from './mail-settings-logic'
@@ -335,40 +333,46 @@ export function MailSettingsScreen() {
                 </FormField>
 
                 <div className="grid gap-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      data-testid="mail-verify"
-                      loading={form.verify.isPending}
-                      disabled={!form.valid || busy}
-                      onClick={() => form.verify.mutate()}
-                    >
-                      <PlugsConnected />
-                      {m.agency_mail_verify()}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      data-testid="mail-send-test"
-                      loading={form.sendTest.isPending}
-                      disabled={!form.valid || busy}
-                      onClick={() => form.sendTest.mutate()}
-                    >
-                      <PaperPlaneTilt />
-                      {m.agency_mail_send_test()}
-                    </Button>
-                    <span className="text-caption font-normal text-text-muted">
-                      {saved.settings?.lastVerifiedAt
-                        ? m.agency_mail_last_verified({
-                            time: formatRelativeTime(
-                              saved.settings.lastVerifiedAt,
-                            ),
-                          })
-                        : saved.settings?.host
-                          ? m.agency_mail_never_verified()
-                          : null}
-                    </span>
+                  <div className="grid gap-2.5">
+                    <div className="grid gap-2 min-[400px]:grid-cols-2 sm:flex sm:flex-wrap sm:items-center">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="w-full sm:w-auto"
+                        data-testid="mail-verify"
+                        loading={form.verify.isPending}
+                        disabled={!form.valid || busy}
+                        onClick={() => form.verify.mutate()}
+                      >
+                        <PlugsConnected />
+                        {m.agency_mail_verify()}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="w-full sm:w-auto"
+                        data-testid="mail-send-test"
+                        loading={form.sendTest.isPending}
+                        disabled={!form.valid || busy}
+                        onClick={() => form.sendTest.mutate()}
+                      >
+                        <PaperPlaneTilt />
+                        {m.agency_mail_send_test()}
+                      </Button>
+                    </div>
+                    {saved.settings?.lastVerifiedAt ? (
+                      <p className="text-caption font-normal text-text-secondary">
+                        {m.agency_mail_last_verified({
+                          time: formatRelativeTime(
+                            saved.settings.lastVerifiedAt,
+                          ),
+                        })}
+                      </p>
+                    ) : saved.settings?.host ? (
+                      <p className="text-caption font-normal text-text-secondary">
+                        {m.agency_mail_never_verified()}
+                      </p>
+                    ) : null}
                   </div>
 
                   {form.verifyResult?.ok ? (
@@ -406,14 +410,18 @@ export function MailSettingsScreen() {
           <FloatingBar
             open={form.dirty && !form.usingEnvironment}
             label={m.shared_unsaved_changes()}
+            fullWidthOnMobile
             data-testid="mail-save-bar"
           >
-            <FloatingBarLabel>{m.shared_unsaved_changes()}</FloatingBarLabel>
-            <FloatingBarDivider />
+            <FloatingBarLabel className="max-md:basis-full">
+              {m.shared_unsaved_changes()}
+            </FloatingBarLabel>
+            <FloatingBarDivider className="max-md:hidden" />
             <Button
               type="button"
               variant="quiet"
               size="sm"
+              className="max-md:flex-1"
               onClick={form.discard}
               disabled={form.save.isPending}
             >
@@ -425,7 +433,7 @@ export function MailSettingsScreen() {
               data-testid="save-mail"
               loading={form.save.isPending}
               disabled={!form.valid || busy}
-              className="rounded-full"
+              className="rounded-full max-md:min-w-28 max-md:flex-1"
             >
               {m.agency_mail_save()}
             </Button>
@@ -509,48 +517,54 @@ function EnvironmentValues({ status }: { status: MailStatus }) {
   const env = status.env
   if (!env) {
     return (
-      <InsetList data-testid="mail-env-values">
-        <InsetRow title={m.agency_mail_env_not_configured()} inset={false} />
-      </InsetList>
+      <p
+        className="text-callout text-text-secondary"
+        data-testid="mail-env-values"
+      >
+        {m.agency_mail_env_not_configured()}
+      </p>
     )
   }
   return (
-    <InsetList data-testid="mail-env-values">
-      <InsetRow
-        title={m.agency_mail_field_host()}
-        trailing={env.host}
-        inset={false}
+    <dl
+      className="divide-y divide-border-default"
+      data-testid="mail-env-values"
+    >
+      <EnvironmentRow label={m.agency_mail_field_host()} value={env.host} />
+      <EnvironmentRow
+        label={m.agency_mail_field_port()}
+        value={String(env.port)}
       />
-      <InsetRow
-        title={m.agency_mail_field_port()}
-        trailing={String(env.port)}
-        inset={false}
+      <EnvironmentRow
+        label={m.agency_mail_field_secure()}
+        value={secureLabel(env.secure)}
       />
-      <InsetRow
-        title={m.agency_mail_field_secure()}
-        trailing={secureLabel(env.secure)}
-        inset={false}
+      <EnvironmentRow label={m.agency_mail_field_from()} value={env.from} />
+      <EnvironmentRow
+        label={m.agency_mail_field_username()}
+        value={env.username ?? '—'}
       />
-      <InsetRow
-        title={m.agency_mail_field_from()}
-        trailing={env.from}
-        inset={false}
-      />
-      <InsetRow
-        title={m.agency_mail_field_username()}
-        trailing={env.username ?? '—'}
-        inset={false}
-      />
-      <InsetRow
-        title={m.agency_mail_field_password()}
-        trailing={
+      <EnvironmentRow
+        label={m.agency_mail_field_password()}
+        value={
           env.passwordSet
             ? m.agency_mail_env_set()
             : m.agency_mail_env_not_set()
         }
-        inset={false}
       />
-    </InsetList>
+    </dl>
+  )
+}
+
+/** One environment value: label on the left, the value wraps on the right. */
+function EnvironmentRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 py-2.5 first:pt-0 last:pb-0">
+      <dt className="shrink-0 text-callout text-text-secondary">{label}</dt>
+      <dd className="min-w-0 text-right text-[14px] leading-5 break-all text-text-primary">
+        {value}
+      </dd>
+    </div>
   )
 }
 
@@ -593,78 +607,85 @@ function RecentEmailsSection() {
   return (
     <SettingsSection
       id="recent-emails"
+      bare
       title={m.agency_mail_recent_title()}
       description={m.agency_mail_recent_description()}
       data-testid="mail-recent"
     >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <SegmentedControl
-          size="sm"
-          value={filter}
-          onValueChange={setFilter}
-          options={[
-            {
-              value: 'all',
-              label: m.agency_mail_filter_all(),
-              testId: 'mail-filter-all',
-            },
-            {
-              value: 'failed',
-              label: m.agency_mail_filter_failed(),
-              testId: 'mail-filter-failed',
-            },
-          ]}
-        />
-        <Button
-          type="button"
-          variant="quiet"
-          size="sm"
-          data-testid="mail-refresh"
-          disabled={recent.isFetching}
-          onClick={() => void recent.refetch()}
-        >
-          <ArrowClockwise className={cn(recent.isFetching && 'animate-spin')} />
-          {m.agency_mail_refresh()}
-        </Button>
-      </div>
-
-      {recent.isError ? (
-        <QueryError
-          title={m.agency_mail_recent_error()}
-          error={recent.error}
-          onRetry={() => void recent.refetch()}
-          retrying={recent.isFetching}
-        />
-      ) : recent.isPending ? (
-        <div className="grid gap-2" aria-busy="true">
-          <Skeleton className="h-16 rounded-control" />
-          <Skeleton className="h-16 rounded-control" />
+      <div className="surface-card overflow-hidden">
+        <div className="flex items-center justify-between gap-3 border-b border-border-default px-4 py-2.5">
+          <SegmentedControl
+            size="sm"
+            value={filter}
+            onValueChange={setFilter}
+            aria-label={m.agency_mail_recent_title()}
+            options={[
+              {
+                value: 'all',
+                label: m.agency_mail_filter_all(),
+                testId: 'mail-filter-all',
+              },
+              {
+                value: 'failed',
+                label: m.agency_mail_filter_failed(),
+                testId: 'mail-filter-failed',
+              },
+            ]}
+          />
+          <Button
+            type="button"
+            variant="quiet"
+            size="sm"
+            data-testid="mail-refresh"
+            aria-label={m.agency_mail_refresh()}
+            disabled={recent.isFetching}
+            onClick={() => void recent.refetch()}
+          >
+            <ArrowClockwise
+              className={cn(recent.isFetching && 'animate-spin')}
+            />
+            <span className="max-sm:sr-only">{m.agency_mail_refresh()}</span>
+          </Button>
         </div>
-      ) : rows.length === 0 ? (
-        filter === 'failed' ? (
-          <EmptyState
-            size="sm"
-            tone="neutral"
-            title={m.agency_mail_empty_failed()}
+
+        {recent.isError ? (
+          <QueryError
+            title={m.agency_mail_recent_error()}
+            error={recent.error}
+            onRetry={() => void recent.refetch()}
+            retrying={recent.isFetching}
           />
+        ) : recent.isPending ? (
+          <div className="grid gap-2" aria-busy="true">
+            <Skeleton className="h-16 rounded-control" />
+            <Skeleton className="h-16 rounded-control" />
+          </div>
+        ) : rows.length === 0 ? (
+          filter === 'failed' ? (
+            <EmptyState
+              size="sm"
+              tone="neutral"
+              title={m.agency_mail_empty_failed()}
+            />
+          ) : (
+            <EmptyState
+              size="sm"
+              tone="neutral"
+              title={m.agency_mail_empty_title()}
+              description={m.agency_mail_empty_description()}
+            />
+          )
         ) : (
-          <EmptyState
-            size="sm"
-            tone="neutral"
-            title={m.agency_mail_empty_title()}
-            description={m.agency_mail_empty_description()}
-          />
-        )
-      ) : (
-        <ul
-          className="overflow-hidden surface-card"
-          data-testid="mail-recent-list"
-        >
-          {rows.map((email) => (
-            <RecentEmailRow key={email.id} email={email} />
-          ))}
-        </ul>
-      )}
+          <ul
+            className="divide-y divide-border-default"
+            data-testid="mail-recent-list"
+          >
+            {rows.map((email) => (
+              <RecentEmailRow key={email.id} email={email} />
+            ))}
+          </ul>
+        )}
+      </div>
     </SettingsSection>
   )
 }
@@ -680,46 +701,52 @@ const TAG_TONE: Record<
   skipped: 'neutral',
 }
 
+/** Three lines: recipient and status, the subject, then the time and delivery dots. */
 function RecentEmailRow({ email }: { email: RecentEmail }) {
   const kind = emailStatusKind(email)
   const steps = emailTimeline(email)
   return (
     <li
-      className="relative grid gap-3 border-b border-border-default px-4 py-3 last:border-b-0 md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:gap-6"
+      className="grid min-w-0 gap-1 px-4 py-3"
       data-testid="mail-recent-row"
       data-status={kind}
     >
-      <div className="grid min-w-0 gap-1">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="truncate text-[14px] leading-5 font-medium text-text-primary">
-            {mailKindLabel(email.kind)}
-          </span>
-          <Tag tone={TAG_TONE[kind]} data-testid="mail-recent-status">
-            {mailStatusLabel(email)}
-          </Tag>
-        </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-x-2 text-caption text-text-muted">
-          <span className="truncate text-text-secondary">{email.to}</span>
-          <span aria-hidden="true">·</span>
-          <time
-            dateTime={new Date(email.createdAt).toISOString()}
-            title={absoluteTimeLabel(email.createdAt)}
-          >
-            {formatRelativeTime(email.createdAt)}
-          </time>
-        </div>
-        {email.error && (kind === 'failed' || kind === 'retrying') ? (
-          <div className="grid gap-0.5 pt-0.5">
-            <span className="text-callout text-text-secondary break-words">
-              {email.error.message}
-            </span>
-            <span className="font-mono text-caption text-text-muted break-all">
-              {m.agency_mail_reference({ id: email.id })}
-            </span>
-          </div>
-        ) : null}
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <span
+          className="min-w-0 truncate text-[14px] leading-5 font-medium text-text-primary"
+          title={email.to}
+        >
+          {email.to}
+        </span>
+        <Tag tone={TAG_TONE[kind]} data-testid="mail-recent-status">
+          {mailStatusLabel(email)}
+        </Tag>
       </div>
-      <MailTimeline steps={steps} />
+      <p
+        className="truncate text-callout text-text-secondary"
+        title={email.subject}
+      >
+        {email.subject}
+      </p>
+      <div className="flex min-w-0 items-center justify-between gap-3 text-caption text-text-secondary">
+        <time
+          dateTime={new Date(email.createdAt).toISOString()}
+          title={absoluteTimeLabel(email.createdAt)}
+        >
+          {formatRelativeTime(email.createdAt, { withinDays: 7 })}
+        </time>
+        <MailTimeline steps={steps} />
+      </div>
+      {email.error && (kind === 'failed' || kind === 'retrying') ? (
+        <div className="mt-1 grid gap-0.5">
+          <span className="text-callout text-text-secondary break-words">
+            {email.error.message}
+          </span>
+          <span className="font-mono text-caption text-text-secondary break-all">
+            {m.agency_mail_reference({ id: email.id })}
+          </span>
+        </div>
+      ) : null}
     </li>
   )
 }

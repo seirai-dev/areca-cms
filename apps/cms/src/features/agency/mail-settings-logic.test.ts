@@ -4,7 +4,6 @@ import {
   emailStatusKind,
   emailTimeline,
   isMailFailing,
-  mailKindLabel,
   mailStatusLabel,
   nextAttemptNumber,
   parsePort,
@@ -139,16 +138,6 @@ describe('mailStatusLabel', () => {
     expect(
       mailStatusLabel({ status: 'failed', retrying: false, attempts: 3 }),
     ).toBe('Failed')
-  })
-})
-
-describe('mailKindLabel', () => {
-  it('gives human labels to known kinds and keeps unknown kinds as stored', () => {
-    expect(mailKindLabel('invitation')).toBe('Invitation')
-    expect(mailKindLabel('test')).toBe('Test email')
-    expect(mailKindLabel('password_reset')).toBe('Password reset')
-    expect(mailKindLabel('release.stuck')).toBe('A release is stuck')
-    expect(mailKindLabel('something_new')).toBe('something_new')
   })
 })
 
