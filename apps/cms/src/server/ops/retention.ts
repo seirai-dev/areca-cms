@@ -4,8 +4,9 @@
  * BATCH_SIZE rows, so a large backlog is worked off over several ticks.
  *
  * Foreign keys checked before choosing a rule:
- * - publication_request.job_id cascades from build_job and holds the durable
- *   idempotency records, so a job with one is kept.
+ * - publication_request.job_id is set to NULL when its job is pruned. The
+ *   idempotency record stays and still replays its publication, so a finished
+ *   job does not need to be kept for it.
  * - oauth tokens reference session with ON DELETE SET NULL (no cascade), so
  *   pruning sessions cannot remove them.
  * - nothing references invitation, verification or email rows.
@@ -69,8 +70,6 @@ export async function runRetention(now = new Date()): Promise<RetentionResult> {
       WHERE j.status IN ('succeeded', 'failed', 'cancelled')
         AND j.dispatch_uncertain = false
         AND j.finished_at < ${cutoff(RETENTION.buildJobDays, now)}
-        AND NOT EXISTS (
-          SELECT 1 FROM publication_request r WHERE r.job_id = j.id)
         AND j.id NOT IN (
           SELECT newest.id FROM (
             SELECT id, row_number() OVER (

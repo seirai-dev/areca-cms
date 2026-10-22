@@ -225,6 +225,13 @@
       "when": 1792673011297,
       "tag": "0031_paused_job_dismissal",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1792674405751,
+      "tag": "0032_publication_request_job_set_null",
+      "breakpoints": true
     }
   ]
 }

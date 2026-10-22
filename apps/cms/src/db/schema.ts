@@ -473,9 +473,11 @@ export const publicationRequest = pgTable('publication_request', {
   publicationId: text('publication_id')
     .notNull()
     .references(() => publication.id, { onDelete: 'cascade' }),
-  jobId: text('job_id')
-    .notNull()
-    .references(() => buildJob.id, { onDelete: 'cascade' }),
+  /**
+   * Null once retention has pruned the finished job. The record stays so a
+   * replayed key still returns the publication it created.
+   */
+  jobId: text('job_id').references(() => buildJob.id, { onDelete: 'set null' }),
   createdAt: createdAt(),
 })
 

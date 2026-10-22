@@ -167,7 +167,7 @@ export function registerPublishingTools(registry: ToolRegistry): void {
       return {
         queued: true,
         publicationId: result.publication.id,
-        jobId: result.job.id,
+        jobId: result.job?.id ?? null,
         note: 'The build is queued. Use get_build_job with this jobId to follow it.',
       }
     },

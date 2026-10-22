@@ -137,7 +137,7 @@ describe.skipIf(!hasDb)('retention', () => {
     expect(RETENTION.sessionDays).toBe(7)
   })
 
-  it('keeps the newest build jobs per site, jobs that need reconciling, and jobs a request points at', async () => {
+  it('keeps the newest build jobs per site and jobs that need reconciling; prunes old jobs a request points at', async () => {
     const ctx = await createTestSite()
     cleanups.push(async () => {
       await db.delete(organization).where(eq(organization.id, ctx.org.id))
@@ -161,13 +161,15 @@ describe.skipIf(!hasDb)('retention', () => {
       status: 'failed',
       dispatchUncertain: true,
     })
-    // Old, referenced by a durable publication request: never removed.
+    // Old and referenced by a publication request: pruned, and the request
+    // keeps its record with the job cleared.
     const referenced = await finishedJob(ctx.site.id, pub.id, {
       finishedDaysAgo: 200,
       createdDaysAgo: 301,
     })
+    const requestId = crypto.randomUUID()
     await db.insert(publicationRequest).values({
-      id: crypto.randomUUID(),
+      id: requestId,
       siteId: ctx.site.id,
       actorId: 'test',
       operation: 'publish',
@@ -193,7 +195,15 @@ describe.skipIf(!hasDb)('retention', () => {
     for (const job of jobs.slice(0, 20)) expect(keptIds.has(job.id)).toBe(true)
     for (const job of jobs.slice(20)) expect(keptIds.has(job.id)).toBe(false)
     expect(keptIds.has(uncertain.id)).toBe(true)
-    expect(keptIds.has(referenced.id)).toBe(true)
+    expect(keptIds.has(referenced.id)).toBe(false)
+    const [request] = await db
+      .select({
+        jobId: publicationRequest.jobId,
+        publicationId: publicationRequest.publicationId,
+      })
+      .from(publicationRequest)
+      .where(eq(publicationRequest.id, requestId))
+    expect(request).toEqual({ jobId: null, publicationId: pub.id })
   })
 
   it('never removes publications', async () => {
