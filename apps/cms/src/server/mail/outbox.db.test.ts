@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 import type * as MailConfig from '#/server/mail/config'
+import type * as MailTransport from '#/server/mail/transport'
 
-import { eq, inArray } from 'drizzle-orm'
+import { eq, inArray, sql } from 'drizzle-orm'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { db } from '#/db'
@@ -44,6 +45,25 @@ vi.mock('#/server/mail/config', async (importOriginal) => {
         from: 'cms@areca.local',
         replyTo: null,
       }
+    },
+  }
+})
+
+// `onSend` runs inside a send, before the real SMTP call. Tests use it to
+// simulate another claim taking over while this one is in flight.
+const transport = vi.hoisted(() => ({
+  onSend: undefined as undefined | (() => Promise<void>),
+}))
+
+vi.mock('#/server/mail/transport', async (importOriginal) => {
+  const actual = await importOriginal<typeof MailTransport>()
+  return {
+    ...actual,
+    sendMail: async (...args: Parameters<typeof MailTransport.sendMail>) => {
+      const hook = transport.onSend
+      transport.onSend = undefined
+      if (hook) await hook()
+      return actual.sendMail(...args)
     },
   }
 })
@@ -95,6 +115,37 @@ async function mailpitMessage(to: string) {
 }
 
 describe.skipIf(!hasDb)('email outbox', () => {
+  it('ignores the outcome of a sender whose lease was taken over mid-send', async () => {
+    const to = `fenced-${crypto.randomUUID()}@areca.local`
+    const { id } = await enqueueEmail({
+      kind: 'test',
+      template: 'test',
+      to,
+      params: { host: 'mailpit', sentBy: 'admin@areca.local' },
+      locale: 'en',
+    })
+    transport.onSend = async () => {
+      // A newer claim (attempt 2) takes the row while attempt 1 is in SMTP.
+      await db
+        .update(emailOutbox)
+        .set({
+          attempts: sql`${emailOutbox.attempts} + 1`,
+          leaseUntil: new Date(Date.now() + 60_000),
+        })
+        .where(eq(emailOutbox.id, id))
+    }
+
+    await processOutbox({ only: [id] })
+
+    // The stale attempt's "sent" must not overwrite the newer claim.
+    expect(await rowOf(id)).toMatchObject({
+      status: 'sending',
+      attempts: 2,
+      sentAt: null,
+      providerMessageId: null,
+    })
+  })
+
   it('enqueues, sends now, and delivers a branded message visible in Mailpit', async () => {
     const brand = await getBranding()
     const to = `outbox-${crypto.randomUUID()}@areca.local`

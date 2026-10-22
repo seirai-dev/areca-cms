@@ -9,7 +9,6 @@
  */
 import {
   and,
-  asc,
   count,
   desc,
   eq,
@@ -18,6 +17,7 @@ import {
   inArray,
   isNotNull,
   lt,
+  lte,
   max,
   ne,
   or,
@@ -133,6 +133,8 @@ type OutboxRow = typeof emailOutbox.$inferSelect
 const log = createLogger('mail')
 
 const LEASE_MS = 60_000
+/** Renewed well inside the lease while a send is in flight. */
+const LEASE_RENEW_MS = 15_000
 const BATCH_SIZE = 20
 /** 5 sends per second. */
 const SEND_INTERVAL_MS = 200
@@ -216,26 +218,34 @@ export async function sendNow(
   return resultOf(current)
 }
 
-/** One worker tick: claim due rows (SKIP LOCKED), send paced at 5/s. */
+/**
+ * One worker tick. Lists due rows, then claims each one immediately before
+ * sending it, paced at 5/s. A claim only lasts one lease, so a batch never
+ * sits leased while earlier sends wait their turn.
+ */
 export async function processOutbox(
   /** Tests only: limit the tick to these rows (the table is shared). */
   opts: { only?: readonly string[] } = {},
 ): Promise<number> {
   await failExhaustedRows()
-  const rows = await claimDueRows(opts.only)
-  for (const [index, row] of rows.entries()) {
+  const candidates = await dueCandidates(opts.only)
+  let claimed = 0
+  for (const [index, id] of candidates.entries()) {
     if (index > 0) await sleep(SEND_INTERVAL_MS)
     try {
+      const row = await claimById(id)
+      // Another replica claimed it, or it stopped being due: skip it.
+      if (!row) continue
+      claimed++
       await sendClaimed(row)
     } catch (error) {
-      // The row keeps its lease and is reclaimed once the lease expires.
       log.error('outbox row could not be recorded', {
-        outboxId: row.id,
+        outboxId: id,
         err: error,
       })
     }
   }
-  return rows.length
+  return claimed
 }
 
 /** Deletes rows older than 30 days. */
@@ -471,42 +481,82 @@ export async function cancelQueuedNotificationEmails(
   return cancelled.length
 }
 
-/** Claims due rows in one statement; `SKIP LOCKED` keeps replicas apart. */
-async function claimDueRows(only?: readonly string[]): Promise<OutboxRow[]> {
-  const scope = only
-    ? sql`AND id IN (${sql.join(
-        only.map((id) => sql`${id}`),
-        sql`, `,
-      )})`
-    : sql``
-  const claimed = await db.execute<{ id: string }>(sql`
-    WITH due AS (
-      SELECT id FROM email_outbox
-      WHERE ((status = 'queued' AND next_attempt_at <= now())
-        OR (status = 'sending' AND lease_until < now() AND attempts < ${MAIL_MAX_ATTEMPTS}))
-        ${scope}
-      ORDER BY coalesce(next_attempt_at, created_at)
-      LIMIT ${BATCH_SIZE}
-      FOR UPDATE SKIP LOCKED
-    )
-    UPDATE email_outbox
-    SET status = 'sending',
-        lease_until = now() + (${LEASE_MS} * interval '1 millisecond'),
-        attempts = attempts + 1
-    WHERE id IN (SELECT id FROM due)
-    RETURNING id
-  `)
-  if (claimed.rows.length === 0) return []
-  return db
-    .select()
+/** Rows a worker may claim now: due, or leased to a sender that stopped. */
+function claimable() {
+  return or(
+    and(
+      eq(emailOutbox.status, 'queued'),
+      lte(emailOutbox.nextAttemptAt, sql`now()`),
+    ),
+    and(
+      eq(emailOutbox.status, 'sending'),
+      lt(emailOutbox.leaseUntil, sql`now()`),
+      lt(emailOutbox.attempts, MAIL_MAX_ATTEMPTS),
+    ),
+  )
+}
+
+/** Ids of due rows, oldest first. Not claimed: `claimById` does that. */
+async function dueCandidates(only?: readonly string[]): Promise<string[]> {
+  const rows = await db
+    .select({ id: emailOutbox.id })
     .from(emailOutbox)
     .where(
-      inArray(
-        emailOutbox.id,
-        claimed.rows.map((row) => row.id),
-      ),
+      and(only ? inArray(emailOutbox.id, [...only]) : undefined, claimable()),
     )
-    .orderBy(asc(emailOutbox.createdAt))
+    .orderBy(
+      sql`coalesce(${emailOutbox.nextAttemptAt}, ${emailOutbox.createdAt})`,
+    )
+    .limit(BATCH_SIZE)
+  return rows.map((row) => row.id)
+}
+
+/**
+ * Claims one row if it is still due, in a single conditional UPDATE. The
+ * `attempts` increment is the fence: every outcome write checks it. Two
+ * replicas cannot both win, because the loser's WHERE sees the new lease.
+ */
+async function claimById(id: string): Promise<OutboxRow | null> {
+  const [row] = await db
+    .update(emailOutbox)
+    .set({
+      status: 'sending',
+      leaseUntil: leaseFromNow(),
+      attempts: sql`${emailOutbox.attempts} + 1`,
+    })
+    .where(and(eq(emailOutbox.id, id), claimable()))
+    .returning()
+  return row ?? null
+}
+
+function leaseFromNow() {
+  return new Date(Date.now() + LEASE_MS)
+}
+
+/** Keeps the lease alive while SMTP is in flight. A stale write is a no-op. */
+function keepLease(row: OutboxRow) {
+  const timer = setInterval(() => {
+    void db
+      .update(emailOutbox)
+      .set({ leaseUntil: leaseFromNow() })
+      .where(ownedBy(row))
+      .catch((error: unknown) =>
+        log.error('mail lease renewal failed', {
+          outboxId: row.id,
+          err: error,
+        }),
+      )
+  }, LEASE_RENEW_MS)
+  return () => clearInterval(timer)
+}
+
+/** The write matches only while this claim still owns the row. */
+function ownedBy(row: Pick<OutboxRow, 'id' | 'attempts'>) {
+  return and(
+    eq(emailOutbox.id, row.id),
+    eq(emailOutbox.attempts, row.attempts),
+    eq(emailOutbox.status, 'sending'),
+  )
 }
 
 /**
@@ -550,6 +600,18 @@ async function failExhaustedRows() {
 
 /** Sends a claimed row (status 'sending') and records the outcome. */
 async function sendClaimed(
+  row: OutboxRow,
+  renderParams?: Record<string, unknown>,
+): Promise<SendResult> {
+  const stopLease = keepLease(row)
+  try {
+    return await deliver(row, renderParams)
+  } finally {
+    stopLease()
+  }
+}
+
+async function deliver(
   row: OutboxRow,
   renderParams?: Record<string, unknown>,
 ): Promise<SendResult> {
@@ -608,9 +670,16 @@ function renderFailure(row: OutboxRow, error: MailRenderError): MailFailure {
   }
 }
 
-async function recordSent(row: OutboxRow, providerMessageId: string) {
+/**
+ * Records a successful send. Only the claim that still owns the row may write;
+ * a stale sender (its lease expired and another claim took over) is ignored.
+ */
+async function recordSent(
+  row: OutboxRow,
+  providerMessageId: string,
+): Promise<SendResult> {
   const now = new Date()
-  await db
+  const owned = await db
     .update(emailOutbox)
     .set({
       status: 'sent',
@@ -622,9 +691,11 @@ async function recordSent(row: OutboxRow, providerMessageId: string) {
       lastErrorParams: null,
       lastError: null,
     })
-    .where(eq(emailOutbox.id, row.id))
+    .where(ownedBy(row))
+    .returning({ id: emailOutbox.id })
+  if (owned.length === 0) return staleOutcome(row)
   await syncInvitation(row, invitationDeliveryPatch('sent', null, now))
-  return { status: 'sent', id: row.id } satisfies SendResult
+  return { status: 'sent', id: row.id }
 }
 
 async function recordFailure(
@@ -637,7 +708,7 @@ async function recordFailure(
   const message = mailFailureMessage(failure)
   const step = nextStep(failure, row.attempts, now)
   if (step.retry) {
-    await db
+    const owned = await db
       .update(emailOutbox)
       .set({
         status: 'queued',
@@ -645,7 +716,9 @@ async function recordFailure(
         leaseUntil: null,
         ...errorColumns(failure),
       })
-      .where(eq(emailOutbox.id, row.id))
+      .where(ownedBy(row))
+      .returning({ id: emailOutbox.id })
+    if (owned.length === 0) return staleOutcome(row)
     await syncInvitation(row, invitationDeliveryPatch('queued', message, now))
     return {
       status: 'retrying',
@@ -654,7 +727,7 @@ async function recordFailure(
       nextAttemptAt: step.nextAttemptAt,
     }
   }
-  await db
+  const owned = await db
     .update(emailOutbox)
     .set({
       status: 'failed',
@@ -662,9 +735,30 @@ async function recordFailure(
       leaseUntil: null,
       ...errorColumns(failure),
     })
-    .where(eq(emailOutbox.id, row.id))
+    .where(ownedBy(row))
+    .returning({ id: emailOutbox.id })
+  if (owned.length === 0) return staleOutcome(row)
   await syncInvitation(row, invitationDeliveryPatch('failed', message, now))
   return { status: 'failed', id: row.id, failure }
+}
+
+/**
+ * The claim lost its lease before the outcome was written. The row now belongs
+ * to a newer attempt, so this result is not recorded. Its outcome is reported
+ * from the row's current state.
+ */
+async function staleOutcome(row: OutboxRow): Promise<SendResult> {
+  log.warn('mail outcome ignored: the row was claimed again', {
+    outboxId: row.id,
+    attempt: row.attempts,
+  })
+  const [current] = await db
+    .select()
+    .from(emailOutbox)
+    .where(eq(emailOutbox.id, row.id))
+    .limit(1)
+  if (!current) throw new Error(`Email ${row.id} not found`)
+  return resultOf(current)
 }
 
 /** Mirrors an invitation email's outcome onto its invitation row. */
