@@ -194,6 +194,10 @@ const authBase = betterAuth({
     },
   },
   socialProviders,
+  // Reset and verification tokens are stored as SHA-256 identifiers, so a
+  // database read does not reveal a live link. Rows written before this option
+  // stay usable: Better Auth also tries the plain identifier for them.
+  verification: { storeIdentifier: 'hashed' },
   account: {
     accountLinking: {
       // An invited or bootstrapped account is never email-verified locally, so
