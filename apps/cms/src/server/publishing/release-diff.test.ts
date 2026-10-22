@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import type { SnapshotEntry } from '#/lib/types'
+import { globalsAsEntryLists } from '#/lib/globals'
+import type { SnapshotEntry, SnapshotGlobal } from '#/lib/types'
 import { resolveEntrySeo } from '#/lib/seo'
 
 import {
@@ -169,6 +170,86 @@ describe('diffSnapshotCollections', () => {
       live,
     )
     expect(dataChange.updates.map((item) => item.id)).toEqual(['a'])
+  })
+})
+
+/** An entry whose main view is `en` and whose Dutch view is shipped too. */
+function localizedSnap(nlTitle: string, nlSlug = 'hallo'): SnapshotEntry {
+  return {
+    id: 'a',
+    slug: 'hello',
+    publishedAt: '2026-01-01T00:00:00.000Z',
+    data: { title: 'Hello' },
+    locale: 'en',
+    locales: {
+      en: { slug: 'hello', data: { title: 'Hello' } },
+      nl: { slug: nlSlug, data: { title: nlTitle } },
+    },
+  }
+}
+
+describe('translation-only changes', () => {
+  it('counts a secondary-language copy edit as an update', () => {
+    const diff = diffSnapshotCollections(
+      { articles: [localizedSnap('Hallo wereld')] },
+      { articles: [localizedSnap('Hallo')] },
+    )
+    expect(diff.updates.map((item) => item.id)).toEqual(['a'])
+    expect(diff.updates[0]).not.toHaveProperty('locales')
+  })
+
+  it('counts a secondary-language slug edit as an update', () => {
+    const diff = diffSnapshotCollections(
+      { articles: [localizedSnap('Hallo', 'nieuw')] },
+      { articles: [localizedSnap('Hallo')] },
+    )
+    expect(diff.updates.map((item) => item.id)).toEqual(['a'])
+  })
+
+  it('counts a language that starts or stops shipping as an update', () => {
+    const withoutDutch: SnapshotEntry = {
+      ...localizedSnap('Hallo'),
+      locales: { en: { slug: 'hello', data: { title: 'Hello' } } },
+    }
+    expect(
+      diffSnapshotCollections(
+        { articles: [localizedSnap('Hallo')] },
+        { articles: [withoutDutch] },
+      ).updates,
+    ).toHaveLength(1)
+    expect(
+      diffSnapshotCollections(
+        { articles: [withoutDutch] },
+        { articles: [localizedSnap('Hallo')] },
+      ).updates,
+    ).toHaveLength(1)
+  })
+
+  it('ignores an unchanged secondary language', () => {
+    expect(
+      diffSnapshotCollections(
+        { articles: [localizedSnap('Hallo')] },
+        { articles: [localizedSnap('Hallo')] },
+      ).updates,
+    ).toEqual([])
+  })
+
+  it('counts a section whose only change is its Dutch view', () => {
+    const section = (nlTitle: string): SnapshotGlobal => ({
+      id: 'g1',
+      publishedAt: '2026-01-01T00:00:00.000Z',
+      data: { title: 'Welcome' },
+      locale: 'en',
+      locales: {
+        en: { data: { title: 'Welcome' } },
+        nl: { data: { title: nlTitle } },
+      },
+    })
+    const diff = diffSnapshotCollections(
+      globalsAsEntryLists({ home: section('Welkom thuis') }),
+      globalsAsEntryLists({ home: section('Welkom') }),
+    )
+    expect(diff.updates.map((item) => item.collectionKey)).toEqual(['home'])
   })
 })
 

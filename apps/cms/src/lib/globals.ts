@@ -75,6 +75,18 @@ export function globalPublicUrl(
   }
 }
 
+/** A section's language views in the entry shape; a section has one slug. */
+function sectionLocalesAsEntryLocales(
+  locales: NonNullable<SnapshotGlobal['locales']>,
+): NonNullable<SnapshotEntry['locales']> {
+  return Object.fromEntries(
+    Object.entries(locales).map(([locale, view]) => [
+      locale,
+      { slug: GLOBAL_ENTRY_SLUG, data: view.data, seo: view.seo },
+    ]),
+  )
+}
+
 /**
  * Sections as one-entry lists keyed by section key, the shape collections
  * already have. Release diffs and asset walks use it so sections are handled
@@ -94,6 +106,10 @@ export function globalsAsEntryLists(
         publishedAt: global.publishedAt,
         data: global.data,
         seo: global.seo,
+        ...(global.locale === undefined ? {} : { locale: global.locale }),
+        ...(global.locales === undefined
+          ? {}
+          : { locales: sectionLocalesAsEntryLocales(global.locales) }),
       },
     ]
   }

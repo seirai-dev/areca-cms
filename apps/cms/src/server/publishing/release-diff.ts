@@ -4,7 +4,7 @@ import { db } from '#/db'
 import { collection, entry, publication, site, user } from '#/db/schema'
 import { entryTitle } from '#/lib/content/utils'
 import { globalsAsEntryLists } from '#/lib/globals'
-import type { Field, Snapshot, SnapshotEntry } from '#/lib/types'
+import type { Field, SeoMeta, Snapshot, SnapshotEntry } from '#/lib/types'
 import { buildSnapshot } from '#/server/content/snapshot'
 
 /**
@@ -59,7 +59,7 @@ export type PendingReleaseChange = {
 }
 
 type IndexedEntry = ReleaseDiffEntry &
-  Pick<SnapshotEntry, 'seo' | 'publishedAt'>
+  Pick<SnapshotEntry, 'seo' | 'publishedAt' | 'locales'>
 
 /** Order-insensitive JSON; same rule as `entry-live-state` `stable()`. */
 export function stableJson(value: unknown): string {
@@ -99,22 +99,69 @@ function seoFingerprint(seo: SnapshotEntry['seo']) {
 function withoutSeoKey({
   seo: _seo,
   publishedAt: _publishedAt,
+  locales: _locales,
   ...rest
 }: IndexedEntry): ReleaseDiffEntry {
   return rest
 }
 
-function changed(next: IndexedEntry, prev: IndexedEntry) {
-  if (fingerprint(next) !== fingerprint(prev)) return true
+/**
+ * Whether resolved SEO moved between two snapshots of the same entry. Adding
+ * resolved defaults to an untouched legacy entry is not a change. Re-approval
+ * advances publishedAt, so its SEO must be released even when the live
+ * baseline predates SEO and has no metadata to compare.
+ */
+function seoChanged(
+  next: { seo?: SeoMeta; publishedAt: string | null },
+  prev: { seo?: SeoMeta; publishedAt: string | null },
+) {
   const a = seoFingerprint(next.seo)
   const b = seoFingerprint(prev.seo)
-  // Adding resolved defaults to an untouched legacy entry is not a change.
-  // Re-approval advances publishedAt, so its SEO must be released even when
-  // the live baseline predates SEO and has no metadata to compare.
   if (a !== null && b === null) {
     return next.publishedAt !== prev.publishedAt
   }
   return a !== null && b !== null && a !== b
+}
+
+type LocaleView = NonNullable<SnapshotEntry['locales']>[string]
+
+/**
+ * Translation-only edits change `locales` and nothing else: the main view in
+ * `data` stays the same. A language that starts or stops shipping is a change too.
+ */
+function localesChanged(next: IndexedEntry, prev: IndexedEntry) {
+  const nextLocales: Partial<Record<string, LocaleView>> = next.locales ?? {}
+  const prevLocales: Partial<Record<string, LocaleView>> = prev.locales ?? {}
+  const keys = new Set([
+    ...Object.keys(nextLocales),
+    ...Object.keys(prevLocales),
+  ])
+  for (const key of keys) {
+    const a = nextLocales[key]
+    const b = prevLocales[key]
+    if (!a || !b) return true
+    if (
+      stableJson({ slug: a.slug, data: a.data }) !==
+      stableJson({ slug: b.slug, data: b.data })
+    ) {
+      return true
+    }
+    if (
+      seoChanged(
+        { seo: a.seo, publishedAt: next.publishedAt },
+        { seo: b.seo, publishedAt: prev.publishedAt },
+      )
+    ) {
+      return true
+    }
+  }
+  return false
+}
+
+function changed(next: IndexedEntry, prev: IndexedEntry) {
+  if (fingerprint(next) !== fingerprint(prev)) return true
+  if (seoChanged(next, prev)) return true
+  return localesChanged(next, prev)
 }
 
 /**
@@ -160,6 +207,7 @@ function indexCollections(
         data: item.data,
         seo: item.seo,
         publishedAt: item.publishedAt,
+        locales: item.locales,
       })
     }
   }
