@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { and, desc, eq, ilike, inArray, isNotNull, or, sql } from 'drizzle-orm'
+import { and, desc, eq, ilike, isNotNull, or, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { collection, entry, entryRevision, site, user } from '#/db/schema'
@@ -18,7 +18,6 @@ import type {
 import {
   I18N_KEY,
   LOCALE_KEY,
-  localeStatus,
   normalizeBase,
   readLocale,
 } from '#/lib/content-locale'
@@ -31,6 +30,7 @@ import { assetMutationLock } from '#/server/assets/usage'
 import { archiveDeletedContent } from './deletion-archive'
 import { getCollection } from './collections.ts'
 import { ConflictError, NotFoundError, ValidationError } from './errors.ts'
+import { notCompleteInLocale } from './missing-language.ts'
 import { assertSectionSeo, sectionSeoIssue } from './globals.ts'
 import {
   formatLanguageBlockers,
@@ -160,29 +160,15 @@ export async function listEntries(
     ).at(0)
     const languages = siteRow?.languages
     if (languages?.all.includes(options.missingLanguage)) {
-      // Completeness is computed from the draft JSON (required translatable
-      // fields, with the same rules as validation), so the matching ids are
-      // collected first and then filtered in SQL. Keeps paging and `total`
-      // exact. Cost grows with the collection size; only paid when the
-      // filter is on.
-      const ctx = {
-        main: languages.main,
-        all: languages.all,
-        fields: col.fields,
-      }
-      const candidates = await db
-        .select({ id: entry.id, draftData: entry.draftData })
-        .from(entry)
-        .where(and(...filters))
-      const missing = candidates
-        .filter(
-          (row) =>
-            !localeStatus(row.draftData, options.missingLanguage!, ctx)
-              .complete,
-        )
-        .map((row) => row.id)
-      if (missing.length === 0) return { items: [], total: 0 }
-      filters.push(inArray(entry.id, missing))
+      // Completeness is one predicate on the draft, so paging and `total` stay
+      // exact and the database reads only the rows of the page.
+      filters.push(
+        notCompleteInLocale(options.missingLanguage, {
+          main: languages.main,
+          all: languages.all,
+          fields: col.fields,
+        }),
+      )
     }
   }
 
