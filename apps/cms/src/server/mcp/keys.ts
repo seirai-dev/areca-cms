@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .returning()/.select() are checked defensively */
-import { createHash, randomBytes } from 'node:crypto'
+import { randomBytes } from 'node:crypto'
 import { and, count, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
@@ -13,6 +13,7 @@ import {
   NotFoundError,
   ValidationError,
 } from '#/server/content/errors'
+import { hashToken } from '#/server/security/token-hash'
 
 export type McpRole = 'editor' | 'owner' | 'agency'
 
@@ -60,7 +61,7 @@ export type McpKeySummary = {
 }
 
 export function hashMcpKey(token: string): string {
-  return createHash('sha256').update(token).digest('hex')
+  return hashToken(token)
 }
 
 export function generateMcpKey(): {

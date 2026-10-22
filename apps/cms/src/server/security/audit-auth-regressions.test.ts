@@ -24,6 +24,7 @@ import {
 import { completeSetup } from '#/server/admin/setup'
 import { deleteOrganization } from '#/server/admin/organizations'
 import { createTestSite } from '#/server/content/test-utils'
+import { hashToken } from '#/server/security/token-hash'
 import { localMfaVerifiedAt, requireAdminLocalMfa } from './local-mfa'
 import {
   clearStepUpFailures,
@@ -85,17 +86,19 @@ async function makeOrg() {
   return created
 }
 async function makeInvite(target: typeof user.$inferSelect, orgId: string) {
+  // The raw token is returned for the test; the database keeps only its hash.
+  const token = crypto.randomUUID()
   const [created] = await db
     .insert(invitation)
     .values({
       email: target.email,
       organizationId: orgId,
       role: 'editor',
-      token: crypto.randomUUID(),
+      tokenHash: hashToken(token),
       expiresAt: new Date(Date.now() + 60_000),
     })
     .returning()
-  return created
+  return { ...created, token }
 }
 
 afterEach(async () => {
@@ -130,16 +133,18 @@ describe.skipIf(!isolated)(
       const existing = await makeUser()
       const org = await makeOrg()
       const email = `${crypto.randomUUID()}@audit.test`
-      const [invite] = await db
+      const inviteToken = crypto.randomUUID()
+      const [inserted] = await db
         .insert(invitation)
         .values({
           email,
           organizationId: org.id,
           role: 'owner',
-          token: crypto.randomUUID(),
+          tokenHash: hashToken(inviteToken),
           expiresAt: new Date(Date.now() + 60_000),
         })
         .returning()
+      const invite = { ...inserted, token: inviteToken }
       const signup = { name: 'Recipient', email, password: 'password123' }
       await expect(
         auth.api.signUpEmail({ body: signup }),

@@ -5,6 +5,7 @@ import { and, eq, gt, isNull, sql } from 'drizzle-orm'
 import { db } from '#/db'
 import { invitation, user } from '#/db/schema'
 import { m } from '#/paraglide/messages'
+import { hashToken } from '#/server/security/token-hash'
 
 /**
  * Registration is invite-only, whatever the sign-in method. A brand new user
@@ -96,7 +97,9 @@ async function hasPendingInvitation(normalizedEmail: string, token: unknown) {
         eq(sql`lower(${invitation.email})`, normalizedEmail),
         isNull(invitation.acceptedAt),
         gt(invitation.expiresAt, new Date()),
-        typeof token === 'string' ? eq(invitation.token, token) : undefined,
+        typeof token === 'string'
+          ? eq(invitation.tokenHash, hashToken(token))
+          : undefined,
       ),
     )
     .limit(1)

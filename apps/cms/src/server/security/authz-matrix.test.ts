@@ -680,6 +680,7 @@ describe.skipIf(!runnable)(
         for (const fn of [
           adminFns.revokeInvitationFn,
           adminFns.resendInvitationFn,
+          adminFns.regenerateInvitationLinkFn,
         ]) {
           const a = await call(fn, { id: real.id }, 'anonymous')
           const b = await call(fn, { id: crypto.randomUUID() }, 'anonymous')
@@ -726,6 +727,12 @@ describe.skipIf(!runnable)(
           [
             'invitation (resend)',
             adminFns.resendInvitationFn,
+            { id: invitationY.id },
+            { id: missing() },
+          ],
+          [
+            'invitation (regenerate link)',
+            adminFns.regenerateInvitationLinkFn,
             { id: invitationY.id },
             { id: missing() },
           ],

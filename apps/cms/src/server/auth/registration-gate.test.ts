@@ -1,19 +1,32 @@
+import { PgDialect } from 'drizzle-orm/pg-core'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { hashToken } from '#/server/security/token-hash'
 
 import {
   assertEmailMayRegister,
   assertPasswordSignupMayProceed,
 } from './registration-gate'
 
-// Rows for each query, in the order the gate runs them.
-const queued = vi.hoisted(() => ({ rows: [] as unknown[][] }))
+// Rows for each query, in the order the gate runs them. `wheres` keeps each
+// query's condition so a test can see the values it binds.
+const queued = vi.hoisted(() => ({
+  rows: [] as unknown[][],
+  wheres: [] as unknown[],
+}))
 
 vi.mock('#/db', () => {
   const next = async () => queued.rows.shift() ?? []
   return {
     db: {
       select: () => ({
-        from: () => ({ limit: next, where: () => ({ limit: next }) }),
+        from: () => ({
+          limit: next,
+          where: (condition: unknown) => {
+            queued.wheres.push(condition)
+            return { limit: next }
+          },
+        }),
       }),
     },
   }
@@ -41,6 +54,17 @@ function answerOf(error: unknown) {
 describe('assertPasswordSignupMayProceed', () => {
   beforeEach(() => {
     queued.rows = []
+    queued.wheres = []
+  })
+
+  it('matches the invitation by the hash of the token, never the raw token', async () => {
+    queued.rows = [bootstrapped, [], invite]
+    await assertPasswordSignupMayProceed('new@example.com', 'raw-token')
+    const bound = new PgDialect().sqlToQuery(
+      queued.wheres.at(-1) as Parameters<PgDialect['sqlToQuery']>[0],
+    ).params
+    expect(bound).toContain(hashToken('raw-token'))
+    expect(bound).not.toContain('raw-token')
   })
 
   it('lets a sign-up through with a pending invitation and no account', async () => {

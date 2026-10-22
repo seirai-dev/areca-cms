@@ -61,7 +61,7 @@ export const env = createEnv({
     S3_SECRET_KEY: z.string().min(1),
     S3_FORCE_PATH_STYLE: z.string().optional(),
     // SMTP is optional: the Agency → Mail settings can replace these entirely.
-    // Without either source, sending is off and invites need Copy link.
+    // Without either source, sending is off and invites need Regenerate link.
     SMTP_HOST: z.string().min(1).optional(),
     SMTP_PORT: z.coerce.number().int().min(1).max(65_535).optional(),
     SMTP_FROM: z.string().min(1).optional(),

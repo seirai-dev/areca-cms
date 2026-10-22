@@ -29,6 +29,7 @@ import {
   inviteMember,
   listMembers,
   listUsers,
+  regenerateInvitationLink,
   removeMember,
   updateMemberRole,
 } from './members.ts'
@@ -90,6 +91,12 @@ async function cleanup(orgIds: string[], userIds: string[]) {
   if (userIds.length > 0) {
     await db.delete(user).where(inArray(user.id, userIds))
   }
+}
+
+/** The raw token of a pending invitation. Only the hash is stored, so the test reads it from a fresh link. */
+async function linkTokenFor(invitationId: string, actorId: string) {
+  const { link } = await regenerateInvitationLink(invitationId, actorId)
+  return link.slice(link.lastIndexOf('/') + 1)
 }
 
 describe.skipIf(!hasDb)('admin', () => {
@@ -265,12 +272,13 @@ describe.skipIf(!hasDb)('admin', () => {
         role: 'owner',
         actorId: actor.id,
       })
-      expect(invitation.token).toMatch(/^[0-9a-f]{64}$/)
+      const token = await linkTokenFor(invitation.id, actor.id)
+      expect(token).toMatch(/^[0-9a-f]{64}$/)
 
       const message = await findMailpitMessage(inviteEmail)
       expect(message).toBeDefined()
 
-      await acceptInvitation({ token: invitation.token, userId: invitee.id })
+      await acceptInvitation({ token, userId: invitee.id })
 
       const members = await listMembers(org.id)
       expect(members).toEqual(
@@ -342,6 +350,7 @@ describe.skipIf(!hasDb)('admin', () => {
         actorId: actor.id,
       })
       expect(first.email).toBe(inviteEmail)
+      const firstToken = await linkTokenFor(first.id, actor.id)
 
       await expect(
         inviteMember({
@@ -353,10 +362,10 @@ describe.skipIf(!hasDb)('admin', () => {
       ).rejects.toThrow('An invitation is already pending for this email')
 
       await expect(
-        acceptInvitation({ token: first.token, userId: stranger.id }),
+        acceptInvitation({ token: firstToken, userId: stranger.id }),
       ).rejects.toThrow('Signed-in email does not match this invitation')
 
-      await acceptInvitation({ token: first.token, userId: invitee.id })
+      await acceptInvitation({ token: firstToken, userId: invitee.id })
 
       await expect(
         inviteMember({

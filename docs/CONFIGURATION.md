@@ -91,7 +91,8 @@ Dokploy delivery, invitation email behavior, and credential rotation.
 ## Mail
 
 SMTP is optional at startup. Without a mail server, mail is off until one is set
-in Agency → Mail. Invitations still work, and the link can be shared with Copy link.
+in Agency → Mail. Invitations still work, and a pending invitation's link can be shared
+with Regenerate link (the old link stops working).
 
 | Variable | Purpose |
 | --- | --- |
@@ -112,7 +113,8 @@ client, role changed). Without a mail server, security notices are skipped and
 forgot password asks the person to contact an agency admin. The reset token in
 the email queue is encrypted with `SECRETS_ENCRYPTION_KEY`, or
 `AI_SETTINGS_ENCRYPTION_KEY` if that is unset. Without a key, a reset email is
-tried once and never retried.
+tried once and never retried. Invitation emails follow the same rule, and only
+their hash is stored, so the link is never kept in plain text.
 
 ## Deployment and safety switches
 

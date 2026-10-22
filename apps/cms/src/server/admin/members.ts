@@ -19,17 +19,38 @@ import { ConflictError, NotFoundError } from '#/server/content/errors'
 import { AppError } from '#/server/http/app-error'
 import { sendAccountEmail } from '#/server/mail/account-emails'
 import { mailFailureMessage } from '#/server/mail/errors'
-import { revokeMemberMcpConnections } from '#/server/mcp/connections'
-import { revokeMemberMcpKeys } from '#/server/mcp/keys'
-import { notifyInviteAccepted } from '#/server/notifications/triggers'
 import {
   cancelQueuedNotificationEmails,
   enqueueEmail,
   sendNow,
   supersedeInvitationEmails,
 } from '#/server/mail/outbox'
+import { invitationAcceptUrl } from '#/server/mail/render/templates/invitation'
+import { PARAMS_SECRET_CONTEXT } from '#/server/mail/render/templates/password-reset'
+import { revokeMemberMcpConnections } from '#/server/mcp/connections'
+import { revokeMemberMcpKeys } from '#/server/mcp/keys'
+import { notifyInviteAccepted } from '#/server/notifications/triggers'
+import { encryptSecret } from '#/server/security/secret-encryption'
+import { secretsEncryptionKey } from '#/server/security/secrets-key'
+import { hashToken } from '#/server/security/token-hash'
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000
+
+/**
+ * Invitation columns that may leave the server. The token hash never does, and
+ * the raw token is only ever in the email or in a regenerate response.
+ */
+const INVITATION_COLUMNS = {
+  id: invitation.id,
+  email: invitation.email,
+  organizationId: invitation.organizationId,
+  role: invitation.role,
+  expiresAt: invitation.expiresAt,
+  acceptedAt: invitation.acceptedAt,
+  deliveryStatus: invitation.deliveryStatus,
+  lastSentAt: invitation.lastSentAt,
+  createdAt: invitation.createdAt,
+}
 
 /**
  * The invitation row exists (and can be resent or revoked) but the email did
@@ -38,6 +59,8 @@ const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000
  */
 export class InvitationDeliveryError extends AppError {
   readonly status = 502
+  /** The readable mail failure on its own. */
+  readonly reason: string
   constructor(reason = '') {
     super(
       reason
@@ -45,6 +68,7 @@ export class InvitationDeliveryError extends AppError {
         : m.server_invitation_email_failed(),
     )
     this.name = 'InvitationDeliveryError'
+    this.reason = reason
   }
 }
 
@@ -333,7 +357,7 @@ export async function inviteMember(input: {
       throw new ConflictError(m.server_invitation_pending())
     }
 
-    const token = newInvitationToken()
+    const { token, tokenHash } = newInvitationToken()
     const expiresAt = new Date(Date.now() + INVITE_TTL_MS)
 
     // Queued in the same transaction, so the invitation and its email are
@@ -344,7 +368,7 @@ export async function inviteMember(input: {
         email,
         organizationId: input.organizationId,
         role: input.role,
-        token,
+        tokenHash,
         expiresAt,
         deliveryStatus: 'queued',
       })
@@ -363,25 +387,46 @@ export async function inviteMember(input: {
       },
       tx,
     )
-    const outbox = await enqueueInvitation(tx, row)
-    return { row, outboxId: outbox.id }
+    const outbox = await enqueueInvitation(tx, row, token)
+    return { row, outboxId: outbox.id, token }
   })
 
-  return sendInvitation(created.row.id, created.outboxId)
+  return sendInvitation(created.row.id, created.outboxId, created.token)
 }
 
+/**
+ * A new invitation token and its hash. The raw token lives in memory only:
+ * the email carries it, and regenerate returns it once.
+ */
 function newInvitationToken() {
-  return randomBytes(32).toString('hex')
+  const token = randomBytes(32).toString('hex')
+  return { token, tokenHash: hashToken(token) }
 }
 
-/** Queues the invitation email in the caller's transaction. */
-async function enqueueInvitation(tx: Tx, row: typeof invitation.$inferSelect) {
+/**
+ * Queues the invitation email in the caller's transaction. The outbox never
+ * holds the link in plain text: `encryptedToken` is stored only when a secrets
+ * key exists, so a retry can rebuild it. The plain token is a render param,
+ * used for the subject and the immediate send, and is not stored.
+ */
+async function enqueueInvitation(
+  tx: Tx,
+  row: typeof invitation.$inferSelect,
+  token: string,
+) {
+  const key = secretsEncryptionKey()
   return enqueueEmail(
     {
       kind: 'invitation',
       template: 'invitation',
       to: row.email,
-      params: { invitationId: row.id },
+      params: {
+        invitationId: row.id,
+        ...(key
+          ? { encryptedToken: encryptSecret(token, key, PARAMS_SECRET_CONTEXT) }
+          : {}),
+      },
+      renderParams: { token },
       locale: getLocale(),
       organizationId: row.organizationId,
     },
@@ -394,13 +439,17 @@ async function enqueueInvitation(tx: Tx, row: typeof invitation.$inferSelect) {
  * the invitation row. Anything but "sent" throws with the readable reason; the
  * row is kept, so it can be resent or left to the worker's retries.
  */
-async function sendInvitation(invitationId: string, outboxId: string) {
-  const result = await sendNow(outboxId)
+async function sendInvitation(
+  invitationId: string,
+  outboxId: string,
+  token: string,
+) {
+  const result = await sendNow(outboxId, { renderParams: { token } })
   if (result.status !== 'sent') {
     throw new InvitationDeliveryError(mailFailureMessage(result.failure))
   }
   const [row] = await db
-    .select()
+    .select(INVITATION_COLUMNS)
     .from(invitation)
     .where(eq(invitation.id, invitationId))
     .limit(1)
@@ -410,18 +459,7 @@ async function sendInvitation(invitationId: string, outboxId: string) {
 
 export async function listInvitations(organizationId: string) {
   return db
-    .select({
-      id: invitation.id,
-      email: invitation.email,
-      organizationId: invitation.organizationId,
-      role: invitation.role,
-      token: invitation.token,
-      expiresAt: invitation.expiresAt,
-      acceptedAt: invitation.acceptedAt,
-      deliveryStatus: invitation.deliveryStatus,
-      lastSentAt: invitation.lastSentAt,
-      createdAt: invitation.createdAt,
-    })
+    .select(INVITATION_COLUMNS)
     .from(invitation)
     .where(eq(invitation.organizationId, organizationId))
     .orderBy(invitation.createdAt)
@@ -464,7 +502,46 @@ export async function revokeInvitation(id: string, actorId: string) {
  * expired and delivery-failed invitations). The previous link stops working.
  */
 export async function resendInvitation(id: string, actorId: string) {
-  const { row, outboxId } = await db.transaction(async (tx) => {
+  const { row, outboxId, token } = await reissueInvitation(
+    id,
+    actorId,
+    'invitation.resend',
+  )
+  return sendInvitation(row.id, outboxId, token)
+}
+
+/**
+ * "Regenerate link": a fresh token, so the old link stops working, and the
+ * invitation email with the new link. The link is returned once for the admin
+ * to copy. When the email cannot go out, the link is still returned, with the
+ * reason, because the admin may share it another way.
+ */
+export async function regenerateInvitationLink(id: string, actorId: string) {
+  const { row, outboxId, token } = await reissueInvitation(
+    id,
+    actorId,
+    'invitation.regenerate_link',
+  )
+  const link = invitationAcceptUrl(token)
+  try {
+    await sendInvitation(row.id, outboxId, token)
+    return { link, emailSent: true, emailError: null }
+  } catch (error) {
+    if (!(error instanceof InvitationDeliveryError)) throw error
+    return { link, emailSent: false, emailError: error.reason }
+  }
+}
+
+/**
+ * Stores a new token hash and expiry, queues the email for it and writes the
+ * audit entry, in one transaction. Callers send the email afterwards.
+ */
+async function reissueInvitation(
+  id: string,
+  actorId: string,
+  action: 'invitation.resend' | 'invitation.regenerate_link',
+) {
+  return db.transaction(async (tx) => {
     const [locked] = await tx
       .select()
       .from(invitation)
@@ -501,10 +578,11 @@ export async function resendInvitation(id: string, actorId: string) {
       throw new ConflictError(m.server_email_already_member())
     }
 
+    const { token, tokenHash } = newInvitationToken()
     const [updated] = await tx
       .update(invitation)
       .set({
-        token: newInvitationToken(),
+        tokenHash,
         expiresAt: new Date(Date.now() + INVITE_TTL_MS),
         deliveryStatus: 'queued',
       })
@@ -517,7 +595,7 @@ export async function resendInvitation(id: string, actorId: string) {
       {
         organizationId: locked.organizationId,
         actorId,
-        action: 'invitation.resend',
+        action,
         targetType: 'invitation',
         targetId: id,
         meta: { email: locked.email },
@@ -526,11 +604,9 @@ export async function resendInvitation(id: string, actorId: string) {
     )
     // The new link replaces the old one, so older queued sends must not go out.
     await supersedeInvitationEmails(updated.id, tx)
-    const outbox = await enqueueInvitation(tx, updated)
-    return { row: updated, outboxId: outbox.id }
+    const outbox = await enqueueInvitation(tx, updated, token)
+    return { row: updated, outboxId: outbox.id, token }
   })
-
-  return sendInvitation(row.id, outboxId)
 }
 
 export async function getInvitation(token: string) {
@@ -539,7 +615,7 @@ export async function getInvitation(token: string) {
     .from(invitation)
     .where(
       and(
-        eq(invitation.token, token),
+        eq(invitation.tokenHash, hashToken(token)),
         isNull(invitation.acceptedAt),
         gt(invitation.expiresAt, new Date()),
       ),
@@ -552,6 +628,7 @@ export async function acceptInvitation(input: {
   token: string
   userId: string
 }) {
+  const tokenHash = hashToken(input.token)
   // Read only the tuple identity first. Re-read the invitation under both
   // locks, so revocation/acceptance cannot make this snapshot authoritative.
   const [identity] = await db
@@ -560,7 +637,7 @@ export async function acceptInvitation(input: {
       email: invitation.email,
     })
     .from(invitation)
-    .where(eq(invitation.token, input.token))
+    .where(eq(invitation.tokenHash, tokenHash))
     .limit(1)
   if (!identity) throw new NotFoundError(m.server_invitation_not_found())
   // Set only when this call accepted the invitation (replays notify nobody).
@@ -572,7 +649,7 @@ export async function acceptInvitation(input: {
     const [invite] = await tx
       .select()
       .from(invitation)
-      .where(eq(invitation.token, input.token))
+      .where(eq(invitation.tokenHash, tokenHash))
       .for('update')
     if (
       !invite ||

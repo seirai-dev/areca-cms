@@ -35,6 +35,7 @@ import {
   toStoredFields,
 } from '#/server/mcp/entry-format'
 import { applyLocaleWrite } from '#/server/mcp/locales'
+import { hashToken } from '#/server/security/token-hash'
 import { requestPublication } from '#/server/publishing/publications'
 import { processJob } from '#/server/publishing/worker'
 
@@ -122,7 +123,7 @@ async function inviteAndSignUp(input: {
     email: input.email,
     organizationId: input.organizationId,
     role: input.role,
-    token,
+    tokenHash: hashToken(token),
     expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
   })
   const created = await signUp(input.name, input.email, token)
@@ -293,7 +294,7 @@ async function seedClient(client: DemoClient, adminId: string) {
       email: client.pendingInvite.email,
       organizationId: org.id,
       role: client.pendingInvite.role,
-      token: randomBytes(32).toString('hex'),
+      tokenHash: hashToken(randomBytes(32).toString('hex')),
       expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
     })
   }

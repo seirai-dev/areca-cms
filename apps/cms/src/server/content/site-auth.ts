@@ -1,16 +1,17 @@
-import { createHash, randomBytes } from 'node:crypto'
+import { randomBytes } from 'node:crypto'
 import { eq } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { site } from '#/db/schema'
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
+import { hashToken } from '#/server/security/token-hash'
 
 import { NotFoundError } from './errors.ts'
 
 export function generateSiteToken() {
   const token = randomBytes(32).toString('hex')
-  const hash = createHash('sha256').update(token).digest('hex')
+  const hash = hashToken(token)
   return { token, hash }
 }
 
@@ -22,7 +23,7 @@ export async function authenticateSite(
   if (!header?.startsWith('Bearer ')) return null
   const token = header.slice('Bearer '.length).trim()
   if (!token) return null
-  const hash = createHash('sha256').update(token).digest('hex')
+  const hash = hashToken(token)
   const found = (
     await db
       .select()

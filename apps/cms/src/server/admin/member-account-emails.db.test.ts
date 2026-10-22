@@ -11,6 +11,8 @@ import {
   user,
 } from '#/db/schema'
 
+import { hashToken } from '#/server/security/token-hash'
+
 import { acceptInvitation, removeMember, updateMemberRole } from './members.ts'
 
 const hasDb = Boolean(process.env.DATABASE_URL)
@@ -143,7 +145,7 @@ describe.skipIf(!hasDb)('member account emails', () => {
       email: person.email,
       organizationId: org.id,
       role: 'editor',
-      token,
+      tokenHash: hashToken(token),
       expiresAt: new Date(Date.now() + 60_000),
       deliveryStatus: 'sent',
     })
@@ -179,7 +181,7 @@ describe.skipIf(!hasDb)('member account emails', () => {
       email: person.email,
       organizationId: org.id,
       role: 'editor',
-      token,
+      tokenHash: hashToken(token),
       expiresAt: new Date(Date.now() + 60_000),
       deliveryStatus: 'failed',
     })
