@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { parseArgs } from './args.js'
 import { run } from './cli.js'
 import { createArecaClient, FieldDropsRequiredError } from './client.js'
+import * as entry from './index.js'
 import { defineSiteContent, manifestFromConfig } from './config.js'
 import { getPreviewEntry, previewHeaders } from './preview.js'
 import { pullContent, readContent } from './pull.js'
@@ -831,6 +832,12 @@ describe('createArecaClient: field removals', () => {
     globalThis.fetch = async () => jsonResponse({ error: 'Site is locked' }, 409)
     const client = createArecaClient({ cmsUrl: 'https://cms.example.com', schemaToken: 'schema' })
     await expect(client.syncManifest(sampleConfig)).rejects.toThrow('Failed to sync manifest (409): Site is locked')
+  })
+})
+
+describe('package entry', () => {
+  it('exports the field-removal error, so callers can catch it', () => {
+    expect(entry.FieldDropsRequiredError).toBe(FieldDropsRequiredError)
   })
 })
 
