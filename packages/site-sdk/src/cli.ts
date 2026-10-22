@@ -11,6 +11,7 @@ import { loadLocalEnv } from './env.js'
 import { InitCancelledError, initSite } from './init.js'
 import { loadConfig } from './load-config.js'
 import { ManifestPullCancelledError, manifestPull } from './manifest-pull.js'
+import { pushManifest } from './manifest-push.js'
 import { paraglideWarnings } from './paraglide.js'
 import { pullContent } from './pull.js'
 
@@ -111,7 +112,12 @@ export async function run(
     }
 
     const config = await loadConfig(parsed.configPath, cwd)
-    await createArecaClient().syncManifest(config)
+    await pushManifest({
+      config,
+      client: createArecaClient(),
+      confirmDropFields: parsed.confirmDropFields,
+      yes: parsed.yes,
+    })
     console.log(`Synced manifest from ${parsed.configPath}`)
     return 0
   } catch (error) {

@@ -16,8 +16,39 @@ export type ArecaClientOptions = {
   schemaToken?: string
 }
 
+/** A field a manifest push would remove together with its content. */
+export type FieldDrop = {
+  kind: 'collection' | 'global'
+  /** Raw key of the collection or site content section. */
+  key: string
+  /** Raw field key. */
+  field: string
+  /** Entries that hold content for the field. */
+  entries: number
+}
+
+/**
+ * The CMS refused a manifest push that would delete content. Nothing was
+ * changed. Confirm the listed drops (`<key>.<field>`) to push them.
+ */
+export class FieldDropsRequiredError extends Error {
+  readonly drops: FieldDrop[]
+
+  constructor(drops: FieldDrop[]) {
+    super(
+      `Pushing removes fields that still hold content: ${drops.map((drop) => `${drop.key}.${drop.field}`).join(', ')}`,
+    )
+    this.name = 'FieldDropsRequiredError'
+    this.drops = drops
+  }
+}
+
 export type ArecaClient = {
-  syncManifest: (config: SiteContentConfig) => Promise<{ ok: true }>
+  /** `confirmDropFields` lists the field removals the push confirms, as `<key>.<field>`. */
+  syncManifest: (
+    config: SiteContentConfig,
+    options?: { confirmDropFields?: string[] },
+  ) => Promise<{ ok: true }>
   fetchManifest: () => Promise<SiteManifest>
   fetchSnapshot: (options?: { publicationId?: string }) => Promise<Snapshot>
   /** `locale` asks the CMS for the preview resolved in that language. */
@@ -71,16 +102,25 @@ export function createArecaClient(
   return {
     fetchAsset: cmsAssetDownloader(cmsUrl),
 
-    async syncManifest(config) {
+    async syncManifest(config, options = {}) {
+      const confirmDropFields = options.confirmDropFields ?? []
       const res = await cmsFetch(`${cmsUrl}/api/sites/manifest`, {
         method: 'POST',
         headers: {
           ...schemaHeaders(),
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(manifestFromConfig(config)),
+        body: JSON.stringify({
+          ...manifestFromConfig(config),
+          // Sent only when there is something to confirm: older CMS versions reject unknown keys.
+          ...(confirmDropFields.length > 0 ? { confirmDropFields } : {}),
+        }),
       })
 
+      if (res.status === 409) {
+        const drops = await readFieldDrops(res)
+        if (drops) throw new FieldDropsRequiredError(drops)
+      }
       if (!res.ok) {
         throw new Error(await formatHttpError('Failed to sync manifest', res))
       }
@@ -182,6 +222,18 @@ async function readError(res: Response): Promise<string> {
     // ignore non-JSON bodies
   }
   return ''
+}
+
+/** The drops of a 409 `field_drops_unconfirmed` answer, or undefined for any other 409. */
+async function readFieldDrops(res: Response): Promise<FieldDrop[] | undefined> {
+  try {
+    // A clone, so formatHttpError can still read the body of any other 409.
+    const body = (await res.clone().json()) as { code?: unknown; drops?: unknown }
+    if (body.code !== 'field_drops_unconfirmed' || !Array.isArray(body.drops)) return undefined
+    return body.drops as FieldDrop[]
+  } catch {
+    return undefined
+  }
 }
 
 async function formatHttpError(prefix: string, res: Response): Promise<string> {
