@@ -68,7 +68,7 @@ async function findMailpitMessage(email: string) {
 }
 
 async function createActor(suffix: string) {
-  const [actor] = await db
+  const actor = (await db
     .insert(user)
     .values({
       id: crypto.randomUUID(),
@@ -76,7 +76,7 @@ async function createActor(suffix: string) {
       email: `actor-${suffix}@test.local`,
       emailVerified: true,
     })
-    .returning()
+    .returning()).at(0)
   if (!actor) throw new Error('Failed to create actor')
   return actor
 }
@@ -169,11 +169,11 @@ describe.skipIf(!hasDb)('admin', () => {
       expect(created.token).toMatch(/^[0-9a-f]{64}$/)
       expect(created).not.toHaveProperty('tokenHash')
 
-      const [stored] = await db
+      const stored = (await db
         .select({ tokenHash: site.tokenHash })
         .from(site)
         .where(eq(site.id, created.id))
-        .limit(1)
+        .limit(1)).at(0)
       expect(stored?.tokenHash).toBe(
         createHash('sha256').update(created.token).digest('hex'),
       )
@@ -181,11 +181,11 @@ describe.skipIf(!hasDb)('admin', () => {
       const rotated = await rotateSiteTokenAdmin(created.id, 'build', actor.id)
       expect(rotated.token).not.toBe(created.token)
 
-      const [afterRotate] = await db
+      const afterRotate = (await db
         .select({ tokenHash: site.tokenHash })
         .from(site)
         .where(eq(site.id, created.id))
-        .limit(1)
+        .limit(1)).at(0)
       expect(afterRotate?.tokenHash).toBe(
         createHash('sha256').update(rotated.token).digest('hex'),
       )
@@ -228,7 +228,7 @@ describe.skipIf(!hasDb)('admin', () => {
   it('invites a member by email, accepts, and refuses removing the last owner', async () => {
     const suffix = crypto.randomUUID()
     const actor = await createActor(suffix)
-    const [invitee] = await db
+    const invitee = (await db
       .insert(user)
       .values({
         id: crypto.randomUUID(),
@@ -236,7 +236,7 @@ describe.skipIf(!hasDb)('admin', () => {
         email: `invitee-${suffix}@test.local`,
         emailVerified: true,
       })
-      .returning()
+      .returning()).at(0)
     if (!invitee) throw new Error('Failed to create invitee')
 
     const orgIds: string[] = []
@@ -289,7 +289,7 @@ describe.skipIf(!hasDb)('admin', () => {
   it('rejects duplicate invites, existing members, and email-mismatched accepts', async () => {
     const suffix = crypto.randomUUID()
     const actor = await createActor(suffix)
-    const [invitee] = await db
+    const invitee = (await db
       .insert(user)
       .values({
         id: crypto.randomUUID(),
@@ -297,10 +297,10 @@ describe.skipIf(!hasDb)('admin', () => {
         email: `invitee-${suffix}@test.local`,
         emailVerified: true,
       })
-      .returning()
+      .returning()).at(0)
     if (!invitee) throw new Error('Failed to create invitee')
 
-    const [stranger] = await db
+    const stranger = (await db
       .insert(user)
       .values({
         id: crypto.randomUUID(),
@@ -308,7 +308,7 @@ describe.skipIf(!hasDb)('admin', () => {
         email: `stranger-${suffix}@test.local`,
         emailVerified: true,
       })
-      .returning()
+      .returning()).at(0)
     if (!stranger) throw new Error('Failed to create stranger')
 
     const orgIds: string[] = []
@@ -362,7 +362,7 @@ describe.skipIf(!hasDb)('admin', () => {
   it('lists users with memberships grouped and sorted by organization name', async () => {
     const suffix = crypto.randomUUID()
     const actor = await createActor(suffix)
-    const [member] = await db
+    const member = (await db
       .insert(user)
       .values({
         id: crypto.randomUUID(),
@@ -370,10 +370,10 @@ describe.skipIf(!hasDb)('admin', () => {
         email: `member-${suffix}@test.local`,
         emailVerified: true,
       })
-      .returning()
+      .returning()).at(0)
     if (!member) throw new Error('Failed to create member')
 
-    const [loner] = await db
+    const loner = (await db
       .insert(user)
       .values({
         id: crypto.randomUUID(),
@@ -381,7 +381,7 @@ describe.skipIf(!hasDb)('admin', () => {
         email: `loner-${suffix}@test.local`,
         emailVerified: true,
       })
-      .returning()
+      .returning()).at(0)
     if (!loner) throw new Error('Failed to create loner')
 
     const orgIds: string[] = []

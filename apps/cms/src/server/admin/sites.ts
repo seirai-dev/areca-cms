@@ -80,11 +80,11 @@ export async function listSites(organizationId?: string) {
 }
 
 export async function getSite(id: string): Promise<PublicSite | null> {
-  const [row] = await db
+  const row = (await db
     .select(publicSiteColumns)
     .from(site)
     .where(eq(site.id, id))
-    .limit(1)
+    .limit(1)).at(0)
   return row ?? null
 }
 
@@ -95,20 +95,20 @@ export async function createSite(input: {
   productionUrl: string
   actorId: string
 }) {
-  const [org] = await db
+  const org = (await db
     .select({ id: organization.id })
     .from(organization)
     .where(eq(organization.id, input.organizationId))
-    .limit(1)
+    .limit(1)).at(0)
   if (!org) {
     throw new NotFoundError(m.server_organization_not_found())
   }
 
-  const [slugTaken] = await db
+  const slugTaken = (await db
     .select({ id: site.id })
     .from(site)
     .where(eq(site.slug, input.slug))
-    .limit(1)
+    .limit(1)).at(0)
   if (slugTaken) {
     throw new ConflictError(m.server_slug_already_exists())
   }
@@ -119,7 +119,7 @@ export async function createSite(input: {
 
   const created = await db.transaction(async (tx) => {
     await lockOrganizationForMutation(tx, input.organizationId)
-    const [row] = await tx
+    const row = (await tx
       .insert(site)
       .values({
         organizationId: input.organizationId,
@@ -130,7 +130,7 @@ export async function createSite(input: {
         productionUrl: input.productionUrl,
         previewSecret,
       })
-      .returning()
+      .returning()).at(0)
     if (!row) {
       throw new Error(m.server_failed_to_create_site())
     }
@@ -169,11 +169,11 @@ export async function updateSite(
   },
   actorId: string,
 ) {
-  const [existing] = await db
+  const existing = (await db
     .select()
     .from(site)
     .where(eq(site.id, id))
-    .limit(1)
+    .limit(1)).at(0)
   if (!existing) {
     throw new NotFoundError(m.server_site_not_found())
   }
@@ -206,11 +206,11 @@ export async function updateSite(
     (key) => key !== 'updatedAt',
   )
   const updated = await db.transaction(async (tx) => {
-    const [row] = await tx
+    const row = (await tx
       .update(site)
       .set(patch)
       .where(eq(site.id, id))
-      .returning()
+      .returning()).at(0)
     if (!row) {
       throw new NotFoundError(m.server_site_not_found())
     }
@@ -251,11 +251,11 @@ export async function rotateSiteTokenAdmin(
   privilege: 'build' | 'schema' = 'build',
   actorId: string,
 ) {
-  const [existing] = await db
+  const existing = (await db
     .select()
     .from(site)
     .where(eq(site.id, id))
-    .limit(1)
+    .limit(1)).at(0)
   if (!existing) {
     throw new NotFoundError(m.server_site_not_found())
   }
@@ -292,22 +292,22 @@ export async function rotateSiteTokenAdmin(
 }
 
 export async function deleteSite(id: string, actorId: string) {
-  const [existing] = await db
+  const existing = (await db
     .select()
     .from(site)
     .where(eq(site.id, id))
-    .limit(1)
+    .limit(1)).at(0)
   if (!existing) {
     throw new NotFoundError(m.server_site_not_found())
   }
 
   await db.transaction(async (tx) => {
     await lockOrganizationForMutation(tx, existing.organizationId)
-    const [locked] = await tx
+    const locked = (await tx
       .select()
       .from(site)
       .where(eq(site.id, id))
-      .for('update')
+      .for('update')).at(0)
     if (!locked) throw new NotFoundError(m.server_site_not_found())
     await assertSiteHasNoPendingDeployment(tx, id)
     await archiveDeletedContent(tx, existing.organizationId, 'site', id)

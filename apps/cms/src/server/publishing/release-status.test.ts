@@ -57,7 +57,7 @@ async function insertSnapshotPublication(
   const built = await buildSnapshot(siteId)
   if (!built.ok) throw new Error(built.errors.join('\n'))
   const id = crypto.randomUUID()
-  const [row] = await db
+  const row = (await db
     .insert(publication)
     .values({
       id,
@@ -67,7 +67,7 @@ async function insertSnapshotPublication(
       status,
       wasLive: status === 'live',
     })
-    .returning()
+    .returning()).at(0)
   if (!row) throw new Error('Failed to insert publication')
   return row
 }

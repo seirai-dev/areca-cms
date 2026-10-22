@@ -36,13 +36,13 @@ export async function createTestSite(
   input: { languages?: SiteLanguages | null } = {},
 ) {
   const suffix = crypto.randomUUID()
-  const [org] = await db
+  const org = (await db
     .insert(organization)
     .values({ name: `Test Org ${suffix}`, slug: `test-org-${suffix}` })
-    .returning()
+    .returning()).at(0)
   if (!org) throw new Error('Failed to create org')
 
-  const [actor] = await db
+  const actor = (await db
     .insert(user)
     .values({
       id: crypto.randomUUID(),
@@ -50,13 +50,13 @@ export async function createTestSite(
       email: `actor-${suffix}@test.local`,
       emailVerified: true,
     })
-    .returning()
+    .returning()).at(0)
   if (!actor) throw new Error('Failed to create user')
 
   const rawToken = randomBytes(32).toString('hex')
   const schemaToken = randomBytes(32).toString('hex')
   const previewSecret = randomBytes(32).toString('hex')
-  const [createdSite] = await db
+  const createdSite = (await db
     .insert(site)
     .values({
       organizationId: org.id,
@@ -68,7 +68,7 @@ export async function createTestSite(
       previewSecret,
       languages: input.languages ?? null,
     })
-    .returning()
+    .returning()).at(0)
   if (!createdSite) throw new Error('Failed to create site')
 
   return {
@@ -92,7 +92,7 @@ export async function createTestCollection(
     localizedRoutes?: Record<string, string> | null
   } = {},
 ) {
-  const [col] = await db
+  const col = (await db
     .insert(collection)
     .values({
       siteId,
@@ -104,7 +104,7 @@ export async function createTestCollection(
       requiredLanguages: input.requiredLanguages ?? [],
       localizedRoutes: input.localizedRoutes ?? null,
     })
-    .returning()
+    .returning()).at(0)
   if (!col) throw new Error('Failed to create collection')
   return col
 }
@@ -139,7 +139,7 @@ export async function createTestGlobal(
   } = {},
 ) {
   return db.transaction(async (tx) => {
-    const [col] = await tx
+    const col = (await tx
       .insert(collection)
       .values({
         siteId,
@@ -153,9 +153,9 @@ export async function createTestGlobal(
         previewPath: input.previewPath ?? null,
         requiredLanguages: input.requiredLanguages ?? [],
       })
-      .returning()
+      .returning()).at(0)
     if (!col) throw new Error('Failed to create global')
-    const [row] = await tx
+    const row = (await tx
       .insert(entry)
       .values({
         siteId,
@@ -163,7 +163,7 @@ export async function createTestGlobal(
         slug: '$global',
         status: 'draft',
       })
-      .returning()
+      .returning()).at(0)
     if (!row) throw new Error('Failed to create global entry')
     return { collection: col, entry: row }
   })

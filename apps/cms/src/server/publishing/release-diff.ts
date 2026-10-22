@@ -76,8 +76,8 @@ export function stableJson(value: unknown): string {
   return JSON.stringify(value ?? null)
 }
 
-function fingerprint(entry: Pick<SnapshotEntry, 'id' | 'slug' | 'data'>) {
-  return `${entry.id}\0${entry.slug}\0${stableJson(entry.data)}`
+function fingerprint(item: Pick<SnapshotEntry, 'id' | 'slug' | 'data'>) {
+  return `${item.id}\0${item.slug}\0${stableJson(item.data)}`
 }
 
 /** Resolved SEO minus the publish dates, which follow `publishedAt`. */
@@ -201,12 +201,12 @@ async function latestPublication(
   siteId: string,
   status: 'live' | 'demo',
 ): Promise<typeof publication.$inferSelect | null> {
-  const [row] = await db
+  const row = (await db
     .select()
     .from(publication)
     .where(and(eq(publication.siteId, siteId), eq(publication.status, status)))
     .orderBy(desc(publication.createdAt))
-    .limit(1)
+    .limit(1)).at(0)
   return row ?? null
 }
 
@@ -269,11 +269,11 @@ async function listScheduledUpcoming(
 export async function diffApprovedRelease(
   siteId: string,
 ): Promise<ApprovedReleaseDiff> {
-  const [existingSite] = await db
+  const existingSite = (await db
     .select()
     .from(site)
     .where(eq(site.id, siteId))
-    .limit(1)
+    .limit(1)).at(0)
   const publishingMode = existingSite?.publishingMode ?? 'production'
   const live = await latestPublication(siteId, 'live')
   const demo =

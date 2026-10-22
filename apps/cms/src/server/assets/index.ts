@@ -480,11 +480,11 @@ export async function streamAssetFile(storageKey: string): Promise<Response> {
     return new Response(m.server_not_found(), { status: 404 })
   }
 
-  const [row] = await db
+  const row = (await db
     .select({ mimeType: asset.mimeType })
     .from(asset)
     .where(eq(asset.storageKey, storageKey))
-    .limit(1)
+    .limit(1)).at(0)
 
   const contentType =
     realMediaType(row?.mimeType) ??

@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import type * as Env from '#/env'
 import { db } from '#/db'
 import { auditLog, user } from '#/db/schema'
 
@@ -12,7 +13,7 @@ const tokens = vi.hoisted(() => ({
   configured: undefined as string | undefined,
 }))
 vi.mock('#/env', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('#/env')>()
+  const actual = await importOriginal<typeof Env>()
   return {
     env: new Proxy(actual.env, {
       get: (target, key, receiver) =>
@@ -40,7 +41,7 @@ async function hasUsers() {
 describe.skipIf(!hasDb)('setup', () => {
   async function withExistingUser(body: (suffix: string) => Promise<void>) {
     const suffix = crypto.randomUUID()
-    const [existing] = await db
+    const existing = (await db
       .insert(user)
       .values({
         id: crypto.randomUUID(),
@@ -48,7 +49,7 @@ describe.skipIf(!hasDb)('setup', () => {
         email: `existing-${suffix}@test.local`,
         emailVerified: true,
       })
-      .returning()
+      .returning()).at(0)
     if (!existing) throw new Error('Failed to create existing user')
     try {
       await body(suffix)

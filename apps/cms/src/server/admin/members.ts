@@ -389,11 +389,11 @@ export async function listInvitations(organizationId: string) {
 }
 
 export async function getInvitationById(id: string) {
-  const [row] = await db
+  const row = (await db
     .select()
     .from(invitation)
     .where(eq(invitation.id, id))
-    .limit(1)
+    .limit(1)).at(0)
   return row ?? null
 }
 

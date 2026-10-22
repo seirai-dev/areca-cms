@@ -48,7 +48,7 @@ async function setupVacancies(suffix: string, siteId: string) {
     .insert(asset)
     .values({
       organizationId: (
-        await db.query.site.findFirst({ where: (s, { eq }) => eq(s.id, siteId) })
+        await db.query.site.findFirst({ where: (s, ops) => ops.eq(s.id, siteId) })
       )!.organizationId,
       storageKey: `org-${suffix}/hero-${suffix}.png`,
       originalFilename: 'hero.png',

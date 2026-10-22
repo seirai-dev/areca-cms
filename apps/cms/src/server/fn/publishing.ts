@@ -40,11 +40,11 @@ async function requireSiteAccess(
   // Authenticate first; a missing site and a site the caller cannot access
   // look identical (NotFound), so other tenants' ids cannot be probed.
   await requireUser()
-  const [found] = await db
+  const found = (await db
     .select()
     .from(site)
     .where(eq(site.id, siteId))
-    .limit(1)
+    .limit(1)).at(0)
   if (!found) {
     throw new NotFoundError(notFoundMessage())
   }

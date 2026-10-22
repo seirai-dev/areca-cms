@@ -143,7 +143,7 @@ export async function syncManifest(siteId: string, manifest: SiteManifest) {
         })
     }
     for (const [key, def] of Object.entries(globals)) {
-      const [row] = await tx
+      const row = (await tx
         .insert(collection)
         .values({
           siteId,
@@ -174,7 +174,7 @@ export async function syncManifest(siteId: string, manifest: SiteManifest) {
             updatedAt: now,
           },
         })
-        .returning({ id: collection.id })
+        .returning({ id: collection.id })).at(0)
       if (!row) {
         throw new Error(m.server_failed_to_upsert_collection())
       }

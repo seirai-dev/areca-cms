@@ -136,10 +136,10 @@ async function upsertBranding(
     await tx.execute(
       sql`SELECT pg_advisory_xact_lock(hashtextextended('branding', 0))`,
     )
-    const [previous] = await tx
+    const previous = (await tx
       .select()
       .from(branding)
-      .where(eq(branding.id, BRANDING_ID))
+      .where(eq(branding.id, BRANDING_ID))).at(0)
     const rows = await tx
       .insert(branding)
       .values({ id: BRANDING_ID, ...values })

@@ -173,11 +173,11 @@ describe.skipIf(!hasDb)('scheduleEntry validation', () => {
       expect(cancelled.publishedData).toEqual(published.publishedData)
       expect(cancelled.scheduledBy).toBeNull()
       expect(cancelled.scheduledAt).toBeNull()
-      const [row] = await db
+      const row = (await db
         .select()
         .from(entry)
         .where(eq(entry.id, created.id))
-        .limit(1)
+        .limit(1)).at(0)
       expect(row?.status).toBe('published')
       expect(row?.publishedSlug).toBe(created.slug)
       expect(row?.scheduledBy).toBeNull()

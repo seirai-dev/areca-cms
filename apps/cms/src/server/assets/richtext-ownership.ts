@@ -36,7 +36,7 @@ export async function richTextAssetsAuthorized(
       }
       const prefix = '/api/assets/file/'
       if (path.startsWith(prefix)) {
-        const [row] = await connection
+        const row = (await connection
           .select({ id: asset.id })
           .from(asset)
           .where(
@@ -45,7 +45,7 @@ export async function richTextAssetsAuthorized(
               eq(asset.storageKey, path.slice(prefix.length)),
             ),
           )
-          .limit(1)
+          .limit(1)).at(0)
         if (!row) return false
       }
     }

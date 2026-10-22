@@ -61,15 +61,15 @@ describe.skipIf(!process.env.DATABASE_URL)('cms schema', () => {
 
         expect(createdEntry).toBeDefined()
 
-        const [readOrg] = await tx
+        const readOrg = (await tx
           .select()
           .from(schema.organization)
-          .where(eq(schema.organization.id, org.id))
+          .where(eq(schema.organization.id, org.id))).at(0)
 
-        const [readEntry] = await tx
+        const readEntry = (await tx
           .select()
           .from(schema.entry)
-          .where(eq(schema.entry.id, createdEntry.id))
+          .where(eq(schema.entry.id, createdEntry.id))).at(0)
 
         expect(readOrg?.name).toBe('Test Org')
         expect(readEntry?.slug).toBe('hello-world')

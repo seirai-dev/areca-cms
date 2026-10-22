@@ -131,10 +131,10 @@ export async function saveDokployCredentials(input: {
 
   await db.transaction(async (tx) => {
     await lockOrganizationForMutation(tx, input.organizationId)
-    const [current] = await tx
+    const current = (await tx
       .select()
       .from(dokployCredential)
-      .where(eq(dokployCredential.organizationId, input.organizationId))
+      .where(eq(dokployCredential.organizationId, input.organizationId))).at(0)
     if (!current || current.url !== url)
       await assertOrganizationHasNoPendingDeployment(tx, input.organizationId)
     // A concurrent credential update must not be overwritten with a stale key.

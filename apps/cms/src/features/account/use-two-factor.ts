@@ -68,6 +68,7 @@ export function useTwoFactor() {
         })
       } else if (action === 'regenerate') {
         const result = await authClient.twoFactor.generateBackupCodes(body)
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- defensive: a response without codes is treated as failure
         if (result.error || !result.data?.backupCodes) {
           setError(result.error?.message ?? m.account_two_factor_failed())
           return

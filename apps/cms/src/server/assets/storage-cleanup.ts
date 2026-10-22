@@ -26,11 +26,11 @@ export async function completeObjectUpload(
   tx: Transaction,
   storageKey: string,
 ) {
-  const [intent] = await tx
+  const intent = (await tx
     .select()
     .from(storageObjectDeletion)
     .where(eq(storageObjectDeletion.storageKey, storageKey))
-    .for('update')
+    .for('update')).at(0)
   // Cleanup and registration share this row lock. If cleanup won, abort the
   // owner's transaction rather than attach an object that may be deleting.
   if (!intent || intent.attempts !== 0) {
@@ -72,7 +72,7 @@ export async function drainStorageObjectDeletions(
   for (let i = 0; i < limit; i++) {
     const now = new Date()
     const job = await db.transaction(async (tx) => {
-      const [row] = await tx
+      const row = (await tx
         .select()
         .from(storageObjectDeletion)
         .where(
@@ -89,16 +89,16 @@ export async function drainStorageObjectDeletions(
         )
         .orderBy(storageObjectDeletion.createdAt)
         .limit(1)
-        .for('update', { skipLocked: true })
+        .for('update', { skipLocked: true })).at(0)
       if (!row) return null
       // A lost COMMIT response may have committed the upload. Never clean up
       // an object now owned by an asset or the current branding configuration.
-      const [ownedAsset] = await tx
+      const ownedAsset = (await tx
         .select({ id: asset.id })
         .from(asset)
         .where(eq(asset.storageKey, row.storageKey))
-        .limit(1)
-      const [ownedBranding] = await tx
+        .limit(1)).at(0)
+      const ownedBranding = (await tx
         .select({ id: branding.id })
         .from(branding)
         .where(
@@ -107,7 +107,7 @@ export async function drainStorageObjectDeletions(
             eq(branding.faviconKey, row.storageKey),
           ),
         )
-        .limit(1)
+        .limit(1)).at(0)
       if (ownedAsset || ownedBranding) {
         await tx
           .delete(storageObjectDeletion)
@@ -132,7 +132,7 @@ export async function drainStorageObjectDeletions(
       await db.delete(storageObjectDeletion).where(owned)
       removed++
     } catch (error) {
-      const delay = STORAGE_RETRY_DELAYS_MS[job.attempts - 1]
+      const delay = STORAGE_RETRY_DELAYS_MS[job.attempts - 1] as number | undefined
       await db
         .update(storageObjectDeletion)
         .set({

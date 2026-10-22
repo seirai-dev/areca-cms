@@ -161,7 +161,9 @@ export function redactError(
 
 function safeStringify(value: unknown) {
   try {
-    return JSON.stringify(value) ?? String(value)
+    // JSON.stringify returns undefined for undefined, functions and symbols.
+    const json = JSON.stringify(value) as string | undefined
+    return json ?? String(value)
   } catch {
     return String(value)
   }
@@ -226,7 +228,8 @@ export function setLogSink(next: LogSink | null) {
 
 function threshold(): number {
   const raw = (process.env.LOG_LEVEL ?? 'info').toLowerCase() as Threshold
-  return LEVEL_RANK[raw] ?? LEVEL_RANK.info
+  const rank = LEVEL_RANK[raw] as number | undefined
+  return rank ?? LEVEL_RANK.info
 }
 
 const RESERVED = new Set(['level', 'time', 'component', 'msg'])

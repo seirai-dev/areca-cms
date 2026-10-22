@@ -35,11 +35,11 @@ export async function getSitesPreview(request: Request) {
     return previewJson({ error: 'Unauthorized' }, 401)
   }
 
-  const [found] = await db
+  const found = (await db
     .select()
     .from(site)
     .where(eq(site.id, decoded.siteId))
-    .limit(1)
+    .limit(1)).at(0)
   if (!found) {
     return previewJson({ error: 'Unauthorized' }, 401)
   }

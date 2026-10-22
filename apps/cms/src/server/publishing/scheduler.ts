@@ -37,7 +37,7 @@ export function scheduleFingerprint(
 }
 
 export function nextSchedulerAttempt(failureCount: number, at: Date) {
-  const delay = SCHEDULER_RETRY_DELAYS_MS[failureCount - 1]
+  const delay = SCHEDULER_RETRY_DELAYS_MS[failureCount - 1] as number | undefined
   return delay === undefined ? null : new Date(at.getTime() + delay)
 }
 
@@ -48,11 +48,11 @@ export async function recordSchedulerFailure(
   at: Date,
 ) {
   if (!job.schedulerFingerprint) return
-  const [current] = await tx
+  const current = (await tx
     .select()
     .from(schedulerBackoff)
     .where(eq(schedulerBackoff.siteId, job.siteId))
-    .for('update')
+    .for('update')).at(0)
   // A replaced approval or manual retry starts a new cycle; an older job
   // must not consume its retry budget.
   if (current && current.approvalFingerprint !== job.schedulerFingerprint)
@@ -118,18 +118,18 @@ export async function runSchedulerTick() {
       )
     if (!owners.length) continue
     const fingerprint = scheduleFingerprint(owners)
-    const [backoff] = await db
+    const backoff = (await db
       .select()
       .from(schedulerBackoff)
       .where(eq(schedulerBackoff.siteId, siteId))
-      .limit(1)
+      .limit(1)).at(0)
     if (
       backoff?.approvalFingerprint === fingerprint &&
       (backoff.failureCount >= 4 ||
         (backoff.nextAttemptAt && backoff.nextAttemptAt > now))
     )
       continue
-    const [blocking] = await db
+    const blocking = (await db
       .select({ id: buildJob.id })
       .from(buildJob)
       .where(
@@ -138,7 +138,7 @@ export async function runSchedulerTick() {
           inArray(buildJob.status, [...BLOCKING_JOB_STATUSES]),
         ),
       )
-      .limit(1)
+      .limit(1)).at(0)
     if (blocking) continue
     const scheduledBy = [
       ...new Set(
@@ -163,11 +163,11 @@ export async function runSchedulerTick() {
         now,
         result.errors.join('; '),
       )
-      const [found] = await db
+      const found = (await db
         .select({ organizationId: site.organizationId })
         .from(site)
         .where(eq(site.id, siteId))
-        .limit(1)
+        .limit(1)).at(0)
       if (!found) continue
       await audit({
         organizationId: found.organizationId,
@@ -203,10 +203,10 @@ async function recordRequestFailure(
   await db.transaction(async (tx) => {
     // Serialize retries on the site, including concurrent scheduler replicas.
     await tx.execute(sql`SELECT id FROM site WHERE id=${siteId} FOR UPDATE`)
-    const [current] = await tx
+    const current = (await tx
       .select()
       .from(schedulerBackoff)
-      .where(eq(schedulerBackoff.siteId, siteId))
+      .where(eq(schedulerBackoff.siteId, siteId))).at(0)
     if (current?.approvalFingerprint !== fingerprint) {
       await tx
         .insert(schedulerBackoff)

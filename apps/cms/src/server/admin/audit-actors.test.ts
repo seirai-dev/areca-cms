@@ -1,4 +1,6 @@
 import type * as MailConfig from '#/server/mail/config'
+import type * as Adapters from '#/adapters'
+import type * as ServerAssets from '#/server/assets'
 import type * as MailTransport from '#/server/mail/transport'
 import { eq, inArray, or } from 'drizzle-orm'
 import sharp from 'sharp'
@@ -57,14 +59,14 @@ vi.mock('#/server/mail/transport', async (importOriginal) => ({
   sendMail: vi.fn(async () => ({ messageId: 'test-message' })),
 }))
 vi.mock('#/adapters', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('#/adapters')>()),
+  ...(await importOriginal<typeof Adapters>()),
   getStorage: () => ({
     put: vi.fn(async () => {}),
     delete: vi.fn(async () => {}),
   }),
 }))
 vi.mock('#/server/assets', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('#/server/assets')>()),
+  ...(await importOriginal<typeof ServerAssets>()),
   drainStorageObjectDeletions: vi.fn(async () => {}),
 }))
 
@@ -92,7 +94,7 @@ describe.skipIf(!hasDb)(
     it('records every admin action, instance-level ones without an organization', async () => {
       const suffix = crypto.randomUUID()
       const mk = async (tag: string, isAgencyAdmin = false) => {
-        const [row] = await db
+        const row = (await db
           .insert(user)
           .values({
             id: crypto.randomUUID(),
@@ -101,7 +103,7 @@ describe.skipIf(!hasDb)(
             emailVerified: true,
             isAgencyAdmin,
           })
-          .returning()
+          .returning()).at(0)
         if (!row) throw new Error('user')
         return row
       }

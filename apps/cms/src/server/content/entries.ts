@@ -200,16 +200,16 @@ export async function listEntries(
     updatedByName: row.updatedByName,
   }))
 
-  const [totalRow] = await db
+  const totalRow = (await db
     .select({ count: sql<number>`count(*)::int` })
     .from(entry)
-    .where(where)
+    .where(where)).at(0)
 
   return { items, total: totalRow?.count ?? 0 }
 }
 
 export async function getEntry(id: string) {
-  const [row] = await db
+  const row = (await db
     .select({
       entry,
       collectionKey: collection.key,
@@ -217,7 +217,7 @@ export async function getEntry(id: string) {
     .from(entry)
     .innerJoin(collection, eq(entry.collectionId, collection.id))
     .where(eq(entry.id, id))
-    .limit(1)
+    .limit(1)).at(0)
   if (!row) return null
   return { ...row.entry, collectionKey: row.collectionKey }
 }
@@ -269,7 +269,7 @@ export async function createEntry(input: {
     )
     if (ownershipErrors.length) throw new ValidationError(ownershipErrors)
     const now = new Date()
-    const [created] = await tx
+    const created = (await tx
       .insert(entry)
       .values({
         siteId: input.siteId,
@@ -282,7 +282,7 @@ export async function createEntry(input: {
         createdAt: now,
         updatedAt: now,
       })
-      .returning()
+      .returning()).at(0)
 
     if (!created) {
       throw new Error(m.server_failed_to_create_entry())
@@ -359,7 +359,7 @@ export async function updateDraft(
     )
     if (ownershipErrors.length) throw new ValidationError(ownershipErrors)
     const now = new Date()
-    const [updated] = await tx
+    const updated = (await tx
       .update(entry)
       .set({
         draftVersion: sql`${entry.draftVersion} + 1`,
@@ -369,7 +369,7 @@ export async function updateDraft(
         updatedAt: now,
       })
       .where(and(eq(entry.id, id), eq(entry.draftVersion, expectedVersion)))
-      .returning()
+      .returning()).at(0)
 
     if (!updated) {
       throw new ConflictError(
@@ -418,13 +418,13 @@ export async function restoreRevision(
   expectedVersion: number,
 ) {
   const initial = await loadEntryContext(entryId)
-  const [revision] = await db
+  const revision = (await db
     .select()
     .from(entryRevision)
     .where(
       and(eq(entryRevision.id, revisionId), eq(entryRevision.entryId, entryId)),
     )
-    .limit(1)
+    .limit(1)).at(0)
   if (!revision) {
     throw new NotFoundError(m.server_revision_not_found())
   }
@@ -491,7 +491,7 @@ export async function restoreRevision(
       }
     }
     const now = new Date()
-    const [updated] = await tx
+    const updated = (await tx
       .update(entry)
       .set({
         draftVersion: sql`${entry.draftVersion} + 1`,
@@ -503,7 +503,7 @@ export async function restoreRevision(
       .where(
         and(eq(entry.id, entryId), eq(entry.draftVersion, expectedVersion)),
       )
-      .returning()
+      .returning()).at(0)
 
     if (!updated) {
       throw new ConflictError(
@@ -650,7 +650,7 @@ export async function publishEntry(id: string, actorId: string) {
     )
     if (ownershipErrors.length) throw new ValidationError(ownershipErrors)
     const now = new Date()
-    const [updated] = await tx
+    const updated = (await tx
       .update(entry)
       .set({
         ...(images.imported > 0 || draftData !== images.data
@@ -672,7 +672,7 @@ export async function publishEntry(id: string, actorId: string) {
       .where(
         and(eq(entry.id, id), eq(entry.draftVersion, ctx.entry.draftVersion)),
       )
-      .returning()
+      .returning()).at(0)
 
     if (!updated) {
       throw new ConflictError(
@@ -706,7 +706,7 @@ export async function unpublishEntry(id: string, actorId: string) {
   const ctx = await loadEntryContext(id)
   assertCollectionEntry(ctx.collection)
   const now = new Date()
-  const [updated] = await db
+  const updated = (await db
     .update(entry)
     .set({
       status: 'draft',
@@ -723,7 +723,7 @@ export async function unpublishEntry(id: string, actorId: string) {
       updatedAt: now,
     })
     .where(eq(entry.id, id))
-    .returning()
+    .returning()).at(0)
 
   if (!updated) {
     throw new NotFoundError(m.server_entry_not_found())
@@ -746,7 +746,7 @@ export async function archiveEntry(id: string, actorId: string) {
   const ctx = await loadEntryContext(id)
   assertCollectionEntry(ctx.collection)
   const now = new Date()
-  const [updated] = await db
+  const updated = (await db
     .update(entry)
     .set({
       status: 'archived',
@@ -754,7 +754,7 @@ export async function archiveEntry(id: string, actorId: string) {
       updatedAt: now,
     })
     .where(eq(entry.id, id))
-    .returning()
+    .returning()).at(0)
 
   if (!updated) {
     throw new NotFoundError(m.server_entry_not_found())
@@ -816,7 +816,7 @@ export async function scheduleEntry(
     if (ownershipErrors.length) throw new ValidationError(ownershipErrors)
     const ready = prepareReadyData(ctx, draftData)
     const now = new Date()
-    const [updated] = await tx
+    const updated = (await tx
       .update(entry)
       .set({
         ...(images.imported > 0 || draftData !== images.data
@@ -835,7 +835,7 @@ export async function scheduleEntry(
       .where(
         and(eq(entry.id, id), eq(entry.draftVersion, ctx.entry.draftVersion)),
       )
-      .returning()
+      .returning()).at(0)
 
     if (!updated) {
       throw new ConflictError(
@@ -875,7 +875,7 @@ export async function cancelSchedule(id: string, actorId: string) {
         ? 'published'
         : 'draft'
       : ctx.entry.status
-  const [updated] = await db
+  const updated = (await db
     .update(entry)
     .set({
       status: nextStatus,
@@ -889,7 +889,7 @@ export async function cancelSchedule(id: string, actorId: string) {
       updatedAt: now,
     })
     .where(eq(entry.id, id))
-    .returning()
+    .returning()).at(0)
 
   if (!updated) {
     throw new NotFoundError(m.server_entry_not_found())
@@ -950,18 +950,18 @@ async function assertSlugAvailable(
   excludeId?: string,
   connection: Pick<typeof db, 'select'> = db,
 ) {
-  const [existing] = await connection
+  const existing = (await connection
     .select({ id: entry.id })
     .from(entry)
     .where(and(eq(entry.collectionId, collectionId), eq(entry.slug, slug)))
-    .limit(1)
+    .limit(1)).at(0)
   if (existing && existing.id !== excludeId) {
     throw new ConflictError(m.server_slug_already_exists())
   }
 }
 
 async function loadCollectionContext(siteId: string, collectionKey: string) {
-  const [row] = await db
+  const row = (await db
     .select({ collection, site })
     .from(collection)
     .innerJoin(site, eq(collection.siteId, site.id))
@@ -972,7 +972,7 @@ async function loadCollectionContext(siteId: string, collectionKey: string) {
         eq(collection.kind, 'collection'),
       ),
     )
-    .limit(1)
+    .limit(1)).at(0)
   if (!row) {
     throw new NotFoundError(m.server_collection_not_found())
   }
@@ -983,13 +983,13 @@ async function loadEntryContext(
   id: string,
   connection: Pick<typeof db, 'select'> = db,
 ) {
-  const [row] = await connection
+  const row = (await connection
     .select({ entry, collection, site })
     .from(entry)
     .innerJoin(collection, eq(entry.collectionId, collection.id))
     .innerJoin(site, eq(entry.siteId, site.id))
     .where(eq(entry.id, id))
-    .limit(1)
+    .limit(1)).at(0)
   if (!row) {
     throw new NotFoundError(m.server_entry_not_found())
   }

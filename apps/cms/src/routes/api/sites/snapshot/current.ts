@@ -29,7 +29,7 @@ export async function getSitesSnapshotCurrent(request: Request) {
   }
   // Build pulls select their frozen publication explicitly. Ordinary pulls
   // read only successful releases, even while a new deployment is in flight.
-  const [pub] = await db
+  const pub = (await db
     .select()
     .from(publication)
     .where(
@@ -44,7 +44,7 @@ export async function getSitesSnapshotCurrent(request: Request) {
       ),
     )
     .orderBy(desc(publication.createdAt))
-    .limit(1)
+    .limit(1)).at(0)
 
   if (!pub) {
     return Response.json(

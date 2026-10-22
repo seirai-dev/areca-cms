@@ -41,6 +41,6 @@ describe('buildSnapshotSchema', () => {
       },
     ])
     source[0].label = 'Changed'
-    expect(schema.notes?.fields[0]?.label).toBe('Title')
+    expect(schema.notes.fields[0].label).toBe('Title')
   })
 })

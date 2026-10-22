@@ -75,10 +75,10 @@ describe.skipIf(!hasDb)('buildSnapshot', () => {
       expect(first.snapshot.siteKey).toBe(ctx.site.slug)
       expect(first.snapshot.collections.articles).toHaveLength(2)
       expect(
-        first.snapshot.collections.articles?.map((item) => item.slug).sort(),
+        first.snapshot.collections.articles.map((item) => item.slug).sort(),
       ).toEqual([`due-${ctx.suffix}`, `pub-${ctx.suffix}`].sort())
 
-      const published = first.snapshot.collections.articles?.find(
+      const published = first.snapshot.collections.articles.find(
         (item) => item.slug === `pub-${ctx.suffix}`,
       )
       expect(published?.data.body).toMatchObject({
@@ -113,16 +113,16 @@ describe.skipIf(!hasDb)('buildSnapshot', () => {
       const result = await buildSnapshot(ctx.site.id)
       expect(result.ok).toBe(true)
       if (!result.ok) return
-      const item = result.snapshot.collections.articles?.[0]
-      expect(item?.data).not.toHaveProperty('$seo')
-      expect(item?.seo).toMatchObject({
+      const item = result.snapshot.collections.articles[0]
+      expect(item.data).not.toHaveProperty('$seo')
+      expect(item.seo).toMatchObject({
         title: 'Entry title',
         description: 'Search snippet',
         canonicalUrl: `${new URL(ctx.site.productionUrl).origin}/blog/${slug}`,
         robots: { index: false, follow: true },
         faq: [{ question: 'Why?', answer: 'Because.' }],
       })
-      expect(item?.seo?.jsonLd.map((node) => node['@type'])).toEqual([
+      expect(item.seo?.jsonLd.map((node) => node['@type'])).toEqual([
         'Article',
         'FAQPage',
       ])
@@ -167,7 +167,7 @@ describe.skipIf(!hasDb)('buildSnapshot', () => {
         Object.keys(result.snapshot.collections).sort(),
       )
       expect(result.snapshot.schema).toEqual(expected)
-      expect(result.snapshot.schema?.notes?.fields[0]?.key).toBe('slug')
+      expect(result.snapshot.schema?.notes.fields[0].key).toBe('slug')
     })
   })
 
@@ -202,8 +202,8 @@ describe.skipIf(!hasDb)('buildSnapshot', () => {
 
       expect(after.snapshot.collections).toEqual(before.snapshot.collections)
       expect(after.hash).toBe(before.hash)
-      expect(after.snapshot.schema?.articles?.label).toBe('Renamed articles')
-      expect(before.snapshot.schema?.articles?.label).toBe('Articles')
+      expect(after.snapshot.schema?.articles.label).toBe('Renamed articles')
+      expect(before.snapshot.schema?.articles.label).toBe('Articles')
     })
   })
 
@@ -303,8 +303,8 @@ describe.skipIf(!hasDb)('buildSnapshot', () => {
       const ok = await buildSnapshot(ctx.site.id)
       expect(ok.ok).toBe(true)
       if (!ok.ok) return
-      const snapEntry = ok.snapshot.collections.articles?.[0]
-      expect(snapEntry?.data.author).toEqual({
+      const snapEntry = ok.snapshot.collections.articles[0]
+      expect(snapEntry.data.author).toEqual({
         collection: 'authors',
         slug: `ada-${ctx.suffix}`,
         id: author.id,

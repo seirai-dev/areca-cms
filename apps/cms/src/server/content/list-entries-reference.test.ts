@@ -23,7 +23,7 @@ async function insertEntry(input: {
   scheduledAt?: Date | null
   scheduledData?: EntryData | null
 }) {
-  const [row] = await db
+  const row = (await db
     .insert(entry)
     .values({
       siteId: input.siteId,
@@ -36,7 +36,7 @@ async function insertEntry(input: {
       scheduledAt: input.scheduledAt ?? null,
       scheduledData: input.scheduledData ?? null,
     })
-    .returning()
+    .returning()).at(0)
   if (!row) throw new Error('Failed to insert entry')
   return row
 }
