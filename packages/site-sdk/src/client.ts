@@ -10,7 +10,9 @@ import type {
 
 export type ArecaClientOptions = {
   cmsUrl?: string
+  /** Reads: manifest, snapshot. Not needed for schema pushes or previews. */
   siteToken?: string
+  /** Manifest push only. Never falls back to the site token. */
   schemaToken?: string
 }
 
@@ -34,16 +36,26 @@ export function createArecaClient(
       'cmsUrl',
     ),
   )
-  const siteToken = requiredValue(
-    options.siteToken ?? process.env.ARECA_SITE_TOKEN,
-    'ARECA_SITE_TOKEN',
-    'siteToken',
-  )
-
-  const headers = {
-    Authorization: `Bearer ${siteToken}`,
+  // Each operation reads only the credential it sends, when it runs. A client
+  // that only pushes schemas or previews drafts never needs the site token.
+  const siteHeaders = (): Record<string, string> => ({
+    Authorization: `Bearer ${requiredValue(
+      options.siteToken ?? process.env.ARECA_SITE_TOKEN,
+      'ARECA_SITE_TOKEN',
+      'siteToken',
+    )}`,
     Accept: 'application/json',
-  }
+  })
+  const schemaHeaders = (): Record<string, string> => ({
+    Authorization: `Bearer ${requiredValue(
+      options.schemaToken ?? process.env.ARECA_SCHEMA_TOKEN,
+      'ARECA_SCHEMA_TOKEN',
+      'schemaToken',
+    )}`,
+    Accept: 'application/json',
+  })
+  // Preview tokens are signed and carry their own authority: no Authorization header.
+  const publicHeaders = { Accept: 'application/json' }
 
   async function cmsFetch(url: string, init: RequestInit): Promise<Response> {
     try {
@@ -63,8 +75,7 @@ export function createArecaClient(
       const res = await cmsFetch(`${cmsUrl}/api/sites/manifest`, {
         method: 'POST',
         headers: {
-          ...headers,
-          Authorization: `Bearer ${requiredValue(options.schemaToken ?? process.env.ARECA_SCHEMA_TOKEN, 'ARECA_SCHEMA_TOKEN', 'schemaToken')}`,
+          ...schemaHeaders(),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(manifestFromConfig(config)),
@@ -80,7 +91,7 @@ export function createArecaClient(
     async fetchManifest() {
       const res = await cmsFetch(`${cmsUrl}/api/sites/manifest`, {
         method: 'GET',
-        headers,
+        headers: siteHeaders(),
       })
 
       if (!res.ok) {
@@ -98,7 +109,7 @@ export function createArecaClient(
         `${cmsUrl}/api/sites/snapshot/current${query}`,
         {
           method: 'GET',
-          headers,
+          headers: siteHeaders(),
         },
       )
 
@@ -131,7 +142,7 @@ export function createArecaClient(
       const url = `${cmsUrl}/api/sites/preview?${params}`
       const res = await cmsFetch(url, {
         method: 'GET',
-        headers,
+        headers: publicHeaders,
       })
 
       if (!res.ok) {

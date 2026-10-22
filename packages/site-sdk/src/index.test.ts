@@ -139,14 +139,74 @@ describe('manifestFromConfig', () => {
 })
 
 describe('createArecaClient', () => {
-  it('throws a clear error when env vars are missing', () => {
+  it('throws a clear error when the CMS URL is missing', () => {
     delete process.env.ARECA_CMS_URL
-    delete process.env.ARECA_SITE_TOKEN
 
     expect(() => createArecaClient()).toThrow(/ARECA_CMS_URL/)
+  })
+
+  it('does not require a site token at construction', () => {
+    delete process.env.ARECA_SITE_TOKEN
+
     expect(() =>
       createArecaClient({ cmsUrl: 'https://cms.example.com' }),
-    ).toThrow(/ARECA_SITE_TOKEN/)
+    ).not.toThrow()
+  })
+
+  it('names ARECA_SITE_TOKEN when a content read has no site token, without calling the CMS', async () => {
+    delete process.env.ARECA_SITE_TOKEN
+    const fetch = vi.fn()
+    globalThis.fetch = fetch as unknown as typeof globalThis.fetch
+    const client = createArecaClient({ cmsUrl: 'https://cms.example.com' })
+
+    await expect(client.fetchManifest()).rejects.toThrow(/ARECA_SITE_TOKEN/)
+    await expect(client.fetchSnapshot()).rejects.toThrow(/ARECA_SITE_TOKEN/)
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('a schema-only client pushes the manifest with the schema token and no site token', async () => {
+    delete process.env.ARECA_SITE_TOKEN
+    delete process.env.ARECA_SCHEMA_TOKEN
+    const calls: Array<{ url: string; init?: RequestInit }> = []
+    globalThis.fetch = async (input, init) => {
+      calls.push({ url: String(input), init })
+      return jsonResponse({ ok: true })
+    }
+
+    const client = createArecaClient({
+      cmsUrl: 'https://cms.example.com',
+      schemaToken: 'schema-token',
+    })
+    await expect(client.syncManifest(sampleConfig)).resolves.toEqual({ ok: true })
+    expect(authHeader(calls[0]?.init)).toBe('Bearer schema-token')
+  })
+
+  it('names ARECA_SCHEMA_TOKEN when a manifest push has only the site token', async () => {
+    const fetch = vi.fn()
+    globalThis.fetch = fetch as unknown as typeof globalThis.fetch
+    const client = createArecaClient({
+      cmsUrl: 'https://cms.example.com',
+      siteToken: 'site-token',
+    })
+
+    await expect(client.syncManifest(sampleConfig)).rejects.toThrow(/ARECA_SCHEMA_TOKEN/)
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('a preview-only client reads a preview with its signed token and sends no Authorization header', async () => {
+    delete process.env.ARECA_SITE_TOKEN
+    delete process.env.ARECA_SCHEMA_TOKEN
+    const preview = { collection: 'articles', slug: 'hello', entry: sampleEntry }
+    const calls: Array<{ url: string; init?: RequestInit }> = []
+    globalThis.fetch = async (input, init) => {
+      calls.push({ url: String(input), init })
+      return jsonResponse(preview)
+    }
+
+    const client = createArecaClient({ cmsUrl: 'https://cms.example.com' })
+    await expect(client.fetchPreview('signed-token')).resolves.toEqual(preview)
+    expect(calls[0]?.url).toBe('https://cms.example.com/api/sites/preview?token=signed-token')
+    expect(authHeader(calls[0]?.init)).toBeNull()
   })
 
   it('syncManifest posts the manifest with a bearer token', async () => {
