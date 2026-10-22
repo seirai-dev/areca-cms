@@ -12,7 +12,8 @@ import {
   user,
 } from '#/db/schema'
 import type { EntryData, Field } from '#/lib/types'
-import { assertAdminMfa, requireUser } from '#/lib/session.server'
+import { requireUser } from '#/lib/session.server'
+import { requireAdminLocalMfa } from '#/server/security/local-mfa'
 
 const loose = { strict: { output: false } as const }
 
@@ -53,7 +54,7 @@ export const getHomeActivityFn = createServerFn({
 }).handler(async () => {
   const session = await requireUser()
   const isAgencyAdmin = Boolean(session.user.isAgencyAdmin)
-  if (isAgencyAdmin) assertAdminMfa(session.user)
+  if (isAgencyAdmin) await requireAdminLocalMfa(session)
   const orgIds = await accessibleOrgIds(session.user.id, isAgencyAdmin)
   if (orgIds && orgIds.length === 0) {
     return { scheduled: [], activity: [] }
