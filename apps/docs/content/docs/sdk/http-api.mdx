@@ -96,7 +96,7 @@ The push is a full sync. A body without `globals` disables every site content se
 | Part | Value |
 | --- | --- |
 | Headers | `Authorization: Bearer <schema token>`, `Content-Type: application/json` |
-| Body | `{ "collections": { ... } }`, up to 256 KiB |
+| Body | `{ "collections": { ... } }`, up to 256 KiB. `globals` and `languages` are optional. `confirmDropFields` is optional, see [removing fields](#removing-fields). |
 
 Each collection has a `route`, an optional `label`, and a `fields` array. Each field has a `key`, `label` and `type`, plus the optional settings in [Field types](/docs/sdk/field-types). The request is rejected if it has any property the CMS does not know.
 
@@ -124,6 +124,19 @@ The body is limited to 100 collections per site and 100 fields per collection. E
 
 Collections that are not in the body are turned off, not deleted. See [`areca manifest push`](/docs/sdk/cli#areca-manifest-push).
 
+### Removing fields
+
+A push that removes a field which still holds content is refused with `409`, and nothing is written. Each confirmed removal is listed in `confirmDropFields` as `<collection or section key>.<field key>`. The CMS then deletes that field's content from every stored version of the entries, including translations.
+
+```json
+{
+  "collections": { "articles": { "route": "/blog/$slug", "fields": [ ... ] } },
+  "confirmDropFields": ["articles.subtitle"]
+}
+```
+
+A field that holds no content is removed without confirmation. Confirming a field that is not removed has no effect.
+
 **Errors**
 
 | Status | Body | Cause |
@@ -133,6 +146,8 @@ Collections that are not in the body are turned off, not deleted. See [`areca ma
 | `400` | `{ "error": "Invalid collection identifier" }` | A collection key is not a safe identifier. |
 | `400` | `{ "error": "A manifest can have at most 100 collections" }` | Too many collections. |
 | `400` | `{ "error": "Invalid identifiers", "issues": "<message>" }` | A field key or identifier was rejected. |
+| `400` | `{ "error": "Invalid body", "issues": [...] }` | An entry in `confirmDropFields` is not `<key>.<field>`. |
+| `409` | `{ "error": "Removing articles.subtitle deletes content. Confirm each removal to push the schema.", "code": "field_drops_unconfirmed", "drops": [{ "kind": "collection", "key": "articles", "field": "subtitle", "entries": 3 }] }` | The push would remove fields that hold content and does not confirm them. Nothing was changed. `kind` is `collection` or `global`, and `entries` counts the entries that hold content for the field. |
 | `401` | `{ "error": "Unauthorized" }` | The schema token is missing or unknown. |
 | `413` | `{ "error": "Manifest is larger than 262144 bytes" }` | The body is over 256 KiB. |
 | `429` | `{ "error": "Too many requests" }` | Rate limit reached. |

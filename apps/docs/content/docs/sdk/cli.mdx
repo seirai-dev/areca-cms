@@ -13,8 +13,8 @@ For a walkthrough, see [Installation](/docs/sdk/installation) and [Pulling conte
 | --- | --- | --- |
 | [`areca init`](#areca-init) | Creates the config, environment and output files in a site project. | Flags, or prompts |
 | [`areca pull`](#areca-pull) | Downloads the current publication into a folder. | `ARECA_CMS_URL`, `ARECA_SITE_TOKEN` |
-| [`areca manifest push`](#areca-manifest-push) | Sends the content definitions in `areca.config.ts` to the CMS. | `ARECA_CMS_URL`, `ARECA_SITE_TOKEN`, `ARECA_SCHEMA_TOKEN` |
-| [`areca manifest pull`](#areca-manifest-pull) | Writes the CMS's content definitions into `areca.config.ts`. | `ARECA_CMS_URL`, `ARECA_SITE_TOKEN`, `ARECA_SITE_KEY` |
+| [`areca manifest push`](#areca-manifest-push) | Sends the content definitions in `areca.config.ts` to the CMS. | `ARECA_CMS_URL`, `ARECA_SCHEMA_TOKEN` |
+| [`areca manifest pull`](#areca-manifest-pull) | Writes the CMS's content definitions into `areca.config.ts`. | `ARECA_CMS_URL`, `ARECA_SITE_TOKEN`, `ARECA_SITE_KEY` (only without a config file) |
 | [`areca sync-manifest`](#areca-sync-manifest) | Deprecated alias of `areca manifest push`. | Same as `manifest push` |
 | [`areca run --`](#areca-run) | Runs another command with the environment loaded. | Nothing extra |
 
@@ -185,7 +185,9 @@ areca manifest push ./areca.config.ts
 
 | Argument | Type | Default | Description |
 | --- | --- | --- | --- |
-| `[config]` | path | `./areca.config.ts` | The config file to read. Optional. Extra arguments after the first are ignored without an error. |
+| `[config]` | path | `./areca.config.ts` | The config file to read. Optional. |
+| `--confirm-drop <collection.field>` | string | none | Confirms the removal of one field that still holds content. Repeat it for each field. Use the raw collection or section key, for example `articles.subtitle`. |
+| `--yes`, `-y` | boolean | `false` | Confirms every field removal the CMS lists. |
 
 The command loads the config file by importing it. That runs the file's code. Keep the config free of side effects.
 
@@ -196,10 +198,26 @@ For a TypeScript config, the command uses Node's native TypeScript import. If th
 | Variable | Required | Use |
 | --- | --- | --- |
 | `ARECA_CMS_URL` | Yes | CMS base URL. |
-| `ARECA_SITE_TOKEN` | Yes | Site token. The client checks for it at startup, even though a push does not use it. |
-| `ARECA_SCHEMA_TOKEN` | Yes | Schema token. Used for the push. It never falls back to the site token. |
+| `ARECA_SCHEMA_TOKEN` | Yes | Schema token. Used for the push. It never falls back to the site token. A push does not need `ARECA_SITE_TOKEN`. |
 
 The schema token is in **Settings › Developer** for the site. Keep it on the machine where you edit the schema. It should not be in a build's environment.
+
+### Removing fields
+
+A field that still holds content cannot be removed silently. When a push would remove one, the CMS refuses it and the command lists each field with the number of entries that hold content for it:
+
+```text
+This push removes fields that still hold content:
+  - articles.subtitle: 3 entries lose this field's content
+```
+
+Then the command:
+
+- On a terminal, asks `Delete the content of articles.subtitle and push?`, with No as the default.
+- Without a terminal, stops and tells you to re-run with `--confirm-drop articles.subtitle` for each field, or with `--yes`.
+- With `--yes`, or with each field passed to `--confirm-drop`, pushes and deletes that content from every stored version of the entries, including translations.
+
+Declining, or leaving a field unconfirmed, stops the command with an error and a non-zero exit code. Nothing is pushed. Fields that hold no content are removed without asking.
 
 ### Output
 
@@ -224,16 +242,21 @@ areca manifest pull --config ./areca.config.ts --yes
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
 | `--config <path>` | path | `./areca.config.ts` | The config file to write. |
-| `--yes`, `-y` | boolean | `false` | Overwrite an existing config without asking. |
+| `--yes`, `-y` | boolean | `false` | Overwrite an existing config without asking, and accept removing a language or changing the main language. |
 
 ### Behavior
 
 1. The command fetches the content definitions from the CMS.
 2. If the config file exists, it loads it. The site key is taken from that file.
-3. If the existing config defines one or more collections and `--yes` is not set:
-   - In a terminal, the command prints the changes (`+` added, `~` changed, `-` removed) and asks `Overwrite ./areca.config.ts?` before writing.
+3. The review lists the changes: collections and site content sections (`+` added, `~` changed, `-` removed), and site languages (`+ language fr` added, `- language de` removed, `~ main language nl -> en` for a new main language). A change to languages alone is listed too.
+4. If the existing config defines one or more collections and `--yes` is not set:
+   - In a terminal, the command asks `Overwrite ./areca.config.ts?` before writing. The answer defaults to No.
    - Without a terminal, the command fails and asks you to re-run with `--yes`.
-4. The command writes the config file. It does not keep comments or helper code.
+5. Removing a language, or changing the main language, always needs confirmation, even when the config has no collections:
+   - In a terminal, the command asks, for example, `Remove language de. Continue?`, with No as the default. Content in a removed language stops being served.
+   - Without a terminal, the command fails, names the change, and asks you to re-run with `--yes`. It writes nothing.
+   - Adding a language does not need confirmation. It appears in the review.
+6. The command writes the config file. It does not keep comments or helper code.
 
 A config file that defines no collections is overwritten without a prompt, even if it contains comments or helper code.
 
@@ -251,7 +274,7 @@ A config file that defines no collections is overwritten without a prompt, even 
 Wrote ./areca.config.ts with 2 collection(s) (+1 ~0 -0)
 ```
 
-If you decline the prompt, the command prints `Aborted` and exits with `0`.
+If you decline a prompt, the command prints `Aborted` and exits with `0`. A refusal without a terminal exits with a non-zero code and writes nothing.
 
 ### Quirks
 
