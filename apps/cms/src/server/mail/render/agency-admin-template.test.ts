@@ -1,14 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
 
+import { renderGranted, renderRevoked } from './templates/agency-admin.ts'
+import { MAIL_LOCALES } from './types.ts'
+import type { MailBrand } from './types.ts'
+
 vi.mock('#/env', () => ({ env: { APP_URL: 'https://cms.test' } }))
 vi.mock('./templates/shared.ts', () => ({
   loadRecipient: async () => ({ name: 'Ada', email: 'ada@example.test' }),
   formatUtc: () => '22 Oct 2026, 12:00 UTC',
 }))
-
-import { renderGranted, renderRevoked } from './templates/agency-admin.ts'
-import { MAIL_LOCALES } from './types.ts'
-import type { MailBrand } from './types.ts'
 
 const brand: MailBrand = {
   appName: 'Acme CMS',
