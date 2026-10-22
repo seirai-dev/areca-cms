@@ -5,7 +5,7 @@ import { db } from '#/db'
 import { buildJob, entry, schedulerBackoff, site } from '#/db/schema'
 import { audit } from '#/server/audit'
 import { createLogger } from '#/server/log'
-import { notifyScheduleFailed } from '#/server/notifications/triggers'
+import { queueScheduleFailedEvent } from '#/server/notifications/publication-events'
 
 import { requestPublication } from './publications.ts'
 
@@ -206,6 +206,7 @@ export async function runSchedulerTick({
         fingerprint,
         now,
         result.errors.join('; '),
+        { scheduledBy },
       )
       const found = (
         await db
@@ -227,11 +228,6 @@ export async function runSchedulerTick({
           ...(scheduledBy.length ? { scheduledBy } : {}),
         },
       })
-      await notifyScheduleFailed({
-        siteId,
-        scheduledBy,
-        fingerprint,
-      })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       await recordRequestFailure(siteId, fingerprint, now, message)
@@ -240,11 +236,17 @@ export async function runSchedulerTick({
   }
 }
 
+/**
+ * Records a failed attempt. A validation failure (`notice`) also queues the
+ * owners' notice in the same transaction, so a recorded failure is never
+ * unannounced. A thrown error records the failure without a notice.
+ */
 async function recordRequestFailure(
   siteId: string,
   fingerprint: string,
   at: Date,
   error: string,
+  notice?: { scheduledBy: string[] },
 ) {
   await db.transaction(async (tx) => {
     // Serialize retries on the site, including concurrent scheduler replicas.
@@ -287,5 +289,12 @@ async function recordRequestFailure(
       error,
       at,
     )
+    if (notice) {
+      await queueScheduleFailedEvent(tx, {
+        siteId,
+        fingerprint,
+        scheduledBy: notice.scheduledBy,
+      })
+    }
   })
 }

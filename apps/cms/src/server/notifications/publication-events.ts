@@ -1,17 +1,23 @@
 /**
- * Durable release notifications. The publication state change and its event
- * row commit together (`queuePublicationEvent` runs in that transaction), so a
- * crash after the commit cannot lose the notice. `processPublicationEvents`
- * delivers pending events with retries. Re-delivery is safe because each
- * recipient's row and email share a dedupe key (see `notify.ts`).
+ * Durable notifications for release outcomes and failed scheduled publishes.
+ * The state change and its event row commit together (`queuePublicationEvent`
+ * and `queueScheduleFailedEvent` run in that transaction), so a crash after the
+ * commit cannot lose the notice. `processPublicationEvents` delivers pending
+ * events with retries. Re-delivery is safe because each recipient's row and
+ * email share a dedupe key (see `notify.ts`).
  */
-import { and, asc, eq, inArray, lte, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, lte, or, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { notificationEvent } from '#/db/schema'
 import { createLogger, redactString } from '#/server/log'
 
-import { deliverPublicationFailed, deliverPublicationLive } from './triggers.ts'
+import {
+  deliverPublicationFailed,
+  deliverPublicationLive,
+  deliverScheduleFailed,
+  scheduleFailedSubject,
+} from './triggers.ts'
 
 type Connection = Pick<typeof db, 'insert'>
 type NotificationEventRow = typeof notificationEvent.$inferSelect
@@ -37,9 +43,46 @@ export function eventRetryDelayMs(attempt: number) {
 export async function queuePublicationEvent(
   connection: Connection,
   input: {
-    kind: NotificationEventRow['kind']
+    kind: 'publication.live' | 'publication.failed'
     siteId: string
     publicationId: string
+    payload?: NotificationEventRow['payload']
+  },
+) {
+  await insertEvent(connection, {
+    kind: input.kind,
+    siteId: input.siteId,
+    publicationId: input.publicationId,
+    dedupeKey: input.publicationId,
+    payload: input.payload,
+  })
+}
+
+/**
+ * Queues the notice for a scheduled publish that could not start. Pass the
+ * transaction that records the failure. One notice per schedule approval, so a
+ * repeat for the same approval is ignored.
+ */
+export async function queueScheduleFailedEvent(
+  connection: Connection,
+  input: { siteId: string; fingerprint: string; scheduledBy: string[] },
+) {
+  await insertEvent(connection, {
+    kind: 'schedule.failed',
+    siteId: input.siteId,
+    publicationId: null,
+    dedupeKey: scheduleFailedSubject(input.siteId, input.fingerprint),
+    payload: { scheduledBy: input.scheduledBy, fingerprint: input.fingerprint },
+  })
+}
+
+async function insertEvent(
+  connection: Connection,
+  input: {
+    kind: NotificationEventRow['kind']
+    siteId: string
+    publicationId: string | null
+    dedupeKey: string
     payload?: NotificationEventRow['payload']
   },
 ) {
@@ -49,19 +92,20 @@ export async function queuePublicationEvent(
       kind: input.kind,
       siteId: input.siteId,
       publicationId: input.publicationId,
+      dedupeKey: input.dedupeKey,
       payload: input.payload ?? {},
       nextAttemptAt: sql`now()`,
     })
     .onConflictDoNothing({
-      target: [notificationEvent.kind, notificationEvent.publicationId],
+      target: [notificationEvent.kind, notificationEvent.dedupeKey],
     })
 }
 
 /** Delivers due events. Each claim is a conditional update, so replicas never share one. */
 export async function processPublicationEvents(
   opts: {
-    /** Tests only: limit the tick to these publications (the table is shared). */
-    only?: readonly string[]
+    /** Tests only: limit the tick to these publications or sites (the table is shared). */
+    only?: { publicationIds?: readonly string[]; siteIds?: readonly string[] }
     /** Raised at shutdown: no new event is claimed after it. */
     signal?: AbortSignal
   } = {},
@@ -74,7 +118,16 @@ export async function processPublicationEvents(
         eq(notificationEvent.status, 'pending'),
         lte(notificationEvent.nextAttemptAt, sql`now()`),
         opts.only
-          ? inArray(notificationEvent.publicationId, [...opts.only])
+          ? or(
+              opts.only.publicationIds
+                ? inArray(notificationEvent.publicationId, [
+                    ...opts.only.publicationIds,
+                  ])
+                : undefined,
+              opts.only.siteIds
+                ? inArray(notificationEvent.siteId, [...opts.only.siteIds])
+                : undefined,
+            )
           : undefined,
       ),
     )
@@ -143,6 +196,18 @@ export async function processPublicationEvents(
 }
 
 async function deliver(event: NotificationEventRow) {
+  if (event.kind === 'schedule.failed') {
+    const fingerprint = event.payload.fingerprint
+    if (!fingerprint) throw new Error('schedule event has no fingerprint')
+    await deliverScheduleFailed(event.siteId, {
+      scheduledBy: event.payload.scheduledBy ?? [],
+      fingerprint,
+    })
+    return
+  }
+  if (!event.publicationId) {
+    throw new Error(`${event.kind} event has no publication`)
+  }
   if (event.kind === 'publication.live') {
     await deliverPublicationLive(
       event.publicationId,

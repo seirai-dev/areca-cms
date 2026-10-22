@@ -330,45 +330,46 @@ export async function deliverPublicationFailed(
   })
 }
 
-/** A scheduled publish could not start. Owners hear once per schedule approval. */
-export async function notifyScheduleFailed(input: {
-  siteId: string
-  scheduledBy: string[]
-  fingerprint: string
-}) {
-  try {
-    const context = await siteContext(input.siteId)
-    if (!context) return
-    const orgId = context.organizationId
-    const subjectId = `schedule:${input.siteId}:${input.fingerprint}`
-    const payload: NotificationPayload = {
-      siteId: context.siteId,
-      siteName: context.siteName,
-      orgName: context.orgName,
-      organizationId: orgId,
-    }
-    const result = await notify({
-      event: 'schedule.failed',
-      organizationId: orgId,
-      subjectId,
-      recipients: uniqueRecipients([
-        ...(await recipientsFor(input.scheduledBy, orgId)),
-        ...(await ownersOf(orgId)),
-      ]),
-      payload,
-    })
-    await alertAgencyAdmins({
-      organizationId: orgId,
-      subjectId,
-      notified: result.notified,
-      payload,
-    })
-  } catch (error) {
-    log.error('schedule failure notification failed', {
-      siteId: input.siteId,
-      err: error,
-    })
+/** Subject and dedupe key of a failed scheduled publish: one per schedule approval. */
+export function scheduleFailedSubject(siteId: string, fingerprint: string) {
+  return `schedule:${siteId}:${fingerprint}`
+}
+
+/**
+ * A scheduled publish could not start. Owners hear once per schedule approval.
+ * Throws on failure so the events loop retries it. The state change that
+ * records the failure queues the event (see `queueScheduleFailedEvent`).
+ */
+export async function deliverScheduleFailed(
+  siteId: string,
+  input: { scheduledBy: string[]; fingerprint: string },
+) {
+  const context = await siteContext(siteId)
+  if (!context) return
+  const orgId = context.organizationId
+  const subjectId = scheduleFailedSubject(siteId, input.fingerprint)
+  const payload: NotificationPayload = {
+    siteId: context.siteId,
+    siteName: context.siteName,
+    orgName: context.orgName,
+    organizationId: orgId,
   }
+  const result = await notifyStrict({
+    event: 'schedule.failed',
+    organizationId: orgId,
+    subjectId,
+    recipients: uniqueRecipients([
+      ...(await recipientsFor(input.scheduledBy, orgId)),
+      ...(await ownersOf(orgId)),
+    ]),
+    payload,
+  })
+  await alertAgencyAdmins({
+    organizationId: orgId,
+    subjectId,
+    notified: result.notified,
+    payload,
+  })
 }
 
 /** The person who sent the invitation hears when it is accepted. */

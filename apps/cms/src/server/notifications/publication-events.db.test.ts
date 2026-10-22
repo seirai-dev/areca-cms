@@ -139,8 +139,8 @@ describe('release notices survive a crash or a failed delivery', () => {
     expect(live?.status).toBe('live')
     expect(await eventFor(pub.id)).toMatchObject({ status: 'pending' })
 
-    await processPublicationEvents({ only: [pub.id] })
-    await processPublicationEvents({ only: [pub.id] })
+    await processPublicationEvents({ only: { publicationIds: [pub.id] } })
+    await processPublicationEvents({ only: { publicationIds: [pub.id] } })
 
     expect(await eventFor(pub.id)).toMatchObject({
       status: 'done',
@@ -213,7 +213,7 @@ describe('release notices survive a crash or a failed delivery', () => {
       adapter: createMockDeploymentAdapter(),
       audit: async () => {},
     })
-    await processPublicationEvents({ only: [pub.id] })
+    await processPublicationEvents({ only: { publicationIds: [pub.id] } })
 
     const row = await db
       .select({ payload: notification.payload })
@@ -240,20 +240,22 @@ describe('release notices survive a crash or a failed delivery', () => {
     })
 
     inject.failNext = true
-    await processPublicationEvents({ only: [pub.id] })
+    await processPublicationEvents({ only: { publicationIds: [pub.id] } })
     expect(await eventFor(pub.id)).toMatchObject({
       status: 'pending',
       attempts: 1,
       lastError: 'smtp down',
     })
     // Waiting out the retry delay: not due yet, so nothing runs.
-    expect(await processPublicationEvents({ only: [pub.id] })).toBe(0)
+    expect(
+      await processPublicationEvents({ only: { publicationIds: [pub.id] } }),
+    ).toBe(0)
 
     await db
       .update(notificationEvent)
       .set({ nextAttemptAt: new Date(Date.now() - 1000) })
       .where(eq(notificationEvent.publicationId, pub.id))
-    await processPublicationEvents({ only: [pub.id] })
+    await processPublicationEvents({ only: { publicationIds: [pub.id] } })
 
     expect(await eventFor(pub.id)).toMatchObject({
       status: 'done',
