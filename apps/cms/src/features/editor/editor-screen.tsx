@@ -842,6 +842,7 @@ function EntryEditorView({
           siteId={siteId}
           collectionKey={collection.key}
           entryId={editor.entryId}
+          locale={ctx ? active : null}
           data={view}
           seo={seo}
           onApply={(next) => onLocaleChange(SEO_KEY, next)}
