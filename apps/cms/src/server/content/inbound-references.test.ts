@@ -73,7 +73,7 @@ describe.skipIf(!hasDb)('listInboundReferences', () => {
           draftData: {
             title: 'Notes',
             slug: `post-${ctx.suffix}`,
-            author: target!.id,
+            author: target.id,
           } satisfies EntryData,
         })
         .returning()
@@ -91,8 +91,8 @@ describe.skipIf(!hasDb)('listInboundReferences', () => {
         })
         .returning()
 
-      const inbound = await listInboundReferences(target!.id, false)
-      expect(inbound.map((row) => row.id)).toEqual([referrer!.id])
+      const inbound = await listInboundReferences(target.id, false)
+      expect(inbound.map((row) => row.id)).toEqual([referrer.id])
       expect(inbound[0]).toMatchObject({
         title: 'Notes',
         slug: `post-${ctx.suffix}`,
@@ -100,8 +100,8 @@ describe.skipIf(!hasDb)('listInboundReferences', () => {
         status: 'draft',
       })
 
-      expect(await listInboundReferences(other!.id, false)).toEqual([])
-      expect(await listInboundReferences(referrer!.id, false)).toEqual([])
+      expect(await listInboundReferences(other.id, false)).toEqual([])
+      expect(await listInboundReferences(referrer.id, false)).toEqual([])
     })
   })
 })

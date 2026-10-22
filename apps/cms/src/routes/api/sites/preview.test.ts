@@ -1,13 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { getSitesPreview } from './preview'
+
 // Assumed API: buildPreviewGlobal(siteId, key) -> SnapshotGlobal | null (draft data).
-const state = vi.hoisted(() => ({
-  rows: [] as unknown[],
-  entry: null as unknown,
-  global: null as unknown,
-  verify: null as unknown,
-  calls: [] as unknown[],
-}))
+const state = vi.hoisted(
+  (): {
+    rows: unknown[]
+    entry: unknown
+    global: unknown
+    verify: unknown
+    calls: unknown[]
+  } => ({
+    rows: [],
+    entry: null,
+    global: null,
+    verify: null,
+    calls: [],
+  }),
+)
 
 vi.mock('#/db', () => ({
   db: {
@@ -31,8 +41,6 @@ vi.mock('#/server/content/preview-token', () => ({
     token === 'bad' ? null : { siteId: 'site-1' },
   verifyPreviewToken: () => state.verify,
 }))
-
-import { getSitesPreview } from './preview'
 
 const req = (token?: string, locale?: string) => {
   const params = new URLSearchParams()

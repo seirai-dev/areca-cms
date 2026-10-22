@@ -1,6 +1,12 @@
 import { eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { db } from '#/db'
+import { auditLog, user } from '#/db/schema'
+
+import { completeSetup, getSetupStatus } from './setup.ts'
+import { resetGeneratedSetupToken } from './setup-token.ts'
+
 // Pin SETUP_TOKEN per test without touching the real environment.
 const tokens = vi.hoisted(() => ({
   configured: undefined as string | undefined,
@@ -16,12 +22,6 @@ vi.mock('#/env', async (importOriginal) => {
     }),
   }
 })
-
-import { db } from '#/db'
-import { auditLog, user } from '#/db/schema'
-
-import { completeSetup, getSetupStatus } from './setup.ts'
-import { resetGeneratedSetupToken } from './setup-token.ts'
 
 const hasDb = Boolean(process.env.DATABASE_URL)
 const TOKEN = 'test-setup-token-0123456789'

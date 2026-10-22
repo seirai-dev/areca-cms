@@ -357,7 +357,7 @@ async function seed(): Promise<Seeded> {
       siteId: st.id,
       snapshot: { ...built.snapshot, publicationId: `bench-${i}` },
       snapshotHash: built.hash,
-      status: (i === 0 ? 'live' : 'superseded') as 'live' | 'superseded',
+      status: i === 0 ? ('live' as const) : ('superseded' as const),
       createdAt: new Date(Date.now() - i * 86_400_000),
     }))
     for (const part of chunks(rows, 5))

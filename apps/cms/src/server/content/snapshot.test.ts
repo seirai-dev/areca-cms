@@ -476,7 +476,7 @@ describe.skipIf(!hasDb)('buildSnapshot', () => {
           title: 'Article',
           slug: `asset-${first.suffix}`,
           body: sampleRichText,
-          heroImage: foreign!.id,
+          heroImage: foreign.id,
         }
         await expect(
           createEntry({
@@ -535,7 +535,7 @@ describe.skipIf(!hasDb)('buildSnapshot', () => {
             {
               type: 'image',
               attrs: {
-                src: `/api/assets/file/${foreign!.storageKey}`,
+                src: `/api/assets/file/${foreign.storageKey}`,
                 alt: 'Foreign',
               },
             },

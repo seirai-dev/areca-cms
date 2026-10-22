@@ -1755,9 +1755,9 @@ describe.skipIf(!hasDb)('site content (globals)', () => {
     const entries = await db
       .select()
       .from(entry)
-      .where(eq(entry.collectionId, col!.id))
+      .where(eq(entry.collectionId, col.id))
     expect(entries.map((item) => item.slug)).toEqual([GLOBAL_ENTRY_SLUG])
-    const entryId = entries[0]!.id
+    const entryId = entries[0].id
 
     const redefined = await call(agency, 'upsert_global', {
       key: 'footerInfo',
@@ -1777,7 +1777,7 @@ describe.skipIf(!hasDb)('site content (globals)', () => {
     const afterRedefine = await db
       .select()
       .from(entry)
-      .where(eq(entry.collectionId, col!.id))
+      .where(eq(entry.collectionId, col.id))
     expect(afterRedefine).toHaveLength(1)
 
     const withSlug = await call(agency, 'upsert_global', {
@@ -1822,7 +1822,7 @@ describe.skipIf(!hasDb)('site content (globals)', () => {
       .select()
       .from(deletedContentArchive)
       .where(
-        inArray(deletedContentArchive.entityId, [col!.id, entryId]),
+        inArray(deletedContentArchive.entityId, [col.id, entryId]),
       )
     expect(archived.length).toBeGreaterThan(0)
     expect(

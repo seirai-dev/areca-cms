@@ -22,7 +22,7 @@ describe.skipIf(!process.env.DATABASE_URL)('cms schema', () => {
         const [createdSite] = await tx
           .insert(schema.site)
           .values({
-            organizationId: org!.id,
+            organizationId: org.id,
             name: 'Test Site',
             slug: `test-site-${crypto.randomUUID()}`,
             tokenHash: crypto.randomUUID(),
@@ -36,7 +36,7 @@ describe.skipIf(!process.env.DATABASE_URL)('cms schema', () => {
         const [createdCollection] = await tx
           .insert(schema.collection)
           .values({
-            siteId: createdSite!.id,
+            siteId: createdSite.id,
             key: 'articles',
             label: 'Articles',
             routePattern: '/blog/$slug',
@@ -51,8 +51,8 @@ describe.skipIf(!process.env.DATABASE_URL)('cms schema', () => {
         const [createdEntry] = await tx
           .insert(schema.entry)
           .values({
-            siteId: createdSite!.id,
-            collectionId: createdCollection!.id,
+            siteId: createdSite.id,
+            collectionId: createdCollection.id,
             slug: 'hello-world',
             status: 'draft',
             draftData: { title: 'Hello' },
@@ -64,12 +64,12 @@ describe.skipIf(!process.env.DATABASE_URL)('cms schema', () => {
         const [readOrg] = await tx
           .select()
           .from(schema.organization)
-          .where(eq(schema.organization.id, org!.id))
+          .where(eq(schema.organization.id, org.id))
 
         const [readEntry] = await tx
           .select()
           .from(schema.entry)
-          .where(eq(schema.entry.id, createdEntry!.id))
+          .where(eq(schema.entry.id, createdEntry.id))
 
         expect(readOrg?.name).toBe('Test Org')
         expect(readEntry?.slug).toBe('hello-world')

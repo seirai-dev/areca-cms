@@ -4,35 +4,6 @@ import { eq, inArray, or } from 'drizzle-orm'
 import sharp from 'sharp'
 import { describe, expect, it, vi } from 'vitest'
 
-vi.mock('#/server/mail/config', async (importOriginal) => ({
-  ...(await importOriginal<typeof MailConfig>()),
-  resolveMailConfig: async () => ({
-    source: 'env' as const,
-    host: 'mail.test',
-    port: 587,
-    secure: 'starttls' as const,
-    username: null,
-    password: null,
-    from: 'cms@areca.test',
-    replyTo: null,
-  }),
-}))
-vi.mock('#/server/mail/transport', async (importOriginal) => ({
-  ...(await importOriginal<typeof MailTransport>()),
-  sendMail: vi.fn(async () => ({ messageId: 'test-message' })),
-}))
-vi.mock('#/adapters', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('#/adapters')>()),
-  getStorage: () => ({
-    put: vi.fn(async () => {}),
-    delete: vi.fn(async () => {}),
-  }),
-}))
-vi.mock('#/server/assets', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('#/server/assets')>()),
-  drainStorageObjectDeletions: vi.fn(async () => {}),
-}))
-
 import { db } from '#/db'
 import { auditLog, branding, organization, site, user } from '#/db/schema'
 
@@ -67,6 +38,35 @@ import {
   rotateSiteTokenAdmin,
   updateSite,
 } from './sites.ts'
+
+vi.mock('#/server/mail/config', async (importOriginal) => ({
+  ...(await importOriginal<typeof MailConfig>()),
+  resolveMailConfig: async () => ({
+    source: 'env' as const,
+    host: 'mail.test',
+    port: 587,
+    secure: 'starttls' as const,
+    username: null,
+    password: null,
+    from: 'cms@areca.test',
+    replyTo: null,
+  }),
+}))
+vi.mock('#/server/mail/transport', async (importOriginal) => ({
+  ...(await importOriginal<typeof MailTransport>()),
+  sendMail: vi.fn(async () => ({ messageId: 'test-message' })),
+}))
+vi.mock('#/adapters', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('#/adapters')>()),
+  getStorage: () => ({
+    put: vi.fn(async () => {}),
+    delete: vi.fn(async () => {}),
+  }),
+}))
+vi.mock('#/server/assets', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('#/server/assets')>()),
+  drainStorageObjectDeletions: vi.fn(async () => {}),
+}))
 
 const hasDb = Boolean(process.env.DATABASE_URL)
 

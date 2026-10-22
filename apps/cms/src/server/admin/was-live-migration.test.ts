@@ -110,7 +110,7 @@ describe.skipIf(!hasDb)('0012 was_live correction', () => {
       const [after] = await db
         .select({ wasLive: publication.wasLive })
         .from(publication)
-        .where(eq(publication.id, clean!.id))
+        .where(eq(publication.id, clean.id))
       expect(after?.wasLive).toBe(false)
     })
   })
