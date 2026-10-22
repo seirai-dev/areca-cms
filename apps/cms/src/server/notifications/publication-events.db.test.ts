@@ -149,6 +149,84 @@ describe('release notices survive a crash or a failed delivery', () => {
     expect(await liveNoticesFor(pub.id, requester.id)).toHaveLength(1)
   })
 
+  it('diffs a live notice against the release it replaced, not against nothing', async () => {
+    const { site: s, requester } = await setup()
+    const entry = (id: string, title: string) => ({
+      id,
+      slug: id,
+      publishedAt: null,
+      data: { title },
+    })
+    // The release that is live before the new one.
+    await db.insert(publication).values({
+      siteId: s.id,
+      snapshot: {
+        hash: 'before',
+        collections: { blog: [entry('keep', 'Keep'), entry('gone', 'Gone')] },
+      } as unknown as Snapshot,
+      snapshotHash: 'before',
+      status: 'live',
+      requestedBy: requester.id,
+      wasLive: true,
+      createdAt: new Date(Date.now() - 60_000),
+    })
+    await db
+      .update(site)
+      .set({
+        deploymentTarget: {
+          provider: 'dokploy',
+          applicationId: 'app',
+          healthCheckUrl: 'http://localhost:3999',
+        },
+      })
+      .where(eq(site.id, s.id))
+    // The release being published: `gone` is removed, `new` is added.
+    const [pub] = await db
+      .insert(publication)
+      .values({
+        siteId: s.id,
+        snapshot: {
+          hash: 'after',
+          collections: { blog: [entry('keep', 'Keep'), entry('new', 'New')] },
+        } as unknown as Snapshot,
+        snapshotHash: 'after',
+        status: 'pending',
+        requestedBy: requester.id,
+      })
+      .returning()
+    if (!pub) throw new Error('fixture failed')
+    const [job] = await db
+      .insert(buildJob)
+      .values({
+        siteId: s.id,
+        publicationId: pub.id,
+        status: 'building',
+        attempts: 1,
+        startedAt: new Date(),
+        leaseExpiresAt: new Date(Date.now() + 10 * 60_000),
+      })
+      .returning()
+    if (!job) throw new Error('fixture failed')
+
+    // The worker supersedes the old release. The notice still sees it.
+    await processJob(job, {
+      adapter: createMockDeploymentAdapter(),
+      audit: async () => {},
+    })
+    await processPublicationEvents({ only: [pub.id] })
+
+    const row = await db
+      .select({ payload: notification.payload })
+      .from(notification)
+      .where(
+        eq(notification.dedupeKey, `release.live:${pub.id}:${requester.id}`),
+      )
+    expect(row[0]?.payload.entries).toEqual([
+      { title: 'New', collection: 'blog', change: 'added' },
+      { title: 'Gone', collection: 'blog', change: 'removed' },
+    ])
+  })
+
   it('keeps a failed delivery pending and retries it without a second notice', async () => {
     const { site: s, requester } = await setup()
     const pub = await insertPublication({

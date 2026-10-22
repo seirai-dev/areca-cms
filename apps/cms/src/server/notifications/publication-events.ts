@@ -50,7 +50,7 @@ export async function queuePublicationEvent(
       siteId: input.siteId,
       publicationId: input.publicationId,
       payload: input.payload ?? {},
-      nextAttemptAt: new Date(),
+      nextAttemptAt: sql`now()`,
     })
     .onConflictDoNothing({
       target: [notificationEvent.kind, notificationEvent.publicationId],
@@ -139,7 +139,10 @@ export async function processPublicationEvents(
 
 async function deliver(event: NotificationEventRow) {
   if (event.kind === 'publication.live') {
-    await deliverPublicationLive(event.publicationId)
+    await deliverPublicationLive(
+      event.publicationId,
+      event.payload.previousPublicationId,
+    )
     return
   }
   await deliverPublicationFailed(event.publicationId, {

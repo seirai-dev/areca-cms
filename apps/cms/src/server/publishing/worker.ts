@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm'
 
 import {
   DeploymentNotDispatchedError,
@@ -482,6 +482,22 @@ export async function processJob(
         await tx.select().from(buildJob).where(fence).for('update')
       ).at(0)
       if (!owned) throw new Error('Publication worker lease lost')
+      // Read before the supersede below: the live notice diffs against this
+      // release, and it is no longer 'live' once superseded.
+      const predecessor = (
+        await tx
+          .select({ id: publication.id })
+          .from(publication)
+          .where(
+            and(
+              eq(publication.siteId, job.siteId),
+              eq(publication.status, 'live'),
+              ne(publication.id, pub.id),
+            ),
+          )
+          .orderBy(desc(publication.createdAt))
+          .limit(1)
+      ).at(0)
       await tx
         .update(publication)
         .set({ status: 'superseded' })
@@ -505,6 +521,7 @@ export async function processJob(
           kind: 'publication.live',
           siteId: job.siteId,
           publicationId: pub.id,
+          payload: { previousPublicationId: predecessor?.id ?? null },
         })
       }
       await clearSchedulerFailure(tx, job)

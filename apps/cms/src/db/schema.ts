@@ -725,7 +725,7 @@ export const notificationEvent = pgTable(
       .notNull()
       .references(() => publication.id, { onDelete: 'cascade' }),
     payload: jsonb('payload')
-      .$type<{ stuck?: boolean }>()
+      .$type<{ stuck?: boolean; previousPublicationId?: string | null }>()
       .notNull()
       .default({}),
     status: text('status')
