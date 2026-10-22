@@ -1,4 +1,5 @@
-const reserved = new Set([
+/** Names no collection, site content section or field may take. Matched case-insensitively. */
+export const RESERVED_IDENTIFIERS: readonly string[] = [
   '__proto__',
   'prototype',
   'constructor',
@@ -9,7 +10,9 @@ const reserved = new Set([
   'nul',
   ...Array.from({ length: 9 }, (_, i) => `com${i + 1}`),
   ...Array.from({ length: 9 }, (_, i) => `lpt${i + 1}`),
-])
+]
+
+const reserved = new Set(RESERVED_IDENTIFIERS)
 
 export function isSafeIdentifier(value: string): boolean {
   return (
@@ -20,21 +23,22 @@ export function isSafeIdentifier(value: string): boolean {
 
 /**
  * Names the generated content object uses itself, so collection and site
- * content keys cannot take them. Stored lowercase: the check is
- * case-insensitive. `previewglobals` is the camelCase of `preview-globals`
- * and `preview_globals`, the member name `content.previewGlobals`.
- * `in`, `languages` and `matchlocale` are the language members.
+ * content keys cannot take them. Compared after camelCase and case-insensitively:
+ * `preview-globals` and `preview_globals` are `previewGlobals`, the member name
+ * `content.previewGlobals`. `in`, `languages` and `matchLocale` are the language members.
  */
-const reservedCollectionKeys = new Set([
+export const RESERVED_CONTENT_KEYS: readonly string[] = [
   'resolve',
   'href',
   'preview',
   'globals',
-  'previewglobals',
+  'previewGlobals',
   'in',
   'languages',
-  'matchlocale',
-])
+  'matchLocale',
+]
+
+const reservedCollectionKeys = new Set(RESERVED_CONTENT_KEYS.map((key) => key.toLowerCase()))
 
 /** Case-insensitive. Field keys may use these names; collection and global keys may not. */
 export function isReservedCollectionKey(key: string): boolean {
