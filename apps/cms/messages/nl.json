@@ -385,6 +385,7 @@
   "agency_mail_status_none_hint": "Voeg hieronder een mailserver toe zodat uitnodigingen per e-mail worden verstuurd. Tot die tijd deel je uitnodigingen met Link kopiëren.",
   "agency_mail_status_queued": "In wachtrij",
   "agency_mail_status_retrying": "Opnieuw proberen (poging {attempt} van {max})",
+  "agency_mail_status_skipped": "Overgeslagen",
   "agency_mail_status_sent": "Verstuurd",
   "agency_mail_status_settings": "Verzenden met de mailinstellingen",
   "agency_mail_step_failed": "Mislukt",

@@ -385,6 +385,7 @@
   "agency_mail_status_none_hint": "Add a mail server below so invitations are emailed. Until then, share invitations with Copy link.",
   "agency_mail_status_queued": "Queued",
   "agency_mail_status_retrying": "Retrying (attempt {attempt} of {max})",
+  "agency_mail_status_skipped": "Skipped",
   "agency_mail_status_sent": "Sent",
   "agency_mail_status_settings": "Sending with Mail settings",
   "agency_mail_step_failed": "Failed",

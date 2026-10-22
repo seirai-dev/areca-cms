@@ -96,7 +96,7 @@ describe.skipIf(!hasDb)('member removal revokes access', () => {
       .select()
       .from(emailOutbox)
       .where(eq(emailOutbox.id, queued.id))
-    expect(cancelled).toMatchObject({ status: 'failed' })
+    expect(cancelled).toMatchObject({ status: 'cancelled' })
     const [audit] = await db
       .select()
       .from(auditLog)

@@ -40,15 +40,17 @@ export function parsePort(value: string): number | null {
   return port >= 1 && port <= 65_535 ? port : null
 }
 
-export type MailEmailKind = 'queued' | 'retrying' | 'sent' | 'failed'
+export type MailEmailKind =
+  'queued' | 'retrying' | 'sent' | 'failed' | 'skipped'
 
 /** The one status a row shows, from the outbox fields. */
 export function emailStatusKind(email: {
-  status: 'queued' | 'sending' | 'sent' | 'failed'
+  status: 'queued' | 'sending' | 'sent' | 'failed' | 'cancelled'
   retrying: boolean
 }): MailEmailKind {
   if (email.status === 'sent') return 'sent'
   if (email.status === 'failed') return 'failed'
+  if (email.status === 'cancelled') return 'skipped'
   return email.retrying ? 'retrying' : 'queued'
 }
 
@@ -70,7 +72,7 @@ export type TimelineStep = {
  * was never needed is `skipped` (drawn muted), not `pending`.
  */
 export function emailTimeline(email: {
-  status: 'queued' | 'sending' | 'sent' | 'failed'
+  status: 'queued' | 'sending' | 'sent' | 'failed' | 'cancelled'
   retrying: boolean
   attempts: number
 }): TimelineStep[] {
@@ -130,7 +132,7 @@ export function mailKindLabel(kind: string) {
 }
 
 export function mailStatusLabel(email: {
-  status: 'queued' | 'sending' | 'sent' | 'failed'
+  status: 'queued' | 'sending' | 'sent' | 'failed' | 'cancelled'
   retrying: boolean
   attempts: number
 }) {
@@ -139,6 +141,8 @@ export function mailStatusLabel(email: {
       return m.agency_mail_status_sent()
     case 'failed':
       return m.agency_mail_status_failed()
+    case 'skipped':
+      return m.agency_mail_status_skipped()
     case 'retrying':
       return m.agency_mail_status_retrying({
         attempt: String(nextAttemptNumber(email.attempts)),

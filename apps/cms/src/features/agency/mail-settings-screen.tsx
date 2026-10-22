@@ -674,6 +674,7 @@ const TAG_TONE: Record<
   queued: 'neutral',
   retrying: 'warning',
   failed: 'error',
+  skipped: 'neutral',
 }
 
 function RecentEmailRow({ email }: { email: RecentEmail }) {

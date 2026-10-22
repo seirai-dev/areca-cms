@@ -385,6 +385,7 @@
   "agency_mail_status_none_hint": "Davetlerin e-postayla gitmesi için aşağıya bir posta sunucusu ekleyin. O zamana kadar davetleri Bağlantıyı kopyala ile paylaşın.",
   "agency_mail_status_queued": "Sırada",
   "agency_mail_status_retrying": "Yeniden deneniyor (deneme {attempt} / {max})",
+  "agency_mail_status_skipped": "Atlandı",
   "agency_mail_status_sent": "Gönderildi",
   "agency_mail_status_settings": "Posta ayarlarıyla gönderiliyor",
   "agency_mail_step_failed": "Başarısız",

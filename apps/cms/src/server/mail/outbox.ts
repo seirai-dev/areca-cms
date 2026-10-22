@@ -33,6 +33,7 @@ import {
 } from '#/db/schema'
 import { getBranding } from '#/server/admin/branding'
 import { createLogger } from '#/server/log'
+import { notificationStillEligible } from '#/server/notifications/eligibility'
 
 import { resolveMailConfig } from './config.ts'
 import {
@@ -79,7 +80,9 @@ export type MailTemplate =
   | 'agency_admin_revoked'
   | 'notification'
 
-export type OutboxStatus = 'queued' | 'sending' | 'sent' | 'failed'
+/** 'cancelled': a notification email skipped at send time; not a failure. */
+export type OutboxStatus =
+  'queued' | 'sending' | 'sent' | 'failed' | 'cancelled'
 
 export type EnqueueEmailInput = {
   /** Account email kind, notification event key, or 'test'. */
@@ -118,7 +121,6 @@ export type SendResult =
       nextAttemptAt: Date
     }
   | { status: 'failed'; id: string; failure: MailFailure }
-
 /** Recent emails row for Agency → Mail. Error message is localized. */
 export type RecentEmail = {
   id: string
@@ -291,6 +293,13 @@ export async function processOutbox(
       // Another replica claimed it, or it stopped being due: skip it.
       if (!row) continue
       claimed++
+      if (
+        row.notificationId &&
+        !(await notificationStillEligible(row.notificationId))
+      ) {
+        await cancelUndelivered(row)
+        continue
+      }
       await sendClaimed(row)
     } catch (error) {
       log.error('outbox row could not be recorded', {
@@ -528,13 +537,7 @@ export async function cancelQueuedNotificationEmails(
   const executor = (connection ?? db) as Executor
   const cancelled = await executor
     .update(emailOutbox)
-    .set({
-      status: 'failed',
-      nextAttemptAt: null,
-      leaseUntil: null,
-      lastErrorCode: 'unknown',
-      lastError: 'Cancelled: the recipient left the organization.',
-    })
+    .set({ status: 'cancelled', nextAttemptAt: null, leaseUntil: null })
     .where(
       and(
         eq(emailOutbox.userId, userId),
@@ -905,6 +908,11 @@ function resultOf(row: OutboxRow): SendResult {
     ref: row.id,
   }
   if (row.status === 'failed') return { status: 'failed', id: row.id, failure }
+  if (row.status === 'cancelled') {
+    throw new Error(
+      `Email ${row.id} was cancelled; only the worker sends notifications`,
+    )
+  }
   return {
     status: 'retrying',
     id: row.id,
@@ -915,4 +923,21 @@ function resultOf(row: OutboxRow): SendResult {
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/**
+ * A notification email whose recipient lost access or switched the kind off
+ * since the event. Cancelled, not failed: nothing went wrong, so no alert.
+ */
+async function cancelUndelivered(row: OutboxRow): Promise<void> {
+  const owned = await db
+    .update(emailOutbox)
+    .set({ status: 'cancelled', leaseUntil: null, nextAttemptAt: null })
+    .where(ownedBy(row))
+    .returning({ id: emailOutbox.id })
+  if (owned.length === 0) return
+  log.info('notification email skipped: recipient no longer eligible', {
+    outboxId: row.id,
+    kind: row.kind,
+  })
 }

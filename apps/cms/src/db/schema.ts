@@ -576,7 +576,7 @@ export const emailOutbox = pgTable(
     params: jsonb('params').$type<Record<string, unknown>>().notNull(),
     locale: text('locale').notNull(),
     status: text('status')
-      .$type<'queued' | 'sending' | 'sent' | 'failed'>()
+      .$type<'queued' | 'sending' | 'sent' | 'failed' | 'cancelled'>()
       .notNull(),
     attempts: integer('attempts').notNull().default(0),
     nextAttemptAt: timestamptz('next_attempt_at'),
