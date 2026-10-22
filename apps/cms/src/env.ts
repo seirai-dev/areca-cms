@@ -2,12 +2,16 @@ import { createEnv } from '@t3-oss/env-core'
 import { config } from 'dotenv'
 import { z } from 'zod'
 
+import { productionSecretProblems } from '#/lib/secret-placeholders'
+
 config({ path: ['.env.local', '.env'] })
 
+const skipValidation =
+  process.env.SKIP_ENV_VALIDATION === 'true' ||
+  process.env.npm_lifecycle_event === 'build'
+
 export const env = createEnv({
-  skipValidation:
-    process.env.SKIP_ENV_VALIDATION === 'true' ||
-    process.env.npm_lifecycle_event === 'build',
+  skipValidation,
   server: {
     SERVER_URL: z.string().url().optional(),
     DATABASE_URL: z.string().url(),
@@ -151,3 +155,14 @@ export const env = createEnv({
    */
   emptyStringAsUndefined: true,
 })
+
+// Example values from docker/.env.example and apps/cms/.env.example must not
+// reach a production instance. Failing at boot is cheaper than a forged session.
+if (process.env.NODE_ENV === 'production' && !skipValidation) {
+  const problems = productionSecretProblems(env)
+  if (problems.length > 0) {
+    throw new Error(
+      `Refusing to start in production:\n- ${problems.join('\n- ')}`,
+    )
+  }
+}
