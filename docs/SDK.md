@@ -162,9 +162,12 @@ pnpm exec areca manifest push
 ```
 
 The command reads `areca.config.ts` and sends it to the CMS using
-`ARECA_SCHEMA_TOKEN`. The CLI also requires `ARECA_CMS_URL` and
-`ARECA_SITE_TOKEN` to construct the SDK client. The default config path is
-`./areca.config.ts`; specify a path after `push` to use another file:
+`ARECA_SCHEMA_TOKEN` and `ARECA_CMS_URL`. It does not need `ARECA_SITE_TOKEN`.
+If the push would remove a field that still holds content, the command lists
+the fields with their entry counts, asks you to confirm on a terminal, and
+otherwise needs `--confirm-drop <collection.field>` for each field or `--yes`.
+The default config path is `./areca.config.ts`; specify a path after `push` to
+use another file:
 
 ```bash
 pnpm exec areca manifest push ./config/areca.config.ts
