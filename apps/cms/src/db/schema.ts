@@ -308,6 +308,10 @@ export const entry = pgTable(
   (t) => [
     unique('entry_collection_slug_unique').on(t.collectionId, t.slug),
     index('entry_site_id_idx').on(t.siteId),
+    // The scheduler's due scan reads only scheduled rows, by time.
+    index('entry_scheduled_due_idx')
+      .on(t.scheduledAt)
+      .where(sql`${t.status} = 'scheduled'`),
   ],
 )
 
@@ -407,7 +411,11 @@ export const publication = pgTable(
     createdAt: createdAt(),
     deployedAt: timestamptz('deployed_at'),
   },
-  (t) => [index('publication_site_id_idx').on(t.siteId)],
+  (t) => [
+    index('publication_site_id_idx').on(t.siteId),
+    // "Latest live release for this site" lookups.
+    index('publication_site_status_idx').on(t.siteId, t.status),
+  ],
 )
 
 export const buildJob = pgTable(
@@ -592,6 +600,13 @@ export const emailOutbox = pgTable(
   (t) => [
     index('email_outbox_status_next_attempt_idx').on(t.status, t.nextAttemptAt),
     index('email_outbox_created_at_idx').on(t.createdAt),
+    // Claimable rows: queued and due, or sending with a lapsed lease.
+    index('email_outbox_queued_due_idx')
+      .on(t.nextAttemptAt)
+      .where(sql`${t.status} = 'queued'`),
+    index('email_outbox_lease_expiry_idx')
+      .on(t.leaseUntil)
+      .where(sql`${t.status} = 'sending'`),
   ],
 )
 
@@ -692,13 +707,23 @@ export const notification = pgTable(
 )
 
 /** Durable object cleanup survives row/org deletion and transient storage outages. */
-export const storageObjectDeletion = pgTable('storage_object_deletion', {
-  storageKey: text('storage_key').primaryKey(),
-  createdAt: createdAt(),
-  lastError: text('last_error'),
-  attempts: integer('attempts').notNull().default(0),
-  nextAttemptAt: timestamptz('next_attempt_at'),
-})
+export const storageObjectDeletion = pgTable(
+  'storage_object_deletion',
+  {
+    storageKey: text('storage_key').primaryKey(),
+    createdAt: createdAt(),
+    lastError: text('last_error'),
+    attempts: integer('attempts').notNull().default(0),
+    nextAttemptAt: timestamptz('next_attempt_at'),
+  },
+  (t) => [
+    // The drain takes the oldest unpaused row. Ordering by created_at lets the
+    // index supply the order; the due-time check runs on the few rows read.
+    index('storage_deletion_unpaused_idx')
+      .on(t.createdAt)
+      .where(sql`${t.attempts} < 4`),
+  ],
+)
 
 /** Cumulative operation counts survive job reconciliation and deletion. */
 export const opsCounter = pgTable('ops_counter', {

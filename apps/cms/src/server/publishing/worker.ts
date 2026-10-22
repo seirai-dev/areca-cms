@@ -963,9 +963,34 @@ export function createJobPool({
   }
 }
 
+/** Stale jobs recovered per transaction, and transactions per call at most. */
+export const RECOVERY_BATCH_SIZE = 50
+const RECOVERY_MAX_BATCHES = 20
+
+/**
+ * Fails jobs whose lease expired. Each batch is its own transaction with
+ * `SKIP LOCKED`, so one call never locks every stale job at once. Batches stop
+ * when one comes back short, or after RECOVERY_MAX_BATCHES. The rest waits for
+ * the next tick.
+ */
 export async function recoverStaleJobs(
   olderThanMs = STALE_JOB_MS,
   now = new Date(),
+  batchSize = RECOVERY_BATCH_SIZE,
+) {
+  const recovered: Awaited<ReturnType<typeof recoverStaleBatch>> = []
+  for (let batch = 0; batch < RECOVERY_MAX_BATCHES; batch++) {
+    const jobs = await recoverStaleBatch(olderThanMs, now, batchSize)
+    recovered.push(...jobs)
+    if (jobs.length < batchSize) break
+  }
+  return recovered
+}
+
+async function recoverStaleBatch(
+  olderThanMs: number,
+  now: Date,
+  batchSize: number,
 ) {
   const cutoff = new Date(now.getTime() - olderThanMs)
   // Lock and fence in one transaction. A heartbeat cannot resurrect an expired lease.
@@ -991,6 +1016,7 @@ export async function recoverStaleJobs(
           ),
         ),
       )
+      .limit(batchSize)
       .for('update', { skipLocked: true })
     for (const job of stale) {
       await incrementFailureCounter(tx)
