@@ -9,7 +9,7 @@ All notable changes to `@areca-cms/site-sdk`.
 - **sdk:** match the CMS language wire shape and cover it end to end (a08a89f)
 - **sdk:** content languages in the SDK (702fd90)
 
-## 0.6.0 (2026-10-23)
+## Unreleased
 
 ### Features
 
@@ -18,19 +18,14 @@ All notable changes to `@areca-cms/site-sdk`.
 - **`Href` follows the language.** `Href` is the union of every language's route, and `content.in(locale)` narrows the collection `href` results to that language's route.
 - Media downloads cover every language view. The SDK previously rewrote only the top-level data, so the main language and other languages kept CMS URLs.
 - `createArecaClient` no longer requires `ARECA_SITE_TOKEN` at construction. Each call checks the credential it sends and names the missing variable before any request. Schema-only and preview-only clients work with their own credential alone, and previews send no `Authorization` header.
-
-### Bug fixes
-
-- Documentation: the rich-text renderer installs `@tanstack/markdown@1.0.0`, the version the SDK depends on. A docs check fails when an install command names another version.
-
-## Unreleased
-
-### Features
-
 - content languages: `createContent({ locale })`, per-call `{ locale, fallback }` on every collection method, `content.in(locale)`, `content.languages`, `content.matchLocale(input)` and the `matchLocale(input, languages)` helper. Entries and site content sections report the language they are served in (`locale`, `isFallback`, `locales`, `alternates`, and `$locale`/`$isFallback` on globals).
 - `languages`, `routes`, `requiredLanguages` and per-field `translatable` in `areca.config.ts`. `areca.gen.ts` emits the `Locale` union and `languages`.
 - `i18n.paraglide` in `areca.config.ts` wires Paraglide's `getLocale` into the generated content object. `areca pull` warns when `project.inlang/settings.json` disagrees with the CMS languages.
 - `seoHead` and `seoHeadHtml` accept `locale`, `alternates`, `main` and `siteUrl` for `hreflang`, `x-default` and `og:locale`.
+
+### Bug fixes
+
+- Documentation: the rich-text renderer installs `@tanstack/markdown@1.0.0`, the version the SDK depends on. A docs check fails when an install command names another version.
 
 ## 0.4.0 (2026-10-14)
 
