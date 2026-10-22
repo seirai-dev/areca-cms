@@ -36,6 +36,8 @@ export type AccountEmailKind =
   | 'two_factor_disabled'
   | 'membership_removed'
   | 'membership_role_changed'
+  | 'agency_admin_granted'
+  | 'agency_admin_revoked'
 
 export type QueuedEmail = { status: 'queued'; id: string }
 

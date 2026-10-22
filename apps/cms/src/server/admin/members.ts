@@ -727,6 +727,19 @@ export async function setAgencyAdmin(
         },
         tx,
       )
+      // A security notice, so it is sent whatever the person's preferences.
+      const [actor] = await tx
+        .select({ name: user.name })
+        .from(user)
+        .where(eq(user.id, actorId))
+        .limit(1)
+      const at = new Date().toISOString()
+      await sendAccountEmail({
+        kind: isAgencyAdmin ? 'agency_admin_granted' : 'agency_admin_revoked',
+        userId,
+        params: { userId, at, actorName: actor?.name ?? '' },
+        connection: tx,
+      })
     }
 
     return updated

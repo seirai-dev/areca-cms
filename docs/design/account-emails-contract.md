@@ -30,6 +30,8 @@ Every template reads the recipient from `params.userId` at render time
 | `two_factor_disabled` | `{ userId, at }` | — | `${APP_URL}/account` |
 | `membership_removed` | `{ userId, orgName, actorName }` | — | none (or `${APP_URL}/`) |
 | `membership_role_changed` | `{ userId, organizationId, role, previousRole }` | — | `${APP_URL}/` |
+| `agency_admin_granted` | `{ userId, at, actorName }` | — | `${APP_URL}/account` (security notice, always sent) |
+| `agency_admin_revoked` | `{ userId, at, actorName }` | — | `${APP_URL}/account` (security notice, always sent) |
 
 Reset token storage: when a secrets key exists, `encryptedToken =
 encryptSecret(token, 'email-outbox:params')`. Without a key nothing is

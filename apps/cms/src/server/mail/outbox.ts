@@ -69,6 +69,8 @@ export type MailTemplate =
   | 'two_factor_disabled'
   | 'membership_removed'
   | 'membership_role_changed'
+  | 'agency_admin_granted'
+  | 'agency_admin_revoked'
   | 'notification'
 
 export type OutboxStatus = 'queued' | 'sending' | 'sent' | 'failed'

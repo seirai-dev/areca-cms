@@ -117,6 +117,8 @@ const ACCOUNT_KIND_LABELS: Partial<Record<string, () => string>> = {
   two_factor_disabled: () => m.agency_mail_kind_two_factor_disabled(),
   membership_removed: () => m.agency_mail_kind_membership_removed(),
   membership_role_changed: () => m.agency_mail_kind_membership_role_changed(),
+  agency_admin_granted: () => m.agency_mail_kind_agency_admin_granted(),
+  agency_admin_revoked: () => m.agency_mail_kind_agency_admin_revoked(),
 }
 
 /** Account email kinds and notification events, as people read them. */
