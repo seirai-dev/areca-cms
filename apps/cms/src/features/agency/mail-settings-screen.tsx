@@ -50,6 +50,7 @@ import {
   mailStatusLabel,
 } from './mail-settings-logic'
 import type { MailEmailKind, TimelineStep } from './mail-settings-logic'
+import { PausedJobsSection } from './paused-jobs-section'
 import { useMailSettings, useRecentEmails } from './use-mail-settings'
 import type { MailActionFailure, MailStatus } from './use-mail-settings'
 import type { RecentEmail } from '#/server/mail/outbox'
@@ -436,6 +437,8 @@ export function MailSettingsScreen() {
       {saved ? <AgencyAlertsSection /> : null}
 
       {saved ? <RecentEmailsSection /> : null}
+
+      {saved ? <PausedJobsSection /> : null}
 
       <ConfirmDialog
         open={envConfirmOpen}
