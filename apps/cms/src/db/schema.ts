@@ -706,6 +706,50 @@ export const opsCounter = pgTable('ops_counter', {
   value: bigint('value', { mode: 'number' }).notNull().default(0),
 })
 
+/**
+ * Notifications owed for a release outcome. Written in the same transaction as
+ * the publication state change, then delivered by a worker loop with retries.
+ * (kind, publication) is unique, so a repeated write adds nothing.
+ */
+export const notificationEvent = pgTable(
+  'notification_event',
+  {
+    id: id(),
+    kind: text('kind')
+      .$type<'publication.live' | 'publication.failed'>()
+      .notNull(),
+    siteId: text('site_id')
+      .notNull()
+      .references(() => site.id, { onDelete: 'cascade' }),
+    publicationId: text('publication_id')
+      .notNull()
+      .references(() => publication.id, { onDelete: 'cascade' }),
+    payload: jsonb('payload')
+      .$type<{ stuck?: boolean }>()
+      .notNull()
+      .default({}),
+    status: text('status')
+      .$type<'pending' | 'done' | 'failed'>()
+      .notNull()
+      .default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    /** Due time while pending. While a loop holds the event, a lease time. */
+    nextAttemptAt: timestamptz('next_attempt_at'),
+    lastError: text('last_error'),
+    createdAt: createdAt(),
+    processedAt: timestamptz('processed_at'),
+  },
+  (t) => [
+    uniqueIndex('notification_event_kind_publication_unique').on(
+      t.kind,
+      t.publicationId,
+    ),
+    index('notification_event_pending_idx')
+      .on(t.nextAttemptAt)
+      .where(sql`${t.status} = 'pending'`),
+  ],
+)
+
 /** Per-site scheduler retry cooldown. Survives process restart. */
 export const schedulerBackoff = pgTable('scheduler_backoff', {
   siteId: text('site_id')

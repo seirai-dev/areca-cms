@@ -41,16 +41,20 @@ const RETENTION_SQL = sql`now() - interval '30 days'`
  * `notified` lists the users who have a row for this subject afterwards,
  * whether it was created now or earlier.
  */
-export async function notify(input: {
+export type NotifyInput = {
   event: EventKey
   organizationId: string | null
   /** Publication id, invitation id, … — makes the dedupe key. */
   subjectId: string
   recipients: NotificationRecipient[]
   payload: NotificationPayload
-}): Promise<{ notified: string[] }> {
+}
+
+export async function notify(
+  input: NotifyInput,
+): Promise<{ notified: string[] }> {
   try {
-    return await deliver(input)
+    return await notifyStrict(input)
   } catch (error) {
     log.error('notification fan-out failed', {
       event: input.event,
@@ -62,13 +66,18 @@ export async function notify(input: {
   }
 }
 
-async function deliver(input: {
-  event: EventKey
-  organizationId: string | null
-  subjectId: string
-  recipients: NotificationRecipient[]
-  payload: NotificationPayload
-}): Promise<{ notified: string[] }> {
+/**
+ * `notify`, but a failure is thrown. Retrying the same call is safe: each
+ * recipient's row and email are created together under the dedupe key, so an
+ * earlier partial run only means fewer rows left to create.
+ */
+export async function notifyStrict(
+  input: NotifyInput,
+): Promise<{ notified: string[] }> {
+  return deliver(input)
+}
+
+async function deliver(input: NotifyInput): Promise<{ notified: string[] }> {
   const { event, organizationId, subjectId, payload } = input
   const seen = new Set<string>()
   const recipients = input.recipients.filter((recipient) => {

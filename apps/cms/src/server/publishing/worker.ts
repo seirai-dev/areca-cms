@@ -24,9 +24,9 @@ import { drainStorageObjectDeletions } from '#/server/assets/storage-cleanup'
 import { cleanupOutbox, processOutbox } from '#/server/mail/outbox'
 import { cleanupNotifications } from '#/server/notifications/notify'
 import {
-  notifyPublicationFailed,
-  notifyPublicationLive,
-} from '#/server/notifications/triggers'
+  processPublicationEvents,
+  queuePublicationEvent,
+} from '#/server/notifications/publication-events'
 import {
   markLoopsStarted,
   markLoopsStopped,
@@ -105,6 +105,7 @@ type WorkerState = {
   schedulerTimer: ReturnType<typeof setInterval>
   cleanupTimer?: ReturnType<typeof setInterval>
   mailTimer?: ReturnType<typeof setInterval>
+  notificationEventsTimer?: ReturnType<typeof setInterval>
   mailCleanupTimer?: ReturnType<typeof setInterval>
   pool?: JobPool
   ticking: boolean
@@ -499,6 +500,13 @@ export async function processJob(
           wasLive: !demo,
         })
         .where(eq(publication.id, pub.id))
+      if (!demo) {
+        await queuePublicationEvent(tx, {
+          kind: 'publication.live',
+          siteId: job.siteId,
+          publicationId: pub.id,
+        })
+      }
       await clearSchedulerFailure(tx, job)
       await tx
         .update(buildJob)
@@ -559,8 +567,6 @@ export async function processJob(
         err: error,
       })
     }
-    // Never throws; runs after the commit above, so it cannot fail the job.
-    await notifyPublicationLive(pub.id)
   } catch (error) {
     if (error instanceof DeploymentNotDispatchedError) dispatchUncertain = false
     const message = redactString(
@@ -639,6 +645,12 @@ async function failJob(
       .update(publication)
       .set({ status: dispatchUncertain ? 'building' : 'failed' })
       .where(eq(publication.id, publicationId))
+    await queuePublicationEvent(tx, {
+      kind: 'publication.failed',
+      siteId: job.siteId,
+      publicationId,
+      payload: { stuck: dispatchUncertain },
+    })
     return true
   })
   if (!recorded) return
@@ -654,7 +666,6 @@ async function failJob(
       meta: { jobId: job.id, publicationId, error, dispatchUncertain },
     })
   }
-  await notifyPublicationFailed(publicationId, { stuck: dispatchUncertain })
 }
 
 /** Owner/admin entry point: resume the same dispatch, never create another. */
@@ -815,6 +826,12 @@ export async function resolveUncertainDeploymentJob(input: {
       .update(publication)
       .set({ status: 'failed' })
       .where(eq(publication.id, resolved.publicationId))
+    await queuePublicationEvent(tx, {
+      kind: 'publication.failed',
+      siteId: resolved.siteId,
+      publicationId: resolved.publicationId,
+      payload: { stuck: false },
+    })
     await audit(
       {
         organizationId: existingSite.organizationId,
@@ -834,7 +851,6 @@ export async function resolveUncertainDeploymentJob(input: {
     )
     return resolved
   })
-  await notifyPublicationFailed(result.publicationId, { stuck: false })
   return result
 }
 
@@ -974,23 +990,20 @@ export async function recoverStaleJobs(
         .where(
           and(eq(buildJob.id, job.id), eq(buildJob.attempts, job.attempts)),
         )
+      const stuck = Boolean(job.dispatchStartedAt || job.status === 'deploying')
       await tx
         .update(publication)
-        .set({
-          status:
-            job.dispatchStartedAt || job.status === 'deploying'
-              ? 'building'
-              : 'failed',
-        })
+        .set({ status: stuck ? 'building' : 'failed' })
         .where(eq(publication.id, job.publicationId))
+      await queuePublicationEvent(tx, {
+        kind: 'publication.failed',
+        siteId: job.siteId,
+        publicationId: job.publicationId,
+        payload: { stuck },
+      })
     }
     return stale
   })
-  for (const job of staleJobs) {
-    await notifyPublicationFailed(job.publicationId, {
-      stuck: Boolean(job.dispatchStartedAt || job.status === 'deploying'),
-    })
-  }
   return staleJobs
 }
 
@@ -1004,6 +1017,8 @@ export type WorkerLoopDeps = {
   cleanup?: () => Promise<unknown>
   /** Sends due emails from the outbox, every 5 s. */
   mail?: () => Promise<unknown>
+  /** Delivers queued release notifications, every 5 s. */
+  notificationEvents?: () => Promise<unknown>
   /** Deletes outbox rows past retention, hourly. */
   mailCleanup?: () => Promise<unknown>
 }
@@ -1089,6 +1104,21 @@ export function startWorkerLoops(
     cleanup()
   }
 
+  if (deps.notificationEvents) {
+    let delivering = false
+    state.notificationEventsTimer = setInterval(() => {
+      if (delivering) return
+      delivering = true
+      void deps.notificationEvents!()
+        .catch((error) =>
+          logger.error('notification events tick failed', { err: error }),
+        )
+        .finally(() => {
+          delivering = false
+        })
+    }, MAIL_INTERVAL_MS)
+  }
+
   if (deps.mail) {
     let sending = false
     state.mailTimer = setInterval(() => {
@@ -1165,6 +1195,7 @@ export function startWorker({
       schedule: () => runSchedulerTick(),
       cleanup: () => drainStorageObjectDeletions(),
       mail: () => processOutbox(),
+      notificationEvents: () => processPublicationEvents(),
       mailCleanup: () => Promise.all([cleanupOutbox(), cleanupNotifications()]),
     },
     { intervalMs },
@@ -1205,6 +1236,7 @@ export function stopWorkerLoops(state: WorkerState) {
   clearInterval(state.schedulerTimer)
   clearInterval(state.cleanupTimer)
   clearInterval(state.mailTimer)
+  clearInterval(state.notificationEventsTimer)
   clearInterval(state.mailCleanupTimer)
   markLoopsStopped()
 }
