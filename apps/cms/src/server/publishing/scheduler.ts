@@ -272,6 +272,8 @@ async function recordRequestFailure(
             nextAttemptAt: null,
             lastAttemptAt: at,
             lastError: null,
+            // A new approval is a new cycle, so an old dismissal does not carry over.
+            dismissedAt: null,
           },
         })
     } else if (

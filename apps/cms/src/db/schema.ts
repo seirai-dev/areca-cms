@@ -715,6 +715,8 @@ export const storageObjectDeletion = pgTable(
     lastError: text('last_error'),
     attempts: integer('attempts').notNull().default(0),
     nextAttemptAt: timestamptz('next_attempt_at'),
+    /** Set when an operator dismisses a paused deletion. */
+    dismissedAt: timestamptz('dismissed_at'),
   },
   (t) => [
     // The drain takes the oldest unpaused row. Ordering by created_at lets the
@@ -785,6 +787,8 @@ export const schedulerBackoff = pgTable('scheduler_backoff', {
   failureCount: integer('failure_count').notNull().default(0),
   approvalFingerprint: text('approval_fingerprint'),
   nextAttemptAt: timestamptz('next_attempt_at'),
+  /** Set when an operator dismisses the paused schedule. */
+  dismissedAt: timestamptz('dismissed_at'),
 })
 
 /**

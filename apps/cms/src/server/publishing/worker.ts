@@ -23,6 +23,7 @@ import { audit } from '#/server/audit'
 import { drainStorageObjectDeletions } from '#/server/assets/storage-cleanup'
 import { cleanupOutbox, processOutbox } from '#/server/mail/outbox'
 import { cleanupNotifications } from '#/server/notifications/notify'
+import { autoRetryPausedJobs } from '#/server/ops/paused-jobs'
 import { runRetention } from '#/server/ops/retention'
 import {
   processPublicationEvents,
@@ -1288,8 +1289,14 @@ export function startWorker({
       mail: () => processOutbox({ signal: abort.signal }),
       notificationEvents: () =>
         processPublicationEvents({ signal: abort.signal }),
+      // Hourly maintenance: prune old rows, then retry paused work.
       mailCleanup: () =>
-        Promise.all([cleanupOutbox(), cleanupNotifications(), runRetention()]),
+        Promise.all([
+          cleanupOutbox(),
+          cleanupNotifications(),
+          runRetention(),
+          autoRetryPausedJobs(),
+        ]),
     },
     { intervalMs },
   )
