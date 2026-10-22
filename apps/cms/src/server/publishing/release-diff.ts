@@ -4,7 +4,13 @@ import { db } from '#/db'
 import { collection, entry, publication, site, user } from '#/db/schema'
 import { entryTitle } from '#/lib/content/utils'
 import { globalsAsEntryLists } from '#/lib/globals'
-import type { Field, SeoMeta, Snapshot, SnapshotEntry } from '#/lib/types'
+import type {
+  Field,
+  SeoMeta,
+  SiteLanguages,
+  Snapshot,
+  SnapshotEntry,
+} from '#/lib/types'
 import { buildSnapshot } from '#/server/content/snapshot'
 
 /**
@@ -33,12 +39,27 @@ export type ScheduledUpcoming = {
   data: Record<string, unknown>
 }
 
+/**
+ * Site language changes that the next go live would publish. Schema-only
+ * changes are not here: they do not change what visitors see.
+ */
+export type LanguageReleaseChange = {
+  /** Languages that the next release ships and the live site does not. */
+  added: string[]
+  /** Languages the live site shows that the next release drops. */
+  removed: string[]
+  /** The main language before and after, when it changed. */
+  mainChanged: { from: string; to: string } | null
+}
+
 export type ApprovedReleaseDiff = {
   pendingCount: number
   adds: ReleaseDiffEntry[]
   updates: ReleaseDiffEntry[]
   removals: ReleaseDiffEntry[]
   scheduledUpcoming: ScheduledUpcoming[]
+  /** Null when the languages are unchanged, or there is no live baseline to compare. */
+  languages: LanguageReleaseChange | null
   liveEntryIds: string[]
   liveSlugsByEntryId: Record<string, string>
 }
@@ -174,9 +195,36 @@ export function pendingCountFromDiff(input: {
   adds: number
   updates: number
   removals: number
+  languages?: boolean
 }) {
   if (!input.candidateOk) return input.hasBaseline ? 1 : 0
-  return input.adds + input.updates + input.removals
+  return input.adds + input.updates + input.removals + (input.languages ? 1 : 0)
+}
+
+/** Two or more languages make a multilingual site; one language is no setting. */
+function multilingual(
+  languages: SiteLanguages | null | undefined,
+): SiteLanguages | null {
+  return languages && languages.all.length > 1 ? languages : null
+}
+
+/** Language change between the live baseline and the candidate, or null. */
+export function diffLanguages(
+  candidate: SiteLanguages | null | undefined,
+  live: SiteLanguages | null | undefined,
+): LanguageReleaseChange | null {
+  const next = multilingual(candidate)
+  const prev = multilingual(live)
+  const nextAll = next?.all ?? []
+  const prevAll = prev?.all ?? []
+  const added = nextAll.filter((locale) => !prevAll.includes(locale))
+  const removed = prevAll.filter((locale) => !nextAll.includes(locale))
+  const mainChanged =
+    prev && next && prev.main !== next.main
+      ? { from: prev.main, to: next.main }
+      : null
+  if (added.length === 0 && removed.length === 0 && !mainChanged) return null
+  return { added, removed, mainChanged }
 }
 
 /**
@@ -341,6 +389,10 @@ export async function diffApprovedRelease(
   const { adds, updates, removals } = built.ok
     ? diffSnapshotCollections(candidate, baselineContent)
     : { adds: [], updates: [], removals: [] }
+  const languages =
+    built.ok && baseline
+      ? diffLanguages(built.snapshot.languages, baseline.languages)
+      : null
 
   const pendingIds = new Set(
     [...adds, ...updates, ...removals].map((item) => item.id),
@@ -357,11 +409,13 @@ export async function diffApprovedRelease(
       adds: adds.length,
       updates: updates.length,
       removals: removals.length,
+      languages: languages !== null,
     }),
     adds,
     updates,
     removals,
     scheduledUpcoming,
+    languages,
     liveEntryIds: [...liveIndex.keys()],
     liveSlugsByEntryId,
   }
@@ -377,9 +431,15 @@ function titleOf(
   return entryTitle(data, col?.fields ?? [], slug)
 }
 
-export async function listPendingReleaseChanges(
+export type PendingRelease = {
+  changes: PendingReleaseChange[]
+  languages: LanguageReleaseChange | null
+}
+
+/** Entry and section changes plus the language change, from one diff. */
+export async function listPendingRelease(
   siteId: string,
-): Promise<PendingReleaseChange[]> {
+): Promise<PendingRelease> {
   const diff = await diffApprovedRelease(siteId)
   const collections = await db
     .select({
@@ -468,5 +528,11 @@ export async function listPendingReleaseChanges(
     return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
   })
 
-  return changes
+  return { changes, languages: diff.languages }
+}
+
+export async function listPendingReleaseChanges(
+  siteId: string,
+): Promise<PendingReleaseChange[]> {
+  return (await listPendingRelease(siteId)).changes
 }

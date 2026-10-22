@@ -36,6 +36,7 @@ import {
   sampleRichText,
 } from '#/server/content/test-utils'
 import { uploadAssetFromUrl } from '#/server/assets/remote'
+import { buildSnapshot } from '#/server/content/snapshot'
 import type * as RemoteModule from '#/server/assets/remote'
 
 import { createMcpKey, revokeMcpKey } from './keys'
@@ -835,6 +836,54 @@ describe.skipIf(!hasDb)('MCP server', () => {
     const status = await call(client, 'get_release_status', {})
     expect(status.isError).toBe(false)
     expect(status.data?.publishingMode).toBe('demo')
+  })
+
+  it('reports a language change in get_release_status', async () => {
+    const { token } = await world.keyFor(world.owner, 'owner', {
+      name: 'Language status',
+    })
+    const client = await connect(token)
+    // Earlier tests may leave the site in demo mode; this one compares to live.
+    await db
+      .update(site)
+      .set({
+        publishingMode: 'production',
+        languages: { main: 'en', all: ['en', 'nl'] },
+      })
+      .where(eq(site.id, world.ctx.site.id))
+    const built = await buildSnapshot(world.ctx.site.id)
+    if (!built.ok) throw new Error(built.errors.join('\n'))
+    const publicationId = crypto.randomUUID()
+    await db.insert(publication).values({
+      id: publicationId,
+      siteId: world.ctx.site.id,
+      snapshot: { ...built.snapshot, publicationId },
+      snapshotHash: built.hash,
+      status: 'live',
+      wasLive: true,
+    })
+    try {
+      const before = await call(client, 'get_release_status', {})
+      expect(before.data?.languageChange).toBeNull()
+
+      await db
+        .update(site)
+        .set({ languages: { main: 'en', all: ['en', 'nl', 'de'] } })
+        .where(eq(site.id, world.ctx.site.id))
+      const after = await call(client, 'get_release_status', {})
+      expect(after.data?.languageChange).toEqual({
+        added: ['de'],
+        removed: [],
+        mainChanged: null,
+      })
+      expect(after.data?.pendingCount).toBe(1)
+    } finally {
+      await db.delete(publication).where(eq(publication.id, publicationId))
+      await db
+        .update(site)
+        .set({ languages: null })
+        .where(eq(site.id, world.ctx.site.id))
+    }
   })
 
   it('lets an agency admin change the collection schema, scoped to its site', async () => {

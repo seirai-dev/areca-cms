@@ -6,6 +6,7 @@ import { resolveEntrySeo } from '#/lib/seo'
 
 import {
   comparisonSnapshot,
+  diffLanguages,
   diffSnapshotCollections,
   pendingCountFromDiff,
   stableJson,
@@ -253,7 +254,67 @@ describe('translation-only changes', () => {
   })
 })
 
+describe('diffLanguages', () => {
+  const bilingual = { main: 'en', all: ['en', 'nl'] }
+
+  it('is null when the language set and main language are unchanged', () => {
+    expect(diffLanguages(bilingual, bilingual)).toBeNull()
+    expect(diffLanguages(null, null)).toBeNull()
+  })
+
+  it('reports an added language', () => {
+    expect(
+      diffLanguages({ main: 'en', all: ['en', 'nl', 'de'] }, bilingual),
+    ).toEqual({ added: ['de'], removed: [], mainChanged: null })
+  })
+
+  it('reports a removed language', () => {
+    expect(
+      diffLanguages(bilingual, { main: 'en', all: ['en', 'nl', 'de'] }),
+    ).toEqual({
+      added: [],
+      removed: ['de'],
+      mainChanged: null,
+    })
+  })
+
+  it('reports a main-language change, keeping the set when it is unchanged', () => {
+    expect(diffLanguages({ main: 'nl', all: ['nl', 'en'] }, bilingual)).toEqual(
+      {
+        added: [],
+        removed: [],
+        mainChanged: { from: 'en', to: 'nl' },
+      },
+    )
+  })
+
+  it('reports enabling languages on a single-language site as additions', () => {
+    expect(diffLanguages(bilingual, null)).toEqual({
+      added: ['en', 'nl'],
+      removed: [],
+      mainChanged: null,
+    })
+  })
+
+  it('treats a one-language setting as no multilingual setting', () => {
+    expect(diffLanguages({ main: 'en', all: ['en'] }, null)).toBeNull()
+  })
+})
+
 describe('pendingCountFromDiff', () => {
+  it('counts a language change as one pending item', () => {
+    expect(
+      pendingCountFromDiff({
+        candidateOk: true,
+        hasBaseline: true,
+        adds: 0,
+        updates: 0,
+        removals: 0,
+        languages: true,
+      }),
+    ).toBe(1)
+  })
+
   it('counts adds, updates, and removals when the candidate built', () => {
     expect(
       pendingCountFromDiff({

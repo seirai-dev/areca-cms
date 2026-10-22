@@ -11,6 +11,7 @@ import {
   Minus,
   RocketLaunch,
   Scroll,
+  Translate,
   WarningCircle,
   XCircle,
 } from '@phosphor-icons/react'
@@ -50,6 +51,7 @@ import {
 } from '#/components/ui/timeline'
 import { Hint } from '#/components/ui/tooltip'
 import { usePanel } from '#/features/shell/panel'
+import { uiLanguageName } from '#/lib/site-languages'
 import { formatRelativeTime } from '#/lib/relative-time'
 import type { MeSite } from '#/lib/site-nav'
 import { EASE_STANDARD } from '#/lib/motion'
@@ -82,7 +84,7 @@ import {
 } from './use-go-live'
 import { canGoLive } from './go-live-gate'
 import { usePendingEntries } from './use-pending-entries'
-import type { PendingEntry } from './use-pending-entries'
+import type { PendingEntry, PendingLanguages } from './use-pending-entries'
 import { useReleaseStatus } from './use-release-status'
 import type { ReleaseStatus } from './use-release-status'
 
@@ -209,9 +211,9 @@ function GoLivePanelBody({
       <Section
         title={m.golive_whats_changing()}
         actions={
-          pending.ready.length > 0 ? (
+          pending.changeCount > 0 ? (
             <span className="text-caption font-normal text-text-muted tnum">
-              {pending.ready.length}
+              {pending.changeCount}
             </span>
           ) : null
         }
@@ -447,7 +449,7 @@ function WhatsChanging({
       </div>
     )
   }
-  if (pending.entries.length === 0) {
+  if (pending.entries.length === 0 && !pending.languages) {
     return (
       <p className="rounded-[12px] border border-dashed border-border-strong px-4 py-4 text-center text-callout text-text-secondary">
         {m.golive_nothing_changing()}
@@ -456,12 +458,55 @@ function WhatsChanging({
   }
   return (
     <ul className="-mx-2 grid" data-testid="golive-changes">
+      {pending.languages ? (
+        <li key="languages">
+          <LanguageRow languages={pending.languages} />
+        </li>
+      ) : null}
       {pending.entries.map((entry) => (
         <li key={`${entry.kind}-${entry.id}`}>
           <PendingRow siteId={siteId} entry={entry} />
         </li>
       ))}
     </ul>
+  )
+}
+
+/** The site's language set or main language changes with the next go live. */
+function LanguageRow({ languages }: { languages: PendingLanguages }) {
+  const parts = [
+    ...languages.added.map((locale) =>
+      m.golive_language_added({ language: uiLanguageName(locale) }),
+    ),
+    ...languages.removed.map((locale) =>
+      m.golive_language_removed({ language: uiLanguageName(locale) }),
+    ),
+    ...(languages.mainChanged
+      ? [
+          m.golive_language_main({
+            from: uiLanguageName(languages.mainChanged.from),
+            to: uiLanguageName(languages.mainChanged.to),
+          }),
+        ]
+      : []),
+  ]
+  return (
+    <div
+      className="flex min-h-11 items-center gap-3 rounded-[10px] px-2 py-1.5"
+      data-testid="golive-language-change"
+    >
+      <span className="grid size-6 shrink-0 place-content-center">
+        <Translate className="size-4 text-icon-accent" />
+      </span>
+      <span className="grid min-w-0 flex-1">
+        <span className="text-[14px] leading-5 font-medium text-text-primary">
+          {m.golive_languages_row()}
+        </span>
+        <span className="text-[12px] leading-4 text-text-muted">
+          {parts.join(' · ')}
+        </span>
+      </span>
+    </div>
   )
 }
 
