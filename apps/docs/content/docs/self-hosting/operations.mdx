@@ -183,7 +183,7 @@ Setting a value to `0` turns that timeout off. Database migrations run at contai
 
 These tasks keep an instance healthy over time:
 
-- **Back up the database and the encryption keys together.** Areca does not schedule backups for you. Keep the database copy, the S3 objects and the encryption keys in step, and test a restore. See [backup and recovery](/docs/self-hosting/backup-and-recovery).
+- **Back up the database and the encryption keys together.** Areca does not schedule backups for you. Take a daily dump with the bucket copy, a full backup before every upgrade, and a quarterly restore drill. The dump and the bucket must come from the same day, and losing `SECRETS_ENCRYPTION_KEY` makes the saved SMTP password unreadable. See [backup and recovery](/docs/self-hosting/backup-and-recovery).
 - **Check readiness after each deploy or restart.** Confirm `/api/health/ready` returns `200`, and that the queue is empty or moving.
 - **Review failed releases.** A failed release leaves the previous release live, but it needs a cause and a fix before the next Go live. See the [publishing pipeline](/docs/self-hosting/publishing-pipeline).
 - **Rotate credentials on a schedule.** The database password, the S3 access keys, the site tokens and the Dokploy API keys all have a rotation procedure. See [secrets](/docs/security/secrets).
