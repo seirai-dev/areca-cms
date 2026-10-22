@@ -174,25 +174,23 @@ describe.skipIf(!isolated)(
       const existing = await makeUser()
       const org = await makeOrg()
       const invite = await makeInvite(existing, org.id)
+      const again = {
+        name: 'Again',
+        email: existing.email,
+        password: 'password123',
+        invitationToken: invite.token,
+      }
+      const stranger = {
+        name: 'Stranger',
+        email: `${crypto.randomUUID()}@audit.test`,
+        password: 'password123',
+        invitationToken: 'incorrect',
+      }
       const withInvite = await auth.api
-        .signUpEmail({
-          body: {
-            name: 'Again',
-            email: existing.email,
-            password: 'password123',
-            invitationToken: invite.token,
-          },
-        })
+        .signUpEmail({ body: again })
         .catch((error: unknown) => error)
       const withoutInvite = await auth.api
-        .signUpEmail({
-          body: {
-            name: 'Stranger',
-            email: `${crypto.randomUUID()}@audit.test`,
-            password: 'password123',
-            invitationToken: 'incorrect',
-          },
-        })
+        .signUpEmail({ body: stranger })
         .catch((error: unknown) => error)
       expect(withInvite).toMatchObject({ statusCode: 403 })
       expect(withoutInvite).toMatchObject({ statusCode: 403 })
