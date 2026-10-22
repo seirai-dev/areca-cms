@@ -9,7 +9,6 @@
  */
 import {
   and,
-  count,
   desc,
   eq,
   gt,
@@ -25,7 +24,13 @@ import {
 } from 'drizzle-orm'
 
 import { db } from '#/db'
-import { emailOutbox, invitation, mailSettings, user } from '#/db/schema'
+import {
+  emailDeliveryAttempt,
+  emailOutbox,
+  invitation,
+  mailSettings,
+  user,
+} from '#/db/schema'
 import { getBranding } from '#/server/admin/branding'
 import { createLogger } from '#/server/log'
 
@@ -39,6 +44,7 @@ import {
 import type { MailLogContext } from './errors.ts'
 import { formatFrom } from './headers.ts'
 import {
+  failureStreak,
   healthWindowStart,
   invitationDeliveryPatch,
   nextStep,
@@ -342,6 +348,9 @@ export async function listRecentEmails(opts: {
   }))
 }
 
+/** Attempts read for the failure streak. Longer streaks read the same as this. */
+const STREAK_SAMPLE = 50
+
 export async function getMailHealth(): Promise<MailHealth> {
   // Test emails use unsaved settings, so they say nothing about live sending.
   const live = ne(emailOutbox.kind, 'test')
@@ -354,33 +363,42 @@ export async function getMailHealth(): Promise<MailHealth> {
     .from(mailSettings)
     .limit(1)
   // Failures count from the last success, or from the last settings change
-  // (a new server deserves a fresh start). `createdAt` stands in for the
-  // attempt time because the outbox has no updated column.
+  // (a new server deserves a fresh start).
   const since = healthWindowStart(
     latest?.sentAt ?? null,
     settings?.updatedAt ?? null,
   )
-  const failing = and(
-    live,
-    isNotNull(emailOutbox.lastErrorCode),
-    or(eq(emailOutbox.status, 'queued'), eq(emailOutbox.status, 'failed')),
-    gt(emailOutbox.createdAt, since),
-  )
-  const [counted] = await db
-    .select({ value: count() })
-    .from(emailOutbox)
-    .where(failing)
-  const consecutiveFailures = counted?.value ?? 0
-  const [last] = await db
-    .select()
-    .from(emailOutbox)
-    .where(failing)
-    .orderBy(desc(emailOutbox.createdAt))
-    .limit(1)
+  // Counted per delivery attempt, so one row that failed three times counts
+  // three times, and a row that has not been tried yet counts nothing.
+  const recent = await db
+    .select({
+      outcome: emailDeliveryAttempt.outcome,
+      createdAt: emailDeliveryAttempt.createdAt,
+      errorCode: emailDeliveryAttempt.errorCode,
+      errorParams: emailDeliveryAttempt.errorParams,
+    })
+    .from(emailDeliveryAttempt)
+    .where(gt(emailDeliveryAttempt.createdAt, since))
+    .orderBy(
+      desc(emailDeliveryAttempt.createdAt),
+      desc(emailDeliveryAttempt.attempt),
+    )
+    .limit(STREAK_SAMPLE)
+  const { consecutiveFailures, last } = failureStreak(recent)
   return {
     consecutiveFailures,
     lastFailureAt: last?.createdAt ?? null,
-    lastFailure: last ? errorOf(last) : null,
+    lastFailure:
+      last?.errorCode && last.errorParams
+        ? errorOfAttempt(last.errorCode, last.errorParams)
+        : null,
+  }
+}
+
+function errorOfAttempt(code: string, params: Record<string, string>) {
+  return {
+    code: code as MailFailureCode,
+    message: mailFailureMessage({ code: code as MailFailureCode, params }),
   }
 }
 
@@ -727,9 +745,9 @@ async function recordSent(
   providerMessageId: string,
 ): Promise<SendResult> {
   const now = new Date()
-  const owned = await db
-    .update(emailOutbox)
-    .set({
+  const written = await writeOutcome(
+    row,
+    {
       status: 'sent',
       sentAt: now,
       providerMessageId,
@@ -738,10 +756,10 @@ async function recordSent(
       lastErrorCode: null,
       lastErrorParams: null,
       lastError: null,
-    })
-    .where(ownedBy(row))
-    .returning({ id: emailOutbox.id })
-  if (owned.length === 0) return staleOutcome(row)
+    },
+    { outcome: 'sent' },
+  )
+  if (!written) return staleOutcome(row)
   await syncInvitation(row, invitationDeliveryPatch('sent', null, now))
   return { status: 'sent', id: row.id }
 }
@@ -755,18 +773,23 @@ async function recordFailure(
   const now = new Date()
   const message = mailFailureMessage(failure)
   const step = nextStep(failure, row.attempts, now)
+  const attempt = {
+    outcome: step.retry ? ('retrying' as const) : ('failed' as const),
+    errorCode: failure.code,
+    errorParams: failure.params,
+  }
   if (step.retry) {
-    const owned = await db
-      .update(emailOutbox)
-      .set({
+    const written = await writeOutcome(
+      row,
+      {
         status: 'queued',
         nextAttemptAt: step.nextAttemptAt,
         leaseUntil: null,
         ...errorColumns(failure),
-      })
-      .where(ownedBy(row))
-      .returning({ id: emailOutbox.id })
-    if (owned.length === 0) return staleOutcome(row)
+      },
+      attempt,
+    )
+    if (!written) return staleOutcome(row)
     await syncInvitation(row, invitationDeliveryPatch('queued', message, now))
     return {
       status: 'retrying',
@@ -775,19 +798,50 @@ async function recordFailure(
       nextAttemptAt: step.nextAttemptAt,
     }
   }
-  const owned = await db
-    .update(emailOutbox)
-    .set({
+  const written = await writeOutcome(
+    row,
+    {
       status: 'failed',
       nextAttemptAt: null,
       leaseUntil: null,
       ...errorColumns(failure),
-    })
-    .where(ownedBy(row))
-    .returning({ id: emailOutbox.id })
-  if (owned.length === 0) return staleOutcome(row)
+    },
+    attempt,
+  )
+  if (!written) return staleOutcome(row)
   await syncInvitation(row, invitationDeliveryPatch('failed', message, now))
   return { status: 'failed', id: row.id, failure }
+}
+
+/**
+ * Writes the row's new state and its attempt record in one transaction. Returns
+ * false, and writes nothing, when this claim no longer owns the row.
+ */
+async function writeOutcome(
+  row: OutboxRow,
+  patch: Partial<typeof emailOutbox.$inferInsert>,
+  attempt: {
+    outcome: 'sent' | 'retrying' | 'failed'
+    errorCode?: string
+    errorParams?: Record<string, string>
+  },
+): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const owned = await tx
+      .update(emailOutbox)
+      .set(patch)
+      .where(ownedBy(row))
+      .returning({ id: emailOutbox.id })
+    if (owned.length === 0) return false
+    await tx.insert(emailDeliveryAttempt).values({
+      outboxId: row.id,
+      attempt: row.attempts,
+      outcome: attempt.outcome,
+      errorCode: attempt.errorCode ?? null,
+      errorParams: attempt.errorParams ?? null,
+    })
+    return true
+  })
 }
 
 /**

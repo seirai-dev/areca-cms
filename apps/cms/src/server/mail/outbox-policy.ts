@@ -53,3 +53,29 @@ export function healthWindowStart(
     Math.max(lastLiveSentAt?.getTime() ?? 0, settingsUpdatedAt?.getTime() ?? 0),
   )
 }
+
+/**
+ * Consecutive failed attempts, newest first, up to the first success. Pure:
+ * `attempts` are in newest-first order. Returns the streak and the newest
+ * failure, if any.
+ */
+export function failureStreak(
+  attempts: ReadonlyArray<{
+    outcome: 'sent' | 'retrying' | 'failed'
+    createdAt: Date
+    errorCode: string | null
+    errorParams: Record<string, string> | null
+  }>,
+): {
+  consecutiveFailures: number
+  last: (typeof attempts)[number] | null
+} {
+  let consecutiveFailures = 0
+  let last: (typeof attempts)[number] | null = null
+  for (const attempt of attempts) {
+    if (attempt.outcome === 'sent') break
+    consecutiveFailures++
+    last ??= attempt
+  }
+  return { consecutiveFailures, last }
+}

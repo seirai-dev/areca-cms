@@ -2,11 +2,11 @@
 import type * as MailConfig from '#/server/mail/config'
 import type * as MailTransport from '#/server/mail/transport'
 
-import { eq, inArray, sql } from 'drizzle-orm'
+import { asc, eq, inArray, sql } from 'drizzle-orm'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { db } from '#/db'
-import { emailOutbox, user } from '#/db/schema'
+import { emailDeliveryAttempt, emailOutbox, user } from '#/db/schema'
 import { getBranding } from '#/server/admin/branding'
 
 import {
@@ -290,6 +290,21 @@ describe.skipIf(!hasDb)('email outbox', () => {
     expect(recent?.error?.message).toContain(
       "Couldn't reach localhost on port 1",
     )
+
+    // Each outcome is one attempt record: the banner counts these.
+    const attempts = await db
+      .select({
+        attempt: emailDeliveryAttempt.attempt,
+        outcome: emailDeliveryAttempt.outcome,
+      })
+      .from(emailDeliveryAttempt)
+      .where(eq(emailDeliveryAttempt.outboxId, id))
+      .orderBy(asc(emailDeliveryAttempt.attempt))
+    expect(attempts).toEqual([
+      { attempt: 1, outcome: 'retrying' },
+      { attempt: 2, outcome: 'retrying' },
+      { attempt: 3, outcome: 'failed' },
+    ])
   })
 
   it('fails a non-retryable error (no mail configured) on the first attempt', async () => {

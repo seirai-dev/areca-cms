@@ -596,6 +596,27 @@ export const emailOutbox = pgTable(
 )
 
 /**
+ * One row per delivery attempt that reached an outcome. Test sends are not
+ * recorded. The mail failure banner counts consecutive failed attempts here.
+ * Deleted with their outbox row (30-day retention).
+ */
+export const emailDeliveryAttempt = pgTable(
+  'email_delivery_attempt',
+  {
+    id: id(),
+    outboxId: text('outbox_id')
+      .notNull()
+      .references(() => emailOutbox.id, { onDelete: 'cascade' }),
+    attempt: integer('attempt').notNull(),
+    outcome: text('outcome').$type<'sent' | 'retrying' | 'failed'>().notNull(),
+    errorCode: text('error_code'),
+    errorParams: jsonb('error_params').$type<Record<string, string>>(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('email_delivery_attempt_created_at_idx').on(t.createdAt)],
+)
+
+/**
  * Notification defaults and locks. `scope` agency rows have no organization;
  * agency rows also hold the agency-role ('agency') alerts.
  */
