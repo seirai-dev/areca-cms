@@ -27,43 +27,80 @@ export async function assertEmailMayRegister(
 ) {
   const normalized = email.trim().toLowerCase()
 
-  // An empty instance is bootstrapped only by token-authorized setup.
-  const [anyUser] = await db.select({ id: user.id }).from(user).limit(1)
-  if (!anyUser) throw registrationDenied()
+  if (!(await isBootstrapped())) throw registrationDenied()
   if (!proof?.passwordSignup && !proof?.emailVerified)
     throw registrationDenied()
   if (proof.passwordSignup && typeof proof.invitationToken !== 'string') {
     throw registrationDenied()
   }
 
-  const [existing] = await db
-    .select({ id: user.id })
-    .from(user)
-    .where(eq(sql`lower(${user.email})`, normalized))
-    .limit(1)
-  if (existing) {
+  if (await accountExists(normalized)) {
     return
   }
 
+  if (
+    await hasPendingInvitation(
+      normalized,
+      proof?.passwordSignup ? proof.invitationToken : undefined,
+    )
+  ) {
+    return
+  }
+
+  throw registrationDenied()
+}
+
+/**
+ * Runs before Better Auth looks the email up, so an attacker cannot tell
+ * "account exists" from "no invitation" by the sign-up response. Password
+ * sign-up goes ahead only with a pending invitation for that email and no
+ * account yet; every other outcome is the same refusal.
+ */
+export async function assertPasswordSignupMayProceed(
+  email: unknown,
+  invitationToken: unknown,
+) {
+  if (typeof email !== 'string' || typeof invitationToken !== 'string') {
+    throw registrationDenied()
+  }
+  const normalized = email.trim().toLowerCase()
+  if (!(await isBootstrapped())) throw registrationDenied()
+  if (await accountExists(normalized)) throw registrationDenied()
+  if (!(await hasPendingInvitation(normalized, invitationToken))) {
+    throw registrationDenied()
+  }
+}
+
+async function isBootstrapped() {
+  // An empty instance is bootstrapped only by token-authorized setup.
+  const [anyUser] = await db.select({ id: user.id }).from(user).limit(1)
+  return Boolean(anyUser)
+}
+
+async function accountExists(normalizedEmail: string) {
+  const [existing] = await db
+    .select({ id: user.id })
+    .from(user)
+    .where(eq(sql`lower(${user.email})`, normalizedEmail))
+    .limit(1)
+  return Boolean(existing)
+}
+
+/** `token` narrows the match to one invitation link (password sign-up). */
+async function hasPendingInvitation(normalizedEmail: string, token: unknown) {
   const [invite] = await db
     .select({ id: invitation.id })
     .from(invitation)
     .where(
       and(
-        eq(sql`lower(${invitation.email})`, normalized),
+        eq(sql`lower(${invitation.email})`, normalizedEmail),
         isNull(invitation.acceptedAt),
         gt(invitation.expiresAt, new Date()),
-        proof?.passwordSignup
-          ? eq(invitation.token, proof.invitationToken as string)
-          : undefined,
+        typeof token === 'string' ? eq(invitation.token, token) : undefined,
       ),
     )
     .limit(1)
-  if (invite) {
-    return
-  }
-
-  throw registrationDenied()
+  return Boolean(invite)
 }
 
 function registrationDenied() {

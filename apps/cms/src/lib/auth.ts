@@ -33,7 +33,10 @@ import {
   recordLocalMfaForToken,
   requireAdminLocalMfa,
 } from '#/server/security/local-mfa'
-import { assertEmailMayRegister } from '#/server/auth/registration-gate'
+import {
+  assertEmailMayRegister,
+  assertPasswordSignupMayProceed,
+} from '#/server/auth/registration-gate'
 import {
   MCP_ACCESS_TOKEN_PREFIX,
   MCP_ACCESS_TOKEN_TTL_SECONDS,
@@ -268,6 +271,12 @@ const authBase = betterAuth({
   },
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
+      // Checked before Better Auth looks the email up, so a refused sign-up
+      // never reveals whether the address already has an account.
+      if (ctx.path === '/sign-up/email') {
+        const body = isRecord(ctx.body) ? ctx.body : {}
+        await assertPasswordSignupMayProceed(body.email, body.invitationToken)
+      }
       // Each MCP site is its own protected resource. Create its row when the
       // authorization request names it, so the plugin accepts the resource.
       if (ctx.path === '/oauth2/authorize') {
