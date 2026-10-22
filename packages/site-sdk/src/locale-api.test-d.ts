@@ -1,7 +1,8 @@
 import { describe, expectTypeOf, it } from 'vitest'
 import { defineSiteContent } from './config.js'
 import { createContent } from './content.js'
-import type { Content, Entry, Locale, SeoMeta } from './index.js'
+import type { Content, Entry, Href, Locale, SeoMeta } from './index.js'
+import type { RegisteredGlobalSchema } from './schema-types.js'
 import { matchLocale, seoHead } from './index.js'
 import { schema } from './test-fixtures/schema.js'
 
@@ -69,8 +70,8 @@ describe('collection api: language options', () => {
 })
 
 describe('content: languages and scopes', () => {
-  it('in(locale) returns the same content shape', () => {
-    expectTypeOf(content.in('en')).toEqualTypeOf<Content<S>>()
+  it('in(locale) returns the same content shape, scoped to that language', () => {
+    expectTypeOf(content.in('en')).toEqualTypeOf<Content<S, RegisteredGlobalSchema, 'en'>>()
     // @ts-expect-error de is not a registered language
     content.in('de')
   })
@@ -179,3 +180,59 @@ describe('defineSiteContent: languages', () => {
   })
 
 })
+
+// A collection with a Dutch route. Its English route is the default `route`.
+const localized = {
+  vacancies: {
+    key: 'vacancies',
+    label: 'Vacancies',
+    route: '/vacancies/$slug',
+    routes: { nl: '/vacatures/$slug' },
+    fields: {
+      slug: { key: 'slug', label: 'Slug', type: 'slug', required: true },
+    },
+  },
+  news: {
+    key: 'news',
+    label: 'News',
+    route: '/news/$slug',
+    fields: {
+      slug: { key: 'slug', label: 'Slug', type: 'slug', required: true },
+    },
+  },
+} as const
+type L = typeof localized
+declare const site: Content<L>
+
+describe('href: language routes', () => {
+  it('Href without a language is the union of every language route', () => {
+    expectTypeOf<Href<'vacancies', L>>().toEqualTypeOf<
+      `/vacancies/${string}` | `/vacatures/${string}`
+    >()
+    expectTypeOf(site.vacancies.href('x')).toEqualTypeOf<
+      `/vacancies/${string}` | `/vacatures/${string}`
+    >()
+  })
+
+  it('in(locale) narrows to that language route', () => {
+    expectTypeOf(site.in('nl').vacancies.href('x')).toEqualTypeOf<`/vacatures/${string}`>()
+    expectTypeOf(site.in('en').vacancies.href('x')).toEqualTypeOf<`/vacancies/${string}`>()
+  })
+
+  it('in(locale) narrows references and the content-level href too', () => {
+    expectTypeOf(site.in('nl').href({ collection: 'vacancies', slug: 'x', id: 'i' })).toEqualTypeOf<
+      `/vacatures/${string}`
+    >()
+  })
+
+  it('a collection without language routes is the same in every language', () => {
+    expectTypeOf<Href<'news', L>>().toEqualTypeOf<`/news/${string}`>()
+    expectTypeOf(site.in('nl').news.href('x')).toEqualTypeOf<`/news/${string}`>()
+    expectTypeOf(site.in('en').news.href('x')).toEqualTypeOf<`/news/${string}`>()
+  })
+
+  it('a scope keeps the other reads of the collection API', () => {
+    expectTypeOf(site.in('nl').news.all()).toEqualTypeOf<Entry<'news', L>[]>()
+  })
+})
+
