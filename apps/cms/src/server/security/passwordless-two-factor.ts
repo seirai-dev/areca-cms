@@ -2,6 +2,7 @@ import { APIError } from 'better-auth/api'
 
 import { REAUTH_REQUIRED } from '#/lib/security-errors'
 import { isFresh } from '#/lib/step-up'
+import { m } from '#/paraglide/messages'
 
 /**
  * Endpoints that enable, disable, re-issue or reveal a user's second factor.
@@ -30,5 +31,17 @@ export function assertPasswordlessFresh(
   throw new APIError('FORBIDDEN', {
     code: REAUTH_REQUIRED,
     message: `${REAUTH_REQUIRED}: Sign in again to change two-factor authentication.`,
+  })
+}
+
+/**
+ * The TOTP secret is only needed to set up an authenticator. Once two-factor is
+ * on, the secret is no longer handed out, so the URI cannot be read again.
+ */
+export function assertTotpUriAvailable(twoFactorEnabled: boolean) {
+  if (!twoFactorEnabled) return
+  throw new APIError('FORBIDDEN', {
+    code: 'TOTP_URI_UNAVAILABLE',
+    message: m.server_totp_uri_unavailable(),
   })
 }

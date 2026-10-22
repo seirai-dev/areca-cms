@@ -1786,6 +1786,7 @@
   "server_step_up_no_two_factor": "Tweestapsverificatie is niet ingeschakeld voor dit account.",
   "server_timezone_required": "Tijdzone is verplicht",
   "server_too_many_fields": "Te veel velden",
+  "server_totp_uri_unavailable": "De installatiesleutel voor de authenticator wordt alleen getoond tijdens het instellen van tweestapsverificatie.",
   "server_unauthorized": "Niet geautoriseerd",
   "server_unknown_collection": "Onbekende collectie \"{collection}\"",
   "server_unknown_field": "Onbekend veld ‘{field}’",

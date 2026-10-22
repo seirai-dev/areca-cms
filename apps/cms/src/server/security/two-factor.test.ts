@@ -92,7 +92,11 @@ describe.skipIf(!hasDb)('two-factor (Better Auth)', () => {
 
     const secret = new URL(enabled.totpURI).searchParams.get('secret') ?? ''
     const code = totp(secret)
-    await auth.api.verifyTOTP({ body: { code }, headers })
+    const verified = await auth.api.verifyTOTP({
+      body: { code },
+      headers,
+      returnHeaders: true,
+    })
     const [factorSession] = await db
       .select()
       .from(session)
@@ -115,6 +119,14 @@ describe.skipIf(!hasDb)('two-factor (Better Auth)', () => {
 
     const challenged = await auth.api.signInEmail({ body: { email, password } })
     expect(challenged).toMatchObject({ twoFactorRedirect: true })
+
+    // The secret was shown during enrolment. Once enabled, it is not handed out again.
+    await expect(
+      auth.api.getTOTPURI({
+        body: { password },
+        headers: cookieHeader(verified.headers),
+      }),
+    ).rejects.toMatchObject({ body: { code: 'TOTP_URI_UNAVAILABLE' } })
   })
 })
 

@@ -1786,6 +1786,7 @@
   "server_step_up_no_two_factor": "Two-factor authentication is not enabled on this account.",
   "server_timezone_required": "Timezone is required",
   "server_too_many_fields": "Too many fields",
+  "server_totp_uri_unavailable": "The authenticator setup key is only shown while two-factor is being set up.",
   "server_unauthorized": "Unauthorized",
   "server_unknown_collection": "Unknown collection \"{collection}\"",
   "server_unknown_field": "Unknown field \"{field}\"",

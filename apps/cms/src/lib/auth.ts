@@ -59,6 +59,7 @@ import { normaliseRegistrationBody } from '#/server/mcp/oauth-registration'
 import {
   TWO_FACTOR_MANAGEMENT_PATHS,
   assertPasswordlessFresh,
+  assertTotpUriAvailable,
 } from '#/server/security/passwordless-two-factor'
 
 import {
@@ -468,6 +469,9 @@ const authBase = betterAuth({
       if (TWO_FACTOR_MANAGEMENT_PATHS.has(ctx.path)) {
         const session = await getSessionFromCtx(ctx)
         if (session) {
+          if (ctx.path === '/two-factor/get-totp-uri') {
+            assertTotpUriAvailable(session.user.twoFactorEnabled)
+          }
           if (session.user.twoFactorEnabled) await assertAuthAdminMfa(session)
           const credential =
             await ctx.context.internalAdapter.findCredentialAccount(

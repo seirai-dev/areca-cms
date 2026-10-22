@@ -1,8 +1,10 @@
+import { APIError } from 'better-auth/api'
 import { describe, expect, it } from 'vitest'
 
 import {
   TWO_FACTOR_MANAGEMENT_PATHS,
   assertPasswordlessFresh,
+  assertTotpUriAvailable,
 } from './passwordless-two-factor.ts'
 
 const now = new Date('2026-10-01T12:00:00Z')
@@ -40,5 +42,23 @@ describe('assertPasswordlessFresh', () => {
         now,
       ),
     ).toThrow(/REAUTH_REQUIRED/)
+  })
+})
+
+describe('assertTotpUriAvailable', () => {
+  it('allows the URI during enrolment, before two-factor is enabled', () => {
+    expect(() => assertTotpUriAvailable(false)).not.toThrow()
+  })
+
+  it('refuses the URI once two-factor is enabled', () => {
+    expect(() => assertTotpUriAvailable(true)).toThrow(APIError)
+    try {
+      assertTotpUriAvailable(true)
+    } catch (error) {
+      expect(error).toMatchObject({
+        statusCode: 403,
+        body: { code: 'TOTP_URI_UNAVAILABLE' },
+      })
+    }
   })
 })
