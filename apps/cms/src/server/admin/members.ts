@@ -1,12 +1,14 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty; retain defensive lookup and authorization checks. */
 import { randomBytes } from 'node:crypto'
 import { and, eq, gt, isNull, like, sql } from 'drizzle-orm'
+import { alias } from 'drizzle-orm/pg-core'
 
 import { db } from '#/db'
 import {
   invitation,
   membership,
   organization,
+  session,
   site,
   user,
   verification,
@@ -31,6 +33,12 @@ import { PARAMS_SECRET_CONTEXT } from '#/server/mail/render/templates/password-r
 import { revokeMemberMcpConnections } from '#/server/mcp/connections'
 import { revokeMemberMcpKeys } from '#/server/mcp/keys'
 import { notifyInviteAccepted } from '#/server/notifications/triggers'
+
+import {
+  assertAgencyAdminCanBeRemoved,
+  countActiveAgencyAdmins,
+  lockAgencyAdminRoster,
+} from './agency-admin-roster.ts'
 import { encryptSecret } from '#/server/security/secret-encryption'
 import { secretsEncryptionKey } from '#/server/security/secrets-key'
 import { hashToken } from '#/server/security/token-hash'
@@ -73,14 +81,14 @@ export class InvitationDeliveryError extends AppError {
   }
 }
 
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
+export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 /**
  * Serialises every owner-changing operation of one organization: concurrent
  * demotions/removals queue on the organization row, so the owner count read
  * afterwards is never stale.
  */
-async function lockOrganization(tx: Tx, organizationId: string) {
+export async function lockOrganization(tx: Tx, organizationId: string) {
   await tx
     .select({ id: organization.id })
     .from(organization)
@@ -88,7 +96,7 @@ async function lockOrganization(tx: Tx, organizationId: string) {
     .for('update')
 }
 
-async function countOwners(tx: Tx, organizationId: string) {
+export async function countOwners(tx: Tx, organizationId: string) {
   const owners = await tx
     .select({ id: membership.id })
     .from(membership)
@@ -101,11 +109,12 @@ async function countOwners(tx: Tx, organizationId: string) {
   return owners.length
 }
 
-export function assertAgencyAdminCanBeRemoved(adminCount: number) {
-  if (adminCount <= 1) {
-    throw new ConflictError(m.server_cannot_remove_last_agency_admin())
-  }
-}
+export {
+  LastAgencyAdminError,
+  assertAgencyAdminCanBeRemoved,
+  countActiveAgencyAdmins,
+  lockAgencyAdminRoster,
+} from './agency-admin-roster.ts'
 
 export async function listMembers(organizationId: string) {
   return db
@@ -130,66 +139,97 @@ export async function updateMemberRole(
   role: MembershipRole,
   actorId: string,
 ) {
-  return db.transaction(async (tx) => {
-    await lockOrganization(tx, organizationId)
-    const [existing] = await tx
-      .select()
-      .from(membership)
-      .where(
-        and(
-          eq(membership.organizationId, organizationId),
-          eq(membership.userId, userId),
-        ),
-      )
-      .limit(1)
-    if (!existing) {
-      throw new NotFoundError(m.server_member_not_found())
-    }
+  return db.transaction((tx) =>
+    applyMemberRole(tx, { organizationId, userId, role, actorId }),
+  )
+}
 
-    if (existing.role === 'owner' && role !== 'owner') {
-      if ((await countOwners(tx, organizationId)) <= 1) {
-        throw new ConflictError(m.server_cannot_demote_last_owner())
-      }
-    }
-
-    const [updated] = await tx
-      .update(membership)
-      .set({ role })
-      .where(eq(membership.id, existing.id))
-      .returning()
-    if (!updated) {
-      throw new NotFoundError(m.server_member_not_found())
-    }
-
-    await audit(
-      {
-        organizationId,
-        actorId,
-        action: 'member.update_role',
-        targetType: 'membership',
-        targetId: existing.id,
-        meta: { userId, role, previousRole: existing.role },
-      },
-      tx,
+/**
+ * Changes one membership's role inside the caller's transaction: last-owner
+ * protection, the audit row and the role-change email. Shared by the single
+ * change above and the batch client access on a person's page.
+ */
+export async function applyMemberRole(
+  tx: Tx,
+  input: {
+    organizationId: string
+    userId: string
+    role: MembershipRole
+    actorId: string
+  },
+) {
+  const { organizationId, userId, role, actorId } = input
+  await lockOrganization(tx, organizationId)
+  const [existing] = await tx
+    .select()
+    .from(membership)
+    .where(
+      and(
+        eq(membership.organizationId, organizationId),
+        eq(membership.userId, userId),
+      ),
     )
+    .limit(1)
+  if (!existing) {
+    throw new NotFoundError(m.server_member_not_found())
+  }
 
-    // Changing your own role needs no email.
-    if (existing.role !== role && actorId !== userId) {
-      await sendAccountEmail({
-        kind: 'membership_role_changed',
-        userId,
-        params: {
-          userId,
-          organizationId,
-          role,
-          previousRole: existing.role,
-        },
-        connection: tx,
-      })
+  if (existing.role === 'owner' && role !== 'owner') {
+    if ((await countOwners(tx, organizationId)) <= 1) {
+      throw new ConflictError(
+        m.server_cannot_demote_last_owner_of({
+          org: await organizationName(tx, organizationId),
+        }),
+      )
     }
+  }
 
-    return updated
-  })
+  const [updated] = await tx
+    .update(membership)
+    .set({ role })
+    .where(eq(membership.id, existing.id))
+    .returning()
+  if (!updated) {
+    throw new NotFoundError(m.server_member_not_found())
+  }
+
+  await audit(
+    {
+      organizationId,
+      actorId,
+      action: 'member.update_role',
+      targetType: 'membership',
+      targetId: existing.id,
+      meta: { userId, role, previousRole: existing.role },
+    },
+    tx,
+  )
+
+  // Changing your own role needs no email.
+  if (existing.role !== role && actorId !== userId) {
+    await sendAccountEmail({
+      kind: 'membership_role_changed',
+      userId,
+      params: {
+        userId,
+        organizationId,
+        role,
+        previousRole: existing.role,
+      },
+      connection: tx,
+    })
+  }
+
+  return updated
+}
+
+async function organizationName(tx: Tx, organizationId: string) {
+  const [org] = await tx
+    .select({ name: organization.name })
+    .from(organization)
+    .where(eq(organization.id, organizationId))
+    .limit(1)
+  return org?.name ?? ''
 }
 
 export async function removeMember(
@@ -197,103 +237,120 @@ export async function removeMember(
   userId: string,
   actorId: string,
 ) {
-  await db.transaction(async (tx) => {
-    await lockOrganization(tx, organizationId)
-    const [existing] = await tx
-      .select()
-      .from(membership)
-      .where(
-        and(
-          eq(membership.organizationId, organizationId),
-          eq(membership.userId, userId),
-        ),
+  await db.transaction((tx) =>
+    applyMemberRemoval(tx, { organizationId, userId, actorId }),
+  )
+}
+
+/**
+ * Removes one membership inside the caller's transaction: last-owner
+ * protection, MCP and queued-notice cleanup, the audit rows and the removal
+ * email. Shared by `removeMember` and the batch client access.
+ */
+export async function applyMemberRemoval(
+  tx: Tx,
+  input: { organizationId: string; userId: string; actorId: string },
+) {
+  const { organizationId, userId, actorId } = input
+  await lockOrganization(tx, organizationId)
+  const [existing] = await tx
+    .select()
+    .from(membership)
+    .where(
+      and(
+        eq(membership.organizationId, organizationId),
+        eq(membership.userId, userId),
+      ),
+    )
+    .limit(1)
+  if (!existing) {
+    throw new NotFoundError(m.server_member_not_found())
+  }
+
+  if (existing.role === 'owner') {
+    if ((await countOwners(tx, organizationId)) <= 1) {
+      throw new ConflictError(
+        m.server_cannot_remove_last_owner_of({
+          org: await organizationName(tx, organizationId),
+        }),
       )
-      .limit(1)
-    if (!existing) {
-      throw new NotFoundError(m.server_member_not_found())
     }
+  }
 
-    if (existing.role === 'owner') {
-      if ((await countOwners(tx, organizationId)) <= 1) {
-        throw new ConflictError(m.server_cannot_remove_last_owner())
-      }
-    }
+  // Read before the delete so the email can still name the organization.
+  const [org] = await tx
+    .select({ name: organization.name })
+    .from(organization)
+    .where(eq(organization.id, organizationId))
+    .limit(1)
+  const [actor] = await tx
+    .select({ name: user.name })
+    .from(user)
+    .where(eq(user.id, actorId))
+    .limit(1)
 
-    // Read before the delete so the email can still name the organization.
-    const [org] = await tx
-      .select({ name: organization.name })
-      .from(organization)
-      .where(eq(organization.id, organizationId))
-      .limit(1)
-    const [actor] = await tx
-      .select({ name: user.name })
-      .from(user)
-      .where(eq(user.id, actorId))
-      .limit(1)
+  await tx.delete(membership).where(eq(membership.id, existing.id))
 
-    await tx.delete(membership).where(eq(membership.id, existing.id))
-
-    // Leaving also ends what the membership granted: personal MCP keys and app
-    // connections on the organization's sites, and queued notices meant for it.
-    // Revoked keys stay revoked, so a rejoin needs new ones.
-    const siteRows = await tx
-      .select({ id: site.id })
-      .from(site)
-      .where(eq(site.organizationId, organizationId))
-    const siteIds = siteRows.map((row) => row.id)
-    const mcpKeysRevoked = await revokeMemberMcpKeys(tx, { userId, siteIds })
-    const mcpConnectionsRevoked = await revokeMemberMcpConnections(tx, {
-      userId,
-      siteIds,
-    })
-    const notificationsCancelled = await cancelQueuedNotificationEmails(
-      userId,
-      organizationId,
-      tx,
-    )
-
-    await audit(
-      {
-        organizationId,
-        actorId,
-        action: 'member.remove',
-        targetType: 'membership',
-        targetId: existing.id,
-        meta: { userId },
-      },
-      tx,
-    )
-    await audit(
-      {
-        organizationId,
-        actorId,
-        action: 'member.mcp_access_revoke',
-        targetType: 'membership',
-        targetId: existing.id,
-        meta: {
-          userId,
-          mcpKeysRevoked,
-          mcpConnectionsRevoked,
-          notificationsCancelled,
-        },
-      },
-      tx,
-    )
-
-    // Leaving on your own needs no email.
-    if (actorId !== userId) {
-      await sendAccountEmail({
-        kind: 'membership_removed',
-        userId,
-        params: {
-          userId,
-          orgName: org?.name ?? '',
-          actorName: actor?.name ?? '',
-        },
-        connection: tx,
-      })
-    }
+  // Leaving also ends what the membership granted: personal MCP keys and app
+  // connections on the organization's sites, and queued notices meant for it.
+  // Revoked keys stay revoked, so a rejoin needs new ones.
+  const siteRows = await tx
+    .select({ id: site.id })
+    .from(site)
+    .where(eq(site.organizationId, organizationId))
+  const siteIds = siteRows.map((row) => row.id)
+  const mcpKeysRevoked = await revokeMemberMcpKeys(tx, { userId, siteIds })
+  const mcpConnectionsRevoked = await revokeMemberMcpConnections(tx, {
+    userId,
+    siteIds,
   })
+  const notificationsCancelled = await cancelQueuedNotificationEmails(
+    userId,
+    organizationId,
+    tx,
+  )
+
+  await audit(
+    {
+      organizationId,
+      actorId,
+      action: 'member.remove',
+      targetType: 'membership',
+      targetId: existing.id,
+      meta: { userId },
+    },
+    tx,
+  )
+  await audit(
+    {
+      organizationId,
+      actorId,
+      action: 'member.mcp_access_revoke',
+      targetType: 'membership',
+      targetId: existing.id,
+      meta: {
+        userId,
+        mcpKeysRevoked,
+        mcpConnectionsRevoked,
+        notificationsCancelled,
+      },
+    },
+    tx,
+  )
+
+  // Leaving on your own needs no email.
+  if (actorId !== userId) {
+    await sendAccountEmail({
+      kind: 'membership_removed',
+      userId,
+      params: {
+        userId,
+        orgName: org?.name ?? '',
+        actorName: actor?.name ?? '',
+      },
+      connection: tx,
+    })
+  }
 }
 
 function normalizeEmail(email: string) {
@@ -767,8 +824,13 @@ export async function setAgencyAdmin(
   actorId: string,
 ) {
   return db.transaction(async (tx) => {
+    await lockAgencyAdminRoster(tx)
     const [existing] = await tx
-      .select({ id: user.id, isAgencyAdmin: user.isAgencyAdmin })
+      .select({
+        id: user.id,
+        isAgencyAdmin: user.isAgencyAdmin,
+        blockedAt: user.blockedAt,
+      })
       .from(user)
       .where(eq(user.id, userId))
       .limit(1)
@@ -776,13 +838,9 @@ export async function setAgencyAdmin(
       throw new NotFoundError(m.server_user_not_found())
     }
 
-    if (existing.isAgencyAdmin && !isAgencyAdmin) {
-      const admins = await tx
-        .select({ id: user.id })
-        .from(user)
-        .where(eq(user.isAgencyAdmin, true))
-        .for('update')
-      assertAgencyAdminCanBeRemoved(admins.length)
+    // A blocked admin is not active, so demoting them takes nothing away.
+    if (existing.isAgencyAdmin && !isAgencyAdmin && !existing.blockedAt) {
+      assertAgencyAdminCanBeRemoved(await countActiveAgencyAdmins(tx))
     }
 
     const [updated] = await tx
@@ -830,6 +888,17 @@ export async function setAgencyAdmin(
 }
 
 export async function listUsers() {
+  const blocker = alias(user, 'blocker')
+  const lastActive = db
+    .select({
+      userId: session.userId,
+      at: sql<Date | null>`max(${session.updatedAt})`
+        .mapWith((value: unknown) => (value ? new Date(String(value)) : null))
+        .as('last_active_at'),
+    })
+    .from(session)
+    .groupBy(session.userId)
+    .as('last_active')
   const users = await db
     .select({
       id: user.id,
@@ -837,8 +906,15 @@ export async function listUsers() {
       email: user.email,
       isAgencyAdmin: user.isAgencyAdmin,
       createdAt: user.createdAt,
+      twoFactorEnabled: user.twoFactorEnabled,
+      blockedAt: user.blockedAt,
+      blockedReason: user.blockedReason,
+      blockedByName: blocker.name,
+      lastActiveAt: lastActive.at,
     })
     .from(user)
+    .leftJoin(blocker, eq(user.blockedById, blocker.id))
+    .leftJoin(lastActive, eq(lastActive.userId, user.id))
     .orderBy(user.email)
 
   const membershipRows = await db
@@ -898,7 +974,24 @@ export async function listUsers() {
 
   return users.map((row) => ({
     ...row,
+    status: row.blockedAt ? ('blocked' as const) : ('active' as const),
     memberships: membershipsByUser.get(row.id) ?? [],
     factorLockedUntil: lockouts.get(row.id) ?? null,
   }))
+}
+
+/**
+ * Invitations nobody has accepted yet, across every client. Expired ones stay
+ * listed (with their expiry) so an agency admin can resend or revoke them.
+ */
+export async function listPendingInvitations() {
+  return db
+    .select({
+      ...INVITATION_COLUMNS,
+      organizationName: organization.name,
+    })
+    .from(invitation)
+    .innerJoin(organization, eq(invitation.organizationId, organization.id))
+    .where(isNull(invitation.acceptedAt))
+    .orderBy(invitation.email)
 }

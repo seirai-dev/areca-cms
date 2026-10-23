@@ -44,6 +44,7 @@ import * as mcpKeyFns from '#/server/fn/mcp-keys'
 import * as mcpOauthFns from '#/server/fn/mcp-oauth'
 import * as meFns from '#/server/fn/me'
 import * as overviewFns from '#/server/fn/overview'
+import * as peopleFns from '#/server/fn/people'
 import * as pausedJobFns from '#/server/fn/paused-jobs'
 import * as publishingFns from '#/server/fn/publishing'
 import * as securityFns from '#/server/fn/security'
@@ -461,6 +462,12 @@ export const ROWS: Row[] = [
   {
     name: 'listUsersFn',
     fn: adminFns.listUsersFn,
+    policy: 'agency',
+    prepare: () => ({ data: undefined }),
+  },
+  {
+    name: 'listPendingInvitationsFn',
+    fn: adminFns.listPendingInvitationsFn,
     policy: 'agency',
     prepare: () => ({ data: undefined }),
   },
@@ -1510,6 +1517,183 @@ export const ROWS: Row[] = [
       }
     },
   },
+
+  // ----------------------------------------------------------- people.ts
+  {
+    name: 'getUserDetailFn',
+    fn: peopleFns.getUserDetailFn,
+    policy: 'agency',
+    prepare: (w) => ({ data: { userId: w.users.editorX.id } }),
+  },
+  {
+    name: 'blockUserFn',
+    fn: peopleFns.blockUserFn,
+    policy: 'agency-fresh',
+    prepare: async (w) => {
+      const target = await w.fresh.user('block-target')
+      return {
+        data: { userId: target.id, reason: 'Authz matrix' },
+        untouched: exists(
+          user,
+          and(eq(user.id, target.id), isNull(user.blockedAt)),
+        ),
+      }
+    },
+  },
+  {
+    name: 'unblockUserFn',
+    fn: peopleFns.unblockUserFn,
+    policy: 'agency-fresh',
+    prepare: async (w) => {
+      const target = await w.fresh.user('unblock-target')
+      return { data: { userId: target.id } }
+    },
+  },
+  {
+    name: 'deleteUserFn',
+    fn: peopleFns.deleteUserFn,
+    policy: 'agency-fresh',
+    prepare: async (w) => {
+      const target = await w.fresh.user('delete-target')
+      return {
+        data: { userId: target.id },
+        untouched: exists(user, eq(user.id, target.id)),
+      }
+    },
+  },
+  {
+    name: 'resetUserTwoFactorFn',
+    fn: peopleFns.resetUserTwoFactorFn,
+    policy: 'agency-fresh',
+    prepare: async (w) => {
+      const target = await w.fresh.user('reset-2fa-target')
+      return {
+        data: { userId: target.id },
+        untouched: exists(user, eq(user.id, target.id)),
+      }
+    },
+  },
+  {
+    name: 'signOutUserEverywhereFn',
+    fn: peopleFns.signOutUserEverywhereFn,
+    policy: 'agency-fresh',
+    prepare: async (w) => {
+      const target = await w.fresh.user('signout-target')
+      return { data: { userId: target.id } }
+    },
+  },
+  {
+    name: 'updateUserNameFn',
+    fn: peopleFns.updateUserNameFn,
+    policy: 'agency',
+    prepare: async (w) => {
+      const target = await w.fresh.user('rename-target')
+      return {
+        data: { userId: target.id, name: 'Renamed Person' },
+        untouched: exists(
+          user,
+          and(eq(user.id, target.id), eq(user.name, target.name)),
+        ),
+      }
+    },
+  },
+  {
+    name: 'setUserClientAccessFn',
+    fn: peopleFns.setUserClientAccessFn,
+    policy: 'agency',
+    prepare: async (w) => {
+      const target = await w.fresh.user('access-target')
+      return {
+        data: {
+          userId: target.id,
+          add: [{ organizationId: w.X.org.id, role: 'editor' }],
+          change: [],
+          remove: [],
+        },
+        untouched: absent(membership, eq(membership.userId, target.id)),
+      }
+    },
+  },
+  {
+    name: 'bulkBlockUsersFn',
+    fn: peopleFns.bulkBlockUsersFn,
+    policy: 'agency-fresh',
+    prepare: async (w) => {
+      const target = await w.fresh.user('bulk-block-target')
+      return {
+        data: { userIds: [target.id] },
+        untouched: exists(
+          user,
+          and(eq(user.id, target.id), isNull(user.blockedAt)),
+        ),
+      }
+    },
+  },
+  {
+    name: 'bulkUnblockUsersFn',
+    fn: peopleFns.bulkUnblockUsersFn,
+    policy: 'agency-fresh',
+    prepare: async (w) => {
+      const target = await w.fresh.user('bulk-unblock-target')
+      return { data: { userIds: [target.id] } }
+    },
+  },
+  {
+    name: 'bulkSignOutUsersFn',
+    fn: peopleFns.bulkSignOutUsersFn,
+    policy: 'agency-fresh',
+    prepare: async (w) => {
+      const target = await w.fresh.user('bulk-signout-target')
+      return { data: { userIds: [target.id] } }
+    },
+  },
+  {
+    name: 'bulkAddUsersToClientsFn',
+    fn: peopleFns.bulkAddUsersToClientsFn,
+    policy: 'agency-fresh',
+    prepare: async (w) => {
+      const target = await w.fresh.user('bulk-add-target')
+      return {
+        data: {
+          userIds: [target.id],
+          organizationIds: [w.X.org.id],
+          role: 'editor',
+        },
+        untouched: absent(membership, eq(membership.userId, target.id)),
+      }
+    },
+  },
+  {
+    name: 'searchPeopleFn',
+    fn: peopleFns.searchPeopleFn,
+    policy: 'agency',
+    prepare: () => ({ data: { query: 'authz' } }),
+  },
+
+  // ---------------------------------- account self-service (account.ts)
+  {
+    name: 'updateMyNameFn',
+    fn: accountFns.updateMyNameFn,
+    policy: 'user',
+    note: 'Renames only the caller.',
+    override: { adminNoMfa: 'mfa' },
+    prepare: () => ({ data: { name: 'Self Renamed' } }),
+  },
+  {
+    name: 'deleteMyAccountFn',
+    fn: accountFns.deleteMyAccountFn,
+    policy: 'user',
+    note: 'Refused for every caller here: the typed email never matches, so no seeded account can be deleted by the matrix. The real delete paths are asserted in users.db.test.ts.',
+    override: {
+      editorX: 'forbidden',
+      ownerX: 'forbidden',
+      ownerY: 'forbidden',
+      adminNoMfa: 'mfa',
+      adminMfa: 'forbidden',
+      adminStale: 'forbidden',
+    },
+    prepare: () => ({ data: { confirmEmail: 'nobody@authz.test' } }),
+  },
 ]
 
 export const ALL_FN_MODULES = {
@@ -1527,6 +1711,7 @@ export const ALL_FN_MODULES = {
   'mcp-oauth': mcpOauthFns,
   me: meFns,
   overview: overviewFns,
+  people: peopleFns,
   'paused-jobs': pausedJobFns,
   publishing: publishingFns,
   security: securityFns,

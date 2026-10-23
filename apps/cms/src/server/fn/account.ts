@@ -18,6 +18,15 @@ import {
   revocableOwnSessionToken,
 } from '#/server/auth/own-sessions'
 import { allowUserAction } from '#/server/http/rate-limit.server'
+import { ForbiddenError, ConflictError } from '#/server/content/errors'
+import { LastAgencyAdminError } from '#/server/admin/members'
+import { verifySelfDeletion } from '#/server/admin/self-delete-verification'
+import {
+  PERSON_NAME_MAX_LENGTH,
+  deleteOwnAccount,
+  renameUser,
+  selfDeleteBlockers,
+} from '#/server/admin/users'
 import { verificationIdentifierForms } from '#/server/security/verification-identifiers'
 import {
   sendPasswordResetLink,
@@ -209,3 +218,69 @@ export const revokeMyOtherSessionsFn = createServerFn({
   await auth.api.revokeOtherSessions({ headers: getRequestHeaders() })
   return { ok: true as const }
 })
+
+/** Self: the display name everyone sees. No email; the change is audited. */
+export const updateMyNameFn = createServerFn({
+  method: 'POST',
+  ...accountFn,
+})
+  .validator(
+    z.object({ name: z.string().trim().min(1).max(PERSON_NAME_MAX_LENGTH) }),
+  )
+  .handler(async ({ data }) => {
+    const session = await requireAccountUser()
+    await renameUser({
+      actorId: session.user.id,
+      userId: session.user.id,
+      name: data.name,
+    })
+    return { ok: true as const }
+  })
+
+/**
+ * Deleting an account is re-verified on the server: the password when the
+ * account has one, otherwise a second-factor code when two-factor is on, and
+ * the typed email in every case.
+ */
+export const deleteMyAccountFn = createServerFn({
+  method: 'POST',
+  ...accountFn,
+})
+  .validator(
+    z.object({
+      confirmEmail: z.string().trim().min(1).max(320),
+      password: z.string().min(1).max(256).optional(),
+      code: z.string().min(6).max(32).optional(),
+      kind: z.enum(['totp', 'backup']).optional(),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const session = await requireAccountUser()
+    const { id, email } = session.user
+    if (data.confirmEmail.toLowerCase() !== email.toLowerCase()) {
+      throw new ForbiddenError(m.server_self_delete_email_mismatch())
+    }
+    // Refusals first, so nobody types a password for an account that cannot go.
+    const blockers = await selfDeleteBlockers(id)
+    if (blockers.soleOwnerOf.length > 0) {
+      throw new ConflictError(
+        m.server_self_delete_sole_owner({
+          clients: blockers.soleOwnerOf.join(', '),
+        }),
+      )
+    }
+    if (blockers.lastAdmin) throw new LastAgencyAdminError()
+
+    await verifySelfDeletion({
+      userId: id,
+      twoFactorEnabled: session.user.twoFactorEnabled,
+      session: session.session,
+      password: data.password,
+      code: data.code,
+      kind: data.kind,
+      headers: getRequestHeaders(),
+    })
+
+    await deleteOwnAccount({ userId: id })
+    return { ok: true as const }
+  })
