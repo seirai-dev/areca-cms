@@ -410,3 +410,18 @@ test('on a phone, a client row opens a sheet to change its role', async ({
   await page.getByTestId('person-discard').click()
   await expect(page.getByTestId('person-save-bar')).toHaveCount(0)
 })
+
+test('a row menu opens the profile and offers block and sign out', async ({
+  page,
+}) => {
+  test.setTimeout(240_000)
+  await login(page)
+  await searchPeople(page, people.sam)
+
+  await page.getByTestId(`person-menu-${people.sam}`).click()
+  await expect(page.getByTestId(`block-${people.sam}`)).toBeVisible()
+  await expect(page.getByTestId(`sign-out-${people.sam}`)).toBeVisible()
+  await page.getByTestId(`person-open-${people.sam}`).click()
+  await expect(page).toHaveURL(/\/agency\/people\/[^/?#]+$/)
+  await expect(page.getByTestId('person-page')).toBeVisible()
+})

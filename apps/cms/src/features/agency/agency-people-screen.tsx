@@ -31,6 +31,8 @@ import type {
   StatusFilter,
 } from '#/features/agency/people-list'
 import { RegeneratedLinkDialog } from '#/features/people/regenerated-link-dialog'
+import { BlockPersonDialog } from '#/features/agency/person/block-person-dialog'
+import { isLastActiveAdmin } from '#/features/agency/person/person-facts'
 import {
   expiresInLabel,
   isInvitationExpired,
@@ -114,9 +116,18 @@ export function AgencyPeopleScreen({
   const [bulk, setBulk] = React.useState<
     'block' | 'unblock' | 'sign-out' | null
   >(null)
+  // One person's block, unblock or sign-out, from the row's menu.
+  const [rowAction, setRowAction] = React.useState<{
+    kind: 'block' | 'unblock' | 'sign-out'
+    account: AccountRow
+  } | null>(null)
 
   const allAccounts = accounts.data ?? []
   const allInvitations = invitations.data ?? []
+  // The last active agency admin cannot be blocked, from the list either.
+  const lastAdminId = allAccounts.find((account) =>
+    isLastActiveAdmin(allAccounts, account.id),
+  )?.id
   const counts = countByStatus(allAccounts, allInvitations)
 
   const people = React.useMemo(
@@ -517,8 +528,10 @@ export function AgencyPeopleScreen({
                   isSelf={account.id === me.user.id}
                   selected={pickedSet.has(account.id)}
                   onSelectedChange={(on) => toggle(account.id, on)}
+                  protectedAdmin={account.id === lastAdminId}
                   onResetLink={() => setResetTarget(account)}
                   onResetLockout={() => setLockoutTarget(account)}
+                  onBlockAction={(kind) => setRowAction({ kind, account })}
                 />
               ))}
               {pending.map((invitation) => (
@@ -753,6 +766,66 @@ export function AgencyPeopleScreen({
         testId="revoke-invitation-dialog"
       />
 
+      <BlockPersonDialog
+        open={rowAction?.kind === 'block'}
+        onClose={() => setRowAction(null)}
+        userId={rowAction?.account.id ?? ''}
+        name={rowAction?.account.name ?? ''}
+      />
+
+      <ConfirmDialog
+        open={rowAction?.kind === 'unblock'}
+        onOpenChange={(open) => {
+          if (!open) setRowAction(null)
+        }}
+        title={m.agency_person_unblock_title({
+          name: rowAction?.account.name ?? '',
+        })}
+        description={m.agency_person_unblock_description()}
+        confirmLabel={m.agency_person_unblock_confirm({
+          name: rowAction?.account.name ?? '',
+        })}
+        onConfirm={async () => {
+          if (!rowAction) return
+          const { account } = rowAction
+          try {
+            await mutations.unblock.mutateAsync(account.id)
+            toast.success(
+              m.agency_person_toast_unblocked({ name: account.name }),
+            )
+          } catch (error) {
+            toast.error(errorMessage(error))
+          }
+        }}
+        testId="people-row-unblock-dialog"
+      />
+
+      <ConfirmDialog
+        open={rowAction?.kind === 'sign-out'}
+        onOpenChange={(open) => {
+          if (!open) setRowAction(null)
+        }}
+        title={m.agency_person_sign_out_title({
+          name: rowAction?.account.name ?? '',
+        })}
+        description={m.agency_person_sign_out_description()}
+        confirmLabel={m.agency_person_sign_out_confirm()}
+        variant="destructive"
+        onConfirm={async () => {
+          if (!rowAction) return
+          const { account } = rowAction
+          try {
+            await mutations.signOutEverywhere.mutateAsync(account.id)
+            toast.success(
+              m.agency_person_toast_signed_out({ name: account.name }),
+            )
+          } catch (error) {
+            toast.error(errorMessage(error))
+          }
+        }}
+        testId="people-row-sign-out-dialog"
+      />
+
       <RegeneratedLinkDialog
         link={regenerated?.link ?? null}
         email={regenerated?.email ?? ''}
@@ -897,15 +970,20 @@ function PersonRow({
   isSelf,
   selected,
   onSelectedChange,
+  protectedAdmin,
   onResetLink,
   onResetLockout,
+  onBlockAction,
 }: {
   account: AccountRow
   isSelf: boolean
   selected: boolean
   onSelectedChange: (on: boolean) => void
+  /** The last active agency admin: cannot be blocked. */
+  protectedAdmin: boolean
   onResetLink: () => void
   onResetLockout: () => void
+  onBlockAction: (kind: 'block' | 'unblock' | 'sign-out') => void
 }) {
   const blocked = account.status === 'blocked'
   const lastActive = formatRelativeTime(account.lastActiveAt, { withinDays: 7 })
@@ -1002,14 +1080,46 @@ function PersonRow({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="min-w-56">
+            <DropdownMenuItem
+              asChild
+              data-testid={`person-open-${account.email}`}
+            >
+              <Link to="/agency/people/$userId" params={{ userId: account.id }}>
+                {m.agency_people_open_profile()}
+              </Link>
+            </DropdownMenuItem>
             {isSelf ? null : (
-              <DropdownMenuItem
-                onSelect={onResetLink}
-                data-testid={`send-reset-link-${account.email}`}
-              >
-                <Key />
-                {m.agency_people_reset_action()}
-              </DropdownMenuItem>
+              <>
+                <DropdownMenuItem
+                  onSelect={onResetLink}
+                  data-testid={`send-reset-link-${account.email}`}
+                >
+                  <Key />
+                  {m.agency_people_reset_action()}
+                </DropdownMenuItem>
+                {blocked ? (
+                  <DropdownMenuItem
+                    onSelect={() => onBlockAction('unblock')}
+                    data-testid={`unblock-${account.email}`}
+                  >
+                    {m.agency_people_menu_unblock()}
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem
+                    disabled={protectedAdmin}
+                    onSelect={() => onBlockAction('block')}
+                    data-testid={`block-${account.email}`}
+                  >
+                    {m.agency_people_menu_block()}
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem
+                  onSelect={() => onBlockAction('sign-out')}
+                  data-testid={`sign-out-${account.email}`}
+                >
+                  {m.agency_person_sign_out_action()}
+                </DropdownMenuItem>
+              </>
             )}
             {account.isAgencyAdmin && account.factorLockedUntil && !isSelf ? (
               <DropdownMenuItem

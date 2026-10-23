@@ -1,19 +1,9 @@
-import * as React from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
-import { Button } from '#/components/ui/button'
 import { ConfirmDialog } from '#/components/ui/confirm-dialog'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '#/components/ui/dialog'
-import { FormField } from '#/components/ui/form-field'
-import { Textarea } from '#/components/ui/textarea'
 import { usePeopleMutations } from '#/features/agency/use-people-mutations'
+import { BlockPersonDialog } from './block-person-dialog'
 import type { PersonDetail } from '#/features/agency/queries'
 import { errorMessage } from '#/lib/admin/helpers'
 import { m } from '#/paraglide/messages'
@@ -27,9 +17,6 @@ export type PersonDialog =
   | { kind: 'reset-2fa' }
   | { kind: 'reset-password' }
   | { kind: 'admin'; next: boolean }
-
-/** The block dialog's internal note is optional and never shown to the person. */
-export const BLOCK_REASON_LIMIT = 500
 
 /**
  * Every confirmation on the person page. Each destructive or step-up action
@@ -47,7 +34,6 @@ export function PersonDialogs({
 }) {
   const navigate = useNavigate()
   const mutations = usePeopleMutations()
-  const [reason, setReason] = React.useState('')
   const open = (kind: PersonDialog['kind']) => dialog?.kind === kind
   const name = person.name
   const soleOwnerOf = person.memberships.filter(
@@ -55,10 +41,7 @@ export function PersonDialogs({
   )
 
   function close(next: boolean) {
-    if (!next) {
-      setReason('')
-      onClose()
-    }
+    if (!next) onClose()
   }
 
   async function run(action: () => Promise<unknown>, success: string) {
@@ -72,54 +55,12 @@ export function PersonDialogs({
 
   return (
     <>
-      <Dialog open={open('block')} onOpenChange={close}>
-        <DialogContent size="sm" data-testid="person-block-dialog">
-          <DialogHeader>
-            <DialogTitle>{m.agency_person_block_title({ name })}</DialogTitle>
-            <DialogDescription>
-              {m.agency_person_block_description()}
-            </DialogDescription>
-          </DialogHeader>
-          <FormField
-            label={m.agency_person_block_reason_label()}
-            htmlFor="person-block-reason"
-            hint={m.agency_person_block_reason_hint()}
-          >
-            <Textarea
-              id="person-block-reason"
-              rows={3}
-              maxLength={BLOCK_REASON_LIMIT}
-              value={reason}
-              onChange={(event) => setReason(event.target.value)}
-              data-testid="person-block-reason"
-            />
-          </FormField>
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="ghost" onClick={() => close(false)}>
-              {m.shared_cancel()}
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              loading={mutations.block.isPending}
-              data-testid="confirm-action"
-              onClick={async () => {
-                await run(
-                  () =>
-                    mutations.block.mutateAsync({
-                      userId: person.id,
-                      reason: reason.trim() || undefined,
-                    }),
-                  m.agency_person_toast_blocked({ name }),
-                )
-                close(false)
-              }}
-            >
-              {m.agency_person_block_confirm({ name })}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <BlockPersonDialog
+        open={open('block')}
+        onClose={() => close(false)}
+        userId={person.id}
+        name={name}
+      />
 
       <ConfirmDialog
         open={open('unblock')}

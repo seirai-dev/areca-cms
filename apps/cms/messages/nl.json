@@ -2383,5 +2383,8 @@
   "agency_invite_add_to_clients_one": "{name} toevoegen aan 1 klant",
   "agency_invite_pick_clients": "Kies ten minste één klant",
   "agency_person_save_refused": "{count} wijzigingen kunnen niet worden opgeslagen",
-  "agency_person_save_refused_one": "1 wijziging kan niet worden opgeslagen"
+  "agency_person_save_refused_one": "1 wijziging kan niet worden opgeslagen",
+  "agency_people_open_profile": "Profiel openen",
+  "agency_people_menu_block": "Blokkeren…",
+  "agency_people_menu_unblock": "Deblokkeren…"
 }
