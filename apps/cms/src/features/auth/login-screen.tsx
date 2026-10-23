@@ -9,7 +9,13 @@ import { safeRedirectPath } from '#/lib/safe-redirect'
 import { useBranding } from '#/lib/use-branding'
 import { m } from '#/paraglide/messages'
 
-import { AuthDivider, AuthError, AuthHeading, AuthShell } from './auth-shell'
+import {
+  AuthDivider,
+  AuthError,
+  AuthHeading,
+  AuthNotice,
+  AuthShell,
+} from './auth-shell'
 import { PasswordInput } from './password-input'
 import { ProviderSignIn } from './provider-buttons'
 import { TwoFactorChallenge } from './two-factor-challenge'
@@ -28,11 +34,14 @@ export function LoginScreen({
   methods,
   redirectTo,
   providerError,
+  deleted,
   oauthQuery,
 }: {
   methods: AuthMethods
   redirectTo: string | undefined
   providerError: string | undefined
+  /** The person came here straight after deleting their account. */
+  deleted: boolean
   /** The signed authorization query when this sign-in is for an AI app. */
   oauthQuery: string | null
 }) {
@@ -88,6 +97,7 @@ export function LoginScreen({
         }
       />
       <div className="grid gap-5">
+        {deleted ? <AuthNotice>{m.auth_account_deleted()}</AuthNotice> : null}
         {methods.emailPassword ? (
           <form
             className="grid gap-4"
