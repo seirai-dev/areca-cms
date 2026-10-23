@@ -168,9 +168,9 @@ test('releasing site-sdk folds its Unreleased notes into the new version', () =>
   const tmp = mkdtempSync(join(tmpdir(), 'areca-release-'))
   try {
     cpSync(join(repo, 'packages/site-sdk/package.json'), join(tmp, 'packages/site-sdk/package.json'), { recursive: true })
-    cpSync(join(repo, 'packages/site-sdk/CHANGELOG.md'), join(tmp, 'packages/site-sdk/CHANGELOG.md'))
-    const { notes } = takeUnreleased(readFileSync(join(tmp, 'packages/site-sdk/CHANGELOG.md'), 'utf8'))
-    assert.ok(notes.length > 0, 'the real site-sdk changelog has Unreleased notes')
+    const existing = '# Changelog\n\nAll notable changes to `@areca-cms/site-sdk`.\n\n## 0.5.0 (2026-10-15)\n\n### Features\n\n- **sdk:** content languages (aaaaaaa)\n\n## Unreleased\n\n### Features\n\n- **manifest push confirms field removals.** Hand-written release note.\n'
+    writeFileSync(join(tmp, 'packages/site-sdk/CHANGELOG.md'), existing)
+    const { notes } = takeUnreleased(existing)
     const entry = renderEntry('0.5.1', '2026-10-20', [parseCommit(commit('fix(sdk): retry the pull'))], notes)
     writeRelease(tmp, getPackage('site-sdk'), '0.5.1', entry)
     const changelog = readFileSync(join(tmp, 'packages/site-sdk/CHANGELOG.md'), 'utf8')
