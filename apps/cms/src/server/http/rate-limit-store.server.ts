@@ -3,8 +3,10 @@ import { createClient } from 'redis'
 import { env } from '#/env'
 import { createLogger } from '#/server/log'
 
+import { createFallbackRateLimitStore } from './rate-limit-fallback.ts'
 import type { RateLimitRule, RateLimitStore } from './rate-limit.ts'
 import { consumeRateLimit } from './rate-limit.ts'
+import { createMemoryRateLimitStore } from './memory-rate-limit-store.ts'
 
 // Kept apart from rate-limit.server.ts, which imports auth. Auth itself needs
 // the store (password reset budgets), so importing that module would cycle.
@@ -21,7 +23,7 @@ redis.on('error', () => {
   // Command errors are reported by enforceRequestRateLimit without credentials.
 })
 
-export const rateLimitStore: RateLimitStore = {
+const redisRateLimitStore: RateLimitStore = {
   async increment(key, ttlSeconds) {
     if (!redis.isReady) {
       connectPromise ??= redis.connect().finally(() => {
@@ -44,8 +46,23 @@ export const rateLimitStore: RateLimitStore = {
 }
 
 /**
- * Budget for one keyed action, e.g. a reset request per email address. Fails
- * open when Redis is unavailable, like the request limiter.
+ * Shared counters when Redis answers. While it does not, this instance keeps
+ * counting in memory with the same budgets. The transitions are logged once.
+ */
+export const rateLimitStore = createFallbackRateLimitStore({
+  primary: redisRateLimitStore,
+  fallback: createMemoryRateLimitStore(),
+  onDegraded: () =>
+    log.warn(
+      'Redis unavailable; rate limits count in memory on this instance only',
+    ),
+  onRecovered: () => log.info('Redis available; rate limits are shared again'),
+})
+
+/**
+ * Budget for one keyed action, e.g. a reset request per email address or a
+ * paid AI call. Fails closed if the limiter itself errors: an action we
+ * cannot count is refused rather than allowed.
  */
 export async function allowKeyedAction(
   scope: string,
@@ -61,7 +78,7 @@ export async function allowKeyedAction(
       Date.now(),
     )
   } catch {
-    log.error('Rate limiting unavailable; action allowed')
-    return true
+    log.error('Rate limiting unavailable; action refused')
+    return false
   }
 }

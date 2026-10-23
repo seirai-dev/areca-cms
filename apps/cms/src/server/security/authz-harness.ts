@@ -36,6 +36,7 @@ import {
   createTestSite,
   sampleRichText,
 } from '#/server/content/test-utils'
+import { hashToken } from '#/server/security/token-hash'
 import { startInstance } from '#/start'
 
 import { setCurrentSession } from './authz-state'
@@ -324,19 +325,21 @@ export async function seedWorld() {
       role?: 'owner' | 'editor'
     } = {},
   ) {
+    // The raw token is returned for the test to use; only its hash is stored.
+    const token = crypto.randomUUID() + crypto.randomUUID()
     const [row] = await db
       .insert(invitation)
       .values({
         email: opts.email ?? `invitee-${crypto.randomUUID()}@authz.test`,
         organizationId: sides[side].ctx.org.id,
         role: opts.role ?? 'editor',
-        token: crypto.randomUUID() + crypto.randomUUID(),
+        tokenHash: hashToken(token),
         expiresAt: opts.expiresAt ?? new Date(Date.now() + 86_400_000),
         acceptedAt: opts.acceptedAt ?? null,
       })
       .returning()
     if (!row) throw new Error('invitation insert failed')
-    return row
+    return { ...row, token }
   }
 
   // Actors ----------------------------------------------------------------

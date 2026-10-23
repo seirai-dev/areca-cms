@@ -5,6 +5,8 @@ import { db } from '#/db'
 import { invitation, organization } from '#/db/schema'
 import { env } from '#/env'
 import { m } from '#/paraglide/messages'
+import { decryptSecret } from '#/server/security/secret-encryption'
+import { secretsEncryptionKey } from '#/server/security/secrets-key'
 
 import { MailRenderError } from '../types.ts'
 import type {
@@ -15,12 +17,37 @@ import type {
 } from '../types.ts'
 import { renderLayout } from '../layout.ts'
 
+import { PARAMS_SECRET_CONTEXT } from './password-reset.ts'
+
 /** What the invitation email says, read from the invitation row at send time. */
 export type InvitationMailData = {
   orgName: string
   role: string
   expiresAt: Date
-  token: string
+}
+
+/** The accept URL for a raw invitation token. */
+export function invitationAcceptUrl(token: string) {
+  return `${env.APP_URL}/invite/${token}`
+}
+
+/**
+ * The raw token comes from the outbox params, never from the database (only
+ * its hash is stored). `encryptedToken` is present when a secrets key existed
+ * at queue time; `token` is passed for the immediate send only.
+ */
+function resolveToken(params: Record<string, unknown>): string {
+  if (typeof params.encryptedToken === 'string') {
+    const key = secretsEncryptionKey()
+    if (!key) throw new MailRenderError('the invitation key is not set')
+    try {
+      return decryptSecret(params.encryptedToken, key, PARAMS_SECRET_CONTEXT)
+    } catch {
+      throw new MailRenderError('the invitation link could not be read')
+    }
+  }
+  if (typeof params.token === 'string' && params.token) return params.token
+  throw new MailRenderError('the invitation link is no longer available')
 }
 
 /** Same name and shape as the other templates: `render(params, ctx)`. */
@@ -29,9 +56,10 @@ export async function render(
   ctx: RenderContext,
 ): Promise<RenderedMail> {
   const data = await loadInvitationMail(params, ctx.connection)
-  const link = `${env.APP_URL}/invite/${data.token}`
+  const token = resolveToken(params)
   return buildInvitationMail(data, {
-    link,
+    link: invitationAcceptUrl(token),
+    token,
     locale: ctx.locale,
     brand: ctx.brand,
   })
@@ -51,7 +79,6 @@ export async function loadInvitationMail(
     .select({
       organizationId: invitation.organizationId,
       role: invitation.role,
-      token: invitation.token,
       expiresAt: invitation.expiresAt,
       acceptedAt: invitation.acceptedAt,
     })
@@ -75,16 +102,20 @@ export async function loadInvitationMail(
     orgName: org.name,
     role: row.role,
     expiresAt: row.expiresAt,
-    token: row.token,
   }
 }
 
 /** Pure: the invitation email for loaded data. `link` is the accept URL. */
 export function buildInvitationMail(
   data: InvitationMailData,
-  options: { link: string; locale: MailLocale; brand: RenderContext['brand'] },
+  options: {
+    link: string
+    token: string
+    locale: MailLocale
+    brand: RenderContext['brand']
+  },
 ): RenderedMail {
-  const { link, locale, brand } = options
+  const { link, token, locale, brand } = options
   const org = data.orgName
   const roleLabel =
     data.role === 'owner'
@@ -115,6 +146,6 @@ export function buildInvitationMail(
     preheader,
     html,
     text,
-    secrets: [data.token, link],
+    secrets: [token, link],
   }
 }

@@ -22,8 +22,14 @@ import {
   TabsList,
   TabsTrigger,
 } from '#/components/ui/tabs'
+import { useShell } from '#/components/shell/shell-context'
 import { PeopleManager } from '#/features/people/people-manager'
 import { TokenReveal } from '#/features/site-settings/token-reveal'
+import {
+  readPendingTokens,
+  removePendingToken,
+} from '#/lib/pending-site-tokens'
+import type { PendingToken } from '#/lib/pending-site-tokens'
 import { m } from '#/paraglide/messages'
 
 import { ClientDeployment } from './client-deployment'
@@ -31,8 +37,6 @@ import { ClientSettings } from './client-settings'
 import { ClientTile } from './client-tile'
 import { clientCounts } from './clients-screen'
 import { NewSiteSheet } from './new-site-sheet'
-import { readPendingTokens, removePendingToken } from './pending-site-tokens'
-import type { PendingToken } from './pending-site-tokens'
 import { clientSitesQuery, clientsQuery } from './queries'
 import type { ClientRow } from './queries'
 import { AgencySiteCard } from './site-card'
@@ -221,6 +225,7 @@ function ClientSites({
   newSiteOpen: boolean
   onNewSiteOpenChange: (open: boolean) => void
 }) {
+  const { me } = useShell()
   const sites = useQuery(clientSitesQuery(client.id))
   const overview = useQuery(sitesOverviewQueryOptions())
   const [search, setSearch] = React.useState('')
@@ -228,8 +233,8 @@ function ClientSites({
 
   // A token from an unconfirmed New site sheet (or a reload) stays visible.
   React.useEffect(() => {
-    setPending(readPendingTokens(client.id))
-  }, [client.id, newSiteOpen])
+    setPending(readPendingTokens(me.user.id, client.id))
+  }, [me.user.id, client.id, newSiteOpen])
 
   const figures = React.useMemo(() => {
     const map = new Map<string, SiteFigures>()
@@ -279,8 +284,8 @@ function ClientSites({
                 type="button"
                 variant="ghost"
                 onClick={() => {
-                  removePendingToken(client.id, item.siteId)
-                  setPending(readPendingTokens(client.id))
+                  removePendingToken(me.user.id, client.id, item.siteId)
+                  setPending(readPendingTokens(me.user.id, client.id))
                 }}
               >
                 {m.agency_token_saved()}
@@ -366,7 +371,9 @@ function ClientSites({
         orgId={client.id}
         open={newSiteOpen}
         onOpenChange={onNewSiteOpenChange}
-        onUnconfirmed={() => setPending(readPendingTokens(client.id))}
+        onUnconfirmed={() =>
+          setPending(readPendingTokens(me.user.id, client.id))
+        }
       />
     </div>
   )

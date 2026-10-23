@@ -6,7 +6,7 @@
  */
 import { randomInt } from 'node:crypto'
 
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { account, user, verification } from '#/db/schema'
@@ -16,6 +16,10 @@ import { NotFoundError } from '#/server/content/errors'
 import { createLogger } from '#/server/log'
 import { encryptSecret } from '#/server/security/secret-encryption'
 import { secretsEncryptionKey } from '#/server/security/secrets-key'
+import {
+  hashedVerificationIdentifier,
+  verificationIdentifierForms,
+} from '#/server/security/verification-identifiers'
 
 import { resolveMailConfig } from './config.ts'
 import { enqueueEmail, sendNow } from './outbox.ts'
@@ -32,6 +36,8 @@ export type AccountEmailKind =
   | 'two_factor_disabled'
   | 'membership_removed'
   | 'membership_role_changed'
+  | 'agency_admin_granted'
+  | 'agency_admin_revoked'
 
 export type QueuedEmail = { status: 'queued'; id: string }
 
@@ -143,7 +149,8 @@ export async function sendPasswordResetLink(
   const token = newResetToken()
   await db.insert(verification).values({
     id: crypto.randomUUID(),
-    identifier: `reset-password:${token}`,
+    // Stored the way Better Auth stores its own reset tokens.
+    identifier: hashedVerificationIdentifier(`reset-password:${token}`),
     value: userId,
     expiresAt: new Date(Date.now() + RESET_TTL_MS),
   })
@@ -197,7 +204,10 @@ async function deliverReset(
       .delete(verification)
       .where(
         and(
-          eq(verification.identifier, `reset-password:${token}`),
+          inArray(
+            verification.identifier,
+            verificationIdentifierForms(`reset-password:${token}`),
+          ),
           eq(verification.value, userId),
         ),
       )

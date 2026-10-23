@@ -58,7 +58,7 @@ Postgres or S3 is down; a plain restart will not fix those, so
 
 - `db`: `select 1`.
 - `storage`: S3 `HeadBucket` on `S3_BUCKET`.
-- `redis`: `PING`. Rate limiting fails open by design, so a Redis outage is
+- `redis`: `PING`. Rate limits fall back to in-memory counters, so a Redis outage is
   reported as `degraded: true` but does **not** fail readiness.
 - `worker`: only meaningful when `WORKER_ENABLED` is on in this process. Fails
   when the worker loop has not ticked for `READINESS_MAX_TICK_AGE_SECONDS`.

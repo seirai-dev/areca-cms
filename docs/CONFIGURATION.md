@@ -52,7 +52,7 @@ The CMS also accepts these optional URL and storage settings:
 | Variable | Default or effect |
 | --- | --- |
 | `SERVER_URL` | Optional server URL override. Usually leave unset. |
-| `REDIS_URL` | `redis://localhost:6379`; used for shared rate-limit counters. Redis failure is reported as degraded and rate limiting fails open. |
+| `REDIS_URL` | `redis://localhost:6379` outside production. Required in production (no default there). Holds the shared rate-limit counters. While Redis is down, each instance keeps counting in memory with the same budgets, and the health check reports Redis as degraded. |
 | `S3_FORCE_PATH_STYLE` | `false`; set `true` for path-style S3 endpoints such as local RustFS/MinIO. |
 
 ## Authentication and integrations
@@ -91,7 +91,8 @@ Dokploy delivery, invitation email behavior, and credential rotation.
 ## Mail
 
 SMTP is optional at startup. Without a mail server, mail is off until one is set
-in Agency → Mail. Invitations still work, and the link can be shared with Copy link.
+in Agency → Mail. Invitations still work, and a pending invitation's link can be shared
+with Regenerate link (the old link stops working).
 
 | Variable | Purpose |
 | --- | --- |
@@ -112,7 +113,8 @@ client, role changed). Without a mail server, security notices are skipped and
 forgot password asks the person to contact an agency admin. The reset token in
 the email queue is encrypted with `SECRETS_ENCRYPTION_KEY`, or
 `AI_SETTINGS_ENCRYPTION_KEY` if that is unset. Without a key, a reset email is
-tried once and never retried.
+tried once and never retried. Invitation emails follow the same rule, and only
+their hash is stored, so the link is never kept in plain text.
 
 ## Deployment and safety switches
 

@@ -1,5 +1,5 @@
 import { createServerFn } from '@tanstack/react-start'
-import { and, eq, gt } from 'drizzle-orm'
+import { and, eq, gt, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { db } from '#/db'
@@ -8,6 +8,7 @@ import { emailPasswordEnabled } from '#/lib/auth-providers'
 import { requireAgencyAdmin, requireUser } from '#/lib/session.server'
 import { m } from '#/paraglide/messages'
 import { allowUserAction } from '#/server/http/rate-limit.server'
+import { verificationIdentifierForms } from '#/server/security/verification-identifiers'
 import {
   sendPasswordResetLink,
   sendVerificationEmail,
@@ -58,7 +59,10 @@ export const checkPasswordResetTokenFn = createServerFn({
       .from(verification)
       .where(
         and(
-          eq(verification.identifier, `reset-password:${data.token}`),
+          inArray(
+            verification.identifier,
+            verificationIdentifierForms(`reset-password:${data.token}`),
+          ),
           gt(verification.expiresAt, new Date()),
         ),
       )

@@ -198,7 +198,8 @@ export const invitation = pgTable('invitation', {
     .notNull()
     .references(() => organization.id, { onDelete: 'cascade' }),
   role: text('role').$type<MembershipRole>().notNull(),
-  token: text('token').notNull().unique(),
+  /** SHA-256 of the invitation token. The raw token is never stored. */
+  tokenHash: text('token_hash').notNull().unique(),
   expiresAt: timestamptz('expires_at').notNull(),
   acceptedAt: timestamptz('accepted_at'),
   /**

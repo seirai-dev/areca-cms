@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 import type * as MailConfig from '#/server/mail/config'
 
-import { and, eq, inArray, like } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { db } from '#/db'
@@ -210,13 +210,10 @@ describe.skipIf(!hasDb)('account emails', () => {
     const [tokenRow] = await db
       .select()
       .from(verification)
-      .where(
-        and(
-          like(verification.identifier, 'reset-password:%'),
-          eq(verification.value, person.id),
-        ),
-      )
+      .where(eq(verification.value, person.id))
     expect(tokenRow).toBeDefined()
+    // Stored hashed, the way Better Auth stores its own reset tokens.
+    expect(tokenRow?.identifier.startsWith('reset-password:')).toBe(false)
     expect(tokenRow.expiresAt.getTime() - Date.now()).toBeGreaterThan(
       50 * 60_000,
     )

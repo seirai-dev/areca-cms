@@ -14,6 +14,7 @@ import {
 import { auth } from '#/lib/auth'
 import type { Field, MembershipRole } from '#/lib/types'
 import { acceptInvitation } from '#/server/admin/members'
+import { hashToken } from '#/server/security/token-hash'
 
 const ADMIN_EMAIL = 'admin@areca.local'
 const PASSWORD = 'password123'
@@ -59,7 +60,7 @@ async function inviteAndSignUp(input: {
     email: input.email,
     organizationId: input.organizationId,
     role: input.role,
-    token,
+    tokenHash: hashToken(token),
     expiresAt: new Date(Date.now() + 60 * 60 * 1000),
   })
   const created = await signUp(input.name, input.email, token)

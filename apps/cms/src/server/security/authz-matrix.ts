@@ -49,6 +49,7 @@ import * as securityFns from '#/server/fn/security'
 import * as setupFns from '#/server/fn/setup'
 import { publishEntry, updateDraft } from '#/server/content/entries'
 import { sampleRichText } from '#/server/content/test-utils'
+import { hashToken } from '#/server/security/token-hash'
 
 import type { ActorName, Expected, Policy, World } from './authz-harness'
 
@@ -383,7 +384,29 @@ export const ROWS: Row[] = [
         data: { id: inv.id },
         untouched: exists(
           invitation,
-          and(eq(invitation.id, inv.id), eq(invitation.token, inv.token)),
+          and(
+            eq(invitation.id, inv.id),
+            eq(invitation.tokenHash, hashToken(inv.token)),
+          ),
+        ),
+      }
+    },
+  },
+  {
+    name: 'regenerateInvitationLinkFn',
+    hidden: true,
+    fn: adminFns.regenerateInvitationLinkFn,
+    policy: 'org-owner',
+    prepare: async (w) => {
+      const inv = await w.fresh.invitation('X')
+      return {
+        data: { id: inv.id },
+        untouched: exists(
+          invitation,
+          and(
+            eq(invitation.id, inv.id),
+            eq(invitation.tokenHash, hashToken(inv.token)),
+          ),
         ),
       }
     },

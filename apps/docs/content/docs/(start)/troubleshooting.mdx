@@ -158,7 +158,7 @@ When you ask an agency admin or your hosting team for help, include the exact er
     The database, storage, or worker state is unhealthy. Check `/api/health/ready` for the failing component, then follow the operations checklist. See [Operations](/docs/self-hosting/operations).
   </Accordion>
   <Accordion title="Rate limiting seems to have stopped working">
-    When Redis is unavailable, shared rate limits fail open and the CMS logs a warning. Restore Redis and check the health output. See [Rate limits](/docs/security/rate-limits).
+    When Redis is unavailable, rate limits count in memory on each instance and the CMS logs a warning. Restore Redis and check the health output. See [Rate limits](/docs/security/rate-limits).
   </Accordion>
   <Accordion title="A saved provider key cannot be decrypted">
     The encryption key in the environment no longer matches the key used to save the credential. Restore the original key from your backup, or enter the credential again. Keep encryption keys stable and backed up with the database. See [Secrets](/docs/security/secrets) and [Backup and recovery](/docs/self-hosting/backup-and-recovery).

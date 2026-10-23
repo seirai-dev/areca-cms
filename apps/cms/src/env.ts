@@ -2,12 +2,16 @@ import { createEnv } from '@t3-oss/env-core'
 import { config } from 'dotenv'
 import { z } from 'zod'
 
+import { productionSecretProblems } from '#/lib/secret-placeholders'
+
 config({ path: ['.env.local', '.env'] })
 
+const skipValidation =
+  process.env.SKIP_ENV_VALIDATION === 'true' ||
+  process.env.npm_lifecycle_event === 'build'
+
 export const env = createEnv({
-  skipValidation:
-    process.env.SKIP_ENV_VALIDATION === 'true' ||
-    process.env.npm_lifecycle_event === 'build',
+  skipValidation,
   server: {
     SERVER_URL: z.string().url().optional(),
     DATABASE_URL: z.string().url(),
@@ -57,7 +61,7 @@ export const env = createEnv({
     S3_SECRET_KEY: z.string().min(1),
     S3_FORCE_PATH_STYLE: z.string().optional(),
     // SMTP is optional: the Agency → Mail settings can replace these entirely.
-    // Without either source, sending is off and invites need Copy link.
+    // Without either source, sending is off and invites need Regenerate link.
     SMTP_HOST: z.string().min(1).optional(),
     SMTP_PORT: z.coerce.number().int().min(1).max(65_535).optional(),
     SMTP_FROM: z.string().min(1).optional(),
@@ -151,3 +155,19 @@ export const env = createEnv({
    */
   emptyStringAsUndefined: true,
 })
+
+// Example values from docker/.env.example and apps/cms/.env.example must not
+// reach a production instance. Failing at boot is cheaper than a forged session.
+if (process.env.NODE_ENV === 'production' && !skipValidation) {
+  const problems = productionSecretProblems(env)
+  if (!process.env.REDIS_URL) {
+    problems.push(
+      'REDIS_URL must be set in production, e.g. redis://redis:6379. Shared rate-limit counters depend on it.',
+    )
+  }
+  if (problems.length > 0) {
+    throw new Error(
+      `Refusing to start in production:\n- ${problems.join('\n- ')}`,
+    )
+  }
+}

@@ -12,6 +12,8 @@ import {
 } from '#/db/schema'
 import type { EventKey } from '#/lib/notifications'
 
+import { hashToken } from '#/server/security/token-hash'
+
 import { writeRule } from './preferences.ts'
 import {
   notifyInviteAccepted,
@@ -367,7 +369,7 @@ async function createInvitation(orgId: string, senderId: string | null) {
       email: `invitee-${crypto.randomUUID()}@test.local`,
       organizationId: orgId,
       role: 'editor',
-      token: crypto.randomUUID(),
+      tokenHash: hashToken(crypto.randomUUID()),
       expiresAt: new Date(Date.now() + 86_400_000),
       acceptedAt: new Date(),
     })

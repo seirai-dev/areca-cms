@@ -41,7 +41,7 @@ import { useSiteGlobals } from '#/features/globals/use-globals'
 import { useReleaseStatus } from '#/features/golive/use-release-status'
 import { usePanel } from '#/features/shell/panel'
 import { useDebouncedValue } from '#/hooks/use-debounced-value'
-import { authClient } from '#/lib/auth-client'
+import { signOutClient } from '#/lib/sign-out'
 import {
   agencyNavItems,
   canManageSite,
@@ -379,7 +379,7 @@ export function CommandPalette() {
             value="action sign out"
             onSelect={() =>
               run(() => {
-                void authClient.signOut().finally(() => {
+                void signOutClient().finally(() => {
                   window.location.assign(localizeHref('/login'))
                 })
               })

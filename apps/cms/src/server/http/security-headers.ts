@@ -1,3 +1,24 @@
+/**
+ * Strict policy observed in browser reports but not enforced yet. TanStack
+ * Start still emits inline hydration scripts, which `script-src 'self'` would
+ * block. Move to enforcement once those carry a nonce (router `ssr.nonce`, see
+ * server.ts) or the scripts are moved to files. Assets are served from this
+ * origin (/api/assets/file), so no storage origin is listed.
+ */
+const CSP_REPORT_ONLY = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "font-src 'self' data:",
+  "connect-src 'self'",
+  "media-src 'self' blob:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join('; ')
+
 const SECURITY_HEADERS: ReadonlyArray<readonly [string, string]> = [
   ['X-Content-Type-Options', 'nosniff'],
   ['X-Frame-Options', 'DENY'],
@@ -8,6 +29,7 @@ const SECURITY_HEADERS: ReadonlyArray<readonly [string, string]> = [
     'Content-Security-Policy',
     "base-uri 'self'; frame-ancestors 'none'; object-src 'none'",
   ],
+  ['Content-Security-Policy-Report-Only', CSP_REPORT_ONLY],
 ]
 
 export function withSecurityHeaders(request: Request, response: Response) {

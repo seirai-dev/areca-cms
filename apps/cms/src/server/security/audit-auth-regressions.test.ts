@@ -1,9 +1,11 @@
 import { and, eq } from 'drizzle-orm'
+import { hashPassword } from 'better-auth/crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { db, pool } from '#/db'
 import {
   account,
+  auditLog,
   invitation,
   membership,
   organization,
@@ -22,6 +24,7 @@ import {
 import { completeSetup } from '#/server/admin/setup'
 import { deleteOrganization } from '#/server/admin/organizations'
 import { createTestSite } from '#/server/content/test-utils'
+import { hashToken } from '#/server/security/token-hash'
 import { localMfaVerifiedAt, requireAdminLocalMfa } from './local-mfa'
 import {
   clearStepUpFailures,
@@ -83,17 +86,19 @@ async function makeOrg() {
   return created
 }
 async function makeInvite(target: typeof user.$inferSelect, orgId: string) {
+  // The raw token is returned for the test; the database keeps only its hash.
+  const token = crypto.randomUUID()
   const [created] = await db
     .insert(invitation)
     .values({
       email: target.email,
       organizationId: orgId,
       role: 'editor',
-      token: crypto.randomUUID(),
+      tokenHash: hashToken(token),
       expiresAt: new Date(Date.now() + 60_000),
     })
     .returning()
-  return created
+  return { ...created, token }
 }
 
 afterEach(async () => {
@@ -128,16 +133,18 @@ describe.skipIf(!isolated)(
       const existing = await makeUser()
       const org = await makeOrg()
       const email = `${crypto.randomUUID()}@audit.test`
-      const [invite] = await db
+      const inviteToken = crypto.randomUUID()
+      const [inserted] = await db
         .insert(invitation)
         .values({
           email,
           organizationId: org.id,
           role: 'owner',
-          token: crypto.randomUUID(),
+          tokenHash: hashToken(inviteToken),
           expiresAt: new Date(Date.now() + 60_000),
         })
         .returning()
+      const invite = { ...inserted, token: inviteToken }
       const signup = { name: 'Recipient', email, password: 'password123' }
       await expect(
         auth.api.signUpEmail({ body: signup }),
@@ -166,6 +173,60 @@ describe.skipIf(!isolated)(
         }),
       ).rejects.toMatchObject({ statusCode: 403 })
       expect(existing.id).not.toBe(result.user.id)
+    })
+
+    it('answers an existing account and a missing invitation with the same refusal', async () => {
+      const existing = await makeUser()
+      const org = await makeOrg()
+      const invite = await makeInvite(existing, org.id)
+      const again = {
+        name: 'Again',
+        email: existing.email,
+        password: 'password123',
+        invitationToken: invite.token,
+      }
+      const stranger = {
+        name: 'Stranger',
+        email: `${crypto.randomUUID()}@audit.test`,
+        password: 'password123',
+        invitationToken: 'incorrect',
+      }
+      const withInvite = await auth.api
+        .signUpEmail({ body: again })
+        .catch((error: unknown) => error)
+      const withoutInvite = await auth.api
+        .signUpEmail({ body: stranger })
+        .catch((error: unknown) => error)
+      expect(withInvite).toMatchObject({ statusCode: 403 })
+      expect(withoutInvite).toMatchObject({ statusCode: 403 })
+      expect((withInvite as { body: unknown }).body).toEqual(
+        (withoutInvite as { body: unknown }).body,
+      )
+    })
+
+    it('audits a password sign-in and never records the password', async () => {
+      const person = await makeUser()
+      const password = 'password123'
+      await db.insert(account).values({
+        id: crypto.randomUUID(),
+        accountId: person.id,
+        providerId: 'credential',
+        userId: person.id,
+        password: await hashPassword(password),
+      })
+      await auth.api.signInEmail({ body: { email: person.email, password } })
+      const events = await db
+        .select()
+        .from(auditLog)
+        .where(
+          and(
+            eq(auditLog.actorId, person.id),
+            eq(auditLog.action, 'user.sign_in'),
+          ),
+        )
+      expect(events).toHaveLength(1)
+      expect(events[0]?.meta).toMatchObject({ sessionId: expect.any(String) })
+      expect(JSON.stringify(events[0]?.meta)).not.toContain(password)
     })
 
     it('rolls back bootstrap credentials and admin together after an audit failure', async () => {

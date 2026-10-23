@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useRouter, Link } from '@tanstack/react-router'
-import { authClient } from '#/lib/auth-client'
+import { signOutClient } from '#/lib/sign-out'
 import { verifyStepUpFn } from '#/server/fn/security'
 import { TwoFactorChallenge } from '#/features/auth/two-factor-challenge'
 import { ArrowLeft, WarningCircle } from '@phosphor-icons/react'
@@ -39,9 +39,7 @@ export function AccountScreen({ me }: { me: Me }) {
           pending={pending}
           error={error}
           onCancel={() => {
-            void authClient
-              .signOut()
-              .then(() => window.location.assign('/login'))
+            void signOutClient().then(() => window.location.assign('/login'))
           }}
           onSubmit={(code, kind) => {
             setPending(true)

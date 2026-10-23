@@ -23,6 +23,7 @@ import {
 import {
   acceptInvitation,
   inviteMember,
+  regenerateInvitationLink,
   removeMember,
   resendInvitation,
   revokeInvitation,
@@ -87,6 +88,12 @@ const appsResponse = () =>
     }),
     { status: 200, headers: { 'content-type': 'application/json' } },
   )
+
+/** The raw token of a pending invitation. Only the hash is stored, so the test reads it from a fresh link. */
+async function linkTokenFor(invitationId: string, actorId: string) {
+  const { link } = await regenerateInvitationLink(invitationId, actorId)
+  return link.slice(link.lastIndexOf('/') + 1)
+}
 
 describe.skipIf(!hasDb)(
   'administrative actions write audit rows with the actor',
@@ -186,14 +193,20 @@ describe.skipIf(!hasDb)(
           role: 'owner',
           actorId: admin.id,
         })
-        await acceptInvitation({ token: second2.token, userId: guest.id })
+        await acceptInvitation({
+          token: await linkTokenFor(second2.id, admin.id),
+          userId: guest.id,
+        })
         const other = await inviteMember({
           organizationId: org.id,
           email: second.email,
           role: 'owner',
           actorId: admin.id,
         })
-        await acceptInvitation({ token: other.token, userId: second.id })
+        await acceptInvitation({
+          token: await linkTokenFor(other.id, admin.id),
+          userId: second.id,
+        })
         await updateMemberRole(org.id, guest.id, 'editor', admin.id)
         await removeMember(org.id, guest.id, admin.id)
 

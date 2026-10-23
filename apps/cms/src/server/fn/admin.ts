@@ -22,6 +22,7 @@ import {
   listInvitations,
   listMembers,
   listUsers,
+  regenerateInvitationLink,
   removeMember,
   resendInvitation,
   revokeInvitation,
@@ -374,6 +375,29 @@ export const resendInvitationFn = createServerFn({
     )
     await resendInvitation(data.id, session.user.id)
     return { ok: true as const }
+  })
+
+/**
+ * "Regenerate link": the response carries the new link, the only time it is
+ * returned. The old link stops working.
+ */
+export const regenerateInvitationLinkFn = createServerFn({
+  method: 'POST',
+  ...adminFn,
+})
+  .validator(z.object({ id: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    await requireUser()
+    const existing = await getInvitationById(data.id)
+    if (!existing) {
+      throw new NotFoundError(m.server_invitation_not_found())
+    }
+    const session = await requireOrgMemberOrNotFound(
+      existing.organizationId,
+      'owner',
+      () => new NotFoundError(m.server_invitation_not_found()),
+    )
+    return regenerateInvitationLink(data.id, session.user.id)
   })
 
 export const listAuditLogFn = createServerFn({ method: 'GET', ...adminFn })
