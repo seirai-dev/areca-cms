@@ -1,9 +1,10 @@
 import { createServerFn } from '@tanstack/react-start'
 import { eq } from 'drizzle-orm'
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import { db } from '#/db'
 import { site } from '#/db/schema'
+import { canonicalLocale, localeTagSchema } from '#/lib/content-locale'
 import { ID_MAX_LENGTH } from '#/lib/content-limits'
 import {
   requireAgencyAdmin,
@@ -86,6 +87,8 @@ export const generateEntrySeoFn = createServerFn({ method: 'POST', ...aiFn })
       collectionKey: z.string().min(1).max(200),
       entryId: z.string().max(ID_MAX_LENGTH).optional(),
       data: z.record(z.string(), z.unknown()),
+      /** The language being edited. Alt text is suggested in it. */
+      locale: localeTagSchema.optional(),
     }),
   )
   .handler(async ({ data }) => {
@@ -94,6 +97,20 @@ export const generateEntrySeoFn = createServerFn({ method: 'POST', ...aiFn })
       await db.select().from(site).where(eq(site.id, data.siteId)).limit(1)
     ).at(0)
     if (!found) throw new NotFoundError(m.server_site_not_found())
+    const locale = data.locale ? canonicalLocale(data.locale) : null
+    if (locale && found.languages && !found.languages.all.includes(locale)) {
+      throw new ValidationError([
+        {
+          path: 'locale',
+          message: 'This language is not one of the site languages.',
+        },
+      ])
+    }
+    // The main language reads and writes the main alt, like no language at all.
+    const altLocale =
+      locale && found.languages && locale !== found.languages.main
+        ? locale
+        : null
     // Anyone who can edit the site's content (editor, owner, agency admin).
     const session = await requireOrgMemberOrNotFound(
       found.organizationId,
@@ -132,6 +149,7 @@ export const generateEntrySeoFn = createServerFn({ method: 'POST', ...aiFn })
       fields: collection.fields,
       data: parsed.data,
       slug: resolveSlug(parsed.data, collection.fields) ?? 'untitled',
+      locale: altLocale,
     })
 
     await audit({

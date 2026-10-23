@@ -35,21 +35,20 @@ async function withJob(
       .insert(buildJob)
       .values({
         siteId: ctx.site.id,
-        publicationId: pub!.id,
+        publicationId: pub.id,
         status,
         leaseExpiresAt:
           status === 'building' ? new Date(Date.now() - 400_000) : null,
       })
       .returning()
-    await run({ jobId: job!.id, siteId: ctx.site.id })
+    await run({ jobId: job.id, siteId: ctx.site.id })
   } finally {
     await cleanupTestSite(ctx)
   }
 }
 
 const logsOf = async (jobId: string) =>
-  (await db.select().from(buildJob).where(eq(buildJob.id, jobId)))[0]!.logs ??
-  ''
+  (await db.select().from(buildJob).where(eq(buildJob.id, jobId)))[0].logs ?? ''
 
 describe.skipIf(!hasDb)('bounded build logs', () => {
   it('appends timestamped, redacted lines', async () => {
@@ -102,7 +101,7 @@ describe.skipIf(!hasDb)('bounded build logs', () => {
       const length = await db.execute<{ n: number }>(
         sql`select char_length(logs) as n from build_job where id = ${jobId}`,
       )
-      expect(Number(length.rows[0]!.n)).toBeLessThanOrEqual(MAX_JOB_LOG_CHARS)
+      expect(Number(length.rows[0].n)).toBeLessThanOrEqual(MAX_JOB_LOG_CHARS)
     })
   })
 
@@ -154,7 +153,10 @@ describe.skipIf(!hasDb)('queue stats and metrics against the database', () => {
           redis: { ok: true, ms: 1 },
           worker: { ok: true, ms: 1 },
           queue: { ok: true, ms: 1 },
+          mail: { ok: true, ms: 1 },
+          loops: { ok: true, ms: 1 },
         },
+        degraded: false,
       })
       expect(snapshot.jobsByStatus.queued).toBeGreaterThanOrEqual(1)
       expect(snapshot.publicationsByStatus.pending).toBeGreaterThanOrEqual(1)

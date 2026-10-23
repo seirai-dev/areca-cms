@@ -86,6 +86,7 @@ await pullContent({ outDir: "src/generated/content", client });
 | `404` / no publication on pull | Nothing is live yet. Go live in the CMS, then pull again. |
 | `429` | 300 requests/min per token. Wait for `Retry-After`. |
 | `400` / `413` on push | Invalid schema, or the manifest is over 256 KiB |
+| `Removing <key.field> deletes content` / `FieldDropsRequiredError` | Nothing was pushed. Ask the user before confirming, then re-run with `--confirm-drop <key.field>` (or `--yes`), or pass `confirmDropFields` to `syncManifest`. |
 | `No content file for collection` | Run `areca pull`, then check the collection key |
 | `Unsafe collection or field identifier` | Rename the key to match `^[A-Za-z][A-Za-z0-9_-]{0,63}$` |
 | `Collection key "<key>" is reserved` / `resolve`, `href`, `preview`, `globals`, `previewGlobals` | Collections cannot use these names, because the content object uses them. Rename the collection. Field keys may keep them. |

@@ -1,5 +1,5 @@
 import { createServerFn } from '@tanstack/react-start'
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import { requireAgencyAdmin } from '#/lib/session.server'
 import { BRAND_COLOR_KEYS, loginTaglinesSchema } from '#/lib/branding'

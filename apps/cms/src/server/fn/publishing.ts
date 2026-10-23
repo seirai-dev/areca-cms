@@ -1,6 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { eq } from 'drizzle-orm'
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import { db } from '#/db'
 import { site } from '#/db/schema'
@@ -26,7 +26,7 @@ import {
   requestPublication,
   requestRollback,
 } from '#/server/publishing/publications'
-import { listPendingReleaseChanges } from '#/server/publishing/release-diff'
+import { listPendingRelease } from '#/server/publishing/release-diff'
 
 const loose = { strict: { output: false } as const }
 
@@ -40,11 +40,9 @@ async function requireSiteAccess(
   // Authenticate first; a missing site and a site the caller cannot access
   // look identical (NotFound), so other tenants' ids cannot be probed.
   await requireUser()
-  const [found] = await db
-    .select()
-    .from(site)
-    .where(eq(site.id, siteId))
-    .limit(1)
+  const found = (
+    await db.select().from(site).where(eq(site.id, siteId)).limit(1)
+  ).at(0)
   if (!found) {
     throw new NotFoundError(notFoundMessage())
   }
@@ -179,7 +177,7 @@ export const listPendingReleaseChangesFn = createServerFn({
   .validator(z.object({ siteId: z.string().min(1) }))
   .handler(async ({ data }) => {
     await requireSiteAccess(data.siteId)
-    return listPendingReleaseChanges(data.siteId)
+    return listPendingRelease(data.siteId)
   })
 
 export const reconcileDeploymentJobFn = createServerFn({

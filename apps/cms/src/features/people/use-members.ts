@@ -10,6 +10,7 @@ import {
   inviteMemberFn,
   listInvitationsFn,
   listMembersFn,
+  regenerateInvitationLinkFn,
   removeMemberFn,
   resendInvitationFn,
   revokeInvitationFn,
@@ -20,6 +21,10 @@ export type MemberRow = Awaited<ReturnType<typeof listMembersFn>>[number]
 export type InvitationRow = Awaited<
   ReturnType<typeof listInvitationsFn>
 >[number]
+
+export type RegeneratedLink = Awaited<
+  ReturnType<typeof regenerateInvitationLinkFn>
+>
 
 export type InviteResult = {
   email: string
@@ -86,6 +91,7 @@ export function useMembers(organizationId: string) {
   const inviteMember = useServerFn(inviteMemberFn)
   const revokeInvitation = useServerFn(revokeInvitationFn)
   const resendInvitation = useServerFn(resendInvitationFn)
+  const regenerateInvitationLink = useServerFn(regenerateInvitationLinkFn)
 
   const members = useQuery({
     queryKey: adminQueryKeys.members(organizationId),
@@ -168,6 +174,13 @@ export function useMembers(organizationId: string) {
     onSettled: refreshInvitations,
   })
 
+  /** A new link: the old one stops working. The result carries the link, once. */
+  const regenerate = useMutation({
+    mutationFn: (row: InvitationRow): Promise<RegeneratedLink> =>
+      regenerateInvitationLink({ data: { id: row.id } }),
+    onSettled: refreshInvitations,
+  })
+
   const sortedMembers = React.useMemo(
     () =>
       [...(members.data ?? [])].sort((a, b) =>
@@ -198,5 +211,6 @@ export function useMembers(organizationId: string) {
     revoke,
     invite,
     resend,
+    regenerate,
   }
 }

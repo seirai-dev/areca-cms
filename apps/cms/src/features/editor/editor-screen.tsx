@@ -67,6 +67,7 @@ import { LocaleFieldsContext } from './locale-fields'
 import type { LocaleFields } from './locale-fields'
 import { ScheduledVersion } from './scheduled-version'
 import { ScheduleForm } from './schedule-form'
+import { conflictReadyBlock, EditorConflictNotice } from './conflict-notice'
 import { SeoPanel, plainTextOf } from './seo-panel'
 import { useContentLanguage } from './use-content-language'
 import { useEntryEditor } from './use-entry-editor'
@@ -293,7 +294,7 @@ function EntryEditorView({
     if (first) requestAnimationFrame(() => revealField(first))
   }
 
-  const readyBlock = blocker
+  const languageBlock = blocker
     ? {
         message: m.editor_language_blocker({
           language: uiLanguageName(blocker.locale),
@@ -302,6 +303,11 @@ function EntryEditorView({
         onFix: () => focusBlocker(blocker),
       }
     : null
+  const conflictBlock = conflictReadyBlock(
+    editor.conflict,
+    () => void editor.reloadServerDraft(),
+  )
+  const readyBlock = conflictBlock ?? languageBlock
 
   // Writes the active language. On the main language (and single-language
   // sites) this is the ordinary update, which also keeps the slug in step
@@ -522,15 +528,10 @@ function EntryEditorView({
       languageRows={languageRows}
       onSelectLanguage={lang.setActive}
       entry={entry}
+      entryId={editor.entryId}
       live={live}
       isNew={editor.isNew}
       canManage={canManage}
-      revisions={editor.revisions}
-      revisionsLoading={editor.revisionsQuery.isLoading}
-      revisionsError={
-        editor.revisionsQuery.isError ? editor.revisionsQuery.error : null
-      }
-      onRetryRevisions={() => void editor.revisionsQuery.refetch()}
       onRestore={setRestoreId}
       onCancelSchedule={editor.cancelSchedule}
       seoPanel={
@@ -564,6 +565,8 @@ function EntryEditorView({
       pending={editor.schedulePending}
       onCancel={() => setScheduleOpen(false)}
       onSubmit={async (at, timeZone) => {
+        // A form opened before the conflict must not approve over it.
+        if (editor.conflict) return
         const result = await editor.schedule(at, timeZone).catch(() => null)
         if (result) setScheduleOpen(false)
       }}
@@ -571,6 +574,7 @@ function EntryEditorView({
   )
 
   const hasErrors = editor.errorCount > 0 || Boolean(editor.formError)
+  const errorKeys = Object.keys(editor.fieldErrors).filter(Boolean)
 
   const languageBar =
     lang.languages && ctx && active ? (
@@ -642,6 +646,7 @@ function EntryEditorView({
           scheduledAt={entry?.scheduledAt}
           editedSinceReady={editedSinceReady}
           saveStatus={editor.status}
+          conflict={editor.conflict}
           isNew={editor.isNew}
           lastSavedAt={editor.lastSavedAt}
           updatedAt={entry?.updatedAt}
@@ -714,43 +719,15 @@ function EntryEditorView({
             className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6 px-1 pt-4 sm:pt-10"
             aria-label={m.editor_canvas_label()}
           >
-            {editor.conflict || editor.recoveredDraft ? (
-              <div
-                role="alert"
-                className="mx-auto grid w-full max-w-[720px] gap-3 rounded-card border border-border-error/30 p-4"
-              >
-                <p>
-                  {editor.conflict
-                    ? m.editor_draft_conflict_notice()
-                    : m.editor_draft_recovered_notice()}
-                </p>
-                <div className="flex flex-wrap gap-4">
-                  <button
-                    type="button"
-                    className="underline"
-                    onClick={() => void editor.reloadServerDraft()}
-                  >
-                    {m.editor_reload_server_draft()}
-                  </button>
-                  <button
-                    type="button"
-                    className="underline"
-                    onClick={() => void editor.reapplyRecoveredDraft()}
-                  >
-                    {m.editor_reapply_recovered_draft()}
-                  </button>
-                  {!editor.conflict && (
-                    <button
-                      type="button"
-                      className="underline"
-                      onClick={editor.discardRecoveredDraft}
-                    >
-                      {m.editor_discard_recovered_draft()}
-                    </button>
-                  )}
-                </div>
-              </div>
-            ) : null}
+            <EditorConflictNotice
+              conflict={editor.conflict}
+              approvalConflict={editor.approvalConflict}
+              recoveredDraft={Boolean(editor.recoveredDraft)}
+              className="mx-auto grid w-full max-w-[720px] gap-3 rounded-card border border-border-error/30 p-4"
+              onReload={() => void editor.reloadServerDraft()}
+              onReapply={() => void editor.reapplyRecoveredDraft()}
+              onDiscard={editor.discardRecoveredDraft}
+            />
             {editor.restoreSkippedFields.length > 0 ? (
               <section
                 role="status"
@@ -798,6 +775,20 @@ function EntryEditorView({
                         : m.editor_save_fix_other({ count: editor.errorCount })
                       : m.editor_save_failed()}
                   </span>
+                  {errorKeys.length > 0 ? (
+                    <span className="flex flex-wrap gap-x-3 gap-y-1">
+                      {errorKeys.map((key) => (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => revealField(key)}
+                          className="text-callout font-medium text-text-primary underline decoration-border-error underline-offset-4 hover:decoration-current"
+                        >
+                          {fieldLabels([key], fields)[0] ?? key}
+                        </button>
+                      ))}
+                    </span>
+                  ) : null}
                   {editor.formError ? (
                     <span className="text-callout text-text-secondary">
                       {editor.formError}
@@ -869,6 +860,7 @@ function EntryEditorView({
           siteId={siteId}
           collectionKey={collection.key}
           entryId={editor.entryId}
+          locale={ctx ? active : null}
           data={view}
           seo={seo}
           onApply={(next) => onLocaleChange(SEO_KEY, next)}

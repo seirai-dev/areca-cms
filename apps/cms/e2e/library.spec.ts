@@ -22,11 +22,14 @@ async function openLibrary(page: Page) {
 }
 
 async function upload(page: Page, name: string) {
-  await page.getByTestId('library-page').getByTestId('media-upload').setInputFiles({
-    name,
-    mimeType: 'image/png',
-    buffer: TINY_PNG,
-  })
+  await page
+    .getByTestId('library-page')
+    .getByTestId('media-upload')
+    .setInputFiles({
+      name,
+      mimeType: 'image/png',
+      buffer: TINY_PNG,
+    })
   const tile = page.getByTestId(`media-card-${name}`)
   await expect(tile).toBeVisible()
   return tile

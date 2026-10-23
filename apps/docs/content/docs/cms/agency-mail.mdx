@@ -117,6 +117,20 @@ Failed and retrying rows show the reason in plain language. Use the filter to sh
 
 A status of **sent** means the mail server accepted the email. It does not confirm delivery to the inbox.
 
+## Paused jobs
+
+**Paused jobs** lists work that stopped after four failed attempts. Each row has the reason, the time of the last attempt, and **Details** with the last error. There are two kinds:
+
+- **Storage deletions**: a file that Areca could not remove from storage. The file stays in the cleanup queue.
+- **Scheduled publishes**: a publish that was scheduled for a site and stopped. Its entries do not go live until it runs again.
+
+The panel shows nothing when nothing is paused.
+
+- **Retry** starts a fresh set of attempts. Fix the cause first, such as a storage outage or a site that has been repaired, or the work will fail again.
+- **Dismiss** hides the row and stops the automatic retry for it. Nothing is deleted. A dismissed scheduled publish stays paused until you publish it another way.
+
+Areca also retries every paused item that you have not dismissed once an hour, with a fresh set of attempts. An item that still fails pauses again and is logged. The counts are on the readiness and metrics output as `areca_storage_deletions_paused` and `areca_schedules_exhausted`. See [operations](/docs/self-hosting/operations#metrics).
+
 ## Troubleshooting errors
 
 These are the messages you may see in a toast, on a People invitation, or in Recent emails. Placeholders such as `host`, `port` and `reply` stand for the values from your installation.

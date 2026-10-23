@@ -1,11 +1,13 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 import type * as MailConfig from '#/server/mail/config'
+import type * as MailTransport from '#/server/mail/transport'
 
-import { eq, inArray } from 'drizzle-orm'
+import { asc, eq, inArray, sql } from 'drizzle-orm'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { db } from '#/db'
-import { emailOutbox, user } from '#/db/schema'
+import { emailDeliveryAttempt, emailOutbox, user } from '#/db/schema'
+import { env } from '#/env'
 import { getBranding } from '#/server/admin/branding'
 
 import {
@@ -27,6 +29,10 @@ vi.mock('#/server/mail/config', async (importOriginal) => {
   const actual = await importOriginal<typeof MailConfig>()
   return {
     ...actual,
+    isMailConfigured: async () => {
+      if (override.value === undefined) return actual.isMailConfigured()
+      return override.value !== null
+    },
     resolveMailConfig: async () => {
       if (override.value === undefined) return actual.resolveMailConfig()
       if (override.value === null) return null
@@ -44,7 +50,31 @@ vi.mock('#/server/mail/config', async (importOriginal) => {
   }
 })
 
+// `onSend` runs inside a send, before the real SMTP call. Tests use it to
+// simulate another claim taking over while this one is in flight.
+const transport = vi.hoisted(() => ({
+  onSend: undefined as undefined | (() => Promise<void>),
+}))
+
+vi.mock('#/server/mail/transport', async (importOriginal) => {
+  const actual = await importOriginal<typeof MailTransport>()
+  return {
+    ...actual,
+    sendMail: async (...args: Parameters<typeof MailTransport.sendMail>) => {
+      const hook = transport.onSend
+      transport.onSend = undefined
+      if (hook) await hook()
+      return actual.sendMail(...args)
+    },
+  }
+})
+
 const hasDb = Boolean(process.env.DATABASE_URL)
+
+// The SMTP sink the suite runs against (Mailpit in CI and in docker/compose),
+// as the environment configures it.
+const smtpHost = env.SMTP_HOST ?? '127.0.0.1'
+const smtpPort = env.SMTP_PORT ?? 1025
 
 beforeEach(() => {
   override.value = undefined
@@ -91,6 +121,86 @@ async function mailpitMessage(to: string) {
 }
 
 describe.skipIf(!hasDb)('email outbox', () => {
+  it('keeps an immediate send away from the worker until its lease expires', async () => {
+    const to = `immediate-${crypto.randomUUID()}@areca.local`
+    const queued = await enqueueEmail({
+      kind: 'test',
+      template: 'test',
+      to,
+      params: { host: 'mailpit', sentBy: 'admin@areca.local' },
+      locale: 'en',
+      immediate: true,
+    })
+    expect(queued.claimedAttempt).toBe(1)
+
+    // The worker runs while the caller is about to send: it must not claim.
+    expect(await processOutbox({ only: [queued.id] })).toBe(0)
+    expect(await rowOf(queued.id)).toMatchObject({
+      status: 'sending',
+      attempts: 1,
+    })
+
+    await expect(
+      sendNow(queued.id, { claimedAttempt: queued.claimedAttempt }),
+    ).resolves.toEqual({ status: 'sent', id: queued.id })
+    expect(await rowOf(queued.id)).toMatchObject({
+      status: 'sent',
+      attempts: 1,
+    })
+  })
+
+  it('lets the worker take an immediate row once its lease has lapsed', async () => {
+    const queued = await enqueueEmail({
+      kind: 'test',
+      template: 'test',
+      to: `lapsed-${crypto.randomUUID()}@areca.local`,
+      params: { host: 'mailpit', sentBy: 'admin@areca.local' },
+      locale: 'en',
+      immediate: true,
+    })
+    await db
+      .update(emailOutbox)
+      .set({ leaseUntil: new Date(Date.now() - 1000) })
+      .where(eq(emailOutbox.id, queued.id))
+
+    expect(await processOutbox({ only: [queued.id] })).toBe(1)
+    expect(await rowOf(queued.id)).toMatchObject({
+      status: 'sent',
+      attempts: 2,
+    })
+  })
+
+  it('ignores the outcome of a sender whose lease was taken over mid-send', async () => {
+    const to = `fenced-${crypto.randomUUID()}@areca.local`
+    const { id } = await enqueueEmail({
+      kind: 'test',
+      template: 'test',
+      to,
+      params: { host: 'mailpit', sentBy: 'admin@areca.local' },
+      locale: 'en',
+    })
+    transport.onSend = async () => {
+      // A newer claim (attempt 2) takes the row while attempt 1 is in SMTP.
+      await db
+        .update(emailOutbox)
+        .set({
+          attempts: sql`${emailOutbox.attempts} + 1`,
+          leaseUntil: new Date(Date.now() + 60_000),
+        })
+        .where(eq(emailOutbox.id, id))
+    }
+
+    await processOutbox({ only: [id] })
+
+    // The stale attempt's "sent" must not overwrite the newer claim.
+    expect(await rowOf(id)).toMatchObject({
+      status: 'sending',
+      attempts: 2,
+      sentAt: null,
+      providerMessageId: null,
+    })
+  })
+
   it('enqueues, sends now, and delivers a branded message visible in Mailpit', async () => {
     const brand = await getBranding()
     const to = `outbox-${crypto.randomUUID()}@areca.local`
@@ -186,6 +296,21 @@ describe.skipIf(!hasDb)('email outbox', () => {
     expect(recent?.error?.message).toContain(
       "Couldn't reach localhost on port 1",
     )
+
+    // Each outcome is one attempt record: the banner counts these.
+    const attempts = await db
+      .select({
+        attempt: emailDeliveryAttempt.attempt,
+        outcome: emailDeliveryAttempt.outcome,
+      })
+      .from(emailDeliveryAttempt)
+      .where(eq(emailDeliveryAttempt.outboxId, id))
+      .orderBy(asc(emailDeliveryAttempt.attempt))
+    expect(attempts).toEqual([
+      { attempt: 1, outcome: 'retrying' },
+      { attempt: 2, outcome: 'retrying' },
+      { attempt: 3, outcome: 'failed' },
+    ])
   })
 
   it('fails a non-retryable error (no mail configured) on the first attempt', async () => {
@@ -274,8 +399,8 @@ describe.skipIf(!hasDb)('email outbox', () => {
     try {
       const sent = await sendTestEmail({
         draft: {
-          host: 'localhost',
-          port: 1025,
+          host: smtpHost,
+          port: smtpPort,
           secure: 'none',
           username: null,
           fromAddress: 'cms@areca.local',
@@ -294,7 +419,7 @@ describe.skipIf(!hasDb)('email outbox', () => {
         userId: sender.id,
       })
       expect(sentRow.subject).toContain('uygulamasından test e-postası')
-      expect((await mailpitMessage(to))?.Text).toContain('localhost')
+      expect((await mailpitMessage(to))?.Text).toContain(smtpHost)
 
       const failed = await sendTestEmail({
         draft: {

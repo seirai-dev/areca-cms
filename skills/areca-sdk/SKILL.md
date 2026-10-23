@@ -15,12 +15,12 @@ Requirements: Node >= 22.6 (24 LTS recommended), ESM only. It works with any fra
 ## Mental model
 
 1. `areca.config.ts` declares **collections** (content types), **globals** (single site content sections) and their **fields**.
-2. `areca manifest push` sends that schema to the CMS (needs the schema token).
+2. `areca manifest push` sends that schema to the CMS (needs the schema token). It is refused while a removed field still holds content, until the removal is confirmed.
 3. Editors create entries in the CMS and **Go live**, which creates an immutable **publication** (snapshot) with the schema embedded.
 4. `areca pull` downloads the publication into `src/generated/content/` and writes `src/generated/content/areca.gen.ts`.
 5. Server code reads it through the typed `content` object from `areca.gen.ts`: `import { content } from "../generated/content/areca.gen"`.
 
-Typing is generated, not hand-written: after a pull, every collection, field, value, select option, reference and route is typed and autocompletes. Commit `areca.gen.ts`; never commit the pulled JSON. Single sections of values, such as company details or the home page, are site content (`globals`). There are no blocks, locales, webhooks or HTTP query API. A "page" is an entry in a collection, or a site content section. Queries run in memory on the pulled files, with `where`, `orderBy`, `limit`, `offset` and `with`.
+Typing is generated, not hand-written: after a pull, every collection, field, value, select option, reference and route is typed and autocompletes. Commit `areca.gen.ts`; never commit the pulled JSON. Single sections of values, such as company details or the home page, are site content (`globals`). There are no blocks, webhooks or HTTP query API. A "page" is an entry in a collection, or a site content section. Queries run in memory on the pulled files, with `where`, `orderBy`, `limit`, `offset` and `with`.
 
 ## Setup
 
@@ -36,13 +36,13 @@ pnpm exec areca init --cms-url https://cms.example.com --token "$ARECA_SITE_TOKE
 | Env var | Needed for | Where the user gets it |
 | --- | --- | --- |
 | `ARECA_CMS_URL` | everything | The CMS base URL, e.g. `https://cms.example.com` |
-| `ARECA_SITE_TOKEN` | pull, client, preview | CMS: site Settings > Developer > build token (shown once; rotate to get a new one) |
+| `ARECA_SITE_TOKEN` | reads (pull, `manifest pull`, the client's snapshot calls) | CMS: site Settings > Developer > build token (shown once; rotate to get a new one) |
 | `ARECA_SCHEMA_TOKEN` | `manifest push` only | Settings > Developer > Rotate schema token. Keep it in the authoring env only, never in builds. |
 | `ARECA_SITE_KEY` | `manifest pull` without a config | The site key shown in Settings |
 | `ARECA_SNAPSHOT_ID` | pinned pulls during Go-live builds | Set by the CMS deploy; empty or `0` means current live |
 | `ARECA_CONTENT_DIR` | the generated `content` object at run time | Optional. The content folder, when it is not the folder that was pulled into |
 
-The CLI loads `.env.local` and then `.env`, and existing process env wins. Library imports do **not** load env files.
+The CLI loads `.env.local` and then `.env`, and existing process env wins. Library imports do **not** load env files. Each call reads only the credential it sends: a schema push needs the schema token but not the site token, and a preview needs neither (its token is signed).
 
 **Security:** both tokens are server secrets. Never put them in browser code or behind a `VITE_`, `NEXT_PUBLIC_` or `PUBLIC_` prefix, and never commit them. Only import the content object, `readContent` and the client in server or build code.
 
@@ -83,7 +83,8 @@ export default defineSiteContent({
 - Collection keys cannot be `resolve`, `href`, `preview`, `globals` or `previewGlobals` (any case, and `preview-globals` too), because the content object uses those names. Field keys may use them.
 - In code, keys are camelCase: `blog-posts` is `content.blogPosts`, `cover_image` is `entry.data.coverImage`. The pull fails when two keys collide after this conversion (`blog-posts` and `blog_posts`).
 - A push is the **full** manifest. Collections left out are disabled (their entries are kept). The CMS adds a required `slug` field if one is missing. Limits: 100 collections, 100 fields each, 256 KiB.
-- `areca manifest pull --config areca.config.ts [--yes]` regenerates the config from the CMS. It replaces the whole file and keeps `siteKey` and `assets`. Without a TTY it needs `--yes` if the config already has collections.
+- `areca manifest pull --config areca.config.ts [--yes]` regenerates the config from the CMS. It replaces the whole file and keeps `siteKey` and `assets`. It prints the changes first, including language changes. Removing a language or changing the main language needs confirmation (`--yes` without a TTY), as does overwriting a config that already has collections.
+- **Removing a field that still holds content** deletes that content. `manifest push` lists the affected fields (`key.field`, with the entry count) and pushes nothing until they are confirmed: `--confirm-drop <key.field>` per field (repeatable), or `--yes` for all. In code, `syncManifest(config, { confirmDropFields: ["articles.subtitle"] })` does the same. An unconfirmed push throws `FieldDropsRequiredError` (exported; `.drops` holds the `FieldDrop` list, each `{ kind, key, field, entries }`). **Ask the user before confirming a drop**; never add `--yes` or `--confirm-drop` on your own.
 
 ### Site content (globals)
 
@@ -118,7 +119,7 @@ assets: { download: true, dir: "public/areca" /*, publicPath: "/areca" */ }, // 
 ```text
 areca init [--cms-url <url>] [--token <t>] [--site-key <key>] [--out <dir>] [--config <path>]
            [--assets-dir <dir>] [--assets-public-path <path>] [--no-assets] [--yes] [--force]
-areca manifest push [config]             # needs ARECA_SCHEMA_TOKEN (+ URL and site token)
+areca manifest push [config] [--confirm-drop <key.field>]... [--yes]   # needs ARECA_SCHEMA_TOKEN and ARECA_CMS_URL
 areca manifest pull [--config <path>] [--yes]
 areca pull [--out <dir>] [--publication <id>] [--config <path>] [--types <path>]   # default out: src/generated/content; types: <out>/areca.gen.ts; media: public/areca
 areca run -- <command>                   # run a command with .env.local/.env loaded
@@ -159,7 +160,7 @@ const author = content.resolve(article.data.author); // Entry<"authors"> | null
 
 ## Languages
 
-Only when the CMS site has content languages. Set `languages`, `routes`, `requiredLanguages` and `translatable` in `areca.config.ts`. Reads pick a language with `content.in(locale)`, a per-call `{ locale, fallback }` or the `createContent({ locale })` resolver, and fall back to the main language. Entries carry `locale`, `isFallback`, `locales` and `alternates`; globals carry `$locale` and `$isFallback`. `seoHead` takes `locale` and `alternates` for hreflang, and `content.matchLocale` picks a visitor's language. Read [references/languages.md](references/languages.md) for the Paraglide setup, the other i18n libraries, preview with `locale`, and every export.
+Only when the CMS site has content languages. Set `languages`, `routes`, `requiredLanguages` and `translatable` in `areca.config.ts`. Reads pick a language with `content.in(locale)`, a per-call `{ locale, fallback }` or the `createContent({ locale })` resolver, and fall back to the main language. Entries carry `locale`, `isFallback`, `locales` and `alternates`; globals carry `$locale` and `$isFallback`. `seoHead` takes `locale` and `alternates` for hreflang, and `content.matchLocale` picks a visitor's language. `Href` is the union of every language's route; `content.in(locale)` narrows `href()` to that language's route. A pulled media URL is rewritten in every language view, so each language gets local files. Read [references/languages.md](references/languages.md) for the Paraglide setup, the other i18n libraries, preview with `locale`, and every export.
 
 ## Rich text
 
@@ -195,7 +196,7 @@ Read [references/api.md](references/api.md) for every export, type and signature
 
 ## Rules
 
-- Change the schema in `areca.config.ts` and then `manifest push`, then go live and pull. Don't hand-edit generated content or `areca.gen.ts`; a pull rewrites both.
+- Change the schema in `areca.config.ts` and then `manifest push`, then go live and pull. Confirm a field removal or a language removal with the user first: both can delete content or stop a language being served. Don't hand-edit generated content or `areca.gen.ts`; a pull rewrites both.
 - Commit `areca.gen.ts`. Keep the pulled JSON out of Git.
 - Never import the content object, `@areca-cms/site-sdk/pull` or a client with tokens into browser bundles.
 - Exclude `/__preview/*` from prerendering and caching.

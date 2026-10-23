@@ -69,6 +69,7 @@ const SENTENCES: Partial<Record<string, Sentence>> = {
   'member.update_role': (target) => m.activity_member_update_role({ target }),
   'member.remove': (target) => m.activity_member_remove({ target }),
   'invitation.revoke': () => m.activity_invitation_revoke(),
+  'invitation.regenerate_link': () => m.activity_invitation_regenerate_link(),
   'invitation.resend': () => m.activity_invitation_resend(),
   'setup.completed': () => m.activity_setup_completed(),
   'agency_admin.grant': () => m.activity_agency_admin_grant(),

@@ -301,6 +301,44 @@ export async function revokeConnection(input: {
   })
 }
 
+/**
+ * Disconnects every app a user connected to the given sites, in the caller's
+ * transaction (organization removal). Same effect as `revokeConnection`: the
+ * connection, its consent and every token it issued are revoked.
+ */
+export async function revokeMemberMcpConnections(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  input: { userId: string; siteIds: string[]; now?: Date },
+): Promise<number> {
+  if (input.siteIds.length === 0) return 0
+  const now = input.now ?? new Date()
+  const revoked = await tx
+    .update(mcpConnection)
+    .set({ revokedAt: now })
+    .where(
+      and(
+        eq(mcpConnection.userId, input.userId),
+        inArray(mcpConnection.siteId, input.siteIds),
+        isNull(mcpConnection.revokedAt),
+      ),
+    )
+    .returning()
+  for (const row of revoked) {
+    const refs = [row.id, row.siteId]
+    await tx
+      .delete(oauthConsent)
+      .where(
+        and(
+          eq(oauthConsent.clientId, row.clientId),
+          eq(oauthConsent.userId, row.userId),
+          inArray(oauthConsent.referenceId, refs),
+        ),
+      )
+    await revokeGenerationTokens(tx, row, refs, now)
+  }
+  return revoked.length
+}
+
 /** Clear replay caches too: a disconnected rotated token must never return 200. */
 async function revokeGenerationTokens(
   tx: Parameters<Parameters<typeof db.transaction>[0]>[0],

@@ -58,6 +58,10 @@ import { getAiAvailabilityFn } from '#/server/fn/ai'
 import { getGlobalFn } from '#/server/fn/content'
 import type { Me } from '#/server/fn/me'
 
+import {
+  conflictReadyBlock,
+  EditorConflictNotice,
+} from '#/features/editor/conflict-notice'
 import { GlobalEditorTopBar } from './global-editor-top-bar'
 import { groupFields } from './site-content'
 
@@ -239,7 +243,7 @@ function GlobalEditorView({
     })
   }
 
-  const readyBlock = blocker
+  const languageBlock = blocker
     ? {
         message: m.editor_language_blocker({
           language: uiLanguageName(blocker.locale),
@@ -248,6 +252,11 @@ function GlobalEditorView({
         onFix: () => focusBlocker(blocker),
       }
     : null
+  const conflictBlock = conflictReadyBlock(
+    editor.conflict,
+    () => void editor.reloadServerDraft(),
+  )
+  const readyBlock = conflictBlock ?? languageBlock
 
   // Writes the active language; the main language (and single-language
   // sites) use the ordinary update.
@@ -292,6 +301,22 @@ function GlobalEditorView({
   const groups = groupFields(fields)
   const seoOn = global.seoEnabled
   const hasErrors = editor.errorCount > 0 || Boolean(editor.formError)
+  const errorKeys = Object.keys(editor.fieldErrors).filter(Boolean)
+
+  // Scroll to an invalid field and focus its control (the save banner's links).
+  function revealField(key: string) {
+    requestAnimationFrame(() => {
+      const node = document.querySelector<HTMLElement>(
+        `[data-field="${CSS.escape(key)}"]`,
+      )
+      node?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      node
+        ?.querySelector<HTMLElement>(
+          'input, textarea, [contenteditable="true"], button',
+        )
+        ?.focus({ preventScroll: true })
+    })
+  }
 
   function openPreview() {
     if (editor.previewUrl) window.open(editor.previewUrl, '_blank', 'noopener')
@@ -347,6 +372,7 @@ function GlobalEditorView({
           scheduledAt={entry.scheduledAt}
           editedSinceReady={editedSinceReady}
           saveStatus={editor.status}
+          conflict={editor.conflict}
           lastSavedAt={editor.lastSavedAt}
           updatedAt={entry.updatedAt}
           errorCount={editor.errorCount}
@@ -374,6 +400,8 @@ function GlobalEditorView({
           }
           scheduleInitialTimeZone={entry.scheduleTimezone}
           onScheduleSubmit={async (at, timeZone) => {
+            // A form opened before the conflict must not approve over it.
+            if (editor.conflict) return
             const result = await editor.schedule(at, timeZone).catch(() => null)
             if (result) setScheduleOpen(false)
           }}
@@ -387,43 +415,15 @@ function GlobalEditorView({
             aria-label={m.globals_canvas_label()}
             data-testid="global-fields"
           >
-            {editor.conflict || editor.recoveredDraft ? (
-              <div
-                role="alert"
-                className="grid gap-3 rounded-card border border-border-error/30 p-4"
-              >
-                <p>
-                  {editor.conflict
-                    ? m.editor_draft_conflict_notice()
-                    : m.editor_draft_recovered_notice()}
-                </p>
-                <div className="flex flex-wrap gap-4">
-                  <button
-                    type="button"
-                    className="underline"
-                    onClick={() => void editor.reloadServerDraft()}
-                  >
-                    {m.editor_reload_server_draft()}
-                  </button>
-                  <button
-                    type="button"
-                    className="underline"
-                    onClick={() => void editor.reapplyRecoveredDraft()}
-                  >
-                    {m.editor_reapply_recovered_draft()}
-                  </button>
-                  {!editor.conflict && (
-                    <button
-                      type="button"
-                      className="underline"
-                      onClick={editor.discardRecoveredDraft}
-                    >
-                      {m.editor_discard_recovered_draft()}
-                    </button>
-                  )}
-                </div>
-              </div>
-            ) : null}
+            <EditorConflictNotice
+              conflict={editor.conflict}
+              approvalConflict={editor.approvalConflict}
+              recoveredDraft={Boolean(editor.recoveredDraft)}
+              className="grid gap-3 rounded-card border border-border-error/30 p-4"
+              onReload={() => void editor.reloadServerDraft()}
+              onReapply={() => void editor.reapplyRecoveredDraft()}
+              onDiscard={editor.discardRecoveredDraft}
+            />
 
             {editor.restoreSkippedFields.length > 0 ? (
               <section
@@ -464,6 +464,20 @@ function GlobalEditorView({
                         : m.editor_save_fix_other({ count: editor.errorCount })
                       : m.editor_save_failed()}
                   </span>
+                  {errorKeys.length > 0 ? (
+                    <span className="flex flex-wrap gap-x-3 gap-y-1">
+                      {errorKeys.map((key) => (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => revealField(key)}
+                          className="text-callout font-medium text-text-primary underline decoration-border-error underline-offset-4 hover:decoration-current"
+                        >
+                          {fieldLabels([key], fields)[0] ?? key}
+                        </button>
+                      ))}
+                    </span>
+                  ) : null}
                   {editor.formError ? (
                     <span className="text-callout text-text-secondary">
                       {editor.formError}
@@ -546,12 +560,7 @@ function GlobalEditorView({
           bodyClassName="bg-background-default pt-2"
         >
           <EntryHistory
-            revisions={editor.revisions}
-            loading={editor.revisionsQuery.isLoading}
-            error={
-              editor.revisionsQuery.isError ? editor.revisionsQuery.error : null
-            }
-            onRetry={() => void editor.revisionsQuery.refetch()}
+            entryId={editor.entryId}
             canManage={canManage}
             onRestore={setRestoreId}
           />

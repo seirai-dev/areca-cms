@@ -157,9 +157,9 @@ export function SchemaEditorSheet({
         }
         bodyClassName="px-0 pb-8"
         footer={
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
             <p
-              className="flex min-w-0 items-center gap-1.5 truncate text-callout text-text-secondary"
+              className="flex min-w-0 items-center gap-1.5 text-callout text-text-secondary"
               aria-live="polite"
             >
               {editor.dirty ? (
@@ -179,7 +179,7 @@ export function SchemaEditorSheet({
                 </>
               )}
             </p>
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="ml-auto flex shrink-0 items-center gap-2">
               <Button
                 type="button"
                 variant="quiet"
@@ -276,6 +276,7 @@ export function SchemaEditorSheet({
                       collectionKeys={collectionKeys}
                       kind={kind}
                       multilingual={editor.multilingual}
+                      keyUsedBy={editor.keyUsedBy(editor.editingField)}
                       onChange={(patch) =>
                         editor.editing &&
                         editor.patchField(editor.editing.index, patch)
@@ -583,6 +584,37 @@ export function SchemaEditorSheet({
         onConfirm={async () => {
           await editor.deleteCollection()
         }}
+      />
+      <ConfirmDialog
+        open={editor.pendingDrop !== null}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) editor.cancelDrop()
+        }}
+        title={m.content_field_delete_content_title()}
+        description={
+          <>
+            <p>{m.content_field_delete_content_lead()}</p>
+            <ul className="mt-3 grid gap-1">
+              {editor.pendingDrop?.map((item) => (
+                <li key={item.key}>
+                  {item.count === 1
+                    ? m.content_field_delete_content_one({
+                        label: item.label,
+                        key: item.key,
+                      })
+                    : m.content_field_delete_content_other({
+                        label: item.label,
+                        key: item.key,
+                        count: item.count,
+                      })}
+                </li>
+              ))}
+            </ul>
+          </>
+        }
+        confirmLabel={m.content_field_delete_content_confirm()}
+        variant="destructive"
+        onConfirm={() => editor.confirmDrop()}
       />
     </>
   )

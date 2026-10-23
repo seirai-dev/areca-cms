@@ -1,10 +1,11 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty; retain defensive lookup and authorization checks. */
 import { createServerFn } from '@tanstack/react-start'
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import { db } from '#/db'
 import { membership, organization, site, user } from '#/db/schema'
+import { hasAgencyWideAccess } from '#/lib/agency-access'
 import { localMfaVerifiedAt } from '#/server/security/local-mfa'
 import { env } from '#/env'
 import type { MembershipRole, SiteLanguages } from '#/lib/types'
@@ -102,7 +103,24 @@ export const getMeFn = createServerFn({ method: 'GET', ...meFn }).handler(
       languages: site.languages,
     }
 
-    const sites = currentUser.isAgencyAdmin
+    // Agency-wide data (every site, the organization count) waits until an
+    // admin has verified a local factor in this session. Until then an admin
+    // gets the same membership-scoped view as anyone else.
+    const adminMfaRequired = env.ADMIN_MFA_REQUIRED && currentUser.isAgencyAdmin
+    const mfaEnrolmentRequired =
+      adminMfaRequired && !currentUser.twoFactorEnabled
+    const mfaVerificationRequired =
+      adminMfaRequired &&
+      currentUser.twoFactorEnabled &&
+      !(await localMfaVerifiedAt(session))
+    const agencyWide = hasAgencyWideAccess({
+      isAgencyAdmin: currentUser.isAgencyAdmin,
+      adminMfaRequired: env.ADMIN_MFA_REQUIRED,
+      twoFactorEnabled: currentUser.twoFactorEnabled,
+      localMfaVerified: !mfaVerificationRequired,
+    })
+
+    const sites = agencyWide
       ? await db
           .select(siteColumns)
           .from(site)
@@ -122,7 +140,7 @@ export const getMeFn = createServerFn({ method: 'GET', ...meFn }).handler(
             )
             .orderBy(site.name)
 
-    const organizationCount = currentUser.isAgencyAdmin
+    const organizationCount = agencyWide
       ? Number(
           (
             await db
@@ -132,19 +150,10 @@ export const getMeFn = createServerFn({ method: 'GET', ...meFn }).handler(
         )
       : memberships.length
 
-    const mfaEnrolmentRequired =
-      env.ADMIN_MFA_REQUIRED &&
-      currentUser.isAgencyAdmin &&
-      !currentUser.twoFactorEnabled
-
     return {
       user: currentUser,
       mfaEnrolmentRequired,
-      mfaVerificationRequired:
-        env.ADMIN_MFA_REQUIRED &&
-        currentUser.isAgencyAdmin &&
-        currentUser.twoFactorEnabled &&
-        !(await localMfaVerifiedAt(session)),
+      mfaVerificationRequired,
       memberships,
       sites,
       organizationCount,

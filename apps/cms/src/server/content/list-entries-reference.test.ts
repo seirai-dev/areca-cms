@@ -23,20 +23,22 @@ async function insertEntry(input: {
   scheduledAt?: Date | null
   scheduledData?: EntryData | null
 }) {
-  const [row] = await db
-    .insert(entry)
-    .values({
-      siteId: input.siteId,
-      collectionId: input.collectionId,
-      slug: input.slug,
-      status: input.status,
-      draftData: input.draftData,
-      publishedData: input.publishedData ?? null,
-      publishedSlug: input.publishedSlug ?? null,
-      scheduledAt: input.scheduledAt ?? null,
-      scheduledData: input.scheduledData ?? null,
-    })
-    .returning()
+  const row = (
+    await db
+      .insert(entry)
+      .values({
+        siteId: input.siteId,
+        collectionId: input.collectionId,
+        slug: input.slug,
+        status: input.status,
+        draftData: input.draftData,
+        publishedData: input.publishedData ?? null,
+        publishedSlug: input.publishedSlug ?? null,
+        scheduledAt: input.scheduledAt ?? null,
+        scheduledData: input.scheduledData ?? null,
+      })
+      .returning()
+  ).at(0)
   if (!row) throw new Error('Failed to insert entry')
   return row
 }

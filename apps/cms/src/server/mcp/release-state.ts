@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- publication lookup may return no row at runtime */
 import { getLivePublication } from '#/server/publishing/publications'
 import { diffApprovedRelease } from '#/server/publishing/release-diff'
 

@@ -20,6 +20,7 @@ import { AppError } from '#/server/http/app-error'
 import { assetMutationLock, referencesAsset } from './usage'
 import { AssetValidationError } from './errors'
 import { validateImageBytes } from './image-validation'
+import { missingAltFilter } from './missing-alt'
 import {
   beginObjectUpload,
   completeObjectUpload,
@@ -119,22 +120,23 @@ export async function uploadAsset(input: {
     await storage.put(storageKey, input.file.buffer, mimeType)
     return await db.transaction(async (tx) => {
       await assetMutationLock(tx, input.organizationId)
-      const row = (await tx
-        .insert(asset)
-        .values({
-          organizationId: input.organizationId,
-          originSiteId: input.originSiteId,
-          storageKey,
-          originalFilename: input.file.filename,
-          mimeType,
-          size: input.file.buffer.byteLength,
-          width,
-          height,
-          altText: input.altText,
-          sourceUrl: input.sourceUrl,
-          createdBy: input.actorId,
-        })
-        .returning()
+      const row = (
+        await tx
+          .insert(asset)
+          .values({
+            organizationId: input.organizationId,
+            originSiteId: input.originSiteId,
+            storageKey,
+            originalFilename: input.file.filename,
+            mimeType,
+            size: input.file.buffer.byteLength,
+            width,
+            height,
+            altText: input.altText,
+            sourceUrl: input.sourceUrl,
+            createdBy: input.actorId,
+          })
+          .returning()
       ).at(0)
       if (!row) throw new Error(m.server_failed_to_insert_asset())
       await completeObjectUpload(tx, storageKey)
@@ -162,6 +164,8 @@ export async function listAssets(
     limit: number
     offset: number
     imagesOnly?: boolean
+    /** Only images without a description in this content language. */
+    missingAlt?: { locale: string | null; mainLocale: string | null }
   },
 ): Promise<Asset[]> {
   const search = opts.search?.trim()
@@ -173,6 +177,9 @@ export async function listAssets(
         eq(asset.organizationId, organizationId),
         opts.imagesOnly
           ? inArray(asset.mimeType, [...RASTER_MIMES])
+          : undefined,
+        opts.missingAlt
+          ? missingAltFilter(opts.missingAlt.locale, opts.missingAlt.mainLocale)
           : undefined,
         search
           ? or(
@@ -216,20 +223,21 @@ export async function updateAsset(
 ): Promise<Asset> {
   const translation =
     patch.locale && patch.locale !== patch.mainLocale ? patch.locale : null
-  const row = (await db
-    .update(asset)
-    .set(
-      translation
-        ? {
-            altI18n:
-              patch.altText.trim() === ''
-                ? sql`${asset.altI18n} - ${translation}::text`
-                : sql`jsonb_set(${asset.altI18n}, ARRAY[${translation}::text], to_jsonb(${patch.altText}::text), true)`,
-          }
-        : { altText: patch.altText },
-    )
-    .where(and(eq(asset.id, id), eq(asset.organizationId, organizationId)))
-    .returning()
+  const row = (
+    await db
+      .update(asset)
+      .set(
+        translation
+          ? {
+              altI18n:
+                patch.altText.trim() === ''
+                  ? sql`${asset.altI18n} - ${translation}::text`
+                  : sql`jsonb_set(${asset.altI18n}, ARRAY[${translation}::text], to_jsonb(${patch.altText}::text), true)`,
+            }
+          : { altText: patch.altText },
+      )
+      .where(and(eq(asset.id, id), eq(asset.organizationId, organizationId)))
+      .returning()
   ).at(0)
   if (!row) {
     throw new NotFoundError(m.server_asset_not_found())
@@ -331,10 +339,11 @@ export async function assetUsage(
 ): Promise<number> {
   return db.transaction(async (tx) => {
     await assetMutationLock(tx, organizationId)
-    const existing = (await tx
-      .select()
-      .from(asset)
-      .where(and(eq(asset.id, id), eq(asset.organizationId, organizationId)))
+    const existing = (
+      await tx
+        .select()
+        .from(asset)
+        .where(and(eq(asset.id, id), eq(asset.organizationId, organizationId)))
     ).at(0)
     return existing ? retainedAssetUsage(tx, existing) : 0
   })
@@ -347,10 +356,11 @@ export async function deleteAsset(
 ): Promise<void> {
   await db.transaction(async (tx) => {
     await assetMutationLock(tx, organizationId)
-    const existing = (await tx
-      .select()
-      .from(asset)
-      .where(and(eq(asset.id, id), eq(asset.organizationId, organizationId)))
+    const existing = (
+      await tx
+        .select()
+        .from(asset)
+        .where(and(eq(asset.id, id), eq(asset.organizationId, organizationId)))
     ).at(0)
     if (!existing) throw new NotFoundError(m.server_asset_not_found())
     const usage = await retainedAssetUsage(tx, existing)
@@ -377,7 +387,10 @@ function altFor(row: Asset, locale?: string | null): string {
   return translated || row.altText || ''
 }
 
-function toResolvedAssetValue(row: Asset, locale?: string | null): ResolvedAssetValue {
+function toResolvedAssetValue(
+  row: Asset,
+  locale?: string | null,
+): ResolvedAssetValue {
   return {
     url: assetUrl(row),
     width: row.width,
@@ -480,11 +493,13 @@ export async function streamAssetFile(storageKey: string): Promise<Response> {
     return new Response(m.server_not_found(), { status: 404 })
   }
 
-  const [row] = await db
-    .select({ mimeType: asset.mimeType })
-    .from(asset)
-    .where(eq(asset.storageKey, storageKey))
-    .limit(1)
+  const row = (
+    await db
+      .select({ mimeType: asset.mimeType })
+      .from(asset)
+      .where(eq(asset.storageKey, storageKey))
+      .limit(1)
+  ).at(0)
 
   const contentType =
     realMediaType(row?.mimeType) ??
@@ -492,19 +507,20 @@ export async function streamAssetFile(storageKey: string): Promise<Response> {
     mimeFromExtension(storageKey) ??
     'application/octet-stream'
 
-  const body = Buffer.isBuffer(object.body)
-    ? new Uint8Array(object.body)
-    : object.body
-
+  // The bytes stream from storage straight to the client; nothing is buffered
+  // in memory here.
   const headers: Record<string, string> = {
     'Content-Type': contentType,
     'Cache-Control': 'public, max-age=31536000, immutable',
     'Access-Control-Allow-Origin': '*',
     'Cross-Origin-Resource-Policy': 'cross-origin',
   }
+  if (object.contentLength !== undefined) {
+    headers['Content-Length'] = String(object.contentLength)
+  }
   if (realMediaType(contentType)) {
     headers['X-Content-Type-Options'] = 'nosniff'
   }
 
-  return new Response(body, { headers })
+  return new Response(object.body, { headers })
 }

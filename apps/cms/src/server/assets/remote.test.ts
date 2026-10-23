@@ -1,12 +1,10 @@
 import http from 'node:http'
 import type { AddressInfo, Socket } from 'node:net'
 
-import { eq } from 'drizzle-orm'
 import sharp from 'sharp'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { db } from '#/db'
-import { membership, organization } from '#/db/schema'
+import { withTestSite } from '#/server/content/test-utils'
 import { AppError } from '#/server/http/app-error'
 
 import { AssetValidationError, deleteAsset } from './index'
@@ -27,8 +25,8 @@ import {
 const TEST_PORT = 8080
 
 const PNG_BYTES = Buffer.from([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
-  0x49, 0x48, 0x44, 0x52,
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49,
+  0x48, 0x44, 0x52,
 ])
 
 describe('isPublicAddress', () => {
@@ -155,13 +153,22 @@ describe('deriveFilename', () => {
 
   it('adds an extension matching the detected type when missing', () => {
     expect(
-      deriveFilename({ url: 'https://example.com/images/banner', mimeType: 'image/jpeg' }),
+      deriveFilename({
+        url: 'https://example.com/images/banner',
+        mimeType: 'image/jpeg',
+      }),
     ).toBe('banner.jpg')
     expect(
-      deriveFilename({ url: 'https://example.com/images/banner.jpeg', mimeType: 'image/jpeg' }),
+      deriveFilename({
+        url: 'https://example.com/images/banner.jpeg',
+        mimeType: 'image/jpeg',
+      }),
     ).toBe('banner.jpeg')
     expect(
-      deriveFilename({ url: 'https://example.com/a/data.txt', mimeType: 'application/pdf' }),
+      deriveFilename({
+        url: 'https://example.com/a/data.txt',
+        mimeType: 'application/pdf',
+      }),
     ).toBe('data.txt.pdf')
   })
 
@@ -193,15 +200,25 @@ describe('deriveFilename', () => {
 describe('sniffMimeType', () => {
   it('detects supported types from magic bytes', () => {
     expect(sniffMimeType(PNG_BYTES)).toBe('image/png')
-    expect(sniffMimeType(Buffer.from([0xff, 0xd8, 0xff, 0xe0]))).toBe('image/jpeg')
+    expect(sniffMimeType(Buffer.from([0xff, 0xd8, 0xff, 0xe0]))).toBe(
+      'image/jpeg',
+    )
     expect(sniffMimeType(Buffer.from('GIF89a....', 'latin1'))).toBe('image/gif')
-    expect(sniffMimeType(Buffer.from('RIFF\0\0\0\0WEBPVP8 ', 'latin1'))).toBe('image/webp')
-    expect(sniffMimeType(Buffer.from('%PDF-1.7\n', 'latin1'))).toBe('application/pdf')
+    expect(sniffMimeType(Buffer.from('RIFF\0\0\0\0WEBPVP8 ', 'latin1'))).toBe(
+      'image/webp',
+    )
+    expect(sniffMimeType(Buffer.from('%PDF-1.7\n', 'latin1'))).toBe(
+      'application/pdf',
+    )
   })
 
   it('returns null for SVG and HTML', () => {
-    expect(sniffMimeType(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>'))).toBeNull()
-    expect(sniffMimeType(Buffer.from('<!doctype html><html></html>'))).toBeNull()
+    expect(
+      sniffMimeType(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>')),
+    ).toBeNull()
+    expect(
+      sniffMimeType(Buffer.from('<!doctype html><html></html>')),
+    ).toBeNull()
   })
 })
 
@@ -237,7 +254,10 @@ describe('fetchRemoteFile against a local server', () => {
       if (path === '/r6') return redirect(res, '/r7')
       if (path === '/r7') return redirect(res, '/files/logo.png')
       if (path === '/oversize-length') {
-        res.writeHead(200, { 'content-type': 'image/png', 'content-length': '2000' })
+        res.writeHead(200, {
+          'content-type': 'image/png',
+          'content-length': '2000',
+        })
         res.end(Buffer.alloc(2000))
         return
       }
@@ -258,7 +278,9 @@ describe('fetchRemoteFile against a local server', () => {
       }
       if (path === '/article') {
         res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
-        res.end('<!DOCTYPE html><html><body>Photo page, not the photo</body></html>')
+        res.end(
+          '<!DOCTYPE html><html><body>Photo page, not the photo</body></html>',
+        )
         return
       }
       res.writeHead(404, { 'content-type': 'text/plain' })
@@ -304,7 +326,9 @@ describe('fetchRemoteFile against a local server', () => {
   })
 
   it('follows a redirect chain within the limit and reports the final URL', async () => {
-    const file = await fetchRemoteFile(`${origin}/r1`, { allowPrivateNetwork: true })
+    const file = await fetchRemoteFile(`${origin}/r1`, {
+      allowPrivateNetwork: true,
+    })
     expect(file.finalUrl).toBe(`${origin}/files/logo.png`)
     expect(file.bytes.equals(PNG_BYTES)).toBe(true)
   })
@@ -327,9 +351,9 @@ describe('fetchRemoteFile against a local server', () => {
   })
 
   it('explains a 4xx answer with the host, the status and what to check', async () => {
-    const error = await fetchRemoteFile(`${origin}/missing`, { allowPrivateNetwork: true }).catch(
-      (err: unknown) => err,
-    )
+    const error = await fetchRemoteFile(`${origin}/missing`, {
+      allowPrivateNetwork: true,
+    }).catch((err: unknown) => err)
     expect(error).toBeInstanceOf(RemoteFetchError)
     expect((error as Error).message).toBe(
       "The link didn't return a downloadable file (HTTP 404 from 127.0.0.1). Check the URL points directly to an image or PDF file.",
@@ -385,7 +409,9 @@ describe('fetchRemoteFile against a local server', () => {
   it('refuses localhost without allowPrivateNetwork and never connects', async () => {
     hits = []
     const port = (server.address() as AddressInfo).port
-    await expect(fetchRemoteFile(`http://localhost:${port}/files/logo.png`)).rejects.toThrow(
+    await expect(
+      fetchRemoteFile(`http://localhost:${port}/files/logo.png`),
+    ).rejects.toThrow(
       "That address is private or local and can't be downloaded",
     )
     expect(hits).toHaveLength(0)
@@ -405,7 +431,9 @@ describe('httpStatusMessage', () => {
     expect(httpStatusMessage(404, 'upload.wikimedia.org')).toBe(
       "The link didn't return a downloadable file (HTTP 404 from upload.wikimedia.org). Check the URL points directly to an image or PDF file.",
     )
-    expect(httpStatusMessage(403, 'example.com')).toContain('HTTP 403 from example.com')
+    expect(httpStatusMessage(403, 'example.com')).toContain(
+      'HTTP 403 from example.com',
+    )
   })
 
   it('says the server failed for 5xx answers', () => {
@@ -419,20 +447,25 @@ describe('unsupportedDownloadMessage', () => {
   const html = Buffer.from('<!doctype html><html><body>hi</body></html>')
 
   it('calls an HTML page a web page and asks for a direct image URL', () => {
-    expect(unsupportedDownloadMessage({ bytes: html, contentType: 'text/html' })).toBe(
+    expect(
+      unsupportedDownloadMessage({ bytes: html, contentType: 'text/html' }),
+    ).toBe(
       'The link returned a web page (text/html), not an image. Use a direct image URL.',
     )
   })
 
   it('recognises HTML bytes even when the declared type is an image', () => {
-    expect(unsupportedDownloadMessage({ bytes: html, contentType: 'image/png' })).toBe(
-      WEB_PAGE_MESSAGE,
-    )
+    expect(
+      unsupportedDownloadMessage({ bytes: html, contentType: 'image/png' }),
+    ).toBe(WEB_PAGE_MESSAGE)
   })
 
   it('names other non-file types the link returned', () => {
     expect(
-      unsupportedDownloadMessage({ bytes: Buffer.from('{"a":1}'), contentType: 'application/json' }),
+      unsupportedDownloadMessage({
+        bytes: Buffer.from('{"a":1}'),
+        contentType: 'application/json',
+      }),
     ).toBe(
       'The link returned a file of type application/json, not an image or PDF. Use a direct image URL.',
     )
@@ -440,11 +473,17 @@ describe('unsupportedDownloadMessage', () => {
 
   it('keeps the format list for SVG and unknown types', () => {
     expect(
-      unsupportedDownloadMessage({ bytes: Buffer.from('<svg/>'), contentType: 'image/svg+xml' }),
+      unsupportedDownloadMessage({
+        bytes: Buffer.from('<svg/>'),
+        contentType: 'image/svg+xml',
+      }),
     ).toBe(UNSUPPORTED_FILE_MESSAGE)
-    expect(unsupportedDownloadMessage({ bytes: Buffer.from('xx'), contentType: null })).toBe(
-      UNSUPPORTED_FILE_MESSAGE,
-    )
+    expect(
+      unsupportedDownloadMessage({
+        bytes: Buffer.from('xx'),
+        contentType: null,
+      }),
+    ).toBe(UNSUPPORTED_FILE_MESSAGE)
   })
 })
 
@@ -452,7 +491,11 @@ describe('uploadAssetFromUrl without a database', () => {
   it('reports a web page without storing anything', async () => {
     await expect(
       uploadAssetFromUrl(
-        { organizationId: 'org', url: 'https://example.com/photo', actorId: 'user' },
+        {
+          organizationId: 'org',
+          url: 'https://example.com/photo',
+          actorId: 'user',
+        },
         {
           fetch: async (url) => ({
             bytes: Buffer.from('<html><body>gallery</body></html>'),
@@ -488,7 +531,11 @@ describe('uploadAssetFromUrl without a database', () => {
   it('does not trust a PNG Content-Type for non-image bytes', async () => {
     await expect(
       uploadAssetFromUrl(
-        { organizationId: 'org', url: 'https://example.com/a.png', actorId: 'user' },
+        {
+          organizationId: 'org',
+          url: 'https://example.com/a.png',
+          actorId: 'user',
+        },
         {
           fetch: async (url) => ({
             bytes: Buffer.from('<html>not an image</html>'),
@@ -505,62 +552,49 @@ describe('uploadAssetFromUrl without a database', () => {
 describe.skipIf(!process.env.DATABASE_URL || !process.env.S3_ENDPOINT)(
   'uploadAssetFromUrl',
   () => {
-    it('stores a PNG fetched from a URL as a library asset', async () => {
-      const [org] = await db
-        .select()
-        .from(organization)
-        .where(eq(organization.slug, 'acme'))
-        .limit(1)
-      expect(org).toBeDefined()
+    it('stores a PNG fetched from a URL as a library asset', () =>
+      withTestSite(async ({ org, actor }) => {
+        const buffer = await sharp({
+          create: {
+            width: 12,
+            height: 8,
+            channels: 3,
+            background: { r: 0, g: 128, b: 255 },
+          },
+        })
+          .png()
+          .toBuffer()
 
-      const [member] = await db
-        .select()
-        .from(membership)
-        .where(eq(membership.organizationId, org.id))
-        .limit(1)
-      expect(member).toBeDefined()
-
-      const buffer = await sharp({
-        create: {
-          width: 12,
-          height: 8,
-          channels: 3,
-          background: { r: 0, g: 128, b: 255 },
-        },
-      })
-        .png()
-        .toBuffer()
-
-      const uploaded = await uploadAssetFromUrl(
-        {
-          organizationId: org.id,
-          url: 'https://cdn.example.com/images/remote-blue.png',
-          altText: 'A blue rectangle',
-          actorId: member.userId,
-        },
-        {
-          fetch: async (url) => ({
-            bytes: buffer,
-            contentType: 'image/png',
-            filename: 'remote-blue.png',
-            finalUrl: url,
-          }),
-        },
-      )
-
-      try {
-        expect(uploaded.mimeType).toBe('image/png')
-        expect(uploaded.size).toBe(buffer.byteLength)
-        expect(uploaded.width).toBe(12)
-        expect(uploaded.height).toBe(8)
-        expect(uploaded.originalFilename).toBe('remote-blue.png')
-        expect(uploaded.altText).toBe('A blue rectangle')
-        expect(uploaded.storageKey).toMatch(
-          new RegExp(`^${org.id}/[0-9a-f-]{36}\\.png$`),
+        const uploaded = await uploadAssetFromUrl(
+          {
+            organizationId: org.id,
+            url: 'https://cdn.example.com/images/remote-blue.png',
+            altText: 'A blue rectangle',
+            actorId: actor.id,
+          },
+          {
+            fetch: async (url) => ({
+              bytes: buffer,
+              contentType: 'image/png',
+              filename: 'remote-blue.png',
+              finalUrl: url,
+            }),
+          },
         )
-      } finally {
-        await deleteAsset(uploaded.id, org.id)
-      }
-    })
+
+        try {
+          expect(uploaded.mimeType).toBe('image/png')
+          expect(uploaded.size).toBe(buffer.byteLength)
+          expect(uploaded.width).toBe(12)
+          expect(uploaded.height).toBe(8)
+          expect(uploaded.originalFilename).toBe('remote-blue.png')
+          expect(uploaded.altText).toBe('A blue rectangle')
+          expect(uploaded.storageKey).toMatch(
+            new RegExp(`^${org.id}/[0-9a-f-]{36}\\.png$`),
+          )
+        } finally {
+          await deleteAsset(uploaded.id, org.id)
+        }
+      }))
   },
 )

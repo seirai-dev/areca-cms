@@ -241,7 +241,7 @@ Three endpoints report the state of the CMS. `/api/health` only tells you that t
 
 <Accordions>
 <Accordion title="Readiness returns 503 with a failing check">
-**Cause:** At least one check failed. Each check means something specific:
+**Cause:** At least one check failed. A check that is only degraded, such as `redis`, `mail` or `loops`, keeps the response at `200` and sets `degraded` instead. Each check means something specific:
 
 | Check | Fails when |
 | --- | --- |
@@ -250,6 +250,8 @@ Three endpoints report the state of the CMS. `/api/health` only tells you that t
 | `redis` | Redis does not answer. This is reported as degraded, and does not fail readiness. |
 | `worker` | The worker is enabled but has not ticked for `READINESS_MAX_TICK_AGE_SECONDS`, which is 300 by default. |
 | `queue` | The oldest queued job is older than `READINESS_MAX_QUEUE_AGE_SECONDS`, which is 900 by default, or a job lease expired, or the scheduler has stopped ticking. |
+| `mail` | Degraded, not failing: the oldest queued email has waited more than 15 minutes. Check the mail settings in Agency › Mail. |
+| `loops` | Degraded, not failing: a worker loop has not finished a run without error for five times its interval. The response names the loops. Check the server logs for that loop. |
 
 **Fix:** Start with the check that failed, and follow the matching section above. Readiness responses carry only short reasons. The full errors are in the log.
 </Accordion>
@@ -274,7 +276,7 @@ Three endpoints report the state of the CMS. `/api/health` only tells you that t
 **Fix:** Check whether many people share one address. Without `RATE_LIMIT_TRUST_PROXY=true`, the CMS cannot tell anonymous clients apart, so they all count against one shared limit. If the CMS sits behind a reverse proxy that replaces the forwarding headers, set `RATE_LIMIT_TRUST_PROXY=true`. Never set it when clients can reach the CMS without the proxy, because clients could then send their own address. See [rate limits](/docs/security/rate-limits).
 </Accordion>
 <Accordion title="Rate limiting seems to have stopped working">
-**Cause:** Redis is unreachable. Rate limiting fails open, so requests are allowed through, and the log records the error.
+**Cause:** Redis is unreachable. Rate limits count in memory on each instance, so the budgets still apply but are not shared across instances. The log records the transition once.
 
 **Fix:** Restore Redis, then check the `redis` entry in the readiness response. An alert on `areca_readiness_check_up` for `redis` helps you notice sooner. See [operations](/docs/self-hosting/operations).
 </Accordion>

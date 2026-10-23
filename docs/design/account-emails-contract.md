@@ -30,6 +30,8 @@ Every template reads the recipient from `params.userId` at render time
 | `two_factor_disabled` | `{ userId, at }` | — | `${APP_URL}/account` |
 | `membership_removed` | `{ userId, orgName, actorName }` | — | none (or `${APP_URL}/`) |
 | `membership_role_changed` | `{ userId, organizationId, role, previousRole }` | — | `${APP_URL}/` |
+| `agency_admin_granted` | `{ userId, at, actorName }` | — | `${APP_URL}/account` (security notice, always sent) |
+| `agency_admin_revoked` | `{ userId, at, actorName }` | — | `${APP_URL}/account` (security notice, always sent) |
 
 Reset token storage: when a secrets key exists, `encryptedToken =
 encryptSecret(token, 'email-outbox:params')`. Without a key nothing is
@@ -92,7 +94,7 @@ export async function sendVerificationEmail(userId: string): Promise<SendResult 
 - Two-factor on/off → `two_factor_enabled` / `two_factor_disabled`
   (detect the actual change of `user.two_factor_enabled`).
 - `hooks.before` on `/request-password-reset`: 3 per hour per email and 3 per
-  hour per IP (Redis store, fail open); over the limit → `APIError('TOO_MANY_REQUESTS')`
+  hour per IP (Redis store; in-memory counts during an outage); over the limit → `APIError('TOO_MANY_REQUESTS')`
   with `m.server_password_reset_rate_limited()`.
 
 ## Other server changes

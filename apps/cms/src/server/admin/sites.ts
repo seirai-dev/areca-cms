@@ -2,7 +2,7 @@ import { archiveDeletedContent } from '#/server/content/deletion-archive'
 import { randomBytes } from 'node:crypto'
 import { eq, inArray } from 'drizzle-orm'
 import type { InferSelectModel } from 'drizzle-orm'
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import { db } from '#/db'
 import {
@@ -14,12 +14,17 @@ import {
   publication,
   site,
 } from '#/db/schema'
+import { isValidSlug } from '#/lib/slug'
 import type { DeploymentTarget } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
 import { lockOrganizationForMutation } from './organization-lock'
 import { assertSiteHasNoPendingDeployment } from '#/server/publishing/deployment-safety'
-import { ConflictError, NotFoundError } from '#/server/content/errors'
+import {
+  ConflictError,
+  NotFoundError,
+  ValidationError,
+} from '#/server/content/errors'
 import { generateSiteToken } from '#/server/content/site-auth'
 
 export const deploymentTargetSchema: z.ZodType<DeploymentTarget | null> =
@@ -80,12 +85,34 @@ export async function listSites(organizationId?: string) {
 }
 
 export async function getSite(id: string): Promise<PublicSite | null> {
-  const [row] = await db
-    .select(publicSiteColumns)
-    .from(site)
-    .where(eq(site.id, id))
-    .limit(1)
+  const row = (
+    await db
+      .select(publicSiteColumns)
+      .from(site)
+      .where(eq(site.id, id))
+      .limit(1)
+  ).at(0)
   return row ?? null
+}
+
+/** The shared slug rule (`#/lib/slug`), as a validation error on `slug`. */
+function assertSiteSlug(slug: string) {
+  if (!isValidSlug(slug)) {
+    throw new ValidationError([
+      { path: 'slug', message: m.server_site_slug_invalid() },
+    ])
+  }
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false
+  const { code, cause } = error as { code?: unknown; cause?: unknown }
+  return (
+    code === '23505' ||
+    (typeof cause === 'object' &&
+      cause !== null &&
+      (cause as { code?: unknown }).code === '23505')
+  )
 }
 
 export async function createSite(input: {
@@ -95,20 +122,25 @@ export async function createSite(input: {
   productionUrl: string
   actorId: string
 }) {
-  const [org] = await db
-    .select({ id: organization.id })
-    .from(organization)
-    .where(eq(organization.id, input.organizationId))
-    .limit(1)
+  const org = (
+    await db
+      .select({ id: organization.id })
+      .from(organization)
+      .where(eq(organization.id, input.organizationId))
+      .limit(1)
+  ).at(0)
   if (!org) {
     throw new NotFoundError(m.server_organization_not_found())
   }
+  assertSiteSlug(input.slug)
 
-  const [slugTaken] = await db
-    .select({ id: site.id })
-    .from(site)
-    .where(eq(site.slug, input.slug))
-    .limit(1)
+  const slugTaken = (
+    await db
+      .select({ id: site.id })
+      .from(site)
+      .where(eq(site.slug, input.slug))
+      .limit(1)
+  ).at(0)
   if (slugTaken) {
     throw new ConflictError(m.server_slug_already_exists())
   }
@@ -119,18 +151,20 @@ export async function createSite(input: {
 
   const created = await db.transaction(async (tx) => {
     await lockOrganizationForMutation(tx, input.organizationId)
-    const [row] = await tx
-      .insert(site)
-      .values({
-        organizationId: input.organizationId,
-        name: input.name,
-        slug: input.slug,
-        tokenHash: hash,
-        schemaTokenHash: schemaToken.hash,
-        productionUrl: input.productionUrl,
-        previewSecret,
-      })
-      .returning()
+    const row = (
+      await tx
+        .insert(site)
+        .values({
+          organizationId: input.organizationId,
+          name: input.name,
+          slug: input.slug,
+          tokenHash: hash,
+          schemaTokenHash: schemaToken.hash,
+          productionUrl: input.productionUrl,
+          previewSecret,
+        })
+        .returning()
+    ).at(0)
     if (!row) {
       throw new Error(m.server_failed_to_create_site())
     }
@@ -169,11 +203,9 @@ export async function updateSite(
   },
   actorId: string,
 ) {
-  const [existing] = await db
-    .select()
-    .from(site)
-    .where(eq(site.id, id))
-    .limit(1)
+  const existing = (
+    await db.select().from(site).where(eq(site.id, id)).limit(1)
+  ).at(0)
   if (!existing) {
     throw new NotFoundError(m.server_site_not_found())
   }
@@ -206,11 +238,9 @@ export async function updateSite(
     (key) => key !== 'updatedAt',
   )
   const updated = await db.transaction(async (tx) => {
-    const [row] = await tx
-      .update(site)
-      .set(patch)
-      .where(eq(site.id, id))
-      .returning()
+    const row = (
+      await tx.update(site).set(patch).where(eq(site.id, id)).returning()
+    ).at(0)
     if (!row) {
       throw new NotFoundError(m.server_site_not_found())
     }
@@ -246,16 +276,80 @@ export async function updateSite(
   return toPublicSite(updated)
 }
 
+/**
+ * Changes a site's slug, which is its key in the CMS: the MCP connector URL
+ * and each project's `--site-key` use it, so old links stop working. The
+ * slug must be unique and follow the shared rule.
+ */
+export async function changeSiteSlug(
+  id: string,
+  slug: string,
+  actorId: string,
+) {
+  const existing = (
+    await db.select().from(site).where(eq(site.id, id)).limit(1)
+  ).at(0)
+  if (!existing) {
+    throw new NotFoundError(m.server_site_not_found())
+  }
+  if (slug === existing.slug) return toPublicSite(existing)
+  assertSiteSlug(slug)
+
+  const taken = (
+    await db
+      .select({ id: site.id })
+      .from(site)
+      .where(eq(site.slug, slug))
+      .limit(1)
+  ).at(0)
+  if (taken) {
+    throw new ConflictError(m.server_slug_already_exists())
+  }
+
+  try {
+    const updated = await db.transaction(async (tx) => {
+      const row = (
+        await tx
+          .update(site)
+          .set({ slug, updatedAt: new Date() })
+          .where(eq(site.id, id))
+          .returning()
+      ).at(0)
+      if (!row) {
+        throw new NotFoundError(m.server_site_not_found())
+      }
+      await audit(
+        {
+          organizationId: existing.organizationId,
+          siteId: id,
+          actorId,
+          action: 'site.update',
+          targetType: 'site',
+          targetId: id,
+          meta: { fields: ['slug'], previousSlug: existing.slug, slug },
+        },
+        tx,
+      )
+      return row
+    })
+    return toPublicSite(updated)
+  } catch (error) {
+    // A slug taken between the check above and the update.
+    if (isUniqueViolation(error)) {
+      throw new ConflictError(m.server_slug_already_exists())
+    }
+    throw error
+  }
+}
+
 export async function rotateSiteTokenAdmin(
   id: string,
   privilege: 'build' | 'schema' = 'build',
   actorId: string,
 ) {
-  const [existing] = await db
-    .select()
-    .from(site)
-    .where(eq(site.id, id))
-    .limit(1)
+  const existing = (
+    await db.select().from(site).where(eq(site.id, id)).limit(1)
+  ).at(0)
   if (!existing) {
     throw new NotFoundError(m.server_site_not_found())
   }
@@ -292,22 +386,18 @@ export async function rotateSiteTokenAdmin(
 }
 
 export async function deleteSite(id: string, actorId: string) {
-  const [existing] = await db
-    .select()
-    .from(site)
-    .where(eq(site.id, id))
-    .limit(1)
+  const existing = (
+    await db.select().from(site).where(eq(site.id, id)).limit(1)
+  ).at(0)
   if (!existing) {
     throw new NotFoundError(m.server_site_not_found())
   }
 
   await db.transaction(async (tx) => {
     await lockOrganizationForMutation(tx, existing.organizationId)
-    const [locked] = await tx
-      .select()
-      .from(site)
-      .where(eq(site.id, id))
-      .for('update')
+    const locked = (
+      await tx.select().from(site).where(eq(site.id, id)).for('update')
+    ).at(0)
     if (!locked) throw new NotFoundError(m.server_site_not_found())
     await assertSiteHasNoPendingDeployment(tx, id)
     await archiveDeletedContent(tx, existing.organizationId, 'site', id)

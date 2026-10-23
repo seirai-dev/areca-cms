@@ -167,6 +167,16 @@ export async function loadMailSettingsRow(): Promise<MailSettingsRow | null> {
   return rows.at(0) ?? null
 }
 
+/**
+ * Whether sending is on. Queuing only needs this answer, so it never decrypts
+ * the SMTP password: a missing or wrong key must not fail the action that
+ * queued the email. Delivery reads the password through `resolveMailConfig`.
+ */
+export async function isMailConfigured(): Promise<boolean> {
+  const row = await loadMailSettingsRow()
+  return chooseMailSource(row, readEnvMail(env)) !== null
+}
+
 let cache: { value: MailConfig | null; expiresAt: number } | null = null
 
 /**

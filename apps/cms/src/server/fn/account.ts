@@ -1,18 +1,29 @@
 import { createServerFn } from '@tanstack/react-start'
-import { and, eq, gt } from 'drizzle-orm'
-import { z } from 'zod'
+import { getRequestHeaders } from '@tanstack/react-start/server'
+import { and, eq, gt, inArray } from 'drizzle-orm'
+import { z } from '#/lib/zod'
 
 import { db } from '#/db'
 import { user, verification } from '#/db/schema'
+import { auth } from '#/lib/auth'
 import { emailPasswordEnabled } from '#/lib/auth-providers'
-import { requireAgencyAdmin, requireUser } from '#/lib/session.server'
+import {
+  requireAccountUser,
+  requireAgencyAdmin,
+  requireUser,
+} from '#/lib/session.server'
 import { m } from '#/paraglide/messages'
+import {
+  listOwnSessions,
+  revocableOwnSessionToken,
+} from '#/server/auth/own-sessions'
 import { allowUserAction } from '#/server/http/rate-limit.server'
+import { verificationIdentifierForms } from '#/server/security/verification-identifiers'
 import {
   sendPasswordResetLink,
   sendVerificationEmail,
 } from '#/server/mail/account-emails'
-import { resolveMailConfig } from '#/server/mail/config'
+import { isMailConfigured } from '#/server/mail/config'
 import { mailFailureMessage } from '#/server/mail/errors'
 import { MAIL_LOCALES } from '#/server/mail/render/types'
 import type { MailFailure } from '#/server/mail/types'
@@ -36,7 +47,7 @@ export const getPasswordResetAvailabilityFn = createServerFn({
   if (!emailPasswordEnabled) {
     return { available: false, reason: 'password_sign_in_disabled' as const }
   }
-  if (!(await resolveMailConfig())) {
+  if (!(await isMailConfigured())) {
     return { available: false, reason: 'mail_not_configured' as const }
   }
   return { available: true, reason: 'ok' as const }
@@ -58,7 +69,10 @@ export const checkPasswordResetTokenFn = createServerFn({
       .from(verification)
       .where(
         and(
-          eq(verification.identifier, `reset-password:${data.token}`),
+          inArray(
+            verification.identifier,
+            verificationIdentifierForms(`reset-password:${data.token}`),
+          ),
           gt(verification.expiresAt, new Date()),
         ),
       )
@@ -85,7 +99,7 @@ export const requestVerificationEmailFn = createServerFn({
       message: m.server_verification_email_rate_limited(),
     }
   }
-  if (!(await resolveMailConfig())) {
+  if (!(await isMailConfigured())) {
     return { ok: false as const, message: mailFailureMessage(NOT_CONFIGURED) }
   }
   const result = await sendVerificationEmail(session.user.id)
@@ -145,3 +159,53 @@ export const sendPasswordResetLinkFn = createServerFn({
         result.status === 'sent' ? ('sent' as const) : ('queued' as const),
     }
   })
+
+/**
+ * The caller's live sessions for the Sessions page. Tokens never leave the
+ * server; each session is named by its id.
+ */
+export const listMySessionsFn = createServerFn({
+  method: 'GET',
+  ...accountFn,
+}).handler(async () => {
+  const session = await requireAccountUser()
+  return listOwnSessions(session.user.id, session.session.id)
+})
+
+/**
+ * Signs out one of the caller's other sessions. The current session ends
+ * through sign-out instead. Better Auth deletes the row, and its hook writes
+ * the `session.revoke` audit entry. No cookie cache or secondary storage is
+ * configured, so the revoked session stops working at once.
+ */
+export const revokeMySessionFn = createServerFn({
+  method: 'POST',
+  ...accountFn,
+})
+  .validator(z.object({ sessionId: z.string().min(1).max(200) }))
+  .handler(async ({ data }) => {
+    const session = await requireAccountUser()
+    const token = await revocableOwnSessionToken(
+      session.user.id,
+      session.session.id,
+      data.sessionId,
+    )
+    await auth.api.revokeSession({
+      body: { token },
+      headers: getRequestHeaders(),
+    })
+    return { ok: true as const }
+  })
+
+/**
+ * Signs out every other session of the caller. The current session stays.
+ * Audited by Better Auth's hook as `session.revoke_others`.
+ */
+export const revokeMyOtherSessionsFn = createServerFn({
+  method: 'POST',
+  ...accountFn,
+}).handler(async () => {
+  await requireAccountUser()
+  await auth.api.revokeOtherSessions({ headers: getRequestHeaders() })
+  return { ok: true as const }
+})

@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 export const MAX_PAGE_SIZE = 100
 export const MAX_PAGE_OFFSET = 100_000

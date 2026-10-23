@@ -83,7 +83,10 @@ test('owner schedules an article from the popover and the worker makes it live',
   // The editor watches a scheduled entry; the worker publishes it when due
   // and requests a release.
   await row.getByRole('link').first().click()
-  await expect(page.getByTestId('entry-editor')).toHaveAttribute('data-ready', 'true')
+  await expect(page.getByTestId('entry-editor')).toHaveAttribute(
+    'data-ready',
+    'true',
+  )
   await expect(page.getByTestId('entry-status')).toHaveAttribute(
     'data-status',
     'published',

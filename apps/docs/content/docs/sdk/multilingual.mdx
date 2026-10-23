@@ -43,6 +43,7 @@ export default defineSiteContent({
 
 - `languages.main` is the fallback. `languages.all` is the order of the language switcher and the last step of the fallback chain, and it includes `main`.
 - `routes` holds each language's route pattern. It has no language prefix: the site adds it, for example `/nl/journaal/<slug>`.
+- The type of `href()` follows the language. Without `in()` it is the union of every language's route, here `` `/journal/${string}` | `/journaal/${string}` ``. After `content.in('nl')` it is the Dutch route alone, `` `/journaal/${string}` ``. A collection with no `routes` has the same route in every language.
 - `translatable` overrides the default for a field. Text, long text, rich text and URL are translated by default; the other types are shared.
 - `i18n.paraglide` is the Paraglide runtime. When it is set, `areca pull` makes `content` read the current language from Paraglide.
 

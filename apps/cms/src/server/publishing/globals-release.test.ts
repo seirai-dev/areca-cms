@@ -171,7 +171,9 @@ describe.skipIf(!hasDb)('release changes for site content', () => {
       await createTestGlobal(ctx.site.id, {
         key: 'opening',
         label: 'Opening hours',
-        fields: [{ key: 'weekdays', label: 'Weekdays', type: 'text', required: true }],
+        fields: [
+          { key: 'weekdays', label: 'Weekdays', type: 'text', required: true },
+        ],
       })
       await updateDraft(
         company.entry.id,
@@ -195,7 +197,8 @@ describe.skipIf(!hasDb)('release changes for site content', () => {
       expect((await buildSnapshot(ctx.site.id)).ok).toBe(false)
 
       const status = await getSiteReleaseStatus(ctx.site.id)
-      expect(status.blockers).toHaveLength(1)
+      // The section, plus the test site's missing deployment target.
+      expect(status.blockers).toHaveLength(2)
       expect(status.pendingEntries).toBe(2)
 
       const changes = await listPendingReleaseChanges(ctx.site.id)
@@ -209,7 +212,11 @@ describe.skipIf(!hasDb)('release changes for site content', () => {
         }),
       )
       expect(changes).toContainEqual(
-        expect.objectContaining({ id: article.id, kind: 'ready', global: false }),
+        expect.objectContaining({
+          id: article.id,
+          kind: 'ready',
+          global: false,
+        }),
       )
 
       const diff = await diffApprovedRelease(ctx.site.id)

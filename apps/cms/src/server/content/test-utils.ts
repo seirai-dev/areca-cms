@@ -36,39 +36,45 @@ export async function createTestSite(
   input: { languages?: SiteLanguages | null } = {},
 ) {
   const suffix = crypto.randomUUID()
-  const [org] = await db
-    .insert(organization)
-    .values({ name: `Test Org ${suffix}`, slug: `test-org-${suffix}` })
-    .returning()
+  const org = (
+    await db
+      .insert(organization)
+      .values({ name: `Test Org ${suffix}`, slug: `test-org-${suffix}` })
+      .returning()
+  ).at(0)
   if (!org) throw new Error('Failed to create org')
 
-  const [actor] = await db
-    .insert(user)
-    .values({
-      id: crypto.randomUUID(),
-      name: 'Test Actor',
-      email: `actor-${suffix}@test.local`,
-      emailVerified: true,
-    })
-    .returning()
+  const actor = (
+    await db
+      .insert(user)
+      .values({
+        id: crypto.randomUUID(),
+        name: 'Test Actor',
+        email: `actor-${suffix}@test.local`,
+        emailVerified: true,
+      })
+      .returning()
+  ).at(0)
   if (!actor) throw new Error('Failed to create user')
 
   const rawToken = randomBytes(32).toString('hex')
   const schemaToken = randomBytes(32).toString('hex')
   const previewSecret = randomBytes(32).toString('hex')
-  const [createdSite] = await db
-    .insert(site)
-    .values({
-      organizationId: org.id,
-      name: `Test Site ${suffix}`,
-      slug: `test-site-${suffix}`,
-      tokenHash: createHash('sha256').update(rawToken).digest('hex'),
-      schemaTokenHash: createHash('sha256').update(schemaToken).digest('hex'),
-      productionUrl: 'http://localhost:3999',
-      previewSecret,
-      languages: input.languages ?? null,
-    })
-    .returning()
+  const createdSite = (
+    await db
+      .insert(site)
+      .values({
+        organizationId: org.id,
+        name: `Test Site ${suffix}`,
+        slug: `test-site-${suffix}`,
+        tokenHash: createHash('sha256').update(rawToken).digest('hex'),
+        schemaTokenHash: createHash('sha256').update(schemaToken).digest('hex'),
+        productionUrl: 'http://localhost:3999',
+        previewSecret,
+        languages: input.languages ?? null,
+      })
+      .returning()
+  ).at(0)
   if (!createdSite) throw new Error('Failed to create site')
 
   return {
@@ -92,19 +98,21 @@ export async function createTestCollection(
     localizedRoutes?: Record<string, string> | null
   } = {},
 ) {
-  const [col] = await db
-    .insert(collection)
-    .values({
-      siteId,
-      key: input.key ?? 'articles',
-      label: 'Articles',
-      routePattern: input.routePattern ?? '/blog/$slug',
-      fields: input.fields ?? articleFields(),
-      enabled: true,
-      requiredLanguages: input.requiredLanguages ?? [],
-      localizedRoutes: input.localizedRoutes ?? null,
-    })
-    .returning()
+  const col = (
+    await db
+      .insert(collection)
+      .values({
+        siteId,
+        key: input.key ?? 'articles',
+        label: 'Articles',
+        routePattern: input.routePattern ?? '/blog/$slug',
+        fields: input.fields ?? articleFields(),
+        enabled: true,
+        requiredLanguages: input.requiredLanguages ?? [],
+        localizedRoutes: input.localizedRoutes ?? null,
+      })
+      .returning()
+  ).at(0)
   if (!col) throw new Error('Failed to create collection')
   return col
 }
@@ -139,31 +147,35 @@ export async function createTestGlobal(
   } = {},
 ) {
   return db.transaction(async (tx) => {
-    const [col] = await tx
-      .insert(collection)
-      .values({
-        siteId,
-        key: input.key ?? 'companyInfo',
-        label: input.label ?? 'Company info',
-        routePattern: '',
-        kind: 'global',
-        fields: input.fields ?? globalFields(),
-        enabled: input.enabled ?? true,
-        seoEnabled: input.seoEnabled ?? false,
-        previewPath: input.previewPath ?? null,
-        requiredLanguages: input.requiredLanguages ?? [],
-      })
-      .returning()
+    const col = (
+      await tx
+        .insert(collection)
+        .values({
+          siteId,
+          key: input.key ?? 'companyInfo',
+          label: input.label ?? 'Company info',
+          routePattern: '',
+          kind: 'global',
+          fields: input.fields ?? globalFields(),
+          enabled: input.enabled ?? true,
+          seoEnabled: input.seoEnabled ?? false,
+          previewPath: input.previewPath ?? null,
+          requiredLanguages: input.requiredLanguages ?? [],
+        })
+        .returning()
+    ).at(0)
     if (!col) throw new Error('Failed to create global')
-    const [row] = await tx
-      .insert(entry)
-      .values({
-        siteId,
-        collectionId: col.id,
-        slug: '$global',
-        status: 'draft',
-      })
-      .returning()
+    const row = (
+      await tx
+        .insert(entry)
+        .values({
+          siteId,
+          collectionId: col.id,
+          slug: '$global',
+          status: 'draft',
+        })
+        .returning()
+    ).at(0)
     if (!row) throw new Error('Failed to create global entry')
     return { collection: col, entry: row }
   })

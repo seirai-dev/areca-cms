@@ -1,4 +1,7 @@
+import { createHash } from 'node:crypto'
+
 import type * as MailConfig from '#/server/mail/config'
+import type * as SecretsKey from '#/server/security/secrets-key'
 import type * as MailTransport from '#/server/mail/transport'
 /* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
 import { eq, inArray } from 'drizzle-orm'
@@ -22,22 +25,45 @@ import {
   getInvitation,
   inviteMember,
   listInvitations,
+  regenerateInvitationLink,
   resendInvitation,
   revokeInvitation,
 } from './members.ts'
 
+// A fixed 32-byte key, so the outbox keeps the link encrypted as it does in
+// production. Tests that need "no key" set `secrets.key` to null.
+const TEST_SECRETS_KEY = 'AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE='
+
 // `override` undefined: the real environment (Mailpit). null: no mail
 // configured. An object: that host and port, with an optional password.
+// `messages` holds every message text handed to SMTP, including failed sends,
+// so tests can read the raw link: the database only keeps its hash.
 const mail = vi.hoisted(() => ({
   override: undefined as
     undefined | null | { host: string; port: number; password?: string },
   echoFailure: false,
+  messages: [] as string[],
 }))
+const secrets = vi.hoisted((): { key: string | null } => ({
+  key: 'AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=',
+}))
+
+vi.mock('#/server/security/secrets-key', async (importOriginal) => {
+  const actual = await importOriginal<typeof SecretsKey>()
+  return {
+    ...actual,
+    secretsEncryptionKey: () => secrets.key,
+  }
+})
 
 vi.mock('#/server/mail/config', async (importOriginal) => {
   const actual = await importOriginal<typeof MailConfig>()
   return {
     ...actual,
+    isMailConfigured: async () => {
+      if (mail.override === undefined) return actual.isMailConfigured()
+      return mail.override !== null
+    },
     resolveMailConfig: async () => {
       if (mail.override === undefined) return actual.resolveMailConfig()
       if (mail.override === null) return null
@@ -63,6 +89,7 @@ vi.mock('#/server/mail/transport', async (importOriginal) => {
       config: Parameters<typeof actual.sendMail>[0],
       message: Parameters<typeof actual.sendMail>[1],
     ) => {
+      mail.messages.push(message.text)
       if (mail.echoFailure) {
         // SMTP errors can echo the password and the message body with its link.
         const link = message.text.match(/https?:\/\/\S+\/invite\/\w+/)?.[0]
@@ -80,7 +107,19 @@ const hasDb = Boolean(process.env.DATABASE_URL)
 beforeEach(() => {
   mail.override = undefined
   mail.echoFailure = false
+  mail.messages = []
+  secrets.key = TEST_SECRETS_KEY
 })
+
+/** The raw token in the newest invitation link SMTP was given. */
+function latestInviteToken() {
+  const links = mail.messages.flatMap((text) =>
+    [...text.matchAll(/\/invite\/([0-9a-f]{64})/g)].map((match) => match[1]),
+  )
+  const token = links.at(-1)
+  if (!token) throw new Error('no invitation link was sent')
+  return token
+}
 
 async function fixture() {
   const suffix = crypto.randomUUID()
@@ -164,6 +203,7 @@ describe.skipIf(!hasDb)('invitation delivery failures', () => {
 
       const [row] = await listInvitations(f.org.id)
       expect(row).toMatchObject({ email: f.email, deliveryStatus: 'queued' })
+      const firstToken = latestInviteToken()
       const [stored] = await db
         .select()
         .from(invitation)
@@ -188,13 +228,15 @@ describe.skipIf(!hasDb)('invitation delivery failures', () => {
       await expect(resendInvitation(row.id, f.actor.id)).rejects.toBeInstanceOf(
         InvitationDeliveryError,
       )
+      const secondToken = latestInviteToken()
+      expect(secondToken).not.toBe(firstToken)
       const [afterFailedResend] = await db
         .select()
         .from(invitation)
         .where(eq(invitation.id, row.id))
-      expect(afterFailedResend?.token).not.toBe(row.token)
       expect(afterFailedResend?.deliveryStatus).toBe('queued')
-      expect(await getInvitation(row.token)).toBeNull()
+      expect(await getInvitation(firstToken)).toBeNull()
+      expect(await getInvitation(secondToken)).toMatchObject({ id: row.id })
       const outbox = await outboxFor(row.id)
       expect(outbox.map((o) => o.status)).toEqual(['failed', 'queued'])
 
@@ -205,17 +247,22 @@ describe.skipIf(!hasDb)('invitation delivery failures', () => {
         .where(eq(invitation.id, row.id))
       mail.override = undefined
       const resent = await resendInvitation(row.id, f.actor.id)
+      const resentToken = latestInviteToken()
+      expect(resentToken).not.toBe(secondToken)
       expect(resent.deliveryStatus).toBe('sent')
-      expect(resent.lastDeliveryError).toBeNull()
       expect(resent.lastSentAt).toBeInstanceOf(Date)
-      expect(resent.token).not.toBe(afterFailedResend?.token)
+      const [sentRow] = await db
+        .select({ lastDeliveryError: invitation.lastDeliveryError })
+        .from(invitation)
+        .where(eq(invitation.id, row.id))
+      expect(sentRow?.lastDeliveryError).toBeNull()
       expect(resent.expiresAt.getTime()).toBeGreaterThan(
         Date.now() + 6 * 86_400_000,
       )
 
       const delivered = await mailpitHtml(f.email)
       expect(delivered?.Subject).toContain(f.org.name)
-      expect(delivered?.HTML).toContain(`/invite/${resent.token}`)
+      expect(delivered?.HTML).toContain(`/invite/${resentToken}`)
       expect(delivered?.HTML).toContain('Accept invitation')
 
       const actions = (
@@ -231,7 +278,7 @@ describe.skipIf(!hasDb)('invitation delivery failures', () => {
     }
   })
 
-  it('marks the invitation failed after three attempts and keeps its copy-link token', async () => {
+  it('marks the invitation failed after three attempts and keeps its link usable', async () => {
     const f = await fixture()
     try {
       mail.override = { host: 'localhost', port: 1 }
@@ -244,6 +291,7 @@ describe.skipIf(!hasDb)('invitation delivery failures', () => {
         }),
       ).rejects.toBeInstanceOf(InvitationDeliveryError)
       const [row] = await listInvitations(f.org.id)
+      const token = latestInviteToken()
       const [queued] = await outboxFor(row.id)
       expect(queued).toMatchObject({ status: 'queued', attempts: 1 })
 
@@ -263,11 +311,8 @@ describe.skipIf(!hasDb)('invitation delivery failures', () => {
       expect(stored?.lastDeliveryError).toContain(
         "Couldn't reach localhost on port 1",
       )
-      // Still usable: the copy-link token has not changed or expired.
-      expect(await getInvitation(row.token)).toMatchObject({
-        id: row.id,
-        token: row.token,
-      })
+      // Still usable: the link has not changed or expired.
+      expect(await getInvitation(token)).toMatchObject({ id: row.id })
       expect(
         (await outboxFor(row.id)).map((o) => [o.status, o.attempts]),
       ).toEqual([['failed', 3]])
@@ -289,9 +334,10 @@ describe.skipIf(!hasDb)('invitation delivery failures', () => {
         }),
       ).rejects.toBeInstanceOf(InvitationDeliveryError)
       const [row] = await listInvitations(f.org.id)
+      const token = latestInviteToken()
       await revokeInvitation(row.id, f.actor.id)
       expect(await listInvitations(f.org.id)).toHaveLength(0)
-      expect(await getInvitation(row.token)).toBeNull()
+      expect(await getInvitation(token)).toBeNull()
       await expect(resendInvitation(row.id, f.actor.id)).rejects.toBeInstanceOf(
         NotFoundError,
       )
@@ -342,15 +388,16 @@ describe.skipIf(!hasDb)('invitation delivery failures', () => {
         .from(invitation)
         .where(eq(invitation.organizationId, f.org.id))
       expect(row).toBeTruthy()
+      const token = latestInviteToken()
       expect(row.lastDeliveryError).not.toContain('smtp-test-secret')
-      expect(row.lastDeliveryError).not.toContain(row.token)
+      expect(row.lastDeliveryError).not.toContain(token)
       expect(row.lastDeliveryError!.length).toBeLessThanOrEqual(500)
 
       const mailLines = lines.filter((line) =>
         line.includes('mail send failed'),
       )
       expect(mailLines).toHaveLength(1)
-      expect(mailLines[0]).not.toContain(row.token)
+      expect(mailLines[0]).not.toContain(token)
       expect(mailLines[0]).not.toContain('smtp-test-secret')
       expect(mailLines[0]).toContain('[redacted]')
     } finally {
@@ -370,14 +417,16 @@ describe.skipIf(!hasDb)('invitation delivery failures', () => {
         role: 'editor',
         actorId: f.actor.id,
       })
-      const resent = await resendInvitation(initial.id, f.actor.id)
+      const initialToken = latestInviteToken()
+      await resendInvitation(initial.id, f.actor.id)
+      const resentToken = latestInviteToken()
       await expect(
-        acceptInvitation({ token: initial.token, userId: f.actor.id }),
+        acceptInvitation({ token: initialToken, userId: f.actor.id }),
       ).rejects.toBeInstanceOf(NotFoundError)
       await expect(
-        acceptInvitation({ token: resent.token, userId: f.actor.id }),
+        acceptInvitation({ token: resentToken, userId: f.actor.id }),
       ).rejects.toBeInstanceOf(ConflictError)
-      expect(await getInvitation(resent.token)).toBeTruthy()
+      expect(await getInvitation(resentToken)).toBeTruthy()
       const [guest] = await db
         .insert(user)
         .values({
@@ -389,15 +438,145 @@ describe.skipIf(!hasDb)('invitation delivery failures', () => {
         .returning()
       guestId = guest.id
       await expect(
-        acceptInvitation({ token: resent.token, userId: guestId }),
+        acceptInvitation({ token: resentToken, userId: guestId }),
       ).resolves.toEqual({ organizationId: f.org.id, role: 'editor' })
-      expect(await getInvitation(resent.token)).toBeNull()
+      expect(await getInvitation(resentToken)).toBeNull()
       await expect(
         resendInvitation(initial.id, f.actor.id),
       ).rejects.toBeInstanceOf(ConflictError)
     } finally {
       await f.cleanup()
       if (guestId) await db.delete(user).where(eq(user.id, guestId))
+    }
+  })
+})
+
+describe.skipIf(!hasDb)('invitation links at rest', () => {
+  it('stores only the hash, and keeps the raw link out of the outbox and listings', async () => {
+    const f = await fixture()
+    try {
+      mail.override = { host: 'localhost', port: 1 }
+      await expect(
+        inviteMember({
+          organizationId: f.org.id,
+          email: f.email,
+          role: 'editor',
+          actorId: f.actor.id,
+        }),
+      ).rejects.toBeInstanceOf(InvitationDeliveryError)
+      const token = latestInviteToken()
+
+      const [stored] = await db
+        .select()
+        .from(invitation)
+        .where(eq(invitation.organizationId, f.org.id))
+      expect(stored?.tokenHash).toBe(
+        createHash('sha256').update(token).digest('hex'),
+      )
+      expect(JSON.stringify(stored)).not.toContain(token)
+
+      const [listed] = await listInvitations(f.org.id)
+      expect(listed).not.toHaveProperty('token')
+      expect(listed).not.toHaveProperty('tokenHash')
+      expect(JSON.stringify(listed)).not.toContain(token)
+
+      const [queued] = await outboxFor(stored.id)
+      expect(JSON.stringify(queued)).not.toContain(token)
+      expect(queued?.params).not.toHaveProperty('token')
+      expect(queued?.params.encryptedToken).toEqual(expect.any(String))
+    } finally {
+      await f.cleanup()
+    }
+  })
+
+  it('without a secrets key the outbox holds no link, so a failed send cannot be retried', async () => {
+    const f = await fixture()
+    try {
+      secrets.key = null
+      mail.override = { host: 'localhost', port: 1 }
+      await expect(
+        inviteMember({
+          organizationId: f.org.id,
+          email: f.email,
+          role: 'editor',
+          actorId: f.actor.id,
+        }),
+      ).rejects.toBeInstanceOf(InvitationDeliveryError)
+      const token = latestInviteToken()
+      const [row] = await listInvitations(f.org.id)
+      const [queued] = await outboxFor(row.id)
+      expect(queued?.params).not.toHaveProperty('encryptedToken')
+      expect(JSON.stringify(queued)).not.toContain(token)
+
+      // The worker has only the stored params, so it cannot rebuild the link.
+      expect((await sendNow(queued.id)).status).toBe('failed')
+    } finally {
+      await f.cleanup()
+    }
+  })
+
+  it('regenerate link returns the new link once, and the old one stops working', async () => {
+    const f = await fixture()
+    try {
+      mail.override = { host: 'localhost', port: 1 }
+      await expect(
+        inviteMember({
+          organizationId: f.org.id,
+          email: f.email,
+          role: 'editor',
+          actorId: f.actor.id,
+        }),
+      ).rejects.toBeInstanceOf(InvitationDeliveryError)
+      const [row] = await listInvitations(f.org.id)
+      const oldToken = latestInviteToken()
+
+      // The email cannot go out, but the admin still gets the link to share.
+      const regenerated = await regenerateInvitationLink(row.id, f.actor.id)
+      const newToken = regenerated.link.slice(
+        regenerated.link.lastIndexOf('/') + 1,
+      )
+      expect(newToken).toMatch(/^[0-9a-f]{64}$/)
+      expect(newToken).not.toBe(oldToken)
+      expect(regenerated.emailSent).toBe(false)
+      expect(regenerated.emailError).toContain(
+        "Couldn't reach localhost on port 1",
+      )
+      expect(await getInvitation(oldToken)).toBeNull()
+      expect(await getInvitation(newToken)).toMatchObject({ id: row.id })
+      expect(latestInviteToken()).toBe(newToken)
+    } finally {
+      await f.cleanup()
+    }
+  })
+
+  it('regenerate link emails the new link and audits it', async () => {
+    const f = await fixture()
+    try {
+      mail.override = undefined
+      const ok = await inviteMember({
+        organizationId: f.org.id,
+        email: f.email,
+        role: 'editor',
+        actorId: f.actor.id,
+      })
+      const oldToken = latestInviteToken()
+
+      const regenerated = await regenerateInvitationLink(ok.id, f.actor.id)
+      const newToken = latestInviteToken()
+      expect(regenerated.emailSent).toBe(true)
+      expect(regenerated.link).toBe(`${process.env.APP_URL}/invite/${newToken}`)
+      expect(newToken).not.toBe(oldToken)
+      expect(await getInvitation(oldToken)).toBeNull()
+
+      const actions = (
+        await db
+          .select({ action: auditLog.action, actorId: auditLog.actorId })
+          .from(auditLog)
+          .where(eq(auditLog.organizationId, f.org.id))
+      ).map((r) => `${r.action}:${r.actorId}`)
+      expect(actions).toContain(`invitation.regenerate_link:${f.actor.id}`)
+    } finally {
+      await f.cleanup()
     }
   })
 })

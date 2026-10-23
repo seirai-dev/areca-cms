@@ -10,7 +10,9 @@ import {
   publication,
   site,
 } from '#/db/schema'
-import { assertAdminMfa, requireUser } from '#/lib/session.server'
+import { requireUser } from '#/lib/session.server'
+import { NotFoundError } from '#/server/content/errors'
+import { requireAdminLocalMfa } from '#/server/security/local-mfa'
 import { diffApprovedRelease } from '#/server/publishing/release-diff'
 
 const loose = { strict: { output: false } as const }
@@ -39,7 +41,7 @@ export const getSitesOverviewFn = createServerFn({
   ...loose,
 }).handler(async () => {
   const session = await requireUser()
-  if (session.user.isAgencyAdmin) assertAdminMfa(session.user)
+  if (session.user.isAgencyAdmin) await requireAdminLocalMfa(session)
   const orgIds = await accessibleOrgIds(
     session.user.id,
     Boolean(session.user.isAgencyAdmin),
@@ -122,10 +124,17 @@ export const getSitesOverviewFn = createServerFn({
     if (!liveSince.has(row.siteId)) liveSince.set(row.siteId, row.createdAt)
   }
 
+  // A site deleted after the list above is simply gone: `null` marks it and it
+  // is left out, rather than failing the whole overview.
   const pendingPairs = await Promise.all(
     siteIds.map(async (siteId) => {
-      const diff = await diffApprovedRelease(siteId)
-      return [siteId, diff.pendingCount] as const
+      try {
+        const diff = await diffApprovedRelease(siteId)
+        return [siteId, diff.pendingCount] as const
+      } catch (error) {
+        if (error instanceof NotFoundError) return [siteId, null] as const
+        throw error
+      }
     }),
   )
 
@@ -144,15 +153,17 @@ export const getSitesOverviewFn = createServerFn({
         )[0]?.n ?? 0,
       )
 
-  const rows = sites.map((row) => ({
-    ...row,
-    collections: byCollection.get(row.id)?.count ?? 0,
-    entries: byEntry.get(row.id)?.count ?? 0,
-    lastUpdated: byEntry.get(row.id)?.lastUpdated ?? row.updatedAt,
-    live: live.has(row.id),
-    liveSince: liveSince.get(row.id) ?? null,
-    pendingEntries: byPending.get(row.id) ?? 0,
-  }))
+  const rows = sites
+    .filter((row) => byPending.get(row.id) !== null)
+    .map((row) => ({
+      ...row,
+      collections: byCollection.get(row.id)?.count ?? 0,
+      entries: byEntry.get(row.id)?.count ?? 0,
+      lastUpdated: byEntry.get(row.id)?.lastUpdated ?? row.updatedAt,
+      live: live.has(row.id),
+      liveSince: liveSince.get(row.id) ?? null,
+      pendingEntries: byPending.get(row.id) ?? 0,
+    }))
 
   return {
     sites: rows,

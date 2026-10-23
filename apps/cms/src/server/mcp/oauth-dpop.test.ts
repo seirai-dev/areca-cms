@@ -1,6 +1,6 @@
 import { createHash, generateKeyPairSync, randomBytes, sign } from 'node:crypto'
 import type { KeyObject } from 'node:crypto'
-import { eq } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import { hashPassword } from 'better-auth/crypto'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type * as StartServer from '@tanstack/react-start/server'
@@ -16,6 +16,7 @@ import {
 import { env } from '#/env'
 import { auth } from '#/lib/auth'
 import { cleanupTestSite, createTestSite } from '#/server/content/test-utils'
+import { verificationIdentifierForms } from '#/server/security/verification-identifiers'
 import { approveConsentRequest } from './consent'
 import { handleSiteMcpRequest } from './http'
 import { mcpResourceUrl } from './oauth-resource'
@@ -165,7 +166,12 @@ describe.skipIf(!hasDb)('MCP DPoP sender-constrained OAuth requests', () => {
     for (const identifier of replayIdentifiers)
       await db
         .delete(verification)
-        .where(eq(verification.identifier, identifier))
+        .where(
+          inArray(
+            verification.identifier,
+            verificationIdentifierForms(identifier),
+          ),
+        )
   })
 
   async function mint(dpop: boolean, scope = 'mcp offline_access') {
@@ -354,7 +360,12 @@ describe.skipIf(!hasDb)('MCP DPoP sender-constrained OAuth requests', () => {
     const persisted = await db
       .select()
       .from(verification)
-      .where(eq(verification.identifier, [...replayIdentifiers].at(-1) ?? ''))
+      .where(
+        inArray(
+          verification.identifier,
+          verificationIdentifierForms([...replayIdentifiers].at(-1) ?? ''),
+        ),
+      )
     expect(persisted).toHaveLength(1)
   })
 

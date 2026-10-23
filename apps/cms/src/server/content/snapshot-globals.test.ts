@@ -52,10 +52,9 @@ function collectionsHash(collections: Record<string, SnapshotEntry[]>) {
 }
 
 async function sectionEntry(globalId: string) {
-  const [row] = await db
-    .select()
-    .from(entry)
-    .where(eq(entry.collectionId, globalId))
+  const row = (
+    await db.select().from(entry).where(eq(entry.collectionId, globalId))
+  ).at(0)
   if (!row) throw new Error('section entry missing')
   return row
 }
@@ -125,10 +124,10 @@ describe.skipIf(!hasDb)('buildSnapshot site content', () => {
       expect(result.ok).toBe(true)
       if (!result.ok) return
 
-      expect(result.snapshot.globals?.homePage?.seo).toMatchObject({
+      expect(result.snapshot.globals?.homePage.seo).toMatchObject({
         description: 'Home description',
       })
-      expect(result.snapshot.globals?.homePage?.data).not.toHaveProperty('$seo')
+      expect(result.snapshot.globals?.homePage.data).not.toHaveProperty('$seo')
       expect(result.snapshot.globals?.companyInfo).not.toHaveProperty('seo')
     })
   })
@@ -222,7 +221,7 @@ describe.skipIf(!hasDb)('buildSnapshot site content', () => {
       expect(second.ok).toBe(true)
       if (!second.ok) return
       expect(second.hash).not.toBe(first.hash)
-      expect(second.snapshot.globals?.companyInfo?.data).toMatchObject({
+      expect(second.snapshot.globals?.companyInfo.data).toMatchObject({
         email: 'second@x.test',
       })
     })
@@ -292,7 +291,7 @@ describe.skipIf(!hasDb)('buildSnapshot site content', () => {
       const due = await buildSnapshot(ctx.site.id)
       expect(due.ok).toBe(true)
       if (!due.ok) return
-      expect(due.snapshot.globals?.companyInfo?.data).toMatchObject({
+      expect(due.snapshot.globals?.companyInfo.data).toMatchObject({
         email: 'new@x.test',
       })
     })
@@ -327,7 +326,7 @@ describe.skipIf(!hasDb)('buildSnapshot site content', () => {
       const result = await buildSnapshot(ctx.site.id)
       expect(result.ok).toBe(true)
       if (!result.ok) return
-      expect(result.snapshot.globals?.companyInfo?.data).toMatchObject({
+      expect(result.snapshot.globals?.companyInfo.data).toMatchObject({
         email: 'old@x.test',
       })
     })

@@ -7,17 +7,20 @@ import { adminQueryKeys, errorMessage, suggestSlug } from '#/lib/admin/helpers'
 import { Button } from '#/components/ui/button'
 import { FormField } from '#/components/ui/form-field'
 import { Input } from '#/components/ui/input'
+import { useShell } from '#/components/shell/shell-context'
 import { SlideOver } from '#/components/ui/slide-over'
 import { useStepUp } from '#/features/security/step-up'
 import { TokenReveal } from '#/features/site-settings/token-reveal'
+import {
+  removePendingToken,
+  writePendingToken,
+} from '#/lib/pending-site-tokens'
+import type { PendingToken } from '#/lib/pending-site-tokens'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 import { createSiteFn } from '#/server/fn/admin'
 
 import { SlugField } from './slug-field'
-
-import { writePendingToken, removePendingToken } from './pending-site-tokens'
-import type { PendingToken } from './pending-site-tokens'
 
 /** The local demo site, suggested only while developing. */
 const DEMO_SITE_URL = 'http://localhost:3001'
@@ -101,6 +104,7 @@ export function NewSiteSheet({
     DEFAULT_PRODUCTION_URL,
   )
   const [created, setCreated] = React.useState<PendingToken | null>(null)
+  const { me } = useShell()
   const create = useCreateSite(orgId)
 
   function reset() {
@@ -113,7 +117,8 @@ export function NewSiteSheet({
 
   function close(confirmed: boolean) {
     if (created && !confirmed) onUnconfirmed(created)
-    if (created && confirmed) removePendingToken(orgId, created.siteId)
+    if (created && confirmed)
+      removePendingToken(me.user.id, orgId, created.siteId)
     onOpenChange(false)
     // Let the exit animation play before clearing the form.
     setTimeout(reset, 250)
@@ -194,7 +199,7 @@ export function NewSiteSheet({
                     schemaToken: site.schemaToken,
                   }
                   // Survives a reload until "I've saved it".
-                  writePendingToken(orgId, pending)
+                  writePendingToken(me.user.id, orgId, pending)
                   setCreated(pending)
                 },
               },

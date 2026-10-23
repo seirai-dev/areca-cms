@@ -41,6 +41,15 @@ export type EntryRow = {
   updatedByName?: string | null
 }
 
+/** A page's rows. A malformed response (no `items`) reads as an empty page. */
+function pageItems<T>(page: { items?: T[] } | null | undefined): T[] {
+  return page?.items ?? []
+}
+
+function pageTotal(page: { total?: number } | null | undefined): number {
+  return page?.total ?? 0
+}
+
 /**
  * One collection's entries for the Collection screen (brief §3.4): status
  * filter and search go to the server; "Show more" appends pages of 25
@@ -84,21 +93,28 @@ export function useCollectionEntries({
         },
       }),
     getNextPageParam: (last, pages) => {
-      const loaded = pages.reduce((sum, page) => sum + page.items.length, 0)
-      return loaded < last.total ? loaded : undefined
+      const loaded = pages.reduce(
+        (sum, page) => sum + pageItems(page).length,
+        0,
+      )
+      return loaded < pageTotal(last) ? loaded : undefined
     },
     placeholderData: keepPreviousData,
     // A scheduled entry goes live on the server; refresh the list while one
     // is due (or less than a minute away) and stop once none is.
     refetchInterval: (q) => {
       const pages = q.state.data?.pages ?? []
-      const times = scheduledTimes(pages.flatMap((page) => page.items))
+      const times = scheduledTimes(pages.flatMap((page) => pageItems(page)))
       return shouldPollScheduled(times) ? DUE_POLL_MS : false
     },
   })
 
+  // A malformed response shows the list's normal empty or error state rather
+  // than throwing to the route error boundary.
   const rows = React.useMemo(
-    () => (query.data?.pages.flatMap((page) => page.items) ?? []) as EntryRow[],
+    () =>
+      (query.data?.pages.flatMap((page) => pageItems(page)) ??
+        []) as EntryRow[],
     [query.data],
   )
   const total = query.data?.pages[0]?.total
@@ -138,72 +154,132 @@ export function useCollectionEntries({
 
 export type BulkAction = 'ready' | 'draft' | 'delete'
 
+/** One entry in a bulk action: its id, and the title and slug the list shows for it. */
+export type BulkTarget = { id: string; title: string; slug: string }
+
+export type BulkFailure = BulkTarget & { reason: string }
+
+/** Per-entry outcome of one bulk action. `failed` lists what did not change. */
+export type BulkResult = {
+  action: BulkAction
+  /** Every entry the action was attempted on. */
+  ids: string[]
+  total: number
+  done: number
+  failed: BulkFailure[]
+}
+
+function bulkPartialMessage(result: BulkResult) {
+  const counts = {
+    done: result.done,
+    total: result.total,
+    failed: result.failed.length,
+  }
+  switch (result.action) {
+    case 'ready':
+      return m.collection_bulk_partial_ready(counts)
+    case 'draft':
+      return m.collection_bulk_partial_draft(counts)
+    case 'delete':
+      return m.collection_bulk_partial_delete(counts)
+  }
+}
+
+function bulkSuccessMessage(action: BulkAction, count: number) {
+  switch (action) {
+    case 'ready':
+      return count === 1
+        ? m.collection_bulk_ready_one()
+        : m.collection_bulk_ready_other({ count })
+    case 'draft':
+      return count === 1
+        ? m.collection_bulk_draft_one()
+        : m.collection_bulk_draft_other({ count })
+    case 'delete':
+      return count === 1
+        ? m.collection_bulk_deleted_one()
+        : m.editor_bulk_deleted({ count })
+  }
+}
+
 /**
- * Mark as ready / Move back to draft / Delete for one or many entries.
- * Calls run one after another (as before) and end in one toast: a success
- * sentence, or "3 completed, 1 failed."
+ * Runs one request per entry, in order, and records which ones failed. A
+ * failure does not stop the others.
  */
-export function useEntryBulkActions(siteId: string, collectionKey: string) {
+export async function runBulkAction(
+  input: { action: BulkAction; targets: BulkTarget[] },
+  call: (id: string) => Promise<unknown>,
+): Promise<BulkResult> {
+  const failed: BulkFailure[] = []
+  for (const target of input.targets) {
+    try {
+      await call(target.id)
+    } catch (error) {
+      failed.push({ ...target, reason: errorMessage(error) })
+    }
+  }
+  return {
+    action: input.action,
+    ids: input.targets.map((target) => target.id),
+    total: input.targets.length,
+    done: input.targets.length - failed.length,
+    failed,
+  }
+}
+
+/**
+ * Mark as ready / Move back to draft / Delete for one or many entries. Each
+ * entry is one request, so every entry has its own outcome. The result goes
+ * to `onResult` (the screen keeps the failed entries selected). A partial
+ * result shows a summary toast whose "Show details" lists each failed entry
+ * with its reason, and offers to retry only those.
+ */
+export function useEntryBulkActions(
+  siteId: string,
+  collectionKey: string,
+  options: { onResult?: (result: BulkResult) => void } = {},
+) {
   const queryClient = useQueryClient()
   const invalidateGoLive = useInvalidateGoLive(siteId)
+  const [details, setDetails] = React.useState<BulkResult | null>(null)
+  const onResultRef = React.useRef(options.onResult)
+  onResultRef.current = options.onResult
 
-  return useMutation({
-    mutationFn: async (input: { action: BulkAction; ids: string[] }) => {
+  const mutation = useMutation({
+    mutationFn: (input: { action: BulkAction; targets: BulkTarget[] }) => {
       const fn =
         input.action === 'ready'
           ? publishEntryFn
           : input.action === 'draft'
             ? unpublishEntryFn
             : deleteEntryFn
-      let failed = 0
-      let lastError: unknown = null
-      for (const id of input.ids) {
-        try {
-          await fn({ data: { id } })
-        } catch (error) {
-          failed += 1
-          lastError = error
-        }
-      }
-      return { done: input.ids.length - failed, failed, lastError }
+      return runBulkAction(input, (id) => fn({ data: { id } }))
     },
-    onSuccess: async (result, input) => {
-      if (result.failed > 0) {
-        const reason = errorMessage(result.lastError)
+    onSuccess: async (result) => {
+      onResultRef.current?.(result)
+      if (result.failed.length === 0) {
+        toast.success(bulkSuccessMessage(result.action, result.done))
+      } else {
+        const showDetails = {
+          label: m.collection_bulk_show_details(),
+          onClick: () => setDetails(result),
+        }
         if (result.done === 0) {
           toast.error(
-            input.ids.length === 1
+            result.total === 1
               ? m.collection_bulk_failed_one()
-              : m.collection_bulk_failed_other({ count: input.ids.length }),
-            { description: reason },
+              : m.collection_bulk_failed_other({ count: result.total }),
+            { description: result.failed[0]?.reason, action: showDetails },
           )
         } else {
-          toast.warning(
-            m.editor_bulk_partial({ done: result.done, failed: result.failed }),
-            { description: reason },
-          )
+          toast.warning(bulkPartialMessage(result), { action: showDetails })
         }
-      } else {
-        const count = result.done
-        toast.success(
-          input.action === 'ready'
-            ? count === 1
-              ? m.collection_bulk_ready_one()
-              : m.collection_bulk_ready_other({ count })
-            : input.action === 'draft'
-              ? count === 1
-                ? m.collection_bulk_draft_one()
-                : m.collection_bulk_draft_other({ count })
-              : count === 1
-                ? m.collection_bulk_deleted_one()
-                : m.editor_bulk_deleted({ count }),
-        )
       }
       await Promise.all([
         queryClient.invalidateQueries({
           queryKey: ['entries', siteId, collectionKey],
         }),
-        ...input.ids.map((id) =>
+        ...result.ids.map((id) =>
           queryClient.invalidateQueries({ queryKey: queryKeys.entry(id) }),
         ),
         invalidateGoLive(),
@@ -211,6 +287,26 @@ export function useEntryBulkActions(siteId: string, collectionKey: string) {
     },
     onError: (error) => toast.error(errorMessage(error)),
   })
+
+  /** Runs the failed entries again, with the same action. */
+  function retryFailed() {
+    if (!details) return
+    const { action, failed } = details
+    setDetails(null)
+    mutation.mutate({
+      action,
+      targets: failed.map(({ id, title, slug }) => ({ id, title, slug })),
+    })
+  }
+
+  return {
+    mutate: mutation.mutate,
+    mutateAsync: mutation.mutateAsync,
+    isPending: mutation.isPending,
+    details,
+    closeDetails: () => setDetails(null),
+    retryFailed,
+  }
 }
 
 export type CollectionView = 'cards' | 'list'

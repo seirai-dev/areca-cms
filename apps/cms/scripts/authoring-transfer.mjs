@@ -356,7 +356,10 @@ async function main() {
               'Imported historical queue; request a new release at the destination'
           }
           if (table === 'invitation') {
-            row.token = randomBytes(32).toString('hex')
+            // Imported invitations can never be used: no link matches the random
+            // hash, and the expiry is in the past. Older bundles carry `token`.
+            delete row.token
+            row.token_hash = randomBytes(32).toString('hex')
             row.expires_at = new Date(0).toISOString()
           }
           const columns = Object.keys(row)

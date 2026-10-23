@@ -31,6 +31,7 @@ import {
 } from '@phosphor-icons/react'
 import type { Icon as IconComponent } from '@phosphor-icons/react'
 
+import { useCspNonce } from '#/hooks/use-csp-nonce'
 import { assetFileUrl, emptyRichText } from '#/lib/content/utils'
 import { Button } from '#/components/ui/button'
 import {
@@ -225,10 +226,13 @@ export function RichTextEditor({
     setOpenMenus((count) => Math.max(0, count + (open ? 1 : -1)))
   }, [])
 
+  // TipTap writes its base ProseMirror stylesheet into <head>; it needs the nonce.
+  const cspNonce = useCspNonce()
   const editor = useEditor({
     extensions: richTextExtensions,
     content: (value as object | null) ?? emptyRichText(),
     immediatelyRender: false,
+    injectNonce: cspNonce,
     editorProps: {
       attributes: {
         class: cn(

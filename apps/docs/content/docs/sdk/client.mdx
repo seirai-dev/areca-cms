@@ -34,16 +34,18 @@ function createArecaClient(options?: ArecaClientOptions): ArecaClient
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
 | `options.cmsUrl` | `string` | `process.env.ARECA_CMS_URL` | CMS base URL. Trailing slashes are removed. The SDK does not check the protocol. |
-| `options.siteToken` | `string` | `process.env.ARECA_SITE_TOKEN` | Site token, sent as a bearer token on reads. |
+| `options.siteToken` | `string` | `process.env.ARECA_SITE_TOKEN` | Site token, sent as a bearer token on reads (`fetchManifest`, `fetchSnapshot`). It is read when a read runs, not when the client is created. |
 | `options.schemaToken` | `string` | `process.env.ARECA_SCHEMA_TOKEN` | Schema token, used only by `syncManifest`. It is read when that method runs, not when the client is created. |
 
 **Returns:** [`ArecaClient`](#arecaclient-methods).
 
-**Throws:** `Error` when `cmsUrl` or `siteToken` is missing or empty after trimming. The message names the environment variable and the option:
+**Throws:** `Error` when `cmsUrl` is missing or empty after trimming. The message names the environment variable and the option:
 
 ```text
-Missing ARECA_SITE_TOKEN. Set the ARECA_SITE_TOKEN environment variable or pass siteToken to createArecaClient().
+Missing ARECA_CMS_URL. Set the ARECA_CMS_URL environment variable or pass cmsUrl to createArecaClient().
 ```
+
+No token is needed to create the client. Each method checks the credential it sends, and fails before any request if that credential is missing. A schema-only client never needs `ARECA_SITE_TOKEN`, and a preview client needs no token but the preview token itself.
 
 ```ts
 import { createArecaClient } from '@areca-cms/site-sdk'
@@ -60,16 +62,18 @@ Each method sends one request. There are no timeouts and no retries. Network fai
 
 | Method | Request | Token | Returns |
 | --- | --- | --- | --- |
-| `syncManifest(config)` | `POST /api/sites/manifest` | Schema token | `Promise<{ ok: true }>` |
+| `syncManifest(config, options?)` | `POST /api/sites/manifest` | Schema token | `Promise<{ ok: true }>` |
 | `fetchManifest()` | `GET /api/sites/manifest` | Site token | `Promise<SiteManifest>` |
 | `fetchSnapshot()` | `GET /api/sites/snapshot/current` | Site token | `Promise<Snapshot>` |
-| `fetchPreview(token)` | `GET /api/sites/preview?token=...` | Site token, plus the preview token | `Promise<PreviewResult>` |
+| `fetchPreview(token)` | `GET /api/sites/preview?token=...` | Preview token only (no `Authorization` header) | `Promise<PreviewResult>` |
 | `fetchAsset(asset)` | `GET /api/assets/file/{storageKey}` | None | `Promise<Uint8Array>` |
 
 **`syncManifest(config: SiteContentConfig)`** converts the config with `manifestFromConfig` and sends it. The `siteKey` is not sent; the CMS identifies the site by the token.
 
 - Throws if `schemaToken` is missing: `Missing ARECA_SCHEMA_TOKEN. Set the ARECA_SCHEMA_TOKEN environment variable or pass schemaToken to createArecaClient().`
 - The site token is never used as a fallback.
+- `options.confirmDropFields` lists the field removals the push confirms, as `<key>.<field>`. It is sent only when it is not empty.
+- Throws `FieldDropsRequiredError` when the CMS refuses the push because it would remove a field that still holds content. The error's `drops` lists each field with its collection or section (`kind`), `key`, `field` and `entries`. Nothing was changed. Send the same push again with those drops in `confirmDropFields` to accept them.
 - Throws `Failed to sync manifest (<status>)` with the CMS's error message, if any, appended.
 - Throws an identifier or duplicate-field error from `manifestFromConfig` before any request is made.
 

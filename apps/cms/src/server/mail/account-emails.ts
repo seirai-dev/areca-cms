@@ -6,7 +6,7 @@
  */
 import { randomInt } from 'node:crypto'
 
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { account, user, verification } from '#/db/schema'
@@ -16,10 +16,14 @@ import { NotFoundError } from '#/server/content/errors'
 import { createLogger } from '#/server/log'
 import { encryptSecret } from '#/server/security/secret-encryption'
 import { secretsEncryptionKey } from '#/server/security/secrets-key'
+import {
+  hashedVerificationIdentifier,
+  verificationIdentifierForms,
+} from '#/server/security/verification-identifiers'
 
-import { resolveMailConfig } from './config.ts'
+import { isMailConfigured } from './config.ts'
 import { enqueueEmail, sendNow } from './outbox.ts'
-import type { SendResult } from './outbox.ts'
+import type { EnqueuedEmail, SendResult } from './outbox.ts'
 import { PARAMS_SECRET_CONTEXT } from './render/templates/password-reset.ts'
 import { mailLocale } from './render/types.ts'
 
@@ -32,6 +36,8 @@ export type AccountEmailKind =
   | 'two_factor_disabled'
   | 'membership_removed'
   | 'membership_role_changed'
+  | 'agency_admin_granted'
+  | 'agency_admin_revoked'
 
 export type QueuedEmail = { status: 'queued'; id: string }
 
@@ -67,22 +73,33 @@ export async function sendAccountEmail(input: {
   immediate?: boolean
   connection?: Connection
 }): Promise<SendResult | QueuedEmail | null> {
-  const queued = await queueAccountEmail(input)
+  const queued = await queueAccountEmail({
+    ...input,
+    immediate: input.immediate && !input.connection,
+  })
   if (!queued) return null
-  if (!input.immediate || input.connection) {
+  if (queued.claimedAttempt === undefined) {
     return { status: 'queued', id: queued.id }
   }
-  return sendNow(queued.id, { renderParams: input.renderParams })
+  return sendNow(queued.id, {
+    renderParams: input.renderParams,
+    claimedAttempt: queued.claimedAttempt,
+  })
 }
 
+/**
+ * Inserts the email. `immediate` means the caller sends it right after this
+ * returns, so the row is claimed from the start (see `enqueueEmail`).
+ */
 async function queueAccountEmail(input: {
   kind: AccountEmailKind
   userId: string
   params?: Record<string, unknown>
   renderParams?: Record<string, unknown>
+  immediate?: boolean
   connection?: Connection
-}): Promise<{ id: string } | null> {
-  if (!(await resolveMailConfig())) {
+}): Promise<EnqueuedEmail | null> {
+  if (!(await isMailConfigured())) {
     log.info('account email skipped: mail is not configured', {
       kind: input.kind,
       userId: input.userId,
@@ -105,6 +122,7 @@ async function queueAccountEmail(input: {
       renderParams: input.renderParams,
       locale: mailLocale(recipient.locale),
       userId: input.userId,
+      immediate: input.immediate,
     },
     input.connection,
   )
@@ -138,12 +156,13 @@ export async function sendPasswordResetLink(
     .where(eq(user.id, userId))
     .limit(1)
   if (!target) throw new NotFoundError(m.server_user_not_found())
-  if (!(await resolveMailConfig())) return null
+  if (!(await isMailConfigured())) return null
 
   const token = newResetToken()
   await db.insert(verification).values({
     id: crypto.randomUUID(),
-    identifier: `reset-password:${token}`,
+    // Stored the way Better Auth stores its own reset tokens.
+    identifier: hashedVerificationIdentifier(`reset-password:${token}`),
     value: userId,
     expiresAt: new Date(Date.now() + RESET_TTL_MS),
   })
@@ -176,9 +195,10 @@ export async function sendVerificationEmail(
     kind: 'verify_email',
     userId,
     params: { userId },
+    immediate: true,
   })
   if (!queued) return null
-  return sendNow(queued.id)
+  return sendNow(queued.id, { claimedAttempt: queued.claimedAttempt })
 }
 
 /** Sends the reset link, or the SSO pointer, and reports which one it was. */
@@ -197,7 +217,10 @@ async function deliverReset(
       .delete(verification)
       .where(
         and(
-          eq(verification.identifier, `reset-password:${token}`),
+          inArray(
+            verification.identifier,
+            verificationIdentifierForms(`reset-password:${token}`),
+          ),
           eq(verification.value, userId),
         ),
       )
@@ -208,9 +231,15 @@ async function deliverReset(
       kind: 'password_reset_sso',
       userId,
       params: { userId, providers },
+      immediate: true,
     })
     if (!queued) return null
-    return { sso: true, result: await sendNow(queued.id) }
+    return {
+      sso: true,
+      result: await sendNow(queued.id, {
+        claimedAttempt: queued.claimedAttempt,
+      }),
+    }
   }
 
   // The token is stored encrypted when a key exists, so a retry can rebuild
@@ -225,9 +254,16 @@ async function deliverReset(
     userId,
     params,
     renderParams,
+    immediate: true,
   })
   if (!queued) return null
-  return { sso: false, result: await sendNow(queued.id, { renderParams }) }
+  return {
+    sso: false,
+    result: await sendNow(queued.id, {
+      renderParams,
+      claimedAttempt: queued.claimedAttempt,
+    }),
+  }
 }
 
 function providerName(providerId: string) {

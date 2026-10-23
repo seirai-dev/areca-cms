@@ -94,7 +94,10 @@ export async function loadContentInSite(actor: McpActor, key: string) {
   if ((await getGlobal(actor.siteId, key)) !== null) {
     return { ...(await loadGlobalInSite(actor, key)), kind: 'global' as const }
   }
-  return { ...(await loadCollectionInSite(actor, key)), kind: 'collection' as const }
+  return {
+    ...(await loadCollectionInSite(actor, key)),
+    kind: 'collection' as const,
+  }
 }
 
 export async function loadBuildJobInSite(actor: McpActor, jobId: string) {

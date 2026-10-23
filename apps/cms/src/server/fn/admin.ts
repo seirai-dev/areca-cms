@@ -1,5 +1,5 @@
 import { createServerFn } from '@tanstack/react-start'
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import {
   requireAgencyAdmin,
@@ -22,6 +22,7 @@ import {
   listInvitations,
   listMembers,
   listUsers,
+  regenerateInvitationLink,
   removeMember,
   resendInvitation,
   revokeInvitation,
@@ -35,6 +36,7 @@ import {
   updateOrganization,
 } from '#/server/admin/organizations'
 import {
+  changeSiteSlug,
   createSite,
   deleteSite,
   deploymentTargetSchema,
@@ -49,7 +51,7 @@ import {
   setSiteLanguages,
 } from '#/server/admin/site-languages'
 import { localeTagSchema } from '#/lib/content-locale'
-import { MAX_SITE_LANGUAGES } from '#/lib/content-limits'
+import { MAX_SITE_LANGUAGES, SLUG_MAX_LENGTH } from '#/lib/content-limits'
 import { NotFoundError } from '#/server/content/errors'
 import { pageLimitSchema, pageOffsetSchema } from '#/server/pagination'
 
@@ -219,6 +221,19 @@ export const updateSiteFn = createServerFn({ method: 'POST', ...adminFn })
     return updateSite(id, patch, session.user.id)
   })
 
+/** Same roles as `updateSiteFn`: agency admins. */
+export const changeSiteSlugFn = createServerFn({ method: 'POST', ...adminFn })
+  .validator(
+    z.object({
+      id: z.string().min(1),
+      slug: z.string().min(1).max(SLUG_MAX_LENGTH),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const session = await requireAgencyAdmin()
+    return changeSiteSlug(data.id, data.slug, session.user.id)
+  })
+
 export const setSiteLanguagesFn = createServerFn({ method: 'POST', ...adminFn })
   .validator(
     z.object({
@@ -374,6 +389,29 @@ export const resendInvitationFn = createServerFn({
     )
     await resendInvitation(data.id, session.user.id)
     return { ok: true as const }
+  })
+
+/**
+ * "Regenerate link": the response carries the new link, the only time it is
+ * returned. The old link stops working.
+ */
+export const regenerateInvitationLinkFn = createServerFn({
+  method: 'POST',
+  ...adminFn,
+})
+  .validator(z.object({ id: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    await requireUser()
+    const existing = await getInvitationById(data.id)
+    if (!existing) {
+      throw new NotFoundError(m.server_invitation_not_found())
+    }
+    const session = await requireOrgMemberOrNotFound(
+      existing.organizationId,
+      'owner',
+      () => new NotFoundError(m.server_invitation_not_found()),
+    )
+    return regenerateInvitationLink(data.id, session.user.id)
   })
 
 export const listAuditLogFn = createServerFn({ method: 'GET', ...adminFn })

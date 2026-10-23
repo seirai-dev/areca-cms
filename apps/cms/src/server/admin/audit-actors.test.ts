@@ -1,37 +1,10 @@
 import type * as MailConfig from '#/server/mail/config'
+import type * as Adapters from '#/adapters'
+import type * as ServerAssets from '#/server/assets'
 import type * as MailTransport from '#/server/mail/transport'
 import { eq, inArray, or } from 'drizzle-orm'
 import sharp from 'sharp'
 import { describe, expect, it, vi } from 'vitest'
-
-vi.mock('#/server/mail/config', async (importOriginal) => ({
-  ...(await importOriginal<typeof MailConfig>()),
-  resolveMailConfig: async () => ({
-    source: 'env' as const,
-    host: 'mail.test',
-    port: 587,
-    secure: 'starttls' as const,
-    username: null,
-    password: null,
-    from: 'cms@areca.test',
-    replyTo: null,
-  }),
-}))
-vi.mock('#/server/mail/transport', async (importOriginal) => ({
-  ...(await importOriginal<typeof MailTransport>()),
-  sendMail: vi.fn(async () => ({ messageId: 'test-message' })),
-}))
-vi.mock('#/adapters', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('#/adapters')>()),
-  getStorage: () => ({
-    put: vi.fn(async () => {}),
-    delete: vi.fn(async () => {}),
-  }),
-}))
-vi.mock('#/server/assets', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('#/server/assets')>()),
-  drainStorageObjectDeletions: vi.fn(async () => {}),
-}))
 
 import { db } from '#/db'
 import { auditLog, branding, organization, site, user } from '#/db/schema'
@@ -50,6 +23,7 @@ import {
 import {
   acceptInvitation,
   inviteMember,
+  regenerateInvitationLink,
   removeMember,
   resendInvitation,
   revokeInvitation,
@@ -67,6 +41,36 @@ import {
   rotateSiteTokenAdmin,
   updateSite,
 } from './sites.ts'
+
+vi.mock('#/server/mail/config', async (importOriginal) => ({
+  ...(await importOriginal<typeof MailConfig>()),
+  isMailConfigured: async () => true,
+  resolveMailConfig: async () => ({
+    source: 'env' as const,
+    host: 'mail.test',
+    port: 587,
+    secure: 'starttls' as const,
+    username: null,
+    password: null,
+    from: 'cms@areca.test',
+    replyTo: null,
+  }),
+}))
+vi.mock('#/server/mail/transport', async (importOriginal) => ({
+  ...(await importOriginal<typeof MailTransport>()),
+  sendMail: vi.fn(async () => ({ messageId: 'test-message' })),
+}))
+vi.mock('#/adapters', async (importOriginal) => ({
+  ...(await importOriginal<typeof Adapters>()),
+  getStorage: () => ({
+    put: vi.fn(async () => {}),
+    delete: vi.fn(async () => {}),
+  }),
+}))
+vi.mock('#/server/assets', async (importOriginal) => ({
+  ...(await importOriginal<typeof ServerAssets>()),
+  drainStorageObjectDeletions: vi.fn(async () => {}),
+}))
 
 const hasDb = Boolean(process.env.DATABASE_URL)
 
@@ -86,22 +90,30 @@ const appsResponse = () =>
     { status: 200, headers: { 'content-type': 'application/json' } },
   )
 
+/** The raw token of a pending invitation. Only the hash is stored, so the test reads it from a fresh link. */
+async function linkTokenFor(invitationId: string, actorId: string) {
+  const { link } = await regenerateInvitationLink(invitationId, actorId)
+  return link.slice(link.lastIndexOf('/') + 1)
+}
+
 describe.skipIf(!hasDb)(
   'administrative actions write audit rows with the actor',
   () => {
     it('records every admin action, instance-level ones without an organization', async () => {
       const suffix = crypto.randomUUID()
       const mk = async (tag: string, isAgencyAdmin = false) => {
-        const [row] = await db
-          .insert(user)
-          .values({
-            id: crypto.randomUUID(),
-            name: tag,
-            email: `${tag}-${suffix}@test.local`,
-            emailVerified: true,
-            isAgencyAdmin,
-          })
-          .returning()
+        const row = (
+          await db
+            .insert(user)
+            .values({
+              id: crypto.randomUUID(),
+              name: tag,
+              email: `${tag}-${suffix}@test.local`,
+              emailVerified: true,
+              isAgencyAdmin,
+            })
+            .returning()
+        ).at(0)
         if (!row) throw new Error('user')
         return row
       }
@@ -182,14 +194,20 @@ describe.skipIf(!hasDb)(
           role: 'owner',
           actorId: admin.id,
         })
-        await acceptInvitation({ token: second2.token, userId: guest.id })
+        await acceptInvitation({
+          token: await linkTokenFor(second2.id, admin.id),
+          userId: guest.id,
+        })
         const other = await inviteMember({
           organizationId: org.id,
           email: second.email,
           role: 'owner',
           actorId: admin.id,
         })
-        await acceptInvitation({ token: other.token, userId: second.id })
+        await acceptInvitation({
+          token: await linkTokenFor(other.id, admin.id),
+          userId: second.id,
+        })
         await updateMemberRole(org.id, guest.id, 'editor', admin.id)
         await removeMember(org.id, guest.id, admin.id)
 

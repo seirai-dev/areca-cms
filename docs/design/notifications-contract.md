@@ -119,8 +119,9 @@ export async function notifyPublicationLive(publicationId: string): Promise<void
   // entries = diff vs the previous live/demo publication (diffSnapshotCollections), title = data.title ?? slug
 export async function notifyPublicationFailed(publicationId: string, opts: { stuck: boolean }): Promise<void>
   // release.failed | release.stuck → requester + scheduled_by + owners; then agency.release.failed
-export async function notifyScheduleFailed(input: { siteId: string; scheduledBy: string[]; fingerprint: string }): Promise<void>
+export async function deliverScheduleFailed(siteId: string, input: { scheduledBy: string[]; fingerprint: string }): Promise<void>  // throws on failure: run by the outbox
   // schedule.failed → owners; then agency.release.failed (subjectId = `schedule:${siteId}:${fingerprint}`)
+  // queued by queueScheduleFailedEvent in the same transaction that records the failure (notification_event)
 export async function notifyInviteAccepted(invitationId: string, acceptedUserId: string): Promise<void>
   // invite.accepted → inviter
 
@@ -144,7 +145,10 @@ export async function applyUnsubscribe(token: string): Promise<...>
   `notifyPublicationFailed(job.publicationId, { stuck: <dispatch uncertain> })`.
 - `resolveUncertainDeploymentJob` → after resolving → `notifyPublicationFailed(id, { stuck: false })`
   (dedupe key makes a repeat harmless: use event `release.failed`).
-- `scheduler.ts` `publication.scheduled_failed` path → `notifyScheduleFailed`.
+- `scheduler.ts` validation failure → `recordRequestFailure` queues the
+  `schedule.failed` event in its own transaction, next to the backoff record;
+  the events loop then calls `deliverScheduleFailed`. Thrown errors record the
+  backoff without a notice, as before.
 - `members.ts` `acceptInvitation` → `notifyInviteAccepted`.
 
 ### Email template `notification` (`render/templates/notification.ts`)

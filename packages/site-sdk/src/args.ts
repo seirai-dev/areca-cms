@@ -8,7 +8,13 @@ export type ParsedArgs =
       /** Where areca.gen.ts is written. Default `<out>/areca.gen.ts`. */
       typesPath?: string
     }
-  | { command: 'sync-manifest'; configPath: string }
+  | {
+      command: 'sync-manifest'
+      configPath: string
+      /** Field removals confirmed up front, as `<key>.<field>`. */
+      confirmDropFields: string[]
+      yes: boolean
+    }
   | { command: 'manifest-pull'; configPath: string; yes: boolean }
   | {
       command: 'init'
@@ -113,14 +119,44 @@ function parsePullArgs(args: string[]): ParsedArgs {
 }
 
 function parseSyncManifestArgs(args: string[]): ParsedArgs {
-  const configPath = args[0]
-  if (!configPath) {
-    return { command: 'sync-manifest', configPath: DEFAULT_SYNC_MANIFEST_PATH }
+  let configPath: string | undefined
+  const confirmDropFields: string[] = []
+  let yes = false
+
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i]!
+    if (arg === '--confirm-drop') {
+      const value = readFlagValue(args, i, '--confirm-drop')
+      if (value.error) return value.error
+      if (!/^[a-zA-Z][a-zA-Z0-9_-]*\.[a-zA-Z][a-zA-Z0-9_-]*$/.test(value.value)) {
+        return {
+          command: 'error',
+          message: `--confirm-drop expects <collection>.<field>, for example articles.subtitle: ${value.value}`,
+        }
+      }
+      confirmDropFields.push(value.value)
+      i += 1
+      continue
+    }
+    if (arg === '--yes' || arg === '-y') {
+      yes = true
+      continue
+    }
+    if (arg.startsWith('-')) {
+      return { command: 'error', message: `Unknown argument: ${arg}` }
+    }
+    if (configPath !== undefined) {
+      return { command: 'error', message: `Unexpected argument: ${arg}` }
+    }
+    configPath = arg
   }
-  if (configPath.startsWith('-')) {
-    return { command: 'error', message: `Unknown argument: ${configPath}` }
+
+  return {
+    command: 'sync-manifest',
+    configPath: configPath ?? DEFAULT_SYNC_MANIFEST_PATH,
+    confirmDropFields,
+    yes,
   }
-  return { command: 'sync-manifest', configPath }
 }
 
 function parseManifestArgs(args: string[]): ParsedArgs {
@@ -296,9 +332,9 @@ export function usage(): string {
   areca init [--cms-url <url>] [--token <token>] [--site-key <key>] [--out ${DEFAULT_PULL_OUT_DIR}] [--config ${DEFAULT_CONFIG_PATH}]
              [--assets-dir ${DEFAULT_ASSETS_DIR}] [--assets-public-path /areca] [--no-assets] [--yes|-y] [--force]
   areca pull [--out ${DEFAULT_PULL_OUT_DIR}] [--publication <id>] [--config ${DEFAULT_CONFIG_PATH}] [--types <path>]
-  areca manifest push [${DEFAULT_SYNC_MANIFEST_PATH}]
+  areca manifest push [${DEFAULT_SYNC_MANIFEST_PATH}] [--confirm-drop <collection.field>]... [--yes|-y]
   areca manifest pull [--config ${DEFAULT_SYNC_MANIFEST_PATH}] [--yes|-y]
-  areca sync-manifest [${DEFAULT_SYNC_MANIFEST_PATH}]   (deprecated alias for manifest push)
+  areca sync-manifest [${DEFAULT_SYNC_MANIFEST_PATH}] [--confirm-drop <collection.field>]... [--yes|-y]   (deprecated alias for manifest push)
   areca run -- <command>
 
 Environment:

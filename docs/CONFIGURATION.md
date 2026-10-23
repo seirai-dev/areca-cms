@@ -26,6 +26,11 @@ openssl rand -hex 32       # BETTER_AUTH_SECRET
 openssl rand -base64 32    # DOKPLOY_CREDENTIALS_ENCRYPTION_KEY
 ```
 
+In production (`NODE_ENV=production`) the CMS refuses to start when `REDIS_URL`
+is unset, when `BETTER_AUTH_SECRET` is an example value (`change-me`, or a value
+starting with `replace-` or `replace_`), or when an encryption key is all zero
+bytes. The error names the setting and repeats the `openssl` command.
+
 Keep the Dokploy encryption key with the database backup. There is no automatic
 re-encryption: changing or losing it makes saved Dokploy credentials unreadable.
 The same applies when restoring a database; restore the matching key. See the
@@ -52,7 +57,7 @@ The CMS also accepts these optional URL and storage settings:
 | Variable | Default or effect |
 | --- | --- |
 | `SERVER_URL` | Optional server URL override. Usually leave unset. |
-| `REDIS_URL` | `redis://localhost:6379`; used for shared rate-limit counters. Redis failure is reported as degraded and rate limiting fails open. |
+| `REDIS_URL` | `redis://localhost:6379` outside production. Required in production (no default there). Holds the shared rate-limit counters. While Redis is down, each instance keeps counting in memory with the same budgets, and the health check reports Redis as degraded. |
 | `S3_FORCE_PATH_STYLE` | `false`; set `true` for path-style S3 endpoints such as local RustFS/MinIO. |
 
 ## Authentication and integrations
@@ -91,7 +96,8 @@ Dokploy delivery, invitation email behavior, and credential rotation.
 ## Mail
 
 SMTP is optional at startup. Without a mail server, mail is off until one is set
-in Agency → Mail. Invitations still work, and the link can be shared with Copy link.
+in Agency → Mail. Invitations still work, and a pending invitation's link can be shared
+with Regenerate link (the old link stops working).
 
 | Variable | Purpose |
 | --- | --- |
@@ -112,7 +118,8 @@ client, role changed). Without a mail server, security notices are skipped and
 forgot password asks the person to contact an agency admin. The reset token in
 the email queue is encrypted with `SECRETS_ENCRYPTION_KEY`, or
 `AI_SETTINGS_ENCRYPTION_KEY` if that is unset. Without a key, a reset email is
-tried once and never retried.
+tried once and never retried. Invitation emails follow the same rule, and only
+their hash is stored, so the link is never kept in plain text.
 
 ## Deployment and safety switches
 
@@ -125,6 +132,7 @@ tried once and never retried.
 | `DOKPLOY_URL`, `DOKPLOY_API_KEY` | unset | Legacy process-wide Dokploy connection, used only when the development fallback above is enabled. Normal deployments save credentials per organization in the CMS. |
 | `DOKPLOY_ALLOW_INSECURE_HTTP` | unset | Allows HTTP Dokploy API URLs. Use only for isolated local/LAN development; production requires HTTPS. |
 | `ALLOW_PRIVATE_HEALTH_CHECKS` | unset | Allows private or local health-check targets for Dokploy. Use only for isolated local/LAN development. |
+| `CSP_REPORT_ONLY` | `false` | Sends the Content-Security-Policy as `Content-Security-Policy-Report-Only`: violations are logged by the browser and nothing is blocked. The default enforces the policy. See [operations](OPERATIONS.md#content-security-policy). |
 | `RATE_LIMIT_TRUST_PROXY` | `false` | Use forwarding headers for client IP only when a trusted reverse proxy replaces those headers. |
 | `SETUP_TOKEN` | generated while first account is absent | Optional first-run `/setup` token; if supplied, it must be at least 16 characters. If omitted, the process generates and logs one while setup is needed. |
 
@@ -140,6 +148,7 @@ documented in [operations](OPERATIONS.md). Common optional settings are:
 | --- | --- | --- |
 | `METRICS_TOKEN` | unset | Bearer token of at least 16 characters for `/api/metrics`; unset returns 404. |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error`, or `silent`. |
+| `STARTUP_DEADLINE_SECONDS` | `60` | Total time the container may wait for PostgreSQL, the migration lock and S3 at startup. When it passes, startup exits with code 1. See [operations](OPERATIONS.md#startup). |
 | `DB_CONNECT_TIMEOUT_MS` | `5000` | PostgreSQL connection wait limit; `0` disables it. |
 | `DB_STATEMENT_TIMEOUT_MS` | `15000` | Per-query PostgreSQL statement deadline; `0` disables it. |
 | `DB_IDLE_IN_TX_TIMEOUT_MS` | `30000` | Closes transactions idle while holding a connection or lock; `0` disables it. |

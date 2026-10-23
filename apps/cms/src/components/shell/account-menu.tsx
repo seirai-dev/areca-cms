@@ -32,7 +32,7 @@ import { SegmentedControl } from '#/components/ui/segmented-control'
 import { Sheet, SheetContent, SheetTitle } from '#/components/ui/sheet'
 import { Hint } from '#/components/ui/tooltip'
 import { useIsMobile } from '#/hooks/use-mobile'
-import { authClient } from '#/lib/auth-client'
+import { signOutClient } from '#/lib/sign-out'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 import {
@@ -104,7 +104,7 @@ function AccountMenuBody({ onClose }: { onClose: () => void }) {
   async function signOut() {
     setSigningOut(true)
     try {
-      await authClient.signOut()
+      await signOutClient()
     } finally {
       window.location.assign(localizeHref('/login'))
     }

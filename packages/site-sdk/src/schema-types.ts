@@ -285,8 +285,34 @@ export type RoutePath<R extends string> = string extends R
     ? `${Before}${string}${After}`
     : R
 
-export type Href<C extends string = string, S extends ContentSchema = RegisteredSchema> = RoutePath<
-  CollectionOf<C, S>['route']
+/** Every route literal of a collection: its `route` and each `routes[locale]`. */
+type RouteLiterals<D> = D extends { route: infer R extends string }
+  ? D extends { routes: infer T extends object }
+    ? R | T[keyof T & string]
+    : R
+  : string
+
+/** The route literal a collection is served at in language `L`: `routes[L]`, else `route`. */
+type RouteIn<D, L extends string> = D extends { route: infer R extends string }
+  ? D extends { routes: infer T extends object }
+    ? L extends keyof T
+      ? T[L] & string
+      : R
+    : R
+  : string
+
+/**
+ * Route of entries of collection `C`. Without `L` it is the union of every
+ * language's route (`/blog/${string}` or `/vacatures/${string}` on a
+ * multilingual collection). With `L`, the route of that language, as
+ * `content.in(L)` reads it.
+ */
+export type Href<
+  C extends string = string,
+  S extends ContentSchema = RegisteredSchema,
+  L extends string = never,
+> = RoutePath<
+  [L] extends [never] ? RouteLiterals<CollectionOf<C, S>> : RouteIn<CollectionOf<C, S>, L>
 >
 
 /* ---------- site content (globals) ---------- */
@@ -382,7 +408,12 @@ export type PreviewEntry<S extends ContentSchema = RegisteredSchema> = {
     | { collection: C; slug: string; complete: false; entry: DraftEntry<C, S>; issues: string[] }
 }[CollectionKey<S>]
 
-export type CollectionApi<C extends string = string, S extends ContentSchema = RegisteredSchema> = {
+/** One collection's reads. `L` is the language of a `content.in(L)` scope; `href` narrows to its route. */
+export type CollectionApi<
+  C extends string = string,
+  S extends ContentSchema = RegisteredSchema,
+  L extends string = never,
+> = {
   all<const O extends QueryOptions<C, S> & LocaleOptions = {}>(
     options?: O & QueryOptions<C, S> & LocaleOptions,
   ): QueryResult<C, O, S>[]
@@ -391,20 +422,21 @@ export type CollectionApi<C extends string = string, S extends ContentSchema = R
   ): QueryResult<C, O, S> | undefined
   get(slug: string, options?: LocaleOptions): Entry<C, S> | undefined
   byId(id: string, options?: LocaleOptions): Entry<C, S> | undefined
-  href(entryOrSlug: Entry<C, S> | string): Href<C, S>
+  href(entryOrSlug: Entry<C, S> | string): Href<C, S, L>
 }
 
 export type Content<
   S extends ContentSchema = RegisteredSchema,
   G extends GlobalSchema = RegisteredGlobalSchema,
+  L extends string = never,
 > = {
-  [C in CollectionKey<S>]: CollectionApi<C, S>
+  [C in CollectionKey<S>]: CollectionApi<C, S, L>
 } & {
   resolve(ref: '' | null | undefined): null
   resolve<C extends CollectionKey<S>>(
     ref: ReferenceValue<C> | '' | null | undefined,
   ): Entry<C, S> | null
-  href<C extends CollectionKey<S>>(ref: ReferenceValue<C> | Entry<C, S>): Href<C, S>
+  href<C extends CollectionKey<S>>(ref: ReferenceValue<C> | Entry<C, S>): Href<C, S, L>
   preview(
     token: string,
     options?: { client?: ArecaClient; locale?: Locale },
@@ -412,8 +444,9 @@ export type Content<
   /**
    * A view of this content that reads `locale` by default. Per-call `locale`
    * options still win. Same shape: collections, globals, resolve, href, preview.
+   * Hrefs narrow to the route of `locale`.
    */
-  in(locale: Locale): Content<S, G>
+  in<const T extends Locale>(locale: T): Content<S, G, T>
   /** Site languages, main first in `all` order, or null on a single-language site. */
   readonly languages: { main: Locale; all: Locale[] } | null
   /** Picks the site language for a tag, an Accept-Language header or a list of tags. */

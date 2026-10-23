@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .returning()/.select() are checked defensively */
 import { createServerFn } from '@tanstack/react-start'
 import { eq } from 'drizzle-orm'
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import { db } from '#/db'
 import { mcpKey } from '#/db/schema'
@@ -32,9 +32,11 @@ function mcpEndpointUrl() {
 export const listMcpKeysFn = createServerFn({ method: 'GET', ...loose })
   .validator(z.object({ siteId: z.string().min(1).max(ID_MAX_LENGTH) }))
   .handler(async ({ data }) => {
-    const { session, site: found, role } = await requireMcpSiteAccess(
-      data.siteId,
-    )
+    const {
+      session,
+      site: found,
+      role,
+    } = await requireMcpSiteAccess(data.siteId)
     const keys: McpKeySummary[] = await listMcpKeys({
       siteId: found.id,
       userId: session.user.id,
@@ -60,9 +62,11 @@ export const createMcpKeyFn = createServerFn({ method: 'POST', ...loose })
     }),
   )
   .handler(async ({ data }) => {
-    const { session, site: found, role } = await requireMcpSiteAccess(
-      data.siteId,
-    )
+    const {
+      session,
+      site: found,
+      role,
+    } = await requireMcpSiteAccess(data.siteId)
     // Creating a key as an agency admin is a privileged act: the key acts with
     // admin power for as long as it lives, so re-verify the second factor.
     if (role === 'agency') await assertFreshSession(session)
@@ -94,9 +98,11 @@ export const revokeMcpKeyFn = createServerFn({ method: 'POST', ...loose })
       .limit(1)
     if (!key) throw new NotFoundError(m.server_mcp_key_not_found())
 
-    const { session, site: found, role } = await requireMcpSiteAccess(
-      key.siteId,
-    )
+    const {
+      session,
+      site: found,
+      role,
+    } = await requireMcpSiteAccess(key.siteId)
     await revokeMcpKey({
       id: data.id,
       siteId: found.id,

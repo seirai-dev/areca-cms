@@ -1,5 +1,5 @@
 import { McpServer } from '@modelcontextprotocol/server'
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import { credentialPhrase } from './guard'
 import type { McpActor } from './keys'
@@ -17,7 +17,9 @@ export const MCP_SERVER_NAME = 'areca-cms'
 export const MCP_SERVER_VERSION = '1.0.0'
 
 /** What the caller may do, in the words the CMS uses. Drives the instructions. */
-function roleInstruction(actor: Pick<McpActor, 'role' | 'allowGoLive' | 'credential'>): string[] {
+function roleInstruction(
+  actor: Pick<McpActor, 'role' | 'allowGoLive' | 'credential'>,
+): string[] {
   if (actor.role === 'editor') {
     return [
       'You can create and edit drafts, upload images and edit alt text. You cannot mark entries ready or go live.',
@@ -59,7 +61,7 @@ export function serverInstructions(
     'Site content (globals) is a single section of values, such as company info or the home page. Read it with get_global and change it with update_global; it is not a collection, so create_entry and list_entries do not apply. Its id works with mark_ready and the other workflow tools.',
     'Write rich text fields as Markdown (headings ##, lists, links, ![alt](asset:<assetId>) images). Do not send HTML.',
     'Always fill SEO for new entries: seo.title (about 50-60 characters), seo.description (140-160 characters), seo.focusKeyphrase, seo.summary (2-3 sentences), seo.keyTakeaways (3-5), and seo.faq only when the body really answers questions.',
-    'Images: upload_asset_from_url with a direct link to the image file, then use the returned assetId in image fields, seo.ogImage and ![alt](asset:<assetId>). Always give alt text. If an upload fails, do not guess other URLs: ask the user for a working link or continue without the image. An external ![alt](https://...) image in rich text is copied into the media library when the entry is saved; any that could not be copied are listed in the result\'s warnings.',
+    "Images: upload_asset_from_url with a direct link to the image file, then use the returned assetId in image fields, seo.ogImage and ![alt](asset:<assetId>). Always give alt text. If an upload fails, do not guess other URLs: ask the user for a working link or continue without the image. An external ![alt](https://...) image in rich text is copied into the media library when the entry is saved; any that could not be copied are listed in the result's warnings.",
     'Drafts are safe. Nothing you write changes the live site until it is approved and a go live happens.',
     ...roleInstruction(actor),
     'Respect the caller role: tools you cannot use are not listed. If an action is refused, explain the reason to the user and say who can do it.',
@@ -67,10 +69,16 @@ export function serverInstructions(
   ].join('\n')
 }
 
-const WRITE_POST_TEXT = (collection: string, topic: string, canApprove: boolean) =>
+const WRITE_POST_TEXT = (
+  collection: string,
+  topic: string,
+  canApprove: boolean,
+) =>
   [
     `Write a complete "${collection}" entry about: ${topic}.`,
-    '1. Call get_site_info, then get_collection_schema for "' + collection + '". Note the required fields, the slug field and the formats.',
+    '1. Call get_site_info, then get_collection_schema for "' +
+      collection +
+      '". Note the required fields, the slug field and the formats.',
     '2. Draft the content in Markdown: an intro that answers the main question, clear ## sections, a short conclusion. Use real facts only; ask the user if you lack them.',
     '3. Fill SEO: title (50-60 characters), description (140-160 characters), focusKeyphrase, summary, keyTakeaways, and faq if the post answers questions.',
     '4. If you need an image, use upload_asset_from_url or list_assets, and reference it with its assetId. Always write alt text.',
@@ -100,7 +108,8 @@ export function createArecaMcpServer(actor: McpActor): McpServer {
     'write_post',
     {
       title: 'Write a post',
-      description: 'Walks the model through writing and saving one complete entry.',
+      description:
+        'Walks the model through writing and saving one complete entry.',
       argsSchema: {
         collection: z.string().min(1).describe('Collection key, e.g. "posts".'),
         topic: z.string().min(1).describe('What the entry is about.'),

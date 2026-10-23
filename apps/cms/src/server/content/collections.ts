@@ -14,6 +14,11 @@ import {
   assertPreviewPath,
   validateContentDefinitions,
 } from './content-definitions.ts'
+import {
+  confirmedFieldDrops,
+  planManifestFieldDrops,
+  purgeFieldContent,
+} from './field-data.ts'
 import { ensureGlobalEntry } from './globals.ts'
 import { normalizeRequiredLanguages } from './locale-validation.ts'
 import { NotFoundError, ValidationError } from './errors.ts'
@@ -58,7 +63,14 @@ export async function getCollection(siteId: string, key: string) {
   return row ? { ...row, fields: withRequiredSlugField(row.fields) } : null
 }
 
-export async function syncManifest(siteId: string, manifest: SiteManifest) {
+export async function syncManifest(
+  siteId: string,
+  manifest: SiteManifest,
+  options: {
+    /** Field removals the push confirms, as `<collection or section key>.<field key>`. */
+    confirmDropFields?: string[]
+  } = {},
+) {
   const globals = manifest.globals ?? {}
   const keys = Object.keys(manifest.collections)
   const globalKeys = Object.keys(globals)
@@ -111,6 +123,22 @@ export async function syncManifest(siteId: string, manifest: SiteManifest) {
         .map((row) => ({ ...row, enabled: false })),
       ...declaredDefs,
     ])
+    // Refuses a removal that would delete content before anything is written.
+    const purge = await planManifestFieldDrops(tx, {
+      existing,
+      declared: declaredDefs.map((def) => ({
+        key: def.key,
+        kind: def.kind,
+        fields:
+          def.kind === 'collection'
+            ? withRequiredSlugField(def.fields)
+            : def.fields,
+      })),
+      confirmDropFields: options.confirmDropFields,
+    })
+    for (const [collectionId, fieldKeys] of purge) {
+      await purgeFieldContent(tx, collectionId, fieldKeys)
+    }
     for (const [key, def] of Object.entries(manifest.collections)) {
       await tx
         .insert(collection)
@@ -143,27 +171,15 @@ export async function syncManifest(siteId: string, manifest: SiteManifest) {
         })
     }
     for (const [key, def] of Object.entries(globals)) {
-      const [row] = await tx
-        .insert(collection)
-        .values({
-          siteId,
-          key,
-          label: def.label ?? key,
-          routePattern: '',
-          kind: 'global',
-          fields: def.fields,
-          enabled: true,
-          seoEnabled: def.seo ?? false,
-          previewPath: def.previewPath ?? null,
-          requiredLanguages: normalizeRequiredLanguages(
-            def.requiredLanguages ?? [],
-          ),
-          updatedAt: now,
-        })
-        .onConflictDoUpdate({
-          target: [collection.siteId, collection.key],
-          set: {
+      const row = (
+        await tx
+          .insert(collection)
+          .values({
+            siteId,
+            key,
             label: def.label ?? key,
+            routePattern: '',
+            kind: 'global',
             fields: def.fields,
             enabled: true,
             seoEnabled: def.seo ?? false,
@@ -172,9 +188,23 @@ export async function syncManifest(siteId: string, manifest: SiteManifest) {
               def.requiredLanguages ?? [],
             ),
             updatedAt: now,
-          },
-        })
-        .returning({ id: collection.id })
+          })
+          .onConflictDoUpdate({
+            target: [collection.siteId, collection.key],
+            set: {
+              label: def.label ?? key,
+              fields: def.fields,
+              enabled: true,
+              seoEnabled: def.seo ?? false,
+              previewPath: def.previewPath ?? null,
+              requiredLanguages: normalizeRequiredLanguages(
+                def.requiredLanguages ?? [],
+              ),
+              updatedAt: now,
+            },
+          })
+          .returning({ id: collection.id })
+      ).at(0)
       if (!row) {
         throw new Error(m.server_failed_to_upsert_collection())
       }
@@ -232,6 +262,8 @@ export async function upsertCollection(
     requiredLanguages?: string[]
     /** Per-language route patterns. Left unchanged when omitted; null clears them. */
     localizedRoutes?: Record<string, string> | null
+    /** Keys of fields that are removed together with their content. */
+    confirmDropFields?: string[]
   },
   actorId?: string,
 ) {
@@ -276,6 +308,13 @@ export async function upsertCollection(
       ...existing.filter((row) => row.key !== input.key),
       { key: input.key, kind: 'collection', fields, enabled },
     ])
+    const previous = existing.find((row) => row.key === input.key)
+    const purgedKeys = await confirmedFieldDrops(tx, {
+      collectionId: previous?.id,
+      before: previous?.fields ?? [],
+      after: fields,
+      confirmDropFields: input.confirmDropFields,
+    })
     await tx
       .insert(collection)
       .values({
@@ -311,6 +350,7 @@ export async function upsertCollection(
           updatedAt: now,
         },
       })
+    if (previous) await purgeFieldContent(tx, previous.id, purgedKeys)
   })
 
   const row = await getCollection(siteId, input.key)

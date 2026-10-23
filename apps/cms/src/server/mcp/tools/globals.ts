@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import { isSafeIdentifier } from '#/lib/content-identifiers'
 import {
@@ -72,7 +72,7 @@ export function registerGlobalTools(registry: ToolRegistry): void {
     name: 'get_global',
     title: 'Get site content',
     description:
-      'Returns one site content section (a single set of values, such as company info or the home page): id, key, label, status (draft, ready or scheduled), live (on the production site now), pendingRelease (approved changes waiting for the next go live), version, editedSinceReady, fields (the format of each field), example, values (rich text as Markdown, images as {assetId,url,alt}, references as {entryId}), seo (only when the section has SEO), and previewAvailable. On a site with languages, locale returns that language\'s values; without it you get the main language plus translations, the completeness of each other language. Use the returned id with mark_ready, schedule_entry, cancel_schedule, list_revisions, restore_revision and get_preview_url. Read-only.',
+      "Returns one site content section (a single set of values, such as company info or the home page): id, key, label, status (draft, ready or scheduled), live (on the production site now), pendingRelease (approved changes waiting for the next go live), version, editedSinceReady, fields (the format of each field), example, values (rich text as Markdown, images as {assetId,url,alt}, references as {entryId}), seo (only when the section has SEO), and previewAvailable. On a site with languages, locale returns that language's values; without it you get the main language plus translations, the completeness of each other language. Use the returned id with mark_ready, schedule_entry, cancel_schedule, list_revisions, restore_revision and get_preview_url. Read-only.",
     inputSchema: z.object({ global: globalKey, locale: localeInput }),
     annotations: { readOnlyHint: true, idempotentHint: true },
     run: async (input, actor) => {
@@ -84,7 +84,11 @@ export function registerGlobalTools(registry: ToolRegistry): void {
           locale: target?.locale,
           translations: input.locale === undefined,
         })),
-        ...describeGlobal(section.global.fields, section.global.seoEnabled, languages),
+        ...describeGlobal(
+          section.global.fields,
+          section.global.seoEnabled,
+          languages,
+        ),
       }
     },
   })
@@ -210,12 +214,16 @@ export function registerGlobalTools(registry: ToolRegistry): void {
       seo: z
         .boolean()
         .optional()
-        .describe('true gives the section an SEO panel (title, description, ...). Default false.'),
+        .describe(
+          'true gives the section an SEO panel (title, description, ...). Default false.',
+        ),
       previewPath: z
         .string()
         .max(GLOBAL_PREVIEW_PATH_MAX_LENGTH)
         .optional()
-        .describe('Page on the site that shows this section, e.g. "/about". Empty string removes it.'),
+        .describe(
+          'Page on the site that shows this section, e.g. "/about". Empty string removes it.',
+        ),
       enabled: z
         .boolean()
         .optional()
@@ -252,9 +260,7 @@ export function registerGlobalTools(registry: ToolRegistry): void {
         seo: row.seoEnabled,
         previewPath: row.previewPath,
         fieldKeys: row.fields.map((field) => field.key),
-        ...(languages
-          ? { requiredLanguages: row.requiredLanguages }
-          : {}),
+        ...(languages ? { requiredLanguages: row.requiredLanguages } : {}),
       }
     },
   })
@@ -265,7 +271,11 @@ export function registerGlobalTools(registry: ToolRegistry): void {
     description:
       'Agency admin only, destructive. Deletes a site content section from the site. Its content is kept in the deleted-content archive. Only do this when the user has clearly asked for it; disabling the section (upsert_global with enabled false) hides it and keeps everything.',
     inputSchema: z.object({
-      key: z.string().min(1).max(ID_MAX_LENGTH).describe('Section key to delete.'),
+      key: z
+        .string()
+        .min(1)
+        .max(ID_MAX_LENGTH)
+        .describe('Section key to delete.'),
     }),
     access: 'agency',
     deniedMessage:

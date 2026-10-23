@@ -35,13 +35,14 @@ import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
 import { InviteSheet } from './invite-sheet'
+import { RegeneratedLinkDialog } from './regenerated-link-dialog'
 import {
   expiresInLabel,
   isInvitationExpired,
   roleChangedMessage,
   useMembers,
 } from './use-members'
-import type { InvitationRow, MemberRow } from './use-members'
+import type { InvitationRow, MemberRow, RegeneratedLink } from './use-members'
 
 type RowError = { id: string; message: string }
 
@@ -403,6 +404,10 @@ function Invitations({
   const [revokeTarget, setRevokeTarget] = React.useState<InvitationRow | null>(
     null,
   )
+  const [regenerated, setRegenerated] = React.useState<{
+    email: string
+    link: RegeneratedLink
+  } | null>(null)
   const [now, setNow] = React.useState<number | null>(null)
   // Relative expiry depends on the viewer's clock: compute after mount.
   React.useEffect(() => setNow(Date.now()), [people.invitations.dataUpdatedAt])
@@ -434,14 +439,15 @@ function Invitations({
     }
   }
 
-  async function copyLink(row: InvitationRow) {
+  async function regenerate(row: InvitationRow) {
+    setRowError(null)
     try {
-      await navigator.clipboard.writeText(
-        `${window.location.origin}/invite/${row.token}`,
-      )
-      toast.success(m.people_invite_link_copied())
-    } catch {
-      toast.error(m.ui_copy_failed())
+      setRegenerated({
+        email: row.email,
+        link: await people.regenerate.mutateAsync(row),
+      })
+    } catch (error) {
+      setRowError({ id: row.id, message: errorMessage(error) })
     }
   }
 
@@ -461,6 +467,9 @@ function Invitations({
           const undelivered = row.deliveryStatus === 'failed'
           const resending =
             people.resend.isPending && people.resend.variables.id === row.id
+          const regenerating =
+            people.regenerate.isPending &&
+            people.regenerate.variables.id === row.id
           return (
             <li
               key={row.id}
@@ -509,18 +518,17 @@ function Invitations({
                   ) : null}
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
-                  {undelivered && !expired ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => void copyLink(row)}
-                      data-testid="invitation-copy-link"
-                    >
-                      <LinkIcon />
-                      {m.people_invite_copy_link()}
-                    </Button>
-                  ) : null}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    loading={regenerating}
+                    onClick={() => void regenerate(row)}
+                    data-testid="invitation-regenerate-link"
+                  >
+                    {regenerating ? null : <LinkIcon />}
+                    {m.people_invite_regenerate_link()}
+                  </Button>
                   {expired || undelivered ? (
                     <Button
                       type="button"
@@ -549,6 +557,12 @@ function Invitations({
           )
         })}
       </InsetList>
+
+      <RegeneratedLinkDialog
+        link={regenerated?.link ?? null}
+        email={regenerated?.email ?? ''}
+        onClose={() => setRegenerated(null)}
+      />
 
       <ConfirmDialog
         open={revokeTarget !== null}

@@ -11,6 +11,7 @@ import {
   Minus,
   RocketLaunch,
   Scroll,
+  Translate,
   WarningCircle,
   XCircle,
 } from '@phosphor-icons/react'
@@ -50,6 +51,7 @@ import {
 } from '#/components/ui/timeline'
 import { Hint } from '#/components/ui/tooltip'
 import { usePanel } from '#/features/shell/panel'
+import { uiLanguageName } from '#/lib/site-languages'
 import { formatRelativeTime } from '#/lib/relative-time'
 import type { MeSite } from '#/lib/site-nav'
 import { EASE_STANDARD } from '#/lib/motion'
@@ -80,9 +82,9 @@ import {
   useReconcileDeployment,
   useResolveUncertainDeployment,
 } from './use-go-live'
-import { canGoLive } from './go-live-gate'
+import { canGoLive, goLiveReason } from './go-live-gate'
 import { usePendingEntries } from './use-pending-entries'
-import type { PendingEntry } from './use-pending-entries'
+import type { PendingEntry, PendingLanguages } from './use-pending-entries'
 import { useReleaseStatus } from './use-release-status'
 import type { ReleaseStatus } from './use-release-status'
 
@@ -162,14 +164,21 @@ function GoLivePanelBody({
   const release = useReleaseStatus(site.id)
   const { goLive, isPending, errors, clearErrors } = useGoLive(site.id)
   const [urgent, setUrgent] = React.useState(false)
-  const blocked = (release.data?.blockers?.length ?? 0) > 0
-  const goLiveAllowed = canGoLive({
-    canPublish,
-    blockers: release.data?.blockers,
-  })
   const pending = usePendingEntries({
     siteId: site.id,
     enabled: release.state !== 'loading',
+  })
+  // Going live without knowing what changes is not allowed: wait for the list.
+  const changesKnown = pending.isSuccess
+  const goLiveAllowed =
+    canGoLive({
+      canPublish,
+      blockers: release.data?.blockers,
+    }) && changesKnown
+  const reason = goLiveReason({
+    canPublish,
+    blockers: release.data?.blockers,
+    changesKnown,
   })
 
   return (
@@ -198,20 +207,16 @@ function GoLivePanelBody({
         </Section>
       ) : release.data?.blockers && release.data.blockers.length > 0 ? (
         <Section>
-          <ErrorChecklist
-            siteId={site.id}
-            errors={release.data.blockers}
-            onDismiss={() => undefined}
-          />
+          <ErrorChecklist siteId={site.id} errors={release.data.blockers} />
         </Section>
       ) : null}
 
       <Section
         title={m.golive_whats_changing()}
         actions={
-          pending.ready.length > 0 ? (
+          pending.changeCount > 0 ? (
             <span className="text-caption font-normal text-text-muted tnum">
-              {pending.ready.length}
+              {pending.changeCount}
             </span>
           ) : null
         }
@@ -245,13 +250,7 @@ function GoLivePanelBody({
             />
           </label>
           <Hint
-            label={
-              goLiveAllowed
-                ? null
-                : blocked
-                  ? m.golive_blocked_reason()
-                  : editorPublishReason()
-            }
+            label={goLiveAllowed ? null : reason}
             wrapDisabled={!goLiveAllowed}
             className="w-full"
           >
@@ -272,7 +271,7 @@ function GoLivePanelBody({
           </Hint>
           {!goLiveAllowed ? (
             <p className="text-center text-callout text-text-secondary">
-              {blocked ? m.golive_blocked_reason() : editorPublishReason()}
+              {reason}
             </p>
           ) : null}
         </div>
@@ -438,6 +437,16 @@ function WhatsChanging({
   siteId: string
   pending: ReturnType<typeof usePendingEntries>
 }) {
+  if (pending.isError) {
+    return (
+      <QueryError
+        title={m.golive_changes_load_error()}
+        error={pending.error}
+        onRetry={pending.refetch}
+        retrying={pending.isRetrying}
+      />
+    )
+  }
   if (pending.isLoading) {
     return (
       <div className="grid gap-2">
@@ -447,7 +456,7 @@ function WhatsChanging({
       </div>
     )
   }
-  if (pending.entries.length === 0) {
+  if (pending.entries.length === 0 && !pending.languages) {
     return (
       <p className="rounded-[12px] border border-dashed border-border-strong px-4 py-4 text-center text-callout text-text-secondary">
         {m.golive_nothing_changing()}
@@ -456,12 +465,55 @@ function WhatsChanging({
   }
   return (
     <ul className="-mx-2 grid" data-testid="golive-changes">
+      {pending.languages ? (
+        <li key="languages">
+          <LanguageRow languages={pending.languages} />
+        </li>
+      ) : null}
       {pending.entries.map((entry) => (
         <li key={`${entry.kind}-${entry.id}`}>
           <PendingRow siteId={siteId} entry={entry} />
         </li>
       ))}
     </ul>
+  )
+}
+
+/** The site's language set or main language changes with the next go live. */
+function LanguageRow({ languages }: { languages: PendingLanguages }) {
+  const parts = [
+    ...languages.added.map((locale) =>
+      m.golive_language_added({ language: uiLanguageName(locale) }),
+    ),
+    ...languages.removed.map((locale) =>
+      m.golive_language_removed({ language: uiLanguageName(locale) }),
+    ),
+    ...(languages.mainChanged
+      ? [
+          m.golive_language_main({
+            from: uiLanguageName(languages.mainChanged.from),
+            to: uiLanguageName(languages.mainChanged.to),
+          }),
+        ]
+      : []),
+  ]
+  return (
+    <div
+      className="flex min-h-11 items-center gap-3 rounded-[10px] px-2 py-1.5"
+      data-testid="golive-language-change"
+    >
+      <span className="grid size-6 shrink-0 place-content-center">
+        <Translate className="size-4 text-icon-accent" />
+      </span>
+      <span className="grid min-w-0 flex-1">
+        <span className="text-[14px] leading-5 font-medium text-text-primary">
+          {m.golive_languages_row()}
+        </span>
+        <span className="text-[12px] leading-4 text-text-muted">
+          {parts.join(' · ')}
+        </span>
+      </span>
+    </div>
   )
 }
 
@@ -545,6 +597,10 @@ function PendingRow({
    Validation errors
 ------------------------------------------------------------------------- */
 
+/**
+ * Failed go-live attempts can be dismissed. Blockers come from the server and
+ * clear on their own, so they have no dismiss control.
+ */
 function ErrorChecklist({
   siteId,
   errors,
@@ -552,7 +608,7 @@ function ErrorChecklist({
 }: {
   siteId: string
   errors: string[]
-  onDismiss: () => void
+  onDismiss?: () => void
 }) {
   const parsed = errors.map(parseGoLiveError)
   return (
@@ -566,9 +622,11 @@ function ErrorChecklist({
         <span className="flex-1 text-[14px] leading-5 font-semibold text-text-primary">
           {m.golive_fix_first()}
         </span>
-        <Button type="button" variant="quiet" size="xs" onClick={onDismiss}>
-          {m.golive_dismiss()}
-        </Button>
+        {onDismiss ? (
+          <Button type="button" variant="quiet" size="xs" onClick={onDismiss}>
+            {m.golive_dismiss()}
+          </Button>
+        ) : null}
       </div>
       <ul className="grid gap-1.5">
         {parsed.map((error) => (

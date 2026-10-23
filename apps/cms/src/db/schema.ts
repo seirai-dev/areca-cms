@@ -198,7 +198,8 @@ export const invitation = pgTable('invitation', {
     .notNull()
     .references(() => organization.id, { onDelete: 'cascade' }),
   role: text('role').$type<MembershipRole>().notNull(),
-  token: text('token').notNull().unique(),
+  /** SHA-256 of the invitation token. The raw token is never stored. */
+  tokenHash: text('token_hash').notNull().unique(),
   expiresAt: timestamptz('expires_at').notNull(),
   acceptedAt: timestamptz('accepted_at'),
   /**
@@ -307,21 +308,43 @@ export const entry = pgTable(
   (t) => [
     unique('entry_collection_slug_unique').on(t.collectionId, t.slug),
     index('entry_site_id_idx').on(t.siteId),
+    // The scheduler's due scan reads only scheduled rows, by time.
+    index('entry_scheduled_due_idx')
+      .on(t.scheduledAt)
+      .where(sql`${t.status} = 'scheduled'`),
   ],
 )
 
-export const entryRevision = pgTable('entry_revision', {
-  id: id(),
-  entryId: text('entry_id')
-    .notNull()
-    .references(() => entry.id, { onDelete: 'cascade' }),
-  data: jsonb('data').$type<EntryData>().notNull(),
-  createdBy: text('created_by').references(() => user.id, {
-    onDelete: 'set null',
-  }),
-  createdAt: createdAt(),
-  note: text('note'),
-})
+export const entryRevision = pgTable(
+  'entry_revision',
+  {
+    id: id(),
+    entryId: text('entry_id')
+      .notNull()
+      .references(() => entry.id, { onDelete: 'cascade' }),
+    data: jsonb('data').$type<EntryData>().notNull(),
+    createdBy: text('created_by').references(() => user.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: createdAt(),
+    note: text('note'),
+    /**
+     * `autosave`: a draft save. Saves by one person within a few minutes of
+     * their last autosave update that revision. `milestone`: an action that
+     * approves, schedules, publishes, restores or creates, always its own row.
+     */
+    kind: text('kind')
+      .$type<'autosave' | 'milestone'>()
+      .notNull()
+      .default('milestone'),
+  },
+  (t) => [
+    // History pages and the latest-revision lookup read one entry, newest first.
+    index('entry_revision_entry_created_idx').on(t.entryId, t.createdAt, t.id),
+    // Retention scans autosave rows by age.
+    index('entry_revision_kind_created_idx').on(t.kind, t.createdAt),
+  ],
+)
 
 /** Authoring history retained after entry, collection, or site deletion. */
 export const deletedContentArchive = pgTable('deleted_content_archive', {
@@ -406,7 +429,11 @@ export const publication = pgTable(
     createdAt: createdAt(),
     deployedAt: timestamptz('deployed_at'),
   },
-  (t) => [index('publication_site_id_idx').on(t.siteId)],
+  (t) => [
+    index('publication_site_id_idx').on(t.siteId),
+    // "Latest live release for this site" lookups.
+    index('publication_site_status_idx').on(t.siteId, t.status),
+  ],
 )
 
 export const buildJob = pgTable(
@@ -464,9 +491,11 @@ export const publicationRequest = pgTable('publication_request', {
   publicationId: text('publication_id')
     .notNull()
     .references(() => publication.id, { onDelete: 'cascade' }),
-  jobId: text('job_id')
-    .notNull()
-    .references(() => buildJob.id, { onDelete: 'cascade' }),
+  /**
+   * Null once retention has pruned the finished job. The record stays so a
+   * replayed key still returns the publication it created.
+   */
+  jobId: text('job_id').references(() => buildJob.id, { onDelete: 'set null' }),
   createdAt: createdAt(),
 })
 
@@ -575,7 +604,7 @@ export const emailOutbox = pgTable(
     params: jsonb('params').$type<Record<string, unknown>>().notNull(),
     locale: text('locale').notNull(),
     status: text('status')
-      .$type<'queued' | 'sending' | 'sent' | 'failed'>()
+      .$type<'queued' | 'sending' | 'sent' | 'failed' | 'cancelled'>()
       .notNull(),
     attempts: integer('attempts').notNull().default(0),
     nextAttemptAt: timestamptz('next_attempt_at'),
@@ -591,7 +620,35 @@ export const emailOutbox = pgTable(
   (t) => [
     index('email_outbox_status_next_attempt_idx').on(t.status, t.nextAttemptAt),
     index('email_outbox_created_at_idx').on(t.createdAt),
+    // Claimable rows: queued and due, or sending with a lapsed lease.
+    index('email_outbox_queued_due_idx')
+      .on(t.nextAttemptAt)
+      .where(sql`${t.status} = 'queued'`),
+    index('email_outbox_lease_expiry_idx')
+      .on(t.leaseUntil)
+      .where(sql`${t.status} = 'sending'`),
   ],
+)
+
+/**
+ * One row per delivery attempt that reached an outcome. Test sends are not
+ * recorded. The mail failure banner counts consecutive failed attempts here.
+ * Deleted with their outbox row (30-day retention).
+ */
+export const emailDeliveryAttempt = pgTable(
+  'email_delivery_attempt',
+  {
+    id: id(),
+    outboxId: text('outbox_id')
+      .notNull()
+      .references(() => emailOutbox.id, { onDelete: 'cascade' }),
+    attempt: integer('attempt').notNull(),
+    outcome: text('outcome').$type<'sent' | 'retrying' | 'failed'>().notNull(),
+    errorCode: text('error_code'),
+    errorParams: jsonb('error_params').$type<Record<string, string>>(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('email_delivery_attempt_created_at_idx').on(t.createdAt)],
 )
 
 /**
@@ -670,19 +727,83 @@ export const notification = pgTable(
 )
 
 /** Durable object cleanup survives row/org deletion and transient storage outages. */
-export const storageObjectDeletion = pgTable('storage_object_deletion', {
-  storageKey: text('storage_key').primaryKey(),
-  createdAt: createdAt(),
-  lastError: text('last_error'),
-  attempts: integer('attempts').notNull().default(0),
-  nextAttemptAt: timestamptz('next_attempt_at'),
-})
+export const storageObjectDeletion = pgTable(
+  'storage_object_deletion',
+  {
+    storageKey: text('storage_key').primaryKey(),
+    createdAt: createdAt(),
+    lastError: text('last_error'),
+    attempts: integer('attempts').notNull().default(0),
+    nextAttemptAt: timestamptz('next_attempt_at'),
+    /** Set when an operator dismisses a paused deletion. */
+    dismissedAt: timestamptz('dismissed_at'),
+  },
+  (t) => [
+    // The drain takes the oldest unpaused row. Ordering by created_at lets the
+    // index supply the order; the due-time check runs on the few rows read.
+    index('storage_deletion_unpaused_idx')
+      .on(t.createdAt)
+      .where(sql`${t.attempts} < 4`),
+  ],
+)
 
 /** Cumulative operation counts survive job reconciliation and deletion. */
 export const opsCounter = pgTable('ops_counter', {
   name: text('name').primaryKey(),
   value: bigint('value', { mode: 'number' }).notNull().default(0),
 })
+
+/**
+ * Notifications owed for a state change: a release outcome or a failed
+ * scheduled publish. Written in the same transaction as that change, then
+ * delivered by a worker loop with retries. (kind, dedupe_key) is unique, so a
+ * repeated write adds nothing. The dedupe key is the publication id for release
+ * events, and the schedule subject for schedule events (no publication exists).
+ */
+export const notificationEvent = pgTable(
+  'notification_event',
+  {
+    id: id(),
+    kind: text('kind')
+      .$type<'publication.live' | 'publication.failed' | 'schedule.failed'>()
+      .notNull(),
+    siteId: text('site_id')
+      .notNull()
+      .references(() => site.id, { onDelete: 'cascade' }),
+    publicationId: text('publication_id').references(() => publication.id, {
+      onDelete: 'cascade',
+    }),
+    dedupeKey: text('dedupe_key').notNull(),
+    payload: jsonb('payload')
+      .$type<{
+        stuck?: boolean
+        previousPublicationId?: string | null
+        scheduledBy?: string[]
+        fingerprint?: string
+      }>()
+      .notNull()
+      .default({}),
+    status: text('status')
+      .$type<'pending' | 'done' | 'failed'>()
+      .notNull()
+      .default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    /** Due time while pending. While a loop holds the event, a lease time. */
+    nextAttemptAt: timestamptz('next_attempt_at'),
+    lastError: text('last_error'),
+    createdAt: createdAt(),
+    processedAt: timestamptz('processed_at'),
+  },
+  (t) => [
+    uniqueIndex('notification_event_kind_dedupe_unique').on(
+      t.kind,
+      t.dedupeKey,
+    ),
+    index('notification_event_pending_idx')
+      .on(t.nextAttemptAt)
+      .where(sql`${t.status} = 'pending'`),
+  ],
+)
 
 /** Per-site scheduler retry cooldown. Survives process restart. */
 export const schedulerBackoff = pgTable('scheduler_backoff', {
@@ -694,6 +815,8 @@ export const schedulerBackoff = pgTable('scheduler_backoff', {
   failureCount: integer('failure_count').notNull().default(0),
   approvalFingerprint: text('approval_fingerprint'),
   nextAttemptAt: timestamptz('next_attempt_at'),
+  /** Set when an operator dismisses the paused schedule. */
+  dismissedAt: timestamptz('dismissed_at'),
 })
 
 /**

@@ -17,7 +17,6 @@ import {
 } from '#/components/ui/floating-bar'
 import { FormField } from '#/components/ui/form-field'
 import { Input } from '#/components/ui/input'
-import { InsetList, InsetRow } from '#/components/ui/inset-list'
 import { PageHeader } from '#/components/ui/page-header'
 import { QueryError } from '#/components/ui/query-error'
 import { SegmentedControl } from '#/components/ui/segmented-control'
@@ -46,10 +45,16 @@ import {
   emailStatusKind,
   emailTimeline,
   isMailSecure,
-  mailKindLabel,
+  mailStatusCompactLabel,
   mailStatusLabel,
+  timelineStateLabel,
 } from './mail-settings-logic'
-import type { MailEmailKind, TimelineStep } from './mail-settings-logic'
+import type {
+  MailEmailKind,
+  MailFieldKey,
+  TimelineStep,
+} from './mail-settings-logic'
+import { PausedJobsSection } from './paused-jobs-section'
 import { useMailSettings, useRecentEmails } from './use-mail-settings'
 import type { MailActionFailure, MailStatus } from './use-mail-settings'
 import type { RecentEmail } from '#/server/mail/outbox'
@@ -58,6 +63,13 @@ function secureLabel(secure: MailSecure) {
   if (secure === 'starttls') return m.agency_mail_secure_starttls()
   if (secure === 'tls') return m.agency_mail_secure_tls()
   return m.agency_mail_secure_none()
+}
+
+/** The element each save-blocking field is focused by. */
+const MAIL_FIELD_IDS: Record<MailFieldKey, string> = {
+  host: 'mail-host',
+  port: 'mail-port',
+  fromAddress: 'mail-from',
 }
 
 /**
@@ -74,10 +86,32 @@ export function MailSettingsScreen() {
     form.sendTest.isPending ||
     form.save.isPending ||
     form.useEnvironment.isPending
+  const barOpen = form.dirty && !form.usingEnvironment
+  const missing = form.problems.length
+
+  /**
+   * Opened from the environment, the form is a proposal: Save is what switches
+   * sending to it, so the bar says so rather than "unsaved changes".
+   */
+  function barText() {
+    if (missing === 1) return m.agency_mail_fix_one()
+    if (missing > 1) return m.agency_mail_fix_many({ count: String(missing) })
+    if (form.saved?.source === 'env') return m.agency_mail_save_to_use()
+    return m.shared_unsaved_changes()
+  }
+
+  /** Shows every error, then moves focus to the first field that blocks a save. */
+  function revealProblems() {
+    form.revealProblems()
+    if (form.problems.length === 0) return
+    const field = document.getElementById(MAIL_FIELD_IDS[form.problems[0]])
+    field?.scrollIntoView({ block: 'center' })
+    field?.focus({ preventScroll: true })
+  }
 
   return (
     <div
-      className="grid gap-8 pb-24"
+      className={cn('grid gap-8 pb-24', barOpen && 'max-md:pb-40')}
       data-testid="mail-settings-page"
       data-ready={saved ? 'true' : 'false'}
     >
@@ -104,6 +138,7 @@ export function MailSettingsScreen() {
           onSubmit={(event) => {
             event.preventDefault()
             if (form.valid) form.save.mutate(false)
+            else revealProblems()
           }}
         >
           <SettingsSection
@@ -147,6 +182,11 @@ export function MailSettingsScreen() {
                   <FormField
                     label={m.agency_mail_field_host()}
                     htmlFor="mail-host"
+                    error={
+                      form.showError('host')
+                        ? m.agency_mail_host_required()
+                        : undefined
+                    }
                   >
                     <Input
                       id="mail-host"
@@ -156,15 +196,16 @@ export function MailSettingsScreen() {
                       placeholder="smtp.example.com"
                       value={fields.host}
                       onChange={(event) => update({ host: event.target.value })}
+                      onBlur={() => form.touch('host')}
                     />
                   </FormField>
                   <FormField
                     label={m.agency_mail_field_port()}
                     htmlFor="mail-port"
                     error={
-                      form.portValid || fields.port === ''
-                        ? undefined
-                        : m.agency_mail_port_invalid()
+                      form.showError('port')
+                        ? m.agency_mail_port_invalid()
+                        : undefined
                     }
                   >
                     <Input
@@ -175,6 +216,7 @@ export function MailSettingsScreen() {
                       className="tnum"
                       value={fields.port}
                       onChange={(event) => update({ port: event.target.value })}
+                      onBlur={() => form.touch('port')}
                     />
                   </FormField>
                 </div>
@@ -296,7 +338,7 @@ export function MailSettingsScreen() {
                   htmlFor="mail-from"
                   hint={m.agency_mail_from_hint()}
                   error={
-                    fields.fromAddress.trim() !== '' && !form.fromValid
+                    form.showError('fromAddress')
                       ? m.agency_mail_from_invalid()
                       : undefined
                   }
@@ -312,6 +354,7 @@ export function MailSettingsScreen() {
                     onChange={(event) =>
                       update({ fromAddress: event.target.value })
                     }
+                    onBlur={() => form.touch('fromAddress')}
                   />
                 </FormField>
 
@@ -334,40 +377,46 @@ export function MailSettingsScreen() {
                 </FormField>
 
                 <div className="grid gap-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      data-testid="mail-verify"
-                      loading={form.verify.isPending}
-                      disabled={!form.valid || busy}
-                      onClick={() => form.verify.mutate()}
-                    >
-                      <PlugsConnected />
-                      {m.agency_mail_verify()}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      data-testid="mail-send-test"
-                      loading={form.sendTest.isPending}
-                      disabled={!form.valid || busy}
-                      onClick={() => form.sendTest.mutate()}
-                    >
-                      <PaperPlaneTilt />
-                      {m.agency_mail_send_test()}
-                    </Button>
-                    <span className="text-caption font-normal text-text-muted">
-                      {saved.settings?.lastVerifiedAt
-                        ? m.agency_mail_last_verified({
-                            time: formatRelativeTime(
-                              saved.settings.lastVerifiedAt,
-                            ),
-                          })
-                        : saved.settings?.host
-                          ? m.agency_mail_never_verified()
-                          : null}
-                    </span>
+                  <div className="grid gap-2.5">
+                    <div className="grid gap-2 min-[400px]:grid-cols-2 sm:flex sm:flex-wrap sm:items-center">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="w-full sm:w-auto"
+                        data-testid="mail-verify"
+                        loading={form.verify.isPending}
+                        disabled={!form.valid || busy}
+                        onClick={() => form.verify.mutate()}
+                      >
+                        <PlugsConnected />
+                        {m.agency_mail_verify()}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="w-full sm:w-auto"
+                        data-testid="mail-send-test"
+                        loading={form.sendTest.isPending}
+                        disabled={!form.valid || busy}
+                        onClick={() => form.sendTest.mutate()}
+                      >
+                        <PaperPlaneTilt />
+                        {m.agency_mail_send_test()}
+                      </Button>
+                    </div>
+                    {saved.settings?.lastVerifiedAt ? (
+                      <p className="text-caption font-normal text-text-secondary">
+                        {m.agency_mail_last_verified({
+                          time: formatRelativeTime(
+                            saved.settings.lastVerifiedAt,
+                          ),
+                        })}
+                      </p>
+                    ) : saved.settings?.host ? (
+                      <p className="text-caption font-normal text-text-secondary">
+                        {m.agency_mail_never_verified()}
+                      </p>
+                    ) : null}
                   </div>
 
                   {form.verifyResult?.ok ? (
@@ -403,16 +452,31 @@ export function MailSettingsScreen() {
           </SettingsSection>
 
           <FloatingBar
-            open={form.dirty && !form.usingEnvironment}
-            label={m.shared_unsaved_changes()}
+            open={barOpen}
+            label={barText()}
+            fullWidthOnMobile
             data-testid="mail-save-bar"
           >
-            <FloatingBarLabel>{m.shared_unsaved_changes()}</FloatingBarLabel>
-            <FloatingBarDivider />
+            <FloatingBarLabel className="max-md:basis-full">
+              {missing > 0 ? (
+                <button
+                  type="button"
+                  data-testid="mail-fix-fields"
+                  className="block max-w-full truncate text-left font-medium text-text-link underline-offset-4 hover:underline"
+                  onClick={revealProblems}
+                >
+                  {barText()}
+                </button>
+              ) : (
+                barText()
+              )}
+            </FloatingBarLabel>
+            <FloatingBarDivider className="max-md:hidden" />
             <Button
               type="button"
               variant="quiet"
               size="sm"
+              className="max-md:flex-1"
               onClick={form.discard}
               disabled={form.save.isPending}
             >
@@ -424,7 +488,7 @@ export function MailSettingsScreen() {
               data-testid="save-mail"
               loading={form.save.isPending}
               disabled={!form.valid || busy}
-              className="rounded-full"
+              className="rounded-full max-md:min-w-28 max-md:flex-1"
             >
               {m.agency_mail_save()}
             </Button>
@@ -436,6 +500,8 @@ export function MailSettingsScreen() {
       {saved ? <AgencyAlertsSection /> : null}
 
       {saved ? <RecentEmailsSection /> : null}
+
+      {saved ? <PausedJobsSection /> : null}
 
       <ConfirmDialog
         open={envConfirmOpen}
@@ -506,48 +572,54 @@ function EnvironmentValues({ status }: { status: MailStatus }) {
   const env = status.env
   if (!env) {
     return (
-      <InsetList data-testid="mail-env-values">
-        <InsetRow title={m.agency_mail_env_not_configured()} inset={false} />
-      </InsetList>
+      <p
+        className="text-callout text-text-secondary"
+        data-testid="mail-env-values"
+      >
+        {m.agency_mail_env_not_configured()}
+      </p>
     )
   }
   return (
-    <InsetList data-testid="mail-env-values">
-      <InsetRow
-        title={m.agency_mail_field_host()}
-        trailing={env.host}
-        inset={false}
+    <dl
+      className="divide-y divide-border-default"
+      data-testid="mail-env-values"
+    >
+      <EnvironmentRow label={m.agency_mail_field_host()} value={env.host} />
+      <EnvironmentRow
+        label={m.agency_mail_field_port()}
+        value={String(env.port)}
       />
-      <InsetRow
-        title={m.agency_mail_field_port()}
-        trailing={String(env.port)}
-        inset={false}
+      <EnvironmentRow
+        label={m.agency_mail_field_secure()}
+        value={secureLabel(env.secure)}
       />
-      <InsetRow
-        title={m.agency_mail_field_secure()}
-        trailing={secureLabel(env.secure)}
-        inset={false}
+      <EnvironmentRow label={m.agency_mail_field_from()} value={env.from} />
+      <EnvironmentRow
+        label={m.agency_mail_field_username()}
+        value={env.username ?? '—'}
       />
-      <InsetRow
-        title={m.agency_mail_field_from()}
-        trailing={env.from}
-        inset={false}
-      />
-      <InsetRow
-        title={m.agency_mail_field_username()}
-        trailing={env.username ?? '—'}
-        inset={false}
-      />
-      <InsetRow
-        title={m.agency_mail_field_password()}
-        trailing={
+      <EnvironmentRow
+        label={m.agency_mail_field_password()}
+        value={
           env.passwordSet
             ? m.agency_mail_env_set()
             : m.agency_mail_env_not_set()
         }
-        inset={false}
       />
-    </InsetList>
+    </dl>
+  )
+}
+
+/** One environment value: label on the left, the value wraps on the right. */
+function EnvironmentRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 py-2.5 first:pt-0 last:pb-0">
+      <dt className="shrink-0 text-callout text-text-secondary">{label}</dt>
+      <dd className="min-w-0 text-right text-[14px] leading-5 break-all text-text-primary">
+        {value}
+      </dd>
+    </div>
   )
 }
 
@@ -590,78 +662,85 @@ function RecentEmailsSection() {
   return (
     <SettingsSection
       id="recent-emails"
+      bare
       title={m.agency_mail_recent_title()}
       description={m.agency_mail_recent_description()}
       data-testid="mail-recent"
     >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <SegmentedControl
-          size="sm"
-          value={filter}
-          onValueChange={setFilter}
-          options={[
-            {
-              value: 'all',
-              label: m.agency_mail_filter_all(),
-              testId: 'mail-filter-all',
-            },
-            {
-              value: 'failed',
-              label: m.agency_mail_filter_failed(),
-              testId: 'mail-filter-failed',
-            },
-          ]}
-        />
-        <Button
-          type="button"
-          variant="quiet"
-          size="sm"
-          data-testid="mail-refresh"
-          disabled={recent.isFetching}
-          onClick={() => void recent.refetch()}
-        >
-          <ArrowClockwise className={cn(recent.isFetching && 'animate-spin')} />
-          {m.agency_mail_refresh()}
-        </Button>
-      </div>
-
-      {recent.isError ? (
-        <QueryError
-          title={m.agency_mail_recent_error()}
-          error={recent.error}
-          onRetry={() => void recent.refetch()}
-          retrying={recent.isFetching}
-        />
-      ) : recent.isPending ? (
-        <div className="grid gap-2" aria-busy="true">
-          <Skeleton className="h-16 rounded-control" />
-          <Skeleton className="h-16 rounded-control" />
+      <div className="surface-card overflow-hidden">
+        <div className="flex items-center justify-between gap-3 border-b border-border-default px-4 py-2.5">
+          <SegmentedControl
+            size="sm"
+            value={filter}
+            onValueChange={setFilter}
+            aria-label={m.agency_mail_recent_title()}
+            options={[
+              {
+                value: 'all',
+                label: m.agency_mail_filter_all(),
+                testId: 'mail-filter-all',
+              },
+              {
+                value: 'failed',
+                label: m.agency_mail_filter_failed(),
+                testId: 'mail-filter-failed',
+              },
+            ]}
+          />
+          <Button
+            type="button"
+            variant="quiet"
+            size="sm"
+            data-testid="mail-refresh"
+            aria-label={m.agency_mail_refresh()}
+            disabled={recent.isFetching}
+            onClick={() => void recent.refetch()}
+          >
+            <ArrowClockwise
+              className={cn(recent.isFetching && 'animate-spin')}
+            />
+            <span className="max-sm:sr-only">{m.agency_mail_refresh()}</span>
+          </Button>
         </div>
-      ) : rows.length === 0 ? (
-        filter === 'failed' ? (
-          <EmptyState
-            size="sm"
-            tone="neutral"
-            title={m.agency_mail_empty_failed()}
+
+        {recent.isError ? (
+          <QueryError
+            title={m.agency_mail_recent_error()}
+            error={recent.error}
+            onRetry={() => void recent.refetch()}
+            retrying={recent.isFetching}
           />
+        ) : recent.isPending ? (
+          <div className="grid gap-2" aria-busy="true">
+            <Skeleton className="h-16 rounded-control" />
+            <Skeleton className="h-16 rounded-control" />
+          </div>
+        ) : rows.length === 0 ? (
+          filter === 'failed' ? (
+            <EmptyState
+              size="sm"
+              tone="neutral"
+              title={m.agency_mail_empty_failed()}
+            />
+          ) : (
+            <EmptyState
+              size="sm"
+              tone="neutral"
+              title={m.agency_mail_empty_title()}
+              description={m.agency_mail_empty_description()}
+            />
+          )
         ) : (
-          <EmptyState
-            size="sm"
-            tone="neutral"
-            title={m.agency_mail_empty_title()}
-            description={m.agency_mail_empty_description()}
-          />
-        )
-      ) : (
-        <ul
-          className="overflow-hidden surface-card"
-          data-testid="mail-recent-list"
-        >
-          {rows.map((email) => (
-            <RecentEmailRow key={email.id} email={email} />
-          ))}
-        </ul>
-      )}
+          <ul
+            className="divide-y divide-border-default"
+            data-testid="mail-recent-list"
+          >
+            {rows.map((email) => (
+              <RecentEmailRow key={email.id} email={email} />
+            ))}
+          </ul>
+        )}
+      </div>
     </SettingsSection>
   )
 }
@@ -674,48 +753,74 @@ const TAG_TONE: Record<
   queued: 'neutral',
   retrying: 'warning',
   failed: 'error',
+  skipped: 'neutral',
 }
 
+/**
+ * Phones: recipient, subject, then the status, time and delivery dots on the
+ * third line. From md: recipient and status on the first line, subject, then
+ * time and dots. The recipient always gets the full first line on phones.
+ */
 function RecentEmailRow({ email }: { email: RecentEmail }) {
   const kind = emailStatusKind(email)
   const steps = emailTimeline(email)
+  const status = mailStatusLabel(email)
   return (
     <li
-      className="relative grid gap-3 border-b border-border-default px-4 py-3 last:border-b-0 md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:gap-6"
+      className="grid min-w-0 grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-x-1.5 gap-y-1 px-4 py-3 md:grid-cols-[minmax(0,1fr)_auto] md:gap-x-3"
       data-testid="mail-recent-row"
       data-status={kind}
     >
-      <div className="grid min-w-0 gap-1">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="truncate text-[14px] leading-5 font-medium text-text-primary">
-            {mailKindLabel(email.kind)}
+      <span
+        className="col-span-full row-start-1 min-w-0 truncate text-[14px] leading-5 font-medium text-text-primary md:col-span-1 md:col-start-1"
+        title={email.to}
+      >
+        {email.to}
+      </span>
+      <p
+        className="col-span-full row-start-2 min-w-0 truncate text-callout text-text-secondary md:col-span-2 md:col-start-1"
+        title={email.subject}
+      >
+        {email.subject}
+      </p>
+      <Tag
+        tone={TAG_TONE[kind]}
+        className="col-start-1 row-start-3 md:col-start-2 md:row-start-1 md:justify-self-end"
+        title={status}
+        data-testid="mail-recent-status"
+      >
+        {kind === 'retrying' ? (
+          <>
+            <span aria-hidden="true" className="md:hidden">
+              {mailStatusCompactLabel(email)}
+            </span>
+            <span className="max-md:sr-only">{status}</span>
+          </>
+        ) : (
+          status
+        )}
+      </Tag>
+      <time
+        dateTime={new Date(email.createdAt).toISOString()}
+        title={absoluteTimeLabel(email.createdAt)}
+        className="col-start-2 row-start-3 text-caption whitespace-nowrap text-text-secondary md:col-start-1 md:row-start-3"
+      >
+        {formatRelativeTime(email.createdAt, { withinDays: 7 })}
+      </time>
+      <MailTimeline
+        steps={steps}
+        className="col-start-4 row-start-3 justify-self-end md:col-start-2 md:row-start-3"
+      />
+      {email.error && (kind === 'failed' || kind === 'retrying') ? (
+        <div className="col-span-full row-start-4 mt-1 grid gap-0.5">
+          <span className="text-callout text-text-secondary break-words">
+            {email.error.message}
           </span>
-          <Tag tone={TAG_TONE[kind]} data-testid="mail-recent-status">
-            {mailStatusLabel(email)}
-          </Tag>
+          <span className="font-mono text-caption text-text-secondary break-all">
+            {m.agency_mail_reference({ id: email.id })}
+          </span>
         </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-x-2 text-caption text-text-muted">
-          <span className="truncate text-text-secondary">{email.to}</span>
-          <span aria-hidden="true">·</span>
-          <time
-            dateTime={new Date(email.createdAt).toISOString()}
-            title={absoluteTimeLabel(email.createdAt)}
-          >
-            {formatRelativeTime(email.createdAt)}
-          </time>
-        </div>
-        {email.error && (kind === 'failed' || kind === 'retrying') ? (
-          <div className="grid gap-0.5 pt-0.5">
-            <span className="text-callout text-text-secondary break-words">
-              {email.error.message}
-            </span>
-            <span className="font-mono text-caption text-text-muted break-all">
-              {m.agency_mail_reference({ id: email.id })}
-            </span>
-          </div>
-        ) : null}
-      </div>
-      <MailTimeline steps={steps} />
+      ) : null}
     </li>
   )
 }
@@ -727,35 +832,50 @@ const STEP_LABEL = {
   failed: () => m.agency_mail_step_failed(),
 } satisfies Record<TimelineStep['key'], () => string>
 
-/** Three dots: queued → retrying → sent or failed. Colour is never the only cue. */
-function MailTimeline({ steps }: { steps: TimelineStep[] }) {
+/**
+ * Three dots: queued → retrying → sent or failed. Colour is never the only
+ * cue. The whole row is one named image, so a tooltip and a screen reader both
+ * say what each delivery step is and whether it happened.
+ */
+function MailTimeline({
+  steps,
+  className,
+}: {
+  steps: TimelineStep[]
+  className?: string
+}) {
+  const summary = `${m.agency_mail_timeline_label()}: ${steps
+    .map(
+      (step) => `${STEP_LABEL[step.key]()} (${timelineStateLabel(step.state)})`,
+    )
+    .join('; ')}`
   return (
-    <ol
-      aria-label={m.agency_mail_timeline_label()}
-      className="flex shrink-0 items-center gap-1.5 md:justify-end"
+    <span
+      role="img"
+      aria-label={summary}
+      title={summary}
+      className={cn('flex items-center gap-1 md:gap-1.5', className)}
     >
       {steps.map((step, index) => (
-        <li
+        <span
           key={step.key}
-          className="flex items-center gap-1.5"
+          aria-hidden="true"
+          className="flex items-center gap-1 md:gap-1.5"
           data-state={step.state}
         >
           {index > 0 ? (
-            <span aria-hidden="true" className="h-px w-5 bg-border-default" />
+            <span className="h-px w-2 bg-border-default md:w-5" />
           ) : null}
           <span
-            aria-hidden="true"
-            title={STEP_LABEL[step.key]()}
             className={cn(
               'size-2.5 rounded-full',
               DOT_CLASS[step.state],
               step.state === 'current' && 'motion-safe:animate-pulse',
             )}
           />
-          <span className="sr-only">{STEP_LABEL[step.key]()}</span>
-        </li>
+        </span>
       ))}
-    </ol>
+    </span>
   )
 }
 

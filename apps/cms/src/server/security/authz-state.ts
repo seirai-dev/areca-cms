@@ -35,6 +35,10 @@ export function fakeAuth() {
         verifyTOTP: async () => {
           throw new Error('INVALID_CODE')
         },
+        // Ownership is checked before these run; the database effects are
+        // asserted in own-sessions.test.ts.
+        revokeSession: async () => ({ status: true }),
+        revokeOtherSessions: async () => ({ status: true }),
       },
     },
   }

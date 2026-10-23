@@ -1,7 +1,7 @@
 import { isSafeIdentifier } from '#/lib/content-identifiers'
 import { createFileRoute } from '@tanstack/react-router'
 import '@tanstack/react-start'
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import {
   GLOBAL_GROUP_MAX_LENGTH,
@@ -21,6 +21,7 @@ import {
 import { localeTagSchema } from '#/lib/content-locale'
 import type { FieldType, SiteManifest } from '#/lib/types'
 import { listCollections, syncManifest } from '#/server/content/collections'
+import { FieldDropsUnconfirmedError } from '#/server/content/field-data'
 import { listGlobals } from '#/server/content/globals'
 import { authenticateSite } from '#/server/content/site-auth'
 
@@ -66,6 +67,11 @@ const languagesSchema = z.strictObject({
 
 const requiredLanguagesSchema = z.array(localeTagSchema).max(MAX_SITE_LANGUAGES)
 
+/** `<key>.<field>`: a collection or section key and a field key, neither with a dot. */
+const confirmDropFieldSchema = z
+  .string()
+  .regex(/^[a-zA-Z][a-zA-Z0-9_-]{0,63}\.[a-zA-Z][a-zA-Z0-9_-]{0,63}$/)
+
 const manifestSchema = z.strictObject({
   languages: languagesSchema.optional(),
   collections: z.record(
@@ -94,6 +100,11 @@ const manifestSchema = z.strictObject({
         requiredLanguages: requiredLanguagesSchema.optional(),
       }),
     )
+    .optional(),
+  /** Field removals the push confirms. Each removal that holds content must be listed. */
+  confirmDropFields: z
+    .array(confirmDropFieldSchema)
+    .max(MANIFEST_MAX_COLLECTIONS * MAX_FIELDS_PER_COLLECTION)
     .optional(),
 })
 
@@ -242,9 +253,20 @@ export async function postSitesManifest(request: Request) {
     return json({ error: 'Invalid body', issues: parsed.error.issues }, 400)
   }
 
+  const { confirmDropFields = [], ...manifest } = parsed.data
   try {
-    await syncManifest(site.id, parsed.data)
+    await syncManifest(site.id, manifest, { confirmDropFields })
   } catch (error) {
+    if (error instanceof FieldDropsUnconfirmedError) {
+      return json(
+        {
+          error: error.message,
+          code: 'field_drops_unconfirmed',
+          drops: error.drops,
+        },
+        409,
+      )
+    }
     if (error instanceof Error && error.name === 'ValidationError')
       return json({ error: 'Invalid identifiers', issues: error.message }, 400)
     throw error

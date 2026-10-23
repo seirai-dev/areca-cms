@@ -30,7 +30,7 @@ import {
   NotFoundError,
   ValidationError,
 } from '#/server/content/errors'
-import { resolveMailConfig } from '#/server/mail/config'
+import { isMailConfigured } from '#/server/mail/config'
 
 import {
   choiceKey,
@@ -86,7 +86,7 @@ export async function getMyNotifications(
         .where(eq(membership.userId, userId))
         .orderBy(organization.name),
       getBranding(),
-      resolveMailConfig().then((config) => config !== null),
+      isMailConfigured(),
     ])
 
   const orgs = await Promise.all(

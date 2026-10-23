@@ -1,3 +1,4 @@
+import type { Field } from '#/lib/types'
 import { describe, expect, it } from 'vitest'
 import {
   draftTranslatable,
@@ -150,6 +151,68 @@ describe('collection mode and group headings', () => {
     const drafts = draftsFromFields(undefined)
     expect(drafts.map((d) => d.type)).toEqual(['slug'])
     expect(fieldsFromDrafts(drafts)[0].group).toBeUndefined()
+  })
+})
+
+describe('round trip keeps every stored property', () => {
+  it('keeps the date-order constraint on a date field', () => {
+    const stored: Field[] = [
+      { key: 'opensAt', label: 'Opens', type: 'date' },
+      { key: 'closesAt', label: 'Closes', type: 'date', after: 'opensAt' },
+    ]
+    expect(
+      fieldsFromDrafts(draftsFromFields(stored, { kind: 'global' }), {
+        kind: 'global',
+      }),
+    ).toEqual(stored)
+  })
+
+  it('keeps every property a section field can store', () => {
+    const stored: Field[] = [
+      {
+        key: 'headline',
+        label: 'Headline',
+        type: 'text',
+        required: true,
+        description: 'Shown above the fold',
+        group: 'Hero',
+        translatable: false,
+      },
+      {
+        key: 'category',
+        label: 'Category',
+        type: 'select',
+        options: ['News', 'Events'],
+      },
+      {
+        key: 'related',
+        label: 'Related',
+        type: 'reference',
+        collection: 'posts',
+      },
+      { key: 'opensAt', label: 'Opens', type: 'datetime' },
+      { key: 'closesAt', label: 'Closes', type: 'datetime', after: 'opensAt' },
+    ]
+    expect(
+      fieldsFromDrafts(draftsFromFields(stored, { kind: 'global' }), {
+        kind: 'global',
+      }),
+    ).toEqual(stored)
+  })
+
+  it('keeps the date-order constraint in a collection, next to the slug row', () => {
+    const drafts = draftsFromFields([
+      { key: 'opensAt', label: 'Opens', type: 'date' },
+      { key: 'closesAt', label: 'Closes', type: 'date', after: 'opensAt' },
+    ])
+    expect(
+      fieldsFromDrafts(drafts).find((field) => field.key === 'closesAt'),
+    ).toEqual({
+      key: 'closesAt',
+      label: 'Closes',
+      type: 'date',
+      after: 'opensAt',
+    })
   })
 })
 

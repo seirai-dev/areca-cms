@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .select() are checked defensively */
 import { createServerFn } from '@tanstack/react-start'
 import { eq } from 'drizzle-orm'
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import { db } from '#/db'
 import { mcpConnection } from '#/db/schema'
@@ -32,7 +32,10 @@ export const getOAuthConsentFn = createServerFn({ method: 'GET', ...loose })
   .validator(z.object({ query: queryField }))
   .handler(async ({ data }) => describeConsentRequest(data.query))
 
-export const approveOAuthConsentFn = createServerFn({ method: 'POST', ...loose })
+export const approveOAuthConsentFn = createServerFn({
+  method: 'POST',
+  ...loose,
+})
   .validator(
     z.object({
       query: queryField,
@@ -59,7 +62,11 @@ export const denyOAuthConsentFn = createServerFn({ method: 'POST', ...loose })
 export const listMcpConnectionsFn = createServerFn({ method: 'GET', ...loose })
   .validator(z.object({ siteId: z.string().min(1).max(ID_MAX_LENGTH) }))
   .handler(async ({ data }) => {
-    const { session, site: found, role } = await requireMcpSiteAccess(data.siteId)
+    const {
+      session,
+      site: found,
+      role,
+    } = await requireMcpSiteAccess(data.siteId)
     const connections = await listConnections({
       siteId: found.id,
       userId: session.user.id,
@@ -80,7 +87,10 @@ export const listMcpConnectionsFn = createServerFn({ method: 'GET', ...loose })
   })
 
 /** Disconnects an app from a site. Takes effect on its next request. */
-export const revokeMcpConnectionFn = createServerFn({ method: 'POST', ...loose })
+export const revokeMcpConnectionFn = createServerFn({
+  method: 'POST',
+  ...loose,
+})
   .validator(z.object({ id: z.string().min(1).max(ID_MAX_LENGTH) }))
   .handler(async ({ data }) => {
     await requireUser()
@@ -89,9 +99,14 @@ export const revokeMcpConnectionFn = createServerFn({ method: 'POST', ...loose }
       .from(mcpConnection)
       .where(eq(mcpConnection.id, data.id))
       .limit(1)
-    if (!connection) throw new NotFoundError(m.server_mcp_connection_not_found())
+    if (!connection)
+      throw new NotFoundError(m.server_mcp_connection_not_found())
 
-    const { session, site: found, role } = await requireMcpSiteAccess(connection.siteId)
+    const {
+      session,
+      site: found,
+      role,
+    } = await requireMcpSiteAccess(connection.siteId)
     await revokeConnection({
       id: data.id,
       siteId: found.id,

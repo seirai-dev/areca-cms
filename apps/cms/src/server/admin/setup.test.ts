@@ -1,12 +1,19 @@
 import { eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import type * as Env from '#/env'
+import { db } from '#/db'
+import { auditLog, user } from '#/db/schema'
+
+import { completeSetup, getSetupStatus } from './setup.ts'
+import { resetGeneratedSetupToken } from './setup-token.ts'
+
 // Pin SETUP_TOKEN per test without touching the real environment.
 const tokens = vi.hoisted(() => ({
   configured: undefined as string | undefined,
 }))
 vi.mock('#/env', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('#/env')>()
+  const actual = await importOriginal<typeof Env>()
   return {
     env: new Proxy(actual.env, {
       get: (target, key, receiver) =>
@@ -16,12 +23,6 @@ vi.mock('#/env', async (importOriginal) => {
     }),
   }
 })
-
-import { db } from '#/db'
-import { auditLog, user } from '#/db/schema'
-
-import { completeSetup, getSetupStatus } from './setup.ts'
-import { resetGeneratedSetupToken } from './setup-token.ts'
 
 const hasDb = Boolean(process.env.DATABASE_URL)
 const TOKEN = 'test-setup-token-0123456789'
@@ -40,15 +41,17 @@ async function hasUsers() {
 describe.skipIf(!hasDb)('setup', () => {
   async function withExistingUser(body: (suffix: string) => Promise<void>) {
     const suffix = crypto.randomUUID()
-    const [existing] = await db
-      .insert(user)
-      .values({
-        id: crypto.randomUUID(),
-        name: `Existing ${suffix}`,
-        email: `existing-${suffix}@test.local`,
-        emailVerified: true,
-      })
-      .returning()
+    const existing = (
+      await db
+        .insert(user)
+        .values({
+          id: crypto.randomUUID(),
+          name: `Existing ${suffix}`,
+          email: `existing-${suffix}@test.local`,
+          emailVerified: true,
+        })
+        .returning()
+    ).at(0)
     if (!existing) throw new Error('Failed to create existing user')
     try {
       await body(suffix)
@@ -124,6 +127,28 @@ describe.skipIf(!hasDb)('setup', () => {
         organizationId: null,
         actorId: created.id,
       })
+    } finally {
+      await db.delete(auditLog).where(eq(auditLog.action, 'setup.completed'))
+      await db.delete(user).where(eq(user.email, email))
+    }
+  })
+
+  it('stores the setup language on the first admin, for the verification email', async (ctx) => {
+    if (await hasUsers()) ctx.skip()
+    tokens.configured = TOKEN
+    const suffix = crypto.randomUUID()
+    const email = `turkish-admin-${suffix}@test.local`
+    try {
+      const created = await completeSetup({
+        ...input(suffix, TOKEN),
+        email,
+        locale: 'tr',
+      })
+      const [row] = await db
+        .select({ locale: user.locale })
+        .from(user)
+        .where(eq(user.id, created.id))
+      expect(row.locale).toBe('tr')
     } finally {
       await db.delete(auditLog).where(eq(auditLog.action, 'setup.completed'))
       await db.delete(user).where(eq(user.email, email))

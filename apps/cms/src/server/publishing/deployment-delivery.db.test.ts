@@ -62,6 +62,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
               jobId: job.id,
               publicationId: pub.id,
               snapshotHash: 'hash',
+              dispatchedAt: expect.any(Date),
             })
             const persisted = await state(job.id)
             expect(persisted.dispatchStartedAt).toBeInstanceOf(Date)

@@ -17,6 +17,7 @@ import {
   derivePublicPath,
   localAssetFileNames,
   localizeCollections,
+  localizeGlobals,
   resolveAssetsConfig,
 } from './assets.js'
 import type { ArecaClient } from './client.js'
@@ -185,6 +186,63 @@ describe('localizeCollections', () => {
     const text = JSON.stringify(articles![0]!.data)
     expect(text).toContain('"url":"/hero-banner-3f2a91c0.jpg"')
     expect(text).toContain(BROCHURE.url)
+  })
+
+  it('rewrites the main-language and other language views of entries', () => {
+    const hero = { url: HERO.url, width: 1, height: 1, alt: '', mimeType: 'image/jpeg' }
+    const seo = { openGraph: { image: { url: HERO.url } } }
+    const body = `![a](${HERO.url}) [pdf](${BROCHURE.url})`
+    const entry = {
+      id: 'e',
+      slug: 'welcome',
+      publishedAt: null,
+      locale: 'en',
+      data: { hero, body },
+      seo,
+      locales: {
+        en: { slug: 'welcome', data: { hero, body }, seo },
+        nl: { slug: 'welkom', data: { hero, body }, seo },
+      },
+    } as never
+    const files = localAssetFileNames([HERO, BROCHURE])
+    const [localized] = localizeCollections(
+      { articles: [entry] },
+      files,
+      { publicPath: '/areca', siteUrl: 'https://www.acme.test' },
+    ).articles!
+    for (const view of [localized, localized!.locales!.en, localized!.locales!.nl]) {
+      const text = JSON.stringify(view)
+      expect(text).not.toContain('/api/assets/file/')
+      expect(text).toContain('"url":"/areca/hero-banner-3f2a91c0.jpg"')
+      expect(text).toContain('[pdf](/areca/brochure-2026-7e1d2c3b.pdf)')
+    }
+    expect(localized!.locales!.nl!.seo).toEqual({
+      openGraph: { image: { url: 'https://www.acme.test/areca/hero-banner-3f2a91c0.jpg' } },
+    })
+  })
+
+  it('rewrites the language views of site content sections', () => {
+    const hero = { url: HERO.url, width: 1, height: 1, alt: '', mimeType: 'image/jpeg' }
+    const globals = localizeGlobals(
+      {
+        home: {
+          id: 'g',
+          publishedAt: null,
+          data: { hero },
+          locale: 'en',
+          locales: { en: { data: { hero } }, nl: { data: { hero } } },
+        },
+      },
+      localAssetFileNames([HERO]),
+      { publicPath: '/areca' },
+    )
+    const home = globals.home!
+    expect(home.data).toEqual({ hero: expect.objectContaining({ url: '/areca/hero-banner-3f2a91c0.jpg' }) })
+    for (const locale of ['en', 'nl']) {
+      expect(home.locales![locale]!.data).toEqual({
+        hero: expect.objectContaining({ url: '/areca/hero-banner-3f2a91c0.jpg' }),
+      })
+    }
   })
 })
 

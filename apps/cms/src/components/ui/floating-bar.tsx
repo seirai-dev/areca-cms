@@ -16,11 +16,14 @@ export function FloatingBar({
   children,
   className,
   label,
+  fullWidthOnMobile = false,
   ...props
 }: {
   open: boolean
   children: React.ReactNode
   className?: string
+  /** Below md, span the gutters instead of floating as a centred pill. */
+  fullWidthOnMobile?: boolean
   /** Accessible name for the toolbar region. */
   label?: string
   'data-testid'?: string
@@ -37,11 +40,14 @@ export function FloatingBar({
           data-slot="floating-bar"
           data-testid={props['data-testid']}
           className={cn(
-            'fixed bottom-[calc(1rem+var(--mobile-tabbar-h,0px)+env(safe-area-inset-bottom))] left-1/2 z-floating flex max-w-[calc(100vw-1.5rem)] items-center gap-1.5 rounded-full py-1.5 pr-1.5 pl-4 surface-float',
+            // Centring uses the translate property, so the spring's transform
+            // on this element does not undo it.
+            'fixed bottom-[calc(1rem+var(--mobile-tabbar-h,0px)+env(safe-area-inset-bottom))] left-1/2 z-floating flex max-w-[calc(100vw-1.5rem)] -translate-x-1/2 items-center gap-1.5 rounded-full py-1.5 pr-1.5 pl-4 surface-float',
             'md:left-[calc(50%+var(--shell-sidebar-offset,0px)/2)]',
+            fullWidthOnMobile &&
+              'max-md:right-4 max-md:left-4 max-md:max-w-none max-md:translate-x-0 max-md:flex-wrap max-md:rounded-panel',
             className,
           )}
-          style={{ x: '-50%' }}
           initial={reduce ? { opacity: 0 } : { y: 24, opacity: 0, scale: 0.96 }}
           animate={reduce ? { opacity: 1 } : { y: 0, opacity: 1, scale: 1 }}
           exit={reduce ? { opacity: 0 } : { y: 24, opacity: 0, scale: 0.96 }}
@@ -71,6 +77,11 @@ export function FloatingBarLabel({
 }
 
 /** Hairline between groups of actions in a floating bar. */
-export function FloatingBarDivider() {
-  return <span aria-hidden="true" className="mx-1 h-5 w-px bg-border-default" />
+export function FloatingBarDivider({ className }: { className?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn('mx-1 h-5 w-px bg-border-default', className)}
+    />
+  )
 }

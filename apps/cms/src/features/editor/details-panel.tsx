@@ -21,7 +21,7 @@ import { EntryHistory } from './history'
 import { LanguageRing } from './language-ring'
 import { languageStateKey } from './language-state'
 import type { LocaleSummary } from './language-state'
-import type { EntryRecord, RevisionRecord } from './use-entry-editor'
+import type { EntryRecord } from './use-entry-editor'
 
 /** One language in the Status block. */
 export type LanguageRow = { summary: LocaleSummary; name: string }
@@ -72,10 +72,7 @@ export function DetailsPanel({
   live,
   isNew,
   canManage,
-  revisions,
-  revisionsLoading,
-  revisionsError,
-  onRetryRevisions,
+  entryId,
   onRestore,
   onCancelSchedule,
   seoPanel,
@@ -97,13 +94,11 @@ export function DetailsPanel({
   slugManual: boolean
   onResetSlug: () => void
   entry: EntryRecord | null
+  /** The entry whose history the panel shows; none until it is saved once. */
+  entryId: string | undefined
   live: LiveMembership
   isNew: boolean
   canManage: boolean
-  revisions: RevisionRecord[]
-  revisionsLoading: boolean
-  revisionsError: unknown
-  onRetryRevisions: () => void
   onRestore: (revisionId: string) => void
   onCancelSchedule: () => void
   /** The built-in SEO & discovery block (see `SeoPanel`). */
@@ -185,10 +180,7 @@ export function DetailsPanel({
           </p>
         ) : (
           <EntryHistory
-            revisions={revisions}
-            loading={revisionsLoading}
-            error={revisionsError}
-            onRetry={onRetryRevisions}
+            entryId={entryId}
             canManage={canManage}
             onRestore={onRestore}
           />

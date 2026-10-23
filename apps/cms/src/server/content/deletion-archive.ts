@@ -62,7 +62,7 @@ export async function archiveDeletedContent(
     entityType === 'site'
       ? await tx.select().from(buildJob).where(eq(buildJob.siteId, entityId))
       : []
-  const [siteRow] =
+  const siteRow = (
     entityType === 'site'
       ? await tx
           .select({
@@ -77,6 +77,7 @@ export async function archiveDeletedContent(
           .from(site)
           .where(eq(site.id, entityId))
       : []
+  ).at(0)
   await tx.insert(deletedContentArchive).values({
     organizationId,
     entityType,

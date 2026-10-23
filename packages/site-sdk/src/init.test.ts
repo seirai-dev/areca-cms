@@ -112,6 +112,8 @@ describe('parseArgs init / run / sync-manifest', () => {
     expect(parseArgs(['sync-manifest'])).toEqual({
       command: 'sync-manifest',
       configPath: './areca.config.ts',
+      confirmDropFields: [],
+      yes: false,
     })
   })
 
@@ -119,6 +121,8 @@ describe('parseArgs init / run / sync-manifest', () => {
     expect(parseArgs(['sync-manifest', './areca.config.ts'])).toEqual({
       command: 'sync-manifest',
       configPath: './areca.config.ts',
+      confirmDropFields: [],
+      yes: false,
     })
   })
 

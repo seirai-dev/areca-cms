@@ -35,6 +35,7 @@ import {
   toStoredFields,
 } from '#/server/mcp/entry-format'
 import { applyLocaleWrite } from '#/server/mcp/locales'
+import { hashToken } from '#/server/security/token-hash'
 import { requestPublication } from '#/server/publishing/publications'
 import { processJob } from '#/server/publishing/worker'
 
@@ -122,7 +123,7 @@ async function inviteAndSignUp(input: {
     email: input.email,
     organizationId: input.organizationId,
     role: input.role,
-    token,
+    tokenHash: hashToken(token),
     expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
   })
   const created = await signUp(input.name, input.email, token)
@@ -293,7 +294,7 @@ async function seedClient(client: DemoClient, adminId: string) {
       email: client.pendingInvite.email,
       organizationId: org.id,
       role: client.pendingInvite.role,
-      token: randomBytes(32).toString('hex'),
+      tokenHash: hashToken(randomBytes(32).toString('hex')),
       expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
     })
   }
@@ -397,6 +398,8 @@ async function seedClient(client: DemoClient, adminId: string) {
   if (!request.ok) {
     throw new Error(`Initial release failed: ${request.errors.join('; ')}`)
   }
+  // No request key, so nothing is replayed and the job is always returned.
+  if (!request.job) throw new Error('Initial release returned no job')
   await processJob(request.job)
 
   // Phase C: approvals after the release, so they show as pending changes.
@@ -448,7 +451,9 @@ async function main() {
   }
   console.log('Demo seed complete.')
   console.log(`Agency admin: ${ADMIN_EMAIL} / ${PASSWORD}`)
-  console.log(`Agency admin TOTP secret (base32): MFZGKY3BFVSGK3LPFV2G65DQFVZWKY3SMV2A`)
+  console.log(
+    `Agency admin TOTP secret (base32): MFZGKY3BFVSGK3LPFV2G65DQFVZWKY3SMV2A`,
+  )
 }
 
 try {

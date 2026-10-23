@@ -25,10 +25,7 @@ import { ValidationError } from '#/server/content/errors'
 
 import { mergeSeo } from './entry-format'
 
-function localeCtxFor(
-  languages: SiteLanguages,
-  fields: Field[],
-): LocaleCtx {
+function localeCtxFor(languages: SiteLanguages, fields: Field[]): LocaleCtx {
   return { main: languages.main, all: languages.all, fields }
 }
 
@@ -48,7 +45,9 @@ export function resolveLocale(
 ): LocaleTarget | null {
   if (!languages) {
     if (requested !== undefined) {
-      throw new ValidationError([{ path: 'locale', message: SINGLE_LANGUAGE_MESSAGE }])
+      throw new ValidationError([
+        { path: 'locale', message: SINGLE_LANGUAGE_MESSAGE },
+      ])
     }
     return null
   }
@@ -82,7 +81,8 @@ function keepKnown(fields: Field[], stored: EntryData): EntryData {
     out[SEO_KEY] = stored[SEO_KEY]
   }
   for (const key of [I18N_KEY, LOCALE_KEY]) {
-    if (Object.prototype.hasOwnProperty.call(stored, key)) out[key] = stored[key]
+    if (Object.prototype.hasOwnProperty.call(stored, key))
+      out[key] = stored[key]
   }
   return out
 }

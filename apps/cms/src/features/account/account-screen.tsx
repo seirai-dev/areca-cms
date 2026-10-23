@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useRouter, Link } from '@tanstack/react-router'
-import { authClient } from '#/lib/auth-client'
+import { signOutClient } from '#/lib/sign-out'
 import { verifyStepUpFn } from '#/server/fn/security'
 import { TwoFactorChallenge } from '#/features/auth/two-factor-challenge'
 import { ArrowLeft, WarningCircle } from '@phosphor-icons/react'
@@ -11,6 +11,7 @@ import { SettingsSection } from '#/components/ui/settings-section'
 import { m } from '#/paraglide/messages'
 import type { Me } from '#/server/fn/me'
 
+import { AccountNav } from './account-nav'
 import { EmailLanguageSection } from './email-language-section'
 import { NotificationsSection } from './notifications-section'
 import { TwoFactorSection } from './two-factor-section'
@@ -39,9 +40,7 @@ export function AccountScreen({ me }: { me: Me }) {
           pending={pending}
           error={error}
           onCancel={() => {
-            void authClient
-              .signOut()
-              .then(() => window.location.assign('/login'))
+            void signOutClient().then(() => window.location.assign('/login'))
           }}
           onSubmit={(code, kind) => {
             setPending(true)
@@ -84,6 +83,7 @@ export function AccountScreen({ me }: { me: Me }) {
           title={m.account_title()}
           description={m.account_description()}
         />
+        {!me.mfaEnrolmentRequired ? <AccountNav current="account" /> : null}
       </div>
 
       {me.mfaEnrolmentRequired ? (

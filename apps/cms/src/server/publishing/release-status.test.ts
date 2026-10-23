@@ -18,7 +18,9 @@ import {
 } from '#/server/content/entries'
 import { buildSnapshot } from '#/server/content/snapshot'
 import {
+  cleanupTestSite,
   createTestCollection,
+  createTestSite,
   sampleRichText,
   withTestSite,
 } from '#/server/content/test-utils'
@@ -26,6 +28,7 @@ import {
 import { getSiteReleaseStatus } from './publications.ts'
 import {
   diffApprovedRelease,
+  listPendingRelease,
   listPendingReleaseChanges,
 } from './release-diff.ts'
 
@@ -57,17 +60,19 @@ async function insertSnapshotPublication(
   const built = await buildSnapshot(siteId)
   if (!built.ok) throw new Error(built.errors.join('\n'))
   const id = crypto.randomUUID()
-  const [row] = await db
-    .insert(publication)
-    .values({
-      id,
-      siteId,
-      snapshot: { ...built.snapshot, publicationId: id },
-      snapshotHash: built.hash,
-      status,
-      wasLive: status === 'live',
-    })
-    .returning()
+  const row = (
+    await db
+      .insert(publication)
+      .values({
+        id,
+        siteId,
+        snapshot: { ...built.snapshot, publicationId: id },
+        snapshotHash: built.hash,
+        status,
+        wasLive: status === 'live',
+      })
+      .returning()
+  ).at(0)
   if (!row) throw new Error('Failed to insert publication')
   return row
 }
@@ -319,5 +324,53 @@ describe.skipIf(!hasDb)('release status from approved snapshot diff', () => {
       await seedPublished(ctx.site.id, ctx.actor.id, ctx.suffix, 'extra')
       expect((await getSiteReleaseStatus(ctx.site.id)).pendingEntries).toBe(1)
     })
+  })
+})
+
+describe.skipIf(!hasDb)('language changes in the pending release', () => {
+  it('lists an added language as one pending change, with no entries', async () => {
+    const ctx = await createTestSite({
+      languages: { main: 'en', all: ['en', 'nl'] },
+    })
+    try {
+      await createTestCollection(ctx.site.id)
+      await insertSnapshotPublication(ctx.site.id, 'live')
+      await db
+        .update(site)
+        .set({ languages: { main: 'en', all: ['en', 'nl', 'de'] } })
+        .where(eq(site.id, ctx.site.id))
+
+      const release = await listPendingRelease(ctx.site.id)
+      expect(release.changes).toEqual([])
+      expect(release.languages).toEqual({
+        added: ['de'],
+        removed: [],
+        mainChanged: null,
+      })
+      expect((await getSiteReleaseStatus(ctx.site.id)).pendingEntries).toBe(1)
+    } finally {
+      await cleanupTestSite(ctx)
+    }
+  })
+
+  it('does not list a schema-only change', async () => {
+    const ctx = await createTestSite({
+      languages: { main: 'en', all: ['en', 'nl'] },
+    })
+    try {
+      await createTestCollection(ctx.site.id)
+      await insertSnapshotPublication(ctx.site.id, 'live')
+      await db
+        .update(collection)
+        .set({ label: 'Renamed for editors' })
+        .where(eq(collection.siteId, ctx.site.id))
+
+      const release = await listPendingRelease(ctx.site.id)
+      expect(release.languages).toBeNull()
+      expect(release.changes).toEqual([])
+      expect((await getSiteReleaseStatus(ctx.site.id)).pendingEntries).toBe(0)
+    } finally {
+      await cleanupTestSite(ctx)
+    }
   })
 })

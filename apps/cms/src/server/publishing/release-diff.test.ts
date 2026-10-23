@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import type { SnapshotEntry } from '#/lib/types'
+import { globalsAsEntryLists } from '#/lib/globals'
+import type { SnapshotEntry, SnapshotGlobal } from '#/lib/types'
 import { resolveEntrySeo } from '#/lib/seo'
 
 import {
   comparisonSnapshot,
+  diffLanguages,
   diffSnapshotCollections,
   pendingCountFromDiff,
   stableJson,
@@ -172,7 +174,147 @@ describe('diffSnapshotCollections', () => {
   })
 })
 
+/** An entry whose main view is `en` and whose Dutch view is shipped too. */
+function localizedSnap(nlTitle: string, nlSlug = 'hallo'): SnapshotEntry {
+  return {
+    id: 'a',
+    slug: 'hello',
+    publishedAt: '2026-01-01T00:00:00.000Z',
+    data: { title: 'Hello' },
+    locale: 'en',
+    locales: {
+      en: { slug: 'hello', data: { title: 'Hello' } },
+      nl: { slug: nlSlug, data: { title: nlTitle } },
+    },
+  }
+}
+
+describe('translation-only changes', () => {
+  it('counts a secondary-language copy edit as an update', () => {
+    const diff = diffSnapshotCollections(
+      { articles: [localizedSnap('Hallo wereld')] },
+      { articles: [localizedSnap('Hallo')] },
+    )
+    expect(diff.updates.map((item) => item.id)).toEqual(['a'])
+    expect(diff.updates[0]).not.toHaveProperty('locales')
+  })
+
+  it('counts a secondary-language slug edit as an update', () => {
+    const diff = diffSnapshotCollections(
+      { articles: [localizedSnap('Hallo', 'nieuw')] },
+      { articles: [localizedSnap('Hallo')] },
+    )
+    expect(diff.updates.map((item) => item.id)).toEqual(['a'])
+  })
+
+  it('counts a language that starts or stops shipping as an update', () => {
+    const withoutDutch: SnapshotEntry = {
+      ...localizedSnap('Hallo'),
+      locales: { en: { slug: 'hello', data: { title: 'Hello' } } },
+    }
+    expect(
+      diffSnapshotCollections(
+        { articles: [localizedSnap('Hallo')] },
+        { articles: [withoutDutch] },
+      ).updates,
+    ).toHaveLength(1)
+    expect(
+      diffSnapshotCollections(
+        { articles: [withoutDutch] },
+        { articles: [localizedSnap('Hallo')] },
+      ).updates,
+    ).toHaveLength(1)
+  })
+
+  it('ignores an unchanged secondary language', () => {
+    expect(
+      diffSnapshotCollections(
+        { articles: [localizedSnap('Hallo')] },
+        { articles: [localizedSnap('Hallo')] },
+      ).updates,
+    ).toEqual([])
+  })
+
+  it('counts a section whose only change is its Dutch view', () => {
+    const section = (nlTitle: string): SnapshotGlobal => ({
+      id: 'g1',
+      publishedAt: '2026-01-01T00:00:00.000Z',
+      data: { title: 'Welcome' },
+      locale: 'en',
+      locales: {
+        en: { data: { title: 'Welcome' } },
+        nl: { data: { title: nlTitle } },
+      },
+    })
+    const diff = diffSnapshotCollections(
+      globalsAsEntryLists({ home: section('Welkom thuis') }),
+      globalsAsEntryLists({ home: section('Welkom') }),
+    )
+    expect(diff.updates.map((item) => item.collectionKey)).toEqual(['home'])
+  })
+})
+
+describe('diffLanguages', () => {
+  const bilingual = { main: 'en', all: ['en', 'nl'] }
+
+  it('is null when the language set and main language are unchanged', () => {
+    expect(diffLanguages(bilingual, bilingual)).toBeNull()
+    expect(diffLanguages(null, null)).toBeNull()
+  })
+
+  it('reports an added language', () => {
+    expect(
+      diffLanguages({ main: 'en', all: ['en', 'nl', 'de'] }, bilingual),
+    ).toEqual({ added: ['de'], removed: [], mainChanged: null })
+  })
+
+  it('reports a removed language', () => {
+    expect(
+      diffLanguages(bilingual, { main: 'en', all: ['en', 'nl', 'de'] }),
+    ).toEqual({
+      added: [],
+      removed: ['de'],
+      mainChanged: null,
+    })
+  })
+
+  it('reports a main-language change, keeping the set when it is unchanged', () => {
+    expect(diffLanguages({ main: 'nl', all: ['nl', 'en'] }, bilingual)).toEqual(
+      {
+        added: [],
+        removed: [],
+        mainChanged: { from: 'en', to: 'nl' },
+      },
+    )
+  })
+
+  it('reports enabling languages on a single-language site as additions', () => {
+    expect(diffLanguages(bilingual, null)).toEqual({
+      added: ['en', 'nl'],
+      removed: [],
+      mainChanged: null,
+    })
+  })
+
+  it('treats a one-language setting as no multilingual setting', () => {
+    expect(diffLanguages({ main: 'en', all: ['en'] }, null)).toBeNull()
+  })
+})
+
 describe('pendingCountFromDiff', () => {
+  it('counts a language change as one pending item', () => {
+    expect(
+      pendingCountFromDiff({
+        candidateOk: true,
+        hasBaseline: true,
+        adds: 0,
+        updates: 0,
+        removals: 0,
+        languages: true,
+      }),
+    ).toBe(1)
+  })
+
   it('counts adds, updates, and removals when the candidate built', () => {
     expect(
       pendingCountFromDiff({

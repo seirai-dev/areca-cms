@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import { assetUrl, loadAssetLookup } from '#/server/assets'
 import { siteAssetLookup } from '#/server/assets/site-scope'
@@ -235,7 +235,13 @@ export async function formatStoredEntry(
   const localeCode = languages ? (options.locale ?? languages.main) : undefined
   const view =
     languages && localeCode
-      ? localeView(row.draftData, languages, content.fields, localeCode, row.slug)
+      ? localeView(
+          row.draftData,
+          languages,
+          content.fields,
+          localeCode,
+          row.slug,
+        )
       : null
   const published =
     languages && localeCode
@@ -282,7 +288,12 @@ export async function formatStoredEntry(
   }
   const input = {
     entry: view
-      ? { ...row, draftData: view.data, publishedData: published, slug: view.slug }
+      ? {
+          ...row,
+          draftData: view.data,
+          publishedData: published,
+          slug: view.slug,
+        }
       : row,
     fields: content.fields,
     ctx: { assets, assetUrl: (storageKey: string) => assetUrl({ storageKey }) },
@@ -407,7 +418,7 @@ export function registerEntryTools(registry: ToolRegistry): void {
     name: 'get_entry',
     title: 'Get entry',
     description:
-      'Returns one entry: status (draft, ready, scheduled or archived), live (on the production site now; demo previews do not count), pendingRelease (approved changes waiting for the next go live), approvedAt, fields (rich text as Markdown, images as {assetId,url,alt}, references as {entryId}), seo, and version (pass it to update_entry as expectedVersion). On a site with languages, locale returns that language\'s values (slug and seo included); without it you get the main language plus translations, the completeness of each other language and its missing fields. Set includePublished to also get liveFields, the version visitors see now. Read-only.',
+      "Returns one entry: status (draft, ready, scheduled or archived), live (on the production site now; demo previews do not count), pendingRelease (approved changes waiting for the next go live), approvedAt, fields (rich text as Markdown, images as {assetId,url,alt}, references as {entryId}), seo, and version (pass it to update_entry as expectedVersion). On a site with languages, locale returns that language's values (slug and seo included); without it you get the main language plus translations, the completeness of each other language and its missing fields. Set includePublished to also get liveFields, the version visitors see now. Read-only.",
     inputSchema: z.object({
       id: idSchema('entry'),
       includePublished: z
@@ -472,7 +483,11 @@ export function registerEntryTools(registry: ToolRegistry): void {
         shared = written.sharedFieldsUpdated
         // The entry needs a main slug to exist: a first language's slug is used for it.
         const slugKey = slugFieldKey(col.fields)
-        if (!target.isMain && slugKey && typeof converted[slugKey] === 'string') {
+        if (
+          !target.isMain &&
+          slugKey &&
+          typeof converted[slugKey] === 'string'
+        ) {
           data[slugKey] = converted[slugKey]
         }
       } else {
@@ -502,7 +517,7 @@ export function registerEntryTools(registry: ToolRegistry): void {
     name: 'update_entry',
     title: 'Update entry',
     description:
-      'Changes a draft. Only the fields and seo keys you send change; others stay as they are. Clear a field by sending an empty string or null; clear an seo key with an empty string (text), false (boolean) or an empty array (list). On a site with languages, locale says which language the fields, seo and slug belong to (the main language when left out). Write one language per call: shared fields (not translatable) change in every language, and the response lists them in sharedFieldsUpdated. Pass expectedVersion from get_entry to avoid overwriting newer changes. Changing the slug changes the entry URL (in a non-main language, only that language\'s URL). Editing a ready entry does not change the live site: mark it ready again to approve the new version. Returns the saved entry.',
+      "Changes a draft. Only the fields and seo keys you send change; others stay as they are. Clear a field by sending an empty string or null; clear an seo key with an empty string (text), false (boolean) or an empty array (list). On a site with languages, locale says which language the fields, seo and slug belong to (the main language when left out). Write one language per call: shared fields (not translatable) change in every language, and the response lists them in sharedFieldsUpdated. Pass expectedVersion from get_entry to avoid overwriting newer changes. Changing the slug changes the entry URL (in a non-main language, only that language's URL). Editing a ready entry does not change the live site: mark it ready again to approve the new version. Returns the saved entry.",
     inputSchema: z.object({
       id: idSchema('entry'),
       fields: fieldsInputSchema.optional(),
@@ -581,15 +596,34 @@ export function registerEntryTools(registry: ToolRegistry): void {
     name: 'list_revisions',
     title: 'List revisions',
     description:
-      'Lists the saved history of an entry, newest first: revision id, what happened (create, update, publish, restore, ...), who, and when. Use a revision id with restore_revision (owners).',
-    inputSchema: z.object({ id: idSchema('entry') }),
+      'Lists the saved history of an entry, newest first: revision id, what happened (create, update, publish, restore, ...), who, and when. Use a revision id with restore_revision (owners). Returns one page of up to limit revisions (default 30). For older ones, pass cursor: the id of the last revision you received. A page shorter than limit is the end of the history.',
+    inputSchema: z.object({
+      id: idSchema('entry'),
+      cursor: z
+        .string()
+        .min(1)
+        .max(ID_MAX_LENGTH)
+        .optional()
+        .describe('The id of the last revision of the previous page.'),
+      limit: z
+        .number()
+        .int()
+        .min(1)
+        .max(100)
+        .optional()
+        .describe('Page size, 1-100. Default 30.'),
+    }),
     annotations: { readOnlyHint: true, idempotentHint: true },
     run: async (input, actor) => {
       const entry = await loadEntryInSite(actor, input.id)
-      const revisions = await listRevisions(entry.id)
+      const { items: revisions } = await listRevisions(entry.id, {
+        cursor: input.cursor,
+        limit: input.limit,
+      })
       return revisions.map((rev) => ({
         id: rev.id,
         note: rev.note,
+        kind: rev.kind,
         createdAt: rev.createdAt.toISOString(),
         createdBy: rev.createdBy,
       }))
@@ -621,7 +655,11 @@ export function registerEntryTools(registry: ToolRegistry): void {
       }
       const url = await previewUrlFor(
         actor,
-        { kind: content.kind, key: content.key, previewPath: content.previewPath },
+        {
+          kind: content.kind,
+          key: content.key,
+          previewPath: content.previewPath,
+        },
         entry.slug,
         target?.locale,
       )

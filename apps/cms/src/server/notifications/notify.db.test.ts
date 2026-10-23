@@ -46,6 +46,7 @@ vi.mock('#/server/mail/config', async (importOriginal) => {
   const actual = await importOriginal<typeof MailConfig>()
   return {
     ...actual,
+    isMailConfigured: async () => mail.configured,
     resolveMailConfig: async () => (mail.configured ? FAKE_CONFIG : null),
   }
 })

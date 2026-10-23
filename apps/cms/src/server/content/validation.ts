@@ -1,6 +1,6 @@
 import { richTextAssetsAuthorized } from '#/server/assets/richtext-ownership'
 import { and, eq } from 'drizzle-orm'
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import { db } from '#/db'
 import { asset, collection, entry } from '#/db/schema'
@@ -23,12 +23,11 @@ import {
 import { isEmptyRichText } from '#/lib/rich-text-empty'
 import { SEO_KEY, entrySeoSchema, readEntrySeo } from '#/lib/seo'
 import type { EntryData, Field } from '#/lib/types'
+import { SLUG_PATTERN } from '#/lib/slug'
 import { m } from '#/paraglide/messages'
 import { validateRichText } from '#/server/richtext'
 
 import { getCollection } from './collections.ts'
-
-export const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
 const ISO_DATETIME =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/
@@ -483,16 +482,19 @@ export async function validateReferences(
       continue
     }
 
-    const ref = (await db
-      .select({
-        id: entry.id,
-        status: entry.status,
-        publishedData: entry.publishedData,
-        publishedSlug: entry.publishedSlug,
-      })
-      .from(entry)
-      .where(and(eq(entry.id, value), eq(entry.collectionId, refCollection.id)))
-      .limit(1)
+    const ref = (
+      await db
+        .select({
+          id: entry.id,
+          status: entry.status,
+          publishedData: entry.publishedData,
+          publishedSlug: entry.publishedSlug,
+        })
+        .from(entry)
+        .where(
+          and(eq(entry.id, value), eq(entry.collectionId, refCollection.id)),
+        )
+        .limit(1)
     ).at(0)
 
     if (!ref) {
@@ -596,13 +598,14 @@ async function ownershipErrors(
   const errors: FieldError[] = []
   const ogImage = readEntrySeo(data).ogImage
   if (ogImage) {
-    const found = (await connection
-      .select({ id: asset.id })
-      .from(asset)
-      .where(
-        and(eq(asset.id, ogImage), eq(asset.organizationId, organizationId)),
-      )
-      .limit(1)
+    const found = (
+      await connection
+        .select({ id: asset.id })
+        .from(asset)
+        .where(
+          and(eq(asset.id, ogImage), eq(asset.organizationId, organizationId)),
+        )
+        .limit(1)
     ).at(0)
     if (!found)
       errors.push({
@@ -623,20 +626,21 @@ async function ownershipErrors(
     }
     if (typeof value !== 'string' || !value) continue
     if (field.type === 'reference') {
-      const found = (field.collection
-        ? await connection
-            .select({ id: entry.id })
-            .from(entry)
-            .innerJoin(collection, eq(entry.collectionId, collection.id))
-            .where(
-              and(
-                eq(entry.id, value),
-                eq(entry.siteId, siteId),
-                eq(collection.key, field.collection),
-              ),
-            )
-            .limit(1)
-        : []
+      const found = (
+        field.collection
+          ? await connection
+              .select({ id: entry.id })
+              .from(entry)
+              .innerJoin(collection, eq(entry.collectionId, collection.id))
+              .where(
+                and(
+                  eq(entry.id, value),
+                  eq(entry.siteId, siteId),
+                  eq(collection.key, field.collection),
+                ),
+              )
+              .limit(1)
+          : []
       ).at(0)
       if (!found)
         errors.push({
@@ -645,13 +649,14 @@ async function ownershipErrors(
         })
     }
     if (field.type === 'image') {
-      const found = (await connection
-        .select({ id: asset.id })
-        .from(asset)
-        .where(
-          and(eq(asset.id, value), eq(asset.organizationId, organizationId)),
-        )
-        .limit(1)
+      const found = (
+        await connection
+          .select({ id: asset.id })
+          .from(asset)
+          .where(
+            and(eq(asset.id, value), eq(asset.organizationId, organizationId)),
+          )
+          .limit(1)
       ).at(0)
       if (!found)
         errors.push({

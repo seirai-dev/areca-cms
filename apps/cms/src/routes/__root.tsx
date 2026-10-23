@@ -11,10 +11,15 @@ import { TanStackDevtools } from '@tanstack/react-devtools'
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 
 import { NotFoundCard } from '#/components/shell/not-found'
+import { RouteErrorCard } from '#/components/shell/route-error'
 import { ThemeProvider } from '#/components/theme'
 import { Toaster } from '#/components/ui/sonner'
 import { TooltipProvider } from '#/components/ui/tooltip'
-import { DEFAULT_BRANDING, brandingCss } from '#/lib/branding'
+import {
+  DEFAULT_BRANDING,
+  brandingCss,
+  fontStylesheetUrl,
+} from '#/lib/branding'
 import type { RouterContext } from '#/lib/router-context'
 import { getLocale } from '#/paraglide/runtime'
 import { getBrandingFn } from '#/server/fn/branding'
@@ -42,6 +47,9 @@ export const Route = createRootRouteWithContext<RouterContext>()({
   head: ({ loaderData }) => {
     const branding = loaderData ?? DEFAULT_BRANDING
     const css = brandingCss(branding)
+    // The branded Google Font, so the whole app renders in it (the preview
+    // loads its own copy). Self-hosted fonts need no stylesheet.
+    const fontUrl = fontStylesheetUrl(branding.font)
     return {
       meta: [
         {
@@ -60,7 +68,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
           rel: 'stylesheet',
           href: appCss,
         },
-        // ...(fontUrl ? [{ rel: 'stylesheet', href: fontUrl }] : []),
+        ...(fontUrl ? [{ rel: 'stylesheet', href: fontUrl }] : []),
         branding.faviconUrl
           ? {
               rel: 'icon',
@@ -73,6 +81,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
     }
   },
   notFoundComponent: () => <NotFoundCard fullPage />,
+  errorComponent: RouteErrorCard,
   shellComponent: RootDocument,
   component: RootComponent,
 })

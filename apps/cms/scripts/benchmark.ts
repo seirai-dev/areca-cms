@@ -357,7 +357,7 @@ async function seed(): Promise<Seeded> {
       siteId: st.id,
       snapshot: { ...built.snapshot, publicationId: `bench-${i}` },
       snapshotHash: built.hash,
-      status: (i === 0 ? 'live' : 'superseded') as 'live' | 'superseded',
+      status: i === 0 ? ('live' as const) : ('superseded' as const),
       createdAt: new Date(Date.now() - i * 86_400_000),
     }))
     for (const part of chunks(rows, 5))
@@ -443,10 +443,12 @@ async function main() {
   console.error(`Database: ${dbName}  scale=${scale}  runs=${runs}`)
   let seeded: Seeded
   if (args['skip-seed']) {
-    const [st] = await db
-      .select()
-      .from(schema.site)
-      .where(eq(schema.site.slug, 'bench-site-0-0'))
+    const st = (
+      await db
+        .select()
+        .from(schema.site)
+        .where(eq(schema.site.slug, 'bench-site-0-0'))
+    ).at(0)
     if (!st) throw new Error('No seeded data found; run without --skip-seed.')
     const [a] = await db
       .select()
@@ -568,8 +570,9 @@ async function main() {
     node: process.version,
     platform: `${os.platform()} ${os.arch()}`,
   }
-  const [pgv] = (await db.execute<{ v: string }>(sql`select version() as v`))
-    .rows
+  const pgv = (
+    await db.execute<{ v: string }>(sql`select version() as v`)
+  ).rows.at(0)
   const dataset = {
     scale,
     ...seeded.counts,

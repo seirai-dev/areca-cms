@@ -6,6 +6,7 @@ import {
   recordTick,
   resetHeartbeatsForTest,
 } from './heartbeat'
+import type { Backlog } from './backlog'
 import { evaluateQueue, runReadinessChecks, withTimeout } from './health'
 import type { QueueStats, ReadinessDeps } from './health'
 
@@ -17,6 +18,16 @@ const emptyQueue: QueueStats = {
   oldestExpiredLeaseSeconds: null,
 }
 
+const emptyBacklog: Backlog = {
+  mailPending: 0,
+  mailOldestPendingAgeSeconds: null,
+  mailExpiredLeases: 0,
+  notificationEventsPending: 0,
+  notificationEventsOldestPendingAgeSeconds: null,
+  storageDeletionsPaused: 0,
+  schedulesExhausted: 0,
+}
+
 const healthy = (over: ReadinessDeps = {}): ReadinessDeps => ({
   timeoutMs: 200,
   maxQueueAgeSeconds: 900,
@@ -25,6 +36,7 @@ const healthy = (over: ReadinessDeps = {}): ReadinessDeps => ({
   checkStorage: async () => {},
   checkRedis: async () => {},
   queueStats: async () => emptyQueue,
+  backlog: async () => emptyBacklog,
   ...over,
 })
 
@@ -37,12 +49,48 @@ describe('readiness', () => {
     expect(report.ok).toBe(true)
     expect(Object.keys(report.checks).sort()).toEqual([
       'db',
+      'loops',
+      'mail',
       'queue',
       'redis',
       'storage',
       'worker',
     ])
     expect(report.checks.worker.detail?.enabled).toBe(false)
+    expect(report.degraded).toBe(false)
+  })
+
+  it('degrades, without failing, when mail has waited more than 15 minutes', async () => {
+    const report = await runReadinessChecks(
+      healthy({
+        backlog: async () => ({
+          mailPending: 2,
+          mailOldestPendingAgeSeconds: 16 * 60,
+          mailExpiredLeases: 0,
+          notificationEventsPending: 0,
+          notificationEventsOldestPendingAgeSeconds: null,
+          storageDeletionsPaused: 0,
+          schedulesExhausted: 0,
+        }),
+      }),
+    )
+    expect(report.ok).toBe(true)
+    expect(report.degraded).toBe(true)
+    expect(report.checks.mail).toMatchObject({
+      ok: true,
+      degraded: true,
+      detail: { pending: 2, oldestPendingAgeSeconds: 960 },
+    })
+  })
+
+  it('degrades when a worker loop has not succeeded in five of its intervals', async () => {
+    markLoopsStarted(Date.now() - 60_000)
+    // The mail loop runs every 5 s, so 25 s without a success is stale.
+    // Every other loop has had a success recently enough.
+    const report = await runReadinessChecks(healthy())
+    expect(report.checks.loops).toMatchObject({ ok: true, degraded: true })
+    expect(report.checks.loops.reason).toContain('mail')
+    expect(report.ok).toBe(true)
   })
 
   it('fails when the database is down, with a redacted short reason', async () => {

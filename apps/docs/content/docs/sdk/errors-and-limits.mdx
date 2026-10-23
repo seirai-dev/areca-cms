@@ -9,28 +9,43 @@ The CLI prints each error message to stderr and exits with code `1`. The SDK thr
 
 ## Identifier rules
 
-Collection keys and field keys are identifiers. The SDK checks them before it sends anything to the CMS or writes any file.
-
-An identifier must:
+Collection keys, site content keys and field keys are identifiers. The SDK checks them before it sends anything to the CMS or writes any file. An identifier must:
 
 - Start with an ASCII letter.
 - Contain only ASCII letters, digits, `_` and `-`.
 - Be 64 characters or fewer.
-- Not be a reserved name. The check ignores case, so `MANIFEST` and `Con` are also rejected.
+- Not be a reserved name. Reserved names are matched without regard to case, so `MANIFEST` and `Con` are rejected too.
 
-Reserved names are `__proto__`, `prototype`, `constructor`, `manifest`, `con`, `prn`, `aux`, `nul`, `com1` to `com9`, and `lpt1` to `lpt9`.
+A field's `collection` and `after` values follow the same rules.
 
-A collection key must also not be `resolve`, `href` or `preview`, because the content object uses those names. Field keys may use them.
+### Reserved names for every key and field
 
-The same rule applies to a field's `collection` and `after` values.
+No collection, site content section or field may use these names:
+
+`__proto__`, `prototype`, `constructor`, `manifest`, `con`, `prn`, `aux`, `nul`, `com1`, `com2`, `com3`, `com4`, `com5`, `com6`, `com7`, `com8`, `com9`, `lpt1`, `lpt2`, `lpt3`, `lpt4`, `lpt5`, `lpt6`, `lpt7`, `lpt8`, `lpt9`
+
+`manifest` is the name of the pulled manifest file. `__proto__`, `prototype` and `constructor` would clash with JavaScript object properties. The `com` and `lpt` names are Windows device names.
+
+### Reserved names for collections and site content
+
+A collection key or a site content key may not be one of these names. The SDK compares the camelCase form of the key, so `preview-globals` and `preview_globals` count as `previewGlobals`:
+
+`resolve`, `href`, `preview`, `globals`, `previewGlobals`, `in`, `languages`, `matchLocale`
+
+These are the members of the generated content object. Field keys may use them: a field called `href` or `preview` is fine.
+
+### Errors for identifiers
+
+These messages come from `areca manifest push`, `areca manifest pull`, and `areca pull`. The SDK checks the names before any file is written.
 
 | Message | Meaning | What to do |
 | --- | --- | --- |
-| `Unsafe collection or field identifier: <value>` | The value breaks the rules above. | Rename the key in your config and push again. See [renaming keys](/docs/sdk/defining-content#identifiers). |
-| `Duplicate field identifier: <key>` | Two fields in one collection have the same key. | Rename one of them. |
-| `Collection key "<key>" is reserved: resolve, href and preview cannot be collection keys` | The collection is named `resolve`, `href` or `preview`. | Rename the collection. |
-
-These errors appear from `areca manifest push` and `areca manifest pull`, and from `areca pull` and `readContent` when a collection key in the content is not safe. A collection key that is not safe is refused before any file is written.
+| `Unsafe collection or field identifier: manifest` | A collection, section or field name is reserved, or breaks the character rules. | Rename it in your config and push again. See [renaming keys](/docs/sdk/defining-content#identifiers). |
+| `Collection "globals" uses the reserved name "globals". resolve, href, preview, globals, previewGlobals, in, languages and matchLocale are reserved.` | A collection key is a reserved content name after camelCase. | Rename the collection. |
+| `Global "preview-globals" uses the reserved name "previewGlobals". resolve, href, preview, globals, previewGlobals, in, languages and matchLocale are reserved.` | A site content key is a reserved content name after camelCase. | Rename the section. |
+| `Collection keys blog-posts and blog_posts both map to "blogPosts". Rename one of them.` | Two collection keys have the same camelCase name. | Rename one of them. |
+| `Collection identifiers differ only by case: Articles, articles` | Two collection keys differ only by letter case. Mac and Windows file systems treat them as one folder. | Rename one of them. |
+| `Duplicate field identifier: title` | Two fields in one collection have the same key. | Rename one of them. |
 
 ## Typed content errors
 
@@ -40,7 +55,7 @@ These errors appear from `areca manifest push` and `areca manifest pull`, and fr
 | --- | --- | --- |
 | `Collection keys <a> and <b> both map to "<name>". Rename one of them.` | Two collection keys have the same camelCase name, such as `blog-posts` and `blog_posts`. | Rename one of them in the config, push, and publish. |
 | `Field keys <a> and <b> in <collection> both map to "<name>". Rename one of them.` | Two field keys in one collection have the same camelCase name. | Rename one of them, push, and publish. |
-| `Collection "<key>" uses the reserved name "<name>"` | A collection is named `resolve`, `href` or `preview`. | Rename the collection. |
+| `Collection "<key>" uses a reserved name (resolve, href, preview, globals, previewGlobals, in, languages, matchLocale)` | `createContent` was given a collection with a reserved name. | Rename the collection in `areca.config.ts`, then run `areca pull` again. |
 | `Publication does not match its schema:` | Each following line is `<collection>/<slug>.<field>: <problem>`, for example `is required` or `must be a YYYY-MM-DD date`. Up to 20 lines are listed, then `...and N more`. | Fix the entry in the CMS, or fix the schema and publish again. |
 | `Types output must not be a symbolic link` | The `areca.gen.ts` path is a symlink. | Delete the symlink and pull again. |
 

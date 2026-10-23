@@ -9,7 +9,15 @@ import type { BuildJobStatus, PublicationStatus } from '#/lib/types'
 
 import { runReadinessChecks } from './health'
 import type { CheckName, ReadinessReport } from './health'
-import { loopsEnabled, tickAgeSeconds } from './heartbeat'
+import {
+  LOOP_INTERVAL_SECONDS,
+  loopsEnabled,
+  successAgeSeconds,
+  tickAgeSeconds,
+} from './heartbeat'
+import type { LoopName } from './heartbeat'
+import { collectBacklog } from './backlog'
+import type { Backlog } from './backlog'
 
 const log = createLogger('metrics')
 
@@ -42,6 +50,10 @@ export type MetricsSnapshot = {
   workerEnabled: boolean
   workerTickAgeSeconds: number | null
   schedulerTickAgeSeconds: number | null
+  /** Queue depths and paused work, see `backlog.ts`. */
+  backlog: Backlog
+  /** Seconds since each worker loop last finished a run; null when loops are off. */
+  loopSuccessAgeSeconds: Record<LoopName, number | null>
   readiness: ReadinessReport
   uptimeSeconds: number
   memory: { rss: number; heapUsed: number; heapTotal: number; external: number }
@@ -152,6 +164,50 @@ export function renderPrometheus(snapshot: MetricsSnapshot): string {
       }
     }),
   )
+  gauge('areca_mail_pending', 'Emails queued and waiting to send.', [
+    { value: snapshot.backlog.mailPending },
+  ])
+  gauge(
+    'areca_mail_oldest_pending_age_seconds',
+    'Age of the oldest queued email, 0 when none.',
+    [{ value: snapshot.backlog.mailOldestPendingAgeSeconds ?? 0 }],
+  )
+  gauge(
+    'areca_mail_expired_leases',
+    'Emails whose sender lease lapsed and that no one has reclaimed yet.',
+    [{ value: snapshot.backlog.mailExpiredLeases }],
+  )
+  gauge(
+    'areca_notification_events_pending',
+    'Release notices waiting to be delivered.',
+    [{ value: snapshot.backlog.notificationEventsPending }],
+  )
+  gauge(
+    'areca_notification_events_oldest_pending_age_seconds',
+    'Age of the oldest pending release notice, 0 when none.',
+    [
+      {
+        value: snapshot.backlog.notificationEventsOldestPendingAgeSeconds ?? 0,
+      },
+    ],
+  )
+  gauge(
+    'areca_storage_deletions_paused',
+    'Storage deletions paused after four failed attempts.',
+    [{ value: snapshot.backlog.storageDeletionsPaused }],
+  )
+  gauge(
+    'areca_schedules_exhausted',
+    'Scheduled publications stopped after four failed attempts.',
+    [{ value: snapshot.backlog.schedulesExhausted }],
+  )
+  gauge(
+    'areca_loop_success_age_seconds',
+    'Seconds since each worker loop last finished a run without error.',
+    Object.entries(snapshot.loopSuccessAgeSeconds).flatMap(([loop, age]) =>
+      age == null ? [] : [{ labels: { loop }, value: age }],
+    ),
+  )
   gauge('areca_ready', '1 when /api/health/ready would return 200.', [
     { value: snapshot.readiness.ok ? 1 : 0 },
   ])
@@ -184,7 +240,7 @@ export function renderPrometheus(snapshot: MetricsSnapshot): string {
 export async function collectMetrics(
   readiness?: ReadinessReport,
 ): Promise<MetricsSnapshot> {
-  const [jobs, pubs, overdue, failures, report] = await Promise.all([
+  const [jobs, pubs, overdue, failures, report, backlog] = await Promise.all([
     db.execute<{ status: string; n: string; oldest: string | null }>(sql`
       select status, count(*) as n,
         extract(epoch from now() - min(created_at)) as oldest
@@ -199,6 +255,7 @@ export async function collectMetrics(
       sql`select value from ops_counter where name = 'publication_failures'`,
     ),
     readiness ?? runReadinessChecks(),
+    collectBacklog(),
   ])
   const jobsByStatus: Record<string, number> = {}
   let oldestQueued: number | null = null
@@ -220,6 +277,13 @@ export async function collectMetrics(
     workerEnabled: loopsEnabled(),
     workerTickAgeSeconds: tickAgeSeconds('worker'),
     schedulerTickAgeSeconds: tickAgeSeconds('scheduler'),
+    backlog,
+    loopSuccessAgeSeconds: Object.fromEntries(
+      (Object.keys(LOOP_INTERVAL_SECONDS) as LoopName[]).map((loop) => [
+        loop,
+        successAgeSeconds(loop),
+      ]),
+    ) as Record<LoopName, number | null>,
     readiness: report,
     uptimeSeconds: process.uptime(),
     memory: {

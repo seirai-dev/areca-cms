@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  failureStreak,
   healthWindowStart,
   invitationDeliveryPatch,
   nextStep,
@@ -70,5 +71,53 @@ describe('healthWindowStart', () => {
 
   it('starts fresh after the mail settings change', () => {
     expect(healthWindowStart(early, late)).toEqual(late)
+  })
+})
+
+describe('failureStreak', () => {
+  const at = (minute: number) => new Date(Date.UTC(2026, 9, 22, 12, minute))
+  const failed = (minute: number, errorCode = 'timeout') => ({
+    outcome: 'failed' as const,
+    createdAt: at(minute),
+    errorCode,
+    errorParams: {},
+  })
+  const retrying = (minute: number) => ({
+    outcome: 'retrying' as const,
+    createdAt: at(minute),
+    errorCode: 'connection_failed',
+    errorParams: {},
+  })
+  const sent = (minute: number) => ({
+    outcome: 'sent' as const,
+    createdAt: at(minute),
+    errorCode: null,
+    errorParams: null,
+  })
+
+  it('counts retried attempts as failures, newest first, until a success', () => {
+    const streak = failureStreak([
+      retrying(3),
+      retrying(2),
+      failed(1),
+      sent(0),
+      failed(-1),
+    ])
+    expect(streak.consecutiveFailures).toBe(3)
+    expect(streak.last).toEqual(retrying(3))
+  })
+
+  it('is zero when the newest attempt succeeded', () => {
+    expect(failureStreak([sent(2), failed(1)])).toEqual({
+      consecutiveFailures: 0,
+      last: null,
+    })
+  })
+
+  it('counts every failed attempt of one row, not one per row', () => {
+    // Three attempts on the same email are three failures for the banner.
+    expect(
+      failureStreak([failed(3), failed(2), failed(1)]).consecutiveFailures,
+    ).toBe(3)
   })
 })

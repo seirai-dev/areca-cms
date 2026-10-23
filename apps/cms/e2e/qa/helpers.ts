@@ -3,7 +3,11 @@ import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Page } from '@playwright/test'
 
-export const CMS_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
+export const CMS_ROOT = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+)
 
 /**
  * Where the walkthrough writes its screenshots and ISSUES.md. Override with
@@ -40,7 +44,9 @@ export function writeIssues() {
   writeFileSync(
     join(SCREENSHOT_DIR, 'ISSUES.md'),
     issues.length
-      ? issues.map((i) => `- **${i.severity}** (${i.area}): ${i.note}`).join('\n') + '\n'
+      ? issues
+          .map((i) => `- **${i.severity}** (${i.area}): ${i.note}`)
+          .join('\n') + '\n'
       : 'No issues logged.\n',
   )
 }
@@ -64,7 +70,11 @@ export async function screenshot(page: Page, name: string) {
  */
 export function watchErrors(page: Page, area: string) {
   page.on('pageerror', (error) =>
-    logIssue({ area, severity: 'functional', note: `page error: ${error.message}` }),
+    logIssue({
+      area,
+      severity: 'functional',
+      note: `page error: ${error.message}`,
+    }),
   )
   page.on('console', (message) => {
     if (message.type() !== 'error') return
@@ -74,7 +84,10 @@ export function watchErrors(page: Page, area: string) {
     // Keep the first line plus React's +/- diff lines (hydration mismatches).
     const lines = text.split('\n')
     const diff = lines.filter((line) => /^\s*[+-] /.test(line)).slice(0, 8)
-    const note = [lines[0].slice(0, 200), ...diff.map((line) => line.trim().slice(0, 160))].join(' | ')
+    const note = [
+      lines[0].slice(0, 200),
+      ...diff.map((line) => line.trim().slice(0, 160)),
+    ].join(' | ')
     logIssue({ area, severity: 'functional', note: `console error: ${note}` })
   })
 }

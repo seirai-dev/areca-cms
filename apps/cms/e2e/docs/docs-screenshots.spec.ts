@@ -91,7 +91,8 @@ function totpAt(at: number) {
 /** A code with at least 5 s left in its window, so it is still valid on submit. */
 async function freshTotp() {
   const remaining = 30_000 - (Date.now() % 30_000)
-  if (remaining < 5_000) await new Promise((r) => setTimeout(r, remaining + 200))
+  if (remaining < 5_000)
+    await new Promise((r) => setTimeout(r, remaining + 200))
   return totpAt(Date.now())
 }
 
@@ -105,7 +106,9 @@ async function openContext(
 ): Promise<BrowserContext> {
   const mobile = options.mobile === true
   const context = await browser.newContext({
-    viewport: mobile ? { width: 390, height: 844 } : { width: 1280, height: 800 },
+    viewport: mobile
+      ? { width: 390, height: 844 }
+      : { width: 1280, height: 800 },
     deviceScaleFactor: mobile ? 3 : 2,
     isMobile: mobile,
     hasTouch: mobile,
@@ -139,20 +142,42 @@ async function goTo(page: Page, path: string, ready?: Locator) {
   if (ready) await expect(ready).toBeVisible({ timeout: 60_000 })
 }
 
-async function goToSite(page: Page, siteId: string, path: string, ready?: Locator) {
+async function goToSite(
+  page: Page,
+  siteId: string,
+  path: string,
+  ready?: Locator,
+) {
   await goTo(page, `/sites/${siteId}${path}`, ready)
 }
 
 /** Opens the entry editor for a row in a collection list. */
-async function openEntry(page: Page, siteId: string, collection: string, testId: string) {
-  await goToSite(page, siteId, `/c/${collection}`, page.getByTestId('site-content'))
-  await expect(page.getByTestId('site-content')).toHaveAttribute('data-ready', 'true')
+async function openEntry(
+  page: Page,
+  siteId: string,
+  collection: string,
+  testId: string,
+) {
+  await goToSite(
+    page,
+    siteId,
+    `/c/${collection}`,
+    page.getByTestId('site-content'),
+  )
+  await expect(page.getByTestId('site-content')).toHaveAttribute(
+    'data-ready',
+    'true',
+  )
   const row = page.getByTestId(testId)
   await expect(row).toBeVisible({ timeout: 30_000 })
   await row.getByRole('link').first().click()
-  await expect(page.getByTestId('entry-editor')).toHaveAttribute('data-ready', 'true', {
-    timeout: 60_000,
-  })
+  await expect(page.getByTestId('entry-editor')).toHaveAttribute(
+    'data-ready',
+    'true',
+    {
+      timeout: 60_000,
+    },
+  )
   await hydrated(page, page.getByTestId('entry-editor'))
   return entryIdFromUrl(page)
 }
@@ -167,7 +192,9 @@ async function shot(
     content: '[data-sonner-toaster]{display:none!important}',
   })
   await page.evaluate(() => document.fonts.ready)
-  await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {})
+  await page
+    .waitForLoadState('networkidle', { timeout: 15_000 })
+    .catch(() => {})
   await page
     .waitForFunction(
       () => Array.from(document.images).every((img) => img.complete),
@@ -234,10 +261,14 @@ async function closeWithEscape(page: Page) {
 ------------------------------------------------------------------------ */
 
 test.describe('documentation screenshots', () => {
-  test('captures every shot listed in docs/DEVELOPMENT.md', async ({ browser }) => {
+  test('captures every shot listed in docs/DEVELOPMENT.md', async ({
+    browser,
+  }) => {
     test.setTimeout(60 * 60_000)
     activeBrowser = browser
-    expect(base32Decode(ADMIN_TOTP_BASE32).toString()).toBe('areca-demo-totp-secret')
+    expect(base32Decode(ADMIN_TOTP_BASE32).toString()).toBe(
+      'areca-demo-totp-secret',
+    )
 
     /* ---------- Admin: sign in with TOTP (also shows the challenge step) ---------- */
     const adminContext = await openContext(browser)
@@ -251,14 +282,21 @@ test.describe('documentation screenshots', () => {
       await admin.getByLabel('Password').fill(PASSWORD)
       await form.getByRole('button', { name: 'Sign in' }).click()
       const challenge = admin.getByTestId('two-factor-form')
-      await expect(challenge).toHaveAttribute('data-ready', 'true', { timeout: 30_000 })
+      await expect(challenge).toHaveAttribute('data-ready', 'true', {
+        timeout: 30_000,
+      })
       await admin.waitForTimeout(400)
       await shot(admin, 'two-factor-authentication.png')
     })
     // Finish the admin sign-in even if the capture above failed.
-    await expect(admin.getByTestId('two-factor-form')).toBeVisible({ timeout: 60_000 })
+    await expect(admin.getByTestId('two-factor-form')).toBeVisible({
+      timeout: 60_000,
+    })
     await admin.locator('#two-factor-code').fill(await freshTotp())
-    await admin.getByTestId('two-factor-form').locator('button[type="submit"]').click()
+    await admin
+      .getByTestId('two-factor-form')
+      .locator('button[type="submit"]')
+      .click()
     await expect(admin).not.toHaveURL(/\/login/, { timeout: 60_000 })
     loginAt = Date.now()
 
@@ -285,12 +323,24 @@ test.describe('documentation screenshots', () => {
       await shot(admin, 'current-branding.png')
     })
     await capture('current-deployment-settings.png', async () => {
-      await goToSite(admin, harborId, '/settings?tab=deployment', admin.getByTestId('settings-tab-deployment'))
-      await expect(admin.getByTestId('settings-tab-deployment')).toHaveAttribute('aria-selected', 'true')
+      await goToSite(
+        admin,
+        harborId,
+        '/settings?tab=deployment',
+        admin.getByTestId('settings-tab-deployment'),
+      )
+      await expect(
+        admin.getByTestId('settings-tab-deployment'),
+      ).toHaveAttribute('aria-selected', 'true')
       await shot(admin, 'current-deployment-settings.png')
     })
     await capture('current-content-schema.png', async () => {
-      await goToSite(admin, harborId, '/settings?tab=content', admin.getByTestId('content-types'))
+      await goToSite(
+        admin,
+        harborId,
+        '/settings?tab=content',
+        admin.getByTestId('content-types'),
+      )
       await admin.getByTestId('content-type-posts').click()
       await expect(admin.getByTestId('collection-drawer')).toBeVisible()
       await admin.waitForTimeout(400)
@@ -298,20 +348,40 @@ test.describe('documentation screenshots', () => {
       await closeWithEscape(admin)
     })
     await capture('current-developer-settings.png', async () => {
-      await goToSite(admin, harborId, '/settings?tab=developer', admin.getByTestId('settings-developer'))
+      await goToSite(
+        admin,
+        harborId,
+        '/settings?tab=developer',
+        admin.getByTestId('settings-developer'),
+      )
       await shot(admin, 'current-developer-settings.png')
       await shot(admin, 'guide-developer-settings.png')
     })
     await capture('settings-languages.png', async () => {
-      await goToSite(admin, lumenId, '/settings?tab=languages', admin.getByTestId('settings-languages'))
+      await goToSite(
+        admin,
+        lumenId,
+        '/settings?tab=languages',
+        admin.getByTestId('settings-languages'),
+      )
       await shot(admin, 'settings-languages.png')
     })
     await capture('site-content-editor.png', async () => {
-      await goToSite(admin, harborId, '/globals/company', admin.getByTestId('global-editor'))
+      await goToSite(
+        admin,
+        harborId,
+        '/globals/company',
+        admin.getByTestId('global-editor'),
+      )
       await shot(admin, 'site-content-editor.png')
     })
     await capture('site-activity.png', async () => {
-      await goToSite(admin, harborId, '/activity', admin.getByTestId('activity-panel'))
+      await goToSite(
+        admin,
+        harborId,
+        '/activity',
+        admin.getByTestId('activity-panel'),
+      )
       await shot(admin, 'site-activity.png')
     })
 
@@ -322,9 +392,20 @@ test.describe('documentation screenshots', () => {
     await expect(owner).not.toHaveURL(/\/login/, { timeout: 60_000 })
 
     await capture('current-collection.png', async () => {
-      await goToSite(owner, harborId, '/c/posts', owner.getByTestId('site-content'))
-      await expect(owner.getByTestId('site-content')).toHaveAttribute('data-ready', 'true')
-      await owner.getByTestId('status-filter-all').click().catch(() => {})
+      await goToSite(
+        owner,
+        harborId,
+        '/c/posts',
+        owner.getByTestId('site-content'),
+      )
+      await expect(owner.getByTestId('site-content')).toHaveAttribute(
+        'data-ready',
+        'true',
+      )
+      await owner
+        .getByTestId('status-filter-all')
+        .click()
+        .catch(() => {})
       await shot(owner, 'current-collection.png')
     })
     await capture('current-mobile-collection.png', async () => {
@@ -332,14 +413,30 @@ test.describe('documentation screenshots', () => {
       const mobile = await mobileContext.newPage()
       await signInWithPassword(mobile, HARBOR_OWNER)
       await expect(mobile).not.toHaveURL(/\/login/, { timeout: 60_000 })
-      await goToSite(mobile, harborId, '/c/posts', mobile.getByTestId('site-content'))
-      await expect(mobile.getByTestId('site-content')).toHaveAttribute('data-ready', 'true')
+      await goToSite(
+        mobile,
+        harborId,
+        '/c/posts',
+        mobile.getByTestId('site-content'),
+      )
+      await expect(mobile.getByTestId('site-content')).toHaveAttribute(
+        'data-ready',
+        'true',
+      )
       await shot(mobile, 'current-mobile-collection.png')
       await mobileContext.close()
     })
     await capture('guide-posts-collection.png', async () => {
-      await goToSite(owner, harborId, '/c/posts', owner.getByTestId('site-content'))
-      await expect(owner.getByTestId('site-content')).toHaveAttribute('data-ready', 'true')
+      await goToSite(
+        owner,
+        harborId,
+        '/c/posts',
+        owner.getByTestId('site-content'),
+      )
+      await expect(owner.getByTestId('site-content')).toHaveAttribute(
+        'data-ready',
+        'true',
+      )
       await shot(owner, 'guide-posts-collection.png')
     })
 
@@ -353,9 +450,12 @@ test.describe('documentation screenshots', () => {
       if (!(await owner.getByTestId('entry-details').isVisible())) {
         await owner.getByTestId('toggle-details').click()
       }
-      await expect(owner.getByTestId('details-seo')).toBeVisible({ timeout: 20_000 })
+      await expect(owner.getByTestId('details-seo')).toBeVisible({
+        timeout: 20_000,
+      })
       const toggle = owner.getByTestId('seo-group-search-toggle')
-      if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click()
+      if ((await toggle.getAttribute('aria-expanded')) !== 'true')
+        await toggle.click()
       await expect(owner.getByTestId('seo-group-search')).toBeVisible()
       await owner.getByTestId('seo-group-search').scrollIntoViewIfNeeded()
       await shot(owner, 'current-editor-seo.png')
@@ -384,7 +484,9 @@ test.describe('documentation screenshots', () => {
       await owner.keyboard.press('ControlOrMeta+End')
       await owner.keyboard.press('Enter')
       await owner.keyboard.type('/')
-      await expect(owner.getByTestId('rich-text-slash-menu')).toBeVisible({ timeout: 10_000 })
+      await expect(owner.getByTestId('rich-text-slash-menu')).toBeVisible({
+        timeout: 10_000,
+      })
       await shot(owner, 'rich-text-slash-menu.png')
       await owner.keyboard.press('Escape')
     })
@@ -396,14 +498,18 @@ test.describe('documentation screenshots', () => {
       if (!(await owner.getByTestId('entry-details').isVisible())) {
         await owner.getByTestId('toggle-details').click()
       }
-      await expect(owner.getByTestId('details-status').getByText('Ready to go live')).toBeVisible()
+      await expect(
+        owner.getByTestId('details-status').getByText('Ready to go live'),
+      ).toBeVisible()
       await owner.getByTestId('details-status').scrollIntoViewIfNeeded()
       await shot(owner, 'guide-mark-ready.png')
     })
     await capture('schedule-sheet.png', async () => {
       await owner.getByTestId('publish-menu').click()
       await owner.getByTestId('schedule-entry').click()
-      await expect(owner.getByTestId('schedule-popover')).toBeVisible({ timeout: 10_000 })
+      await expect(owner.getByTestId('schedule-popover')).toBeVisible({
+        timeout: 10_000,
+      })
       await shot(owner, 'schedule-sheet.png')
       await closeWithEscape(owner)
     })
@@ -421,7 +527,12 @@ test.describe('documentation screenshots', () => {
     })
 
     await capture('current-people.png', async () => {
-      await goToSite(owner, harborId, '/people', owner.getByTestId('people-page'))
+      await goToSite(
+        owner,
+        harborId,
+        '/people',
+        owner.getByTestId('people-page'),
+      )
       await expect(owner.getByTestId('pending-invitations')).toBeVisible()
       await shot(owner, 'current-people.png')
     })
@@ -444,10 +555,16 @@ test.describe('documentation screenshots', () => {
         return siteIdFromUrl(nw)
       })()
       await goToSite(nw, nwId, '/library', nw.getByTestId('library-page'))
-      await expect(nw.getByTestId('library-grid')).toBeVisible({ timeout: 30_000 })
+      await expect(nw.getByTestId('library-grid')).toBeVisible({
+        timeout: 30_000,
+      })
       await shot(nw, 'current-library.png')
       await capture('library-file-details.png', async () => {
-        await nw.getByTestId('library-grid').locator('[data-testid^="media-card-"]').first().click()
+        await nw
+          .getByTestId('library-grid')
+          .locator('[data-testid^="media-card-"]')
+          .first()
+          .click()
         await expect(nw.getByTestId('asset-drawer')).toBeVisible()
         await nw.waitForTimeout(400)
         await shot(nw, 'library-file-details.png')
@@ -464,22 +581,39 @@ test.describe('documentation screenshots', () => {
     await capture('two-factor-setup.png', async () => {
       await goTo(owner, '/account', owner.getByTestId('two-factor-section'))
       await owner.getByTestId('two-factor-enable').click()
-      await owner.getByTestId('two-factor-password').locator('input[type="password"]').fill(PASSWORD)
-      await owner.getByTestId('two-factor-password').locator('button[type="submit"]').click()
-      await expect(owner.getByTestId('two-factor-qr')).toBeVisible({ timeout: 30_000 })
+      await owner
+        .getByTestId('two-factor-password')
+        .locator('input[type="password"]')
+        .fill(PASSWORD)
+      await owner
+        .getByTestId('two-factor-password')
+        .locator('button[type="submit"]')
+        .click()
+      await expect(owner.getByTestId('two-factor-qr')).toBeVisible({
+        timeout: 30_000,
+      })
       await shot(owner, 'two-factor-setup.png')
       await closeWithEscape(owner)
     })
 
     await capture('current-releases.png', async () => {
-      await goToSite(owner, harborId, '?panel=golive', owner.getByTestId('golive-panel'))
+      await goToSite(
+        owner,
+        harborId,
+        '?panel=golive',
+        owner.getByTestId('golive-panel'),
+      )
       await shot(owner, 'current-releases.png')
       await shot(owner, 'guide-go-live-panel.png')
     })
 
     /* ---------- Admin: state-changing wizards (no confirm) ---------- */
     await capture('guide-create-client.png', async () => {
-      await goTo(admin, '/agency/clients', admin.getByTestId('organizations-page'))
+      await goTo(
+        admin,
+        '/agency/clients',
+        admin.getByTestId('organizations-page'),
+      )
       await admin.getByTestId('new-organization').first().click()
       await expect(admin.getByTestId('new-client-sheet')).toBeVisible()
       await admin.getByTestId('org-name').fill('Harbor & Pine Bakery')
@@ -487,7 +621,11 @@ test.describe('documentation screenshots', () => {
       await closeWithEscape(admin)
     })
     await capture('guide-create-site.png', async () => {
-      await goTo(admin, '/agency/clients', admin.getByTestId('organizations-page'))
+      await goTo(
+        admin,
+        '/agency/clients',
+        admin.getByTestId('organizations-page'),
+      )
       // Follow the row's link directly: the stretched link is not always clickable.
       const href = await admin
         .getByRole('link', { name: /^Harbor & Pine Bakery/ })
@@ -500,33 +638,49 @@ test.describe('documentation screenshots', () => {
       await admin.getByTestId('site-name').fill('Harbor & Pine')
       await admin.getByTestId('site-slug-edit').click()
       await admin.getByTestId('site-slug').fill('harbor-and-pine')
-      await admin.getByTestId('site-production-url').fill('https://harborandpine.com')
+      await admin
+        .getByTestId('site-production-url')
+        .fill('https://harborandpine.com')
       await shot(admin, 'guide-create-site.png')
       await closeWithEscape(admin)
     })
 
     await capture('guide-site-token.png', async () => {
       // A throwaway client, so the real Harbor & Pine client is left as seeded.
-      await goTo(admin, '/agency/clients', admin.getByTestId('organizations-page'))
+      await goTo(
+        admin,
+        '/agency/clients',
+        admin.getByTestId('organizations-page'),
+      )
       await admin.getByTestId('new-organization').first().click()
       await admin.getByTestId('org-name').fill('Harbor & Pine Bakery')
       await admin.getByTestId('create-client').click()
-      await expect(admin.getByTestId('client-slug')).toBeVisible({ timeout: 30_000 })
+      await expect(admin.getByTestId('client-slug')).toBeVisible({
+        timeout: 30_000,
+      })
       await admin.getByTestId('new-site').first().click()
       await admin.getByTestId('site-name').fill('Harbor & Pine')
-      await admin.getByTestId('site-production-url').fill('https://harborandpine.com')
+      await admin
+        .getByTestId('site-production-url')
+        .fill('https://harborandpine.com')
       await admin.getByTestId('create-site').click()
-      await expect(admin.getByTestId('site-token-value').first()).toBeVisible({ timeout: 30_000 })
+      await expect(admin.getByTestId('site-token-value').first()).toBeVisible({
+        timeout: 30_000,
+      })
       // Swap the real token for a fixed fake so the docs never show a live secret.
       await admin.evaluate(
         ({ fakeToken, fakeUrl, fakeSnippetToken }) => {
           // Both the site token and the schema token are on this page; mask every instance.
-          const values = Array.from(document.querySelectorAll('[data-testid="site-token-value"]'))
+          const values = Array.from(
+            document.querySelectorAll('[data-testid="site-token-value"]'),
+          )
           const realTokens = values.map((el) => el.textContent.trim())
           values.forEach((el) => {
             el.textContent = fakeToken
           })
-          const envs = Array.from(document.querySelectorAll('[data-testid="site-token-env"]'))
+          const envs = Array.from(
+            document.querySelectorAll('[data-testid="site-token-env"]'),
+          )
           for (const env of envs) {
             const walker = document.createTreeWalker(env, NodeFilter.SHOW_TEXT)
             const texts: Text[] = []
@@ -535,8 +689,11 @@ test.describe('documentation screenshots', () => {
               const text = node.textContent
               if (/^https?:\/\//.test(text.trim())) node.textContent = fakeUrl
               else {
-                const real = realTokens.find((token) => token && text.includes(token))
-                if (real) node.textContent = text.replace(real, fakeSnippetToken)
+                const real = realTokens.find(
+                  (token) => token && text.includes(token),
+                )
+                if (real)
+                  node.textContent = text.replace(real, fakeSnippetToken)
               }
             }
           }
@@ -548,7 +705,10 @@ test.describe('documentation screenshots', () => {
         },
       )
       await shot(admin, 'guide-site-token.png')
-      await admin.getByTestId('site-token-done').click().catch(() => {})
+      await admin
+        .getByTestId('site-token-done')
+        .click()
+        .catch(() => {})
       await closeWithEscape(admin)
     })
 
@@ -557,11 +717,22 @@ test.describe('documentation screenshots', () => {
       const elapsed = Date.now() - loginAt
       const wait = 10.5 * 60_000 - elapsed
       if (wait > 0) await admin.waitForTimeout(wait)
-      await goToSite(admin, harborId, '/settings?tab=developer', admin.getByTestId('settings-developer'))
+      await goToSite(
+        admin,
+        harborId,
+        '/settings?tab=developer',
+        admin.getByTestId('settings-developer'),
+      )
       await admin.getByTestId('rotate-token').click()
-      const confirm = admin.getByRole('alertdialog').getByRole('button').filter({ hasText: /rotate/i }).last()
+      const confirm = admin
+        .getByRole('alertdialog')
+        .getByRole('button')
+        .filter({ hasText: /rotate/i })
+        .last()
       await confirm.click()
-      await expect(admin.getByTestId('step-up-dialog')).toBeVisible({ timeout: 20_000 })
+      await expect(admin.getByTestId('step-up-dialog')).toBeVisible({
+        timeout: 20_000,
+      })
       await shot(admin, 'step-up-dialog.png')
       await closeWithEscape(admin)
     })

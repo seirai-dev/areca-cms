@@ -5,9 +5,11 @@
   "sideEffects": false,
   "scripts": {
     "dev": "vite dev --port 3100 --strictPort",
-    "build": "vite build && node scripts/check-anchors.mjs",
+    "build": "vite build && node scripts/check-anchors.mjs && node scripts/check-install-versions.mjs",
     "preview": "node scripts/serve-static.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --test scripts/*.test.mjs",
+    "check:versions": "node scripts/check-install-versions.mjs"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",

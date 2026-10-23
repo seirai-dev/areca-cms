@@ -40,6 +40,7 @@ import {
   processJob,
   recoverStaleJobs,
 } from './worker.ts'
+import { jobOf } from './test-helpers'
 
 const hasDb = Boolean(process.env.DATABASE_URL)
 
@@ -108,14 +109,14 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
       })
       expect(localOnly.ok).toBe(true)
       if (!localOnly.ok) return
-      await processJob(localOnly.job, {
+      await processJob(jobOf(localOnly), {
         resolveAdapter: async () => {
           throw new Error('resolver should not run')
         },
       })
-      expect((await getBuildJob(localOnly.job.id)).status).toBe('succeeded')
+      expect((await getBuildJob(jobOf(localOnly).id))?.status).toBe('succeeded')
 
-      expect((await getPublication(localOnly.publication.id)).status).toBe(
+      expect((await getPublication(localOnly.publication.id))?.status).toBe(
         'demo',
       )
       expect(await getLivePublication(ctx.site.id)).toBeNull()
@@ -131,14 +132,14 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
       expect(deployed.ok).toBe(true)
       if (!deployed.ok) return
       const resolvedOrganizations: string[] = []
-      await processJob(deployed.job, {
+      await processJob(jobOf(deployed), {
         resolveAdapter: async (organizationId) => {
           resolvedOrganizations.push(organizationId)
           return createMockDeploymentAdapter()
         },
       })
       expect(resolvedOrganizations).toEqual([ctx.org.id])
-      expect((await getBuildJob(deployed.job.id)).status).toBe('succeeded')
+      expect((await getBuildJob(jobOf(deployed).id))?.status).toBe('succeeded')
     })
   })
 
@@ -155,17 +156,17 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
       expect(requested.ok).toBe(true)
       if (!requested.ok) return
 
-      await processJob(requested.job, {
+      await processJob(jobOf(requested), {
         resolveAdapter: async () => {
           throw new Error('Dokploy credentials are not configured')
         },
       })
 
-      expect((await getBuildJob(requested.job.id)).status).toBe('failed')
-      expect((await getBuildJob(requested.job.id)).error).toMatch(
+      expect((await getBuildJob(jobOf(requested).id))?.status).toBe('failed')
+      expect((await getBuildJob(jobOf(requested).id))?.error).toMatch(
         /not configured/,
       )
-      expect((await getPublication(requested.publication.id)).status).toBe(
+      expect((await getPublication(requested.publication.id))?.status).toBe(
         'failed',
       )
     })
@@ -196,7 +197,7 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
       })
       expect(first.ok).toBe(true)
       if (!first.ok) return
-      expect(first.job.status).toBe('queued')
+      expect(jobOf(first).status).toBe('queued')
       expect(first.publication.status).toBe('pending')
       expect(first.publication.snapshot.publicationId).toBe(
         first.publication.id,
@@ -209,14 +210,16 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
       expect(second.ok).toBe(true)
       if (!second.ok) return
 
-      const cancelled = await getBuildJob(first.job.id)
+      const cancelled = await getBuildJob(jobOf(first).id)
       expect(cancelled?.status).toBe('cancelled')
       expect((await getPublication(first.publication.id))?.status).toBe(
         'superseded',
       )
-      expect(second.job.status).toBe('queued')
+      expect(jobOf(second).status).toBe('queued')
 
-      await processJob(second.job, { adapter: createMockDeploymentAdapter() })
+      await processJob(jobOf(second), {
+        adapter: createMockDeploymentAdapter(),
+      })
 
       const liveAfterFirstDeploy = await getLivePublication(ctx.site.id)
       expect(liveAfterFirstDeploy?.id).toBe(second.publication.id)
@@ -225,7 +228,7 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
       expect((await getPublication(first.publication.id))?.status).toBe(
         'superseded',
       )
-      expect((await getBuildJob(second.job.id))?.status).toBe('succeeded')
+      expect((await getBuildJob(jobOf(second).id))?.status).toBe('succeeded')
       expect((await getEntry(scheduled.id))?.status).toBe('published')
       expect((await getEntry(scheduled.id))?.publishedData).toMatchObject({
         title: 'Due',
@@ -237,7 +240,7 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
       })
       expect(third.ok).toBe(true)
       if (!third.ok) return
-      await processJob(third.job, { adapter: createMockDeploymentAdapter() })
+      await processJob(jobOf(third), { adapter: createMockDeploymentAdapter() })
       expect((await getLivePublication(ctx.site.id))?.id).toBe(
         third.publication.id,
       )
@@ -251,8 +254,8 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
       })
       expect(failedReq.ok).toBe(true)
       if (!failedReq.ok) return
-      await processJob(failedReq.job, { adapter: failingAdapter })
-      expect((await getBuildJob(failedReq.job.id))?.status).toBe('failed')
+      await processJob(jobOf(failedReq), { adapter: failingAdapter })
+      expect((await getBuildJob(jobOf(failedReq).id))?.status).toBe('failed')
       expect((await getPublication(failedReq.publication.id))?.status).toBe(
         'failed',
       )
@@ -265,9 +268,11 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
         publicationId: second.publication.id,
         actorId: ctx.actor.id,
       })
-      expect(rollback.job.priority).toBe(100)
+      expect(jobOf(rollback).priority).toBe(100)
       expect(rollback.publication.status).toBe('pending')
-      await processJob(rollback.job, { adapter: createMockDeploymentAdapter() })
+      await processJob(jobOf(rollback), {
+        adapter: createMockDeploymentAdapter(),
+      })
       expect((await getLivePublication(ctx.site.id))?.id).toBe(
         rollback.publication.id,
       )
@@ -290,7 +295,7 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
       })
       expect(first.ok).toBe(true)
       if (!first.ok) return
-      await processJob(first.job, { adapter: createMockDeploymentAdapter() })
+      await processJob(jobOf(first), { adapter: createMockDeploymentAdapter() })
       expect((await getPublication(first.publication.id))?.wasLive).toBe(true)
 
       const rollback = await requestRollback({
@@ -298,7 +303,7 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
         publicationId: first.publication.id,
         actorId: ctx.actor.id,
       })
-      await processJob(rollback.job, { adapter: failingAdapter })
+      await processJob(jobOf(rollback), { adapter: failingAdapter })
 
       const failed = await getPublication(first.publication.id)
       expect(failed?.status).toBe('live')
@@ -313,7 +318,7 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
         actorId: ctx.actor.id,
       })
       expect(retry.publication.status).toBe('pending')
-      expect(retry.job.status).toBe('queued')
+      expect(jobOf(retry).status).toBe('queued')
     })
   })
 
@@ -364,16 +369,18 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
       expect(jobs[0]?.status).toBe('queued')
       const queued = await getPublication(jobs[0].publicationId)
       expect(queued).not.toBeNull()
-      expect(queued.requestedBy).toBeNull()
-      const [requested] = await db
-        .select()
-        .from(auditLog)
-        .where(
-          and(
-            eq(auditLog.targetId, queued.id),
-            eq(auditLog.action, 'publication.requested'),
-          ),
-        )
+      expect(queued?.requestedBy).toBeNull()
+      const requested = (
+        await db
+          .select()
+          .from(auditLog)
+          .where(
+            and(
+              eq(auditLog.targetId, queued!.id),
+              eq(auditLog.action, 'publication.requested'),
+            ),
+          )
+      ).at(0)
       expect(requested?.actorId).toBe(ctx.actor.id)
       expect(requested?.meta).toEqual(
         expect.objectContaining({
@@ -412,19 +419,19 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
         await db
           .update(buildJob)
           .set({ status: 'building', startedAt: new Date(), attempts: 1 })
-          .where(eq(buildJob.id, a2.job.id))
+          .where(eq(buildJob.id, jobOf(a2).id))
 
         const claimed = await claimNextJob()
-        expect(claimed?.id).toBe(b1.job.id)
+        expect(claimed?.id).toBe(jobOf(b1).id)
         expect(claimed?.siteId).toBe(siteB.site.id)
         expect(claimed?.status).toBe('building')
 
         const claimedAgain = await claimNextJob()
         expect(claimedAgain).toBeNull()
 
-        const leftover = await getBuildJob(a1.job.id)
+        const leftover = await getBuildJob(jobOf(a1).id)
         expect(leftover?.status).toBe('cancelled')
-        const a2Queued = await getBuildJob(a2.job.id)
+        const a2Queued = await getBuildJob(jobOf(a2).id)
         expect(a2Queued?.status).toBe('building')
       })
     })
@@ -447,12 +454,12 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
       await db
         .update(buildJob)
         .set({ status: 'building', startedAt: staleStarted, attempts: 1 })
-        .where(eq(buildJob.id, requested.job.id))
+        .where(eq(buildJob.id, jobOf(requested).id))
 
       const recovered = await recoverStaleJobs()
-      expect(recovered.some((job) => job.id === requested.job.id)).toBe(true)
+      expect(recovered.some((job) => job.id === jobOf(requested).id)).toBe(true)
 
-      const failed = await getBuildJob(requested.job.id)
+      const failed = await getBuildJob(jobOf(requested).id)
       expect(failed?.status).toBe('failed')
       expect(failed?.error).toMatch(/lease expired/)
       expect((await getPublication(requested.publication.id))?.status).toBe(
@@ -563,7 +570,7 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
         actorId: ctx.actor.id,
       })
       await scheduleEntry(late.id, dueScheduleIso(), 'UTC', ctx.actor.id)
-      await processJob(requested.job, {
+      await processJob(jobOf(requested), {
         adapter: createMockDeploymentAdapter(),
       })
       const promoted = await getEntry(scheduled.id)
@@ -578,7 +585,9 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
         actorId: ctx.actor.id,
       })
       expect(rollback.publication.entryVersions).toEqual([])
-      await processJob(rollback.job, { adapter: createMockDeploymentAdapter() })
+      await processJob(jobOf(rollback), {
+        adapter: createMockDeploymentAdapter(),
+      })
       expect((await getEntry(late.id))?.status).toBe('scheduled')
     })
   })
@@ -602,7 +611,7 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
         releaseWait = resolve
       })
       const mock = createMockDeploymentAdapter()
-      const running = processJob(requested.job, {
+      const running = processJob(jobOf(requested), {
         adapter: {
           ...mock,
           async waitForCompletion() {
@@ -616,13 +625,15 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
       await db
         .update(buildJob)
         .set({ leaseExpiresAt: new Date(Date.now() - 1) })
-        .where(eq(buildJob.id, requested.job.id))
+        .where(eq(buildJob.id, jobOf(requested).id))
       expect(
-        (await recoverStaleJobs()).some((job) => job.id === requested.job.id),
+        (await recoverStaleJobs()).some(
+          (job) => job.id === jobOf(requested).id,
+        ),
       ).toBe(true)
       releaseWait()
       await running
-      expect((await getBuildJob(requested.job.id)).status).toBe('failed')
+      expect((await getBuildJob(jobOf(requested).id))?.status).toBe('failed')
       expect(await getLivePublication(ctx.site.id)).toBeNull()
     })
   })
@@ -643,7 +654,7 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
         }),
       ).rejects.toThrow()
       const claimed = await claimNextJob()
-      expect(claimed?.id).toBe(requested.job.id)
+      expect(claimed?.id).toBe(jobOf(requested).id)
       await expect(
         db.insert(buildJob).values({
           siteId: ctx.site.id,
@@ -670,14 +681,16 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
         .where(eq(site.id, ctx.site.id))
       const adapter = createMockDeploymentAdapter()
       const healthCheck = vi.fn(adapter.healthCheck)
-      await processJob(requested.job, { adapter: { ...adapter, healthCheck } })
+      await processJob(jobOf(requested), {
+        adapter: { ...adapter, healthCheck },
+      })
       expect(healthCheck).toHaveBeenCalledWith(
         'http://localhost:3999',
         expect.objectContaining({
           expectPublicationId: requested.publication.id,
         }),
       )
-      expect((await getBuildJob(requested.job.id)).status).toBe('succeeded')
+      expect((await getBuildJob(jobOf(requested).id))?.status).toBe('succeeded')
       expect((await getLivePublication(ctx.site.id))?.id).toBe(
         requested.publication.id,
       )
@@ -720,7 +733,7 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
         'UTC',
         ctx.actor.id,
       )
-      await processJob(requested.job, {
+      await processJob(jobOf(requested), {
         adapter: createMockDeploymentAdapter(),
       })
       const after = await getEntry(scheduled.id)
@@ -791,23 +804,27 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
       await scheduleEntry(scheduled.id, dueScheduleIso(), 'UTC', ctx.actor.id)
 
       await runSchedulerTick()
-      const [row] = await db
-        .select()
-        .from(schedulerBackoff)
-        .where(eq(schedulerBackoff.siteId, ctx.site.id))
-        .limit(1)
+      const row = (
+        await db
+          .select()
+          .from(schedulerBackoff)
+          .where(eq(schedulerBackoff.siteId, ctx.site.id))
+          .limit(1)
+      ).at(0)
       expect(row).toBeDefined()
       expect(row?.lastError).toBeTruthy()
       expect(await listBuildJobs(ctx.site.id)).toHaveLength(0)
-      const [failed] = await db
-        .select()
-        .from(auditLog)
-        .where(
-          and(
-            eq(auditLog.siteId, ctx.site.id),
-            eq(auditLog.action, 'publication.scheduled_failed'),
-          ),
-        )
+      const failed = (
+        await db
+          .select()
+          .from(auditLog)
+          .where(
+            and(
+              eq(auditLog.siteId, ctx.site.id),
+              eq(auditLog.action, 'publication.scheduled_failed'),
+            ),
+          )
+      ).at(0)
       expect(failed?.actorId).toBe(ctx.actor.id)
       expect(failed?.meta).toEqual(
         expect.objectContaining({ scheduledBy: [ctx.actor.id] }),
@@ -816,12 +833,14 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
       resetSchedulerAttempts()
       await runSchedulerTick()
       expect(await listBuildJobs(ctx.site.id)).toHaveLength(0)
-      const [still] = await db
-        .select()
-        .from(schedulerBackoff)
-        .where(eq(schedulerBackoff.siteId, ctx.site.id))
-        .limit(1)
-      expect(still?.lastAttemptAt.getTime()).toBe(row.lastAttemptAt.getTime())
+      const still = (
+        await db
+          .select()
+          .from(schedulerBackoff)
+          .where(eq(schedulerBackoff.siteId, ctx.site.id))
+          .limit(1)
+      ).at(0)
+      expect(still?.lastAttemptAt.getTime()).toBe(row!.lastAttemptAt.getTime())
     })
   })
 
@@ -839,12 +858,12 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
       })
       expect(requested.ok).toBe(true)
       if (!requested.ok) return
-      await processJob(requested.job, {
+      await processJob(jobOf(requested), {
         audit: async () => {
           throw new Error('audit unavailable')
         },
       })
-      expect((await getBuildJob(requested.job.id)).status).toBe('succeeded')
+      expect((await getBuildJob(jobOf(requested).id))?.status).toBe('succeeded')
       expect((await getPublication(requested.publication.id))?.status).toBe(
         'demo',
       )

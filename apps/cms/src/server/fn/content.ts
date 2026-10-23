@@ -18,7 +18,7 @@ import {
   SLUG_MAX_LENGTH,
 } from '#/lib/content-limits'
 import { createServerFn } from '@tanstack/react-start'
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import { db } from '#/db'
 import { site, user } from '#/db/schema'
@@ -60,6 +60,7 @@ import {
   setGlobalEnabled,
   upsertGlobal,
 } from '#/server/content/globals'
+import { fieldDataUsageForCollection } from '#/server/content/field-data'
 import {
   buildGlobalPreviewUrl,
   buildPreviewUrl,
@@ -191,6 +192,25 @@ async function requireEntryAccess(entryId: string, role?: 'owner') {
   return { ...access, entry: existing }
 }
 
+/** Field keys the owner confirmed removing together with their content. */
+const confirmDropFieldsSchema = z
+  .array(z.string().min(1).max(FIELD_OPTION_MAX_LENGTH))
+  .max(MAX_FIELDS_PER_COLLECTION)
+  .optional()
+
+/** Content counts per field key of one collection or section (schema editor). */
+export const fieldDataUsageFn = createServerFn({ method: 'GET' })
+  .validator(
+    z.object({
+      siteId: z.string().min(1).max(ID_MAX_LENGTH),
+      key: z.string().min(1).max(ID_MAX_LENGTH),
+    }),
+  )
+  .handler(async ({ data }) => {
+    await requireSiteAccess(data.siteId)
+    return fieldDataUsageForCollection(data.siteId, data.key)
+  })
+
 export const listCollectionsFn = createServerFn({ method: 'GET' })
   .validator(
     z.object({
@@ -292,10 +312,16 @@ export const updateDraftFn = createServerFn({ method: 'POST', ...entryFn })
   })
 
 export const publishEntryFn = createServerFn({ method: 'POST', ...entryFn })
-  .validator(z.object({ id: z.string().min(1).max(ID_MAX_LENGTH) }))
+  .validator(
+    z.object({
+      id: z.string().min(1).max(ID_MAX_LENGTH),
+      /** The draft version the reviewer saw; a later version is a conflict. */
+      expectedVersion: z.number().int().positive().optional(),
+    }),
+  )
   .handler(async ({ data }) => {
     const { session } = await requireEntryAccess(data.id, 'owner')
-    return publishEntry(data.id, session.user.id)
+    return publishEntry(data.id, session.user.id, data.expectedVersion)
   })
 
 export const unpublishEntryFn = createServerFn({ method: 'POST', ...entryFn })
@@ -318,6 +344,7 @@ export const scheduleEntryFn = createServerFn({ method: 'POST', ...entryFn })
       id: z.string().min(1).max(ID_MAX_LENGTH),
       scheduledAt: z.string().min(1).max(SCHEDULE_FIELD_MAX_LENGTH),
       timezone: z.string().min(1).max(SCHEDULE_FIELD_MAX_LENGTH),
+      expectedVersion: z.number().int().positive().optional(),
     }),
   )
   .handler(async ({ data }) => {
@@ -327,6 +354,7 @@ export const scheduleEntryFn = createServerFn({ method: 'POST', ...entryFn })
       data.scheduledAt,
       data.timezone,
       session.user.id,
+      data.expectedVersion,
     )
   })
 
@@ -345,16 +373,31 @@ export const deleteEntryFn = createServerFn({ method: 'POST' })
     return { ok: true as const }
   })
 
+/** One history page, newest first, without revision data. */
 export const listRevisionsFn = createServerFn({ method: 'GET', ...entryFn })
-  .validator(z.object({ entryId: z.string().min(1).max(ID_MAX_LENGTH) }))
+  .validator(
+    z.object({
+      entryId: z.string().min(1).max(ID_MAX_LENGTH),
+      cursor: z.string().min(1).max(ID_MAX_LENGTH).nullish(),
+      limit: z.number().int().min(1).max(100).optional(),
+    }),
+  )
   .handler(async ({ data }) => {
     await requireEntryAccess(data.entryId)
-    const revisions = await listRevisions(data.entryId)
-    const names = await userNames(revisions.map((rev) => rev.createdBy))
-    return revisions.map((rev) => ({
-      ...rev,
-      createdByName: rev.createdBy ? (names.get(rev.createdBy) ?? null) : null,
-    }))
+    const page = await listRevisions(data.entryId, {
+      cursor: data.cursor,
+      limit: data.limit,
+    })
+    const names = await userNames(page.items.map((rev) => rev.createdBy))
+    return {
+      items: page.items.map((rev) => ({
+        ...rev,
+        createdByName: rev.createdBy
+          ? (names.get(rev.createdBy) ?? null)
+          : null,
+      })),
+      nextCursor: page.nextCursor,
+    }
   })
 
 export const restoreRevisionFn = createServerFn({ method: 'POST', ...entryFn })
@@ -426,6 +469,7 @@ export const upsertCollectionFn = createServerFn({ method: 'POST' })
         )
         .nullable()
         .optional(),
+      confirmDropFields: confirmDropFieldsSchema,
     }),
   )
   .handler(async ({ data }) => {
@@ -435,6 +479,7 @@ export const upsertCollectionFn = createServerFn({ method: 'POST' })
       label: data.label,
       routePattern: data.routePattern,
       fields: data.fields,
+      confirmDropFields: data.confirmDropFields,
       enabled: data.enabled,
       requiredLanguages: data.requiredLanguages,
       localizedRoutes: data.localizedRoutes,
@@ -583,6 +628,7 @@ export const upsertGlobalFn = createServerFn({ method: 'POST' })
         .array(localeTagSchema)
         .max(MAX_SITE_LANGUAGES)
         .optional(),
+      confirmDropFields: confirmDropFieldsSchema,
     }),
   )
   .handler(async ({ data }) => {
@@ -593,6 +639,7 @@ export const upsertGlobalFn = createServerFn({ method: 'POST' })
         key: data.key,
         label: data.label,
         fields: data.fields,
+        confirmDropFields: data.confirmDropFields,
         seo: data.seo,
         previewPath: data.previewPath,
         enabled: data.enabled,

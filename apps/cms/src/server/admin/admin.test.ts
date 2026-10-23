@@ -29,6 +29,7 @@ import {
   inviteMember,
   listMembers,
   listUsers,
+  regenerateInvitationLink,
   removeMember,
   updateMemberRole,
 } from './members.ts'
@@ -68,15 +69,17 @@ async function findMailpitMessage(email: string) {
 }
 
 async function createActor(suffix: string) {
-  const [actor] = await db
-    .insert(user)
-    .values({
-      id: crypto.randomUUID(),
-      name: `Admin Actor ${suffix}`,
-      email: `actor-${suffix}@test.local`,
-      emailVerified: true,
-    })
-    .returning()
+  const actor = (
+    await db
+      .insert(user)
+      .values({
+        id: crypto.randomUUID(),
+        name: `Admin Actor ${suffix}`,
+        email: `actor-${suffix}@test.local`,
+        emailVerified: true,
+      })
+      .returning()
+  ).at(0)
   if (!actor) throw new Error('Failed to create actor')
   return actor
 }
@@ -88,6 +91,12 @@ async function cleanup(orgIds: string[], userIds: string[]) {
   if (userIds.length > 0) {
     await db.delete(user).where(inArray(user.id, userIds))
   }
+}
+
+/** The raw token of a pending invitation. Only the hash is stored, so the test reads it from a fresh link. */
+async function linkTokenFor(invitationId: string, actorId: string) {
+  const { link } = await regenerateInvitationLink(invitationId, actorId)
+  return link.slice(link.lastIndexOf('/') + 1)
 }
 
 describe.skipIf(!hasDb)('admin', () => {
@@ -169,11 +178,13 @@ describe.skipIf(!hasDb)('admin', () => {
       expect(created.token).toMatch(/^[0-9a-f]{64}$/)
       expect(created).not.toHaveProperty('tokenHash')
 
-      const [stored] = await db
-        .select({ tokenHash: site.tokenHash })
-        .from(site)
-        .where(eq(site.id, created.id))
-        .limit(1)
+      const stored = (
+        await db
+          .select({ tokenHash: site.tokenHash })
+          .from(site)
+          .where(eq(site.id, created.id))
+          .limit(1)
+      ).at(0)
       expect(stored?.tokenHash).toBe(
         createHash('sha256').update(created.token).digest('hex'),
       )
@@ -181,11 +192,13 @@ describe.skipIf(!hasDb)('admin', () => {
       const rotated = await rotateSiteTokenAdmin(created.id, 'build', actor.id)
       expect(rotated.token).not.toBe(created.token)
 
-      const [afterRotate] = await db
-        .select({ tokenHash: site.tokenHash })
-        .from(site)
-        .where(eq(site.id, created.id))
-        .limit(1)
+      const afterRotate = (
+        await db
+          .select({ tokenHash: site.tokenHash })
+          .from(site)
+          .where(eq(site.id, created.id))
+          .limit(1)
+      ).at(0)
       expect(afterRotate?.tokenHash).toBe(
         createHash('sha256').update(rotated.token).digest('hex'),
       )
@@ -228,15 +241,17 @@ describe.skipIf(!hasDb)('admin', () => {
   it('invites a member by email, accepts, and refuses removing the last owner', async () => {
     const suffix = crypto.randomUUID()
     const actor = await createActor(suffix)
-    const [invitee] = await db
-      .insert(user)
-      .values({
-        id: crypto.randomUUID(),
-        name: `Invitee ${suffix}`,
-        email: `invitee-${suffix}@test.local`,
-        emailVerified: true,
-      })
-      .returning()
+    const invitee = (
+      await db
+        .insert(user)
+        .values({
+          id: crypto.randomUUID(),
+          name: `Invitee ${suffix}`,
+          email: `invitee-${suffix}@test.local`,
+          emailVerified: true,
+        })
+        .returning()
+    ).at(0)
     if (!invitee) throw new Error('Failed to create invitee')
 
     const orgIds: string[] = []
@@ -257,12 +272,13 @@ describe.skipIf(!hasDb)('admin', () => {
         role: 'owner',
         actorId: actor.id,
       })
-      expect(invitation.token).toMatch(/^[0-9a-f]{64}$/)
+      const token = await linkTokenFor(invitation.id, actor.id)
+      expect(token).toMatch(/^[0-9a-f]{64}$/)
 
       const message = await findMailpitMessage(inviteEmail)
       expect(message).toBeDefined()
 
-      await acceptInvitation({ token: invitation.token, userId: invitee.id })
+      await acceptInvitation({ token, userId: invitee.id })
 
       const members = await listMembers(org.id)
       expect(members).toEqual(
@@ -289,26 +305,30 @@ describe.skipIf(!hasDb)('admin', () => {
   it('rejects duplicate invites, existing members, and email-mismatched accepts', async () => {
     const suffix = crypto.randomUUID()
     const actor = await createActor(suffix)
-    const [invitee] = await db
-      .insert(user)
-      .values({
-        id: crypto.randomUUID(),
-        name: `Invitee ${suffix}`,
-        email: `invitee-${suffix}@test.local`,
-        emailVerified: true,
-      })
-      .returning()
+    const invitee = (
+      await db
+        .insert(user)
+        .values({
+          id: crypto.randomUUID(),
+          name: `Invitee ${suffix}`,
+          email: `invitee-${suffix}@test.local`,
+          emailVerified: true,
+        })
+        .returning()
+    ).at(0)
     if (!invitee) throw new Error('Failed to create invitee')
 
-    const [stranger] = await db
-      .insert(user)
-      .values({
-        id: crypto.randomUUID(),
-        name: `Stranger ${suffix}`,
-        email: `stranger-${suffix}@test.local`,
-        emailVerified: true,
-      })
-      .returning()
+    const stranger = (
+      await db
+        .insert(user)
+        .values({
+          id: crypto.randomUUID(),
+          name: `Stranger ${suffix}`,
+          email: `stranger-${suffix}@test.local`,
+          emailVerified: true,
+        })
+        .returning()
+    ).at(0)
     if (!stranger) throw new Error('Failed to create stranger')
 
     const orgIds: string[] = []
@@ -330,6 +350,7 @@ describe.skipIf(!hasDb)('admin', () => {
         actorId: actor.id,
       })
       expect(first.email).toBe(inviteEmail)
+      const firstToken = await linkTokenFor(first.id, actor.id)
 
       await expect(
         inviteMember({
@@ -341,10 +362,10 @@ describe.skipIf(!hasDb)('admin', () => {
       ).rejects.toThrow('An invitation is already pending for this email')
 
       await expect(
-        acceptInvitation({ token: first.token, userId: stranger.id }),
+        acceptInvitation({ token: firstToken, userId: stranger.id }),
       ).rejects.toThrow('Signed-in email does not match this invitation')
 
-      await acceptInvitation({ token: first.token, userId: invitee.id })
+      await acceptInvitation({ token: firstToken, userId: invitee.id })
 
       await expect(
         inviteMember({
@@ -362,26 +383,30 @@ describe.skipIf(!hasDb)('admin', () => {
   it('lists users with memberships grouped and sorted by organization name', async () => {
     const suffix = crypto.randomUUID()
     const actor = await createActor(suffix)
-    const [member] = await db
-      .insert(user)
-      .values({
-        id: crypto.randomUUID(),
-        name: `Member ${suffix}`,
-        email: `member-${suffix}@test.local`,
-        emailVerified: true,
-      })
-      .returning()
+    const member = (
+      await db
+        .insert(user)
+        .values({
+          id: crypto.randomUUID(),
+          name: `Member ${suffix}`,
+          email: `member-${suffix}@test.local`,
+          emailVerified: true,
+        })
+        .returning()
+    ).at(0)
     if (!member) throw new Error('Failed to create member')
 
-    const [loner] = await db
-      .insert(user)
-      .values({
-        id: crypto.randomUUID(),
-        name: `Loner ${suffix}`,
-        email: `loner-${suffix}@test.local`,
-        emailVerified: true,
-      })
-      .returning()
+    const loner = (
+      await db
+        .insert(user)
+        .values({
+          id: crypto.randomUUID(),
+          name: `Loner ${suffix}`,
+          email: `loner-${suffix}@test.local`,
+          emailVerified: true,
+        })
+        .returning()
+    ).at(0)
     if (!loner) throw new Error('Failed to create loner')
 
     const orgIds: string[] = []

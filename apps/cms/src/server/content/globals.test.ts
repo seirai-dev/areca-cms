@@ -68,10 +68,9 @@ const future = () => new Date(Date.now() + 86_400_000).toISOString()
 
 /** The one `$global` entry of a section. */
 async function sectionEntry(globalId: string) {
-  const [row] = await db
-    .select()
-    .from(entry)
-    .where(eq(entry.collectionId, globalId))
+  const row = (
+    await db.select().from(entry).where(eq(entry.collectionId, globalId))
+  ).at(0)
   if (!row) throw new Error('section entry missing')
   return row
 }
@@ -159,10 +158,9 @@ describe.skipIf(!hasDb)('site content globals (server layer)', () => {
   it('keeps the same section and entry when the fields are updated', async () => {
     await withTestSite(async (ctx) => {
       const first = await upsertGlobal(ctx.site.id, companyInfo, ctx.actor.id)
-      const [before] = await db
-        .select()
-        .from(entry)
-        .where(eq(entry.collectionId, first.id))
+      const before = (
+        await db.select().from(entry).where(eq(entry.collectionId, first.id))
+      ).at(0)
 
       const second = await upsertGlobal(
         ctx.site.id,
@@ -599,9 +597,7 @@ describe.skipIf(!hasDb)('site content globals (server layer)', () => {
         .select()
         .from(entryRevision)
         .where(eq(entryRevision.entryId, row.id))
-      const withSeo = revisions.find(
-        (revision) => revision.data && SEO_KEY in revision.data,
-      )
+      const withSeo = revisions.find((revision) => SEO_KEY in revision.data)
       expect(withSeo).toBeDefined()
 
       await upsertGlobal(ctx.site.id, { ...home, seo: false }, ctx.actor.id)

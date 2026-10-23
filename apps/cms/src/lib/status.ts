@@ -74,8 +74,8 @@ export const PUBLICATION_STATUS: Record<
   StatusMeta & { title: () => string }
 > = {
   demo: {
-    label: () => 'Demo ready',
-    title: () => 'Demo publication — not production live',
+    label: () => m.golive_demo_ready(),
+    title: () => m.golive_title_demo(),
     tone: 'warning',
     icon: 'box',
   },

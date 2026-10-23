@@ -21,7 +21,9 @@ test('unauthenticated / redirects to /login', async ({ page }) => {
   await page.goto('/')
   await expect(page).toHaveURL(/\/login/)
   await authForm(page)
-  await expect(page.getByRole('heading', { name: /^Sign in to / })).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: /^Sign in to / }),
+  ).toBeVisible()
 })
 
 test('wrong password shows an inline error in the card', async ({ page }) => {

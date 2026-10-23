@@ -12,13 +12,20 @@ import {
 } from '#/db/schema'
 import type { EventKey } from '#/lib/notifications'
 
+import { hashToken } from '#/server/security/token-hash'
+
 import { writeRule } from './preferences.ts'
 import {
   notifyInviteAccepted,
   notifyPublicationFailed,
   notifyPublicationLive,
-  notifyScheduleFailed,
+  deliverScheduleFailed,
+  scheduleFailedSubject,
 } from './triggers.ts'
+import {
+  processPublicationEvents,
+  queueScheduleFailedEvent,
+} from './publication-events.ts'
 import {
   addMember,
   createTestSite,
@@ -244,18 +251,18 @@ describe('scheduled publish failed', () => {
     const { site, org, requester, editor, ownerTwo, agencyAdmin } =
       await setup()
     const fingerprint = `fp-${crypto.randomUUID()}`
-    const subjectId = `schedule:${site.id}:${fingerprint}`
+    const subjectId = scheduleFailedSubject(site.id, fingerprint)
+    const input = {
+      siteId: site.id,
+      fingerprint,
+      scheduledBy: [editor.id],
+    }
 
-    await notifyScheduleFailed({
-      siteId: site.id,
-      scheduledBy: [editor.id],
-      fingerprint,
-    })
-    await notifyScheduleFailed({
-      siteId: site.id,
-      scheduledBy: [editor.id],
-      fingerprint,
-    })
+    // The failure's state change queues the notice; a repeat queues nothing.
+    await queueScheduleFailedEvent(db, input)
+    await queueScheduleFailedEvent(db, input)
+    await processPublicationEvents({ only: { siteIds: [site.id] } })
+    await processPublicationEvents({ only: { siteIds: [site.id] } })
 
     expect(
       await rowFor('schedule.failed', subjectId, requester.id),
@@ -339,7 +346,7 @@ describe('invitation accepted', () => {
 })
 
 describe('never fails the caller', () => {
-  it('resolves for publications, schedules and invitations that do not exist', async () => {
+  it('resolves for publications and invitations that do not exist', async () => {
     await expect(
       notifyPublicationLive(crypto.randomUUID()),
     ).resolves.toBeUndefined()
@@ -347,14 +354,18 @@ describe('never fails the caller', () => {
       notifyPublicationFailed(crypto.randomUUID(), { stuck: true }),
     ).resolves.toBeUndefined()
     await expect(
-      notifyScheduleFailed({
-        siteId: crypto.randomUUID(),
+      notifyInviteAccepted(crypto.randomUUID(), crypto.randomUUID()),
+    ).resolves.toBeUndefined()
+  })
+
+  it('treats a schedule whose site is gone as nothing to tell', async () => {
+    // Unlike the wrappers above, this throws on a database failure so the
+    // events loop retries it. A missing site is not a failure.
+    await expect(
+      deliverScheduleFailed(crypto.randomUUID(), {
         scheduledBy: [],
         fingerprint: 'x',
       }),
-    ).resolves.toBeUndefined()
-    await expect(
-      notifyInviteAccepted(crypto.randomUUID(), crypto.randomUUID()),
     ).resolves.toBeUndefined()
   })
 })
@@ -367,7 +378,7 @@ async function createInvitation(orgId: string, senderId: string | null) {
       email: `invitee-${crypto.randomUUID()}@test.local`,
       organizationId: orgId,
       role: 'editor',
-      token: crypto.randomUUID(),
+      tokenHash: hashToken(crypto.randomUUID()),
       expiresAt: new Date(Date.now() + 86_400_000),
       acceptedAt: new Date(),
     })

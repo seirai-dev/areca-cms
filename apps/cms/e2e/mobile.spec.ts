@@ -8,7 +8,9 @@ test.use({
   hasTouch: true,
 })
 
-test('phone: top bar, bottom tab bar and the Go-live pill', async ({ page }) => {
+test('phone: top bar, bottom tab bar and the Go-live pill', async ({
+  page,
+}) => {
   await login(page, OWNER)
   // Pick the site on the picker, or start from it when it is the only one.
   if (!/\/sites\/[^/]+/.test(page.url())) await openSite(page, ACME_SITE)
@@ -37,7 +39,10 @@ test('phone: top bar, bottom tab bar and the Go-live pill', async ({ page }) => 
     .getByRole('link', { name: /Articles/ })
     .click()
   await expect(page).toHaveURL(/\/c\/articles$/)
-  await expect(page.getByTestId('site-content')).toHaveAttribute('data-ready', 'true')
+  await expect(page.getByTestId('site-content')).toHaveAttribute(
+    'data-ready',
+    'true',
+  )
 
   // Library is a tab.
   await tabs.getByRole('link', { name: 'Library' }).click()
@@ -55,12 +60,17 @@ test('phone: top bar, bottom tab bar and the Go-live pill', async ({ page }) => 
 
   // Overview tab.
   await tabs.getByRole('link', { name: 'Overview' }).click()
-  await expect(page).toHaveURL(new RegExp(`${siteUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`))
+  await expect(page).toHaveURL(
+    new RegExp(`${siteUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`),
+  )
 
   // The Go-live pill in the top bar opens the panel as a sheet.
   const pill = top.getByTestId('golive-pill')
   await expect(pill).toBeVisible()
-  await expect(pill).toHaveAttribute('data-state', /never-live|ready|up-to-date/)
+  await expect(pill).toHaveAttribute(
+    'data-state',
+    /never-live|ready|up-to-date/,
+  )
   await pill.click()
   await expect(page).toHaveURL(/[?&]panel=golive/)
   const panel = page.getByTestId('golive-panel')

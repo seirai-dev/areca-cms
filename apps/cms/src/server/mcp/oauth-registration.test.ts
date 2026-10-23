@@ -13,8 +13,17 @@ describe('registrationApplicationType', () => {
     ['VS Code loopback', ['http://127.0.0.1:33418/', 'http://127.0.0.1/']],
     ['Gemini CLI', ['http://localhost:45123/oauth/callback']],
     ['IPv6 loopback', ['http://[::1]:9000/cb']],
-    ['VS Code mixed', ['https://vscode.dev/redirect', 'http://127.0.0.1:33418/']],
-    ['Cursor mixed', ['https://www.cursor.com/agents/mcp/oauth/callback', 'http://localhost:8787/callback']],
+    [
+      'VS Code mixed',
+      ['https://vscode.dev/redirect', 'http://127.0.0.1:33418/'],
+    ],
+    [
+      'Cursor mixed',
+      [
+        'https://www.cursor.com/agents/mcp/oauth/callback',
+        'http://localhost:8787/callback',
+      ],
+    ],
   ])('registers %s as native', (_label, redirect_uris) => {
     expect(registrationApplicationType({ redirect_uris })).toBe('native')
   })
@@ -22,7 +31,9 @@ describe('registrationApplicationType', () => {
   it('leaves all-https registrations to the plugin web rules', () => {
     expect(
       registrationApplicationType({
-        redirect_uris: ['https://chatgpt.com/connector_platform_oauth_redirect'],
+        redirect_uris: [
+          'https://chatgpt.com/connector_platform_oauth_redirect',
+        ],
       }),
     ).toBeUndefined()
     expect(
@@ -37,7 +48,13 @@ describe('registrationApplicationType', () => {
     ['LAN http', ['http://192.168.1.20:3000/cb']],
     ['loopback lookalike', ['http://localhost.evil.example/cb']],
     ['0.0.0.0', ['http://0.0.0.0:8000/cb']],
-    ['custom scheme alongside loopback', ['cursor://anysphere.cursor-mcp/oauth/callback', 'http://localhost:8787/callback']],
+    [
+      'custom scheme alongside loopback',
+      [
+        'cursor://anysphere.cursor-mcp/oauth/callback',
+        'http://localhost:8787/callback',
+      ],
+    ],
     ['custom scheme only', ['com.example.app:/callback']],
     ['https loopback', ['https://localhost:8443/cb']],
     ['not a URL', ['localhost:8787/callback']],

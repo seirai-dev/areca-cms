@@ -1,15 +1,16 @@
 import { createServerFn } from '@tanstack/react-start'
 import { eq } from 'drizzle-orm'
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import { db } from '#/db'
 import { site } from '#/db/schema'
 import { ID_MAX_LENGTH } from '#/lib/content-limits'
-import { canonicalLocale, localeTagSchema, readLocale } from '#/lib/content-locale'
 import {
-  requireOrgMemberOrNotFound,
-  requireUser,
-} from '#/lib/session.server'
+  canonicalLocale,
+  localeTagSchema,
+  readLocale,
+} from '#/lib/content-locale'
+import { requireOrgMemberOrNotFound, requireUser } from '#/lib/session.server'
 import { m } from '#/paraglide/messages'
 import { loadAssetLookup } from '#/server/assets'
 import { richTextAssetRefs } from '#/server/assets/richtext-ownership'
@@ -71,25 +72,35 @@ export const translateContentFn = createServerFn({
       throw new ValidationError([
         {
           path: 'to',
-          message: 'This site has one language, so there is nothing to translate.',
+          message:
+            'This site has one language, so there is nothing to translate.',
         },
       ])
     }
     const to = canonicalLocale(data.to)
     if (!to || !languages.all.includes(to)) {
       throw new ValidationError([
-        { path: 'to', message: 'This language is not one of the site languages.' },
+        {
+          path: 'to',
+          message: 'This language is not one of the site languages.',
+        },
       ])
     }
     const from = data.from ? canonicalLocale(data.from) : languages.main
     if (!from || !languages.all.includes(from)) {
       throw new ValidationError([
-        { path: 'from', message: 'This language is not one of the site languages.' },
+        {
+          path: 'from',
+          message: 'This language is not one of the site languages.',
+        },
       ])
     }
     if (from === to) {
       throw new ValidationError([
-        { path: 'to', message: 'Choose a different language to translate into.' },
+        {
+          path: 'to',
+          message: 'Choose a different language to translate into.',
+        },
       ])
     }
 

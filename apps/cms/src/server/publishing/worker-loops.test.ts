@@ -2,7 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { resetHeartbeatsForTest, tickAgeSeconds } from '#/server/ops/heartbeat'
 
-import { createJobPool, startWorkerLoops, stopWorkerLoops } from './worker.ts'
+import {
+  createJobPool,
+  drainWorkerState,
+  startWorkerLoops,
+  stopWorkerLoops,
+} from './worker.ts'
 
 describe('worker loops', () => {
   beforeEach(() => {
@@ -101,7 +106,7 @@ describe('job pool', () => {
     const finish = new Map<string, () => void>()
     const pool = createJobPool({
       concurrency: 2,
-      claim: async () => queue.shift() ?? null,
+      claim: async () => (queue.length > 0 ? queue.shift()! : null),
       run: (j: { id: string }) =>
         new Promise<void>((resolve) => {
           started.push(j.id)
@@ -125,7 +130,7 @@ describe('job pool', () => {
     const ran: string[] = []
     const pool = createJobPool({
       concurrency: 1,
-      claim: async () => queue.shift() ?? null,
+      claim: async () => (queue.length > 0 ? queue.shift()! : null),
       run: async (j: { id: string }) => {
         ran.push(j.id)
         if (j.id === 'x') throw new Error('boom')
@@ -167,7 +172,7 @@ describe('job pool', () => {
 
   it('drain is bounded and stops claiming', async () => {
     const queue = [job('a'), job('b')]
-    const claim = vi.fn(async () => queue.shift() ?? null)
+    const claim = vi.fn(async () => (queue.length > 0 ? queue.shift()! : null))
     const pool = createJobPool({
       concurrency: 1,
       claim,
@@ -179,5 +184,51 @@ describe('job pool', () => {
     expect(Date.now() - started).toBeLessThan(1000)
     await pool.fill()
     expect(claim).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('shutdown drain', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    resetHeartbeatsForTest()
+  })
+  afterEach(() => vi.useRealTimers())
+
+  it('waits for a running loop tick, then aborts it and reports the timeout', async () => {
+    const state = startWorkerLoops(
+      {
+        processJobs: async () => {},
+        recover: async () => {},
+        schedule: async () => {},
+        mail: () => new Promise(() => {}), // a send that never returns
+      },
+      { intervalMs: 1000 },
+    )
+    state.abort = new AbortController()
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(state.inFlight.size).toBe(1)
+    stopWorkerLoops(state)
+
+    const drained = drainWorkerState(state, 100)
+    await vi.advanceTimersByTimeAsync(150)
+
+    await expect(drained).resolves.toBe(false)
+    expect(state.abort.signal.aborted).toBe(true)
+  })
+
+  it('reports a clean drain when nothing is running', async () => {
+    const state = startWorkerLoops(
+      {
+        processJobs: async () => {},
+        recover: async () => {},
+        schedule: async () => {},
+      },
+      { intervalMs: 1000 },
+    )
+    stopWorkerLoops(state)
+    state.abort = new AbortController()
+
+    await expect(drainWorkerState(state, 100)).resolves.toBe(true)
+    expect(state.abort.signal.aborted).toBe(false)
   })
 })

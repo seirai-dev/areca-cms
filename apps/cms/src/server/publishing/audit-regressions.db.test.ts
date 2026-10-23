@@ -32,6 +32,7 @@ import {
   recoverStaleJobs,
 } from './worker'
 import { runSchedulerTick } from './scheduler'
+import { jobOf } from './test-helpers'
 
 const fakeFetch: typeof fetch = async () =>
   Response.json({ items: [], total: 0 })
@@ -84,10 +85,10 @@ describe('audit publishing regressions', () => {
           actorId: b.actor.id,
         })
         if (!first.ok || !second.ok) throw new Error('fixture enqueue failed')
-        expect(first.job.deploymentResourceKey).toBe(
-          second.job.deploymentResourceKey,
+        expect(jobOf(first).deploymentResourceKey).toBe(
+          jobOf(second).deploymentResourceKey,
         )
-        expect(first.job.deploymentResourceKey).toBe(
+        expect(jobOf(first).deploymentResourceKey).toBe(
           createHash('sha256')
             .update('https://shared-dokploy.example.com\nshared-app')
             .digest('hex'),
@@ -135,13 +136,13 @@ describe('audit publishing regressions', () => {
             deploymentResourceKey: null,
             dispatchConnectionUrl: null,
           })
-          .where(eq(buildJob.id, first.job.id))
+          .where(eq(buildJob.id, jobOf(first).id))
         await db
           .delete(dokployCredential)
           .where(eq(dokployCredential.organizationId, a.org.id))
         const result = await pool.query(
           `SELECT 1 FROM (SELECT $1::text id, $2::text deployment_resource_key) q WHERE EXISTS (${resourceBlockerSql('https://shared-dokploy.example.com')})`,
-          [second.job.id, second.job.deploymentResourceKey],
+          [jobOf(second).id, jobOf(second).deploymentResourceKey],
         )
         expect(result.rowCount).toBe(1)
       }),
@@ -170,8 +171,8 @@ describe('audit publishing regressions', () => {
         const deploy = vi.fn(mock.deploy)
         const adapter = { ...mock, deploy, waitForCompletion: () => waiting }
         const running = [
-          processJob(first.job, { adapter }),
-          processJob(second.job, { adapter }),
+          processJob(jobOf(first), { adapter }),
+          processJob(jobOf(second), { adapter }),
         ]
         try {
           await vi.waitFor(() => expect(deploy).toHaveBeenCalledOnce())
@@ -181,7 +182,7 @@ describe('audit publishing regressions', () => {
             .where(
               and(
                 eq(buildJob.status, 'queued'),
-                sql`${buildJob.id} in (${first.job.id}, ${second.job.id})`,
+                sql`${buildJob.id} in (${jobOf(first).id}, ${jobOf(second).id})`,
               ),
             )
           expect(queued).toHaveLength(1)
@@ -221,14 +222,14 @@ describe('audit publishing regressions', () => {
       await db
         .update(buildJob)
         .set({ status: 'failed', dispatchUncertain: true })
-        .where(eq(buildJob.id, result.job.id))
+        .where(eq(buildJob.id, jobOf(result).id))
       await expect(deleteSite(ctx.site.id, ctx.actor.id)).rejects.toThrow(
         /uncertain deployments/,
       )
       await db
         .update(buildJob)
         .set({ dispatchUncertain: false })
-        .where(eq(buildJob.id, result.job.id))
+        .where(eq(buildJob.id, jobOf(result).id))
       await deleteSite(ctx.site.id, ctx.actor.id)
       expect(
         await db.select().from(site).where(eq(site.id, ctx.site.id)),
@@ -275,10 +276,12 @@ describe('audit publishing regressions', () => {
           )
         expect(job).toBeTruthy()
         await processJob(job, { adapter: failure })
-        const [backoff] = await db
-          .select()
-          .from(schedulerBackoff)
-          .where(eq(schedulerBackoff.siteId, ctx.site.id))
+        const backoff = (
+          await db
+            .select()
+            .from(schedulerBackoff)
+            .where(eq(schedulerBackoff.siteId, ctx.site.id))
+        ).at(0)
         expect(backoff?.failureCount).toBe(attempt)
         await runSchedulerTick()
         expect(
@@ -309,10 +312,12 @@ describe('audit publishing regressions', () => {
         .set({ scheduledVersion: crypto.randomUUID() })
         .where(eq(entry.id, row.id))
       await runSchedulerTick()
-      const [reset] = await db
-        .select()
-        .from(schedulerBackoff)
-        .where(eq(schedulerBackoff.siteId, ctx.site.id))
+      const reset = (
+        await db
+          .select()
+          .from(schedulerBackoff)
+          .where(eq(schedulerBackoff.siteId, ctx.site.id))
+      ).at(0)
       expect(reset?.failureCount).toBe(0)
       const [queued] = await db
         .select()
@@ -345,7 +350,7 @@ describe('audit publishing regressions', () => {
         actorId: ctx.actor.id,
       })
       if (!result.ok) throw new Error('fixture enqueue failed')
-      await processJob(result.job, {
+      await processJob(jobOf(result), {
         resolveAdapter: async () => {
           throw new Error('credentials unavailable')
         },
@@ -357,7 +362,7 @@ describe('audit publishing regressions', () => {
           .where(eq(opsCounter.name, 'publication_failures'))
       )[0].value
       expect(after).toBeGreaterThanOrEqual(before + 1)
-      await db.delete(buildJob).where(eq(buildJob.id, result.job.id))
+      await db.delete(buildJob).where(eq(buildJob.id, jobOf(result).id))
       expect(
         (
           await db
@@ -377,7 +382,7 @@ describe('audit publishing regressions', () => {
           status: 'building',
           leaseExpiresAt: new Date(Date.now() - 1000),
         })
-        .where(eq(buildJob.id, next.job.id))
+        .where(eq(buildJob.id, jobOf(next).id))
       await recoverStaleJobs()
       expect(
         (

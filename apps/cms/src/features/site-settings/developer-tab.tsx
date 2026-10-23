@@ -1,8 +1,10 @@
 import * as React from 'react'
+import { useRouter } from '@tanstack/react-router'
 import { ArrowsClockwise, Plugs, Stack } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
 import { errorMessage } from '#/lib/admin/helpers'
+import { isValidSlug } from '#/lib/slug'
 import { Button } from '#/components/ui/button'
 import { ConfirmDialog } from '#/components/ui/confirm-dialog'
 import { CopyButton } from '#/components/ui/copy-button'
@@ -38,6 +40,13 @@ export function DeveloperTab({
 }) {
   const [token, setToken] = React.useState<string | null>(null)
   const [schemaToken, setSchemaToken] = React.useState<string | null>(null)
+  const router = useRouter()
+  const [editingSlug, setEditingSlug] = React.useState(false)
+  const [slugDraft, setSlugDraft] = React.useState(site.slug)
+  const [slugConfirm, setSlugConfirm] = React.useState(false)
+  const [slugError, setSlugError] = React.useState<string | null>(null)
+  const slugChanged = slugDraft.trim() !== site.slug
+  const slugValid = isValidSlug(slugDraft.trim())
   const origin = useOrigin()
   const commands = [
     'npm install @areca-cms/site-sdk',
@@ -57,29 +66,131 @@ export function DeveloperTab({
           <label htmlFor="settings-site-slug" className="sr-only">
             {m.settings_site_key_title()}
           </label>
-          <div className="flex items-center gap-2">
-            <Input
-              id="settings-site-slug"
-              data-testid="settings-site-slug"
-              readOnly
-              value={site.slug}
-              className="font-mono text-[13px]"
-              onFocus={(event) => event.currentTarget.select()}
-            />
-            <CopyButton
-              value={site.slug}
-              label={m.sites_slug_copy()}
-              copiedLabel={m.sites_slug_copied_label()}
-              toastMessage={m.sites_slug_copied()}
-              aria-label={m.sites_slug_copy_aria()}
-              variant="secondary"
-              size="md"
-            />
-          </div>
-          <p className="text-caption font-normal text-text-muted">
-            {m.settings_site_key_hint()}
-          </p>
+          {editingSlug ? (
+            <form
+              className="grid gap-2"
+              onSubmit={(event) => {
+                event.preventDefault()
+                if (slugChanged && slugValid) setSlugConfirm(true)
+              }}
+            >
+              <Input
+                id="settings-site-slug"
+                data-testid="settings-site-slug-input"
+                autoFocus
+                spellCheck={false}
+                autoComplete="off"
+                value={slugDraft}
+                onChange={(event) => {
+                  setSlugDraft(event.target.value)
+                  setSlugError(null)
+                }}
+                aria-invalid={slugDraft !== '' && !slugValid}
+                className="font-mono text-[13px]"
+              />
+              <p
+                className="text-caption font-normal text-text-muted"
+                data-testid="settings-site-slug-hint"
+              >
+                {slugError ??
+                  (slugDraft !== '' && !slugValid
+                    ? m.server_site_slug_invalid()
+                    : m.settings_site_key_draft_hint())}
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={
+                    !slugChanged || !slugValid || settings.changeSlug.isPending
+                  }
+                  data-testid="settings-site-slug-save"
+                >
+                  {m.settings_site_key_save()}
+                </Button>
+                <Button
+                  type="button"
+                  variant="quiet"
+                  size="sm"
+                  onClick={() => {
+                    setEditingSlug(false)
+                    setSlugDraft(site.slug)
+                    setSlugError(null)
+                  }}
+                >
+                  {m.shared_cancel()}
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <div className="grid gap-2">
+              {/* Full width on its own line: the key is the thing to read. */}
+              <Input
+                id="settings-site-slug"
+                data-testid="settings-site-slug"
+                readOnly
+                value={site.slug}
+                className="w-full min-w-0 font-mono text-[13px]"
+                onFocus={(event) => event.currentTarget.select()}
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <CopyButton
+                  value={site.slug}
+                  label={m.sites_slug_copy()}
+                  copiedLabel={m.sites_slug_copied_label()}
+                  toastMessage={m.sites_slug_copied()}
+                  aria-label={m.sites_slug_copy_aria()}
+                  variant="secondary"
+                  size="md"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="md"
+                  onClick={() => {
+                    setSlugDraft(site.slug)
+                    setEditingSlug(true)
+                  }}
+                  data-testid="settings-site-slug-change"
+                >
+                  {m.settings_site_key_change()}
+                </Button>
+              </div>
+            </div>
+          )}
+          {editingSlug ? null : (
+            <p className="text-caption font-normal text-text-muted">
+              {m.settings_site_key_hint()}
+            </p>
+          )}
         </div>
+        <ConfirmDialog
+          open={slugConfirm}
+          onOpenChange={setSlugConfirm}
+          title={m.settings_site_key_change_title()}
+          description={m.settings_site_key_change_description({
+            from: site.slug,
+            to: slugDraft.trim(),
+          })}
+          confirmLabel={m.settings_site_key_change_confirm()}
+          variant="destructive"
+          testId="change-site-key-dialog"
+          onConfirm={async () => {
+            const next = slugDraft.trim()
+            try {
+              await settings.changeSlug.mutateAsync(next)
+              toast.success(m.settings_site_key_changed())
+              setEditingSlug(false)
+              // The connector URL on Connect AI now carries the new key.
+              void router.navigate({
+                to: '/sites/$siteId/connect-ai',
+                params: { siteId: site.id },
+              })
+            } catch (error) {
+              setSlugError(errorMessage(error))
+            }
+          }}
+        />
       </SettingsSection>
 
       <SettingsSection

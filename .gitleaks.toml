@@ -24,4 +24,7 @@ paths = [
   # Fake MCP keys and OAuth tokens in install-snippet and OAuth flow tests.
   '''(^|/)apps/cms/src/lib/mcp-install\.test\.ts$''',
   '''(^|/)apps/cms/src/server/mcp/oauth-flow\.test\.ts$''',
+  # Fake BETTER_AUTH_SECRET values proving the production placeholder checks
+  # (in history since c7147b3 and 4c6a6b9).
+  '''(^|/)apps/cms/src/lib/secret-placeholders\.test\.ts$''',
 ]

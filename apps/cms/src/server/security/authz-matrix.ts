@@ -44,11 +44,13 @@ import * as mcpKeyFns from '#/server/fn/mcp-keys'
 import * as mcpOauthFns from '#/server/fn/mcp-oauth'
 import * as meFns from '#/server/fn/me'
 import * as overviewFns from '#/server/fn/overview'
+import * as pausedJobFns from '#/server/fn/paused-jobs'
 import * as publishingFns from '#/server/fn/publishing'
 import * as securityFns from '#/server/fn/security'
 import * as setupFns from '#/server/fn/setup'
 import { publishEntry, updateDraft } from '#/server/content/entries'
 import { sampleRichText } from '#/server/content/test-utils'
+import { hashToken } from '#/server/security/token-hash'
 
 import type { ActorName, Expected, Policy, World } from './authz-harness'
 
@@ -251,6 +253,23 @@ export const ROWS: Row[] = [
     },
   },
   {
+    name: 'changeSiteSlugFn',
+    fn: adminFns.changeSiteSlugFn,
+    policy: 'agency',
+    prepare: async (w) => {
+      const s = await w.fresh.site()
+      return {
+        // Unique per actor: an allowed call takes the slug, so reusing it
+        // would turn the next allowed call into a conflict.
+        data: {
+          id: s.id,
+          slug: `hijacked-${crypto.randomUUID().slice(0, 8)}`,
+        },
+        untouched: exists(site, and(eq(site.id, s.id), eq(site.slug, s.slug))),
+      }
+    },
+  },
+  {
     name: 'setSiteLanguagesFn',
     fn: adminFns.setSiteLanguagesFn,
     policy: 'agency',
@@ -383,7 +402,29 @@ export const ROWS: Row[] = [
         data: { id: inv.id },
         untouched: exists(
           invitation,
-          and(eq(invitation.id, inv.id), eq(invitation.token, inv.token)),
+          and(
+            eq(invitation.id, inv.id),
+            eq(invitation.tokenHash, hashToken(inv.token)),
+          ),
+        ),
+      }
+    },
+  },
+  {
+    name: 'regenerateInvitationLinkFn',
+    hidden: true,
+    fn: adminFns.regenerateInvitationLinkFn,
+    policy: 'org-owner',
+    prepare: async (w) => {
+      const inv = await w.fresh.invitation('X')
+      return {
+        data: { id: inv.id },
+        untouched: exists(
+          invitation,
+          and(
+            eq(invitation.id, inv.id),
+            eq(invitation.tokenHash, hashToken(inv.token)),
+          ),
         ),
       }
     },
@@ -431,6 +472,13 @@ export const ROWS: Row[] = [
     fn: contentFns.listCollectionsFn,
     policy: 'org-editor',
     prepare: (w) => ({ data: { siteId: w.X.site.id } }),
+  },
+  {
+    name: 'fieldDataUsageFn',
+    hidden: true,
+    fn: contentFns.fieldDataUsageFn,
+    policy: 'org-editor',
+    prepare: (w) => ({ data: { siteId: w.X.site.id, key: 'articles' } }),
   },
   {
     name: 'listEntriesFn',
@@ -1008,6 +1056,28 @@ export const ROWS: Row[] = [
     prepare: () => ({ data: undefined }),
   },
 
+  // ---------------------------------------------------------------- paused-jobs.ts
+  {
+    name: 'listPausedJobsFn',
+    fn: pausedJobFns.listPausedJobsFn,
+    policy: 'agency',
+    prepare: () => ({ data: undefined }),
+  },
+  {
+    name: 'retryPausedJobFn',
+    fn: pausedJobFns.retryPausedJobFn,
+    policy: 'agency-fresh',
+    note: 'An item that is not paused is not reset.',
+    prepare: () => ({ data: { kind: 'storage', id: 'no-such-storage-key' } }),
+  },
+  {
+    name: 'dismissPausedJobFn',
+    fn: pausedJobFns.dismissPausedJobFn,
+    policy: 'agency-fresh',
+    note: 'An item that is not paused is not dismissed.',
+    prepare: () => ({ data: { kind: 'storage', id: 'no-such-storage-key' } }),
+  },
+
   // ---------------------------------------------------------------- notifications.ts
   {
     name: 'getMyNotificationsFn',
@@ -1254,6 +1324,31 @@ export const ROWS: Row[] = [
     prepare: () => ({ data: { locale: 'en' } }),
   },
   {
+    name: 'listMySessionsFn',
+    fn: accountFns.listMySessionsFn,
+    policy: 'user',
+    note: 'Lists only the caller own live sessions, without tokens (asserted in own-sessions.test.ts).',
+    override: { adminNoMfa: 'mfa' },
+    prepare: () => ({ data: undefined }),
+  },
+  {
+    name: 'revokeMySessionFn',
+    fn: accountFns.revokeMySessionFn,
+    policy: 'user',
+    tolerant: true,
+    note: 'Own sessions only. An unknown id answers NotFound for every signed-in caller; ownership and the current-session refusal are asserted in own-sessions.test.ts.',
+    override: { adminNoMfa: 'mfa' },
+    prepare: () => ({ data: { sessionId: 'no-such-session' } }),
+  },
+  {
+    name: 'revokeMyOtherSessionsFn',
+    fn: accountFns.revokeMyOtherSessionsFn,
+    policy: 'user',
+    note: 'Revokes only the caller own other sessions; the current session is kept.',
+    override: { adminNoMfa: 'mfa' },
+    prepare: () => ({ data: undefined }),
+  },
+  {
     name: 'sendPasswordResetLinkFn',
     fn: accountFns.sendPasswordResetLinkFn,
     policy: 'agency',
@@ -1432,6 +1527,7 @@ export const ALL_FN_MODULES = {
   'mcp-oauth': mcpOauthFns,
   me: meFns,
   overview: overviewFns,
+  'paused-jobs': pausedJobFns,
   publishing: publishingFns,
   security: securityFns,
   setup: setupFns,

@@ -1,3 +1,4 @@
+import * as React from 'react'
 import type { ReactNode } from 'react'
 import { ThemeProvider as NextThemesProvider, useTheme } from 'next-themes'
 import { Button } from '#/components/ui/button'
@@ -7,6 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '#/components/ui/dropdown-menu'
+import { useCspNonce } from '#/hooks/use-csp-nonce'
 import { m } from '#/paraglide/messages'
 import { Monitor, Moon, Sun } from '@phosphor-icons/react'
 
@@ -16,6 +18,9 @@ import { Monitor, Moon, Sun } from '@phosphor-icons/react'
  * the OS; the choice is persisted by next-themes in localStorage.
  */
 export function ThemeProvider({ children }: { children: ReactNode }) {
+  // next-themes writes an inline script (before first paint) and a style that
+  // suppresses transitions while the theme changes. Both need the nonce.
+  const nonce = useCspNonce()
   return (
     <NextThemesProvider
       attribute="class"
@@ -23,6 +28,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       enableSystem
       disableTransitionOnChange
       storageKey="areca.theme"
+      nonce={nonce}
     >
       {children}
     </NextThemesProvider>
@@ -31,7 +37,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
 export function ThemeToggle({ className }: { className?: string }) {
   const { theme, setTheme } = useTheme()
-  const Icon = theme === 'dark' ? Moon : theme === 'light' ? Sun : Monitor
+  // The stored choice is only known in the browser. Until mounted, show the
+  // server's icon so the first client render matches the HTML it hydrates.
+  const [mounted, setMounted] = React.useState(false)
+  React.useEffect(() => setMounted(true), [])
+  const shown = mounted ? theme : undefined
+  const Icon = shown === 'dark' ? Moon : shown === 'light' ? Sun : Monitor
 
   return (
     <DropdownMenu>
