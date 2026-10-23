@@ -1,3 +1,4 @@
+import * as React from 'react'
 import type { ReactNode } from 'react'
 import { ThemeProvider as NextThemesProvider, useTheme } from 'next-themes'
 import { Button } from '#/components/ui/button'
@@ -31,7 +32,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
 export function ThemeToggle({ className }: { className?: string }) {
   const { theme, setTheme } = useTheme()
-  const Icon = theme === 'dark' ? Moon : theme === 'light' ? Sun : Monitor
+  // The stored choice is only known in the browser. Until mounted, show the
+  // server's icon so the first client render matches the HTML it hydrates.
+  const [mounted, setMounted] = React.useState(false)
+  React.useEffect(() => setMounted(true), [])
+  const shown = mounted ? theme : undefined
+  const Icon = shown === 'dark' ? Moon : shown === 'light' ? Sun : Monitor
 
   return (
     <DropdownMenu>
