@@ -43,7 +43,7 @@ import type { Tx } from './members.ts'
 /** Longest internal block note an agency admin can write. */
 export const BLOCK_REASON_MAX_LENGTH = 500
 /** Longest display name a person can have. */
-export const PERSON_NAME_MAX_LENGTH = 120
+export { PERSON_NAME_MAX_LENGTH } from '#/lib/person-name'
 
 export type PersonRow = {
   id: string
@@ -99,18 +99,25 @@ async function selfDeleteBlockersIn(tx: Tx, person: PersonRow) {
     .innerJoin(organization, eq(membership.organizationId, organization.id))
     .where(and(eq(membership.userId, person.id), eq(membership.role, 'owner')))
     .orderBy(membership.organizationId)
-  const soleOwnerOf: string[] = []
+  const soleOwnerClients: Array<{ organizationId: string; name: string }> = []
   for (const row of owned) {
     await lockOrganization(tx, row.organizationId)
     if ((await countOwners(tx, row.organizationId)) <= 1) {
-      soleOwnerOf.push(row.name)
+      soleOwnerClients.push({
+        organizationId: row.organizationId,
+        name: row.name,
+      })
     }
   }
   const lastAdmin =
     person.isAgencyAdmin &&
     !person.blockedAt &&
     (await countActiveAgencyAdmins(tx)) <= 1
-  return { soleOwnerOf, lastAdmin }
+  return {
+    soleOwnerClients,
+    soleOwnerOf: soleOwnerClients.map((client) => client.name),
+    lastAdmin,
+  }
 }
 
 /**
