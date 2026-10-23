@@ -59,18 +59,20 @@ describe.skipIf(!hasDb)('0012 was_live correction', () => {
     await withTestSite(async (ctx) => {
       const ids = new Map<string, string>()
       for (const seed of seeds) {
-        const [pub] = await db
-          .insert(publication)
-          .values({
-            siteId: ctx.site.id,
-            snapshot: { schemaVersion: 1 } as never,
-            snapshotHash: seed.name,
-            status: seed.status,
-            publishingMode: seed.mode ?? 'production',
-            wasLive: true,
-            deployedAt: seed.deployedAt ?? null,
-          })
-          .returning()
+        const pub = (
+          await db
+            .insert(publication)
+            .values({
+              siteId: ctx.site.id,
+              snapshot: { schemaVersion: 1 } as never,
+              snapshotHash: seed.name,
+              status: seed.status,
+              publishingMode: seed.mode ?? 'production',
+              wasLive: true,
+              deployedAt: seed.deployedAt ?? null,
+            })
+            .returning()
+        ).at(0)
         if (!pub) throw new Error('seed publication')
         ids.set(seed.name, pub.id)
         if (seed.job) {
@@ -101,16 +103,20 @@ describe.skipIf(!hasDb)('0012 was_live correction', () => {
       }
 
       for (const seed of seeds) {
-        const [row] = await db
-          .select({ wasLive: publication.wasLive })
-          .from(publication)
-          .where(eq(publication.id, ids.get(seed.name)!))
+        const row = (
+          await db
+            .select({ wasLive: publication.wasLive })
+            .from(publication)
+            .where(eq(publication.id, ids.get(seed.name)!))
+        ).at(0)
         expect(row?.wasLive, seed.name).toBe(seed.keeps)
       }
-      const [after] = await db
-        .select({ wasLive: publication.wasLive })
-        .from(publication)
-        .where(eq(publication.id, clean!.id))
+      const after = (
+        await db
+          .select({ wasLive: publication.wasLive })
+          .from(publication)
+          .where(eq(publication.id, clean.id))
+      ).at(0)
       expect(after?.wasLive).toBe(false)
     })
   })

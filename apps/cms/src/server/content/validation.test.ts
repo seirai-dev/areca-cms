@@ -101,9 +101,7 @@ describe('buildEntrySchema / validateEntryData', () => {
     expect(result.ok).toBe(false)
     if (result.ok) return
     const paths = result.errors.map((e) => e.path)
-    expect(paths).toEqual(
-      expect.arrayContaining(['title', 'summary', 'slug']),
-    )
+    expect(paths).toEqual(expect.arrayContaining(['title', 'summary', 'slug']))
   })
 
   it('rejects empty richtext on publish', () => {

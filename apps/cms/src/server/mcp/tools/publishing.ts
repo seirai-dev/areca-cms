@@ -87,7 +87,9 @@ export function registerPublishingTools(registry: ToolRegistry): void {
           slug: change.slug,
           collection: change.collectionKey,
           kind: change.kind,
-          scheduledAt: change.scheduledAt ? new Date(change.scheduledAt).toISOString() : null,
+          scheduledAt: change.scheduledAt
+            ? new Date(change.scheduledAt).toISOString()
+            : null,
         })),
       }
     },
@@ -99,11 +101,19 @@ export function registerPublishingTools(registry: ToolRegistry): void {
     description:
       'Lists recent go lives of the site, newest first: publicationId, status (pending, building, live, failed, superseded, rolled_back), who requested it, and its build job. Use publicationId with rollback. Read-only.',
     inputSchema: z.object({
-      limit: z.number().int().min(1).max(50).optional().describe('How many to return, 1-50. Default 10.'),
+      limit: z
+        .number()
+        .int()
+        .min(1)
+        .max(50)
+        .optional()
+        .describe('How many to return, 1-50. Default 10.'),
     }),
     annotations: { readOnlyHint: true, idempotentHint: true },
     run: async (input, actor) => {
-      const rows = await listPublications(actor.siteId, { limit: input.limit ?? 10 })
+      const rows = await listPublications(actor.siteId, {
+        limit: input.limit ?? 10,
+      })
       return rows.map((row) => ({
         ...describePublication(row),
         requestedBy: row.requestedByName,
@@ -130,10 +140,20 @@ export function registerPublishingTools(registry: ToolRegistry): void {
     description:
       'Goes live: builds every ready change and deploys it, so the live site shows what is approved. Only call this when the user asks to go live. It queues a build; follow it with get_build_job or get_release_status. Requires a key with the "Allow going live" option.',
     inputSchema: z.object({
-      note: z.string().max(500).optional().describe('Short note saved with the publication, e.g. "Spring menu update".'),
+      note: z
+        .string()
+        .max(500)
+        .optional()
+        .describe(
+          'Short note saved with the publication, e.g. "Spring menu update".',
+        ),
     }),
     access: 'go-live',
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     run: async (input, actor: McpActor) => {
       const result = await requestPublication({
         siteId: actor.siteId,
@@ -160,7 +180,11 @@ export function registerPublishingTools(registry: ToolRegistry): void {
       'Goes live again with an earlier publication, which reverts the live site to it. Only call this when the user asks to roll back. Get publicationId from list_publications. Requires a key with the "Allow going live" option.',
     inputSchema: z.object({ publicationId: idSchema('publication') }),
     access: 'go-live',
-    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+    },
     run: async (input, actor) => {
       await loadPublicationInSite(actor, input.publicationId)
       await requestRollback({
@@ -183,12 +207,15 @@ export function registerPublishingTools(registry: ToolRegistry): void {
       'Cancels a build job that is still queued (not started). Running builds cannot be cancelled. Get jobId from get_release_status. Requires a key with the "Allow going live" option.',
     inputSchema: z.object({ jobId: idSchema('build job') }),
     access: 'go-live',
-    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+    },
     run: async (input, actor) => {
       await loadBuildJobInSite(actor, input.jobId)
       const job = await cancelJob(input.jobId, actor.userId)
       return describeJob(job)
     },
   })
-
 }

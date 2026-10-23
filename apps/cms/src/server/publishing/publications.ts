@@ -33,7 +33,9 @@ export function dbActorId(actorId: string | null | undefined) {
 }
 
 export async function getSiteOrThrow(siteId: string) {
-  const [row] = await db.select().from(site).where(eq(site.id, siteId)).limit(1)
+  const row = (
+    await db.select().from(site).where(eq(site.id, siteId)).limit(1)
+  ).at(0)
   if (!row) {
     throw new NotFoundError(m.server_site_not_found())
   }
@@ -150,11 +152,13 @@ export async function requestPublication(input: {
     await lockOrganizationForMutation(tx, preliminarySite.organizationId)
     const replay = await replayRequest(tx, input, 'publish', payload)
     if (replay) return { ok: true as const, ...replay }
-    const [lockedSite] = await tx
-      .select()
-      .from(site)
-      .where(eq(site.id, input.siteId))
-      .for('update')
+    const lockedSite = (
+      await tx
+        .select()
+        .from(site)
+        .where(eq(site.id, input.siteId))
+        .for('update')
+    ).at(0)
     if (!lockedSite) throw new NotFoundError(m.server_site_not_found())
     if (
       lockedSite.publishingMode !== 'demo' &&
@@ -167,21 +171,23 @@ export async function requestPublication(input: {
       }
     }
     if (input.schedulerFingerprint) {
-      const [pending] = await tx
-        .select()
-        .from(buildJob)
-        .where(
-          and(
-            eq(buildJob.siteId, input.siteId),
-            inArray(buildJob.status, [
-              'queued',
-              'building',
-              'validating',
-              'deploying',
-            ]),
-          ),
-        )
-        .limit(1)
+      const pending = (
+        await tx
+          .select()
+          .from(buildJob)
+          .where(
+            and(
+              eq(buildJob.siteId, input.siteId),
+              inArray(buildJob.status, [
+                'queued',
+                'building',
+                'validating',
+                'deploying',
+              ]),
+            ),
+          )
+          .limit(1)
+      ).at(0)
       if (pending) {
         const [pendingPublication] = await tx
           .select()
@@ -193,10 +199,12 @@ export async function requestPublication(input: {
           job: pending,
         }
       }
-      const [retry] = await tx
-        .select()
-        .from(schedulerBackoff)
-        .where(eq(schedulerBackoff.siteId, input.siteId))
+      const retry = (
+        await tx
+          .select()
+          .from(schedulerBackoff)
+          .where(eq(schedulerBackoff.siteId, input.siteId))
+      ).at(0)
       if (
         retry?.approvalFingerprint === input.schedulerFingerprint &&
         (retry.failureCount >= 4 ||
@@ -247,21 +255,23 @@ export async function requestPublication(input: {
         )
       scheduledBy = uniqueActorIds(owners.map((row) => row.scheduledBy))
     }
-    const [pub] = await tx
-      .insert(publication)
-      .values({
-        id: publicationId,
-        siteId: input.siteId,
-        snapshot,
-        snapshotHash: built.hash,
-        entryVersions: built.entryVersions,
-        publishingMode: lockedSite.publishingMode,
-        requestedBy: actorId,
-        origin: isScheduler ? 'scheduled' : 'manual',
-        scheduledBy: isScheduler ? scheduledBy : [],
-        status: 'pending',
-      })
-      .returning()
+    const pub = (
+      await tx
+        .insert(publication)
+        .values({
+          id: publicationId,
+          siteId: input.siteId,
+          snapshot,
+          snapshotHash: built.hash,
+          entryVersions: built.entryVersions,
+          publishingMode: lockedSite.publishingMode,
+          requestedBy: actorId,
+          origin: isScheduler ? 'scheduled' : 'manual',
+          scheduledBy: isScheduler ? scheduledBy : [],
+          status: 'pending',
+        })
+        .returning()
+    ).at(0)
 
     if (!pub) {
       throw new Error(m.server_failed_to_create_publication())
@@ -295,17 +305,19 @@ export async function requestPublication(input: {
         )
     }
 
-    const [job] = await tx
-      .insert(buildJob)
-      .values({
-        siteId: input.siteId,
-        publicationId: pub.id,
-        priority,
-        ...(await deploymentIdentity(tx, lockedSite)),
-        schedulerFingerprint: input.schedulerFingerprint ?? null,
-        status: 'queued',
-      })
-      .returning()
+    const job = (
+      await tx
+        .insert(buildJob)
+        .values({
+          siteId: input.siteId,
+          publicationId: pub.id,
+          priority,
+          ...(await deploymentIdentity(tx, lockedSite)),
+          schedulerFingerprint: input.schedulerFingerprint ?? null,
+          status: 'queued',
+        })
+        .returning()
+    ).at(0)
 
     if (!job) {
       throw new Error(m.server_failed_to_create_build_job())
@@ -356,11 +368,13 @@ export async function requestRollback(input: {
     await lockOrganizationForMutation(tx, preliminarySite.organizationId)
     const replay = await replayRequest(tx, input, 'rollback', payload)
     if (replay) return replay
-    const [pub] = await tx
-      .select()
-      .from(publication)
-      .where(eq(publication.id, input.publicationId))
-      .limit(1)
+    const pub = (
+      await tx
+        .select()
+        .from(publication)
+        .where(eq(publication.id, input.publicationId))
+        .limit(1)
+    ).at(0)
 
     if (!pub || pub.siteId !== input.siteId) {
       throw new NotFoundError(m.server_publication_not_found())
@@ -374,11 +388,13 @@ export async function requestRollback(input: {
       ])
     }
 
-    const [lockedSite] = await tx
-      .select()
-      .from(site)
-      .where(eq(site.id, input.siteId))
-      .for('update')
+    const lockedSite = (
+      await tx
+        .select()
+        .from(site)
+        .where(eq(site.id, input.siteId))
+        .for('update')
+    ).at(0)
     if (!lockedSite) throw new NotFoundError(m.server_site_not_found())
     if (
       lockedSite.publishingMode !== 'demo' &&
@@ -390,20 +406,22 @@ export async function requestRollback(input: {
       )
     await assertDispatchResolved(tx, input.siteId)
     const rollbackId = crypto.randomUUID()
-    const [updated] = await tx
-      .insert(publication)
-      .values({
-        siteId: input.siteId,
-        id: rollbackId,
-        snapshot: { ...pub.snapshot, publicationId: rollbackId },
-        snapshotHash: pub.snapshotHash,
-        requestedBy: actorId,
-        origin: 'rollback',
-        publishingMode: lockedSite.publishingMode,
-        entryVersions: [],
-        status: 'pending',
-      })
-      .returning()
+    const updated = (
+      await tx
+        .insert(publication)
+        .values({
+          siteId: input.siteId,
+          id: rollbackId,
+          snapshot: { ...pub.snapshot, publicationId: rollbackId },
+          snapshotHash: pub.snapshotHash,
+          requestedBy: actorId,
+          origin: 'rollback',
+          publishingMode: lockedSite.publishingMode,
+          entryVersions: [],
+          status: 'pending',
+        })
+        .returning()
+    ).at(0)
     if (!updated) throw new NotFoundError(m.server_publication_not_found())
 
     const queued = await tx
@@ -434,16 +452,18 @@ export async function requestRollback(input: {
         )
     }
 
-    const [job] = await tx
-      .insert(buildJob)
-      .values({
-        siteId: input.siteId,
-        publicationId: updated.id,
-        priority: 100,
-        ...(await deploymentIdentity(tx, lockedSite)),
-        status: 'queued',
-      })
-      .returning()
+    const job = (
+      await tx
+        .insert(buildJob)
+        .values({
+          siteId: input.siteId,
+          publicationId: updated.id,
+          priority: 100,
+          ...(await deploymentIdentity(tx, lockedSite)),
+          status: 'queued',
+        })
+        .returning()
+    ).at(0)
 
     if (!job) {
       throw new Error(m.server_failed_to_create_build_job())
@@ -512,11 +532,9 @@ export async function listPublications(
 }
 
 export async function getPublication(id: string) {
-  const [row] = await db
-    .select()
-    .from(publication)
-    .where(eq(publication.id, id))
-    .limit(1)
+  const row = (
+    await db.select().from(publication).where(eq(publication.id, id)).limit(1)
+  ).at(0)
   return row ?? null
 }
 
@@ -534,11 +552,9 @@ export async function listBuildJobs(
 }
 
 export async function getBuildJob(id: string) {
-  const [row] = await db
-    .select()
-    .from(buildJob)
-    .where(eq(buildJob.id, id))
-    .limit(1)
+  const row = (
+    await db.select().from(buildJob).where(eq(buildJob.id, id)).limit(1)
+  ).at(0)
   return row ?? null
 }
 
@@ -556,17 +572,19 @@ export async function cancelJob(id: string, actorId: string) {
   }
 
   const existingSite = await getSiteOrThrow(job.siteId)
-  const [updated] = await db
-    .update(buildJob)
-    .set({ status: 'cancelled', finishedAt: new Date() })
-    .where(
-      and(
-        eq(buildJob.id, id),
-        eq(buildJob.status, 'queued'),
-        eq(buildJob.dispatchUncertain, false),
-      ),
-    )
-    .returning()
+  const updated = (
+    await db
+      .update(buildJob)
+      .set({ status: 'cancelled', finishedAt: new Date() })
+      .where(
+        and(
+          eq(buildJob.id, id),
+          eq(buildJob.status, 'queued'),
+          eq(buildJob.dispatchUncertain, false),
+        ),
+      )
+      .returning()
+  ).at(0)
 
   if (!updated) {
     throw new NotFoundError(m.server_build_job_not_found())
@@ -591,22 +609,30 @@ export async function cancelJob(id: string, actorId: string) {
 }
 
 export async function getLivePublication(siteId: string) {
-  const [row] = await db
-    .select()
-    .from(publication)
-    .where(and(eq(publication.siteId, siteId), eq(publication.status, 'live')))
-    .orderBy(desc(publication.createdAt))
-    .limit(1)
+  const row = (
+    await db
+      .select()
+      .from(publication)
+      .where(
+        and(eq(publication.siteId, siteId), eq(publication.status, 'live')),
+      )
+      .orderBy(desc(publication.createdAt))
+      .limit(1)
+  ).at(0)
   return row ?? null
 }
 
 export async function getDemoPublication(siteId: string) {
-  const [row] = await db
-    .select()
-    .from(publication)
-    .where(and(eq(publication.siteId, siteId), eq(publication.status, 'demo')))
-    .orderBy(desc(publication.createdAt))
-    .limit(1)
+  const row = (
+    await db
+      .select()
+      .from(publication)
+      .where(
+        and(eq(publication.siteId, siteId), eq(publication.status, 'demo')),
+      )
+      .orderBy(desc(publication.createdAt))
+      .limit(1)
+  ).at(0)
   return row ?? null
 }
 
@@ -620,26 +646,32 @@ export async function getSiteReleaseStatus(siteId: string) {
   const existingSite = await getSiteOrThrow(siteId)
   const live = await getLivePublication(siteId)
   const demo = await getDemoPublication(siteId)
-  const [activeJob] = await db
-    .select()
-    .from(buildJob)
-    .where(
-      and(
-        eq(buildJob.siteId, siteId),
-        inArray(buildJob.status, ACTIVE_JOB_STATUSES),
-      ),
-    )
-    .orderBy(desc(buildJob.startedAt), desc(buildJob.createdAt))
-    .limit(1)
+  const activeJob = (
+    await db
+      .select()
+      .from(buildJob)
+      .where(
+        and(
+          eq(buildJob.siteId, siteId),
+          inArray(buildJob.status, ACTIVE_JOB_STATUSES),
+        ),
+      )
+      .orderBy(desc(buildJob.startedAt), desc(buildJob.createdAt))
+      .limit(1)
+  ).at(0)
 
-  const [queuedJob] = activeJob
-    ? [null]
-    : await db
-        .select()
-        .from(buildJob)
-        .where(and(eq(buildJob.siteId, siteId), eq(buildJob.status, 'queued')))
-        .orderBy(desc(buildJob.priority), desc(buildJob.createdAt))
-        .limit(1)
+  const queuedJob = (
+    activeJob
+      ? [null]
+      : await db
+          .select()
+          .from(buildJob)
+          .where(
+            and(eq(buildJob.siteId, siteId), eq(buildJob.status, 'queued')),
+          )
+          .orderBy(desc(buildJob.priority), desc(buildJob.createdAt))
+          .limit(1)
+  ).at(0)
 
   const diff = await diffApprovedRelease(siteId)
   const blockers = await sectionBlockers(siteId)
@@ -663,10 +695,12 @@ export async function deploymentIdentity(
   existingSite: typeof site.$inferSelect,
 ) {
   if (existingSite.publishingMode === 'demo') return {}
-  const [credential] = await tx
-    .select()
-    .from(dokployCredential)
-    .where(eq(dokployCredential.organizationId, existingSite.organizationId))
+  const credential = (
+    await tx
+      .select()
+      .from(dokployCredential)
+      .where(eq(dokployCredential.organizationId, existingSite.organizationId))
+  ).at(0)
   const rawUrl =
     credential?.url ??
     (process.env.NODE_ENV !== 'production' && env.DOKPLOY_DEV_FALLBACK_ENABLED

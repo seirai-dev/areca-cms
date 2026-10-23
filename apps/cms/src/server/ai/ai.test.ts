@@ -53,9 +53,7 @@ describe('verifyOpenRouterKey', () => {
     await expect(verifyOpenRouterKey('bad', fetchFn)).resolves.toBe(false)
     await expect(verifyOpenRouterKey('good', fetchFn)).resolves.toBe(true)
     const init = fetchFn.mock.calls[1]?.[1]
-    expect(new Headers(init?.headers).get('authorization')).toBe(
-      'Bearer good',
-    )
+    expect(new Headers(init?.headers).get('authorization')).toBe('Bearer good')
   })
 
   it('throws on provider outages instead of calling the key invalid', async () => {

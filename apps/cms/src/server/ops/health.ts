@@ -159,7 +159,7 @@ export async function defaultQueueStats(): Promise<QueueStats> {
     from build_job
     where status in ('queued','building','validating','deploying')
   `)
-  const row = result.rows[0]
+  const row = result.rows.at(0)
   return {
     queued: Number(row?.queued ?? 0),
     oldestQueuedAgeSeconds:

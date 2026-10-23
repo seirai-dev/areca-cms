@@ -206,7 +206,10 @@ export function registerAssetTools(registry: ToolRegistry): void {
       return {
         ...describeAsset(row),
         ...(target && !target.isMain
-          ? { locale: target.locale, localeAlt: row.altI18n[target.locale] || '' }
+          ? {
+              locale: target.locale,
+              localeAlt: row.altI18n[target.locale] || '',
+            }
           : {}),
       }
     },

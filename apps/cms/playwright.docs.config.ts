@@ -22,7 +22,9 @@ function appUrlFromEnvLocal() {
 }
 
 const baseURL =
-  process.env.PLAYWRIGHT_BASE_URL ?? appUrlFromEnvLocal() ?? 'http://localhost:3000'
+  process.env.PLAYWRIGHT_BASE_URL ??
+  appUrlFromEnvLocal() ??
+  'http://localhost:3000'
 const executablePath = process.env.PW_CHROMIUM_PATH || undefined
 
 export default defineConfig({

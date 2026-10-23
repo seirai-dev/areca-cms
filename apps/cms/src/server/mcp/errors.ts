@@ -73,7 +73,10 @@ export function toToolError(error: unknown): CallToolResult {
       `This asset is still used by ${error.usage} item(s) (entries, revisions or published snapshots). Remove it from them first, then retry.`,
     )
   }
-  if (error instanceof RemoteFetchError || error instanceof AssetValidationError) {
+  if (
+    error instanceof RemoteFetchError ||
+    error instanceof AssetValidationError
+  ) {
     return toolError(`Could not import the file: ${error.message}`)
   }
   if (

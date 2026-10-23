@@ -27,7 +27,9 @@ test('old admin URLs lead into the Agency workspace', async ({ page }) => {
   await page.goto(`/admin/organizations/${orgId}`)
   await expect(page).toHaveURL(new RegExp(`/agency/clients/${orgId}`))
   await page.goto(`/orgs/${orgId}/members`)
-  await expect(page).toHaveURL(new RegExp(`/agency/clients/${orgId}\\?tab=people`))
+  await expect(page).toHaveURL(
+    new RegExp(`/agency/clients/${orgId}\\?tab=people`),
+  )
   await expect(page.getByRole('tab', { name: 'People' })).toHaveAttribute(
     'aria-selected',
     'true',
@@ -38,8 +40,14 @@ test('old site URLs open the new places', async ({ page }) => {
   await login(page, OWNER)
   const siteId = await openSite(page, ACME_SITE)
   const cases: Array<[string, RegExp]> = [
-    [`/sites/${siteId}/releases`, new RegExp(`/sites/${siteId}\\?panel=golive$`)],
-    [`/sites/${siteId}/activity`, new RegExp(`/sites/${siteId}\\?panel=activity$`)],
+    [
+      `/sites/${siteId}/releases`,
+      new RegExp(`/sites/${siteId}\\?panel=golive$`),
+    ],
+    [
+      `/sites/${siteId}/activity`,
+      new RegExp(`/sites/${siteId}\\?panel=activity$`),
+    ],
     [`/sites/${siteId}/media`, new RegExp(`/sites/${siteId}/library$`)],
     [`/sites/${siteId}/team`, new RegExp(`/sites/${siteId}/people$`)],
   ]

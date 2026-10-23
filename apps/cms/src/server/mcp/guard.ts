@@ -37,7 +37,10 @@ export function goLiveDeniedMessage(credential: McpCredential): string {
     : 'Going live is not enabled for this key. Ask a site owner to press Go live in the CMS, or use a key created with "Allow going live".'
 }
 
-function deniedMessage(actor: McpActor, access: Exclude<ToolAccess, 'everyone'>): string {
+function deniedMessage(
+  actor: McpActor,
+  access: Exclude<ToolAccess, 'everyone'>,
+): string {
   switch (access) {
     case 'owner':
       return 'Only site owners can use this tool. Ask a site owner to make this change, or leave the entry as a draft.'

@@ -112,7 +112,10 @@ async function makeWorld(siteLanguages: SiteLanguages | null) {
   await db
     .insert(membership)
     .values({ userId: editorId, organizationId: ctx.org.id, role: 'editor' })
-  const keyFor = async (userId: string, role: 'owner' | 'editor' | 'agency') => {
+  const keyFor = async (
+    userId: string,
+    role: 'owner' | 'editor' | 'agency',
+  ) => {
     const created = await createMcpKey({
       userId,
       siteId: ctx.site.id,
@@ -166,9 +169,9 @@ describe.skipIf(!hasDb)('MCP with content languages', () => {
         all: ['nl', 'en', 'fr'],
         names: { nl: 'Dutch', en: 'English', fr: 'French' },
       })
-      const vacancies = (info.data?.collections as Record<string, unknown>[]).find(
-        (c) => c.key === 'vacancies',
-      )
+      const vacancies = (
+        info.data?.collections as Record<string, unknown>[]
+      ).find((c) => c.key === 'vacancies')
       expect(vacancies).toMatchObject({
         requiredLanguages: ['en'],
         translatableFields: ['title', 'body'],
@@ -200,7 +203,11 @@ describe.skipIf(!hasDb)('MCP with content languages', () => {
     })
 
     it('writes a translation without changing the main language, and lists shared fields it changed', async () => {
-      const created = await createVacancy(owner, 'Backend ontwikkelaar', 'backend-ontwikkelaar')
+      const created = await createVacancy(
+        owner,
+        'Backend ontwikkelaar',
+        'backend-ontwikkelaar',
+      )
       const id = created.id as string
       const updated = await call(owner, 'update_entry', {
         id,
@@ -250,7 +257,11 @@ describe.skipIf(!hasDb)('MCP with content languages', () => {
     })
 
     it('shows the main language by default, with translations for the other languages', async () => {
-      const created = await createVacancy(owner, 'Verpleegkundige', 'verpleegkundige')
+      const created = await createVacancy(
+        owner,
+        'Verpleegkundige',
+        'verpleegkundige',
+      )
       const id = created.id as string
       await call(owner, 'update_entry', {
         id,
@@ -282,7 +293,11 @@ describe.skipIf(!hasDb)('MCP with content languages', () => {
       expect(en.data).toMatchObject({
         locale: 'en',
         slug: 'driver',
-        fields: { title: 'Driver', body: '## English body\n\nHello.', salary: 4000 },
+        fields: {
+          title: 'Driver',
+          body: '## English body\n\nHello.',
+          salary: 4000,
+        },
       })
       expect(en.data).not.toHaveProperty('translations')
       const fr = await call(owner, 'get_entry', { id, locale: 'fr' })
@@ -304,13 +319,19 @@ describe.skipIf(!hasDb)('MCP with content languages', () => {
       const created = await call(owner, 'create_entry', {
         collection: 'vacancies',
         locale: 'en',
-        fields: { title: 'Developer', slug: 'developer', body: '## Hi\n\nBody.' },
+        fields: {
+          title: 'Developer',
+          slug: 'developer',
+          body: '## Hi\n\nBody.',
+        },
       })
       expect(created.isError).toBe(false)
       expect(created.data).toMatchObject({ locale: 'en' })
       const draft = await storedDraft(created.data?.id as string)
       expect(draft.title).toBeUndefined()
-      expect((draft.$i18n as Record<string, EntryData>).en.title).toBe('Developer')
+      expect((draft.$i18n as Record<string, EntryData>).en.title).toBe(
+        'Developer',
+      )
     })
 
     it('blocks mark_ready with the languages and fields that are missing, naming how to fill them', async () => {
@@ -329,7 +350,11 @@ describe.skipIf(!hasDb)('MCP with content languages', () => {
     })
 
     it('filters list_entries by a missing language', async () => {
-      const complete = await createVacancy(owner, 'Stratenmaker', 'stratenmaker')
+      const complete = await createVacancy(
+        owner,
+        'Stratenmaker',
+        'stratenmaker',
+      )
       await call(owner, 'update_entry', {
         id: complete.id,
         locale: 'en',
@@ -339,7 +364,9 @@ describe.skipIf(!hasDb)('MCP with content languages', () => {
         collection: 'vacancies',
         missingLanguage: 'en',
       })
-      const ids = (missing.data?.items as { id: string }[]).map((item) => item.id)
+      const ids = (missing.data?.items as { id: string }[]).map(
+        (item) => item.id,
+      )
       expect(ids).not.toContain(complete.id)
       expect(ids.length).toBeGreaterThan(0)
     })
@@ -508,7 +535,12 @@ describe.skipIf(!hasDb)('MCP with content languages', () => {
         key: 'homePage',
         label: 'Home page',
         fields: [
-          { key: 'headline', label: 'Headline', type: 'text', translatable: true },
+          {
+            key: 'headline',
+            label: 'Headline',
+            type: 'text',
+            translatable: true,
+          },
           { key: 'hero', label: 'Hero', type: 'image', translatable: false },
         ],
         requiredLanguages: ['en'],
@@ -520,7 +552,10 @@ describe.skipIf(!hasDb)('MCP with content languages', () => {
         .from(collection)
         .where(eq(collection.key, 'homePage'))
       expect(row.requiredLanguages).toEqual(['en'])
-      expect(row.fields[0]).toMatchObject({ key: 'headline', translatable: true })
+      expect(row.fields[0]).toMatchObject({
+        key: 'headline',
+        translatable: true,
+      })
     })
 
     it('rejects a route pattern without $slug', async () => {
@@ -557,9 +592,9 @@ describe.skipIf(!hasDb)('MCP with content languages', () => {
     it('keeps get_site_info free of language keys', async () => {
       const info = await call(owner, 'get_site_info')
       expect(info.data).not.toHaveProperty('languages')
-      const vacancies = (info.data?.collections as Record<string, unknown>[]).find(
-        (c) => c.key === 'vacancies',
-      )
+      const vacancies = (
+        info.data?.collections as Record<string, unknown>[]
+      ).find((c) => c.key === 'vacancies')
       expect(vacancies).not.toHaveProperty('requiredLanguages')
       expect(vacancies).not.toHaveProperty('translatableFields')
       expect(info.data?.guide).not.toContain('Languages:')
@@ -640,4 +675,3 @@ describe.skipIf(!hasDb)('MCP with content languages', () => {
     })
   })
 })
-

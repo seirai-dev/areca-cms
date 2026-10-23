@@ -101,7 +101,7 @@ describe('job pool', () => {
     const finish = new Map<string, () => void>()
     const pool = createJobPool({
       concurrency: 2,
-      claim: async () => queue.shift() ?? null,
+      claim: async () => (queue.length > 0 ? queue.shift()! : null),
       run: (j: { id: string }) =>
         new Promise<void>((resolve) => {
           started.push(j.id)
@@ -125,7 +125,7 @@ describe('job pool', () => {
     const ran: string[] = []
     const pool = createJobPool({
       concurrency: 1,
-      claim: async () => queue.shift() ?? null,
+      claim: async () => (queue.length > 0 ? queue.shift()! : null),
       run: async (j: { id: string }) => {
         ran.push(j.id)
         if (j.id === 'x') throw new Error('boom')
@@ -167,7 +167,7 @@ describe('job pool', () => {
 
   it('drain is bounded and stops claiming', async () => {
     const queue = [job('a'), job('b')]
-    const claim = vi.fn(async () => queue.shift() ?? null)
+    const claim = vi.fn(async () => (queue.length > 0 ? queue.shift()! : null))
     const pool = createJobPool({
       concurrency: 1,
       claim,

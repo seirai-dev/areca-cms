@@ -34,9 +34,9 @@ async function queueJob(siteId: string) {
     .returning()
   const [job] = await db
     .insert(buildJob)
-    .values({ siteId, publicationId: pub!.id })
+    .values({ siteId, publicationId: pub.id })
     .returning()
-  return job!
+  return job
 }
 
 describe.skipIf(!hasDb)('worker job pool against the database', () => {
@@ -76,7 +76,7 @@ describe.skipIf(!hasDb)('worker job pool against the database', () => {
 
       await pool.fill()
       const state = async (id: string) =>
-        (await db.select().from(buildJob).where(eq(buildJob.id, id)))[0]!.status
+        (await db.select().from(buildJob).where(eq(buildJob.id, id)))[0].status
       await expect
         .poll(() => state(jobB.id), { timeout: 10_000 })
         .toBe('succeeded')

@@ -75,7 +75,8 @@ export class ToolRegistry {
       },
       // The SDK has already validated the input; parsing again gives it the
       // schema's output type without a cast.
-      (input: unknown) => runTool(this.actor, spec, spec.inputSchema.parse(input)),
+      (input: unknown) =>
+        runTool(this.actor, spec, spec.inputSchema.parse(input)),
     )
   }
 }

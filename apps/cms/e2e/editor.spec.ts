@@ -264,7 +264,11 @@ test('an existing entry opens from the collection and keeps its address', async 
   const id = await createArticle(page, title)
   await backToCollection(page)
 
-  await page.getByTestId(`entry-${slugify(title)}`).getByRole('link').first().click()
+  await page
+    .getByTestId(`entry-${slugify(title)}`)
+    .getByRole('link')
+    .first()
+    .click()
   await expect(page).toHaveURL(new RegExp(`/c/articles/${id}$`))
   await expect(page.getByTestId('entry-editor')).toHaveAttribute(
     'data-ready',

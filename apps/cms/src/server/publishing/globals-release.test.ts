@@ -171,7 +171,9 @@ describe.skipIf(!hasDb)('release changes for site content', () => {
       await createTestGlobal(ctx.site.id, {
         key: 'opening',
         label: 'Opening hours',
-        fields: [{ key: 'weekdays', label: 'Weekdays', type: 'text', required: true }],
+        fields: [
+          { key: 'weekdays', label: 'Weekdays', type: 'text', required: true },
+        ],
       })
       await updateDraft(
         company.entry.id,
@@ -209,7 +211,11 @@ describe.skipIf(!hasDb)('release changes for site content', () => {
         }),
       )
       expect(changes).toContainEqual(
-        expect.objectContaining({ id: article.id, kind: 'ready', global: false }),
+        expect.objectContaining({
+          id: article.id,
+          kind: 'ready',
+          global: false,
+        }),
       )
 
       const diff = await diffApprovedRelease(ctx.site.id)

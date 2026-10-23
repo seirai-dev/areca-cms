@@ -13,10 +13,7 @@ import { createOpenRouterText } from '@tanstack/ai-openrouter'
 import { z } from 'zod'
 
 import { env } from '#/env'
-import {
-  TEXTAREA_MAX_LENGTH,
-  TEXT_MAX_LENGTH,
-} from '#/lib/content-limits'
+import { TEXTAREA_MAX_LENGTH, TEXT_MAX_LENGTH } from '#/lib/content-limits'
 import { isTranslatable } from '#/lib/content-locale'
 import { isEmptyRichText } from '#/lib/rich-text-empty'
 import { SEO_KEY, SEO_LIMITS } from '#/lib/seo'
@@ -190,7 +187,8 @@ export function planTranslation(input: {
             .map((item) => String(item).trim())
         : []
       const filled =
-        Array.isArray(seoTarget.keyTakeaways) && seoTarget.keyTakeaways.length > 0
+        Array.isArray(seoTarget.keyTakeaways) &&
+        seoTarget.keyTakeaways.length > 0
       if (decide('seo.keyTakeaways', list.length > 0, filled)) {
         items.push({ key: 'seo.keyTakeaways', kind: 'seoList', source: list })
       }
@@ -198,15 +196,16 @@ export function planTranslation(input: {
 
     if (wanted('seo.faq')) {
       const pairs = Array.isArray(seoSource.faq)
-        ? seoSource.faq.flatMap((item: { question?: unknown; answer?: unknown }) =>
-            hasText(item.question) && hasText(item.answer)
-              ? [
-                  {
-                    question: String(item.question).trim(),
-                    answer: String(item.answer).trim(),
-                  },
-                ]
-              : [],
+        ? seoSource.faq.flatMap(
+            (item: { question?: unknown; answer?: unknown }) =>
+              hasText(item.question) && hasText(item.answer)
+                ? [
+                    {
+                      question: String(item.question).trim(),
+                      answer: String(item.answer).trim(),
+                    },
+                  ]
+                : [],
           )
         : []
       const filled = Array.isArray(seoTarget.faq) && seoTarget.faq.length > 0
@@ -242,14 +241,18 @@ export function translationOutputSchema(items: TranslationItem[]) {
       items.map((item) => [
         item.key,
         item.kind === 'seoList'
-          ? z.array(z.string()).describe('Translated list, same length and order.')
+          ? z
+              .array(z.string())
+              .describe('Translated list, same length and order.')
           : item.kind === 'seoFaq'
-            ? z.array(
-                z.object({
-                  question: z.string(),
-                  answer: z.string(),
-                }),
-              ).describe('Translated questions and answers, same order.')
+            ? z
+                .array(
+                  z.object({
+                    question: z.string(),
+                    answer: z.string(),
+                  }),
+                )
+                .describe('Translated questions and answers, same order.')
             : z.string().describe('Translated value.'),
       ]),
     ),

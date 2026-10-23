@@ -77,14 +77,26 @@ describe('localeView', () => {
   }
 
   it('reads the main language from the base', () => {
-    const view = localeView(stored, languages, fields, 'nl', 'backend-ontwikkelaar')
+    const view = localeView(
+      stored,
+      languages,
+      fields,
+      'nl',
+      'backend-ontwikkelaar',
+    )
     expect(view.slug).toBe('backend-ontwikkelaar')
     expect(view.data.title).toBe('Backend ontwikkelaar')
     expect(view.data.$seo).toEqual({ title: 'SEO NL' })
   })
 
   it('reads a translation, sharing the shared fields and the per-language SEO', () => {
-    const view = localeView(stored, languages, fields, 'en', 'backend-ontwikkelaar')
+    const view = localeView(
+      stored,
+      languages,
+      fields,
+      'en',
+      'backend-ontwikkelaar',
+    )
     expect(view.data.title).toBe('Backend developer')
     expect(view.data.salary).toBe(4000)
     expect(view.data.$seo).toEqual({ title: 'SEO EN' })
@@ -96,13 +108,25 @@ describe('localeView', () => {
       ...stored,
       $i18n: { en: { title: 'Backend developer', $slug: 'backend-developer' } },
     }
-    const view = localeView(withSlug, languages, fields, 'en', 'backend-ontwikkelaar')
+    const view = localeView(
+      withSlug,
+      languages,
+      fields,
+      'en',
+      'backend-ontwikkelaar',
+    )
     expect(view.slug).toBe('backend-developer')
     expect(view.data.slug).toBe('backend-developer')
   })
 
   it('shows empty translatable fields for a language that has none yet', () => {
-    const view = localeView(stored, languages, fields, 'fr', 'backend-ontwikkelaar')
+    const view = localeView(
+      stored,
+      languages,
+      fields,
+      'fr',
+      'backend-ontwikkelaar',
+    )
     expect(view.data.title).toBeUndefined()
     expect(view.data.salary).toBe(4000)
   })
@@ -136,7 +160,10 @@ describe('applyLocaleWrite', () => {
       languages,
       locale: 'en',
       stored,
-      converted: { title: 'Backend developer', body: { type: 'doc', content: [] } },
+      converted: {
+        title: 'Backend developer',
+        body: { type: 'doc', content: [] },
+      },
     }).data
     const second = applyLocaleWrite({
       fields,

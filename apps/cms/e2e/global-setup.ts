@@ -68,6 +68,8 @@ export default async function globalSetup(config: FullConfig) {
     }
   } finally {
     await browser.close()
-    console.log(`[e2e] dev server warm (${Math.round((Date.now() - started) / 1000)}s)`)
+    console.log(
+      `[e2e] dev server warm (${Math.round((Date.now() - started) / 1000)}s)`,
+    )
   }
 }

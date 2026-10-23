@@ -483,16 +483,19 @@ export async function validateReferences(
       continue
     }
 
-    const ref = (await db
-      .select({
-        id: entry.id,
-        status: entry.status,
-        publishedData: entry.publishedData,
-        publishedSlug: entry.publishedSlug,
-      })
-      .from(entry)
-      .where(and(eq(entry.id, value), eq(entry.collectionId, refCollection.id)))
-      .limit(1)
+    const ref = (
+      await db
+        .select({
+          id: entry.id,
+          status: entry.status,
+          publishedData: entry.publishedData,
+          publishedSlug: entry.publishedSlug,
+        })
+        .from(entry)
+        .where(
+          and(eq(entry.id, value), eq(entry.collectionId, refCollection.id)),
+        )
+        .limit(1)
     ).at(0)
 
     if (!ref) {
@@ -596,13 +599,14 @@ async function ownershipErrors(
   const errors: FieldError[] = []
   const ogImage = readEntrySeo(data).ogImage
   if (ogImage) {
-    const found = (await connection
-      .select({ id: asset.id })
-      .from(asset)
-      .where(
-        and(eq(asset.id, ogImage), eq(asset.organizationId, organizationId)),
-      )
-      .limit(1)
+    const found = (
+      await connection
+        .select({ id: asset.id })
+        .from(asset)
+        .where(
+          and(eq(asset.id, ogImage), eq(asset.organizationId, organizationId)),
+        )
+        .limit(1)
     ).at(0)
     if (!found)
       errors.push({
@@ -623,20 +627,21 @@ async function ownershipErrors(
     }
     if (typeof value !== 'string' || !value) continue
     if (field.type === 'reference') {
-      const found = (field.collection
-        ? await connection
-            .select({ id: entry.id })
-            .from(entry)
-            .innerJoin(collection, eq(entry.collectionId, collection.id))
-            .where(
-              and(
-                eq(entry.id, value),
-                eq(entry.siteId, siteId),
-                eq(collection.key, field.collection),
-              ),
-            )
-            .limit(1)
-        : []
+      const found = (
+        field.collection
+          ? await connection
+              .select({ id: entry.id })
+              .from(entry)
+              .innerJoin(collection, eq(entry.collectionId, collection.id))
+              .where(
+                and(
+                  eq(entry.id, value),
+                  eq(entry.siteId, siteId),
+                  eq(collection.key, field.collection),
+                ),
+              )
+              .limit(1)
+          : []
       ).at(0)
       if (!found)
         errors.push({
@@ -645,13 +650,14 @@ async function ownershipErrors(
         })
     }
     if (field.type === 'image') {
-      const found = (await connection
-        .select({ id: asset.id })
-        .from(asset)
-        .where(
-          and(eq(asset.id, value), eq(asset.organizationId, organizationId)),
-        )
-        .limit(1)
+      const found = (
+        await connection
+          .select({ id: asset.id })
+          .from(asset)
+          .where(
+            and(eq(asset.id, value), eq(asset.organizationId, organizationId)),
+          )
+          .limit(1)
       ).at(0)
       if (!found)
         errors.push({

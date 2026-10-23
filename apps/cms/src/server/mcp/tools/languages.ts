@@ -17,12 +17,16 @@ export function registerLanguageTools(registry: ToolRegistry): void {
     description:
       'Agency admin only. Sets the languages this site publishes in and its main language. main is the fallback: visitors get it when a translation is missing, and it is the language of the shared base values. all lists the languages in the order the site shows them, and must include main. Codes are BCP 47 (e.g. "nl", "en", "nl-BE"). Removing a language hides it: it stops shipping and leaves the editor, but its text stays in the entries and comes back if you add it again. Changing main deletes nothing, but entries and sections that are not complete in the new main language cannot be marked ready until they are; the result counts them as gaps. Languages cannot be turned off once set: reduce to one language instead. Returns the languages, their English names and the gaps.',
     inputSchema: z.object({
-      main: languageCode.describe('The main language code, e.g. "nl". Must be one of all.'),
+      main: languageCode.describe(
+        'The main language code, e.g. "nl". Must be one of all.',
+      ),
       all: z
         .array(languageCode)
         .min(1)
         .max(MAX_SITE_LANGUAGES)
-        .describe('Every language of the site, in display order, e.g. ["nl", "en"].'),
+        .describe(
+          'Every language of the site, in display order, e.g. ["nl", "en"].',
+        ),
     }),
     access: 'agency',
     deniedMessage:

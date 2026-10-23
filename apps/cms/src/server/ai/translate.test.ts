@@ -49,7 +49,10 @@ const assets = {
 
 const bodyDoc = markdownToRichText(
   '## Over de baan\n\nWerk bij [ons team](https://example.com).\n\n![Kantoor](asset:asset-1)',
-  { resolveAssetSrc: (id) => (id === 'asset-1' ? `/api/assets/file/${storageKey}` : null) },
+  {
+    resolveAssetSrc: (id) =>
+      id === 'asset-1' ? `/api/assets/file/${storageKey}` : null,
+  },
 )
 
 const source: EntryData = {
@@ -255,7 +258,9 @@ describe('translationRequest and the system prompt', () => {
       ],
     })
     expect(request).toContain('Translate from Dutch to English.')
-    expect(request).toContain('Markdown fields (keep the Markdown syntax): body.')
+    expect(request).toContain(
+      'Markdown fields (keep the Markdown syntax): body.',
+    )
     expect(request).toContain('"title": "Titel"')
   })
 

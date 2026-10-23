@@ -46,11 +46,28 @@ const MANIFEST = {
       label: 'Vacancies',
       requiredLanguages: ['en'],
       fields: [
-        { key: 'title', label: 'Title', type: 'text', required: true, translatable: true },
+        {
+          key: 'title',
+          label: 'Title',
+          type: 'text',
+          required: true,
+          translatable: true,
+        },
         { key: 'slug', label: 'Slug', type: 'slug', required: true },
-        { key: 'body', label: 'Body', type: 'richtext', required: true, translatable: true },
+        {
+          key: 'body',
+          label: 'Body',
+          type: 'richtext',
+          required: true,
+          translatable: true,
+        },
         { key: 'salary', label: 'Salary', type: 'number' },
-        { key: 'location', label: 'Location', type: 'text', translatable: false },
+        {
+          key: 'location',
+          label: 'Location',
+          type: 'text',
+          translatable: false,
+        },
       ],
     },
   },
@@ -58,9 +75,21 @@ const MANIFEST = {
     companyInfo: {
       label: 'Company info',
       fields: [
-        { key: 'email', label: 'Email', type: 'text', required: true, group: 'Contact' },
+        {
+          key: 'email',
+          label: 'Email',
+          type: 'text',
+          required: true,
+          group: 'Contact',
+        },
         { key: 'phone', label: 'Phone', type: 'text', group: 'Contact' },
-        { key: 'tagline', label: 'Tagline', type: 'text', translatable: true, group: 'About' },
+        {
+          key: 'tagline',
+          label: 'Tagline',
+          type: 'text',
+          translatable: true,
+          group: 'About',
+        },
       ],
     },
   },
@@ -93,9 +122,13 @@ const ENTRY_C_NL_BODY = [
  * previous "Saved" state, so wait for the dirty flag first.
  */
 async function saveTyped(page: Page) {
-  await expect(page.getByTestId('entry-editor')).toHaveAttribute('data-dirty', 'true', {
-    timeout: 5_000,
-  })
+  await expect(page.getByTestId('entry-editor')).toHaveAttribute(
+    'data-dirty',
+    'true',
+    {
+      timeout: 5_000,
+    },
+  )
   await waitForSaved(page)
 }
 
@@ -129,13 +162,20 @@ async function shot(page: Page, name: string) {
 
 async function setTheme(page: Page, theme: 'light' | 'dark') {
   // next-themes persists the choice under `areca.theme` and sets the class on <html>.
-  await page.evaluate((value) => localStorage.setItem('areca.theme', value), theme)
+  await page.evaluate(
+    (value) => localStorage.setItem('areca.theme', value),
+    theme,
+  )
   await page.reload()
   await page.waitForLoadState('domcontentloaded')
 }
 
 function runCmsScript(script: string) {
-  execSync(`pnpm run ${script}`, { cwd: CMS_ROOT, stdio: 'inherit', env: process.env })
+  execSync(`pnpm run ${script}`, {
+    cwd: CMS_ROOT,
+    stdio: 'inherit',
+    env: process.env,
+  })
 }
 
 test.use({ colorScheme: 'light' })
@@ -144,7 +184,9 @@ test.beforeAll(() => {
   // Only ever the isolated database (the runner sets DATABASE_URL to areca_e2e).
   const database = new URL(process.env.DATABASE_URL ?? '')
   if (database.pathname !== '/areca_e2e') {
-    throw new Error(`Refusing to seed ${database.pathname}: expected /areca_e2e`)
+    throw new Error(
+      `Refusing to seed ${database.pathname}: expected /areca_e2e`,
+    )
   }
   runCmsScript('db:reset')
   runCmsScript('db:seed')
@@ -313,11 +355,14 @@ test('multilingual UI screenshots', async ({ page }) => {
   await page.goto(`/sites/${siteId}/library`)
   await expect(page.getByTestId('library-page')).toBeVisible()
   await hydrated(page, page.getByTestId('library-page'))
-  await page.getByTestId('library-page').getByTestId('media-upload').setInputFiles({
-    name: assetName,
-    mimeType: 'image/png',
-    buffer: TINY_PNG,
-  })
+  await page
+    .getByTestId('library-page')
+    .getByTestId('media-upload')
+    .setInputFiles({
+      name: assetName,
+      mimeType: 'image/png',
+      buffer: TINY_PNG,
+    })
   const tile = page.getByTestId(`media-card-${assetName}`)
   await expect(tile).toBeVisible()
   await tile.click()

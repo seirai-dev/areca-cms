@@ -48,13 +48,18 @@ const devDatabaseUrl = pick('DATABASE_URL')
 let databaseUrl = process.env.E2E_DATABASE_URL
 if (!databaseUrl) {
   if (!devDatabaseUrl) {
-    throw new Error('Set E2E_DATABASE_URL or DATABASE_URL (apps/cms/.env.local).')
+    throw new Error(
+      'Set E2E_DATABASE_URL or DATABASE_URL (apps/cms/.env.local).',
+    )
   }
   const url = new URL(devDatabaseUrl)
   url.pathname = '/areca_e2e'
   databaseUrl = url.toString()
 }
-if (devDatabaseUrl && new URL(devDatabaseUrl).pathname === new URL(databaseUrl).pathname) {
+if (
+  devDatabaseUrl &&
+  new URL(devDatabaseUrl).pathname === new URL(databaseUrl).pathname
+) {
   throw new Error(
     `Refusing to run: the e2e database (${new URL(databaseUrl).pathname}) is your dev database.`,
   )
@@ -83,7 +88,10 @@ async function ensureDatabase() {
   const client = new pg.Client({ connectionString: admin.toString() })
   await client.connect()
   try {
-    const found = await client.query('select 1 from pg_database where datname = $1', [name])
+    const found = await client.query(
+      'select 1 from pg_database where datname = $1',
+      [name],
+    )
     if (found.rowCount === 0) {
       await client.query(`create database "${name.replace(/"/g, '""')}"`)
       console.log(`[e2e] created database ${name}`)
@@ -104,11 +112,15 @@ async function clearRateLimits() {
   try {
     await client.connect()
     let cleared = 0
-    for await (const keys of client.scanIterator({ MATCH: 'areca:rate-limit:*', COUNT: 500 })) {
+    for await (const keys of client.scanIterator({
+      MATCH: 'areca:rate-limit:*',
+      COUNT: 500,
+    })) {
       const batch = Array.isArray(keys) ? keys : [keys]
       if (batch.length > 0) cleared += await client.del(batch)
     }
-    if (cleared > 0) console.log(`[e2e] cleared ${cleared} rate-limit counter(s)`)
+    if (cleared > 0)
+      console.log(`[e2e] cleared ${cleared} rate-limit counter(s)`)
   } catch (error) {
     console.warn(`[e2e] could not clear rate limits: ${error.message}`)
   } finally {
@@ -130,5 +142,7 @@ await ensureDatabase()
 await clearRateLimits()
 run('pnpm', ['exec', 'drizzle-kit', 'migrate'])
 run('pnpm', ['run', 's3:init'])
-console.log(`[e2e] isolated stack: ${origin} · db ${new URL(databaseUrl).pathname.slice(1)} · bucket ${env.S3_BUCKET} · ${env.REDIS_URL}`)
+console.log(
+  `[e2e] isolated stack: ${origin} · db ${new URL(databaseUrl).pathname.slice(1)} · bucket ${env.S3_BUCKET} · ${env.REDIS_URL}`,
+)
 run('pnpm', ['exec', 'playwright', 'test', ...process.argv.slice(2)])

@@ -48,13 +48,10 @@ describe('isValidGlobalKey', () => {
     'previewGlobals',
     'preview-globals',
     'preview_globals',
-  ])(
-    'rejects the reserved key %s',
-    (key) => {
-      expect(isValidGlobalKey(key)).toBe(false)
-      expect(isReservedGlobalKey(key)).toBe(true)
-    },
-  )
+  ])('rejects the reserved key %s', (key) => {
+    expect(isValidGlobalKey(key)).toBe(false)
+    expect(isReservedGlobalKey(key)).toBe(true)
+  })
 
   it.each(['constructor', '__proto__', '1abc', 'company info', '../escape'])(
     'rejects the unsafe key %s',

@@ -409,9 +409,7 @@ export function SeoPanel({
           htmlFor={fieldId('title')}
           error={err('title')}
           trailing={<Counter value={previewTitle} target={SEO_TITLE_TARGET} />}
-          hint={
-            global ? m.globals_seo_title_hint() : m.editor_seo_title_hint()
-          }
+          hint={global ? m.globals_seo_title_hint() : m.editor_seo_title_hint()}
         >
           <Input
             id={fieldId('title')}

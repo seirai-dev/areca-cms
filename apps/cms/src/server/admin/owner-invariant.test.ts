@@ -10,10 +10,12 @@ import { removeMember, updateMemberRole } from './members.ts'
 const hasDb = Boolean(process.env.DATABASE_URL)
 
 async function setup(suffix: string) {
-  const [org] = await db
-    .insert(organization)
-    .values({ name: `Owners ${suffix}`, slug: `owners-${suffix}` })
-    .returning()
+  const org = (
+    await db
+      .insert(organization)
+      .values({ name: `Owners ${suffix}`, slug: `owners-${suffix}` })
+      .returning()
+  ).at(0)
   const users = await db
     .insert(user)
     .values(

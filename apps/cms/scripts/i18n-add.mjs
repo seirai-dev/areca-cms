@@ -12,7 +12,14 @@
  * placeholder unless they already have a value (translations come later).
  * Keys are kept sorted, `$schema` stays first.
  */
-import { closeSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  closeSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -67,7 +74,9 @@ withLock(() => {
       for (const key of positional) delete messages[key]
       write(file, messages)
     }
-    console.log(`Removed ${positional.length} key(s) from ${locales.join(', ')}`)
+    console.log(
+      `Removed ${positional.length} key(s) from ${locales.join(', ')}`,
+    )
     return
   }
 
@@ -100,5 +109,7 @@ withLock(() => {
     }
     write(file, messages)
   }
-  console.log(`Added ${added} key(s) to ${locales.join(', ')}; skipped ${skipped}`)
+  console.log(
+    `Added ${added} key(s) to ${locales.join(', ')}; skipped ${skipped}`,
+  )
 })

@@ -36,22 +36,31 @@ describe('credential wording', () => {
   })
 
   it('keeps the key wording for keys', () => {
-    expect(goLiveDeniedMessage('key')).toContain('Going live is not enabled for this key')
+    expect(goLiveDeniedMessage('key')).toContain(
+      'Going live is not enabled for this key',
+    )
   })
 })
 
 describe('requireAccess', () => {
   it('uses the credential-specific go-live message when no message is given', () => {
-    expect(() => requireAccess(actor({ credential: 'oauth' }), 'go-live')).toThrow(ForbiddenError)
-    expect(() => requireAccess(actor({ credential: 'oauth' }), 'go-live')).toThrow(
-      /Reconnect it from Connect AI/,
-    )
-    expect(() => requireAccess(actor({ credential: 'key' }), 'go-live')).toThrow(
-      /Going live is not enabled for this key/,
-    )
+    expect(() =>
+      requireAccess(actor({ credential: 'oauth' }), 'go-live'),
+    ).toThrow(ForbiddenError)
+    expect(() =>
+      requireAccess(actor({ credential: 'oauth' }), 'go-live'),
+    ).toThrow(/Reconnect it from Connect AI/)
+    expect(() =>
+      requireAccess(actor({ credential: 'key' }), 'go-live'),
+    ).toThrow(/Going live is not enabled for this key/)
   })
 
   it('lets a go-live actor through', () => {
-    expect(() => requireAccess(actor({ credential: 'oauth', allowGoLive: true }), 'go-live')).not.toThrow()
+    expect(() =>
+      requireAccess(
+        actor({ credential: 'oauth', allowGoLive: true }),
+        'go-live',
+      ),
+    ).not.toThrow()
   })
 })

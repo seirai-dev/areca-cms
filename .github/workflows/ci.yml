@@ -84,6 +84,33 @@ jobs:
           pnpm --filter @areca/docs build
           pnpm --filter @areca/docs typecheck
 
+  lint:
+    name: Lint and format check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm install --global "pnpm@${PNPM_VERSION}"
+      - id: store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6.1.0
+        with:
+          path: ${{ steps.store.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-store-${{ runner.os }}-
+      - run: pnpm install --frozen-lockfile
+      # Type-aware lint rules read the generated paraglide messages, so
+      # compile them first (the same step the CMS typecheck script runs).
+      - name: Compile paraglide messages
+        run: pnpm --filter @areca/cms exec paraglide-js compile --project ./project.inlang --outdir ./src/paraglide
+      - name: CMS lint
+        run: pnpm --filter @areca/cms lint
+      - name: CMS format check (non-mutating)
+        run: pnpm --filter @areca/cms check
+
   secret-scan:
     name: Secret scan (git history)
     runs-on: ubuntu-24.04

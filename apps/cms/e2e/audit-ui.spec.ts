@@ -212,13 +212,11 @@ test('image picker filters before three-page pagination and rejects a PDF upload
         ),
     ).toBe(85)
     await expect(picker.locator('[title$=".pdf"]')).toHaveCount(0)
-    await picker
-      .getByTestId('media-upload')
-      .setInputFiles({
-        name: 'blocked.pdf',
-        mimeType: 'application/pdf',
-        buffer: Buffer.from('%PDF-1.4'),
-      })
+    await picker.getByTestId('media-upload').setInputFiles({
+      name: 'blocked.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from('%PDF-1.4'),
+    })
     await expect(
       page
         .locator('[data-sonner-toast]')

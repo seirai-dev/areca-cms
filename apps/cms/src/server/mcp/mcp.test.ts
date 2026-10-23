@@ -4,7 +4,15 @@ import {
   Client,
   StreamableHTTPClientTransport,
 } from '@modelcontextprotocol/client'
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest'
 
 import { db } from '#/db'
 import {
@@ -1309,7 +1317,9 @@ async function callArray(
   const result = await client.callTool({ name, arguments: args })
   expect(result.isError).toBeFalsy()
   const first = result.content[0]
-  const parsed: unknown = JSON.parse(first?.type === 'text' ? first.text : 'null')
+  const parsed: unknown = JSON.parse(
+    first?.type === 'text' ? first.text : 'null',
+  )
   return Array.isArray(parsed) ? (parsed as Record<string, unknown>[]) : []
 }
 
@@ -1395,8 +1405,12 @@ describe.skipIf(!hasDb)('site content (globals)', () => {
       for (const name of definition) expect(names).not.toContain(name)
     }
 
-    const agencyNames = await toolNames(await clientFor(w, 'agency', 'Vis agency'))
-    expect(agencyNames).toEqual(expect.arrayContaining([...readWrite, ...definition]))
+    const agencyNames = await toolNames(
+      await clientFor(w, 'agency', 'Vis agency'),
+    )
+    expect(agencyNames).toEqual(
+      expect.arrayContaining([...readWrite, ...definition]),
+    )
   })
 
   it('returns a section with status, schema, values, and SEO and preview only when they apply', async () => {
@@ -1417,9 +1431,9 @@ describe.skipIf(!hasDb)('site content (globals)', () => {
       previewAvailable: false,
     })
     expect(
-      (read.data?.fields as { key: string; type: string; required: boolean }[]).map(
-        (field) => [field.key, field.type, field.required],
-      ),
+      (
+        read.data?.fields as { key: string; type: string; required: boolean }[]
+      ).map((field) => [field.key, field.type, field.required]),
     ).toEqual([
       ['email', 'text', true],
       ['phone', 'text', false],
@@ -1431,9 +1445,9 @@ describe.skipIf(!hasDb)('site content (globals)', () => {
       phone: '+31 20 123 4567',
     })
     // Rich text comes back as Markdown, not as the stored editor document.
-    expect(String((read.data?.values as Record<string, unknown>).about)).toContain(
-      'Hello world',
-    )
+    expect(
+      String((read.data?.values as Record<string, unknown>).about),
+    ).toContain('Hello world')
     expect(read.data).not.toHaveProperty('seo')
 
     const withSeo = await call(client, 'get_global', { global: 'homePage' })
@@ -1488,10 +1502,7 @@ describe.skipIf(!hasDb)('site content (globals)', () => {
       expect(out.text, name).toMatch(/No (entry with id|site content)/)
     }
 
-    const [row] = await db
-      .select()
-      .from(entry)
-      .where(eq(entry.id, id))
+    const [row] = await db.select().from(entry).where(eq(entry.id, id))
     expect(row).toMatchObject({ status: 'draft' })
 
     const agency = await clientFor(w, 'agency', 'Retired by id agency')
@@ -1536,9 +1547,9 @@ describe.skipIf(!hasDb)('site content (globals)', () => {
     expect((stored.draftData.about as { type: string }).type).toBe('doc')
     const read = await call(client, 'get_global', { global: 'companyInfo' })
     expect(read.data?.values).toMatchObject({ email: 'team@example.com' })
-    expect(String((read.data?.values as Record<string, unknown>).about)).toContain(
-      '## Our story',
-    )
+    expect(
+      String((read.data?.values as Record<string, unknown>).about),
+    ).toContain('## Our story')
 
     const stale = await call(client, 'update_global', {
       global: 'companyInfo',
@@ -1751,13 +1762,17 @@ describe.skipIf(!hasDb)('site content (globals)', () => {
           eq(collection.key, 'footerInfo'),
         ),
       )
-    expect(col).toMatchObject({ kind: 'global', label: 'Footer', enabled: true })
+    expect(col).toMatchObject({
+      kind: 'global',
+      label: 'Footer',
+      enabled: true,
+    })
     const entries = await db
       .select()
       .from(entry)
-      .where(eq(entry.collectionId, col!.id))
+      .where(eq(entry.collectionId, col.id))
     expect(entries.map((item) => item.slug)).toEqual([GLOBAL_ENTRY_SLUG])
-    const entryId = entries[0]!.id
+    const entryId = entries[0].id
 
     const redefined = await call(agency, 'upsert_global', {
       key: 'footerInfo',
@@ -1777,7 +1792,7 @@ describe.skipIf(!hasDb)('site content (globals)', () => {
     const afterRedefine = await db
       .select()
       .from(entry)
-      .where(eq(entry.collectionId, col!.id))
+      .where(eq(entry.collectionId, col.id))
     expect(afterRedefine).toHaveLength(1)
 
     const withSlug = await call(agency, 'upsert_global', {
@@ -1821,9 +1836,7 @@ describe.skipIf(!hasDb)('site content (globals)', () => {
     const archived = await db
       .select()
       .from(deletedContentArchive)
-      .where(
-        inArray(deletedContentArchive.entityId, [col!.id, entryId]),
-      )
+      .where(inArray(deletedContentArchive.entityId, [col.id, entryId]))
     expect(archived.length).toBeGreaterThan(0)
     expect(
       (await call(agency, 'get_global', { global: 'footerInfo' })).isError,

@@ -94,15 +94,14 @@ export async function buildSnapshot(
     }
   | { ok: false; errors: string[] }
 > {
-  const [existingSite] = await connection
-    .select()
-    .from(site)
-    .where(eq(site.id, siteId))
-    .limit(1)
+  const existingSite = (
+    await connection.select().from(site).where(eq(site.id, siteId)).limit(1)
+  ).at(0)
   if (!existingSite) {
     throw new NotFoundError(m.server_site_not_found())
   }
 
+  const siteRow = existingSite
   const now = new Date()
   // Null on a single-language site: every language step below is skipped.
   const languages: SiteLanguages | null = existingSite.languages ?? null
@@ -172,9 +171,7 @@ export async function buildSnapshot(
           requiredLanguages: col.requiredLanguages,
         })
         if (gaps.length > 0) {
-          errors.push(
-            `${col.key}/${row.slug}: ${formatLanguageBlockers(gaps)}`,
-          )
+          errors.push(`${col.key}/${row.slug}: ${formatLanguageBlockers(gaps)}`)
         }
       }
       included.push({
@@ -197,17 +194,19 @@ export async function buildSnapshot(
   const sectionItems = new Map<string, IncludedEntry>()
   const unreadySections = new Map<string, string>()
   for (const section of sections) {
-    const [row] = await connection
-      .select()
-      .from(entry)
-      .where(
-        and(
-          eq(entry.siteId, siteId),
-          eq(entry.collectionId, section.id),
-          eq(entry.slug, GLOBAL_ENTRY_SLUG),
-        ),
-      )
-      .limit(1)
+    const row = (
+      await connection
+        .select()
+        .from(entry)
+        .where(
+          and(
+            eq(entry.siteId, siteId),
+            eq(entry.collectionId, section.id),
+            eq(entry.slug, GLOBAL_ENTRY_SLUG),
+          ),
+        )
+        .limit(1)
+    ).at(0)
     if (!row) {
       errors.push(`Site content "${section.label}": entry is missing`)
       continue
@@ -521,7 +520,9 @@ export async function buildSnapshot(
     view: EntryData,
     locale: string | null,
   ): Promise<{ slug: string; data: Record<string, unknown>; seo: SeoMeta }> {
-    const isTranslation = Boolean(languages && locale && locale !== languages.main)
+    const isTranslation = Boolean(
+      languages && locale && locale !== languages.main,
+    )
     const localSlug = isTranslation ? view[SLUG_KEY] : undefined
     const slug =
       typeof localSlug === 'string' && localSlug !== '' ? localSlug : item.slug
@@ -533,7 +534,7 @@ export async function buildSnapshot(
       connection,
       assets,
       siteId,
-      organizationId: existingSite.organizationId,
+      organizationId: siteRow.organizationId,
       strict: true,
       locale: locale ?? undefined,
     })
@@ -550,7 +551,7 @@ export async function buildSnapshot(
         converted: data,
         slug,
         routePattern,
-        site: existingSite,
+        site: siteRow,
         // A missing OG image falls back to the hero image rather than
         // blocking the whole publication.
         ogImage: ogImageId
@@ -574,7 +575,7 @@ export async function buildSnapshot(
           connection,
           assets,
           siteId,
-          organizationId: existingSite.organizationId,
+          organizationId: siteRow.organizationId,
           strict: true,
           locale: locale ?? undefined,
         })
@@ -586,9 +587,9 @@ export async function buildSnapshot(
           converted: data,
           slug: GLOBAL_ENTRY_SLUG,
           routePattern: '',
-          url: globalPublicUrl(existingSite.productionUrl, section.previewPath),
+          url: globalPublicUrl(siteRow.productionUrl, section.previewPath),
           title: section.label,
-          site: existingSite,
+          site: siteRow,
           ogImage: item ? resolveOgImage(view, assets) : null,
           publishedAt: item?.publishedAt ?? null,
         })
@@ -645,11 +646,9 @@ export async function buildPreviewGlobal(
   locale?: string | null,
 ): Promise<PreviewGlobal | null> {
   const found = await getGlobalEntry(siteId, key)
-  const [existingSite] = await db
-    .select()
-    .from(site)
-    .where(eq(site.id, siteId))
-    .limit(1)
+  const existingSite = (
+    await db.select().from(site).where(eq(site.id, siteId)).limit(1)
+  ).at(0)
   if (!found || !existingSite || !found.global.enabled) return null
   const { global, entry: row } = found
   const languages = existingSite.languages ?? null
@@ -673,7 +672,10 @@ export async function buildPreviewGlobal(
             converted: data,
             slug: GLOBAL_ENTRY_SLUG,
             routePattern: '',
-            url: globalPublicUrl(existingSite.productionUrl, global.previewPath),
+            url: globalPublicUrl(
+              existingSite.productionUrl,
+              global.previewPath,
+            ),
             title: global.label,
             site: existingSite,
             ogImage: await resolveOgImageValue(
@@ -709,18 +711,18 @@ export async function buildPreviewEntry(
   locale?: string | null,
 ): Promise<PreviewEntry | null> {
   const col = await getCollection(siteId, collectionKey)
-  const [existingSite] = await db
-    .select()
-    .from(site)
-    .where(eq(site.id, siteId))
-    .limit(1)
+  const existingSite = (
+    await db.select().from(site).where(eq(site.id, siteId)).limit(1)
+  ).at(0)
   if (!col || !existingSite) return null
 
-  const [row] = await db
-    .select()
-    .from(entry)
-    .where(and(eq(entry.collectionId, col.id), eq(entry.slug, slug)))
-    .limit(1)
+  const row = (
+    await db
+      .select()
+      .from(entry)
+      .where(and(eq(entry.collectionId, col.id), eq(entry.slug, slug)))
+      .limit(1)
+  ).at(0)
   if (!row) return null
   const languages = existingSite.languages ?? null
 
@@ -790,7 +792,10 @@ function previewLanguageFields(
   languages: SiteLanguages | null,
   fields: Field[],
   draft: EntryData,
-): { isFallback?: boolean; localeStatus?: Record<string, PreviewLocaleStatus> } {
+): {
+  isFallback?: boolean
+  localeStatus?: Record<string, PreviewLocaleStatus>
+} {
   if (!languages || expanded.locale === undefined) return {}
   return {
     isFallback: expanded.isFallback ?? false,
@@ -806,8 +811,7 @@ function previewLanguageFields(
  */
 function shippedLocales(data: EntryData, ctx: LocaleCtx): string[] {
   return servedLocales(data, ctx).filter(
-    (locale) =>
-      locale === ctx.main || localeStatus(data, locale, ctx).started,
+    (locale) => locale === ctx.main || localeStatus(data, locale, ctx).started,
   )
 }
 
@@ -957,24 +961,26 @@ async function convertFields(
       }
       out[field.key] = null
       if (!options.strict && field.collection) {
-        const [refRow] = await db
-          .select({
-            id: entry.id,
-            slug: entry.slug,
-            collectionKey: collection.key,
-          })
-          .from(entry)
-          .innerJoin(collection, eq(entry.collectionId, collection.id))
-          .where(
-            and(
-              eq(entry.id, value),
-              eq(entry.siteId, options.siteId),
-              ...(field.collection
-                ? [eq(collection.key, field.collection)]
-                : []),
-            ),
-          )
-          .limit(1)
+        const refRow = (
+          await db
+            .select({
+              id: entry.id,
+              slug: entry.slug,
+              collectionKey: collection.key,
+            })
+            .from(entry)
+            .innerJoin(collection, eq(entry.collectionId, collection.id))
+            .where(
+              and(
+                eq(entry.id, value),
+                eq(entry.siteId, options.siteId),
+                ...(field.collection
+                  ? [eq(collection.key, field.collection)]
+                  : []),
+              ),
+            )
+            .limit(1)
+        ).at(0)
         if (refRow) {
           out[field.key] = {
             collection: refRow.collectionKey,

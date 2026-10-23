@@ -179,11 +179,9 @@ export async function claimNextJob() {
   }
   const id = result.rows[0]?.id
   if (!id) return null
-  const [job] = await db
-    .select()
-    .from(buildJob)
-    .where(eq(buildJob.id, id))
-    .limit(1)
+  const job = (
+    await db.select().from(buildJob).where(eq(buildJob.id, id)).limit(1)
+  ).at(0)
   return job ?? null
 }
 
@@ -215,24 +213,30 @@ export async function processJob(
         )
         if (blocked.rows.length) return null
       }
-      const [active] = await tx
-        .select()
-        .from(buildJob)
-        .where(
-          and(
-            or(
-              eq(buildJob.siteId, job.siteId),
-              ...(resourceKey
-                ? [eq(buildJob.deploymentResourceKey, resourceKey)]
-                : []),
+      const active = (
+        await tx
+          .select()
+          .from(buildJob)
+          .where(
+            and(
+              or(
+                eq(buildJob.siteId, job.siteId),
+                ...(resourceKey
+                  ? [eq(buildJob.deploymentResourceKey, resourceKey)]
+                  : []),
+              ),
+              or(
+                inArray(buildJob.status, [
+                  'building',
+                  'validating',
+                  'deploying',
+                ]),
+                eq(buildJob.dispatchUncertain, true),
+              ),
             ),
-            or(
-              inArray(buildJob.status, ['building', 'validating', 'deploying']),
-              eq(buildJob.dispatchUncertain, true),
-            ),
-          ),
-        )
-        .limit(1)
+          )
+          .limit(1)
+      ).at(0)
       if (active) return null
       return (
         (
@@ -270,11 +274,13 @@ export async function processJob(
       )
   }, HEARTBEAT_MS)
   const transition = async (status: 'validating' | 'deploying') => {
-    const [owned] = await db
-      .update(buildJob)
-      .set({ status })
-      .where(fence)
-      .returning({ id: buildJob.id })
+    const owned = (
+      await db
+        .update(buildJob)
+        .set({ status })
+        .where(fence)
+        .returning({ id: buildJob.id })
+    ).at(0)
     if (!owned) throw new Error('Publication worker lease lost')
   }
   const logs: Promise<void>[] = []
@@ -287,11 +293,9 @@ export async function processJob(
   }
 
   try {
-    const [existingSite] = await db
-      .select()
-      .from(site)
-      .where(eq(site.id, job.siteId))
-      .limit(1)
+    const existingSite = (
+      await db.select().from(site).where(eq(site.id, job.siteId)).limit(1)
+    ).at(0)
     if (!existingSite) {
       await failJob(
         job,
@@ -316,11 +320,9 @@ export async function processJob(
     }
 
     await db.transaction(async (tx) => {
-      const [owned] = await tx
-        .select()
-        .from(buildJob)
-        .where(fence)
-        .for('update')
+      const owned = (
+        await tx.select().from(buildJob).where(fence).for('update')
+      ).at(0)
       if (!owned) throw new Error('Publication worker lease lost')
       await tx
         .update(publication)
@@ -334,6 +336,7 @@ export async function processJob(
     await transition('validating')
     log('validating snapshot')
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- defensive: the column is NOT NULL, but a bad row must still fail the job here
     if (!pub.snapshot || !pub.snapshotHash) {
       await failJob(
         job,
@@ -398,15 +401,17 @@ export async function processJob(
         dispatchUncertain = true
       } else {
         const dispatchedAt = new Date()
-        const [intent] = await db
-          .update(buildJob)
-          .set({
-            dispatchStartedAt: dispatchedAt,
-            dispatchTarget: adapterTarget,
-            dispatchUncertain: true,
-          })
-          .where(fence)
-          .returning({ id: buildJob.id })
+        const intent = (
+          await db
+            .update(buildJob)
+            .set({
+              dispatchStartedAt: dispatchedAt,
+              dispatchTarget: adapterTarget,
+              dispatchUncertain: true,
+            })
+            .where(fence)
+            .returning({ id: buildJob.id })
+        ).at(0)
         if (!intent) throw new Error('Publication worker lease lost')
         dispatchUncertain = true
         const result = await adapter.deploy(adapterTarget, log, {
@@ -415,11 +420,13 @@ export async function processJob(
         })
         deploymentId = result.deploymentId
       }
-      const [ownedDispatch] = await db
-        .update(buildJob)
-        .set({ upstreamDeploymentId: deploymentId })
-        .where(fence)
-        .returning({ id: buildJob.id })
+      const ownedDispatch = (
+        await db
+          .update(buildJob)
+          .set({ upstreamDeploymentId: deploymentId })
+          .where(fence)
+          .returning({ id: buildJob.id })
+      ).at(0)
       if (!ownedDispatch) throw new Error('Publication worker lease lost')
       const wait = await adapter.waitForCompletion(
         adapterTarget,
@@ -432,11 +439,13 @@ export async function processJob(
           `Deployment ${deploymentId} completion unknown; reconcile manually before publishing again`,
         )
       dispatchUncertain = false
-      const [completedDispatch] = await db
-        .update(buildJob)
-        .set({ dispatchUncertain: false })
-        .where(fence)
-        .returning({ id: buildJob.id })
+      const completedDispatch = (
+        await db
+          .update(buildJob)
+          .set({ dispatchUncertain: false })
+          .where(fence)
+          .returning({ id: buildJob.id })
+      ).at(0)
       if (!completedDispatch) throw new Error('Publication worker lease lost')
       if (wait === 'error') {
         await failJob(
@@ -468,11 +477,9 @@ export async function processJob(
 
     const now = new Date()
     await db.transaction(async (tx) => {
-      const [owned] = await tx
-        .select()
-        .from(buildJob)
-        .where(fence)
-        .for('update')
+      const owned = (
+        await tx.select().from(buildJob).where(fence).for('update')
+      ).at(0)
       if (!owned) throw new Error('Publication worker lease lost')
       await tx
         .update(publication)
@@ -565,11 +572,13 @@ export async function processJob(
       err: error,
     })
     try {
-      const [existingSite] = await db
-        .select({ organizationId: site.organizationId })
-        .from(site)
-        .where(eq(site.id, job.siteId))
-        .limit(1)
+      const existingSite = (
+        await db
+          .select({ organizationId: site.organizationId })
+          .from(site)
+          .where(eq(site.id, job.siteId))
+          .limit(1)
+      ).at(0)
       await failJob(
         job,
         job.publicationId,
@@ -601,26 +610,28 @@ async function failJob(
   )
   const now = new Date()
   const recorded = await db.transaction(async (tx) => {
-    const [failed] = await tx
-      .update(buildJob)
-      .set({
-        status: 'failed',
-        error,
-        finishedAt: now,
-        leaseExpiresAt: null,
-        dispatchUncertain,
-      })
-      .where(
-        and(
-          eq(buildJob.id, job.id),
-          eq(buildJob.attempts, job.attempts),
-          inArray(buildJob.status, ['building', 'validating', 'deploying']),
-          // Expired workers must leave the durable dispatch marker untouched.
-          // Recovery acquires the row and decides whether it needs quarantine.
-          sql`${buildJob.leaseExpiresAt} > now()`,
-        ),
-      )
-      .returning()
+    const failed = (
+      await tx
+        .update(buildJob)
+        .set({
+          status: 'failed',
+          error,
+          finishedAt: now,
+          leaseExpiresAt: null,
+          dispatchUncertain,
+        })
+        .where(
+          and(
+            eq(buildJob.id, job.id),
+            eq(buildJob.attempts, job.attempts),
+            inArray(buildJob.status, ['building', 'validating', 'deploying']),
+            // Expired workers must leave the durable dispatch marker untouched.
+            // Recovery acquires the row and decides whether it needs quarantine.
+            sql`${buildJob.leaseExpiresAt} > now()`,
+          ),
+        )
+        .returning()
+    ).at(0)
     if (!failed) return false
     await incrementFailureCounter(tx)
     await recordSchedulerFailure(tx, job, error, now)
@@ -652,25 +663,25 @@ export async function reconcileDeploymentJob(
   deps: ProcessJobDeps = {},
 ) {
   const claimed = await db.transaction(async (tx) => {
-    const [candidate] = await tx
-      .select()
-      .from(buildJob)
-      .where(eq(buildJob.id, jobId))
-      .limit(1)
+    const candidate = (
+      await tx.select().from(buildJob).where(eq(buildJob.id, jobId)).limit(1)
+    ).at(0)
     if (!candidate) throw new Error('Build job not found')
     await tx.execute(
       sql`SELECT id FROM site WHERE id=${candidate.siteId} FOR UPDATE`,
     )
-    const [active] = await tx
-      .select()
-      .from(buildJob)
-      .where(
-        and(
-          eq(buildJob.siteId, candidate.siteId),
-          inArray(buildJob.status, ['building', 'validating', 'deploying']),
-        ),
-      )
-      .limit(1)
+    const active = (
+      await tx
+        .select()
+        .from(buildJob)
+        .where(
+          and(
+            eq(buildJob.siteId, candidate.siteId),
+            inArray(buildJob.status, ['building', 'validating', 'deploying']),
+          ),
+        )
+        .limit(1)
+    ).at(0)
     if (active) throw new Error('A worker is already reconciling this site')
     const identity = await resourceIdentity(tx, candidate)
     const resourceKey =
@@ -687,23 +698,25 @@ export async function reconcileDeploymentJob(
           'Another deployment for this Dokploy application must finish or be resolved first',
         )
     }
-    const [job] = await tx
-      .update(buildJob)
-      .set({
-        ...identity,
-        status: 'deploying',
-        startedAt: new Date(),
-        leaseExpiresAt: new Date(Date.now() + LEASE_MS),
-        attempts: sql`${buildJob.attempts}+1`,
-      })
-      .where(
-        and(
-          eq(buildJob.id, jobId),
-          eq(buildJob.status, 'failed'),
-          eq(buildJob.dispatchUncertain, true),
-        ),
-      )
-      .returning()
+    const job = (
+      await tx
+        .update(buildJob)
+        .set({
+          ...identity,
+          status: 'deploying',
+          startedAt: new Date(),
+          leaseExpiresAt: new Date(Date.now() + LEASE_MS),
+          attempts: sql`${buildJob.attempts}+1`,
+        })
+        .where(
+          and(
+            eq(buildJob.id, jobId),
+            eq(buildJob.status, 'failed'),
+            eq(buildJob.dispatchUncertain, true),
+          ),
+        )
+        .returning()
+    ).at(0)
     if (!job) throw new Error('Job does not require deployment reconciliation')
     return job
   })
@@ -736,56 +749,66 @@ export async function resolveUncertainDeploymentJob(input: {
     throw new Error(
       'Confirm upstream has stopped and provide an investigation reason',
     )
-  const [actor] = await db
-    .select({ isAgencyAdmin: user.isAgencyAdmin })
-    .from(user)
-    .where(eq(user.id, input.actorId))
-    .limit(1)
+  const actor = (
+    await db
+      .select({ isAgencyAdmin: user.isAgencyAdmin })
+      .from(user)
+      .where(eq(user.id, input.actorId))
+      .limit(1)
+  ).at(0)
   if (!actor?.isAgencyAdmin)
     throw new Error('Only agency admins can release an uncertain deployment')
   const result = await db.transaction(async (tx) => {
-    const [candidate] = await tx
-      .select()
-      .from(buildJob)
-      .where(eq(buildJob.id, input.jobId))
-      .limit(1)
+    const candidate = (
+      await tx
+        .select()
+        .from(buildJob)
+        .where(eq(buildJob.id, input.jobId))
+        .limit(1)
+    ).at(0)
     if (!candidate) throw new Error('Build job not found')
-    const [existingSite] = await tx
-      .select()
-      .from(site)
-      .where(eq(site.id, candidate.siteId))
-      .for('update')
-      .limit(1)
+    const existingSite = (
+      await tx
+        .select()
+        .from(site)
+        .where(eq(site.id, candidate.siteId))
+        .for('update')
+        .limit(1)
+    ).at(0)
     if (!existingSite) throw new Error('Site not found')
-    const [active] = await tx
-      .select()
-      .from(buildJob)
-      .where(
-        and(
-          eq(buildJob.siteId, candidate.siteId),
-          inArray(buildJob.status, ['building', 'validating', 'deploying']),
-        ),
-      )
-      .limit(1)
+    const active = (
+      await tx
+        .select()
+        .from(buildJob)
+        .where(
+          and(
+            eq(buildJob.siteId, candidate.siteId),
+            inArray(buildJob.status, ['building', 'validating', 'deploying']),
+          ),
+        )
+        .limit(1)
+    ).at(0)
     if (active)
       throw new Error(
         'A worker is still active; wait for reconciliation to finish',
       )
     const reason = redactString(input.reason.trim())
-    const [resolved] = await tx
-      .update(buildJob)
-      .set({
-        dispatchUncertain: false,
-        error: `Manually resolved after upstream stopped: ${reason}`,
-      })
-      .where(
-        and(
-          eq(buildJob.id, input.jobId),
-          eq(buildJob.status, 'failed'),
-          eq(buildJob.dispatchUncertain, true),
-        ),
-      )
-      .returning()
+    const resolved = (
+      await tx
+        .update(buildJob)
+        .set({
+          dispatchUncertain: false,
+          error: `Manually resolved after upstream stopped: ${reason}`,
+        })
+        .where(
+          and(
+            eq(buildJob.id, input.jobId),
+            eq(buildJob.status, 'failed'),
+            eq(buildJob.dispatchUncertain, true),
+          ),
+        )
+        .returning()
+    ).at(0)
     if (!resolved)
       throw new Error('Job does not require deployment reconciliation')
     await tx
@@ -1126,7 +1149,7 @@ export function startWorker({
   if (!env.WORKER_ENABLED) return
   if (g.__arecaWorker) return g.__arecaWorker
 
-  const pool = createJobPool({
+  const workerPool = createJobPool({
     concurrency: env.WORKER_CONCURRENCY,
     claim: claimNextJob,
     run: (job) => processJob(job),
@@ -1137,7 +1160,7 @@ export function startWorker({
   })
   const state = startWorkerLoops(
     {
-      processJobs: pool.fill,
+      processJobs: workerPool.fill,
       recover: () => recoverStaleJobs(),
       schedule: () => runSchedulerTick(),
       cleanup: () => drainStorageObjectDeletions(),
@@ -1146,7 +1169,7 @@ export function startWorker({
     },
     { intervalMs },
   )
-  state.pool = pool
+  state.pool = workerPool
   g.__arecaWorker = state
   installShutdownHandlers({
     stop: () => stopWorker({ drainTimeoutMs: env.WORKER_DRAIN_TIMEOUT_MS }),
@@ -1203,14 +1226,15 @@ async function resourceIdentity(
   job: typeof buildJob.$inferSelect,
 ) {
   if (job.deploymentResourceKey) return {}
-  const [existingSite] = await tx
-    .select()
-    .from(site)
-    .where(eq(site.id, job.siteId))
-  const [pub] = await tx
-    .select({ publishingMode: publication.publishingMode })
-    .from(publication)
-    .where(eq(publication.id, job.publicationId))
+  const existingSite = (
+    await tx.select().from(site).where(eq(site.id, job.siteId))
+  ).at(0)
+  const pub = (
+    await tx
+      .select({ publishingMode: publication.publishingMode })
+      .from(publication)
+      .where(eq(publication.id, job.publicationId))
+  ).at(0)
   if (!existingSite || !pub) return {}
   return deploymentIdentity(tx, {
     ...existingSite,
