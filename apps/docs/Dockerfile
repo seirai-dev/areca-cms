@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Standalone, read-only docs site. Build from the repository root:
 #   docker build -f apps/docs/Dockerfile -t areca-docs .
-# Only apps/docs is copied in; nothing from the CMS or SDK is used.
+# The SDK manifest is also needed to validate documented install versions.
 ARG NODE_VERSION=24.21.0
 
 FROM node:${NODE_VERSION}-alpine AS build
@@ -15,6 +15,7 @@ COPY apps/docs/package.json ./apps/docs/package.json
 RUN --mount=type=cache,id=docs-pnpm,target=/pnpm/store \
     pnpm install --filter @areca/docs --no-include-workspace-root --frozen-lockfile --store-dir=/pnpm/store
 COPY apps/docs ./apps/docs
+COPY packages/site-sdk/package.json ./packages/site-sdk/package.json
 RUN pnpm --filter @areca/docs build
 
 FROM nginx:1.29-alpine AS runner
