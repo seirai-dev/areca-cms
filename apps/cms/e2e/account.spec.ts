@@ -214,7 +214,7 @@ test('a sole owner cannot delete the account: the client is named with a People 
   await hydrated(guest, guest.getByTestId('account-page'))
   const blockers = guest.getByTestId('delete-account-blockers')
   await expect(blockers).toBeVisible()
-  await expect(blockers).toContainText('Only you own these clients')
+  await expect(blockers).toContainText('Only you own this client')
   await expect(blockers).toContainText(clientName)
   const peopleLink = blockers.getByRole('link', { name: clientName })
   await expect(peopleLink).toHaveAttribute('href', /\/sites\/[^/]+\/people$/)
