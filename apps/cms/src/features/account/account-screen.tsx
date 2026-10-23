@@ -11,6 +11,7 @@ import { SettingsSection } from '#/components/ui/settings-section'
 import { m } from '#/paraglide/messages'
 import type { Me } from '#/server/fn/me'
 
+import { AccountNav } from './account-nav'
 import { EmailLanguageSection } from './email-language-section'
 import { NotificationsSection } from './notifications-section'
 import { TwoFactorSection } from './two-factor-section'
@@ -82,6 +83,7 @@ export function AccountScreen({ me }: { me: Me }) {
           title={m.account_title()}
           description={m.account_description()}
         />
+        {!me.mfaEnrolmentRequired ? <AccountNav current="account" /> : null}
       </div>
 
       {me.mfaEnrolmentRequired ? (

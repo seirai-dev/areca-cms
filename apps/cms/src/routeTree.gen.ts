@@ -22,6 +22,8 @@ import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as ApiMetricsRouteImport } from './routes/api/metrics'
 import { Route as InviteTokenRouteImport } from './routes/invite/$token'
 import { Route as OauthConsentRouteImport } from './routes/oauth/consent'
+import { Route as AppAccountIndexRouteImport } from './routes/_app/account/index'
+import { Route as AppAccountSessionsRouteImport } from './routes/_app/account/sessions'
 import { Route as AppAdminIndexRouteImport } from './routes/_app/admin/index'
 import { Route as AppAdminSplatRouteImport } from './routes/_app/admin/$'
 import { Route as AppAgencyIndexRouteImport } from './routes/_app/agency/index'
@@ -125,6 +127,16 @@ const OauthConsentRoute = OauthConsentRouteImport.update({
   id: '/oauth/consent',
   path: '/oauth/consent',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AppAccountIndexRoute = AppAccountIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppAccountRoute,
+} as any)
+const AppAccountSessionsRoute = AppAccountSessionsRouteImport.update({
+  id: '/sessions',
+  path: '/sessions',
+  getParentRoute: () => AppAccountRoute,
 } as any)
 const AppAdminIndexRoute = AppAdminIndexRouteImport.update({
   id: '/admin/',
@@ -336,12 +348,13 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/setup': typeof SetupRoute
   '/unsubscribe': typeof UnsubscribeRoute
-  '/account': typeof AppAccountRoute
+  '/account': typeof AppAccountRouteWithChildren
   '/agency': typeof AppAgencyRouteWithChildren
   '/api/health': typeof ApiHealthRouteWithChildren
   '/api/metrics': typeof ApiMetricsRoute
   '/invite/$token': typeof InviteTokenRoute
   '/oauth/consent': typeof OauthConsentRoute
+  '/account/sessions': typeof AppAccountSessionsRoute
   '/admin/$': typeof AppAdminSplatRoute
   '/agency/activity': typeof AppAgencyActivityRoute
   '/agency/ai': typeof AppAgencyAiRoute
@@ -356,6 +369,7 @@ export interface FileRoutesByFullPath {
   '/api/notifications/unsubscribe': typeof ApiNotificationsUnsubscribeRoute
   '/api/sites/manifest': typeof ApiSitesManifestRoute
   '/api/sites/preview': typeof ApiSitesPreviewRoute
+  '/account/': typeof AppAccountIndexRoute
   '/admin/': typeof AppAdminIndexRoute
   '/agency/': typeof AppAgencyIndexRoute
   '/sites/': typeof AppSitesIndexRoute
@@ -388,12 +402,12 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/setup': typeof SetupRoute
   '/unsubscribe': typeof UnsubscribeRoute
-  '/account': typeof AppAccountRoute
   '/api/health': typeof ApiHealthRouteWithChildren
   '/api/metrics': typeof ApiMetricsRoute
   '/invite/$token': typeof InviteTokenRoute
   '/oauth/consent': typeof OauthConsentRoute
   '/': typeof AppIndexRoute
+  '/account/sessions': typeof AppAccountSessionsRoute
   '/admin/$': typeof AppAdminSplatRoute
   '/agency/activity': typeof AppAgencyActivityRoute
   '/agency/ai': typeof AppAgencyAiRoute
@@ -407,6 +421,7 @@ export interface FileRoutesByTo {
   '/api/notifications/unsubscribe': typeof ApiNotificationsUnsubscribeRoute
   '/api/sites/manifest': typeof ApiSitesManifestRoute
   '/api/sites/preview': typeof ApiSitesPreviewRoute
+  '/account': typeof AppAccountIndexRoute
   '/admin': typeof AppAdminIndexRoute
   '/agency': typeof AppAgencyIndexRoute
   '/sites': typeof AppSitesIndexRoute
@@ -440,13 +455,14 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/setup': typeof SetupRoute
   '/unsubscribe': typeof UnsubscribeRoute
-  '/_app/account': typeof AppAccountRoute
+  '/_app/account': typeof AppAccountRouteWithChildren
   '/_app/agency': typeof AppAgencyRouteWithChildren
   '/api/health': typeof ApiHealthRouteWithChildren
   '/api/metrics': typeof ApiMetricsRoute
   '/invite/$token': typeof InviteTokenRoute
   '/oauth/consent': typeof OauthConsentRoute
   '/_app/': typeof AppIndexRoute
+  '/_app/account/sessions': typeof AppAccountSessionsRoute
   '/_app/admin/$': typeof AppAdminSplatRoute
   '/_app/agency/activity': typeof AppAgencyActivityRoute
   '/_app/agency/ai': typeof AppAgencyAiRoute
@@ -461,6 +477,7 @@ export interface FileRoutesById {
   '/api/notifications/unsubscribe': typeof ApiNotificationsUnsubscribeRoute
   '/api/sites/manifest': typeof ApiSitesManifestRoute
   '/api/sites/preview': typeof ApiSitesPreviewRoute
+  '/_app/account/': typeof AppAccountIndexRoute
   '/_app/admin/': typeof AppAdminIndexRoute
   '/_app/agency/': typeof AppAgencyIndexRoute
   '/_app/sites/': typeof AppSitesIndexRoute
@@ -502,6 +519,7 @@ export interface FileRouteTypes {
     | '/api/metrics'
     | '/invite/$token'
     | '/oauth/consent'
+    | '/account/sessions'
     | '/admin/$'
     | '/agency/activity'
     | '/agency/ai'
@@ -516,6 +534,7 @@ export interface FileRouteTypes {
     | '/api/notifications/unsubscribe'
     | '/api/sites/manifest'
     | '/api/sites/preview'
+    | '/account/'
     | '/admin/'
     | '/agency/'
     | '/sites/'
@@ -548,12 +567,12 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/setup'
     | '/unsubscribe'
-    | '/account'
     | '/api/health'
     | '/api/metrics'
     | '/invite/$token'
     | '/oauth/consent'
     | '/'
+    | '/account/sessions'
     | '/admin/$'
     | '/agency/activity'
     | '/agency/ai'
@@ -567,6 +586,7 @@ export interface FileRouteTypes {
     | '/api/notifications/unsubscribe'
     | '/api/sites/manifest'
     | '/api/sites/preview'
+    | '/account'
     | '/admin'
     | '/agency'
     | '/sites'
@@ -606,6 +626,7 @@ export interface FileRouteTypes {
     | '/invite/$token'
     | '/oauth/consent'
     | '/_app/'
+    | '/_app/account/sessions'
     | '/_app/admin/$'
     | '/_app/agency/activity'
     | '/_app/agency/ai'
@@ -620,6 +641,7 @@ export interface FileRouteTypes {
     | '/api/notifications/unsubscribe'
     | '/api/sites/manifest'
     | '/api/sites/preview'
+    | '/_app/account/'
     | '/_app/admin/'
     | '/_app/agency/'
     | '/_app/sites/'
@@ -762,6 +784,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/oauth/consent'
       preLoaderRoute: typeof OauthConsentRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_app/account/': {
+      id: '/_app/account/'
+      path: '/'
+      fullPath: '/account/'
+      preLoaderRoute: typeof AppAccountIndexRouteImport
+      parentRoute: typeof AppAccountRoute
+    }
+    '/_app/account/sessions': {
+      id: '/_app/account/sessions'
+      path: '/sessions'
+      fullPath: '/account/sessions'
+      preLoaderRoute: typeof AppAccountSessionsRouteImport
+      parentRoute: typeof AppAccountRoute
     }
     '/_app/admin/': {
       id: '/_app/admin/'
@@ -1039,6 +1075,20 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AppAccountRouteChildren {
+  AppAccountSessionsRoute: typeof AppAccountSessionsRoute
+  AppAccountIndexRoute: typeof AppAccountIndexRoute
+}
+
+const AppAccountRouteChildren: AppAccountRouteChildren = {
+  AppAccountSessionsRoute: AppAccountSessionsRoute,
+  AppAccountIndexRoute: AppAccountIndexRoute,
+}
+
+const AppAccountRouteWithChildren = AppAccountRoute._addFileChildren(
+  AppAccountRouteChildren,
+)
+
 interface AppAgencyRouteChildren {
   AppAgencyActivityRoute: typeof AppAgencyActivityRoute
   AppAgencyAiRoute: typeof AppAgencyAiRoute
@@ -1119,7 +1169,7 @@ const AppSitesSiteIdRouteWithChildren = AppSitesSiteIdRoute._addFileChildren(
 )
 
 interface AppRouteChildren {
-  AppAccountRoute: typeof AppAccountRoute
+  AppAccountRoute: typeof AppAccountRouteWithChildren
   AppAgencyRoute: typeof AppAgencyRouteWithChildren
   AppIndexRoute: typeof AppIndexRoute
   AppAdminSplatRoute: typeof AppAdminSplatRoute
@@ -1131,7 +1181,7 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
-  AppAccountRoute: AppAccountRoute,
+  AppAccountRoute: AppAccountRouteWithChildren,
   AppAgencyRoute: AppAgencyRouteWithChildren,
   AppIndexRoute: AppIndexRoute,
   AppAdminSplatRoute: AppAdminSplatRoute,
@@ -1181,13 +1231,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

@@ -1,13 +1,10 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { Outlet, createFileRoute } from '@tanstack/react-router'
 
-import { AccountScreen } from '#/features/account/account-screen'
-
-/** `/account`: profile and two-factor authentication for the signed-in user. */
+/** `/account` and its pages: the profile page and `/account/sessions`. */
 export const Route = createFileRoute('/_app/account')({
-  component: AccountPage,
+  component: AccountLayout,
 })
 
-function AccountPage() {
-  const { me } = Route.useRouteContext()
-  return <AccountScreen me={me} />
+function AccountLayout() {
+  return <Outlet />
 }
