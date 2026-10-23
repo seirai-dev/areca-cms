@@ -41,6 +41,15 @@ export type EntryRow = {
   updatedByName?: string | null
 }
 
+/** A page's rows. A malformed response (no `items`) reads as an empty page. */
+function pageItems<T>(page: { items?: T[] } | null | undefined): T[] {
+  return page?.items ?? []
+}
+
+function pageTotal(page: { total?: number } | null | undefined): number {
+  return page?.total ?? 0
+}
+
 /**
  * One collection's entries for the Collection screen (brief §3.4): status
  * filter and search go to the server; "Show more" appends pages of 25
@@ -84,21 +93,28 @@ export function useCollectionEntries({
         },
       }),
     getNextPageParam: (last, pages) => {
-      const loaded = pages.reduce((sum, page) => sum + page.items.length, 0)
-      return loaded < last.total ? loaded : undefined
+      const loaded = pages.reduce(
+        (sum, page) => sum + pageItems(page).length,
+        0,
+      )
+      return loaded < pageTotal(last) ? loaded : undefined
     },
     placeholderData: keepPreviousData,
     // A scheduled entry goes live on the server; refresh the list while one
     // is due (or less than a minute away) and stop once none is.
     refetchInterval: (q) => {
       const pages = q.state.data?.pages ?? []
-      const times = scheduledTimes(pages.flatMap((page) => page.items))
+      const times = scheduledTimes(pages.flatMap((page) => pageItems(page)))
       return shouldPollScheduled(times) ? DUE_POLL_MS : false
     },
   })
 
+  // A malformed response shows the list's normal empty or error state rather
+  // than throwing to the route error boundary.
   const rows = React.useMemo(
-    () => (query.data?.pages.flatMap((page) => page.items) ?? []) as EntryRow[],
+    () =>
+      (query.data?.pages.flatMap((page) => pageItems(page)) ??
+        []) as EntryRow[],
     [query.data],
   )
   const total = query.data?.pages[0]?.total
