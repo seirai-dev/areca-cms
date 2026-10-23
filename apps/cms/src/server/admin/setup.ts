@@ -6,10 +6,13 @@ import { account, user } from '#/db/schema'
 import { env } from '#/env'
 import { auth } from '#/lib/auth'
 import { m } from '#/paraglide/messages'
+import { getLocale } from '#/paraglide/runtime'
 import { audit } from '#/server/audit'
 import { ConflictError, ForbiddenError } from '#/server/content/errors'
 import { createLogger } from '#/server/log'
 import { sendVerificationEmail } from '#/server/mail/account-emails'
+import { mailLocale } from '#/server/mail/render/types'
+import type { MailLocale } from '#/server/mail/render/types'
 
 import {
   resetGeneratedSetupToken,
@@ -38,6 +41,8 @@ export async function completeSetup(input: {
   email: string
   password: string
   setupToken?: string
+  /** The language the setup was done in. Falls back to the request's. */
+  locale?: MailLocale
 }) {
   // Checked before anything else, with one generic error, so a caller without
   // the token learns nothing about whether the instance is already set up.
@@ -67,6 +72,8 @@ export async function completeSetup(input: {
         email: input.email.trim().toLowerCase(),
         emailVerified: false,
         isAgencyAdmin: true,
+        // Stored now so the verification email goes out in this language.
+        locale: mailLocale(input.locale ?? getLocale()),
       })
       .returning({
         id: user.id,

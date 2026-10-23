@@ -133,6 +133,28 @@ describe.skipIf(!hasDb)('setup', () => {
     }
   })
 
+  it('stores the setup language on the first admin, for the verification email', async (ctx) => {
+    if (await hasUsers()) ctx.skip()
+    tokens.configured = TOKEN
+    const suffix = crypto.randomUUID()
+    const email = `turkish-admin-${suffix}@test.local`
+    try {
+      const created = await completeSetup({
+        ...input(suffix, TOKEN),
+        email,
+        locale: 'tr',
+      })
+      const [row] = await db
+        .select({ locale: user.locale })
+        .from(user)
+        .where(eq(user.id, created.id))
+      expect(row.locale).toBe('tr')
+    } finally {
+      await db.delete(auditLog).where(eq(auditLog.action, 'setup.completed'))
+      await db.delete(user).where(eq(user.email, email))
+    }
+  })
+
   it('accepts the generated token when SETUP_TOKEN is unset', async (ctx) => {
     if (await hasUsers()) ctx.skip()
     const log = vi.spyOn(console, 'info').mockImplementation(() => {})
