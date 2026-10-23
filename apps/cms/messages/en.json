@@ -2386,5 +2386,13 @@
   "agency_person_save_refused_one": "1 change can't be saved",
   "agency_people_open_profile": "Open profile",
   "agency_people_menu_block": "Block…",
-  "agency_people_menu_unblock": "Unblock…"
+  "agency_people_menu_unblock": "Unblock…",
+  "activity_user_sign_in": "signed in",
+  "activity_user_rename_full": "renamed {from} to {to}",
+  "activity_member_update_role_full": "changed {person}'s role in {client} to {role}",
+  "activity_member_update_role_anon": "changed a member's role in {client} to {role}",
+  "activity_member_add_full": "added {person} to {client} as {role}",
+  "activity_member_add_anon": "added a member to {client} as {role}",
+  "activity_member_add_plain": "added {person} to {client}",
+  "activity_a_client": "a client"
 }

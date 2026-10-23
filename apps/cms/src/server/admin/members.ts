@@ -193,6 +193,13 @@ export async function applyMemberRole(
     throw new NotFoundError(m.server_member_not_found())
   }
 
+  // The name is kept in the row, so the activity log still names the person
+  // after they are renamed or deleted.
+  const [person] = await tx
+    .select({ name: user.name })
+    .from(user)
+    .where(eq(user.id, userId))
+    .limit(1)
   await audit(
     {
       organizationId,
@@ -200,7 +207,12 @@ export async function applyMemberRole(
       action: 'member.update_role',
       targetType: 'membership',
       targetId: existing.id,
-      meta: { userId, role, previousRole: existing.role },
+      meta: {
+        userId,
+        userName: person?.name ?? null,
+        role,
+        previousRole: existing.role,
+      },
     },
     tx,
   )

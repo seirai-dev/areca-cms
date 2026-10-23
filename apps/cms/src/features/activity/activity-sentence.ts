@@ -1,4 +1,5 @@
-import { humanizeSlug } from '#/lib/admin/helpers'
+import { humanizeSlug, membershipRoleLabel } from '#/lib/admin/helpers'
+import type { MembershipRole } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 
 /**
@@ -73,6 +74,7 @@ const SENTENCES: Partial<Record<string, Sentence>> = {
   'user.unblock': (target) => m.activity_user_unblock({ target }),
   'user.delete': (target) => m.activity_user_delete({ target }),
   'user.rename': (target) => m.activity_user_rename({ target }),
+  'user.sign_in': () => m.activity_user_sign_in(),
   'user.sessions_revoke': (target) =>
     m.activity_user_sessions_revoke({ target }),
   'user.two_factor_reset': (target) =>
@@ -242,14 +244,64 @@ export type ActivityParts = {
   siteEvent: boolean
 }
 
+function roleOf(value: unknown): MembershipRole | null {
+  return value === 'owner' || value === 'editor' ? value : null
+}
+
+/**
+ * Sentences that name the person, client and role from the row's own meta,
+ * as they were when the row was written (so a later rename or deletion does not
+ * rewrite history). Returns null when the meta lacks what the sentence needs,
+ * and the generic sentence is used instead.
+ */
+function namedSentence(row: ActivityLike): string | null {
+  const meta = metaOf(row)
+  const client = row.organizationName ?? m.activity_a_client()
+  switch (row.action) {
+    case 'user.sign_in':
+      return m.activity_user_sign_in()
+    case 'user.rename': {
+      const from = text(meta?.previousName)
+      const to = text(meta?.userName)
+      return from && to ? m.activity_user_rename_full({ from, to }) : null
+    }
+    case 'member.update_role': {
+      const role = roleOf(meta?.role)
+      if (!role) return null
+      const roleName = membershipRoleLabel(role)
+      const person = text(meta?.userName)
+      return person
+        ? m.activity_member_update_role_full({ person, client, role: roleName })
+        : m.activity_member_update_role_anon({ client, role: roleName })
+    }
+    case 'member.add': {
+      const person = text(meta?.userName) ?? text(meta?.email)
+      const role = roleOf(meta?.role)
+      if (!role) {
+        return person ? m.activity_member_add_plain({ person, client }) : null
+      }
+      const roleName = membershipRoleLabel(role)
+      return person
+        ? m.activity_member_add_full({ person, client, role: roleName })
+        : m.activity_member_add_anon({ client, role: roleName })
+    }
+    default:
+      return null
+  }
+}
+
 /** Splits the sentence around its target so the target can be styled. */
 export function activityParts(
   row: ActivityLike,
   entryTitle?: string | null,
 ): ActivityParts {
+  const siteEvent = SITE_EVENTS.has(row.action)
+  const named = namedSentence(row)
+  if (named !== null) {
+    return { before: named, target: null, named: false, after: '', siteEvent }
+  }
   const sentence = SENTENCES[row.action]
   const target = activityTarget(row, entryTitle)
-  const siteEvent = SITE_EVENTS.has(row.action)
   if (!sentence) {
     // Unknown action: its key, made readable.
     return {

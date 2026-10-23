@@ -57,7 +57,7 @@ describe('activityText for people actions', () => {
     ).toBe('Sanne de Vries reset two-factor sign-in for someone')
   })
 
-  it('says a person was added to a client, by name', () => {
+  it('says a person was added to a client, by their e-mail when the name was not kept', () => {
     expect(
       activityText(
         row({
@@ -66,7 +66,105 @@ describe('activityText for people actions', () => {
           meta: { email: 'pia@example.com', direct: true },
         }),
       ),
-    ).toBe('Sanne de Vries added pia@example.com to a client')
+    ).toBe('Sanne de Vries added pia@example.com to Acme')
+  })
+
+  it('names the person, client and role when a person is added to a client', () => {
+    expect(
+      activityText(
+        row({
+          action: 'member.add',
+          targetType: 'membership',
+          organizationName: 'Kade Bakery',
+          meta: {
+            userName: 'Tom Peeters',
+            email: 'tom@harbourdental.nl',
+            role: 'editor',
+            direct: true,
+          },
+        }),
+      ),
+    ).toBe('Sanne de Vries added Tom Peeters to Kade Bakery as Editor')
+  })
+
+  it('says someone was given a role in a client, by name, with the new role', () => {
+    expect(
+      activityText(
+        row({
+          action: 'member.update_role',
+          targetType: 'membership',
+          organizationName: 'Kade Bakery',
+          meta: {
+            userId: 'u2',
+            userName: 'Tom Peeters',
+            role: 'owner',
+            previousRole: 'editor',
+          },
+        }),
+      ),
+    ).toBe("Sanne de Vries changed Tom Peeters's role in Kade Bakery to Owner")
+  })
+
+  it('keeps the role change readable for older rows that have no name', () => {
+    expect(
+      activityText(
+        row({
+          action: 'member.update_role',
+          targetType: 'membership',
+          organizationName: 'Kade Bakery',
+          meta: { userId: 'u2', role: 'editor', previousRole: 'owner' },
+        }),
+      ),
+    ).toBe("Sanne de Vries changed a member's role in Kade Bakery to Editor")
+  })
+
+  it('falls back to the generic role wording when the row has no role', () => {
+    expect(
+      activityText(
+        row({
+          action: 'member.update_role',
+          targetType: 'membership',
+          meta: { userId: 'u2' },
+        }),
+      ),
+    ).toBe('Sanne de Vries changed the role of someone')
+  })
+
+  it('says a sign-in in plain words', () => {
+    expect(
+      activityText(
+        row({ action: 'user.sign_in', targetType: 'user', targetId: 'u1' }),
+      ),
+    ).toBe('Sanne de Vries signed in')
+  })
+
+  it('says a rename with the names it had and got, not the current name', () => {
+    expect(
+      activityText(
+        row({
+          action: 'user.rename',
+          targetType: 'user',
+          targetId: 'u9',
+          meta: {
+            previousName: 'Lucas de Vries',
+            userName: 'Lucas de Vries-Bos',
+          },
+        }),
+      ),
+    ).toBe('Sanne de Vries renamed Lucas de Vries to Lucas de Vries-Bos')
+  })
+
+  it('uses the generic rename wording for older rows without the old name', () => {
+    expect(
+      activityText(
+        row({
+          action: 'user.rename',
+          targetType: 'user',
+          targetId: 'u9',
+          meta: { userName: 'Lucas de Vries-Bos' },
+        }),
+      ),
+    ).toBe('Sanne de Vries changed the name of Lucas de Vries-Bos')
   })
 
   it('keeps the name of an actor who has since been deleted, from the row itself', () => {

@@ -2386,5 +2386,13 @@
   "agency_person_save_refused_one": "1 wijziging kan niet worden opgeslagen",
   "agency_people_open_profile": "Profiel openen",
   "agency_people_menu_block": "Blokkeren…",
-  "agency_people_menu_unblock": "Deblokkeren…"
+  "agency_people_menu_unblock": "Deblokkeren…",
+  "activity_user_sign_in": "is ingelogd",
+  "activity_user_rename_full": "heeft {from} hernoemd naar {to}",
+  "activity_member_update_role_full": "heeft de rol van {person} bij {client} gewijzigd naar {role}",
+  "activity_member_update_role_anon": "heeft de rol van een lid bij {client} gewijzigd naar {role}",
+  "activity_member_add_full": "heeft {person} als {role} aan {client} toegevoegd",
+  "activity_member_add_anon": "heeft een lid als {role} aan {client} toegevoegd",
+  "activity_member_add_plain": "heeft {person} aan {client} toegevoegd",
+  "activity_a_client": "een klant"
 }

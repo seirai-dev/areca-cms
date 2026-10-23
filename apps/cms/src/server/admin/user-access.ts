@@ -213,6 +213,7 @@ export async function setUserClientAccess(
         const name = await addMembership(tx, {
           organizationId: step.organizationId,
           userId: person.id,
+          userName: person.name,
           email: person.email,
           role: step.role,
           actorId: input.actorId,
@@ -270,6 +271,7 @@ async function addMembership(
   input: {
     organizationId: string
     userId: string
+    userName: string
     email: string
     role: MembershipRole
     actorId: string
@@ -316,6 +318,7 @@ async function addMembership(
       targetId: row.id,
       meta: {
         userId: input.userId,
+        userName: input.userName,
         email: input.email,
         role: input.role,
         direct: true,
