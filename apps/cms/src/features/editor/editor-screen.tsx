@@ -578,6 +578,7 @@ function EntryEditorView({
   )
 
   const hasErrors = editor.errorCount > 0 || Boolean(editor.formError)
+  const errorKeys = Object.keys(editor.fieldErrors).filter(Boolean)
 
   const languageBar =
     lang.languages && ctx && active ? (
@@ -777,6 +778,20 @@ function EntryEditorView({
                         : m.editor_save_fix_other({ count: editor.errorCount })
                       : m.editor_save_failed()}
                   </span>
+                  {errorKeys.length > 0 ? (
+                    <span className="flex flex-wrap gap-x-3 gap-y-1">
+                      {errorKeys.map((key) => (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => revealField(key)}
+                          className="text-callout font-medium text-text-primary underline decoration-border-error underline-offset-4 hover:decoration-current"
+                        >
+                          {fieldLabels([key], fields)[0] ?? key}
+                        </button>
+                      ))}
+                    </span>
+                  ) : null}
                   {editor.formError ? (
                     <span className="text-callout text-text-secondary">
                       {editor.formError}

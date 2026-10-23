@@ -532,6 +532,8 @@ export function useEntryEditor({
       }
       return 'saved'
     } catch (error) {
+      // A conflict is not a field problem. The conflict notice explains it, so
+      // the message must not be parsed into a fake field error ("fix 1 field").
       if (
         errorMessage(error, m.editor_could_not_save()).includes(
           'DRAFT_CONFLICT',
@@ -540,6 +542,10 @@ export function useEntryEditor({
         conflictRef.current = true
         setConflict(true)
         setRecoveredDraft(dataRef.current)
+        setFieldErrors({})
+        setFormError(null)
+        setStatus('failed')
+        return 'failed'
       }
       const parsed = fieldErrorsFromUnknown(error)
       setFieldErrors(parsed.fieldErrors)
