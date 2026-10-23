@@ -139,7 +139,7 @@ export function ClientPicker({
         }}
         data-testid="client-picker-search"
       />
-      <CommandList className="max-h-[300px] min-h-[120px] max-sm:max-h-none max-sm:flex-1">
+      <CommandList className="max-h-[300px] max-sm:max-h-none max-sm:flex-1">
         {visible.length === 0 ? (
           <p className="px-3 py-8 text-center text-callout text-text-muted">
             {needle
