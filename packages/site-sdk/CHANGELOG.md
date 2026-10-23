@@ -2,14 +2,7 @@
 
 All notable changes to `@areca-cms/site-sdk`.
 
-## 0.5.0 (2026-10-15)
-
-### Features
-
-- **sdk:** match the CMS language wire shape and cover it end to end (a08a89f)
-- **sdk:** content languages in the SDK (702fd90)
-
-## Unreleased
+## 0.6.0 (2026-10-23)
 
 ### Features
 
@@ -22,10 +15,23 @@ All notable changes to `@areca-cms/site-sdk`.
 - `languages`, `routes`, `requiredLanguages` and per-field `translatable` in `areca.config.ts`. `areca.gen.ts` emits the `Locale` union and `languages`.
 - `i18n.paraglide` in `areca.config.ts` wires Paraglide's `getLocale` into the generated content object. `areca pull` warns when `project.inlang/settings.json` disagrees with the CMS languages.
 - `seoHead` and `seoHeadHtml` accept `locale`, `alternates`, `main` and `siteUrl` for `hreflang`, `x-default` and `og:locale`.
+- **sdk:** confirm field removals on manifest push (b239d17)
+- **sdk:** review language changes in manifest pull (4a65b91)
+- **sdk:** type Href by language and narrow it in content.in() (7fae327)
 
 ### Bug fixes
 
 - Documentation: the rich-text renderer installs `@tanstack/markdown@1.0.0`, the version the SDK depends on. A docs check fails when an install command names another version.
+- **sdk:** export FieldDropsRequiredError from the package entry (8ed302d)
+- **sdk:** resolve each credential only for the call that sends it (bb2c5d1)
+- **sdk:** rewrite media URLs in every language view (86ba2c4)
+
+## 0.5.0 (2026-10-15)
+
+### Features
+
+- **sdk:** match the CMS language wire shape and cover it end to end (a08a89f)
+- **sdk:** content languages in the SDK (702fd90)
 
 ## 0.4.0 (2026-10-14)
 
