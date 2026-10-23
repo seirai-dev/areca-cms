@@ -131,11 +131,20 @@ export function AccessSection({
     }
   }
 
-  const changeCount = summary.added + summary.changed + summary.removed
+  // Name the blocker, not the whole save: a refused row that drops the only owner
+  // is "needs an owner"; any other refusal sends the user to the red lines.
+  const refusedRows = staged.filter((row) => errors[row.organizationId])
+  const ownerRows = refusedRows.filter(
+    (row) => row.isOnlyOwner && (row.removed || row.role !== 'owner'),
+  )
   const refusedText =
-    changeCount === 1
-      ? m.agency_person_save_refused_one()
-      : m.agency_person_save_refused({ count: changeCount })
+    refusedRows.length > 0 && ownerRows.length === refusedRows.length
+      ? ownerRows.length === 1
+        ? m.agency_person_save_refused_owner({ client: ownerRows[0].name })
+        : m.agency_person_save_refused_owners({ count: ownerRows.length })
+      : refusedRows.length > 0
+        ? m.agency_person_save_refused_marked()
+        : m.agency_person_save_refused_one()
 
   const sheetRow = staged.find((row) => row.organizationId === sheetFor)
   const summaryText = [
@@ -313,7 +322,7 @@ export function AccessSection({
       >
         <FloatingBarLabel
           data-testid="person-save-summary"
-          className={refused ? 'text-text-error' : undefined}
+          className={cn('min-w-0 flex-1', refused && 'text-text-error')}
         >
           {refused ? refusedText : summaryText || m.agency_person_unsaved()}
         </FloatingBarLabel>

@@ -2394,5 +2394,8 @@
   "activity_member_add_full": "{person} kişisini {client} müşterisine {role} olarak ekledi",
   "activity_member_add_anon": "{client} müşterisine bir üyeyi {role} olarak ekledi",
   "activity_member_add_plain": "{person} kişisini {client} müşterisine ekledi",
-  "activity_a_client": "bir müşteri"
+  "activity_a_client": "bir müşteri",
+  "agency_person_save_refused_owner": "{client} için bir sahip gerekiyor",
+  "agency_person_save_refused_owners": "{count} müşteri için sahip gerekiyor",
+  "agency_person_save_refused_marked": "Kırmızıyla işaretli değişiklikleri düzeltin"
 }

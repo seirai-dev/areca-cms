@@ -2394,5 +2394,8 @@
   "activity_member_add_full": "heeft {person} als {role} aan {client} toegevoegd",
   "activity_member_add_anon": "heeft een lid als {role} aan {client} toegevoegd",
   "activity_member_add_plain": "heeft {person} aan {client} toegevoegd",
-  "activity_a_client": "een klant"
+  "activity_a_client": "een klant",
+  "agency_person_save_refused_owner": "{client} heeft een eigenaar nodig",
+  "agency_person_save_refused_owners": "{count} klanten hebben een eigenaar nodig",
+  "agency_person_save_refused_marked": "Los de wijzigingen in het rood op"
 }

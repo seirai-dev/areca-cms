@@ -2394,5 +2394,8 @@
   "activity_member_add_full": "added {person} to {client} as {role}",
   "activity_member_add_anon": "added a member to {client} as {role}",
   "activity_member_add_plain": "added {person} to {client}",
-  "activity_a_client": "a client"
+  "activity_a_client": "a client",
+  "agency_person_save_refused_owner": "{client} needs an owner",
+  "agency_person_save_refused_owners": "{count} clients need an owner",
+  "agency_person_save_refused_marked": "Fix the changes marked in red"
 }
