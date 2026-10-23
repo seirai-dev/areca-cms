@@ -12,6 +12,7 @@ import { migrate } from 'drizzle-orm/node-postgres/migrator'
 import { Pool } from 'pg'
 
 import { withMigrationLock } from './lib/migration-lock.mjs'
+import { retryUntilDeadline, startupDeadlineMs } from './lib/startup-retry.mjs'
 
 const appDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 const databaseUrl = process.env.DATABASE_URL
@@ -24,33 +25,52 @@ if (!bucket) {
   throw new Error('S3_BUCKET is required')
 }
 
+// Waiting for Postgres and for another instance's migration lock share one
+// deadline (STARTUP_DEADLINE_SECONDS). A migration that has started is not
+// interrupted by it.
+const deadline = Date.now() + startupDeadlineMs()
+
+// Each probe connects and queries with its own timeout, so a half-open socket
+// cannot hold the startup past the deadline.
+const PROBE_TIMEOUT_MS = 5000
+
 async function waitForPostgres() {
-  for (let attempt = 1; attempt <= 30; attempt += 1) {
-    const pool = new Pool({ connectionString: databaseUrl })
-    try {
-      await pool.query('select 1')
-      await pool.end()
-      return
-    } catch (error) {
-      await pool.end().catch(() => {})
-      const message = error instanceof Error ? error.message : String(error)
-      console.log(`waiting for postgres (${attempt}/30): ${message}`)
-      await new Promise((resolve) => setTimeout(resolve, 2000))
-    }
-  }
-  throw new Error('Postgres did not become ready')
+  await retryUntilDeadline(
+    'postgres',
+    async () => {
+      const pool = new Pool({
+        connectionString: databaseUrl,
+        connectionTimeoutMillis: PROBE_TIMEOUT_MS,
+        query_timeout: PROBE_TIMEOUT_MS,
+      })
+      try {
+        await pool.query('select 1')
+      } finally {
+        await pool.end().catch(() => {})
+      }
+    },
+    { deadline },
+  )
 }
 
 async function runMigrations() {
   // The advisory lock holds one connection; migrate() uses another.
-  const pool = new Pool({ connectionString: databaseUrl, max: 2 })
+  const pool = new Pool({
+    connectionString: databaseUrl,
+    max: 2,
+    connectionTimeoutMillis: PROBE_TIMEOUT_MS,
+  })
   try {
     // Only one instance migrates at a time; the others wait, then find
     // nothing left to apply.
-    await withMigrationLock(pool, async () => {
-      const db = drizzle(pool)
-      await migrate(db, { migrationsFolder: join(appDir, 'drizzle') })
-    })
+    await withMigrationLock(
+      pool,
+      async () => {
+        const db = drizzle(pool)
+        await migrate(db, { migrationsFolder: join(appDir, 'drizzle') })
+      },
+      { timeoutMs: Math.max(deadline - Date.now(), 0) },
+    )
     console.log('database migrations applied')
   } finally {
     await pool.end()
@@ -77,9 +97,15 @@ async function ensureBucket() {
   }
 }
 
-await waitForPostgres()
-await runMigrations()
-await ensureBucket()
+try {
+  await waitForPostgres()
+  await runMigrations()
+  await ensureBucket()
+} catch (error) {
+  const message = error instanceof Error ? error.message : String(error)
+  console.error(`startup failed, exiting: ${message}`)
+  process.exit(1)
+}
 
 const child = spawn(
   process.execPath,
