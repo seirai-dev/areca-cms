@@ -165,14 +165,17 @@ function GoLivePanelBody({
   const { goLive, isPending, errors, clearErrors } = useGoLive(site.id)
   const [urgent, setUrgent] = React.useState(false)
   const blocked = (release.data?.blockers?.length ?? 0) > 0
-  const goLiveAllowed = canGoLive({
-    canPublish,
-    blockers: release.data?.blockers,
-  })
   const pending = usePendingEntries({
     siteId: site.id,
     enabled: release.state !== 'loading',
   })
+  // Going live without knowing what changes is not allowed: wait for the list.
+  const changesKnown = pending.isSuccess
+  const goLiveAllowed =
+    canGoLive({
+      canPublish,
+      blockers: release.data?.blockers,
+    }) && changesKnown
 
   return (
     <div className="grid divide-y divide-border-default">
@@ -250,9 +253,7 @@ function GoLivePanelBody({
             label={
               goLiveAllowed
                 ? null
-                : blocked
-                  ? m.golive_blocked_reason()
-                  : editorPublishReason()
+                : blockedReason(canPublish, blocked, changesKnown)
             }
             wrapDisabled={!goLiveAllowed}
             className="w-full"
@@ -274,7 +275,7 @@ function GoLivePanelBody({
           </Hint>
           {!goLiveAllowed ? (
             <p className="text-center text-callout text-text-secondary">
-              {blocked ? m.golive_blocked_reason() : editorPublishReason()}
+              {blockedReason(canPublish, blocked, changesKnown)}
             </p>
           ) : null}
         </div>
@@ -287,6 +288,18 @@ function GoLivePanelBody({
       />
     </div>
   )
+}
+
+/** Why the Go live control is disabled, most specific reason first. */
+function blockedReason(
+  canPublish: boolean,
+  blocked: boolean,
+  changesKnown: boolean,
+) {
+  if (!canPublish) return editorPublishReason()
+  if (blocked) return m.golive_blocked_reason()
+  if (!changesKnown) return m.golive_changes_unavailable()
+  return editorPublishReason()
 }
 
 /* -------------------------------------------------------------------------
@@ -440,6 +453,15 @@ function WhatsChanging({
   siteId: string
   pending: ReturnType<typeof usePendingEntries>
 }) {
+  if (pending.isError) {
+    return (
+      <QueryError
+        error={pending.error}
+        onRetry={pending.refetch}
+        retrying={pending.isRetrying}
+      />
+    )
+  }
   if (pending.isLoading) {
     return (
       <div className="grid gap-2">

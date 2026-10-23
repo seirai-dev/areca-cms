@@ -98,6 +98,9 @@ export function useSiteCollections(
     counts: counts.map((item) => item.data?.total),
     isLoading: query.isLoading,
     isError: query.isError,
+    error: query.error,
+    isRetrying: query.isFetching,
+    refetch: () => void query.refetch(),
   }
 }
 

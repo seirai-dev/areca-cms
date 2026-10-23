@@ -2143,5 +2143,10 @@
   "ui_copy": "Kopiëren",
   "ui_copy_failed": "Kopiëren naar klembord mislukt",
   "ui_more": "Meer",
-  "ui_try_again": "Opnieuw proberen"
+  "ui_try_again": "Opnieuw proberen",
+  "shell_route_error_title": "Er ging iets mis",
+  "shell_route_error_description": "Deze pagina kon niet worden geladen. Probeer het opnieuw of ga terug naar je werkruimte.",
+  "shell_route_error_home": "Naar je werkruimte",
+  "shell_route_error_details": "Technische details",
+  "golive_changes_unavailable": "Live zetten kan zodra de lijst met wijzigingen is geladen."
 }

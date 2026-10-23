@@ -2143,5 +2143,10 @@
   "ui_copy": "Copy",
   "ui_copy_failed": "Couldn't copy to the clipboard",
   "ui_more": "More",
-  "ui_try_again": "Try again"
+  "ui_try_again": "Try again",
+  "shell_route_error_title": "Something went wrong",
+  "shell_route_error_description": "This page couldn't load. Try again, or go back to your workspace.",
+  "shell_route_error_home": "Go to your workspace",
+  "shell_route_error_details": "Technical details",
+  "golive_changes_unavailable": "Go live is available once the list of changes has loaded."
 }

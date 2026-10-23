@@ -291,14 +291,16 @@ function AttentionStrip({
   const panel = usePanel()
   const { goLive, isPending } = useGoLive(site.id)
   const blocked = (release.data?.blockers?.length ?? 0) > 0
-  const goLiveAllowed = canGoLive({
-    canPublish,
-    blockers: release.data?.blockers,
-  })
   const pending = usePendingEntries({
     siteId: site.id,
     enabled: release.state !== 'loading',
   })
+  // Same rule as the Go-live panel: no Go live until the change list loaded.
+  const goLiveAllowed =
+    canGoLive({
+      canPublish,
+      blockers: release.data?.blockers,
+    }) && pending.isSuccess
 
   const cards: React.ReactNode[] = []
 
@@ -360,7 +362,16 @@ function AttentionStrip({
             <p className="text-headline text-text-primary tnum">
               {changesReadyLabel(release.pending)}
             </p>
-            {pending.ready.length > 0 ? (
+            {pending.isError ? (
+              <button
+                type="button"
+                onClick={pending.refetch}
+                disabled={pending.isRetrying}
+                className="justify-self-start text-callout text-text-accent hover:underline disabled:opacity-60"
+              >
+                {m.ui_try_again()}
+              </button>
+            ) : pending.ready.length > 0 ? (
               <ul className="grid gap-1 max-sm:[&>li:nth-child(n+3)]:hidden">
                 {pending.ready.slice(0, 3).map((entry) => (
                   <li
@@ -543,6 +554,7 @@ function RecentlyEdited({
     })),
   })
   const loading = results.some((result) => result.isLoading)
+  const failed = results.find((result) => result.isError)
 
   const rows = collections
     .flatMap((collection, index) =>
@@ -570,6 +582,12 @@ function RecentlyEdited({
             <Skeleton key={index} className="h-14 rounded-card" />
           ))}
         </div>
+      ) : failed && rows.length === 0 ? (
+        <QueryError
+          error={failed.error}
+          retrying={results.some((result) => result.isFetching)}
+          onRetry={() => void Promise.all(results.map((r) => r.refetch()))}
+        />
       ) : rows.length === 0 ? (
         <p className="rounded-card border border-dashed border-border-strong px-4 py-6 text-center text-callout text-text-secondary">
           {m.overview_recent_empty()}

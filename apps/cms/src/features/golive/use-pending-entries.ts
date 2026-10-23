@@ -58,5 +58,11 @@ export function usePendingEntries({
     changeCount: changing.length + (languages ? 1 : 0),
     scheduled: entries.filter((entry) => entry.kind === 'scheduled'),
     isLoading: query.isLoading,
+    /** The list loaded. Go live stays disabled until this is true. */
+    isSuccess: query.isSuccess,
+    isError: query.isError,
+    error: query.error,
+    isRetrying: query.isFetching,
+    refetch: () => void query.refetch(),
   }
 }

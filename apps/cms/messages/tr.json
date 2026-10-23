@@ -2143,5 +2143,10 @@
   "ui_copy": "Kopyala",
   "ui_copy_failed": "Panoya kopyalanamadı",
   "ui_more": "Daha fazla",
-  "ui_try_again": "Yeniden dene"
+  "ui_try_again": "Yeniden dene",
+  "shell_route_error_title": "Bir şeyler ters gitti",
+  "shell_route_error_description": "Bu sayfa yüklenemedi. Tekrar deneyin veya çalışma alanınıza dönün.",
+  "shell_route_error_home": "Çalışma alanınıza git",
+  "shell_route_error_details": "Teknik ayrıntılar",
+  "golive_changes_unavailable": "Yayına alma, değişiklik listesi yüklendikten sonra kullanılabilir."
 }
