@@ -31,7 +31,6 @@ import { Route as AppAgencyActivityRouteImport } from './routes/_app/agency/acti
 import { Route as AppAgencyAiRouteImport } from './routes/_app/agency/ai'
 import { Route as AppAgencyBrandingRouteImport } from './routes/_app/agency/branding'
 import { Route as AppAgencyMailRouteImport } from './routes/_app/agency/mail'
-import { Route as AppAgencyPeopleRouteImport } from './routes/_app/agency/people'
 import { Route as AppSitesIndexRouteImport } from './routes/_app/sites/index'
 import { Route as AppSitesSiteIdRouteImport } from './routes/_app/sites/$siteId'
 import { Route as ApiAssetsUploadRouteImport } from './routes/api/assets/upload'
@@ -44,6 +43,8 @@ import { Route as ApiSitesManifestRouteImport } from './routes/api/sites/manifes
 import { Route as ApiSitesPreviewRouteImport } from './routes/api/sites/preview'
 import { Route as AppAgencyClientsIndexRouteImport } from './routes/_app/agency/clients/index'
 import { Route as AppAgencyClientsOrgIdRouteImport } from './routes/_app/agency/clients/$orgId'
+import { Route as AppAgencyPeopleIndexRouteImport } from './routes/_app/agency/people/index'
+import { Route as AppAgencyPeopleUserIdRouteImport } from './routes/_app/agency/people/$userId'
 import { Route as AppOrgsOrgIdAuditRouteImport } from './routes/_app/orgs/$orgId/audit'
 import { Route as AppOrgsOrgIdMembersRouteImport } from './routes/_app/orgs/$orgId/members'
 import { Route as AppSitesSiteIdIndexRouteImport } from './routes/_app/sites/$siteId/index'
@@ -173,11 +174,6 @@ const AppAgencyMailRoute = AppAgencyMailRouteImport.update({
   path: '/mail',
   getParentRoute: () => AppAgencyRoute,
 } as any)
-const AppAgencyPeopleRoute = AppAgencyPeopleRouteImport.update({
-  id: '/people',
-  path: '/people',
-  getParentRoute: () => AppAgencyRoute,
-} as any)
 const AppSitesIndexRoute = AppSitesIndexRouteImport.update({
   id: '/sites/',
   path: '/sites/',
@@ -237,6 +233,16 @@ const AppAgencyClientsIndexRoute = AppAgencyClientsIndexRouteImport.update({
 const AppAgencyClientsOrgIdRoute = AppAgencyClientsOrgIdRouteImport.update({
   id: '/clients/$orgId',
   path: '/clients/$orgId',
+  getParentRoute: () => AppAgencyRoute,
+} as any)
+const AppAgencyPeopleIndexRoute = AppAgencyPeopleIndexRouteImport.update({
+  id: '/people/',
+  path: '/people/',
+  getParentRoute: () => AppAgencyRoute,
+} as any)
+const AppAgencyPeopleUserIdRoute = AppAgencyPeopleUserIdRouteImport.update({
+  id: '/people/$userId',
+  path: '/people/$userId',
   getParentRoute: () => AppAgencyRoute,
 } as any)
 const AppOrgsOrgIdAuditRoute = AppOrgsOrgIdAuditRouteImport.update({
@@ -360,7 +366,6 @@ export interface FileRoutesByFullPath {
   '/agency/ai': typeof AppAgencyAiRoute
   '/agency/branding': typeof AppAgencyBrandingRoute
   '/agency/mail': typeof AppAgencyMailRoute
-  '/agency/people': typeof AppAgencyPeopleRoute
   '/sites/$siteId': typeof AppSitesSiteIdRouteWithChildren
   '/api/assets/upload': typeof ApiAssetsUploadRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -375,6 +380,7 @@ export interface FileRoutesByFullPath {
   '/sites/': typeof AppSitesIndexRoute
   '/api/mcp/': typeof ApiMcpIndexRoute
   '/agency/clients/$orgId': typeof AppAgencyClientsOrgIdRoute
+  '/agency/people/$userId': typeof AppAgencyPeopleUserIdRoute
   '/orgs/$orgId/audit': typeof AppOrgsOrgIdAuditRoute
   '/orgs/$orgId/members': typeof AppOrgsOrgIdMembersRoute
   '/sites/$siteId/activity': typeof AppSitesSiteIdActivityRoute
@@ -388,6 +394,7 @@ export interface FileRoutesByFullPath {
   '/api/admin/branding/upload': typeof ApiAdminBrandingUploadRoute
   '/api/sites/snapshot/current': typeof ApiSitesSnapshotCurrentRoute
   '/agency/clients/': typeof AppAgencyClientsIndexRoute
+  '/agency/people/': typeof AppAgencyPeopleIndexRoute
   '/sites/$siteId/': typeof AppSitesSiteIdIndexRoute
   '/sites/$siteId/c/$collectionKey': typeof AppSitesSiteIdCCollectionKeyRouteWithChildren
   '/sites/$siteId/globals/$globalKey': typeof AppSitesSiteIdGlobalsGlobalKeyRoute
@@ -413,7 +420,6 @@ export interface FileRoutesByTo {
   '/agency/ai': typeof AppAgencyAiRoute
   '/agency/branding': typeof AppAgencyBrandingRoute
   '/agency/mail': typeof AppAgencyMailRoute
-  '/agency/people': typeof AppAgencyPeopleRoute
   '/api/assets/upload': typeof ApiAssetsUploadRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/health/ready': typeof ApiHealthReadyRoute
@@ -427,6 +433,7 @@ export interface FileRoutesByTo {
   '/sites': typeof AppSitesIndexRoute
   '/api/mcp': typeof ApiMcpIndexRoute
   '/agency/clients/$orgId': typeof AppAgencyClientsOrgIdRoute
+  '/agency/people/$userId': typeof AppAgencyPeopleUserIdRoute
   '/orgs/$orgId/audit': typeof AppOrgsOrgIdAuditRoute
   '/orgs/$orgId/members': typeof AppOrgsOrgIdMembersRoute
   '/sites/$siteId/activity': typeof AppSitesSiteIdActivityRoute
@@ -440,6 +447,7 @@ export interface FileRoutesByTo {
   '/api/admin/branding/upload': typeof ApiAdminBrandingUploadRoute
   '/api/sites/snapshot/current': typeof ApiSitesSnapshotCurrentRoute
   '/agency/clients': typeof AppAgencyClientsIndexRoute
+  '/agency/people': typeof AppAgencyPeopleIndexRoute
   '/sites/$siteId': typeof AppSitesSiteIdIndexRoute
   '/sites/$siteId/globals/$globalKey': typeof AppSitesSiteIdGlobalsGlobalKeyRoute
   '/api/assets/file/$prefix/$filename': typeof ApiAssetsFilePrefixFilenameRoute
@@ -468,7 +476,6 @@ export interface FileRoutesById {
   '/_app/agency/ai': typeof AppAgencyAiRoute
   '/_app/agency/branding': typeof AppAgencyBrandingRoute
   '/_app/agency/mail': typeof AppAgencyMailRoute
-  '/_app/agency/people': typeof AppAgencyPeopleRoute
   '/_app/sites/$siteId': typeof AppSitesSiteIdRouteWithChildren
   '/api/assets/upload': typeof ApiAssetsUploadRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -483,6 +490,7 @@ export interface FileRoutesById {
   '/_app/sites/': typeof AppSitesIndexRoute
   '/api/mcp/': typeof ApiMcpIndexRoute
   '/_app/agency/clients/$orgId': typeof AppAgencyClientsOrgIdRoute
+  '/_app/agency/people/$userId': typeof AppAgencyPeopleUserIdRoute
   '/_app/orgs/$orgId/audit': typeof AppOrgsOrgIdAuditRoute
   '/_app/orgs/$orgId/members': typeof AppOrgsOrgIdMembersRoute
   '/_app/sites/$siteId/activity': typeof AppSitesSiteIdActivityRoute
@@ -496,6 +504,7 @@ export interface FileRoutesById {
   '/api/admin/branding/upload': typeof ApiAdminBrandingUploadRoute
   '/api/sites/snapshot/current': typeof ApiSitesSnapshotCurrentRoute
   '/_app/agency/clients/': typeof AppAgencyClientsIndexRoute
+  '/_app/agency/people/': typeof AppAgencyPeopleIndexRoute
   '/_app/sites/$siteId/': typeof AppSitesSiteIdIndexRoute
   '/_app/sites/$siteId/c/$collectionKey': typeof AppSitesSiteIdCCollectionKeyRouteWithChildren
   '/_app/sites/$siteId/globals/$globalKey': typeof AppSitesSiteIdGlobalsGlobalKeyRoute
@@ -525,7 +534,6 @@ export interface FileRouteTypes {
     | '/agency/ai'
     | '/agency/branding'
     | '/agency/mail'
-    | '/agency/people'
     | '/sites/$siteId'
     | '/api/assets/upload'
     | '/api/auth/$'
@@ -540,6 +548,7 @@ export interface FileRouteTypes {
     | '/sites/'
     | '/api/mcp/'
     | '/agency/clients/$orgId'
+    | '/agency/people/$userId'
     | '/orgs/$orgId/audit'
     | '/orgs/$orgId/members'
     | '/sites/$siteId/activity'
@@ -553,6 +562,7 @@ export interface FileRouteTypes {
     | '/api/admin/branding/upload'
     | '/api/sites/snapshot/current'
     | '/agency/clients/'
+    | '/agency/people/'
     | '/sites/$siteId/'
     | '/sites/$siteId/c/$collectionKey'
     | '/sites/$siteId/globals/$globalKey'
@@ -578,7 +588,6 @@ export interface FileRouteTypes {
     | '/agency/ai'
     | '/agency/branding'
     | '/agency/mail'
-    | '/agency/people'
     | '/api/assets/upload'
     | '/api/auth/$'
     | '/api/health/ready'
@@ -592,6 +601,7 @@ export interface FileRouteTypes {
     | '/sites'
     | '/api/mcp'
     | '/agency/clients/$orgId'
+    | '/agency/people/$userId'
     | '/orgs/$orgId/audit'
     | '/orgs/$orgId/members'
     | '/sites/$siteId/activity'
@@ -605,6 +615,7 @@ export interface FileRouteTypes {
     | '/api/admin/branding/upload'
     | '/api/sites/snapshot/current'
     | '/agency/clients'
+    | '/agency/people'
     | '/sites/$siteId'
     | '/sites/$siteId/globals/$globalKey'
     | '/api/assets/file/$prefix/$filename'
@@ -632,7 +643,6 @@ export interface FileRouteTypes {
     | '/_app/agency/ai'
     | '/_app/agency/branding'
     | '/_app/agency/mail'
-    | '/_app/agency/people'
     | '/_app/sites/$siteId'
     | '/api/assets/upload'
     | '/api/auth/$'
@@ -647,6 +657,7 @@ export interface FileRouteTypes {
     | '/_app/sites/'
     | '/api/mcp/'
     | '/_app/agency/clients/$orgId'
+    | '/_app/agency/people/$userId'
     | '/_app/orgs/$orgId/audit'
     | '/_app/orgs/$orgId/members'
     | '/_app/sites/$siteId/activity'
@@ -660,6 +671,7 @@ export interface FileRouteTypes {
     | '/api/admin/branding/upload'
     | '/api/sites/snapshot/current'
     | '/_app/agency/clients/'
+    | '/_app/agency/people/'
     | '/_app/sites/$siteId/'
     | '/_app/sites/$siteId/c/$collectionKey'
     | '/_app/sites/$siteId/globals/$globalKey'
@@ -848,13 +860,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAgencyMailRouteImport
       parentRoute: typeof AppAgencyRoute
     }
-    '/_app/agency/people': {
-      id: '/_app/agency/people'
-      path: '/people'
-      fullPath: '/agency/people'
-      preLoaderRoute: typeof AppAgencyPeopleRouteImport
-      parentRoute: typeof AppAgencyRoute
-    }
     '/_app/sites/': {
       id: '/_app/sites/'
       path: '/sites'
@@ -937,6 +942,20 @@ declare module '@tanstack/react-router' {
       path: '/clients/$orgId'
       fullPath: '/agency/clients/$orgId'
       preLoaderRoute: typeof AppAgencyClientsOrgIdRouteImport
+      parentRoute: typeof AppAgencyRoute
+    }
+    '/_app/agency/people/': {
+      id: '/_app/agency/people/'
+      path: '/people'
+      fullPath: '/agency/people/'
+      preLoaderRoute: typeof AppAgencyPeopleIndexRouteImport
+      parentRoute: typeof AppAgencyRoute
+    }
+    '/_app/agency/people/$userId': {
+      id: '/_app/agency/people/$userId'
+      path: '/people/$userId'
+      fullPath: '/agency/people/$userId'
+      preLoaderRoute: typeof AppAgencyPeopleUserIdRouteImport
       parentRoute: typeof AppAgencyRoute
     }
     '/_app/orgs/$orgId/audit': {
@@ -1094,10 +1113,11 @@ interface AppAgencyRouteChildren {
   AppAgencyAiRoute: typeof AppAgencyAiRoute
   AppAgencyBrandingRoute: typeof AppAgencyBrandingRoute
   AppAgencyMailRoute: typeof AppAgencyMailRoute
-  AppAgencyPeopleRoute: typeof AppAgencyPeopleRoute
   AppAgencyIndexRoute: typeof AppAgencyIndexRoute
   AppAgencyClientsOrgIdRoute: typeof AppAgencyClientsOrgIdRoute
+  AppAgencyPeopleUserIdRoute: typeof AppAgencyPeopleUserIdRoute
   AppAgencyClientsIndexRoute: typeof AppAgencyClientsIndexRoute
+  AppAgencyPeopleIndexRoute: typeof AppAgencyPeopleIndexRoute
 }
 
 const AppAgencyRouteChildren: AppAgencyRouteChildren = {
@@ -1105,10 +1125,11 @@ const AppAgencyRouteChildren: AppAgencyRouteChildren = {
   AppAgencyAiRoute: AppAgencyAiRoute,
   AppAgencyBrandingRoute: AppAgencyBrandingRoute,
   AppAgencyMailRoute: AppAgencyMailRoute,
-  AppAgencyPeopleRoute: AppAgencyPeopleRoute,
   AppAgencyIndexRoute: AppAgencyIndexRoute,
   AppAgencyClientsOrgIdRoute: AppAgencyClientsOrgIdRoute,
+  AppAgencyPeopleUserIdRoute: AppAgencyPeopleUserIdRoute,
   AppAgencyClientsIndexRoute: AppAgencyClientsIndexRoute,
+  AppAgencyPeopleIndexRoute: AppAgencyPeopleIndexRoute,
 }
 
 const AppAgencyRouteWithChildren = AppAgencyRoute._addFileChildren(
@@ -1231,13 +1252,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
