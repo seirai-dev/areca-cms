@@ -936,10 +936,11 @@ function PersonRow({
       >
         <UserAvatar name={account.name} size="lg" />
         <span className="grid min-w-0 flex-1 gap-0.5">
-          <span className="flex min-w-0 items-center gap-2">
+          <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            {/* Short names wrap onto their own line, so the tags never truncate the name; only a very long name is clamped. */}
             <span
               className={cn(
-                'truncate text-[14px] leading-5 font-medium text-text-primary',
+                'line-clamp-2 min-w-0 max-w-full text-[14px] leading-5 font-medium break-words text-text-primary',
                 blocked && 'text-text-muted',
               )}
             >
