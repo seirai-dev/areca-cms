@@ -10,6 +10,7 @@ import { createIsomorphicFn } from '@tanstack/react-start'
 import { getContext } from './integrations/tanstack-query/root-provider'
 import { deLocalizeUrl, localizeUrl } from '#/paraglide/runtime'
 import { currentCspNonce } from '#/server/http/csp-nonce'
+import { publishLibraryNonce } from '#/hooks/use-csp-nonce'
 
 // The nonce of the request being rendered. The server knows it; in the browser
 // the router reads it back from the `csp-nonce` meta tag it emits.
@@ -19,6 +20,9 @@ const requestCspNonce = createIsomorphicFn()
 
 export function getRouter() {
   const context = getContext()
+  // Dialogs and sheets write a <style> for their scroll lock; in the browser
+  // it needs the page nonce before the first one opens.
+  publishLibraryNonce()
 
   const router = createTanStackRouter({
     routeTree,
