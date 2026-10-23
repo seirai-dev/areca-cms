@@ -174,7 +174,7 @@ The container starts in four steps, and each waits for the one before it:
 1. It waits for PostgreSQL. Each attempt has a 5-second connection and query limit.
 2. It applies database migrations while holding a PostgreSQL advisory lock. Replicas never migrate at the same time. A replica that finds the lock taken waits for the other to finish, then finds nothing left to apply.
 3. It makes sure the S3 bucket exists. See [object storage](#object-storage).
-4. It starts the server, then sends the server one warm-up request.
+4. It starts the server, then sends it one request to `/api/health`. The server loads its configuration on that first request, so a `500` there, for example when `REDIS_URL` is missing in production, stops the container with code `1` and leaves the server's error in the log.
 
 These waits share one deadline set by `STARTUP_DEADLINE_SECONDS` (default `60`). Retries back off from one second up to five seconds, and each retry logs the dependency, the attempt and the time left. When the deadline passes, the container logs `startup failed, exiting` with the reason and exits with code `1`, so your orchestrator can restart it or show it as failed. A migration that has already started runs to completion, because the deadline does not interrupt it. A replica waiting for the migration lock does count against the deadline, so raise `STARTUP_DEADLINE_SECONDS` if a long migration makes other replicas time out.
 

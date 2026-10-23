@@ -113,15 +113,32 @@ const child = spawn(
   },
 )
 
+function shutdown(signal) {
+  if (!child.killed) child.kill(signal)
+}
+
 // The server entry (and with it the publishing worker, scheduler and the
 // first-run setup token) loads on the first request, so make one ourselves
-// once the child listens instead of waiting for a user. Best effort only.
+// once the child listens instead of waiting for a user. Its configuration is
+// checked then too: a 500 from /api/health (which touches no dependency) means
+// the server could not start, for example when REDIS_URL is missing in
+// production. The container then stops with code 1 and the server's error is
+// already in the log above. Without an answer the request is retried until the
+// startup deadline.
 async function warmUp() {
   const url = `http://127.0.0.1:${process.env.PORT ?? 3000}/api/health`
-  for (let attempt = 1; attempt <= 60; attempt += 1) {
+  const until = Date.now() + startupDeadlineMs()
+  while (Date.now() < until) {
     try {
       const response = await fetch(url, { signal: AbortSignal.timeout(2000) })
       if (response.ok) return
+      if (response.status >= 500) {
+        console.error(
+          `startup failed, exiting: the server answered /api/health with HTTP ${response.status}; see the error above`,
+        )
+        shutdown('SIGTERM')
+        process.exit(1)
+      }
     } catch {
       // not listening yet
     }
@@ -130,10 +147,6 @@ async function warmUp() {
   console.log('warm-up request to /api/health did not succeed; continuing')
 }
 void warmUp()
-
-function shutdown(signal) {
-  if (!child.killed) child.kill(signal)
-}
 
 process.on('SIGTERM', () => shutdown('SIGTERM'))
 process.on('SIGINT', () => shutdown('SIGINT'))

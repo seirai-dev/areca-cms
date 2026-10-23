@@ -243,7 +243,11 @@ order:
    replicas never migrate at the same time. A replica that finds the lock taken
    waits for the other to finish, then finds nothing left to apply.
 3. Makes sure the S3 bucket exists (see [Object storage](#object-storage)).
-4. Starts the server and sends it one warm-up request.
+4. Starts the server and sends it one request to `/api/health`. The server
+   loads its configuration on that first request, so a 500 there (for example
+   when `REDIS_URL` is missing in production) stops the container with code 1,
+   with the server's error in the log. Connection failures are retried until the
+   deadline.
 
 The waits share one deadline set by `STARTUP_DEADLINE_SECONDS` (default `60`).
 Retries back off from 1 second to 5 seconds. Each retry logs the dependency, the
