@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm'
 
 import {
   DeploymentNotDispatchedError,
@@ -23,15 +23,19 @@ import { audit } from '#/server/audit'
 import { drainStorageObjectDeletions } from '#/server/assets/storage-cleanup'
 import { cleanupOutbox, processOutbox } from '#/server/mail/outbox'
 import { cleanupNotifications } from '#/server/notifications/notify'
+import { autoRetryPausedJobs } from '#/server/ops/paused-jobs'
+import { runRetention } from '#/server/ops/retention'
 import {
-  notifyPublicationFailed,
-  notifyPublicationLive,
-} from '#/server/notifications/triggers'
+  processPublicationEvents,
+  queuePublicationEvent,
+} from '#/server/notifications/publication-events'
 import {
   markLoopsStarted,
   markLoopsStopped,
+  recordLoopSuccess,
   recordTick,
 } from '#/server/ops/heartbeat'
+import type { LoopName } from '#/server/ops/heartbeat'
 import { createLogger, redactString } from '#/server/log'
 
 import { installShutdownHandlers } from './shutdown.ts'
@@ -100,11 +104,16 @@ const STALE_JOB_MS = 30 * 60 * 1000
 const STALE_JOB_STATUSES = ['building', 'validating', 'deploying'] as const
 
 type WorkerState = {
+  /** Every loop tick still running. Shutdown waits on these, bounded. */
+  inFlight: Set<Promise<unknown>>
+  /** Aborted when the drain deadline passes: stop and leave rows for recovery. */
+  abort?: AbortController
   timer: ReturnType<typeof setInterval>
   recoveryTimer: ReturnType<typeof setInterval>
   schedulerTimer: ReturnType<typeof setInterval>
   cleanupTimer?: ReturnType<typeof setInterval>
   mailTimer?: ReturnType<typeof setInterval>
+  notificationEventsTimer?: ReturnType<typeof setInterval>
   mailCleanupTimer?: ReturnType<typeof setInterval>
   pool?: JobPool
   ticking: boolean
@@ -481,6 +490,22 @@ export async function processJob(
         await tx.select().from(buildJob).where(fence).for('update')
       ).at(0)
       if (!owned) throw new Error('Publication worker lease lost')
+      // Read before the supersede below: the live notice diffs against this
+      // release, and it is no longer 'live' once superseded.
+      const predecessor = (
+        await tx
+          .select({ id: publication.id })
+          .from(publication)
+          .where(
+            and(
+              eq(publication.siteId, job.siteId),
+              eq(publication.status, 'live'),
+              ne(publication.id, pub.id),
+            ),
+          )
+          .orderBy(desc(publication.createdAt))
+          .limit(1)
+      ).at(0)
       await tx
         .update(publication)
         .set({ status: 'superseded' })
@@ -499,6 +524,14 @@ export async function processJob(
           wasLive: !demo,
         })
         .where(eq(publication.id, pub.id))
+      if (!demo) {
+        await queuePublicationEvent(tx, {
+          kind: 'publication.live',
+          siteId: job.siteId,
+          publicationId: pub.id,
+          payload: { previousPublicationId: predecessor?.id ?? null },
+        })
+      }
       await clearSchedulerFailure(tx, job)
       await tx
         .update(buildJob)
@@ -559,8 +592,6 @@ export async function processJob(
         err: error,
       })
     }
-    // Never throws; runs after the commit above, so it cannot fail the job.
-    await notifyPublicationLive(pub.id)
   } catch (error) {
     if (error instanceof DeploymentNotDispatchedError) dispatchUncertain = false
     const message = redactString(
@@ -639,6 +670,12 @@ async function failJob(
       .update(publication)
       .set({ status: dispatchUncertain ? 'building' : 'failed' })
       .where(eq(publication.id, publicationId))
+    await queuePublicationEvent(tx, {
+      kind: 'publication.failed',
+      siteId: job.siteId,
+      publicationId,
+      payload: { stuck: dispatchUncertain },
+    })
     return true
   })
   if (!recorded) return
@@ -654,7 +691,6 @@ async function failJob(
       meta: { jobId: job.id, publicationId, error, dispatchUncertain },
     })
   }
-  await notifyPublicationFailed(publicationId, { stuck: dispatchUncertain })
 }
 
 /** Owner/admin entry point: resume the same dispatch, never create another. */
@@ -815,6 +851,12 @@ export async function resolveUncertainDeploymentJob(input: {
       .update(publication)
       .set({ status: 'failed' })
       .where(eq(publication.id, resolved.publicationId))
+    await queuePublicationEvent(tx, {
+      kind: 'publication.failed',
+      siteId: resolved.siteId,
+      publicationId: resolved.publicationId,
+      payload: { stuck: false },
+    })
     await audit(
       {
         organizationId: existingSite.organizationId,
@@ -834,7 +876,6 @@ export async function resolveUncertainDeploymentJob(input: {
     )
     return resolved
   })
-  await notifyPublicationFailed(result.publicationId, { stuck: false })
   return result
 }
 
@@ -925,9 +966,34 @@ export function createJobPool({
   }
 }
 
+/** Stale jobs recovered per transaction, and transactions per call at most. */
+export const RECOVERY_BATCH_SIZE = 50
+const RECOVERY_MAX_BATCHES = 20
+
+/**
+ * Fails jobs whose lease expired. Each batch is its own transaction with
+ * `SKIP LOCKED`, so one call never locks every stale job at once. Batches stop
+ * when one comes back short, or after RECOVERY_MAX_BATCHES. The rest waits for
+ * the next tick.
+ */
 export async function recoverStaleJobs(
   olderThanMs = STALE_JOB_MS,
   now = new Date(),
+  batchSize = RECOVERY_BATCH_SIZE,
+) {
+  const recovered: Awaited<ReturnType<typeof recoverStaleBatch>> = []
+  for (let batch = 0; batch < RECOVERY_MAX_BATCHES; batch++) {
+    const jobs = await recoverStaleBatch(olderThanMs, now, batchSize)
+    recovered.push(...jobs)
+    if (jobs.length < batchSize) break
+  }
+  return recovered
+}
+
+async function recoverStaleBatch(
+  olderThanMs: number,
+  now: Date,
+  batchSize: number,
 ) {
   const cutoff = new Date(now.getTime() - olderThanMs)
   // Lock and fence in one transaction. A heartbeat cannot resurrect an expired lease.
@@ -953,6 +1019,7 @@ export async function recoverStaleJobs(
           ),
         ),
       )
+      .limit(batchSize)
       .for('update', { skipLocked: true })
     for (const job of stale) {
       await incrementFailureCounter(tx)
@@ -974,23 +1041,20 @@ export async function recoverStaleJobs(
         .where(
           and(eq(buildJob.id, job.id), eq(buildJob.attempts, job.attempts)),
         )
+      const stuck = Boolean(job.dispatchStartedAt || job.status === 'deploying')
       await tx
         .update(publication)
-        .set({
-          status:
-            job.dispatchStartedAt || job.status === 'deploying'
-              ? 'building'
-              : 'failed',
-        })
+        .set({ status: stuck ? 'building' : 'failed' })
         .where(eq(publication.id, job.publicationId))
+      await queuePublicationEvent(tx, {
+        kind: 'publication.failed',
+        siteId: job.siteId,
+        publicationId: job.publicationId,
+        payload: { stuck },
+      })
     }
     return stale
   })
-  for (const job of staleJobs) {
-    await notifyPublicationFailed(job.publicationId, {
-      stuck: Boolean(job.dispatchStartedAt || job.status === 'deploying'),
-    })
-  }
   return staleJobs
 }
 
@@ -1004,6 +1068,8 @@ export type WorkerLoopDeps = {
   cleanup?: () => Promise<unknown>
   /** Sends due emails from the outbox, every 5 s. */
   mail?: () => Promise<unknown>
+  /** Delivers queued release notifications, every 5 s. */
+  notificationEvents?: () => Promise<unknown>
   /** Deletes outbox rows past retention, hourly. */
   mailCleanup?: () => Promise<unknown>
 }
@@ -1018,17 +1084,56 @@ export type WorkerLoopDeps = {
  * - cleanup: retries durable storage object deletions
  * - mail: sends due outbox emails; mailCleanup: prunes old outbox rows
  */
-export function startWorkerLoops(
+/**
+ * Records each loop tick's promise in `inFlight` until it settles, so shutdown
+ * can wait for it. A run that resolves also stamps the loop's success clock,
+ * which readiness and metrics read. The promise itself is returned unchanged.
+ */
+function trackLoops(
   deps: WorkerLoopDeps,
+  inFlight: Set<Promise<unknown>>,
+): WorkerLoopDeps {
+  const track =
+    <T>(loop: LoopName, run: () => Promise<T>) =>
+    () => {
+      const promise = run()
+      inFlight.add(promise)
+      const done = () => {
+        inFlight.delete(promise)
+      }
+      promise.then(() => {
+        recordLoopSuccess(loop)
+        done()
+      }, done)
+      return promise
+    }
+  return {
+    processJobs: track('worker', deps.processJobs),
+    recover: track('recovery', deps.recover),
+    schedule: track('scheduler', deps.schedule),
+    cleanup: deps.cleanup && track('cleanup', deps.cleanup),
+    mail: deps.mail && track('mail', deps.mail),
+    notificationEvents:
+      deps.notificationEvents &&
+      track('notifications', deps.notificationEvents),
+    mailCleanup: deps.mailCleanup && track('maintenance', deps.mailCleanup),
+  }
+}
+
+export function startWorkerLoops(
+  rawDeps: WorkerLoopDeps,
   {
     intervalMs = 3000,
     schedulerIntervalMs = Math.min(intervalMs, 15_000),
-  } = {},
+  }: { intervalMs?: number; schedulerIntervalMs?: number } = {},
 ): WorkerState {
   markLoopsStarted()
+  const inFlight = new Set<Promise<unknown>>()
+  const deps = trackLoops(rawDeps, inFlight)
   const state = {
     ticking: true,
     schedulerTicking: false,
+    inFlight,
   } as WorkerState
   let recovering = false
 
@@ -1087,6 +1192,21 @@ export function startWorkerLoops(
     }
     state.cleanupTimer = setInterval(cleanup, 15_000)
     cleanup()
+  }
+
+  if (deps.notificationEvents) {
+    let delivering = false
+    state.notificationEventsTimer = setInterval(() => {
+      if (delivering) return
+      delivering = true
+      void deps.notificationEvents!()
+        .catch((error) =>
+          logger.error('notification events tick failed', { err: error }),
+        )
+        .finally(() => {
+          delivering = false
+        })
+    }, MAIL_INTERVAL_MS)
   }
 
   if (deps.mail) {
@@ -1158,18 +1278,30 @@ export function startWorker({
     intervalMs,
     concurrency: env.WORKER_CONCURRENCY,
   })
+  // Aborted only when the drain deadline passes. Loops check it between items.
+  const abort = new AbortController()
   const state = startWorkerLoops(
     {
       processJobs: workerPool.fill,
       recover: () => recoverStaleJobs(),
       schedule: () => runSchedulerTick(),
-      cleanup: () => drainStorageObjectDeletions(),
-      mail: () => processOutbox(),
-      mailCleanup: () => Promise.all([cleanupOutbox(), cleanupNotifications()]),
+      cleanup: () => drainStorageObjectDeletions(100, { signal: abort.signal }),
+      mail: () => processOutbox({ signal: abort.signal }),
+      notificationEvents: () =>
+        processPublicationEvents({ signal: abort.signal }),
+      // Hourly maintenance: prune old rows, then retry paused work.
+      mailCleanup: () =>
+        Promise.all([
+          cleanupOutbox(),
+          cleanupNotifications(),
+          runRetention(),
+          autoRetryPausedJobs(),
+        ]),
     },
     { intervalMs },
   )
   state.pool = workerPool
+  state.abort = abort
   g.__arecaWorker = state
   installShutdownHandlers({
     stop: () => stopWorker({ drainTimeoutMs: env.WORKER_DRAIN_TIMEOUT_MS }),
@@ -1179,9 +1311,11 @@ export function startWorker({
 }
 
 /**
- * Stops the timers, stops claiming, and waits up to `drainTimeoutMs` for
- * in-flight jobs. Jobs still running afterwards keep their lease and are
- * recovered by the next process if it never finishes them.
+ * Stops the timers and stops claiming. Then waits up to `drainTimeoutMs` for
+ * running deployments and every loop tick (mail, storage, notifications,
+ * scheduler, recovery). At the deadline the abort signal is raised, so loops
+ * stop at their next item, and S3 calls are cancelled. Everything left behind
+ * keeps its lease or durable state, and the next process recovers it.
  */
 export async function stopWorker({
   drainTimeoutMs = 30_000,
@@ -1190,13 +1324,44 @@ export async function stopWorker({
   if (!state) return true
   stopWorkerLoops(state)
   g.__arecaWorker = undefined
-  const drained = (await state.pool?.drain(drainTimeoutMs)) ?? true
-  if (!drained) {
+  return drainWorkerState(state, drainTimeoutMs)
+}
+
+/** Waits for a stopped worker's running work, bounded. See `stopWorker`. */
+export async function drainWorkerState(
+  state: WorkerState,
+  drainTimeoutMs = 30_000,
+) {
+  const settled = Promise.all([
+    state.pool?.drain(drainTimeoutMs) ?? Promise.resolve(true),
+    Promise.allSettled([...state.inFlight]),
+  ]).then(([poolDrained]) => poolDrained)
+  const outcome = await raceDeadline(settled, drainTimeoutMs)
+  if (outcome === 'timeout') {
+    state.abort?.abort()
+    logger.warn('worker stopped with work still in flight; aborting', {
+      jobsInFlight: state.pool?.inFlight(),
+      loopsInFlight: state.inFlight.size,
+    })
+    return false
+  }
+  if (!outcome) {
     logger.warn('worker stopped with jobs still in flight', {
       inFlight: state.pool?.inFlight(),
     })
   }
-  return drained
+  return outcome
+}
+
+function raceDeadline<T>(
+  promise: Promise<T>,
+  ms: number,
+): Promise<T | 'timeout'> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const deadline = new Promise<'timeout'>((resolve) => {
+    timer = setTimeout(() => resolve('timeout'), ms)
+  })
+  return Promise.race([promise, deadline]).finally(() => clearTimeout(timer))
 }
 
 export function stopWorkerLoops(state: WorkerState) {
@@ -1205,6 +1370,7 @@ export function stopWorkerLoops(state: WorkerState) {
   clearInterval(state.schedulerTimer)
   clearInterval(state.cleanupTimer)
   clearInterval(state.mailTimer)
+  clearInterval(state.notificationEventsTimer)
   clearInterval(state.mailCleanupTimer)
   markLoopsStopped()
 }

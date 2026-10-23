@@ -1,6 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty at runtime, so lookups stay defensive. */
+import type * as MailConfig from '#/server/mail/config'
+
 import { and, eq, inArray } from 'drizzle-orm'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { db } from '#/db'
 import {
@@ -10,10 +12,24 @@ import {
   organization,
   user,
 } from '#/db/schema'
-
+import { MailConfigError } from '#/server/mail/errors'
 import { hashToken } from '#/server/security/token-hash'
 
 import { acceptInvitation, removeMember, updateMemberRole } from './members.ts'
+
+// `unreadable` makes the delivery-time config read fail like a wrong key would.
+const mail = vi.hoisted(() => ({ unreadable: false }))
+
+vi.mock('#/server/mail/config', async (importOriginal) => {
+  const actual = await importOriginal<typeof MailConfig>()
+  return {
+    ...actual,
+    resolveMailConfig: async () => {
+      if (mail.unreadable) throw new MailConfigError('password_unreadable')
+      return actual.resolveMailConfig()
+    },
+  }
+})
 
 const hasDb = Boolean(process.env.DATABASE_URL)
 
@@ -85,6 +101,29 @@ describe.skipIf(!hasDb)('member account emails', () => {
       orgName: org.name,
       actorName: 'Owen Owner',
     })
+  })
+
+  it('removes the member and queues the notice even when the SMTP password cannot be decrypted', async () => {
+    const { org, owner, member } = await fixture()
+    mail.unreadable = true
+    try {
+      await removeMember(org.id, member.id, owner.id)
+    } finally {
+      mail.unreadable = false
+    }
+
+    const [membershipRow] = await db
+      .select({ id: membership.id })
+      .from(membership)
+      .where(
+        and(
+          eq(membership.userId, member.id),
+          eq(membership.organizationId, org.id),
+        ),
+      )
+    expect(membershipRow).toBeUndefined()
+    const [row] = await outboxFor(member.id, 'membership_removed')
+    expect(row).toMatchObject({ status: 'queued' })
   })
 
   it('sends nothing when someone leaves on their own', async () => {

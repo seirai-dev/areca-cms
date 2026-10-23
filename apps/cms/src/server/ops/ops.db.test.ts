@@ -153,7 +153,10 @@ describe.skipIf(!hasDb)('queue stats and metrics against the database', () => {
           redis: { ok: true, ms: 1 },
           worker: { ok: true, ms: 1 },
           queue: { ok: true, ms: 1 },
+          mail: { ok: true, ms: 1 },
+          loops: { ok: true, ms: 1 },
         },
+        degraded: false,
       })
       expect(snapshot.jobsByStatus.queued).toBeGreaterThanOrEqual(1)
       expect(snapshot.publicationsByStatus.pending).toBeGreaterThanOrEqual(1)

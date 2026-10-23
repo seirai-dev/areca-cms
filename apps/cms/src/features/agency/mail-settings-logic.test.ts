@@ -4,12 +4,14 @@ import {
   emailStatusKind,
   emailTimeline,
   isMailFailing,
-  mailKindLabel,
+  mailFieldProblems,
+  mailStatusCompactLabel,
   mailStatusLabel,
   nextAttemptNumber,
   parsePort,
   portForEncryption,
   suggestedPort,
+  timelineStateLabel,
 } from './mail-settings-logic'
 
 describe('suggestedPort', () => {
@@ -142,20 +144,62 @@ describe('mailStatusLabel', () => {
   })
 })
 
-describe('mailKindLabel', () => {
-  it('gives human labels to known kinds and keeps unknown kinds as stored', () => {
-    expect(mailKindLabel('invitation')).toBe('Invitation')
-    expect(mailKindLabel('test')).toBe('Test email')
-    expect(mailKindLabel('password_reset')).toBe('Password reset')
-    expect(mailKindLabel('release.stuck')).toBe('A release is stuck')
-    expect(mailKindLabel('something_new')).toBe('something_new')
-  })
-})
-
 describe('isMailFailing', () => {
   it('warns from three consecutive failures', () => {
     expect(isMailFailing({ consecutiveFailures: 0 })).toBe(false)
     expect(isMailFailing({ consecutiveFailures: 2 })).toBe(false)
     expect(isMailFailing({ consecutiveFailures: 3 })).toBe(true)
+  })
+})
+
+describe('mailFieldProblems', () => {
+  const valid = {
+    host: 'smtp.example.com',
+    port: '587',
+    fromAddress: 'cms@example.com',
+  }
+
+  it('is empty when every save rule passes', () => {
+    expect(mailFieldProblems(valid)).toEqual([])
+  })
+
+  it('accepts a From with a display name, as the server does', () => {
+    expect(
+      mailFieldProblems({
+        ...valid,
+        fromAddress: 'Areca Review <review@areca.local>',
+      }),
+    ).toEqual([])
+  })
+
+  it('lists the blocking fields in form order, and counts empty ones', () => {
+    expect(
+      mailFieldProblems({ host: ' ', port: '0', fromAddress: '' }),
+    ).toEqual(['host', 'port', 'fromAddress'])
+    expect(
+      mailFieldProblems({ ...valid, fromAddress: 'not-an-address' }),
+    ).toEqual(['fromAddress'])
+  })
+})
+
+describe('mailStatusCompactLabel', () => {
+  it('shortens only the retrying status, to the attempt and the limit', () => {
+    expect(
+      mailStatusCompactLabel({ status: 'queued', retrying: true, attempts: 1 }),
+    ).toBe('Retrying 2/3')
+  })
+
+  it('keeps the other statuses as they are', () => {
+    expect(
+      mailStatusCompactLabel({ status: 'sent', retrying: false, attempts: 1 }),
+    ).toBe('Sent')
+  })
+})
+
+describe('timelineStateLabel', () => {
+  it('says in words what each dot state means', () => {
+    expect(timelineStateLabel('done')).toBe('done')
+    expect(timelineStateLabel('skipped')).toBe('not needed')
+    expect(timelineStateLabel('failed')).toBe('stopped')
   })
 })

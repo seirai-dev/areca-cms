@@ -79,15 +79,14 @@ async function replayRequest(
     .select()
     .from(publication)
     .where(eq(publication.id, previous.publicationId))
-  const jobs = await tx
-    .select()
-    .from(buildJob)
-    .where(eq(buildJob.id, previous.jobId))
   const pub = publications.at(0)
-  const job = jobs.at(0)
-  if (!pub || !job)
-    throw new ConflictError(m.server_publication_request_unavailable())
-  return { publication: pub, job }
+  if (!pub) throw new ConflictError(m.server_publication_request_unavailable())
+  // A null job means retention pruned it after it finished. The publication the
+  // key created is still the answer, so the replay returns it without a job.
+  const jobs = previous.jobId
+    ? await tx.select().from(buildJob).where(eq(buildJob.id, previous.jobId))
+    : []
+  return { publication: pub, job: jobs.at(0) ?? null }
 }
 
 async function rememberRequest(
@@ -134,7 +133,8 @@ export async function requestPublication(input: {
   | {
       ok: true
       publication: typeof publication.$inferSelect
-      job: typeof buildJob.$inferSelect
+      /** Null only when a replayed key's job has been pruned. */
+      job: typeof buildJob.$inferSelect | null
     }
   | { ok: false; errors: string[] }
 > {

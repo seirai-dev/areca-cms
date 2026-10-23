@@ -1,4 +1,4 @@
-import { eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import {
   Client,
   StreamableHTTPClientTransport,
@@ -415,7 +415,12 @@ describe.skipIf(!hasDb)('MCP with content languages', () => {
         .select()
         .from(entry)
         .innerJoin(collection, eq(entry.collectionId, collection.id))
-        .where(eq(collection.key, 'companyInfo'))
+        .where(
+          and(
+            eq(collection.siteId, world.ctx.site.id),
+            eq(collection.key, 'companyInfo'),
+          ),
+        )
       expect(section.entry.draftData).toMatchObject({
         $i18n: { en: { email: 'info@example.com' } },
       })
@@ -524,7 +529,12 @@ describe.skipIf(!hasDb)('MCP with content languages', () => {
       const [row] = await db
         .select()
         .from(collection)
-        .where(eq(collection.key, 'pages'))
+        .where(
+          and(
+            eq(collection.siteId, world.ctx.site.id),
+            eq(collection.key, 'pages'),
+          ),
+        )
       expect(row.localizedRoutes).toEqual({ nl: '/pagina/$slug' })
       expect(row.requiredLanguages).toEqual(['en'])
     })
@@ -550,7 +560,12 @@ describe.skipIf(!hasDb)('MCP with content languages', () => {
       const [row] = await db
         .select()
         .from(collection)
-        .where(eq(collection.key, 'homePage'))
+        .where(
+          and(
+            eq(collection.siteId, world.ctx.site.id),
+            eq(collection.key, 'homePage'),
+          ),
+        )
       expect(row.requiredLanguages).toEqual(['en'])
       expect(row.fields[0]).toMatchObject({
         key: 'headline',

@@ -5,12 +5,14 @@ import { db } from '#/db'
 import { buildJob, entry, schedulerBackoff, site } from '#/db/schema'
 import { audit } from '#/server/audit'
 import { createLogger } from '#/server/log'
-import { notifyScheduleFailed } from '#/server/notifications/triggers'
+import { queueScheduleFailedEvent } from '#/server/notifications/publication-events'
 
 import { requestPublication } from './publications.ts'
 
 const log = createLogger('scheduler')
 export const SCHEDULER_RETRY_DELAYS_MS = [60_000, 5 * 60_000, 15 * 60_000]
+/** Failed attempts after which a schedule stops retrying (paused until an operator acts). */
+export const SCHEDULER_MAX_FAILURES = 4
 const BLOCKING_JOB_STATUSES = [
   'queued',
   'building',
@@ -61,6 +63,13 @@ export async function recordSchedulerFailure(
   if (current && current.approvalFingerprint !== job.schedulerFingerprint)
     return
   const failureCount = (current?.failureCount ?? 0) + 1
+  if (failureCount === SCHEDULER_MAX_FAILURES) {
+    // Stops retrying until an operator retries it from Paused jobs.
+    log.error('scheduled publication paused after four failed attempts', {
+      siteId: job.siteId,
+      reason: error,
+    })
+  }
   await tx
     .insert(schedulerBackoff)
     .values({
@@ -97,56 +106,84 @@ export async function clearSchedulerFailure(
     )
 }
 
-export async function runSchedulerTick() {
+/** Sites handled per tick. Each site's work is independent, so the rest wait one tick. */
+export const SCHEDULER_SITE_LIMIT = 50
+
+/**
+ * One tick. The due sites are picked first (bounded), then their due entries,
+ * backoff rows and busy build jobs are read with one query each, instead of
+ * several queries per site.
+ */
+export async function runSchedulerTick({
+  maxSites = SCHEDULER_SITE_LIMIT,
+}: { maxSites?: number } = {}) {
   const now = new Date()
-  const due = await db
-    .selectDistinct({ siteId: entry.siteId })
+  const dueSites = await db
+    .select({ siteId: entry.siteId })
     .from(entry)
     .where(and(eq(entry.status, 'scheduled'), lte(entry.scheduledAt, now)))
+    .groupBy(entry.siteId)
+    .orderBy(sql`min(${entry.scheduledAt})`)
+    .limit(maxSites)
+  const siteIds = dueSites.map((row) => row.siteId)
+  if (siteIds.length === 0) return
 
-  for (const { siteId } of due) {
-    const owners = await db
-      .select({
-        id: entry.id,
-        scheduledVersion: entry.scheduledVersion,
-        scheduledBy: entry.scheduledBy,
-      })
-      .from(entry)
-      .where(
-        and(
-          eq(entry.siteId, siteId),
-          eq(entry.status, 'scheduled'),
-          lte(entry.scheduledAt, now),
-        ),
-      )
-    if (!owners.length) continue
-    const fingerprint = scheduleFingerprint(owners)
-    const backoff = (
+  // Every due entry of these sites, so each fingerprint covers the whole set.
+  const dueRows = await db
+    .select({
+      siteId: entry.siteId,
+      id: entry.id,
+      scheduledVersion: entry.scheduledVersion,
+      scheduledBy: entry.scheduledBy,
+    })
+    .from(entry)
+    .where(
+      and(
+        inArray(entry.siteId, siteIds),
+        eq(entry.status, 'scheduled'),
+        lte(entry.scheduledAt, now),
+      ),
+    )
+  const ownersBySite = new Map<string, typeof dueRows>()
+  for (const row of dueRows) {
+    const list = ownersBySite.get(row.siteId) ?? []
+    list.push(row)
+    ownersBySite.set(row.siteId, list)
+  }
+  const backoffs = new Map(
+    (
       await db
         .select()
         .from(schedulerBackoff)
-        .where(eq(schedulerBackoff.siteId, siteId))
-        .limit(1)
-    ).at(0)
-    if (
-      backoff?.approvalFingerprint === fingerprint &&
-      (backoff.failureCount >= 4 ||
-        (backoff.nextAttemptAt && backoff.nextAttemptAt > now))
-    )
-      continue
-    const blocking = (
+        .where(inArray(schedulerBackoff.siteId, siteIds))
+    ).map((row) => [row.siteId, row]),
+  )
+  const busySites = new Set(
+    (
       await db
-        .select({ id: buildJob.id })
+        .selectDistinct({ siteId: buildJob.siteId })
         .from(buildJob)
         .where(
           and(
-            eq(buildJob.siteId, siteId),
+            inArray(buildJob.siteId, siteIds),
             inArray(buildJob.status, [...BLOCKING_JOB_STATUSES]),
           ),
         )
-        .limit(1)
-    ).at(0)
-    if (blocking) continue
+    ).map((row) => row.siteId),
+  )
+
+  for (const siteId of siteIds) {
+    const owners = ownersBySite.get(siteId) ?? []
+    if (!owners.length) continue
+    const fingerprint = scheduleFingerprint(owners)
+    const backoff = backoffs.get(siteId)
+    if (
+      backoff?.approvalFingerprint === fingerprint &&
+      (backoff.failureCount >= SCHEDULER_MAX_FAILURES ||
+        (backoff.nextAttemptAt && backoff.nextAttemptAt > now))
+    )
+      continue
+    if (busySites.has(siteId)) continue
     const scheduledBy = [
       ...new Set(
         owners
@@ -169,6 +206,7 @@ export async function runSchedulerTick() {
         fingerprint,
         now,
         result.errors.join('; '),
+        { scheduledBy },
       )
       const found = (
         await db
@@ -190,11 +228,6 @@ export async function runSchedulerTick() {
           ...(scheduledBy.length ? { scheduledBy } : {}),
         },
       })
-      await notifyScheduleFailed({
-        siteId,
-        scheduledBy,
-        fingerprint,
-      })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       await recordRequestFailure(siteId, fingerprint, now, message)
@@ -203,11 +236,17 @@ export async function runSchedulerTick() {
   }
 }
 
+/**
+ * Records a failed attempt. A validation failure (`notice`) also queues the
+ * owners' notice in the same transaction, so a recorded failure is never
+ * unannounced. A thrown error records the failure without a notice.
+ */
 async function recordRequestFailure(
   siteId: string,
   fingerprint: string,
   at: Date,
   error: string,
+  notice?: { scheduledBy: string[] },
 ) {
   await db.transaction(async (tx) => {
     // Serialize retries on the site, including concurrent scheduler replicas.
@@ -235,10 +274,12 @@ async function recordRequestFailure(
             nextAttemptAt: null,
             lastAttemptAt: at,
             lastError: null,
+            // A new approval is a new cycle, so an old dismissal does not carry over.
+            dismissedAt: null,
           },
         })
     } else if (
-      current.failureCount >= 4 ||
+      current.failureCount >= SCHEDULER_MAX_FAILURES ||
       (current.nextAttemptAt && current.nextAttemptAt > at)
     )
       return
@@ -248,5 +289,12 @@ async function recordRequestFailure(
       error,
       at,
     )
+    if (notice) {
+      await queueScheduleFailedEvent(tx, {
+        siteId,
+        fingerprint,
+        scheduledBy: notice.scheduledBy,
+      })
+    }
   })
 }

@@ -9,10 +9,15 @@ function relative(value: number, unit: Intl.RelativeTimeFormatUnit) {
 
 /**
  * The one relative-time formatter in the app: "4m ago" for anything inside a
- * day, the full date after that. Callers always put the absolute timestamp in
- * a `title` (see `absoluteTimeLabel`), so nothing is lost.
+ * day, the full date after that. `withinDays` extends the relative range to
+ * whole days ("3 days ago") before falling back to the date. Callers always
+ * put the absolute timestamp in a `title` (see `absoluteTimeLabel`), so
+ * nothing is lost.
  */
-export function formatRelativeTime(value: Date | string | null | undefined) {
+export function formatRelativeTime(
+  value: Date | string | null | undefined,
+  options: { withinDays?: number } = {},
+) {
   if (value == null || value === '') return '—'
   const date = value instanceof Date ? value : new Date(String(value))
   const diff = date.getTime() - Date.now()
@@ -24,6 +29,9 @@ export function formatRelativeTime(value: Date | string | null | undefined) {
   if (abs < minute) return relative(0, 'second')
   if (abs < hour) return relative(Math.round(diff / minute), 'minute')
   if (abs < day) return relative(Math.round(diff / hour), 'hour')
+  if (options.withinDays && abs < options.withinDays * day) {
+    return relative(Math.round(diff / day), 'day')
+  }
   return new Intl.DateTimeFormat(getLocale(), { dateStyle: 'medium' }).format(
     date,
   )

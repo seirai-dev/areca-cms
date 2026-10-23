@@ -1,5 +1,6 @@
 import type * as MailConfig from '#/server/mail/config'
 import type * as MailTransport from '#/server/mail/transport'
+import type * as ReleaseDiff from '#/server/publishing/release-diff'
 /* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .returning()/.select() are checked defensively */
 
 import { eq } from 'drizzle-orm'
@@ -36,7 +37,21 @@ import { setCurrentSession } from './authz-state'
 vi.hoisted(() => {
   process.env.ADMIN_MFA_REQUIRED = 'true'
 })
+// Lets one test delete a site between the overview's list and its per-site diff.
+const releaseDiffHook = vi.hoisted(() => ({
+  beforeDiff: null as null | ((siteId: string) => Promise<void>),
+}))
 vi.mock('#/lib/auth', async () => (await import('./authz-state')).fakeAuth())
+vi.mock('#/server/publishing/release-diff', async (importOriginal) => {
+  const actual = await importOriginal<typeof ReleaseDiff>()
+  return {
+    ...actual,
+    diffApprovedRelease: async (siteId: string) => {
+      await releaseDiffHook.beforeDiff?.(siteId)
+      return actual.diffApprovedRelease(siteId)
+    },
+  }
+})
 vi.mock('@tanstack/react-start/server', () => ({
   getRequestHeaders: () => new Headers(),
   getCookie: () => null,
@@ -46,6 +61,7 @@ vi.mock('@tanstack/react-start', async (importOriginal) =>
 )
 vi.mock('#/server/mail/config', async (importOriginal) => ({
   ...(await importOriginal<typeof MailConfig>()),
+  isMailConfigured: async () => true,
   resolveMailConfig: async () => ({
     source: 'env' as const,
     host: 'mail.test',
@@ -926,6 +942,43 @@ describe.skipIf(!runnable)('error shape that reaches the client', () => {
     expect(classify(out.error)).toBe('login')
   })
 })
+
+describe.skipIf(!runnable)(
+  'agency overview while a site is deleted mid-read',
+  () => {
+    let w: World
+    beforeAll(async () => {
+      w = await seedWorld()
+    }, 60_000)
+    afterAll(async () => {
+      releaseDiffHook.beforeDiff = null
+      await w?.destroy()
+    })
+
+    // Other test files create and delete sites in the same database. An agency
+    // admin's overview lists every site, so one can vanish before its diff runs.
+    it('leaves the deleted site out instead of failing the whole overview', async () => {
+      const { overviewFns } = await fns()
+      const victim = w.X.site.id
+      releaseDiffHook.beforeDiff = async (siteId) => {
+        if (siteId !== victim) return
+        releaseDiffHook.beforeDiff = null
+        await db.delete(site).where(eq(site.id, victim))
+      }
+      const outcome = await callServerFn(
+        overviewFns.getSitesOverviewFn as never,
+        undefined,
+        w.sessions.adminMfa,
+      )
+      expect(outcome.error).toBeUndefined()
+      const ids = (outcome.result as { sites: { id: string }[] }).sites.map(
+        (row) => row.id,
+      )
+      expect(ids).not.toContain(victim)
+      expect(ids).toContain(w.Y.site.id)
+    })
+  },
+)
 
 async function fns() {
   return {

@@ -197,6 +197,48 @@
       "when": 1792669209507,
       "tag": "0027_hash_invitation_tokens",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1792671144161,
+      "tag": "0028_mail_delivery_attempts",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1792671562671,
+      "tag": "0029_notification_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1792672638219,
+      "tag": "0030_scheduler_recovery_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1792673011297,
+      "tag": "0031_paused_job_dismissal",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1792674405751,
+      "tag": "0032_publication_request_job_set_null",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1792674825390,
+      "tag": "0033_notification_event_schedule_dedupe",
+      "breakpoints": true
     }
   ]
 }

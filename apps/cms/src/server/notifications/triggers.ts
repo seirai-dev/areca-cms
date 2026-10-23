@@ -17,16 +17,21 @@ import {
   user,
 } from '#/db/schema'
 import type { NotificationPayload, NotificationRole } from '#/lib/notifications'
-import type { Snapshot } from '#/lib/types'
+import type { PublicationStatus, Snapshot } from '#/lib/types'
 import { createLogger } from '#/server/log'
 import { diffSnapshotCollections } from '#/server/publishing/release-diff'
 import type { ReleaseDiffEntry } from '#/server/publishing/release-diff'
 
-import { notify } from './notify.ts'
+import { notify, notifyStrict } from './notify.ts'
 import type { NotificationRecipient } from './notify.ts'
 
 const log = createLogger('notifications')
 const MAX_ENTRIES = 10
+const WENT_LIVE_STATUSES: PublicationStatus[] = [
+  'live',
+  'superseded',
+  'rolled_back',
+]
 
 type Entries = Pick<NotificationPayload, 'entries' | 'moreEntries'>
 
@@ -172,7 +177,7 @@ async function alertAgencyAdmins(input: {
     .from(user)
     .where(eq(user.isAgencyAdmin, true))
   const already = new Set(input.notified)
-  await notify({
+  await notifyStrict({
     event: 'agency.release.failed',
     organizationId: input.organizationId,
     subjectId: input.subjectId,
@@ -190,66 +195,86 @@ async function alertAgencyAdmins(input: {
  */
 export async function notifyPublicationLive(publicationId: string) {
   try {
-    const pub = await publicationRow(publicationId)
-    if (!pub || pub.status !== 'live') return
-    const context = await siteContext(pub.siteId)
-    if (!context) return
-    const previous = await previousLive(pub)
-    const payload: NotificationPayload = {
-      siteId: context.siteId,
-      siteName: context.siteName,
-      orgName: context.orgName,
-      organizationId: context.organizationId,
-      publicationId: pub.id,
-      ...entriesBetween(pub.snapshot, previous?.snapshot ?? null),
-    }
-    const orgId = context.organizationId
-
-    if (pub.origin === 'scheduled') {
-      await notify({
-        event: 'schedule.published',
-        organizationId: orgId,
-        subjectId: pub.id,
-        recipients: await recipientsFor(pub.scheduledBy, orgId),
-        payload,
-      })
-      return
-    }
-
-    const requester = pub.requestedBy
-    if (pub.origin === 'rollback') {
-      // The requester hears through release.live below, so only once.
-      await notify({
-        event: 'rollback.live',
-        organizationId: orgId,
-        subjectId: pub.id,
-        recipients: (await ownersOf(orgId)).filter(
-          (owner) => owner.userId !== requester,
-        ),
-        payload,
-      })
-    }
-    await notify({
-      event: 'release.live',
-      organizationId: orgId,
-      subjectId: pub.id,
-      recipients: await recipientsFor([requester], orgId),
-      payload,
-    })
-    if (pub.origin === 'manual') {
-      const others = (await ownersOf(orgId)).filter(
-        (owner) => owner.userId !== requester,
-      )
-      await notify({
-        event: 'release.live.others',
-        organizationId: orgId,
-        subjectId: pub.id,
-        recipients: others,
-        payload,
-      })
-    }
+    await deliverPublicationLive(publicationId)
   } catch (error) {
     log.error('live notification failed', { publicationId, err: error })
+  }
+}
+
+/**
+ * Fans out the live notifications and throws on failure, so the publication
+ * events loop can retry. `previousPublicationId` is the release that was live
+ * before this one, read before it was superseded. Omitted: look it up now
+ * (only correct before the supersede, so the worker always passes it).
+ */
+export async function deliverPublicationLive(
+  publicationId: string,
+  previousPublicationId?: string | null,
+) {
+  const pub = await publicationRow(publicationId)
+  // Delivery can run after a newer release superseded this one, so accept
+  // any status a release that went live can have by now.
+  if (!pub || !WENT_LIVE_STATUSES.includes(pub.status)) return
+  const context = await siteContext(pub.siteId)
+  if (!context) return
+  const previous =
+    previousPublicationId === undefined
+      ? await previousLive(pub)
+      : previousPublicationId
+        ? await publicationRow(previousPublicationId)
+        : null
+  const payload: NotificationPayload = {
+    siteId: context.siteId,
+    siteName: context.siteName,
+    orgName: context.orgName,
+    organizationId: context.organizationId,
+    publicationId: pub.id,
+    ...entriesBetween(pub.snapshot, previous?.snapshot ?? null),
+  }
+  const orgId = context.organizationId
+
+  if (pub.origin === 'scheduled') {
+    await notifyStrict({
+      event: 'schedule.published',
+      organizationId: orgId,
+      subjectId: pub.id,
+      recipients: await recipientsFor(pub.scheduledBy, orgId),
+      payload,
+    })
+    return
+  }
+
+  const requester = pub.requestedBy
+  if (pub.origin === 'rollback') {
+    // The requester hears through release.live below, so only once.
+    await notifyStrict({
+      event: 'rollback.live',
+      organizationId: orgId,
+      subjectId: pub.id,
+      recipients: (await ownersOf(orgId)).filter(
+        (owner) => owner.userId !== requester,
+      ),
+      payload,
+    })
+  }
+  await notifyStrict({
+    event: 'release.live',
+    organizationId: orgId,
+    subjectId: pub.id,
+    recipients: await recipientsFor([requester], orgId),
+    payload,
+  })
+  if (pub.origin === 'manual') {
+    const others = (await ownersOf(orgId)).filter(
+      (owner) => owner.userId !== requester,
+    )
+    await notifyStrict({
+      event: 'release.live.others',
+      organizationId: orgId,
+      subjectId: pub.id,
+      recipients: others,
+      payload,
+    })
   }
 }
 
@@ -263,79 +288,88 @@ export async function notifyPublicationFailed(
   opts: { stuck: boolean },
 ) {
   try {
-    const pub = await publicationRow(publicationId)
-    if (!pub) return
-    const context = await siteContext(pub.siteId)
-    if (!context) return
-    const orgId = context.organizationId
-    const payload: NotificationPayload = {
-      siteId: context.siteId,
-      siteName: context.siteName,
-      orgName: context.orgName,
-      organizationId: orgId,
-      publicationId: pub.id,
-    }
-    const involved = await recipientsFor(
-      [pub.requestedBy, ...pub.scheduledBy],
-      orgId,
-    )
-    const result = await notify({
-      event: opts.stuck ? 'release.stuck' : 'release.failed',
-      organizationId: orgId,
-      subjectId: pub.id,
-      recipients: uniqueRecipients([...involved, ...(await ownersOf(orgId))]),
-      payload,
-    })
-    await alertAgencyAdmins({
-      organizationId: orgId,
-      subjectId: pub.id,
-      notified: result.notified,
-      payload,
-    })
+    await deliverPublicationFailed(publicationId, opts)
   } catch (error) {
     log.error('failure notification failed', { publicationId, err: error })
   }
 }
 
-/** A scheduled publish could not start. Owners hear once per schedule approval. */
-export async function notifyScheduleFailed(input: {
-  siteId: string
-  scheduledBy: string[]
-  fingerprint: string
-}) {
-  try {
-    const context = await siteContext(input.siteId)
-    if (!context) return
-    const orgId = context.organizationId
-    const subjectId = `schedule:${input.siteId}:${input.fingerprint}`
-    const payload: NotificationPayload = {
-      siteId: context.siteId,
-      siteName: context.siteName,
-      orgName: context.orgName,
-      organizationId: orgId,
-    }
-    const result = await notify({
-      event: 'schedule.failed',
-      organizationId: orgId,
-      subjectId,
-      recipients: uniqueRecipients([
-        ...(await recipientsFor(input.scheduledBy, orgId)),
-        ...(await ownersOf(orgId)),
-      ]),
-      payload,
-    })
-    await alertAgencyAdmins({
-      organizationId: orgId,
-      subjectId,
-      notified: result.notified,
-      payload,
-    })
-  } catch (error) {
-    log.error('schedule failure notification failed', {
-      siteId: input.siteId,
-      err: error,
-    })
+/** Throws on failure so the publication events loop retries it. */
+export async function deliverPublicationFailed(
+  publicationId: string,
+  opts: { stuck: boolean },
+) {
+  const pub = await publicationRow(publicationId)
+  if (!pub) return
+  const context = await siteContext(pub.siteId)
+  if (!context) return
+  const orgId = context.organizationId
+  const payload: NotificationPayload = {
+    siteId: context.siteId,
+    siteName: context.siteName,
+    orgName: context.orgName,
+    organizationId: orgId,
+    publicationId: pub.id,
   }
+  const involved = await recipientsFor(
+    [pub.requestedBy, ...pub.scheduledBy],
+    orgId,
+  )
+  const result = await notifyStrict({
+    event: opts.stuck ? 'release.stuck' : 'release.failed',
+    organizationId: orgId,
+    subjectId: pub.id,
+    recipients: uniqueRecipients([...involved, ...(await ownersOf(orgId))]),
+    payload,
+  })
+  await alertAgencyAdmins({
+    organizationId: orgId,
+    subjectId: pub.id,
+    notified: result.notified,
+    payload,
+  })
+}
+
+/** Subject and dedupe key of a failed scheduled publish: one per schedule approval. */
+export function scheduleFailedSubject(siteId: string, fingerprint: string) {
+  return `schedule:${siteId}:${fingerprint}`
+}
+
+/**
+ * A scheduled publish could not start. Owners hear once per schedule approval.
+ * Throws on failure so the events loop retries it. The state change that
+ * records the failure queues the event (see `queueScheduleFailedEvent`).
+ */
+export async function deliverScheduleFailed(
+  siteId: string,
+  input: { scheduledBy: string[]; fingerprint: string },
+) {
+  const context = await siteContext(siteId)
+  if (!context) return
+  const orgId = context.organizationId
+  const subjectId = scheduleFailedSubject(siteId, input.fingerprint)
+  const payload: NotificationPayload = {
+    siteId: context.siteId,
+    siteName: context.siteName,
+    orgName: context.orgName,
+    organizationId: orgId,
+  }
+  const result = await notifyStrict({
+    event: 'schedule.failed',
+    organizationId: orgId,
+    subjectId,
+    recipients: uniqueRecipients([
+      ...(await recipientsFor(input.scheduledBy, orgId)),
+      ...(await ownersOf(orgId)),
+    ]),
+    payload,
+  })
+  await alertAgencyAdmins({
+    organizationId: orgId,
+    subjectId,
+    notified: result.notified,
+    payload,
+  })
 }
 
 /** The person who sent the invitation hears when it is accepted. */

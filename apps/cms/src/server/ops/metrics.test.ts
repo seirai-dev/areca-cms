@@ -12,7 +12,10 @@ const readiness: ReadinessReport = {
     redis: { ok: true, degraded: true, ms: 1 },
     worker: { ok: true, ms: 0 },
     queue: { ok: true, ms: 1 },
+    mail: { ok: true, ms: 1 },
+    loops: { ok: true, ms: 1 },
   },
+  degraded: false,
 }
 
 const snapshot: MetricsSnapshot = {
@@ -30,6 +33,24 @@ const snapshot: MetricsSnapshot = {
   workerEnabled: true,
   workerTickAgeSeconds: 1.5,
   schedulerTickAgeSeconds: 7,
+  backlog: {
+    mailPending: 3,
+    mailOldestPendingAgeSeconds: 120,
+    mailExpiredLeases: 1,
+    notificationEventsPending: 6,
+    notificationEventsOldestPendingAgeSeconds: 30,
+    storageDeletionsPaused: 2,
+    schedulesExhausted: 1,
+  },
+  loopSuccessAgeSeconds: {
+    worker: 1,
+    scheduler: 2,
+    recovery: 3,
+    cleanup: 4,
+    mail: 4,
+    notifications: null,
+    maintenance: 5,
+  },
   readiness,
   uptimeSeconds: 100,
   memory: { rss: 1, heapUsed: 2, heapTotal: 3, external: 4 },
@@ -37,6 +58,21 @@ const snapshot: MetricsSnapshot = {
 
 describe('renderPrometheus', () => {
   const text = renderPrometheus(snapshot)
+
+  it('exposes mail, notification, paused work and per-loop success ages', () => {
+    expect(text).toContain('areca_mail_pending 3')
+    expect(text).toContain('areca_mail_oldest_pending_age_seconds 120')
+    expect(text).toContain('areca_mail_expired_leases 1')
+    expect(text).toContain('areca_notification_events_pending 6')
+    expect(text).toContain('areca_storage_deletions_paused 2')
+    expect(text).toContain('areca_schedules_exhausted 1')
+    expect(text).toContain('areca_loop_success_age_seconds{loop="mail"} 4')
+    expect(text).toContain(
+      'areca_loop_success_age_seconds{loop="maintenance"} 5',
+    )
+    // A loop that has never succeeded is left out rather than reported as zero.
+    expect(text).not.toContain('loop="notifications"')
+  })
 
   it('emits HELP/TYPE headers and labelled samples', () => {
     expect(text).toContain('# HELP areca_build_jobs Build jobs by status.')

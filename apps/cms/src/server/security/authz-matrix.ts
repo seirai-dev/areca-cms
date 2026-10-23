@@ -44,6 +44,7 @@ import * as mcpKeyFns from '#/server/fn/mcp-keys'
 import * as mcpOauthFns from '#/server/fn/mcp-oauth'
 import * as meFns from '#/server/fn/me'
 import * as overviewFns from '#/server/fn/overview'
+import * as pausedJobFns from '#/server/fn/paused-jobs'
 import * as publishingFns from '#/server/fn/publishing'
 import * as securityFns from '#/server/fn/security'
 import * as setupFns from '#/server/fn/setup'
@@ -1031,6 +1032,28 @@ export const ROWS: Row[] = [
     prepare: () => ({ data: undefined }),
   },
 
+  // ---------------------------------------------------------------- paused-jobs.ts
+  {
+    name: 'listPausedJobsFn',
+    fn: pausedJobFns.listPausedJobsFn,
+    policy: 'agency',
+    prepare: () => ({ data: undefined }),
+  },
+  {
+    name: 'retryPausedJobFn',
+    fn: pausedJobFns.retryPausedJobFn,
+    policy: 'agency-fresh',
+    note: 'An item that is not paused is not reset.',
+    prepare: () => ({ data: { kind: 'storage', id: 'no-such-storage-key' } }),
+  },
+  {
+    name: 'dismissPausedJobFn',
+    fn: pausedJobFns.dismissPausedJobFn,
+    policy: 'agency-fresh',
+    note: 'An item that is not paused is not dismissed.',
+    prepare: () => ({ data: { kind: 'storage', id: 'no-such-storage-key' } }),
+  },
+
   // ---------------------------------------------------------------- notifications.ts
   {
     name: 'getMyNotificationsFn',
@@ -1455,6 +1478,7 @@ export const ALL_FN_MODULES = {
   'mcp-oauth': mcpOauthFns,
   me: meFns,
   overview: overviewFns,
+  'paused-jobs': pausedJobFns,
   publishing: publishingFns,
   security: securityFns,
   setup: setupFns,

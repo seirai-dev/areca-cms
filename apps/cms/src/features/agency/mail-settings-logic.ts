@@ -1,8 +1,7 @@
 import type { MailSecure } from '#/lib/types'
 import { m } from '#/paraglide/messages'
+import { isMailAddress } from '#/server/mail/headers'
 import { MAIL_MAX_ATTEMPTS } from '#/server/mail/types'
-import { isEventKey } from '#/lib/notifications'
-import { eventLabel } from '#/features/notifications/notification-copy'
 
 /**
  * Pure helpers for Agency → Mail and the shell banners. No React and no
@@ -40,15 +39,37 @@ export function parsePort(value: string): number | null {
   return port >= 1 && port <= 65_535 ? port : null
 }
 
-export type MailEmailKind = 'queued' | 'retrying' | 'sent' | 'failed'
+/** The form fields a save depends on, in the order they appear on the form. */
+export type MailFieldKey = 'host' | 'port' | 'fromAddress'
+
+/**
+ * The fields that would block a save, in form order. Empty counts as a
+ * problem. The From check is the server's own (`Name <address>` is valid),
+ * so a value the server accepts never shows as an error here.
+ */
+export function mailFieldProblems(input: {
+  host: string
+  port: string
+  fromAddress: string
+}): MailFieldKey[] {
+  const problems: MailFieldKey[] = []
+  if (input.host.trim() === '') problems.push('host')
+  if (parsePort(input.port) === null) problems.push('port')
+  if (!isMailAddress(input.fromAddress)) problems.push('fromAddress')
+  return problems
+}
+
+export type MailEmailKind =
+  'queued' | 'retrying' | 'sent' | 'failed' | 'skipped'
 
 /** The one status a row shows, from the outbox fields. */
 export function emailStatusKind(email: {
-  status: 'queued' | 'sending' | 'sent' | 'failed'
+  status: 'queued' | 'sending' | 'sent' | 'failed' | 'cancelled'
   retrying: boolean
 }): MailEmailKind {
   if (email.status === 'sent') return 'sent'
   if (email.status === 'failed') return 'failed'
+  if (email.status === 'cancelled') return 'skipped'
   return email.retrying ? 'retrying' : 'queued'
 }
 
@@ -70,7 +91,7 @@ export type TimelineStep = {
  * was never needed is `skipped` (drawn muted), not `pending`.
  */
 export function emailTimeline(email: {
-  status: 'queued' | 'sending' | 'sent' | 'failed'
+  status: 'queued' | 'sending' | 'sent' | 'failed' | 'cancelled'
   retrying: boolean
   attempts: number
 }): TimelineStep[] {
@@ -105,32 +126,8 @@ export function emailTimeline(email: {
   ]
 }
 
-/** Human label for an email kind; unknown kinds are shown as stored. */
-const ACCOUNT_KIND_LABELS: Partial<Record<string, () => string>> = {
-  invitation: () => m.agency_mail_kind_invitation(),
-  test: () => m.agency_mail_kind_test(),
-  password_reset: () => m.agency_mail_kind_password_reset(),
-  password_reset_sso: () => m.agency_mail_kind_password_reset_sso(),
-  verify_email: () => m.agency_mail_kind_verify_email(),
-  password_changed: () => m.agency_mail_kind_password_changed(),
-  two_factor_enabled: () => m.agency_mail_kind_two_factor_enabled(),
-  two_factor_disabled: () => m.agency_mail_kind_two_factor_disabled(),
-  membership_removed: () => m.agency_mail_kind_membership_removed(),
-  membership_role_changed: () => m.agency_mail_kind_membership_role_changed(),
-  agency_admin_granted: () => m.agency_mail_kind_agency_admin_granted(),
-  agency_admin_revoked: () => m.agency_mail_kind_agency_admin_revoked(),
-}
-
-/** Account email kinds and notification events, as people read them. */
-export function mailKindLabel(kind: string) {
-  const account = ACCOUNT_KIND_LABELS[kind]
-  if (account) return account()
-  if (isEventKey(kind)) return eventLabel(kind)
-  return kind
-}
-
 export function mailStatusLabel(email: {
-  status: 'queued' | 'sending' | 'sent' | 'failed'
+  status: 'queued' | 'sending' | 'sent' | 'failed' | 'cancelled'
   retrying: boolean
   attempts: number
 }) {
@@ -139,6 +136,8 @@ export function mailStatusLabel(email: {
       return m.agency_mail_status_sent()
     case 'failed':
       return m.agency_mail_status_failed()
+    case 'skipped':
+      return m.agency_mail_status_skipped()
     case 'retrying':
       return m.agency_mail_status_retrying({
         attempt: String(nextAttemptNumber(email.attempts)),
@@ -146,6 +145,38 @@ export function mailStatusLabel(email: {
       })
     case 'queued':
       return m.agency_mail_status_queued()
+  }
+}
+
+/**
+ * The status on a narrow row: "Retrying 2/3" fits beside the time where the
+ * full "Retrying (attempt 2 of 3)" does not. Other statuses are already short.
+ */
+export function mailStatusCompactLabel(email: {
+  status: 'queued' | 'sending' | 'sent' | 'failed' | 'cancelled'
+  retrying: boolean
+  attempts: number
+}) {
+  if (emailStatusKind(email) !== 'retrying') return mailStatusLabel(email)
+  return m.agency_mail_status_retrying_short({
+    attempt: String(nextAttemptNumber(email.attempts)),
+    max: String(MAIL_MAX_ATTEMPTS),
+  })
+}
+
+/** What a delivery dot means in words, for its tooltip and screen readers. */
+export function timelineStateLabel(state: TimelineState) {
+  switch (state) {
+    case 'done':
+      return m.agency_mail_dot_done()
+    case 'current':
+      return m.agency_mail_dot_current()
+    case 'pending':
+      return m.agency_mail_dot_pending()
+    case 'skipped':
+      return m.agency_mail_dot_skipped()
+    case 'failed':
+      return m.agency_mail_dot_failed()
   }
 }
 

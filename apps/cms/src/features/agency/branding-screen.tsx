@@ -417,14 +417,18 @@ export function BrandingScreen() {
           <FloatingBar
             open={form.dirty}
             label={m.shared_unsaved_changes()}
+            fullWidthOnMobile
             data-testid="branding-save-bar"
           >
-            <FloatingBarLabel>{m.shared_unsaved_changes()}</FloatingBarLabel>
-            <FloatingBarDivider />
+            <FloatingBarLabel className="max-md:basis-full">
+              {m.shared_unsaved_changes()}
+            </FloatingBarLabel>
+            <FloatingBarDivider className="max-md:hidden" />
             <Button
               type="button"
               variant="quiet"
               size="sm"
+              className="max-md:flex-1"
               onClick={form.discard}
               disabled={form.save.isPending}
             >
@@ -435,7 +439,7 @@ export function BrandingScreen() {
               size="sm"
               data-testid="save-branding"
               loading={form.save.isPending}
-              className="rounded-full"
+              className="rounded-full max-md:min-w-28 max-md:flex-1"
             >
               {m.admin_branding_save()}
             </Button>

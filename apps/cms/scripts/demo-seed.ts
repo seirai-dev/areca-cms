@@ -398,6 +398,8 @@ async function seedClient(client: DemoClient, adminId: string) {
   if (!request.ok) {
     throw new Error(`Initial release failed: ${request.errors.join('; ')}`)
   }
+  // No request key, so nothing is replayed and the job is always returned.
+  if (!request.job) throw new Error('Initial release returned no job')
   await processJob(request.job)
 
   // Phase C: approvals after the release, so they show as pending changes.
