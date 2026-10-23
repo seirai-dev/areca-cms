@@ -14,7 +14,7 @@ type LoginSearch = {
   error?: string
   error_description?: string
   /** Set by account deletion: the person has just deleted their account. */
-  deleted?: boolean
+  deleted?: 1
 }
 
 /**
@@ -30,7 +30,9 @@ export const Route = createFileRoute('/login')({
       typeof search.error_description === 'string'
         ? search.error_description
         : undefined,
-    deleted: search.deleted === '1' ? true : undefined,
+    // The router parses `?deleted=1` as the number 1, so keep that value:
+    // anything else would be dropped from the URL.
+    deleted: search.deleted === 1 || search.deleted === '1' ? 1 : undefined,
   }),
   beforeLoad: async ({ search, location }) => {
     const { needsSetup } = await getSetupStatusFn()
@@ -60,7 +62,7 @@ function LoginPage() {
       methods={methods}
       redirectTo={redirectTo}
       providerError={error}
-      deleted={deleted ?? false}
+      deleted={deleted === 1}
       oauthQuery={oauthQuery}
     />
   )
