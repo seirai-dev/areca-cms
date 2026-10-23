@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto'
 import { realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
 
@@ -16,6 +17,31 @@ export const EDITOR_REASON =
 
 export function uniqueSuffix() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+/**
+ * The RFC 6238 code (SHA-1, 6 digits, 30 s) for a base32 TOTP secret, as the
+ * two-factor setup screen shows it.
+ */
+export function totpCode(base32Secret: string, at = Date.now()) {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+  const key: number[] = []
+  let bits = 0
+  let value = 0
+  for (const char of base32Secret.replace(/=+$/, '').toUpperCase()) {
+    value = (value << 5) | alphabet.indexOf(char)
+    bits += 5
+    if (bits >= 8) {
+      key.push((value >>> (bits - 8)) & 0xff)
+      bits -= 8
+    }
+  }
+  const counter = Buffer.alloc(8)
+  counter.writeBigUInt64BE(BigInt(Math.floor(at / 30_000)))
+  const digest = createHmac('sha1', Buffer.from(key)).update(counter).digest()
+  const offset = digest[digest.length - 1] & 0xf
+  const binary = digest.readUInt32BE(offset) & 0x7fffffff
+  return String(binary % 1_000_000).padStart(6, '0')
 }
 
 export function slugify(value: string) {
