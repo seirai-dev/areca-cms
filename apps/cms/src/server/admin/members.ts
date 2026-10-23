@@ -8,7 +8,6 @@ import {
   invitation,
   membership,
   organization,
-  session,
   site,
   user,
   verification,
@@ -19,6 +18,7 @@ import { getLocale } from '#/paraglide/runtime'
 import { audit } from '#/server/audit'
 import { ConflictError, NotFoundError } from '#/server/content/errors'
 import { AppError } from '#/server/http/app-error'
+import { lastActiveSubquery } from './last-active'
 import { sendAccountEmail } from '#/server/mail/account-emails'
 import { mailFailureMessage } from '#/server/mail/errors'
 import {
@@ -889,16 +889,7 @@ export async function setAgencyAdmin(
 
 export async function listUsers() {
   const blocker = alias(user, 'blocker')
-  const lastActive = db
-    .select({
-      userId: session.userId,
-      at: sql<Date | null>`max(${session.updatedAt})`
-        .mapWith((value: unknown) => (value ? new Date(String(value)) : null))
-        .as('last_active_at'),
-    })
-    .from(session)
-    .groupBy(session.userId)
-    .as('last_active')
+  const lastActive = lastActiveSubquery()
   const users = await db
     .select({
       id: user.id,
