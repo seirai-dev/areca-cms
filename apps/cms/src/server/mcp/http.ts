@@ -261,6 +261,7 @@ export async function handleSiteMcpRequest(
       name: user.name,
       isAgencyAdmin: user.isAgencyAdmin,
       twoFactorEnabled: user.twoFactorEnabled,
+      blockedAt: user.blockedAt,
     })
     .from(user)
     .where(eq(user.id, userId))

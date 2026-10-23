@@ -23,9 +23,13 @@ export async function getSession() {
   })
 }
 
+/**
+ * A blocked person is signed out here too. Their sessions are deleted when
+ * they are blocked, so this is defence in depth.
+ */
 export async function requireUser() {
   const session = await getSession()
-  if (!session) {
+  if (!session || session.user.blockedAt) {
     throw redirect({ href: '/login' })
   }
   return session
