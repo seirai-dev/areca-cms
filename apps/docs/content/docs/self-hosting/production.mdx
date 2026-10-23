@@ -218,6 +218,8 @@ The CMS development example, `apps/cms/.env.example`, has `DOKPLOY_ALLOW_INSECUR
 
 Keep `docker/.env` readable only by the account that runs Docker, and never commit it. Store a copy in a secrets manager or another encrypted location. The [secrets](/docs/security/secrets) page lists every secret and where it lives.
 
+The CMS refuses to start in production in three cases. `REDIS_URL` is not set. `BETTER_AUTH_SECRET` is an example value: `change-me`, or a value starting with `replace-` or `replace_`. An encryption key is all zero bytes. Generate real values with `openssl rand -hex 32` for `BETTER_AUTH_SECRET` and `openssl rand -base64 32` for each encryption key. The error names the setting that failed. See [configuration](/docs/self-hosting/configuration#required-secrets).
+
 Keep these values stable, because the data depends on them:
 
 - `DOKPLOY_CREDENTIALS_ENCRYPTION_KEY` decrypts the Dokploy API keys stored in the database. Changing or losing it means every saved key must be re-entered.
@@ -237,7 +239,7 @@ node docker/recovery.mjs backup areca-demo docker/.env /secure/backups/areca-202
 
 The helper stops every service in the project while it copies the volumes, so plan a short outage. When it finishes, start the stack again with your usual `docker compose up -d --wait` command. The backup folder contains your secrets in plain form, so move it to encrypted storage that is not on the CMS host.
 
-Choose a backup schedule that suits your data, and take a backup before every upgrade. Test a restore into a separate project before you rely on it. The [backup and recovery](/docs/self-hosting/backup-and-recovery) page covers the restore steps.
+The [backup and recovery](/docs/self-hosting/backup-and-recovery) page sets a recommended schedule: a daily database dump with the bucket copy, a full backup before every upgrade, and a quarterly restore drill. It also covers the restore steps. Test a restore into a separate project before you rely on it.
 
 <Callout type="warn" title="A backup is only useful if it restores">
 Run a restore into a new project with empty volumes at least once, and check that you can sign in, open a draft and see an uploaded file. Do this before you need it.
@@ -250,7 +252,7 @@ The CMS exposes three endpoints you can monitor:
 | Endpoint | Use |
 | --- | --- |
 | `GET /api/health` | Liveness. Returns `200` while the process is running. The image's built-in health check uses it. |
-| `GET /api/health/ready` | Readiness. Returns `503` when the database, storage or background queue is failing. |
+| `GET /api/health/ready` | Readiness. Returns `503` when the database, storage or background queue is failing. A degraded instance, such as one with Redis down, a stale background loop or mail waiting more than 15 minutes, still returns `200`. The response's `degraded` flag shows it. |
 | `GET /api/metrics` | Prometheus metrics. Requires `Authorization: Bearer <METRICS_TOKEN>`. Returns `404` when `METRICS_TOKEN` is not set. |
 
 Set `METRICS_TOKEN` in `.env` to enable metrics. The Compose file already passes it. See [operations](/docs/self-hosting/operations) for the metrics list and example alerts.

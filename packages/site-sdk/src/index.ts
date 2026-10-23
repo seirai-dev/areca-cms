@@ -1,5 +1,5 @@
-export { createArecaClient } from './client.js'
-export type { ArecaClient, ArecaClientOptions } from './client.js'
+export { createArecaClient, FieldDropsRequiredError } from './client.js'
+export type { ArecaClient, ArecaClientOptions, FieldDrop } from './client.js'
 export { defineSiteContent, manifestFromConfig } from './config.js'
 export { matchLocale } from './locale.js'
 export type {

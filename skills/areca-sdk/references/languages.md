@@ -35,6 +35,7 @@ export default defineSiteContent({
 - `translatable` on a field overrides the default. Text, textarea, richtext and url are per language by default; every other type is shared across languages.
 - `i18n.paraglide` is the Paraglide runtime path. When it is set, `areca pull` wires its `getLocale` into the generated content object.
 - `languages` and the per-language settings are sent with the schema by `manifest push`. `i18n` and `assets` stay local.
+- `manifest pull` lists language changes before it writes. Removing a language, or changing `main`, needs confirmation (`--yes` without a TTY). Adding one only appears in the diff. Ask the user before confirming: a removed language stops being served.
 - `areca pull` warns when `project.inlang/settings.json` disagrees with `languages`.
 
 The generated `areca.gen.ts` exports `languages` (`{ main, all }`) and the `Locale` union, which is registered for the typed API. Commit it like any other generated file.
@@ -82,6 +83,10 @@ For each read, the first of these that is set wins:
 4. the main language.
 
 `content.in(locale)` returns a new content object that reads in that language. A per-call `locale` still overrides the scope.
+
+Types follow the same scope. `Href` (and `href()` on a collection or `content.href(ref)`) is the union of every language's route, such as `` `/journal/${string}` | `/journaal/${string}` ``. `content.in("nl").articles.href(entry)` narrows it to the Dutch route `` `/journaal/${string}` ``.
+
+Media URLs are rewritten for every language view, so the main language and the other languages all serve the local files from `areca pull`, not CMS URLs.
 
 ## Reading in a language
 

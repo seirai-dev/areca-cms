@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { parseArgs } from './args.js'
 import { run } from './cli.js'
-import { createArecaClient } from './client.js'
+import { createArecaClient, FieldDropsRequiredError } from './client.js'
+import * as entry from './index.js'
 import { defineSiteContent, manifestFromConfig } from './config.js'
 import { getPreviewEntry, previewHeaders } from './preview.js'
 import { pullContent, readContent } from './pull.js'
@@ -139,14 +140,74 @@ describe('manifestFromConfig', () => {
 })
 
 describe('createArecaClient', () => {
-  it('throws a clear error when env vars are missing', () => {
+  it('throws a clear error when the CMS URL is missing', () => {
     delete process.env.ARECA_CMS_URL
-    delete process.env.ARECA_SITE_TOKEN
 
     expect(() => createArecaClient()).toThrow(/ARECA_CMS_URL/)
+  })
+
+  it('does not require a site token at construction', () => {
+    delete process.env.ARECA_SITE_TOKEN
+
     expect(() =>
       createArecaClient({ cmsUrl: 'https://cms.example.com' }),
-    ).toThrow(/ARECA_SITE_TOKEN/)
+    ).not.toThrow()
+  })
+
+  it('names ARECA_SITE_TOKEN when a content read has no site token, without calling the CMS', async () => {
+    delete process.env.ARECA_SITE_TOKEN
+    const fetch = vi.fn()
+    globalThis.fetch = fetch as unknown as typeof globalThis.fetch
+    const client = createArecaClient({ cmsUrl: 'https://cms.example.com' })
+
+    await expect(client.fetchManifest()).rejects.toThrow(/ARECA_SITE_TOKEN/)
+    await expect(client.fetchSnapshot()).rejects.toThrow(/ARECA_SITE_TOKEN/)
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('a schema-only client pushes the manifest with the schema token and no site token', async () => {
+    delete process.env.ARECA_SITE_TOKEN
+    delete process.env.ARECA_SCHEMA_TOKEN
+    const calls: Array<{ url: string; init?: RequestInit }> = []
+    globalThis.fetch = async (input, init) => {
+      calls.push({ url: String(input), init })
+      return jsonResponse({ ok: true })
+    }
+
+    const client = createArecaClient({
+      cmsUrl: 'https://cms.example.com',
+      schemaToken: 'schema-token',
+    })
+    await expect(client.syncManifest(sampleConfig)).resolves.toEqual({ ok: true })
+    expect(authHeader(calls[0]?.init)).toBe('Bearer schema-token')
+  })
+
+  it('names ARECA_SCHEMA_TOKEN when a manifest push has only the site token', async () => {
+    const fetch = vi.fn()
+    globalThis.fetch = fetch as unknown as typeof globalThis.fetch
+    const client = createArecaClient({
+      cmsUrl: 'https://cms.example.com',
+      siteToken: 'site-token',
+    })
+
+    await expect(client.syncManifest(sampleConfig)).rejects.toThrow(/ARECA_SCHEMA_TOKEN/)
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('a preview-only client reads a preview with its signed token and sends no Authorization header', async () => {
+    delete process.env.ARECA_SITE_TOKEN
+    delete process.env.ARECA_SCHEMA_TOKEN
+    const preview = { collection: 'articles', slug: 'hello', entry: sampleEntry }
+    const calls: Array<{ url: string; init?: RequestInit }> = []
+    globalThis.fetch = async (input, init) => {
+      calls.push({ url: String(input), init })
+      return jsonResponse(preview)
+    }
+
+    const client = createArecaClient({ cmsUrl: 'https://cms.example.com' })
+    await expect(client.fetchPreview('signed-token')).resolves.toEqual(preview)
+    expect(calls[0]?.url).toBe('https://cms.example.com/api/sites/preview?token=signed-token')
+    expect(authHeader(calls[0]?.init)).toBeNull()
   })
 
   it('syncManifest posts the manifest with a bearer token', async () => {
@@ -434,6 +495,8 @@ describe('parseArgs', () => {
     expect(parseArgs(['sync-manifest', './areca.config.ts'])).toEqual({
       command: 'sync-manifest',
       configPath: './areca.config.ts',
+      confirmDropFields: [],
+      yes: false,
     })
   })
 
@@ -441,6 +504,8 @@ describe('parseArgs', () => {
     expect(parseArgs(['sync-manifest'])).toEqual({
       command: 'sync-manifest',
       configPath: './areca.config.ts',
+      confirmDropFields: [],
+      yes: false,
     })
   })
 
@@ -448,10 +513,44 @@ describe('parseArgs', () => {
     expect(parseArgs(['manifest', 'push'])).toEqual({
       command: 'sync-manifest',
       configPath: './areca.config.ts',
+      confirmDropFields: [],
+      yes: false,
     })
     expect(parseArgs(['manifest', 'push', './custom.config.ts'])).toEqual({
       command: 'sync-manifest',
       configPath: './custom.config.ts',
+      confirmDropFields: [],
+      yes: false,
+    })
+  })
+
+  it('parses repeated --confirm-drop and --yes on manifest push', () => {
+    expect(
+      parseArgs([
+        'manifest',
+        'push',
+        '--confirm-drop',
+        'articles.subtitle',
+        '--confirm-drop',
+        'companyInfo.phone',
+        '-y',
+      ]),
+    ).toEqual({
+      command: 'sync-manifest',
+      configPath: './areca.config.ts',
+      confirmDropFields: ['articles.subtitle', 'companyInfo.phone'],
+      yes: true,
+    })
+  })
+
+  it('refuses a --confirm-drop that is not collection.field, or has no value', () => {
+    expect(parseArgs(['manifest', 'push', '--confirm-drop', 'articles'])).toMatchObject({
+      command: 'error',
+      message: expect.stringContaining('<collection>.<field>'),
+    })
+    expect(parseArgs(['manifest', 'push', '--confirm-drop'])).toMatchObject({
+      command: 'error',
+      message: 'Missing value for --confirm-drop',
     })
   })
 
@@ -696,3 +795,49 @@ describe('manifestFromConfig: globals', () => {
     ).toThrow(/group/)
   })
 })
+
+describe('createArecaClient: field removals', () => {
+  it('sends confirmDropFields only when there are some to confirm', async () => {
+    const bodies: unknown[] = []
+    globalThis.fetch = async (_input, init) => {
+      bodies.push(JSON.parse(String(init?.body)))
+      return jsonResponse({ ok: true })
+    }
+    const client = createArecaClient({ cmsUrl: 'https://cms.example.com', schemaToken: 'schema' })
+    await client.syncManifest(sampleConfig)
+    await client.syncManifest(sampleConfig, { confirmDropFields: ['articles.subtitle'] })
+    expect(bodies[0]).not.toHaveProperty('confirmDropFields')
+    expect(bodies[1]).toMatchObject({ confirmDropFields: ['articles.subtitle'] })
+  })
+
+  it('turns the CMS 409 field_drops_unconfirmed answer into FieldDropsRequiredError', async () => {
+    globalThis.fetch = async () =>
+      jsonResponse(
+        {
+          error: 'Removing articles.subtitle deletes content.',
+          code: 'field_drops_unconfirmed',
+          drops: [{ kind: 'collection', key: 'articles', field: 'subtitle', entries: 2 }],
+        },
+        409,
+      )
+    const client = createArecaClient({ cmsUrl: 'https://cms.example.com', schemaToken: 'schema' })
+    const error = await client.syncManifest(sampleConfig).catch((caught: unknown) => caught)
+    expect(error).toBeInstanceOf(FieldDropsRequiredError)
+    expect((error as FieldDropsRequiredError).drops).toEqual([
+      { kind: 'collection', key: 'articles', field: 'subtitle', entries: 2 },
+    ])
+  })
+
+  it('keeps the message of any other 409', async () => {
+    globalThis.fetch = async () => jsonResponse({ error: 'Site is locked' }, 409)
+    const client = createArecaClient({ cmsUrl: 'https://cms.example.com', schemaToken: 'schema' })
+    await expect(client.syncManifest(sampleConfig)).rejects.toThrow('Failed to sync manifest (409): Site is locked')
+  })
+})
+
+describe('package entry', () => {
+  it('exports the field-removal error, so callers can catch it', () => {
+    expect(entry.FieldDropsRequiredError).toBe(FieldDropsRequiredError)
+  })
+})
+

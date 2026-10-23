@@ -81,8 +81,8 @@ the site token or call the CMS from a public browser bundle.
 | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | `areca init`                                          | Create frontend config and environment-file scaffolding.                                                |
 | `areca pull [--out <directory>] [--publication <id>] [--config <path>] [--types <path>]` | Download the current published snapshot and its media, and write `areca.gen.ts`; default output is `src/generated/content`. |
-| `areca manifest push [config]`                        | Send the local config to the CMS. Default config is `./areca.config.ts`. Requires `ARECA_SCHEMA_TOKEN`. |
-| `areca manifest pull [--config <path>] [--yes]`       | Replace the local config with enabled CMS collections.                                                  |
+| `areca manifest push [config] [--confirm-drop <collection.field>]... [--yes]` | Send the local config to the CMS. Default config is `./areca.config.ts`. Requires `ARECA_SCHEMA_TOKEN`. Removing a field that holds content needs confirmation. |
+| `areca manifest pull [--config <path>] [--yes]`       | Replace the local config with enabled CMS collections. Removing a language or changing the main language needs confirmation. |
 | `areca sync-manifest [config]`                        | Deprecated alias for `areca manifest push`.                                                             |
 | `areca run -- <command>`                              | Run a child command with SDK-loaded environment files.                                                  |
 

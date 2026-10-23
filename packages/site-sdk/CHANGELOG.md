@@ -13,10 +13,19 @@ All notable changes to `@areca-cms/site-sdk`.
 
 ### Features
 
+- **manifest push confirms field removals.** The CMS refuses a push that removes a field which still holds content and lists each field with its entry count. `areca manifest push` shows that list, asks on a terminal (default No), and accepts `--confirm-drop <collection.field>` (repeatable) or `--yes`. `syncManifest(config, { confirmDropFields })` sends the confirmations, and a refusal throws `FieldDropsRequiredError` with the drops.
+- **manifest pull reviews languages.** The review lists added and removed languages and a new main language. Removing a language or changing the main language asks before writing (default No), or needs `--yes` without a terminal.
+- **`Href` follows the language.** `Href` is the union of every language's route, and `content.in(locale)` narrows the collection `href` results to that language's route.
+- Media downloads cover every language view. The SDK previously rewrote only the top-level data, so the main language and other languages kept CMS URLs.
+- `createArecaClient` no longer requires `ARECA_SITE_TOKEN` at construction. Each call checks the credential it sends and names the missing variable before any request. Schema-only and preview-only clients work with their own credential alone, and previews send no `Authorization` header.
 - content languages: `createContent({ locale })`, per-call `{ locale, fallback }` on every collection method, `content.in(locale)`, `content.languages`, `content.matchLocale(input)` and the `matchLocale(input, languages)` helper. Entries and site content sections report the language they are served in (`locale`, `isFallback`, `locales`, `alternates`, and `$locale`/`$isFallback` on globals).
 - `languages`, `routes`, `requiredLanguages` and per-field `translatable` in `areca.config.ts`. `areca.gen.ts` emits the `Locale` union and `languages`.
 - `i18n.paraglide` in `areca.config.ts` wires Paraglide's `getLocale` into the generated content object. `areca pull` warns when `project.inlang/settings.json` disagrees with the CMS languages.
 - `seoHead` and `seoHeadHtml` accept `locale`, `alternates`, `main` and `siteUrl` for `hreflang`, `x-default` and `og:locale`.
+
+### Bug fixes
+
+- Documentation: the rich-text renderer installs `@tanstack/markdown@1.0.0`, the version the SDK depends on. A docs check fails when an install command names another version.
 
 ## 0.4.0 (2026-10-14)
 

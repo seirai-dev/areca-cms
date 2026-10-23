@@ -26,6 +26,11 @@ openssl rand -hex 32       # BETTER_AUTH_SECRET
 openssl rand -base64 32    # DOKPLOY_CREDENTIALS_ENCRYPTION_KEY
 ```
 
+In production (`NODE_ENV=production`) the CMS refuses to start when `REDIS_URL`
+is unset, when `BETTER_AUTH_SECRET` is an example value (`change-me`, or a value
+starting with `replace-` or `replace_`), or when an encryption key is all zero
+bytes. The error names the setting and repeats the `openssl` command.
+
 Keep the Dokploy encryption key with the database backup. There is no automatic
 re-encryption: changing or losing it makes saved Dokploy credentials unreadable.
 The same applies when restoring a database; restore the matching key. See the

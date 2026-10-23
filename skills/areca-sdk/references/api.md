@@ -8,8 +8,9 @@ ESM only. Import paths and their exports:
 | --- | --- | --- |
 | `defineSiteContent` | `<const T extends {...}, const G extends {...}>(config: { siteKey; collections: T; globals?: G; assets? }) => same object` | Identity helper for `areca.config.ts`. Checks at compile time: `options` only on `select`, `collection` required on `reference` and must be a collection key, `after` must name a date key, `route` contains `$slug`. Globals take the same fields, with no `slug`, and may set `group` |
 | `manifestFromConfig` | `(config: SiteContentConfig) => SiteManifest` | Validates identifiers, duplicates and reserved keys (`resolve`, `href`, `preview`, `globals`, `previewGlobals`), returns `{ collections }` plus `globals` only when there are sections |
-| `createArecaClient` | `(options?: { cmsUrl?; siteToken?; schemaToken? }) => ArecaClient` | Falls back to `ARECA_CMS_URL`, `ARECA_SITE_TOKEN`, `ARECA_SCHEMA_TOKEN`; URL and site token required at creation |
-| `getPreviewEntry` | `({ token: string; client?: ArecaClient }) => Promise<PreviewResult>` | `PreviewResult` = `PreviewEntryResult` `{ kind: 'entry', collection, slug, entry }` or `PreviewGlobalResult` `{ kind: 'global', global, entry }`. Needs `ARECA_CMS_URL` and `ARECA_SITE_TOKEN` (or pass `client`). |
+| `createArecaClient` | `(options?: { cmsUrl?; siteToken?; schemaToken? }) => ArecaClient` | Falls back to `ARECA_CMS_URL`, `ARECA_SITE_TOKEN`, `ARECA_SCHEMA_TOKEN`. Only the URL is required at creation; each call resolves the one credential it sends and fails before any request if it is missing |
+| `FieldDropsRequiredError` | `class extends Error { drops: FieldDrop[] }` | Thrown by `syncManifest` when the CMS refuses removed fields that still hold content. Nothing was changed. Retry with `confirmDropFields` only after the user confirms |
+| `getPreviewEntry` | `({ token: string; client?: ArecaClient; locale?: string }) => Promise<PreviewResult>` | `PreviewResult` = `PreviewEntryResult` `{ kind: 'entry', collection, slug, entry }` or `PreviewGlobalResult` `{ kind: 'global', global, entry }`. Needs `ARECA_CMS_URL` only (or pass `client`): the signed token is the credential. `locale` previews in that language |
 | `toCamelKey` | `(raw: string) => string` | Converts a raw CMS key such as `blog-posts` or `company_info` to its code name (`blogPosts`, `companyInfo`) |
 | `previewHeaders` | `() => { 'X-Robots-Tag': 'noindex, nofollow'; 'Cache-Control': 'no-store' }` | Apply to preview responses |
 | `matchLocale` | `(input: string \| readonly string[] \| null \| undefined, languages: SiteLanguages \| null \| undefined) => string \| undefined` | Picks a site language from a tag, a list of tags or an `Accept-Language` header: exact match, then subtag, then `languages.main`. Returns `undefined` without languages |
@@ -27,13 +28,13 @@ ESM only. Import paths and their exports:
 | Method | HTTP | Auth |
 | --- | --- | --- |
 | `fetchManifest(): Promise<SiteManifest>` | `GET /api/sites/manifest` | site token |
-| `syncManifest(config): Promise<{ ok: true }>` | `POST /api/sites/manifest` | schema token |
+| `syncManifest(config, opts?: { confirmDropFields?: string[] }): Promise<{ ok: true }>` | `POST /api/sites/manifest` | schema token. `confirmDropFields` lists confirmed removals as `<key>.<field>` |
 | `fetchSnapshot(opts?: { publicationId?: string }): Promise<Snapshot>` | `GET /api/sites/snapshot/current[?publicationId=]` | site token |
-| `fetchPreview(token: string): Promise<PreviewResult>` | `GET /api/sites/preview?token=` | signed preview token |
+| `fetchPreview(token: string, opts?: { locale?: string }): Promise<PreviewResult>` | `GET /api/sites/preview?token=[&locale=]` | signed preview token (no `Authorization` header) |
 
 Language types from the main entry: `SiteLanguages` (`{ main; all }`), `I18nConfig` (`{ paraglide? }`), `LocalizedValues` (`{ slug?; data; seo? }`, one language of an entry as published), `PreviewLocaleStatus` (`{ complete; missing }`), `PreviewSnapshotEntry` and `PreviewSnapshotGlobal` (the preview snapshot with `localeStatus`).
 
-Types from the main entry: `ArecaClient`, `ArecaClientOptions`, `SiteContentConfig`, `AssetsConfig` (`{ download?, dir?, publicPath? }`), `CollectionConfig` (`{ route; label?; fields: Field[] }`), `Field` (a union discriminated on `type`: `reference` requires `collection`, `select` takes `options`, `date` and `datetime` take `after`), `FieldType`, `SiteManifest`, `Snapshot` (`{ publicationId, siteKey, createdAt, hash, collections, assets?, siteUrl?, schema? }`), `SnapshotAsset` (`{ id, storageKey, url, filename, mimeType, size }`), `SnapshotEntry` (the raw entry: `{ id, slug, publishedAt: string | null, data: Record<string, unknown>, seo? }`), `ImageValue`, `ReferenceValue<C = string>` (`{ collection: C; slug; id }`), `RichTextValue`, `SeoMeta`, `PreviewResult`, `PulledContentManifest`, `HeadMeta`, `HeadLink`, `HeadScript`, `SeoHeadOptions`, `SeoHeadResult`.
+Types from the main entry: `ArecaClient`, `ArecaClientOptions`, `FieldDrop` (`{ kind: 'collection' | 'global'; key; field; entries }`), `SiteContentConfig`, `AssetsConfig` (`{ download?, dir?, publicPath? }`), `CollectionConfig` (`{ route; label?; fields: Field[] }`), `Field` (a union discriminated on `type`: `reference` requires `collection`, `select` takes `options`, `date` and `datetime` take `after`), `FieldType`, `SiteManifest`, `Snapshot` (`{ publicationId, siteKey, createdAt, hash, collections, assets?, siteUrl?, schema? }`), `SnapshotAsset` (`{ id, storageKey, url, filename, mimeType, size }`), `SnapshotEntry` (the raw entry: `{ id, slug, publishedAt: string | null, data: Record<string, unknown>, seo? }`), `ImageValue`, `ReferenceValue<C = string>` (`{ collection: C; slug; id }`), `RichTextValue`, `SeoMeta`, `PreviewResult`, `PulledContentManifest`, `HeadMeta`, `HeadLink`, `HeadScript`, `SeoHeadOptions`, `SeoHeadResult`.
 
 Site content types: `GlobalConfig` (`{ label?, fields, seo?, previewPath? }`, `seo` defaults to `false`), `SnapshotGlobal` (`{ id, publishedAt, data, seo? }`), `PreviewEntryResult`, `PreviewGlobalResult`, and `SiteManifest` / `Snapshot`, which gain optional `globals` (and `globalSchema` on the snapshot).
 
@@ -59,7 +60,7 @@ Typed content types (main entry, generated against `Register`):
 | `EntryLocale` | `{ locale; isFallback; locales; alternates }` added to each entry on a languages site |
 | `GlobalLocale` | `{ $locale; $isFallback }` added to each section value on a languages site |
 | `LocaleOptions` | per-call options: `{ locale?: Locale; fallback?: boolean }` (`fallback` defaults to `true`) |
-| `Href<C, S>` | the route type of collection `C`, such as `` `/blog/${string}` `` |
+| `Href<C, S, L>` | the route type of collection `C`: the union of every language's route on a languages site, such as `` `/blog/${string}` ``. With language `L`, the route of that language, as `content.in(L)` gives |
 | `Content<S, G>` | the content object: one property per collection, plus `resolve`, `href`, `preview`, `globals` and `previewGlobals` |
 | `ContentGlobalSchema` | one site content section in the generated `globalSchema`: `key`, `label?`, `seo`, `previewPath?`, `fields` |
 | `GlobalSchema`, `RegisteredGlobalSchema` | the generated `globalSchema` (or the loose type when nothing is registered) |

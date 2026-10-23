@@ -18,15 +18,20 @@ The Docker image uses `/api/health` for its built-in health check, every 30 seco
 
 The readiness response lists each check. Responses contain only names, pass or fail status, timings and short, redacted reasons. Full errors are in the logs.
 
-```json title="Example readiness response (one check failing)"
+Two flags mean different things. `ok` is `false` only when a check fails outright, and then the response is `503`. `degraded` is `true` when something needs attention but the instance can still do its work. A degraded response is still `200`, and the top-level `degraded` flag and each check's `degraded` flag show what needs attention.
+
+```json title="Example readiness response (one check failing, two degraded)"
 {
   "ok": false,
+  "degraded": true,
   "checks": {
     "db": { "ok": true, "ms": 4 },
     "storage": { "ok": false, "ms": 3001, "reason": "CheckTimeout: timed out after 3000ms" },
     "redis": { "ok": true, "ms": 2, "degraded": true, "reason": "ECONNREFUSED" },
     "worker": { "ok": true, "ms": 0, "detail": { "enabled": true, "tickAgeSeconds": 1 } },
-    "queue": { "ok": true, "ms": 5, "detail": { "queued": 0, "active": 1, "oldestQueuedAgeSeconds": null, "expiredLeases": 0, "schedulerAgeSeconds": 2 } }
+    "queue": { "ok": true, "ms": 5, "detail": { "queued": 0, "active": 1, "oldestQueuedAgeSeconds": null, "expiredLeases": 0, "schedulerAgeSeconds": 2 } },
+    "mail": { "ok": true, "ms": 3, "degraded": true, "reason": "mail waiting 22 min to send (limit 15 min)", "detail": { "pending": 4, "oldestPendingAgeSeconds": 1320, "expiredLeases": 0, "notificationEventsPending": 0, "storageDeletionsPaused": 0, "schedulesExhausted": 0 } },
+    "loops": { "ok": true, "ms": 0, "detail": { "staleLoops": 0 } }
   }
 }
 ```
@@ -38,8 +43,12 @@ The checks are:
 - **redis** pings Redis. When Redis is down, rate limits count in memory on each instance, so a Redis failure is reported as `degraded` and does not make the instance unready.
 - **worker** fails if the publishing worker has not run for longer than `READINESS_MAX_TICK_AGE_SECONDS`. It is checked only when `WORKER_ENABLED` is on. Each process reports its own worker state.
 - **queue** fails if the oldest queued build is older than `READINESS_MAX_QUEUE_AGE_SECONDS`, if a build lease has been expired for longer than the tick age without recovery, or if the scheduler has stopped ticking.
+- **mail** is `degraded` when the oldest queued email has waited more than 15 minutes. Test sends are not counted. It never fails readiness, and a database outage is reported by **db**.
+- **loops** is `degraded` when a worker loop has not finished a run without error for five times its interval. The mail and notification loops run every 5 seconds, so they are stale after 25 seconds. The worker runs every 3 seconds, the scheduler, recovery and cleanup loops every 15 seconds, and the hourly maintenance loop every hour. The response names the stale loops. Only processes with the worker on have loops.
 
 Each check has a time limit set by `READINESS_TIMEOUT_MS`.
+
+Readiness is `degraded`, not failing, in four cases: Redis is down, the oldest queued email is older than 15 minutes, a worker loop is stale, or the check itself could not run. Use the metric `areca_readiness_check_up` to alert on those. It is `0` for a degraded check, as well as for a failing one.
 
 ## Metrics
 
@@ -73,7 +82,16 @@ Most metrics are gauges read from the database when Prometheus scrapes, so the v
 | `areca_build_jobs` | `status` | Build jobs in each status. |
 | `areca_build_jobs_oldest_queued_age_seconds` | | Age of the oldest queued job. `0` when the queue is empty. |
 | `areca_build_jobs_active` | | Jobs that are building, validating or deploying. |
-| `areca_build_jobs_failed_total` | | Jobs in the `failed` status. Despite the name, it is a gauge, and it falls when old history is deleted. |
+| `areca_build_jobs_failed_backlog` | | Build jobs in the `failed` status now. This is a gauge, and it falls when old history is deleted. |
+| `areca_build_jobs_failed_total` | | Publication execution failures since metrics history began. It is a counter, and deleting old jobs does not lower it. |
+| `areca_mail_pending` | | Emails queued and waiting to send. |
+| `areca_mail_oldest_pending_age_seconds` | | Age of the oldest queued email. `0` when none. |
+| `areca_mail_expired_leases` | | Emails whose sender lease lapsed and that no one has reclaimed yet. |
+| `areca_notification_events_pending` | | Release notices waiting to be delivered. |
+| `areca_notification_events_oldest_pending_age_seconds` | | Age of the oldest pending release notice. `0` when none. |
+| `areca_storage_deletions_paused` | | Storage deletions paused after four failed attempts. See [paused jobs](/docs/cms/agency-mail#paused-jobs). |
+| `areca_schedules_exhausted` | | Scheduled publications stopped after four failed attempts. See [paused jobs](/docs/cms/agency-mail#paused-jobs). |
+| `areca_loop_success_age_seconds` | `loop` | Seconds since each worker loop last finished a run without error. Loops that have never succeeded are left out. |
 | `areca_publications` | `status` | Releases in each status. |
 | `areca_scheduled_entries_overdue` | | Scheduled entries whose time has passed but that have not been published. |
 | `areca_worker_enabled` | | `1` when this process runs the publishing worker. |
@@ -183,12 +201,28 @@ Setting a value to `0` turns that timeout off. Database migrations run at contai
 
 These tasks keep an instance healthy over time:
 
-- **Back up the database and the encryption keys together.** Areca does not schedule backups for you. Keep the database copy, the S3 objects and the encryption keys in step, and test a restore. See [backup and recovery](/docs/self-hosting/backup-and-recovery).
+- **Back up the database and the encryption keys together.** Areca does not schedule backups for you. Take a daily dump with the bucket copy, a full backup before every upgrade, and a quarterly restore drill. The dump and the bucket must come from the same day, and losing `SECRETS_ENCRYPTION_KEY` makes the saved SMTP password unreadable. See [backup and recovery](/docs/self-hosting/backup-and-recovery).
 - **Check readiness after each deploy or restart.** Confirm `/api/health/ready` returns `200`, and that the queue is empty or moving.
 - **Review failed releases.** A failed release leaves the previous release live, but it needs a cause and a fix before the next Go live. See the [publishing pipeline](/docs/self-hosting/publishing-pipeline).
 - **Rotate credentials on a schedule.** The database password, the S3 access keys, the site tokens and the Dokploy API keys all have a rotation procedure. See [secrets](/docs/security/secrets).
 - **Clean up stored files carefully.** Storage objects that are still referenced by a draft, release or archive are protected. Follow [asset retention](/docs/self-hosting/asset-retention).
 - **Upgrade with a backup in hand.** Read [upgrades](/docs/self-hosting/upgrades) before you change the image version.
+
+### How long data is kept
+
+A background job removes old rows once an hour. Sessions, tokens, invitations, build jobs and autosaves are removed in batches of 1,000 rows. The periods are fixed in the CMS:
+
+| Data | Removed | Notes |
+| --- | --- | --- |
+| Expired sessions | 7 days after they expire | Kept briefly for support lookups. |
+| Expired email verification and password-reset tokens | 7 days after they expire | |
+| Unaccepted invitations | 30 days after they expire | Revoking an invitation deletes it at once. |
+| Finished build jobs (succeeded, failed or cancelled) | 90 days after they finish | The newest 20 jobs of each site are always kept, and so are jobs that a release still points at and jobs that still need reconciling. |
+| Autosave revisions | 90 days after they are saved | Milestone revisions and each entry's newest revision are always kept. |
+| Email outbox | 30 days after the email was queued | |
+| Notification records | 30 days after they are created | |
+
+Releases are never removed, because rollback needs them. Stored files follow [asset retention](/docs/self-hosting/asset-retention). Paused work is retried hourly, see [paused jobs](/docs/cms/agency-mail#paused-jobs).
 
 ## Related
 

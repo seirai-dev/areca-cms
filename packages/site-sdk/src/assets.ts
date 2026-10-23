@@ -160,7 +160,11 @@ export function localizeGlobals(
   )
 }
 
-/** Rewrites the URLs of one entry or section; `data` and `seo` are the only parts that hold them. */
+/**
+ * Rewrites the URLs of one entry or section. `data` and `seo` hold them, both
+ * at the top level and in every `locales` view: the SDK serves a language's
+ * view as-is, so the main language is rewritten through `locales` too.
+ */
 function localizeEntry(
   files: Map<string, string>,
   options: { publicPath: string; siteUrl?: string | null },
@@ -176,12 +180,29 @@ function localizeEntry(
   const absoluteUrl = options.siteUrl
     ? local(`${options.siteUrl.replace(/\/+$/, '')}${options.publicPath}`)
     : relativeUrl
-  return <T extends { data: Record<string, unknown>; seo?: SeoMeta }>(entry: T): T => ({
-    ...entry,
-    data: mapStrings(entry.data, relativeUrl),
-    ...(entry.seo ? { seo: mapStrings(entry.seo, absoluteUrl) } : {}),
+  const localizeView = <V extends LocalizableView>(view: V): V => ({
+    ...view,
+    data: mapStrings(view.data, relativeUrl),
+    ...(view.seo ? { seo: mapStrings(view.seo, absoluteUrl) } : {}),
+  })
+  return <T extends LocalizableView & { locales?: Record<string, LocalizableView> }>(
+    entry: T,
+  ): T => ({
+    ...localizeView(entry),
+    ...(entry.locales
+      ? {
+          locales: Object.fromEntries(
+            Object.entries(entry.locales).map(([locale, view]) => [
+              locale,
+              localizeView(view),
+            ]),
+          ),
+        }
+      : {}),
   })
 }
+
+type LocalizableView = { data: Record<string, unknown>; seo?: SeoMeta }
 
 function mapStrings<T>(value: T, map: (value: string) => string): T {
   if (typeof value === 'string') return map(value) as T

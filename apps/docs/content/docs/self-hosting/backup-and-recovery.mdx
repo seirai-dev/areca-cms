@@ -5,7 +5,7 @@ description: Back up everything an Areca instance needs, restore it into an isol
 
 A copy of the database is not a complete backup of Areca. Uploaded files live in object storage, and saved deployment credentials can only be read with the encryption key that was in use when they were saved. This page explains what to back up, how to take a backup and restore it, how to check the restore, and how to move a single client with the export and import tools.
 
-Areca does not schedule backups for you. Choose a schedule and retention that match how much work you can afford to lose, and test your restores regularly.
+Areca does not schedule backups for you. The schedule below is a sensible default. Choose a schedule and retention that match how much work you can afford to lose, and test your restores regularly.
 
 <Callout type="warn" title="Backups contain secrets and personal data">
 A backup includes your environment file, with the auth secret, database and storage passwords and encryption keys. It also includes users, unpublished content and history. Store every backup encrypted, off the CMS host, with access limited to the people who need it. Never commit a backup or put one in public storage.
@@ -19,10 +19,64 @@ An Areca instance has four parts. You need all four to recover it.
 | --- | --- | --- |
 | PostgreSQL database | Clients, sites, collections, entries, revisions, releases, build jobs, users, audit history and the asset cleanup queue. | Take it in the same backup window as the object storage. |
 | S3 bucket | Every uploaded file. | Releases and history refer to these files, so the bucket must match the database. |
-| Environment and keys | `BETTER_AUTH_SECRET`, `DOKPLOY_CREDENTIALS_ENCRYPTION_KEY`, `AI_SETTINGS_ENCRYPTION_KEY` if you use AI, and the database and storage credentials. | Keep them with the backup. Without the matching encryption key, saved deployment credentials cannot be read. |
+| Environment and keys | `BETTER_AUTH_SECRET`, `SECRETS_ENCRYPTION_KEY`, `DOKPLOY_CREDENTIALS_ENCRYPTION_KEY`, `AI_SETTINGS_ENCRYPTION_KEY` if you use AI, and the database and storage credentials. | Keep them with the backup. Losing an encryption key makes the values it protects unreadable: the SMTP password and queued reset tokens (`SECRETS_ENCRYPTION_KEY`), saved Dokploy credentials (`DOKPLOY_CREDENTIALS_ENCRYPTION_KEY`) and the OpenRouter key (`AI_SETTINGS_ENCRYPTION_KEY`). You must then enter those values again. |
 | Redis | Shared rate-limit counters. | The Docker backup includes it. Losing the counters only resets the current rate-limit windows, so a restore without Redis data still works. |
 
 Keep the image reference too. A restore needs the same image it was taken with, so record the tag or digest you run. The Docker backup records the image IDs for you.
+
+## Recommended schedule
+
+Run these three routines. The daily one is the only one that runs without downtime.
+
+| Routine | When | Keep |
+| --- | --- | --- |
+| Database dump and bucket copy | Every day, at a quiet hour | 14 days of dumps, each with the bucket copy taken in the same run |
+| Full recovery backup | Before every upgrade, and before any change to the encryption keys | Until you have accepted the upgrade |
+| Restore drill | Every quarter | The drill log |
+
+The database and the bucket must come from the same day. A dump refers to files in the bucket, so a bucket copy older than the dump can lose media that the dump still links to.
+
+### Daily dump from the host
+
+Run the dump from host cron on the Docker host. If Dokploy runs your Compose stack, its scheduled tasks can run the same command on that host. The script reads from the running database, so the CMS stays up.
+
+```sh title="/usr/local/bin/areca-backup.sh (run as the user that owns the Compose project)"
+#!/bin/sh
+set -eu
+
+PROJECT_DIR=/srv/areca/docker
+DEST=/var/backups/areca
+STAMP=$(date -u +%Y%m%dT%H%M%SZ)
+
+mkdir -p "$DEST"
+cd "$PROJECT_DIR"
+
+# Custom format: pg_restore can read it, and it is compressed.
+docker compose exec -T postgres \
+  pg_dump -U areca -d areca --format=custom --no-owner \
+  > "$DEST/areca-$STAMP.dump"
+
+# Copy the S3 bucket in the same run, with your storage provider's tools
+# or a sync tool such as rclone. Use the same S3 settings as the CMS.
+
+# Encrypt before the copy leaves the host, and delete the plain file.
+# Keep the recipient's private key off this host.
+# age -r "$BACKUP_RECIPIENT" -o "$DEST/areca-$STAMP.dump.age" "$DEST/areca-$STAMP.dump"
+# rm -f "$DEST/areca-$STAMP.dump"
+
+# Keep 14 days of dumps.
+find "$DEST" -name 'areca-*.dump*' -mtime +14 -delete
+```
+
+```sh title="Host crontab entry, 02:30 UTC every day"
+30 2 * * * /usr/local/bin/areca-backup.sh >> /var/log/areca-backup.log 2>&1
+```
+
+Copy each dump, and the encryption keys, to a protected location off the host. A dump on the same disk as the database protects against a bad migration, not against losing the host.
+
+### Full backup before an upgrade
+
+Before every upgrade, take the full backup from the next section. It stops the stack for a few minutes, so the database, the bucket and the environment file are captured together. Keep it until you have accepted the upgrade. See [upgrading](/docs/self-hosting/upgrades).
 
 ## Back up a Docker Compose instance
 
@@ -161,6 +215,37 @@ Verify an import by exporting the destination and comparing it with the source e
 ## Retry deferred file cleanup
 
 When a file cannot be removed from storage, Areca keeps it in a cleanup queue. The queue is part of the database, so full backups keep it. To retry the queue, run the cleanup command as described in [asset retention](/docs/self-hosting/asset-retention#run-the-cleanup). Do not run the cleanup against a destination while an offline import is running.
+
+## Restore a daily dump
+
+Restore a dump into an isolated copy first, using the steps in [restore into an isolated copy](#restore-into-an-isolated-copy). Do not restore over a live database unless you are recovering from a failure and have decided to replace its data.
+
+```sh title="Check that a dump is readable"
+docker compose -p areca-restore exec -T postgres pg_restore --list < /var/backups/areca/areca-20261001T023000Z.dump > /dev/null
+```
+
+```sh title="Restore into the isolated copy's database"
+docker compose -p areca-restore exec -T postgres \
+  pg_restore -U areca -d areca --clean --if-exists --no-owner \
+  < /var/backups/areca/areca-20261001T023000Z.dump
+```
+
+Restore the bucket from the copy taken in the same run, then run the checks in [verify a restore](#verify-a-restore). If you restored a `.age` file, decrypt it first.
+
+## Quarterly restore drill
+
+A backup you have not restored is a guess. Once a quarter, restore the newest daily dump and its bucket copy into an isolated copy, and work through this list. Record the date, the dump name, the results and who did it.
+
+- [ ] Choose the newest daily dump and its bucket copy, and confirm they are from the same day.
+- [ ] Restore both into an isolated project with new ports and no deployments enabled.
+- [ ] Run `pg_restore --list` on the dump, and restore it without errors.
+- [ ] Compare the record counts with the source, as in [verify a restore](#verify-a-restore).
+- [ ] Download three uploaded files, and compare their SHA-256 checksums with the originals.
+- [ ] Sign in, open a draft and a live release, and serve an uploaded file.
+- [ ] Check that the SMTP password, Dokploy credentials and OpenRouter key still work. If one fails, the matching encryption key is wrong or missing.
+- [ ] Confirm the restore log is stored with the backups, and that no drill copy is still reachable from the internet.
+- [ ] Stop and remove the isolated project, and delete the restored volumes.
+- [ ] Write down any step that took longer than expected, and change the runbook.
 
 ## Related
 
