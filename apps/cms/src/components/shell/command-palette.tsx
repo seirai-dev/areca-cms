@@ -18,6 +18,7 @@ import {
 
 import { queryKeys } from '#/lib/content/query-keys'
 import { entryTitle } from '#/lib/content/utils'
+import { matchesSearch } from '#/lib/search-match'
 import { useShell } from '#/components/shell/shell-context'
 import { SiteTile } from '#/components/shell/site-tile'
 import {
@@ -139,6 +140,19 @@ export function CommandPalette() {
     if (firstHit) setHighlighted(firstHit)
   }, [firstHit])
 
+  // cmdk's default filter is fuzzy: scattered letters let unrelated actions
+  // through, and the English action values never match a Dutch query. Match
+  // whole words against the localized keywords (or the value, when an item
+  // has none) instead.
+  const locale = getLocale()
+  const matchItem = React.useCallback(
+    (value: string, query: string, keywords?: string[]) =>
+      matchesSearch(query, keywords?.length ? keywords : [value], locale)
+        ? 1
+        : 0,
+    [locale],
+  )
+
   return (
     <CommandDialog
       open={paletteOpen}
@@ -147,6 +161,7 @@ export function CommandPalette() {
         loop: true,
         value: highlighted,
         onValueChange: setHighlighted,
+        filter: matchItem,
       }}
     >
       <CommandInput
@@ -223,6 +238,7 @@ export function CommandPalette() {
               <CommandItem
                 key={item.key}
                 value={`go ${item.label}`}
+                keywords={[item.label]}
                 onSelect={() =>
                   go({ to: item.to, params: { siteId: inSite.id } })
                 }
@@ -245,6 +261,7 @@ export function CommandPalette() {
                 <CommandItem
                   key={collection.id}
                   value={`go ${collection.label} ${collection.key}`}
+                  keywords={[collection.label]}
                   onSelect={() =>
                     go({
                       to: '/sites/$siteId/c/$collectionKey',
@@ -265,6 +282,7 @@ export function CommandPalette() {
               <CommandItem
                 key={`global-${section.key}`}
                 value={`go ${section.label} ${section.key}`}
+                keywords={[section.label]}
                 onSelect={() =>
                   go({
                     to: GLOBAL_ROUTE,
@@ -289,7 +307,7 @@ export function CommandPalette() {
               <CommandItem
                 key={`new-${collection.id}`}
                 value={`create new ${collection.label} ${collection.key}`}
-                keywords={[newEntryLabel(collection.label)]}
+                keywords={[newEntryLabel(collection.label), collection.label]}
                 onSelect={() =>
                   go({
                     to: '/sites/$siteId/c/$collectionKey/new',
@@ -363,7 +381,12 @@ export function CommandPalette() {
           ) : null}
           <CommandItem
             value="action switch appearance theme dark light"
-            keywords={[m.shell_palette_switch_appearance()]}
+            keywords={[
+              m.shell_palette_switch_appearance(),
+              'theme',
+              'dark',
+              'light',
+            ]}
             onSelect={() =>
               run(() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark'))
             }
@@ -379,6 +402,7 @@ export function CommandPalette() {
                 value={`action language ${LOCALE_LABELS[code]} ${code}`}
                 keywords={[
                   m.shell_palette_language({ language: LOCALE_LABELS[code] }),
+                  LOCALE_LABELS[code],
                 ]}
                 onSelect={() => run(() => setLocale(code))}
               >
@@ -410,6 +434,7 @@ export function CommandPalette() {
                 <CommandItem
                   key={item.id}
                   value={`site ${item.name} ${item.organizationName} ${item.slug}`}
+                  keywords={[item.name, item.organizationName, item.slug]}
                   onSelect={() =>
                     go({ to: '/sites/$siteId', params: { siteId: item.id } })
                   }
@@ -430,6 +455,7 @@ export function CommandPalette() {
               <CommandItem
                 key={item.key}
                 value={`agency ${item.label}`}
+                keywords={[item.label]}
                 onSelect={() => go({ to: item.to })}
               >
                 <item.icon />
