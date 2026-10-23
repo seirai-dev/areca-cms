@@ -481,7 +481,7 @@ function AccessRowDesktop({
               type="button"
               aria-label={m.agency_person_remove_from({ client: row.name })}
               onClick={onRemove}
-              className="touch-target inline-flex size-8 items-center justify-center rounded-full text-icon-muted outline-none hover:bg-surface-state-hover hover:text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus"
+              className="relative touch-target inline-flex size-8 items-center justify-center rounded-full text-icon-muted outline-none hover:bg-surface-state-hover hover:text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus"
               data-testid={`access-remove-${row.slug}`}
             >
               <X weight="bold" className="size-3.5" />

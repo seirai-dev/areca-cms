@@ -333,7 +333,7 @@ export function InvitePersonSheet({
                       })}
                       onClick={() => remove(pick.organizationId)}
                       disabled={busy}
-                      className="touch-target inline-flex size-7 shrink-0 items-center justify-center rounded-full text-icon-muted outline-none hover:bg-surface-state-hover hover:text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus disabled:opacity-40"
+                      className="relative touch-target inline-flex size-7 shrink-0 items-center justify-center rounded-full text-icon-muted outline-none hover:bg-surface-state-hover hover:text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus disabled:opacity-40"
                     >
                       <X weight="bold" className="size-3.5" />
                     </button>

@@ -459,7 +459,7 @@ export function AgencyPeopleScreen({
             <div className="flex items-center justify-between gap-3 px-4">
               <label className="flex items-center gap-2.5 text-caption font-medium text-text-secondary">
                 <Checkbox
-                  className="touch-target"
+                  className="relative touch-target"
                   checked={
                     allVisibleSelected
                       ? true
@@ -921,7 +921,7 @@ function PersonRow({
     >
       <span className="flex items-center pl-4">
         <Checkbox
-          className="touch-target"
+          className="relative touch-target"
           checked={selected}
           onCheckedChange={(checked) => onSelectedChange(checked === true)}
           aria-label={m.agency_people_select({ name: account.name })}
