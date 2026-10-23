@@ -19,6 +19,7 @@ import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
 import { canGoLive } from './go-live-gate'
+import { usePendingEntries } from './use-pending-entries'
 import { useGoLive } from './use-go-live'
 import { useReleaseStatus } from './use-release-status'
 import type { GoLiveState, ReleaseStatus } from './use-release-status'
@@ -148,6 +149,7 @@ export function IndeterminateBar({ className }: { className?: string }) {
 function GoLiveButton({
   canPublish,
   blocked = false,
+  reason,
   onGoLive,
   pending,
   label = m.golive_go_live(),
@@ -160,6 +162,8 @@ function GoLiveButton({
   canPublish: boolean
   /** Sections block go live; the reason says to fix them, not who may publish. */
   blocked?: boolean
+  /** Overrides the default reason, e.g. while the change list is loading. */
+  reason?: string
   onGoLive: () => void
   pending: boolean
   label?: string
@@ -190,7 +194,9 @@ function GoLiveButton({
   if (canPublish) return button
   return (
     <Hint
-      label={blocked ? m.golive_blocked_reason() : editorPublishReason()}
+      label={
+        reason ?? (blocked ? m.golive_blocked_reason() : editorPublishReason())
+      }
       side="top"
       wrapDisabled
       className={fullWidth ? 'w-full' : undefined}
@@ -225,6 +231,19 @@ export function GoLiveTray({
     canPublish: canPublishRole,
     blockers: release.data?.blockers,
   })
+  // The tray publishes straight from here, so it waits for the change list
+  // too, as the panel does. The query runs only where a publish control shows.
+  const publishOffered =
+    release.state === 'ready' ||
+    release.state === 'never-live' ||
+    release.state === 'failed' ||
+    release.data?.publishingMode === 'demo'
+  const changes = usePendingEntries({ siteId, enabled: publishOffered })
+  const goLiveAllowed = canPublish && changes.isSuccess
+  const changesReason =
+    canPublish && !changes.isSuccess
+      ? m.golive_changes_unavailable()
+      : undefined
   const { goLive, isPending } = useGoLive(siteId)
   const panel = usePanel()
   const reduce = useReducedMotion()
@@ -250,7 +269,9 @@ export function GoLiveTray({
         {canPublish ? (
           <button
             type="button"
-            disabled={isPending || Boolean(release.data.activeJob)}
+            disabled={
+              !goLiveAllowed || isPending || Boolean(release.data.activeJob)
+            }
             onClick={() => void handleGoLive()}
           >
             {m.golive_publish_demo()}
@@ -355,7 +376,8 @@ export function GoLiveTray({
                     }
                   />
                   <GoLiveButton
-                    canPublish={canPublish}
+                    canPublish={goLiveAllowed}
+                    reason={changesReason}
                     blocked={blocked}
                     pending={isPending}
                     onGoLive={() => void handleGoLive()}
@@ -372,7 +394,8 @@ export function GoLiveTray({
                     }
                   />
                   <GoLiveButton
-                    canPublish={canPublish}
+                    canPublish={goLiveAllowed}
+                    reason={changesReason}
                     blocked={blocked}
                     pending={isPending}
                     onGoLive={() => void handleGoLive()}
@@ -404,7 +427,8 @@ export function GoLiveTray({
                     </div>
                   </div>
                   <GoLiveButton
-                    canPublish={canPublish}
+                    canPublish={goLiveAllowed}
+                    reason={changesReason}
                     blocked={blocked}
                     pending={isPending}
                     variant="secondary"
