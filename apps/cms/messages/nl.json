@@ -1407,8 +1407,6 @@
   "library_info_uploaded": "Geüpload",
   "library_link_copied": "Link gekopieerd",
   "library_load_more": "Meer laden",
-  "library_missing_alt_one": "1 afbeelding mist een beschrijving",
-  "library_missing_alt_other": "{count} afbeeldingen missen een beschrijving",
   "library_missing_alt_show_all": "Alle bestanden tonen",
   "library_no_description": "Geen beschrijving",
   "library_no_results_description": "Bestandsnaam of beschrijving aanpassen.",
@@ -2148,5 +2146,10 @@
   "shell_route_error_description": "Deze pagina kon niet worden geladen. Probeer het opnieuw of ga terug naar je werkruimte.",
   "shell_route_error_home": "Naar je werkruimte",
   "shell_route_error_details": "Technische details",
-  "golive_changes_unavailable": "Live zetten kan zodra de lijst met wijzigingen is geladen."
+  "golive_changes_unavailable": "Live zetten kan zodra de lijst met wijzigingen is geladen.",
+  "library_missing_alt_toggle": "Beschrijving ontbreekt",
+  "library_missing_alt_empty_title": "Geen afbeeldingen missen een beschrijving",
+  "library_missing_alt_empty_description": "Elke afbeelding heeft een beschrijving in het {language}.",
+  "library_missing_alt_empty_description_single": "Elke afbeelding heeft een beschrijving.",
+  "library_description_language": "Taal van beschrijving"
 }

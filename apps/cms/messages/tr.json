@@ -1407,8 +1407,6 @@
   "library_info_uploaded": "Yüklenme",
   "library_link_copied": "Bağlantı kopyalandı",
   "library_load_more": "Daha fazla yükle",
-  "library_missing_alt_one": "1 görselin açıklaması eksik",
-  "library_missing_alt_other": "{count} görselin açıklaması eksik",
   "library_missing_alt_show_all": "Tüm dosyaları göster",
   "library_no_description": "Açıklama yok",
   "library_no_results_description": "Başka bir dosya adı veya açıklama deneyin.",
@@ -2148,5 +2146,10 @@
   "shell_route_error_description": "Bu sayfa yüklenemedi. Tekrar deneyin veya çalışma alanınıza dönün.",
   "shell_route_error_home": "Çalışma alanınıza git",
   "shell_route_error_details": "Teknik ayrıntılar",
-  "golive_changes_unavailable": "Yayına alma, değişiklik listesi yüklendikten sonra kullanılabilir."
+  "golive_changes_unavailable": "Yayına alma, değişiklik listesi yüklendikten sonra kullanılabilir.",
+  "library_missing_alt_toggle": "Açıklaması eksik",
+  "library_missing_alt_empty_title": "Açıklaması eksik görsel yok",
+  "library_missing_alt_empty_description": "Tüm görsellerin {language} dilinde açıklaması var.",
+  "library_missing_alt_empty_description_single": "Tüm görsellerin açıklaması var.",
+  "library_description_language": "Açıklama dili"
 }

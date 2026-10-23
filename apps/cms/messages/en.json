@@ -1407,8 +1407,6 @@
   "library_info_uploaded": "Uploaded",
   "library_link_copied": "Link copied",
   "library_load_more": "Load more",
-  "library_missing_alt_one": "1 needs a description",
-  "library_missing_alt_other": "{count} need a description",
   "library_missing_alt_show_all": "Show all files",
   "library_no_description": "No description",
   "library_no_results_description": "Try another filename or description.",
@@ -2148,5 +2146,10 @@
   "shell_route_error_description": "This page couldn't load. Try again, or go back to your workspace.",
   "shell_route_error_home": "Go to your workspace",
   "shell_route_error_details": "Technical details",
-  "golive_changes_unavailable": "Go live is available once the list of changes has loaded."
+  "golive_changes_unavailable": "Go live is available once the list of changes has loaded.",
+  "library_missing_alt_toggle": "Missing description",
+  "library_missing_alt_empty_title": "No images are missing a description",
+  "library_missing_alt_empty_description": "Every image has a description in {language}.",
+  "library_missing_alt_empty_description_single": "Every image has a description.",
+  "library_description_language": "Description language"
 }

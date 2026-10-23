@@ -27,15 +27,58 @@ export const listAssetsFn = createServerFn({ method: 'GET' })
       organizationId: z.string().min(1).max(ID_MAX_LENGTH),
       search: z.string().max(SEARCH_MAX_LENGTH).optional(),
       imagesOnly: z.boolean().optional(),
+      /**
+       * Only images without a description in `locale` of `siteId`. Absent
+       * `locale` means the site's main language.
+       */
+      missingAlt: z
+        .object({
+          siteId: z.string().min(1).max(ID_MAX_LENGTH),
+          locale: localeTagSchema.optional(),
+        })
+        .optional(),
       limit: pageLimitSchema,
       offset: pageOffsetSchema,
     }),
   )
   .handler(async ({ data }) => {
     await requireOrgMember(data.organizationId)
+    let missingAlt:
+      { locale: string | null; mainLocale: string | null } | undefined
+    if (data.missingAlt) {
+      const found = (
+        await db
+          .select({
+            organizationId: site.organizationId,
+            languages: site.languages,
+          })
+          .from(site)
+          .where(eq(site.id, data.missingAlt.siteId))
+          .limit(1)
+      ).at(0)
+      if (!found || found.organizationId !== data.organizationId) {
+        throw new NotFoundError(m.server_site_not_found())
+      }
+      const languages = found.languages
+      // A single-language site has no per-language descriptions: main only.
+      const locale =
+        languages && data.missingAlt.locale
+          ? canonicalLocale(data.missingAlt.locale)
+          : null
+      if (locale && !languages?.all.includes(locale)) {
+        throw new ValidationError([
+          {
+            path: 'locale',
+            message: 'This language is not one of the site languages.',
+          },
+        ])
+      }
+      missingAlt = { locale, mainLocale: languages?.main ?? null }
+    }
     return listAssets(data.organizationId, {
       search: data.search,
       imagesOnly: data.imagesOnly,
+      missingAlt,
       limit: data.limit,
       offset: data.offset,
     })
