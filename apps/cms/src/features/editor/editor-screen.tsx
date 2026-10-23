@@ -67,7 +67,7 @@ import { LocaleFieldsContext } from './locale-fields'
 import type { LocaleFields } from './locale-fields'
 import { ScheduledVersion } from './scheduled-version'
 import { ScheduleForm } from './schedule-form'
-import { EditorConflictNotice } from './conflict-notice'
+import { conflictReadyBlock, EditorConflictNotice } from './conflict-notice'
 import { SeoPanel, plainTextOf } from './seo-panel'
 import { useContentLanguage } from './use-content-language'
 import { useEntryEditor } from './use-entry-editor'
@@ -303,14 +303,10 @@ function EntryEditorView({
         onFix: () => focusBlocker(blocker),
       }
     : null
-  // While the version-conflict notice is up, approving would approve a draft
-  // nobody has reviewed: Mark ready and Schedule wait for the latest version.
-  const conflictBlock = editor.conflict
-    ? {
-        message: m.editor_conflict_blocks_ready(),
-        onFix: () => void editor.reloadServerDraft(),
-      }
-    : null
+  const conflictBlock = conflictReadyBlock(
+    editor.conflict,
+    () => void editor.reloadServerDraft(),
+  )
   const readyBlock = conflictBlock ?? languageBlock
 
   // Writes the active language. On the main language (and single-language

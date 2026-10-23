@@ -58,7 +58,10 @@ import { getAiAvailabilityFn } from '#/server/fn/ai'
 import { getGlobalFn } from '#/server/fn/content'
 import type { Me } from '#/server/fn/me'
 
-import { EditorConflictNotice } from '#/features/editor/conflict-notice'
+import {
+  conflictReadyBlock,
+  EditorConflictNotice,
+} from '#/features/editor/conflict-notice'
 import { GlobalEditorTopBar } from './global-editor-top-bar'
 import { groupFields } from './site-content'
 
@@ -240,7 +243,7 @@ function GlobalEditorView({
     })
   }
 
-  const readyBlock = blocker
+  const languageBlock = blocker
     ? {
         message: m.editor_language_blocker({
           language: uiLanguageName(blocker.locale),
@@ -249,6 +252,11 @@ function GlobalEditorView({
         onFix: () => focusBlocker(blocker),
       }
     : null
+  const conflictBlock = conflictReadyBlock(
+    editor.conflict,
+    () => void editor.reloadServerDraft(),
+  )
+  const readyBlock = conflictBlock ?? languageBlock
 
   // Writes the active language; the main language (and single-language
   // sites) use the ordinary update.
@@ -392,6 +400,8 @@ function GlobalEditorView({
           }
           scheduleInitialTimeZone={entry.scheduleTimezone}
           onScheduleSubmit={async (at, timeZone) => {
+            // A form opened before the conflict must not approve over it.
+            if (editor.conflict) return
             const result = await editor.schedule(at, timeZone).catch(() => null)
             if (result) setScheduleOpen(false)
           }}
