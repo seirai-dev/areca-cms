@@ -11,6 +11,7 @@ import {
   unique,
   uniqueIndex,
 } from 'drizzle-orm/pg-core'
+import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 
 import type {
   AuditMeta,
@@ -64,6 +65,16 @@ export const user = pgTable('user', {
   twoFactorEnabled: boolean('two_factor_enabled').notNull().default(false),
   /** Language for account and notification emails. Null = not chosen yet. */
   locale: text('locale').$type<'en' | 'nl' | 'tr'>(),
+  /**
+   * Suspended, not deleted: the person cannot sign in or use their keys and
+   * connections until an agency admin unblocks them. Memberships are kept.
+   */
+  blockedAt: timestamptz('blocked_at'),
+  blockedById: text('blocked_by_id').references((): AnyPgColumn => user.id, {
+    onDelete: 'set null',
+  }),
+  /** Internal note for agency admins. Never shown to the blocked person. */
+  blockedReason: text('blocked_reason'),
 })
 
 export const session = pgTable(
@@ -871,7 +882,9 @@ export const oauthClient = pgTable(
       .array()
       .notNull()
       .default(sql`'{}'::text[]`),
-    userId: text('userId').references(() => user.id, { onDelete: 'cascade' }),
+    // Set null, not cascade: deleting the person who registered an app must
+    // not cut off other people's connections made through that app.
+    userId: text('userId').references(() => user.id, { onDelete: 'set null' }),
     createdAt: timestamptz('createdAt'),
     updatedAt: timestamptz('updatedAt'),
     name: text('name'),
