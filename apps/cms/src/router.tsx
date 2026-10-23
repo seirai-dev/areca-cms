@@ -8,6 +8,7 @@ import {
 import { setupRouterSsrQueryIntegration } from '@tanstack/react-router-ssr-query'
 import { createIsomorphicFn } from '@tanstack/react-start'
 import { getContext } from './integrations/tanstack-query/root-provider'
+import { ME_QUERY_KEY } from '#/lib/me-query'
 import { deLocalizeUrl, localizeUrl } from '#/paraglide/runtime'
 import { currentCspNonce } from '#/server/http/csp-nonce'
 import { publishLibraryNonce } from '#/hooks/use-csp-nonce'
@@ -46,6 +47,14 @@ export function getRouter() {
   })
 
   setupRouterSsrQueryIntegration({ router, queryClient: context.queryClient })
+
+  // The signed-in user is cached briefly (lib/me-query.ts). Everything that
+  // changes it calls `router.invalidate()`, so that drops the cache too.
+  const invalidate = router.invalidate
+  router.invalidate = (opts) => {
+    context.queryClient.removeQueries({ queryKey: ME_QUERY_KEY })
+    return invalidate(opts)
+  }
 
   return router
 }

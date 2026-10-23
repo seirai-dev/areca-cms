@@ -3,7 +3,7 @@ import { Outlet, createFileRoute, redirect } from '@tanstack/react-router'
 import { AppShell } from '#/components/shell/app-shell'
 import { NotFoundCard } from '#/components/shell/not-found'
 import { StepUpProvider } from '#/features/security/step-up'
-import { getMeFn } from '#/server/fn/me'
+import { loadMe } from '#/lib/me-query'
 import { getSetupStatusFn } from '#/server/fn/setup'
 
 /** Matches `/account` with or without a locale prefix (`/nl/account`). */
@@ -12,13 +12,17 @@ function isAccountPath(pathname: string) {
 }
 
 export const Route = createFileRoute('/_app')({
-  beforeLoad: async ({ location }) => {
-    const { needsSetup } = await getSetupStatusFn()
-    if (needsSetup) {
-      throw redirect({ href: '/setup' })
-    }
-    const me = await getMeFn()
+  // Runs on every navigation, tab switches included, so `me` comes from a
+  // short cache (lib/me-query.ts).
+  beforeLoad: async ({ context, location }) => {
+    const me = await loadMe(context.queryClient)
     if (!me) {
+      // Setup is only open before the first user exists, so only a signed-out
+      // visitor needs to ask.
+      const { needsSetup } = await getSetupStatusFn()
+      if (needsSetup) {
+        throw redirect({ href: '/setup' })
+      }
       throw redirect({
         to: '/login',
         search: { redirect: location.href },
