@@ -213,24 +213,21 @@ export function AgencyPeopleScreen({
   function reportBulk(result: BulkResult, done: (count: number) => string) {
     if (result.done.length > 0) toast.success(done(result.done.length))
     if (result.skipped.length > 0) {
-      toast.warning(
-        m.agency_people_bulk_skipped({ count: result.skipped.length }),
-        {
-          description: (
-            <ul className="mt-1 grid gap-1">
-              {result.skipped.map((item) => (
-                <li key={item.userId}>
-                  <span className="font-medium">
-                    {names.get(item.userId) ?? item.userId}
-                  </span>
-                  {' · '}
-                  {item.message}
-                </li>
-              ))}
-            </ul>
-          ),
-        },
-      )
+      toast.warning(m.agency_people_bulk_skipped(), {
+        description: (
+          <ul className="mt-1 grid gap-1">
+            {result.skipped.map((item) => (
+              <li key={item.userId}>
+                <span className="font-medium">
+                  {names.get(item.userId) ?? item.userId}
+                </span>
+                {' · '}
+                {item.message}
+              </li>
+            ))}
+          </ul>
+        ),
+      })
     }
     clear()
   }
@@ -249,7 +246,10 @@ export function AgencyPeopleScreen({
   return (
     <div
       id="people-page"
-      className={cn('grid gap-6', picked.length > 0 && 'pb-24 md:pb-20')}
+      className={cn(
+        'grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6',
+        picked.length > 0 && 'pb-24 md:pb-20',
+      )}
       data-testid="agency-people"
       data-ready={accounts.isSuccess ? 'true' : undefined}
     >
@@ -291,7 +291,7 @@ export function AgencyPeopleScreen({
           }
         />
       ) : (
-        <div className="grid gap-4">
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
             <div className="relative w-full lg:max-w-xs">
               <MagnifyingGlass className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-icon-muted" />
@@ -381,7 +381,7 @@ export function AgencyPeopleScreen({
           </div>
 
           {rowCount > 0 ? (
-            <div className="flex items-center justify-between gap-3 px-1">
+            <div className="flex items-center justify-between gap-3 px-4">
               <label className="flex items-center gap-2.5 text-caption font-medium text-text-secondary">
                 <Checkbox
                   className="touch-target"
@@ -434,7 +434,7 @@ export function AgencyPeopleScreen({
               }
             />
           ) : (
-            <InsetList data-testid="people-list">
+            <InsetList data-testid="people-list" className="min-w-0">
               {people.map((account) => (
                 <PersonRow
                   key={account.id}

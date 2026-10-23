@@ -2270,7 +2270,7 @@
   "agency_people_bulk_sign_out_description": "Elke sessie eindigt, op elk apparaat. Zij kunnen meteen weer inloggen.",
   "agency_people_bulk_sign_out_confirm": "{count} personen uitloggen",
   "agency_people_bulk_sign_out_confirm_one": "1 persoon uitloggen",
-  "agency_people_bulk_skipped": "{count} personen overgeslagen",
+  "agency_people_bulk_skipped": "Sommige personen zijn overgeslagen",
   "agency_people_toast_added": "{count} personen aan de klanten toegevoegd",
   "agency_people_toast_added_one": "1 persoon aan de klanten toegevoegd",
   "agency_people_toast_blocked": "{count} personen geblokkeerd",

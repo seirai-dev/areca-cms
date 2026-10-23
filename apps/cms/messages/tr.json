@@ -2270,7 +2270,7 @@
   "agency_people_bulk_sign_out_description": "Her cihazdaki her oturum sona erer. Hemen yeniden giriş yapabilirler.",
   "agency_people_bulk_sign_out_confirm": "{count} kişiyi çıkış yaptır",
   "agency_people_bulk_sign_out_confirm_one": "1 kişiyi çıkış yaptır",
-  "agency_people_bulk_skipped": "{count} kişi atlandı",
+  "agency_people_bulk_skipped": "Bazı kişiler atlandı",
   "agency_people_toast_added": "{count} kişi müşterilere eklendi",
   "agency_people_toast_added_one": "1 kişi müşterilere eklendi",
   "agency_people_toast_blocked": "{count} kişi engellendi",

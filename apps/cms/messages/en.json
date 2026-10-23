@@ -2270,7 +2270,7 @@
   "agency_people_bulk_sign_out_description": "Every session ends, on every device. They can sign in again straight away.",
   "agency_people_bulk_sign_out_confirm": "Sign out {count} people",
   "agency_people_bulk_sign_out_confirm_one": "Sign out 1 person",
-  "agency_people_bulk_skipped": "{count} people skipped",
+  "agency_people_bulk_skipped": "Some people were skipped",
   "agency_people_toast_added": "Added {count} people to the clients",
   "agency_people_toast_added_one": "Added 1 person to the clients",
   "agency_people_toast_blocked": "Blocked {count} people",
