@@ -413,7 +413,9 @@ export function AgencyPeopleScreen({
               })}
             </div>
             {filtersActive ? (
-              <div className="col-span-2 flex justify-start">{clearButton}</div>
+              <div className="col-span-2 -ml-2.5 flex justify-start">
+                {clearButton}
+              </div>
             ) : null}
           </div>
 
