@@ -10,9 +10,10 @@
  * attributes stay allowed because React renders them for layout and view
  * transitions; they cannot run script.
  *
- * Two outside origins are listed because the branding screen loads Google Fonts
- * stylesheets for its font previews. Assets are served from this origin
- * (/api/assets/file), so no storage origin is listed.
+ * Two outside origins are listed because a branded Google Font is loaded from
+ * Google Fonts: the root document for the whole app, and the branding preview.
+ * Assets are served from this origin (/api/assets/file), so no storage origin
+ * is listed.
  */
 
 const GOOGLE_STYLESHEET_ORIGIN = 'https://fonts.googleapis.com'
