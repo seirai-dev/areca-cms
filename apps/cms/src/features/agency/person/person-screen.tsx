@@ -88,7 +88,8 @@ export function PersonScreen({ me, userId }: { me: Me; userId: string }) {
   return (
     <div
       id="person-page"
-      className="grid gap-6 pb-24 md:pb-20"
+      // While the save bar is up, leave room below the last section for it.
+      className="grid gap-6 pb-24 has-[[data-dirty=true]]:pb-56 md:pb-20 md:has-[[data-dirty=true]]:pb-24"
       data-testid="person-page"
       data-ready="true"
     >

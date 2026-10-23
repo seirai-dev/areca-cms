@@ -322,7 +322,12 @@ export function AccessSection({
       >
         <FloatingBarLabel
           data-testid="person-save-summary"
-          className={cn('min-w-0 flex-1', refused && 'text-text-error')}
+          className={cn(
+            'min-w-0 flex-1',
+            // On phones the summary may take two lines, so a refusal's reason reads in full.
+            'max-sm:line-clamp-2 max-sm:whitespace-normal',
+            refused && 'text-text-error',
+          )}
         >
           {refused ? refusedText : summaryText || m.agency_person_unsaved()}
         </FloatingBarLabel>
@@ -343,7 +348,9 @@ export function AccessSection({
           onClick={() => void save()}
           data-testid="person-save"
         >
-          {m.agency_person_save()}
+          {/* "Save" on phones, "Save changes" where there is room for it. */}
+          <span className="sm:hidden">{m.settings_save()}</span>
+          <span className="hidden sm:inline">{m.agency_person_save()}</span>
         </Button>
       </FloatingBar>
 
