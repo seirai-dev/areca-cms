@@ -1,9 +1,10 @@
-# Only the root workspace manifests and apps/docs are needed.
+# Only the workspace manifests, docs app, and SDK version-check input are needed.
 **
 !package.json
 !pnpm-lock.yaml
 !pnpm-workspace.yaml
 !apps/docs/**
+!packages/site-sdk/package.json
 apps/docs/node_modules
 apps/docs/dist
 apps/docs/.tanstack
