@@ -188,13 +188,34 @@ export function InvitePersonSheet({
       }}
       title={m.agency_invite_title()}
       description={m.agency_invite_description()}
+      wrapDescription
       data-testid="invite-person-sheet"
       footer={
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-caption font-normal text-text-muted">
-            {m.people_invite_link_note()}
-          </p>
-          {match ? null : (
+        match ? (
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              loading={busy}
+              onClick={() => void addDirectly()}
+              disabled={picks.length === 0}
+              className="w-full sm:w-auto"
+              data-testid="invite-person-add-direct"
+            >
+              {picks.length === 0
+                ? m.agency_invite_pick_clients()
+                : picks.length === 1
+                  ? m.agency_invite_add_to_clients_one({ name: match.name })
+                  : m.agency_invite_add_to_clients({
+                      name: match.name,
+                      count: picks.length,
+                    })}
+            </Button>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-caption font-normal text-text-muted">
+              {m.people_invite_link_note()}
+            </p>
             <Button
               type="button"
               loading={busy}
@@ -205,8 +226,8 @@ export function InvitePersonSheet({
               {busy ? null : <PaperPlaneTilt />}
               {picks.length === 0 ? m.agency_invite_send_none() : sendLabel}
             </Button>
-          )}
-        </div>
+          </div>
+        )
       }
     >
       <div className="grid gap-6 pt-2">
@@ -245,19 +266,6 @@ export function InvitePersonSheet({
             <p className="text-callout text-text-secondary">
               {m.agency_invite_existing_description()}
             </p>
-            <div>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                loading={busy}
-                disabled={picks.length === 0}
-                onClick={() => void addDirectly()}
-                data-testid="invite-person-add-direct"
-              >
-                {m.agency_invite_add_directly()}
-              </Button>
-            </div>
           </div>
         ) : null}
 

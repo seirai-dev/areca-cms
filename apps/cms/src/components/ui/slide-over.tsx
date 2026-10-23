@@ -40,6 +40,7 @@ export function SlideOver({
   children,
   hideTitle = false,
   fit = false,
+  wrapDescription = false,
   ...props
 }: {
   open: boolean
@@ -62,6 +63,8 @@ export function SlideOver({
   hideTitle?: boolean
   /** As a phone bottom sheet, size to the content instead of full height. */
   fit?: boolean
+  /** Let a long description wrap instead of truncating it to one line. */
+  wrapDescription?: boolean
   'data-testid'?: string
 }) {
   const mobile = useIsMobile()
@@ -138,7 +141,12 @@ export function SlideOver({
                       {title}
                     </DialogPrimitive.Title>
                     {description ? (
-                      <DialogPrimitive.Description className="truncate text-callout text-text-secondary">
+                      <DialogPrimitive.Description
+                        className={cn(
+                          'text-callout text-text-secondary',
+                          !wrapDescription && 'truncate',
+                        )}
+                      >
                         {description}
                       </DialogPrimitive.Description>
                     ) : (

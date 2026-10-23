@@ -2214,7 +2214,6 @@
   "agency_invite_email_label": "Email address",
   "agency_invite_existing_title": "{name} already has an account",
   "agency_invite_existing_description": "No invitation needed. Add them to these clients now, each with the role you choose.",
-  "agency_invite_add_directly": "Add to clients directly",
   "agency_invite_added_directly": "Added {name} to the clients",
   "agency_invite_clients_label": "Clients",
   "agency_invite_clients_empty": "Pick at least one client. Each one gets its own role.",
@@ -2379,5 +2378,8 @@
   "agency_person_name_save": "Save name",
   "agency_person_name_saved": "Name saved",
   "agency_person_delete_no_owner_intro": "These clients will have no owner. Agency admins can still manage them.",
-  "agency_person_delete_type_prompt": "Type the email to confirm"
+  "agency_person_delete_type_prompt": "Type the email to confirm",
+  "agency_invite_add_to_clients": "Add {name} to {count} clients",
+  "agency_invite_add_to_clients_one": "Add {name} to 1 client",
+  "agency_invite_pick_clients": "Pick at least one client"
 }

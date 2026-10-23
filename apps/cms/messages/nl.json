@@ -2214,7 +2214,6 @@
   "agency_invite_email_label": "E-mailadres",
   "agency_invite_existing_title": "{name} heeft al een account",
   "agency_invite_existing_description": "Geen uitnodiging nodig. Voeg hem of haar nu toe aan deze klanten, elk met de rol die je kiest.",
-  "agency_invite_add_directly": "Direct aan klanten toevoegen",
   "agency_invite_added_directly": "{name} is aan de klanten toegevoegd",
   "agency_invite_clients_label": "Klanten",
   "agency_invite_clients_empty": "Kies ten minste één klant. Elke klant krijgt een eigen rol.",
@@ -2379,5 +2378,8 @@
   "agency_person_name_save": "Naam opslaan",
   "agency_person_name_saved": "Naam opgeslagen",
   "agency_person_delete_no_owner_intro": "Deze klanten krijgen geen eigenaar. Bureaubeheerders kunnen ze nog steeds beheren.",
-  "agency_person_delete_type_prompt": "Typ het e-mailadres om te bevestigen"
+  "agency_person_delete_type_prompt": "Typ het e-mailadres om te bevestigen",
+  "agency_invite_add_to_clients": "{name} toevoegen aan {count} klanten",
+  "agency_invite_add_to_clients_one": "{name} toevoegen aan 1 klant",
+  "agency_invite_pick_clients": "Kies ten minste één klant"
 }

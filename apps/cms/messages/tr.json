@@ -2214,7 +2214,6 @@
   "agency_invite_email_label": "E-posta adresi",
   "agency_invite_existing_title": "{name} zaten bir hesaba sahip",
   "agency_invite_existing_description": "Davet gerekmiyor. Seçtiğiniz rollerle şimdi bu müşterilere ekleyin.",
-  "agency_invite_add_directly": "Doğrudan müşterilere ekle",
   "agency_invite_added_directly": "{name} müşterilere eklendi",
   "agency_invite_clients_label": "Müşteriler",
   "agency_invite_clients_empty": "En az bir müşteri seçin. Her birinin kendi rolü olur.",
@@ -2379,5 +2378,8 @@
   "agency_person_name_save": "Adı kaydet",
   "agency_person_name_saved": "Ad kaydedildi",
   "agency_person_delete_no_owner_intro": "Bu müşterilerin sahibi olmayacak. Ajans yöneticileri yine de bunları yönetebilir.",
-  "agency_person_delete_type_prompt": "Onaylamak için e-postayı yazın"
+  "agency_person_delete_type_prompt": "Onaylamak için e-postayı yazın",
+  "agency_invite_add_to_clients": "{name} kişisini {count} müşteriye ekle",
+  "agency_invite_add_to_clients_one": "{name} kişisini 1 müşteriye ekle",
+  "agency_invite_pick_clients": "En az bir müşteri seçin"
 }
