@@ -1900,7 +1900,7 @@
   "settings_schema_token_rotate_description": "Bestaande schema-integraties hebben het nieuwe token nodig.",
   "settings_schema_token_rotate_title": "Schema-writetoken vernieuwen?",
   "settings_schema_token_title": "Schema-writetoken",
-  "settings_site_key_description": "Identificeert deze site voor het siteproject. Je kunt dit niet wijzigen.",
+  "settings_site_key_description": "Identificeert deze site voor het siteproject. Je kunt de sleutel wijzigen. De CMS-URL's volgen de nieuwe sleutel, maar werk ook --site-key in je siteproject bij.",
   "settings_site_key_hint": "Gebruik --site-key wanneer je areca init uitvoert.",
   "settings_site_key_title": "Sitecode",
   "settings_stop_button": "Uitrol stoppen…",

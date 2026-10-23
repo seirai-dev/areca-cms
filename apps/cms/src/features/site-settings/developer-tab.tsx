@@ -123,36 +123,39 @@ export function DeveloperTab({
               </div>
             </form>
           ) : (
-            <div className="flex items-center gap-2">
+            <div className="grid gap-2">
+              {/* Full width on its own line: the key is the thing to read. */}
               <Input
                 id="settings-site-slug"
                 data-testid="settings-site-slug"
                 readOnly
                 value={site.slug}
-                className="font-mono text-[13px]"
+                className="w-full min-w-0 font-mono text-[13px]"
                 onFocus={(event) => event.currentTarget.select()}
               />
-              <CopyButton
-                value={site.slug}
-                label={m.sites_slug_copy()}
-                copiedLabel={m.sites_slug_copied_label()}
-                toastMessage={m.sites_slug_copied()}
-                aria-label={m.sites_slug_copy_aria()}
-                variant="secondary"
-                size="md"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="md"
-                onClick={() => {
-                  setSlugDraft(site.slug)
-                  setEditingSlug(true)
-                }}
-                data-testid="settings-site-slug-change"
-              >
-                {m.settings_site_key_change()}
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <CopyButton
+                  value={site.slug}
+                  label={m.sites_slug_copy()}
+                  copiedLabel={m.sites_slug_copied_label()}
+                  toastMessage={m.sites_slug_copied()}
+                  aria-label={m.sites_slug_copy_aria()}
+                  variant="secondary"
+                  size="md"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="md"
+                  onClick={() => {
+                    setSlugDraft(site.slug)
+                    setEditingSlug(true)
+                  }}
+                  data-testid="settings-site-slug-change"
+                >
+                  {m.settings_site_key_change()}
+                </Button>
+              </div>
             </div>
           )}
           {editingSlug ? null : (

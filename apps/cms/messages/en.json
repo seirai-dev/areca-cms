@@ -1900,7 +1900,7 @@
   "settings_schema_token_rotate_description": "Existing schema integrations will need the new token.",
   "settings_schema_token_rotate_title": "Rotate schema-write token?",
   "settings_schema_token_title": "Schema-write token",
-  "settings_site_key_description": "Identifies this site to the site project. It can't be changed.",
+  "settings_site_key_description": "Identifies this site to the site project. You can change it. The CMS URLs follow the new key, but update --site-key in your site project too.",
   "settings_site_key_hint": "Use it as --site-key when you run areca init.",
   "settings_site_key_title": "Site key",
   "settings_stop_button": "Stop deploying…",

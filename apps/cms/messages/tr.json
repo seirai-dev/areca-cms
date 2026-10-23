@@ -1900,7 +1900,7 @@
   "settings_schema_token_rotate_description": "Mevcut şema entegrasyonlarında yeni belirtecin kullanılması gerekir.",
   "settings_schema_token_rotate_title": "Şema yazma belirteci yenilensin mi?",
   "settings_schema_token_title": "Şema yazma belirteci",
-  "settings_site_key_description": "Bu siteyi site projesine tanıtır. Değiştirilemez.",
+  "settings_site_key_description": "Bu siteyi site projesine tanıtır. Anahtarı değiştirebilirsiniz. CMS URL'leri yeni anahtarı izler; ancak site projenizdeki --site-key değerini de güncelleyin.",
   "settings_site_key_hint": "areca init komutunu çalıştırırken --site-key olarak kullanın.",
   "settings_site_key_title": "Site anahtarı",
   "settings_stop_button": "Dağıtımı durdur…",
