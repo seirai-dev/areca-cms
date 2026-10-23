@@ -59,6 +59,26 @@ export function NotificationsSection() {
   )
 }
 
+/**
+ * A group's heading above its card. `InsetGroup` indents its heading to line
+ * up with the rows inside the card, which put the label 4px right of the card
+ * edge here, so the heading is set in line with the cards instead.
+ */
+function NotificationGroup({
+  title,
+  children,
+}: {
+  title: string
+  children: ReactNode
+}) {
+  return (
+    <div className="grid gap-2">
+      <h2 className="text-headline text-text-primary">{title}</h2>
+      <InsetGroup>{children}</InsetGroup>
+    </div>
+  )
+}
+
 function NotificationGroups({
   data,
   onSet,
@@ -76,7 +96,7 @@ function NotificationGroups({
       ) : null}
 
       {data.orgs.map((org) => (
-        <InsetGroup
+        <NotificationGroup
           key={org.organizationId}
           title={m.notifications_group_title({
             org: org.orgName,
@@ -92,11 +112,11 @@ function NotificationGroups({
             agencyName={data.agencyName}
             onSet={onSet}
           />
-        </InsetGroup>
+        </NotificationGroup>
       ))}
 
       {data.agency ? (
-        <InsetGroup title={m.notifications_agency_alerts()}>
+        <NotificationGroup title={m.notifications_agency_alerts()}>
           <PreferenceList
             rows={data.agency.events}
             role="agency"
@@ -106,7 +126,7 @@ function NotificationGroups({
             agencyName={data.agencyName}
             onSet={onSet}
           />
-        </InsetGroup>
+        </NotificationGroup>
       ) : null}
     </div>
   )
