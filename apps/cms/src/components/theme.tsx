@@ -8,6 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '#/components/ui/dropdown-menu'
+import { useCspNonce } from '#/hooks/use-csp-nonce'
 import { m } from '#/paraglide/messages'
 import { Monitor, Moon, Sun } from '@phosphor-icons/react'
 
@@ -17,6 +18,9 @@ import { Monitor, Moon, Sun } from '@phosphor-icons/react'
  * the OS; the choice is persisted by next-themes in localStorage.
  */
 export function ThemeProvider({ children }: { children: ReactNode }) {
+  // next-themes writes an inline script (before first paint) and a style that
+  // suppresses transitions while the theme changes. Both need the nonce.
+  const nonce = useCspNonce()
   return (
     <NextThemesProvider
       attribute="class"
@@ -24,6 +28,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       enableSystem
       disableTransitionOnChange
       storageKey="areca.theme"
+      nonce={nonce}
     >
       {children}
     </NextThemesProvider>

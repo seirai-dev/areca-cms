@@ -6,8 +6,16 @@ import {
 } from './lib/router-search'
 
 import { setupRouterSsrQueryIntegration } from '@tanstack/react-router-ssr-query'
+import { createIsomorphicFn } from '@tanstack/react-start'
 import { getContext } from './integrations/tanstack-query/root-provider'
 import { deLocalizeUrl, localizeUrl } from '#/paraglide/runtime'
+import { currentCspNonce } from '#/server/http/csp-nonce'
+
+// The nonce of the request being rendered. The server knows it; in the browser
+// the router reads it back from the `csp-nonce` meta tag it emits.
+const requestCspNonce = createIsomorphicFn()
+  .server(() => currentCspNonce())
+  .client(() => undefined)
 
 export function getRouter() {
   const context = getContext()
@@ -16,6 +24,9 @@ export function getRouter() {
     routeTree,
     context,
     scrollRestoration: true,
+    // Stamped on the scripts and styles the router emits, so the enforced
+    // Content-Security-Policy admits them (see server/http/csp.ts).
+    ssr: { nonce: requestCspNonce() },
     // Keeps Better Auth's signed sign-in query intact (see lib/router-search.ts).
     parseSearch: parseSearchKeepingRepeats,
     stringifySearch: stringifySearchKeepingRepeats,
