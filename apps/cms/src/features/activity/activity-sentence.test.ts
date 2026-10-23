@@ -102,7 +102,7 @@ describe('activityText for people actions', () => {
           },
         }),
       ),
-    ).toBe("Sanne de Vries changed Tom Peeters's role in Kade Bakery to Owner")
+    ).toBe('Sanne de Vries changed the role of Tom Peeters in Kade Bakery to Owner')
   })
 
   it('keeps the role change readable for older rows that have no name', () => {
