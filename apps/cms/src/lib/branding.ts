@@ -2,7 +2,7 @@
  * Whitelabel branding shared by server and client: defaults, the curated font
  * list, and the accent-colour → palette derivation. Pure, no I/O.
  */
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 export const DEFAULT_APP_NAME = 'Areca'
 

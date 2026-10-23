@@ -24,6 +24,8 @@ An Areca instance has four parts. You need all four to recover it.
 
 Keep the image reference too. A restore needs the same image it was taken with, so record the tag or digest you run. The Docker backup records the image IDs for you.
 
+The database is pruned as it runs. Sessions, verification tokens, invitations, finished build jobs, autosave revisions, email and notification records are removed after fixed periods. Releases are never removed. A backup therefore holds those rows only for the periods listed in [how long data is kept](/docs/self-hosting/operations#how-long-data-is-kept). A restore brings back what the backup held, and pruning then continues as normal.
+
 ## Recommended schedule
 
 Run these three routines. The daily one is the only one that runs without downtime.

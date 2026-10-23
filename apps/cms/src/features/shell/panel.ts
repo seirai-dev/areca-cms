@@ -1,5 +1,5 @@
 import { useNavigate, useSearch } from '@tanstack/react-router'
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 /**
  * Site overlays addressable by search param (brief §2): `?panel=golive` and

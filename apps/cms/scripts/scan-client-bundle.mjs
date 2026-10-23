@@ -39,8 +39,11 @@ export const SERVER_ENV_NAMES = [
 // setting's help text in the UI legitimately names SMTP_FROM.
 
 // better-auth's client ships an env reader whose getters merely name
-// BETTER_AUTH_SECRET; it reads process.env lazily and holds no value.
-const BENIGN_FRAGMENTS = [/get (\w+)\(\)\{return \w+\(`\1`(?:,`[^`]*`)?\)\}/g]
+// BETTER_AUTH_SECRET; it reads process.env lazily and holds no value. Minifiers
+// may name the reader helper with `$` (e.g. `a$`), so the helper name allows it.
+const BENIGN_FRAGMENTS = [
+  /get (\w+)\(\)\{return [\w$]+\(`\1`(?:,`[^`]*`)?\)\}/g,
+]
 
 // Values shorter than this are ignored to avoid matching "ci", "true", ports.
 const MIN_VALUE_LENGTH = 8

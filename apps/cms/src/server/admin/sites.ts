@@ -2,7 +2,7 @@ import { archiveDeletedContent } from '#/server/content/deletion-archive'
 import { randomBytes } from 'node:crypto'
 import { eq, inArray } from 'drizzle-orm'
 import type { InferSelectModel } from 'drizzle-orm'
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import { db } from '#/db'
 import {

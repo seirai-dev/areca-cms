@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import { ID_MAX_LENGTH, URL_MAX_LENGTH } from '#/lib/content-limits'
 import { SEO_LIMITS, SEO_SCHEMA_TYPES, TWITTER_CARDS } from '#/lib/seo'

@@ -1,6 +1,6 @@
 import { richTextAssetsAuthorized } from '#/server/assets/richtext-ownership'
 import { and, eq } from 'drizzle-orm'
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import { db } from '#/db'
 import { asset, collection, entry } from '#/db/schema'

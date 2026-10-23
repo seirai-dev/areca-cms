@@ -87,26 +87,87 @@ const SECTIONS = [
   ['Bug fixes', (commit) => !commit.breaking && commit.type === 'fix'],
   ['Performance', (commit) => !commit.breaking && commit.type === 'perf'],
 ]
+const SECTION_TITLES = SECTIONS.map(([title]) => title)
 
-export function renderNotes(commits) {
-  const parts = []
-  for (const [title, matches] of SECTIONS) {
-    const lines = commits
+function generatedSections(commits) {
+  return SECTIONS.map(([title, matches]) => ({
+    title,
+    entries: commits
       .filter(matches)
-      .map((commit) => `- ${commit.scope ? `**${commit.scope}:** ` : ''}${commit.description} (${commit.hash.slice(0, 7)})`)
-    if (lines.length) parts.push(`### ${title}\n\n${lines.join('\n')}`)
-  }
-  return parts.length ? parts.join('\n\n') : 'No user-facing changes.'
+      .map((commit) => `- ${commit.scope ? `**${commit.scope}:** ` : ''}${commit.description} (${commit.hash.slice(0, 7)})`),
+  })).filter((section) => section.entries.length)
 }
 
-export function renderEntry(version, date, commits) {
-  return `## ${version} (${date})\n\n${renderNotes(commits)}\n`
+// Hand-written notes go first within a section, then the generated ones. Known
+// sections keep their order; hand-written sections the commits do not cover
+// come after them, in the order they were written.
+function mergeSections(generated, handWritten) {
+  const merged = new Map()
+  for (const { title, entries } of generated) merged.set(title, [...entries])
+  for (const { title, entries } of handWritten) {
+    merged.set(title, [...entries, ...(merged.get(title) ?? [])])
+  }
+  const rank = (title) => {
+    const index = SECTION_TITLES.indexOf(title)
+    return index === -1 ? SECTION_TITLES.length : index
+  }
+  return [...merged]
+    .sort(([a], [b]) => rank(a) - rank(b))
+    .map(([title, entries]) => ({ title, entries }))
+}
+
+export function renderNotes(commits, handWritten = []) {
+  const sections = mergeSections(generatedSections(commits), handWritten)
+  if (!sections.length) return 'No user-facing changes.'
+  return sections.map(({ title, entries }) => `### ${title}\n\n${entries.join('\n')}`).join('\n\n')
+}
+
+export function renderEntry(version, date, commits, handWritten = []) {
+  return `## ${version} (${date})\n\n${renderNotes(commits, handWritten)}\n`
+}
+
+const UNRELEASED = /^## Unreleased[ \t]*\n/m
+
+// `### ` groups of hand-written notes. A bullet keeps the lines that follow it.
+function parseNoteSections(body) {
+  const sections = []
+  let section = null
+  for (const line of body.split('\n')) {
+    const heading = /^### (.+?)\s*$/.exec(line)
+    if (heading) {
+      section = { title: heading[1], entries: [] }
+      sections.push(section)
+    } else if (line.trim()) {
+      if (!section) {
+        section = { title: 'Changes', entries: [] }
+        sections.push(section)
+      }
+      if (line.startsWith('- ') || section.entries.length === 0) section.entries.push(line)
+      else section.entries[section.entries.length - 1] += `\n${line}`
+    }
+  }
+  return sections
+}
+
+// A hand-written `## Unreleased` section, wherever it sits. It is removed from
+// the changelog, and its notes are returned for the next release to fold in.
+export function takeUnreleased(changelog) {
+  const match = UNRELEASED.exec(changelog)
+  if (!match) return { changelog, notes: [] }
+  const bodyStart = match.index + match[0].length
+  const next = changelog.slice(bodyStart).search(/^## /m)
+  const bodyEnd = next === -1 ? changelog.length : bodyStart + next
+  return {
+    changelog: changelog.slice(0, match.index) + changelog.slice(bodyEnd),
+    notes: parseNoteSections(changelog.slice(bodyStart, bodyEnd)),
+  }
 }
 
 export function prependChangelog(existing, name, entry) {
   const title = `# Changelog\n\nAll notable changes to \`${name}\`.\n`
-  const first = existing.search(/^## /m)
-  const rest = first === -1 ? '' : existing.slice(first)
+  const { changelog } = takeUnreleased(existing)
+  const first = changelog.search(/^## /m)
+  const rest = first === -1 ? '' : changelog.slice(first)
   return `${title}\n${entry}${rest ? `\n${rest}` : ''}`
 }
 

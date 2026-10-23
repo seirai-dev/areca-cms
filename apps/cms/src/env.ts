@@ -1,6 +1,6 @@
 import { createEnv } from '@t3-oss/env-core'
 import { config } from 'dotenv'
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import { productionSecretProblems } from '#/lib/secret-placeholders'
 
@@ -51,6 +51,12 @@ export const env = createEnv({
     APP_URL: z.string().url(),
     REDIS_URL: z.string().url().default('redis://localhost:6379'),
     RATE_LIMIT_TRUST_PROXY: z
+      .enum(['true', 'false'])
+      .optional()
+      .transform((value) => value === 'true'),
+    // Send the Content-Security-Policy as Report-Only: browsers log violations
+    // but do not block them. For rolling out a custom setup or debugging.
+    CSP_REPORT_ONLY: z
       .enum(['true', 'false'])
       .optional()
       .transform((value) => value === 'true'),

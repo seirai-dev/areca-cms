@@ -5,7 +5,7 @@
  * Every read or write of `$i18n` / `$locale` goes through this module.
  * See docs/design/content-languages.md.
  */
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import { LOCALE_TAG_MAX_LENGTH } from './content-limits.ts'
 import { isEmptyRichText } from './rich-text-empty.ts'

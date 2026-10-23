@@ -5,3 +5,6 @@ src/paraglide
 drizzle/meta
 project.inlang
 .cta.json
+.output
+test-results
+playwright-report

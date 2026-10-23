@@ -1,6 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import { requireFreshAgencyAdmin, requireUser } from '#/lib/session.server'
 import { ForbiddenError } from '#/server/content/errors'

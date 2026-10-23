@@ -1,5 +1,5 @@
 import { createServerFn } from '@tanstack/react-start'
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import { completeSetup, getSetupStatus } from '#/server/admin/setup'
 import { MAIL_LOCALES } from '#/server/mail/render/types'

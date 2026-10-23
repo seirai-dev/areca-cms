@@ -2,8 +2,9 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { defineConfig } from 'vitest/config'
 
-// Suites that need real PostgreSQL / S3 / SMTP. CI does not provision those
-// services, so it sets SKIP_INTEGRATION_TESTS=true to leave these files out.
+// Suites that need real PostgreSQL / Redis / S3. The unit job in CI sets
+// SKIP_INTEGRATION_TESTS=true to leave these files out; the integration job
+// provisions the services and runs them.
 // Test files that import the database (or the shared DB test utilities) are
 // detected automatically; list anything else that needs a service here.
 const integrationSuites = [

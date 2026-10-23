@@ -1,7 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { and, eq, gt, inArray } from 'drizzle-orm'
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import { db } from '#/db'
 import { user, verification } from '#/db/schema'

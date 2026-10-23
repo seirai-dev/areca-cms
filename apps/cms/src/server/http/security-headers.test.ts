@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest'
 
 import { withSecurityHeaders } from './security-headers'
 
+const NONCE = 'AbC_dEf-123456789012'
+
+const production = { nonce: NONCE, reportOnly: false, development: false }
+
 describe('withSecurityHeaders', () => {
   it('adds browser security headers without replacing route headers', () => {
     const response = withSecurityHeaders(
@@ -12,6 +16,7 @@ describe('withSecurityHeaders', () => {
           'Cross-Origin-Resource-Policy': 'cross-origin',
         },
       }),
+      production,
     )
 
     expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff')
@@ -32,30 +37,37 @@ describe('withSecurityHeaders', () => {
     )
   })
 
-  it('observes a strict CSP without enforcing it yet', () => {
+  it('enforces the nonce policy by default', () => {
     const response = withSecurityHeaders(
       new Request('https://cms.example.test'),
       new Response('ok'),
+      production,
     )
-    // Enforced policy is unchanged.
-    expect(response.headers.get('Content-Security-Policy')).toBe(
-      "base-uri 'self'; frame-ancestors 'none'; object-src 'none'",
+    expect(response.headers.get('Content-Security-Policy')).toContain(
+      `script-src 'self' 'nonce-${NONCE}'`,
     )
-    const reportOnly = response.headers.get(
-      'Content-Security-Policy-Report-Only',
+    expect(response.headers.has('Content-Security-Policy-Report-Only')).toBe(
+      false,
     )
-    expect(reportOnly).toContain("default-src 'self'")
-    expect(reportOnly).toContain("script-src 'self';")
-    expect(reportOnly).not.toMatch(/script-src[^;]*unsafe-/)
-    expect(reportOnly).toContain("style-src 'self' 'unsafe-inline'")
-    expect(reportOnly).toContain("frame-ancestors 'none'")
-    expect(reportOnly).toContain("form-action 'self'")
+  })
+
+  it('sends the same policy as Report-Only when the operator asks for it', () => {
+    const response = withSecurityHeaders(
+      new Request('https://cms.example.test'),
+      new Response('ok'),
+      { ...production, reportOnly: true },
+    )
+    expect(response.headers.has('Content-Security-Policy')).toBe(false)
+    expect(
+      response.headers.get('Content-Security-Policy-Report-Only'),
+    ).toContain(`script-src 'self' 'nonce-${NONCE}'`)
   })
 
   it('does not advertise HSTS over local HTTP', () => {
     const response = withSecurityHeaders(
       new Request('http://localhost:3000'),
       new Response('ok'),
+      production,
     )
     expect(response.headers.has('Strict-Transport-Security')).toBe(false)
   })

@@ -1,8 +1,6 @@
-import {
-  CreateBucketCommand,
-  HeadBucketCommand,
-  S3Client,
-} from '@aws-sdk/client-s3'
+import { S3Client } from '@aws-sdk/client-s3'
+
+import { ensureBucket } from './lib/ensure-bucket.mjs'
 
 const bucket = process.env.S3_BUCKET
 if (!bucket) {
@@ -19,10 +17,5 @@ const client = new S3Client({
   forcePathStyle: process.env.S3_FORCE_PATH_STYLE === 'true',
 })
 
-try {
-  await client.send(new HeadBucketCommand({ Bucket: bucket }))
-  console.log(`Bucket already exists: ${bucket}`)
-} catch {
-  await client.send(new CreateBucketCommand({ Bucket: bucket }))
-  console.log(`Created bucket: ${bucket}`)
-}
+// Fails without creating anything unless the bucket is definitively missing.
+await ensureBucket(client, bucket)

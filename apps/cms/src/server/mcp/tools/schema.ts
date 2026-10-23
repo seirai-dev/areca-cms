@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import { isSafeIdentifier } from '#/lib/content-identifiers'
 import { GLOBAL_GROUP_MAX_LENGTH } from '#/lib/globals'

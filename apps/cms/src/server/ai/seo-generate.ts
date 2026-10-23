@@ -116,9 +116,7 @@ async function readImageBase64(row: Asset): Promise<string | null> {
   try {
     const object = await getStorage().get(row.storageKey)
     if (!object) return null
-    const buffer = Buffer.isBuffer(object.body)
-      ? object.body
-      : Buffer.from(await new Response(object.body).arrayBuffer())
+    const buffer = Buffer.from(await new Response(object.body).arrayBuffer())
     const resized = await sharp(buffer, { animated: false })
       .rotate()
       .resize(IMAGE_MAX_EDGE, IMAGE_MAX_EDGE, {

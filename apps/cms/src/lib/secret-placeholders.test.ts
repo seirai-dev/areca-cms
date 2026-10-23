@@ -59,4 +59,15 @@ describe('productionSecretProblems', () => {
     expect(problems.join('\n')).toMatch(/DOKPLOY_CREDENTIALS_ENCRYPTION_KEY/)
     expect(problems.join('\n')).toMatch(/SECRETS_ENCRYPTION_KEY/)
   })
+
+  it('ignores non-secret values it is handed alongside the secrets', () => {
+    // The env object carries flags and numbers too; a boolean must not reach
+    // the key check (it crashed production boots with ADMIN_MFA_REQUIRED set).
+    const env = {
+      BETTER_AUTH_SECRET: '9f1c2a7e0b4d4e8f9a6c3b2d1e0f9a8b',
+      ADMIN_MFA_REQUIRED: true,
+      PORT: 3000,
+    }
+    expect(productionSecretProblems(env)).toEqual([])
+  })
 })

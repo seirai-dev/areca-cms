@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import { assetUrl, loadAssetLookup } from '#/server/assets'
 import { siteAssetLookup } from '#/server/assets/site-scope'

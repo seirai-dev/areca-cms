@@ -67,6 +67,19 @@ test('better-auth lazy env getters are tolerated', () => {
   ])
 })
 
+test('minified env readers with a $ in their helper name are tolerated', () => {
+  // The shape the production build emits: the helper is `a$`, not `h`.
+  const code =
+    'Object.freeze({get BETTER_AUTH_SECRET(){return a$(`BETTER_AUTH_SECRET`)},get AUTH_SECRET(){return a$(`AUTH_SECRET`)}})'
+  assert.deepEqual(rules(code), [])
+  // A getter that reads a different variable than the one it is named after
+  // is not the benign shape.
+  assert.deepEqual(
+    rules('Object.freeze({get DATABASE_URL(){return a$(`REDIS_URL`)}})'),
+    ['server-env-name'],
+  )
+})
+
 test('scans a directory recursively', () => {
   const dir = mkdtempSync(join(tmpdir(), 'scan-'))
   mkdirSync(join(dir, 'assets'))

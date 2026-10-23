@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition -- Drizzle row arrays can be empty; retain defensive lookup and authorization checks. */
 import { createServerFn } from '@tanstack/react-start'
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import { db } from '#/db'
 import { membership, organization, site, user } from '#/db/schema'

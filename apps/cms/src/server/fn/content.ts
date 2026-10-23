@@ -18,7 +18,7 @@ import {
   SLUG_MAX_LENGTH,
 } from '#/lib/content-limits'
 import { createServerFn } from '@tanstack/react-start'
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import { db } from '#/db'
 import { site, user } from '#/db/schema'

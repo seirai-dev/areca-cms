@@ -3,7 +3,7 @@ import type {
   McpServer,
   ToolAnnotations,
 } from '@modelcontextprotocol/server'
-import type { z } from 'zod'
+import type { z } from '#/lib/zod'
 
 import { withAuditContext } from '#/server/audit-context'
 

@@ -167,6 +167,63 @@ When something unexpected fails, the admin interface shows `Something went wrong
 
 Each release has a build log, which you can read from the release details. Each line is limited to 8 KiB, and each job's log to 256 Ki characters. When a log goes over the limit, the oldest lines are dropped, the log starts with a `[truncated]` marker, and the most recent output is kept.
 
+## Startup
+
+The container starts in four steps, and each waits for the one before it:
+
+1. It waits for PostgreSQL. Each attempt has a 5-second connection and query limit.
+2. It applies database migrations while holding a PostgreSQL advisory lock. Replicas never migrate at the same time. A replica that finds the lock taken waits for the other to finish, then finds nothing left to apply.
+3. It makes sure the S3 bucket exists. See [object storage](#object-storage).
+4. It starts the server, then sends it one request to `/api/health`. The server loads its configuration on that first request, so a `500` there, for example when `REDIS_URL` is missing in production, stops the container with code `1` and leaves the server's error in the log.
+
+These waits share one deadline set by `STARTUP_DEADLINE_SECONDS` (default `60`). Retries back off from one second up to five seconds, and each retry logs the dependency, the attempt and the time left. When the deadline passes, the container logs `startup failed, exiting` with the reason and exits with code `1`, so your orchestrator can restart it or show it as failed. A migration that has already started runs to completion, because the deadline does not interrupt it. A replica waiting for the migration lock does count against the deadline, so raise `STARTUP_DEADLINE_SECONDS` if a long migration makes other replicas time out.
+
+## Object storage
+
+Files stream from S3 to the browser. The CMS does not hold a whole file in memory to serve it. The S3 client has fixed time limits, which are not set by an environment variable:
+
+| Operation | Limit |
+| --- | --- |
+| Download, response headers | 30 seconds |
+| Download, body | 30 seconds without any new bytes while the body is being read |
+| Upload | 60 seconds in total |
+| Delete | 30 seconds in total |
+
+A download that hits a limit fails its request, and the browser can retry it. A failed delete goes back into the durable cleanup queue. After four failed attempts it pauses until someone retries it, as described in [paused jobs](/docs/cms/agency-mail#paused-jobs).
+
+**Bucket creation.** Startup creates `S3_BUCKET` only when S3 definitively reports that it does not exist (a `404`, `NotFound` or `NoSuchBucket` answer). Wrong credentials (`403`), server errors and network failures are never read as "missing". Startup retries those until the deadline and then exits, and nothing is created. Readiness checks the bucket with a read-only request and never creates it. `pnpm s3:init` follows the same rule.
+
+## Redis
+
+Production requires `REDIS_URL`. The CMS refuses to start without it, because Redis holds the rate-limit counters that every instance shares.
+
+If Redis cannot be reached while the CMS runs, each instance counts requests in its own memory with the same budgets. It retries Redis every five seconds. The log records when counting moves to memory and when Redis returns. During an outage a client can use up to one budget per running instance. Readiness reports `redis` as degraded and does not fail.
+
+## Content Security Policy
+
+Every response carries a `Content-Security-Policy` with a new nonce for each request, and the framework applies that nonce to the scripts and styles it writes. The policy allows:
+
+- Scripts from this origin, and scripts with the request's nonce. There is no `unsafe-inline` and no `unsafe-eval`.
+- Stylesheets from this origin and with the nonce, Google Fonts (`fonts.googleapis.com`) for the branding preview, and one hashed stylesheet written by the toast library.
+- Inline `style` attributes. React writes them for layout and transitions, and they cannot run script.
+- Fonts from this origin and `fonts.gstatic.com`, images from this origin and `data:` or `blob:` URLs, and connections to this origin only.
+
+`CSP_REPORT_ONLY=true` sends the same policy as `Content-Security-Policy-Report-Only`. Browsers then log violations and block nothing. Use it to see what a change would break before you enforce it.
+
+For operators, the practical effects are these. Uploaded files load, because the CMS serves them from `/api/assets/file/`. An external image URL pasted into rich text does not load in the editor until its file is in the library. The CMS interface cannot load third-party scripts or widgets. To find a violation, open the browser console and look for `Content Security Policy` messages, which name the directive and the blocked source. The development server (`vite dev`) uses a relaxed policy so that hot reload works. Production builds never send it.
+
+## Several instances
+
+Run as many replicas as you need. The work they share is coordinated in PostgreSQL:
+
+- **Migrations** run under an advisory lock (see [startup](#startup)).
+- **Builds** are claimed with a 60-second lease that the running worker renews. A claim is fenced: a worker whose lease expired cannot record its result, and the job stays queued for the next tick. Recovery fails the jobs left behind by a crashed process. A job runs for one site at a time, and shared Dokploy application deployments are serialized.
+- **Email** is leased per message for 60 seconds and renewed while it is sent. A lapsed lease is reclaimed by another replica. `areca_mail_expired_leases` counts the messages waiting to be reclaimed.
+- **Storage cleanup** claims each object before deleting it, so two replicas never delete the same object.
+- **Retention** works in bounded batches, and overlapping runs remove different rows.
+
+Two things stay per process: the rate-limit counters during a Redis outage, and each process's worker heartbeat. Readiness and the `areca_worker_*` metrics describe the process that answered, so each replica reports its own loops. Set `WORKER_ENABLED=false` on replicas that should only serve pages.
+
 ## Worker and graceful shutdown
 
 The publishing worker and the scheduler run inside the CMS process. They are on by default. Set `WORKER_ENABLED=false` only during maintenance, or when you deliberately want to pause publishing and scheduled releases.
@@ -217,7 +274,7 @@ A background job removes old rows once an hour. Sessions, tokens, invitations, b
 | Expired sessions | 7 days after they expire | Kept briefly for support lookups. |
 | Expired email verification and password-reset tokens | 7 days after they expire | |
 | Unaccepted invitations | 30 days after they expire | Revoking an invitation deletes it at once. |
-| Finished build jobs (succeeded, failed or cancelled) | 90 days after they finish | The newest 20 jobs of each site are always kept, and so are jobs that a release still points at and jobs that still need reconciling. |
+| Finished build jobs (succeeded, failed or cancelled) | 90 days after they finish | The newest 20 jobs of each site are always kept, and so are jobs whose deployment acceptance is still uncertain, because they need reconciling. Releases themselves are kept (see below). |
 | Autosave revisions | 90 days after they are saved | Milestone revisions and each entry's newest revision are always kept. |
 | Email outbox | 30 days after the email was queued | |
 | Notification records | 30 days after they are created | |

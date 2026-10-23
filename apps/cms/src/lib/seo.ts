@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import { m } from '#/paraglide/messages'
 import { ID_MAX_LENGTH, URL_MAX_LENGTH } from '#/lib/content-limits'

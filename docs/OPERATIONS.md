@@ -67,6 +67,16 @@ Postgres or S3 is down; a plain restart will not fix those, so
   `READINESS_MAX_QUEUE_AGE_SECONDS`, when an active job's lease has been
   expired for longer than `READINESS_MAX_TICK_AGE_SECONDS` without recovery, or
   when the scheduler has not completed a tick in that window.
+- `mail`: never fails readiness. It is `degraded` when the oldest queued email
+  has waited more than 15 minutes.
+- `loops`: never fails readiness. It is `degraded` when a background loop has no
+  successful run within five times its interval (worker 15 seconds, scheduler,
+  recovery and cleanup 75 seconds, mail and notifications 25 seconds, and the
+  hourly maintenance loop five hours). The reason names the loops.
+
+The top level has two flags. `ok` is `false` only when a check fails outright.
+`degraded` is `true` when any check is degraded, and readiness still returns
+`200` in that case.
 
 Responses carry only check names, ok/fail, timings and a short redacted reason.
 Full errors go to the logs. Readiness heartbeats are per process: with several
@@ -90,6 +100,14 @@ time, so they are correct across restarts and replicas.
 | `areca_worker_last_tick_age_seconds`         |          | Only when the worker is enabled                                                  |
 | `areca_scheduler_last_tick_age_seconds`      |          | Only when the worker is enabled                                                  |
 | `areca_readiness_check_up`                   | `check`  | 1 up, 0 down or degraded                                                         |
+| `areca_mail_pending`                         |          | Emails queued and waiting to send                                                |
+| `areca_mail_oldest_pending_age_seconds`      |          | Age of the oldest queued email, 0 when none                                      |
+| `areca_mail_expired_leases`                  |          | Emails whose sender lease lapsed and that no replica has reclaimed yet           |
+| `areca_notification_events_pending`          |          | Release notices waiting to be delivered                                          |
+| `areca_notification_events_oldest_pending_age_seconds` |  | Age of the oldest pending release notice, 0 when none                    |
+| `areca_storage_deletions_paused`             |          | Object deletions paused after four failed attempts                               |
+| `areca_schedules_exhausted`                  |          | Scheduled publications stopped after four failed attempts                        |
+| `areca_loop_success_age_seconds`             | `loop`   | Seconds since each background loop last finished a run without error             |
 | `areca_ready`                                |          | 1 when readiness would return 200                                                |
 | `areca_process_uptime_seconds`               |          |                                                                                  |
 | `areca_process_memory_bytes`                 | `kind`   | rss, heap_used, heap_total, external                                             |
@@ -215,6 +233,126 @@ legitimately needs longer must open a transaction and run
 `SET LOCAL statement_timeout = '60s'` first. Pool-level errors on idle clients
 are logged (`component: "db"`) instead of crashing the process.
 
+## Startup
+
+The container entrypoint (`scripts/docker-entrypoint.mjs`) runs these steps in
+order:
+
+1. Waits for PostgreSQL. Each probe has a 5-second connection and query timeout.
+2. Applies database migrations while holding a PostgreSQL advisory lock, so
+   replicas never migrate at the same time. A replica that finds the lock taken
+   waits for the other to finish, then finds nothing left to apply.
+3. Makes sure the S3 bucket exists (see [Object storage](#object-storage)).
+4. Starts the server and sends it one request to `/api/health`. The server
+   loads its configuration on that first request, so a 500 there (for example
+   when `REDIS_URL` is missing in production) stops the container with code 1,
+   with the server's error in the log. Connection failures are retried until the
+   deadline.
+
+The waits share one deadline set by `STARTUP_DEADLINE_SECONDS` (default `60`).
+Retries back off from 1 second to 5 seconds. Each retry logs the dependency, the
+attempt and the time left, for example
+`postgres not ready (attempt 3: connect ECONNREFUSED …); retrying in 2s, 4s left before the startup deadline`.
+When the deadline passes, the entrypoint logs `startup failed, exiting: …` and
+exits with code 1, so your orchestrator can restart it or show it as failed. A
+migration that has already started runs to completion; the deadline does not
+interrupt it. A replica waiting for the migration lock does count against the
+deadline, so raise `STARTUP_DEADLINE_SECONDS` if a long migration makes the
+others time out.
+
+## Object storage
+
+Asset reads stream from S3 to the browser, so the CMS does not hold a whole file
+in memory to serve it. The S3 client has fixed time limits; they are not set by
+an environment variable.
+
+| Operation | Limit |
+| --- | --- |
+| Download (`GET`), response headers | 30 seconds |
+| Download (`GET`), body | 30 seconds without any new bytes while the body is being read |
+| Upload (`PUT`) | 60 seconds in total |
+| Delete (`DELETE`) | 30 seconds in total |
+
+A download that hits a limit fails its request, and the browser can retry it.
+A failed delete goes back into the durable cleanup queue. After four failed
+attempts the deletion pauses (`areca_storage_deletions_paused`) until it is
+retried; see [recovery](RECOVERY.md#retained-media-cleanup).
+
+**Bucket creation.** Startup and `pnpm s3:init` create `S3_BUCKET` only when S3
+definitively reports that it does not exist (`404`, `NotFound` or
+`NoSuchBucket`). Wrong credentials (`403`), server errors and network failures
+are never read as "missing". Startup retries them until the deadline and then
+exits, and nothing is created. Readiness checks the bucket with a read-only
+`HeadBucket` and never creates one.
+
+## Redis
+
+Production requires `REDIS_URL`. The CMS refuses to start without it, because
+Redis holds the rate-limit counters that every instance shares.
+
+If Redis cannot be reached while the CMS runs, each instance counts requests in
+its own memory with the same budgets, and retries Redis every 5 seconds. The log
+records the change once (`Redis unavailable; rate limits count in memory on this instance only`)
+and records the recovery once. During an outage a client can use up to one budget
+per replica. Readiness reports `redis` as `degraded` without failing.
+
+## Content Security Policy
+
+Every response carries a `Content-Security-Policy` with a fresh nonce for each
+request. The framework stamps that nonce on the scripts and styles it writes.
+The policy:
+
+- `script-src 'self' 'nonce-…'`: same-origin scripts and nonce-marked scripts
+  only. There is no `unsafe-inline` and no `unsafe-eval`.
+- `style-src 'self' 'nonce-…'` plus Google Fonts (`https://fonts.googleapis.com`)
+  for the branding preview, and one hashed stylesheet that the Sonner toast
+  library writes.
+- `style-src-attr 'unsafe-inline'`: React writes inline `style` attributes for
+  layout and transitions. An inline style attribute cannot run script.
+- `font-src 'self' data: https://fonts.gstatic.com`, `img-src 'self' data: blob:`,
+  `connect-src 'self'`, `object-src 'none'`, `base-uri 'self'`,
+  `form-action 'self'` and `frame-ancestors 'none'`.
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `CSP_REPORT_ONLY` | `false` | `true` sends the same policy as `Content-Security-Policy-Report-Only`. Browsers log violations and block nothing. Use it to see what a change would break before enforcing it. |
+
+What this means for operators:
+
+- Images, scripts and styles must load from this origin. The CMS serves uploaded
+  files at `/api/assets/file/…`, so they work. An external image URL pasted into
+  rich text does not load in the editor until its file is in the library.
+- The CMS UI cannot load third-party scripts or widgets.
+- `vite dev` uses a relaxed development policy (inline scripts, `eval`, and a
+  websocket for hot reload). Production builds never send it.
+- To find a violation, open the browser console and look for
+  `Content Security Policy` messages. They name the directive and the blocked
+  source.
+
+## Several instances
+
+Run as many replicas as you need. The work they share is coordinated in
+PostgreSQL:
+
+- **Migrations** run under an advisory lock (see [Startup](#startup)).
+- **Build jobs** are claimed with a 60-second lease that the running worker
+  renews. Each claim is fenced: a worker whose lease has expired cannot write
+  its result, and the job stays queued for the next tick. Stale-lease recovery
+  fails the jobs left behind by a crashed process. One job per site runs at a
+  time, and shared Dokploy application deployments are serialized.
+- **Email** is leased per message for 60 seconds and renewed while it is sent.
+  A lapsed lease is reclaimed by another replica. `areca_mail_expired_leases`
+  counts the ones waiting for reclaim.
+- **Storage cleanup** claims each object row (`FOR UPDATE SKIP LOCKED`) before
+  deleting it, so two replicas never delete the same object.
+- **Retention** deletes bounded batches. Overlapping runs remove different rows.
+
+Two things stay per process. The rate-limit counters during a Redis outage
+(see [Redis](#redis)) and each process's worker heartbeat. Readiness and the
+`areca_worker_*` metrics describe the process that answered, so each replica
+reports its own loops. Set `WORKER_ENABLED=false` on replicas that should only
+serve pages.
+
 ## Worker and scheduler
 
 Publication behavior follows each site's deployment mode. **Production**
@@ -249,6 +387,8 @@ entrypoint forwards the signal to the server process and waits for it to exit.
 
 | Variable                          | Default | Meaning                                                                                                |
 | --------------------------------- | ------- | ------------------------------------------------------------------------------------------------------ |
+| `STARTUP_DEADLINE_SECONDS`        | `60`    | Total time startup may wait for PostgreSQL, the migration lock and S3 before exiting with code 1       |
+| `CSP_REPORT_ONLY`                 | `false` | Send the Content-Security-Policy as Report-Only (see [Content Security Policy](#content-security-policy)) |
 | `METRICS_TOKEN`                   | unset   | Bearer token (min 16 chars) for `/api/metrics`; unset means 404. Generate with `openssl rand -hex 32`. |
 | `LOG_LEVEL`                       | `info`  | Log threshold                                                                                          |
 | `WORKER_CONCURRENCY`              | `2`     | Max build jobs processed at once by this process                                                       |

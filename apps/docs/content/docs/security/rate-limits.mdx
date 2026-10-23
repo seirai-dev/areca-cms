@@ -146,7 +146,7 @@ Set `RATE_LIMIT_TRUST_PROXY=true` only when the CMS runs behind a reverse proxy 
 
 ### Redis outages
 
-If Redis cannot be reached, Areca allows the request and logs an error. Limits are not enforced until Redis returns. Monitor the error log, and treat a Redis outage as a reason to check for abuse.
+If Redis cannot be reached, each CMS instance keeps counting requests in its own memory with the same budgets, and retries Redis every few seconds. The log records when counting moves to memory and when Redis returns. Counts are then not shared between instances, so a client can use up to one budget per running instance during the outage. Readiness reports Redis as degraded, without failing. Treat a Redis outage as a reason to check for abuse.
 
 ## Related
 
