@@ -289,6 +289,7 @@ export function CommandPalette() {
               <CommandItem
                 key={`new-${collection.id}`}
                 value={`create new ${collection.label} ${collection.key}`}
+                keywords={[newEntryLabel(collection.label)]}
                 onSelect={() =>
                   go({
                     to: '/sites/$siteId/c/$collectionKey/new',
@@ -311,6 +312,7 @@ export function CommandPalette() {
             <>
               <CommandItem
                 value="action go live publish"
+                keywords={[m.golive_go_live()]}
                 onSelect={() => run(() => panel.open('golive'))}
               >
                 <RocketLaunch />
@@ -318,6 +320,7 @@ export function CommandPalette() {
               </CommandItem>
               <CommandItem
                 value="action invite people"
+                keywords={[m.shell_palette_invite()]}
                 onSelect={() =>
                   go({
                     to: '/sites/$siteId/people',
@@ -334,10 +337,13 @@ export function CommandPalette() {
           {inSite ? (
             <CommandItem
               value="action upload library"
+              keywords={[m.shell_palette_upload()]}
               onSelect={() =>
                 go({
                   to: '/sites/$siteId/library',
                   params: { siteId: inSite.id },
+                  // The library opens its file picker when it sees this.
+                  search: { upload: 1 },
                 })
               }
             >
@@ -348,6 +354,7 @@ export function CommandPalette() {
           {inSite && canManage ? (
             <CommandItem
               value="action open activity"
+              keywords={[m.shell_palette_open_activity()]}
               onSelect={() => run(() => panel.open('activity'))}
             >
               <Pulse />
@@ -356,6 +363,7 @@ export function CommandPalette() {
           ) : null}
           <CommandItem
             value="action switch appearance theme dark light"
+            keywords={[m.shell_palette_switch_appearance()]}
             onSelect={() =>
               run(() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark'))
             }
@@ -369,6 +377,9 @@ export function CommandPalette() {
               <CommandItem
                 key={code}
                 value={`action language ${LOCALE_LABELS[code]} ${code}`}
+                keywords={[
+                  m.shell_palette_language({ language: LOCALE_LABELS[code] }),
+                ]}
                 onSelect={() => run(() => setLocale(code))}
               >
                 <Translate />
@@ -377,6 +388,7 @@ export function CommandPalette() {
             ))}
           <CommandItem
             value="action sign out"
+            keywords={[m.shell_sign_out()]}
             onSelect={() =>
               run(() => {
                 void signOutClient().finally(() => {

@@ -51,7 +51,18 @@ const GRID =
  * `media-upload` (the file input), `media-upload-button`, `library-search`,
  * `library-load-more`, `library-drop-overlay`, `asset-drawer`.
  */
-export function LibraryScreen({ site, me }: { site: MeSite; me: Me }) {
+export function LibraryScreen({
+  site,
+  me,
+  uploadRequested = false,
+  onUploadRequestHandled,
+}: {
+  site: MeSite
+  me: Me
+  /** Set by `?upload=1` (the palette's Upload): open the file picker once. */
+  uploadRequested?: boolean
+  onUploadRequestHandled?: () => void
+}) {
   const organizationId = site.organizationId
   const canDelete = canManageSite(me, organizationId)
   const inputRef = React.useRef<HTMLInputElement>(null)
@@ -81,6 +92,12 @@ export function LibraryScreen({ site, me }: { site: MeSite; me: Me }) {
 
   const active = library.assets.find((asset) => asset.id === activeId) ?? null
   const openPicker = () => inputRef.current?.click()
+
+  React.useEffect(() => {
+    if (!uploadRequested) return
+    inputRef.current?.click()
+    onUploadRequestHandled?.()
+  }, [uploadRequested, onUploadRequestHandled])
   const searching = needle !== ''
   const total = library.assets.length
   // One quiet hint in the header instead of a warning dot on every tile.
