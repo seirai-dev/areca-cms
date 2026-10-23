@@ -170,6 +170,7 @@ The worker runs inside the CMS container. It builds and deploys releases, and it
 | --- | --- | --- | --- |
 | `RATE_LIMIT_TRUST_PROXY` | No | `false` | When `true`, the CMS reads the client address from the forwarding headers (`X-Forwarded-For`, then `X-Real-IP` or `CF-Connecting-IP`). Turn it on only behind a reverse proxy that replaces those headers with the real client address. When it is `false`, all anonymous requests share one rate-limit bucket. The stock Compose file does not pass it. See [rate limits](/docs/security/rate-limits). |
 | `ADMIN_MFA_REQUIRED` | No | `true` | Also listed under [auth and sign-in](#auth-and-sign-in). Keep it `true` on any instance that other people use. |
+| `CSP_REPORT_ONLY` | No | `false` | The Content-Security-Policy is enforced by default. `true` sends it as `Content-Security-Policy-Report-Only`: browsers log what would be blocked, and nothing is blocked. Use it to test a change before enforcing it. See [operations](/docs/self-hosting/operations#content-security-policy). |
 
 The limits themselves, such as requests per minute and upload limits, are described in [rate limits](/docs/security/rate-limits).
 
@@ -179,6 +180,7 @@ The limits themselves, such as requests per minute and upload limits, are descri
 | --- | --- | --- | --- |
 | `METRICS_TOKEN` | No | Unset | Bearer token of at least 16 characters for `GET /api/metrics`. When unset, the endpoint returns `404`. Generate it with `openssl rand -hex 32`. The Compose file passes it from `.env`. See [operations](/docs/self-hosting/operations). |
 | `LOG_LEVEL` | No | `info` | How much to log: `debug`, `info`, `warn`, `error` or `silent`. The CMS reads it directly, not through the validated configuration. An unrecognized value silently falls back to `info`. The Compose file does not pass it. |
+| `STARTUP_DEADLINE_SECONDS` | No | `60` | Total time the container may wait for PostgreSQL, the migration lock and S3 when it starts. When the time is up, it logs why and exits with code 1. A migration that has started is not interrupted. See [startup](/docs/self-hosting/operations#startup). |
 | `READINESS_TIMEOUT_MS` | No | `3000` | Time limit for each dependency check on `GET /api/health/ready`. The minimum is `100`. |
 | `READINESS_MAX_QUEUE_AGE_SECONDS` | No | `900` | Readiness fails when the oldest queued build has waited longer than this. |
 | `READINESS_MAX_TICK_AGE_SECONDS` | No | `300` | Readiness fails when the worker or scheduler has not ticked for this long, or when a build lease has expired and not been recovered. |

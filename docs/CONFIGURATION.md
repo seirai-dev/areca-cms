@@ -132,6 +132,7 @@ their hash is stored, so the link is never kept in plain text.
 | `DOKPLOY_URL`, `DOKPLOY_API_KEY` | unset | Legacy process-wide Dokploy connection, used only when the development fallback above is enabled. Normal deployments save credentials per organization in the CMS. |
 | `DOKPLOY_ALLOW_INSECURE_HTTP` | unset | Allows HTTP Dokploy API URLs. Use only for isolated local/LAN development; production requires HTTPS. |
 | `ALLOW_PRIVATE_HEALTH_CHECKS` | unset | Allows private or local health-check targets for Dokploy. Use only for isolated local/LAN development. |
+| `CSP_REPORT_ONLY` | `false` | Sends the Content-Security-Policy as `Content-Security-Policy-Report-Only`: violations are logged by the browser and nothing is blocked. The default enforces the policy. See [operations](OPERATIONS.md#content-security-policy). |
 | `RATE_LIMIT_TRUST_PROXY` | `false` | Use forwarding headers for client IP only when a trusted reverse proxy replaces those headers. |
 | `SETUP_TOKEN` | generated while first account is absent | Optional first-run `/setup` token; if supplied, it must be at least 16 characters. If omitted, the process generates and logs one while setup is needed. |
 
@@ -147,6 +148,7 @@ documented in [operations](OPERATIONS.md). Common optional settings are:
 | --- | --- | --- |
 | `METRICS_TOKEN` | unset | Bearer token of at least 16 characters for `/api/metrics`; unset returns 404. |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error`, or `silent`. |
+| `STARTUP_DEADLINE_SECONDS` | `60` | Total time the container may wait for PostgreSQL, the migration lock and S3 at startup. When it passes, startup exits with code 1. See [operations](OPERATIONS.md#startup). |
 | `DB_CONNECT_TIMEOUT_MS` | `5000` | PostgreSQL connection wait limit; `0` disables it. |
 | `DB_STATEMENT_TIMEOUT_MS` | `15000` | Per-query PostgreSQL statement deadline; `0` disables it. |
 | `DB_IDLE_IN_TX_TIMEOUT_MS` | `30000` | Closes transactions idle while holding a connection or lock; `0` disables it. |
