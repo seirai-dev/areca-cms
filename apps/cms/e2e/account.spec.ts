@@ -216,7 +216,7 @@ test('a sole owner cannot delete the account: the client is named with a People 
   await expect(blockers).toBeVisible()
   await expect(blockers).toContainText('Only you own these clients')
   await expect(blockers).toContainText(clientName)
-  const peopleLink = blockers.locator('a', { hasText: 'People' }).first()
+  const peopleLink = blockers.getByRole('link', { name: clientName })
   await expect(peopleLink).toHaveAttribute('href', /\/sites\/[^/]+\/people$/)
   await expect(guest.getByTestId('delete-account')).toBeDisabled()
   await expect(guest.getByTestId('delete-account-dialog')).toHaveCount(0)

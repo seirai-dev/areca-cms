@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { Link } from '@tanstack/react-router'
+import { ArrowUpRight } from '@phosphor-icons/react'
 
 import { Button } from '#/components/ui/button'
 import { SettingsSection } from '#/components/ui/settings-section'
@@ -48,30 +49,24 @@ export function DeleteAccountSection({
       {blocked ? (
         <div className="grid gap-4" data-testid="delete-account-blockers">
           {deletion.soleOwnerOf.length > 0 ? (
-            <div className="grid gap-2">
+            <div className="grid gap-3">
               <p className="text-headline text-text-primary">
                 {m.account_delete_owner_title()}
               </p>
-              <ul className="divide-y divide-border-default overflow-hidden rounded-control border border-border-default">
+              <p className="text-callout text-text-secondary">
+                {m.account_delete_owner_help()}
+              </p>
+              <ul className="grid gap-2.5">
                 {deletion.soleOwnerOf.map((client) => (
                   <li
                     key={client.organizationId}
                     data-testid={`delete-blocker-client-${client.organizationId}`}
-                    className="flex min-w-0 items-center justify-between gap-3 px-3 py-2.5"
+                    className="min-w-0"
                   >
-                    <span className="min-w-0 truncate text-body text-text-primary">
-                      {client.name}
-                    </span>
-                    <PeopleLink
-                      me={me}
-                      organizationId={client.organizationId}
-                    />
+                    <ClientLink me={me} client={client} />
                   </li>
                 ))}
               </ul>
-              <p className="text-callout text-text-secondary">
-                {m.account_delete_owner_help()}
-              </p>
             </div>
           ) : null}
           {deletion.lastAdmin ? (
@@ -126,41 +121,59 @@ export function DeleteAccountSection({
 }
 
 /**
- * Where a client's People live for this person. Admins have the client page
- * in the Agency workspace; owners go to People in one of the client's sites
- * (the same rule as the legacy `/orgs/$orgId/members` redirect). A client with
- * no site has no People page to link to, so it is named without a link.
+ * A client named as a link to its People page: the client name, an arrow, and
+ * a link colour that underlines on hover. Admins have the client page in the
+ * Agency workspace; owners go to People in one of the client's sites (the same
+ * rule as the legacy `/orgs/$orgId/members` redirect). A client with no site
+ * has no People page to link to, so it is named as plain text.
  */
-function PeopleLink({
+function ClientLink({
   me,
-  organizationId,
+  client,
 }: {
   me: Me
-  organizationId: string
+  client: { organizationId: string; name: string }
 }) {
+  const className =
+    'inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-[4px] text-body font-medium text-text-accent underline-offset-4 outline-none hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus'
+  const label = (
+    <>
+      <span className="min-w-0 truncate">{client.name}</span>
+      <ArrowUpRight aria-hidden="true" className="size-4 shrink-0" />
+    </>
+  )
+  const testId = `delete-blocker-people-${client.organizationId}`
   if (me.user.isAgencyAdmin) {
     return (
       <Link
         to="/agency/clients/$orgId"
-        params={{ orgId: organizationId }}
+        params={{ orgId: client.organizationId }}
         search={{ tab: 'people' }}
-        data-testid={`delete-blocker-people-${organizationId}`}
-        className="shrink-0 text-callout font-medium text-text-accent underline-offset-4 hover:underline"
+        data-testid={testId}
+        className={className}
       >
-        {m.account_delete_people_link()}
+        {label}
       </Link>
     )
   }
-  const site = me.sites.find((item) => item.organizationId === organizationId)
-  if (!site) return null
+  const site = me.sites.find(
+    (item) => item.organizationId === client.organizationId,
+  )
+  if (!site) {
+    return (
+      <span className="min-w-0 truncate text-body text-text-primary">
+        {client.name}
+      </span>
+    )
+  }
   return (
     <Link
       to="/sites/$siteId/people"
       params={{ siteId: site.id }}
-      data-testid={`delete-blocker-people-${organizationId}`}
-      className="shrink-0 text-callout font-medium text-text-accent underline-offset-4 hover:underline"
+      data-testid={testId}
+      className={className}
     >
-      {m.account_delete_people_link()}
+      {label}
     </Link>
   )
 }
