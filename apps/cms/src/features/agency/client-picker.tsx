@@ -99,6 +99,8 @@ export function ClientPicker({
     if (!next) {
       setQuery('')
       setPicked(new Set())
+      // Each opening starts from the default role (Editor).
+      setRole('editor')
     }
   }
 
@@ -158,14 +160,18 @@ export function ClientPicker({
               className="data-[disabled=true]:opacity-60"
               data-testid={`client-picker-option-${client.slug}`}
             >
+              {/* Already in the client: a muted check, not a selection. */}
               <span
                 aria-hidden="true"
                 className={cn(
                   'grid size-[18px] shrink-0 place-content-center rounded-[6px] border border-border-strong bg-background-surface text-accent-contrast',
-                  checked && 'border-accent bg-accent',
+                  current && 'border-border-default text-icon-muted',
+                  !current && checked && 'border-accent bg-accent',
                 )}
               >
-                {checked ? <Check weight="bold" className="size-3" /> : null}
+                {current || checked ? (
+                  <Check weight="bold" className="size-3" />
+                ) : null}
               </span>
               <ClientTile id={client.id} name={client.name} size="sm" />
               <span className="grid min-w-0 flex-1 gap-0.5">
