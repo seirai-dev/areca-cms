@@ -32,6 +32,8 @@ import {
 } from '#/components/ui/command'
 import { Kbd } from '#/components/ui/kbd'
 import { EntryStatusPill } from '#/components/ui/status-pill'
+import { UserAvatar } from '#/components/ui/avatar'
+import { Tag } from '#/components/ui/tag'
 import { Spinner } from '#/components/ui/spinner'
 import { entryUiStatus } from '#/features/golive/entry-live-state'
 import {
@@ -59,6 +61,7 @@ import {
   setLocale,
 } from '#/paraglide/runtime'
 import { listCollectionsFn, listEntriesFn } from '#/server/fn/content'
+import { searchPeopleFn } from '#/server/fn/people'
 
 import { LOCALE_LABELS } from './account-menu'
 
@@ -114,6 +117,18 @@ export function CommandPalette() {
     })),
   })
   const searchingNow = searching && hits.some((hit) => hit.isFetching)
+
+  // Agency admins also find people by name or email (top matches, server side).
+  const peopleNeedle = useDebouncedValue(search.trim(), 200)
+  const searchingPeople =
+    me.user.isAgencyAdmin && paletteOpen && peopleNeedle.length >= 2
+  const peopleQuery = useQuery({
+    queryKey: ['palette-people', peopleNeedle] as const,
+    queryFn: () => searchPeopleFn({ data: { query: peopleNeedle } }),
+    enabled: searchingPeople,
+    staleTime: 15_000,
+  })
+  const people = searchingPeople ? (peopleQuery.data ?? []) : []
 
   function run(action: () => void) {
     setPaletteOpen(false)
@@ -229,6 +244,42 @@ export function CommandPalette() {
                 </CommandItem>
               )
             })}
+          </CommandGroup>
+        ) : null}
+
+        {people.length > 0 ? (
+          <CommandGroup heading={m.shell_palette_people()}>
+            {people.map((person) => (
+              <CommandItem
+                key={`person-${person.id}`}
+                value={`person ${person.id}`}
+                keywords={[peopleNeedle, person.name, person.email]}
+                onSelect={() =>
+                  go({
+                    to: '/agency/people/$userId',
+                    params: { userId: person.id },
+                  })
+                }
+                data-testid={`palette-person-${person.email}`}
+              >
+                <UserAvatar name={person.name} size="sm" />
+                <span className="grid min-w-0 flex-1">
+                  <span className="truncate">{person.name}</span>
+                  <span
+                    data-slot="command-meta"
+                    className="truncate text-[12px] leading-4 text-text-muted"
+                  >
+                    {person.email}
+                  </span>
+                </span>
+                {person.blocked ? (
+                  <Tag tone="error">{m.agency_people_blocked()}</Tag>
+                ) : null}
+                {person.invited ? (
+                  <Tag tone="neutral">{m.agency_people_invited()}</Tag>
+                ) : null}
+              </CommandItem>
+            ))}
           </CommandGroup>
         ) : null}
 
