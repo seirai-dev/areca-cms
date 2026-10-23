@@ -77,6 +77,9 @@ export function SessionsScreen() {
       ) : (
         <SettingsSection
           id="sessions"
+          bare
+          // The account nav already draws the rule above this section.
+          className="border-t-0 pt-0"
           title={m.account_sessions_section_title()}
           description={m.account_sessions_section_description()}
         >
@@ -90,25 +93,26 @@ export function SessionsScreen() {
                 <InsetRow
                   key={session.id}
                   data-testid={isCurrent ? 'session-current' : 'session-row'}
+                  className="gap-2.5 px-3"
                   leading={<DeviceIcon device={parsed.device} />}
-                  title={deviceLabel(parsed)}
-                  subtitle={
-                    <span className="grid gap-0.5">
+                  title={
+                    <span className="flex min-w-0 items-baseline gap-2">
+                      <span className="truncate">{deviceLabel(parsed)}</span>
                       {isCurrent ? (
-                        <span className="font-medium text-text-accent">
+                        <span className="shrink-0 text-caption font-medium text-text-accent">
                           {m.account_sessions_this_device()}
                         </span>
                       ) : null}
-                      <span>
-                        {m.account_sessions_last_active({
-                          time: formatRelativeTime(session.updatedAt),
-                        })}
-                      </span>
-                      {session.ipAddress ? (
-                        <span className="text-caption text-text-muted tnum">
-                          {m.account_sessions_ip({ ip: session.ipAddress })}
-                        </span>
-                      ) : null}
+                    </span>
+                  }
+                  subtitle={
+                    <span className="text-caption text-text-muted tnum">
+                      {m.account_sessions_last_active({
+                        time: formatRelativeTime(session.updatedAt),
+                      })}
+                      {session.ipAddress
+                        ? ` · ${m.account_sessions_ip({ ip: session.ipAddress })}`
+                        : null}
                     </span>
                   }
                   wrapSubtitle
@@ -117,7 +121,8 @@ export function SessionsScreen() {
                       <Button
                         type="button"
                         variant="quiet"
-                        size="sm"
+                        size="xs"
+                        className="px-1.5"
                         loading={pending}
                         disabled={revoke.isPending}
                         onClick={() => signOut(session.id)}
@@ -132,7 +137,7 @@ export function SessionsScreen() {
             })}
           </InsetList>
 
-          <div className="grid gap-2 sm:flex sm:items-center sm:justify-between">
+          <div className="mt-3 grid gap-2 sm:flex sm:items-center sm:justify-between">
             <p className="text-callout text-text-secondary">
               {otherCount === 0 ? m.account_sessions_none_other() : null}
             </p>
