@@ -207,11 +207,7 @@ function GoLivePanelBody({
         </Section>
       ) : release.data?.blockers && release.data.blockers.length > 0 ? (
         <Section>
-          <ErrorChecklist
-            siteId={site.id}
-            errors={release.data.blockers}
-            onDismiss={() => undefined}
-          />
+          <ErrorChecklist siteId={site.id} errors={release.data.blockers} />
         </Section>
       ) : null}
 
@@ -601,6 +597,10 @@ function PendingRow({
    Validation errors
 ------------------------------------------------------------------------- */
 
+/**
+ * Failed go-live attempts can be dismissed. Blockers come from the server and
+ * clear on their own, so they have no dismiss control.
+ */
 function ErrorChecklist({
   siteId,
   errors,
@@ -608,7 +608,7 @@ function ErrorChecklist({
 }: {
   siteId: string
   errors: string[]
-  onDismiss: () => void
+  onDismiss?: () => void
 }) {
   const parsed = errors.map(parseGoLiveError)
   return (
@@ -622,9 +622,11 @@ function ErrorChecklist({
         <span className="flex-1 text-[14px] leading-5 font-semibold text-text-primary">
           {m.golive_fix_first()}
         </span>
-        <Button type="button" variant="quiet" size="xs" onClick={onDismiss}>
-          {m.golive_dismiss()}
-        </Button>
+        {onDismiss ? (
+          <Button type="button" variant="quiet" size="xs" onClick={onDismiss}>
+            {m.golive_dismiss()}
+          </Button>
+        ) : null}
       </div>
       <ul className="grid gap-1.5">
         {parsed.map((error) => (
