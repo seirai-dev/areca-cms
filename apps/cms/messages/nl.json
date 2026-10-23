@@ -2174,5 +2174,6 @@
   "settings_site_key_change_title": "Sitesleutel wijzigen?",
   "settings_site_key_change_description": "Oude links naar het CMS-adres van deze site werken niet meer. Dat geldt ook voor de MCP-connector-URL en elk project dat met {from} is ingesteld. Werk ze na de wijziging bij naar {to}.",
   "settings_site_key_change_confirm": "Sitesleutel wijzigen",
-  "settings_site_key_changed": "Sitesleutel gewijzigd"
+  "settings_site_key_changed": "Sitesleutel gewijzigd",
+  "editor_conflict_blocks_ready": "Laad de nieuwste versie of los het conflict op voordat je dit als gereed markeert of inplant."
 }

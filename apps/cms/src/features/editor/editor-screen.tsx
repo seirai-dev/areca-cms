@@ -294,7 +294,7 @@ function EntryEditorView({
     if (first) requestAnimationFrame(() => revealField(first))
   }
 
-  const readyBlock = blocker
+  const languageBlock = blocker
     ? {
         message: m.editor_language_blocker({
           language: uiLanguageName(blocker.locale),
@@ -303,6 +303,15 @@ function EntryEditorView({
         onFix: () => focusBlocker(blocker),
       }
     : null
+  // While the version-conflict notice is up, approving would approve a draft
+  // nobody has reviewed: Mark ready and Schedule wait for the latest version.
+  const conflictBlock = editor.conflict
+    ? {
+        message: m.editor_conflict_blocks_ready(),
+        onFix: () => void editor.reloadServerDraft(),
+      }
+    : null
+  const readyBlock = conflictBlock ?? languageBlock
 
   // Writes the active language. On the main language (and single-language
   // sites) this is the ordinary update, which also keeps the slug in step
@@ -560,6 +569,8 @@ function EntryEditorView({
       pending={editor.schedulePending}
       onCancel={() => setScheduleOpen(false)}
       onSubmit={async (at, timeZone) => {
+        // A form opened before the conflict must not approve over it.
+        if (editor.conflict) return
         const result = await editor.schedule(at, timeZone).catch(() => null)
         if (result) setScheduleOpen(false)
       }}

@@ -2174,5 +2174,6 @@
   "settings_site_key_change_title": "Site anahtarı değiştirilsin mi?",
   "settings_site_key_change_description": "Bu sitenin CMS adresine ait eski bağlantılar çalışmaz olur. Buna MCP bağlayıcı adresi ve {from} ile kurulmuş her proje dahildir. Değişiklikten sonra bunları {to} olarak güncelleyin.",
   "settings_site_key_change_confirm": "Site anahtarını değiştir",
-  "settings_site_key_changed": "Site anahtarı değiştirildi"
+  "settings_site_key_changed": "Site anahtarı değiştirildi",
+  "editor_conflict_blocks_ready": "Bunu hazır olarak işaretlemeden veya planlamadan önce en son sürümü yükleyin ya da çakışmayı çözün."
 }
