@@ -12,12 +12,14 @@
   "account_delete_failed": "Could not delete your account.",
   "account_delete_kept": "Content you wrote stays, credited to “Deleted user”.",
   "account_delete_owner_help": "Make someone else an owner of each client first. Then you can delete your account.",
-  "account_delete_owner_title": "Only you own these clients",
+  "account_delete_owner_title_one": "Only you own this client",
+  "account_delete_owner_title_other": "Only you own these clients",
   "account_delete_people_link": "People",
   "account_delete_reason_admin": "Make another person an agency admin first. You are the last active agency admin.",
   "account_delete_removed_access": "Your access to every client",
   "account_delete_removed_keys": "Your personal API and MCP keys and app connections",
   "account_delete_removed_sign_in": "Your sign-in, including any provider you use to sign in",
+  "account_delete_type_email": "Type your email to confirm",
   "account_delete_verify_code_help": "Enter a code from your authenticator app, or a backup code.",
   "account_delete_verify_password_help": "Enter your password to delete your account.",
   "account_delete_verify_title": "Confirm it's you",
@@ -2437,6 +2439,5 @@
   "ui_copy": "Copy",
   "ui_copy_failed": "Couldn't copy to the clipboard",
   "ui_more": "More",
-  "ui_try_again": "Try again",
-  "account_delete_type_email": "Type your email to confirm"
+  "ui_try_again": "Try again"
 }

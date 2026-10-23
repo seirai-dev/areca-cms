@@ -12,12 +12,14 @@
   "account_delete_failed": "Hesabın silinemedi.",
   "account_delete_kept": "Yazdığın içerik kalır, “Silinmiş kullanıcı” olarak gösterilir.",
   "account_delete_owner_help": "Önce her müşteri için başka birini sahip yap. Sonra hesabını silebilirsin.",
-  "account_delete_owner_title": "Bu müşterilerin tek sahibi sensin",
+  "account_delete_owner_title_one": "Bu müşterinin tek sahibi sensin",
+  "account_delete_owner_title_other": "Bu müşterilerin tek sahibi sensin",
   "account_delete_people_link": "Kişiler",
   "account_delete_reason_admin": "Önce başka birini ajans yöneticisi yap. Son etkin ajans yöneticisi sensin.",
   "account_delete_removed_access": "Tüm müşterilere erişimin",
   "account_delete_removed_keys": "Kişisel API ve MCP anahtarların ile uygulama bağlantıların",
   "account_delete_removed_sign_in": "Giriş bilgilerin, giriş yaptığın sağlayıcılar dahil",
+  "account_delete_type_email": "Onaylamak için e-posta adresini yaz",
   "account_delete_verify_code_help": "Kimlik doğrulama uygulamandaki bir kodu ya da yedek kodu gir.",
   "account_delete_verify_password_help": "Hesabını silmek için parolanı gir.",
   "account_delete_verify_title": "Sen olduğunu doğrula",
@@ -2437,6 +2439,5 @@
   "ui_copy": "Kopyala",
   "ui_copy_failed": "Panoya kopyalanamadı",
   "ui_more": "Daha fazla",
-  "ui_try_again": "Yeniden dene",
-  "account_delete_type_email": "Onaylamak için e-posta adresini yaz"
+  "ui_try_again": "Yeniden dene"
 }

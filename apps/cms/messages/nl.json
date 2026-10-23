@@ -12,12 +12,14 @@
   "account_delete_failed": "Je account kon niet worden verwijderd.",
   "account_delete_kept": "Inhoud die je schreef blijft staan, met de naam “Verwijderde gebruiker”.",
   "account_delete_owner_help": "Maak eerst iemand anders eigenaar van elke klant. Dan kun je je account verwijderen.",
-  "account_delete_owner_title": "Alleen jij bent eigenaar van deze klanten",
+  "account_delete_owner_title_one": "Alleen jij bent eigenaar van deze klant",
+  "account_delete_owner_title_other": "Alleen jij bent eigenaar van deze klanten",
   "account_delete_people_link": "Personen",
   "account_delete_reason_admin": "Maak eerst een andere persoon beheerder van het bureau. Jij bent de laatste actieve beheerder.",
   "account_delete_removed_access": "Je toegang tot elke klant",
   "account_delete_removed_keys": "Je persoonlijke API- en MCP-sleutels en app-koppelingen",
   "account_delete_removed_sign_in": "Je inlog, ook via een provider waarmee je inlogt",
+  "account_delete_type_email": "Typ je e-mailadres om te bevestigen",
   "account_delete_verify_code_help": "Vul een code uit je authenticator-app in, of een back-upcode.",
   "account_delete_verify_password_help": "Vul je wachtwoord in om je account te verwijderen.",
   "account_delete_verify_title": "Bevestig dat jij het bent",
@@ -2437,6 +2439,5 @@
   "ui_copy": "Kopiëren",
   "ui_copy_failed": "Kopiëren naar klembord mislukt",
   "ui_more": "Meer",
-  "ui_try_again": "Opnieuw proberen",
-  "account_delete_type_email": "Typ je e-mailadres om te bevestigen"
+  "ui_try_again": "Opnieuw proberen"
 }

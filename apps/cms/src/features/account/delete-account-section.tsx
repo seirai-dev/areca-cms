@@ -51,7 +51,9 @@ export function DeleteAccountSection({
           {deletion.soleOwnerOf.length > 0 ? (
             <div className="grid gap-3">
               <p className="text-headline text-text-primary">
-                {m.account_delete_owner_title()}
+                {deletion.soleOwnerOf.length === 1
+                  ? m.account_delete_owner_title_one()
+                  : m.account_delete_owner_title_other()}
               </p>
               <p className="text-callout text-text-secondary">
                 {m.account_delete_owner_help()}
