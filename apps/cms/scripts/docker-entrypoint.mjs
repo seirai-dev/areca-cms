@@ -2,15 +2,12 @@ import { spawn } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import {
-  CreateBucketCommand,
-  HeadBucketCommand,
-  S3Client,
-} from '@aws-sdk/client-s3'
+import { S3Client } from '@aws-sdk/client-s3'
 import { drizzle } from 'drizzle-orm/node-postgres'
 import { migrate } from 'drizzle-orm/node-postgres/migrator'
 import { Pool } from 'pg'
 
+import { ensureBucket } from './lib/ensure-bucket.mjs'
 import { withMigrationLock } from './lib/migration-lock.mjs'
 import { retryUntilDeadline, startupDeadlineMs } from './lib/startup-retry.mjs'
 
@@ -25,9 +22,9 @@ if (!bucket) {
   throw new Error('S3_BUCKET is required')
 }
 
-// Waiting for Postgres and for another instance's migration lock share one
-// deadline (STARTUP_DEADLINE_SECONDS). A migration that has started is not
-// interrupted by it.
+// Waiting for Postgres, another instance's migration lock and object storage
+// share one deadline (STARTUP_DEADLINE_SECONDS). A migration that has started
+// is not interrupted by it.
 const deadline = Date.now() + startupDeadlineMs()
 
 // Each probe connects and queries with its own timeout, so a half-open socket
@@ -77,7 +74,7 @@ async function runMigrations() {
   }
 }
 
-async function ensureBucket() {
+async function ensureStorageBucket() {
   const client = new S3Client({
     endpoint: process.env.S3_ENDPOINT,
     region: process.env.S3_REGION ?? 'us-east-1',
@@ -87,20 +84,19 @@ async function ensureBucket() {
     },
     forcePathStyle: process.env.S3_FORCE_PATH_STYLE === 'true',
   })
-
-  try {
-    await client.send(new HeadBucketCommand({ Bucket: bucket }))
-    console.log(`bucket already exists: ${bucket}`)
-  } catch {
-    await client.send(new CreateBucketCommand({ Bucket: bucket }))
-    console.log(`created bucket: ${bucket}`)
-  }
+  // Access denied or an unreachable endpoint is retried until the deadline. The
+  // bucket is only created on a definitive not-found (see ensure-bucket.mjs).
+  await retryUntilDeadline(
+    'object storage',
+    () => ensureBucket(client, bucket),
+    { deadline },
+  )
 }
 
 try {
   await waitForPostgres()
   await runMigrations()
-  await ensureBucket()
+  await ensureStorageBucket()
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error)
   console.error(`startup failed, exiting: ${message}`)
