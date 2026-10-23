@@ -930,6 +930,7 @@
   "editor_details_history": "History",
   "editor_details_page": "Page",
   "editor_discard_recovered_draft": "Discard recovered draft",
+  "editor_draft_changed_elsewhere": "Draft changed elsewhere",
   "editor_draft_conflict_notice": "Another user changed this draft. Your changes are kept in this browser.",
   "editor_draft_recovered_notice": "A recoverable draft is saved in this browser.",
   "editor_draft_recovery_unavailable": "Browser-local draft recovery is unavailable. Keep this page open until your changes save.",

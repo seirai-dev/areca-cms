@@ -930,6 +930,7 @@
   "editor_details_history": "Geschiedenis",
   "editor_details_page": "Pagina",
   "editor_discard_recovered_draft": "Hersteld concept verwijderen",
+  "editor_draft_changed_elsewhere": "Concept elders gewijzigd",
   "editor_draft_conflict_notice": "Een andere gebruiker wijzigde dit concept. Je wijzigingen zijn in deze browser bewaard.",
   "editor_draft_recovered_notice": "Herstelbaar concept opgeslagen in deze browser.",
   "editor_draft_recovery_unavailable": "Herstel van browserconcepten is niet beschikbaar. Laat deze pagina open tot je wijzigingen zijn opgeslagen.",

@@ -650,6 +650,7 @@ function EntryEditorView({
           scheduledAt={entry?.scheduledAt}
           editedSinceReady={editedSinceReady}
           saveStatus={editor.status}
+          conflict={editor.conflict}
           isNew={editor.isNew}
           lastSavedAt={editor.lastSavedAt}
           updatedAt={entry?.updatedAt}

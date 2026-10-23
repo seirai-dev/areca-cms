@@ -364,6 +364,7 @@ function GlobalEditorView({
           scheduledAt={entry.scheduledAt}
           editedSinceReady={editedSinceReady}
           saveStatus={editor.status}
+          conflict={editor.conflict}
           lastSavedAt={editor.lastSavedAt}
           updatedAt={entry.updatedAt}
           errorCount={editor.errorCount}

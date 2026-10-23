@@ -50,6 +50,7 @@ export function GlobalEditorTopBar({
   scheduledAt,
   editedSinceReady,
   saveStatus,
+  conflict = false,
   lastSavedAt,
   updatedAt,
   errorCount,
@@ -87,6 +88,8 @@ export function GlobalEditorTopBar({
   scheduledAt?: string | Date | null
   editedSinceReady: boolean
   saveStatus: SaveStatus
+  /** The draft moved on the server; the header says so instead of Retry. */
+  conflict?: boolean
   lastSavedAt: Date | null
   updatedAt?: string | Date
   errorCount: number
@@ -209,6 +212,7 @@ export function GlobalEditorTopBar({
             <div className="order-last w-full min-w-0 md:order-none md:mr-1 md:w-auto">
               <SaveIndicator
                 status={saveStatus}
+                conflict={conflict}
                 isNew={false}
                 lastSavedAt={lastSavedAt}
                 updatedAt={updatedAt}

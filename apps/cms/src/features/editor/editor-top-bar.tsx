@@ -63,6 +63,7 @@ export function EditorTopBar({
   scheduledAt,
   editedSinceReady,
   saveStatus,
+  conflict = false,
   isNew,
   lastSavedAt,
   updatedAt,
@@ -105,6 +106,8 @@ export function EditorTopBar({
   scheduledAt?: string | Date | null
   editedSinceReady: boolean
   saveStatus: SaveStatus
+  /** The draft moved on the server; the header says so instead of Retry. */
+  conflict?: boolean
   isNew: boolean
   lastSavedAt: Date | null
   updatedAt?: string | Date
@@ -330,6 +333,7 @@ export function EditorTopBar({
           <div className="mr-1 hidden min-w-0 md:block">
             <SaveIndicator
               status={saveStatus}
+              conflict={conflict}
               isNew={isNew}
               lastSavedAt={lastSavedAt}
               updatedAt={updatedAt}
@@ -341,6 +345,7 @@ export function EditorTopBar({
             <SaveIndicator
               compact
               status={saveStatus}
+              conflict={conflict}
               isNew={isNew}
               lastSavedAt={lastSavedAt}
               updatedAt={updatedAt}

@@ -930,6 +930,7 @@
   "editor_details_history": "Geçmiş",
   "editor_details_page": "Sayfa",
   "editor_discard_recovered_draft": "Kurtarılan taslağı sil",
+  "editor_draft_changed_elsewhere": "Taslak başka yerde değişti",
   "editor_draft_conflict_notice": "Başka bir kullanıcı bu taslağı değiştirdi. Değişiklikleriniz bu tarayıcıda saklandı.",
   "editor_draft_recovered_notice": "Kurtarılabilir bir taslak bu tarayıcıya kaydedildi.",
   "editor_draft_recovery_unavailable": "Tarayıcıdaki taslak kurtarma kullanılamıyor. Değişiklikleriniz kaydedilene kadar bu sayfayı açık tutun.",

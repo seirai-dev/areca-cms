@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { WarningCircle } from '@phosphor-icons/react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 
 import { CheckDraw, FailedIcon, SpinnerRing } from '#/components/ui/status-pill'
@@ -7,6 +8,8 @@ import { FADE } from '#/lib/motion'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
+import { CONFLICT_NOTICE_ID } from './conflict-notice'
+import { saveIndicatorKind } from './save-indicator-state'
 import type { SaveStatus } from './use-entry-editor'
 
 const FRESH_MS = 4000
@@ -23,11 +26,13 @@ function useNow(interval = 20_000) {
 /**
  * The live save state in the editor's top bar (brief §3.5): Saving… ·
  * Saved (a check draws in) · Saved 2m ago · Couldn't save + Retry ·
- * Couldn't save — fix N fields · Not saved yet — add a title.
+ * Couldn't save — fix N fields · Not saved yet — add a title ·
+ * Draft changed elsewhere (no Retry; the text scrolls to the conflict notice).
  */
 export function SaveIndicator({
   status,
   isNew,
+  conflict = false,
   lastSavedAt,
   updatedAt,
   errorCount,
@@ -36,6 +41,8 @@ export function SaveIndicator({
 }: {
   status: SaveStatus
   isNew: boolean
+  /** The draft moved on the server; the conflict notice explains it. */
+  conflict?: boolean
   lastSavedAt: Date | null
   updatedAt?: string | Date
   errorCount: number
@@ -53,28 +60,40 @@ export function SaveIndicator({
     return () => clearTimeout(timer)
   }, [status, lastSavedAt])
 
-  let key: string
+  const kind = saveIndicatorKind({ status, isNew, conflict, errorCount, fresh })
+  const key = kind
   let icon: React.ReactNode = null
   let text: React.ReactNode
   let tone = 'text-text-muted'
   let action: React.ReactNode = null
 
-  if (status === 'saving') {
-    key = 'saving'
+  function showConflictNotice() {
+    document.getElementById(CONFLICT_NOTICE_ID)?.scrollIntoView({
+      block: 'center',
+      behavior: reduce ? 'auto' : 'smooth',
+    })
+  }
+
+  if (kind === 'conflict') {
+    tone = 'text-text-warning'
+    icon = (
+      <WarningCircle weight="fill" size={13} className="text-icon-warning" />
+    )
+    text = m.editor_draft_changed_elsewhere()
+  } else if (kind === 'saving') {
     icon = <SpinnerRing size={13} className="text-icon-muted" />
     text = m.editor_saving()
-  } else if (status === 'failed') {
-    key = 'failed'
+  } else if (kind === 'fields' || kind === 'failed') {
     tone = 'text-text-error'
     icon = <FailedIcon size={13} className="text-icon-error" />
     text =
-      errorCount > 0
+      kind === 'fields'
         ? errorCount === 1
           ? m.editor_save_fix_one()
           : m.editor_save_fix_other({ count: errorCount })
         : m.editor_save_failed()
     action =
-      errorCount > 0 ? null : (
+      kind === 'fields' ? null : (
         <button
           type="button"
           onClick={onRetry}
@@ -84,10 +103,9 @@ export function SaveIndicator({
           {m.editor_save_retry()}
         </button>
       )
-  } else if (isNew) {
-    key = status === 'blocked' ? 'blocked' : 'new'
+  } else if (kind === 'blocked' || kind === 'new') {
     text =
-      status === 'blocked'
+      kind === 'blocked'
         ? m.editor_not_saved_add_title()
         : m.editor_not_saved_yet()
     icon = (
@@ -96,12 +114,10 @@ export function SaveIndicator({
         className="size-1.5 rounded-full bg-text-disabled"
       />
     )
-  } else if (fresh) {
-    key = 'fresh'
+  } else if (kind === 'fresh') {
     icon = <CheckDraw size={13} className="text-icon-success" />
     text = m.editor_saved()
   } else {
-    key = 'ago'
     const at = lastSavedAt ?? updatedAt
     void now
     text = at
@@ -128,9 +144,29 @@ export function SaveIndicator({
           exit={{ opacity: 0 }}
           transition={FADE}
         >
-          {icon}
-          <span className={cn('truncate', compact && 'sr-only')}>{text}</span>
-          {action}
+          {kind === 'conflict' ? (
+            // The whole status is the control, so the compact (icon-only)
+            // form keeps a visible focus target.
+            <button
+              type="button"
+              onClick={showConflictNotice}
+              className="flex min-w-0 items-center gap-1.5 font-medium hover:underline"
+              data-testid="save-conflict"
+            >
+              {icon}
+              <span className={cn('truncate', compact && 'sr-only')}>
+                {text}
+              </span>
+            </button>
+          ) : (
+            <>
+              {icon}
+              <span className={cn('truncate', compact && 'sr-only')}>
+                {text}
+              </span>
+              {action}
+            </>
+          )}
         </motion.span>
       </AnimatePresence>
     </p>
