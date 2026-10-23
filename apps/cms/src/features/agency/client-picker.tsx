@@ -17,7 +17,7 @@ import {
 import { SegmentedControl } from '#/components/ui/segmented-control'
 import { SlideOver } from '#/components/ui/slide-over'
 import { Tag } from '#/components/ui/tag'
-import { useIsMobile } from '#/hooks/use-mobile'
+import { useIsMobile, useMediaQuery } from '#/hooks/use-mobile'
 import { membershipRoleLabel } from '#/lib/admin/helpers'
 import { cn } from '#/lib/utils'
 import type { MembershipRole } from '#/lib/types'
@@ -56,6 +56,8 @@ export function ClientPicker({
   align?: 'start' | 'center' | 'end'
 }) {
   const mobile = useIsMobile()
+  // cmdk's active row looks like a selection; on touch it has no keyboard job.
+  const touch = useMediaQuery('(pointer: coarse)')
   const [open, setOpen] = React.useState(false)
   const [query, setQuery] = React.useState('')
   const [picked, setPicked] = React.useState<ReadonlySet<string>>(new Set())
@@ -157,7 +159,10 @@ export function ClientPicker({
               value={client.id}
               disabled={Boolean(current) || isStaged}
               onSelect={() => toggle(client.id)}
-              className="data-[disabled=true]:opacity-60"
+              className={cn(
+                'data-[disabled=true]:opacity-60',
+                touch && 'data-[selected=true]:bg-transparent',
+              )}
               data-testid={`client-picker-option-${client.slug}`}
             >
               {/* Already in the client: a muted check, not a selection. */}
