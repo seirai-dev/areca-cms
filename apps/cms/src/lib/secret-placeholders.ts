@@ -24,9 +24,17 @@ export function isAllZeroKey(base64Key: string) {
   return bytes.length > 0 && bytes.every((byte) => byte === 0)
 }
 
+/** The encryption keys that must not be all-zero. */
+const ENCRYPTION_KEY_NAMES = [
+  'DOKPLOY_CREDENTIALS_ENCRYPTION_KEY',
+  'AI_SETTINGS_ENCRYPTION_KEY',
+  'SECRETS_ENCRYPTION_KEY',
+] as const
+
 /**
  * Human-readable problems with the production secrets. Empty when every
- * supplied secret is real. Unset optional keys are not checked.
+ * supplied secret is real. Unset optional keys are not checked. Callers may
+ * pass the whole parsed env: only the named secrets are read from it.
  */
 export function productionSecretProblems(secrets: {
   BETTER_AUTH_SECRET?: string
@@ -35,13 +43,14 @@ export function productionSecretProblems(secrets: {
   SECRETS_ENCRYPTION_KEY?: string
 }) {
   const problems: string[] = []
-  const { BETTER_AUTH_SECRET, ...keys } = secrets
-  if (BETTER_AUTH_SECRET && isPlaceholderSecret(BETTER_AUTH_SECRET)) {
+  const authSecret = secrets.BETTER_AUTH_SECRET
+  if (authSecret && isPlaceholderSecret(authSecret)) {
     problems.push(
       `BETTER_AUTH_SECRET is still a placeholder. ${GENERATE_SECRET_HINT}`,
     )
   }
-  for (const [name, value] of Object.entries(keys)) {
+  for (const name of ENCRYPTION_KEY_NAMES) {
+    const value = secrets[name]
     if (value && isAllZeroKey(value)) {
       problems.push(`${name} is an all-zero key. ${GENERATE_SECRET_HINT}`)
     }
