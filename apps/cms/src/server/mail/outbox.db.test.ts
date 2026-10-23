@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { db } from '#/db'
 import { emailDeliveryAttempt, emailOutbox, user } from '#/db/schema'
+import { env } from '#/env'
 import { getBranding } from '#/server/admin/branding'
 
 import {
@@ -69,6 +70,11 @@ vi.mock('#/server/mail/transport', async (importOriginal) => {
 })
 
 const hasDb = Boolean(process.env.DATABASE_URL)
+
+// The SMTP sink the suite runs against (Mailpit in CI and in docker/compose),
+// as the environment configures it.
+const smtpHost = env.SMTP_HOST ?? '127.0.0.1'
+const smtpPort = env.SMTP_PORT ?? 1025
 
 beforeEach(() => {
   override.value = undefined
@@ -393,8 +399,8 @@ describe.skipIf(!hasDb)('email outbox', () => {
     try {
       const sent = await sendTestEmail({
         draft: {
-          host: 'localhost',
-          port: 1025,
+          host: smtpHost,
+          port: smtpPort,
           secure: 'none',
           username: null,
           fromAddress: 'cms@areca.local',
@@ -413,7 +419,7 @@ describe.skipIf(!hasDb)('email outbox', () => {
         userId: sender.id,
       })
       expect(sentRow.subject).toContain('uygulamasından test e-postası')
-      expect((await mailpitMessage(to))?.Text).toContain('localhost')
+      expect((await mailpitMessage(to))?.Text).toContain(smtpHost)
 
       const failed = await sendTestEmail({
         draft: {

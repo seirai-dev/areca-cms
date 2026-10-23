@@ -39,8 +39,21 @@ async function queueJob(siteId: string) {
   return job
 }
 
+/**
+ * The pool stops filling at the first claim it cannot use, so a queued job
+ * left in the shared database by an earlier run would hide this test's own
+ * jobs. Cancel whatever is still queued before queueing them.
+ */
+async function cancelStaleQueuedJobs() {
+  await db
+    .update(buildJob)
+    .set({ status: 'cancelled' })
+    .where(eq(buildJob.status, 'queued'))
+}
+
 describe.skipIf(!hasDb)('worker job pool against the database', () => {
   it('finishes site B while site A deployment never returns, and drain is bounded', async () => {
+    await cancelStaleQueuedJobs()
     const a = await createTestSite()
     const b = await createTestSite()
     try {
@@ -87,5 +100,6 @@ describe.skipIf(!hasDb)('worker job pool against the database', () => {
       await cleanupTestSite(a)
       await cleanupTestSite(b)
     }
-  })
+    // The poll above waits up to 10s, longer than the default 5s timeout.
+  }, 30_000)
 })
