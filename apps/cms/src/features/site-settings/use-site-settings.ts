@@ -6,6 +6,7 @@ import { useServerFn } from '@tanstack/react-start'
 import { useStepUp } from '#/features/security/step-up'
 import { adminQueryKeys } from '#/lib/admin/helpers'
 import {
+  changeSiteSlugFn,
   deleteSiteFn,
   getDokployCredentialStatusFn,
   getSiteFn,
@@ -27,6 +28,7 @@ export function useSiteSettings(siteId: string) {
   const getSite = useServerFn(getSiteFn)
   const updateSite = useServerFn(updateSiteFn)
   const setLanguagesFn = useServerFn(setSiteLanguagesFn)
+  const changeSlugFn = useServerFn(changeSiteSlugFn)
   const rotateSiteToken = useServerFn(rotateSiteTokenFn)
   const deleteSite = useServerFn(deleteSiteFn)
   const stepUp = useStepUp()
@@ -50,6 +52,12 @@ export function useSiteSettings(siteId: string) {
     onSuccess: refresh,
   })
 
+  // The slug is the site key: the connector URL and `--site-key` use it.
+  const changeSlug = useMutation({
+    mutationFn: (slug: string) => changeSlugFn({ data: { id: siteId, slug } }),
+    onSuccess: refresh,
+  })
+
   const setLanguages = useMutation({
     mutationFn: (input: { main: string; all: string[] }) =>
       setLanguagesFn({ data: { id: siteId, ...input } }),
@@ -65,7 +73,7 @@ export function useSiteSettings(siteId: string) {
     mutationFn: () => stepUp.run(() => deleteSite({ data: { id: siteId } })),
   })
 
-  return { site, update, setLanguages, rotate, remove }
+  return { site, update, changeSlug, setLanguages, rotate, remove }
 }
 
 /**

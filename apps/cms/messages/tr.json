@@ -2166,5 +2166,13 @@
   "account_sessions_load_error": "Oturumlar yüklenemedi",
   "account_sessions_reauth_title": "Oturumlarınızı görmek için yeniden giriş yapın",
   "account_sessions_reauth_body": "Güvenliğiniz için liste yalnızca yakın zamanda yapılan bir girişten sonra gösterilir. Yeniden giriş yapmak birkaç saniye sürer.",
-  "account_sessions_reauth_action": "Yeniden giriş yap"
+  "account_sessions_reauth_action": "Yeniden giriş yap",
+  "server_site_slug_invalid": "Yalnızca küçük harf ve rakam kullanın; aralarında tek tire olabilir, örneğin acme-website.",
+  "settings_site_key_change": "Değiştir",
+  "settings_site_key_save": "Site anahtarını kaydet",
+  "settings_site_key_draft_hint": "Küçük harf ve rakam; aralarında tek tire olabilir.",
+  "settings_site_key_change_title": "Site anahtarı değiştirilsin mi?",
+  "settings_site_key_change_description": "Bu sitenin CMS adresine ait eski bağlantılar çalışmaz olur. Buna MCP bağlayıcı adresi ve {from} ile kurulmuş her proje dahildir. Değişiklikten sonra bunları {to} olarak güncelleyin.",
+  "settings_site_key_change_confirm": "Site anahtarını değiştir",
+  "settings_site_key_changed": "Site anahtarı değiştirildi"
 }

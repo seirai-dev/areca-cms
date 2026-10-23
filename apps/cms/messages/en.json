@@ -2166,5 +2166,13 @@
   "account_sessions_load_error": "Could not load sessions",
   "account_sessions_reauth_title": "Sign in again to see your sessions",
   "account_sessions_reauth_body": "For your security, the list is only shown after a recent sign-in. Signing in again takes a moment.",
-  "account_sessions_reauth_action": "Sign in again"
+  "account_sessions_reauth_action": "Sign in again",
+  "server_site_slug_invalid": "Use lowercase letters and numbers, with single hyphens between them, for example acme-website.",
+  "settings_site_key_change": "Change",
+  "settings_site_key_save": "Save site key",
+  "settings_site_key_draft_hint": "Lowercase letters and numbers, with single hyphens between them.",
+  "settings_site_key_change_title": "Change the site key?",
+  "settings_site_key_change_description": "Old links to this site's CMS address stop working. That includes the MCP connector URL and any project set up with {from}. After the change, update them to {to}.",
+  "settings_site_key_change_confirm": "Change site key",
+  "settings_site_key_changed": "Site key changed"
 }

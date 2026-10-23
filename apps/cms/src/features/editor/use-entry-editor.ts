@@ -10,6 +10,7 @@ import {
 } from './draft-recovery'
 import { authClient } from '#/lib/auth-client'
 import { readLocale, writeLocale } from '#/lib/content-locale'
+import { isValidSlug } from '#/lib/slug'
 import type { LocaleCtx } from '#/lib/content-locale'
 import { queryKeys } from '#/lib/content/query-keys'
 import {
@@ -41,9 +42,6 @@ import {
   updateDraftFn,
   updateGlobalDraftFn,
 } from '#/server/fn/content'
-
-/** Same rule as the server's `SLUG_PATTERN`. */
-const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
 /** Autosave waits this long after the last change (brief §3.5). */
 const AUTOSAVE_DELAY = 2000
@@ -458,7 +456,7 @@ export function useEntryEditor({
     }
     if (!id) {
       const slug = slugField ? snapshot[slugField.key] : undefined
-      if (typeof slug !== 'string' || !SLUG_PATTERN.test(slug)) {
+      if (typeof slug !== 'string' || !isValidSlug(slug)) {
         setStatus('blocked')
         return 'blocked'
       }

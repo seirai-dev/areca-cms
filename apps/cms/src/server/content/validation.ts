@@ -23,12 +23,11 @@ import {
 import { isEmptyRichText } from '#/lib/rich-text-empty'
 import { SEO_KEY, entrySeoSchema, readEntrySeo } from '#/lib/seo'
 import type { EntryData, Field } from '#/lib/types'
+import { SLUG_PATTERN } from '#/lib/slug'
 import { m } from '#/paraglide/messages'
 import { validateRichText } from '#/server/richtext'
 
 import { getCollection } from './collections.ts'
-
-export const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
 const ISO_DATETIME =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/

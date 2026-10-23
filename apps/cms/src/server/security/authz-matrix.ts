@@ -253,6 +253,23 @@ export const ROWS: Row[] = [
     },
   },
   {
+    name: 'changeSiteSlugFn',
+    fn: adminFns.changeSiteSlugFn,
+    policy: 'agency',
+    prepare: async (w) => {
+      const s = await w.fresh.site()
+      return {
+        // Unique per actor: an allowed call takes the slug, so reusing it
+        // would turn the next allowed call into a conflict.
+        data: {
+          id: s.id,
+          slug: `hijacked-${crypto.randomUUID().slice(0, 8)}`,
+        },
+        untouched: exists(site, and(eq(site.id, s.id), eq(site.slug, s.slug))),
+      }
+    },
+  },
+  {
     name: 'setSiteLanguagesFn',
     fn: adminFns.setSiteLanguagesFn,
     policy: 'agency',

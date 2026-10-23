@@ -2166,5 +2166,13 @@
   "account_sessions_load_error": "Sessies konden niet worden geladen",
   "account_sessions_reauth_title": "Log opnieuw in om je sessies te zien",
   "account_sessions_reauth_body": "Voor je veiligheid wordt de lijst alleen getoond na een recente login. Opnieuw inloggen duurt even.",
-  "account_sessions_reauth_action": "Opnieuw inloggen"
+  "account_sessions_reauth_action": "Opnieuw inloggen",
+  "server_site_slug_invalid": "Gebruik kleine letters en cijfers, met enkele koppeltekens ertussen, bijvoorbeeld acme-website.",
+  "settings_site_key_change": "Wijzigen",
+  "settings_site_key_save": "Sitesleutel opslaan",
+  "settings_site_key_draft_hint": "Kleine letters en cijfers, met enkele koppeltekens ertussen.",
+  "settings_site_key_change_title": "Sitesleutel wijzigen?",
+  "settings_site_key_change_description": "Oude links naar het CMS-adres van deze site werken niet meer. Dat geldt ook voor de MCP-connector-URL en elk project dat met {from} is ingesteld. Werk ze na de wijziging bij naar {to}.",
+  "settings_site_key_change_confirm": "Sitesleutel wijzigen",
+  "settings_site_key_changed": "Sitesleutel gewijzigd"
 }

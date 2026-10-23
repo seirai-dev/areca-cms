@@ -32,6 +32,7 @@ import { getCollection } from './collections.ts'
 import { ConflictError, NotFoundError, ValidationError } from './errors.ts'
 import { notCompleteInLocale } from './missing-language.ts'
 import { assertSectionSeo, sectionSeoIssue } from './globals.ts'
+import { SLUG_PATTERN } from '#/lib/slug'
 import {
   formatLanguageBlockers,
   languageBlockers,
@@ -41,7 +42,6 @@ import {
 } from './locale-validation.ts'
 import {
   resolveSlug,
-  SLUG_PATTERN,
   pickDeclaredFields,
   validateEntryData,
   validateLanguageData,
