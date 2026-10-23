@@ -174,6 +174,129 @@ jobs:
       - name: CMS integration tests
         run: pnpm --filter @areca/cms test
 
+  smoke:
+    name: Chromium smoke test (production build)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: areca_smoke
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d areca_smoke"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+      s3:
+        image: rustfs/rustfs:1.0.0
+        env:
+          RUSTFS_ACCESS_KEY: ciaccess
+          RUSTFS_SECRET_KEY: ci-dummy-storage-secret
+          RUSTFS_VOLUMES: /data
+        ports:
+          - 9000:9000
+    env:
+      # The CMS runs as a production build on localhost:3000. Better Auth
+      # cookies are bound to BETTER_AUTH_URL, so the browser uses localhost too.
+      DATABASE_URL: postgres://ci:ci@127.0.0.1:5432/areca_smoke
+      REDIS_URL: redis://127.0.0.1:6379
+      BETTER_AUTH_SECRET: ci-dummy-auth-secret-not-real
+      BETTER_AUTH_URL: http://localhost:3000
+      APP_URL: http://localhost:3000
+      PORT: "3000"
+      ADMIN_MFA_REQUIRED: "false"
+      S3_ENDPOINT: http://127.0.0.1:9000
+      S3_REGION: us-east-1
+      S3_BUCKET: areca-smoke
+      S3_ACCESS_KEY: ciaccess
+      S3_SECRET_KEY: ci-dummy-storage-secret
+      S3_FORCE_PATH_STYLE: "true"
+      SMTP_HOST: 127.0.0.1
+      SMTP_PORT: "1025"
+      SMTP_FROM: ci@example.test
+      DOKPLOY_CREDENTIALS_ENCRYPTION_KEY: AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=
+      PLAYWRIGHT_BASE_URL: http://localhost:3000
+      # The server above is already running a production build, so Playwright
+      # must not start `vite dev`.
+      PW_EXTERNAL_SERVER: "true"
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm install --global "pnpm@${PNPM_VERSION}"
+      - id: store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6.1.0
+        with:
+          path: ${{ steps.store.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-store-${{ runner.os }}-
+      - run: pnpm install --frozen-lockfile
+      - name: Compile paraglide messages
+        run: pnpm --filter @areca/cms exec paraglide-js compile --project ./project.inlang --outdir ./src/paraglide
+      - name: Build CMS
+        run: pnpm --filter @areca/cms build
+      - name: Wait for the S3 service
+        run: |
+          for _ in $(seq 1 30); do
+            if curl -fsS "${S3_ENDPOINT}/health" >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          echo "S3 service did not become healthy" >&2
+          exit 1
+      - name: Create the bucket
+        run: |
+          AWS_ACCESS_KEY_ID="$S3_ACCESS_KEY" AWS_SECRET_ACCESS_KEY="$S3_SECRET_KEY" \
+            AWS_DEFAULT_REGION="$S3_REGION" \
+            aws --endpoint-url "$S3_ENDPOINT" s3api create-bucket --bucket "$S3_BUCKET"
+      - name: Apply migrations and seed the admin, organization and site
+        run: |
+          pnpm --filter @areca/cms db:migrate
+          pnpm --filter @areca/cms run paraglide:scripts
+          pnpm --filter @areca/cms exec tsx --import ./scripts/lib/script-runtime.mjs scripts/seed.ts
+      - name: Start the CMS
+        # The entrypoint migrates, checks the bucket and starts the server.
+        run: |
+          # NODE_ENV=production enables the production secret checks, as in the image.
+          NODE_ENV=production nohup node apps/cms/scripts/docker-entrypoint.mjs \
+            > "$RUNNER_TEMP/cms.log" 2>&1 &
+          for _ in $(seq 1 60); do
+            if curl -fsS "http://127.0.0.1:${PORT}/api/health" >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          echo "The CMS did not become healthy" >&2
+          cat "$RUNNER_TEMP/cms.log" >&2
+          exit 1
+      - id: playwright-version
+        run: echo "version=$(pnpm --filter @areca/cms exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - id: playwright-browsers
+        uses: actions/cache@v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+      - name: Install Chromium with its system dependencies
+        if: steps.playwright-browsers.outputs.cache-hit != 'true'
+        run: pnpm --filter @areca/cms exec playwright install --with-deps chromium
+      - name: Install Chromium system dependencies (browsers cached)
+        if: steps.playwright-browsers.outputs.cache-hit == 'true'
+        run: pnpm --filter @areca/cms exec playwright install-deps chromium
+      - name: Smoke tests
+        run: pnpm --filter @areca/cms exec playwright test --project=smoke
+      - name: CMS server log
+        if: failure()
+        run: cat "$RUNNER_TEMP/cms.log"
+
   lint:
     name: Lint and format check
     runs-on: ubuntu-24.04

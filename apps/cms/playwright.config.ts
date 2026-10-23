@@ -54,9 +54,17 @@ export default defineConfig({
     },
     {
       name: 'chromium',
-      testIgnore: /setup\.spec\.ts|qa\/|docs\//,
+      testIgnore: /setup\.spec\.ts|smoke\.spec\.ts|qa\/|docs\//,
       use: chrome,
       dependencies: ['setup'],
+    },
+    {
+      // Against a production build the CI smoke job started. It does not
+      // depend on `setup`, which wipes the database.
+      name: 'smoke',
+      testMatch: /smoke\.spec\.ts/,
+      fullyParallel: false,
+      use: chrome,
     },
     {
       name: 'qa',
@@ -68,21 +76,25 @@ export default defineConfig({
   ],
   // Several workers against one dev server; keep it moderate.
   workers: process.env.PW_WORKERS ? Number(process.env.PW_WORKERS) : 3,
-  webServer: isLocal
-    ? {
-        command: `pnpm exec vite dev --port ${port} --strictPort`,
-        url: `${base.origin}/login`,
-        reuseExistingServer: true,
-        timeout: 180_000,
-        stdout: 'ignore',
-        stderr: 'pipe',
-        // A frozen dev server: no watcher, no hot reloads (see vite.config.ts).
-        env: {
-          VITE_FREEZE: 'true',
-          // Setup spec token; the seeded admins have no two-factor enrolled.
-          SETUP_TOKEN: process.env.SETUP_TOKEN ?? 'e2e-setup-token-0123456789',
-          ADMIN_MFA_REQUIRED: 'false',
-        },
-      }
-    : undefined,
+  // PW_EXTERNAL_SERVER=true: the caller already runs the CMS (CI's smoke job
+  // runs a production build), so Playwright must not start `vite dev`.
+  webServer:
+    isLocal && process.env.PW_EXTERNAL_SERVER !== 'true'
+      ? {
+          command: `pnpm exec vite dev --port ${port} --strictPort`,
+          url: `${base.origin}/login`,
+          reuseExistingServer: true,
+          timeout: 180_000,
+          stdout: 'ignore',
+          stderr: 'pipe',
+          // A frozen dev server: no watcher, no hot reloads (see vite.config.ts).
+          env: {
+            VITE_FREEZE: 'true',
+            // Setup spec token; the seeded admins have no two-factor enrolled.
+            SETUP_TOKEN:
+              process.env.SETUP_TOKEN ?? 'e2e-setup-token-0123456789',
+            ADMIN_MFA_REQUIRED: 'false',
+          },
+        }
+      : undefined,
 })
