@@ -32,6 +32,19 @@ export function dbActorId(actorId: string | null | undefined) {
   return actorId
 }
 
+/**
+ * A production site needs a deployment target before anything can go live.
+ * The publish transaction refuses without one; release status reports the same
+ * message as a blocker, so the tray, panel and overview disable Go live up front.
+ */
+export function deploymentBlockers(row: typeof site.$inferSelect): string[] {
+  if (row.publishingMode === 'demo') return []
+  const target = row.deploymentTarget
+  return target?.applicationId && target.healthCheckUrl
+    ? []
+    : [m.server_publication_deployment_required()]
+}
+
 export async function getSiteOrThrow(siteId: string) {
   const row = (
     await db.select().from(site).where(eq(site.id, siteId)).limit(1)
@@ -160,15 +173,9 @@ export async function requestPublication(input: {
         .for('update')
     ).at(0)
     if (!lockedSite) throw new NotFoundError(m.server_site_not_found())
-    if (
-      lockedSite.publishingMode !== 'demo' &&
-      (!lockedSite.deploymentTarget?.applicationId ||
-        !lockedSite.deploymentTarget.healthCheckUrl)
-    ) {
-      return {
-        ok: false as const,
-        errors: [m.server_publication_deployment_required()],
-      }
+    const deployment = deploymentBlockers(lockedSite)
+    if (deployment.length > 0) {
+      return { ok: false as const, errors: deployment }
     }
     if (input.schedulerFingerprint) {
       const pending = (
@@ -674,7 +681,10 @@ export async function getSiteReleaseStatus(siteId: string) {
   ).at(0)
 
   const diff = await diffApprovedRelease(siteId)
-  const blockers = await sectionBlockers(siteId)
+  const blockers = [
+    ...deploymentBlockers(existingSite),
+    ...(await sectionBlockers(siteId)),
+  ]
 
   return {
     blockers,

@@ -52,22 +52,40 @@ export function fileKind(asset: {
   return dot > 0 ? asset.originalFilename.slice(dot + 1).toUpperCase() : ''
 }
 
-function libraryQueryKey(organizationId: string, search: string) {
+/** Only images without a description in one content language. */
+export type MissingAltFilter = { siteId: string; locale?: string }
+
+function libraryQueryKey(
+  organizationId: string,
+  search: string,
+  missingAlt: MissingAltFilter | undefined,
+) {
   // Shares the `['assets', organizationId]` prefix with the media picker so
   // one invalidation refreshes both.
-  return ['assets', organizationId, 'library', search] as const
+  return [
+    'assets',
+    organizationId,
+    'library',
+    search,
+    missingAlt ?? null,
+  ] as const
 }
 
 /** Paged Library list ("Load more", 40 per page), newest first. */
-export function useLibraryAssets(organizationId: string, search: string) {
+export function useLibraryAssets(
+  organizationId: string,
+  search: string,
+  missingAlt?: MissingAltFilter,
+) {
   const query = useInfiniteQuery({
-    queryKey: libraryQueryKey(organizationId, search),
+    queryKey: libraryQueryKey(organizationId, search, missingAlt),
     initialPageParam: 0,
     queryFn: ({ pageParam }) =>
       listAssetsFn({
         data: {
           organizationId,
           search: search || undefined,
+          missingAlt,
           limit: LIBRARY_PAGE_SIZE + 1,
           offset: pageParam,
         },

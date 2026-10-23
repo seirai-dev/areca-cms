@@ -14,12 +14,17 @@ import {
   publication,
   site,
 } from '#/db/schema'
+import { isValidSlug } from '#/lib/slug'
 import type { DeploymentTarget } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
 import { lockOrganizationForMutation } from './organization-lock'
 import { assertSiteHasNoPendingDeployment } from '#/server/publishing/deployment-safety'
-import { ConflictError, NotFoundError } from '#/server/content/errors'
+import {
+  ConflictError,
+  NotFoundError,
+  ValidationError,
+} from '#/server/content/errors'
 import { generateSiteToken } from '#/server/content/site-auth'
 
 export const deploymentTargetSchema: z.ZodType<DeploymentTarget | null> =
@@ -90,6 +95,26 @@ export async function getSite(id: string): Promise<PublicSite | null> {
   return row ?? null
 }
 
+/** The shared slug rule (`#/lib/slug`), as a validation error on `slug`. */
+function assertSiteSlug(slug: string) {
+  if (!isValidSlug(slug)) {
+    throw new ValidationError([
+      { path: 'slug', message: m.server_site_slug_invalid() },
+    ])
+  }
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false
+  const { code, cause } = error as { code?: unknown; cause?: unknown }
+  return (
+    code === '23505' ||
+    (typeof cause === 'object' &&
+      cause !== null &&
+      (cause as { code?: unknown }).code === '23505')
+  )
+}
+
 export async function createSite(input: {
   organizationId: string
   name: string
@@ -107,6 +132,7 @@ export async function createSite(input: {
   if (!org) {
     throw new NotFoundError(m.server_organization_not_found())
   }
+  assertSiteSlug(input.slug)
 
   const slugTaken = (
     await db
@@ -248,6 +274,72 @@ export async function updateSite(
   })
 
   return toPublicSite(updated)
+}
+
+/**
+ * Changes a site's slug, which is its key in the CMS: the MCP connector URL
+ * and each project's `--site-key` use it, so old links stop working. The
+ * slug must be unique and follow the shared rule.
+ */
+export async function changeSiteSlug(
+  id: string,
+  slug: string,
+  actorId: string,
+) {
+  const existing = (
+    await db.select().from(site).where(eq(site.id, id)).limit(1)
+  ).at(0)
+  if (!existing) {
+    throw new NotFoundError(m.server_site_not_found())
+  }
+  if (slug === existing.slug) return toPublicSite(existing)
+  assertSiteSlug(slug)
+
+  const taken = (
+    await db
+      .select({ id: site.id })
+      .from(site)
+      .where(eq(site.slug, slug))
+      .limit(1)
+  ).at(0)
+  if (taken) {
+    throw new ConflictError(m.server_slug_already_exists())
+  }
+
+  try {
+    const updated = await db.transaction(async (tx) => {
+      const row = (
+        await tx
+          .update(site)
+          .set({ slug, updatedAt: new Date() })
+          .where(eq(site.id, id))
+          .returning()
+      ).at(0)
+      if (!row) {
+        throw new NotFoundError(m.server_site_not_found())
+      }
+      await audit(
+        {
+          organizationId: existing.organizationId,
+          siteId: id,
+          actorId,
+          action: 'site.update',
+          targetType: 'site',
+          targetId: id,
+          meta: { fields: ['slug'], previousSlug: existing.slug, slug },
+        },
+        tx,
+      )
+      return row
+    })
+    return toPublicSite(updated)
+  } catch (error) {
+    // A slug taken between the check above and the update.
+    if (isUniqueViolation(error)) {
+      throw new ConflictError(m.server_slug_already_exists())
+    }
+    throw error
+  }
 }
 
 export async function rotateSiteTokenAdmin(

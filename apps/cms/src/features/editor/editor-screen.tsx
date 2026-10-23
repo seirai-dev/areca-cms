@@ -67,7 +67,7 @@ import { LocaleFieldsContext } from './locale-fields'
 import type { LocaleFields } from './locale-fields'
 import { ScheduledVersion } from './scheduled-version'
 import { ScheduleForm } from './schedule-form'
-import { EditorConflictNotice } from './conflict-notice'
+import { conflictReadyBlock, EditorConflictNotice } from './conflict-notice'
 import { SeoPanel, plainTextOf } from './seo-panel'
 import { useContentLanguage } from './use-content-language'
 import { useEntryEditor } from './use-entry-editor'
@@ -294,7 +294,7 @@ function EntryEditorView({
     if (first) requestAnimationFrame(() => revealField(first))
   }
 
-  const readyBlock = blocker
+  const languageBlock = blocker
     ? {
         message: m.editor_language_blocker({
           language: uiLanguageName(blocker.locale),
@@ -303,6 +303,11 @@ function EntryEditorView({
         onFix: () => focusBlocker(blocker),
       }
     : null
+  const conflictBlock = conflictReadyBlock(
+    editor.conflict,
+    () => void editor.reloadServerDraft(),
+  )
+  const readyBlock = conflictBlock ?? languageBlock
 
   // Writes the active language. On the main language (and single-language
   // sites) this is the ordinary update, which also keeps the slug in step
@@ -560,6 +565,8 @@ function EntryEditorView({
       pending={editor.schedulePending}
       onCancel={() => setScheduleOpen(false)}
       onSubmit={async (at, timeZone) => {
+        // A form opened before the conflict must not approve over it.
+        if (editor.conflict) return
         const result = await editor.schedule(at, timeZone).catch(() => null)
         if (result) setScheduleOpen(false)
       }}
@@ -567,6 +574,7 @@ function EntryEditorView({
   )
 
   const hasErrors = editor.errorCount > 0 || Boolean(editor.formError)
+  const errorKeys = Object.keys(editor.fieldErrors).filter(Boolean)
 
   const languageBar =
     lang.languages && ctx && active ? (
@@ -638,6 +646,7 @@ function EntryEditorView({
           scheduledAt={entry?.scheduledAt}
           editedSinceReady={editedSinceReady}
           saveStatus={editor.status}
+          conflict={editor.conflict}
           isNew={editor.isNew}
           lastSavedAt={editor.lastSavedAt}
           updatedAt={entry?.updatedAt}
@@ -766,6 +775,20 @@ function EntryEditorView({
                         : m.editor_save_fix_other({ count: editor.errorCount })
                       : m.editor_save_failed()}
                   </span>
+                  {errorKeys.length > 0 ? (
+                    <span className="flex flex-wrap gap-x-3 gap-y-1">
+                      {errorKeys.map((key) => (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => revealField(key)}
+                          className="text-callout font-medium text-text-primary underline decoration-border-error underline-offset-4 hover:decoration-current"
+                        >
+                          {fieldLabels([key], fields)[0] ?? key}
+                        </button>
+                      ))}
+                    </span>
+                  ) : null}
                   {editor.formError ? (
                     <span className="text-callout text-text-secondary">
                       {editor.formError}

@@ -82,7 +82,7 @@ import {
   useReconcileDeployment,
   useResolveUncertainDeployment,
 } from './use-go-live'
-import { canGoLive } from './go-live-gate'
+import { canGoLive, goLiveReason } from './go-live-gate'
 import { usePendingEntries } from './use-pending-entries'
 import type { PendingEntry, PendingLanguages } from './use-pending-entries'
 import { useReleaseStatus } from './use-release-status'
@@ -164,14 +164,21 @@ function GoLivePanelBody({
   const release = useReleaseStatus(site.id)
   const { goLive, isPending, errors, clearErrors } = useGoLive(site.id)
   const [urgent, setUrgent] = React.useState(false)
-  const blocked = (release.data?.blockers?.length ?? 0) > 0
-  const goLiveAllowed = canGoLive({
-    canPublish,
-    blockers: release.data?.blockers,
-  })
   const pending = usePendingEntries({
     siteId: site.id,
     enabled: release.state !== 'loading',
+  })
+  // Going live without knowing what changes is not allowed: wait for the list.
+  const changesKnown = pending.isSuccess
+  const goLiveAllowed =
+    canGoLive({
+      canPublish,
+      blockers: release.data?.blockers,
+    }) && changesKnown
+  const reason = goLiveReason({
+    canPublish,
+    blockers: release.data?.blockers,
+    changesKnown,
   })
 
   return (
@@ -200,11 +207,7 @@ function GoLivePanelBody({
         </Section>
       ) : release.data?.blockers && release.data.blockers.length > 0 ? (
         <Section>
-          <ErrorChecklist
-            siteId={site.id}
-            errors={release.data.blockers}
-            onDismiss={() => undefined}
-          />
+          <ErrorChecklist siteId={site.id} errors={release.data.blockers} />
         </Section>
       ) : null}
 
@@ -247,13 +250,7 @@ function GoLivePanelBody({
             />
           </label>
           <Hint
-            label={
-              goLiveAllowed
-                ? null
-                : blocked
-                  ? m.golive_blocked_reason()
-                  : editorPublishReason()
-            }
+            label={goLiveAllowed ? null : reason}
             wrapDisabled={!goLiveAllowed}
             className="w-full"
           >
@@ -274,7 +271,7 @@ function GoLivePanelBody({
           </Hint>
           {!goLiveAllowed ? (
             <p className="text-center text-callout text-text-secondary">
-              {blocked ? m.golive_blocked_reason() : editorPublishReason()}
+              {reason}
             </p>
           ) : null}
         </div>
@@ -440,6 +437,16 @@ function WhatsChanging({
   siteId: string
   pending: ReturnType<typeof usePendingEntries>
 }) {
+  if (pending.isError) {
+    return (
+      <QueryError
+        title={m.golive_changes_load_error()}
+        error={pending.error}
+        onRetry={pending.refetch}
+        retrying={pending.isRetrying}
+      />
+    )
+  }
   if (pending.isLoading) {
     return (
       <div className="grid gap-2">
@@ -590,6 +597,10 @@ function PendingRow({
    Validation errors
 ------------------------------------------------------------------------- */
 
+/**
+ * Failed go-live attempts can be dismissed. Blockers come from the server and
+ * clear on their own, so they have no dismiss control.
+ */
 function ErrorChecklist({
   siteId,
   errors,
@@ -597,7 +608,7 @@ function ErrorChecklist({
 }: {
   siteId: string
   errors: string[]
-  onDismiss: () => void
+  onDismiss?: () => void
 }) {
   const parsed = errors.map(parseGoLiveError)
   return (
@@ -611,9 +622,11 @@ function ErrorChecklist({
         <span className="flex-1 text-[14px] leading-5 font-semibold text-text-primary">
           {m.golive_fix_first()}
         </span>
-        <Button type="button" variant="quiet" size="xs" onClick={onDismiss}>
-          {m.golive_dismiss()}
-        </Button>
+        {onDismiss ? (
+          <Button type="button" variant="quiet" size="xs" onClick={onDismiss}>
+            {m.golive_dismiss()}
+          </Button>
+        ) : null}
       </div>
       <ul className="grid gap-1.5">
         {parsed.map((error) => (

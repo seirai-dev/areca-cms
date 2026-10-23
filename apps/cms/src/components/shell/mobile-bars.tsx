@@ -27,6 +27,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '#/components/ui/sheet'
+import { QueryError } from '#/components/ui/query-error'
 import { Tag } from '#/components/ui/tag'
 import { GoLivePill } from '#/features/golive/golive-tray'
 import {
@@ -409,11 +410,19 @@ function MobileCollections({
   onNavigate: () => void
 }) {
   const { me } = useShell()
-  const { collections, counts, isLoading } = useSiteCollections(
-    siteId,
-    me.user.isAgencyAdmin,
-  )
+  const {
+    collections,
+    counts,
+    isLoading,
+    isError,
+    error,
+    isRetrying,
+    refetch,
+  } = useSiteCollections(siteId, me.user.isAgencyAdmin)
   if (isLoading) return null
+  if (isError) {
+    return <QueryError error={error} onRetry={refetch} retrying={isRetrying} />
+  }
   if (collections.length === 0) {
     return (
       <p className="py-6 text-center text-callout text-text-secondary">

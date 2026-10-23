@@ -10,6 +10,7 @@ import {
 } from './draft-recovery'
 import { authClient } from '#/lib/auth-client'
 import { readLocale, writeLocale } from '#/lib/content-locale'
+import { isValidSlug } from '#/lib/slug'
 import type { LocaleCtx } from '#/lib/content-locale'
 import { queryKeys } from '#/lib/content/query-keys'
 import {
@@ -41,9 +42,6 @@ import {
   updateDraftFn,
   updateGlobalDraftFn,
 } from '#/server/fn/content'
-
-/** Same rule as the server's `SLUG_PATTERN`. */
-const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
 /** Autosave waits this long after the last change (brief §3.5). */
 const AUTOSAVE_DELAY = 2000
@@ -458,7 +456,7 @@ export function useEntryEditor({
     }
     if (!id) {
       const slug = slugField ? snapshot[slugField.key] : undefined
-      if (typeof slug !== 'string' || !SLUG_PATTERN.test(slug)) {
+      if (typeof slug !== 'string' || !isValidSlug(slug)) {
         setStatus('blocked')
         return 'blocked'
       }
@@ -534,6 +532,8 @@ export function useEntryEditor({
       }
       return 'saved'
     } catch (error) {
+      // A conflict is not a field problem. The conflict notice explains it, so
+      // the message must not be parsed into a fake field error ("fix 1 field").
       if (
         errorMessage(error, m.editor_could_not_save()).includes(
           'DRAFT_CONFLICT',
@@ -542,6 +542,10 @@ export function useEntryEditor({
         conflictRef.current = true
         setConflict(true)
         setRecoveredDraft(dataRef.current)
+        setFieldErrors({})
+        setFormError(null)
+        setStatus('failed')
+        return 'failed'
       }
       const parsed = fieldErrorsFromUnknown(error)
       setFieldErrors(parsed.fieldErrors)

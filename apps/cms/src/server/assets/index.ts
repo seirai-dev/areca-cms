@@ -20,6 +20,7 @@ import { AppError } from '#/server/http/app-error'
 import { assetMutationLock, referencesAsset } from './usage'
 import { AssetValidationError } from './errors'
 import { validateImageBytes } from './image-validation'
+import { missingAltFilter } from './missing-alt'
 import {
   beginObjectUpload,
   completeObjectUpload,
@@ -163,6 +164,8 @@ export async function listAssets(
     limit: number
     offset: number
     imagesOnly?: boolean
+    /** Only images without a description in this content language. */
+    missingAlt?: { locale: string | null; mainLocale: string | null }
   },
 ): Promise<Asset[]> {
   const search = opts.search?.trim()
@@ -174,6 +177,9 @@ export async function listAssets(
         eq(asset.organizationId, organizationId),
         opts.imagesOnly
           ? inArray(asset.mimeType, [...RASTER_MIMES])
+          : undefined,
+        opts.missingAlt
+          ? missingAltFilter(opts.missingAlt.locale, opts.missingAlt.mainLocale)
           : undefined,
         search
           ? or(

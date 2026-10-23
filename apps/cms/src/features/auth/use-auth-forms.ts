@@ -4,7 +4,7 @@ import { authClient } from '#/lib/auth-client'
 import { signOutClient } from '#/lib/sign-out'
 import { safeRedirectPath } from '#/lib/safe-redirect'
 import { m } from '#/paraglide/messages'
-import { localizeHref } from '#/paraglide/runtime'
+import { getLocale, localizeHref } from '#/paraglide/runtime'
 import { acceptInvitationFn } from '#/server/fn/me'
 import { completeSetupFn } from '#/server/fn/setup'
 
@@ -176,7 +176,8 @@ export function useCompleteSetup(emailPassword: boolean) {
     setPending(true)
     setError(null)
     try {
-      await completeSetupFn({ data: input })
+      // The language the setup screen is shown in: the admin's email language.
+      await completeSetupFn({ data: { ...input, locale: getLocale() } })
     } catch (err) {
       setError(
         err instanceof Error ? err.message : m.auth_could_not_complete_setup(),

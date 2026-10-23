@@ -55,6 +55,19 @@ export async function requireAgencyAdmin() {
 }
 
 /**
+ * Any signed-in user. Agency admins also need two-factor and a local factor
+ * proof in this session, the same bar the account routes set in their guards.
+ */
+export async function requireAccountUser() {
+  const session = await requireUser()
+  if (session.user.isAgencyAdmin) {
+    assertAdminMfa(session.user)
+    await requireAdminLocalMfa(session)
+  }
+  return session
+}
+
+/**
  * `requireAgencyAdmin` plus the step-up gate (see `assertFreshSession`) for
  * deleting organizations, deployment credentials, site tokens and changing
  * agency-admin status. Throws `REAUTH_REQUIRED` when the session is stale.

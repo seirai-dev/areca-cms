@@ -197,7 +197,8 @@ describe.skipIf(!hasDb)('release changes for site content', () => {
       expect((await buildSnapshot(ctx.site.id)).ok).toBe(false)
 
       const status = await getSiteReleaseStatus(ctx.site.id)
-      expect(status.blockers).toHaveLength(1)
+      // The section, plus the test site's missing deployment target.
+      expect(status.blockers).toHaveLength(2)
       expect(status.pendingEntries).toBe(2)
 
       const changes = await listPendingReleaseChanges(ctx.site.id)

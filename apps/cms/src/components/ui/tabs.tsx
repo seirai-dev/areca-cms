@@ -75,12 +75,64 @@ const tabsListVariants = cva(
   },
 )
 
+/** Width of the fade shown at a scrolling strip's edge that has more tabs. */
+const EDGE_FADE = '24px'
+
+function edgeMask({ start, end }: { start: boolean; end: boolean }) {
+  if (!start && !end) return undefined
+  const left = start ? `transparent, #000 ${EDGE_FADE}` : '#000 0'
+  const right = end
+    ? `#000 calc(100% - ${EDGE_FADE}), transparent`
+    : '#000 100%'
+  return `linear-gradient(to right, ${left}, ${right})`
+}
+
 function TabsList({
   className,
   variant = 'line',
+  ref,
+  style,
+  onScroll,
   ...props
 }: React.ComponentProps<typeof TabsPrimitive.List> &
   VariantProps<typeof tabsListVariants>) {
+  const value = React.useContext(TabsValueContext)
+  const listRef = React.useRef<HTMLDivElement | null>(null)
+  const [edges, setEdges] = React.useState({ start: false, end: false })
+
+  const measure = React.useCallback(() => {
+    const list = listRef.current
+    if (!list) return
+    const start = list.scrollLeft > 1
+    const end = list.scrollLeft + list.clientWidth < list.scrollWidth - 1
+    setEdges((prev) =>
+      prev.start === start && prev.end === end ? prev : { start, end },
+    )
+  }, [])
+
+  // Keep the selected tab on screen (keyboard and deep links can select one
+  // that is scrolled out of view), then re-measure as the strip resizes.
+  React.useEffect(() => {
+    const list = listRef.current
+    if (!list || variant !== 'line') return
+    const active = list.querySelector<HTMLElement>(
+      '[role="tab"][data-state="active"]',
+    )
+    if (active) {
+      list.scrollTo({
+        left: active.offsetLeft - (list.clientWidth - active.offsetWidth) / 2,
+        behavior: 'smooth',
+      })
+    }
+    measure()
+    const observer =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure)
+    observer?.observe(list)
+    return () => observer?.disconnect()
+  }, [value, variant, measure])
+
+  const mask = variant === 'line' ? edgeMask(edges) : undefined
+
   return (
     <TabsVariantContext.Provider
       value={variant === 'line' ? 'line' : 'segmented'}
@@ -89,7 +141,19 @@ function TabsList({
         data-slot="tabs-list"
         data-variant={variant}
         className={cn(tabsListVariants({ variant }), className)}
+        style={
+          mask ? { ...style, maskImage: mask, WebkitMaskImage: mask } : style
+        }
+        onScroll={(event) => {
+          onScroll?.(event)
+          measure()
+        }}
         {...props}
+        ref={(node) => {
+          listRef.current = node
+          if (typeof ref === 'function') ref(node)
+          else if (ref) ref.current = node
+        }}
       />
     </TabsVariantContext.Provider>
   )

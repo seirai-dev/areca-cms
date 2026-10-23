@@ -15,13 +15,17 @@ import { assetFileUrl } from '#/lib/content/utils'
 import { Button } from '#/components/ui/button'
 import { EmptyState } from '#/components/ui/empty-state'
 import { Input } from '#/components/ui/input'
+import { SegmentedControl } from '#/components/ui/segmented-control'
 import { PageHeader } from '#/components/ui/page-header'
 import { QueryError } from '#/components/ui/query-error'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Hint } from '#/components/ui/tooltip'
 import { useDebouncedValue } from '#/hooks/use-debounced-value'
+import { isAltMissing } from '#/lib/asset-alt'
 import { FADE, SPRING_SMALL } from '#/lib/motion'
 import { canManageSite } from '#/lib/site-nav'
+import { isMultilingual, languageEndonym } from '#/lib/site-languages'
+import type { SiteLanguages } from '#/lib/types'
 import type { MeSite } from '#/lib/site-nav'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
@@ -51,13 +55,45 @@ const GRID =
  * `media-upload` (the file input), `media-upload-button`, `library-search`,
  * `library-load-more`, `library-drop-overlay`, `asset-drawer`.
  */
-export function LibraryScreen({ site, me }: { site: MeSite; me: Me }) {
+export function LibraryScreen({
+  site,
+  me,
+  uploadRequested = false,
+  onUploadRequestHandled,
+  missingAltOnly = false,
+  altLanguage = null,
+  onFilterChange,
+}: {
+  site: MeSite
+  me: Me
+  /** Set by `?upload=1` (the palette's Upload): open the file picker once. */
+  uploadRequested?: boolean
+  onUploadRequestHandled?: () => void
+  /** Only images without a description in `altLanguage` (`?alt=missing`). */
+  missingAltOnly?: boolean
+  /** The content language the description filter reads (`?lang=`). */
+  altLanguage?: string | null
+  onFilterChange?: (next: {
+    missingAltOnly: boolean
+    altLanguage: string | null
+  }) => void
+}) {
   const organizationId = site.organizationId
   const canDelete = canManageSite(me, organizationId)
   const inputRef = React.useRef<HTMLInputElement>(null)
   const [search, setSearch] = React.useState('')
   const needle = useDebouncedValue(search.trim())
-  const library = useLibraryAssets(organizationId, needle)
+  const mainLocale = site.languages?.main ?? null
+  // The description filter reads one content language; null on a
+  // single-language site, where the main description is the only one.
+  const altLocale = altLanguage ?? mainLocale
+  const library = useLibraryAssets(
+    organizationId,
+    needle,
+    missingAltOnly
+      ? { siteId: site.id, locale: altLocale ?? undefined }
+      : undefined,
+  )
   const uploads = useUploadQueue(organizationId)
   const mutations = useAssetMutations(organizationId)
   const [activeId, setActiveId] = React.useState<string | null>(null)
@@ -81,15 +117,14 @@ export function LibraryScreen({ site, me }: { site: MeSite; me: Me }) {
 
   const active = library.assets.find((asset) => asset.id === activeId) ?? null
   const openPicker = () => inputRef.current?.click()
+
+  React.useEffect(() => {
+    if (!uploadRequested) return
+    inputRef.current?.click()
+    onUploadRequestHandled?.()
+  }, [uploadRequested, onUploadRequestHandled])
   const searching = needle !== ''
   const total = library.assets.length
-  // One quiet hint in the header instead of a warning dot on every tile.
-  const missingAlt = library.assets.filter(
-    (asset) => isImage(asset) && !asset.altText?.trim(),
-  )
-  const [onlyMissingAlt, setOnlyMissingAlt] = React.useState(false)
-  const filteringAlt = onlyMissingAlt && missingAlt.length > 0
-  const visibleAssets = filteringAlt ? missingAlt : library.assets
   const countLabel = library.hasNextPage
     ? m.library_count_more({ count: total })
     : total === 1
@@ -105,33 +140,7 @@ export function LibraryScreen({ site, me }: { site: MeSite; me: Me }) {
         })}
         meta={
           library.isSuccess && total > 0 ? (
-            <span className="inline-flex flex-wrap items-center gap-x-1.5">
-              <span className="tnum">{countLabel}</span>
-              {missingAlt.length > 0 ? (
-                <>
-                  <span aria-hidden="true">·</span>
-                  <button
-                    type="button"
-                    onClick={() => setOnlyMissingAlt((value) => !value)}
-                    aria-pressed={filteringAlt}
-                    className="inline-flex items-center gap-1.5 rounded-[4px] text-text-secondary tnum outline-none hover:text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus aria-pressed:text-text-warning"
-                    data-testid="library-missing-alt-filter"
-                  >
-                    <span
-                      aria-hidden="true"
-                      className="size-1.5 rounded-full bg-status-warning"
-                    />
-                    {filteringAlt
-                      ? m.library_missing_alt_show_all()
-                      : missingAlt.length === 1
-                        ? m.library_missing_alt_one()
-                        : m.library_missing_alt_other({
-                            count: missingAlt.length,
-                          })}
-                  </button>
-                </>
-              ) : null}
-            </span>
+            <span className="tnum">{countLabel}</span>
           ) : undefined
         }
         actions={
@@ -166,6 +175,14 @@ export function LibraryScreen({ site, me }: { site: MeSite; me: Me }) {
           </>
         }
       />
+      {total > 0 || missingAltOnly ? (
+        <LibraryFilters
+          languages={site.languages}
+          altLocale={altLocale}
+          missingAltOnly={missingAltOnly}
+          onChange={(next) => onFilterChange?.(next)}
+        />
+      ) : null}
       <input
         ref={inputRef}
         type="file"
@@ -195,6 +212,31 @@ export function LibraryScreen({ site, me }: { site: MeSite; me: Me }) {
             <Skeleton key={index} className="aspect-square rounded-thumb" />
           ))}
         </div>
+      ) : missingAltOnly && total === 0 && uploads.items.length === 0 ? (
+        <EmptyState
+          tone="neutral"
+          icon={<ImagesSquare weight="duotone" />}
+          title={m.library_missing_alt_empty_title()}
+          description={
+            altLocale
+              ? m.library_missing_alt_empty_description({
+                  language: languageEndonym(altLocale),
+                })
+              : m.library_missing_alt_empty_description_single()
+          }
+          action={
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() =>
+                onFilterChange?.({ missingAltOnly: false, altLanguage })
+              }
+            >
+              {m.library_missing_alt_show_all()}
+            </Button>
+          }
+          data-testid="library-missing-alt-empty"
+        />
       ) : total === 0 && uploads.items.length === 0 ? (
         searching ? (
           <EmptyState
@@ -248,12 +290,13 @@ export function LibraryScreen({ site, me }: { site: MeSite; me: Me }) {
                 <UploadTile item={item} />
               </li>
             ))}
-            {visibleAssets.map((asset, index) => (
+            {library.assets.map((asset, index) => (
               <li key={asset.id}>
                 <AssetTile
                   asset={asset}
                   index={index}
-                  showAltHint={filteringAlt}
+                  missingAlt={isAltMissing(asset, altLocale, mainLocale)}
+                  showAltHint={missingAltOnly}
                   selected={detailOpen && asset.id === activeId}
                   onOpen={() => {
                     setActiveId(asset.id)
@@ -263,7 +306,7 @@ export function LibraryScreen({ site, me }: { site: MeSite; me: Me }) {
               </li>
             ))}
           </ul>
-          {library.hasNextPage && !filteringAlt ? (
+          {library.hasNextPage ? (
             <div className="flex justify-center">
               <Button
                 type="button"
@@ -295,23 +338,84 @@ export function LibraryScreen({ site, me }: { site: MeSite; me: Me }) {
   )
 }
 
+/**
+ * The Library's filter row: "Missing description" (`?alt=missing`) and, on a
+ * multilingual site, the content language the description filter reads.
+ */
+function LibraryFilters({
+  languages,
+  altLocale,
+  missingAltOnly,
+  onChange,
+}: {
+  languages: SiteLanguages | null
+  altLocale: string | null
+  missingAltOnly: boolean
+  onChange: (next: {
+    missingAltOnly: boolean
+    altLanguage: string | null
+  }) => void
+}) {
+  const multilingual = isMultilingual(languages)
+  return (
+    <div
+      className="flex flex-wrap items-center gap-x-3 gap-y-2"
+      data-testid="library-filters"
+    >
+      <Button
+        type="button"
+        size="sm"
+        variant={missingAltOnly ? 'secondary' : 'ghost'}
+        aria-pressed={missingAltOnly}
+        onClick={() =>
+          onChange({ missingAltOnly: !missingAltOnly, altLanguage: altLocale })
+        }
+        data-testid="library-missing-alt-filter"
+      >
+        <span
+          aria-hidden="true"
+          className="size-1.5 rounded-full bg-status-warning"
+        />
+        {m.library_missing_alt_toggle()}
+      </Button>
+      {multilingual && altLocale ? (
+        <SegmentedControl
+          aria-label={m.library_description_language()}
+          value={altLocale}
+          onValueChange={(next) =>
+            onChange({ missingAltOnly, altLanguage: next })
+          }
+          options={languages.all.map((tag) => ({
+            value: tag,
+            label: languageEndonym(tag),
+            testId: `library-alt-language-${tag}`,
+          }))}
+          data-testid="library-alt-language"
+        />
+      ) : null}
+    </div>
+  )
+}
+
 function AssetTile({
   asset,
   index,
   selected,
   onOpen,
+  missingAlt,
   showAltHint = false,
 }: {
   asset: LibraryAsset
   index: number
   selected: boolean
   onOpen: () => void
-  /** Keep the "No description" dot visible (the header filter is on). */
+  /** No description in the selected content language. */
+  missingAlt: boolean
+  /** Keep the "No description" dot visible (the filter is on). */
   showAltHint?: boolean
 }) {
   const reduce = useReducedMotion()
   const image = isImage(asset)
-  const missingAlt = image && !asset.altText?.trim()
   return (
     <motion.div
       className="relative"

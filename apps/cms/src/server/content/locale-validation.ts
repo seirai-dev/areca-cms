@@ -9,12 +9,12 @@ import {
   localeStatus,
 } from '#/lib/content-locale'
 import type { LocaleCtx } from '#/lib/content-locale'
+import { SLUG_PATTERN } from '#/lib/slug'
 import { SLUG_MAX_LENGTH } from '#/lib/content-limits'
 import type { EntryData, Field, SiteLanguages } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 
 import type { LanguageBlockerDetail } from './errors.ts'
-import { SLUG_PATTERN } from './validation.ts'
 import type { FieldError } from './validation.ts'
 
 /**

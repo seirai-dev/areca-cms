@@ -253,6 +253,23 @@ export const ROWS: Row[] = [
     },
   },
   {
+    name: 'changeSiteSlugFn',
+    fn: adminFns.changeSiteSlugFn,
+    policy: 'agency',
+    prepare: async (w) => {
+      const s = await w.fresh.site()
+      return {
+        // Unique per actor: an allowed call takes the slug, so reusing it
+        // would turn the next allowed call into a conflict.
+        data: {
+          id: s.id,
+          slug: `hijacked-${crypto.randomUUID().slice(0, 8)}`,
+        },
+        untouched: exists(site, and(eq(site.id, s.id), eq(site.slug, s.slug))),
+      }
+    },
+  },
+  {
     name: 'setSiteLanguagesFn',
     fn: adminFns.setSiteLanguagesFn,
     policy: 'agency',
@@ -1305,6 +1322,31 @@ export const ROWS: Row[] = [
     policy: 'user',
     note: 'Changes only the caller own language.',
     prepare: () => ({ data: { locale: 'en' } }),
+  },
+  {
+    name: 'listMySessionsFn',
+    fn: accountFns.listMySessionsFn,
+    policy: 'user',
+    note: 'Lists only the caller own live sessions, without tokens (asserted in own-sessions.test.ts).',
+    override: { adminNoMfa: 'mfa' },
+    prepare: () => ({ data: undefined }),
+  },
+  {
+    name: 'revokeMySessionFn',
+    fn: accountFns.revokeMySessionFn,
+    policy: 'user',
+    tolerant: true,
+    note: 'Own sessions only. An unknown id answers NotFound for every signed-in caller; ownership and the current-session refusal are asserted in own-sessions.test.ts.',
+    override: { adminNoMfa: 'mfa' },
+    prepare: () => ({ data: { sessionId: 'no-such-session' } }),
+  },
+  {
+    name: 'revokeMyOtherSessionsFn',
+    fn: accountFns.revokeMyOtherSessionsFn,
+    policy: 'user',
+    note: 'Revokes only the caller own other sessions; the current session is kept.',
+    override: { adminNoMfa: 'mfa' },
+    prepare: () => ({ data: undefined }),
   },
   {
     name: 'sendPasswordResetLinkFn',

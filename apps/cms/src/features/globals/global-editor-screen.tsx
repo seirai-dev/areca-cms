@@ -58,7 +58,10 @@ import { getAiAvailabilityFn } from '#/server/fn/ai'
 import { getGlobalFn } from '#/server/fn/content'
 import type { Me } from '#/server/fn/me'
 
-import { EditorConflictNotice } from '#/features/editor/conflict-notice'
+import {
+  conflictReadyBlock,
+  EditorConflictNotice,
+} from '#/features/editor/conflict-notice'
 import { GlobalEditorTopBar } from './global-editor-top-bar'
 import { groupFields } from './site-content'
 
@@ -240,7 +243,7 @@ function GlobalEditorView({
     })
   }
 
-  const readyBlock = blocker
+  const languageBlock = blocker
     ? {
         message: m.editor_language_blocker({
           language: uiLanguageName(blocker.locale),
@@ -249,6 +252,11 @@ function GlobalEditorView({
         onFix: () => focusBlocker(blocker),
       }
     : null
+  const conflictBlock = conflictReadyBlock(
+    editor.conflict,
+    () => void editor.reloadServerDraft(),
+  )
+  const readyBlock = conflictBlock ?? languageBlock
 
   // Writes the active language; the main language (and single-language
   // sites) use the ordinary update.
@@ -293,6 +301,22 @@ function GlobalEditorView({
   const groups = groupFields(fields)
   const seoOn = global.seoEnabled
   const hasErrors = editor.errorCount > 0 || Boolean(editor.formError)
+  const errorKeys = Object.keys(editor.fieldErrors).filter(Boolean)
+
+  // Scroll to an invalid field and focus its control (the save banner's links).
+  function revealField(key: string) {
+    requestAnimationFrame(() => {
+      const node = document.querySelector<HTMLElement>(
+        `[data-field="${CSS.escape(key)}"]`,
+      )
+      node?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      node
+        ?.querySelector<HTMLElement>(
+          'input, textarea, [contenteditable="true"], button',
+        )
+        ?.focus({ preventScroll: true })
+    })
+  }
 
   function openPreview() {
     if (editor.previewUrl) window.open(editor.previewUrl, '_blank', 'noopener')
@@ -348,6 +372,7 @@ function GlobalEditorView({
           scheduledAt={entry.scheduledAt}
           editedSinceReady={editedSinceReady}
           saveStatus={editor.status}
+          conflict={editor.conflict}
           lastSavedAt={editor.lastSavedAt}
           updatedAt={entry.updatedAt}
           errorCount={editor.errorCount}
@@ -375,6 +400,8 @@ function GlobalEditorView({
           }
           scheduleInitialTimeZone={entry.scheduleTimezone}
           onScheduleSubmit={async (at, timeZone) => {
+            // A form opened before the conflict must not approve over it.
+            if (editor.conflict) return
             const result = await editor.schedule(at, timeZone).catch(() => null)
             if (result) setScheduleOpen(false)
           }}
@@ -437,6 +464,20 @@ function GlobalEditorView({
                         : m.editor_save_fix_other({ count: editor.errorCount })
                       : m.editor_save_failed()}
                   </span>
+                  {errorKeys.length > 0 ? (
+                    <span className="flex flex-wrap gap-x-3 gap-y-1">
+                      {errorKeys.map((key) => (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => revealField(key)}
+                          className="text-callout font-medium text-text-primary underline decoration-border-error underline-offset-4 hover:decoration-current"
+                        >
+                          {fieldLabels([key], fields)[0] ?? key}
+                        </button>
+                      ))}
+                    </span>
+                  ) : null}
                   {editor.formError ? (
                     <span className="text-callout text-text-secondary">
                       {editor.formError}

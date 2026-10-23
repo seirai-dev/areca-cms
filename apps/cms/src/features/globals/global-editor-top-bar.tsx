@@ -50,6 +50,7 @@ export function GlobalEditorTopBar({
   scheduledAt,
   editedSinceReady,
   saveStatus,
+  conflict = false,
   lastSavedAt,
   updatedAt,
   errorCount,
@@ -87,6 +88,8 @@ export function GlobalEditorTopBar({
   scheduledAt?: string | Date | null
   editedSinceReady: boolean
   saveStatus: SaveStatus
+  /** The draft moved on the server; the header says so instead of Retry. */
+  conflict?: boolean
   lastSavedAt: Date | null
   updatedAt?: string | Date
   errorCount: number
@@ -116,7 +119,11 @@ export function GlobalEditorTopBar({
   onOpenHistory: () => void
   /** The language bar, rendered as the second row of the sticky header. */
   languageBar?: ReactNode
-  /** A required language blocks ready: the reason is clickable and switches to it. */
+  /**
+   * Blocks ready and schedule: a draft conflict (fix reloads the latest
+   * version) or a required language (fix switches to it). The reason is
+   * clickable.
+   */
   readyBlock?: { message: string; onFix: () => void } | null
 }) {
   const mobile = useIsMobile()
@@ -145,7 +152,7 @@ export function GlobalEditorTopBar({
       type="button"
       variant="quiet"
       size="sm"
-      disabled={busy || !hasReady}
+      disabled={busy || !hasReady || readyBlock !== null}
       onClick={() => onScheduleOpenChange(true)}
       data-testid="schedule-global"
       className="hidden md:inline-flex"
@@ -209,6 +216,7 @@ export function GlobalEditorTopBar({
             <div className="order-last w-full min-w-0 md:order-none md:mr-1 md:w-auto">
               <SaveIndicator
                 status={saveStatus}
+                conflict={conflict}
                 isNew={false}
                 lastSavedAt={lastSavedAt}
                 updatedAt={updatedAt}
@@ -365,7 +373,7 @@ export function GlobalEditorTopBar({
                       </DropdownMenuItem>
                     ) : (
                       <DropdownMenuItem
-                        disabled={busy || !hasReady}
+                        disabled={busy || !hasReady || readyBlock !== null}
                         onSelect={() => onScheduleOpenChange(true)}
                         data-testid="schedule-global-menu"
                       >

@@ -11,6 +11,7 @@ import { TanStackDevtools } from '@tanstack/react-devtools'
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 
 import { NotFoundCard } from '#/components/shell/not-found'
+import { RouteErrorCard } from '#/components/shell/route-error'
 import { ThemeProvider } from '#/components/theme'
 import { Toaster } from '#/components/ui/sonner'
 import { TooltipProvider } from '#/components/ui/tooltip'
@@ -73,6 +74,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
     }
   },
   notFoundComponent: () => <NotFoundCard fullPage />,
+  errorComponent: RouteErrorCard,
   shellComponent: RootDocument,
   component: RootComponent,
 })

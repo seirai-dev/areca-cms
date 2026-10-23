@@ -1,5 +1,19 @@
 import { m } from '#/paraglide/messages'
 
+/** The header save status scrolls to this notice during a conflict. */
+export const CONFLICT_NOTICE_ID = 'editor-conflict-notice'
+
+/**
+ * While the notice is up, approving would approve a draft nobody has
+ * reviewed, so Mark ready and Schedule wait for the latest version. The
+ * editors pass this block ahead of their language blocker.
+ */
+export function conflictReadyBlock(conflict: boolean, onReload: () => void) {
+  return conflict
+    ? { message: m.editor_conflict_blocks_ready(), onFix: onReload }
+    : null
+}
+
 /**
  * Shown when the draft moved on the server. A save conflict keeps the local
  * changes in this browser; an approval conflict (Mark ready or Schedule) only
@@ -24,7 +38,7 @@ export function EditorConflictNotice({
 }) {
   if (!conflict && !recoveredDraft) return null
   return (
-    <div role="alert" className={className}>
+    <div id={CONFLICT_NOTICE_ID} role="alert" className={className}>
       <p>
         {approvalConflict
           ? m.editor_entry_changed_notice()

@@ -174,6 +174,10 @@ export function GettingStarted() {
           aria-valuemin={0}
           aria-valuemax={steps.length}
           aria-valuenow={doneCount}
+          aria-valuetext={m.agency_checklist_progress({
+            done: doneCount,
+            total: steps.length,
+          })}
           aria-label={m.agency_checklist_title()}
           className="h-1.5 overflow-hidden rounded-full bg-background-subtle"
         >
