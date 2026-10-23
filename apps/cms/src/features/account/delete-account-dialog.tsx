@@ -270,11 +270,10 @@ export function DeleteAccountDialog({
               >
                 {m.account_delete_back()}
               </Button>
-            ) : (
-              <AlertDialogCancel disabled={pending}>
-                {m.shared_cancel()}
-              </AlertDialogCancel>
-            )}
+            ) : null}
+            <AlertDialogCancel disabled={pending}>
+              {m.shared_cancel()}
+            </AlertDialogCancel>
             {step === 'confirm' && needsProof ? (
               <Button
                 type="submit"
