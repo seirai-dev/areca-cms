@@ -2137,6 +2137,7 @@
   "shell_route_error_home": "Çalışma alanınıza git",
   "shell_route_error_details": "Teknik ayrıntılar",
   "golive_changes_unavailable": "Yayına alma, değişiklik listesi yüklendikten sonra kullanılabilir.",
+  "golive_changes_load_error": "Değişiklikler yüklenemedi.",
   "library_missing_alt_toggle": "Açıklaması eksik",
   "library_missing_alt_empty_title": "Açıklaması eksik görsel yok",
   "library_missing_alt_empty_description": "Tüm görsellerin {language} dilinde açıklaması var.",

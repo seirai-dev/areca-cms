@@ -82,7 +82,7 @@ import {
   useReconcileDeployment,
   useResolveUncertainDeployment,
 } from './use-go-live'
-import { canGoLive } from './go-live-gate'
+import { canGoLive, goLiveReason } from './go-live-gate'
 import { usePendingEntries } from './use-pending-entries'
 import type { PendingEntry, PendingLanguages } from './use-pending-entries'
 import { useReleaseStatus } from './use-release-status'
@@ -164,7 +164,6 @@ function GoLivePanelBody({
   const release = useReleaseStatus(site.id)
   const { goLive, isPending, errors, clearErrors } = useGoLive(site.id)
   const [urgent, setUrgent] = React.useState(false)
-  const blocked = (release.data?.blockers?.length ?? 0) > 0
   const pending = usePendingEntries({
     siteId: site.id,
     enabled: release.state !== 'loading',
@@ -176,6 +175,11 @@ function GoLivePanelBody({
       canPublish,
       blockers: release.data?.blockers,
     }) && changesKnown
+  const reason = goLiveReason({
+    canPublish,
+    blockers: release.data?.blockers,
+    changesKnown,
+  })
 
   return (
     <div className="grid divide-y divide-border-default">
@@ -250,11 +254,7 @@ function GoLivePanelBody({
             />
           </label>
           <Hint
-            label={
-              goLiveAllowed
-                ? null
-                : blockedReason(canPublish, blocked, changesKnown)
-            }
+            label={goLiveAllowed ? null : reason}
             wrapDisabled={!goLiveAllowed}
             className="w-full"
           >
@@ -275,7 +275,7 @@ function GoLivePanelBody({
           </Hint>
           {!goLiveAllowed ? (
             <p className="text-center text-callout text-text-secondary">
-              {blockedReason(canPublish, blocked, changesKnown)}
+              {reason}
             </p>
           ) : null}
         </div>
@@ -288,18 +288,6 @@ function GoLivePanelBody({
       />
     </div>
   )
-}
-
-/** Why the Go live control is disabled, most specific reason first. */
-function blockedReason(
-  canPublish: boolean,
-  blocked: boolean,
-  changesKnown: boolean,
-) {
-  if (!canPublish) return editorPublishReason()
-  if (blocked) return m.golive_blocked_reason()
-  if (!changesKnown) return m.golive_changes_unavailable()
-  return editorPublishReason()
 }
 
 /* -------------------------------------------------------------------------
@@ -456,6 +444,7 @@ function WhatsChanging({
   if (pending.isError) {
     return (
       <QueryError
+        title={m.golive_changes_load_error()}
         error={pending.error}
         onRetry={pending.refetch}
         retrying={pending.isRetrying}

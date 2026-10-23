@@ -44,6 +44,10 @@ export function usePendingEntries({
       }),
     enabled,
     staleTime: 5_000,
+    // One retry, not the default three: a real failure should show its
+    // error (and Try again) in about a second, not after several seconds.
+    retry: 1,
+    retryDelay: 1_000,
   })
 
   const entries = query.data?.changes ?? []

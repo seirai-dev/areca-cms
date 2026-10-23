@@ -2137,6 +2137,7 @@
   "shell_route_error_home": "Naar je werkruimte",
   "shell_route_error_details": "Technische details",
   "golive_changes_unavailable": "Live zetten kan zodra de lijst met wijzigingen is geladen.",
+  "golive_changes_load_error": "Kon de wijzigingen niet laden.",
   "library_missing_alt_toggle": "Beschrijving ontbreekt",
   "library_missing_alt_empty_title": "Geen afbeeldingen missen een beschrijving",
   "library_missing_alt_empty_description": "Elke afbeelding heeft een beschrijving in het {language}.",

@@ -2137,6 +2137,7 @@
   "shell_route_error_home": "Go to your workspace",
   "shell_route_error_details": "Technical details",
   "golive_changes_unavailable": "Go live is available once the list of changes has loaded.",
+  "golive_changes_load_error": "Couldn't load the changes.",
   "library_missing_alt_toggle": "Missing description",
   "library_missing_alt_empty_title": "No images are missing a description",
   "library_missing_alt_empty_description": "Every image has a description in {language}.",

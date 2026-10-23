@@ -37,7 +37,7 @@ import {
 } from '#/components/ui/status-pill'
 import { ActivityList } from '#/features/activity/activity-list'
 import { entryLiveState } from '#/features/golive/entry-live-state'
-import { canGoLive } from '#/features/golive/go-live-gate'
+import { canGoLive, goLiveReason } from '#/features/golive/go-live-gate'
 import { GoLiveButton, changesReadyLabel } from '#/features/golive/golive-tray'
 import { useGoLive } from '#/features/golive/use-go-live'
 import { usePendingEntries } from '#/features/golive/use-pending-entries'
@@ -290,7 +290,6 @@ function AttentionStrip({
   const release = useReleaseStatus(site.id)
   const panel = usePanel()
   const { goLive, isPending } = useGoLive(site.id)
-  const blocked = (release.data?.blockers?.length ?? 0) > 0
   const pending = usePendingEntries({
     siteId: site.id,
     enabled: release.state !== 'loading',
@@ -301,6 +300,11 @@ function AttentionStrip({
       canPublish,
       blockers: release.data?.blockers,
     }) && pending.isSuccess
+  const goLiveHint = goLiveReason({
+    canPublish,
+    blockers: release.data?.blockers,
+    changesKnown: pending.isSuccess,
+  })
 
   const cards: React.ReactNode[] = []
 
@@ -359,8 +363,11 @@ function AttentionStrip({
             <RocketLaunch weight="fill" className="size-3 text-icon-accent" />
           </span>
           <div className="grid min-w-0 flex-1 gap-2">
+            {/* A count the list could not confirm is not a headline. */}
             <p className="text-headline text-text-primary tnum">
-              {changesReadyLabel(release.pending)}
+              {pending.isError
+                ? m.golive_changes_load_error()
+                : changesReadyLabel(release.pending)}
             </p>
             {pending.isError ? (
               <button
@@ -408,7 +415,7 @@ function AttentionStrip({
         <div className="flex items-center gap-2">
           <GoLiveButton
             canPublish={goLiveAllowed}
-            blocked={blocked}
+            reason={goLiveHint}
             pending={isPending}
             testId="overview-go-live"
             fullWidth={false}

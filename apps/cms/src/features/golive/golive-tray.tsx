@@ -18,7 +18,7 @@ import type { BuildJobStatus } from '#/lib/types'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
-import { canGoLive } from './go-live-gate'
+import { canGoLive, goLiveReason } from './go-live-gate'
 import { usePendingEntries } from './use-pending-entries'
 import { useGoLive } from './use-go-live'
 import { useReleaseStatus } from './use-release-status'
@@ -240,10 +240,11 @@ export function GoLiveTray({
     release.data?.publishingMode === 'demo'
   const changes = usePendingEntries({ siteId, enabled: publishOffered })
   const goLiveAllowed = canPublish && changes.isSuccess
-  const changesReason =
-    canPublish && !changes.isSuccess
-      ? m.golive_changes_unavailable()
-      : undefined
+  const changesReason = goLiveReason({
+    canPublish: canPublishRole,
+    blockers: release.data?.blockers,
+    changesKnown: changes.isSuccess,
+  })
   const { goLive, isPending } = useGoLive(siteId)
   const panel = usePanel()
   const reduce = useReducedMotion()
@@ -437,11 +438,50 @@ export function GoLiveTray({
                   />
                 </>
               )}
+              {changes.isError ? (
+                <ChangesLoadError
+                  onRetry={changes.refetch}
+                  retrying={changes.isRetrying}
+                />
+              ) : null}
             </div>
           )}
         </motion.div>
       </AnimatePresence>
     </motion.div>
+  )
+}
+
+/**
+ * The change list failed to load. Said in words, not only in the disabled
+ * button's tooltip, because touch users cannot hover to find out why.
+ */
+function ChangesLoadError({
+  onRetry,
+  retrying,
+}: {
+  onRetry: () => void
+  retrying: boolean
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+      <span className="flex min-w-0 items-center gap-1.5 text-caption text-text-secondary">
+        <FailedIcon size={13} className="shrink-0 text-icon-error" />
+        {m.golive_changes_load_error()}
+      </span>
+      <button
+        type="button"
+        onClick={(event) => {
+          // The row opens the panel; Try again should only retry.
+          event.stopPropagation()
+          onRetry()
+        }}
+        disabled={retrying}
+        className="text-caption font-medium text-text-accent hover:underline disabled:opacity-60"
+      >
+        {m.ui_try_again()}
+      </button>
+    </div>
   )
 }
 
