@@ -8,11 +8,7 @@ import { FormField } from '#/components/ui/form-field'
 import { Input } from '#/components/ui/input'
 import { SegmentedControl } from '#/components/ui/segmented-control'
 import { SlideOver } from '#/components/ui/slide-over'
-import {
-  adminQueryKeys,
-  errorMessage,
-  membershipRoleLabel,
-} from '#/lib/admin/helpers'
+import { adminQueryKeys, errorMessage } from '#/lib/admin/helpers'
 import type { MembershipRole } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 import { isValidEmail } from '#/features/people/use-members'
@@ -326,12 +322,9 @@ export function InvitePersonSheet({
                   data-testid={`invite-person-pick-${pick.slug}`}
                 >
                   <div className="flex items-center gap-3">
-                    <span className="grid min-w-0 flex-1">
-                      <span className="truncate text-[14px] leading-5 font-medium text-text-primary">
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[14px] leading-5 font-medium text-text-primary">
                         {pick.name}
-                      </span>
-                      <span className="truncate text-caption font-normal text-text-muted">
-                        {membershipRoleLabel(pick.role)}
                       </span>
                     </span>
                     <button
