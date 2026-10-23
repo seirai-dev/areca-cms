@@ -128,6 +128,7 @@ unchanged (each row carries a side-effect probe).
 | `getAiAvailabilityFn` | `ai.ts` | `user` | any signed-in user (boolean only) |
 | `generateEntrySeoFn` | `ai.ts` | `org-editor` | org member (editor/owner) or agency admin; NotFound outside the org; 30/hour per user |
 | `verifyStepUpFn` | `security.ts` | `user` | any signed-in user |
+| `getMyAccountFn` | `account.ts` | `user` | any signed-in user, own password flag and deletion blockers only; agency admins need local MFA |
 | `listMySessionsFn` | `account.ts` | `user` | any signed-in user, own live sessions only, never tokens; agency admins need local MFA |
 | `revokeMySessionFn` | `account.ts` | `user` | any signed-in user, own other sessions only (current session refused, NotFound for others); agency admins need local MFA |
 | `revokeMyOtherSessionsFn` | `account.ts` | `user` | any signed-in user, own other sessions only; agency admins need local MFA |
