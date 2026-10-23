@@ -2381,5 +2381,7 @@
   "agency_person_delete_type_prompt": "Onaylamak için e-postayı yazın",
   "agency_invite_add_to_clients": "{name} kişisini {count} müşteriye ekle",
   "agency_invite_add_to_clients_one": "{name} kişisini 1 müşteriye ekle",
-  "agency_invite_pick_clients": "En az bir müşteri seçin"
+  "agency_invite_pick_clients": "En az bir müşteri seçin",
+  "agency_person_save_refused": "{count} değişiklik kaydedilemiyor",
+  "agency_person_save_refused_one": "1 değişiklik kaydedilemiyor"
 }

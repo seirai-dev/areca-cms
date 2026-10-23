@@ -2381,5 +2381,7 @@
   "agency_person_delete_type_prompt": "Typ het e-mailadres om te bevestigen",
   "agency_invite_add_to_clients": "{name} toevoegen aan {count} klanten",
   "agency_invite_add_to_clients_one": "{name} toevoegen aan 1 klant",
-  "agency_invite_pick_clients": "Kies ten minste één klant"
+  "agency_invite_pick_clients": "Kies ten minste één klant",
+  "agency_person_save_refused": "{count} wijzigingen kunnen niet worden opgeslagen",
+  "agency_person_save_refused_one": "1 wijziging kan niet worden opgeslagen"
 }

@@ -50,6 +50,8 @@ export function AccessSection({
   const mutations = usePeopleMutations()
   const phone = useMediaQuery('(max-width: 639px)')
   const [errors, setErrors] = React.useState<Record<string, string>>({})
+  /** The last save was refused: the summary says so until the next edit. */
+  const [refused, setRefused] = React.useState(false)
   const [sheetFor, setSheetFor] = React.useState<string | null>(null)
 
   // Reset the staged rows only when the saved access itself changes (after a
@@ -103,6 +105,7 @@ export function AccessSection({
   function update(next: StagedAccessRow[]) {
     setStaged(next)
     setErrors({})
+    setRefused(false)
   }
 
   function pick(picks: ClientPick[], role: MembershipRole) {
@@ -115,16 +118,24 @@ export function AccessSection({
 
   async function save() {
     setErrors({})
+    setRefused(false)
     try {
       await mutations.saveAccess.mutateAsync({ userId: detail.id, ...change })
       toast.success(m.agency_person_saved())
     } catch (error) {
       const message = errorMessage(error)
       const organizationId = rowForServerError(staged, message)
+      setRefused(true)
       if (organizationId) setErrors({ [organizationId]: message })
       else toast.error(message)
     }
   }
+
+  const changeCount = summary.added + summary.changed + summary.removed
+  const refusedText =
+    changeCount === 1
+      ? m.agency_person_save_refused_one()
+      : m.agency_person_save_refused({ count: changeCount })
 
   const sheetRow = staged.find((row) => row.organizationId === sheetFor)
   const summaryText = [
@@ -300,8 +311,11 @@ export function AccessSection({
         label={m.agency_person_unsaved()}
         data-testid="person-save-bar"
       >
-        <FloatingBarLabel data-testid="person-save-summary">
-          {summaryText || m.agency_person_unsaved()}
+        <FloatingBarLabel
+          data-testid="person-save-summary"
+          className={refused ? 'text-text-error' : undefined}
+        >
+          {refused ? refusedText : summaryText || m.agency_person_unsaved()}
         </FloatingBarLabel>
         <Button
           type="button"
@@ -428,15 +442,6 @@ function AccessRowDesktop({
               ) : null}
             </>
           )}
-          {error ? (
-            <span
-              role="alert"
-              className="text-caption font-normal text-text-error"
-              data-testid={`access-error-${row.slug}`}
-            >
-              {error}
-            </span>
-          ) : null}
         </div>
       </div>
 
@@ -489,6 +494,15 @@ function AccessRowDesktop({
           </Hint>
         )}
       </div>
+      {error ? (
+        <p
+          role="alert"
+          className="col-span-3 -mt-1 pb-2.5 text-caption font-normal text-text-error"
+          data-testid={`access-error-${row.slug}`}
+        >
+          {error}
+        </p>
+      ) : null}
     </li>
   )
 }
@@ -534,11 +548,6 @@ function AccessRowPhone({
             {isNew ? <Tag tone="accent">{m.agency_person_new()}</Tag> : null}
           </span>
           <StateCaption row={row} />
-          {error ? (
-            <span role="alert" className="text-caption text-text-error">
-              {error}
-            </span>
-          ) : null}
         </span>
         <span className="flex shrink-0 items-center gap-2 text-callout text-text-secondary">
           {row.removed ? (
@@ -557,6 +566,15 @@ function AccessRowPhone({
           <CaretRight weight="bold" className="size-3.5 text-icon-muted" />
         </span>
       </button>
+      {error ? (
+        <p
+          role="alert"
+          className="px-4 pb-3 text-caption text-text-error"
+          data-testid={`access-error-${row.slug}`}
+        >
+          {error}
+        </p>
+      ) : null}
     </li>
   )
 }

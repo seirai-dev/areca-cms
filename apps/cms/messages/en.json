@@ -2381,5 +2381,7 @@
   "agency_person_delete_type_prompt": "Type the email to confirm",
   "agency_invite_add_to_clients": "Add {name} to {count} clients",
   "agency_invite_add_to_clients_one": "Add {name} to 1 client",
-  "agency_invite_pick_clients": "Pick at least one client"
+  "agency_invite_pick_clients": "Pick at least one client",
+  "agency_person_save_refused": "{count} changes can't be saved",
+  "agency_person_save_refused_one": "1 change can't be saved"
 }
