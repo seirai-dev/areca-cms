@@ -2321,7 +2321,6 @@
   "agency_person_toast_2fa_reset": "Reset 2FA for {name}",
   "agency_person_delete_title": "Delete {name}?",
   "agency_person_delete_description": "{name}'s sign-in is removed and they lose access to every client. Their edits stay in the content, shown as Deleted user. This can't be undone.",
-  "agency_person_delete_no_owner": "{client} will have no owner. Agency admins can still manage it.",
   "agency_person_toast_deleted": "{name} was deleted",
   "agency_person_delete_row_title": "Delete user",
   "agency_person_delete_row_description": "Removes the account and sign-in for good. Their edits stay in the content, shown as Deleted user.",
@@ -2378,5 +2377,7 @@
   "agency_person_profile_description": "How their name appears in the CMS.",
   "agency_person_name_label": "Display name",
   "agency_person_name_save": "Save name",
-  "agency_person_name_saved": "Name saved"
+  "agency_person_name_saved": "Name saved",
+  "agency_person_delete_no_owner_intro": "These clients will have no owner. Agency admins can still manage them.",
+  "agency_person_delete_type_prompt": "Type the email to confirm"
 }

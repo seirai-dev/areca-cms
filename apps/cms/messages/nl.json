@@ -2321,7 +2321,6 @@
   "agency_person_toast_2fa_reset": "2FA opnieuw ingesteld voor {name}",
   "agency_person_delete_title": "{name} verwijderen?",
   "agency_person_delete_description": "De aanmelding van {name} wordt verwijderd en de persoon verliest toegang tot elke klant. Zijn of haar bewerkingen blijven in de content, weergegeven als Verwijderde gebruiker. Dit kan niet ongedaan worden gemaakt.",
-  "agency_person_delete_no_owner": "{client} krijgt geen eigenaar. Bureaubeheerders kunnen het nog steeds beheren.",
   "agency_person_toast_deleted": "{name} is verwijderd",
   "agency_person_delete_row_title": "Gebruiker verwijderen",
   "agency_person_delete_row_description": "Verwijdert het account en de aanmelding definitief. Bewerkingen blijven in de content, weergegeven als Verwijderde gebruiker.",
@@ -2378,5 +2377,7 @@
   "agency_person_profile_description": "Hoe de naam in de CMS wordt getoond.",
   "agency_person_name_label": "Weergavenaam",
   "agency_person_name_save": "Naam opslaan",
-  "agency_person_name_saved": "Naam opgeslagen"
+  "agency_person_name_saved": "Naam opgeslagen",
+  "agency_person_delete_no_owner_intro": "Deze klanten krijgen geen eigenaar. Bureaubeheerders kunnen ze nog steeds beheren.",
+  "agency_person_delete_type_prompt": "Typ het e-mailadres om te bevestigen"
 }

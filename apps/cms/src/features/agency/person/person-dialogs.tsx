@@ -236,21 +236,28 @@ export function PersonDialogs({
         onOpenChange={close}
         title={m.agency_person_delete_title({ name })}
         description={
-          <span className="grid gap-2">
+          <span className="grid gap-3">
             <span className="block">
               {m.agency_person_delete_description({ name })}
             </span>
-            {soleOwnerOf.map((item) => (
-              <span key={item.organizationId} className="block">
-                {m.agency_person_delete_no_owner({
-                  client: item.organizationName,
-                })}
+            {soleOwnerOf.length > 0 ? (
+              <span className="grid gap-2">
+                <span className="block">
+                  {m.agency_person_delete_no_owner_intro()}
+                </span>
+                <ul className="list-disc pl-5">
+                  {soleOwnerOf.map((item) => (
+                    <li key={item.organizationId}>{item.organizationName}</li>
+                  ))}
+                </ul>
               </span>
-            ))}
+            ) : null}
           </span>
         }
         confirmLabel={m.agency_person_delete_confirm()}
         confirmText={person.email}
+        confirmPrompt={m.agency_person_delete_type_prompt()}
+        align="start"
         variant="destructive"
         onConfirm={async () => {
           try {

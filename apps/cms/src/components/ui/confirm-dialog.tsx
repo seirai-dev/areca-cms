@@ -14,6 +14,7 @@ import {
 } from '#/components/ui/alert-dialog'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
+import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
 function typeToConfirmLabel(confirmText: string) {
@@ -48,6 +49,8 @@ export function ConfirmDialog({
   cancelLabel = m.shared_cancel(),
   variant = 'default',
   confirmText,
+  confirmPrompt,
+  align = 'center',
   onConfirm,
   open,
   onOpenChange,
@@ -60,6 +63,13 @@ export function ConfirmDialog({
   cancelLabel?: string
   variant?: 'default' | 'destructive'
   confirmText?: string
+  /**
+   * Replaces the "Type … to confirm" sentence. The value to type then sits on
+   * its own line in a monospace chip that wraps (for e-mail addresses).
+   */
+  confirmPrompt?: string
+  /** `start` keeps the title and body left-aligned on every screen size. */
+  align?: 'center' | 'start'
   onConfirm: () => void | Promise<void>
   open?: boolean
   onOpenChange?: (open: boolean) => void
@@ -101,10 +111,19 @@ export function ConfirmDialog({
         <AlertDialogTrigger asChild>{children}</AlertDialogTrigger>
       ) : null}
       <AlertDialogContent data-testid={testId}>
-        <AlertDialogHeader>
+        <AlertDialogHeader
+          className={cn(align === 'start' && 'place-items-start text-left')}
+        >
           <AlertDialogTitle>{title}</AlertDialogTitle>
           {description ? (
-            <AlertDialogDescription>{description}</AlertDialogDescription>
+            typeof description === 'string' ? (
+              <AlertDialogDescription>{description}</AlertDialogDescription>
+            ) : (
+              // Rich content (lists) cannot sit inside the <p> the description renders.
+              <AlertDialogDescription asChild>
+                <div>{description}</div>
+              </AlertDialogDescription>
+            )
           ) : null}
         </AlertDialogHeader>
         {needsTyping ? (
@@ -113,8 +132,16 @@ export function ConfirmDialog({
               htmlFor={inputId}
               className="block font-normal text-text-secondary"
             >
-              {typeToConfirmLabel(confirmText!)}
+              {confirmPrompt ?? typeToConfirmLabel(confirmText!)}
             </Label>
+            {confirmPrompt ? (
+              <span
+                className="block w-fit max-w-full rounded-[5px] bg-background-subtle px-1.5 py-0.5 font-mono text-[12.5px] leading-5 font-medium break-all text-text-primary"
+                data-testid="confirm-expected"
+              >
+                {confirmText}
+              </span>
+            ) : null}
             <Input
               id={inputId}
               autoComplete="off"

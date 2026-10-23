@@ -2321,7 +2321,6 @@
   "agency_person_toast_2fa_reset": "{name} için 2FA sıfırlandı",
   "agency_person_delete_title": "{name} silinsin mi?",
   "agency_person_delete_description": "{name} kişisinin girişi kaldırılır ve her müşteriye erişimi sona erer. Düzenlemeleri içerikte kalır ve Silinmiş kullanıcı olarak gösterilir. Bu geri alınamaz.",
-  "agency_person_delete_no_owner": "{client} sahipsiz kalacak. Ajans yöneticileri yine de yönetebilir.",
   "agency_person_toast_deleted": "{name} silindi",
   "agency_person_delete_row_title": "Kullanıcıyı sil",
   "agency_person_delete_row_description": "Hesabı ve girişi kalıcı olarak kaldırır. Düzenlemeleri içerikte kalır ve Silinmiş kullanıcı olarak gösterilir.",
@@ -2378,5 +2377,7 @@
   "agency_person_profile_description": "Adının CMS'te nasıl göründüğü.",
   "agency_person_name_label": "Görünen ad",
   "agency_person_name_save": "Adı kaydet",
-  "agency_person_name_saved": "Ad kaydedildi"
+  "agency_person_name_saved": "Ad kaydedildi",
+  "agency_person_delete_no_owner_intro": "Bu müşterilerin sahibi olmayacak. Ajans yöneticileri yine de bunları yönetebilir.",
+  "agency_person_delete_type_prompt": "Onaylamak için e-postayı yazın"
 }
