@@ -1,12 +1,10 @@
 import http from 'node:http'
 import type { AddressInfo, Socket } from 'node:net'
 
-import { eq } from 'drizzle-orm'
 import sharp from 'sharp'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { db } from '#/db'
-import { membership, organization } from '#/db/schema'
+import { withTestSite } from '#/server/content/test-utils'
 import { AppError } from '#/server/http/app-error'
 
 import { AssetValidationError, deleteAsset } from './index'
@@ -554,62 +552,49 @@ describe('uploadAssetFromUrl without a database', () => {
 describe.skipIf(!process.env.DATABASE_URL || !process.env.S3_ENDPOINT)(
   'uploadAssetFromUrl',
   () => {
-    it('stores a PNG fetched from a URL as a library asset', async () => {
-      const [org] = await db
-        .select()
-        .from(organization)
-        .where(eq(organization.slug, 'acme'))
-        .limit(1)
-      expect(org).toBeDefined()
+    it('stores a PNG fetched from a URL as a library asset', () =>
+      withTestSite(async ({ org, actor }) => {
+        const buffer = await sharp({
+          create: {
+            width: 12,
+            height: 8,
+            channels: 3,
+            background: { r: 0, g: 128, b: 255 },
+          },
+        })
+          .png()
+          .toBuffer()
 
-      const [member] = await db
-        .select()
-        .from(membership)
-        .where(eq(membership.organizationId, org.id))
-        .limit(1)
-      expect(member).toBeDefined()
-
-      const buffer = await sharp({
-        create: {
-          width: 12,
-          height: 8,
-          channels: 3,
-          background: { r: 0, g: 128, b: 255 },
-        },
-      })
-        .png()
-        .toBuffer()
-
-      const uploaded = await uploadAssetFromUrl(
-        {
-          organizationId: org.id,
-          url: 'https://cdn.example.com/images/remote-blue.png',
-          altText: 'A blue rectangle',
-          actorId: member.userId,
-        },
-        {
-          fetch: async (url) => ({
-            bytes: buffer,
-            contentType: 'image/png',
-            filename: 'remote-blue.png',
-            finalUrl: url,
-          }),
-        },
-      )
-
-      try {
-        expect(uploaded.mimeType).toBe('image/png')
-        expect(uploaded.size).toBe(buffer.byteLength)
-        expect(uploaded.width).toBe(12)
-        expect(uploaded.height).toBe(8)
-        expect(uploaded.originalFilename).toBe('remote-blue.png')
-        expect(uploaded.altText).toBe('A blue rectangle')
-        expect(uploaded.storageKey).toMatch(
-          new RegExp(`^${org.id}/[0-9a-f-]{36}\\.png$`),
+        const uploaded = await uploadAssetFromUrl(
+          {
+            organizationId: org.id,
+            url: 'https://cdn.example.com/images/remote-blue.png',
+            altText: 'A blue rectangle',
+            actorId: actor.id,
+          },
+          {
+            fetch: async (url) => ({
+              bytes: buffer,
+              contentType: 'image/png',
+              filename: 'remote-blue.png',
+              finalUrl: url,
+            }),
+          },
         )
-      } finally {
-        await deleteAsset(uploaded.id, org.id)
-      }
-    })
+
+        try {
+          expect(uploaded.mimeType).toBe('image/png')
+          expect(uploaded.size).toBe(buffer.byteLength)
+          expect(uploaded.width).toBe(12)
+          expect(uploaded.height).toBe(8)
+          expect(uploaded.originalFilename).toBe('remote-blue.png')
+          expect(uploaded.altText).toBe('A blue rectangle')
+          expect(uploaded.storageKey).toMatch(
+            new RegExp(`^${org.id}/[0-9a-f-]{36}\\.png$`),
+          )
+        } finally {
+          await deleteAsset(uploaded.id, org.id)
+        }
+      }))
   },
 )
