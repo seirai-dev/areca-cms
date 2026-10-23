@@ -89,7 +89,7 @@ export function DeleteAccountSection({
               variant="outline"
               disabled
               data-testid="delete-account"
-              className="w-full text-text-error sm:w-auto"
+              className="w-full sm:w-auto"
             >
               {m.account_delete_button()}
             </Button>
