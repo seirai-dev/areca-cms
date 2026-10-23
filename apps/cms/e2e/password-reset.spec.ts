@@ -156,7 +156,8 @@ test('an agency admin sends a reset link from People', async ({
   await page.getByRole('searchbox').fill(email)
   const row = page.getByTestId(`person-row-${email}`)
   await expect(row).toBeVisible()
-  await row.getByTestId(`send-reset-link-${email}`).click()
+  await row.getByTestId(`person-menu-${email}`).click()
+  await page.getByTestId(`send-reset-link-${email}`).click()
 
   const dialog = page.getByTestId('send-reset-link-dialog')
   await expect(dialog).toContainText('Send a password reset link?')
