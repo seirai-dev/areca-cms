@@ -122,7 +122,7 @@ export function DeleteAccountDialog({
         <form className="grid gap-5" onSubmit={advance}>
           {step === 'confirm' ? (
             <>
-              <AlertDialogHeader>
+              <AlertDialogHeader className="text-left">
                 <AlertDialogTitle>
                   {m.account_delete_dialog_title()}
                 </AlertDialogTitle>
@@ -159,7 +159,7 @@ export function DeleteAccountDialog({
             </>
           ) : (
             <>
-              <AlertDialogHeader>
+              <AlertDialogHeader className="text-left">
                 <AlertDialogTitle>
                   {m.account_delete_verify_title()}
                 </AlertDialogTitle>
