@@ -259,10 +259,10 @@ export function AppShell({
             )}
           >
             <div
-              // Re-run the page fade per page, but never remount the editor.
+              // A fresh page tree per path, but never remount the editor.
               key={mode === 'focus' ? 'focus' : pathname}
               className={cn(
-                'page-enter mx-auto w-full min-w-0',
+                'mx-auto w-full min-w-0',
                 mode === 'focus'
                   ? 'max-w-[1440px] px-6 py-6'
                   : 'max-w-(--content-max) px-4 pt-6 pb-16 md:px-8 md:pt-10',

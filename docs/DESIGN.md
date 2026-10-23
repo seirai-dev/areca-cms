@@ -94,7 +94,7 @@ Library: `motion/react`. Presets in [`lib/motion.ts`](../apps/cms/src/lib/motion
 | `FADE` | 150ms, standard ease | The reduced-motion fallback |
 | `EASE_STANDARD` | `cubic-bezier(.2,.8,.2,1)` | CSS transitions (`ease-(--ease-standard)`) |
 
-- **Page transition:** a 180ms fade plus 4px rise on route content (`.page-enter`), which steps aside while a router view transition morphs shared elements (collection card → editor via `view-transition-name: entry-{id}`).
+- **Page transition:** the router's view transition only: a 180ms crossfade, with shared elements morphing on top (collection card → editor via `view-transition-name: entry-{id}`). Page content has no CSS enter animation of its own; one that steps aside during the view transition restarts when it ends and blinks the page.
 - **Sliding indicators** (`layoutId`) for segmented controls, tabs and the active sidebar item.
 - **Staggered reveals** (`Stagger`/`StaggerItem`): 30ms per item, capped at 10, opacity + 6px.
 - **Animated status icons:** the live dot pings once every 4s, the going-live ring spins, the scheduled clock ticks once, the saved check draws in, the failed icon shakes once.
