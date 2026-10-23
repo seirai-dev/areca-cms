@@ -23,6 +23,20 @@ import { emailMatches } from './account-logic'
 import type { DeleteProof } from './account-logic'
 
 /**
+ * The address with a soft line break after `@` and each `.`, so a long address
+ * wraps at its parts ("example.com") instead of inside a word.
+ */
+function emailBreaks(email: string) {
+  const parts = email.split(/(?<=[@.])/)
+  return parts.map((part, index) => (
+    <React.Fragment key={index}>
+      {part}
+      {index < parts.length - 1 ? <wbr /> : null}
+    </React.Fragment>
+  ))
+}
+
+/**
  * Two steps. Step 1 says what goes and what stays, and asks for the email.
  * Step 2 re-verifies the person (password, or a two-factor code), and is
  * skipped for SSO-only accounts without two-factor. On success the browser
@@ -122,7 +136,7 @@ export function DeleteAccountDialog({
         <form className="grid gap-5" onSubmit={advance}>
           {step === 'confirm' ? (
             <>
-              <AlertDialogHeader className="text-left">
+              <AlertDialogHeader className="place-items-start text-left">
                 <AlertDialogTitle>
                   {m.account_delete_dialog_title()}
                 </AlertDialogTitle>
@@ -139,8 +153,16 @@ export function DeleteAccountDialog({
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <FormField
-                label={m.shared_type_to_confirm({ confirmText: email })}
+                label={m.account_delete_type_email()}
                 htmlFor={emailId}
+                description={
+                  <span
+                    data-testid="delete-account-address"
+                    className="block max-w-full rounded-[6px] bg-background-subtle px-2 py-1.5 font-mono text-[13px] leading-5 break-words text-text-primary"
+                  >
+                    {emailBreaks(email)}
+                  </span>
+                }
                 error={error ?? undefined}
               >
                 <Input
@@ -159,7 +181,7 @@ export function DeleteAccountDialog({
             </>
           ) : (
             <>
-              <AlertDialogHeader className="text-left">
+              <AlertDialogHeader className="place-items-start text-left">
                 <AlertDialogTitle>
                   {m.account_delete_verify_title()}
                 </AlertDialogTitle>

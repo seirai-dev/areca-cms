@@ -2437,5 +2437,6 @@
   "ui_copy": "Kopiëren",
   "ui_copy_failed": "Kopiëren naar klembord mislukt",
   "ui_more": "Meer",
-  "ui_try_again": "Opnieuw proberen"
+  "ui_try_again": "Opnieuw proberen",
+  "account_delete_type_email": "Typ je e-mailadres om te bevestigen"
 }

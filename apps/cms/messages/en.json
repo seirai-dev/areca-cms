@@ -2437,5 +2437,6 @@
   "ui_copy": "Copy",
   "ui_copy_failed": "Couldn't copy to the clipboard",
   "ui_more": "More",
-  "ui_try_again": "Try again"
+  "ui_try_again": "Try again",
+  "account_delete_type_email": "Type your email to confirm"
 }

@@ -2437,5 +2437,6 @@
   "ui_copy": "Kopyala",
   "ui_copy_failed": "Panoya kopyalanamadı",
   "ui_more": "Daha fazla",
-  "ui_try_again": "Yeniden dene"
+  "ui_try_again": "Yeniden dene",
+  "account_delete_type_email": "Onaylamak için e-posta adresini yaz"
 }
