@@ -89,3 +89,45 @@ export async function renderRoleChanged(
   })
   return { subject, preheader, html, text, secrets: [] }
 }
+
+/**
+ * Sent when an agency admin adds someone to one or more clients, in one email.
+ * The client names and roles are captured when the access is saved.
+ */
+export async function renderAdded(
+  params: Record<string, unknown>,
+  ctx: RenderContext,
+): Promise<RenderedMail> {
+  const { locale, brand } = ctx
+  await loadRecipient(params.userId, ctx.connection)
+  const actor = String(params.actorName ?? '')
+  const grants = Array.isArray(params.orgs) ? params.orgs : []
+  const list = new Intl.ListFormat(locale, {
+    style: 'long',
+    type: 'conjunction',
+  }).format(
+    grants.map((grant: { name?: unknown; role?: unknown }) =>
+      String(grant.name ?? ''),
+    ),
+  )
+  const subject = m.server_mail_tpl_membership_added_subject({}, { locale })
+  const preheader = m.server_mail_tpl_membership_added_preheader(
+    { list },
+    { locale },
+  )
+  const { html, text } = renderLayout({
+    brand,
+    preheader,
+    heading: subject,
+    paragraphs: [
+      m.server_mail_tpl_membership_added_body({ actor, list }, { locale }),
+    ],
+    button: {
+      label: m.server_mail_tpl_open_dashboard({}, { locale }),
+      url: `${env.APP_URL.replace(/\/+$/, '')}/`,
+    },
+    footer: [m.server_mail_tpl_membership_added_footer({}, { locale })],
+    lang: locale,
+  })
+  return { subject, preheader, html, text, secrets: [] }
+}

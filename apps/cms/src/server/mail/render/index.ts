@@ -3,6 +3,7 @@ import type { BrandingView } from '#/lib/branding'
 
 import type { MailTemplate } from '../outbox.ts'
 
+import * as accountDeleted from './templates/account-deleted.ts'
 import * as agencyAdmin from './templates/agency-admin.ts'
 import * as invitation from './templates/invitation.ts'
 import * as membership from './templates/membership.ts'
@@ -42,8 +43,11 @@ const RENDERERS: Record<MailTemplate, Renderer> = {
   two_factor_disabled: twoFactor.renderDisabled,
   membership_removed: membership.renderRemoved,
   membership_role_changed: membership.renderRoleChanged,
+  membership_added: membership.renderAdded,
   agency_admin_granted: agencyAdmin.renderGranted,
   agency_admin_revoked: agencyAdmin.renderRevoked,
+  account_deleted: accountDeleted.renderDeleted,
+  two_factor_reset: twoFactor.renderReset,
 }
 
 /** Branding for emails: the logo path becomes an absolute URL for clients. */

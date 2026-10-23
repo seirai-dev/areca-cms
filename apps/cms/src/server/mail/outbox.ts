@@ -76,8 +76,11 @@ export type MailTemplate =
   | 'two_factor_disabled'
   | 'membership_removed'
   | 'membership_role_changed'
+  | 'membership_added'
   | 'agency_admin_granted'
   | 'agency_admin_revoked'
+  | 'account_deleted'
+  | 'two_factor_reset'
   | 'notification'
 
 /** 'cancelled': a notification email skipped at send time; not a failure. */
@@ -548,6 +551,29 @@ export async function cancelQueuedNotificationEmails(
       and(
         eq(emailOutbox.userId, userId),
         eq(emailOutbox.organizationId, organizationId),
+        eq(emailOutbox.status, 'queued'),
+        isNotNull(emailOutbox.notificationId),
+      ),
+    )
+    .returning({ id: emailOutbox.id })
+  return cancelled.length
+}
+
+/**
+ * Cancels every queued notification email for a person, in any client. Used
+ * when they are blocked or deleted: a suspended or gone person gets nothing.
+ */
+export async function cancelAllQueuedNotificationEmails(
+  userId: string,
+  connection?: unknown,
+): Promise<number> {
+  const executor = (connection ?? db) as Executor
+  const cancelled = await executor
+    .update(emailOutbox)
+    .set({ status: 'cancelled', nextAttemptAt: null, leaseUntil: null })
+    .where(
+      and(
+        eq(emailOutbox.userId, userId),
         eq(emailOutbox.status, 'queued'),
         isNotNull(emailOutbox.notificationId),
       ),
