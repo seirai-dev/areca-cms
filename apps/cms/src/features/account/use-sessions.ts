@@ -1,18 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { authClient } from '#/lib/auth-client'
+import {
+  listMySessionsFn,
+  revokeMyOtherSessionsFn,
+  revokeMySessionFn,
+} from '#/server/fn/account'
 
-/** Better Auth's session APIs: list, revoke one, revoke the other sessions. */
 export const SESSIONS_QUERY_KEY = ['account', 'sessions'] as const
 
 export function useAccountSessions() {
   return useQuery({
     queryKey: SESSIONS_QUERY_KEY,
-    queryFn: async () => {
-      const result = await authClient.listSessions()
-      if (result.error) throw result.error
-      return result.data
-    },
+    queryFn: () => listMySessionsFn(),
     retry: false,
   })
 }
@@ -20,10 +19,8 @@ export function useAccountSessions() {
 export function useRevokeSession() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (token: string) => {
-      const result = await authClient.revokeSession({ token })
-      if (result.error) throw result.error
-    },
+    mutationFn: (sessionId: string) =>
+      revokeMySessionFn({ data: { sessionId } }),
     onSettled: () =>
       queryClient.invalidateQueries({ queryKey: SESSIONS_QUERY_KEY }),
   })
@@ -32,10 +29,7 @@ export function useRevokeSession() {
 export function useRevokeOtherSessions() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async () => {
-      const result = await authClient.revokeOtherSessions()
-      if (result.error) throw result.error
-    },
+    mutationFn: () => revokeMyOtherSessionsFn(),
     onSettled: () =>
       queryClient.invalidateQueries({ queryKey: SESSIONS_QUERY_KEY }),
   })

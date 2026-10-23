@@ -1,10 +1,5 @@
 import * as React from 'react'
-import {
-  Desktop,
-  DeviceMobile,
-  DeviceTablet,
-  WarningCircle,
-} from '@phosphor-icons/react'
+import { Desktop, DeviceMobile, DeviceTablet } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
 import { Button } from '#/components/ui/button'
@@ -14,14 +9,11 @@ import { PageHeader } from '#/components/ui/page-header'
 import { QueryError } from '#/components/ui/query-error'
 import { SettingsSection } from '#/components/ui/settings-section'
 import { Skeleton } from '#/components/ui/skeleton'
-import { authClient } from '#/lib/auth-client'
 import { formatRelativeTime } from '#/lib/relative-time'
-import { signOutClient } from '#/lib/sign-out'
 import { m } from '#/paraglide/messages'
-import { localizeHref } from '#/paraglide/runtime'
 
 import { AccountNav } from './account-nav'
-import { isSessionNotFresh, orderSessions } from './sessions'
+import { orderSessions } from './sessions'
 import { parseUserAgent } from './user-agent'
 import type { DeviceKind } from './user-agent'
 import {
@@ -33,24 +25,19 @@ import {
 /**
  * `/account/sessions`: where you are signed in. This device is marked and
  * has no sign-out of its own (use the account menu). Other sessions sign out
- * one by one, or all at once. Better Auth shows the list only to a recent
- * sign-in, so a stale session gets a sign-in-again prompt instead.
+ * one by one, or all at once. The list comes from the server, without tokens.
  */
 export function SessionsScreen() {
-  const current = authClient.useSession().data
-  const currentToken = current?.session.token
   const query = useAccountSessions()
   const revoke = useRevokeSession()
   const revokeOthers = useRevokeOtherSessions()
   const [confirmOthers, setConfirmOthers] = React.useState(false)
 
-  const sessions = orderSessions(query.data ?? [], currentToken)
-  const otherCount = sessions.filter(
-    (session) => session.token !== currentToken,
-  ).length
+  const sessions = orderSessions(query.data ?? [])
+  const otherCount = sessions.filter((session) => !session.current).length
 
-  function signOut(token: string) {
-    revoke.mutate(token, {
+  function signOut(sessionId: string) {
+    revoke.mutate(sessionId, {
       onSuccess: () => toast.success(m.account_sessions_signed_out()),
       onError: () => toast.error(m.account_sessions_sign_out_failed()),
     })
@@ -75,9 +62,7 @@ export function SessionsScreen() {
         <AccountNav current="sessions" />
       </div>
 
-      {query.isError && isSessionNotFresh(query.error) ? (
-        <SignInAgainCard />
-      ) : query.isError ? (
+      {query.isError ? (
         <QueryError
           title={m.account_sessions_load_error()}
           error={query.error}
@@ -97,10 +82,10 @@ export function SessionsScreen() {
         >
           <InsetList data-testid="sessions-list">
             {sessions.map((session) => {
-              const isCurrent = session.token === currentToken
+              const isCurrent = session.current
               const parsed = parseUserAgent(session.userAgent)
               const pending =
-                revoke.isPending && revoke.variables === session.token
+                revoke.isPending && revoke.variables === session.id
               return (
                 <InsetRow
                   key={session.id}
@@ -135,7 +120,7 @@ export function SessionsScreen() {
                         size="sm"
                         loading={pending}
                         disabled={revoke.isPending}
-                        onClick={() => signOut(session.token)}
+                        onClick={() => signOut(session.id)}
                         data-testid="session-sign-out"
                       >
                         {m.account_sessions_sign_out()}
@@ -194,45 +179,4 @@ function DeviceIcon({ device }: { device: DeviceKind }) {
   if (device === 'mobile') return <DeviceMobile aria-hidden="true" />
   if (device === 'tablet') return <DeviceTablet aria-hidden="true" />
   return <Desktop aria-hidden="true" />
-}
-
-/**
- * The session is older than Better Auth's fresh age, so the list is withheld.
- * A new sign-in makes it fresh; this signs out and returns to this page.
- */
-function SignInAgainCard() {
-  return (
-    <div
-      role="alert"
-      data-testid="sessions-sign-in-again"
-      className="grid gap-4 px-5 py-5 surface-card"
-    >
-      <div className="flex items-start gap-3">
-        <span className="mt-0.5 grid size-7 shrink-0 place-content-center rounded-full bg-status-warning-bg text-icon-warning">
-          <WarningCircle weight="fill" className="size-[18px]" />
-        </span>
-        <div className="grid gap-0.5">
-          <p className="text-[14px] leading-5 font-medium text-text-primary">
-            {m.account_sessions_reauth_title()}
-          </p>
-          <p className="text-callout text-text-secondary">
-            {m.account_sessions_reauth_body()}
-          </p>
-        </div>
-      </div>
-      <Button
-        type="button"
-        className="justify-self-start"
-        onClick={() => {
-          void signOutClient().finally(() => {
-            window.location.assign(
-              `${localizeHref('/login')}?redirect=${encodeURIComponent(localizeHref('/account/sessions'))}`,
-            )
-          })
-        }}
-      >
-        {m.account_sessions_reauth_action()}
-      </Button>
-    </div>
-  )
 }
