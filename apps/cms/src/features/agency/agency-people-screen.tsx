@@ -4,6 +4,11 @@ import { useQuery } from '@tanstack/react-query'
 import {
   DotsThree,
   EnvelopeSimple,
+  LockKey,
+  LockOpen,
+  Prohibit,
+  SignOut,
+  UserCircle,
   Key,
   MagnifyingGlass,
   Plus,
@@ -1085,23 +1090,46 @@ function PersonRow({
               data-testid={`person-open-${account.email}`}
             >
               <Link to="/agency/people/$userId" params={{ userId: account.id }}>
+                <UserCircle />
                 {m.agency_people_open_profile()}
               </Link>
             </DropdownMenuItem>
             {isSelf ? null : (
+              <DropdownMenuItem
+                onSelect={() => onBlockAction('sign-out')}
+                data-testid={`sign-out-${account.email}`}
+              >
+                <SignOut />
+                {m.agency_person_sign_out_action()}
+              </DropdownMenuItem>
+            )}
+            {isSelf ? null : (
+              <DropdownMenuItem
+                onSelect={onResetLink}
+                data-testid={`send-reset-link-${account.email}`}
+              >
+                <Key />
+                {m.agency_people_reset_action()}
+              </DropdownMenuItem>
+            )}
+            {account.isAgencyAdmin && account.factorLockedUntil && !isSelf ? (
+              <DropdownMenuItem
+                onSelect={onResetLockout}
+                data-testid={`reset-factor-lockout-${account.email}`}
+              >
+                <LockKey />
+                {m.account_factor_lockout_reset()}
+              </DropdownMenuItem>
+            ) : null}
+            {isSelf ? null : (
               <>
-                <DropdownMenuItem
-                  onSelect={onResetLink}
-                  data-testid={`send-reset-link-${account.email}`}
-                >
-                  <Key />
-                  {m.agency_people_reset_action()}
-                </DropdownMenuItem>
+                <DropdownMenuSeparator />
                 {blocked ? (
                   <DropdownMenuItem
                     onSelect={() => onBlockAction('unblock')}
                     data-testid={`unblock-${account.email}`}
                   >
+                    <LockOpen />
                     {m.agency_people_menu_unblock()}
                   </DropdownMenuItem>
                 ) : (
@@ -1110,25 +1138,12 @@ function PersonRow({
                     onSelect={() => onBlockAction('block')}
                     data-testid={`block-${account.email}`}
                   >
+                    <Prohibit />
                     {m.agency_people_menu_block()}
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuItem
-                  onSelect={() => onBlockAction('sign-out')}
-                  data-testid={`sign-out-${account.email}`}
-                >
-                  {m.agency_person_sign_out_action()}
-                </DropdownMenuItem>
               </>
             )}
-            {account.isAgencyAdmin && account.factorLockedUntil && !isSelf ? (
-              <DropdownMenuItem
-                onSelect={onResetLockout}
-                data-testid={`reset-factor-lockout-${account.email}`}
-              >
-                {m.account_factor_lockout_reset()}
-              </DropdownMenuItem>
-            ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
       </span>
