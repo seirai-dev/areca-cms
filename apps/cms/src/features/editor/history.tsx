@@ -236,7 +236,7 @@ function HistoryItem({
   const count = group.items.length
   const title =
     count > 1 ? m.editor_history_edited_saves({ count }) : meta.title()
-  const author = latest.createdByName?.trim() || m.editor_unknown_author()
+  const author = latest.createdByName?.trim() || m.people_deleted_user()
 
   return (
     <TimelineItem

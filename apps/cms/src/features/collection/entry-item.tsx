@@ -221,7 +221,8 @@ function SelectBox({
 }
 
 function Author({ name }: { name: string | null | undefined }) {
-  const label = name?.trim() || m.sites_system()
+  // An author is only missing once their account has been deleted.
+  const label = name?.trim() || m.people_deleted_user()
   return <UserAvatar name={label} size="xs" title={label} />
 }
 

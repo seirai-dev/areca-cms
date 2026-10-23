@@ -68,6 +68,15 @@ const SENTENCES: Partial<Record<string, Sentence>> = {
   'member.invite': (target) => m.activity_member_invite({ target }),
   'member.update_role': (target) => m.activity_member_update_role({ target }),
   'member.remove': (target) => m.activity_member_remove({ target }),
+  'member.add': (target) => m.activity_member_add({ target }),
+  'user.block': (target) => m.activity_user_block({ target }),
+  'user.unblock': (target) => m.activity_user_unblock({ target }),
+  'user.delete': (target) => m.activity_user_delete({ target }),
+  'user.rename': (target) => m.activity_user_rename({ target }),
+  'user.sessions_revoke': (target) =>
+    m.activity_user_sessions_revoke({ target }),
+  'user.two_factor_reset': (target) =>
+    m.activity_user_two_factor_reset({ target }),
   'invitation.revoke': () => m.activity_invitation_revoke(),
   'invitation.regenerate_link': () => m.activity_invitation_regenerate_link(),
   'invitation.resend': () => m.activity_invitation_resend(),
@@ -179,6 +188,13 @@ export function activityTarget(
           named: false,
         }
       )
+    case 'user':
+      return (
+        named(text(meta?.userName) ?? text(meta?.deletedUserName)) ?? {
+          label: m.activity_target_person(),
+          named: false,
+        }
+      )
     case 'mcp_key':
       return (
         named(text(meta?.name)) ?? {
@@ -266,10 +282,12 @@ export function activityParts(
 export function activityText(row: ActivityLike, entryTitle?: string | null) {
   const parts = activityParts(row, entryTitle)
   const body = `${parts.before}${parts.target ?? ''}${parts.after}`
-  if (parts.siteEvent || !row.actorName) {
+  // An actor who has since been deleted is kept by name in the row's meta.
+  const actorName = row.actorName ?? text(metaOf(row)?.actorName)
+  if (parts.siteEvent || !actorName) {
     return body.charAt(0).toUpperCase() + body.slice(1)
   }
-  return `${row.actorName} ${body}`
+  return `${actorName} ${body}`
 }
 
 /**
