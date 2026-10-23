@@ -507,19 +507,20 @@ export async function streamAssetFile(storageKey: string): Promise<Response> {
     mimeFromExtension(storageKey) ??
     'application/octet-stream'
 
-  const body = Buffer.isBuffer(object.body)
-    ? new Uint8Array(object.body)
-    : object.body
-
+  // The bytes stream from storage straight to the client; nothing is buffered
+  // in memory here.
   const headers: Record<string, string> = {
     'Content-Type': contentType,
     'Cache-Control': 'public, max-age=31536000, immutable',
     'Access-Control-Allow-Origin': '*',
     'Cross-Origin-Resource-Policy': 'cross-origin',
   }
+  if (object.contentLength !== undefined) {
+    headers['Content-Length'] = String(object.contentLength)
+  }
   if (realMediaType(contentType)) {
     headers['X-Content-Type-Options'] = 'nosniff'
   }
 
-  return new Response(body, { headers })
+  return new Response(object.body, { headers })
 }

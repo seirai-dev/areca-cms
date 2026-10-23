@@ -4,7 +4,13 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3'
+import { abortAfter, explainAbort, idleGuard } from './timeouts'
 import type { AssetStorageAdapter } from './types'
+
+/** Longest wait for S3 to send a GET's headers, and for each body chunk after. */
+const GET_TIMEOUT_MS = 30_000
+const PUT_TIMEOUT_MS = 60_000
+const DELETE_TIMEOUT_MS = 30_000
 
 export function createS3Storage(opts: {
   endpoint: string
@@ -13,7 +19,10 @@ export function createS3Storage(opts: {
   accessKey: string
   secretKey: string
   forcePathStyle: boolean
+  /** Overrides the GET wait limit; tests use a short one. */
+  getTimeoutMs?: number
 }): AssetStorageAdapter {
+  const getTimeoutMs = opts.getTimeoutMs ?? GET_TIMEOUT_MS
   const client = new S3Client({
     endpoint: opts.endpoint,
     region: opts.region,
@@ -35,26 +44,56 @@ export function createS3Storage(opts: {
           Body: body,
           ContentType: contentType,
         }),
-        { abortSignal: AbortSignal.timeout(60_000) },
+        { abortSignal: AbortSignal.timeout(PUT_TIMEOUT_MS) },
       )
     },
 
-    async get(key) {
+    async get(key, call) {
+      // One controller covers the request and the body. Aborting it, by the
+      // caller, a timeout or a cancelled stream, closes the connection.
+      const controller = new AbortController()
+      const onCallerAbort = () => controller.abort(call?.signal?.reason)
+      const detach = () =>
+        call?.signal?.removeEventListener('abort', onCallerAbort)
+      call?.signal?.addEventListener('abort', onCallerAbort, { once: true })
+
+      const headersTimer = abortAfter(
+        controller,
+        getTimeoutMs,
+        `S3 did not send ${key} within ${getTimeoutMs / 1000}s`,
+      )
+      let response
       try {
-        const res = await client.send(
+        response = await client.send(
           new GetObjectCommand({ Bucket: opts.bucket, Key: key }),
+          { abortSignal: controller.signal },
         )
-        if (!res.Body) return null
-        const body = Buffer.from(await res.Body.transformToByteArray())
-        return { body, contentType: res.ContentType }
       } catch (err) {
+        detach()
         if (isNotFound(err)) return null
-        throw err
+        throw explainAbort(controller, err)
+      } finally {
+        clearTimeout(headersTimer)
+      }
+
+      if (!response.Body) {
+        detach()
+        return null
+      }
+      return {
+        body: idleGuard(
+          response.Body.transformToWebStream(),
+          controller,
+          getTimeoutMs,
+          detach,
+        ),
+        contentType: response.ContentType,
+        contentLength: response.ContentLength,
       }
     },
 
     async delete(key, call) {
-      const timeout = AbortSignal.timeout(30_000)
+      const timeout = AbortSignal.timeout(DELETE_TIMEOUT_MS)
       await client.send(
         new DeleteObjectCommand({ Bucket: opts.bucket, Key: key }),
         {
