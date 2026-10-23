@@ -12,9 +12,8 @@ Everything here is for agency admins. Client owners manage the people of their o
 **Agency › People** lists every account in the agency, and every invitation that hasn't been accepted yet.
 
 - **Search** by name or email.
-- **Status** filters: **All**, **Active**, **Blocked**, **Invited** and **2FA off**.
-- **Role** and **Client** filters narrow the list to the people who have a given role, or belong to a given client.
-- **Last active** shows when each person last used the CMS, such as "2h ago". On a phone it sits under the name.
+- **Filters** for status, role and client narrow the list. The status choices are **All**, **Active**, **Blocked**, **Invited** and **2FA off**. The role and client choices pick the people with a given role, or in a given client.
+- **Last active** shows when each person last used the CMS, such as "2h ago", or **Never signed in**.
 - A **Blocked** tag marks people who can't sign in. Their name is dimmed.
 - An **Invited** tag marks a pending invitation. It shows the client or clients, the role and when the invitation expires.
 
@@ -26,11 +25,11 @@ Select **Invite person** to invite someone new to the agency:
 
 1. **Enter the email address.**
 2. **Pick the clients.** Choose one or more clients, and a role for each: **Owner** or **Editor**.
-3. **Send the invitations.** Areca sends one email with a link for the person to join.
+3. **Send the invitations.** Areca emails the person a link to join each client you picked.
 
 If the address already belongs to an account, the sheet says so and offers **Add to clients directly** instead. An existing person is added straight away, with no invitation. They get one email that lists the clients they were added to.
 
-Pending invitations stay in the list, and their row menu has **Resend**, **Copy link** and **Revoke**. See [pending invitations](/docs/cms/people-and-invitations#manage-pending-invitations) for what each one does.
+Pending invitations stay in the list, and their row menu has **Send again**, **Copy link** and **Revoke**. See [pending invitations](/docs/cms/people-and-invitations#manage-pending-invitations) for what each one does.
 
 ## A person's page
 
@@ -38,8 +37,8 @@ Select someone in the list to open their page. It has these parts, from top to b
 
 - **Header:** their name, email, when they were last active, whether two-factor is on, and whether they are an agency admin.
 - **Blocked band:** shown only when the person is blocked. It says when and by whom they were blocked, with **Unblock**.
-- **Clients:** one row per client, with the role they have there. Change the role with **Owner** or **Editor**, remove them with **Remove from client**, or pick **Add to clients**. Changes are staged until you save them, and the save bar shows what will change.
-- **Security:** two-factor status with **Reset 2FA**, the number of active sessions with **Sign out everywhere**, and **Reset password**.
+- **Clients:** one row per client, with the role they have there. Change the role with **Owner** or **Editor**, remove them from a client with the remove action on that row, or pick **Add to clients…**. Changes are staged until you select **Save changes**. The save bar shows how many clients will be added, roles changed and removals made, and **Discard** drops them.
+- **Security:** two-factor status with **Reset 2FA**, the number of active sessions with **Sign out everywhere**, and the password with **Send reset link**.
 - **Profile:** the name, which you can edit.
 - **Danger zone:** **Block** or **Unblock**, and **Delete user**.
 
@@ -48,7 +47,7 @@ Select someone in the list to open their page. It has these parts, from top to b
 A person can be an owner in one client and an editor in another. Each change applies to one client only.
 
 - A client must always keep at least one owner. Areca won't demote or remove the last owner of a client. Add another owner first.
-- Agency admin access is separate from client roles. Grant or remove it on the person's page.
+- Agency admin access is separate from client roles. Grant or remove it with the **Agency admin** switch in the person's header.
 
 ## Block and unblock
 
@@ -63,7 +62,7 @@ When you block someone:
 - **Queued notification emails are cancelled.** No new notification emails are sent to them.
 - **Nobody is emailed.** The person gets no email about the block or the unblock.
 
-Areca records the reason you give, and when and by whom the block happened. Only agency admins see the reason. The reason is optional.
+Blocking asks for an optional internal note, and Areca records when and by whom the block happened. Only agency admins see the note.
 
 Unblocking reverses the block. The person can sign in again and their keys and connections work again. Nobody is emailed.
 
@@ -119,7 +118,7 @@ Nothing else changes. Their roles, keys and connections stay in place, and no em
 
 ## Bulk actions
 
-Select several people with the checkboxes in the list. A bar appears at the bottom of the screen, full width on a phone, with:
+Select several people with the checkboxes in the list. A bar appears at the bottom of the screen, with:
 
 - **Add to clients**: add the selected people to clients, with a role for each.
 - **Block** and **Unblock**.
