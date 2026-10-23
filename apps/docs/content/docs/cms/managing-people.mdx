@@ -1,0 +1,146 @@
+---
+title: Managing people
+description: For agency admins. Find people across the agency, add them to several clients at once, change their roles, block or unblock them, sign them out everywhere, reset two-factor, and delete them.
+---
+
+Agency admins can see and manage every person in the agency from **Agency › People**. This page covers the tools that act on people across clients. For inviting people and changing roles within one client, see [people and invitations](/docs/cms/people-and-invitations).
+
+Everything here is for agency admins. Client owners manage the people of their own client from the client's **People** list, and do not see these tools.
+
+## The people list
+
+**Agency › People** lists every account in the agency, and every invitation that hasn't been accepted yet.
+
+- **Search** by name or email.
+- **Status** filters: **All**, **Active**, **Blocked**, **Invited** and **2FA off**.
+- **Role** and **Client** filters narrow the list to the people who have a given role, or belong to a given client.
+- **Last active** shows when each person last used the CMS, such as "2h ago". On a phone it sits under the name.
+- A **Blocked** tag marks people who can't sign in. Their name is dimmed.
+- An **Invited** tag marks a pending invitation. It shows the client or clients, the role and when the invitation expires.
+
+Select a person's row to open their page.
+
+## Add people to several clients
+
+Select **Invite person** to invite someone new to the agency:
+
+1. **Enter the email address.**
+2. **Pick the clients.** Choose one or more clients, and a role for each: **Owner** or **Editor**.
+3. **Send the invitations.** Areca sends one email with a link for the person to join.
+
+If the address already belongs to an account, the sheet says so and offers **Add to clients directly** instead. An existing person is added straight away, with no invitation. They get one email that lists the clients they were added to.
+
+Pending invitations stay in the list, and their row menu has **Resend**, **Copy link** and **Revoke**. See [pending invitations](/docs/cms/people-and-invitations#manage-pending-invitations) for what each one does.
+
+## A person's page
+
+Select someone in the list to open their page. It has these parts, from top to bottom:
+
+- **Header:** their name, email, when they were last active, whether two-factor is on, and whether they are an agency admin.
+- **Blocked band:** shown only when the person is blocked. It says when and by whom they were blocked, with **Unblock**.
+- **Clients:** one row per client, with the role they have there. Change the role with **Owner** or **Editor**, remove them with **Remove from client**, or pick **Add to clients**. Changes are staged until you save them, and the save bar shows what will change.
+- **Security:** two-factor status with **Reset 2FA**, the number of active sessions with **Sign out everywhere**, and **Reset password**.
+- **Profile:** the name, which you can edit.
+- **Danger zone:** **Block** or **Unblock**, and **Delete user**.
+
+### Roles in each client
+
+A person can be an owner in one client and an editor in another. Each change applies to one client only.
+
+- A client must always keep at least one owner. Areca won't demote or remove the last owner of a client. Add another owner first.
+- Agency admin access is separate from client roles. Grant or remove it on the person's page.
+
+## Block and unblock
+
+Blocking stops a person from signing in and from using the CMS, without deleting anything. Use it when someone should lose access for now, for example while you look into a problem with their account.
+
+When you block someone:
+
+- **They are signed out everywhere.** Every session ends straight away.
+- **They can't sign in.** Password, Google, Microsoft and any other sign-in method is refused. They see "This account is blocked. Contact your agency." They are never told why they were blocked.
+- **Their personal AI keys and AI app connections are paused.** They stop working while the person is blocked. They are not deleted, so they start working again after you unblock the person.
+- **Their memberships are kept.** Their roles in every client stay as they were, so unblocking restores everything.
+- **Queued notification emails are cancelled.** No new notification emails are sent to them.
+- **Nobody is emailed.** The person gets no email about the block or the unblock.
+
+Areca records the reason you give, and when and by whom the block happened. Only agency admins see the reason. The reason is optional.
+
+Unblocking reverses the block. The person can sign in again and their keys and connections work again. Nobody is emailed.
+
+### Limits
+
+- You can't block yourself from this screen. To leave the agency, delete your own account from your [account page](/docs/cms/account#delete-your-account).
+- The last active agency admin can't be blocked or deleted. A blocked admin doesn't count as active.
+- You can block or delete another agency admin.
+
+## Delete a user
+
+Deleting removes the person's account. This can't be undone, and there is no waiting period before it happens.
+
+Open the person's page, select **Delete user** in the danger zone, and type their email address to confirm. The confirmation lists any client where the person is the only owner. Those clients are left with no owner. Agency admins can still manage them, and you can add an owner later.
+
+### What is removed
+
+- Their sign-in, and their sign-in through Google, Microsoft or other providers.
+- Their memberships in every client.
+- Their personal AI keys and AI app connections. The apps they connected stop working.
+- Their active sessions and two-factor setup.
+- Their pending notification emails.
+
+Areca also emails the person to tell them their account was deleted. Account emails are sent whether or not they have turned off other emails.
+
+### What stays
+
+- **Content they wrote stays.** Entries, revisions, uploaded media, and publication records remain. Wherever their name was shown as the author, it now shows **Deleted user**.
+- **Activity history stays.** Changes the person made are still listed, shown as made by **Deleted user**. The deletion itself is recorded with their name.
+
+### Limits
+
+- You can't delete yourself from this screen. Use your [account page](/docs/cms/account#delete-your-account).
+- The last active agency admin can't be deleted.
+- Delete people one at a time. Bulk delete isn't available.
+
+## Reset two-factor
+
+Use **Reset 2FA** when a person has lost their authenticator app and their backup codes.
+
+- Their two-factor setup is removed, including the backup codes.
+- All their sessions end, so they sign in again.
+- They get an email telling them two-factor was reset.
+- If they are an agency admin, they must set up two-factor again the next time they sign in. Other people can turn it on again from their account page, or leave it off.
+
+Ask the person to confirm it is really them before you reset anything. A reset makes it easier for someone else to sign in as them.
+
+## Sign out everywhere
+
+**Sign out everywhere** ends every session the person has, on every device. They have to sign in again on each one.
+
+Nothing else changes. Their roles, keys and connections stay in place, and no email is sent. Use it when a laptop is lost or a session looks suspicious. To stop their access altogether, block them.
+
+## Bulk actions
+
+Select several people with the checkboxes in the list. A bar appears at the bottom of the screen, full width on a phone, with:
+
+- **Add to clients**: add the selected people to clients, with a role for each.
+- **Block** and **Unblock**.
+- **Sign out everywhere**.
+
+Areca asks for one authenticator code for the whole batch. Your own account and the last active agency admin are skipped, and Areca lists each skipped person with the reason. There is no bulk delete.
+
+## Confirm with an authenticator code
+
+Some actions ask for a fresh code from your authenticator app, even if you are already signed in. They are: block, unblock, delete, reset 2FA, sign out everywhere, and their bulk versions. Enter the six-digit code from your app, or a backup code. See [two-factor and step-up](/docs/security/two-factor-and-step-up).
+
+## Names and the activity history
+
+You can edit anyone's name from their page. Areca doesn't email the person when their name changes. The change is recorded in the [activity history](/docs/cms/history-and-activity).
+
+Blocking, unblocking, deleting, resetting two-factor, signing out everywhere and adding people to clients are all recorded there too. Each record shows who made the change.
+
+## Related
+
+- [People and invitations](/docs/cms/people-and-invitations): invite people to one client, change roles and send password reset links.
+- [Your account](/docs/cms/account): what a person can change on their own account, including deleting it.
+- [Account and sign-in](/docs/cms/account-and-sign-in): what a blocked or deleted person sees, and which emails they receive.
+- [Roles and permissions](/docs/security/roles-and-permissions): what owners, editors and agency admins can do.
+- [History and activity](/docs/cms/history-and-activity): where these changes are recorded.

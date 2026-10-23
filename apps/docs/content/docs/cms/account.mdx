@@ -1,6 +1,6 @@
 ---
 title: Your account
-description: Set your language and appearance, turn on two-factor authentication with an authenticator app, keep your recovery codes safe, and sign out.
+description: Change your name and password, set your language and appearance, turn on two-factor authentication, sign out, and delete your account.
 ---
 
 Your account holds your name and email, how you sign in, and your display preferences. You manage most of it from the account menu and the **Account** page.
@@ -17,7 +17,37 @@ Select your name at the bottom of the sidebar to open the account menu. It shows
 
 ## Profile
 
-The **Profile** section on the **Account** page shows your **Name** and **Email**. Both are read-only there. The Account page has no setting to change your name, email or password. If you need a change, contact your agency admin.
+The **Profile** section on the **Account** page shows your **Name** and **Email**.
+
+To change your name, select the name field, type the new name, then select **Save name** or press Enter. Press Escape to go back to the saved name. The new name appears in the account menu straight away.
+
+Your email address can't be changed on this page. If it needs to change, ask your agency admin.
+
+## Change your password
+
+The **Password** section on the **Account** page is there if you sign in with a password. If you only sign in through Google or Microsoft, there is no password to change, and the section doesn't appear.
+
+<Steps>
+<Step>
+
+**Enter your current password.** Use the eye button to show what you typed.
+
+</Step>
+<Step>
+
+**Enter the new password, twice.** It must be at least 8 characters, and no more than 128. The confirmation must match.
+
+</Step>
+<Step>
+
+**Select Change password.** Areca confirms the change.
+
+</Step>
+</Steps>
+
+Changing your password signs out every other device. The browser you changed it in stays signed in. Areca also emails you a notice that your password changed. If you didn't make the change, reset your password straight away with **Forgot password?** on the sign-in page.
+
+If the current password is wrong, the field says **That password is not correct.** Nothing changes.
 
 ## Language
 
@@ -33,11 +63,11 @@ The language changes the labels, buttons and messages in the CMS. It does not tr
 
 Choose **Appearance** in the account menu:
 
-| Option | Effect |
-| --- | --- |
-| **Light** | Always uses the light theme. |
-| **Dark** | Always uses the dark theme. |
-| **Auto** | Follows the theme of your device. |
+| Option    | Effect                            |
+| --------- | --------------------------------- |
+| **Light** | Always uses the light theme.      |
+| **Dark**  | Always uses the dark theme.       |
+| **Auto**  | Follows the theme of your device. |
 
 ## Notifications
 
@@ -82,7 +112,9 @@ Turn it on from **Account**, in the **Two-factor authentication** section.
 </Steps>
 
 <Callout type="warn" title="Save your backup codes">
-Backup codes are shown only once. Each code works one time, and they are the way back in if you lose your phone. Store them outside your phone, for example in a password manager.
+  Backup codes are shown only once. Each code works one time, and they are the
+  way back in if you lose your phone. Store them outside your phone, for example
+  in a password manager.
 </Callout>
 
 ### Sign in with a code
@@ -112,6 +144,54 @@ On the **Account** page, select **Back to workspace** to return to your sites. T
 ## Sign out
 
 Choose **Sign out** from the account menu. Areca signs you out on this device and shows the sign-in page. Sign out on a shared computer before you leave it.
+
+## Delete your account
+
+Deleting your account is permanent. It can't be undone, and it happens straight away, with no waiting period. Scroll to the **Danger zone** at the bottom of the **Account** page and select **Delete account**.
+
+### Before you delete
+
+Areca refuses to delete your account in two cases:
+
+- **You are the only owner of a client.** The page lists those clients, with a **People** link for each one. Make someone else an owner of each client, then come back to this page.
+- **You are the last active agency admin.** Make another person an agency admin first. The page links to **People**.
+
+When neither applies, the **Delete account** button is available.
+
+### Confirm it is you
+
+Deleting asks you to confirm in two steps:
+
+<Steps>
+<Step>
+
+**Read what happens, then type your email.** The first step lists what is removed and what stays. Type your email address to confirm, then select **Continue**.
+
+</Step>
+<Step>
+
+**Prove it's you.** If your account has a password, enter it. If you sign in only with a provider and have two-factor authentication on, enter a code from your authenticator app, or select **Use a backup code**. If you sign in only with a provider and have no two-factor, there is no second step.
+
+</Step>
+</Steps>
+
+Select **Delete account** to finish. Areca deletes the account, signs you out and shows the sign-in page with the message **Your account was deleted.**
+
+### What is removed
+
+- Your sign-in, including any provider you use to sign in.
+- Your access to every client.
+- Your personal AI keys and the AI apps you connected. They stop working.
+- Your sessions and your two-factor setup.
+
+### What stays
+
+- **Content you wrote stays**, such as entries, revisions and uploaded files. Where your name was shown as the author, it now shows **Deleted user**.
+- **Activity history stays.** Changes you made are still listed, shown as made by **Deleted user**.
+
+Areca emails your address to say the account was deleted. You get this email even if you have turned off other emails.
+
+If an agency admin deletes your account instead, you get the same kind of email, and it says that an admin did it. See [managing people](/docs/cms/managing-people) for what an admin can do.
 
 ## Related
 
