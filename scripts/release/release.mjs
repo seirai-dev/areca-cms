@@ -22,6 +22,7 @@ import {
   renderEntry,
   renderNotes,
   tagName,
+  takeUnreleased,
   writeRelease,
 } from './lib.mjs'
 
@@ -89,9 +90,13 @@ function releaseCommit() {
   return git('log', '-1', '--format=%H', `-S"version": "${version}"`, '--', file).trim() || head
 }
 
-function hasChangelogEntry() {
+function readChangelog() {
   const changelog = join(root, pkg.dir, 'CHANGELOG.md')
-  return existsSync(changelog) && changelogSection(readFileSync(changelog, 'utf8'), version) !== null
+  return existsSync(changelog) ? readFileSync(changelog, 'utf8') : ''
+}
+
+function hasChangelogEntry() {
+  return changelogSection(readChangelog(), version) !== null
 }
 
 if (command === 'status') {
@@ -113,8 +118,10 @@ if (command === 'status') {
     output({ next: '' })
   } else {
     const date = new Date().toISOString().slice(0, 10)
-    const changed = writeRelease(root, pkg, plan.next, renderEntry(plan.next, date, plan.commits))
-    if (values['notes-file']) writeFileSync(values['notes-file'], renderNotes(plan.commits))
+    // Hand-written notes under `## Unreleased` are folded into this release.
+    const { notes } = takeUnreleased(readChangelog())
+    const changed = writeRelease(root, pkg, plan.next, renderEntry(plan.next, date, plan.commits, notes))
+    if (values['notes-file']) writeFileSync(values['notes-file'], renderNotes(plan.commits, notes))
     output({ next: plan.next, bump: plan.bump, changed })
   }
 } else if (command === 'notes') {
