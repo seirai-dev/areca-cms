@@ -2,6 +2,13 @@ import { useQuery } from '@tanstack/react-query'
 
 import { listPendingReleaseChangesFn } from '#/server/fn/publishing'
 
+/** Site languages the next go live changes. Null when they are unchanged. */
+export type PendingLanguages = {
+  added: string[]
+  removed: string[]
+  mainChanged: { from: string; to: string } | null
+}
+
 export type PendingEntry = {
   id: string
   title: string
@@ -32,19 +39,23 @@ export function usePendingEntries({
   const query = useQuery({
     queryKey: ['golive-pending', siteId] as const,
     queryFn: async () =>
-      (await listPendingReleaseChangesFn({
+      await listPendingReleaseChangesFn({
         data: { siteId },
-      })) as PendingEntry[],
+      }),
     enabled,
     staleTime: 5_000,
   })
 
-  const entries = query.data ?? []
+  const entries = query.data?.changes ?? []
   const changing = entries.filter((entry) => entry.kind !== 'scheduled')
+  const languages = query.data?.languages ?? null
 
   return {
     entries,
+    languages,
     ready: changing,
+    /** Entries that change plus the language change, as the badge counts them. */
+    changeCount: changing.length + (languages ? 1 : 0),
     scheduled: entries.filter((entry) => entry.kind === 'scheduled'),
     isLoading: query.isLoading,
   }

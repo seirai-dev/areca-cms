@@ -26,7 +26,7 @@ import {
   requestPublication,
   requestRollback,
 } from '#/server/publishing/publications'
-import { listPendingReleaseChanges } from '#/server/publishing/release-diff'
+import { listPendingRelease } from '#/server/publishing/release-diff'
 
 const loose = { strict: { output: false } as const }
 
@@ -177,7 +177,7 @@ export const listPendingReleaseChangesFn = createServerFn({
   .validator(z.object({ siteId: z.string().min(1) }))
   .handler(async ({ data }) => {
     await requireSiteAccess(data.siteId)
-    return listPendingReleaseChanges(data.siteId)
+    return listPendingRelease(data.siteId)
   })
 
 export const reconcileDeploymentJobFn = createServerFn({

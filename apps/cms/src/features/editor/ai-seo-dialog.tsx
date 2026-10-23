@@ -118,6 +118,7 @@ export function AiSeoDialog({
   siteId,
   collectionKey,
   entryId,
+  locale,
   data,
   seo,
   onApply,
@@ -127,6 +128,8 @@ export function AiSeoDialog({
   siteId: string
   collectionKey: string
   entryId: string | undefined
+  /** The language being edited (multilingual sites). Alt text is per language. */
+  locale?: string | null
   data: EntryData
   seo: EntrySeo
   onApply: (next: EntrySeo | undefined) => void
@@ -135,7 +138,15 @@ export function AiSeoDialog({
   const [selected, setSelected] = React.useState<Set<string>>(new Set())
   const generate = useMutation({
     mutationFn: () =>
-      generateEntrySeoFn({ data: { siteId, collectionKey, entryId, data } }),
+      generateEntrySeoFn({
+        data: {
+          siteId,
+          collectionKey,
+          entryId,
+          data,
+          locale: locale ?? undefined,
+        },
+      }),
     onSuccess: (result) => {
       const next = new Set<string>()
       for (const key of KEYS) {
@@ -162,7 +173,14 @@ export function AiSeoDialog({
       )
       await Promise.all(
         alts.map((alt) =>
-          updateAssetFn({ data: { id: alt.imageId, altText: alt.alt } }),
+          updateAssetFn({
+            data: {
+              id: alt.imageId,
+              altText: alt.alt,
+              siteId,
+              locale: locale ?? undefined,
+            },
+          }),
         ),
       )
       for (const alt of alts)

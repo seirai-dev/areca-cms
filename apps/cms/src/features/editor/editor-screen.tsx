@@ -67,6 +67,7 @@ import { LocaleFieldsContext } from './locale-fields'
 import type { LocaleFields } from './locale-fields'
 import { ScheduledVersion } from './scheduled-version'
 import { ScheduleForm } from './schedule-form'
+import { EditorConflictNotice } from './conflict-notice'
 import { SeoPanel, plainTextOf } from './seo-panel'
 import { useContentLanguage } from './use-content-language'
 import { useEntryEditor } from './use-entry-editor'
@@ -522,15 +523,10 @@ function EntryEditorView({
       languageRows={languageRows}
       onSelectLanguage={lang.setActive}
       entry={entry}
+      entryId={editor.entryId}
       live={live}
       isNew={editor.isNew}
       canManage={canManage}
-      revisions={editor.revisions}
-      revisionsLoading={editor.revisionsQuery.isLoading}
-      revisionsError={
-        editor.revisionsQuery.isError ? editor.revisionsQuery.error : null
-      }
-      onRetryRevisions={() => void editor.revisionsQuery.refetch()}
       onRestore={setRestoreId}
       onCancelSchedule={editor.cancelSchedule}
       seoPanel={
@@ -714,43 +710,15 @@ function EntryEditorView({
             className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6 px-1 pt-4 sm:pt-10"
             aria-label={m.editor_canvas_label()}
           >
-            {editor.conflict || editor.recoveredDraft ? (
-              <div
-                role="alert"
-                className="mx-auto grid w-full max-w-[720px] gap-3 rounded-card border border-border-error/30 p-4"
-              >
-                <p>
-                  {editor.conflict
-                    ? m.editor_draft_conflict_notice()
-                    : m.editor_draft_recovered_notice()}
-                </p>
-                <div className="flex flex-wrap gap-4">
-                  <button
-                    type="button"
-                    className="underline"
-                    onClick={() => void editor.reloadServerDraft()}
-                  >
-                    {m.editor_reload_server_draft()}
-                  </button>
-                  <button
-                    type="button"
-                    className="underline"
-                    onClick={() => void editor.reapplyRecoveredDraft()}
-                  >
-                    {m.editor_reapply_recovered_draft()}
-                  </button>
-                  {!editor.conflict && (
-                    <button
-                      type="button"
-                      className="underline"
-                      onClick={editor.discardRecoveredDraft}
-                    >
-                      {m.editor_discard_recovered_draft()}
-                    </button>
-                  )}
-                </div>
-              </div>
-            ) : null}
+            <EditorConflictNotice
+              conflict={editor.conflict}
+              approvalConflict={editor.approvalConflict}
+              recoveredDraft={Boolean(editor.recoveredDraft)}
+              className="mx-auto grid w-full max-w-[720px] gap-3 rounded-card border border-border-error/30 p-4"
+              onReload={() => void editor.reloadServerDraft()}
+              onReapply={() => void editor.reapplyRecoveredDraft()}
+              onDiscard={editor.discardRecoveredDraft}
+            />
             {editor.restoreSkippedFields.length > 0 ? (
               <section
                 role="status"
@@ -869,6 +837,7 @@ function EntryEditorView({
           siteId={siteId}
           collectionKey={collection.key}
           entryId={editor.entryId}
+          locale={ctx ? active : null}
           data={view}
           seo={seo}
           onApply={(next) => onLocaleChange(SEO_KEY, next)}

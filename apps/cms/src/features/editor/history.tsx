@@ -32,8 +32,7 @@ import { getLocale } from '#/paraglide/runtime'
 import { groupRevisions } from './revision-groups'
 import type { RevisionGroup } from './revision-groups'
 import type { RevisionRecord } from './use-entry-editor'
-
-const PAGE = 12
+import { useRevisionHistory } from './use-revision-history'
 
 function noteMeta(note: string): {
   title: () => string
@@ -99,24 +98,22 @@ function noteMeta(note: string): {
  * disabled with the reason), behind the existing confirm.
  */
 export function EntryHistory({
-  revisions,
-  loading,
-  error,
-  onRetry,
+  entryId,
   canManage,
   onRestore,
 }: {
-  revisions: RevisionRecord[]
-  loading: boolean
-  error: unknown
-  onRetry: () => void
+  entryId: string | undefined
   canManage: boolean
   onRestore: (revisionId: string) => void
 }) {
-  const [limit, setLimit] = React.useState(PAGE)
+  const history = useRevisionHistory(entryId)
+  const revisions = React.useMemo<RevisionRecord[]>(
+    () => history.data?.pages.flatMap((page) => page.items) ?? [],
+    [history.data],
+  )
   const groups = React.useMemo(() => groupRevisions(revisions), [revisions])
 
-  if (loading) {
+  if (history.isLoading) {
     return (
       <div className="grid gap-4">
         {Array.from({ length: 3 }, (_, index) => (
@@ -131,12 +128,12 @@ export function EntryHistory({
       </div>
     )
   }
-  if (error) {
+  if (history.isError) {
     return (
       <QueryError
-        error={error}
+        error={history.error}
         title={m.editor_could_not_load_revisions()}
-        onRetry={onRetry}
+        onRetry={() => void history.refetch()}
       />
     )
   }
@@ -158,7 +155,7 @@ export function EntryHistory({
       }
     >
       <Timeline data-testid="entry-history">
-        {groups.slice(0, limit).map((group) => (
+        {groups.map((group) => (
           <HistoryItem
             key={group.id}
             group={group}
@@ -168,13 +165,14 @@ export function EntryHistory({
           />
         ))}
       </Timeline>
-      {groups.length > limit ? (
+      {history.hasNextPage ? (
         <Button
           type="button"
           variant="quiet"
           size="sm"
           className="w-fit"
-          onClick={() => setLimit((value) => value + PAGE)}
+          disabled={history.isFetchingNextPage}
+          onClick={() => void history.fetchNextPage()}
         >
           {m.collection_show_more()}
         </Button>

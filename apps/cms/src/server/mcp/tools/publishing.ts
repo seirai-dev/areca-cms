@@ -10,7 +10,7 @@ import {
   requestPublication,
   requestRollback,
 } from '#/server/publishing/publications'
-import { listPendingReleaseChanges } from '#/server/publishing/release-diff'
+import { listPendingRelease } from '#/server/publishing/release-diff'
 
 import type { McpActor } from '../keys'
 import { loadBuildJobInSite, loadPublicationInSite } from '../scope'
@@ -69,19 +69,20 @@ export function registerPublishingTools(registry: ToolRegistry): void {
     name: 'get_release_status',
     title: 'Get release status',
     description:
-      'Shows what is live now, what is ready (approved) but not yet live (pendingChanges: entries marked ready, scheduled entries, and entries withdrawn since the last go live), whether a build is running, and the publishing mode. Call this to answer "what is live" and "what is pending". Read-only.',
+      'Shows what is live now, what is ready (approved) but not yet live (pendingChanges: entries marked ready, scheduled entries, and entries withdrawn since the last go live; languageChange: languages added, removed, or a new main language, or null), whether a build is running, and the publishing mode. Call this to answer "what is live" and "what is pending". Read-only.',
     inputSchema: z.object({}),
     annotations: { readOnlyHint: true, idempotentHint: true },
     run: async (_input, actor) => {
       const status = await getSiteReleaseStatus(actor.siteId)
-      const pending = await listPendingReleaseChanges(actor.siteId)
+      const pending = await listPendingRelease(actor.siteId)
       return {
         publishingMode: status.publishingMode,
         live: describeOptional(status.live),
         demo: describeOptional(status.demo),
         activeJob: describeJob(status.activeJob),
         pendingCount: status.pendingEntries,
-        pendingChanges: pending.map((change) => ({
+        languageChange: pending.languages,
+        pendingChanges: pending.changes.map((change) => ({
           id: change.id,
           title: change.title,
           slug: change.slug,

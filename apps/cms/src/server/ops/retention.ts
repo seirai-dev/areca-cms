@@ -10,6 +10,10 @@
  * - oauth tokens reference session with ON DELETE SET NULL (no cascade), so
  *   pruning sessions cannot remove them.
  * - nothing references invitation, verification or email rows.
+ * - nothing references entry_revision rows (they go with their entry), so an
+ *   autosave can be removed on age alone, except the newest revision of its
+ *   entry. Approvals, schedules, publishes and restores are milestones and are
+ *   never autosaves.
  */
 import { sql } from 'drizzle-orm'
 
@@ -29,6 +33,8 @@ export const RETENTION = {
   buildJobDays: 90,
   /** Newest build jobs kept per site, whatever their age. */
   buildJobsKeptPerSite: 20,
+  /** Autosave revisions. Milestones, and each entry's newest revision, are kept. */
+  autosaveDays: 90,
   batchSize: 1000,
 } as const
 
@@ -37,6 +43,7 @@ export type RetentionResult = {
   verifications: number
   invitations: number
   buildJobs: number
+  autosaves: number
 }
 
 function cutoff(days: number, now: Date) {
@@ -78,7 +85,19 @@ export async function runRetention(now = new Date()): Promise<RetentionResult> {
           WHERE newest.rank <= ${RETENTION.buildJobsKeptPerSite})
       LIMIT ${RETENTION.batchSize})`,
   )
-  const result = { sessions, verifications, invitations, buildJobs }
+  const autosaves = await deleteBatch(
+    sql`entry_revision WHERE id IN (
+      SELECT r.id FROM entry_revision r
+      WHERE r.kind = 'autosave'
+        AND r.note = 'update'
+        AND r.created_at < ${cutoff(RETENTION.autosaveDays, now)}
+        AND EXISTS (
+          SELECT 1 FROM entry_revision newer
+          WHERE newer.entry_id = r.entry_id
+            AND (newer.created_at, newer.id) > (r.created_at, r.id))
+      LIMIT ${RETENTION.batchSize})`,
+  )
+  const result = { sessions, verifications, invitations, buildJobs, autosaves }
   if (Object.values(result).some((count) => count > 0)) {
     log.info('retention removed expired rows', result)
   }

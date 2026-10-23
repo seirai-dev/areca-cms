@@ -315,18 +315,36 @@ export const entry = pgTable(
   ],
 )
 
-export const entryRevision = pgTable('entry_revision', {
-  id: id(),
-  entryId: text('entry_id')
-    .notNull()
-    .references(() => entry.id, { onDelete: 'cascade' }),
-  data: jsonb('data').$type<EntryData>().notNull(),
-  createdBy: text('created_by').references(() => user.id, {
-    onDelete: 'set null',
-  }),
-  createdAt: createdAt(),
-  note: text('note'),
-})
+export const entryRevision = pgTable(
+  'entry_revision',
+  {
+    id: id(),
+    entryId: text('entry_id')
+      .notNull()
+      .references(() => entry.id, { onDelete: 'cascade' }),
+    data: jsonb('data').$type<EntryData>().notNull(),
+    createdBy: text('created_by').references(() => user.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: createdAt(),
+    note: text('note'),
+    /**
+     * `autosave`: a draft save. Saves by one person within a few minutes of
+     * their last autosave update that revision. `milestone`: an action that
+     * approves, schedules, publishes, restores or creates, always its own row.
+     */
+    kind: text('kind')
+      .$type<'autosave' | 'milestone'>()
+      .notNull()
+      .default('milestone'),
+  },
+  (t) => [
+    // History pages and the latest-revision lookup read one entry, newest first.
+    index('entry_revision_entry_created_idx').on(t.entryId, t.createdAt, t.id),
+    // Retention scans autosave rows by age.
+    index('entry_revision_kind_created_idx').on(t.kind, t.createdAt),
+  ],
+)
 
 /** Authoring history retained after entry, collection, or site deletion. */
 export const deletedContentArchive = pgTable('deleted_content_archive', {

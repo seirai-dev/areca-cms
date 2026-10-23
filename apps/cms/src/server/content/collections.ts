@@ -14,6 +14,7 @@ import {
   assertPreviewPath,
   validateContentDefinitions,
 } from './content-definitions.ts'
+import { confirmedFieldDrops, purgeFieldContent } from './field-data.ts'
 import { ensureGlobalEntry } from './globals.ts'
 import { normalizeRequiredLanguages } from './locale-validation.ts'
 import { NotFoundError, ValidationError } from './errors.ts'
@@ -234,6 +235,8 @@ export async function upsertCollection(
     requiredLanguages?: string[]
     /** Per-language route patterns. Left unchanged when omitted; null clears them. */
     localizedRoutes?: Record<string, string> | null
+    /** Keys of fields that are removed together with their content. */
+    confirmDropFields?: string[]
   },
   actorId?: string,
 ) {
@@ -278,6 +281,13 @@ export async function upsertCollection(
       ...existing.filter((row) => row.key !== input.key),
       { key: input.key, kind: 'collection', fields, enabled },
     ])
+    const previous = existing.find((row) => row.key === input.key)
+    const purgedKeys = await confirmedFieldDrops(tx, {
+      collectionId: previous?.id,
+      before: previous?.fields ?? [],
+      after: fields,
+      confirmDropFields: input.confirmDropFields,
+    })
     await tx
       .insert(collection)
       .values({
@@ -313,6 +323,7 @@ export async function upsertCollection(
           updatedAt: now,
         },
       })
+    if (previous) await purgeFieldContent(tx, previous.id, purgedKeys)
   })
 
   const row = await getCollection(siteId, input.key)

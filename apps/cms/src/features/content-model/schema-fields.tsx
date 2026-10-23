@@ -217,6 +217,12 @@ function SlugRow({ field }: { field: FieldDraft }) {
   )
 }
 
+function keyUsedByHint(count: number) {
+  return count === 1
+    ? m.content_field_key_locked_one()
+    : m.content_field_key_locked_other({ count })
+}
+
 function FieldListRow({
   field,
   index,
@@ -417,6 +423,7 @@ export function FieldFormPanel({
   collectionKeys,
   kind = 'collection',
   multilingual = false,
+  keyUsedBy = 0,
   onChange,
   onBack,
   onRemove,
@@ -430,6 +437,8 @@ export function FieldFormPanel({
   kind?: SchemaKind
   /** 2+ site languages: shows the Translatable switch. */
   multilingual?: boolean
+  /** Entries holding content for this field. A key with content can't change. */
+  keyUsedBy?: number
   onChange: (patch: Partial<FieldDraft>) => void
   onBack: () => void
   onRemove: () => void
@@ -492,14 +501,22 @@ export function FieldFormPanel({
           label={m.admin_collection_key()}
           htmlFor={`field-key-${index}`}
           error={errors?.key}
-          hint={m.content_field_key_hint()}
+          hint={
+            keyUsedBy > 0
+              ? keyUsedByHint(keyUsedBy)
+              : m.content_field_key_hint()
+          }
           required
         >
           <Input
             id={`field-key-${index}`}
             data-testid={`field-key-${index}`}
-            className="font-mono text-[13px]"
             value={field.key}
+            readOnly={keyUsedBy > 0}
+            className={cn(
+              'font-mono text-[13px]',
+              keyUsedBy > 0 && 'bg-background-subtle text-text-secondary',
+            )}
             spellCheck={false}
             autoCapitalize="off"
             aria-invalid={errors?.key ? true : undefined}

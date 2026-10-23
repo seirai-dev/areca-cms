@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { db } from '#/db'
 import {
   buildJob,
+  entry,
+  entryRevision,
   invitation,
   organization,
   publication,
@@ -12,6 +14,7 @@ import {
   session,
   verification,
 } from '#/db/schema'
+import { createTestCollection } from '#/server/content/test-utils'
 import {
   createTestSite,
   insertPublication,
@@ -57,6 +60,102 @@ async function finishedJob(
 }
 
 describe.skipIf(!hasDb)('retention', () => {
+  it("prunes old autosaves, but keeps milestones and each entry's newest revision", async () => {
+    const ctx = await createTestSite()
+    cleanups.push(async () => {
+      await db.delete(organization).where(eq(organization.id, ctx.org.id))
+      await removeUsers([ctx.actor.id])
+    })
+    const col = await createTestCollection(ctx.site.id)
+    const addEntry = async (slug: string) =>
+      (
+        await db
+          .insert(entry)
+          .values({ siteId: ctx.site.id, collectionId: col.id, slug })
+          .returning()
+      ).at(0)
+    const addRevision = async (
+      entryId: string,
+      input: { daysOld: number; note: string; kind: 'autosave' | 'milestone' },
+    ) =>
+      (
+        await db
+          .insert(entryRevision)
+          .values({
+            entryId,
+            data: {},
+            createdBy: ctx.actor.id,
+            note: input.note,
+            kind: input.kind,
+            createdAt: daysAgo(input.daysOld),
+          })
+          .returning()
+      ).at(0)
+
+    // Old autosave with a newer one: the old one goes.
+    const first = await addEntry(`retention-a-${ctx.suffix}`)
+    const oldAutosave = await addRevision(first!.id, {
+      daysOld: 100,
+      note: 'update',
+      kind: 'autosave',
+    })
+    const recentAutosave = await addRevision(first!.id, {
+      daysOld: 2,
+      note: 'update',
+      kind: 'autosave',
+    })
+    // An old autosave that is the entry's only revision: it stays.
+    const second = await addEntry(`retention-b-${ctx.suffix}`)
+    const onlyAutosave = await addRevision(second!.id, {
+      daysOld: 100,
+      note: 'update',
+      kind: 'autosave',
+    })
+    // Old milestones stay, even with an old autosave between them.
+    const third = await addEntry(`retention-c-${ctx.suffix}`)
+    const oldPublish = await addRevision(third!.id, {
+      daysOld: 100,
+      note: 'publish',
+      kind: 'milestone',
+    })
+    const middleAutosave = await addRevision(third!.id, {
+      daysOld: 99,
+      note: 'update',
+      kind: 'autosave',
+    })
+    const newerPublish = await addRevision(third!.id, {
+      daysOld: 98,
+      note: 'publish',
+      kind: 'milestone',
+    })
+
+    const result = await runRetention(NOW)
+
+    expect(result.autosaves).toBeGreaterThanOrEqual(2)
+    const kept = await db
+      .select({ id: entryRevision.id })
+      .from(entryRevision)
+      .where(
+        inArray(entryRevision.id, [
+          oldAutosave!.id,
+          recentAutosave!.id,
+          onlyAutosave!.id,
+          oldPublish!.id,
+          middleAutosave!.id,
+          newerPublish!.id,
+        ]),
+      )
+    expect(kept.map((row) => row.id).sort()).toEqual(
+      [
+        recentAutosave!.id,
+        onlyAutosave!.id,
+        oldPublish!.id,
+        newerPublish!.id,
+      ].sort(),
+    )
+    expect(RETENTION.autosaveDays).toBe(90)
+  })
+
   it('removes expired sessions, verification tokens and unaccepted invitations past their windows only', async () => {
     const person = await makeUser({ name: 'Retention Person' })
     const sessionOld = crypto.randomUUID()

@@ -4,7 +4,13 @@ import { db } from '#/db'
 import { collection, entry, publication, site, user } from '#/db/schema'
 import { entryTitle } from '#/lib/content/utils'
 import { globalsAsEntryLists } from '#/lib/globals'
-import type { Field, Snapshot, SnapshotEntry } from '#/lib/types'
+import type {
+  Field,
+  SeoMeta,
+  SiteLanguages,
+  Snapshot,
+  SnapshotEntry,
+} from '#/lib/types'
 import { buildSnapshot } from '#/server/content/snapshot'
 
 /**
@@ -33,12 +39,27 @@ export type ScheduledUpcoming = {
   data: Record<string, unknown>
 }
 
+/**
+ * Site language changes that the next go live would publish. Schema-only
+ * changes are not here: they do not change what visitors see.
+ */
+export type LanguageReleaseChange = {
+  /** Languages that the next release ships and the live site does not. */
+  added: string[]
+  /** Languages the live site shows that the next release drops. */
+  removed: string[]
+  /** The main language before and after, when it changed. */
+  mainChanged: { from: string; to: string } | null
+}
+
 export type ApprovedReleaseDiff = {
   pendingCount: number
   adds: ReleaseDiffEntry[]
   updates: ReleaseDiffEntry[]
   removals: ReleaseDiffEntry[]
   scheduledUpcoming: ScheduledUpcoming[]
+  /** Null when the languages are unchanged, or there is no live baseline to compare. */
+  languages: LanguageReleaseChange | null
   liveEntryIds: string[]
   liveSlugsByEntryId: Record<string, string>
 }
@@ -59,7 +80,7 @@ export type PendingReleaseChange = {
 }
 
 type IndexedEntry = ReleaseDiffEntry &
-  Pick<SnapshotEntry, 'seo' | 'publishedAt'>
+  Pick<SnapshotEntry, 'seo' | 'publishedAt' | 'locales'>
 
 /** Order-insensitive JSON; same rule as `entry-live-state` `stable()`. */
 export function stableJson(value: unknown): string {
@@ -99,22 +120,69 @@ function seoFingerprint(seo: SnapshotEntry['seo']) {
 function withoutSeoKey({
   seo: _seo,
   publishedAt: _publishedAt,
+  locales: _locales,
   ...rest
 }: IndexedEntry): ReleaseDiffEntry {
   return rest
 }
 
-function changed(next: IndexedEntry, prev: IndexedEntry) {
-  if (fingerprint(next) !== fingerprint(prev)) return true
+/**
+ * Whether resolved SEO moved between two snapshots of the same entry. Adding
+ * resolved defaults to an untouched legacy entry is not a change. Re-approval
+ * advances publishedAt, so its SEO must be released even when the live
+ * baseline predates SEO and has no metadata to compare.
+ */
+function seoChanged(
+  next: { seo?: SeoMeta; publishedAt: string | null },
+  prev: { seo?: SeoMeta; publishedAt: string | null },
+) {
   const a = seoFingerprint(next.seo)
   const b = seoFingerprint(prev.seo)
-  // Adding resolved defaults to an untouched legacy entry is not a change.
-  // Re-approval advances publishedAt, so its SEO must be released even when
-  // the live baseline predates SEO and has no metadata to compare.
   if (a !== null && b === null) {
     return next.publishedAt !== prev.publishedAt
   }
   return a !== null && b !== null && a !== b
+}
+
+type LocaleView = NonNullable<SnapshotEntry['locales']>[string]
+
+/**
+ * Translation-only edits change `locales` and nothing else: the main view in
+ * `data` stays the same. A language that starts or stops shipping is a change too.
+ */
+function localesChanged(next: IndexedEntry, prev: IndexedEntry) {
+  const nextLocales: Partial<Record<string, LocaleView>> = next.locales ?? {}
+  const prevLocales: Partial<Record<string, LocaleView>> = prev.locales ?? {}
+  const keys = new Set([
+    ...Object.keys(nextLocales),
+    ...Object.keys(prevLocales),
+  ])
+  for (const key of keys) {
+    const a = nextLocales[key]
+    const b = prevLocales[key]
+    if (!a || !b) return true
+    if (
+      stableJson({ slug: a.slug, data: a.data }) !==
+      stableJson({ slug: b.slug, data: b.data })
+    ) {
+      return true
+    }
+    if (
+      seoChanged(
+        { seo: a.seo, publishedAt: next.publishedAt },
+        { seo: b.seo, publishedAt: prev.publishedAt },
+      )
+    ) {
+      return true
+    }
+  }
+  return false
+}
+
+function changed(next: IndexedEntry, prev: IndexedEntry) {
+  if (fingerprint(next) !== fingerprint(prev)) return true
+  if (seoChanged(next, prev)) return true
+  return localesChanged(next, prev)
 }
 
 /**
@@ -127,9 +195,36 @@ export function pendingCountFromDiff(input: {
   adds: number
   updates: number
   removals: number
+  languages?: boolean
 }) {
   if (!input.candidateOk) return input.hasBaseline ? 1 : 0
-  return input.adds + input.updates + input.removals
+  return input.adds + input.updates + input.removals + (input.languages ? 1 : 0)
+}
+
+/** Two or more languages make a multilingual site; one language is no setting. */
+function multilingual(
+  languages: SiteLanguages | null | undefined,
+): SiteLanguages | null {
+  return languages && languages.all.length > 1 ? languages : null
+}
+
+/** Language change between the live baseline and the candidate, or null. */
+export function diffLanguages(
+  candidate: SiteLanguages | null | undefined,
+  live: SiteLanguages | null | undefined,
+): LanguageReleaseChange | null {
+  const next = multilingual(candidate)
+  const prev = multilingual(live)
+  const nextAll = next?.all ?? []
+  const prevAll = prev?.all ?? []
+  const added = nextAll.filter((locale) => !prevAll.includes(locale))
+  const removed = prevAll.filter((locale) => !nextAll.includes(locale))
+  const mainChanged =
+    prev && next && prev.main !== next.main
+      ? { from: prev.main, to: next.main }
+      : null
+  if (added.length === 0 && removed.length === 0 && !mainChanged) return null
+  return { added, removed, mainChanged }
 }
 
 /**
@@ -160,6 +255,7 @@ function indexCollections(
         data: item.data,
         seo: item.seo,
         publishedAt: item.publishedAt,
+        locales: item.locales,
       })
     }
   }
@@ -293,6 +389,10 @@ export async function diffApprovedRelease(
   const { adds, updates, removals } = built.ok
     ? diffSnapshotCollections(candidate, baselineContent)
     : { adds: [], updates: [], removals: [] }
+  const languages =
+    built.ok && baseline
+      ? diffLanguages(built.snapshot.languages, baseline.languages)
+      : null
 
   const pendingIds = new Set(
     [...adds, ...updates, ...removals].map((item) => item.id),
@@ -309,11 +409,13 @@ export async function diffApprovedRelease(
       adds: adds.length,
       updates: updates.length,
       removals: removals.length,
+      languages: languages !== null,
     }),
     adds,
     updates,
     removals,
     scheduledUpcoming,
+    languages,
     liveEntryIds: [...liveIndex.keys()],
     liveSlugsByEntryId,
   }
@@ -329,9 +431,15 @@ function titleOf(
   return entryTitle(data, col?.fields ?? [], slug)
 }
 
-export async function listPendingReleaseChanges(
+export type PendingRelease = {
+  changes: PendingReleaseChange[]
+  languages: LanguageReleaseChange | null
+}
+
+/** Entry and section changes plus the language change, from one diff. */
+export async function listPendingRelease(
   siteId: string,
-): Promise<PendingReleaseChange[]> {
+): Promise<PendingRelease> {
   const diff = await diffApprovedRelease(siteId)
   const collections = await db
     .select({
@@ -420,5 +528,11 @@ export async function listPendingReleaseChanges(
     return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
   })
 
-  return changes
+  return { changes, languages: diff.languages }
+}
+
+export async function listPendingReleaseChanges(
+  siteId: string,
+): Promise<PendingReleaseChange[]> {
+  return (await listPendingRelease(siteId)).changes
 }

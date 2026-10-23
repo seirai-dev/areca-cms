@@ -281,6 +281,44 @@ describe('generateSeoSuggestion: images', () => {
   })
 })
 
+describe('generateSeoSuggestion: alt text by language', () => {
+  function withAlt(altText: string | null, altI18n: Record<string, string>) {
+    mocks.loadAssetLookup.mockResolvedValue({
+      byId: new Map([['asset-1', assetRow({ altText, altI18n })]]),
+      byStorageKey: new Map(),
+    })
+  }
+
+  it('reads the selected language alt and asks for alt text in that language', async () => {
+    withAlt('Main photo', { nl: 'Foto van de haven' })
+
+    const result = await generateSeoSuggestion({ ...baseInput, locale: 'nl' })
+
+    expect(result.images[0]?.alt).toBe('Foto van de haven')
+    expect(JSON.stringify(lastChatOptions().messages)).toContain(
+      'Write each imageAlts text in the language with tag nl',
+    )
+  })
+
+  it('does not fill a language without its own alt from the main alt', async () => {
+    withAlt('Main photo', {})
+
+    const result = await generateSeoSuggestion({ ...baseInput, locale: 'nl' })
+
+    expect(result.images[0]?.alt).toBeNull()
+  })
+
+  it('keeps the main alt for the main language and for no language', async () => {
+    withAlt('Main photo', { nl: 'Foto' })
+
+    const noLocale = await generateSeoSuggestion(baseInput)
+    expect(noLocale.images[0]?.alt).toBe('Main photo')
+    expect(JSON.stringify(lastChatOptions().messages)).not.toContain(
+      'language with tag',
+    )
+  })
+})
+
 describe('generateSeoSuggestion: usage', () => {
   it('sums usage reported by the middleware across calls', async () => {
     mocks.chat.mockImplementation(async (options: ChatOptions) => {

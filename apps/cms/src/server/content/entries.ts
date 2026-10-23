@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { and, desc, eq, ilike, inArray, isNotNull, or, sql } from 'drizzle-orm'
+import { and, desc, eq, ilike, isNotNull, or, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { collection, entry, entryRevision, site, user } from '#/db/schema'
@@ -18,7 +18,6 @@ import type {
 import {
   I18N_KEY,
   LOCALE_KEY,
-  localeStatus,
   normalizeBase,
   readLocale,
 } from '#/lib/content-locale'
@@ -31,6 +30,7 @@ import { assetMutationLock } from '#/server/assets/usage'
 import { archiveDeletedContent } from './deletion-archive'
 import { getCollection } from './collections.ts'
 import { ConflictError, NotFoundError, ValidationError } from './errors.ts'
+import { notCompleteInLocale } from './missing-language.ts'
 import { assertSectionSeo, sectionSeoIssue } from './globals.ts'
 import {
   formatLanguageBlockers,
@@ -160,29 +160,15 @@ export async function listEntries(
     ).at(0)
     const languages = siteRow?.languages
     if (languages?.all.includes(options.missingLanguage)) {
-      // Completeness is computed from the draft JSON (required translatable
-      // fields, with the same rules as validation), so the matching ids are
-      // collected first and then filtered in SQL. Keeps paging and `total`
-      // exact. Cost grows with the collection size; only paid when the
-      // filter is on.
-      const ctx = {
-        main: languages.main,
-        all: languages.all,
-        fields: col.fields,
-      }
-      const candidates = await db
-        .select({ id: entry.id, draftData: entry.draftData })
-        .from(entry)
-        .where(and(...filters))
-      const missing = candidates
-        .filter(
-          (row) =>
-            !localeStatus(row.draftData, options.missingLanguage!, ctx)
-              .complete,
-        )
-        .map((row) => row.id)
-      if (missing.length === 0) return { items: [], total: 0 }
-      filters.push(inArray(entry.id, missing))
+      // Completeness is one predicate on the draft, so paging and `total` stay
+      // exact and the database reads only the rows of the page.
+      filters.push(
+        notCompleteInLocale(options.missingLanguage, {
+          main: languages.main,
+          all: languages.all,
+          fields: col.fields,
+        }),
+      )
     }
   }
 
@@ -407,16 +393,56 @@ export async function updateDraft(
   })
 }
 
-export async function listRevisions(entryId: string) {
+/** Revisions per history page. */
+export const REVISION_PAGE_SIZE = 30
+const REVISION_PAGE_MAX = 100
+
+/** A revision without its data: what the history list shows. */
+export type RevisionSummary = {
+  id: string
+  createdAt: Date
+  createdBy: string | null
+  note: string | null
+  kind: 'autosave' | 'milestone'
+}
+
+/**
+ * One page of an entry's history, newest first, without the revision data
+ * (that is read on demand). `cursor` is the id of the last row of the previous
+ * page; the rows are compared in SQL, so no timestamp round trip can skip one.
+ */
+export async function listRevisions(
+  entryId: string,
+  options: { cursor?: string | null; limit?: number } = {},
+): Promise<{ items: RevisionSummary[]; nextCursor: string | null }> {
   const existing = await getEntry(entryId)
   if (!existing) {
     throw new NotFoundError(m.server_entry_not_found())
   }
-  return db
-    .select()
+  const limit = Math.min(
+    Math.max(options.limit ?? REVISION_PAGE_SIZE, 1),
+    REVISION_PAGE_MAX,
+  )
+  const before = options.cursor
+    ? sql`(${entryRevision.createdAt}, ${entryRevision.id}) < (select c.created_at, c.id from entry_revision c where c.id = ${options.cursor})`
+    : undefined
+  const rows = await db
+    .select({
+      id: entryRevision.id,
+      createdAt: entryRevision.createdAt,
+      createdBy: entryRevision.createdBy,
+      note: entryRevision.note,
+      kind: entryRevision.kind,
+    })
     .from(entryRevision)
-    .where(eq(entryRevision.entryId, entryId))
-    .orderBy(desc(entryRevision.createdAt))
+    .where(and(eq(entryRevision.entryId, entryId), before))
+    .orderBy(desc(entryRevision.createdAt), desc(entryRevision.id))
+    .limit(limit + 1)
+  const items = rows.slice(0, limit)
+  return {
+    items,
+    nextCursor: rows.length > limit ? (items.at(-1)?.id ?? null) : null,
+  }
 }
 
 export async function restoreRevision(
@@ -639,8 +665,30 @@ function keepCurrentRevisionField(
   else delete data[key]
 }
 
-export async function publishEntry(id: string, actorId: string) {
+/** Approval conflict: the draft moved after the reviewer opened it. */
+const APPROVAL_CONFLICT_MESSAGE =
+  'DRAFT_CONFLICT: Draft changed while approving. Reload and review it.'
+
+/**
+ * The draft version an approval applies to. A caller that sent the version it
+ * reviewed gets a conflict when the draft has moved on; without one, the
+ * version loaded for this request is approved (MCP and bulk callers).
+ */
+function approvedVersion(current: number, expectedVersion: number | undefined) {
+  if (expectedVersion === undefined) return current
+  if (expectedVersion !== current) {
+    throw new ConflictError(APPROVAL_CONFLICT_MESSAGE)
+  }
+  return expectedVersion
+}
+
+export async function publishEntry(
+  id: string,
+  actorId: string,
+  expectedVersion?: number,
+) {
   const ctx = await loadEntryContext(id)
+  const reviewed = approvedVersion(ctx.entry.draftVersion, expectedVersion)
   // Drafts saved before external images were imported are caught up here.
   const images = await importEntryImages(ctx, ctx.entry.draftData, actorId)
   const draftData = normalizeEntryData(ctx, images.data)
@@ -685,16 +733,12 @@ export async function publishEntry(id: string, actorId: string) {
           updatedBy: actorId,
           updatedAt: now,
         })
-        .where(
-          and(eq(entry.id, id), eq(entry.draftVersion, ctx.entry.draftVersion)),
-        )
+        .where(and(eq(entry.id, id), eq(entry.draftVersion, reviewed)))
         .returning()
     ).at(0)
 
     if (!updated) {
-      throw new ConflictError(
-        'DRAFT_CONFLICT: Draft changed while approving. Reload and review it.',
-      )
+      throw new ConflictError(APPROVAL_CONFLICT_MESSAGE)
     }
 
     await writeRevision(id, draftData, actorId, 'publish', tx)
@@ -799,8 +843,10 @@ export async function scheduleEntry(
   scheduledAt: string,
   timezone: string,
   actorId: string,
+  expectedVersion?: number,
 ) {
   const ctx = await loadEntryContext(id)
+  const reviewed = approvedVersion(ctx.entry.draftVersion, expectedVersion)
   if (!timezone) {
     throw new ValidationError([
       { path: 'timezone', message: m.server_timezone_required() },
@@ -854,16 +900,12 @@ export async function scheduleEntry(
           updatedBy: actorId,
           updatedAt: now,
         })
-        .where(
-          and(eq(entry.id, id), eq(entry.draftVersion, ctx.entry.draftVersion)),
-        )
+        .where(and(eq(entry.id, id), eq(entry.draftVersion, reviewed)))
         .returning()
     ).at(0)
 
     if (!updated) {
-      throw new ConflictError(
-        'DRAFT_CONFLICT: Draft changed while approving. Reload and review it.',
-      )
+      throw new ConflictError(APPROVAL_CONFLICT_MESSAGE)
     }
 
     await writeRevision(id, draftData, actorId, 'schedule', tx)
@@ -954,18 +996,60 @@ export async function deleteEntry(id: string, actorId: string) {
   })
 }
 
+/**
+ * A person's autosaves within this window of their last autosave update that
+ * one revision instead of adding a row. The window is measured from when that
+ * revision was created, so a long session still gets a new row every window.
+ */
+export const AUTOSAVE_COALESCE_MS = 10 * 60 * 1000
+
+/**
+ * Records a revision. An autosave by the same person, when the entry's newest
+ * revision is their own autosave within the window, replaces that revision's
+ * data. Every other write (approval, schedule, publish, restore, another
+ * person's change) adds its own revision, so milestones are never merged.
+ */
 async function writeRevision(
   entryId: string,
   data: EntryData,
   actorId: string,
   note: string,
-  connection: Pick<typeof db, 'insert'> = db,
+  connection: Pick<typeof db, 'insert' | 'select' | 'update'> = db,
 ) {
+  const kind = note === 'update' ? 'autosave' : 'milestone'
+  if (kind === 'autosave') {
+    const latest = (
+      await connection
+        .select({
+          id: entryRevision.id,
+          kind: entryRevision.kind,
+          createdBy: entryRevision.createdBy,
+          createdAt: entryRevision.createdAt,
+        })
+        .from(entryRevision)
+        .where(eq(entryRevision.entryId, entryId))
+        .orderBy(desc(entryRevision.createdAt), desc(entryRevision.id))
+        .limit(1)
+    ).at(0)
+    if (
+      latest &&
+      latest.kind === 'autosave' &&
+      latest.createdBy === actorId &&
+      Date.now() - latest.createdAt.getTime() <= AUTOSAVE_COALESCE_MS
+    ) {
+      await connection
+        .update(entryRevision)
+        .set({ data })
+        .where(eq(entryRevision.id, latest.id))
+      return
+    }
+  }
   await connection.insert(entryRevision).values({
     entryId,
     data,
     createdBy: actorId,
     note,
+    kind,
   })
 }
 

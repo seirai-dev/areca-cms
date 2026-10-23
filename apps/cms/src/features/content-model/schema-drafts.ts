@@ -53,6 +53,11 @@ export type FieldDraft = {
   /** Site content only: visual heading above this field ('' when unset). */
   group: string
   /**
+   * Date fields: the key of the date field this must be on or after ('' when
+   * unset). Not edited here, but it is stored, so a save keeps it.
+   */
+  after: string
+  /**
    * The explicit "Translatable" switch. Undefined follows the field type's
    * default (`TRANSLATABLE_BY_DEFAULT`). Only written when it differs from it.
    */
@@ -223,6 +228,7 @@ export function emptyFieldDraft(type: FieldType = 'text'): FieldDraft {
     description: '',
     keyTouched: false,
     group: '',
+    after: '',
     translatable: undefined,
   }
 }
@@ -239,6 +245,7 @@ function toFieldDraft(field: Field): FieldDraft {
     description: field.description ?? '',
     keyTouched: true,
     group: field.group ?? '',
+    after: field.after ?? '',
     translatable: field.translatable,
   }
 }
@@ -272,6 +279,7 @@ export function fieldsFromDrafts(
         field.type === 'reference'
           ? field.collection.trim() || undefined
           : undefined,
+      after: field.after.trim() || undefined,
     }
     if (kind === 'global') saved.group = field.group.trim() || undefined
     // Stored only when it differs from the type default, so a field that

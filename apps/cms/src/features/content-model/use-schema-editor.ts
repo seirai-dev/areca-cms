@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { toast } from 'sonner'
 
@@ -15,6 +15,7 @@ import { m } from '#/paraglide/messages'
 import {
   deleteCollectionFn,
   deleteGlobalFn,
+  fieldDataUsageFn,
   upsertCollectionFn,
   upsertGlobalFn,
 } from '#/server/fn/content'
@@ -52,6 +53,9 @@ export type CollectionRecord = {
 }
 
 export type SchemaSegment = 'fields' | 'settings'
+
+/** A field whose content a save would delete, waiting for the owner to confirm. */
+export type PendingFieldDrop = { key: string; label: string; count: number }
 
 /** The field form that replaces the list; `picking` shows the type tiles. */
 export type EditingField = { index: number; picking: boolean } | null
@@ -125,8 +129,21 @@ export function useSchemaEditor({
   const deleteCollection = useServerFn(deleteCollectionFn)
   const upsertGlobal = useServerFn(upsertGlobalFn)
   const deleteGlobal = useServerFn(deleteGlobalFn)
+  const fieldUsage = useServerFn(fieldDataUsageFn)
   const isGlobal = kind === 'global'
   const creating = collection === null
+  const savedKey = collection?.key
+  // Entries holding content per field key. Saved fields with content are locked.
+  const usageQuery = useQuery({
+    queryKey: ['field-data-usage', siteId, savedKey] as const,
+    queryFn: () => fieldUsage({ data: { siteId, key: savedKey ?? '' } }),
+    enabled: open && Boolean(savedKey),
+    staleTime: 0,
+  })
+  const usage: Partial<Record<string, number>> = usageQuery.data ?? {}
+  const [pendingDrop, setPendingDrop] = useState<PendingFieldDrop[] | null>(
+    null,
+  )
 
   const [segment, setSegmentState] = useState<SchemaSegment>('settings')
   const [key, setKey] = useState('')
@@ -229,6 +246,8 @@ export function useSchemaEditor({
       /** Sent only on a multilingual site; omitted leaves the server as is. */
       requiredLanguages?: string[]
       localizedRoutes?: Record<string, string> | null
+      /** Fields whose content the owner confirmed deleting. */
+      confirmDropFields: string[]
     }) =>
       isGlobal
         ? upsertGlobal({
@@ -241,6 +260,7 @@ export function useSchemaEditor({
               previewPath: draft.previewPath || null,
               enabled: draft.enabled,
               requiredLanguages: draft.requiredLanguages,
+              confirmDropFields: draft.confirmDropFields,
             },
           })
         : upsertCollection({
@@ -253,11 +273,16 @@ export function useSchemaEditor({
               enabled: draft.enabled,
               requiredLanguages: draft.requiredLanguages,
               localizedRoutes: draft.localizedRoutes,
+              confirmDropFields: draft.confirmDropFields,
             },
           }),
     onSuccess: async (_result, draft) => {
       toast.success(isGlobal ? m.globals_saved() : m.sites_collection_saved())
+      setPendingDrop(null)
       await invalidateSchemas()
+      await queryClient.invalidateQueries({
+        queryKey: ['field-data-usage', siteId],
+      })
       setBaseline(current)
       if (creating) {
         onOpenChange(false)
@@ -321,14 +346,24 @@ export function useSchemaEditor({
       )
       return
     }
+    const drops = fieldDropsWithContent()
+    if (drops.length > 0) {
+      setPendingDrop(drops)
+      return
+    }
+    submit([])
+  }
+
+  function submit(confirmDropFields: string[]) {
     saveMutation.mutate({
       key: key.trim(),
-      label: trimmedLabel,
+      label: label.trim(),
       routePattern: routePattern.trim(),
       enabled,
       seo,
-      previewPath: trimmedPreviewPath,
+      previewPath: previewPath.trim(),
       fields: fieldsFromDrafts(fields, { kind }),
+      confirmDropFields,
       ...(multilingual
         ? {
             requiredLanguages: requiredLanguagesFrom(
@@ -341,6 +376,35 @@ export function useSchemaEditor({
           }
         : {}),
     })
+  }
+
+  /** Saved fields this save removes while they still hold content. */
+  function fieldDropsWithContent(): PendingFieldDrop[] {
+    const kept = new Set(fields.map((field) => field.key.trim()))
+    return (collection?.fields ?? [])
+      .filter((field) => !kept.has(field.key) && (usage[field.key] ?? 0) > 0)
+      .map((field) => ({
+        key: field.key,
+        label: field.label,
+        count: usage[field.key] ?? 0,
+      }))
+  }
+
+  /** A saved field keeps its key while it has content. */
+  function keyUsedBy(field: FieldDraft): number {
+    const saved = (collection?.fields ?? []).some(
+      (item) => item.key === field.key,
+    )
+    return saved ? (usage[field.key] ?? 0) : 0
+  }
+
+  function confirmDrop() {
+    if (!pendingDrop) return
+    submit(pendingDrop.map((item) => item.key))
+  }
+
+  function cancelDrop() {
+    setPendingDrop(null)
   }
 
   function requestClose() {
@@ -470,6 +534,10 @@ export function useSchemaEditor({
     saving: saveMutation.isPending,
     deleting: deleteMutation.isPending,
     save,
+    keyUsedBy,
+    pendingDrop,
+    confirmDrop,
+    cancelDrop,
     requestClose,
     discard,
     discardOpen,

@@ -596,15 +596,34 @@ export function registerEntryTools(registry: ToolRegistry): void {
     name: 'list_revisions',
     title: 'List revisions',
     description:
-      'Lists the saved history of an entry, newest first: revision id, what happened (create, update, publish, restore, ...), who, and when. Use a revision id with restore_revision (owners).',
-    inputSchema: z.object({ id: idSchema('entry') }),
+      'Lists the saved history of an entry, newest first: revision id, what happened (create, update, publish, restore, ...), who, and when. Use a revision id with restore_revision (owners). Returns one page of up to limit revisions (default 30). For older ones, pass cursor: the id of the last revision you received. A page shorter than limit is the end of the history.',
+    inputSchema: z.object({
+      id: idSchema('entry'),
+      cursor: z
+        .string()
+        .min(1)
+        .max(ID_MAX_LENGTH)
+        .optional()
+        .describe('The id of the last revision of the previous page.'),
+      limit: z
+        .number()
+        .int()
+        .min(1)
+        .max(100)
+        .optional()
+        .describe('Page size, 1-100. Default 30.'),
+    }),
     annotations: { readOnlyHint: true, idempotentHint: true },
     run: async (input, actor) => {
       const entry = await loadEntryInSite(actor, input.id)
-      const revisions = await listRevisions(entry.id)
+      const { items: revisions } = await listRevisions(entry.id, {
+        cursor: input.cursor,
+        limit: input.limit,
+      })
       return revisions.map((rev) => ({
         id: rev.id,
         note: rev.note,
+        kind: rev.kind,
         createdAt: rev.createdAt.toISOString(),
         createdBy: rev.createdBy,
       }))

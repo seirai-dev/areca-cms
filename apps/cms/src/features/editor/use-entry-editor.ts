@@ -34,7 +34,6 @@ import {
   getEntryFn,
   getGlobalPreviewUrlFn,
   getPreviewUrlFn,
-  listRevisionsFn,
   publishEntryFn,
   restoreRevisionFn,
   scheduleEntryFn,
@@ -172,12 +171,6 @@ export function useEntryEditor({
   })
   const entry = (entryQuery.data ?? null) as EntryRecord | null
 
-  const revisionsQuery = useQuery({
-    queryKey: queryKeys.revisions(entryId ?? ''),
-    queryFn: () => listRevisionsFn({ data: { entryId: entryId! } }),
-    enabled: Boolean(entryId),
-  })
-
   const previewQuery = useQuery({
     queryKey: globalKey
       ? (['global-preview', siteId, globalKey] as const)
@@ -219,6 +212,8 @@ export function useEntryEditor({
   const versionRef = React.useRef<number>(1)
   const conflictRef = React.useRef(false)
   const [conflict, setConflict] = React.useState(false)
+  /** The conflict came from Mark ready or Schedule: the draft moved after review. */
+  const [approvalConflict, setApprovalConflict] = React.useState(false)
   const [recoveredDraft, setRecoveredDraft] = React.useState<EntryData | null>(
     null,
   )
@@ -282,6 +277,7 @@ export function useEntryEditor({
       hydrate(entry, true)
       conflictRef.current = false
       setConflict(false)
+      setApprovalConflict(false)
       // A never-published draft whose slug still matches its title keeps
       // following the title; anything else keeps its address.
       const title = titleField ? entry.draftData[titleField.key] : undefined
@@ -704,11 +700,34 @@ export function useEntryEditor({
     }
   }
 
+  /**
+   * A conflict means the draft moved after the reviewer opened it. Nothing was
+   * approved, so the editor blocks further saves until the latest version is loaded.
+   */
+  function approvalError(
+    fallback: ReturnType<typeof m.editor_something_went_wrong>,
+  ) {
+    const failed = actionError(fallback)
+    return (error: unknown) => {
+      if (errorMessage(error, fallback).includes('DRAFT_CONFLICT')) {
+        conflictRef.current = true
+        setConflict(true)
+        setApprovalConflict(true)
+        return
+      }
+      failed(error)
+    }
+  }
+
   const markReadyMutation = useMutation({
     mutationFn: async (options: { quiet?: boolean } = {}) => {
       const id = await ensureSaved()
       if (!id) return null
-      warnImageImports(await publishEntryFn({ data: { id } }))
+      warnImageImports(
+        await publishEntryFn({
+          data: { id, expectedVersion: versionRef.current },
+        }),
+      )
       return { id, quiet: options.quiet }
     },
     onSuccess: async (result) => {
@@ -719,7 +738,7 @@ export function useEntryEditor({
         })
       await invalidateEntry(result.id)
     },
-    onError: actionError(m.editor_could_not_mark_ready()),
+    onError: approvalError(m.editor_could_not_mark_ready()),
   })
 
   const goLiveNowMutation = useMutation({
@@ -742,6 +761,7 @@ export function useEntryEditor({
             id,
             scheduledAt: input.at.toISOString(),
             timezone: input.timeZone,
+            expectedVersion: versionRef.current,
           },
         }),
       )
@@ -752,7 +772,7 @@ export function useEntryEditor({
       toast.success(m.editor_scheduled_toast())
       await invalidateEntry(id)
     },
-    onError: actionError(m.editor_could_not_schedule()),
+    onError: approvalError(m.editor_could_not_schedule()),
   })
 
   const cancelScheduleMutation = useMutation({
@@ -827,6 +847,7 @@ export function useEntryEditor({
       hydrate(record, true)
       conflictRef.current = false
       setConflict(false)
+      setApprovalConflict(false)
       setRecoveredDraft(null)
       setFieldErrors({})
       setFormError(null)
@@ -922,6 +943,7 @@ export function useEntryEditor({
     }
     conflictRef.current = false
     setConflict(false)
+    setApprovalConflict(false)
     setFormError(null)
     setStatus('idle')
     if (reapply && recovery) {
@@ -934,6 +956,7 @@ export function useEntryEditor({
 
   return {
     conflict,
+    approvalConflict,
     recoveredDraft,
     reloadServerDraft: () => resolveDraftConflict(false),
     reapplyRecoveredDraft: () => resolveDraftConflict(true),
@@ -951,8 +974,6 @@ export function useEntryEditor({
     entryQuery,
     loading,
     ready,
-    revisions: (revisionsQuery.data ?? []) as RevisionRecord[],
-    revisionsQuery,
     previewUrl: previewQuery.data?.url,
     titleField,
     slugField,

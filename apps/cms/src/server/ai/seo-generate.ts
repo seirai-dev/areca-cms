@@ -133,6 +133,19 @@ async function readImageBase64(row: Asset): Promise<string | null> {
   }
 }
 
+/**
+ * The alt text a suggestion is judged against: the language's own alt. Another
+ * language's alt is not a fallback, so a language without its own alt is
+ * asked for one. The main language (or no language) reads the main alt.
+ */
+export function altInLocale(
+  row: Pick<Asset, 'altText' | 'altI18n'>,
+  locale: string | null | undefined,
+): string | null {
+  const value = locale ? row.altI18n[locale] : row.altText
+  return value?.trim() || null
+}
+
 export function buildArticlePrompt(input: {
   site: { name: string; productionUrl: string }
   collectionLabel: string
@@ -141,6 +154,8 @@ export function buildArticlePrompt(input: {
   data: EntryData
   slug: string
   images: AiImageInput[]
+  /** Set for a non-main language: image alt text is written in it. */
+  locale?: string | null
 }): string {
   const { fields, data } = input
   const lines: string[] = []
@@ -181,6 +196,11 @@ export function buildArticlePrompt(input: {
 
   if (input.images.length) {
     lines.push('', '## Images (attached in this order when supported)')
+    if (input.locale) {
+      lines.push(
+        `Write each imageAlts text in the language with tag ${input.locale}.`,
+      )
+    }
     for (const image of input.images) {
       lines.push(
         `- id=${image.id} file="${image.filename}" alt=${
@@ -273,6 +293,8 @@ export async function generateSeoSuggestion(input: {
   fields: Field[]
   data: EntryData
   slug: string
+  /** A non-main language, or null for the main language. */
+  locale?: string | null
 }): Promise<GenerateSeoResult> {
   const assets = await collectImages(
     input.site.organizationId,
@@ -283,7 +305,7 @@ export async function generateSeoSuggestion(input: {
     id: row.id,
     url: assetUrl(row),
     filename: row.originalFilename,
-    alt: row.altText?.trim() || null,
+    alt: altInLocale(row, input.locale),
   }))
 
   const model = await findOpenRouterModel(input.config.model)
@@ -319,6 +341,7 @@ export async function generateSeoSuggestion(input: {
     data: input.data,
     slug: input.slug,
     images,
+    locale: input.locale,
   })
 
   const adapter = createOpenRouterText(
