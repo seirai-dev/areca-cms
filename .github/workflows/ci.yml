@@ -172,7 +172,9 @@ jobs:
       - name: Apply database migrations
         run: pnpm --filter @areca/cms db:migrate
       - name: CMS integration tests
-        run: pnpm --filter @areca/cms test
+        # Suites share one database and some clean up rows that others queue,
+        # so they run one file at a time to stay deterministic.
+        run: pnpm --filter @areca/cms test -- --no-file-parallelism
 
   smoke:
     name: Chromium smoke test (production build)
