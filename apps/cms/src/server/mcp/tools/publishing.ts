@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import { ConflictError } from '#/server/content/errors'
 import {

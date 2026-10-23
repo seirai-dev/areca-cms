@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import { resolveLanguage } from '#/features/editor/use-content-language'
 import { LibraryScreen } from '#/features/library/library-screen'

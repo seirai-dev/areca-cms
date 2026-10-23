@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import { isTranslatable } from '#/lib/content-locale'
 import { listCollections } from '#/server/content/collections'

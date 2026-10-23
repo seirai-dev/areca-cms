@@ -1,5 +1,5 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import { PeopleScreen } from '#/features/people/people-screen'
 import { canManageSite } from '#/lib/site-nav'

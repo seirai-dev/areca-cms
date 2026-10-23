@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import {
   ALT_TEXT_MAX_LENGTH,

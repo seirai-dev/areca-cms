@@ -1,5 +1,5 @@
 import { McpServer } from '@modelcontextprotocol/server'
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import { credentialPhrase } from './guard'
 import type { McpActor } from './keys'

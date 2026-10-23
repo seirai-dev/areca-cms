@@ -2,7 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { eq } from 'drizzle-orm'
 import { db } from '#/db'
 import { asset, site } from '#/db/schema'
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import {
   ALT_TEXT_MAX_LENGTH,

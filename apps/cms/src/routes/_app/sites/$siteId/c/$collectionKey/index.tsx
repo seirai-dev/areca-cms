@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import { CollectionScreen } from '#/features/collection/collection-screen'
 

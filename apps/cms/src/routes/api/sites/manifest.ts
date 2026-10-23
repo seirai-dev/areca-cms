@@ -1,7 +1,7 @@
 import { isSafeIdentifier } from '#/lib/content-identifiers'
 import { createFileRoute } from '@tanstack/react-router'
 import '@tanstack/react-start'
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import {
   GLOBAL_GROUP_MAX_LENGTH,

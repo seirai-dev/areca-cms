@@ -10,7 +10,7 @@
  */
 import { chat } from '@tanstack/ai'
 import { createOpenRouterText } from '@tanstack/ai-openrouter'
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import { env } from '#/env'
 import { TEXTAREA_MAX_LENGTH, TEXT_MAX_LENGTH } from '#/lib/content-limits'

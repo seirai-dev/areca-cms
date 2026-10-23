@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
-import type { z } from 'zod'
+import type { z } from '#/lib/zod'
 import { registerAssetTools } from '#/server/mcp/tools/assets'
 import { registerEntryTools } from '#/server/mcp/tools/entries'
 import type { McpActor } from '#/server/mcp/keys'

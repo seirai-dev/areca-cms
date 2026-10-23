@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from '#/lib/zod'
 
 import { LOCALE_TAG_MAX_LENGTH, MAX_SITE_LANGUAGES } from '#/lib/content-limits'
 import { languageName } from '#/server/content/locale-validation'
