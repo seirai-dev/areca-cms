@@ -288,9 +288,16 @@ export type LiveRoleResult =
  * and OAuth connections so both obey the same rules.
  */
 export async function liveRoleFor(
-  owner: { id: string; isAgencyAdmin: boolean; twoFactorEnabled: boolean },
+  owner: {
+    id: string
+    isAgencyAdmin: boolean
+    twoFactorEnabled: boolean
+    blockedAt?: Date | null
+  },
   organizationId: string,
 ): Promise<LiveRoleResult> {
+  // Suspended, not revoked: keys and connections work again once unblocked.
+  if (owner.blockedAt) return { ok: false, reason: 'invalid' }
   if (owner.isAgencyAdmin) {
     // Mirrors assertAdminMfa in lib/session.server.ts. Not imported, because
     // that module pulls in request-only APIs.

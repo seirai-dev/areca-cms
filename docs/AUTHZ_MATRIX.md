@@ -66,6 +66,20 @@ unchanged (each row carries a side-effect probe).
 | `listAuditLogFn (instance-wide)` | `admin.ts` | `agency` | agency admin (MFA) |
 | `setAgencyAdminFn` | `admin.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) |
 | `listUsersFn` | `admin.ts` | `agency` | agency admin (MFA) |
+| `listPendingInvitationsFn` | `admin.ts` | `agency` | agency admin (MFA) |
+| `getUserDetailFn` | `people.ts` | `agency` | agency admin (MFA) |
+| `blockUserFn` | `people.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) |
+| `unblockUserFn` | `people.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) |
+| `deleteUserFn` | `people.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) |
+| `resetUserTwoFactorFn` | `people.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) |
+| `signOutUserEverywhereFn` | `people.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) |
+| `updateUserNameFn` | `people.ts` | `agency` | agency admin (MFA) |
+| `setUserClientAccessFn` | `people.ts` | `agency` | agency admin (MFA) |
+| `bulkBlockUsersFn` | `people.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) |
+| `bulkUnblockUsersFn` | `people.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) |
+| `bulkSignOutUsersFn` | `people.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) |
+| `bulkAddUsersToClientsFn` | `people.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) |
+| `searchPeopleFn` | `people.ts` | `agency` | agency admin (MFA) |
 | `listCollectionsFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
 | `listEntriesFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
 | `getEntryFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
@@ -117,6 +131,8 @@ unchanged (each row carries a side-effect probe).
 | `listMySessionsFn` | `account.ts` | `user` | any signed-in user, own live sessions only, never tokens; agency admins need local MFA |
 | `revokeMySessionFn` | `account.ts` | `user` | any signed-in user, own other sessions only (current session refused, NotFound for others); agency admins need local MFA |
 | `revokeMyOtherSessionsFn` | `account.ts` | `user` | any signed-in user, own other sessions only; agency admins need local MFA |
+| `updateMyNameFn` | `account.ts` | `user` | any signed-in user, own name only; agency admins need local MFA |
+| `deleteMyAccountFn` | `account.ts` | `user` | any signed-in user, own account only, after re-verifying the password or a second factor; agency admins need local MFA |
 | `getAuthMethodsFn` | `auth-methods.ts` | `public` | anyone |
 | `getSetupStatusFn` | `setup.ts` | `public` | anyone |
 | `completeSetupFn` | `setup.ts` | `public` | anyone |

@@ -28,3 +28,15 @@ paths = [
   # (in history since c7147b3 and 4c6a6b9).
   '''(^|/)apps/cms/src/lib/secret-placeholders\.test\.ts$''',
 ]
+
+[[allowlists]]
+description = "Paraglide message keys: snake_case names such as agency_person_2fa_off look like generic API keys"
+condition = "AND"
+paths = [
+  '''(^|/)apps/cms/messages/[a-z]{2}\.json$''',
+]
+regexTarget = "secret"
+regexes = [
+  # Only a whole snake_case message key; any other value in these files is still scanned.
+  '''^[a-z][a-z0-9]*(_[a-z0-9]+)+$''',
+]

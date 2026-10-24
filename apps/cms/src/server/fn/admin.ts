@@ -21,6 +21,7 @@ import {
   inviteMember,
   listInvitations,
   listMembers,
+  listPendingInvitations,
   listUsers,
   regenerateInvitationLink,
   removeMember,
@@ -450,4 +451,13 @@ export const listUsersFn = createServerFn({
 }).handler(async () => {
   await requireAgencyAdmin()
   return listUsers()
+})
+
+/** Invitations nobody has accepted, across every client. People page rows. */
+export const listPendingInvitationsFn = createServerFn({
+  method: 'GET',
+  ...adminFn,
+}).handler(async () => {
+  await requireAgencyAdmin()
+  return listPendingInvitations()
 })

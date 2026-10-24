@@ -97,6 +97,7 @@ async function deliver(input: NotifyInput): Promise<{ notified: string[] }> {
         email: user.email,
         emailVerified: user.emailVerified,
         locale: user.locale,
+        blockedAt: user.blockedAt,
       })
       .from(user)
       .where(inArray(user.id, userIds)),
@@ -109,7 +110,8 @@ async function deliver(input: NotifyInput): Promise<{ notified: string[] }> {
 
   const planned = recipients.flatMap((recipient) => {
     const row = usersById.get(recipient.userId)
-    if (!row) return []
+    // A blocked person gets no notices, new or queued.
+    if (!row || row.blockedAt) return []
     const key = ruleKey(event, recipient.role)
     const resolved = resolvePreference({
       event,

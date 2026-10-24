@@ -38,6 +38,12 @@ export async function notificationStillEligible(
   const role = row.payload.recipientRole
   const organizationId = row.organizationId
   if (!role) return false
+  const [recipient] = await db
+    .select({ blockedAt: user.blockedAt })
+    .from(user)
+    .where(eq(user.id, row.userId))
+    .limit(1)
+  if (!recipient || recipient.blockedAt) return false
 
   if (role === 'agency') {
     const [person] = await db

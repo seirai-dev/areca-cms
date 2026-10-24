@@ -36,8 +36,11 @@ export type AccountEmailKind =
   | 'two_factor_disabled'
   | 'membership_removed'
   | 'membership_role_changed'
+  | 'membership_added'
   | 'agency_admin_granted'
   | 'agency_admin_revoked'
+  | 'account_deleted'
+  | 'two_factor_reset'
 
 export type QueuedEmail = { status: 'queued'; id: string }
 
@@ -201,11 +204,38 @@ export async function sendVerificationEmail(
   return sendNow(queued.id, { claimedAttempt: queued.claimedAttempt })
 }
 
+/** Removes a reset token, so a link that was never sent cannot be used. */
+async function removeResetToken(userId: string, token: string) {
+  await db
+    .delete(verification)
+    .where(
+      and(
+        inArray(
+          verification.identifier,
+          verificationIdentifierForms(`reset-password:${token}`),
+        ),
+        eq(verification.value, userId),
+      ),
+    )
+}
+
 /** Sends the reset link, or the SSO pointer, and reports which one it was. */
 async function deliverReset(
   userId: string,
   token: string,
 ): Promise<{ sso: boolean; result: SendResult } | null> {
+  const [person] = await db
+    .select({ blockedAt: user.blockedAt })
+    .from(user)
+    .where(eq(user.id, userId))
+    .limit(1)
+  // A blocked person gets no mail, and the answer is the same as for an
+  // unknown address. Their sign-in is refused anyway (see auth.ts).
+  if (person?.blockedAt) {
+    await removeResetToken(userId, token)
+    return null
+  }
+
   const accounts = await db
     .select({ providerId: account.providerId })
     .from(account)
@@ -213,17 +243,7 @@ async function deliverReset(
   const hasPassword = accounts.some((row) => row.providerId === 'credential')
 
   if (!hasPassword) {
-    await db
-      .delete(verification)
-      .where(
-        and(
-          inArray(
-            verification.identifier,
-            verificationIdentifierForms(`reset-password:${token}`),
-          ),
-          eq(verification.value, userId),
-        ),
-      )
+    await removeResetToken(userId, token)
     const providers = [
       ...new Set(accounts.map((row) => providerName(row.providerId))),
     ]

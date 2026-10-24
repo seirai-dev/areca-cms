@@ -306,6 +306,23 @@ const authBase = betterAuth({
   databaseHooks: {
     session: {
       create: {
+        // Every session, whatever the sign-in method (password, social, SSO).
+        // Throwing here refuses the sign-in with ACCOUNT_BLOCKED.
+        before: async (session) => {
+          const [row] = await db
+            .select({ blockedAt: schema.user.blockedAt })
+            .from(schema.user)
+            .where(eq(schema.user.id, session.userId))
+            .limit(1)
+          // The lookup can come back empty, so the row check stays.
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+          if (row?.blockedAt) {
+            throw new APIError('FORBIDDEN', {
+              code: 'ACCOUNT_BLOCKED',
+              message: m.server_account_blocked(),
+            })
+          }
+        },
         // Every new session that comes from a sign-in endpoint. Session swaps
         // made by two-factor changes are not sign-ins and are not recorded.
         after: async (session, context) => {
@@ -387,6 +404,12 @@ const authBase = betterAuth({
       // from the sign-up body.
       locale: {
         type: 'string',
+        required: false,
+        input: false,
+      },
+      // Read by requireUser: a blocked person is treated as signed out.
+      blockedAt: {
+        type: 'date',
         required: false,
         input: false,
       },

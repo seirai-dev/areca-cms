@@ -468,11 +468,11 @@ function StatusBlock({
         </Row>
         <Row label={m.editor_author()}>
           <UserAvatar
-            name={entry.createdByName ?? m.editor_unknown_author()}
+            name={entry.createdByName ?? m.people_deleted_user()}
             size="xs"
           />
           <span className="truncate">
-            {entry.createdByName?.trim() || m.editor_unknown_author()}
+            {entry.createdByName?.trim() || m.people_deleted_user()}
           </span>
         </Row>
         <Row label={m.editor_entry_id()}>

@@ -246,6 +246,13 @@
       "when": 1792693713213,
       "tag": "0034_entry_revision_kind",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1792779801574,
+      "tag": "0035_account_management_blocking",
+      "breakpoints": true
     }
   ]
 }

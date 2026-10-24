@@ -25,6 +25,65 @@ function row(partial: Partial<ActivityLike>): ActivityLike {
   }
 }
 
+describe('activityText for people actions', () => {
+  it('names the person a block, unblock, deletion, rename, sign-out or 2FA reset is about', () => {
+    expect(
+      activityText(
+        row({
+          action: 'user.block',
+          targetType: 'user',
+          meta: { userName: 'Jane Doe', reason: 'x' },
+        }),
+      ),
+    ).toBe('Sanne de Vries blocked Jane Doe')
+    expect(
+      activityText(
+        row({
+          action: 'user.delete',
+          targetType: 'user',
+          meta: { deletedUserName: 'Jane Doe', self: false },
+        }),
+      ),
+    ).toBe('Sanne de Vries deleted the account of Jane Doe')
+    expect(
+      activityText(
+        row({ action: 'user.sessions_revoke', targetType: 'user', meta: {} }),
+      ),
+    ).toBe('Sanne de Vries signed someone out everywhere')
+    expect(
+      activityText(
+        row({ action: 'user.two_factor_reset', targetType: 'user', meta: {} }),
+      ),
+    ).toBe('Sanne de Vries reset two-factor sign-in for someone')
+  })
+
+  it('says a person was added to a client, by name', () => {
+    expect(
+      activityText(
+        row({
+          action: 'member.add',
+          targetType: 'membership',
+          meta: { email: 'pia@example.com', direct: true },
+        }),
+      ),
+    ).toBe('Sanne de Vries added pia@example.com to a client')
+  })
+
+  it('keeps the name of an actor who has since been deleted, from the row itself', () => {
+    expect(
+      activityText(
+        row({
+          action: 'user.delete',
+          targetType: 'user',
+          actorId: null,
+          actorName: null,
+          meta: { deletedUserName: 'Jane Doe', actorName: 'Owen Admin' },
+        }),
+      ),
+    ).toBe('Owen Admin deleted the account of Jane Doe')
+  })
+})
+
 describe('activityText', () => {
   it('uses the new vocabulary and the entry title', () => {
     expect(

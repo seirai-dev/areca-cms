@@ -58,3 +58,34 @@ export function renderDisabled(
 ): Promise<RenderedMail> {
   return renderChange('disabled', params, ctx)
 }
+
+/**
+ * Sent when an agency admin resets someone's two-factor sign-in. A security
+ * notice, so it ignores preferences.
+ */
+export async function renderReset(
+  params: Record<string, unknown>,
+  ctx: RenderContext,
+): Promise<RenderedMail> {
+  const { locale, brand } = ctx
+  await loadRecipient(params.userId, ctx.connection)
+  const actor = String(params.actorName ?? '')
+  const date = formatUtc(params.at, locale)
+  const subject = m.server_mail_tpl_two_factor_reset_subject({}, { locale })
+  const preheader = m.server_mail_tpl_two_factor_reset_preheader({}, { locale })
+  const { html, text } = renderLayout({
+    brand,
+    preheader,
+    heading: subject,
+    paragraphs: [
+      m.server_mail_tpl_two_factor_reset_body({ actor, date }, { locale }),
+    ],
+    button: {
+      label: m.server_mail_tpl_review_account({}, { locale }),
+      url: `${env.APP_URL.replace(/\/$/, '')}/account`,
+    },
+    footer: [m.server_mail_tpl_two_factor_reset_footer({}, { locale })],
+    lang: locale,
+  })
+  return { subject, preheader, html, text, secrets: [] }
+}
