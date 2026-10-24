@@ -68,13 +68,14 @@ import {
 } from './golive-tray'
 import { parseGoLiveError } from './parse-errors'
 import type { GoLiveError } from './parse-errors'
+import { releaseRequesterKey } from './release-requester'
 import {
   PUBLICATIONS_PAGE_SIZE,
   buildJobQuery,
   jobsQuery,
   publicationsQuery,
 } from './queries'
-import type { JobRow, PublicationRow } from './queries'
+import type { JobRow, PublicationOrigin, PublicationRow } from './queries'
 import {
   useCancelJob,
   useGoLive,
@@ -1016,11 +1017,7 @@ function ReleaseItem({
         </span>
       }
       time={<RelativeTime value={row.createdAt} />}
-      meta={
-        row.requestedByName
-          ? m.golive_by({ name: row.requestedByName })
-          : m.golive_by_system()
-      }
+      meta={requesterLabel(row)}
       actions={
         restorable ? (
           <DropdownMenu>
@@ -1286,4 +1283,15 @@ function BuildLogSheet({
       </div>
     </SlideOver>
   )
+}
+
+/** "by Jane", "Started automatically" for the scheduler, "by Deleted user". */
+function requesterLabel(row: {
+  requestedByName: string | null
+  origin: PublicationOrigin
+}) {
+  const requester = releaseRequesterKey(row)
+  if (requester.kind === 'person') return m.golive_by({ name: requester.name })
+  if (requester.kind === 'automatic') return m.golive_by_system()
+  return m.golive_by({ name: m.people_deleted_user() })
 }

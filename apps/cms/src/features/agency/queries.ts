@@ -5,9 +5,11 @@ import {
   getDokployCredentialStatusFn,
   listInvitationsFn,
   listOrganizationsFn,
+  listPendingInvitationsFn,
   listSitesFn,
   listUsersFn,
 } from '#/server/fn/admin'
+import { getUserDetailFn } from '#/server/fn/people'
 import { getHomeActivityFn } from '#/server/fn/home'
 
 /**
@@ -19,6 +21,10 @@ import { getHomeActivityFn } from '#/server/fn/home'
 export type ClientRow = Awaited<ReturnType<typeof listOrganizationsFn>>[number]
 export type ClientSiteRow = Awaited<ReturnType<typeof listSitesFn>>[number]
 export type AccountRow = Awaited<ReturnType<typeof listUsersFn>>[number]
+export type PendingInvitationRow = Awaited<
+  ReturnType<typeof listPendingInvitationsFn>
+>[number]
+export type PersonDetail = Awaited<ReturnType<typeof getUserDetailFn>>
 export type HomeActivity = Awaited<ReturnType<typeof getHomeActivityFn>>
 
 export function clientsQuery() {
@@ -39,6 +45,22 @@ export function accountsQuery() {
   return queryOptions({
     queryKey: adminQueryKeys.users,
     queryFn: () => listUsersFn(),
+  })
+}
+
+/** Open invitations across every client, for the People list. */
+export function pendingInvitationsQuery() {
+  return queryOptions({
+    queryKey: adminQueryKeys.pendingInvitations,
+    queryFn: () => listPendingInvitationsFn(),
+  })
+}
+
+/** One person's page: profile, sign-in state, clients and open invitations. */
+export function personQuery(userId: string) {
+  return queryOptions({
+    queryKey: adminQueryKeys.person(userId),
+    queryFn: () => getUserDetailFn({ data: { userId } }),
   })
 }
 

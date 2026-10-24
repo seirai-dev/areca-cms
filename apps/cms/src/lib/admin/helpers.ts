@@ -31,6 +31,8 @@ export const adminQueryKeys = {
   invitations: (organizationId: string) =>
     ['invitations', organizationId] as const,
   users: ['users'] as const,
+  person: (userId: string) => ['person', userId] as const,
+  pendingInvitations: ['pending-invitations'] as const,
   audit: (offset: number, organizationId?: string) =>
     ['audit', organizationId ?? 'all', offset] as const,
   collections: (siteId: string) => ['collections', siteId] as const,

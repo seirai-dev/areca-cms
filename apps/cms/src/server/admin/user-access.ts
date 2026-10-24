@@ -5,12 +5,11 @@
  * removals reuse the member functions, so last-owner protection and their
  * emails stay in one place.
  */
-import { and, count, desc, eq, gt, isNull, sql } from 'drizzle-orm'
+import { and, count, desc, eq, gt, isNull } from 'drizzle-orm'
 
 import { db } from '#/db'
 import {
   account,
-  auditLog,
   invitation,
   membership,
   organization,
@@ -20,6 +19,7 @@ import {
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
 import { ConflictError, NotFoundError } from '#/server/content/errors'
+import { lastActiveSubquery } from './last-active'
 import { sendAccountEmail } from '#/server/mail/account-emails'
 import type { MembershipRole } from '#/lib/types'
 
@@ -88,23 +88,13 @@ export async function getUserDetail(userId: string) {
     .select({ value: count() })
     .from(session)
     .where(and(eq(session.userId, userId), gt(session.expiresAt, new Date())))
-  const [lastSession] = await db
-    .select({
-      at: sql<Date | null>`max(${session.updatedAt})`.mapWith(toDate),
-    })
-    .from(session)
-    .where(eq(session.userId, userId))
-  // Sessions end when a person is blocked, so the last sign-in is the
-  // fallback for "last active".
-  const [lastSignIn] = await db
-    .select({
-      at: sql<Date | null>`max(${auditLog.createdAt})`.mapWith(toDate),
-    })
-    .from(auditLog)
-    .where(
-      and(eq(auditLog.actorId, userId), eq(auditLog.action, 'user.sign_in')),
-    )
-  const lastActiveAt = lastSession?.at ?? lastSignIn?.at ?? null
+  // The same definition as the people list (see last-active.ts).
+  const lastActive = lastActiveSubquery()
+  const [lastActiveRow] = await db
+    .select({ at: lastActive.at })
+    .from(lastActive)
+    .where(eq(lastActive.userId, userId))
+  const lastActiveAt = lastActiveRow?.at ?? null
 
   const memberRows = await db
     .select({
@@ -223,6 +213,7 @@ export async function setUserClientAccess(
         const name = await addMembership(tx, {
           organizationId: step.organizationId,
           userId: person.id,
+          userName: person.name,
           email: person.email,
           role: step.role,
           actorId: input.actorId,
@@ -280,6 +271,7 @@ async function addMembership(
   input: {
     organizationId: string
     userId: string
+    userName: string
     email: string
     role: MembershipRole
     actorId: string
@@ -326,6 +318,7 @@ async function addMembership(
       targetId: row.id,
       meta: {
         userId: input.userId,
+        userName: input.userName,
         email: input.email,
         role: input.role,
         direct: true,

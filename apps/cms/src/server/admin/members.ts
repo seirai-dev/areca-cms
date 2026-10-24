@@ -8,7 +8,6 @@ import {
   invitation,
   membership,
   organization,
-  session,
   site,
   user,
   verification,
@@ -19,6 +18,7 @@ import { getLocale } from '#/paraglide/runtime'
 import { audit } from '#/server/audit'
 import { ConflictError, NotFoundError } from '#/server/content/errors'
 import { AppError } from '#/server/http/app-error'
+import { lastActiveSubquery } from './last-active'
 import { sendAccountEmail } from '#/server/mail/account-emails'
 import { mailFailureMessage } from '#/server/mail/errors'
 import {
@@ -193,6 +193,13 @@ export async function applyMemberRole(
     throw new NotFoundError(m.server_member_not_found())
   }
 
+  // The name is kept in the row, so the activity log still names the person
+  // after they are renamed or deleted.
+  const [person] = await tx
+    .select({ name: user.name })
+    .from(user)
+    .where(eq(user.id, userId))
+    .limit(1)
   await audit(
     {
       organizationId,
@@ -200,7 +207,12 @@ export async function applyMemberRole(
       action: 'member.update_role',
       targetType: 'membership',
       targetId: existing.id,
-      meta: { userId, role, previousRole: existing.role },
+      meta: {
+        userId,
+        userName: person?.name ?? null,
+        role,
+        previousRole: existing.role,
+      },
     },
     tx,
   )
@@ -889,16 +901,7 @@ export async function setAgencyAdmin(
 
 export async function listUsers() {
   const blocker = alias(user, 'blocker')
-  const lastActive = db
-    .select({
-      userId: session.userId,
-      at: sql<Date | null>`max(${session.updatedAt})`
-        .mapWith((value: unknown) => (value ? new Date(String(value)) : null))
-        .as('last_active_at'),
-    })
-    .from(session)
-    .groupBy(session.userId)
-    .as('last_active')
+  const lastActive = lastActiveSubquery()
   const users = await db
     .select({
       id: user.id,

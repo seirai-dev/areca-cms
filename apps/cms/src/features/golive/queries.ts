@@ -51,6 +51,8 @@ export type JobRow = {
   logs: string | null
 }
 
+export type PublicationOrigin = 'manual' | 'scheduled' | 'rollback'
+
 export type PublicationRow = {
   id: string
   status: PublicationStatus
@@ -58,6 +60,7 @@ export type PublicationRow = {
   snapshotHash: string
   requestedBy: string | null
   requestedByName: string | null
+  origin: PublicationOrigin
   createdAt: string | Date
   deployedAt: string | Date | null
   job?: JobRow | null

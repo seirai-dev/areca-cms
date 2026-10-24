@@ -3,7 +3,12 @@ import { realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
 
 import { expect, request as playwrightRequest } from '@playwright/test'
-import type { APIRequestContext, Locator, Page } from '@playwright/test'
+import type {
+  APIRequestContext,
+  Browser,
+  Locator,
+  Page,
+} from '@playwright/test'
 
 export const PASSWORD = 'password123'
 export const ADMIN = 'admin@areca.local'
@@ -629,4 +634,99 @@ export async function stubAi(page: Page, translated: Record<string, string>) {
     route.fulfill(reply({ values: { ...translated }, skipped: [] })),
   )
   await page.route('https://openrouter.ai/**', (route) => route.abort())
+}
+
+/* ------------------------------------------------------------------------
+   Agency: people (accounts, invitations, the person page)
+------------------------------------------------------------------------ */
+
+/** Creates a client from Agency › Clients and returns its slug. */
+export async function createAgencyClient(page: Page, name: string) {
+  await page.goto('/agency/clients')
+  await expect(page.getByTestId('organizations-page')).toBeVisible()
+  await hydrated(page)
+  await page.getByTestId('new-organization').first().click()
+  await page.getByTestId('org-name').fill(name)
+  await page.getByTestId('create-client').click()
+  const slug = slugify(name)
+  await expect(page.getByTestId('client-slug')).toHaveText(slug)
+  return slug
+}
+
+/** Agency › People, hydrated. */
+export async function openAgencyPeople(page: Page) {
+  await page.goto('/agency/people')
+  await expect(page.getByTestId('agency-people')).toBeVisible()
+  await hydrated(page)
+}
+
+/**
+ * Filters the people list by a search term and opens that person's page.
+ * Returns the user id from the URL.
+ */
+export async function openPersonPage(page: Page, email: string) {
+  await openAgencyPeople(page)
+  await page.getByRole('searchbox').fill(email)
+  await page.getByTestId(`person-link-${email}`).click()
+  await expect(page.getByTestId('person-page')).toBeVisible()
+  await expect(page.getByTestId('person-page')).toHaveAttribute(
+    'data-ready',
+    'true',
+  )
+  const id = page.url().match(/\/agency\/people\/([^/?#]+)/)?.[1]
+  expect(id, 'user id in the URL').toBeTruthy()
+  return id!
+}
+
+/**
+ * Invites `email` to each client with the given role, from the Invite person
+ * sheet on Agency › People. The sheet closes after the last send.
+ */
+export async function inviteToClients(
+  page: Page,
+  email: string,
+  picks: Array<{ slug: string; name: string; role: 'owner' | 'editor' }>,
+) {
+  await openAgencyPeople(page)
+  await page.getByTestId('invite-person').click()
+  const sheet = page.getByTestId('invite-person-sheet')
+  await expect(sheet).toBeVisible()
+  await page.getByTestId('invite-person-email').fill(email)
+  for (const pick of picks) {
+    await page.getByTestId('invite-person-clients-add').click()
+    await expect(page.getByTestId('client-picker')).toBeVisible()
+    await page.getByTestId('client-picker-search').fill(pick.name)
+    await page.getByTestId(`client-picker-option-${pick.slug}`).click()
+    if (pick.role === 'owner') {
+      await page.getByTestId('client-picker-role-owner').click()
+    }
+    await page.getByTestId('client-picker-add').click()
+    await expect(page.getByTestId('client-picker')).toBeHidden()
+    await expect(
+      page.getByTestId(`invite-person-pick-${pick.slug}`),
+    ).toBeVisible()
+  }
+  await page.getByTestId('invite-person-send').click()
+  await expect(sheet).toBeHidden()
+}
+
+/**
+ * Follows the e-mailed invitation in a fresh browser context and joins as
+ * `name`. Used to give the people tests real accounts to act on.
+ */
+export async function acceptInvitation(
+  browser: Browser,
+  email: string,
+  name: string,
+) {
+  const link = await waitForInviteLink(email)
+  const context = await browser.newContext()
+  const guest = await context.newPage()
+  await guest.goto(link)
+  const form = await authForm(guest)
+  await guest.getByLabel('Name', { exact: true }).fill(name)
+  await guest.getByLabel('Password', { exact: true }).fill(PASSWORD)
+  await form.getByRole('button', { name: 'Create account and join' }).click()
+  await expect(guest).not.toHaveURL(/\/invite\//, { timeout: 30_000 })
+  await context.close()
 }
