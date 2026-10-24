@@ -4,7 +4,7 @@ import { and, eq, gt, inArray } from 'drizzle-orm'
 import { z } from '#/lib/zod'
 
 import { db } from '#/db'
-import { user, verification } from '#/db/schema'
+import { account, user, verification } from '#/db/schema'
 import { auth } from '#/lib/auth'
 import { emailPasswordEnabled } from '#/lib/auth-providers'
 import {
@@ -217,6 +217,32 @@ export const revokeMyOtherSessionsFn = createServerFn({
   await requireAccountUser()
   await auth.api.revokeOtherSessions({ headers: getRequestHeaders() })
   return { ok: true as const }
+})
+
+/**
+ * What the account page needs before it renders the self-service sections:
+ * whether the caller signs in with a password (only those accounts can change
+ * one), and what would stop the account being deleted. Nothing secret leaves
+ * the server: the hash is read for a yes/no only.
+ */
+export const getMyAccountFn = createServerFn({
+  method: 'GET',
+  ...accountFn,
+}).handler(async () => {
+  const session = await requireAccountUser()
+  const { id } = session.user
+  const credentials = await db
+    .select({ password: account.password })
+    .from(account)
+    .where(and(eq(account.userId, id), eq(account.providerId, 'credential')))
+  const blockers = await selfDeleteBlockers(id)
+  return {
+    hasPassword: credentials.some((row) => Boolean(row.password)),
+    deletion: {
+      soleOwnerOf: blockers.soleOwnerClients,
+      lastAdmin: blockers.lastAdmin,
+    },
+  }
 })
 
 /** Self: the display name everyone sees. No email; the change is audited. */

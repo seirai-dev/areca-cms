@@ -119,6 +119,35 @@ export function AuthError({
   )
 }
 
+/**
+ * A calm, neutral note at the top of the card: something happened that is not
+ * an error (the account was deleted). Same shape as AuthError, no red.
+ */
+export function AuthNotice({
+  children,
+  className,
+}: {
+  children: ReactNode
+  className?: string
+}) {
+  return (
+    <p
+      role="status"
+      data-testid="auth-notice"
+      className={cn(
+        'flex items-start gap-2 rounded-control bg-background-subtle px-3 py-2.5 text-callout text-text-secondary',
+        className,
+      )}
+    >
+      <span
+        aria-hidden="true"
+        className="mt-[5px] size-1.5 shrink-0 rounded-full bg-icon-muted"
+      />
+      <span className="min-w-0">{children}</span>
+    </p>
+  )
+}
+
 /** Hairline "or" between the email form and the provider buttons. */
 export function AuthDivider() {
   return (

@@ -1,6 +1,6 @@
 ---
 title: Account and sign-in
-description: Reset a forgotten password, verify your email address, choose the language of account emails, and know which security emails Areca sends you.
+description: Reset a forgotten password, verify your email address, understand a blocked or deleted account, choose the language of account emails, and know which security emails Areca sends you.
 ---
 
 Areca sends a few emails to your own address about your account. This page covers how to reset a forgotten password, how to verify your email address, which language the emails use, and which security notices you always get.
@@ -72,6 +72,18 @@ A few things to know:
 - If you joined through an invitation that Areca emailed to you, your address counts as verified. You don't need to verify it again.
 - If the first admin account is created during setup and a mail server is set up, Areca sends that admin a verification email.
 
+## If your account is blocked
+
+An agency admin can block an account. A blocked person can't sign in, whichever way they try: with a password, Google, Microsoft or another provider. The sign-in page says **This account is blocked. Contact your agency.**
+
+Areca doesn't say why. Ask your agency admin. Your work is safe: entries, memberships and roles are kept, and everything works again once you are unblocked. Your personal AI keys and AI app connections are paused while you are blocked, and start working again after you are unblocked. You get no email about a block or an unblock.
+
+If you were signed in when the account was blocked, you are signed out on every device.
+
+## If your account was deleted
+
+Deleting an account is permanent. You can delete your own account from the **Account** page, or an agency admin can delete it. Either way, you are signed out, and the sign-in page says **Your account was deleted.** The account can't be signed in to again. See [your account](/docs/cms/account#delete-your-account) for what is removed and what stays.
+
 ## Email language
 
 Account emails are sent in English, Nederlands or Türkçe. To change the language, open **Account** and find the **Email language** section. Choose the language you want. Notification emails use the same language.
@@ -93,8 +105,11 @@ Areca sends these emails when the change happens. You always get them, and you c
 - **Two-factor authentication turned off.** Sent when two-factor authentication is turned off for your account.
 - **Removed from a client.** Sent when someone removes you from a client. It names the client and the person who removed you.
 - **Role changed.** Sent when your role in a client changes, for example from Editor to Owner. It shows the new role.
+- **Added to a client.** Sent when an agency admin adds you to one or more clients without an invitation. It lists the clients and links to the CMS.
+- **Two-factor authentication reset.** Sent when an agency admin resets your two-factor setup. Sign in again and set it up if you are an agency admin.
+- **Account deleted.** Sent when your account is deleted, by you or by an agency admin. It names who did it.
 
-Areca does not send the removal and role-change emails for a change you made yourself.
+Areca does not send the removal and role-change emails for a change you made yourself. Blocking, unblocking, a change of name and signing out everywhere do not send an email.
 
 ## Related
 

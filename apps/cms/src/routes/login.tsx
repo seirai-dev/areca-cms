@@ -13,6 +13,8 @@ type LoginSearch = {
   /** Set by Better Auth when a provider round-trip fails. */
   error?: string
   error_description?: string
+  /** Set by account deletion: the person has just deleted their account. */
+  deleted?: 1
 }
 
 /**
@@ -28,6 +30,9 @@ export const Route = createFileRoute('/login')({
       typeof search.error_description === 'string'
         ? search.error_description
         : undefined,
+    // The router parses `?deleted=1` as the number 1, so keep that value:
+    // anything else would be dropped from the URL.
+    deleted: search.deleted === 1 || search.deleted === '1' ? 1 : undefined,
   }),
   beforeLoad: async ({ search, location }) => {
     const { needsSetup } = await getSetupStatusFn()
@@ -47,7 +52,7 @@ export const Route = createFileRoute('/login')({
 
 function LoginPage() {
   const methods = Route.useLoaderData()
-  const { redirect: redirectTo, error } = Route.useSearch()
+  const { redirect: redirectTo, error, deleted } = Route.useSearch()
   const { oauthQuery, signedIn } = Route.useRouteContext()
   if (signedIn && oauthQuery) {
     return <OAuthContinue query={oauthQuery} />
@@ -57,6 +62,7 @@ function LoginPage() {
       methods={methods}
       redirectTo={redirectTo}
       providerError={error}
+      deleted={deleted === 1}
       oauthQuery={oauthQuery}
     />
   )

@@ -8,6 +8,7 @@ import { getLocale, localizeHref } from '#/paraglide/runtime'
 import { acceptInvitationFn } from '#/server/fn/me'
 import { completeSetupFn } from '#/server/fn/setup'
 
+import { ACCOUNT_BLOCKED_CODE, signInFailureMessage } from './sign-in-error'
 import {
   continueOAuth,
   isPluginRedirect,
@@ -33,6 +34,7 @@ export function useHydrated() {
  */
 export function providerErrorMessage(code: string | undefined) {
   if (!code) return null
+  if (code === ACCOUNT_BLOCKED_CODE) return m.auth_account_blocked()
   return code === 'REGISTRATION_NOT_ALLOWED'
     ? m.auth_registration_not_allowed()
     : m.auth_could_not_sign_in()
@@ -87,7 +89,7 @@ export function usePasswordSignIn(
     setError(null)
     const result = await authClient.signIn.email({ email, password })
     if (result.error) {
-      setError(result.error.message ?? m.auth_could_not_sign_in())
+      setError(signInFailureMessage(result.error))
       setPending(false)
       return
     }

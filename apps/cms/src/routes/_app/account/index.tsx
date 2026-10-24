@@ -1,13 +1,16 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { AccountScreen } from '#/features/account/account-screen'
+import { getMyAccountFn } from '#/server/fn/account'
 
-/** `/account`: profile and two-factor authentication for the signed-in user. */
+/** `/account`: profile, password, two-factor and deleting the account, for the signed-in user. */
 export const Route = createFileRoute('/_app/account/')({
+  loader: () => getMyAccountFn(),
   component: AccountPage,
 })
 
 function AccountPage() {
   const { me } = Route.useRouteContext()
-  return <AccountScreen me={me} />
+  const { hasPassword, deletion } = Route.useLoaderData()
+  return <AccountScreen me={me} hasPassword={hasPassword} deletion={deletion} />
 }

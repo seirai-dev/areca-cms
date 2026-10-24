@@ -7,13 +7,16 @@ import { ArrowLeft, WarningCircle } from '@phosphor-icons/react'
 
 import { buttonVariants } from '#/components/ui/button'
 import { PageHeader } from '#/components/ui/page-header'
-import { SettingsSection } from '#/components/ui/settings-section'
 import { m } from '#/paraglide/messages'
 import type { Me } from '#/server/fn/me'
 
 import { AccountNav } from './account-nav'
+import { DeleteAccountSection } from './delete-account-section'
+import type { MyAccountDeletion } from './delete-account-section'
 import { EmailLanguageSection } from './email-language-section'
 import { NotificationsSection } from './notifications-section'
+import { PasswordSection } from './password-section'
+import { ProfileSection } from './profile-section'
 import { TwoFactorSection } from './two-factor-section'
 
 /**
@@ -21,7 +24,16 @@ import { TwoFactorSection } from './two-factor-section'
  * including agency admins who still have to enrol in two-factor, so it is
  * the one signed-in page the enrolment redirect leaves alone.
  */
-export function AccountScreen({ me }: { me: Me }) {
+export function AccountScreen({
+  me,
+  hasPassword,
+  deletion,
+}: {
+  me: Me
+  /** Accounts with a password see the change-password section. */
+  hasPassword: boolean
+  deletion: MyAccountDeletion
+}) {
   const router = useRouter()
   const [pending, setPending] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -106,26 +118,9 @@ export function AccountScreen({ me }: { me: Me }) {
         </div>
       ) : null}
 
-      <SettingsSection
-        id="profile"
-        title={m.account_profile_title()}
-        description={m.account_profile_description()}
-      >
-        <dl className="grid gap-3 text-body">
-          <div className="grid gap-0.5">
-            <dt className="text-callout text-text-secondary">
-              {m.auth_name()}
-            </dt>
-            <dd className="text-text-primary">{me.user.name}</dd>
-          </div>
-          <div className="grid gap-0.5">
-            <dt className="text-callout text-text-secondary">
-              {m.auth_email()}
-            </dt>
-            <dd className="text-text-primary">{me.user.email}</dd>
-          </div>
-        </dl>
-      </SettingsSection>
+      <ProfileSection me={me} />
+
+      {hasPassword ? <PasswordSection /> : null}
 
       <EmailLanguageSection locale={me.user.locale} />
 
@@ -134,6 +129,12 @@ export function AccountScreen({ me }: { me: Me }) {
       <TwoFactorSection
         enabled={me.user.twoFactorEnabled}
         required={me.mfaEnrolmentRequired}
+      />
+
+      <DeleteAccountSection
+        me={me}
+        hasPassword={hasPassword}
+        deletion={deletion}
       />
     </div>
   )

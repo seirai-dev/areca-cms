@@ -1672,6 +1672,14 @@ export const ROWS: Row[] = [
 
   // ---------------------------------- account self-service (account.ts)
   {
+    name: 'getMyAccountFn',
+    fn: accountFns.getMyAccountFn,
+    policy: 'user',
+    note: 'Own password flag and deletion blockers only; no hash or other person data.',
+    override: { adminNoMfa: 'mfa' },
+    prepare: () => ({ data: undefined }),
+  },
+  {
     name: 'updateMyNameFn',
     fn: accountFns.updateMyNameFn,
     policy: 'user',

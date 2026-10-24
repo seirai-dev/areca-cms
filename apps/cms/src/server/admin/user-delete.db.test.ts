@@ -306,6 +306,9 @@ describe.skipIf(!hasDb)('a person deletes their own account', () => {
     await join(target.id, onlyOwned.id, 'owner')
 
     await expect(selfDeleteBlockers(target.id)).resolves.toEqual({
+      soleOwnerClients: [
+        { organizationId: onlyOwned.id, name: 'Harbour Works' },
+      ],
       soleOwnerOf: ['Harbour Works'],
       lastAdmin: false,
     })
