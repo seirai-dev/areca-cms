@@ -26,6 +26,15 @@ import { m } from '#/paraglide/messages'
 import type { ClientPick } from './person/access-stage'
 import type { ClientRow } from './queries'
 
+const NAVIGATION_KEYS = new Set([
+  'ArrowUp',
+  'ArrowDown',
+  'Home',
+  'End',
+  'PageUp',
+  'PageDown',
+])
+
 /**
  * Multi-select of clients, shared by the person page, the invite sheet and
  * the bulk bar. A popover on desktop and a bottom sheet on phones. Clients the
@@ -63,6 +72,10 @@ export function ClientPicker({
   const [picked, setPicked] = React.useState<ReadonlySet<string>>(new Set())
   const [role, setRole] = React.useState<MembershipRole>('editor')
   const [highlight, setHighlight] = React.useState('')
+  // The highlight paints only once the keyboard moves it. Otherwise the first
+  // client looks hovered, and the last hovered row stays lit after the mouse
+  // leaves. Enter and Space still act on the highlight.
+  const [keyboardNav, setKeyboardNav] = React.useState(false)
 
   const needle = query.trim().toLowerCase()
   const visible = React.useMemo(
@@ -85,6 +98,11 @@ export function ClientPicker({
     )
     setHighlight(first?.id ?? '')
   }, [visible, existing, staged, open])
+
+  // Each opening starts in mouse mode, with nothing painted until hover.
+  React.useEffect(() => {
+    setKeyboardNav(false)
+  }, [open])
 
   function toggle(id: string) {
     if (existing?.has(id) || staged?.has(id)) return
@@ -127,6 +145,10 @@ export function ClientPicker({
       value={highlight}
       onValueChange={setHighlight}
       className="bg-transparent"
+      onKeyDown={(event) => {
+        if (NAVIGATION_KEYS.has(event.key)) setKeyboardNav(true)
+      }}
+      onPointerMove={() => setKeyboardNav(false)}
     >
       <CommandInput
         placeholder={m.agency_clients_search()}
@@ -162,6 +184,10 @@ export function ClientPicker({
               className={cn(
                 'data-[disabled=true]:opacity-60',
                 touch && 'data-[selected=true]:bg-transparent',
+                // Mouse mode: hover paints, the auto-highlight does not.
+                !touch &&
+                  !keyboardNav &&
+                  'data-[selected=true]:bg-transparent data-[selected=true]:hover:bg-accent-soft hover:bg-accent-soft',
               )}
               data-testid={`client-picker-option-${client.slug}`}
             >
