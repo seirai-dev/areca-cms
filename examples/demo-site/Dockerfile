@@ -1,4 +1,5 @@
-FROM node:24-alpine AS deps
+ARG NODE_VERSION=24.22.1
+FROM node:${NODE_VERSION}-alpine AS deps
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@11.18.0 --activate
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
@@ -20,7 +21,7 @@ RUN --mount=type=secret,id=ARECA_SITE_TOKEN,required=true \
     ARECA_SITE_TOKEN="$(cat /run/secrets/ARECA_SITE_TOKEN)" \
     pnpm --filter @areca/demo-site build
 
-FROM node:24-alpine AS runner
+FROM node:${NODE_VERSION}-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000

@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Build from the repository root: docker build -f apps/cms/Dockerfile .
-ARG NODE_VERSION=24.21.0
+ARG NODE_VERSION=24.22.1
 FROM node:${NODE_VERSION}-alpine AS base
 WORKDIR /app
 

@@ -12,7 +12,7 @@ permissions:
 
 env:
   # Keep in step with apps/cms/Dockerfile (NODE_VERSION / PNPM_VERSION).
-  NODE_VERSION: 24.21.0
+  NODE_VERSION: 24.22.1
   PNPM_VERSION: 12.8.1
 
 jobs:

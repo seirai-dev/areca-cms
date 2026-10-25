@@ -2,7 +2,7 @@
 # Standalone, read-only docs site. Build from the repository root:
 #   docker build -f apps/docs/Dockerfile -t areca-docs .
 # The SDK manifest is also needed to validate documented install versions.
-ARG NODE_VERSION=24.21.0
+ARG NODE_VERSION=24.22.1
 
 FROM node:${NODE_VERSION}-alpine AS build
 ARG PNPM_VERSION=12.8.1

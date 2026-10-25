@@ -56,7 +56,7 @@ cd docker
 CMS_IMAGE=areca-cms:local docker compose up -d --wait
 ```
 
-The Dockerfile pins Node 24.21.0 (latest LTS) and pnpm 12.8.1 (latest stable as of
+The Dockerfile pins Node 24.22.1 (latest LTS) and pnpm 12.8.1 (latest stable as of
 2026-10-01). Override `NODE_VERSION` and `PNPM_VERSION` using `--build-arg` when
 upgrading. Dependencies use the frozen lockfile; only CMS files enter the build
 context. Dependency layers are reused across source changes. The runtime runs as
