@@ -997,7 +997,11 @@ function PersonRow({
     : m.agency_people_never_active()
   return (
     <li
-      className={cn(ROW_CLASS, selected && 'bg-accent-soft/40')}
+      className={cn(
+        ROW_CLASS,
+        'transition-colors duration-150 hover:bg-surface-state-hover has-[a:focus-visible]:bg-surface-state-hover has-[a:focus-visible]:outline-2 has-[a:focus-visible]:-outline-offset-2 has-[a:focus-visible]:outline-border-focus',
+        selected && 'bg-accent-soft/40 hover:bg-accent-soft/60',
+      )}
       data-testid={`person-row-${account.email}`}
       data-status={account.status}
       data-selected={selected ? 'true' : undefined}
@@ -1014,7 +1018,7 @@ function PersonRow({
       <Link
         to="/agency/people/$userId"
         params={{ userId: account.id }}
-        className="flex min-w-0 flex-1 items-center gap-3 py-3 pr-2 pl-3 outline-none focus-visible:bg-surface-state-hover hover:bg-surface-state-hover"
+        className="flex min-w-0 flex-1 items-center gap-3 py-3 pr-2 pl-3 outline-none"
         data-testid={`person-link-${account.email}`}
       >
         <UserAvatar name={account.name} size="lg" />
