@@ -38,7 +38,7 @@ permissions:
 
 env:
   # Keep in step with ci.yml.
-  NODE_VERSION: 24.21.0
+  NODE_VERSION: 24.22.1
   PNPM_VERSION: 12.8.1
 
 jobs:
@@ -223,7 +223,7 @@ jobs:
       - id: artifact
         run: |
           if [ -f "$RUNNER_TEMP/release/release.json" ]; then echo "found=true" >> "$GITHUB_OUTPUT"; fi
-      # Trusted publishing needs npm 11.5.1+; Node 24.21.0 ships npm 11.19.0.
+      # Trusted publishing needs npm 11.5.1+; Node 24.22.1 ships npm 11.19.1.
       - if: steps.artifact.outputs.found == 'true'
         uses: actions/setup-node@v7.0.0
         with:
