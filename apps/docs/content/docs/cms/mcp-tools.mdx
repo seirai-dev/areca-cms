@@ -139,7 +139,7 @@ Tools are registered per request, based on the caller's current role. A tool tha
 | Everyone | Any member of the site, including editors | All read tools, drafts, uploads, alt text, preview |
 | Owner | Owners, and agency admins | Workflow, delete, Library delete |
 | Go live | A connected app or key allowed to publish, held by an owner or agency admin | `go_live`, `rollback`, `cancel_build` |
-| Agency | Agency admins only | `upsert_collection`, `delete_collection`, `set_publishing_mode` |
+| Agency | Agency admins only | `upsert_collection`, `delete_collection`, `set_publishing_mode`, and the development environment tools |
 
 The publishing permission is ignored for editors. Both the app's flag and the user's live role are checked on each request.
 
@@ -205,7 +205,7 @@ Site content sections (globals) are single sets of values, such as company detai
 
 | Tool | Access | Inputs | What it does |
 | --- | --- | --- | --- |
-| `mark_ready` | Owner | `id` (required), `expectedVersion` | Approves the current draft for the next release. Checks required fields and names any that are missing. On a site with languages it also names the languages that are not complete, and the fields, and says to fill them with `update_entry` and `locale`. Pass `expectedVersion` from `get_entry` to approve exactly the draft you reviewed: if the entry changed since, the call fails with a conflict and nothing is approved. It returns a message that the entry is approved and goes live with the next release. It does not change the live site. |
+| `mark_ready` | Owner | `id` or `ids` (up to 200 ids; one result per id), `expectedVersion` (with `id` only) | Approves the current draft for the next release. Checks required fields and names any that are missing. On a site with languages it also names the languages that are not complete, and the fields, and says to fill them with `update_entry` and `locale`. Pass `expectedVersion` from `get_entry` to approve exactly the draft you reviewed: if the entry changed since, the call fails with a conflict and nothing is approved. It returns a message that the entry is approved and goes live with the next release. It does not change the live site. |
 | `unpublish_entry` | Owner | `id` (required) | Withdraws the entry from the release: its status becomes `draft` and the approved version is dropped. The draft is kept. The live site stops showing it at the next go live. |
 | `archive_entry` | Owner | `id` (required) | Archives the entry. The live site is updated at the next go live. |
 | `schedule_entry` | Go-live permission | `id` (required), `publishAt` (required; ISO 8601 with an offset, in the future), `timezone` (required; IANA name such as `Europe/Amsterdam`), `expectedVersion` | Sets the status to `scheduled`. The entry goes live at that time without a `go_live` call. Pass `expectedVersion` from `get_entry` to schedule exactly the draft you reviewed. If the entry changed since, the call fails with a conflict and nothing is scheduled. Date fields in the content do not schedule anything. |
@@ -227,6 +227,17 @@ Site content sections (globals) are single sets of values, such as company detai
 | `delete_collection` | Agency | `key` (required) | Deletes a collection and its entries. |
 
 If the site syncs its content types from code, the next manifest push replaces changes made with these tools. Prefer changing the site's configuration.
+
+### Development environments (agency admins)
+
+A production site can have one development environment. Agency admins work in it first and push the reviewed changes to production. Its own connector is the site's connector with `-dev` after the slug. The production connector offers `create_dev_environment`. The development connector offers the tools below, and does not offer the publishing tools (`go_live`, `rollback`, `cancel_build`, `list_publications`, `get_release_status`, `get_build_job`) or the schedule tools. See [Development environments](/docs/cms/development-environments) for the workflow.
+
+| Tool | Connector | Inputs | What it does |
+| --- | --- | --- | --- |
+| `create_dev_environment` | Production | `confirm` (must be `true`) | Creates the development environment, with the production schema and ready content. Returns its slug and connector URL. Never returns tokens; the CMS shows them once, under Settings › Development. |
+| `refresh_from_production` | Development | `confirm` (must be `true`) | Replaces the development environment's content with production's. Unpushed changes are discarded; the result says how many. |
+| `push_to_production` | Development | `dryRun` (default `true`), `planHash`, `exclude`, `apply`, `goLive` | With `dryRun` true, lists every change with its needs-attention items and a `planHash`, and writes nothing. With `dryRun` false and the `planHash`, pushes the changes that were not excluded. Needs-attention items are pushed only when listed in `apply`. `goLive` starts a production build and needs the go-live permission. Refused with "The plan changed" when the plan moved since the dry run. |
+| `copy_entry_to_production` | Development | `id` (required), `markReady`, `overwrite` | Copies one development entry into production as its draft. The live version does not change unless `markReady` is true. Refused on a schema mismatch and on a production change since the last sync, unless `overwrite` is true. |
 
 ### Prompt
 

@@ -40,7 +40,7 @@ Entry history appears after the first save. Owners and agency admins can restore
 
 ## Make changes live
 
-An owner can mark one or several entries ready from the editor or collection list. In a collection, choose **Select** to use the bulk action bar for **Mark as ready**, **Move to draft**, or **Delete**. The editor’s action menu also offers **Mark as ready & go live now**, **Schedule**, and, when relevant, actions to move an entry back to draft, archive it, or delete it.
+An owner can mark one or several entries ready from the editor or collection list. In a collection, choose **Select** to use the bulk action bar for **Mark as ready**, **Move to draft**, **Archive**, or **Delete**. Each entry is changed on its own, so one failure does not stop the others, and the entries that could not be changed are listed. The editor’s action menu also offers **Mark as ready & go live now**, **Schedule**, and, when relevant, actions to move an entry back to draft, archive it, or delete it.
 
 Scheduling freezes the approved content and address at the time you schedule it. The editor shows **View approved scheduled version** while you can continue editing the draft separately; those later draft edits do not replace the scheduled version. The schedule uses the selected time zone and runs the release when due. Owners can cancel a scheduled version.
 
@@ -87,6 +87,10 @@ Connect AI lets an AI app you use, such as ChatGPT, Claude, Claude Code, Cursor 
 The AI works within your role. Editors can create and edit drafts, upload files from web addresses and edit alt text. Owners can also mark ready, schedule, archive and delete. Only a key with **Allow going live** can publish. Connections stop working when they are disconnected or unused for 90 days, and keys stop working when they expire or are revoked. Owners can see and disconnect every connection on the site. Actions made through a connected app or key appear in the activity log as **via AI**.
 
 For setup steps and troubleshooting, see the [Connect AI guide](/docs/cms/connect-ai) in the docs site. For the tools and their rules, see [MCP.md](MCP.md).
+
+## Development environments
+
+Your agency may try changes on a copy of your site before they reach the live site. This copy is a **development environment**. Only agency admins can see it, so you will not find it in the CMS. Its changes reach your live site only after the agency pushes them, and the agency reviews each change first. You do not need to do anything for this.
 
 ## Keyboard shortcuts
 

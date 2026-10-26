@@ -1,0 +1,119 @@
+---
+title: Development environments
+description: Try content and code changes on a copy of a live client site, then push the reviewed changes to production. The agency workflow, the local token steps, and the push screen.
+---
+
+A **development environment** (dev env) is a copy of a production site that only agency admins can see. You change it first, check the changes on your local machine, and then push the ones you want to production. Changes stay in the development environment until you push them, so the live site is never edited by accident.
+
+Each production site has at most one development environment. Clients never see it.
+
+## Why it exists
+
+Without a development environment, every edit goes straight to the live site. When a client asks for a change, there is no safe place to try it. A development environment gives you that place. You can change content and schema in it, run the website on your machine against it, show the result to the client, and send only the approved changes to production.
+
+## The workflow
+
+1. **Set up the site.** Create the production site, add its collections, entries and languages, and go live. A new site is a normal site in Demo mode until then.
+2. **Create the development environment.** Once the site is in Production mode or has gone live, open **Settings › Development** on the production site and select **Create development environment**.
+3. **Copy its tokens.** The dialog shows the development site's tokens **once**. Copy them into your project's `.env.local` (see below).
+4. **Change it.** Edit entries, sections and the schema in the CMS, with the CLI, or over MCP. Changes stay in the development environment.
+5. **Run it locally.** With the development token in `.env.local`, mark the entries you want to check as ready and run `areca pull`. Code changes can be made at the same time. A development environment has no releases, so no go-live step is needed for the local check.
+6. **Review with the client.** Share screenshots, collect small changes, and make them in the development environment or in code.
+7. **Push to production.** Open the push screen, review the list, and push. Optionally start the production build in the same step.
+
+When the client asks for something new later, reset the development environment from production first, so it starts from what is live.
+
+## Create, reset and delete
+
+All three are in **Settings › Development** on the production site. Each is one click with a plain confirmation. No authenticator code is needed, because nothing is lost that is not already in production or on your machine.
+
+- **Create development environment.** Copies the production schema and the ready content of every entry. Draft-only entries are not copied. Media files are shared with production, so nothing is duplicated. The development site's name is the production name with "(dev)", and its slug is the production slug with `-dev`.
+- **Reset from production.** Throws away everything in the development environment and copies production again. Unpushed changes are lost and not archived. The dialog says how many. The tokens and the preview URL stay.
+- **Delete development environment.** Removes it. Production is not changed.
+
+If production changed since the last reset, the development environment shows **Production changed since the last sync** with a count, and offers a reset.
+
+## Set up the local project
+
+The development environment has its own site token. The website reads whichever token is in `.env.local`, so swapping that one value is how you choose what you are looking at.
+
+For day-to-day work on the development environment, `.env.local` holds the development values:
+
+```dotenv title=".env.local"
+ARECA_CMS_URL=https://cms.example.com
+# The development environment's site token. Pulls read the development environment.
+ARECA_SITE_TOKEN=<development-site-token>
+# Code-first sites only: the development environment's schema token.
+ARECA_SCHEMA_TOKEN=<development-schema-token>
+```
+
+Keep `.env.local` out of git, as usual.
+
+### Check the production site locally
+
+To see what production will show, replace the values with the production site's values, pull, and check. The production tokens are the ones in your production deployment's environment. Areca shows a token only once, so if you no longer have it, rotate it in **Settings › Developer** on the production site and update the deployment with the new value. Rotating stops the old token working straight away.
+
+1. Put the production site token in `ARECA_SITE_TOKEN`. For a code-first site, also put the production schema token in `ARECA_SCHEMA_TOKEN`.
+2. Run `areca pull` and check the site.
+3. Put the development values back, so you are working on the development environment again.
+
+The `siteKey` in `areca.config.ts` is informational. The CMS uses the site that the token belongs to, so the token decides what you read.
+
+### Code-first sites
+
+If the site syncs its content definitions from code with `areca manifest push`, read this before you push to production. A manifest push is a full sync. It replaces the production definitions with the file's, which can undo changes that were made in the CMS.
+
+Before you send the manifest to production:
+
+1. Keep the development values in `.env.local`, and run `areca manifest pull`. This updates `areca.config.ts` to match the development environment, so the file includes the changes made in the CMS.
+2. Review the code changes you want, and commit them.
+3. Push the schema to production through the push screen, or with `areca manifest push` using the production schema token once the file matches what you want live.
+
+Code changes that are not in the file's content definitions (components, styles, pages) reach production with the next go live of the production site, as usual.
+
+## Pulls need no release
+
+An `areca pull` with the development token reads the development environment's ready content directly. It does not use a publication, so there is nothing to build or go live. Draft entries are not included, so mark an entry ready before you expect to see it locally.
+
+A development token refuses a pinned publication. The `--publication` option, and the `publicationId` query, return an error for a development environment: "Development environments have no releases. Pull without a publication id."
+
+## The push screen
+
+Open **Push to production** from the banner at the top of the development environment, or from the Development tab. The screen is one list of everything that changed in the development environment since the last reset or push. Everything is ticked by default.
+
+- **Needs attention** is at the top. These items are risky for production, so each one is set to **Skip** unless you switch it to **Apply**. Skip is the default, so an item you do not decide on is never pushed. The items are:
+  - **Changed in production since the fork.** Production and the development environment both changed the same item. Apply overwrites production with the development version.
+  - **Remove field, which drops content.** The row says how many values will be archived.
+  - **Change of the main language.** The row says how many entries it stamps.
+  - **Scheduled in production.** Apply is not available until the schedule is resolved in production.
+  - **Deleted in production.** Apply recreates the entry in production as a draft.
+- The other groups are **Schema**, **Languages**, **New entries**, **Changed** and **Archived**. Untick anything you do not want to push.
+- The button shows the count and the skipped items, for example "Push 12 changes · 2 skipped". Pushing needs no confirmation dialog. It asks only for a fresh authenticator code when your session is not fresh.
+- **Go live after push** starts the production build once the push is saved. It is off by default. The browser remembers your last choice. It needs permission to go live.
+
+Pushing never deletes content in production. An entry you removed in the development environment is archived in production. Drafts and ready versions are written; the live version changes only at the next production go live, unless you use **Go live after push**.
+
+The result lists the counts, any warnings (for example, a ready version that could not be made ready in production, or references that were cleared), and links to the production entries.
+
+## Copy one entry to production
+
+To send only one entry or section, open it in the development environment and choose **Copy to production as draft** in the top bar menu. The copy becomes the draft of the matching production entry. The live version stays as it is, and the copy is not ready in production. Approving it is a separate step in the production CMS.
+
+The copy is refused when the production schema for that collection does not match the development schema. Push the schema first. It is also refused when production changed since the last sync. The message then offers **Overwrite**, which replaces the production draft with your copy.
+
+## Bulk actions on a normal site
+
+On a site that is not a development environment, the collection list's bulk bar has an **Archive** action next to **Mark as ready**, **Move to draft** and **Delete**. Each entry is handled on its own, so one failure does not stop the rest, and the entries that could not be changed are listed.
+
+## MCP and AI apps
+
+The development environment has its own connector, `/api/mcp/<slug>-dev`. Agency admins can connect an AI app to it, and the production connector reports the development environment. The AI app can make the same changes, and it always does a dry run of a push and shows you the list before it pushes. See [Connect AI](/docs/cms/connect-ai) and the [MCP tools](/docs/cms/mcp-tools) reference.
+
+## What a development environment does not do
+
+- It cannot go live, switch to Production mode, or be scheduled. It has no publications and no builds.
+- Its preview links open your local site. The **Preview URL** is in its **Settings › General**, and defaults to `http://localhost:3000`.
+- There is only one per production site. It is shared by all agency admins.
+- It does not merge production changes into itself. Reset replaces it.
+- Site settings such as the AI prompt, URLs and the deployment target are not pushed.
+- Clients cannot see it, its changes, or its push history.

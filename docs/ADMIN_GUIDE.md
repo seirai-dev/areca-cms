@@ -75,6 +75,21 @@ The Agency overview summarizes sites needing attention. Open a site and use **Go
 
 **Agency › Activity** is the instance-wide audit log. A client detail page has a **View activity** action that opens the agency log filtered to that client; site activity gives the site scope. Use these records to investigate who changed content or access.
 
+## Development environments
+
+Use a development environment (dev env) to try content and schema changes on a live client site before they reach production. Each production site can have one. Only agency admins see it; owners and editors never see it, its connector or its tokens. The full workflow is in the [development environments guide](/docs/cms/development-environments) in the docs site, and the MCP side is in [MCP.md](MCP.md#development-environments).
+
+- **Create.** On the production site, open **Settings › Development** and select **Create development environment**. It appears only once the site is in Production mode or has gone live. The new environment is a copy of the schema and of every entry's ready content, with no releases. Its slug is the production slug with `-dev`. Its tokens are shown **once**: copy them into the development site's `.env.local`. To get new ones later, rotate the site token and the schema token in the development site's **Developer** settings.
+- **Reset.** **Reset from production** throws away everything in the development environment and copies production again. Unpushed changes are lost and are not archived. The dialog says how many. A banner also warns when production changed since the last sync.
+- **Delete.** **Delete development environment** removes it. Production is not changed.
+- **Work.** Changes stay in the development environment until you push them. Dev entries and schema are edited in the CMS, through the CLI, or over MCP. Run the website on localhost with the dev token, mark the entries ready and pull. There is no release to build.
+- **Push.** The banner's **Push to production** opens the push screen. It lists everything changed since the last push or reset, with each row summarised, all ticked. Items that are risky for production are in **Needs attention** at the top, and each is set to **Skip** unless you switch it to **Apply**. The risky ones are: a conflict (production changed the same item since the fork), a schema removal that drops production content, a change of the main language, an entry scheduled in production, and an entry deleted in production since the fork. The button shows the count and the skipped items, for example "Push 12 changes · 2 skipped". Use **Go live after push** to start the production build once the push commits. Pushing asks for a fresh authenticator code when your session is not fresh. Nothing is deleted from production: removed entries are archived.
+- **Copy one entry.** In the entry or section editor, **Copy to production as draft** (the top bar menu) copies that item as the production draft. The live version stays as it is unless you also make it ready. It needs the production schema of that collection to match, so push the schema first if it does not.
+- **Bulk actions on a site.** Ordinary sites (not development environments) have a bulk bar on the collection list: **Mark as ready**, **Move to draft**, **Archive (N)** and **Delete**. Each entry is handled on its own, and the entries that failed are listed.
+- **Agency admins and MCP.** The production connector offers `create_dev_environment`; the development connector offers `push_to_production` (dry run first), `refresh_from_production`, `copy_entry_to_production` and `mark_ready` with several ids. Go live, rollback and scheduling are not offered on a development environment.
+
+Activity records the create, reset, push and copy, with counts. Those rows are visible to agency admins only.
+
 ## Security and lifecycle notes
 
 - Require two-factor authentication for agency admins and use individual accounts.

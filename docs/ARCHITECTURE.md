@@ -65,6 +65,10 @@ A lost deployment response may leave the dispatch outcome uncertain. The worker 
 
 A release records the whole site's snapshot, build steps, logs, and status. Restore a release that previously went live to redeploy its content. The CMS creates a new publication ID containing the old snapshot's content and hash, then queues a high-priority build. This uses the configured website repository and deployment target; it is not a rollback of website source code, database migrations, or provider settings.
 
+## Development environments
+
+A production site can have one development environment: a linked site (`environment = 'development'`, `parent_site_id` set) that copies its schema and ready content. It has its own tokens, preview secret and MCP connector, and it is always in Demo mode with no publications or builds. Its reads are live: `areca pull` with its token builds the snapshot from the current ready content, without a publication. Changes go back to production by an explicit push, which reviews a plan and writes drafts, ready versions and archives through the same entry services as the UI. Only agency admins can see a development environment. See [development-environments.md](design/dev-environments.md) for the contract and the CMS guide for the workflow.
+
 ## Snapshot format
 
 A snapshot contains collection arrays of entries with stable IDs, approved slugs, dates, and resolved data. Image fields become URL/dimension/alt-text objects; references become collection/slug/ID objects; rich text includes JSON, Markdown, a Markdown document, and HTML. Resolved SEO is a separate optional `entry.seo` object for compatibility with older snapshots.
