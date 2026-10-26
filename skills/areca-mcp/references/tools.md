@@ -6,7 +6,7 @@
 
 | Tool | Access | Inputs | Returns |
 | --- | --- | --- | --- |
-| `get_site_info` | all | none | `site` (name, slug, productionUrl, publishingMode), `you` (role, capabilities), `cannotDo[]`, `collections[]`, `globals[]` (site content: key, label, enabled, fieldCount, seo, previewPath), `guide`. On a site with languages also `languages` (`main`, `all`, `names`) and, per collection and section, `requiredLanguages`, `translatableFields` and `routes`. **Call first.** |
+| `get_site_info` | all | none | `site` (name, slug, productionUrl, publishingMode, deploymentConfigured), `you` (role, capabilities), `cannotDo[]`, `collections[]`, `globals[]` (site content: key, label, enabled, fieldCount, seo, previewPath), `guide`. On a site with languages also `languages` (`main`, `all`, `names`) and, per collection and section, `requiredLanguages`, `translatableFields` and `routes`. **Call first.** |
 | `get_collection_schema` | all | `collection*` | Per-field key, type, required, format, options (and `translatable` on sites with languages); example `fields` and `seo` payloads; SEO guide; `translation` example on sites with languages |
 
 ## Entries
@@ -59,6 +59,7 @@ Single sections such as company info or the home page. Editors and owners see en
 | Tool | Access | Inputs | Returns |
 | --- | --- | --- | --- |
 | `get_release_status` | all | none | `publishingMode`, `live`, `demo`, `activeJob`, `pendingCount`, `pendingChanges[]` |
+| `set_publishing_mode` | agency | `mode*` (`demo` or `production`) | `publishingMode`, `deploymentConfigured`. `demo`: `go_live` builds a release that `areca pull` can fetch without a deployment; demo releases never reach visitors. `production`: `go_live` deploys to the live site and needs a deployment target (application ID and health check URL, set in Settings › Deployment). Refused with a conflict when switching to `demo` after the site has ever gone live, or to `production` without a deployment target. The same mode changes nothing and writes no audit entry. Each change is audited with the MCP caller. |
 | `list_publications` | all | `limit?` (1-50, default 10) | Publications, newest first |
 | `get_build_job` | all | `jobId*` | Status, attempts, timing, error |
 | `go_live` | go-live | `note?` | Queues a build that publishes **all** ready changes and returns `publicationId` and `jobId`. Poll `get_build_job`. |

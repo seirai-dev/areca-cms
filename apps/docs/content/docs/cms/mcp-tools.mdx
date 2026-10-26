@@ -139,7 +139,7 @@ Tools are registered per request, based on the caller's current role. A tool tha
 | Everyone | Any member of the site, including editors | All read tools, drafts, uploads, alt text, preview |
 | Owner | Owners, and agency admins | Workflow, delete, Library delete |
 | Go live | A connected app or key allowed to publish, held by an owner or agency admin | `go_live`, `rollback`, `cancel_build` |
-| Agency | Agency admins only | `upsert_collection`, `delete_collection` |
+| Agency | Agency admins only | `upsert_collection`, `delete_collection`, `set_publishing_mode` |
 
 The publishing permission is ignored for editors. Both the app's flag and the user's live role are checked on each request.
 
@@ -151,7 +151,7 @@ Every tool returns text or JSON. Ids come from earlier tool results. Inputs mark
 
 | Tool | Access | Inputs | What it does |
 | --- | --- | --- | --- |
-| `get_site_info` | Everyone | None | Returns the site, your role and capabilities, `cannotDo` (what this key may not do, in plain sentences), every collection, every site content section (`globals`: key, label, enabled, field count, `seo`, `previewPath`), and a short writing guide. Call it first. |
+| `get_site_info` | Everyone | None | Returns the site (including its `publishingMode` and whether a `deploymentConfigured` target is set), your role and capabilities, `cannotDo` (what this key may not do, in plain sentences), every collection, every site content section (`globals`: key, label, enabled, field count, `seo`, `previewPath`), and a short writing guide. Call it first. |
 | `get_collection_schema` | Everyone | `collection` (required) | Returns each field's key, label, type, required flag, format, options or referenced collection, and an example `fields` and `seo` payload. On a site with languages, each field also says whether it is `translatable`, and an example `update_entry` call with a `locale` shows how to write one language. |
 
 ### Entries
@@ -198,6 +198,7 @@ Site content sections (globals) are single sets of values, such as company detai
 | `get_build_job` | Everyone | `jobId` (required) | Returns one build job's status, attempts, timing and error. |
 | `go_live` | Go live | `note` (up to 500 characters) | Queues a build that publishes every approved change. Follow it with `get_build_job`. |
 | `rollback` | Go live | `publicationId` (required) | Queues a rollback that makes an earlier publication live again. |
+| `set_publishing_mode` | Agency admin | `mode` (required: `demo` or `production`) | Sets how the site publishes. `demo`: `go_live` builds a release that `areca pull` can fetch without a deployment; demo releases never reach visitors. `production`: `go_live` deploys to the live site and needs a deployment target (application ID and health check URL), set in Settings › Deployment. Refused when switching to `demo` after the site has ever gone live, and when switching to `production` without a deployment target. Setting the mode the site already has changes nothing. Returns `publishingMode` and `deploymentConfigured`. |
 | `cancel_build` | Go live | `jobId` (required) | Cancels a build that is queued. A build that has started cannot be cancelled. |
 
 ### Workflow (owners)

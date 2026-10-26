@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
-import { join, relative } from 'node:path'
+import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export type Skill = {
@@ -9,18 +9,25 @@ export type Skill = {
   dir: string
 }
 
+const MARKER = 'areca-sdk/SKILL.md'
+
 /**
- * Skills ship in the package's `skills/` folder (copied from the repo root at
- * build). From source inside the monorepo, fall back to the repo root copy.
+ * Where the bundled skills live. Inside the monorepo the root `skills/` folder is
+ * the source of truth, so it wins over the `skills/` copy that `build` makes inside
+ * the package (that copy can go stale). An npm install has no repo root, so the
+ * packaged copy is used.
+ *
+ * `moduleDir` is the folder of this module (`src/` from source, `dist/` when built).
+ * It is a parameter so tests can point it at a temp layout.
  */
-export function skillsRoot(): string {
-  const candidates = [
-    fileURLToPath(new URL('../skills', import.meta.url)),
-    fileURLToPath(new URL('../../../skills', import.meta.url)),
-  ]
-  const found = candidates.find((dir) => existsSync(join(dir, 'areca-sdk', 'SKILL.md')))
-  if (!found) throw new Error(`Bundled skills not found (looked in ${candidates.join(', ')})`)
-  return found
+export function skillsRoot(moduleDir = dirname(fileURLToPath(import.meta.url))): string {
+  const repoRoot = resolve(moduleDir, '../../..')
+  const repoSkills = join(repoRoot, 'skills')
+  const packaged = resolve(moduleDir, '../skills')
+  const inRepo = existsSync(join(repoRoot, 'pnpm-workspace.yaml')) && existsSync(join(repoSkills, MARKER))
+  if (inRepo) return repoSkills
+  if (existsSync(join(packaged, MARKER))) return packaged
+  throw new Error(`Bundled skills not found (looked in ${repoSkills}, ${packaged})`)
 }
 
 export function loadSkills(root = skillsRoot()): Skill[] {

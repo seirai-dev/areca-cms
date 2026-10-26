@@ -29,7 +29,7 @@ ChatGPT and Claude connect from the internet, so the CMS must be reachable on it
 | Schedule, cancel schedule | no | yes | yes | yes |
 | Delete library asset (not in use) | no | yes | yes | yes |
 | `go_live`, `rollback`, `cancel_build` | no | no | yes | yes, if the app or key may publish |
-| `upsert_collection`, `delete_collection` | no | no | no | yes |
+| `upsert_collection`, `delete_collection`, `set_publishing_mode` | no | no | no | yes |
 
 Rules:
 
@@ -139,6 +139,7 @@ Tools are registered per request for the caller's role, so a tool the caller can
 | Publishing | `go_live` | go-live key | `note?` (up to 500 characters) |
 | Publishing | `rollback` | go-live key | `publicationId` |
 | Publishing | `cancel_build` | go-live key | `jobId` (queued builds only) |
+| Publishing | `set_publishing_mode` | agency admin | `mode` (`demo` or `production`) |
 | Site content | `get_global` | everyone | `global` (key; disabled sections are agency-only), `locale?` (languages sites) |
 | Site content | `update_global` | everyone | `global`, `fields?`, `seo?` (refused unless the section has SEO on), `locale?` (languages sites), `expectedVersion?` |
 | Site content | `discard_global_draft` | everyone | `global` (refused until the section was ready once) |
@@ -190,6 +191,8 @@ A `ready` entry can still have `live: false` until the next go live. Editing a r
 ## Languages
 
 A site can publish in several languages. `get_site_info` lists them under `languages` (codes, English names and the main language). Write one language per call: pass `locale`, and `fields`, `seo` and `slug` apply to that language. Fields that are not translatable are shared, so changing them in one language changes every language, and the response lists them in `sharedFieldsUpdated`. Check the other languages with `get_entry`: `translations` gives each language's `complete` flag and its `missing` fields. `mark_ready` and `schedule_entry` refuse an entry until every required language is complete, and the error names the languages and fields.
+
+`set_publishing_mode` switches the site between `demo` and `production` publishing (agency admins only). In demo mode, `go_live` builds a release that `areca pull` fetches without a deployment, and demo releases never reach visitors. Production needs a deployment target (application ID and health check URL) set in Settings › Deployment. A site that has ever gone live in production cannot switch to demo. `get_site_info` reports `publishingMode` and `deploymentConfigured`.
 
 `set_site_languages` changes the languages (agency admins only). Removing a language hides it and keeps its text. Changing the main language deletes nothing, but entries not complete in the new main language cannot be marked ready until they are; the result reports how many.
 

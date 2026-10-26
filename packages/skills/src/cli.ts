@@ -39,7 +39,7 @@ Commands:
 
 Options:
   -a, --agent <id>    Agent id, repeatable or comma separated (see list)
-  -s, --skill <name>  Only this skill (areca-sdk, areca-mcp); default all
+  -s, --skill <name>  Only this skill (areca-sdk, areca-mcp, areca-quickstart); default all
   -g, --global        Install into user-level folders instead of the project
       --mcp-url <url> Connector URL (<cms>/api/mcp/<site-slug>) to register
       --out <dir>     Zip folder for chat apps and export (default: areca-skills)
@@ -280,6 +280,7 @@ function selectSkills(names: string[]): Skill[] {
 function hintFor(name: string): string {
   if (name === 'areca-sdk') return 'website code: setup, config, CLI, content, preview, deploy'
   if (name === 'areca-mcp') return 'AI content editing: connect, tools, workflow'
+  if (name === 'areca-quickstart') return 'Set up Areca in a new site project (interview + wiring)'
   return ''
 }
 

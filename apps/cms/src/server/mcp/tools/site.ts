@@ -1,8 +1,10 @@
 import { z } from '#/lib/zod'
 
 import { isTranslatable } from '#/lib/content-locale'
+import type { site } from '#/db/schema'
 import { listCollections } from '#/server/content/collections'
 import { listGlobals } from '#/server/content/globals'
+import { deploymentBlockers } from '#/server/publishing/publications'
 import {
   languageName,
   loadSiteLanguages,
@@ -49,6 +51,17 @@ export function cannotDoFor(actor: McpActor): string[] {
   return out
 }
 
+/**
+ * True when the site has the deployment target a production go live needs.
+ * Reuses deploymentBlockers, which skips the check for demo sites, so the
+ * site is checked as production.
+ */
+export function isDeploymentConfigured(row: typeof site.$inferSelect): boolean {
+  return (
+    deploymentBlockers({ ...row, publishingMode: 'production' }).length === 0
+  )
+}
+
 /** The site's languages as agents read them: codes, English names, main. */
 export function languageSummary(languages: SiteLanguages) {
   return {
@@ -92,7 +105,7 @@ export function registerSiteTools(registry: ToolRegistry): void {
     name: 'get_site_info',
     title: 'Get site info',
     description:
-      'Call this first. Returns the site this AI connection is for (name, slug, production URL, publishing mode), your role and what you may do, every collection with its route and whether it is enabled, the site content sections (globals) with their keys, and a short guide for writing content. Read-only.',
+      'Call this first. Returns the site this AI connection is for (name, slug, production URL, publishing mode, whether a deployment target is configured), your role and what you may do, every collection with its route and whether it is enabled, the site content sections (globals) with their keys, and a short guide for writing content. Read-only.',
     inputSchema: z.object({}),
     annotations: { readOnlyHint: true, idempotentHint: true },
     run: async (_input, actor) => {
@@ -112,6 +125,7 @@ export function registerSiteTools(registry: ToolRegistry): void {
           slug: siteRow.slug,
           productionUrl: siteRow.productionUrl,
           publishingMode: siteRow.publishingMode,
+          deploymentConfigured: isDeploymentConfigured(siteRow),
         },
         you: {
           name: actor.userName,

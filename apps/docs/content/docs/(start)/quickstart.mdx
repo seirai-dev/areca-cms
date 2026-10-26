@@ -77,6 +77,10 @@ pnpm exec areca init
 
 `areca init` asks for the CMS URL (`http://localhost:3000`), the site token and the site key. It creates `areca.config.ts`, a `.env.example`, a gitignored `.env.local`, and an empty `src/generated/content` folder.
 
+<Callout title="Prefer an agent?">
+An AI coding agent can do this setup for you. See [Quickstart with an AI agent](/docs/sdk/agent-quickstart).
+</Callout>
+
 Declare the content your website needs in `areca.config.ts`. This example defines one collection called `articles`:
 
 ```ts title="areca.config.ts"

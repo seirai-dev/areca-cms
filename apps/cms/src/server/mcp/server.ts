@@ -44,7 +44,7 @@ function roleInstruction(
   }
   if (actor.role === 'agency') {
     lines.push(
-      'You can also change collection schemas (upsert_collection, delete_collection) and site content sections (upsert_global, delete_global). If the site syncs its schema from code, prefer changing areca.config.ts. set_site_languages changes the site languages.',
+      'You can also change collection schemas (upsert_collection, delete_collection) and site content sections (upsert_global, delete_global). If the site syncs its schema from code, prefer changing areca.config.ts. set_site_languages changes the site languages, and set_publishing_mode switches the site between demo and production publishing.',
     )
   }
   return lines

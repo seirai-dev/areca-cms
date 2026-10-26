@@ -52,6 +52,17 @@ that compatible version rather than the latest major:
 pnpm add @tanstack/markdown@1.0.0
 ```
 
+## Set up with an AI agent
+
+An AI coding agent can set up the SDK for you. Install the `areca-quickstart`
+skill with `npx @areca-cms/skills`, then run `/areca-quickstart` in the website
+project. The agent asks a few questions, creates the content model, wires the
+SDK and makes a first release. It asks before it goes live. See
+[`packages/skills`](../packages/skills/README.md) for install options and
+the public guide, "Quickstart with an AI agent".
+
+The steps below do the same setup by hand.
+
 ## Initialize your website
 
 Run the interactive initializer from the website's project root:

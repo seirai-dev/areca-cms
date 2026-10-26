@@ -1,0 +1,174 @@
+---
+title: Quickstart with an AI agent
+description: Let an AI coding agent set up Areca in a new website project. The agent checks your project, asks a few questions, builds the content model, connects the site SDK and makes a first release.
+---
+
+The `areca-quickstart` skill lets an AI coding agent set up Areca for you. The agent reads your project, asks you a few questions, creates the content model, wires in the site SDK and makes a first release. You make the decisions. The agent does the work.
+
+This guide is for developers who start a new client website. It explains what to prepare, what the agent asks, what it changes, and how to keep the site up to date.
+
+Prefer to do each step yourself? Follow [Installation and setup](/docs/sdk/installation) instead.
+
+## Before you start
+
+You need these things first.
+
+- **A site in the CMS.** The agent cannot create sites or tokens. Create the client and site in the CMS under **Agency › Clients › New site**. Use `http://localhost:3001` as the **Production URL** for now. You can change it later.
+- **Three values from the CMS.** When you create the site, save the **site token** and the **schema-write token**. The CMS shows each one only once. If you lose one, rotate it under **Settings › Developer**.
+- **Connect AI.** The agent uses the site's MCP server to create the content model. Connect your AI app first. See [Connect AI](/docs/cms/connect-ai). If you cannot connect, the agent uses the code-first path instead. See [How the content model is created](#how-the-content-model-is-created).
+- **Node.js 22.18 or newer.** The CLI loads `areca.config.ts` directly. On an older Node version, the agent runs the CLI through `tsx`.
+- **A website project.** Use a project with a `package.json` at its root. The agent works with TanStack Start, Next.js, Astro and other frameworks. If you have no project yet, create one first.
+- **A coding agent with a terminal.** The agent must read and change files in your project and run commands. Claude Code, Codex, Cursor and similar tools work. Chat apps such as the Claude app or ChatGPT cannot run this skill.
+
+## Install the skill
+
+Install the skill in the website project. Pick the method that fits your tools.
+
+<Tabs items={['Areca installer', 'skills CLI', 'Claude Code plugin']}>
+  <Tab value="Areca installer">
+
+Run the installer and select `areca-quickstart` in the skill list:
+
+```bash
+npx @areca-cms/skills
+```
+
+To skip the prompts, pass the skill name and the agent:
+
+```bash
+npx @areca-cms/skills add -a claude-code -s areca-quickstart -y
+```
+
+  </Tab>
+  <Tab value="skills CLI">
+
+```bash
+npx skills add ekozf/areca-cms --skill areca-quickstart
+```
+
+  </Tab>
+  <Tab value="Claude Code plugin">
+
+```bash
+/plugin marketplace add ekozf/areca-cms
+/plugin install areca@areca-cms
+```
+
+Claude Code then lists the skill as `/areca:areca-quickstart`.
+
+  </Tab>
+</Tabs>
+
+## Run the skill
+
+Open the website project in your agent and run the skill.
+
+- In Claude Code, type `/areca-quickstart`. With the plugin, type `/areca:areca-quickstart`.
+- In other agents, such as Codex or Cursor, ask: "run the areca-quickstart skill".
+
+## What the agent asks
+
+The agent first checks your project. It detects the framework, the package manager and whether the project already uses more than one language. It asks only about what it cannot find.
+
+Then it asks in four batches.
+
+1. **Project.** What the site is for, and the framework and package manager to use.
+2. **Content model.** Which content types the site needs. The agent suggests recipes such as **blog**, **vacancies**, **team** and **services**. You can keep, change or skip any of them.
+3. **Languages.** Which languages the site uses, and which one is the default.
+4. **Build and preview.** How the site gets its content at build time, and whether to add a preview route.
+
+After the batches, the agent shows the proposed schema. It makes no changes until you approve it.
+
+## How the content model is created
+
+The agent uses one of two paths. MCP-first is the default.
+
+- **MCP-first.** The agent creates the collections, sections and languages through the Areca MCP server. Then `areca manifest pull` writes them into `areca.config.ts`. This path needs an agency admin connection.
+- **Code-first.** The agent writes `areca.config.ts` itself, then runs `areca manifest push`. The agent uses this path when the MCP server is not connected, or when you are not an agency admin. This path needs the schema-write token in `.env.local`.
+
+<Callout type="warn" title="A push removes collections you leave out">
+A manifest push disables any collection that is missing from `areca.config.ts`. Check the proposed schema before you approve it. See [Syncing the schema](/docs/sdk/schema-sync).
+</Callout>
+
+## What the agent creates or changes
+
+The agent works in the website project. These files change.
+
+| File or folder | What changes |
+| --- | --- |
+| `areca.config.ts` | The collections, fields, sections and languages. Written by the agent (code-first) or by `areca manifest pull` (MCP-first). |
+| `.env.example` and `.env.local` | Created by `areca init`. You paste the tokens into `.env.local` yourself. The agent never asks for them in chat. |
+| `.gitignore` | Updated by `areca init` to ignore `.env.local` and the pulled content files. |
+| `package.json` | Adds the `content:pull` and `content:sync` scripts, and a `prebuild` hook that pulls content before the build. |
+| `src/generated/content/` | The pulled content and the `areca.gen.ts` types file. Commit `areca.gen.ts`. |
+| Framework files | The loaders or routes that read content, written for your framework. |
+| Languages | Locale routing for the languages you chose, through Paraglide or explicit locale routes. |
+| Optional pages | Sample pages and a preview route, if you chose them. |
+
+The agent installs `@areca-cms/site-sdk` and runs `areca init` for you. See [Installation and setup](/docs/sdk/installation) for what `areca init` writes.
+
+## Make the first release
+
+A release needs content to show. So the agent makes a first release before it finishes.
+
+1. It switches the site to **Demo** mode. When it is connected as an agency admin, it does this itself with the `set_publishing_mode` tool. That is refused if the site was ever live in production. Then switch it by hand under **Settings › Deployment**.
+2. It creates a few entries with a `[Sample]` prefix, so you can find and delete them later.
+3. It marks the entries ready.
+4. It asks you before it goes live.
+5. When you agree, it goes live, pulls the content and builds the site. Then it checks that a page renders.
+
+If the connection cannot go live, the agent asks you to press **Publish demo** in the CMS. To let the agent go live, connect the app again and tick **Allow going live**. See [Connect AI](/docs/cms/connect-ai#allow-going-live).
+
+<Callout type="info" title="Demo releases are not public">
+Demo releases are never visible to visitors. They are for previews and testing. For a public site, switch the site to Production and set up deployment. See [Going live](/docs/cms/going-live) and [Go-live builds](/docs/sdk/go-live-builds).
+</Callout>
+
+## Stay up to date
+
+After setup, one command keeps the site in step with the CMS:
+
+```bash
+pnpm run content:sync
+```
+
+This command pulls the content model into `areca.config.ts`, then pulls the published content. Use it on every new machine and before you build.
+
+On a code-first site, run `pnpm run content:pull` instead. It pulls the content only.
+
+## Add or change content later
+
+Run `/areca-quickstart` again in the same project. The skill sees the existing setup and switches to **add or change content** mode. It does not repeat the setup.
+
+## Work on a live site
+
+<Callout type="warn" title="Be careful on a live site">
+Schema changes and go-live actions affect the real site. The agent asks before it goes live. Still, check the proposed schema closely. Dev environments are planned. Until they exist, test changes on a copy of the site first.
+</Callout>
+
+## Troubleshooting
+
+| Symptom | What to do |
+| --- | --- |
+| The agent says the Areca MCP is not connected. | Connect the app first. See [Connect AI](/docs/cms/connect-ai). Then start a new agent session, because some apps keep the tool list from the start of a session. |
+| MCP-first setup is refused. | Only an agency admin connection can create the content model. Ask an agency admin to connect, or let the agent use code-first setup. |
+| `areca pull` fails and says there is no release. | Make a first release. Run the skill again, or go live from the CMS. `areca pull` needs a release to read. |
+| The CLI fails while it loads `areca.config.ts`. | Use Node.js 22.18 or newer. Or run the CLI through `tsx`. |
+| The schema push is refused. | Check that `ARECA_SCHEMA_TOKEN` in `.env.local` is the current schema-write token. If it was rotated, copy the new one from **Settings › Developer**. |
+| The build cannot find the site token. | Check `.env.local`. Load env files before the dev server or build starts. See [Environment variables](/docs/sdk/installation#environment-variables). |
+| A schema change you made in the CMS disappeared. | The site gets its content types from code. The next manifest push replaces them. Change `areca.config.ts` instead. See [Connect AI](/docs/cms/connect-ai#troubleshooting). |
+| Demo content does not show to visitors. | Demo releases are never public. Switch to Production to publish for visitors. |
+
+## What the agent will never do
+
+- Print or paste a token in the chat. You paste tokens into `.env.local`.
+- Go live without asking you first.
+- Delete a collection, entry or file without your confirmation.
+- Run `areca init --force`. That command overwrites existing files.
+- Create a site or a token. Only the CMS can do that.
+
+## Related
+
+- [Agent skills](/docs/sdk/agent-skills) lists all the Areca skills and how to install them.
+- [Connect AI](/docs/cms/connect-ai) explains how to connect an AI app to a site.
+- [Installation and setup](/docs/sdk/installation) covers the manual setup the agent follows.
+- [Syncing the schema](/docs/sdk/schema-sync) explains the code-first path.

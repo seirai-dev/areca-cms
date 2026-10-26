@@ -76,12 +76,16 @@ describe('areca-sdk covers @areca-cms/site-sdk', () => {
   })
 })
 
+/** Names of the MCP tools registered in apps/cms/src/server/mcp/tools. */
+const mcpToolsDir = 'apps/cms/src/server/mcp/tools'
+const mcpTools = () =>
+  readdirSync(join(repo, mcpToolsDir))
+    .filter((file) => file.endsWith('.ts') && !file.includes('.test.'))
+    .flatMap((file) => [...read(`${mcpToolsDir}/${file}`).matchAll(/^\s+name: '(\w+)'/gm)].map(([, name]) => name!))
+
 describe('areca-mcp covers the MCP server', () => {
   const text = skillText('areca-mcp')
-  const toolsDir = 'apps/cms/src/server/mcp/tools'
-  const tools = readdirSync(join(repo, toolsDir))
-    .filter((file) => file.endsWith('.ts') && !file.includes('.test.'))
-    .flatMap((file) => [...read(`${toolsDir}/${file}`).matchAll(/^\s+name: '(\w+)'/gm)].map(([, name]) => name!))
+  const tools = mcpTools()
   const prompts = [...read('apps/cms/src/server/mcp/server.ts').matchAll(/registerPrompt\(\s*'(\w+)'/g)].map(
     ([, name]) => name!,
   )
@@ -95,6 +99,68 @@ describe('areca-mcp covers the MCP server', () => {
     const reference = read('skills/areca-mcp/references/tools.md')
     const documented = [...reference.matchAll(/^\| `(\w+)` \|/gm)].map(([, name]) => name!)
     expect(documented.filter((name) => !tools.includes(name))).toEqual([])
+  })
+})
+
+describe('areca-quickstart', () => {
+  const dir = join(repo, 'skills/areca-quickstart')
+  const files = skillFiles(dir).map(([path, data]) => [path, data.toString('utf8')] as const)
+  const text = files.map(([, body]) => body).join('\n')
+  const skill = files.find(([path]) => path === 'SKILL.md')![1]
+  const args = read('packages/site-sdk/src/args.ts')
+  const commands = [...args.matchAll(/command === '([\w-]+)'/g)].map(([, name]) => name!)
+  const subcommands = [...args.matchAll(/sub === '([\w-]+)'/g)].map(([, name]) => name!)
+
+  it('mentions only CLI commands that args.ts parses', () => {
+    const invoked = [...text.matchAll(/\bareca ([a-z][\w-]*)(?: ([a-z][\w-]*))?/g)]
+    const unknown = invoked
+      .filter(([, command, sub]) => {
+        if (!commands.includes(command!)) return true
+        return command === 'manifest' && !!sub && !subcommands.includes(sub)
+      })
+      .map(([match]) => match)
+    expect(unknown).toEqual([])
+  })
+
+  it('uses only long flags that args.ts accepts on areca lines', () => {
+    const flags = text
+      .split('\n')
+      .filter((line) => line.includes('areca '))
+      .flatMap((line) => [...line.matchAll(/--[a-z][a-z-]*/g)].map(([flag]) => flag))
+    expect([...new Set(flags)].filter((flag) => !args.includes(`'${flag}'`))).toEqual([])
+  })
+
+  it('mentions --force only to say never run it', () => {
+    const risky = text.split('\n').filter((line) => line.includes('--force') && !/never|not|don't|avoid/i.test(line))
+    expect(risky).toEqual([])
+  })
+
+  it('mentions only ARECA_* variables the SDK reads', () => {
+    const env = new Set<string>()
+    for (const file of readdirSync(join(repo, 'packages/site-sdk/src'))) {
+      if (file.endsWith('.test.ts') || !statSync(join(repo, 'packages/site-sdk/src', file)).isFile()) continue
+      for (const [name] of read(`packages/site-sdk/src/${file}`).matchAll(/ARECA_[A-Z_]+/g)) env.add(name)
+    }
+    // Read by the MCP client (a Bearer header), not by the SDK.
+    const clientSide = ['ARECA_MCP_KEY']
+    const mentioned = new Set(text.match(/ARECA_[A-Z_]+/g) ?? [])
+    expect([...mentioned].filter((name) => !env.has(name) && !clientSide.includes(name))).toEqual([])
+  })
+
+  it('mentions only MCP tools that the CMS registers', () => {
+    // Snake_case backticked identifiers that are not tools. Keep this list minimal.
+    const notTools = ['mfa_required']
+    const registered = new Set(mcpTools())
+    const candidates = [...text.matchAll(/`([a-z][a-z0-9]*(?:_[a-z0-9]+)+)`/g)].map(([, name]) => name!)
+    const unknown = [...new Set(candidates)].filter((name) => !registered.has(name) && !notTools.includes(name))
+    expect(unknown).toEqual([])
+    expect(candidates.filter((name) => registered.has(name)).length).toBeGreaterThan(0)
+  })
+
+  it('names the scripts it adds and the sister skills', () => {
+    for (const script of ['content:pull', 'content:sync', 'sync-manifest']) expect(skill).toContain(script)
+    expect(skill).toContain('areca-sdk')
+    expect(skill).toContain('areca-mcp')
   })
 })
 
