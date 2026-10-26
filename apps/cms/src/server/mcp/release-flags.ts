@@ -18,6 +18,17 @@ export type ReleaseFlags = {
   pendingRelease: boolean
 }
 
+/**
+ * A development environment has no releases (docs/design/dev-environments.md,
+ * Decision 7): nothing is live and nothing is pending, so every entry reads
+ * `live: false, pendingRelease: false` and keeps its `ready` status.
+ */
+export const NO_RELEASE_STATE: ReleaseState = {
+  liveSnapshot: null,
+  liveIds: new Set(),
+  pendingIds: new Set(),
+}
+
 export function releaseFlags(
   state: ReleaseState,
   entryId: string,

@@ -63,6 +63,7 @@ export function ReferencePicker({
   value,
   onChange,
   invalid,
+  devSite = false,
 }: {
   id: string
   siteId: string
@@ -70,6 +71,8 @@ export function ReferencePicker({
   value: unknown
   onChange: (value: string) => void
   invalid?: boolean
+  /** A development environment has no releases: published reads as Ready. */
+  devSite?: boolean
 }) {
   const [open, setOpen] = React.useState(false)
   const [search, setSearch] = React.useState('')
@@ -201,7 +204,7 @@ export function ReferencePicker({
                       const listed = referencePickerUiStatus(item.status)
                       const uiStatus =
                         item.status === 'published'
-                          ? entryUiStatus(item, live)
+                          ? entryUiStatus(item, live, devSite)
                           : listed
                       return (
                         <CommandItem

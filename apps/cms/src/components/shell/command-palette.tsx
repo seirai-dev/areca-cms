@@ -240,7 +240,11 @@ export function CommandPalette() {
                   </span>
                   <EntryStatusPill
                     size="sm"
-                    status={entryUiStatus(entry, release.liveMembership)}
+                    status={entryUiStatus(
+                      entry,
+                      release.liveMembership,
+                      isDevSite(inSite!),
+                    )}
                   />
                 </CommandItem>
               )

@@ -147,6 +147,7 @@ function GlobalEditorView({
   const canManage = canManageSite(me, site.organizationId)
   // A development environment has no scheduling (Decision 8).
   const canSchedule = !isDevSite(site)
+  const devSite = isDevSite(site)
   const release = useReleaseStatus(siteId)
   const live = release.liveMembership
   const titleRef = React.useRef<HTMLTextAreaElement>(null)
@@ -279,7 +280,7 @@ function GlobalEditorView({
 
   if (editor.loading || !entry) return <GlobalEditorSkeleton />
 
-  const uiStatus = entryUiStatus(entry, live)
+  const uiStatus = entryUiStatus(entry, live, devSite)
   const editedSinceReady = isEditedSinceReady({
     status: entry.status,
     updatedAt: entry.updatedAt,
@@ -527,6 +528,7 @@ function GlobalEditorView({
                       onChange={(value) => onLocaleChange(field.key, value)}
                       error={editor.fieldErrors[field.key]}
                       siteId={siteId}
+                      devSite={devSite}
                       organizationId={site.organizationId}
                     />
                   ),

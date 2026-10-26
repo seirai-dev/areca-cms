@@ -446,7 +446,7 @@ function EntryEditorView({
     (view[titleField.key] as string).trim()
       ? (view[titleField.key] as string)
       : m.editor_untitled()
-  const uiStatus = entry ? entryUiStatus(entry, live) : 'draft'
+  const uiStatus = entry ? entryUiStatus(entry, live, isDev) : 'draft'
   const editedSinceReady = entry
     ? isEditedSinceReady({
         status: entry.status,
@@ -510,6 +510,7 @@ function EntryEditorView({
   const details = (
     <DetailsPanel
       siteId={siteId}
+      devSite={isDev}
       organizationId={site.organizationId}
       productionUrl={site.productionUrl}
       routePattern={collection.routePattern}

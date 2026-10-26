@@ -606,7 +606,11 @@ function RecentlyEdited({
       ) : (
         <InsetList data-testid="recently-edited">
           {rows.map(({ row, collection, fields }) => {
-            const state = entryLiveState(row, release.liveMembership)
+            const state = entryLiveState(
+              row,
+              release.liveMembership,
+              isDevSite(site),
+            )
             const imageField = fields.find((field) => field.type === 'image')
             const cover = imageField ? row.draftData[imageField.key] : undefined
             return (

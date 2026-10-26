@@ -57,6 +57,7 @@ function Section({
  */
 export function DetailsPanel({
   siteId,
+  devSite = false,
   organizationId,
   productionUrl,
   routePattern,
@@ -82,6 +83,8 @@ export function DetailsPanel({
   slugHelper,
 }: {
   siteId: string
+  /** A development environment has no releases: published reads as Ready. */
+  devSite?: boolean
   organizationId: string
   productionUrl: string
   routePattern: string
@@ -149,6 +152,7 @@ export function DetailsPanel({
               onChange={(value) => onChange(field.key, value)}
               error={errors[field.key]}
               siteId={siteId}
+              devSite={devSite}
               organizationId={organizationId}
             />
           ))}
