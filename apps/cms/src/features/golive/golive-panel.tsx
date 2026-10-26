@@ -65,6 +65,7 @@ import {
   IndeterminateBar,
   changesReadyLabel,
   editorPublishReason,
+  withMonoCommand,
 } from './golive-tray'
 import { parseGoLiveError } from './parse-errors'
 import type { GoLiveError } from './parse-errors'
@@ -106,6 +107,7 @@ export function GoLivePanel({
 }) {
   const panel = usePanel()
   const open = panel.panel === 'golive'
+  const demo = useReleaseStatus(site.id).data?.publishingMode === 'demo'
 
   return (
     <SlideOver
@@ -113,7 +115,7 @@ export function GoLivePanel({
       onOpenChange={(next) => {
         if (!next) panel.close()
       }}
-      title={m.golive_go_live()}
+      title={demo ? m.golive_demo_publish_release() : m.golive_go_live()}
       description={site.name}
       data-testid="golive-panel"
       bodyClassName="px-0 pb-0"
@@ -165,6 +167,9 @@ function GoLivePanelBody({
   const release = useReleaseStatus(site.id)
   const { goLive, isPending, errors, clearErrors } = useGoLive(site.id)
   const [urgent, setUrgent] = React.useState(false)
+  const demo = release.data?.publishingMode === 'demo'
+  const isAgencyAdmin =
+    authClient.useSession().data?.user.isAgencyAdmin === true
   const pending = usePendingEntries({
     siteId: site.id,
     enabled: release.state !== 'loading',
@@ -184,15 +189,25 @@ function GoLivePanelBody({
 
   return (
     <div className="grid divide-y divide-border-default">
-      {release.data?.publishingMode === 'demo' ? (
+      {demo ? (
         <Section>
-          <p data-testid="demo-publication-label" role="status">
-            {m.golive_demo_mode()} ·{' '}
-            {release.data.demo
-              ? m.golive_demo_publication_ready()
-              : m.golive_no_demo_publication()}{' '}
-            · {m.golive_not_live_in_production()}
-          </p>
+          <div
+            data-testid="demo-publication-label"
+            role="status"
+            className="grid gap-0.5"
+          >
+            <p className="text-[14px] leading-5 font-semibold text-text-primary">
+              {release.data?.demo
+                ? m.golive_demo_tray_ready()
+                : m.golive_demo_tray_none()}
+            </p>
+            <p className="text-callout text-text-secondary">
+              {withMonoCommand(
+                m.golive_demo_tray_hint({ command: 'areca pull' }),
+                'areca pull',
+              )}
+            </p>
+          </div>
         </Section>
       ) : (
         <StatusHero site={site} release={release} />
@@ -222,34 +237,39 @@ function GoLivePanelBody({
           ) : null
         }
       >
-        <WhatsChanging siteId={site.id} pending={pending} />
+        <WhatsChanging siteId={site.id} pending={pending} demo={demo} />
       </Section>
 
       <Section>
         <div className="grid gap-4">
-          <label
-            className={cn(
-              'flex items-center justify-between gap-4 rounded-[12px] bg-background-subtle px-3.5 py-3',
-              !goLiveAllowed && 'opacity-60',
-            )}
-          >
-            <span className="grid gap-0.5">
-              <span className="flex items-center gap-1.5 text-[14px] leading-5 font-medium text-text-primary">
-                <Lightning weight="fill" className="size-4 text-icon-warning" />
-                {m.golive_urgent()}
+          {demo ? null : (
+            <label
+              className={cn(
+                'flex items-center justify-between gap-4 rounded-[12px] bg-background-subtle px-3.5 py-3',
+                !goLiveAllowed && 'opacity-60',
+              )}
+            >
+              <span className="grid gap-0.5">
+                <span className="flex items-center gap-1.5 text-[14px] leading-5 font-medium text-text-primary">
+                  <Lightning
+                    weight="fill"
+                    className="size-4 text-icon-warning"
+                  />
+                  {m.golive_urgent()}
+                </span>
+                <span className="text-callout text-text-secondary">
+                  {m.golive_urgent_hint()}
+                </span>
               </span>
-              <span className="text-callout text-text-secondary">
-                {m.golive_urgent_hint()}
-              </span>
-            </span>
-            <Switch
-              checked={urgent}
-              onCheckedChange={setUrgent}
-              disabled={!goLiveAllowed}
-              data-testid="golive-urgent"
-              aria-label={m.golive_urgent()}
-            />
-          </label>
+              <Switch
+                checked={urgent}
+                onCheckedChange={setUrgent}
+                disabled={!goLiveAllowed}
+                data-testid="golive-urgent"
+                aria-label={m.golive_urgent()}
+              />
+            </label>
+          )}
           <Hint
             label={goLiveAllowed ? null : reason}
             wrapDisabled={!goLiveAllowed}
@@ -267,13 +287,25 @@ function GoLivePanelBody({
               {isPending ? null : <RocketLaunch weight="fill" />}
               {release.state === 'going-live'
                 ? m.golive_going_live()
-                : m.golive_go_live()}
+                : demo
+                  ? m.golive_demo_publish_release()
+                  : m.golive_go_live()}
             </Button>
           </Hint>
           {!goLiveAllowed ? (
             <p className="text-center text-callout text-text-secondary">
               {reason}
             </p>
+          ) : null}
+          {demo && isAgencyAdmin ? (
+            <Link
+              to="/sites/$siteId/settings"
+              params={{ siteId: site.id }}
+              search={{ tab: 'deployment' }}
+              className="justify-self-center text-caption font-medium text-text-accent hover:underline"
+            >
+              {m.golive_switch_to_production()}
+            </Link>
           ) : null}
         </div>
       </Section>
@@ -434,9 +466,11 @@ function StatusHero({
 function WhatsChanging({
   siteId,
   pending,
+  demo = false,
 }: {
   siteId: string
   pending: ReturnType<typeof usePendingEntries>
+  demo?: boolean
 }) {
   if (pending.isError) {
     return (
@@ -460,7 +494,9 @@ function WhatsChanging({
   if (pending.entries.length === 0 && !pending.languages) {
     return (
       <p className="rounded-[12px] border border-dashed border-border-strong px-4 py-4 text-center text-callout text-text-secondary">
-        {m.golive_nothing_changing()}
+        {demo
+          ? m.golive_demo_nothing_to_publish()
+          : m.golive_nothing_changing()}
       </p>
     )
   }

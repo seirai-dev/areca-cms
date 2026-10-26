@@ -40,7 +40,7 @@ export function editorPublishReason() {
  * Renders `command` in mono wherever it appears in `text`, so a CLI command
  * in a translated sentence stays recognisable.
  */
-function withMonoCommand(text: string, command: string) {
+export function withMonoCommand(text: string, command: string) {
   return text.split(command).map((part, index) => (
     <React.Fragment key={index}>
       {index > 0 ? <span className="font-mono">{command}</span> : null}
@@ -629,8 +629,16 @@ export function GoLivePill({ siteId }: { siteId: string }) {
   const release = useReleaseStatus(siteId)
   const panel = usePanel()
   if (release.state === 'loading') return null
-  const label =
-    release.state === 'ready'
+  // A demo site is neutral: it is not live, and nothing is waiting to go live.
+  const neutral =
+    release.data?.publishingMode === 'demo' &&
+    release.state !== 'going-live' &&
+    release.state !== 'failed'
+  const label = neutral
+    ? release.data?.demo
+      ? m.golive_demo_pill_ready()
+      : m.golive_demo_pill()
+    : release.state === 'ready'
       ? m.golive_pill_ready({ count: release.pending })
       : release.state === 'going-live'
         ? m.golive_pill_going_live()
@@ -644,22 +652,26 @@ export function GoLivePill({ siteId }: { siteId: string }) {
       type="button"
       onClick={() => panel.open('golive')}
       data-testid="golive-pill"
-      data-state={release.state}
+      data-state={neutral ? 'demo' : release.state}
       className={cn(
         'flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12.5px] font-medium outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus',
-        release.state === 'ready' || release.state === 'never-live'
-          ? 'bg-accent-soft text-accent-text'
-          : release.state === 'failed'
-            ? 'bg-status-error-bg text-text-error'
-            : 'bg-background-subtle text-text-secondary',
+        neutral
+          ? 'bg-background-subtle text-text-secondary'
+          : release.state === 'ready' || release.state === 'never-live'
+            ? 'bg-accent-soft text-accent-text'
+            : release.state === 'failed'
+              ? 'bg-status-error-bg text-text-error'
+              : 'bg-background-subtle text-text-secondary',
       )}
     >
       {release.state === 'going-live' ? (
         <SpinnerRing size={12} />
-      ) : release.state === 'up-to-date' ? (
-        <LiveDot pulse="none" />
       ) : release.state === 'failed' ? (
         <FailedIcon size={12} />
+      ) : neutral ? (
+        <span className="size-1.5 rounded-full bg-border-strong" />
+      ) : release.state === 'up-to-date' ? (
+        <LiveDot pulse="none" />
       ) : (
         <span className="size-1.5 rounded-full bg-accent" />
       )}
