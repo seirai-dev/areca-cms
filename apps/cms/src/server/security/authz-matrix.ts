@@ -38,6 +38,7 @@ import * as translateFns from '#/server/fn/translate'
 import * as assetFns from '#/server/fn/assets'
 import * as authMethodFns from '#/server/fn/auth-methods'
 import * as brandingFns from '#/server/fn/branding'
+import * as devEnvFns from '#/server/fn/dev-env'
 import * as contentFns from '#/server/fn/content'
 import * as homeFns from '#/server/fn/home'
 import * as mcpKeyFns from '#/server/fn/mcp-keys'
@@ -51,6 +52,7 @@ import * as securityFns from '#/server/fn/security'
 import * as setupFns from '#/server/fn/setup'
 import { publishEntry, updateDraft } from '#/server/content/entries'
 import { sampleRichText } from '#/server/content/test-utils'
+import { forkDevEnvironment } from '#/server/dev-env/fork'
 import { hashToken } from '#/server/security/token-hash'
 
 import type { ActorName, Expected, Policy, World } from './authz-harness'
@@ -1702,10 +1704,66 @@ export const ROWS: Row[] = [
     },
     prepare: () => ({ data: { confirmEmail: 'nobody@authz.test' } }),
   },
+  // ---------------------------------------------------------- dev-env.ts
+  {
+    name: 'getDevEnvironmentFn',
+    fn: devEnvFns.getDevEnvironmentFn,
+    policy: 'agency',
+    prepare: (w) => ({ data: { siteId: w.X.site.id } }),
+  },
+  {
+    name: 'createDevEnvironmentFn',
+    fn: devEnvFns.createDevEnvironmentFn,
+    policy: 'agency',
+    prepare: async (w) => {
+      const s = await w.fresh.site()
+      return {
+        data: { siteId: s.id },
+        untouched: absent(site, eq(site.parentSiteId, s.id)),
+      }
+    },
+  },
+  {
+    name: 'refreshDevEnvironmentFn',
+    fn: devEnvFns.refreshDevEnvironmentFn,
+    policy: 'agency',
+    prepare: async (w) => {
+      const s = await w.fresh.site()
+      const dev = await forkDevEnvironment(w.users.adminMfa, s.id)
+      const [before] = await db
+        .select({ updatedAt: site.updatedAt })
+        .from(site)
+        .where(eq(site.id, dev.id))
+      return {
+        data: { devSiteId: dev.id },
+        untouched: async () => {
+          const [now] = await db
+            .select({ updatedAt: site.updatedAt })
+            .from(site)
+            .where(eq(site.id, dev.id))
+          return now?.updatedAt.getTime() === before?.updatedAt.getTime()
+        },
+      }
+    },
+  },
+  {
+    name: 'deleteDevEnvironmentFn',
+    fn: devEnvFns.deleteDevEnvironmentFn,
+    policy: 'agency',
+    prepare: async (w) => {
+      const s = await w.fresh.site()
+      const dev = await forkDevEnvironment(w.users.adminMfa, s.id)
+      return {
+        data: { devSiteId: dev.id },
+        untouched: exists(site, eq(site.id, dev.id)),
+      }
+    },
+  },
 ]
 
 export const ALL_FN_MODULES = {
   account: accountFns,
+  'dev-env': devEnvFns,
   notifications: notificationFns,
   admin: adminFns,
   ai: aiFns,

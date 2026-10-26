@@ -55,6 +55,10 @@ unchanged (each row carries a side-effect probe).
 | `updateSiteFn` | `admin.ts` | `agency` | agency admin (MFA) |
 | `rotateSiteTokenFn` | `admin.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up); rotates the build or schema token according to `privilege` |
 | `deleteSiteFn` | `admin.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) |
+| `getDevEnvironmentFn` | `dev-env.ts` | `agency` | agency admin (MFA); a production site's development environment, or null |
+| `createDevEnvironmentFn` | `dev-env.ts` | `agency` | agency admin (MFA); no step-up (throwaway dev env); production sites only |
+| `refreshDevEnvironmentFn` | `dev-env.ts` | `agency` | agency admin (MFA); no step-up; discards the dev env's content and forks again |
+| `deleteDevEnvironmentFn` | `dev-env.ts` | `agency` | agency admin (MFA); no step-up; deletes the dev env, nothing is archived |
 | `listMembersFn` | `admin.ts` | `org-owner` | org owner, agency admin (MFA) |
 | `updateMemberRoleFn` | `admin.ts` | `org-owner` | org owner, agency admin (MFA) |
 | `removeMemberFn` | `admin.ts` | `org-owner` | org owner, agency admin (MFA) |
@@ -183,7 +187,7 @@ answers NotFound for editors (the matrix override), so existence is not revealed
 | `/api/notifications/unsubscribe` | POST | signed unsubscribe token in the query | RFC 8058 one-click: 200 `{ ok }`, 400 for invalid, expired or locked links; no GET |
 | `/api/sites/manifest` | GET | site **build** token | 401 for none/garbage/schema token; only own site's schema |
 | `/api/sites/manifest` | POST | site **schema** token | 401 for build token; writes only the token's own site |
-| `/api/sites/snapshot/current` | GET | site build token | 401 for schema token; only own publication |
+| `/api/sites/snapshot/current` | GET | site build token | 401 for schema token; only own publication. A dev env's token builds the snapshot from its ready content (`publicationId: null`); a `publicationId` query returns 400 for it |
 | `/api/sites/preview` | GET | HMAC preview token | 401 expired/tampered/foreign-secret/unknown site; 404 for another site's slug |
 | `/api/mcp/<siteSlug>` | POST, GET, DELETE | OAuth access token issued for that site (RFC 8707 audience), or a personal key for that site; 401 with `WWW-Authenticate: Bearer resource_metadata=…` for none, invalid, expired, revoked, other-site or disconnected credentials; 403 `insufficient_scope` without the `mcp` scope; 403 `mfa_required` as for keys; 404 for an unknown slug |
 | `/.well-known/oauth-authorization-server/api/auth`, `/.well-known/openid-configuration/api/auth` | GET | none | public metadata, CORS `*`; the issuer matches the plugin's; root-level documents are not served |

@@ -245,6 +245,30 @@ export type SiteManifest = {
   globals?: Record<string, GlobalConfig>
 }
 
+/**
+ * One collection or site content section as a fork copies it, enabled or
+ * not (docs/design/dev-environments.md, "Schema snapshot"). Collections are
+ * compared by `key` and `kind`; fields by `key`.
+ */
+export type SchemaSnapshotItem = {
+  key: string
+  label: string
+  routePattern: string
+  fields: Field[]
+  enabled: boolean
+  kind: ContentKind
+  seoEnabled: boolean
+  previewPath: string | null
+  requiredLanguages: string[]
+  localizedRoutes: Record<string, string> | null
+}
+
+/** Schema and languages of a site at one moment. `site.schema_baseline` holds one. */
+export type SchemaSnapshot = {
+  languages: SiteLanguages | null
+  collections: SchemaSnapshotItem[]
+}
+
 export type EntryData = Record<string, unknown>
 
 /** `development` sites are forks of a production site (docs/design/dev-environments.md). */

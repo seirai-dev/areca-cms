@@ -27,6 +27,8 @@ import {
   ValidationError,
 } from '#/server/content/errors'
 import { generateSiteToken } from '#/server/content/site-auth'
+import { deleteDevSiteRows } from '#/server/dev-env/delete'
+import { lockProductionSite } from '#/server/dev-env/lock'
 
 export const deploymentTargetSchema: z.ZodType<DeploymentTarget | null> =
   z.union([
@@ -442,6 +444,12 @@ export async function deleteSite(id: string, actorId: string) {
     throw new NotFoundError(m.server_site_not_found())
   }
 
+  if (isDevSite(existing)) {
+    // Dev content is never archived; the dev env is deleted from its
+    // production site (docs/design/dev-environments.md, Decision 6).
+    throw new ConflictError(m.server_dev_env_delete_from_production())
+  }
+
   await db.transaction(async (tx) => {
     await lockOrganizationForMutation(tx, existing.organizationId)
     const locked = (
@@ -450,6 +458,18 @@ export async function deleteSite(id: string, actorId: string) {
     if (!locked) throw new NotFoundError(m.server_site_not_found())
     await assertSiteHasNoPendingDeployment(tx, id)
     await archiveDeletedContent(tx, existing.organizationId, 'site', id)
+    // The dev env goes with its production site, in this transaction.
+    const devEnv = (
+      await tx
+        .select({ id: site.id })
+        .from(site)
+        .where(eq(site.parentSiteId, id))
+        .limit(1)
+    ).at(0)
+    if (devEnv) {
+      await lockProductionSite(tx, id)
+      await deleteDevSiteRows(tx, devEnv.id)
+    }
     const entryRows = await tx
       .select({ id: entry.id })
       .from(entry)

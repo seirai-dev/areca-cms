@@ -1,6 +1,7 @@
 import { and, isNull, ne, notLike, or } from 'drizzle-orm'
 
 import { auditLog, site as siteTable } from '#/db/schema'
+import { isDevSite } from '#/lib/site-environment'
 import { assertAdminMfa } from '#/lib/session.server'
 import { MfaRequiredError } from '#/lib/security-errors'
 import { m } from '#/paraglide/messages'
@@ -13,9 +14,7 @@ import { requireAdminLocalMfa } from './local-mfa'
  * visible to agency admins only. Every site-scoped check goes through this
  * module, so the rule lives in one place.
  */
-export function isDevSite(site: { environment: string }): boolean {
-  return site.environment === 'development'
-}
+export { isDevSite }
 
 type VisibilityPrincipal = {
   session: { id: string }

@@ -989,6 +989,12 @@ export async function cancelSchedule(id: string, actorId: string) {
 export async function deleteEntry(id: string, actorId: string) {
   const ctx = await loadEntryContext(id)
   assertCollectionEntry(ctx.collection)
+  if (isDevSite(ctx.site) && ctx.entry.originEntryId) {
+    // A forked dev entry is archived, not deleted: the origin link must
+    // survive so that a push can archive the production entry.
+    await archiveEntry(id, actorId)
+    return
+  }
   return db.transaction(async (tx) => {
     await archiveDeletedContent(tx, ctx.site.organizationId, 'entry', id)
     await audit(

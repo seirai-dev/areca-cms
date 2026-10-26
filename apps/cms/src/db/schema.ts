@@ -27,6 +27,7 @@ import type {
   MailSecure,
   MembershipRole,
   PublicationStatus,
+  SchemaSnapshot,
   SiteEnvironment,
   SiteLanguages,
   SiteManifest,
@@ -266,7 +267,7 @@ export const site = pgTable(
       { onDelete: 'cascade' },
     ),
     /** Dev environments only: production schema at the last fork or push. */
-    schemaBaseline: jsonb('schema_baseline').$type<SiteManifest | null>(),
+    schemaBaseline: jsonb('schema_baseline').$type<SchemaSnapshot | null>(),
     /** Dev environments only: last fork or reset. */
     lastForkedAt: timestamptz('last_forked_at'),
     /** Dev environments only: last push or copy. */
