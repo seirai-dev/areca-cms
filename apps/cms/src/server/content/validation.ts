@@ -449,6 +449,7 @@ export async function validateReferences(
   fields: Field[],
   data: EntryData,
   options: { requirePublished?: boolean } = {},
+  connection: Pick<typeof db, 'select'> = db,
 ): Promise<FieldError[]> {
   const errors: FieldError[] = []
 
@@ -471,7 +472,11 @@ export async function validateReferences(
       continue
     }
 
-    const refCollection = await getCollection(siteId, field.collection)
+    const refCollection = await getCollection(
+      siteId,
+      field.collection,
+      connection,
+    )
     if (!refCollection) {
       errors.push({
         path: field.key,
@@ -483,7 +488,7 @@ export async function validateReferences(
     }
 
     const ref = (
-      await db
+      await connection
         .select({
           id: entry.id,
           status: entry.status,

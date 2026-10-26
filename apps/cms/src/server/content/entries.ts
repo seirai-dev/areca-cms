@@ -73,7 +73,7 @@ function normalizeEntryData(
  * every required language is complete. `referenceData` is the flat view that
  * reference targets are checked against.
  */
-function prepareReadyData(
+export function prepareReadyData(
   ctx: {
     site: { languages: SiteLanguages | null }
     collection: { fields: Field[]; requiredLanguages: string[] }

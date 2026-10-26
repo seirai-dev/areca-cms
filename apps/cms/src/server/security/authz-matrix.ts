@@ -1759,6 +1759,54 @@ export const ROWS: Row[] = [
       }
     },
   },
+  {
+    name: 'getDevSiteSyncStatusFn',
+    fn: devEnvFns.getDevSiteSyncStatusFn,
+    policy: 'agency',
+    prepare: async (w) => {
+      const s = await w.fresh.site()
+      const dev = await forkDevEnvironment(w.users.adminMfa, s.id)
+      return { data: { devSiteId: dev.id } }
+    },
+  },
+  {
+    name: 'getPushPlanFn',
+    fn: devEnvFns.getPushPlanFn,
+    policy: 'agency',
+    prepare: async (w) => {
+      const s = await w.fresh.site()
+      const dev = await forkDevEnvironment(w.users.adminMfa, s.id)
+      return { data: { devSiteId: dev.id } }
+    },
+  },
+  {
+    // The plan hash is stale on purpose: nothing is written, and an allowed
+    // caller gets the "plan changed" refusal.
+    name: 'pushToProductionFn',
+    fn: devEnvFns.pushToProductionFn,
+    policy: 'agency-fresh',
+    tolerant: true,
+    prepare: async (w) => {
+      const s = await w.fresh.site()
+      const dev = await forkDevEnvironment(w.users.adminMfa, s.id)
+      return {
+        data: {
+          devSiteId: dev.id,
+          planHash: 'stale',
+          exclude: [],
+          apply: [],
+          goLive: false,
+        },
+        untouched: async () => {
+          const [row] = await db
+            .select({ lastPushedAt: site.lastPushedAt })
+            .from(site)
+            .where(eq(site.id, dev.id))
+          return row?.lastPushedAt == null
+        },
+      }
+    },
+  },
 ]
 
 export const ALL_FN_MODULES = {
