@@ -30,7 +30,7 @@ export function DevBanner({ me, site }: { me: Me; site: MeSite }) {
     <div
       role="status"
       data-testid="dev-env-banner"
-      className="grid gap-2 rounded-card border border-border-default bg-accent-soft px-4 py-2.5 text-callout text-text-primary"
+      className="mb-6 grid gap-2 rounded-card border border-border-default bg-accent-soft px-4 py-2.5 text-callout text-text-primary"
     >
       {/* Mobile: tag + text on row 1, actions on row 2. Desktop: one row. */}
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-2">

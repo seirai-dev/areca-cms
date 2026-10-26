@@ -23,6 +23,7 @@ import { StatusPill } from '#/components/ui/status-pill'
 import { formatRelativeTime } from '#/lib/relative-time'
 import { displayHost, groupSitesByOrg } from '#/lib/site-nav'
 import type { MeSite } from '#/lib/site-nav'
+import { isDevSite } from '#/lib/site-environment'
 import { m } from '#/paraglide/messages'
 import type { Me } from '#/server/fn/me'
 
@@ -234,7 +235,14 @@ function SiteCard({
                   label={m.shell_status_live()}
                 />
               ) : (
-                <StatusPill tone="neutral" label={m.shell_not_live_yet()} />
+                <StatusPill
+                  tone="neutral"
+                  label={
+                    isDevSite(site)
+                      ? m.dev_env_status()
+                      : m.shell_not_live_yet()
+                  }
+                />
               )}
               {figures.pendingEntries > 0 ? (
                 <StatusPill

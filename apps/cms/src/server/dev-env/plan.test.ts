@@ -46,6 +46,7 @@ const devEntry = (overrides: Partial<PlanEntry> = {}): PlanEntry => ({
   collectionKey: 'articles',
   collectionKind: 'collection',
   slug: 'a',
+  title: 'A',
   status: 'published',
   draftData: { title: 'A' },
   publishedSlug: 'a',
@@ -233,14 +234,31 @@ describe('buildPlan: schema', () => {
     })
   })
 
-  it('uses the section kind in the label of a section item', () => {
-    const footer = def('footer', [field('note')], { kind: 'global' })
+  it('titles a collection item with the collection label', () => {
+    const offers = def('offers', [field('title')], { label: 'Offers' })
+    const plan = buildPlan(
+      planInput({
+        dev: snapshot([def('articles'), offers]),
+      }),
+    )
+    expect(plan.items[0]).toMatchObject({
+      kind: 'schema.add',
+      title: 'Offers',
+    })
+    expect(plan.items[0]?.collectionLabel).toBeUndefined()
+  })
+
+  it('titles a section item with its section label', () => {
+    const footer = def('footer', [field('note')], {
+      kind: 'global',
+      label: 'Footer',
+    })
     const plan = buildPlan(
       planInput({
         dev: snapshot([def('articles'), footer]),
       }),
     )
-    expect(plan.items[0]?.label).toBe('Add section "footer"')
+    expect(plan.items[0]).toMatchObject({ kind: 'schema.add', title: 'Footer' })
   })
 })
 
@@ -583,6 +601,20 @@ describe('buildPlan: plan hash', () => {
     )
   })
 
+  it('does not change when only the row titles change', () => {
+    expect(build()).toBe(
+      build({
+        devEntries: [
+          devEntry({
+            draftData: { title: 'B' },
+            title: 'Renamed in the loader',
+          }),
+        ],
+        productionEntries: [prodEntry()],
+      }),
+    )
+  })
+
   it('changes when the production version of a listed entry moves', () => {
     expect(build()).not.toBe(
       build({ productionEntries: [prodEntry({ contentVersion: 4 })] }),
@@ -705,5 +737,78 @@ describe('stableStringify', () => {
     expect(stableStringify({ b: 1, a: { d: 2, c: undefined } })).toBe(
       '{"a":{"d":2},"b":1}',
     )
+  })
+})
+
+describe('buildPlan: entry row titles', () => {
+  it('titles an entry row with its title and the collection label', () => {
+    const plan = buildPlan(
+      planInput({
+        base: snapshot([
+          def('articles', [field('title')], { label: 'Articles' }),
+        ]),
+        dev: snapshot([
+          def('articles', [field('title')], { label: 'Articles' }),
+        ]),
+        production: snapshot([
+          def('articles', [field('title')], { label: 'Articles' }),
+        ]),
+        devEntries: [
+          devEntry({
+            title: 'Spring menu',
+            draftData: { title: 'Spring menu' },
+          }),
+        ],
+        productionEntries: [prodEntry()],
+      }),
+    )
+    expect(plan.items[0]).toMatchObject({
+      title: 'Spring menu',
+      collectionLabel: 'Articles',
+    })
+  })
+
+  it('leaves the collection label off a section entry row', () => {
+    const footer = def('footer', [field('note')], {
+      kind: 'global',
+      label: 'Footer',
+    })
+    const plan = buildPlan(
+      planInput({
+        base: snapshot([footer]),
+        dev: snapshot([footer]),
+        production: snapshot([footer]),
+        devEntries: [
+          devEntry({
+            id: 'd9',
+            collectionKey: 'footer',
+            collectionKind: 'global',
+            slug: 'footer',
+            title: 'Footer',
+            draftData: { note: 'B' },
+            originEntryId: 'p9',
+            originBaseline: {
+              slug: 'footer',
+              data: { note: 'A' },
+              publishedSlug: 'footer',
+              publishedData: null,
+              status: 'published',
+            },
+            originContentVersion: 1,
+          }),
+        ],
+        productionEntries: [
+          prodEntry({
+            id: 'p9',
+            collectionKey: 'footer',
+            collectionKind: 'global',
+            slug: 'footer',
+            contentVersion: 1,
+          }),
+        ],
+      }),
+    )
+    expect(plan.items[0]?.title).toBe('Footer')
+    expect(plan.items[0]?.collectionLabel).toBeUndefined()
   })
 })

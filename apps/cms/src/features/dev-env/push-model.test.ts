@@ -11,6 +11,7 @@ import {
   groupPushItems,
   isPushTaken,
   pluralForm,
+  planItemLabel,
   pushGroupOf,
   pushSelection,
   summarizePushItem,
@@ -26,7 +27,7 @@ function item(
   return {
     id,
     kind,
-    label: id,
+    title: id,
     collectionKey: 'pages',
     summary,
     devChanged: true,
@@ -135,6 +136,27 @@ describe('withId', () => {
     expect(withId([], 'a', true)).toEqual(['a'])
     expect(withId(['a'], 'a', true)).toEqual(['a'])
     expect(withId(['a', 'b'], 'a', false)).toEqual(['b'])
+  })
+})
+
+describe('planItemLabel', () => {
+  it('joins an entry title and its collection label with a middle dot', () => {
+    expect(
+      planItemLabel({
+        ...item('entry:1', 'entry.change'),
+        title: 'Spring menu',
+        collectionLabel: 'Articles',
+      }),
+    ).toBe('Spring menu · Articles')
+  })
+
+  it('shows only the title when there is no collection label', () => {
+    expect(
+      planItemLabel({
+        ...item('schema:offers', 'schema.add'),
+        title: 'Offers',
+      }),
+    ).toBe('Offers')
   })
 })
 

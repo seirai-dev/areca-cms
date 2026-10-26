@@ -2,6 +2,8 @@ import { and, eq, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { collection, entry, site } from '#/db/schema'
+import { entryTitle } from '#/lib/content/utils'
+import type { EntryData, SchemaSnapshotItem } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 import { NotFoundError } from '#/server/content/errors'
 import { fieldKeyUsage } from '#/server/content/field-data'
@@ -12,6 +14,18 @@ import type { Plan, PlanInput } from './plan'
 import { schemaSnapshot } from './schema-snapshot'
 
 type Reader = Pick<typeof db, 'select' | 'execute'>
+
+/**
+ * Row title of a dev entry: a section shows its label, an entry its main-language
+ * title (the same one the collection list shows), or its slug when it has none.
+ */
+function planEntryTitle(
+  row: { slug: string; draftData: EntryData; collectionKind: string },
+  def: SchemaSnapshotItem | undefined,
+): string {
+  if (row.collectionKind === 'global') return def?.label ?? row.slug
+  return entryTitle(row.draftData, def?.fields ?? [], row.slug)
+}
 
 export type PlanContext = {
   devSiteId: string
@@ -104,6 +118,10 @@ export async function loadPlanContext(
           collectionKey,
           collectionKind,
           slug: row.slug,
+          title: planEntryTitle(
+            { slug: row.slug, draftData: row.draftData, collectionKind },
+            devSchema.collections.find((def) => def.key === collectionKey),
+          ),
           status: row.status,
           draftData: row.draftData,
           publishedSlug: row.publishedSlug,

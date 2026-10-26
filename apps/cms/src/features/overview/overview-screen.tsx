@@ -109,7 +109,9 @@ export function OverviewScreen({ site }: { site: MeSite }) {
             ) : release.state === 'loading' ? (
               <Skeleton className="inline-block h-3.5 w-28" />
             ) : (
-              <span>{m.shell_not_live_yet()}</span>
+              <span>
+                {isDevSite(site) ? m.dev_env_status() : m.shell_not_live_yet()}
+              </span>
             )}
           </span>
         }

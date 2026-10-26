@@ -2451,6 +2451,7 @@
   "dev_env_banner": "Ontwikkelomgeving voor {name}. Wijzigingen blijven hier tot je ze pusht.",
   "dev_env_banner_back": "Terug naar productie",
   "dev_env_tag": "Dev",
+  "dev_env_status": "Ontwikkeling",
   "dev_env_tab_title": "Ontwikkelomgeving",
   "dev_env_tab_description": "Een privékopie van deze site om wijzigingen op te proberen voordat ze in productie gaan.",
   "dev_env_none_body": "Wijzigingen in de ontwikkelomgeving blijven daar tot je ze naar productie pusht.",

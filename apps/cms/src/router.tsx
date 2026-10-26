@@ -73,5 +73,7 @@ declare module '@tanstack/react-router' {
 declare module '@tanstack/react-router' {
   interface StaticDataRouteOption {
     shell?: 'focus' | 'bare'
+    /** Hides the development environment banner on this page (the push screen has its own header). */
+    hideDevBanner?: boolean
   }
 }

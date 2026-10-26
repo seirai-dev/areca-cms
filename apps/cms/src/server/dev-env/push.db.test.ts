@@ -453,9 +453,7 @@ describe.skipIf(!hasDb)('development environment: push', () => {
       await deleteEntry(prodAbout!.id, actorId)
 
       const plan = await loadPlan(db, devId)
-      const aboutItem = plan.items.find((item) =>
-        item.label.startsWith('"about"'),
-      )
+      const aboutItem = plan.items.find((item) => item.title === 'About dev')
       expect(aboutItem?.attention).toBe('deleted-in-production')
 
       await push(actorId, devId, { apply: [aboutItem!.id] })

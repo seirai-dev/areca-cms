@@ -10,6 +10,7 @@ import { isDevSite } from '#/lib/site-environment'
  * dev env only; everyone else goes back to the site overview.
  */
 export const Route = createFileRoute('/_app/sites/$siteId/push')({
+  staticData: { hideDevBanner: true },
   beforeLoad: ({ context, params }) => {
     if (!context.me.user.isAgencyAdmin || !isDevSite(context.site)) {
       throw redirect({

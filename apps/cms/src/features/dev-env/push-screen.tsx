@@ -24,6 +24,7 @@ import {
   NO_PUSH_DECISIONS,
   attentionReasonOf,
   groupPushItems,
+  planItemLabel,
   pluralForm,
   pushSelection,
   summarizePushItem,
@@ -351,7 +352,7 @@ function PushRow({
         className="grid min-w-0 flex-1 cursor-pointer gap-0.5"
       >
         <span className="break-words text-[14px] leading-5 font-medium text-text-primary">
-          {item.label}
+          {planItemLabel(item)}
         </span>
         <span className="text-callout text-text-secondary">
           {summaryText(summarizePushItem(item))}
@@ -392,7 +393,7 @@ function AttentionRow({
     >
       <div className="grid min-w-0 flex-1 gap-0.5">
         <span className="break-words text-[14px] leading-5 font-medium text-text-primary">
-          {item.label}
+          {planItemLabel(item)}
         </span>
         {reason ? (
           <span className="text-callout text-text-warning">
@@ -405,7 +406,7 @@ function AttentionRow({
         value={applied && !scheduled ? 'apply' : 'skip'}
         onValueChange={(value) => onDecide(item.id, value === 'apply')}
         options={options}
-        aria-label={m.dev_push_decision_label({ label: item.label })}
+        aria-label={m.dev_push_decision_label({ label: planItemLabel(item) })}
         className="w-full shrink-0 sm:w-auto"
         data-testid={`push-decision-${item.id}`}
       />
@@ -578,7 +579,7 @@ function PushResultView({
                   key={row.itemId}
                   asChild
                   chevron
-                  title={item.label}
+                  title={planItemLabel(item)}
                   subtitle={m.dev_push_open_in_production()}
                 >
                   <Link

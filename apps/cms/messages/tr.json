@@ -2451,6 +2451,7 @@
   "dev_env_banner": "{name} için geliştirme ortamı. Değişiklikler gönderene kadar burada kalır.",
   "dev_env_banner_back": "Canlıya dön",
   "dev_env_tag": "Dev",
+  "dev_env_status": "Geliştirme",
   "dev_env_tab_title": "Geliştirme ortamı",
   "dev_env_tab_description": "Canlıya geçmeden önce değişiklikleri deneyebileceğiniz özel bir site kopyası.",
   "dev_env_none_body": "Geliştirme ortamında yapılan değişiklikler, canlıya gönderene kadar orada kalır.",

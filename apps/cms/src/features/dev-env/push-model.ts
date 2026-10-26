@@ -118,6 +118,13 @@ export function withId(list: readonly string[], id: string, on: boolean) {
 
 export type ScopeKind = 'ready' | 'draft' | 'both'
 
+/** The row title: `Spring menu · Articles` for an entry, the bare title otherwise. */
+export function planItemLabel(item: PlanItem): string {
+  return item.collectionLabel
+    ? `${item.title} · ${item.collectionLabel}`
+    : item.title
+}
+
 export type PushSummary =
   | { kind: 'fields'; fields: number; scope: ScopeKind | null }
   | { kind: 'plain' }

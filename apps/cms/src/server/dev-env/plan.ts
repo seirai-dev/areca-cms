@@ -49,7 +49,13 @@ export type PlanItem = {
   /** Stable id: `schema:<key>`, `languages`, or `entry:<devId>`. */
   id: string
   kind: PlanItemKind
-  label: string
+  /**
+   * What the row is about: the entry title, the section or collection label,
+   * or the languages label. Display only; not part of the plan hash.
+   */
+  title: string
+  /** Collection label of an entry row. Not set for sections. Display only. */
+  collectionLabel?: string
   collectionKey: string | null
   /** Dev entry id, for entry items. */
   devId?: string
@@ -70,6 +76,8 @@ export type PlanEntry = {
   collectionKey: string
   collectionKind: ContentKind
   slug: string
+  /** Row title the loader computed: the entry title, or the section label for a section. */
+  title: string
   status: EntryStatus
   draftData: EntryData
   publishedSlug: string | null
@@ -175,17 +183,6 @@ function droppedFields(
     .filter((drop) => drop.values > 0)
 }
 
-function schemaLabel(kind: PlanItemKind, def: SchemaSnapshotItem): string {
-  const noun = def.kind === 'global' ? 'section' : 'collection'
-  const verb =
-    kind === 'schema.add'
-      ? 'Add'
-      : kind === 'schema.remove'
-        ? 'Remove'
-        : 'Change'
-  return `${verb} ${noun} "${def.label}"`
-}
-
 type Built = {
   item: PlanItem
   /** Values the item was planned from; part of the plan hash. */
@@ -228,7 +225,7 @@ function schemaItems(input: PlanInput, base: SchemaSnapshot): Built[] {
       item: {
         id: `schema:${key}`,
         kind,
-        label: schemaLabel(kind, def),
+        title: def.label,
         collectionKey: key,
         summary: {
           changedFields: changedFieldKeys(b?.fields ?? [], d?.fields ?? []),
@@ -266,7 +263,7 @@ function languageItem(input: PlanInput, base: SchemaSnapshot): Built | null {
     item: {
       id: 'languages',
       kind: 'languages',
-      label: 'Site languages',
+      title: 'Site languages',
       collectionKey: null,
       summary: mainChanged ? { stampCount: input.stampCount } : {},
       devChanged: true,
@@ -339,6 +336,26 @@ function entryFingerprint(
   }
 }
 
+/**
+ * Label of the collection a dev entry belongs to. A section has none: its row
+ * title is the section label already.
+ */
+function entryCollectionLabel(
+  input: PlanInput,
+  dev: PlanEntry,
+): string | undefined {
+  if (dev.collectionKind === 'global') return undefined
+  const defs = [
+    ...input.dev.collections,
+    ...input.production.collections,
+    ...(input.base?.collections ?? []),
+  ]
+  return (
+    defs.find((def) => def.key === dev.collectionKey)?.label ??
+    dev.collectionKey
+  )
+}
+
 function entryItems(input: PlanInput, addedKeys: Set<string>): Built[] {
   const productionById = new Map(
     input.productionEntries.map((row) => [row.id, row]),
@@ -368,6 +385,7 @@ function entryItems(input: PlanInput, addedKeys: Set<string>): Built[] {
           kind: archive ? 'entry.archive' : 'entry.change',
           attention,
           productionChanged,
+          collectionLabel: entryCollectionLabel(input, dev),
         }),
       )
       continue
@@ -389,6 +407,7 @@ function entryItems(input: PlanInput, addedKeys: Set<string>): Built[] {
           kind: 'entry.change',
           attention: null,
           productionChanged: false,
+          collectionLabel: undefined,
         }),
       )
       continue
@@ -403,6 +422,7 @@ function entryItems(input: PlanInput, addedKeys: Set<string>): Built[] {
         kind: 'entry.new',
         attention: null,
         productionChanged: false,
+        collectionLabel: entryCollectionLabel(input, dev),
       }),
     )
   }
@@ -416,12 +436,16 @@ function entryBuilt(
     kind: PlanItemKind
     attention: PlanAttention
     productionChanged: boolean
+    collectionLabel: string | undefined
   },
 ): Built {
   const item: PlanItem = {
     id: `entry:${dev.id}`,
     kind: options.kind,
-    label: `"${dev.slug}" (${dev.collectionKey})`,
+    title: dev.title,
+    ...(options.collectionLabel !== undefined
+      ? { collectionLabel: options.collectionLabel }
+      : {}),
     collectionKey: dev.collectionKey,
     devId: dev.id,
     summary: entrySummary(dev),

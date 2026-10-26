@@ -36,6 +36,7 @@ import {
 } from '#/lib/site-nav'
 import type { MeSite } from '#/lib/site-nav'
 import { cn } from '#/lib/utils'
+import { isDevSite } from '#/lib/site-environment'
 import { m } from '#/paraglide/messages'
 import { listOrganizationsFn } from '#/server/fn/admin'
 import { getSitesOverviewFn } from '#/server/fn/overview'
@@ -80,7 +81,9 @@ function SiteLiveLine({ site }: { site: MeSite }) {
               {m.shell_status_live()}
             </span>
           ) : (
-            <span className="shrink-0">{m.shell_not_live_yet()}</span>
+            <span className="shrink-0">
+              {isDevSite(site) ? m.dev_env_status() : m.shell_not_live_yet()}
+            </span>
           )}
         </>
       )}

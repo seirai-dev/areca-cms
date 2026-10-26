@@ -2451,6 +2451,7 @@
   "dev_env_banner": "Development environment for {name}. Changes stay here until you push.",
   "dev_env_banner_back": "Back to production",
   "dev_env_tag": "Dev",
+  "dev_env_status": "Development",
   "dev_env_tab_title": "Development environment",
   "dev_env_tab_description": "A private copy of this site to try changes on before they reach production.",
   "dev_env_none_body": "Changes made in the development environment stay there until you push them to production.",
