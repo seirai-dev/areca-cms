@@ -34,6 +34,9 @@ export function useDevEnvironment(siteId: string, enabled: boolean) {
     await queryClient.invalidateQueries({
       queryKey: adminQueryKeys.devEnvironment(siteId),
     })
+    // Reset and delete change what the push screen and the banner show.
+    await queryClient.invalidateQueries({ queryKey: ['dev-sync'] })
+    await queryClient.invalidateQueries({ queryKey: ['push-plan'] })
     await router.invalidate()
   }
 

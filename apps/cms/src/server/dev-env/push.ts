@@ -1,5 +1,6 @@
 import { and, eq, inArray, sql } from 'drizzle-orm'
 
+import { PLAN_CHANGED_MESSAGE } from '#/lib/dev-env'
 import { db } from '#/db'
 import {
   collection,
@@ -62,7 +63,7 @@ import {
 import type { DevEnvActor, SiteRow, Tx } from './rows'
 
 /** The message a push refused on a stale plan shows. */
-export const PLAN_CHANGED_MESSAGE = 'The plan changed. Review it again.'
+export { PLAN_CHANGED_MESSAGE }
 
 export type PushInput = {
   devSiteId: string

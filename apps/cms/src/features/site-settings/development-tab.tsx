@@ -22,6 +22,7 @@ import { m } from '#/paraglide/messages'
 import { TokenReveal } from './token-reveal'
 import type { SiteRecord } from './use-site-settings'
 import { useDevEnvironment } from './use-dev-environment'
+import { resetDevEnvDescription } from '#/features/dev-env/reset-copy'
 
 type DevEnvStatus = NonNullable<
   ReturnType<typeof useDevEnvironment>['status']['data']
@@ -100,7 +101,7 @@ export function DevelopmentTab({ site }: { site: SiteRecord }) {
               </Button>
               <ConfirmDialog
                 title={m.dev_env_reset_title()}
-                description={m.dev_env_reset_description()}
+                description={resetDevEnvDescription(status.unpushedChanges)}
                 confirmLabel={m.dev_env_reset_confirm()}
                 variant="destructive"
                 testId="dev-env-reset-dialog"
