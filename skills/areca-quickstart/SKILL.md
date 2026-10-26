@@ -34,7 +34,7 @@ Keep the details in the reference files:
 - [references/frameworks.md](references/frameworks.md): wiring code for TanStack Start, Next.js, Astro and plain Node.
 - [references/first-release.md](references/first-release.md): sample entries, release, pull, checks and troubleshooting.
 
-For API detail, read the `areca-sdk` skill (config, fields, CLI, content API) and the `areca-mcp` skill (tools, roles, workflow). Do not copy their detail into the project. Name the skill and use what it says.
+For API detail, read the `areca-sdk` skill (config, fields, CLI, content API) and the `areca-mcp` skill (tools, roles, workflow). Do not copy their detail into the project. Name the skill and use what it says. If those skills are not installed, read the docs in the `skills/` folder of https://github.com/ekozf/areca-cms instead.
 
 ## Ground rules
 
@@ -71,7 +71,9 @@ Read these. Do not change anything yet.
    awk -F= '/^ARECA_(CMS_URL|SITE_TOKEN|SCHEMA_TOKEN)=/{print $1, "length", length($2)}' .env.local 2>/dev/null
    ```
 
-8. Git: run `git status --short`. If the tree has unrelated changes, tell the user before you start.
+8. Git: run `git status --short`. If the project is not a git repo, say so and offer `git init` before you write any file. If the tree has unrelated changes, tell the user before you start.
+
+No framework yet (no `package.json`, or no framework in it)? Say so. Offer to scaffold a TanStack Start app with `pnpm dlx @tanstack/cli@latest create` (not `create-tsrouter-app`). Then continue from step 0 in the new project. This skill does not cover the scaffold itself.
 
 Report what you found in a short list. Ask only about what you could not detect. Go to step 1.
 
@@ -96,33 +98,38 @@ Read [references/interview.md](references/interview.md). It has four batches: A 
 
 ## Step 3: Show the content model and wait for approval
 
+The approval in this step covers every MCP write and every file write that follows. Record it in your notes before you call any write tool, including `set_site_languages`. No recorded yes, no write.
+
 For each collection and section in the plan, build the schema from [references/recipes.md](references/recipes.md). Show one table per collection or section:
 
 | Key | Type | Required | Translatable | Notes |
 | --- | --- | --- | --- | --- |
 
-Also show the route for each collection (for example `/blog/$slug`) and the SEO setting for each section.
+Also show the route for each collection (for example `/blog/$slug`) and the SEO setting for each section. When an extra was declined, show the fields that were removed because of it, in the table, for example a row "removed: author (authors declined)".
 
 Ask: "Shall I create this content model?" Wait for a yes. If the user changes something, update the plan and show the changed tables again. Do not create anything before approval.
 
 ## Step 4: Connect the project and create the schema
+
+Record the Step 3 approval before any MCP write, including `set_site_languages`.
 
 ### 4a. Install, init and tokens
 
 1. Install the SDK with the detected package manager: `pnpm add @areca-cms/site-sdk`, `npm install @areca-cms/site-sdk`, `yarn add @areca-cms/site-sdk` or `bun add @areca-cms/site-sdk`. Skip this if it is already there.
 2. Run `areca init` once. Use one of these two ways.
    - **Preferred:** ask the user to run `<pm> exec areca init` in their own terminal. It asks for the CMS URL, the site token and the site key. The token prompt hides what is typed. Wait for the user to say it is done.
-   - **Alternative:** if the user is fine with it, run the non-interactive form. The token must already be in `.env.local`, so it does not appear in the command line history:
+   - **Alternative:** if the user is fine with it, the user first puts `ARECA_CMS_URL` and `ARECA_SITE_TOKEN` in `.env.local` (you do not paste the token). Then run the non-interactive form, with the URL and site key from the plan:
 
      ```bash
-     pnpm exec areca init --yes --cms-url "$CMS_URL" --site-key "$SITE_KEY" --token "$(sed -n 's/^ARECA_SITE_TOKEN=//p' .env.local)"
+     <pm> exec areca init --yes --cms-url <url from the plan> --site-key <site key from the plan> --token "$(sed -n 's/^ARECA_SITE_TOKEN=//p' .env.local)"
      ```
 
      Do not echo the command with the token in it. The `--token` flag is visible to other users on the machine for a moment. Mention that.
-3. `init` writes `areca.config.ts` (if missing), `.env.example`, `.env.local`, `.gitignore` entries, `src/generated/content/manifest.json` and the scripts `sync-manifest` and `content:pull`. It does not install packages and does not add `areca.gen.ts`. Check the result with `git diff` and show the user a short list.
+3. `init` writes `areca.config.ts` (if missing), `.env.example`, `.env.local`, `.gitignore` entries, `src/generated/content/manifest.json` and the scripts `sync-manifest` and `content:pull`. It also wraps `dev` in `areca run --` unless the script already loads env files. It does not install packages and does not add `areca.gen.ts`. Check the result with `git diff` and show the user a short list.
+   - `init` prints code-first next steps (`sync-manifest`, then publish). Ignore that text when you go MCP-first. The schema comes from MCP, and `sync-manifest` is not used.
 4. Schema token (code-first only): the user adds `ARECA_SCHEMA_TOKEN=` to `.env.local` themselves, from Settings › Developer › Schema-write token. MCP-first does not need it.
 5. Check the tokens with the length check from step 0. Do not print them. If a value is empty, say which key is empty and where to paste it. Continue only when the needed keys are set.
-6. Recommend `chmod 600 .env.local` (the SDK docs say so). Make the change only if the user agrees.
+6. `.env.local` is gitignored. Leave its file permissions as they are. Do not run `chmod` on your own. If the user asks for stricter permissions, `chmod 600 .env.local` is the usual choice.
 
 ### 4b. Create the schema
 
@@ -133,7 +140,7 @@ Ask: "Shall I create this content model?" Wait for a yes. If the user changes so
 3. For each collection, call `get_collection_schema` for an existing one. Then call `upsert_collection` with `key`, `label`, `routePattern`, the full `fields` list, `requiredLanguages` and `routes` when needed. Fields replace the whole list, so always send every field. A `slug` field is added when missing, but include it anyway.
 4. For each section, call `upsert_global` with `key`, `label`, the full `fields` list, `seo` and `previewPath`.
 5. Call `get_site_info` again and compare with the plan. Report any difference.
-6. Pull the schema into the project: `<pm> exec areca manifest pull`. This writes `areca.config.ts` from the CMS, so the schema is in Git. It runs without a question unless something would be removed (a collection, section, field, language, or the main language). If it stops for a removal, show the user the diff and get a yes. Then follow [first-release.md](references/first-release.md) (section 7) before you add `--yes`.
+6. Pull the schema into the project: `<pm> exec areca manifest pull`. This writes `areca.config.ts` from the CMS, so the schema is in Git. A file it wrote before (it starts with the header `// Generated by \`areca manifest pull\`.`) asks only before a removal (a collection, section, field, language, or the main language). If it stops for a removal, show the user the diff and get a yes. Then follow [first-release.md](references/first-release.md) (section 7) before you add `--yes`. A file without the header that already has collections (for example from an older SDK) asks once. With the user's yes, run `<pm> exec areca manifest pull --yes` once.
 
 `manifest pull` rewrites the config file. Keep hand edits out of it. It keeps `siteKey`, `assets` and `i18n`.
 
@@ -150,11 +157,12 @@ If an MCP-first or code-first step fails, read the error and the `areca-sdk` or 
 Do these in order. Show the user each file you will change before you change it when the file already exists.
 
 1. **Scripts** in `package.json`. Keep the scripts `init` added. Add these, using the detected package manager:
-   - `content:sync`: `areca manifest pull && areca pull --out src/generated/content` (MCP-first). It asks only when something would be removed, and that prompt is intended.
+   - `content:sync`: `areca manifest pull && areca pull --out src/generated/content` (MCP-first). It asks only before a removal. A config from an older SDK (no header) asks once: see step 4b.6.
+   - `sync-manifest` (`areca manifest push`, needs `ARECA_SCHEMA_TOKEN`) is for code-first only. In MCP-first, leave it in place and tell the user it is not used.
    - `prebuild`: `areca pull` (plus the Paraglide compile first when Paraglide is used). A build without content fails until the first release exists. That is expected.
    - `predev` (optional): only after the first release. A failing `predev` stops the dev server.
    - Do not change `dev` again. `init` already wraps it in `areca run --` when needed.
-2. **Languages** (only if the plan has them). Set `languages` in `areca.config.ts` through MCP or by code. Set up Paraglide only if the user agreed to it. Install it only after approval. Follow [references/frameworks.md](references/frameworks.md) for the compile step and the wiring. Other i18n libraries: pass the locale yourself with `content.in(locale)`.
+2. **Languages** (only if the plan has them). Set `languages` in `areca.config.ts` through MCP or by code. Set up Paraglide only if the user agreed to it. Install it only after approval. For TanStack Start the Paraglide recipe in [references/frameworks.md](references/frameworks.md) was verified end to end; follow it. Other i18n libraries: pass the locale yourself with `content.in(locale)`.
 3. **Framework wiring**: read the section for the detected framework in [references/frameworks.md](references/frameworks.md). Add:
    - a server-only content module (the code imports `content` from `areca.gen.ts`),
    - list and detail pages for each collection in batch D,
@@ -172,7 +180,7 @@ Do not render CMS content in browser code. The SDK content object and tokens are
 Read [references/first-release.md](references/first-release.md). The short version:
 
 1. Check the publishing mode. Use demo mode for the first release. Production needs the user's explicit choice, and a site that already went live in production must not get sample content (see first-release.md, section 1).
-2. Create one sample entry per collection, in dependency order (authors before posts, for example). Title starts with `[Sample]`. Fill the SEO fields. Fill the main language and each required language.
+2. Create one sample entry per collection, in dependency order (authors before posts, for example). The title starts with `[Sample]`, or the main text field when there is no title. Fill the SEO fields. Fill the main language and each required language.
 3. Fill each required section with `update_global`. Use the real company details from the interview. For other copy, write short placeholder text and say so.
 4. Mark everything ready. Tell the user what you are doing.
 5. Ask: "Go live now in demo mode? This publishes N entries and M sections." Wait for a yes.
@@ -226,8 +234,12 @@ Use this when `areca.config.ts`, the SDK dependency or `areca.gen.ts` already ex
 
 1. Do not install the SDK again. Do not run `areca init` again. Do not overwrite `.env.local`.
 2. Show the current state: collections and sections from `areca.config.ts`, or from `get_site_info` if MCP is connected. Note the languages and the publishing mode.
-3. Ask what the user wants to add or change. Typical requests: a new collection (for example vacancies), a new field, a new language, a new page.
-4. For new or changed parts, go through the same flow: the interview questions that apply, the approval gate (step 3), the schema (step 4b), the wiring (step 5), and a release (step 6). Skip the parts that are done.
-5. For removals, fields that hold content, or languages: explain what is lost. Get explicit confirmation before any change.
-6. For an existing live site, follow the note in the ground rules. Use hidden collections (`enabled: false`) or a separate site for experiments.
-7. Finish with the step 7 summary, only for the parts that changed.
+3. Decide the schema source from the header of `areca.config.ts`:
+   - It has the header `// Generated by \`areca manifest pull\`.`: **MCP-first**. Change the schema with MCP (`upsert_collection`, `upsert_global`, `set_site_languages`) after the approval. Then run `<pm> run content:sync </dev/null`.
+   - Anything else: **code-first**. Edit `areca.config.ts` after the approval. Then run `<pm> run sync-manifest` (needs `ARECA_SCHEMA_TOKEN`), then `<pm> run content:pull`.
+   This is how to read the `areca-mcp` advice "if the site syncs its schema from code, prefer areca.config.ts": the header tells you which kind of site it is. Do not switch a site from one kind to the other without asking the user.
+4. Ask what the user wants to add or change. Typical requests: a new collection (for example vacancies), a new field, a new language, a new page.
+5. For new or changed parts, go through the same flow: the interview questions that apply, the approval gate (step 3), the schema (step 4b), the wiring (step 5), and a release (step 6). Skip the parts that are done.
+6. For removals, fields that hold content, or languages: explain what is lost. Get explicit confirmation before any change.
+7. For an existing live site, follow the note in the ground rules. Use hidden collections (`enabled: false`) or a separate site for experiments.
+8. Finish with the step 7 summary, only for the parts that changed.

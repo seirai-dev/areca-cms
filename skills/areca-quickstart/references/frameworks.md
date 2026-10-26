@@ -9,7 +9,7 @@ Rules for every framework:
 - Read content only on the server or at build time. Import `content` in server code only: a server function, a server component, a build script or a server route.
 - Never import the generated `content` into a client component or a browser bundle. It reads files with `node:fs`, so the client build breaks or leaks server code.
 - Use the same code path for every page. Keep list and detail pages on the same functions.
-- Write the file, then run the typecheck (step 6) before you move to the next file.
+- Typecheck only after the first release pull (`areca.gen.ts` is written by the pull). Before that, check the files by reading them.
 
 Common pieces, in every framework:
 
@@ -23,104 +23,320 @@ Common pieces, in every framework:
 }
 ```
 
-Keep the script names the ones your project uses. `content:sync` is for MCP-first. Code-first uses `content:pull` and `sync-manifest`.
+Keep the script names the ones your project uses. `content:sync` is for MCP-first. Code-first uses `content:pull` and `sync-manifest`. How `content:sync` behaves (it asks only before a removal) is in [SKILL.md](../SKILL.md), step 4b.
 
 `areca pull` reads `areca.config.ts` and `.env.local` itself, so the hook needs no extra flags.
 
-## Paraglide (only when the plan uses it)
+## Paraglide with TanStack Start (verified)
 
-Paraglide is the only i18n library the SDK wires for you. With it set in the config (`i18n: { paraglide: './src/paraglide/runtime.js' }`), `areca pull` passes Paraglide's `getLocale` to the generated content object. The current URL language is then used for every read.
+Paraglide is the only i18n library the SDK wires for you. With `i18n: { paraglide: './src/paraglide/runtime.js' }` in `areca.config.ts`, the generated content module reads the language from Paraglide's `getLocale()`. Use Paraglide when the project has no i18n library yet. If the project already uses another library, use the explicit locale (the end of this file).
 
-Steps (install only after the user says yes):
+This recipe was run end to end on a TanStack Start app with two languages (`en` main, `nl`). The Dutch blog is `/nl/blog/<slug>`, and the Dutch vacancies are `/nl/vacatures/<slug>`. Versions: `@inlang/paraglide-js` 2.29.1, `@tanstack/react-start` 1.169.4, Node 24.
 
-1. `pnpm add @inlang/paraglide-js`
-2. Create `project.inlang/settings.json`. Copy the shape from the demo (`examples/demo-site/project.inlang/settings.json`). Set `baseLocale` to the main language and `locales` to `languages.all`. Keep them equal to `areca.config.ts`.
-3. Compile before anything imports the generated content, and before the pull:
+Install only after the user says yes (step 1). The other steps only change files the plan names.
+
+1. Install: `<pm> add @inlang/paraglide-js`. The compile reads plugins from a CDN (see the settings file), so it needs internet access.
+2. Create `project.inlang/settings.json`. Keep `baseLocale` and `locales` equal to `languages` in `areca.config.ts`:
 
    ```json
    {
-     "scripts": {
-       "paraglide": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide",
-       "predev": "pnpm run paraglide",
-       "prebuild": "pnpm run paraglide && areca pull"
+     "$schema": "https://inlang.com/schema/project-settings",
+     "baseLocale": "en",
+     "locales": ["en", "nl"],
+     "modules": [
+       "https://cdn.jsdelivr.net/npm/@inlang/plugin-message-format@4/dist/index.js",
+       "https://cdn.jsdelivr.net/npm/@inlang/plugin-m-function-matcher@2/dist/index.js"
+     ],
+     "plugin.inlang.messageFormat": {
+       "pathPattern": "./messages/{locale}.json"
      }
    }
    ```
 
-   The generated `areca.gen.ts` imports the runtime from `src/paraglide`. A build without the compile step fails with a missing module.
-4. Use the URL strategy only. Locale comes from the URL prefix, so prerendered pages never depend on a cookie or the browser language. The demo uses `strategy: ['url', 'baseLocale']`.
-5. Route paths are written once in the main language. The other language's path segments come from `routes` in `areca.config.ts`. Use the demo's router setup (`src/router.tsx`, `src/lib/locale-routes.ts`) as the pattern.
+3. Create `messages/en.json` and `messages/nl.json`. Each holds only `{ "$schema": "https://inlang.com/schema/inlang-message-format" }`. Add UI strings later. Until then, the UI text stays in one language.
+4. `tsconfig.json`: add `"allowJs": true` to `compilerOptions`. The compiled Paraglide files are JavaScript. The `#/*` alias must exist in `tsconfig.json` (`paths`) and `package.json` (`imports`). The scaffold has both. Add them if they are missing.
+5. `areca.config.ts`: add `i18n: { paraglide: './src/paraglide/runtime.js' },` below `languages`.
+6. `package.json` scripts. Keep `dev` as it is. Add `paraglide`, add `predev`, and change `prebuild` so the compile runs before the pull:
 
-Without Paraglide, pass the locale yourself (see "Explicit locale" at the end).
+   ```json
+   "paraglide": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide",
+   "predev": "pnpm run paraglide",
+   "prebuild": "pnpm run paraglide && areca pull"
+   ```
+
+   The pull writes `areca.gen.ts`, which imports `src/paraglide/runtime.js`. The compile must exist before the typecheck.
+7. `vite.config.ts`: add the Paraglide plugin, and point the TanStack Start server at `src/server.ts`:
+
+   ```ts
+   import { paraglideVitePlugin } from '@inlang/paraglide-js'
+   // ...
+   plugins: [
+     paraglideVitePlugin({
+       project: './project.inlang',
+       outdir: './src/paraglide',
+       strategy: ['url', 'baseLocale'],
+     }),
+     tanstackStart({ server: { entry: 'server.ts' } }),
+     viteReact(),
+   ],
+   ```
+
+   `strategy: ['url', 'baseLocale']` takes the language from the URL prefix only. Pages never depend on a cookie or the browser language.
+8. `src/server.ts` (new). It sets the language for each server request from the URL:
+
+   ```ts
+   import { createStartHandler, defaultStreamHandler } from '@tanstack/react-start/server'
+   import type { Register } from '@tanstack/react-router'
+   import type { RequestHandler } from '@tanstack/react-start/server'
+   import { paraglideMiddleware } from '#/paraglide/server.js'
+
+   const startFetch = createStartHandler(defaultStreamHandler)
+
+   const fetch: RequestHandler<Register> = (req, ...args) =>
+     paraglideMiddleware(req, () => startFetch(req, ...args))
+
+   export default { fetch }
+   ```
+
+9. `src/lib/locale-routes.ts` (new). Routes are written once in the base language. This file translates the page segment for each other language:
+
+   ```ts
+   export const BASE_LOCALE = 'en'
+   export const LOCALES = ['en', 'nl'] as const
+   export type Locale = (typeof LOCALES)[number]
+
+   // Base segment -> segment per language. Keep in step with `routes` in areca.config.ts.
+   export const SEGMENTS: Record<string, Partial<Record<Locale, string>>> = {
+     vacancies: { nl: 'vacatures' },
+   }
+
+   function mapFirstSegment(pathname: string, map: (segment: string) => string): string {
+     const parts = pathname.split('/')
+     if (parts.length < 2 || parts[1] === '') return pathname
+     parts[1] = map(parts[1]!)
+     return parts.join('/')
+   }
+
+   /** /vacancies/x -> /vacatures/x for nl. */
+   export function toLocalePath(pathname: string, locale: Locale): string {
+     if (locale === BASE_LOCALE) return pathname
+     return mapFirstSegment(pathname, (segment) => SEGMENTS[segment]?.[locale] ?? segment)
+   }
+
+   /** The inverse: /vacatures/x -> /vacancies/x. */
+   export function toBasePath(pathname: string, locale: Locale): string {
+     if (locale === BASE_LOCALE) return pathname
+     return mapFirstSegment(pathname, (segment) => {
+       const base = Object.keys(SEGMENTS).find((key) => SEGMENTS[key]?.[locale] === segment)
+       return base ?? segment
+     })
+   }
+   ```
+
+10. `src/router.tsx`: add the URL rewrite. Paraglide adds and strips `/nl`, and this code translates the page segment:
+
+    ```tsx
+    import { createRouter as createTanStackRouter } from '@tanstack/react-router'
+    import { deLocalizeUrl, getLocale, localizeUrl } from '#/paraglide/runtime'
+    import { routeTree } from './routeTree.gen'
+    import { toBasePath, toLocalePath } from './lib/locale-routes'
+
+    function withPathname(url: URL, pathname: string): URL {
+      const next = new URL(url.href)
+      next.pathname = pathname
+      return next
+    }
+
+    export function getRouter() {
+      const router = createTanStackRouter({
+        routeTree,
+        scrollRestoration: true,
+        defaultPreload: 'intent',
+        defaultPreloadStaleTime: 0,
+        rewrite: {
+          input: ({ url }) => {
+            const base = deLocalizeUrl(url)
+            return withPathname(base, toBasePath(base.pathname, getLocale()))
+          },
+          output: ({ url }) => {
+            const locale = getLocale()
+            return localizeUrl(withPathname(url, toLocalePath(url.pathname, locale)), { locale })
+          },
+        },
+      })
+      return router
+    }
+
+    declare module '@tanstack/react-router' {
+      interface Register {
+        router: ReturnType<typeof getRouter>
+      }
+    }
+    ```
+
+11. Routes: write the base-language routes only (`src/routes/blog/$slug.tsx`, `src/routes/vacancies/index.tsx`, and so on). Do not make `routes/nl/` copies. Every loader passes the language from `getLocale()`:
+
+    ```tsx
+    import { getLocale } from '#/paraglide/runtime'
+    // ...
+    loader: async ({ params }) => {
+      const post = await loadPost({ data: { locale: getLocale(), slug: params.slug } })
+      if (!post) throw notFound()
+      return post
+    },
+    ```
+
+    The list rows use TanStack `Link` with the base route. The router rewrite adds `/nl` for Dutch:
+
+    ```tsx
+    <Link to="/blog/$slug" params={{ slug: row.slug }}>{row.title}</Link>
+    ```
+
+12. `src/routes/__root.tsx`: set the page language from the URL: `<html lang={getLocale()}>` (import `getLocale` from `#/paraglide/runtime`).
+13. Check, in this order:
+
+    ```bash
+    <pm> run generate-routes     # regenerates routeTree.gen.ts (or: <pm> exec tsr generate)
+    <pm> exec tsc --noEmit
+    <pm> run build
+    ```
+
+    Then start the dev server (`<pm> run dev`) and check the pages with the HTTP checks in [first-release.md](first-release.md).
+
+Notes:
+
+- The `routes` values in `areca.config.ts` (for example `routes: { nl: '/vacatures/$slug' }`) have no `/nl` prefix. Keep `SEGMENTS` in step with them. See [recipes.md](recipes.md#routes-and-languages).
+- The check was done with `curl` on server-rendered pages. Client-side navigation was not tested in a browser.
+- The recipe does not turn on prerendering. Add `prerender` in the Vite config only when the site needs static HTML, and exclude `/__preview` and `/api` (as in the demo).
 
 ## TanStack Start
 
-Detected by `@tanstack/react-start` in `package.json`. Mirror the demo.
+Detected by `@tanstack/react-start` in `package.json`. This section is for a site without Paraglide. For Paraglide, follow the recipe above first, then use the same pattern. The loaders pass `getLocale()` instead of a fixed locale.
 
-Dependencies to add (ask first): `@tanstack/markdown@1.0.0` for rich text (same version as the SDK).
+No framework yet? Use the TanStack CLI: `<pm> dlx @tanstack/cli@latest create`. Do not use `create-tsrouter-app`. The rest of this skill assumes the site already exists.
+
+Dependency to add (ask first): `@tanstack/markdown@1.0.0`, the same version the SDK pins. Install it with `<pm> add @tanstack/markdown@1.0.0`.
+
+Rules for this framework:
+
+- Server functions return plain data only: strings, numbers, arrays and objects. Do not return the entry, `seo` or a rich text object. `seo.jsonLd` and `richText.json` do not serialize, so the typecheck fails. Build the head on the server with `seoHead(...)`, and the body as a Markdown string with `richTextMarkdown(...)`.
+- Keep every content call inside a `createServerFn`. Route files import the server function, never the content object.
+- `.validator(...)` takes a plain function. No `zod` is needed.
+- Run the typecheck only after the first pull (`areca.gen.ts` does not exist before it). Generate the route tree first (`<pm> run generate-routes`, or `<pm> exec tsr generate`), then `<pm> exec tsc --noEmit`.
 
 ### Server functions
 
-Keep every content call inside a `createServerFn`. The route files import the server function, not the content object.
-
 ```ts
-// src/lib/content.functions.ts
+// src/lib/content.functions.ts (server only)
 import { createServerFn } from '@tanstack/react-start'
-import { z } from 'zod'
+import { richTextMarkdown, seoHead, type SeoHeadResult } from '@areca-cms/site-sdk'
 import { content } from '../generated/content/areca.gen'
 
-const slugInput = z.object({ slug: z.string().min(1) })
+type Locale = 'en' | 'nl' // the languages in areca.config.ts
 
-export const loadPosts = createServerFn({ method: 'GET' }).handler(() =>
-  content.posts.all({ orderBy: { publishedAt: 'desc' } }),
-)
+function parseLocale(value: unknown): Locale {
+  if (value === 'en' || value === 'nl') return value
+  throw new Error(`Unknown locale: ${String(value)}`)
+}
+
+// The SDK's route has no language prefix. Add it for every language but the main one.
+const localePath = (locale: Locale, path: string) => (locale === 'en' ? path : `/${locale}${path}`)
+
+export type ListRow = { slug: string; title: string; summary: string | null; href: string }
+export type PostPage = { title: string; body: string; head: SeoHeadResult }
+
+export const loadPosts = createServerFn({ method: 'GET' })
+  .validator((input: { locale: unknown }) => ({ locale: parseLocale(input.locale) }))
+  .handler(({ data }): ListRow[] =>
+    content
+      .in(data.locale)
+      .posts.all({ orderBy: { publishedAt: 'desc' } })
+      .map((post) => ({
+        slug: post.slug,
+        title: post.data.title,
+        summary: post.data.excerpt ?? null,
+        href: localePath(data.locale, content.in(data.locale).posts.href(post.slug)),
+      })),
+  )
 
 export const loadPost = createServerFn({ method: 'GET' })
-  .validator(slugInput)
-  .handler(({ data }) => {
-    const post = content.posts.get(data.slug)
+  .validator((input: { locale: unknown; slug: unknown }) => ({
+    locale: parseLocale(input.locale),
+    slug: String(input.slug),
+  }))
+  .handler(({ data }): PostPage | null => {
+    const post = content.in(data.locale).posts.get(data.slug)
     if (!post) return null
-    return { post, author: content.resolve(post.data.author) }
+    return {
+      title: post.data.title,
+      body: richTextMarkdown(post.data.body),
+      head: seoHead(post.seo, { siteName: 'Acme' }),
+    }
   })
 ```
 
-The demo uses the same `.validator(...)` call with zod. If the project uses a newer TanStack Start version that renames it, follow the version the project already uses.
+Replace `Acme` with the client's name from `companyInfo`. For a single-language site, drop `locale`, `parseLocale` and `localePath`, and call `content.posts.all()`.
 
-### Detail route with SEO and rich text
+### Detail and list routes
 
 ```tsx
 // src/routes/blog/$slug.tsx
 import { createFileRoute, notFound } from '@tanstack/react-router'
-import { Markdown } from '@tanstack/markdown/react'
-import { richTextDocument, seoHead } from '@areca-cms/site-sdk'
-import { richTextComponents } from '@areca-cms/site-sdk/rich-text-react'
 import { loadPost } from '../../lib/content.functions'
+import { PostDetail } from '../../components/pages'
 
 export const Route = createFileRoute('/blog/$slug')({
   loader: async ({ params }) => {
-    const result = await loadPost({ data: { slug: params.slug } })
-    if (!result) throw notFound()
-    return result
+    const post = await loadPost({ data: { locale: 'en', slug: params.slug } })
+    if (!post) throw notFound()
+    return post
   },
-  head: ({ loaderData }) =>
-    seoHead(loaderData?.post.seo, { titleTemplate: '%s · Acme', siteName: 'Acme' }),
+  head: ({ loaderData }) => loaderData?.head ?? {},
   component: PostPage,
 })
 
 function PostPage() {
-  const { post } = Route.useLoaderData()
+  return <PostDetail post={Route.useLoaderData()} />
+}
+```
+
+Each language has its own route file that calls the same loader with its own locale. For Dutch, `src/routes/nl/blog/$slug.tsx` uses `locale: 'nl'` and renders the same component.
+
+The list route (`src/routes/blog/index.tsx`) uses `loader: () => loadPosts({ data: { locale: 'en' } })`. Its rows already carry `href`.
+
+```tsx
+// src/components/pages.tsx
+import { Markdown } from '@tanstack/markdown/react'
+import { richTextComponents } from '@areca-cms/site-sdk/rich-text-react'
+import type { ListRow, PostPage } from '../lib/content.functions'
+
+export function ListPage({ heading, rows }: { heading: string; rows: ListRow[] }) {
+  return (
+    <main>
+      <h1>{heading}</h1>
+      <ul>
+        {rows.map((row) => (
+          <li key={row.slug}>
+            <a href={row.href}>{row.title}</a>
+            {row.summary ? <p>{row.summary}</p> : null}
+          </li>
+        ))}
+      </ul>
+    </main>
+  )
+}
+
+export function PostDetail({ post }: { post: PostPage }) {
   return (
     <article>
-      <h1>{post.data.title}</h1>
-      <Markdown components={richTextComponents()}>{richTextDocument(post.data.body)}</Markdown>
+      <h1>{post.title}</h1>
+      <Markdown components={richTextComponents()}>{post.body}</Markdown>
     </article>
   )
 }
 ```
 
-The list route (`src/routes/blog/index.tsx`) uses `loader: () => loadPosts()` and maps the entries to links with `content.posts.href(post)`.
-
-Replace `Acme` with the client's site name from `companyInfo`, or pass it in from the root route.
+`richTextComponents()` keeps the image sizes from the CMS. Use it with every `Markdown` element.
 
 ### Preview route (optional)
 
@@ -299,7 +515,19 @@ content.matchLocale(request.headers.get('accept-language'))  // pick a language 
 
 - Pass the locale from the route or the request. Do not rely on a global language setting in server code.
 - `entry.isFallback` is `true` when the entry is shown in another language. Show a note or link to the main language.
-- Use `seoHead(entry.seo, { locale: entry.locale, alternates: entry.alternates, main: content.languages?.main })` for hreflang.
+- `entry.alternates` holds the route of each language **without** the `/nl` prefix (see [recipes.md](recipes.md#routes-and-languages)). Add the prefix yourself before you use it for hreflang. The main language has no prefix:
+
+  ```ts
+  const alternates = Object.fromEntries(
+    Object.entries(entry.alternates ?? {}).map(([tag, path]) => [
+      tag,
+      tag === content.languages?.main ? path : `/${tag}${path}`,
+    ]),
+  )
+  seoHead(entry.seo, { locale: entry.locale, alternates, main: content.languages?.main })
+  ```
+
 - Set the HTML `lang` attribute to the page language.
+- `content.in(locale).<collection>.href(slug)` returns the route without the prefix too. Add the same prefix for links.
 
 For the full language API, read the `areca-sdk` skill, `references/languages.md`.

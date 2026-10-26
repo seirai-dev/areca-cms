@@ -12,6 +12,8 @@ Field rules that apply to every recipe (see the `areca-sdk` skill for the full l
 - The SDK has no list field. Use one of these instead: a collection with a number field for order, a reference, or several plain fields.
 - `group` works only on sections (globals), not on collection fields.
 - A `date` or `datetime` field is content only. It does not schedule an entry.
+- When the user declines an extra (for example authors or departments), remove every field that points to it (`posts.author`, `vacancies.department`, `posts.category`, `homePage.featuredPost`). Show each removal in the approval table, for example "removed: author (authors declined)".
+- Never invent facts for a field (a founding year, a phone number, an address, a salary). If the interview did not give the value, leave an optional field empty. Use placeholder text only for copy, and say so.
 
 Field lines below use: `key` (type, required, notes). `slug` is always `slug` (type slug, required).
 
@@ -162,6 +164,8 @@ Sections are single sets of values. They have no slug and no route. Set `seo: tr
 
 Section `companyInfo`. Label "Company info". No SEO.
 
+Ask the user for the company details in batch B: name, email, phone and address. Use only what they give. Leave the others empty. Do not guess a founding year, a phone number or an address.
+
 - `name` (text, required, `translatable: false`)
 - `tagline` (textarea). The site's default description in the root head.
 - `email` (text, `translatable: false`, `group: "Contact"`)
@@ -208,6 +212,17 @@ Use `companyInfo` for the address and contact fields. Do not repeat them.
 - Sections get SEO only with `seo: true`. Use it for home and about. Read the value from `content.globals.<key>.$seo`.
 - The site name and the default description come from `companyInfo`. Use them in the root layout.
 - Do not add SEO fields as collection fields. Use the CMS SEO panel.
+
+## Routes and languages
+
+A collection has one `route` in the main language, for example `/blog/$slug`. A language that uses other words gets its own pattern in `routes`, for example `routes: { nl: '/vacatures/$slug' }`. Read from the SDK source (`packages/site-sdk/src/content.ts`):
+
+- The SDK uses `route` and each `routes[locale]` value exactly as written. It never adds a language prefix. Write `/vacatures/$slug`, not `/nl/vacatures/$slug`. A prefix in `routes` is doubled once the site adds `/nl`.
+- `content.posts.href(slug)` returns the route of the language in use, with `$slug` replaced. Example: `content.posts.href('my-post')` gives `/blog/my-post`. `content.in('nl').vacancies.href('dev')` gives `/vacatures/dev`. A string slug uses the language from `in(locale)` if set, else the locale function (Paraglide's `getLocale` when it is wired), else the main language. `href(entry)` uses the entry's own language.
+- `entry.alternates` maps each complete language tag to its route, again with no prefix: `{ en: '/vacancies/dev', nl: '/vacatures/dev' }`.
+- The site adds the prefix. The main language has none. Every other language is `/<tag>` followed by the route, so the Dutch vacancy is `/nl/vacatures/dev`. With Paraglide, the router rewrite does this (see [frameworks.md](frameworks.md)). Without Paraglide, add the prefix in code.
+
+**The rule:** `href()` and `alternates` never include the language prefix. Add `/<tag>` yourself for every language except the main one.
 
 ## Route suggestions
 

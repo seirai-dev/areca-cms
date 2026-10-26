@@ -60,8 +60,10 @@ B. Content model
    e. SEO on the home and about pages (on by default)
 4. Routes: each collection gets a route. These are the defaults from the recipe, for example /blog/$slug and /vacancies/$slug. Change them?
 5. Anything that does not fit the recipes? Describe the fields in your own words. I will map them to field types.
+6. Company details for the company info section: name, email, phone and address. [name: the client's name, the rest empty]
+   Give only what you know. I will leave the others empty. I will not guess a founding year, a phone number or an address.
 
-Reply "defaults" to accept the recipe fields and all the extras in B.
+Reply "defaults" to accept the recipe fields and all the extras in B (the company details stay empty except the name).
 ```
 
 For each item the user names:
@@ -71,6 +73,8 @@ For each item the user names:
 3. Note the translatable choice for each text field. Use the recipe defaults.
 
 Do not invent extra fields. Add what the user asked for and the recipe defaults.
+- A declined extra removes the fields that point to it. For example, no authors means no `author` field on posts. Show each removal in the plan.
+- Never invent a fact. A value the user did not give stays empty when the field is optional.
 
 ## Batch C: Languages
 
@@ -87,7 +91,8 @@ C. Languages
 5. Which fields are the same in every language (names, prices, contact details, URLs, emails)? [the recipe defaults]
 6. i18n approach:
    - If the project already uses a library, use it. Only Paraglide is wired by the SDK. For another library, the content is read with an explicit locale.
-   - If the project has none: Paraglide is recommended. It needs a new package. Install it only if you say yes.
+   - If the project has none: Paraglide is recommended. It needs a new package, and the recipe is in `frameworks.md` (TanStack Start is verified). Install it only if you say yes.
+     The lighter alternative is the explicit locale: no new package, and the locale is passed to each read.
    [Paraglide]
 
 Reply "defaults" to accept all of C (one language, so C is skipped).
