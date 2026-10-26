@@ -253,6 +253,7 @@ export async function purgeFieldContent(
     await tx
       .update(entry)
       .set({
+        contentVersion: sql`${entry.contentVersion} + 1`,
         draftVersion: sql`${entry.draftVersion} + 1`,
         draftData: withoutKeys(row.draftData, keys),
         publishedData: row.publishedData

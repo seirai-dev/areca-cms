@@ -355,6 +355,7 @@ export async function updateDraft(
       await tx
         .update(entry)
         .set({
+          contentVersion: sql`${entry.contentVersion} + 1`,
           draftVersion: sql`${entry.draftVersion} + 1`,
           draftData: parsed.data,
           slug: nextSlug ?? ctx.entry.slug,
@@ -534,6 +535,7 @@ export async function restoreRevision(
       await tx
         .update(entry)
         .set({
+          contentVersion: sql`${entry.contentVersion} + 1`,
           draftVersion: sql`${entry.draftVersion} + 1`,
           draftData: restoredData,
           slug: nextSlug ?? ctx.entry.slug,
@@ -717,6 +719,7 @@ export async function publishEntry(
       await tx
         .update(entry)
         .set({
+          contentVersion: sql`${entry.contentVersion} + 1`,
           ...(images.imported > 0 || draftData !== images.data
             ? { draftData }
             : {}),
@@ -771,6 +774,7 @@ export async function unpublishEntry(id: string, actorId: string) {
     await db
       .update(entry)
       .set({
+        contentVersion: sql`${entry.contentVersion} + 1`,
         status: 'draft',
         publishedData: null,
         publishedSlug: null,
@@ -813,6 +817,7 @@ export async function archiveEntry(id: string, actorId: string) {
     await db
       .update(entry)
       .set({
+        contentVersion: sql`${entry.contentVersion} + 1`,
         status: 'archived',
         updatedBy: actorId,
         updatedAt: now,
@@ -887,6 +892,7 @@ export async function scheduleEntry(
       await tx
         .update(entry)
         .set({
+          contentVersion: sql`${entry.contentVersion} + 1`,
           ...(images.imported > 0 || draftData !== images.data
             ? { draftData }
             : {}),
@@ -944,6 +950,7 @@ export async function cancelSchedule(id: string, actorId: string) {
     await db
       .update(entry)
       .set({
+        contentVersion: sql`${entry.contentVersion} + 1`,
         status: nextStatus,
         scheduledData: null,
         scheduledSlug: null,

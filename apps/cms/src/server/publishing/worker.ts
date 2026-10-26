@@ -548,6 +548,7 @@ export async function processJob(
         await tx
           .update(entry)
           .set({
+            contentVersion: sql`${entry.contentVersion} + 1`,
             status: 'published',
             publishedData: sql`${entry.scheduledData}`,
             publishedSlug: sql`${entry.scheduledSlug}`,

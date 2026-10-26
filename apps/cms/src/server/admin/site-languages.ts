@@ -118,6 +118,7 @@ async function stampPreviousMain(tx: Tx, siteId: string, oldMain: string) {
   await tx
     .update(entry)
     .set({
+      contentVersion: sql`${entry.contentVersion} + 1`,
       draftData: stamp(entry.draftData),
       draftVersion: sql`${entry.draftVersion} + 1`,
     })
@@ -129,7 +130,10 @@ async function stampPreviousMain(tx: Tx, siteId: string, oldMain: string) {
     )
   await tx
     .update(entry)
-    .set({ publishedData: stamp(entry.publishedData) })
+    .set({
+      publishedData: stamp(entry.publishedData),
+      contentVersion: sql`${entry.contentVersion} + 1`,
+    })
     .where(
       and(
         eq(entry.siteId, siteId),
@@ -139,7 +143,10 @@ async function stampPreviousMain(tx: Tx, siteId: string, oldMain: string) {
     )
   await tx
     .update(entry)
-    .set({ scheduledData: stamp(entry.scheduledData) })
+    .set({
+      scheduledData: stamp(entry.scheduledData),
+      contentVersion: sql`${entry.contentVersion} + 1`,
+    })
     .where(
       and(
         eq(entry.siteId, siteId),

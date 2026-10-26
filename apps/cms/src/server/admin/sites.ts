@@ -59,6 +59,11 @@ const publicSiteColumns = {
   lastManifest: site.lastManifest,
   aiPrompt: site.aiPrompt,
   languages: site.languages,
+  environment: site.environment,
+  parentSiteId: site.parentSiteId,
+  schemaBaseline: site.schemaBaseline,
+  lastForkedAt: site.lastForkedAt,
+  lastPushedAt: site.lastPushedAt,
   createdAt: site.createdAt,
   updatedAt: site.updatedAt,
 }

@@ -253,6 +253,13 @@
       "when": 1792779801574,
       "tag": "0035_account_management_blocking",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1793036486211,
+      "tag": "0036_dev_environments",
+      "breakpoints": true
     }
   ]
 }

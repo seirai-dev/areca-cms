@@ -247,6 +247,21 @@ export type SiteManifest = {
 
 export type EntryData = Record<string, unknown>
 
+/** `development` sites are forks of a production site (docs/design/dev-environments.md). */
+export type SiteEnvironment = 'production' | 'development'
+
+/** Dev-side content of an entry at its last fork or push (`entry.origin_baseline`). */
+export type EntryOriginBaseline = {
+  slug: string
+  data: EntryData
+  publishedSlug: string | null
+  publishedData: EntryData | null
+  status: EntryStatus
+}
+
+/** Kind of an `environment_push` log row. */
+export type EnvironmentPushKind = 'fork' | 'refresh' | 'push' | 'copy'
+
 /** SMTP transport security: STARTTLS (587), implicit TLS (465), or none (private hosts only). */
 export type MailSecure = 'starttls' | 'tls' | 'none'
 
