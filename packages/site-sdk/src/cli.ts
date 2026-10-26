@@ -104,6 +104,10 @@ export async function run(
         configPath: parsed.configPath,
         yes: parsed.yes,
       })
+      if (result.unchanged) {
+        console.log(`${result.configPath} is already up to date`)
+        return 0
+      }
       const { added, changed, removed } = result.diff
       console.log(
         `Wrote ${result.configPath} with ${result.collections} collection(s) (+${added.length} ~${changed.length} -${removed.length})`,

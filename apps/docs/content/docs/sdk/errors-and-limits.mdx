@@ -122,10 +122,11 @@ This comes from `areca manifest pull` when the config file is missing, or has no
 ### Manifest overwrite
 
 ```text
+Remove collection legacy in ./areca.config.ts. Re-run with --yes to confirm.
 <path> already defines 2 collection(s). Re-run with --yes to overwrite it.
 ```
 
-`areca manifest pull` refuses to overwrite a config that defines collections when it cannot ask you. Re-run with `--yes`, or run the command in a terminal and confirm the prompt.
+`areca manifest pull` stops when it cannot ask you and the pull would remove a collection, a site content section, a field, a language, or the main language. The first message names the removal. It also stops before replacing a populated config that it did not write; the second message is for that case. Re-run with `--yes`, or run the command in a terminal and confirm the prompt.
 
 ## Failed to reach CMS
 

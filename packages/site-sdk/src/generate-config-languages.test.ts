@@ -43,8 +43,8 @@ describe('generateConfigSource: languages', () => {
 
   it('omits languages, routes and i18n when they are not set', () => {
     const source = generateConfigSource({ siteKey: 'acme', collections: {} })
-    expect(source).not.toContain('languages')
-    expect(source).not.toContain('i18n')
+    expect(source).not.toContain('languages:')
+    expect(source).not.toContain('i18n:')
   })
 
   it('round-trips through manifestFromConfig and the generated module', async () => {

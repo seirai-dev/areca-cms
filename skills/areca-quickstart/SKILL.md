@@ -133,7 +133,7 @@ Ask: "Shall I create this content model?" Wait for a yes. If the user changes so
 3. For each collection, call `get_collection_schema` for an existing one. Then call `upsert_collection` with `key`, `label`, `routePattern`, the full `fields` list, `requiredLanguages` and `routes` when needed. Fields replace the whole list, so always send every field. A `slug` field is added when missing, but include it anyway.
 4. For each section, call `upsert_global` with `key`, `label`, the full `fields` list, `seo` and `previewPath`.
 5. Call `get_site_info` again and compare with the plan. Report any difference.
-6. Pull the schema into the project: `<pm> exec areca manifest pull`. This writes `areca.config.ts` from the CMS, so the schema is in Git. On a new config (no collections yet) it runs without a prompt. If the config already has collections, it stops and asks for `--yes`. Then follow [first-release.md](references/first-release.md) (section 7) before you add `--yes`.
+6. Pull the schema into the project: `<pm> exec areca manifest pull`. This writes `areca.config.ts` from the CMS, so the schema is in Git. It runs without a question unless something would be removed (a collection, section, field, language, or the main language). If it stops for a removal, show the user the diff and get a yes. Then follow [first-release.md](references/first-release.md) (section 7) before you add `--yes`.
 
 `manifest pull` rewrites the config file. Keep hand edits out of it. It keeps `siteKey`, `assets` and `i18n`.
 
@@ -150,7 +150,7 @@ If an MCP-first or code-first step fails, read the error and the `areca-sdk` or 
 Do these in order. Show the user each file you will change before you change it when the file already exists.
 
 1. **Scripts** in `package.json`. Keep the scripts `init` added. Add these, using the detected package manager:
-   - `content:sync`: `areca manifest pull && areca pull --out src/generated/content` (MCP-first). Its interactive prompt is intended.
+   - `content:sync`: `areca manifest pull && areca pull --out src/generated/content` (MCP-first). It asks only when something would be removed, and that prompt is intended.
    - `prebuild`: `areca pull` (plus the Paraglide compile first when Paraglide is used). A build without content fails until the first release exists. That is expected.
    - `predev` (optional): only after the first release. A failing `predev` stops the dev server.
    - Do not change `dev` again. `init` already wraps it in `areca run --` when needed.
@@ -177,7 +177,7 @@ Read [references/first-release.md](references/first-release.md). The short versi
 4. Mark everything ready. Tell the user what you are doing.
 5. Ask: "Go live now in demo mode? This publishes N entries and M sections." Wait for a yes.
 6. Go live, then poll `get_build_job` until the job is done. If the agent has no go-live permission, ask the user to press Go live in the CMS and wait for them.
-7. Pull: `<pm> exec areca pull --out src/generated/content`. Use the direct command, not the `content:sync` script. The script also runs `manifest pull`, which stops without a terminal once the config has collections. Expect `Pulled publication …` and a `Types:` line.
+7. Pull: `<pm> exec areca pull --out src/generated/content`. Use the direct command, not the `content:sync` script. The script also runs `manifest pull`, which stops without a terminal when that pull would remove something. Expect `Pulled publication …` and a `Types:` line.
 8. Verify: typecheck, build, start the dev server, and check that a sample page returns HTTP 200 and shows its title. Use the checks in the first-release reference.
 9. Ask the user whether to archive the sample entries or keep them as editor examples. Do not archive without a yes.
 

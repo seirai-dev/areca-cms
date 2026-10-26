@@ -195,8 +195,10 @@ pnpm exec areca manifest pull --config ./areca.config.ts
 ```
 
 This replaces the full config file, including comments and helper functions.
-If the file already defines collections, the CLI shows an added/changed/removed
-summary and asks before replacing it. Use `--yes` for automation. The existing
+The CLI shows an added/changed/removed summary. It asks before anything is
+removed (a collection, site content section, field, language, or the main
+language) and writes additions and changes without asking. If the file already
+matches the CMS, it writes nothing. Use `--yes` for automation. The existing
 `siteKey` is preserved; if there is no config, set `ARECA_SITE_KEY` or run init
 first.
 

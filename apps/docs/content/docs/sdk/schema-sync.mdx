@@ -75,13 +75,15 @@ The pull fetches the site's enabled collections from the CMS and writes a comple
 The generated file replaces the old one completely. Comments, helper functions and any other code in the file are lost. Commit or back up the file first.
 </Callout>
 
-If the existing file already has collections, the command shows the difference and asks you to confirm before it overwrites the file:
+The command shows the difference first:
 
-- `+` for a collection the CMS has and your file does not
+- `+` for a collection, field or language the CMS has and your file does not
 - `~` for a collection that differs on both sides
-- `-` for a collection your file has and the CMS does not
+- `-` for a collection, section, field or language your file has and the CMS does not
 
-Use `--yes` to skip the question. If the file already has collections and the shell is not interactive, the command stops unless you pass `--yes`. The pull only reads from the CMS, so it needs only the site token.
+It asks you to confirm only when something would be removed. Additions and changes are written without a question. If the file already matches the CMS, nothing is written. Without a terminal, a removal stops the command until you pass `--yes`.
+
+A file the pull did not write (hand-written, or from `areca init` with collections) still asks before a populated file is replaced, even when nothing changed. Use `--yes` to accept everything. The pull only reads from the CMS, so it needs only the site token.
 
 ## Use schema sync in CI
 

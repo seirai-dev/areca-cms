@@ -1,9 +1,9 @@
-import { existsSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { confirm, isCancel } from '@clack/prompts'
 import { type ArecaClient, createArecaClient } from './client.js'
 import { manifestFromConfig } from './config.js'
-import { generateConfigSource } from './generate-config.js'
+import { generateConfigSource, isGeneratedConfigSource } from './generate-config.js'
 import { loadConfig } from './load-config.js'
 import type {
   CollectionConfig,
@@ -33,11 +33,21 @@ export type LanguagesDiff = {
   main?: { from: string; to: string }
 }
 
+/** A field the CMS no longer has, in a collection or in a site content section. */
+export type FieldRemoval = {
+  /** Collection key, or site content section key. */
+  owner: string
+  key: string
+  site: boolean
+}
+
 export type ManifestDiff = KeyDiff & {
   /** Site content sections. Only present when either side has any. */
   globals?: KeyDiff
   /** Site languages. Only present when either side has languages. */
   languages?: LanguagesDiff
+  /** Fields dropped from a collection or section that exists on both sides. Only present when there are some. */
+  removedFields?: FieldRemoval[]
 }
 
 export type ManifestPullOptions = {
@@ -55,6 +65,8 @@ export type ManifestPullResult = {
   collections: number
   diff: ManifestDiff
   source: string
+  /** True when the config already matched the CMS, so nothing was written. */
+  unchanged: boolean
 }
 
 /**
@@ -74,9 +86,31 @@ export function diffManifests(
   if (Object.keys(localGlobals).length > 0 || Object.keys(remoteGlobals).length > 0) {
     diff.globals = compareKeys(localGlobals, remoteGlobals)
   }
+  const removedFields = [
+    ...fieldRemovals(normalized?.collections ?? {}, remote.collections, false),
+    ...fieldRemovals(localGlobals, remoteGlobals, true),
+  ]
+  if (removedFields.length > 0) diff.removedFields = removedFields
   const languages = compareLanguages(local?.languages, remote.languages)
   if (languages) diff.languages = languages
   return diff
+}
+
+function fieldRemovals(
+  local: Record<string, { fields: readonly { key: string }[] }>,
+  remote: Record<string, { fields: readonly { key: string }[] }>,
+  site: boolean,
+): FieldRemoval[] {
+  const removals: FieldRemoval[] = []
+  for (const owner of Object.keys(remote).sort()) {
+    const before = local[owner]
+    if (!before) continue
+    const after = new Set(remote[owner]!.fields.map((field) => field.key))
+    for (const field of before.fields) {
+      if (!after.has(field.key)) removals.push({ owner, key: field.key, site })
+    }
+  }
+  return removals
 }
 
 function compareLanguages(
@@ -112,6 +146,22 @@ export function languageRisks(diff: ManifestDiff): string[] {
   return risks
 }
 
+/**
+ * Every change that takes something away: a collection, a site content section,
+ * a field, a language, or the main language. Each one is a sentence. The pull
+ * asks before writing when there is at least one (see `manifestPull`).
+ */
+export function removalsOf(diff: ManifestDiff): string[] {
+  return [
+    ...diff.removed.map((key) => `remove collection ${key}`),
+    ...(diff.globals?.removed ?? []).map((key) => `remove site content section ${key}`),
+    ...(diff.removedFields ?? []).map(
+      (field) => `remove field ${field.key} from ${field.owner}`,
+    ),
+    ...languageRisks(diff),
+  ]
+}
+
 function compareKeys(
   local: Record<string, CollectionConfig | GlobalConfig>,
   remote: Record<string, CollectionConfig | GlobalConfig>,
@@ -136,7 +186,7 @@ function compareKeys(
   return { added, changed, removed }
 }
 
-export function formatManifestDiff(diff: ManifestDiff): string {
+function diffLines(diff: ManifestDiff): string[] {
   const lines: string[] = []
   for (const key of diff.added) lines.push(`  + ${key}`)
   for (const key of diff.changed) lines.push(`  ~ ${key}`)
@@ -144,12 +194,20 @@ export function formatManifestDiff(diff: ManifestDiff): string {
   for (const key of diff.globals?.added ?? []) lines.push(`  + ${key} (site content)`)
   for (const key of diff.globals?.changed ?? []) lines.push(`  ~ ${key} (site content)`)
   for (const key of diff.globals?.removed ?? []) lines.push(`  - ${key} (site content)`)
+  for (const field of diff.removedFields ?? []) {
+    lines.push(`  - field ${field.key} in ${field.owner}${field.site ? ' (site content)' : ''}`)
+  }
   for (const language of diff.languages?.added ?? []) lines.push(`  + language ${language}`)
   for (const language of diff.languages?.removed ?? []) lines.push(`  - language ${language}`)
   if (diff.languages?.main) {
     const { from, to } = diff.languages.main
     lines.push(`  ~ main language ${from} -> ${to}`)
   }
+  return lines
+}
+
+export function formatManifestDiff(diff: ManifestDiff): string {
+  const lines = diffLines(diff)
   return lines.length > 0 ? lines.join('\n') : '  (no changes)'
 }
 
@@ -173,11 +231,17 @@ export async function manifestPull(options: ManifestPullOptions): Promise<Manife
     : 0
   const risks = languageRisks(diff)
   const interactive = options.interactive ?? Boolean(process.stdin.isTTY)
+  const current = existsSync(absConfigPath) ? readFileSync(absConfigPath, 'utf8') : undefined
+  // A file this command wrote is managed: only removals need a yes. Any other
+  // file (hand-written, or from `areca init`) asks before a populated one is replaced.
+  const managed = current !== undefined && isGeneratedConfigSource(current)
+  const removals = removalsOf(diff)
+  const needsConfirm = managed ? removals.length > 0 : existingCount > 0 || risks.length > 0
 
-  // Overwriting a populated config, or taking languages away, needs a yes.
-  // Adding a language only shows up in the diff.
-  if ((existingCount > 0 || risks.length > 0) && options.yes !== true) {
-    const subject = risks.length > 0 ? capitalize(risks.join(' and ')) : undefined
+  let promptShown = false
+  if (needsConfirm && options.yes !== true) {
+    const subject =
+      managed || risks.length > 0 ? capitalize(joinList(managed ? removals : risks)) : undefined
     if (!interactive) {
       throw new Error(
         subject
@@ -186,9 +250,8 @@ export async function manifestPull(options: ManifestPullOptions): Promise<Manife
       )
     }
 
-    console.log(`Changes to ${options.configPath}:`)
-    console.log(formatManifestDiff(diff))
-
+    printDiff(options.configPath, diff)
+    promptShown = true
     const answer = await confirm({
       message: subject ? `${subject}. Continue?` : `Overwrite ${options.configPath}?`,
       initialValue: false,
@@ -207,14 +270,32 @@ export async function manifestPull(options: ManifestPullOptions): Promise<Manife
     collections: manifest.collections,
     globals: manifest.globals,
   })
-  writeFileSync(absConfigPath, source, 'utf8')
+
+  const changed = diffLines(diff).length > 0
+  const unchanged = !changed && current === source
+  if (!unchanged) {
+    if (changed && !promptShown) printDiff(options.configPath, diff)
+    writeFileSync(absConfigPath, source, 'utf8')
+  }
 
   return {
     configPath: options.configPath,
     collections: Object.keys(manifest.collections).length,
     diff,
     source,
+    unchanged,
   }
+}
+
+function printDiff(configPath: string, diff: ManifestDiff): void {
+  console.log(`Changes to ${configPath}:`)
+  console.log(formatManifestDiff(diff))
+}
+
+/** `a`, `a and b`, `a, b and c`. */
+function joinList(items: string[]): string {
+  if (items.length <= 1) return items.join('')
+  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
 }
 
 function capitalize(value: string): string {

@@ -388,6 +388,13 @@ describe('areca-quickstart: brand-new site project', () => {
     expect(config).toContain('globals: {')
     expect(config).toContain("companyInfo: {\n      label: 'Company info',")
 
+    // A second pull without --yes finds nothing to change: no prompt, no write.
+    const generated = read(CONFIG)
+    log.mockClear()
+    expect(await run(['manifest', 'pull'], { cwd: dir })).toBe(0)
+    expect(read(CONFIG)).toBe(generated)
+    expect(log.mock.calls.flat().map(String)).toEqual([expect.stringMatching(/areca\.config\.ts is already up to date$/)])
+
     // Each run of the skill's re-run mode keeps what the agent added.
     const pkg = packageScripts()
     expect(pkg['content:sync']).toBeDefined()

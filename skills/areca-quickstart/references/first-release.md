@@ -18,11 +18,13 @@ Steps 2 to 6 use MCP tools. Without MCP, see [Code-first](#code-first-without-mc
 
 ## 1. Check the publishing mode
 
-Call `get_site_info`. Read `site.publishingMode` and `site.deploymentConfigured`.
+Call `get_site_info`. Read `site.publishingMode` and `site.deploymentConfigured`. To learn whether the site was ever live, call `list_publications`: any publication with status `live`, or with `publishingMode: "production"` and a `deployedAt` date, means it has gone live.
+
+Older CMS versions do not report `deploymentConfigured` and do not list `set_publishing_mode`. Then treat the deployment as not configured, and ask the user to change the mode in the UI (below).
 
 - **Demo:** continue.
 - **Production, never live:** explain the choice. Demo means the release is pulled by `areca pull` and never shown to visitors. Production means the site builds and deploys. For the first release, use demo.
-  - Agency admin: ask the user for a yes, then call `set_publishing_mode` with `mode: "demo"`.
+  - Agency admin, and `set_publishing_mode` is in your tool list: ask the user for a yes, then call it with `mode: "demo"`.
   - Anyone else: ask the user to change it in **Settings › Deployment › Mode** (Demo, no production deployment), then wait.
 - **Production, already live:** stop. Do not go live. A live production site must not get sample content. Ask the user whether to use a separate demo site. Read [connect.md](connect.md) for demo mode.
 
@@ -103,11 +105,13 @@ Types: src/generated/content/areca.gen.ts
 
 - The `Types:` line means `areca.gen.ts` now exists. Tell the user to commit it.
 - A `Warning:` line about an older publication means it was built before the schema was embedded. Ask the user to go live again.
-- Without a terminal, `manifest pull` stops when the config already has collections. It asks for `--yes` and prints no diff. Then tell the user the schema changes you expect (from the plan), and ask for a yes. Use `--yes` only after that yes. Or ask the user to run `<pm> exec areca manifest pull` in their terminal, where it prints the diff and asks.
+- Without a terminal, `manifest pull` stops only when the pull would remove something: a collection, section, field, language, or the main language. It names the removal and asks for `--yes`. Then tell the user the removal you expect (from the plan), and ask for a yes. Use `--yes` only after that yes. Or ask the user to run `<pm> exec areca manifest pull` in their terminal, where it prints the diff and asks. Additions and changes apply without a question.
 
 ## 8. Verify
 
 Run these checks in order. Stop at the first failure and report it.
+
+0. The one-command flow. Run `<pm> run content:sync` once. It pulls the schema and the published content, and it should finish without a question. If it stops asking for confirmation, something would be removed: show the user the `-` lines of the diff, and ask before you pass `--yes`.
 
 1. Typecheck. Use the project's script, or `<pm> exec tsc --noEmit`. Expect no errors in the new files.
 2. Build. `<pm> run build`. Expect success. If the build reads content, it must find the pulled files.
@@ -167,7 +171,8 @@ If the schema was written in code, `areca pull` works after the release.
 | `Expected publication X, received Y` | `ARECA_SNAPSHOT_ID` is set in the environment. Unset it for local work. It is for pinned builds only. |
 | `Failed to load TypeScript config … Use Node.js 22.18 or newer, or retry with tsx` | Upgrade Node, or run the command through `tsx`: `<pm> exec tsx ./node_modules/@areca-cms/site-sdk/dist/cli.js pull`. |
 | Build fails with a missing module under `src/paraglide` | The Paraglide compile did not run before the pull. Run the compile first, as in [frameworks.md](frameworks.md). |
-| `areca manifest pull` says it "already defines N collection(s). Re-run with --yes" | It is not a terminal, so it cannot ask. Show the user the diff (run it in their terminal), then confirm. Use `--yes` only after the yes. |
+| `areca manifest pull` says "Remove … Re-run with --yes to confirm" | The pull would remove a collection, section, field, or language. It is not a terminal, so it cannot ask. Show the user the diff (run it in their terminal), then confirm. Use `--yes` only after the yes. |
+| `areca manifest pull` says it "already defines N collection(s). Re-run with --yes" | The config was not written by `manifest pull` and has collections. Show the user the diff, then confirm as above. |
 | Preview link shows "expired" or "invalid" | Preview links last about an hour. Create a new link with `get_preview_url`. |
 | `Something went wrong on the Areca server (ref …)` | Nothing is confirmed saved. Retry once, then report the ref to the user. |
 | Pages show no content after the pull | The dev server started before the pull. Restart it. Check that `src/generated/content/manifest.json` has a `publicationId`. |
