@@ -2,6 +2,13 @@
 
 All notable changes to `@areca-cms/skills`.
 
+## 0.5.0 (2026-10-26)
+
+### Features
+
+- **sdk:** manifest pull asks only when something would be removed (a265c3e)
+- **skills:** add areca-quickstart skill and set_publishing_mode MCP tool (3c1bdbd)
+
 ## 0.4.0 (2026-10-14)
 
 ### Features
