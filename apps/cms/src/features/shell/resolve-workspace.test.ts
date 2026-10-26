@@ -10,6 +10,8 @@ const site = (id: string) => ({
   organizationName: 'Org',
   productionUrl: 'https://example.com',
   languages: null,
+  environment: 'production' as const,
+  parentSiteId: null,
 })
 
 const user = (isAgencyAdmin: boolean) => ({

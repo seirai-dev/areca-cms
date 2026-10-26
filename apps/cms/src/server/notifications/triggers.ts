@@ -35,7 +35,11 @@ const WENT_LIVE_STATUSES: PublicationStatus[] = [
 
 type Entries = Pick<NotificationPayload, 'entries' | 'moreEntries'>
 
-/** Release, schedule and invite events for one site, with its org name. */
+/**
+ * Release, schedule and invite events for one site, with its org name. Null
+ * for a development environment: dev envs create no notification events
+ * (docs/design/dev-environments.md, Decision 22). Every caller returns early.
+ */
 async function siteContext(siteId: string) {
   const [row] = await db
     .select({
@@ -46,7 +50,7 @@ async function siteContext(siteId: string) {
     })
     .from(site)
     .innerJoin(organization, eq(organization.id, site.organizationId))
-    .where(eq(site.id, siteId))
+    .where(and(eq(site.id, siteId), eq(site.environment, 'production')))
     .limit(1)
   return row ?? null
 }

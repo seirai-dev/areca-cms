@@ -50,6 +50,7 @@ import {
 } from '#/server/content/entries'
 import { listInboundReferences } from '#/server/content/inbound-references'
 import { NotFoundError } from '#/server/content/errors'
+import { assertSiteVisibleTo } from '#/server/security/site-visibility'
 import { pageLimitSchema, pageOffsetSchema } from '#/server/pagination'
 import {
   deleteGlobal,
@@ -150,11 +151,24 @@ async function requireSiteAccess(
   if (!found) {
     throw new NotFoundError(notFoundMessage())
   }
-  const session = await requireOrgMemberOrNotFound(
+  const member = await requireOrgMemberOrNotFound(
     found.organizationId,
-    role,
+    undefined,
     () => new NotFoundError(notFoundMessage()),
   )
+  // Before the role check: a dev env is NotFound for an editor as for an owner.
+  await assertSiteVisibleTo(
+    member,
+    found,
+    () => new NotFoundError(notFoundMessage()),
+  )
+  const session = role
+    ? await requireOrgMemberOrNotFound(
+        found.organizationId,
+        role,
+        () => new NotFoundError(notFoundMessage()),
+      )
+    : member
   return { session, site: found }
 }
 

@@ -15,6 +15,7 @@ import {
   site,
 } from '#/db/schema'
 import { isValidSlug } from '#/lib/slug'
+import { isDevSite } from '#/server/security/site-visibility'
 import type { DeploymentTarget } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
@@ -141,13 +142,17 @@ export async function createSite(input: {
 
   const slugTaken = (
     await db
-      .select({ id: site.id })
+      .select({ id: site.id, environment: site.environment })
       .from(site)
       .where(eq(site.slug, input.slug))
       .limit(1)
   ).at(0)
   if (slugTaken) {
-    throw new ConflictError(m.server_slug_already_exists())
+    throw new ConflictError(
+      isDevSite(slugTaken)
+        ? m.server_slug_belongs_to_dev_env()
+        : m.server_slug_already_exists(),
+    )
   }
 
   const { token, hash } = generateSiteToken()
@@ -213,6 +218,13 @@ export async function updateSite(
   ).at(0)
   if (!existing) {
     throw new NotFoundError(m.server_site_not_found())
+  }
+  if (isDevSite(existing)) {
+    // Dev envs stay in Demo mode with no deployment target (Decision 7).
+    // The preview URL (productionUrl) stays editable.
+    if (input.publishingMode === 'production' || input.deploymentTarget) {
+      throw new ConflictError(m.server_dev_env_stays_demo())
+    }
   }
 
   const patch: {
@@ -298,6 +310,9 @@ export async function changeSiteSlug(
     throw new NotFoundError(m.server_site_not_found())
   }
   if (slug === existing.slug) return toPublicSite(existing)
+  if (isDevSite(existing)) {
+    throw new ConflictError(m.server_dev_env_slug_follows_production())
+  }
   assertSiteSlug(slug)
 
   const taken = (
@@ -309,6 +324,24 @@ export async function changeSiteSlug(
   ).at(0)
   if (taken) {
     throw new ConflictError(m.server_slug_already_exists())
+  }
+
+  // The dev env follows its production slug as <slug>-dev (Edge case 8).
+  const devEnv = (
+    await db.select().from(site).where(eq(site.parentSiteId, id)).limit(1)
+  ).at(0)
+  const devSlug = `${slug}-dev`
+  if (devEnv) {
+    const devSlugTaken = (
+      await db
+        .select({ id: site.id })
+        .from(site)
+        .where(eq(site.slug, devSlug))
+        .limit(1)
+    ).at(0)
+    if (devSlugTaken) {
+      throw new ConflictError(m.server_dev_env_slug_taken({ slug: devSlug }))
+    }
   }
 
   try {
@@ -323,6 +356,12 @@ export async function changeSiteSlug(
       if (!row) {
         throw new NotFoundError(m.server_site_not_found())
       }
+      if (devEnv) {
+        await tx
+          .update(site)
+          .set({ slug: devSlug, updatedAt: new Date() })
+          .where(eq(site.id, devEnv.id))
+      }
       await audit(
         {
           organizationId: existing.organizationId,
@@ -331,7 +370,12 @@ export async function changeSiteSlug(
           action: 'site.update',
           targetType: 'site',
           targetId: id,
-          meta: { fields: ['slug'], previousSlug: existing.slug, slug },
+          meta: {
+            fields: ['slug'],
+            previousSlug: existing.slug,
+            slug,
+            ...(devEnv ? { devSlug } : {}),
+          },
         },
         tx,
       )

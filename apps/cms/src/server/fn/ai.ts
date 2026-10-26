@@ -29,6 +29,7 @@ import {
 import { audit } from '#/server/audit'
 import { getCollection } from '#/server/content/collections'
 import { NotFoundError, ValidationError } from '#/server/content/errors'
+import { assertSiteVisibleTo } from '#/server/security/site-visibility'
 import { resolveSlug, validateEntryData } from '#/server/content/validation'
 import { allowUserAction } from '#/server/http/rate-limit.server'
 
@@ -115,6 +116,11 @@ export const generateEntrySeoFn = createServerFn({ method: 'POST', ...aiFn })
     const session = await requireOrgMemberOrNotFound(
       found.organizationId,
       undefined,
+      () => new NotFoundError(m.server_site_not_found()),
+    )
+    await assertSiteVisibleTo(
+      session,
+      found,
       () => new NotFoundError(m.server_site_not_found()),
     )
     const collection = await getCollection(found.id, data.collectionKey)

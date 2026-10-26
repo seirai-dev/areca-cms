@@ -22,6 +22,7 @@ import {
   readLocale,
 } from '#/lib/content-locale'
 import { SEO_KEY } from '#/lib/seo'
+import { isDevSite } from '#/server/security/site-visibility'
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
 import { importExternalImages } from '#/server/assets/external-images'
@@ -851,6 +852,9 @@ export async function scheduleEntry(
   expectedVersion?: number,
 ) {
   const ctx = await loadEntryContext(id)
+  if (isDevSite(ctx.site)) {
+    throw new ConflictError(m.server_dev_env_no_scheduling())
+  }
   const reviewed = approvedVersion(ctx.entry.draftVersion, expectedVersion)
   if (!timezone) {
     throw new ValidationError([

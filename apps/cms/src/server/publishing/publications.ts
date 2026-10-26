@@ -26,6 +26,7 @@ import {
   ValidationError,
 } from '#/server/content/errors'
 import { diffApprovedRelease } from '#/server/publishing/release-diff'
+import { isDevSite } from '#/server/security/site-visibility'
 
 export function dbActorId(actorId: string | null | undefined) {
   if (!actorId || actorId === 'system') return null
@@ -134,6 +135,13 @@ async function assertDispatchResolved(tx: RequestTx, siteId: string) {
     throw new ConflictError(m.server_publication_uncertain_reconcile_first())
 }
 
+/** Dev envs have no releases and no builds (docs/design/dev-environments.md, Decision 7). */
+function assertNotDevSite(row: typeof site.$inferSelect) {
+  if (isDevSite(row)) {
+    throw new ConflictError(m.server_dev_env_no_releases())
+  }
+}
+
 export async function requestPublication(input: {
   siteId: string
   actorId: string
@@ -161,6 +169,7 @@ export async function requestPublication(input: {
   const priority = input.priority ?? 0
 
   const preliminarySite = await getSiteOrThrow(input.siteId)
+  assertNotDevSite(preliminarySite)
   return db.transaction(async (tx) => {
     await lockOrganizationForMutation(tx, preliminarySite.organizationId)
     const replay = await replayRequest(tx, input, 'publish', payload)
@@ -371,6 +380,7 @@ export async function requestRollback(input: {
   const payload = JSON.stringify({ publicationId: input.publicationId })
   const actorId = dbActorId(input.actorId)
   const preliminarySite = await getSiteOrThrow(input.siteId)
+  assertNotDevSite(preliminarySite)
   return db.transaction(async (tx) => {
     await lockOrganizationForMutation(tx, preliminarySite.organizationId)
     const replay = await replayRequest(tx, input, 'rollback', payload)
