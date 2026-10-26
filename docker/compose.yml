@@ -19,6 +19,7 @@ services:
       S3_ENDPOINT: http://rustfs:9000
       S3_REGION: us-east-1
       S3_BUCKET: areca
+      S3_PREFIX: ${S3_PREFIX:-}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-areca-demo}
       S3_SECRET_KEY: ${S3_SECRET_KEY:?Set S3_SECRET_KEY in .env}
       S3_FORCE_PATH_STYLE: "true"

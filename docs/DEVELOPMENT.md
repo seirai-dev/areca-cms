@@ -52,9 +52,22 @@ SKIP_INTEGRATION_TESTS=true pnpm --filter @areca/cms test
 
 In PowerShell, set `$env:SKIP_INTEGRATION_TESTS = 'true'`, run the test command, then remove the variable. Skipping integration suites verifies only the remaining unit tests; it does not validate database or external service behavior.
 
+For focused storage checks, run:
+
+```sh
+pnpm --filter @areca/cms test:storage
+```
+
+This suite covers prefix boundaries, bucket-root compatibility, malformed public
+asset keys and storage timeouts using mocks and a loopback S3 stand-in. It does
+not load local environment files or need a real database or bucket. CI runs this
+command explicitly alongside the general unit tests so integration-test
+filtering cannot omit these checks. Script-level cleanup, reset and import/export
+coverage runs separately through `test:scripts`.
+
 ### Integration and browser tests
 
-Regular `pnpm test` includes service-dependent suites and can change test data. Use a dedicated test database and bucket. In particular, ordinary `pnpm test:e2e` runs a setup project that clears the configured database and upload bucket. Never use it against a stack whose data you want to retain.
+Regular `pnpm test` includes service-dependent suites and can change test data. Use a dedicated test database and bucket. In particular, ordinary `pnpm test:e2e` runs a setup project that clears the configured database and upload subtree (the entire bucket if `S3_PREFIX` is unset or exactly empty). Never use it against a stack whose data you want to retain.
 
 The provided isolated browser workflow provisions `areca_e2e`, bucket `areca-e2e`, Redis DB 1, and a CMS on port 3100:
 
@@ -63,7 +76,7 @@ pnpm --filter @areca/cms test:e2e:isolated
 pnpm --filter @areca/cms test:e2e:qa:isolated
 ```
 
-The first command runs setup and functional Chromium tests. The second runs the QA walkthrough. Infrastructure must be running; the isolated script handles its test database and bucket migrations. `PW_CHROMIUM_PATH` selects a local Chromium binary, `QA_SCREENSHOT_DIR` selects the walkthrough image directory, and `PLAYWRIGHT_BASE_URL` selects the server for non-isolated runs. Read `apps/cms/scripts/e2e-isolated.mjs` before changing its assumptions.
+The first command runs setup and functional Chromium tests. The second runs the QA walkthrough. Infrastructure must be running; the isolated script handles its test database and bucket migrations. It ignores inherited `S3_PREFIX`, using `E2E_S3_PREFIX` or exactly empty instead. For example, `E2E_S3_PREFIX=tests/browser` confines test objects to `tests/browser/` in the test bucket. Prefix validation is the same as for the CMS. `PW_CHROMIUM_PATH` selects a local Chromium binary, `QA_SCREENSHOT_DIR` selects the walkthrough image directory, and `PLAYWRIGHT_BASE_URL` selects the server for non-isolated runs. Read `apps/cms/scripts/e2e-isolated.mjs` before changing its assumptions.
 
 ### Build and security checks
 
@@ -73,11 +86,11 @@ CI checks SDK/CMS/demo types and tests, recovery and CMS scripts, a CMS build, c
 
 Drizzle's source schema lives in `apps/cms/src/db/schema.ts`; committed migrations live in `apps/cms/drizzle`. Use `pnpm db:generate` to produce a migration and `pnpm db:migrate` to apply migrations in development. Review generated SQL. Avoid `db:push` as a production upgrade workflow because it bypasses the reviewed migration sequence.
 
-Use [upgrades](UPGRADES.md) for production migration, staging validation, backups, and rollback. `db:reset` erases application data and the configured upload bucket; it is a deliberate local reset tool rather than a setup prerequisite.
+Use [upgrades](UPGRADES.md) for production migration, staging validation, backups, and rollback. `db:reset` erases application data and every object under `S3_PREFIX` plus `/` (including manually placed objects), or the entire bucket when unset/empty; it is a deliberate local reset tool rather than a setup prerequisite.
 
 ## Demo data
 
-`pnpm db:demo` gives you the five sample clients used for screenshots and the docs: Harbor & Pine Bakery, Northwind Cycling Club, Lumen Dental Studio, Fieldnote Architects and Kestrel Outdoor Gear. It first runs `pnpm db:reset`, which erases every application table and empties the upload bucket, then seeds the same content every time from `apps/cms/scripts/demo-data/`. The tooling refuses to run unless `DATABASE_URL` and `S3_ENDPOINT` point at a local host and `NODE_ENV` is not `production`. Downloaded demo images are cached in `apps/cms/.cache/demo-images/`.
+`pnpm db:demo` gives you the five sample clients used for screenshots and the docs: Harbor & Pine Bakery, Northwind Cycling Club, Lumen Dental Studio, Fieldnote Architects and Kestrel Outdoor Gear. It first runs `pnpm db:reset`, which erases every application table and empties the configured upload subtree (the whole bucket when `S3_PREFIX` is unset/empty), then seeds the same content every time from `apps/cms/scripts/demo-data/`. The tooling refuses to run unless `DATABASE_URL` and `S3_ENDPOINT` point at a local host and `NODE_ENV` is not `production`. Downloaded demo images are cached in `apps/cms/.cache/demo-images/`.
 
 Sign in at the `APP_URL` from `apps/cms/.env.local` with:
 

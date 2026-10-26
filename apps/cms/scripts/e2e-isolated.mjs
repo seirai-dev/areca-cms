@@ -23,6 +23,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import pg from 'pg'
 import { createClient } from 'redis'
+import { createS3Namespace } from '../src/adapters/storage/s3-namespace.mjs'
 
 const cmsRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -69,6 +70,7 @@ const env = {
   ...process.env,
   DATABASE_URL: databaseUrl,
   S3_BUCKET: process.env.E2E_S3_BUCKET ?? 'areca-e2e',
+  S3_PREFIX: process.env.E2E_S3_PREFIX ?? '',
   REDIS_URL: process.env.E2E_REDIS_URL ?? 'redis://localhost:6379/1',
   BETTER_AUTH_URL: origin,
   APP_URL: origin,
@@ -79,6 +81,8 @@ const env = {
   SETUP_TOKEN: process.env.SETUP_TOKEN ?? 'e2e-setup-token-0123456789',
   ADMIN_MFA_REQUIRED: 'false',
 }
+
+createS3Namespace(env.S3_PREFIX)
 
 async function ensureDatabase() {
   const target = new URL(databaseUrl)

@@ -1,6 +1,9 @@
 import { S3Client } from '@aws-sdk/client-s3'
 
 import { ensureBucket } from './lib/ensure-bucket.mjs'
+import { createS3Namespace } from '../src/adapters/storage/s3-namespace.mjs'
+
+createS3Namespace(process.env.S3_PREFIX)
 
 const bucket = process.env.S3_BUCKET
 if (!bucket) {

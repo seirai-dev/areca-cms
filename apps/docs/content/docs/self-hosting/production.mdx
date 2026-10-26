@@ -115,8 +115,9 @@ The Compose file hard-codes several connections for the local stack. Production 
 | --- | --- | --- |
 | `S3_ENDPOINT` | `http://rustfs:9000` | The URL of your S3-compatible storage |
 | `S3_REGION` | `us-east-1` | Your bucket's region |
-| `S3_BUCKET` | `areca` | A private bucket reserved for Areca |
-| `S3_ACCESS_KEY`, `S3_SECRET_KEY` | from `.env` | Credentials with access to that bucket only |
+| `S3_BUCKET` | `areca` | A private dedicated bucket, or an existing shared bucket with a separate installation prefix |
+| `S3_PREFIX` | empty | Optional installation path such as `areca/production`; Compose passes it from `.env` |
+| `S3_ACCESS_KEY`, `S3_SECRET_KEY` | from `.env` | Credentials with the required bucket checks and object permissions; restrict access through provider policies |
 | `S3_FORCE_PATH_STYLE` | `"true"` | `"true"` for MinIO and RustFS, `"false"` for AWS S3 and most hosted services |
 | `SMTP_HOST`, `SMTP_PORT` | `mailpit`, `1025` | Your mail provider's host and port, or unset if you set up mail in Agency › Mail |
 | `SMTP_FROM` | `cms@areca.local` | A sender address on a domain you control |
@@ -133,6 +134,8 @@ If you use external storage, also remove the `rustfs` service, its `rustfs_data`
 Use a mail provider that requires sign-in, with a verified sending domain, or a relay on your private network. Do not point Areca at an open relay on the internet. See [storage and email](/docs/self-hosting/storage-and-email) for the provider settings and the SPF, DKIM and DMARC records.
 
 The bucket must stay private. The CMS reads and writes it, and serves uploaded files to visitors itself. Do not make the bucket public. Anything uploaded to the Library is public by design, so do not upload confidential files. See [asset retention](/docs/self-hosting/asset-retention) for how deleted files are handled.
+
+A prefix scopes object requests, not the credentials themselves. Startup/readiness still check the bucket, without probing prefix permissions. Before changing an existing installation's prefix, follow the [manual migration and rollback steps](/docs/self-hosting/storage-and-email#move-an-existing-installation).
 
 Keep the database and Redis volumes on disks you back up. The Compose file stores them in named volumes called `postgres_data` and `redis_data`.
 

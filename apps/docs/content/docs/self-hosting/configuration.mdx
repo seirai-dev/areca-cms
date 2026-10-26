@@ -98,10 +98,13 @@ Uploaded files and branding images are stored in an S3-compatible bucket. The bu
 | --- | --- | --- | --- |
 | `S3_ENDPOINT` | Yes | Compose: `http://rustfs:9000` | URL of the S3-compatible API. |
 | `S3_REGION` | Yes | Compose: `us-east-1` | The bucket's region. Use the region your storage service gives you. |
-| `S3_BUCKET` | Yes | Compose: `areca` | The bucket name. Use a bucket reserved for Areca, and keep it private. |
+| `S3_BUCKET` | Yes | Compose: `areca` | A private bucket, dedicated to Areca or shared with a separate `S3_PREFIX`. |
 | `S3_ACCESS_KEY` | Yes | Compose: `${S3_ACCESS_KEY:-areca-demo}` | Access key with access to the bucket. |
 | `S3_SECRET_KEY` | Yes | Compose: required from `.env` | Secret key for the access key. |
+| `S3_PREFIX` | No | Unset (bucket root) | Installation path such as `areca` or `sites/production`. Exactly empty also uses root; surrounding slashes are normalized. Invalid nonempty paths fail before storage operations, without root fallback. |
 | `S3_FORCE_PATH_STYLE` | No | `false` | Set to `true` for path-style addressing, which MinIO and RustFS need. Compose sets it to `true`. Keep the default `false` for virtual-hosted endpoints. |
+
+See [storage prefixes and migration](/docs/self-hosting/storage-and-email#use-a-shared-bucket) for validation, reset scope, permissions and moving existing objects. Use the same prefix for every CMS process and maintenance script. Database keys, bundle keys and public URLs do not change.
 
 ## Email
 

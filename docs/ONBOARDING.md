@@ -52,8 +52,9 @@ Expected: compose starts Postgres on `5432`, RustFS on `9000`, Mailpit SMTP on `
 
 This step is optional. A new database already has no users or content, so skip
 it on first run. `db:reset` is destructive: it truncates every CMS table and
-empties the configured S3 bucket. Use it only when you intentionally want to
-erase the local instance, and confirm `DATABASE_URL` and `S3_BUCKET` point to
+empties the configured S3 prefix subtree, or the entire bucket when `S3_PREFIX`
+is unset or exactly empty. Use it only when you intentionally want to erase the
+local instance, and confirm `DATABASE_URL`, `S3_BUCKET` and `S3_PREFIX` select
 throwaway local resources before running it. Never run it against a shared or
 production instance.
 
@@ -61,7 +62,7 @@ production instance.
 pnpm db:reset
 ```
 
-This **does not** drop the schema. It `TRUNCATE`s every application table (`RESTART IDENTITY CASCADE`) and empties the S3 bucket. You should see a list of truncated tables and `Reset complete`.
+This **does not** drop the schema. It `TRUNCATE`s every application table (`RESTART IDENTITY CASCADE`) and empties the entire configured upload subtree, including manually placed objects. With `S3_PREFIX` unset/empty, it empties the whole bucket. Neighboring prefixes are excluded. See [storage configuration](CONFIGURATION.md#storage-prefix). You should see a list of truncated tables and `Reset complete`.
 
 `pnpm --filter @areca/cms db:seed` still works after a reset if you want the Acme demo users instead of this walkthrough.
 

@@ -226,6 +226,16 @@ If a deployment ever needs private media (for example per-user downloads), that
 is a product change (authenticated or signed URLs plus build-time handling), not
 a configuration switch.
 
+## Shared object storage
+
+Use a private dedicated bucket or choose a unique `S3_PREFIX` within an existing
+shared bucket. Set the same prefix on every CMS process, cleanup job and
+authoring-transfer command. It scopes object requests, while bucket startup and
+readiness remain bucket-level; provider policies must enforce credential limits.
+Public asset URLs stay unchanged and public. Changing an existing prefix needs a
+manual object move and coordinated rollback plan; see
+[storage configuration](CONFIGURATION.md#storage-prefix).
+
 ## Secret handling
 
 What is secret, and where it lives:

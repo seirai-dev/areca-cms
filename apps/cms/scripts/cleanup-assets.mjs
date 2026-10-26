@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 import { Pool } from 'pg'
 import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3'
+import { createS3Namespace } from '../src/adapters/storage/s3-namespace.mjs'
+
+const namespace = createS3Namespace(process.env.S3_PREFIX)
 
 if (!process.env.DATABASE_URL || !process.env.S3_BUCKET)
   throw new Error('DATABASE_URL and S3_BUCKET are required')
@@ -42,7 +45,7 @@ try {
       await s3.send(
         new DeleteObjectCommand({
           Bucket: process.env.S3_BUCKET,
-          Key: job.storage_key,
+          Key: namespace.objectKey(job.storage_key),
         }),
         { abortSignal: AbortSignal.timeout(30_000) },
       )

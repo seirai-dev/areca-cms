@@ -9,9 +9,11 @@ import { Pool } from 'pg'
 
 import { ensureBucket } from './lib/ensure-bucket.mjs'
 import { withMigrationLock } from './lib/migration-lock.mjs'
+import { createS3Namespace } from '../src/adapters/storage/s3-namespace.mjs'
 import { retryUntilDeadline, startupDeadlineMs } from './lib/startup-retry.mjs'
 
 const appDir = join(dirname(fileURLToPath(import.meta.url)), '..')
+createS3Namespace(process.env.S3_PREFIX)
 const databaseUrl = process.env.DATABASE_URL
 const bucket = process.env.S3_BUCKET
 

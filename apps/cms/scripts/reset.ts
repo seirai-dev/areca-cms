@@ -8,6 +8,9 @@ import { getTableConfig, PgTable } from 'drizzle-orm/pg-core'
 
 import { pool } from '#/db'
 import * as schema from '#/db/schema'
+import { createS3Namespace } from '../src/adapters/storage/s3-namespace.mjs'
+
+const namespace = createS3Namespace(process.env.S3_PREFIX)
 
 // Every table the schema declares, so a new table is wiped without editing
 // this file. TRUNCATE ... CASCADE over one statement is FK-safe.
@@ -38,6 +41,7 @@ async function emptyBucket() {
     const listed = await client.send(
       new ListObjectsV2Command({
         Bucket: bucket,
+        Prefix: namespace.listPrefix,
         ContinuationToken: token,
       }),
     )
@@ -46,16 +50,35 @@ async function emptyBucket() {
       .filter((key): key is string => Boolean(key))
       .map((Key) => ({ Key }))
 
+    if (objects.some(({ Key }) => !namespace.containsPhysicalKey(Key))) {
+      throw new Error(
+        'S3 listing returned an object outside the configured prefix',
+      )
+    }
+
     if (objects.length > 0) {
-      await client.send(
+      const result = await client.send(
         new DeleteObjectsCommand({
           Bucket: bucket,
           Delete: { Objects: objects, Quiet: true },
         }),
       )
+      if (result.Errors?.length) {
+        throw new Error(
+          `S3 reset deletion failed: ${result.Errors.map((error) => `${error.Key}: ${error.Code}`).join(', ')}`,
+        )
+      }
       deleted += objects.length
     }
 
+    if (
+      listed.IsTruncated &&
+      (!listed.NextContinuationToken || listed.NextContinuationToken === token)
+    ) {
+      throw new Error(
+        'S3 reset listing did not return a new continuation token',
+      )
+    }
     token = listed.IsTruncated ? listed.NextContinuationToken : undefined
   } while (token)
 
@@ -71,7 +94,10 @@ try {
   }
 
   const deleted = await emptyBucket()
-  console.log(`Emptied S3 bucket "${bucket}": deleted ${deleted} object(s).`)
+  const scope = namespace.listPrefix
+    ? `prefix "${namespace.listPrefix}" in S3 bucket "${bucket}"`
+    : `S3 bucket "${bucket}"`
+  console.log(`Emptied ${scope}: deleted ${deleted} object(s).`)
   console.log('Reset complete. Run `pnpm db:seed` if you want the demo data.')
 } finally {
   await pool.end()

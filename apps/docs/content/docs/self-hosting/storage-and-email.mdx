@@ -13,9 +13,62 @@ Every uploaded asset and branding file is stored in one bucket. The CMS reads an
 | --- | --- |
 | `S3_ENDPOINT` | The full URL of the storage API, for example `https://s3.eu-central-1.example.com` or `http://rustfs:9000` in the Docker Compose stack. |
 | `S3_REGION` | The region name the provider expects. Use the value from your provider's documentation. |
-| `S3_BUCKET` | The bucket name. Areca uses this bucket only. |
+| `S3_BUCKET` | A private bucket, dedicated to Areca or shared using a separate installation prefix. |
+| `S3_PREFIX` | Optional installation path, such as `areca` or `sites/production`. Unset or exactly empty uses the bucket root. |
 | `S3_ACCESS_KEY` and `S3_SECRET_KEY` | Credentials with read, write and delete access to the bucket. |
 | `S3_FORCE_PATH_STYLE` | Set to `true` for servers that need path-style URLs, such as MinIO and RustFS. The default is `false`. |
+
+### Use a shared bucket
+
+Set `S3_PREFIX=areca` to keep this installation's objects under `areca/` in an existing shared bucket. Nested paths work too: `S3_PREFIX=sites/production` uses `sites/production/`. Surrounding slashes are removed, so `/areca/` normalizes to `areca`. Leave the variable unset or exactly empty (`S3_PREFIX=`) for existing bucket-root behavior.
+
+Nonempty values must contain a path: slash-only values, any whitespace or control characters, backslashes, repeated internal slashes (`a//b`), and `.` or `..` segments are invalid. Invalid configuration fails before storage operations; it never becomes root mode.
+
+Every object operation stays within the normalized prefix plus `/`: uploads, reads, deletes, branding, queued cleanup, authoring export/import and reset. With `areca`, neither `areca-other/` nor root objects are used. There is no fallback to root for missing files. Database keys, authoring bundle keys and public asset URLs stay logical and unchanged; the prefix is applied exactly once at the S3 boundary.
+
+Use the same `S3_PREFIX` on every CMS process and on standalone cleanup and authoring-transfer commands for that installation. `db:reset` deletes **every object** in the subtree, including manually placed files without database records. With the variable unset or exactly empty, reset still empties the entire bucket.
+
+This setting scopes Areca's requests; it does not restrict what the credentials can access. Enforce access restrictions with the provider's policies and grant only the permissions needed. Bucket checks, creation and readiness remain bucket-level and do not probe read/write/delete rights within the prefix. Test an upload, read and delete before relying on the configuration.
+
+### Bucket-check permissions
+
+Startup and readiness use `HeadBucket`. For AWS S3 general-purpose buckets, [this requires `s3:ListBucket`](https://docs.aws.amazon.com/AmazonS3/latest/API/API_HeadBucket.html) on the bucket. A listing grant conditioned only on an object prefix does not cover this request: `HeadBucket` sends no prefix. A `403` makes startup retry until its deadline and fail; readiness also fails.
+
+For an existing AWS bucket named `company-projects` and `S3_PREFIX=areca`, this identity policy allows bucket checks and limits object access to `areca/`:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::company-projects"
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+      "Resource": "arn:aws:s3:::company-projects/areca/*"
+    }
+  ]
+}
+```
+
+The unrestricted bucket-listing grant also lets these credentials list other prefixes' object names, although their object access remains limited by the policy above. Other attached policies can grant more access. This example assumes the bucket already exists; it does not grant bucket creation or permissions for additional features such as customer-managed encryption keys. S3-compatible providers, including Hetzner, may use different permission models: check their `HeadBucket`, listing and object-access rules rather than assuming AWS IAM policies apply.
+
+### Move an existing installation
+
+Changing `S3_PREFIX` does not move files. There is no automatic migration or fallback. For a move from root to `areca/` (or between prefixes):
+
+1. Stop **all** CMS instances and maintenance writers, including cleanup timers and authoring imports. Keep them stopped throughout the copy and configuration change.
+2. Back up a consistent database and its matching objects, plus the old environment and encryption keys.
+3. Inventory and copy **only this installation's Areca-owned objects**, preserving each relative logical key under the destination prefix. Collect keys from `asset.storage_key`, `branding.logo_key`, `branding.favicon_key` and pending `storage_object_deletion.storage_key` rows; deduplicate them and omit null branding keys. Pending deletion keys may already be absent: preserve the queue and migrate any matching objects that still exist so cleanup can continue at the new location. Resolve source keys beneath the old prefix, if any, and destination keys beneath the new one. Do not recursively copy an entire shared bucket into a prefix within itself; that can include unrelated data or copy the destination back into itself.
+4. Verify object counts, bytes/checksums and representative asset and branding reads before deleting any originals. Keep originals and the backup until the move is accepted.
+5. Restart all CMS processes and maintenance writers with the same new prefix. Public URLs and database keys need no rewrite.
+
+To roll back after new writes, stop all writers again and reverse-sync the installation's changes, including deletions, to the old location, or restore the consistent pre-change database and object snapshot together (losing later changes). Toggling the environment alone does not recover objects written at the new location.
+
+Logical object keys are now validated in both root and prefix mode. Empty keys, empty path segments, `.` or `..` segments, backslashes and control characters are rejected. Areca-generated keys already follow these rules. Inventory any legacy database or authoring-bundle keys before upgrading; unusual keys may need a separate repair. Invalid keys requested through the public asset endpoint return `404` without a storage request; direct adapter calls still reject them as errors.
 
 ### Create the bucket
 

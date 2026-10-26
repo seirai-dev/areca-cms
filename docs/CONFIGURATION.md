@@ -58,7 +58,48 @@ The CMS also accepts these optional URL and storage settings:
 | --- | --- |
 | `SERVER_URL` | Optional server URL override. Usually leave unset. |
 | `REDIS_URL` | `redis://localhost:6379` outside production. Required in production (no default there). Holds the shared rate-limit counters. While Redis is down, each instance keeps counting in memory with the same budgets, and the health check reports Redis as degraded. |
+| `S3_PREFIX` | Unset or exactly empty uses the bucket root. Optional installation path such as `areca` or `sites/production`; `/areca/` normalizes to `areca`. See below before changing it. |
 | `S3_FORCE_PATH_STYLE` | `false`; set `true` for path-style S3 endpoints such as local RustFS/MinIO. |
+
+## Storage prefix
+
+A private bucket may be dedicated to Areca or shared with a separate `S3_PREFIX`
+for each installation. All object reads, writes and deletes, including branding,
+cleanup and authoring export/import, use the normalized prefix plus `/` exactly
+once at the S3 boundary. Database keys, bundle logical keys and public URLs stay
+unchanged. There is no root fallback. Invalid nonempty values fail before storage
+operations: slash-only values, whitespace/control characters, backslashes,
+repeated internal `/`, and `.` or `..` segments are rejected.
+
+Use the same setting for every CMS process and standalone maintenance script.
+Reset lists and deletes the entire subtree, including manually placed objects,
+without touching neighboring prefixes; unset/empty retains whole-bucket reset.
+Bucket Head/Create and readiness stay bucket-level and do not test prefix rights.
+The setting does not limit credential permissions: apply provider policies as
+needed. Keep the bucket private; assets served by the CMS remain public.
+
+On AWS S3, bucket checks require bucket-wide `s3:ListBucket` without a
+prefix-only condition. This also permits listing other prefixes' object names;
+object Get/Put/Delete permissions can still be limited to the installation's
+subtree. S3-compatible providers may have different permission models. See the
+[bucket-check permission example](../apps/docs/content/docs/self-hosting/storage-and-email.mdx#bucket-check-permissions).
+
+Existing objects require a manual move, with all CMS and maintenance writers
+stopped and a consistent database/object backup. Copy only this installation's
+Areca-owned objects, preserving relative keys; never recursively copy an entire
+shared bucket into itself. Verify before deleting originals, then restart every
+writer with the same prefix. After new writes, rollback requires reverse-syncing
+changes (including deletions) with writers stopped, or restoring the pre-change
+database/object snapshot together; changing the variable alone is insufficient.
+There is no automatic migration. See the full
+[storage guide](../apps/docs/content/docs/self-hosting/storage-and-email.mdx).
+
+Build the migration inventory from `asset.storage_key`, `branding.logo_key`,
+`branding.favicon_key` and pending `storage_object_deletion.storage_key` rows.
+Deduplicate keys, omit nulls and retain the deletion queue; queued objects may
+already be absent. Logical key validation also applies in root mode: empty keys
+or path segments, `.`/`..` segments, backslashes and control characters are
+rejected. App-generated keys comply; inspect unusual legacy keys before upgrading.
 
 ## Authentication and integrations
 

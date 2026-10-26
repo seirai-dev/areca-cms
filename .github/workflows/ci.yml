@@ -69,6 +69,8 @@ jobs:
         run: pnpm --filter @areca/cms typecheck
       - name: CMS unit tests
         run: pnpm --filter @areca/cms test
+      - name: CMS focused storage tests (no services)
+        run: pnpm --filter @areca/cms test:storage
       - name: CMS script tests (scanner, transfer tooling)
         run: pnpm --filter @areca/cms test:scripts
       - name: Release script tests
