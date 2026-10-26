@@ -2,6 +2,7 @@ import * as React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import {
+  Archive,
   ArrowUUpLeft,
   CheckCircle,
   CheckSquare,
@@ -672,6 +673,17 @@ function CollectionView({
           <ArrowUUpLeft />
           <span className="hidden sm:inline">
             {m.collection_move_to_draft_short()}
+          </span>
+        </BulkButton>
+        <BulkButton
+          canManage={canManage}
+          disabled={selected.size === 0 || bulk.isPending}
+          onClick={() => runAction('archive', [...selected])}
+          testId="bulk-archive"
+        >
+          <Archive />
+          <span className="hidden sm:inline">
+            {m.collection_bulk_archive({ count: selected.size })}
           </span>
         </BulkButton>
         <BulkButton

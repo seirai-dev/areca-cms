@@ -13,6 +13,7 @@ import {
   MAX_FIELDS_PER_COLLECTION,
   MAX_SITE_LANGUAGES,
   ROUTE_PATTERN_MAX_LENGTH,
+  BULK_ENTRY_MAX_IDS,
   SCHEDULE_FIELD_MAX_LENGTH,
   SEARCH_MAX_LENGTH,
   SLUG_MAX_LENGTH,
@@ -50,6 +51,7 @@ import {
 } from '#/server/content/entries'
 import { listInboundReferences } from '#/server/content/inbound-references'
 import { NotFoundError } from '#/server/content/errors'
+import { AppError } from '#/server/http/app-error'
 import { assertSiteVisibleTo } from '#/server/security/site-visibility'
 import { pageLimitSchema, pageOffsetSchema } from '#/server/pagination'
 import {
@@ -385,6 +387,76 @@ export const deleteEntryFn = createServerFn({ method: 'POST' })
     const { session } = await requireEntryAccess(data.id, 'owner')
     await deleteEntry(data.id, session.user.id)
     return { ok: true as const }
+  })
+
+const bulkEntryActionSchema = z.object({
+  siteId: z.string().min(1).max(ID_MAX_LENGTH),
+  action: z.enum(['ready', 'draft', 'archive', 'delete']),
+  ids: z
+    .array(z.string().min(1).max(ID_MAX_LENGTH))
+    .min(1)
+    .max(BULK_ENTRY_MAX_IDS),
+})
+
+export type BulkEntryActionResult = { id: string; ok: boolean; error?: string }
+
+/**
+ * One single-entry action on one entry, with that action's rules: owner only,
+ * and the entry must belong to the site. A failure is returned, not thrown,
+ * so the rest of the batch still runs.
+ */
+async function runBulkEntryAction(
+  siteId: string,
+  action: z.infer<typeof bulkEntryActionSchema>['action'],
+  id: string,
+): Promise<BulkEntryActionResult> {
+  try {
+    const { session, entry: found } = await requireEntryAccess(id, 'owner')
+    if (found.siteId !== siteId) {
+      throw new NotFoundError(m.server_entry_not_found())
+    }
+    const actorId = session.user.id
+    switch (action) {
+      case 'ready':
+        await publishEntry(id, actorId)
+        break
+      case 'draft':
+        await unpublishEntry(id, actorId)
+        break
+      case 'archive':
+        await archiveEntry(id, actorId)
+        break
+      case 'delete':
+        await deleteEntry(id, actorId)
+        break
+    }
+    return { id, ok: true }
+  } catch (error) {
+    return {
+      id,
+      ok: false,
+      error:
+        error instanceof AppError
+          ? error.message
+          : m.shared_something_went_wrong(),
+    }
+  }
+}
+
+/**
+ * Bulk entry actions on a normal site (docs/design/dev-environments.md,
+ * Decision 19). Not all-or-nothing: each id gets its own result, and the
+ * caller shows the failures. Owners only, as each single action is.
+ */
+export const bulkEntryActionFn = createServerFn({ method: 'POST', ...entryFn })
+  .validator(bulkEntryActionSchema)
+  .handler(async ({ data }) => {
+    await requireSiteAccess(data.siteId, 'owner')
+    const results: BulkEntryActionResult[] = []
+    for (const id of new Set(data.ids)) {
+      results.push(await runBulkEntryAction(data.siteId, data.action, id))
+    }
+    return { results }
   })
 
 /** One history page, newest first, without revision data. */

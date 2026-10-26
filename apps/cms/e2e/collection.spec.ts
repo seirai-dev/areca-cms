@@ -175,6 +175,53 @@ test('collection: view toggle, status filter and select-mode bulk actions', asyn
   await expect(bar).toBeHidden()
 })
 
+test('collection: bulk archive two entries on a normal site', async ({
+  page,
+}) => {
+  test.setTimeout(240_000)
+  const suffix = uniqueSuffix()
+  const { siteSlug } = await createIsolatedAcmeSite(page, `arch-${suffix}`)
+  const [keep, archiveA, archiveB] = ['Keep', 'Archive A', 'Archive B'].map(
+    (name) => `${name} ${suffix}`,
+  )
+
+  await login(page, OWNER)
+  await openSite(page, siteSlug)
+  await openCollection(page, 'articles')
+  for (const title of [keep, archiveA, archiveB]) {
+    await createArticle(page, title)
+    await backToCollection(page)
+  }
+  await expect(page.getByTestId('site-content')).toContainText('3 entries')
+
+  await page.getByTestId('select-mode').click()
+  const bar = page.getByTestId('bulk-actions')
+  await page
+    .getByRole('button', { name: `Select ${archiveA}`, exact: true })
+    .click()
+  await page
+    .getByRole('button', { name: `Select ${archiveB}`, exact: true })
+    .click()
+  await expect(bar).toContainText('2 selected')
+  await expect(bar.getByTestId('bulk-archive')).toContainText('Archive (2)')
+
+  await bar.getByTestId('bulk-archive').click()
+  await expect(
+    entry(page, archiveA).getByTestId('entry-status'),
+  ).toHaveAttribute('data-ui-status', 'archived')
+  await expect(
+    entry(page, archiveB).getByTestId('entry-status'),
+  ).toHaveAttribute('data-ui-status', 'archived')
+  await expect(entry(page, keep).getByTestId('entry-status')).toHaveAttribute(
+    'data-ui-status',
+    'draft',
+  )
+  // The action clears the selection.
+  await expect(bar).toContainText('Select entries')
+  await page.getByTestId('bulk-done').click()
+  await expect(bar).toBeHidden()
+})
+
 test('editors can select entries but bulk actions are disabled with the reason', async ({
   page,
 }) => {

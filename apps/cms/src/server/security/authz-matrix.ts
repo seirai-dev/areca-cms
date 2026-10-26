@@ -600,6 +600,22 @@ export const ROWS: Row[] = [
     },
   },
   {
+    name: 'bulkEntryActionFn',
+    hidden: true,
+    fn: contentFns.bulkEntryActionFn,
+    policy: 'org-owner',
+    prepare: async (w) => {
+      const e = await w.fresh.entry('X')
+      return {
+        data: { siteId: w.X.site.id, action: 'archive', ids: [e.id] },
+        untouched: entryUntouched(e.id, {
+          status: 'draft',
+          draftVersion: e.draftVersion,
+        }),
+      }
+    },
+  },
+  {
     name: 'listRevisionsFn',
     hidden: true,
     fn: contentFns.listRevisionsFn,

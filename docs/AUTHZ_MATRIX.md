@@ -97,6 +97,7 @@ unchanged (each row carries a side-effect probe).
 | `publishEntryFn` | `content.ts` | `org-owner` | org owner, agency admin (MFA) |
 | `unpublishEntryFn` | `content.ts` | `org-owner` | org owner, agency admin (MFA) |
 | `archiveEntryFn` | `content.ts` | `org-owner` | org owner, agency admin (MFA) |
+| `bulkEntryActionFn` | `content.ts` | `org-owner` | org owner, agency admin (MFA); ready, draft, archive or delete for up to 200 ids of one site, each id with the rules of its single action and its own result (not all-or-nothing) |
 | `cancelScheduleFn` | `content.ts` | `org-owner` | org owner, agency admin (MFA) |
 | `scheduleEntryFn` | `content.ts` | `org-owner` | org owner, agency admin (MFA) |
 | `deleteEntryFn` | `content.ts` | `org-owner` | org owner, agency admin (MFA) |

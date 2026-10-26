@@ -18,12 +18,9 @@ import {
   shouldPollScheduled,
 } from './scheduled-poll'
 import { m } from '#/paraglide/messages'
-import {
-  deleteEntryFn,
-  listEntriesFn,
-  publishEntryFn,
-  unpublishEntryFn,
-} from '#/server/fn/content'
+import { BULK_ENTRY_MAX_IDS } from '#/lib/content-limits'
+import { bulkEntryActionFn, listEntriesFn } from '#/server/fn/content'
+import type { BulkEntryActionResult } from '#/server/fn/content'
 
 const PAGE_SIZE = 25
 
@@ -152,7 +149,7 @@ export function useCollectionEntries({
   return { query, rows, total }
 }
 
-export type BulkAction = 'ready' | 'draft' | 'delete'
+export type BulkAction = 'ready' | 'draft' | 'archive' | 'delete'
 
 /** One entry in a bulk action: its id, and the title and slug the list shows for it. */
 export type BulkTarget = { id: string; title: string; slug: string }
@@ -180,6 +177,8 @@ function bulkPartialMessage(result: BulkResult) {
       return m.collection_bulk_partial_ready(counts)
     case 'draft':
       return m.collection_bulk_partial_draft(counts)
+    case 'archive':
+      return m.collection_bulk_partial_archive(counts)
     case 'delete':
       return m.collection_bulk_partial_delete(counts)
   }
@@ -195,6 +194,10 @@ function bulkSuccessMessage(action: BulkAction, count: number) {
       return count === 1
         ? m.collection_bulk_draft_one()
         : m.collection_bulk_draft_other({ count })
+    case 'archive':
+      return count === 1
+        ? m.collection_bulk_archived_one()
+        : m.collection_bulk_archived_other({ count })
     case 'delete':
       return count === 1
         ? m.collection_bulk_deleted_one()
@@ -202,20 +205,59 @@ function bulkSuccessMessage(action: BulkAction, count: number) {
   }
 }
 
+/** Runs the action for one batch of ids on the server, and returns one result per id. */
+export type BulkRunner = (ids: string[]) => Promise<BulkEntryActionResult[]>
+
 /**
- * Runs one request per entry, in order, and records which ones failed. A
- * failure does not stop the others.
+ * The failure reason of each id in a batch that did not change. Ids that
+ * changed are absent. A failed request fails every id in its batch.
+ */
+async function batchFailures(
+  batch: BulkTarget[],
+  run: BulkRunner,
+): Promise<Map<string, string>> {
+  const reasons = new Map<string, string>()
+  try {
+    const byId = new Map(
+      (await run(batch.map((target) => target.id))).map((result) => [
+        result.id,
+        result,
+      ]),
+    )
+    for (const target of batch) {
+      const result = byId.get(target.id)
+      if (!result) {
+        reasons.set(target.id, m.editor_something_went_wrong())
+      } else if (!result.ok) {
+        reasons.set(target.id, result.error ?? m.editor_something_went_wrong())
+      }
+    }
+  } catch (error) {
+    for (const target of batch) reasons.set(target.id, errorMessage(error))
+  }
+  return reasons
+}
+
+/**
+ * Runs a bulk action in batches of at most BULK_ENTRY_MAX_IDS ids, one server
+ * request per batch, and records which entries did not change. A failure does
+ * not stop the other entries or batches.
  */
 export async function runBulkAction(
   input: { action: BulkAction; targets: BulkTarget[] },
-  call: (id: string) => Promise<unknown>,
+  run: BulkRunner,
 ): Promise<BulkResult> {
   const failed: BulkFailure[] = []
-  for (const target of input.targets) {
-    try {
-      await call(target.id)
-    } catch (error) {
-      failed.push({ ...target, reason: errorMessage(error) })
+  for (
+    let start = 0;
+    start < input.targets.length;
+    start += BULK_ENTRY_MAX_IDS
+  ) {
+    const batch = input.targets.slice(start, start + BULK_ENTRY_MAX_IDS)
+    const reasons = await batchFailures(batch, run)
+    for (const target of batch) {
+      const reason = reasons.get(target.id)
+      if (reason !== undefined) failed.push({ ...target, reason })
     }
   }
   return {
@@ -246,15 +288,13 @@ export function useEntryBulkActions(
   onResultRef.current = options.onResult
 
   const mutation = useMutation({
-    mutationFn: (input: { action: BulkAction; targets: BulkTarget[] }) => {
-      const fn =
-        input.action === 'ready'
-          ? publishEntryFn
-          : input.action === 'draft'
-            ? unpublishEntryFn
-            : deleteEntryFn
-      return runBulkAction(input, (id) => fn({ data: { id } }))
-    },
+    mutationFn: (input: { action: BulkAction; targets: BulkTarget[] }) =>
+      runBulkAction(input, async (ids) => {
+        const response = await bulkEntryActionFn({
+          data: { siteId, action: input.action, ids },
+        })
+        return response.results
+      }),
     onSuccess: async (result) => {
       onResultRef.current?.(result)
       if (result.failed.length === 0) {
