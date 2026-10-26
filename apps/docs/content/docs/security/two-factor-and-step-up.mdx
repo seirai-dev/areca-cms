@@ -46,7 +46,7 @@ Sign-in with GitHub, Google, Discord, or Microsoft does not ask for an authentic
 
 ## Agency admins must have two-factor
 
-The `ADMIN_MFA_REQUIRED` setting controls this rule. It is `true` by default. Set it to `false` only on an isolated development or test instance. With it set to `false`, step-up checks are also skipped for accounts that have no two-factor.
+The `ADMIN_MFA_REQUIRED` setting controls this rule. It is `true` by default. Set it to `false` only on an isolated development or test instance. When it is `false`, admins do not need two-factor enabled or a local factor proof to use admin functions. For an admin who has two-factor enabled, step-up freshness is measured from session creation or a successful step-up code; an admin without two-factor skips the second-factor step-up check.
 
 When it is on:
 
@@ -72,15 +72,15 @@ These actions require step-up:
 
 ![The Confirm it's you dialog asking for a six-digit code from an authenticator app before a site token is rotated](/screenshots/step-up-dialog.png)
 
-Step-up checks when your session started and when you last confirmed a code:
+With `ADMIN_MFA_REQUIRED` on, step-up checks when your local factor was verified in this session and when you last confirmed a step-up code:
 
-- A session counts as fresh for **10 minutes** after it starts. Signing in with a password and code starts a session, and so does signing in with a provider.
+- A local TOTP or backup-code verification counts as fresh for **10 minutes**. A new session, including one started by signing in with a provider, is not itself local factor proof.
 - Confirming a code in the step-up dialog makes the session fresh again for 10 minutes.
 - After 10 minutes, the next step-up action asks for a code.
 
-<Callout type="warn" title="Provider sign-ins count as fresh without a code">
+<Callout type="info" title="Provider sign-ins do not prove a local factor">
 
-A session started with GitHub, Google, Discord, or Microsoft counts as fresh for 10 minutes, even though no authenticator code was asked for. An agency admin who signs in with a provider can run a step-up action within those 10 minutes without entering a code. Agency admins who sign in with a password are asked for a code at sign-in.
+Signing in with GitHub, Google, Discord, or Microsoft does not create the local factor proof required when `ADMIN_MFA_REQUIRED` is on. An agency admin must verify a TOTP or backup code for that session before using admin functions; a sensitive action can ask for another code when that proof is older than 10 minutes. When `ADMIN_MFA_REQUIRED` is off, enrolled admins’ step-up freshness instead starts from session creation.
 
 </Callout>
 
@@ -92,11 +92,11 @@ The lockout applies to the step-up check only. Requests to the sign-in and two-f
 
 ## Social and single sign-on
 
-Sign-in with GitHub, Google, Discord, or Microsoft Entra ID skips the authenticator code. The provider is trusted to have done its own multi-factor check. The consequences are:
+Sign-in with GitHub, Google, Discord, or Microsoft Entra ID does not ask for the CMS authenticator code. For admin access while `ADMIN_MFA_REQUIRED` is on, however, the provider sign-in does not count as local factor proof; the admin must verify a TOTP or backup code in that session. The consequences are:
 
 - A person who signs in with a provider is not asked for a code at sign-in, even if two-factor is on for that account.
-- The agency admin requirement still applies. An agency admin's account must have two-factor on, and an admin without it cannot use admin actions.
-- The step-up window described above still applies, and provider sign-ins count as fresh for 10 minutes.
+- The agency admin requirement still applies. An agency admin's account must have two-factor on and a local factor verified in the current session before using admin functions.
+- Step-up freshness is based on that session's local factor proof (or a recent step-up code), not the provider sign-in time.
 
 Configure these providers on the server. See [authentication](/docs/self-hosting/authentication).
 
