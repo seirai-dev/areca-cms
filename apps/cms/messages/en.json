@@ -1553,11 +1553,9 @@
   "golive_live_since": "Live since {time}",
   "golive_log_live": "Refreshing while this build runs",
   "golive_never_live_hint": "Mark content as ready, then go live to publish the site.",
-  "golive_never_production_live": "Never production live",
   "golive_no_demo_publication": "No demo publication yet",
   "golive_no_releases": "No releases yet. Your first Go live will appear here.",
   "golive_not_live_yet": "Not live yet",
-  "golive_not_published": "Not published",
   "golive_nothing_changing": "Nothing new to go live. Mark entries as ready and they appear here.",
   "golive_open_panel": "Open Go live",
   "golive_pill_going_live": "Going live",
@@ -1569,7 +1567,6 @@
   "golive_pub_pending": "Waiting",
   "golive_pub_rolled_back": "Rolled back",
   "golive_pub_superseded": "Replaced",
-  "golive_publish_demo": "Publish demo",
   "golive_reconcile_deployment": "Check deployment status",
   "golive_releases": "Releases",
   "golive_releases_load_error": "Couldn't load releases",
@@ -2496,5 +2493,11 @@
   "activity_dev_env_push_one": "pushed {count} change to production",
   "activity_dev_env_push_other": "pushed {count} changes to production",
   "activity_dev_env_copy_entry": "copied {target} to production as a draft",
-  "activity_dev_env_delete": "deleted the development environment"
+  "activity_dev_env_delete": "deleted the development environment",
+  "golive_demo_publish_release": "Publish demo release",
+  "golive_demo_tray_hint": "Demo releases are only used by {command}. Visitors don't see them.",
+  "golive_demo_tray_none": "No demo release yet",
+  "golive_demo_tray_ready": "Demo ready to pull",
+  "golive_not_live_in_production": "Not live in production yet",
+  "golive_switch_to_production": "Switch to Production"
 }

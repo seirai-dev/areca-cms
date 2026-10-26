@@ -191,7 +191,7 @@ function GoLivePanelBody({
             {release.data.demo
               ? m.golive_demo_publication_ready()
               : m.golive_no_demo_publication()}{' '}
-            · {m.golive_never_production_live()}
+            · {m.golive_not_live_in_production()}
           </p>
         </Section>
       ) : (

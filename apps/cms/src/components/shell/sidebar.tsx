@@ -580,6 +580,7 @@ export function Sidebar({
             <GoLiveTray
               siteId={site.id}
               canPublish={canManageSite(me, site.organizationId)}
+              canChangeMode={me.user.isAgencyAdmin}
               collapsed={collapsed}
             />
           )

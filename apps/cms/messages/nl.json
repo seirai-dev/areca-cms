@@ -1553,11 +1553,9 @@
   "golive_live_since": "Gepubliceerd sinds {time}",
   "golive_log_live": "Wordt vernieuwd terwijl deze build loopt",
   "golive_never_live_hint": "Maak inhoud gereed en publiceer daarna de site.",
-  "golive_never_production_live": "Nooit live in productie",
   "golive_no_demo_publication": "Nog geen demo gepubliceerd",
   "golive_no_releases": "Nog geen releases. Je eerste publicatie verschijnt hier.",
   "golive_not_live_yet": "Nog niet gepubliceerd",
-  "golive_not_published": "Niet gepubliceerd",
   "golive_nothing_changing": "Er is niets nieuws om te publiceren. Maak items gereed; ze verschijnen dan hier.",
   "golive_open_panel": "Publicatievenster openen",
   "golive_pill_going_live": "Wordt gepubliceerd",
@@ -1569,7 +1567,6 @@
   "golive_pub_pending": "Wachtend",
   "golive_pub_rolled_back": "Teruggezet",
   "golive_pub_superseded": "Vervangen",
-  "golive_publish_demo": "Demo publiceren",
   "golive_reconcile_deployment": "Deploymentstatus controleren",
   "golive_releases": "Releases",
   "golive_releases_load_error": "Releases konden niet worden geladen",
@@ -2496,5 +2493,11 @@
   "activity_dev_env_push_one": "heeft {count} wijziging naar productie gepusht",
   "activity_dev_env_push_other": "heeft {count} wijzigingen naar productie gepusht",
   "activity_dev_env_copy_entry": "heeft {target} als concept naar productie gekopieerd",
-  "activity_dev_env_delete": "heeft de ontwikkelomgeving verwijderd"
+  "activity_dev_env_delete": "heeft de ontwikkelomgeving verwijderd",
+  "golive_demo_publish_release": "Demorelease publiceren",
+  "golive_demo_tray_hint": "Demoreleases worden alleen gebruikt door {command}. Bezoekers zien ze niet.",
+  "golive_demo_tray_none": "Nog geen demorelease",
+  "golive_demo_tray_ready": "Demo klaar om op te halen",
+  "golive_not_live_in_production": "Nog niet live in productie",
+  "golive_switch_to_production": "Overschakelen naar productie"
 }
