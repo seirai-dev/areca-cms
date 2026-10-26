@@ -10,6 +10,8 @@ import { m } from '#/paraglide/messages'
 import { useStepUp } from '#/features/security/step-up'
 import { copyEntryToProductionFn } from '#/server/fn/dev-env'
 
+import type { SaveOutcome } from './save-before-copy'
+import { saveBeforeCopy } from './save-before-copy'
 import { useDevSyncStatus } from './use-push'
 
 export type CopyEntryInput = { devEntryId: string; overwrite?: boolean }
@@ -31,9 +33,12 @@ export type CopyDestination =
 export function useCopyToProduction({
   productionSiteId,
   destination,
+  save,
 }: {
   productionSiteId: string
   destination: CopyDestination
+  /** The editor's save: the copy waits for it and stops when it fails. */
+  save: () => Promise<SaveOutcome>
 }) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
@@ -41,8 +46,9 @@ export function useCopyToProduction({
   const copy = useServerFn(copyEntryToProductionFn)
 
   const mutation = useMutation({
-    mutationFn: (input: CopyEntryInput) =>
-      stepUp.run(() =>
+    mutationFn: async (input: CopyEntryInput) => {
+      await saveBeforeCopy(save)
+      return stepUp.run(() =>
         copy({
           data: {
             devEntryId: input.devEntryId,
@@ -50,7 +56,8 @@ export function useCopyToProduction({
             overwrite: input.overwrite ?? false,
           },
         }),
-      ),
+      )
+    },
     onSuccess: async (result) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['push-plan'] }),
@@ -125,6 +132,7 @@ export function useCopyEntryAction({
   collectionKey,
   destination,
   devEntryId,
+  save,
 }: {
   devSiteId: string
   productionSiteId: string | null
@@ -132,12 +140,14 @@ export function useCopyEntryAction({
   collectionKey: string
   destination: CopyDestination
   devEntryId: string | undefined
+  save: () => Promise<SaveOutcome>
 }): CopyEntryAction | null {
   // Only a dev env has a sync status; the query stays off for production sites.
   const sync = useDevSyncStatus(devSiteId, { enabled: isDevelopment })
   const mutation = useCopyToProduction({
     productionSiteId: productionSiteId ?? '',
     destination,
+    save,
   })
   const { mutate } = mutation
   const copy = React.useCallback(() => {

@@ -421,6 +421,7 @@ function EntryEditorView({
     collectionKey: collection.key,
     destination: { kind: 'collection', collectionKey: collection.key },
     devEntryId: editor.entryId,
+    save: editor.save,
   })
 
   if (routeEntryId && editor.entryQuery.isError && !entry) {

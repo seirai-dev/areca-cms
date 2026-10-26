@@ -287,6 +287,7 @@ function GlobalEditorView({
     collectionKey: global.key,
     destination: { kind: 'global', globalKey: global.key },
     devEntryId: entryId,
+    save: editor.save,
   })
 
   if (editor.loading || !entry) return <GlobalEditorSkeleton />
