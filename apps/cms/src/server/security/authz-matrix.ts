@@ -1807,6 +1807,31 @@ export const ROWS: Row[] = [
       }
     },
   },
+  {
+    name: 'copyEntryToProductionFn',
+    fn: devEnvFns.copyEntryToProductionFn,
+    policy: 'agency-fresh',
+    tolerant: true,
+    prepare: async (w) => {
+      const s = await w.fresh.site()
+      const dev = await forkDevEnvironment(w.users.adminMfa, s.id)
+      return {
+        // No such entry: an admin gets NotFound, which is a tolerant "allowed".
+        data: {
+          devEntryId: 'missing-entry',
+          markReady: false,
+          overwrite: false,
+        },
+        untouched: async () => {
+          const [row] = await db
+            .select({ lastPushedAt: site.lastPushedAt })
+            .from(site)
+            .where(eq(site.id, dev.id))
+          return row?.lastPushedAt == null
+        },
+      }
+    },
+  },
 ]
 
 export const ALL_FN_MODULES = {

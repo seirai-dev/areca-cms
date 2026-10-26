@@ -62,6 +62,7 @@ unchanged (each row carries a side-effect probe).
 | `getDevSiteSyncStatusFn` | `dev-env.ts` | `agency` | agency admin (MFA); unpushed and production change counts of a dev env |
 | `getPushPlanFn` | `dev-env.ts` | `agency` | agency admin (MFA); the push plan items and the plan hash of a dev env. Writes nothing |
 | `pushToProductionFn` | `dev-env.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up); pushes the selected plan items to production; refused when the plan hash is stale |
+| `copyEntryToProductionFn` | `dev-env.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up); copies one dev entry or section to production as its draft; refused on a schema mismatch, on a production change since the last sync (unless `overwrite`), and on a scheduled production entry |
 | `listMembersFn` | `admin.ts` | `org-owner` | org owner, agency admin (MFA) |
 | `updateMemberRoleFn` | `admin.ts` | `org-owner` | org owner, agency admin (MFA) |
 | `removeMemberFn` | `admin.ts` | `org-owner` | org owner, agency admin (MFA) |

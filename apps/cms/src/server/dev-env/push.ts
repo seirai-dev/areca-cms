@@ -2,16 +2,9 @@ import { and, eq, inArray, sql } from 'drizzle-orm'
 
 import { PLAN_CHANGED_MESSAGE } from '#/lib/dev-env'
 import { db } from '#/db'
-import {
-  collection,
-  entry,
-  entryRevision,
-  environmentPush,
-  site,
-} from '#/db/schema'
+import { collection, entry, environmentPush, site } from '#/db/schema'
 import type {
   EntryData,
-  EntryOriginBaseline,
   EntryStatus,
   Field,
   SchemaSnapshot,
@@ -28,20 +21,13 @@ import {
   writeCollectionUpsert,
 } from '#/server/content/collections'
 import type { CollectionUpsertInput } from '#/server/content/collections'
-import { prepareReadyData } from '#/server/content/entries'
-import {
-  ConflictError,
-  NotFoundError,
-  ValidationError,
-} from '#/server/content/errors'
-import { m } from '#/paraglide/messages'
+import { ConflictError, ValidationError } from '#/server/content/errors'
 import {
   prepareGlobalUpsert,
   writeGlobalDelete,
   writeGlobalUpsert,
 } from '#/server/content/globals'
 import type { GlobalInput } from '#/server/content/globals'
-import { validateReferences } from '#/server/content/validation'
 import { AppError } from '#/server/http/app-error'
 import { requestPublication } from '#/server/publishing/publications'
 
@@ -49,18 +35,25 @@ import { lockProductionSite } from './lock'
 import { buildPlan, selectPlanItems, stableStringify } from './plan'
 import type { PlanEntry, PlanInput, PlanItem } from './plan'
 import { loadPlanContext } from './load-plan'
-import {
-  referenceLookup,
-  referenceTargets,
-  remapReferences,
-} from './references'
-import type { ReferenceWarning } from './references'
+import { remapReferences } from './references'
 import {
   lockDevEnvironment,
   lockProductionRow,
   readDevEnvironment,
 } from './rows'
 import type { DevEnvActor, SiteRow, Tx } from './rows'
+import {
+  keepDraftRevision,
+  nextOriginBaseline,
+  productionReferenceLookup,
+  readSiteRow,
+  readyProblems,
+  referenceWarnings,
+  slugTaken,
+} from './write'
+import type { ProductionCollection, PushCounts, PushWarning } from './write'
+
+export type { PushCounts, PushWarning } from './write'
 
 /** The message a push refused on a stale plan shows. */
 export { PLAN_CHANGED_MESSAGE }
@@ -74,24 +67,6 @@ export type PushInput = {
   /** Needs-attention item ids set to Apply. */
   apply: string[]
   goLive: boolean
-}
-
-export type PushWarning = {
-  /** The plan item the warning is about, when there is one. */
-  itemId: string | null
-  message: string
-  field?: string
-  locale?: string
-  devTargetId?: string
-}
-
-export type PushCounts = {
-  schema: number
-  new: number
-  changed: number
-  archived: number
-  skipped: number
-  warnings: number
 }
 
 export type GoLiveOutcome = Awaited<ReturnType<typeof requestPublication>>
@@ -108,8 +83,6 @@ export type PushResult = {
 type CommittedPush = Omit<PushResult, 'publication'> & {
   productionSiteId: string
 }
-
-type ProductionCollection = typeof collection.$inferSelect
 
 /** A ready version written in pass 2 that still has to pass strict validation. */
 type ReadyCandidate = {
@@ -207,7 +180,7 @@ async function runPush(
     .select()
     .from(collection)
     .where(eq(collection.siteId, prod.id))
-  const productionSite = await readRow(tx, prod.id)
+  const productionSite = await readSiteRow(tx, prod.id)
 
   const entryItems = selected
     .filter((item) => item.kind.startsWith('entry.'))
@@ -222,7 +195,7 @@ async function runPush(
     devById,
     productionCollections,
   )
-  const lookup = await buildReferenceLookup(
+  const lookup = await productionReferenceLookup(
     tx,
     prod.id,
     context.planInput.devEntries,
@@ -305,14 +278,6 @@ type PushState = {
   targets: Map<string, string>
   /** Plan item id to the production id it wrote to (null for schema and languages). */
   written: Map<string, string | null>
-}
-
-async function readRow(tx: Tx, siteId: string): Promise<SiteRow> {
-  const row = (
-    await tx.select().from(site).where(eq(site.id, siteId)).limit(1)
-  ).at(0)
-  if (!row) throw new NotFoundError(m.server_site_not_found())
-  return row
 }
 
 async function pushSchema(state: PushState, items: PlanItem[]) {
@@ -429,46 +394,6 @@ async function pushLanguages(state: PushState) {
   )
 }
 
-/** Duplicate-free key for a warning, so a reference reported in draft and ready shows once. */
-function warningKey(item: ReferenceWarning) {
-  return `${item.field}|${item.locale ?? ''}|${item.devTargetId}`
-}
-
-function referenceWarnings(
-  itemId: string,
-  cleared: ReferenceWarning[],
-  seen: Set<string>,
-): PushWarning[] {
-  const out: PushWarning[] = []
-  for (const reference of cleared) {
-    const key = warningKey(reference)
-    if (seen.has(key)) continue
-    seen.add(key)
-    out.push({
-      itemId,
-      message: `Reference cleared: "${reference.field}" pointed at an entry that is not in production.`,
-      field: reference.field,
-      ...(reference.locale !== undefined ? { locale: reference.locale } : {}),
-      devTargetId: reference.devTargetId,
-    })
-  }
-  return out
-}
-
-async function slugTaken(
-  tx: Tx,
-  collectionId: string,
-  slug: string,
-  exceptId?: string,
-): Promise<boolean> {
-  const rows = await tx
-    .select({ id: entry.id })
-    .from(entry)
-    .where(and(eq(entry.collectionId, collectionId), eq(entry.slug, slug)))
-    .limit(2)
-  return rows.some((row) => row.id !== exceptId)
-}
-
 /**
  * Pass 1: resolves each entry item to its production entry. Entries that dev
  * created, and entries deleted in production, get a new empty production draft
@@ -555,29 +480,6 @@ async function pushEntriesPassOne(
 }
 
 /**
- * Maps dev entry ids to production ids for reference mapping: the origin of
- * each forked entry that still exists in production, and the ids of the
- * entries created in pass 1.
- */
-async function buildReferenceLookup(
-  tx: Tx,
-  productionSiteId: string,
-  devEntries: PlanEntry[],
-  created: Map<string, string>,
-) {
-  const productionIds = new Set(
-    (
-      await tx
-        .select({ id: entry.id })
-        .from(entry)
-        .where(eq(entry.siteId, productionSiteId))
-    ).map((row) => row.id),
-  )
-  const targets = referenceTargets(devEntries, productionIds, created)
-  return referenceLookup(targets, productionIds)
-}
-
-/**
  * Pass 2: writes each selected entry's draft, and its ready version as a
  * candidate. The production row is locked and its `content_version` checked
  * against the plan; the draft it replaces is kept as a revision first.
@@ -622,13 +524,7 @@ async function pushEntriesPassTwo(
     }
 
     if (item.kind === 'entry.archive') {
-      await tx.insert(entryRevision).values({
-        entryId: row.id,
-        data: row.draftData,
-        createdBy: actor.id,
-        note: 'before dev push',
-        kind: 'milestone',
-      })
+      await keepDraftRevision(tx, row, actor.id)
       await tx
         .update(entry)
         .set({
@@ -656,13 +552,7 @@ async function pushEntriesPassTwo(
       continue
     }
     if (!isCreated) {
-      await tx.insert(entryRevision).values({
-        entryId: row.id,
-        data: row.draftData,
-        createdBy: actor.id,
-        note: 'before dev push',
-        kind: 'milestone',
-      })
+      await keepDraftRevision(tx, row, actor.id)
     }
 
     const seen = new Set<string>()
@@ -721,49 +611,6 @@ async function pushEntriesPassTwo(
     }
   }
   return candidates
-}
-
-async function readyProblems(
-  tx: Tx,
-  productionSite: SiteRow,
-  candidate: ReadyCandidate,
-): Promise<{ messages: string[]; stored: EntryData | null }> {
-  try {
-    const prepared = prepareReadyData(
-      {
-        site: { languages: productionSite.languages },
-        collection: {
-          fields: candidate.fields,
-          requiredLanguages: candidate.requiredLanguages,
-        },
-      },
-      candidate.ready,
-    )
-    const refErrors = await validateReferences(
-      productionSite.id,
-      candidate.fields,
-      prepared.referenceData,
-      {},
-      tx,
-    )
-    return {
-      messages: refErrors.map((error) => error.message),
-      stored: prepared.stored,
-    }
-  } catch (error) {
-    if (error instanceof ValidationError) {
-      return {
-        messages:
-          error.errors.length > 0
-            ? error.errors.map((item) =>
-                item.path ? `${item.path}: ${item.message}` : item.message,
-              )
-            : [error.message],
-        stored: null,
-      }
-    }
-    throw error
-  }
 }
 
 /**
@@ -853,18 +700,7 @@ async function writeBaselines(
     if (!dev) continue
     const candidate = candidates.find((c) => c.itemId === item.id)
     const readyPushed = candidate ? candidate.active : true
-    const old: EntryOriginBaseline | null = dev.originBaseline
-    const baseline: EntryOriginBaseline = {
-      slug: dev.slug,
-      data: dev.draftData,
-      publishedSlug: readyPushed
-        ? dev.publishedSlug
-        : (old?.publishedSlug ?? null),
-      publishedData: readyPushed
-        ? dev.publishedData
-        : (old?.publishedData ?? null),
-      status: readyPushed ? dev.status : (old?.status ?? 'draft'),
-    }
+    const baseline = nextOriginBaseline(dev, readyPushed)
     await tx
       .update(entry)
       .set({

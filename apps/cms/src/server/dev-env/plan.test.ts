@@ -4,6 +4,7 @@ import type { Field, SchemaSnapshotItem } from '#/lib/types'
 
 import {
   buildPlan,
+  collectionsMatchProduction,
   productionChangeCount,
   selectPlanItems,
   stableStringify,
@@ -810,5 +811,35 @@ describe('buildPlan: entry row titles', () => {
     )
     expect(plan.items[0]?.title).toBe('Footer')
     expect(plan.items[0]?.collectionLabel).toBeUndefined()
+  })
+})
+
+describe('collectionsMatchProduction', () => {
+  it('matches a collection only when its whole definition is the same', () => {
+    const articles = def('articles')
+    const matches = collectionsMatchProduction({
+      dev: snapshot([articles, def('cases')]),
+      production: snapshot([
+        articles,
+        def('cases', [field('title'), field('slug')]),
+      ]),
+    })
+    expect(matches).toEqual({ articles: true, cases: false })
+  })
+
+  it('treats a collection missing on one side as a mismatch', () => {
+    const matches = collectionsMatchProduction({
+      dev: snapshot([def('articles')]),
+      production: snapshot([def('pages')]),
+    })
+    expect(matches).toEqual({ articles: false, pages: false })
+  })
+
+  it('compares the kind, so a section and a collection of the same key differ', () => {
+    const matches = collectionsMatchProduction({
+      dev: snapshot([def('home', [field('title')], { kind: 'global' })]),
+      production: snapshot([def('home')]),
+    })
+    expect(matches).toEqual({ home: false })
   })
 })

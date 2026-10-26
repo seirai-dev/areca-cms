@@ -16,11 +16,13 @@ import {
   RocketLaunch,
   SidebarSimple,
   TextAa,
+  UploadSimple,
   Sparkle,
   Trash,
   WarningCircle,
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
+import type { CopyEntryAction } from '#/features/dev-env/use-copy-to-production'
 
 import { Button, SplitButton } from '#/components/ui/button'
 import {
@@ -97,6 +99,7 @@ export function EditorTopBar({
   scheduleAnchor,
   languageBar,
   readyBlock = null,
+  copyAction = null,
 }: {
   siteId: string
   collectionKey: string
@@ -154,6 +157,8 @@ export function EditorTopBar({
    * that language.
    */
   readyBlock?: { message: string; onFix: () => void } | null
+  /** Copy to production as a draft (development environments only; null elsewhere). */
+  copyAction?: CopyEntryAction | null
 }) {
   const reduce = useReducedMotion()
   const mod = useModifierKey()
@@ -493,6 +498,28 @@ export function EditorTopBar({
                 </>
               ) : null}
               <DropdownMenuSeparator />
+              {copyAction ? (
+                <>
+                  <DropdownMenuItem
+                    disabled={
+                      copyAction.blockedReason !== null ||
+                      copyAction.pending ||
+                      busy ||
+                      !entryId
+                    }
+                    onSelect={copyAction.copy}
+                    data-testid="copy-to-production"
+                  >
+                    <UploadSimple />
+                    {m.dev_env_copy_menu()}
+                  </DropdownMenuItem>
+                  {copyAction.blockedReason ? (
+                    <DropdownMenuLabel className="max-w-64 pt-2 pb-2 text-caption font-normal tracking-normal whitespace-normal normal-case">
+                      {copyAction.blockedReason}
+                    </DropdownMenuLabel>
+                  ) : null}
+                </>
+              ) : null}
               {canUnpublish ? (
                 <DropdownMenuItem
                   disabled={!canManage || busy}
