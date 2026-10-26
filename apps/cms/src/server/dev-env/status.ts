@@ -1,7 +1,7 @@
-import { desc, eq } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 
 import { db } from '#/db'
-import { environmentPush, site, user } from '#/db/schema'
+import { environmentPush, publication, site, user } from '#/db/schema'
 
 /** Most recent fork, reset, push and copy rows shown on the production site. */
 export const DEV_ENV_HISTORY_LIMIT = 20
@@ -42,4 +42,18 @@ export async function getDevEnvironmentStatus(productionSiteId: string) {
     .limit(DEV_ENV_HISTORY_LIMIT)
 
   return { ...dev, history }
+}
+
+/**
+ * Whether a site has ever gone live: a release was live for it. A development
+ * environment can be created once the site is in Production mode or has gone
+ * live (docs/design/dev-environments.md, Decision 5).
+ */
+export async function hasGoneLive(siteId: string): Promise<boolean> {
+  const rows = await db
+    .select({ id: publication.id })
+    .from(publication)
+    .where(and(eq(publication.siteId, siteId), eq(publication.wasLive, true)))
+    .limit(1)
+  return rows.length > 0
 }

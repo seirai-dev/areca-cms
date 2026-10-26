@@ -18,6 +18,7 @@ import {
   focusPageSearch,
   useShortcut,
 } from '#/components/shell/shortcuts'
+import { DevBanner } from '#/components/shell/dev-banner'
 import { Sidebar } from '#/components/shell/sidebar'
 import {
   EmailVerifiedNotice,
@@ -27,6 +28,7 @@ import { ActivityPanel } from '#/features/activity/activity-panel'
 import { MailBanners } from '#/features/agency/mail-banners'
 import { GoLivePanel } from '#/features/golive/golive-panel'
 import { useIsMobile, useIsTablet } from '#/hooks/use-mobile'
+import { isDevSite } from '#/lib/site-environment'
 import { canManageSite, findSite } from '#/lib/site-nav'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
@@ -146,7 +148,8 @@ function SitePanels({ me, siteId }: { me: Me; siteId: string }) {
   const manage = canManageSite(me, site.organizationId)
   return (
     <>
-      <GoLivePanel site={site} canPublish={manage} />
+      {/* A development environment has no releases (Decision 7). */}
+      {isDevSite(site) ? null : <GoLivePanel site={site} canPublish={manage} />}
       {manage ? <ActivityPanel site={site} /> : null}
     </>
   )
@@ -271,6 +274,9 @@ export function AppShell({
               {mode !== 'focus' ? <VerifyEmailBanner me={me} /> : null}
               {me.user.isAgencyAdmin && mode !== 'focus' ? (
                 <MailBanners />
+              ) : null}
+              {site && isDevSite(site) && mode !== 'focus' ? (
+                <DevBanner me={me} site={site} />
               ) : null}
               {children}
             </div>

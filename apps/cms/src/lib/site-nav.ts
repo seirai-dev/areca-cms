@@ -22,6 +22,8 @@ import type { Icon } from '@phosphor-icons/react'
 import { m } from '#/paraglide/messages'
 import type { Me } from '#/server/fn/me'
 
+import { isDevSite } from './site-environment'
+
 /**
  * Navigation model for the shell (brief §2, §2.1). One source of truth for
  * the sidebar, the mobile tab bar and sheets, and the command palette.
@@ -60,6 +62,33 @@ export function groupSitesByOrg(sites: MeSite[]) {
     groups.set(site.organizationId, group)
   }
   return [...groups.entries()].map(([id, group]) => ({ id, ...group }))
+}
+
+/**
+ * The switcher's list: each production site's development environment is
+ * nested under it, so only the rest stay at the top level. A dev env whose
+ * production site is not in the list stays top-level (it should not happen;
+ * showing it is safer than hiding it).
+ */
+export function nestDevEnvironments(sites: MeSite[]) {
+  const productionIds = new Set(
+    sites.filter((site) => !isDevSite(site)).map((site) => site.id),
+  )
+  const devByParent = new Map<string, MeSite>()
+  for (const site of sites) {
+    if (
+      isDevSite(site) &&
+      site.parentSiteId !== null &&
+      productionIds.has(site.parentSiteId)
+    ) {
+      devByParent.set(site.parentSiteId, site)
+    }
+  }
+  const nestedIds = new Set([...devByParent.values()].map((site) => site.id))
+  return {
+    topLevel: sites.filter((site) => !nestedIds.has(site.id)),
+    devByParent,
+  }
 }
 
 /** "https://www.acme.com/" → "acme.com". */

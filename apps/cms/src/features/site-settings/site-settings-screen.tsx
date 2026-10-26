@@ -9,6 +9,7 @@ import {
   TabsList,
   TabsTrigger,
 } from '#/components/ui/tabs'
+import { isDevSite } from '#/lib/site-environment'
 import type { MeSite } from '#/lib/site-nav'
 import { m } from '#/paraglide/messages'
 
@@ -16,6 +17,7 @@ import { ContentModelTab } from '#/features/content-model/content-model-tab'
 import { AiTab } from './ai-tab'
 import { DeploymentTab } from './deployment-tab'
 import { DeveloperTab } from './developer-tab'
+import { DevelopmentTab } from './development-tab'
 import { GeneralTab } from './general-tab'
 import { LanguagesTab } from './languages-tab'
 import { useSiteSettings } from './use-site-settings'
@@ -24,11 +26,32 @@ export const SETTINGS_TABS = [
   'general',
   'languages',
   'deployment',
+  'development',
   'developer',
   'ai',
   'content',
 ] as const
 export type SettingsTab = (typeof SETTINGS_TABS)[number]
+
+/**
+ * The tabs a site shows. A development environment stays in Demo mode and
+ * has no deployment target, so it has neither Deployment nor Development. A
+ * production site gets Development once it is in Production mode or has gone
+ * live (docs/design/dev-environments.md, Decision 5).
+ */
+export function settingsTabsFor(site: {
+  environment: string
+  publishingMode: string
+  hasGoneLive: boolean
+}): SettingsTab[] {
+  if (isDevSite(site)) {
+    return SETTINGS_TABS.filter(
+      (tab) => tab !== 'deployment' && tab !== 'development',
+    )
+  }
+  const canDevelop = site.publishingMode === 'production' || site.hasGoneLive
+  return SETTINGS_TABS.filter((tab) => tab !== 'development' || canDevelop)
+}
 
 /**
  * Site settings (brief §3.10), agency admins only: underline tabs
@@ -50,10 +73,20 @@ export function SiteSettingsScreen({
     general: m.settings_tab_general(),
     languages: m.settings_tab_languages(),
     deployment: m.settings_tab_deployment(),
+    development: m.settings_tab_development(),
     developer: m.settings_tab_developer(),
     ai: m.settings_tab_ai(),
     content: m.settings_tab_content(),
   }
+  // Until the record loads, a development environment is recognised from the
+  // list entry; the production tabs wait for the full record.
+  const visible = record
+    ? settingsTabsFor(record)
+    : SETTINGS_TABS.filter(
+        (item) =>
+          item !== 'development' && (item !== 'deployment' || !isDevSite(site)),
+      )
+  const shown = (item: SettingsTab) => visible.includes(item)
 
   const body = (
     render: (record: NonNullable<typeof settings.site.data>) => React.ReactNode,
@@ -83,12 +116,12 @@ export function SiteSettingsScreen({
         }
       />
       <Tabs
-        value={tab}
+        value={shown(tab) ? tab : 'general'}
         onValueChange={(value) => onTabChange(value as SettingsTab)}
         className="gap-8"
       >
         <TabsList>
-          {SETTINGS_TABS.map((item) => (
+          {SETTINGS_TABS.filter(shown).map((item) => (
             <TabsTrigger
               key={item}
               value={item}
@@ -108,11 +141,20 @@ export function SiteSettingsScreen({
             <LanguagesTab site={r} settings={settings} />
           ))}
         </TabsContent>
-        <TabsContent value="deployment">
-          {body((r) => (
-            <DeploymentTab site={r} meSite={site} settings={settings} />
-          ))}
-        </TabsContent>
+        {shown('deployment') ? (
+          <TabsContent value="deployment">
+            {body((r) => (
+              <DeploymentTab site={r} meSite={site} settings={settings} />
+            ))}
+          </TabsContent>
+        ) : null}
+        {shown('development') ? (
+          <TabsContent value="development">
+            {body((r) => (
+              <DevelopmentTab site={r} />
+            ))}
+          </TabsContent>
+        ) : null}
         <TabsContent value="developer">
           {body((r) => (
             <DeveloperTab site={r} settings={settings} />

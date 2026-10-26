@@ -109,6 +109,22 @@ const SENTENCES: Partial<Record<string, Sentence>> = {
   'asset.upload': (target) => m.activity_asset_upload({ target }),
   'asset.update': (target) => m.activity_asset_update({ target }),
   'asset.delete': (target) => m.activity_asset_delete({ target }),
+  'dev_env.fork': () => m.activity_dev_env_fork(),
+  'dev_env.refresh': () => m.activity_dev_env_refresh(),
+  'dev_env.copy_entry': (target) => m.activity_dev_env_copy_entry({ target }),
+  'dev_env.delete': () => m.activity_dev_env_delete(),
+}
+
+/** The counts a push row stores that make up "changes" (see the push plan). */
+const PUSH_CHANGE_KEYS = ['schema', 'new', 'changed', 'archived'] as const
+
+function pushedChangeCount(meta: Record<string, unknown> | null) {
+  let total = 0
+  for (const key of PUSH_CHANGE_KEYS) {
+    const value = meta?.[key]
+    if (typeof value === 'number') total += value
+  }
+  return total
 }
 
 /** Events the system reports about the site, told without an actor. */
@@ -273,6 +289,12 @@ function namedSentence(row: ActivityLike): string | null {
       return person
         ? m.activity_member_update_role_full({ person, client, role: roleName })
         : m.activity_member_update_role_anon({ client, role: roleName })
+    }
+    case 'dev_env.push': {
+      const count = pushedChangeCount(meta)
+      return count === 1
+        ? m.activity_dev_env_push_one({ count })
+        : m.activity_dev_env_push_other({ count })
     }
     case 'member.add': {
       const person = text(meta?.userName) ?? text(meta?.email)

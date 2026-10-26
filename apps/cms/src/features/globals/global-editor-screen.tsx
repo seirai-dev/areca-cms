@@ -48,6 +48,7 @@ import { QueryError } from '#/components/ui/query-error'
 import { Skeleton } from '#/components/ui/skeleton'
 import { SlideOver } from '#/components/ui/slide-over'
 import { initialEntryData } from '#/lib/content/utils'
+import { isDevSite } from '#/lib/site-environment'
 import { canManageSite } from '#/lib/site-nav'
 import type { MeSite } from '#/lib/site-nav'
 import type { Field } from '#/lib/types'
@@ -144,6 +145,8 @@ function GlobalEditorView({
 }) {
   const siteId = site.id
   const canManage = canManageSite(me, site.organizationId)
+  // A development environment has no scheduling (Decision 8).
+  const canSchedule = !isDevSite(site)
   const release = useReleaseStatus(siteId)
   const live = release.liveMembership
   const titleRef = React.useRef<HTMLTextAreaElement>(null)
@@ -378,6 +381,7 @@ function GlobalEditorView({
           errorCount={editor.errorCount}
           onSave={() => void editor.save()}
           canManage={canManage}
+          canSchedule={canSchedule}
           busy={editor.busy}
           markReadyPending={editor.markReadyPending}
           markable={editor.markable}

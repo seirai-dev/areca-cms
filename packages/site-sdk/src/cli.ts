@@ -81,8 +81,13 @@ export async function run(
       const counts = Object.entries(snapshot.collections)
         .map(([key, entries]) => `${camelKeys.get(key)}=${entries.length}`)
         .join(', ')
+      // A development environment pull has no publication (live pull).
+      const source =
+        snapshot.publicationId === null
+          ? 'Pulled development content'
+          : `Pulled publication ${snapshot.publicationId}`
       console.log(
-        `Pulled publication ${snapshot.publicationId} (${snapshot.hash})${counts ? `: ${counts}` : ''}`,
+        `${source} (${snapshot.hash})${counts ? `: ${counts}` : ''}`,
       )
       if (snapshot.localAssets) {
         const { total, downloaded, dir } = snapshot.localAssets

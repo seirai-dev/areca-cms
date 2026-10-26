@@ -45,6 +45,7 @@ import { useReleaseStatus } from '#/features/golive/use-release-status'
 import { usePanel } from '#/features/shell/panel'
 import { useDebouncedValue } from '#/hooks/use-debounced-value'
 import { signOutClient } from '#/lib/sign-out'
+import { isDevSite } from '#/lib/site-environment'
 import {
   agencyNavItems,
   canManageSite,
@@ -379,14 +380,16 @@ export function CommandPalette() {
         <CommandGroup heading={m.shell_search_actions()}>
           {inSite && canManage ? (
             <>
-              <CommandItem
-                value="action go live publish"
-                keywords={[m.golive_go_live()]}
-                onSelect={() => run(() => panel.open('golive'))}
-              >
-                <RocketLaunch />
-                {m.golive_go_live()}
-              </CommandItem>
+              {isDevSite(inSite) ? null : (
+                <CommandItem
+                  value="action go live publish"
+                  keywords={[m.golive_go_live()]}
+                  onSelect={() => run(() => panel.open('golive'))}
+                >
+                  <RocketLaunch />
+                  {m.golive_go_live()}
+                </CommandItem>
+              )}
               <CommandItem
                 value="action invite people"
                 keywords={[m.shell_palette_invite()]}

@@ -108,7 +108,9 @@ export async function pullContent(
   if (schema === undefined) {
     schema = (await client.fetchManifest()).collections
     warnings.push(
-      `Publication ${snapshot.publicationId} has no embedded schema; types use the current CMS schema. Go live again to embed it.`,
+      snapshot.publicationId === null
+        ? 'Development content has no embedded schema; types use the current CMS schema.'
+        : `Publication ${snapshot.publicationId} has no embedded schema; types use the current CMS schema. Go live again to embed it.`,
     )
   }
   // Raw keys, before anything is camelised or written.

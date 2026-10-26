@@ -59,6 +59,7 @@ import {
   isAgencyAdminWithMfa,
 } from '#/server/security/site-visibility'
 import { pageLimitSchema, pageOffsetSchema } from '#/server/pagination'
+import { hasGoneLive } from '#/server/dev-env/status'
 
 const membershipRoleSchema = z.enum(['owner', 'editor'])
 const adminFn = { strict: { output: false } as const }
@@ -191,7 +192,7 @@ export const getSiteFn = createServerFn({ method: 'GET', ...adminFn })
       found,
       () => new NotFoundError(m.server_site_not_found()),
     )
-    return found
+    return { ...found, hasGoneLive: await hasGoneLive(found.id) }
   })
 
 export const createSiteFn = createServerFn({ method: 'POST', ...adminFn })

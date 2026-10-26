@@ -23,12 +23,17 @@ import {
   PopoverTrigger,
 } from '#/components/ui/popover'
 import { Sheet, SheetContent, SheetTitle } from '#/components/ui/sheet'
+import { Tag } from '#/components/ui/tag'
 import { LiveDot } from '#/components/ui/status-pill'
 import { useReleaseStatus } from '#/features/golive/use-release-status'
 import { readRecentSites } from '#/features/shell/last-site'
 import { useIsMobile } from '#/hooks/use-mobile'
 import { useBranding } from '#/lib/use-branding'
-import { displayHost, groupSitesByOrg } from '#/lib/site-nav'
+import {
+  displayHost,
+  groupSitesByOrg,
+  nestDevEnvironments,
+} from '#/lib/site-nav'
 import type { MeSite } from '#/lib/site-nav'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
@@ -183,7 +188,9 @@ function SwitcherList({ onDone }: { onDone: () => void }) {
     .map((id) => me.sites.find((site) => site.id === id))
     .filter((site): site is MeSite => Boolean(site))
     .slice(0, 3)
-  const groups = groupSitesByOrg(me.sites)
+  // Dev envs are agency-only, so `nestDevEnvironments` only nests them for admins.
+  const { topLevel, devByParent } = nestDevEnvironments(me.sites)
+  const groups = groupSitesByOrg(topLevel)
   const isAdmin = me.user.isAgencyAdmin
 
   function go(siteId: string) {
@@ -191,7 +198,7 @@ function SwitcherList({ onDone }: { onDone: () => void }) {
     void navigate({ to: '/sites/$siteId', params: { siteId } })
   }
 
-  const row = (site: MeSite, keyPrefix = '') => {
+  const row = (site: MeSite, keyPrefix = '', nested = false) => {
     const state = liveMap.get(site.id)
     const selected = mode !== 'agency' && current?.id === site.id
     return (
@@ -200,10 +207,14 @@ function SwitcherList({ onDone }: { onDone: () => void }) {
         value={`${keyPrefix}${site.name} ${site.slug} ${site.organizationName} ${site.id}`}
         onSelect={() => go(site.id)}
         data-testid={`switch-site-${site.slug}`}
+        className={cn(nested && 'pl-7')}
       >
         <SiteTile id={site.id} name={site.name} size="sm" />
         <span className="grid min-w-0 flex-1">
-          <span className="truncate font-medium">{site.name}</span>
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate font-medium">{site.name}</span>
+            {nested ? <Tag tone="accent">{m.dev_env_tag()}</Tag> : null}
+          </span>
           <span
             data-slot="command-meta"
             className="truncate text-[12px] leading-4 text-text-muted"
@@ -238,7 +249,15 @@ function SwitcherList({ onDone }: { onDone: () => void }) {
                 : m.shell_switcher_sites()
             }
           >
-            {group.sites.map((site) => row(site))}
+            {group.sites.map((site) => {
+              const dev = devByParent.get(site.id)
+              return (
+                <React.Fragment key={site.id}>
+                  {row(site)}
+                  {dev ? row(dev, '', true) : null}
+                </React.Fragment>
+              )
+            })}
           </CommandGroup>
         ))}
         {isAdmin ? (

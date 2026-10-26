@@ -44,6 +44,7 @@ import { usePendingEntries } from '#/features/golive/use-pending-entries'
 import { useReleaseStatus } from '#/features/golive/use-release-status'
 import { usePanel } from '#/features/shell/panel'
 import { formatRelativeTime } from '#/lib/relative-time'
+import { isDevSite } from '#/lib/site-environment'
 import {
   canManageSite,
   collectionIcon,
@@ -289,6 +290,9 @@ function AttentionStrip({
 }) {
   const release = useReleaseStatus(site.id)
   const panel = usePanel()
+  // Releases (go live, failed builds, scheduled changes) do not apply to a
+  // development environment (Decision 7); its drafts card still does.
+  const dev = isDevSite(site)
   const { goLive, isPending } = useGoLive(site.id)
   const pending = usePendingEntries({
     siteId: site.id,
@@ -308,7 +312,7 @@ function AttentionStrip({
 
   const cards: React.ReactNode[] = []
 
-  if (release.state === 'failed') {
+  if (!dev && release.state === 'failed') {
     cards.push(
       <Card
         key="failed"
@@ -351,7 +355,7 @@ function AttentionStrip({
     )
   }
 
-  if (release.pending > 0 && release.state !== 'going-live') {
+  if (!dev && release.pending > 0 && release.state !== 'going-live') {
     cards.push(
       <Card
         key="ready"
@@ -439,7 +443,7 @@ function AttentionStrip({
     )
   }
 
-  if (pending.scheduled.length > 0) {
+  if (!dev && pending.scheduled.length > 0) {
     cards.push(
       <Card
         key="scheduled"

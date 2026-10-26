@@ -4,6 +4,7 @@ import { Trash } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
 import { errorMessage } from '#/lib/admin/helpers'
+import { isDevSite } from '#/lib/site-environment'
 import { Button } from '#/components/ui/button'
 import { ConfirmDialog } from '#/components/ui/confirm-dialog'
 import { FormField } from '#/components/ui/form-field'
@@ -33,6 +34,8 @@ export function GeneralTab({
 }) {
   const navigate = useNavigate()
   const formId = React.useId()
+  // A development environment's URL is its local preview address (Decision 10).
+  const dev = isDevSite(site)
   const [name, setName] = React.useState(site.name)
   const [url, setUrl] = React.useState(site.productionUrl)
   const [errors, setErrors] = React.useState<{ name?: string; url?: string }>(
@@ -94,9 +97,15 @@ export function GeneralTab({
             />
           </FormField>
           <FormField
-            label={m.sites_production_url()}
+            label={dev ? m.dev_env_preview_url() : m.sites_production_url()}
             htmlFor="settings-production-url"
-            hint={errors.url ? undefined : m.settings_production_url_hint()}
+            hint={
+              errors.url
+                ? undefined
+                : dev
+                  ? m.dev_env_preview_url_hint()
+                  : m.settings_production_url_hint()
+            }
             error={errors.url}
           >
             <Input
