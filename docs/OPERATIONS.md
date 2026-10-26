@@ -285,6 +285,16 @@ are never read as "missing". Startup retries them until the deadline and then
 exits, and nothing is created. Readiness checks the bucket with a read-only
 `HeadBucket` and never creates one.
 
+**Object scope.** Optional `S3_PREFIX` confines all object operations to the
+normalized prefix plus `/`, including branding, cleanup and authoring scripts.
+Unset or exactly empty uses root; invalid nonempty values fail before storage
+operations with no fallback. Every writer must use the same prefix. `db:reset`
+empties the entire subtree, including manually placed objects, or the whole
+bucket in root mode. Bucket checks above do not probe prefix permissions, and
+configuration does not restrict credential capabilities. See
+[configuration](CONFIGURATION.md#storage-prefix) for validation and manual
+migration/rollback.
+
 ## Redis
 
 Production requires `REDIS_URL`. The CMS refuses to start without it, because

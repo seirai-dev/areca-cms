@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ArecaClient } from './client.js'
@@ -9,7 +9,9 @@ import {
   formatManifestDiff,
   languageRisks,
   manifestPull,
+  removalsOf,
 } from './manifest-pull.js'
+import { generateConfigSource, isGeneratedConfigSource } from './generate-config.js'
 import type { SiteContentConfig, SiteManifest } from './types.js'
 
 const confirmMock = vi.hoisted(() => vi.fn())
@@ -61,6 +63,23 @@ function makeDir(): string {
 /** Writes a plain-JS config module so it can be imported without tsx. */
 function writeConfig(dir: string, config: SiteContentConfig, name = 'areca.config.mjs'): string {
   writeFileSync(join(dir, name), `export default ${JSON.stringify(config, null, 2)}\n`, 'utf8')
+  return name
+}
+
+/**
+ * Writes a config exactly as `areca manifest pull` renders it, with the generated
+ * header. A stub `@areca-cms/site-sdk` in the temp dir lets the file load.
+ */
+function writeGenerated(dir: string, config: SiteContentConfig, name = 'areca.config.mjs'): string {
+  const pkgDir = join(dir, 'node_modules', '@areca-cms', 'site-sdk')
+  mkdirSync(pkgDir, { recursive: true })
+  writeFileSync(
+    join(pkgDir, 'package.json'),
+    JSON.stringify({ name: '@areca-cms/site-sdk', type: 'module', main: 'index.js' }),
+    'utf8',
+  )
+  writeFileSync(join(pkgDir, 'index.js'), 'export const defineSiteContent = (config) => config\n', 'utf8')
+  writeFileSync(join(dir, name), generateConfigSource(config), 'utf8')
   return name
 }
 
@@ -536,3 +555,340 @@ describe('manifestPull: language changes', () => {
   })
 })
 
+
+describe('diffManifests: removed fields', () => {
+  it('reports a field the CMS dropped from a collection that exists on both sides', () => {
+    const local: SiteContentConfig = {
+      siteKey: 'demo',
+      collections: {
+        articles: {
+          route: '/blog/$slug',
+          label: 'Articles',
+          fields: [
+            { key: 'slug', label: 'Slug', type: 'slug', required: true },
+            { key: 'title', label: 'Title', type: 'text', required: true },
+            { key: 'subtitle', label: 'Subtitle', type: 'text' },
+          ],
+        },
+      },
+    }
+    const diff = diffManifests(local, remote)
+    expect(diff.removedFields).toEqual([{ owner: 'articles', key: 'subtitle', site: false }])
+    expect(removalsOf(diff)).toEqual(['remove field subtitle from articles'])
+    expect(formatManifestDiff(diff)).toContain('  - field subtitle in articles')
+  })
+
+  it('reports a field the CMS dropped from a site content section', () => {
+    const local: SiteContentConfig = {
+      siteKey: 'demo',
+      globals: {
+        companyInfo: {
+          label: 'Company info',
+          fields: [
+            { key: 'name', label: 'Name', type: 'text' },
+            { key: 'phone', label: 'Phone', type: 'text' },
+          ],
+        },
+      },
+      collections: {},
+    }
+    const remoteWithGlobal: SiteManifest = {
+      collections: {},
+      globals: {
+        companyInfo: { label: 'Company info', fields: [{ key: 'name', label: 'Name', type: 'text' }] },
+      },
+    }
+    const diff = diffManifests(local, remoteWithGlobal)
+    expect(diff.removedFields).toEqual([{ owner: 'companyInfo', key: 'phone', site: true }])
+    expect(removalsOf(diff)).toEqual(['remove field phone from companyInfo'])
+  })
+
+  it('leaves removedFields out when no field was dropped', () => {
+    expect(diffManifests({ siteKey: 'demo', collections: {} }, remote)).not.toHaveProperty(
+      'removedFields',
+    )
+  })
+})
+
+describe('manifestPull: generated config', () => {
+  const localSame: SiteContentConfig = {
+    siteKey: 'acme-site',
+    collections: remote.collections,
+  }
+
+  it('recognises the header that the generator writes', () => {
+    expect(isGeneratedConfigSource(generateConfigSource(localSame))).toBe(true)
+    expect(isGeneratedConfigSource("import { defineSiteContent } from '@areca-cms/site-sdk'\n")).toBe(
+      false,
+    )
+  })
+
+  it('leaves the file alone and reports unchanged when it already matches the CMS', async () => {
+    const dir = makeDir()
+    try {
+      const name = writeGenerated(dir, localSame)
+      const before = readFileSync(join(dir, name), 'utf8')
+      const result = await manifestPull({
+        cwd: dir,
+        configPath: name,
+        client: makeClient(),
+        interactive: false,
+      })
+      expect(result.unchanged).toBe(true)
+      expect(result.diff).toEqual({ added: [], changed: [], removed: [] })
+      expect(readFileSync(join(dir, name), 'utf8')).toBe(before)
+      expect(confirmMock).not.toHaveBeenCalled()
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('does not report unchanged for a file that was not generated, even with the same collections', async () => {
+    const dir = makeDir()
+    try {
+      const name = writeConfig(dir, localSame)
+      const result = await manifestPull({
+        cwd: dir,
+        configPath: name,
+        yes: true,
+        client: makeClient(),
+        interactive: false,
+      })
+      expect(result.unchanged).toBe(false)
+      expect(readFileSync(join(dir, name), 'utf8').startsWith('// Generated by')).toBe(true)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('writes additions without prompting and without needing --yes', async () => {
+    const dir = makeDir()
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    try {
+      const name = writeGenerated(dir, { siteKey: 'acme-site', collections: { articles: remote.collections.articles! } })
+      const result = await manifestPull({
+        cwd: dir,
+        configPath: name,
+        client: makeClient(),
+        interactive: false,
+      })
+      expect(result.unchanged).toBe(false)
+      expect(result.diff.added).toEqual(['pages'])
+      expect(confirmMock).not.toHaveBeenCalled()
+      expect(readFileSync(join(dir, name), 'utf8')).toContain('pages: {')
+      const printed = log.mock.calls.flat().map(String).join('\n')
+      expect(printed).toContain('+ pages')
+    } finally {
+      log.mockRestore()
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('writes changed labels and types without prompting', async () => {
+    const dir = makeDir()
+    try {
+      const name = writeGenerated(dir, {
+        siteKey: 'acme-site',
+        collections: { pages: { route: '/$slug', label: 'Old label', fields: [{ key: 'slug', label: 'Slug', type: 'slug', required: true }] } },
+      })
+      const result = await manifestPull({
+        cwd: dir,
+        configPath: name,
+        client: makeClient(),
+        interactive: false,
+      })
+      expect(result.diff.changed).toEqual(['pages'])
+      expect(confirmMock).not.toHaveBeenCalled()
+      expect(readFileSync(join(dir, name), 'utf8')).toContain("label: 'Pages'")
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses a dropped field without --yes when not a TTY, and names it', async () => {
+    const dir = makeDir()
+    try {
+      const name = writeGenerated(dir, localSame)
+      const before = readFileSync(join(dir, name), 'utf8')
+      const trimmed: SiteManifest = {
+        collections: {
+          ...remote.collections,
+          articles: {
+            ...remote.collections.articles!,
+            fields: [{ key: 'slug', label: 'Slug', type: 'slug', required: true }],
+          },
+        },
+      }
+      await expect(
+        manifestPull({ cwd: dir, configPath: name, client: makeClient(trimmed), interactive: false }),
+      ).rejects.toThrow(/remove field title from articles.*--yes/i)
+      expect(readFileSync(join(dir, name), 'utf8')).toBe(before)
+      expect(confirmMock).not.toHaveBeenCalled()
+
+      await manifestPull({
+        cwd: dir,
+        configPath: name,
+        yes: true,
+        client: makeClient(trimmed),
+        interactive: false,
+      })
+      expect(readFileSync(join(dir, name), 'utf8')).not.toContain("key: 'title'")
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses a removed collection without --yes when not a TTY, and writes it with --yes', async () => {
+    const dir = makeDir()
+    try {
+      const name = writeGenerated(dir, {
+        siteKey: 'acme-site',
+        collections: { ...remote.collections, legacy: { route: '/legacy/$slug', fields: [] } },
+      })
+      const before = readFileSync(join(dir, name), 'utf8')
+      await expect(
+        manifestPull({ cwd: dir, configPath: name, client: makeClient(), interactive: false }),
+      ).rejects.toThrow(/remove collection legacy.*--yes/i)
+      expect(readFileSync(join(dir, name), 'utf8')).toBe(before)
+
+      const result = await manifestPull({
+        cwd: dir,
+        configPath: name,
+        yes: true,
+        client: makeClient(),
+        interactive: false,
+      })
+      expect(result.diff.removed).toEqual(['legacy'])
+      expect(readFileSync(join(dir, name), 'utf8')).not.toContain('legacy')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses a removed site content section without --yes when not a TTY, and writes it with --yes', async () => {
+    const dir = makeDir()
+    try {
+      const withGlobal: SiteContentConfig = {
+        siteKey: 'acme-site',
+        collections: remote.collections,
+        globals: { companyInfo: { label: 'Company info', fields: [{ key: 'name', label: 'Name', type: 'text' }] } },
+      }
+      const name = writeGenerated(dir, withGlobal)
+      await expect(
+        manifestPull({ cwd: dir, configPath: name, client: makeClient(), interactive: false }),
+      ).rejects.toThrow(/remove site content section companyInfo.*--yes/i)
+
+      await manifestPull({ cwd: dir, configPath: name, yes: true, client: makeClient(), interactive: false })
+      expect(readFileSync(join(dir, name), 'utf8')).not.toContain('companyInfo')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('asks on a TTY before removing a field, and writes only when confirmed', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const trimmed: SiteManifest = {
+      collections: {
+        ...remote.collections,
+        pages: { route: '/$slug', label: 'Pages', fields: [] },
+      },
+    }
+    const dir = makeDir()
+    try {
+      const name = writeGenerated(dir, localSame)
+      confirmMock.mockResolvedValueOnce(false)
+      await expect(
+        manifestPull({ cwd: dir, configPath: name, client: makeClient(trimmed), interactive: true }),
+      ).rejects.toBeInstanceOf(ManifestPullCancelledError)
+      expect(confirmMock.mock.calls[0]?.[0]).toMatchObject({
+        message: expect.stringMatching(/remove field slug from pages/i),
+      })
+      expect(readFileSync(join(dir, name), 'utf8')).toContain("key: 'slug'")
+    } finally {
+      log.mockRestore()
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('asks before removing a language from a generated config', async () => {
+    const dir = makeDir()
+    try {
+      const name = writeGenerated(dir, { ...localSame, languages: { main: 'nl', all: ['nl', 'en'] } })
+      await expect(
+        manifestPull({
+          cwd: dir,
+          configPath: name,
+          client: makeClient({ ...remote, languages: { main: 'nl', all: ['nl'] } }),
+          interactive: false,
+        }),
+      ).rejects.toThrow(/remove language en.*--yes/i)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('rewrites a generated config with only formatting edits, without prompting', async () => {
+    const dir = makeDir()
+    try {
+      const name = writeGenerated(dir, localSame)
+      const edited = readFileSync(join(dir, name), 'utf8').replace(
+        'export default',
+        '// my note\nexport default',
+      )
+      writeFileSync(join(dir, name), edited, 'utf8')
+      const result = await manifestPull({
+        cwd: dir,
+        configPath: name,
+        client: makeClient(),
+        interactive: false,
+      })
+      expect(result.unchanged).toBe(false)
+      expect(result.diff).toEqual({ added: [], changed: [], removed: [] })
+      expect(confirmMock).not.toHaveBeenCalled()
+      expect(readFileSync(join(dir, name), 'utf8')).not.toContain('// my note')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('still asks before overwriting a hand-written config with collections, even with no schema change', async () => {
+    const dir = makeDir()
+    try {
+      const name = writeConfig(dir, localSame)
+      await expect(
+        manifestPull({ cwd: dir, configPath: name, client: makeClient(), interactive: false }),
+      ).rejects.toThrow(/already defines 2 collection\(s\).*--yes/)
+
+      const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+      confirmMock.mockResolvedValueOnce(true)
+      try {
+        await manifestPull({ cwd: dir, configPath: name, client: makeClient(), interactive: true })
+      } finally {
+        log.mockRestore()
+      }
+      expect(confirmMock.mock.calls[0]?.[0]).toMatchObject({
+        message: 'Overwrite areca.config.mjs?',
+      })
+      expect(readFileSync(join(dir, name), 'utf8')).toMatch(/^\/\/ Generated by/)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('writes a config with no collections without prompting (areca init starter)', async () => {
+    const dir = makeDir()
+    try {
+      const name = writeConfig(dir, { siteKey: 'acme-site', collections: {} })
+      const result = await manifestPull({
+        cwd: dir,
+        configPath: name,
+        client: makeClient(),
+        interactive: false,
+      })
+      expect(result.unchanged).toBe(false)
+      expect(confirmMock).not.toHaveBeenCalled()
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})

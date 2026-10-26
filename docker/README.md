@@ -46,6 +46,20 @@ docker compose down
 Named volumes retain database, Redis, and uploaded media across restarts and
 `down`. `docker compose down --volumes` deletes all demo data.
 
+## Storage prefix
+
+Compose passes optional `S3_PREFIX` from `.env`. Leave it unset or exactly empty
+for bucket-root behavior, or choose an installation path such as `areca` or
+`sites/production` for a shared private bucket. `/areca/` normalizes to `areca`;
+invalid nonempty paths fail without root fallback. All object operations stay
+under that prefix plus `/`; reset removes the entire subtree, including manually
+placed files, while root mode empties the entire bucket. Keep the same prefix on
+CMS and maintenance scripts. Database/bundle keys and public URLs stay unchanged.
+The prefix does not restrict credentials or change bucket-level readiness checks.
+See [configuration](../docs/CONFIGURATION.md#storage-prefix) for validation and
+manual migration/rollback; changing the variable does not move existing files.
+Physical RustFS recovery still captures the whole store; see [recovery](RECOVERY.md).
+
 ## Build locally
 
 From the repository root:

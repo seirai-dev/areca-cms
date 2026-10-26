@@ -7,7 +7,7 @@ import { AGENTS, mcpServerName, validateConnectorUrl } from './agents.js'
 import { run } from './cli.js'
 import { exportZips, installSkills, removeSkills, resolveTargets } from './install.js'
 import { configureMcp } from './mcp-config.js'
-import { loadSkills } from './skills.js'
+import { loadSkills, skillsRoot } from './skills.js'
 import { createZip } from './zip.js'
 
 const URL_ = 'https://cms.example.com/api/mcp/acme-site'
@@ -29,6 +29,53 @@ function unzip(buffer: Buffer): Record<string, string> {
   }
   return out
 }
+
+describe('skillsRoot', () => {
+  const writeSkill = (dir: string, body = 'x') => {
+    mkdirSync(join(dir, 'areca-sdk'), { recursive: true })
+    writeFileSync(join(dir, 'areca-sdk/SKILL.md'), body)
+  }
+
+  it('prefers the repo root skills/ over the packaged copy inside the monorepo', () => {
+    const repo = tmp()
+    writeFileSync(join(repo, 'pnpm-workspace.yaml'), 'packages:\n  - packages/*\n')
+    writeSkill(join(repo, 'skills'), 'fresh')
+    const pkg = join(repo, 'packages/skills')
+    writeSkill(join(pkg, 'skills'), 'stale')
+    mkdirSync(join(pkg, 'src'), { recursive: true })
+
+    const root = skillsRoot(join(pkg, 'src'))
+    expect(root).toBe(join(repo, 'skills'))
+    expect(readFileSync(join(root, 'areca-sdk/SKILL.md'), 'utf8')).toBe('fresh')
+  })
+
+  it('uses the packaged copy when installed from npm (no repo root)', () => {
+    const nodeModules = tmp()
+    const pkg = join(nodeModules, '@areca-cms/skills')
+    writeSkill(join(pkg, 'skills'), 'packaged')
+    mkdirSync(join(pkg, 'dist'), { recursive: true })
+
+    const root = skillsRoot(join(pkg, 'dist'))
+    expect(root).toBe(join(pkg, 'skills'))
+    expect(loadSkills(root).map((skill) => skill.name)).toEqual(['areca-sdk'])
+  })
+
+  it('ignores a skills/ folder next to the package when there is no workspace marker', () => {
+    const parent = tmp()
+    writeSkill(join(parent, 'skills'), 'not-the-repo')
+    const pkg = join(parent, 'pkg')
+    writeSkill(join(pkg, 'skills'), 'packaged')
+    mkdirSync(join(pkg, 'dist'), { recursive: true })
+
+    expect(skillsRoot(join(pkg, 'dist'))).toBe(join(pkg, 'skills'))
+  })
+
+  it('throws when no bundled skills exist', () => {
+    const empty = tmp()
+    mkdirSync(join(empty, 'a/b/c'), { recursive: true })
+    expect(() => skillsRoot(join(empty, 'a/b/c'))).toThrow('Bundled skills not found')
+  })
+})
 
 describe('agents', () => {
   it('has unique ids and a skills folder for every coding agent', () => {

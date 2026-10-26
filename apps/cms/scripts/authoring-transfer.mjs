@@ -3,6 +3,7 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { createHash, randomBytes } from 'node:crypto'
 import { Pool } from 'pg'
+import { createS3Namespace } from '../src/adapters/storage/s3-namespace.mjs'
 import {
   S3Client,
   GetObjectCommand,
@@ -151,6 +152,7 @@ export function rebaseAssetUrls(value, keys, appUrl) {
 }
 
 async function main() {
+  const namespace = createS3Namespace(process.env.S3_PREFIX)
   const [command, value, file] = process.argv.slice(2)
   if (!['export', 'import'].includes(command) || !value || !file)
     throw new Error(
@@ -226,7 +228,10 @@ async function main() {
       const objects = Object.create(null)
       for (const row of rows.asset) {
         const response = await s3.send(
-          new GetObjectCommand({ Bucket: bucket, Key: row.storage_key }),
+          new GetObjectCommand({
+            Bucket: bucket,
+            Key: namespace.objectKey(row.storage_key),
+          }),
         )
         const bytes = Buffer.from(await response.Body.transformToByteArray())
         objects[row.storage_key] = {
@@ -289,7 +294,10 @@ async function main() {
       for (const row of bundle.rows.asset) {
         try {
           await s3.send(
-            new HeadObjectCommand({ Bucket: bucket, Key: row.storage_key }),
+            new HeadObjectCommand({
+              Bucket: bucket,
+              Key: namespace.objectKey(row.storage_key),
+            }),
           )
           throw new Error(`Object already exists: ${row.storage_key}`)
         } catch (error) {
@@ -401,7 +409,7 @@ async function main() {
         await s3.send(
           new PutObjectCommand({
             Bucket: bucket,
-            Key: row.storage_key,
+            Key: namespace.objectKey(row.storage_key),
             Body: Buffer.from(object.base64, 'base64'),
             ContentType: object.contentType,
           }),
@@ -421,7 +429,12 @@ async function main() {
       )
     for (const key of commitAttempted ? [] : uploaded) {
       try {
-        await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }))
+        await s3.send(
+          new DeleteObjectCommand({
+            Bucket: bucket,
+            Key: namespace.objectKey(key),
+          }),
+        )
       } catch (cleanup) {
         console.error(`Cleanup required for ${key}: ${cleanup.message}`)
       }

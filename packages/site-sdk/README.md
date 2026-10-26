@@ -82,7 +82,7 @@ the site token or call the CMS from a public browser bundle.
 | `areca init`                                          | Create frontend config and environment-file scaffolding.                                                |
 | `areca pull [--out <directory>] [--publication <id>] [--config <path>] [--types <path>]` | Download the current published snapshot and its media, and write `areca.gen.ts`; default output is `src/generated/content`. |
 | `areca manifest push [config] [--confirm-drop <collection.field>]... [--yes]` | Send the local config to the CMS. Default config is `./areca.config.ts`. Requires `ARECA_SCHEMA_TOKEN`. Removing a field that holds content needs confirmation. |
-| `areca manifest pull [--config <path>] [--yes]`       | Replace the local config with enabled CMS collections. Removing a language or changing the main language needs confirmation. |
+| `areca manifest pull [--config <path>] [--yes]`       | Replace the local config with enabled CMS collections. Removals (collections, sections, fields, languages, main language) need confirmation. |
 | `areca sync-manifest [config]`                        | Deprecated alias for `areca manifest push`.                                                             |
 | `areca run -- <command>`                              | Run a child command with SDK-loaded environment files.                                                  |
 
@@ -95,9 +95,9 @@ whether to download media into the repo (default yes) and where (default
 before replacing one.
 
 `manifest pull` replaces the entire config file, including comments and helper
-code. It prints a collection diff and prompts before overwriting a config that
-already defines collections. `--yes` skips the prompt; in non-interactive use,
-it is required when collections already exist. The local `siteKey` and `assets`
+code. It prints a diff. It asks only when something would be removed, and in
+non-interactive use `--yes` is required then. Additions and changes are written
+without a prompt, and a file that already matches the CMS is left alone. The local `siteKey` and `assets`
 settings are kept. If there is no config, set `ARECA_SITE_KEY` or run
 `areca init` first.
 

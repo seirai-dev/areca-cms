@@ -1,10 +1,45 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   recoveryEnvironment,
   portableConfiguration,
   verifyContainerCredentials,
 } from "./recovery-config.mjs";
+test("recovery preserves the configured S3 namespace and ignores inherited prefixes", () => {
+  const composeSource = readFileSync(
+    new URL("./compose.yml", import.meta.url),
+    "utf8",
+  );
+  assert.match(composeSource, /S3_PREFIX: \$\{S3_PREFIX:-\}/);
+  assert.deepEqual(
+    recoveryEnvironment(
+      { PATH: "/bin", S3_PREFIX: "unrelated/instance" },
+      composeSource,
+      "",
+    ),
+    { PATH: "/bin" },
+  );
+  const configuration = {
+    services: { cms: { environment: { S3_PREFIX: "tenant/prod" } } },
+  };
+  assert.equal(
+    portableConfiguration(configuration).services.cms.environment.S3_PREFIX,
+    "tenant/prod",
+  );
+  verifyContainerCredentials("cms", configuration.services.cms.environment, [
+    "S3_PREFIX=tenant/prod",
+  ]);
+  assert.throws(
+    () =>
+      verifyContainerCredentials(
+        "cms",
+        configuration.services.cms.environment,
+        ["S3_PREFIX=tenant/other"],
+      ),
+    /S3_PREFIX/,
+  );
+});
 test("environment file wins over unrelated sourced integration credentials", () => {
   assert.deepEqual(
     recoveryEnvironment(

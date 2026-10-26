@@ -2,6 +2,8 @@ import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { SiteContentConfig } from './types.js'
 
+let loads = 0
+
 /** Imports an areca.config.ts (or .js) module and returns its default export. */
 export async function loadConfig(
   configPath: string,
@@ -11,7 +13,11 @@ export async function loadConfig(
   let mod: { default?: SiteContentConfig }
 
   try {
-    mod = (await import(pathToFileURL(abs).href)) as { default?: SiteContentConfig }
+    // A fresh query string per load: ESM caches by URL, and a second load in the
+    // same process (a test, a watcher) must see the file as it is now.
+    mod = (await import(`${pathToFileURL(abs).href}?load=${++loads}`)) as {
+      default?: SiteContentConfig
+    }
   } catch (error) {
     if (abs.endsWith('.ts') || abs.endsWith('.mts') || abs.endsWith('.tsx')) {
       const detail = error instanceof Error ? error.message : String(error)

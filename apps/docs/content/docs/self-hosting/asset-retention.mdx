@@ -46,7 +46,7 @@ cd apps/cms
 node --env-file=/secure/areca-cms.env scripts/cleanup-assets.mjs
 ```
 
-The environment file needs `DATABASE_URL`, `S3_BUCKET`, `S3_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` and `S3_FORCE_PATH_STYLE`, with the same values the CMS uses. Keep the file out of version control and restrict its permissions.
+The environment file needs `DATABASE_URL`, `S3_BUCKET`, `S3_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` and `S3_FORCE_PATH_STYLE`, plus `S3_PREFIX` when configured, with the same values the CMS uses. Cleanup applies the prefix to queued logical keys and never falls back to root. An invalid nonempty prefix fails before storage operations. Keep the file out of version control and restrict its permissions.
 
 The command prints a summary such as `Storage cleanup: 12 removed, 0 pending retries`. It exits with an error code when any removal fails, so a scheduler can alert on it.
 
@@ -79,6 +79,8 @@ Areca does not schedule the cleanup for you. Run it on a timer from a host that 
 ```
 
 The Compose file does not publish the S3 API port, so the host may not be able to reach the bucket at the address in the CMS environment. In that case, run the command from a place on the Compose network that can reach it.
+
+`db:reset` is different from queued cleanup: it empties the entire configured prefix subtree, including manually placed objects, or the entire bucket when `S3_PREFIX` is unset or exactly empty. Neighboring prefixes are excluded. See [storage configuration](/docs/self-hosting/storage-and-email#use-a-shared-bucket).
 
 ## Delete a whole client
 

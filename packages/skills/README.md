@@ -6,6 +6,7 @@ Agent skills that teach AI coding agents and chat apps how to work with Areca CM
 | --- | --- |
 | `areca-sdk` | Connecting a website with `@areca-cms/site-sdk`: tokens and env vars, `areca.config.ts`, the `areca` CLI, reading content, rich text, SEO, preview routes, Go-live builds |
 | `areca-mcp` | Connecting an AI to a site's MCP server and using it: OAuth and personal keys, roles, the draft/ready/live workflow, field formats, SEO, images, every tool |
+| `areca-quickstart` | Setting up Areca in a new website project: checks the project, interviews you about the content model, languages and build, wires the SDK, and makes a first release. Run it as `/areca-quickstart` |
 
 The skills are plain `SKILL.md` folders in the open [Agent Skills](https://agentskills.io) format. They have no scripts and no dependencies, so they work in any project.
 
@@ -45,7 +46,7 @@ MCP config is written to the project file for Claude Code (`.mcp.json`), Cursor,
 ## Other ways to install
 
 - **Claude Code plugin:** `/plugin marketplace add ekozf/areca-cms`, then `/plugin install areca@areca-cms`.
-- **skills CLI:** `npx skills add ekozf/areca-cms --skill areca-sdk --skill areca-mcp`.
+- **skills CLI:** `npx skills add ekozf/areca-cms --skill areca-sdk --skill areca-mcp --skill areca-quickstart`.
 - **Manually:** copy `skills/areca-*` from the repository into your agent's skills folder.
 
 ## Development

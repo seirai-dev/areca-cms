@@ -97,7 +97,7 @@ Invitations expire after seven days. To invite someone, see [people and invitati
 
 Areca's own two-factor authentication (TOTP) is a challenge after email and password sign-in. Sign-ins through GitHub, Google, Discord or Entra ID do not show that prompt. Areca relies on the identity provider to have done its own multi-factor check.
 
-Agency admins still need two-factor authentication turned on in their Areca account, whichever method they use to sign in. This is controlled by `ADMIN_MFA_REQUIRED`, which defaults to `true`. Until an admin has enrolled, admin functions are blocked. Sensitive actions also ask for a fresh authenticator code.
+Agency admins still need two-factor authentication turned on in their Areca account, whichever method they use to sign in. This is controlled by `ADMIN_MFA_REQUIRED`, which defaults to `true`. Until an admin has enrolled and verified a local TOTP or backup code in the current session, admin functions are blocked. Sensitive actions also ask for a fresh authenticator code when that local proof is older than 10 minutes.
 
 Read [two-factor authentication and step-up](/docs/security/two-factor-and-step-up) for the enrollment steps and the step-up rules.
 

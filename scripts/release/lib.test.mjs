@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -94,7 +94,8 @@ test('writes every skills version file the drift test checks', () => {
     for (const file of changed.filter((file) => file.endsWith('SKILL.md'))) {
       assert.match(readFileSync(join(tmp, file), 'utf8'), /^ {2}version: "9\.8\.7"$/m)
     }
-    assert.equal(changed.filter((file) => file.endsWith('SKILL.md')).length, 2)
+    const skillCount = readdirSync(join(repo, 'skills')).filter((name) => existsSync(join(repo, 'skills', name, 'SKILL.md'))).length
+    assert.equal(changed.filter((file) => file.endsWith('SKILL.md')).length, skillCount)
     assert.match(readFileSync(join(tmp, 'packages/skills/CHANGELOG.md'), 'utf8'), /## 9\.8\.7/)
   } finally {
     rmSync(tmp, { recursive: true, force: true })

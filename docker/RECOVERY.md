@@ -2,6 +2,13 @@
 
 The recovery unit is PostgreSQL + the entire S3 object store + configuration and encryption keys. Retain every revision/publication and its assets. The repository does not schedule backups for you: define an operator-owned backup cadence and retention period, back up before migrations, copy archives encrypted to a separate host, limit access, and regularly exercise restoration. The Compose backup command stops all services in the target project while it captures volumes, so plan for that outage. For managed services, coordinate database and object-store snapshots to one no-writes window. Archives and authoring bundles contain credentials, personal data and unpublished content: never commit them or place them in public storage.
 
+`S3_PREFIX` scopes CMS and maintenance object operations, but the bundled
+RustFS physical-volume backup captures the **whole store**, including other
+prefixes and buckets. It is not filtered by the installation prefix. Preserve
+the prefix configuration with the database. External object storage, including
+Hetzner, needs operator-managed backups and restore coordination; the local
+RustFS volume archive does not capture it.
+
 ## Coordinated full instance backup
 
 Run from the repository root against the intended Compose project, using its original environment file:
@@ -30,6 +37,15 @@ From `apps/cms`, with dependencies installed and all CMS/worker writes stopped:
 ARECA_WRITES_STOPPED=1 node --env-file=.env.local scripts/authoring-transfer.mjs export ORGANIZATION_ID /secure/organization.json
 ARECA_WRITES_STOPPED=1 node --env-file=.env.local scripts/authoring-transfer.mjs import --offline /secure/organization.json
 ```
+
+Use the source installation's `S3_PREFIX` for export and the destination's for
+import, and the CMS prefix for standalone cleanup below. Export GET, import
+collision HEAD, PUT and compensation DELETE all use their configured subtree;
+there is no root fallback. Bundles retain logical relative keys, so importing
+between different prefixes needs no bundle key rewrite. Invalid nonempty prefix
+configuration fails before storage operations. For moving an existing
+installation and rollback after new writes, see
+[storage configuration](../docs/CONFIGURATION.md#storage-prefix).
 
 Version 1 includes the organization, sites and manifests, collections, draft/approved/scheduled data, complete entry revisions, asset metadata **and bytes with SHA-256 checksums**, membership roles, invitations, publications, build jobs, audit history, retained deleted-content archives and encrypted deployment credentials with their encryption key. User references are captured by email; authentication accounts, passwords and other organizations are deliberately outside the organization boundary. Provision matching destination users first. Import maps historical actors and permissions to those users, rejects missing/ambiguous identities, validates bundle/version/database columns/organization relationships/asset integrity, and relies on database constraints to reject ID/slug conflicts. Use the exporter database schema version; migrate destination before importing.
 

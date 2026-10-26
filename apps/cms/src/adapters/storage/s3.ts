@@ -5,6 +5,7 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3'
 import { abortAfter, explainAbort, idleGuard } from './timeouts'
+import { createS3Namespace } from './s3-namespace.mjs'
 import type { AssetStorageAdapter } from './types'
 
 /** Longest wait for S3 to send a GET's headers, and for each body chunk after. */
@@ -19,9 +20,11 @@ export function createS3Storage(opts: {
   accessKey: string
   secretKey: string
   forcePathStyle: boolean
+  prefix?: string
   /** Overrides the GET wait limit; tests use a short one. */
   getTimeoutMs?: number
 }): AssetStorageAdapter {
+  const namespace = createS3Namespace(opts.prefix)
   const getTimeoutMs = opts.getTimeoutMs ?? GET_TIMEOUT_MS
   const client = new S3Client({
     endpoint: opts.endpoint,
@@ -40,7 +43,7 @@ export function createS3Storage(opts: {
       await client.send(
         new PutObjectCommand({
           Bucket: opts.bucket,
-          Key: key,
+          Key: namespace.objectKey(key),
           Body: body,
           ContentType: contentType,
         }),
@@ -49,6 +52,7 @@ export function createS3Storage(opts: {
     },
 
     async get(key, call) {
+      const physicalKey = namespace.objectKey(key)
       // One controller covers the request and the body. Aborting it, by the
       // caller, a timeout or a cancelled stream, closes the connection.
       const controller = new AbortController()
@@ -65,7 +69,7 @@ export function createS3Storage(opts: {
       let response
       try {
         response = await client.send(
-          new GetObjectCommand({ Bucket: opts.bucket, Key: key }),
+          new GetObjectCommand({ Bucket: opts.bucket, Key: physicalKey }),
           { abortSignal: controller.signal },
         )
       } catch (err) {
@@ -95,7 +99,10 @@ export function createS3Storage(opts: {
     async delete(key, call) {
       const timeout = AbortSignal.timeout(DELETE_TIMEOUT_MS)
       await client.send(
-        new DeleteObjectCommand({ Bucket: opts.bucket, Key: key }),
+        new DeleteObjectCommand({
+          Bucket: opts.bucket,
+          Key: namespace.objectKey(key),
+        }),
         {
           abortSignal: call?.signal
             ? AbortSignal.any([timeout, call.signal])

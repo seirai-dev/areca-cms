@@ -3,8 +3,13 @@ import { config } from 'dotenv'
 import { z } from '#/lib/zod'
 
 import { productionSecretProblems } from '#/lib/secret-placeholders'
+import { createS3Namespace } from './adapters/storage/s3-namespace.mjs'
 
 config({ path: ['.env.local', '.env'] })
+
+// This safety check also applies when general env validation is skipped (builds
+// and operator scripts). Invalid nonempty configuration must never mean root.
+createS3Namespace(process.env.S3_PREFIX)
 
 const skipValidation =
   process.env.SKIP_ENV_VALIDATION === 'true' ||
@@ -63,6 +68,7 @@ export const env = createEnv({
     S3_ENDPOINT: z.string().url(),
     S3_REGION: z.string().min(1),
     S3_BUCKET: z.string().min(1),
+    S3_PREFIX: z.string().optional(),
     S3_ACCESS_KEY: z.string().min(1),
     S3_SECRET_KEY: z.string().min(1),
     S3_FORCE_PATH_STYLE: z.string().optional(),

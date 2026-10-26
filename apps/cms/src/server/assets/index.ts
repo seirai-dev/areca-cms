@@ -2,6 +2,7 @@ import { and, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm'
 import type { AnyColumn, InferSelectModel, SQL } from 'drizzle-orm'
 
 import { getStorage } from '#/adapters'
+import { isValidLogicalKey } from '#/adapters/storage/s3-namespace.mjs'
 import { db } from '#/db'
 import {
   asset,
@@ -488,6 +489,9 @@ function realMediaType(value: string | undefined): string | undefined {
 }
 
 export async function streamAssetFile(storageKey: string): Promise<Response> {
+  if (!isValidLogicalKey(storageKey)) {
+    return new Response(m.server_not_found(), { status: 404 })
+  }
   const object = await getStorage().get(storageKey)
   if (!object) {
     return new Response(m.server_not_found(), { status: 404 })

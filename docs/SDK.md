@@ -52,6 +52,17 @@ that compatible version rather than the latest major:
 pnpm add @tanstack/markdown@1.0.0
 ```
 
+## Set up with an AI agent
+
+An AI coding agent can set up the SDK for you. Install the `areca-quickstart`
+skill with `npx @areca-cms/skills`, then run `/areca-quickstart` in the website
+project. The agent asks a few questions, creates the content model, wires the
+SDK and makes a first release. It asks before it goes live. See
+[`packages/skills`](../packages/skills/README.md) for install options and
+the public guide, "Quickstart with an AI agent".
+
+The steps below do the same setup by hand.
+
 ## Initialize your website
 
 Run the interactive initializer from the website's project root:
@@ -184,8 +195,10 @@ pnpm exec areca manifest pull --config ./areca.config.ts
 ```
 
 This replaces the full config file, including comments and helper functions.
-If the file already defines collections, the CLI shows an added/changed/removed
-summary and asks before replacing it. Use `--yes` for automation. The existing
+The CLI shows an added/changed/removed summary. It asks before anything is
+removed (a collection, site content section, field, language, or the main
+language) and writes additions and changes without asking. If the file already
+matches the CMS, it writes nothing. Use `--yes` for automation. The existing
 `siteKey` is preserved; if there is no config, set `ARECA_SITE_KEY` or run init
 first.
 
