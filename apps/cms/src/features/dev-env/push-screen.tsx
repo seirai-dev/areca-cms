@@ -111,8 +111,9 @@ export function PushScreen({
     }))
 
   const one = pluralForm(selection.push) === 'one'
-  const pushLabel =
-    selection.skipped === 0
+  const pushLabel = !plan.data
+    ? m.dev_env_push_button()
+    : selection.skipped === 0
       ? one
         ? m.dev_push_button_plain_one()
         : m.dev_push_button_plain_other({ count: selection.push })
