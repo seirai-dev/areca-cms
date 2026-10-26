@@ -110,13 +110,18 @@ export function PushScreen({
       applied: withId(prev.applied, id, apply),
     }))
 
+  const one = pluralForm(selection.push) === 'one'
   const pushLabel =
-    pluralForm(selection.push) === 'one'
-      ? m.dev_push_button_one({ skipped: selection.skipped })
-      : m.dev_push_button_other({
-          count: selection.push,
-          skipped: selection.skipped,
-        })
+    selection.skipped === 0
+      ? one
+        ? m.dev_push_button_plain_one()
+        : m.dev_push_button_plain_other({ count: selection.push })
+      : one
+        ? m.dev_push_button_one({ skipped: selection.skipped })
+        : m.dev_push_button_other({
+            count: selection.push,
+            skipped: selection.skipped,
+          })
 
   return (
     <div data-testid="push-screen" className="grid gap-6">

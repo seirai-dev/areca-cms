@@ -2510,6 +2510,8 @@
   "dev_push_cancel": "Cancel",
   "dev_push_button_one": "Push 1 change · {skipped} skipped",
   "dev_push_button_other": "Push {count} changes · {skipped} skipped",
+  "dev_push_button_plain_one": "Push 1 change",
+  "dev_push_button_plain_other": "Push {count} changes",
   "dev_push_empty": "Nothing to push. Development matches production.",
   "dev_push_group_attention": "Needs attention",
   "dev_push_group_schema": "Schema",

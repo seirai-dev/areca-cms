@@ -2510,6 +2510,8 @@
   "dev_push_cancel": "İptal",
   "dev_push_button_one": "1 değişikliği gönder · {skipped} atlandı",
   "dev_push_button_other": "{count} değişikliği gönder · {skipped} atlandı",
+  "dev_push_button_plain_one": "1 değişikliği gönder",
+  "dev_push_button_plain_other": "{count} değişikliği gönder",
   "dev_push_empty": "Gönderilecek bir şey yok. Geliştirme üretimle aynı.",
   "dev_push_group_attention": "Dikkat gerektirenler",
   "dev_push_group_schema": "Şema",

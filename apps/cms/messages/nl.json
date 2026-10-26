@@ -2510,6 +2510,8 @@
   "dev_push_cancel": "Annuleren",
   "dev_push_button_one": "1 wijziging pushen · {skipped} overgeslagen",
   "dev_push_button_other": "{count} wijzigingen pushen · {skipped} overgeslagen",
+  "dev_push_button_plain_one": "1 wijziging pushen",
+  "dev_push_button_plain_other": "{count} wijzigingen pushen",
   "dev_push_empty": "Niets om te pushen. Ontwikkeling is gelijk aan productie.",
   "dev_push_group_attention": "Vraagt aandacht",
   "dev_push_group_schema": "Schema",
