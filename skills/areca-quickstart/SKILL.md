@@ -45,7 +45,8 @@ For API detail, read the `areca-sdk` skill (config, fields, CLI, content API) an
 - Never ask for a token or key in chat. Never print a token. See [Secrets](#secrets).
 - Never install a package you were not asked to install. This includes an i18n library. Ask first.
 - Confirm before you overwrite an existing file, or change an existing `package.json` script that is not ours.
-- Do not experiment on a live production site. For an existing live site, use hidden collections (`enabled: false`) or a separate site. Dev environments are planned but not available yet.
+- Do not experiment on a live production site. For a site that is already live, work in its development environment (see [Live site with a development environment](#live-site-with-a-development-environment)). If it has none, use hidden collections (`enabled: false`) or ask the agency to create one.
+- Never push to production on your own. Push only after the user has seen the dry run list and approved it.
 - Respect the user's choices. If they say no to MCP, use code-first. If they say no to a route, skip it.
 - Show a plan before you write files, and wait for the user to approve the content model.
 
@@ -81,7 +82,7 @@ Report what you found in a short list. Ask only about what you could not detect.
 
 The Areca MCP server gives the agent its own tools. Look for a tool named `get_site_info` from an Areca server. The name may carry a prefix such as `mcp__areca-<slug>__get_site_info`.
 
-- **Connected:** call `get_site_info`. Read `you.role`, `cannotDo`, `site.publishingMode`, `collections`, `globals` and `languages`.
+- **Connected:** call `get_site_info`. Read `you.role`, `cannotDo`, `site.publishingMode`, `site.environment`, `site.devEnvironment`, `collections`, `globals` and `languages`. If the site has gone live or `site.devEnvironment` is set, read the live-site section below before you write anything.
   - Role **agency admin**: the schema can be created over MCP (MCP-first, the default).
   - Any other role: the schema must be created in code (code-first). Say why. Owners and editors cannot change the schema over MCP.
 - **Not connected:** ask the user whether they want to connect. Explain what you need: the CMS URL and the site slug. The connector URL is `<cms-url>/api/mcp/<site-slug>`. Explain the sign-in (a browser opens on first use). Read [references/connect.md](references/connect.md) for the exact steps per app. Tell the user that the agent session may need a reload or restart after the connector is added.
@@ -220,6 +221,25 @@ Docs: https://github.com/ekozf/areca-cms
 
 Remove lines that do not apply. Mention any step you skipped and why.
 
+## Live site with a development environment
+
+Use this when the site is already live, or when `get_site_info` on the production connector shows `site.devEnvironment`. Changes for a live site go to its development environment first. The user reviews them there, and only then are they pushed to production.
+
+1. **Find the development environment.** On the production connector, `site.devEnvironment` gives its `connectorUrl`. Tell the user that the development connector is the place to work. If the site has none, ask the user whether an agency admin should create one. Only with the user's yes, and only from an agency admin connection on the production connector, call `create_dev_environment({ confirm: true })`. It never returns tokens.
+2. **Connect the development connector.** The user adds it in Connect AI, as a second connector for the same site. The development connector is for agency admins only. Its URL is the production connector URL with `-dev` added after the site slug. If `get_site_info` on the connector you have shows `environment: "development"`, you are already on it.
+3. **Set up the project for the development environment.** The user keeps the development site's token in `.env.local` as `ARECA_SITE_TOKEN`, and the development schema token as `ARECA_SCHEMA_TOKEN` for code-first sites. Only the user pastes them. The development site's tokens are shown once in the CMS, under Settings › Development. A pull with the development token reads its ready content directly, with no release. Entries show up in that pull once they are marked ready with `mark_ready`.
+4. **Make the change on the development connector.** Edit with the MCP tools as in the `areca-mcp` skill, and keep the code changes in the project as usual.
+5. **Check it locally.** Mark the new or changed entries ready and run `areca pull`. Never run `go_live` for this. A development environment has no go live.
+6. **Push, with a review.** Call `push_to_production` with no arguments first. That is a dry run and writes nothing. Show the user `items` and `needsAttention`. Ask which items to leave out and which needs-attention items to apply. Only then call `push_to_production` with `dryRun: false`, the `planHash` from the dry run, and the user's `exclude` and `apply`. Ask the user separately before passing `goLive: true`. If the answer is "The plan changed", run the dry run again.
+7. **Or push in the CMS.** The push screen in the CMS (the banner's **Push to production**) does the same review with switches. Use it if the user prefers, or if the agent cannot use the development connector.
+
+Things to keep in mind:
+
+- **Reset** with `refresh_from_production({ confirm: true })` discards every unpushed change. Run the dry run first, and get a yes from the user for the number it reports.
+- **Code-first sites.** Before the schema goes to production with `sync-manifest`, run `<pm> exec areca manifest pull` with the development token in `.env.local`. This updates `areca.config.ts` to match the development environment, so the next manifest push does not undo the changes made in the CMS.
+- **Production check.** To look at production locally, the user swaps the tokens in `.env.local` for the production values, pulls, checks, and swaps them back. Do not do this for them, and do not print the values.
+- **One copy only.** A site has at most one development environment, and every agency admin shares it. Clients never see it.
+
 ## Secrets
 
 - Never ask for a token, key or password in chat. If the user pastes one anyway, do not repeat it. Tell them to remove it from the chat and rotate it in the CMS.
@@ -233,7 +253,7 @@ Remove lines that do not apply. Mention any step you skipped and why.
 Use this when `areca.config.ts`, the SDK dependency or `areca.gen.ts` already exists.
 
 1. Do not install the SDK again. Do not run `areca init` again. Do not overwrite `.env.local`.
-2. Show the current state: collections and sections from `areca.config.ts`, or from `get_site_info` if MCP is connected. Note the languages and the publishing mode.
+2. Show the current state: collections and sections from `areca.config.ts`, or from `get_site_info` if MCP is connected. Note the languages, the publishing mode and whether a development environment exists.
 3. Decide the schema source from the header of `areca.config.ts`:
    - It has the header `// Generated by \`areca manifest pull\`.`: **MCP-first**. Change the schema with MCP (`upsert_collection`, `upsert_global`, `set_site_languages`) after the approval. Then run `<pm> run content:sync </dev/null`.
    - Anything else: **code-first**. Edit `areca.config.ts` after the approval. Then run `<pm> run sync-manifest` (needs `ARECA_SCHEMA_TOKEN`), then `<pm> run content:pull`.
@@ -241,5 +261,5 @@ Use this when `areca.config.ts`, the SDK dependency or `areca.gen.ts` already ex
 4. Ask what the user wants to add or change. Typical requests: a new collection (for example vacancies), a new field, a new language, a new page.
 5. For new or changed parts, go through the same flow: the interview questions that apply, the approval gate (step 3), the schema (step 4b), the wiring (step 5), and a release (step 6). Skip the parts that are done.
 6. For removals, fields that hold content, or languages: explain what is lost. Get explicit confirmation before any change.
-7. For an existing live site, follow the note in the ground rules. Use hidden collections (`enabled: false`) or a separate site for experiments.
+7. For an existing live site, follow [Live site with a development environment](#live-site-with-a-development-environment). Never write experiments straight into production.
 8. Finish with the step 7 summary, only for the parts that changed.

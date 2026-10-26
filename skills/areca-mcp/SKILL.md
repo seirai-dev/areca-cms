@@ -1,6 +1,6 @@
 ---
 name: areca-mcp
-description: Connects an AI client to an Areca CMS site through its MCP server and uses its tools to write, edit, review and publish content. Covers the per-site connector URL, OAuth sign-in or personal keys, roles and go-live permission, the draft/ready/live workflow, field and Markdown formats, SEO, images, and every tool. Use when the user wants to connect Areca to an AI app or coding agent, or to create, update, approve, schedule or publish Areca CMS entries, upload images, or check what is live.
+description: Connects an AI client to an Areca CMS site through its MCP server and uses its tools to write, edit, review and publish content. Covers the per-site connector URL, OAuth sign-in or personal keys, roles and go-live permission, the draft/ready/live workflow, development environments (review and push), field and Markdown formats, SEO, images, and every tool. Use when the user wants to connect Areca to an AI app or coding agent, or to create, update, approve, schedule or publish Areca CMS entries, upload images, or check what is live.
 license: MIT
 metadata:
   version: "0.5.0"
@@ -37,8 +37,9 @@ schedule_entry            -> scheduled goes live at a set time (also publishes o
 - `status`: `draft` | `ready` | `scheduled` | `archived`. To answer "what is live" use the flags: `live` (on the production site now), `pendingRelease` (approved changes waiting for the next go live) and `editedSinceReady`.
 - Drafts are safe. Nothing changes the live site until an entry is marked ready **and** a go live happens.
 - Publishing mode: `production` (go live deploys to the live site) or `demo` (go live builds a release that `areca pull` fetches; demo releases never reach visitors). Agency admins switch it with `set_publishing_mode`. A site that has ever gone live cannot switch to demo, and production needs a deployment target set in Settings › Deployment.
-- Only call `mark_ready`, `go_live`, `schedule_entry`, `rollback`, `delete_*` or `archive_entry` when the user explicitly asks.
+- Only call `mark_ready`, `go_live`, `schedule_entry`, `rollback`, `delete_*`, `archive_entry` or a `push_to_production` that is not a dry run when the user explicitly asks.
 - Writes return a `version`. Pass it as `expectedVersion` on the next `update_entry` or `update_global`. On a version conflict, call `get_entry` (or `get_global`), reapply the change and retry.
+- `mark_ready` also takes `ids` (up to 200) to approve several entries at once. It returns one result per id, so report the failures.
 - Show the user the `previewUrl` that create and update return (it's signed and valid for about 1 hour). If the site has no production URL, preview isn't available.
 
 ## Roles
@@ -48,7 +49,21 @@ schedule_entry            -> scheduled goes live at a set time (also publishes o
 | editor | read everything, create and edit drafts, upload images, edit alt text, preview |
 | owner | everything an editor can, plus `mark_ready`, `unpublish_entry`, `archive_entry`, `cancel_schedule`, `delete_entry`, `restore_revision`, `delete_asset` |
 | + go-live permission | `go_live`, `schedule_entry`, `rollback`, `cancel_build`. Granted per connection or key with "Allow going live" (owners and agency admins only). |
-| agency admin | everything above, plus `upsert_collection`, `delete_collection`, `upsert_global`, `delete_global`, `set_site_languages` and `set_publishing_mode` (needs 2FA) |
+| agency admin | everything above, plus `upsert_collection`, `delete_collection`, `upsert_global`, `delete_global`, `set_site_languages`, `set_publishing_mode` (needs 2FA) and the development environment tools (see below) |
+
+## Development environments (agency admins)
+
+A production site can have a **development environment**: a copy of the site that changes are made in first, then pushed to production. Only agency admins can see it.
+
+- **Which connector.** `get_site_info` on the production connector shows `devEnvironment` with its `connectorUrl` when one exists. `get_site_info` on the development connector shows `environment: "development"` and the `productionSlug`. Make the changes on the development connector, then push.
+- **No releases there.** A development environment has no go live, schedule or rollback tools. Its content reaches the production site only through a push, and a push never deletes production content.
+- **Push is a review.** First call `push_to_production` with no arguments. That is a dry run: it writes nothing and returns `items`, `needsAttention` and a `planHash`. Show the list to the user and ask which items to leave out (`exclude`) and which needs-attention items to apply (`apply`). Then call it with `dryRun: false`, the `planHash`, `exclude` and `apply`. If the answer is "The plan changed", run the dry run again.
+- **Going live with a push** (`goLive: true`) starts a production build. Only when the user asks, and only with the go-live permission.
+- **Copy one entry** with `copy_entry_to_production({ id })`. It becomes the production draft; the live version stays unless `markReady` is set. It is refused on a schema mismatch ("Push the schema first") and when production changed since the last sync; use `overwrite` only when the user agrees.
+- **Reset** with `refresh_from_production({ confirm: true })`. It discards every unpushed change. Run the dry run first and tell the user how many changes will be lost.
+- **New environment.** `create_dev_environment({ confirm: true })` on the production connector. It never returns tokens. The tokens are shown once in the CMS under Settings › Development, so tell the user to copy them there. If they were missed, rotate the site token and the schema token in the development site's Developer settings.
+
+Full tool inputs are in [references/tools.md](references/tools.md#development-environments-agency).
 
 ## Writing content
 

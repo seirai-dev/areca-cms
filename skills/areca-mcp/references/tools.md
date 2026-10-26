@@ -6,7 +6,7 @@
 
 | Tool | Access | Inputs | Returns |
 | --- | --- | --- | --- |
-| `get_site_info` | all | none | `site` (name, slug, productionUrl, publishingMode, deploymentConfigured), `you` (role, capabilities), `cannotDo[]`, `collections[]`, `globals[]` (site content: key, label, enabled, fieldCount, seo, previewPath), `guide`. On a site with languages also `languages` (`main`, `all`, `names`) and, per collection and section, `requiredLanguages`, `translatableFields` and `routes`. **Call first.** |
+| `get_site_info` | all | none | `site` (name, slug, productionUrl, publishingMode, deploymentConfigured, `environment` (`production` or `development`); on a development environment `productionSlug`; on a production site with one, `devEnvironment` `{ slug, connectorUrl }` for agency admins), `you` (role, capabilities), `cannotDo[]`, `collections[]`, `globals[]` (site content: key, label, enabled, fieldCount, seo, previewPath), `guide`. On a site with languages also `languages` (`main`, `all`, `names`) and, per collection and section, `requiredLanguages`, `translatableFields` and `routes`. **Call first.** |
 | `get_collection_schema` | all | `collection*` | Per-field key, type, required, format, options (and `translatable` on sites with languages); example `fields` and `seo` payloads; SEO guide; `translation` example on sites with languages |
 
 ## Entries
@@ -34,7 +34,7 @@ Single sections such as company info or the home page. Editors and owners see en
 
 | Tool | Access | Inputs | Effect |
 | --- | --- | --- | --- |
-| `mark_ready` | owner | `id*` | Approves the current draft for the next release. Not live yet. |
+| `mark_ready` | owner | `id*` or `ids` (up to 200), `expectedVersion?` (with `id` only) | Approves the current draft for the next release. Not live yet. With `ids`, returns `results`: `{ id, ok, error? }` for each id, and one failure does not stop the others. |
 | `unpublish_entry` | owner | `id*` | Takes it out of the release and back to draft. Removed from the live site at the next go live. |
 | `archive_entry` | owner | `id*` | Archives it. Removed from the live site at the next go live. |
 | `cancel_schedule` | owner | `id*` | Clears the scheduled time |
@@ -65,6 +65,21 @@ Single sections such as company info or the home page. Editors and owners see en
 | `go_live` | go-live | `note?` | Queues a build that publishes **all** ready changes and returns `publicationId` and `jobId`. Poll `get_build_job`. |
 | `rollback` | go-live | `publicationId*` | Queues a rollback to an earlier publication |
 | `cancel_build` | go-live | `jobId*` | Cancels a queued build |
+
+On a development environment (its connector is `/api/mcp/<slug>-dev`), `get_release_status`, `list_publications`, `get_build_job`, `go_live`, `rollback`, `cancel_build`, `schedule_entry` and `cancel_schedule` are not listed, because it has no releases. `set_publishing_mode` is listed to agency admins and refuses `production` there.
+
+## Development environments (agency)
+
+A production site can have one development environment: a copy of its schema and ready content, changed first and then pushed to production. Only agency admins see it. Its connector is `/api/mcp/<slug>-dev`. The production connector offers `create_dev_environment`; the development connector offers the other four tools here.
+
+| Tool | Access | Inputs | Returns |
+| --- | --- | --- | --- |
+| `create_dev_environment` | agency, production connector | `confirm*` (must be `true`) | `devSlug`, `devConnectorUrl`, `counts`, `message`. Never returns tokens: the CMS shows them once, under Settings › Development. A missed token is replaced by rotating the site token and the schema token in the development site's Developer settings. Refused when the site already has one. |
+| `refresh_from_production` | agency, development connector | `confirm*` (must be `true`) | Replaces the development environment's content with production's schema and ready content. Returns `counts` and `discardedChanges` (unpushed changes lost). |
+| `push_to_production` | agency, development connector | `dryRun` (default `true`), `planHash?` (required when `dryRun` is `false`), `exclude?` (item ids to leave out), `apply?` (needs-attention item ids to apply), `goLive?` (default `false`, needs the go-live permission) | Dry run: `planHash`, `items[]` (`id`, `kind`, `title`, `collection`, `summary`, `attention`), `needsAttention[]`, `message`. Writes nothing. Apply: `counts`, `warnings`, `written[]` (`itemId`, `productionId`) and `goLive` (`queued`, `publicationId`, `jobId`, or `reason`). Refused with "The plan changed" when production or the development environment changed since the dry run. |
+| `copy_entry_to_production` | agency, development connector | `id*` (a development entry), `markReady?` (default `false`), `overwrite?` (default `false`) | `productionId`, `created`, `warnings`, `clearedReferences`. Writes the production draft; the live version stays unless `markReady`. Refused on a schema mismatch ("Push the schema first") and on a production change since the last sync, unless `overwrite`. |
+
+Pushing is a review step. Always call `push_to_production` first with the dry run, show `items` and `needsAttention` to the user, and apply only with their decision and the `planHash`. Needs-attention items are skipped unless listed in `apply`. A push writes drafts, ready versions and archives. It never deletes production content.
 
 ## Content types (agency)
 
