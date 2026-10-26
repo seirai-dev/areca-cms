@@ -23,6 +23,8 @@ import {
 } from './oauth-resource'
 import { verifyMcpAccessToken } from './oauth-tokens'
 import { createArecaMcpServer } from './server'
+import { isSiteContext, loadSiteContext } from './site-context'
+import type { McpSiteContext } from './site-context'
 
 const log = createLogger('mcp')
 
@@ -30,7 +32,8 @@ const log = createLogger('mcp')
 const MAX_REQUEST_BODY_BYTES = 1_048_576
 
 const handler = createMcpHandler(
-  (ctx: McpRequestContext) => createArecaMcpServer(actorFrom(ctx)),
+  (ctx: McpRequestContext) =>
+    createArecaMcpServer(actorFrom(ctx), siteFrom(ctx)),
   {
     legacy: 'stateless',
     responseMode: 'json',
@@ -48,6 +51,15 @@ function actorFrom(ctx: McpRequestContext): McpActor {
     )
   }
   return actor
+}
+
+/** The site's environment, set per request next to the actor. */
+function siteFrom(ctx: McpRequestContext): McpSiteContext {
+  const context = ctx.authInfo?.extra?.site
+  if (!isSiteContext(context)) {
+    throw new Error('MCP request reached the server without a site context')
+  }
+  return context
 }
 
 function isActor(value: unknown): value is McpActor {
@@ -307,18 +319,23 @@ export async function handleSiteMcpRequest(
   return response
 }
 
-function runMcp(
+async function runMcp(
   request: Request,
   actor: McpActor,
   auth: { clientId: string; scopes: string[] },
 ): Promise<Response> {
+  const siteContext = await loadSiteContext(actor.siteId)
+  // Last check for every credential: a development environment is agency-only (Decision 3).
+  if (siteContext.environment === 'development' && actor.role !== 'agency') {
+    return unknownSite()
+  }
   return handler.fetch(request, {
     authInfo: {
       // Never the secret: the connection or key id is enough for logs and audit.
       token: actor.keyId,
       clientId: auth.clientId,
       scopes: auth.scopes,
-      extra: { actor },
+      extra: { actor, site: siteContext },
     },
   })
 }

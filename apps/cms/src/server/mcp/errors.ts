@@ -32,6 +32,16 @@ export function toolError(text: string): CallToolResult {
 }
 
 /**
+ * The agent-readable message for a thrown error, for results that report a
+ * failure inline (one row of a multi-id call) rather than failing the call.
+ */
+export function toolErrorMessage(error: unknown): string {
+  return toToolError(error)
+    .content.map((part) => (part.type === 'text' ? part.text : ''))
+    .join('')
+}
+
+/**
  * Turns anything a tool handler throws into an agent-readable tool error. The
  * messages are written for the model: they say what went wrong and what to do
  * next. Unknown errors never expose stack traces or SQL; they get a reference

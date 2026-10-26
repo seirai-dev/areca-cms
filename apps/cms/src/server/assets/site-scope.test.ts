@@ -94,7 +94,11 @@ describe.skipIf(!process.env.DATABASE_URL)('site AI media boundary', () => {
       const registry = {
         add<T extends z.ZodObject>(spec: ToolSpec<T>) {
           tools.set(spec.name, (input) =>
-            spec.run(spec.inputSchema.parse(input), actor),
+            spec.run(spec.inputSchema.parse(input), actor, {
+              environment: 'production',
+              productionSlug: null,
+              devSlug: null,
+            }),
           )
         },
       } as ToolRegistry

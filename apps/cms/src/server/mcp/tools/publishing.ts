@@ -26,6 +26,7 @@ import {
   loadSiteRow,
 } from '../scope'
 import { idSchema } from '../schemas'
+import { PRODUCTION_ONLY } from '../tool-kit'
 import type { ToolRegistry } from '../tool-kit'
 import { isDeploymentConfigured } from './site'
 
@@ -151,6 +152,7 @@ export function registerPublishingTools(registry: ToolRegistry): void {
   registry.add({
     name: 'get_release_status',
     title: 'Get release status',
+    environments: PRODUCTION_ONLY,
     description:
       'Shows what is live now, what is ready (approved) but not yet live (pendingChanges: entries marked ready, scheduled entries, and entries withdrawn since the last go live; languageChange: languages added, removed, or a new main language, or null), whether a build is running, and the publishing mode. Call this to answer "what is live" and "what is pending". Read-only.',
     inputSchema: z.object({}),
@@ -182,6 +184,7 @@ export function registerPublishingTools(registry: ToolRegistry): void {
   registry.add({
     name: 'list_publications',
     title: 'List publications',
+    environments: PRODUCTION_ONLY,
     description:
       'Lists recent go lives of the site, newest first: publicationId, status (pending, building, live, failed, superseded, rolled_back), who requested it, and its build job. Use publicationId with rollback. Read-only.',
     inputSchema: z.object({
@@ -208,6 +211,7 @@ export function registerPublishingTools(registry: ToolRegistry): void {
   registry.add({
     name: 'get_build_job',
     title: 'Get build job',
+    environments: PRODUCTION_ONLY,
     description:
       'Returns one go-live build job: status (queued, building, validating, deploying, succeeded, failed, cancelled), attempts, timing and error text. Read-only.',
     inputSchema: z.object({ jobId: idSchema('build job') }),
@@ -221,6 +225,7 @@ export function registerPublishingTools(registry: ToolRegistry): void {
   registry.add({
     name: 'go_live',
     title: 'Go live',
+    environments: PRODUCTION_ONLY,
     description:
       'Goes live: builds every ready change and deploys it, so the live site shows what is approved. Only call this when the user asks to go live. It queues a build; follow it with get_build_job or get_release_status. Requires a key with the "Allow going live" option.',
     inputSchema: z.object({
@@ -260,6 +265,7 @@ export function registerPublishingTools(registry: ToolRegistry): void {
   registry.add({
     name: 'rollback',
     title: 'Roll back to a publication',
+    environments: PRODUCTION_ONLY,
     description:
       'Goes live again with an earlier publication, which reverts the live site to it. Only call this when the user asks to roll back. Get publicationId from list_publications. Requires a key with the "Allow going live" option.',
     inputSchema: z.object({ publicationId: idSchema('publication') }),
@@ -287,6 +293,7 @@ export function registerPublishingTools(registry: ToolRegistry): void {
   registry.add({
     name: 'cancel_build',
     title: 'Cancel queued build',
+    environments: PRODUCTION_ONLY,
     description:
       'Cancels a build job that is still queued (not started). Running builds cannot be cancelled. Get jobId from get_release_status. Requires a key with the "Allow going live" option.',
     inputSchema: z.object({ jobId: idSchema('build job') }),

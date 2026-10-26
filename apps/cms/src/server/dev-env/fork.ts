@@ -302,6 +302,7 @@ export async function forkDevEnvironment(
     return {
       id: dev.id,
       slug: devSlug,
+      counts,
       token: token.token,
       schemaToken: schemaToken.token,
       previewSecret,
