@@ -437,6 +437,7 @@ function CollectionView({
         <div className="flex flex-wrap items-center gap-3">
           <StatusFilterControl
             value={status}
+            devSite={devSite}
             onChange={(next) => {
               setStatus(next)
               setSelected(new Set())
@@ -454,6 +455,7 @@ function CollectionView({
       ) : (
         <StatusFilterControl
           value={status}
+          devSite={devSite}
           onChange={(next) => {
             setStatus(next)
             setSelected(new Set())

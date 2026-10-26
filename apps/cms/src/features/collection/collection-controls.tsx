@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from '#/components/ui/select'
 import { SegmentedControl } from '#/components/ui/segmented-control'
+import type { SegmentedOption } from '#/components/ui/segmented-control'
 import { uiLanguageName } from '#/lib/site-languages'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
@@ -102,14 +103,66 @@ export function CollectionSearch({
   )
 }
 
-/** All · Drafts · Ready & live · Scheduled · Archived, sliding pill. */
+/**
+ * Whether a status tab is offered. Development environments have no
+ * releases and no scheduling (docs/design/dev-environments.md), so their
+ * tabs drop "Scheduled".
+ */
+export function statusFilterVisible(
+  value: StatusFilter,
+  devSite: boolean,
+): boolean {
+  return !(devSite && value === 'scheduled')
+}
+
+/**
+ * All · Drafts · Ready & live · Scheduled · Archived, sliding pill. On a
+ * development site the ready tab reads "Ready" and "Scheduled" is hidden.
+ */
 export function StatusFilterControl({
   value,
   onChange,
+  devSite = false,
 }: {
   value: StatusFilter
   onChange: (value: StatusFilter) => void
+  devSite?: boolean
 }) {
+  const allOptions: SegmentedOption<StatusFilter>[] = [
+    {
+      value: 'all',
+      label: m.collection_filter_all(),
+      icon: <Stack />,
+      testId: 'status-filter-all',
+    },
+    {
+      value: 'draft',
+      label: m.collection_filter_drafts(),
+      icon: <PencilSimple />,
+      testId: 'status-filter-draft',
+    },
+    {
+      value: 'published',
+      label: devSite ? m.shell_status_ready() : m.collection_filter_published(),
+      icon: <RocketLaunch />,
+      testId: 'status-filter-published',
+    },
+    {
+      value: 'scheduled',
+      label: m.collection_filter_scheduled(),
+      icon: <ClockCountdown />,
+      testId: 'status-filter-scheduled',
+    },
+    {
+      value: 'archived',
+      label: m.collection_filter_archived(),
+      icon: <Archive />,
+      testId: 'status-filter-archived',
+    },
+  ]
+  const options = allOptions.filter((option) =>
+    statusFilterVisible(option.value, devSite),
+  )
   return (
     <div className="-mx-4 min-w-0 overflow-x-auto px-4 no-scrollbar md:mx-0 md:px-0">
       <SegmentedControl
@@ -117,38 +170,7 @@ export function StatusFilterControl({
         value={value}
         onValueChange={onChange}
         data-testid="status-filter"
-        options={[
-          {
-            value: 'all',
-            label: m.collection_filter_all(),
-            icon: <Stack />,
-            testId: 'status-filter-all',
-          },
-          {
-            value: 'draft',
-            label: m.collection_filter_drafts(),
-            icon: <PencilSimple />,
-            testId: 'status-filter-draft',
-          },
-          {
-            value: 'published',
-            label: m.collection_filter_published(),
-            icon: <RocketLaunch />,
-            testId: 'status-filter-published',
-          },
-          {
-            value: 'scheduled',
-            label: m.collection_filter_scheduled(),
-            icon: <ClockCountdown />,
-            testId: 'status-filter-scheduled',
-          },
-          {
-            value: 'archived',
-            label: m.collection_filter_archived(),
-            icon: <Archive />,
-            testId: 'status-filter-archived',
-          },
-        ]}
+        options={options}
       />
     </div>
   )
