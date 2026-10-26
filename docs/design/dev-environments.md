@@ -1,37 +1,39 @@
 # Development environments
 
-Status: agreed with the product owner on 26 Oct 2026. Not built yet. This is the contract the later PRs implement. Delivered as four stacked PRs (see Rollout).
+Status: agreed with the product owner on 26 Oct 2026 (second review the same day). Not built yet. This is the contract the later PRs implement. Delivered as four stacked PRs (see Rollout).
 
 ## Problem and workflow
 
-Today every edit goes straight to the production site. When a customer asks for a change, the agency edits the live site's schema and content, and there is no safe place to try it first. The agency also wants to show the customer a demo release before anything is published to the production site.
+Today every edit goes straight to the production site. When a customer asks for a change, the agency edits the live site's schema and content, and there is no safe place to try it first. The agency wants to try content changes together with code changes on localhost before anything reaches production.
 
 The agency's workflow:
 
 1. A new site is created for a customer. It is a normal site in Demo mode.
-2. The agency sets it up with the `areca-quickstart` agent skill and creates test entries.
-3. The agency pulls the content locally and checks it.
+2. The agency sets it up with the `areca-quickstart` agent skill, adds collections, entries, images and languages.
+3. The agency pulls the content locally and checks it. The customer approves.
 4. The agency deploys on Dokploy with the production URL and switches the site to Production.
-5. The customer asks for a change.
-6. The agency forks production into the site's **development environment**.
+5. Later, the customer asks for a change (new entries, and maybe code or styling changes).
+6. The agency opens the site's **development environment**. If it is stale, the agency resets it from production with one click.
 7. The agency makes schema and/or content changes there, in the CMS UI, the CLI or over MCP.
-8. The agency makes a demo release in the development environment, pulls it locally and checks it.
-9. The customer approves.
-10. The agency **pushes** the changes to production. Optionally the agency also goes live, which starts the production build.
+8. The agency runs the website on localhost with `.env.local` pointing at the dev env, marks the dev entries ready and runs `areca pull`. No release is needed. Code changes are made at the same time.
+9. The customer reviews screenshots and asks for small changes. The agency makes them in dev or in code.
+10. The agency **pushes** the changes to production (CMS UI or MCP). Optionally the agency also goes live, which starts the production build. The build pulls production content and the new code.
 
 The agency edits the CMS about 90% of the time. Customers email change requests.
+
+**The dev env is a throwaway sandbox.** Nothing important lives only in dev. Creating, resetting and deleting it is cheap, with one plain confirm and no step-up. Everything that writes to production keeps full safeguards.
 
 ## Vocabulary
 
 - **Production site**: a site with `environment = 'production'`. This is every site that exists today.
-- **Development environment** (dev env): a linked site with `environment = 'development'`. It belongs to exactly one production site, through `parent_site_id`. It is shown to agency admins as "Development".
+- **Development environment** (dev env): a linked site with `environment = 'development'`. It belongs to exactly one production site, through `parent_site_id`. It is shown to agency admins as "Development", with a "Dev" tag.
 - **Fork**: creating the dev env by copying production's schema and ready content.
-- **Refresh**: replacing everything in the dev env with a new fork of production.
-- **Push**: copying chosen dev changes into production (schema, entries, sections, archives).
+- **Reset from production**: throwing away everything in the dev env and forking again. (Called "refresh" in code and MCP: `refresh_from_production`.)
+- **Push**: copying chosen dev changes into production (schema, languages, entries, sections, archives).
 - **Copy to production**: pushing one entry or section, as a draft.
 - **Baseline**: the state of an item when it was last forked or pushed. Used to tell what changed in dev and what changed in production.
 - **Origin**: the production entry a dev entry was forked from.
-- **Demo release**: a publication in Demo mode. It is only pulled by `areca pull`. Visitors never see it.
+- **Live pull**: an `areca pull` with a dev token. It reads the dev env's current ready content directly, without a publication.
 
 Other vocabulary follows `docs/DECISIONS.md` and `docs/ARCHITECTURE.md`.
 
@@ -39,35 +41,45 @@ Other vocabulary follows `docs/DECISIONS.md` and `docs/ARCHITECTURE.md`.
 
 These are settled. They are recorded here, not reopened.
 
-1. **Shape: a linked site.** A dev env is a real `site` row, marked as a development site, linked to its production site. It reuses all per-site machinery: its own site read token, its own schema token, its own MCP connector at `/api/mcp/<slug>-dev`, and its own publications. It is not an `environment` column added to every table.
-2. **New client sites are normal sites.** A brand-new client site is a normal site in Demo mode. "Promote" for a new site means setting the deployment target and switching to Production. Dev envs only exist next to a production site. New sites are not hidden from client users. The agency chooses when to invite them.
-3. **Visibility: agency admins only.** Client owners and editors never see a dev env: not in the site list, the site switcher, notifications, MCP access or any guard. Membership is per organization today, so each check must test the dev flag explicitly.
-4. **Exactly one dev env per production site, permanently.** All developers share it. There are never several. It has a Delete action. Deleting the production site deletes its dev env too. The slug is `<slug>-dev`. Slugs are globally unique, so collisions are handled (see Edge cases).
-5. **Always Demo mode.** A dev env can never switch to Production. The `set_publishing_mode` MCP tool and the UI both refuse Production on a dev site. Its releases only feed `areca pull`.
-6. **Fork and refresh copy content.** A fork copies the production schema (collections, sections, languages, route patterns, required languages). It also copies every production entry's ready version (`published_data`) as ready in the dev env, so a demo release and a pull work at once. Unfinished production drafts are not copied. Refresh replaces the dev env completely. It warns when the dev env has unpushed changes. Assets are organization-scoped, so the media library is shared and nothing is duplicated. Images uploaded in dev go into the shared library.
-7. **Origin and baseline.** Each forked entry records its production entry id (origin) and the production version at fork time (baseline). Entries created in dev have no origin. They become new production entries on push. References between entries are mapped through origin ids.
-8. **Push screen.** One list of everything changed in dev since the fork or the last push, all ticked by default. Each item can be unticked. The list covers:
-   - schema changes: added, changed or removed fields, collections, sections and languages. Removals that drop content need explicit confirmation, like `confirmDropFields`;
-   - new entries;
-   - changed entries and sections;
-   - entries deleted or archived in dev. These **archive** the production entry. A push never hard-deletes production content.
-
-   Two options: **Mark pushed changes ready** (on by default, the bulk ready) and **Go live after push** (off by default, needs the go-live permission, starts the production build). Without go live, nothing reaches visitors. The normal mark ready and go live flow in production still applies.
-9. **Conflicts.** If a production entry changed since the baseline (for example a client editor edited it), the push screen flags it. Each conflicting item has a choice: **keep production** (the default, the item is skipped) or **overwrite with dev**. After a push, the baseline is updated, so the next push only shows new changes.
-10. **Copy to production as draft.** A "Copy to production as draft" button in the dev entry editor (and for sections) and an MCP tool copy one item. The copy becomes the new **draft** of the matching production entry. The live version stays as it is. The copy is blocked if the production schema for that collection does not match the dev schema ("Push the schema first"). All languages are copied. References are mapped. References that cannot be mapped are cleared, and the copy lists them as warnings.
-11. **Bulk mark ready and bulk archive on normal sites.** Multi-select in the collection list. The MCP `mark_ready` tool accepts several ids. This is part of the first build.
-12. **MCP.** Refresh, push and copy-to-production act on the dev connector, on its linked production site, for agency admins only. Creating the dev env is on the production connector, because no dev connector exists yet. `get_site_info` on a dev site reports `environment: 'development'` and the production site's slug.
-13. **Local project.** `.env.local` points at the dev env's site token, so `content:sync` and `content:pull` pull the dev env. Deployed builds use the production token from the deployment's environment variables. To check production locally, swap `ARECA_SITE_TOKEN` (and `ARECA_SCHEMA_TOKEN` for code-first sites) for the production values. Code-first sites: run `areca manifest push` to the dev token, test, then push the schema to production with the UI Push or with the production schema token. `siteKey` in `areca.config.ts` is informational. The CMS uses the token's site. Checked: no `siteKey` comparison exists in `apps/cms/src/routes/api/sites/manifest.ts` or `apps/cms/src/server/content/collections.ts`. The `areca-quickstart` skill, when run on a live site, connects to the dev env.
-14. **Audit.** Fork, refresh, push (with item counts), copy and delete are all written to the audit log.
+1. **Shape: a linked site.** A dev env is a real `site` row, marked as a development site, linked to its production site. It reuses all per-site machinery: its own site token, its own schema token, its own preview secret and its own MCP connector at `/api/mcp/<slug>-dev`. It is not an `environment` column added to every table.
+2. **New client sites are normal sites.** A brand-new client site is a normal site in Demo mode. The agency edits it directly until its first go-live.
+3. **Visibility: agency admins only.** Client owners and editors never see a dev env: not in the site list, the site switcher, notifications, activity, dashboards, MCP access, Connect AI or any guard. Membership is per organization today, so every site-scoped check goes through one helper that tests the dev flag.
+4. **Exactly one dev env per production site, permanently.** All developers share it. The slug is `<slug>-dev` (collisions: see Edge cases). Deleting the production site deletes its dev env too.
+5. **When it can be created.** The Development tab and the Create action are shown only when the production site is in Production mode or has gone live at least once. (The server rule is only "the site is a production site, not a dev env".)
+6. **Throwaway lifecycle.** Create, Reset from production and Delete are one click with a plain confirm dialog. No fresh step-up. No type-to-confirm. Dev content is **not** archived to `deleted_content_archive` on reset or delete; dev rows are simply deleted. The reset dialog states how many unpushed changes will be lost.
+7. **Always Demo, no releases.** A dev env can never switch to Production and never has a deployment target. It has **no publications and no builds**. The Go live tray, pill and panel are hidden on a dev env. `areca pull` with the dev token builds the snapshot on the fly from the dev env's current ready content (live pull). Pinning a publication (`?publicationId=`, `--publication`, `ARECA_SNAPSHOT_ID`) returns 400 on a dev token: "Development environments have no releases. Pull without a publication id."
+8. **No scheduling in dev.** Scheduling is refused in dev (UI hidden, server refuses, `schedule_entry` and `cancel_schedule` not listed on dev connectors).
+9. **Fork copies.** Schema (collections and sections, including disabled ones, with all their columns), site languages, `ai_prompt`, and every production entry's ready version (`published_data`) as ready in dev. Unfinished production drafts are not copied. Not copied: deployment target, Dokploy credentials, `production_url`, publications, builds, revisions, scheduled versions. Assets are organization-scoped, so the media library is shared and nothing is duplicated. Images uploaded in dev go into the shared library.
+10. **Dev preview URL.** The dev env has its own editable **Preview URL** (stored in `site.production_url` of the dev row), default `http://localhost:3000`. Preview links in the dev editor use it with the dev preview secret, so drafts open on the agency's local site.
+11. **Origin and baseline.** Each forked entry records its production entry id (origin), its content at fork time (baseline), and production's `content_version` at fork time. Entries created in dev have no origin. They become new production entries on push. References between entries are mapped through origin ids.
+12. **Content version counter.** `entry.content_version` (new, on every site) goes up by one on **every** write to an entry row: draft save, ready, unpublish, archive, unarchive, schedule, cancel schedule, restore, language stamping, field purge, worker flips of scheduled entries, global upsert and discard. This is what detects "changed in production since the fork". `draft_version` keeps its current meaning.
+13. **Push mirrors dev.** After a push, the production entry matches the dev entry: production's ready version (`published_data`, `published_slug`) becomes dev's ready version (validated strictly, as `publishEntry` does), and production's draft becomes dev's draft. A dev entry that is a draft only (never ready in dev) lands as a production draft only, and its production ready version is left as it was. If strict validation of a ready version fails in production (for example a newly required language), the draft is still written, ready is skipped, and the item is listed as a warning.
+14. **Push screen.** One list of everything changed in dev since the fork or the last push, all ticked by default. The list covers schema changes, the language setting, new entries, changed entries and sections, and entries archived or deleted in dev (these **archive** the production entry; a push never hard-deletes production content).
+15. **Needs attention, no dialog stacks.** Items that are risky to production sit in a **Needs attention** group at the top of the push screen. Each has an inline two-way switch in its row: **Skip** (default) or **Apply**. No pop-up confirm dialogs. Push is never blocked by undecided items: skipped is the default. Needs attention covers:
+    - conflicts (production changed since the baseline; Apply = overwrite with dev);
+    - schema removals that drop production content (Apply = remove and archive the dropped values; the row says how many values);
+    - main-language changes (the row says how many entries get stamped);
+    - production entries with a scheduled version ("Scheduled in production"; Apply is disabled; resolve the schedule first);
+    - production entries deleted after the fork (Apply = recreate as a draft).
+16. **Push confirmation.** The push button shows the summary ("Push 12 changes · 2 skipped"). Clicking it pushes. The only extra step is the fresh 2FA step-up when the session is not fresh. There is no extra confirm dialog.
+17. **Go live after push.** An option on the push screen, off by default. The browser remembers the user's last choice (local storage). It needs the go-live permission and starts the production build after the push commits.
+18. **Copy to production as draft.** A "Copy to production as draft" action in the dev entry editor menu (and for sections) and an MCP tool copy one item. The copy becomes the new **draft** of the matching production entry. The live version stays as it is. Blocked if the production schema for that collection does not match the dev schema ("Push the schema first"). All languages are copied. References are mapped; unmappable references are cleared and listed as warnings. Conflicts are refused unless the caller passes `overwrite`.
+19. **Bulk actions on normal sites.** A server-side bulk action (ready, draft, archive, delete) returns a result per id. The collection list's existing bulk bar uses it and gains **Archive (N)**. Per-action permissions are unchanged. The MCP `mark_ready` tool accepts several ids.
+20. **MCP.** Reset, push and copy act on the dev connector, on its linked production site, for agency admins only. Creating the dev env is on the production connector. `get_site_info` reports `environment`, and on a dev site the production slug; on a production site with a dev env, it reports `devEnvironment: { slug, connectorUrl }`, and the server instructions say "Make changes in the development environment, then push." Production writes over MCP are **not** blocked.
+21. **Local project.** `.env.local` points at the dev env's site token, so `areca pull` reads dev. Deployed builds use the production token. To check production locally, swap `ARECA_SITE_TOKEN` (and `ARECA_SCHEMA_TOKEN` for code-first sites) for the production values. `siteKey` in `areca.config.ts` is informational; the CMS uses the token's site. No SDK change in v1.
+22. **Audit.** Fork, reset, push (with item counts), copy and delete are written to the audit log. Dev audit rows are hidden from non-admins. No notification events are created for dev envs.
 
 ## Non-goals
 
 - Several dev envs per production site.
+- A non-destructive "merge production changes into dev". Reset replaces dev completely.
 - Content promotion without review. Push always shows a list the agency reviews.
-- Dev envs for demo-only sites. A dev env needs a production site.
-- Client-user access to dev envs in v1. Customers only see the production site.
-- A visual diff of entry content. The push list shows which fields changed. A field-level preview comes later.
+- Dev envs for sites that never went live.
+- Client-user access to dev envs.
+- A visual diff of entry content. The push list shows which fields changed.
 - Renaming collections as a special case. A rename is a remove plus an add.
+- Pushing site-level settings (AI prompt, URLs, deployment) back to production.
+- A push history drill-down. v1 shows a simple list.
 
 ## Data model
 
@@ -78,357 +90,264 @@ Migration `0036_dev_environments` (next after `0035_account_management_blocking`
 | Column | Type | Notes |
 |---|---|---|
 | `environment` | `text not null default 'production'` | `'production' \| 'development'` |
-| `parent_site_id` | `text null` → `site.id` on delete cascade | Set only on dev envs. Unique (one dev env per production site). |
-| `schema_baseline` | `jsonb null` | Dev envs only. The production schema (`SiteManifest` shape) at the last fork or push. |
+| `parent_site_id` | `text null` → `site.id` on delete cascade | Set only on dev envs. Partial unique index `where parent_site_id is not null`. |
+| `schema_baseline` | `jsonb null` | Dev envs only. The production schema at the last fork or push. Same shape as `SiteManifest` plus disabled collections and sections (see "Schema snapshot"). |
+| `last_forked_at` | `timestamptz null` | Dev envs only. Last fork or reset. |
+| `last_pushed_at` | `timestamptz null` | Dev envs only. Last push or copy. |
 
 Check constraints (backstops; the app checks the same rules first):
 
-- `environment = 'production' or (parent_site_id is not null and publishing_mode = 'demo')`
+- `environment = 'production' or (parent_site_id is not null and publishing_mode = 'demo' and deployment_target is null)`
 - `environment = 'development' or parent_site_id is null`
-
-The existing `publishing_mode` column (`apps/cms/src/db/schema.ts`, `site` table) defaults to `'production'`. Dev envs are stored as `'demo'`.
 
 ### `entry`
 
 | Column | Type | Notes |
 |---|---|---|
-| `origin_entry_id` | `text null` | Production entry id. **No foreign key, on purpose.** If a production entry is hard-deleted, the dev link must survive. Otherwise the next push would treat it as new and create a duplicate. |
-| `origin_baseline` | `jsonb null` | `{ slug, data }`: the content at the last fork or push. Used to see what changed in dev. |
-| `origin_draft_version` | `integer null` | Production `entry.draft_version` at the last fork or push. |
-| `origin_published_at` | `timestamptz null` | Production `entry.published_at` at the last fork or push. |
+| `content_version` | `integer not null default 1` | Bumped on every write (Decision 12). All sites. |
+| `origin_entry_id` | `text null` | Production entry id. **No foreign key, on purpose**: if the production entry is hard-deleted, the link must survive so the next push does not create a duplicate. |
+| `origin_baseline` | `jsonb null` | `{ slug, data, publishedSlug, publishedData, status }`: the dev-side content at the last fork or push. Used to see what changed in dev. |
+| `origin_content_version` | `integer null` | Production `content_version` at the last fork or push. |
 
-Entries that exist in production have no origin fields set on the production side. The origin fields are only read on dev envs.
+Origin fields are only written on dev envs.
 
 ### `environment_push` (log)
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | `text` | Same id helper as other tables. |
-| `dev_site_id` | `text` → `site.id` on delete cascade | |
-| `production_site_id` | `text null` → `site.id` on delete set null | Kept as a record after the production site is gone. |
+| `dev_site_id` | `text null` → `site.id` on delete set null | |
+| `production_site_id` | `text` → `site.id` on delete cascade | The history list lives on the production site. |
 | `kind` | `text` | `fork`, `refresh`, `push`, `copy` |
 | `actor_id` | `text null` → `user.id` on delete set null | |
-| `counts` | `jsonb` | For example `{ schema: 2, new: 3, changed: 5, archived: 1, conflictsSkipped: 1 }` |
-| `items` | `jsonb` | Item ids, kinds, the choice made for each conflict, and the production id each item wrote to. Used by the history list. |
+| `counts` | `jsonb` | For example `{ schema: 2, new: 3, changed: 5, archived: 1, skipped: 1, warnings: 0 }` |
+| `items` | `jsonb` | Item ids, kinds, decisions, and the production id each item wrote to. |
 | `created_at` | `timestamptz` | |
 
 ### Migration notes
 
-- All new columns are nullable or have a default. Existing rows need no backfill: every site is a production site.
-- The unique index on `parent_site_id` is partial, `where parent_site_id is not null`, so ordinary production sites do not conflict.
-- The `entry` columns are only written on dev envs. Production rows are not touched.
+- All new columns are nullable or have a default. Existing rows need no backfill.
+- Drizzle schema in `apps/cms/src/db/schema.ts`, SQL in `apps/cms/drizzle/0036_dev_environments.sql`, journal and snapshot updated with `drizzle-kit generate` (then hand-add the check constraints and the partial index if drizzle does not emit them).
 
 ## Server
 
+New module: `apps/cms/src/server/dev-env/` (pure plan logic in files without database imports, so it can be unit-tested).
+
+### Visibility helper
+
+- `assertSiteVisibleTo(session, site)` in `apps/cms/src/server/security/site-visibility.ts`. A dev site requires an agency admin (with MFA, as `requireAgencyAdmin`); otherwise NotFound. Any other site keeps today's checks.
+- The copied `requireSiteAccess` helpers (`server/fn/content.ts`, `server/fn/publishing.ts`) and the admin site lookups call it. `requireMcpSiteAccess` calls it. `handleSiteMcpRequest` (`server/mcp/http.ts`) returns NotFound for a dev site when the actor is not an agency admin, for both the personal-key and the OAuth branch.
+- Site list (`server/fn/me.ts`): the client branch adds `environment = 'production'`. The agency-wide branch keeps dev envs, with `environment` and `parentSiteId` in the result so the switcher can nest them.
+- Notifications: triggers skip dev sites entirely.
+- Activity: queries that return audit rows exclude rows whose site is a dev env, unless the caller is an agency admin.
+- Org-level counts and dashboards (`server/fn/home.ts`, `overview.ts`, agency screens) exclude dev envs for non-admins; for admins, they are not counted as separate client sites.
+
 ### Fork (create dev env)
 
-Input: a production site id. Caller: agency admin with a fresh step-up (`requireFreshAgencyAdmin`, `src/lib/session.server.ts` l.79).
+Input: production site id. Caller: agency admin (no step-up).
 
-Refused when the site is not a production site, or when it already has a dev env.
+Refused when the site is not a production site, or already has a dev env.
 
-In one transaction (the same pattern as `createSite` and `deleteSite` in `apps/cms/src/server/admin/sites.ts`, which take `lockOrganizationForMutation` first):
+In one transaction (`lockOrganizationForMutation` first, as `createSite`):
 
-1. Lock the production site row (`FOR UPDATE`).
-2. Choose the slug: `<slug>-dev`. If it is taken, try `<slug>-dev-2`, and so on.
-3. Insert the dev site row:
-   - `name` = `<production name> (dev)`
-   - `environment` = `'development'`, `parent_site_id` = production id
-   - `publishing_mode` = `'demo'`, `deployment_target` = null
-   - `production_url` = copied from production (not used for deploys; see Open questions)
-   - new read token, schema token and preview secret, made with the same helpers `createSite` uses
-   - `languages` copied from production
-4. Copy collections (including disabled ones, with their `enabled` flag) with all their columns: `key`, `label`, `route_pattern`, `fields`, `kind`, `seo_enabled`, `preview_path`, `required_languages`, `localized_routes`. The unique key `(site_id, key)` applies per site, so the same keys are fine.
-5. Copy entries. For each production entry of a collection or section:
-   - skip `archived` entries;
-   - skip collection entries that were never ready (`published_data` is null);
-   - a section never marked ready is still copied, as an empty section, the same as production;
-   - copy `slug = published_slug`, `draft_data = published_data`, `status = 'published'`, `published_data`, `published_slug`, `draft_version = 1`;
-   - set `origin_entry_id` = production id, `origin_baseline = { slug, data }` (the ready version), `origin_draft_version` and `origin_published_at` from production;
-   - scheduled versions and production drafts are not copied;
-   - revisions are not copied. Each dev entry gets one milestone revision, note `fork`.
-6. Set `schema_baseline` to the production schema.
-7. Write the `environment_push` row (`kind = 'fork'`) and the audit row `dev_env.fork` with the counts.
+1. Lock the production site row (`FOR UPDATE`), and take the production advisory lock (see Locking).
+2. Slug: `<slug>-dev`; if taken, `<slug>-dev-2`, `-dev-3`, and so on.
+3. Insert the dev site row: `name` = `<production name> (dev)`, `environment = 'development'`, `parent_site_id`, `publishing_mode = 'demo'`, `deployment_target = null`, `production_url = 'http://localhost:3000'`, new site token, schema token and preview secret (same helpers as `createSite`), `languages` and `ai_prompt` copied.
+4. Copy collections and sections (`fork-copy` routine, shared with reset): every column, including `enabled`.
+5. Copy entries: skip `archived`; skip collection entries never ready (`published_data` null); copy sections always (an empty section stays empty); `slug = published_slug`, `draft_data = published_data`, `status = 'published'`, `published_data`, `published_slug`, `published_at = now`, `draft_version = 1`, `content_version = 1`; origin fields from production. Each dev entry gets one milestone revision, note `fork`.
+6. `schema_baseline` = production schema snapshot. `last_forked_at = now`.
+7. `environment_push` row (`kind = 'fork'`) and audit `dev_env.fork` with counts.
 
-Assets are not copied. They are organization-scoped (`asset.organization_id`), so the dev env sees the same library.
+Return the dev site id, slug, and the plaintext site token, schema token and preview secret (shown once, as on site creation).
 
-### Refresh
+### Reset from production (refresh)
 
-Input: the dev env id. Caller: agency admin with fresh step-up.
+Input: dev env id. Caller: agency admin (no step-up). In one transaction, under the production advisory lock: delete dev entry revisions, entries and collections (no archive), rerun fork steps 4 to 6 into the same dev site row (tokens, name, preview URL stay), `environment_push` (`kind = 'refresh'`), audit `dev_env.refresh`. The UI shows the unpushed change count from the plan in the confirm dialog, but the server does not require it.
 
-1. Compute the push plan (below). If there are unpushed changes, the request needs `confirmDiscard: <count>`. The count must match the plan, so the warning cannot be skipped by accident.
-2. Refused while a dev build job is queued or running.
-3. In one transaction:
-   - archive the dev env's content to `deleted_content_archive` (entries, collections, the site), so the work is recoverable;
-   - delete the dev entries, their revisions and the dev collections;
-   - run the fork steps 4 to 6 again. The dev site row, its tokens and its name stay the same.
-4. Write `environment_push` (`kind = 'refresh'`) and audit `dev_env.refresh`.
+### Delete dev env
+
+Caller: agency admin (no step-up). Delete entry revisions, entries, collections, MCP keys and connections bound to the dev site, then the site row. No archive. Audit `dev_env.delete` (on the production site). `deleteSite` on a production site first deletes its dev env with the same routine, in the same transaction.
+
+### Live pull (snapshot)
+
+`routes/api/sites/snapshot/current.ts`: when the token's site is a dev env, build the snapshot in memory from the dev env's current ready content, with the same builder the publication flow uses to freeze a snapshot, and return it in the same response shape (`publicationId: null`). A `publicationId` query returns 400. Nothing is stored.
+
+### Guards on a dev env
+
+- `updateSite` refuses `publishingMode: 'production'` and any deployment target on a dev env: "Development environments stay in Demo mode." It allows `productionUrl` (the preview URL).
+- `requestPublication` and rollback refuse on a dev env.
+- `scheduleEntry` refuses on a dev env.
+- `changeSiteSlug` on a production site renames the dev slug to `<new>-dev` when free; otherwise refused with a message. On a dev env, slug change is refused.
+- Rotating tokens works per site, independently.
+- Creating a site whose slug equals a dev slug is refused by the unique check, with a message that the slug belongs to a development environment.
+- Archive or delete of a **forked** dev entry sets the dev row to `archived` (so the origin link stays and the push can archive production). Deleting a dev-created entry is a plain delete.
+
+### Schema snapshot
+
+`schemaSnapshot(tx, siteId)` returns collections and sections (enabled and disabled) with all copied columns, plus the languages. It is used for `schema_baseline`, for the plan, and for "schema matches" checks in copy. Collections are compared by `key` and `kind`; fields by `key`.
 
 ### Plan (diff) computation
 
-The push plan is computed on the server every time. The client never sends its own diff. It is a three-way comparison:
+Computed on the server every time. Three-way:
 
-| Item | Base (baseline) | Dev (changed by the agency) | Production (changed by others) |
+| Item | Base | Dev | Production |
 |---|---|---|---|
-| Schema item (a collection, section or field) | `site.schema_baseline` | dev schema now | production schema now |
-| Entry or section | `origin_baseline` | dev `draft_data` and `slug` | production `draft_version` and `published_at` against the origin fields |
+| Schema item (collection or section, with fields) | `schema_baseline` | dev schema now | production schema now |
+| Languages | `schema_baseline.languages` | dev `languages` | production `languages` |
+| Entry or section | `origin_baseline` | dev row now | production `content_version` vs `origin_content_version` |
 
-Rules:
-
-- **Dev changed** = dev differs from base.
-- **Production changed** = production's `draft_version` or `published_at` differs from the origin fields (schema: production differs from base).
-- **Conflict** = dev changed and production changed.
-- A conflict is unticked by default. Its choice is "keep production" (default) or "overwrite with dev".
-
-Item kinds:
-
-- `schema.add`, `schema.change`, `schema.remove` (collections and sections, with their fields)
-- `languages` (the site setting, using the same rules as the UI: removing a language hides it, changing the main language stamps data)
-- `entry.new`, `entry.change`, `entry.archive`
-
-A production entry with a scheduled version (`scheduled_at` set) is not pushed. It shows as a conflict ("Scheduled in production. Resolve it first.").
-
-The plan returns a `planHash` (a hash of the item ids, kinds and base values). Apply requires that hash. If the plan changed since the screen was loaded, apply is refused with "The plan changed. Review it again."
-
-Tell whether `draft_version` bumps on every draft save before relying on it. Check `apps/cms/src/server/content/entry-workflow.ts`. If it does not bump on every change, add an explicit production version counter in the same migration.
+- **Dev changed** = dev differs from base. **Production changed** = production differs from base (entries: `content_version` differs, or the row is gone).
+- **Conflict** = both changed. Goes to Needs attention, default Skip.
+- Item kinds: `schema.add`, `schema.change`, `schema.remove`, `languages`, `entry.new`, `entry.change`, `entry.archive`.
+- `entry.change` lists the changed field keys (and whether the ready version, the draft or both changed) for the one-line summary.
+- `planHash`: SHA-256 of the sorted item ids, kinds, base values and production versions. Apply requires it; a mismatch is refused with "The plan changed. Review it again."
+- The Needs attention flag and its reason are part of each item (`attention: null | 'conflict' | 'drops-content' | 'main-language' | 'scheduled' | 'deleted-in-production'`).
 
 ### Push
 
-Input: `planHash`, the selected item ids, the conflict choices, `markReady`, `goLive`, and `confirmDropFields` for schema removals. Caller: agency admin with fresh step-up.
+Input: `planHash`, unticked item ids (`exclude`), `apply` (ids of Needs attention items set to Apply), `goLive`. Caller: agency admin with fresh step-up (`requireFreshAgencyAdmin`).
 
-Steps, in one transaction:
+In one transaction:
 
-1. Lock order: organization (`lockOrganizationForMutation`), then the dev site row, then the production site row (`FOR UPDATE`). Take a transaction advisory lock on the production site id, the same way the publication request lock does (`src/server/publishing/publications.ts` l.75). Only one push, refresh or copy runs per production site at a time.
-2. Recompute the plan and compare the `planHash`.
-3. **Schema first.** Apply each selected schema item with the same logic as `upsertCollection` and `deleteCollection` (`src/server/content/collections.ts` l.253 and l.374), one item at a time.
-   - Do not call `syncManifest` (l.66) for a partial push. It is a full sync: any collection missing from the payload is disabled.
-   - Removals with content need the item in `confirmDropFields`. Removed content is archived, never hard-deleted.
-4. **Languages.** Apply the selected language change with the content-languages rules.
-5. **Entries, pass 1.** For each new dev entry, insert the production entry with the mapped slug and no data yet. Record `dev id → production id`.
-6. **Entries, pass 2.** For each selected changed or new entry:
-   - lock the production row (`FOR UPDATE`) and check `draft_version` against the plan;
-   - write a revision of the current production draft (note `before dev push`), so an overwritten draft can be restored;
-   - write the dev draft as the production draft: `draft_data` with references mapped, `slug`, `draft_version + 1`;
-   - if `markReady` is on, run the strict validation that `publishEntry` runs. If it fails, the draft is still written, but ready is skipped and the item is listed as a warning.
-7. **Archives.** Archive the production entries of selected `entry.archive` items (`status = 'archived'`).
-8. **Baselines.** For every pushed item, set the dev row's `origin_baseline`, `origin_draft_version` and `origin_published_at` from what production now holds. Set `origin_entry_id` on pushed dev-created entries. Set `schema_baseline` to the production schema.
-9. Write `environment_push` (`kind = 'push'`, counts, items) and audit `dev_env.push` with the counts.
+1. Lock order: organization, dev site row, production site row (`FOR UPDATE`), then the production advisory lock.
+2. Recompute the plan; compare `planHash`.
+3. **Schema first**, item by item, with the same logic as `upsertCollection` / `upsertGlobal` / `deleteCollection` / `deleteGlobal`. Never `syncManifest` (it is a full sync). Drops are passed as confirmed only for Applied items; dropped values are purged by the existing purge path, which archives.
+4. **Languages** with `applySiteLanguages` (stamps on main change).
+5. **Entries pass 1**: insert new production entries (draft, no data), record `dev id → production id`.
+6. **Entries pass 2**: for each selected entry: lock the production row, check `content_version` against the plan, write a revision of the current production draft (note `before dev push`), then write the mirrored state (Decision 13) with references mapped, bump `content_version` and `draft_version`.
+7. **Archives**: set `status = 'archived'` on production entries of selected `entry.archive` items.
+8. **Baselines**: for every pushed item, reset the dev row's origin fields from what production now holds; set `origin_entry_id` on dev-created entries; `schema_baseline` = production schema; `last_pushed_at`.
+9. `environment_push` (`kind = 'push'`) and audit `dev_env.push` with counts.
 
-After the transaction commits:
-
-10. If `goLive` is on and the caller may go live, call `requestPublication` for the production site. That function already validates the content and coalesces queued builds.
+After commit: if `goLive` and the caller may go live, call `requestPublication` for the production site and return its result.
 
 ### Reference mapping
 
-References store the target entry id as a string (`src/server/content/validation.ts` l.121). Mapping:
-
-- a dev id with an origin maps to the origin id;
-- a dev-created entry maps to the production id created in pass 1;
-- anything else cannot be mapped. The reference is cleared and listed as a warning.
-
-Production entries never reference dev-only ids, so no mapping is needed in that direction.
+Reference fields store the target entry id (also inside `$i18n.<locale>` slots). A dev id with an origin maps to the origin id; a dev-created entry maps to its pass-1 production id; anything else is cleared and listed as a warning. Asset ids are org-wide and need no mapping.
 
 ### Copy to production (one item)
 
-Input: the dev entry or section id, `markReady` (default false). Caller: agency admin.
+Input: dev entry or section id, `markReady` (default false), `overwrite` (default false). Caller: agency admin with fresh step-up. Under the production advisory lock: refuse on schema mismatch for that collection; target = origin entry, else the production entry with the same collection and slug (refuse if another dev entry already links to it); create a new production draft for a dev-created entry with no target; refuse a conflict unless `overwrite`; write the draft (and optionally ready, strict), map references, update the baseline, log `environment_push` (`kind = 'copy'`) and audit `dev_env.copy_entry`.
 
-1. Refused when the production collection schema does not match the dev schema for that collection: "Push the schema first."
-2. Find the target: the origin entry if there is one; otherwise the production entry in the same collection with the same slug. If another dev entry is already linked to that production entry, refuse.
-3. If no target exists and the dev entry was created in dev, create a new production draft entry. If the slug is taken by an unrelated production entry, refuse.
-4. Apply the same conflict rule as push (default: refuse unless the caller confirms an overwrite).
-5. Write the draft (and optionally ready), map references, set the baseline, and log `dev_env.copy_entry`.
+### Bulk entry action (normal sites, PR 3)
 
-### Archive semantics
-
-- Archiving in production sets `status = 'archived'`. The entry leaves the next snapshot. Nothing is deleted.
-- Archiving or deleting a forked entry in dev does not hard-delete it. It sets the dev row to `archived`, so the origin link stays and the push can archive production. Deleting a dev-created entry (no origin) is a plain delete.
-- Sections are never archived (globals never use `archived`, see `docs/design/site-content-globals.md`). A section removed in dev is a schema removal, handled as above.
+`bulkEntryActionFn({ siteId, action: 'ready' | 'draft' | 'archive' | 'delete', ids })` runs the existing single-entry function per id (same permissions), and returns `{ id, ok, error? }[]`. Not all-or-nothing.
 
 ### Locking and concurrency
 
-- Push, refresh and copy take the production site advisory lock, and lock rows in a fixed order.
-- An editor saving a draft in production during a push is handled by the row lock plus the `draft_version` check. A save that lands first is seen as a conflict. A save that lands after the push is a normal later edit.
-- Publishing works from a frozen snapshot. A push only writes drafts and ready flags, so a publication that is already running keeps its own snapshot. The worker's deployment lock is keyed by `deploymentResourceKey` (`src/server/publishing/worker.ts` l.214 to l.218), and a dev env has no deployment, so dev demo releases never wait for a production deploy.
-- "Go live after push" runs after the commit. Existing coalescing cancels queued builds for the site.
-
-### Visibility and guards
-
-- **Helper.** Add one helper, `assertSiteVisibleTo(session, site)`. A dev site requires `requireAgencyAdmin`. Any other site keeps today's checks. Every site-scoped function calls it.
-- **Why a helper.** `requireOrgMember` (`src/lib/session.server.ts` l.85) checks the organization. Agency admins pass it for every site. A client member passes it for every site of their client, dev envs included. The per-site check is what hides the dev env.
-- **Site list.** The client branch of `me.ts` (`apps/cms/src/server/fn/me.ts` around l.123 to l.146) adds `environment = 'production'`. The agency-wide branch keeps dev envs. Agency admins see them in the switcher, nested under their production site.
-- **MCP.** `requireMcpSiteAccess` (`apps/cms/src/server/mcp/site-access.ts`) returns NotFound for a dev site when the caller is not an agency admin. This is the same answer a missing site gets. `roleFor` already returns `'agency'` for admins.
-- **Connect AI.** The consent screen and the connection list hide dev connectors from non-admins.
-- **Notifications.** In v1, no notification events are created for dev envs. Dev activity is audit-only.
-- **Tests.** An authz test (see Testing plan) checks every site-scoped function with a client member and a dev site.
-
-### Deleting
-
-- **Delete dev env.** Agency admin, fresh step-up, type-to-confirm with the dev slug. Works like `deleteSite` (`apps/cms/src/server/admin/sites.ts` l.388): archive the content with `archiveDeletedContent`, then delete entries, revisions, collections, builds and publications. The dev env's publications are demo, so they are not blocked by `assertSiteHasNoPendingDeployment`. Audit `dev_env.delete`.
-- **Delete production site.** In the same transaction, delete the dev env first, through the same routine, so its content is archived with the production site's. The database cascade on `parent_site_id` is only a backstop. It does not archive anything.
-
-### Tokens and slugs
-
-- Dev tokens are separate. Rotating the dev token does not touch production, and the reverse is also true (`rotateSiteTokenAdmin`, `sites.ts` l.345).
-- `changeSiteSlug` (`sites.ts` l.284) also renames the dev slug to `<new>-dev` when that is free. If it is taken, the slug change is refused with a message.
-- Creating a site whose slug equals an existing dev slug is refused by the normal unique check. The message says the slug belongs to a development environment.
-
-### Publishing mode guard
-
-- `updateSite` (`sites.ts` l.195, mode patch at l.222) refuses `publishingMode: 'production'` on a dev env, and refuses setting a deployment target on it.
-- The `set_publishing_mode` MCP tool uses the same check.
-- The check constraint in the database is the last line of defence.
+- Push, reset, copy and fork take `pg_advisory_xact_lock(hashtextextended('dev-env:' || productionSiteId, 3))`.
+- A production draft save during a push is caught by the row lock plus the `content_version` check.
+- A push only writes drafts, ready flags and archives, so a running publication keeps its frozen snapshot. Go live after push runs after the commit; existing coalescing applies.
 
 ## UI
 
-### Where things live
-
-- **Production site, Settings › Development** (agency only): the dev env's status (exists or not, slug, last fork, last refresh, last push), **Create development environment** (fork), **Refresh from production**, **Delete development environment**, and a link to open the dev env. The tab does not appear for clients.
-- **Site switcher** (agency only): dev envs are nested under their production site, with a "Dev" tag. Clients never see them.
-- **Dev env header**: a banner "Development environment for <client>. Demo only. Releases feed `areca pull`." The top bar has **Push to production** (agency only). The "Go live" button becomes **Release for pull** (a demo release).
-- **Dev entry and section editor**: a **Copy to production as draft** action in the top bar's menu, with a warning when the production schema for that collection does not match.
+- **Production site, Settings › Development** (agency only, shown per Decision 5): status (exists or not, slug, last reset, last push), **Create development environment**, **Open**, **Reset from production**, **Delete development environment**, the one-time token display after create, and the push history list (date, who, kind, counts).
+- **Site switcher** (agency only): dev envs are nested under their production site, with a "Dev" tag.
+- **Dev env shell**: a banner "Development environment for <production name>. Changes stay here until you push." with **Push to production**, and a "Production changed since the last sync (N)" notice with **Reset from production** when N > 0. Go live tray, pill and panel are hidden. Schedule actions are hidden.
+- **Dev env Settings**: General shows **Preview URL** (default `http://localhost:3000`), no publishing mode or deployment controls. No Development tab on a dev env.
+- **Dev entry and section editor**: **Copy to production as draft** in the top bar menu.
 
 ### Push screen
 
-A full page, not a sheet, because the list can be long.
+A full page at `/sites/<devSiteId>/push`.
 
 ```
 Push to production · Acme
-Development → Production              [Cancel]  [Push 12 changes]
+Development → Production                        [Cancel]  [Push 12 changes · 2 skipped]
 
-Schema (2)                                    1 removal needs confirmation
+Needs attention (3)
+  "About" (Pages) — changed in production since the fork      ( Skip | Apply )
+  Remove field "Old hero" from Pages — archives 4 values      ( Skip | Apply )
+  "Spring offer" (Offers) — scheduled in production           ( Skip )  resolve first
+
+Schema (1)
   [x] Add collection "Case studies"
-  [ ] Remove field "Old hero" from Pages      drops 4 values  (confirm)
-
-Languages (0)
 
 New entries (3)
-  [x] New: "Spring menu"  (Menus)
-  ...
-
+  [x] "Spring menu" (Menus)
 Changed (7)
-  [x] "Home" (Pages)                          3 fields changed
-  [ ] "About" (Pages)  ⚠ Changed in production since the fork
-        ( ) Keep production  (default)   ( ) Overwrite with dev
-
+  [x] "Home" (Pages)                            3 fields changed · ready + draft
 Archived (1)
-  [x] "Old offer" (Offers)                    archives production entry
+  [x] "Old offer" (Offers)                      archives production entry
 
-Options
-  [x] Mark pushed changes ready
-  [ ] Go live after push                      needs go-live permission
-
-Summary: 12 selected · 1 conflict skipped · 1 removal needs confirmation
+[ ] Go live after push            needs go-live permission
 ```
 
-- Groups collapse. Each row has a checkbox, a one-line change summary and a conflict badge.
-- Conflict rows show two radio options. Keep production is selected by default.
-- Removals open a confirm dialog that lists the collection or field and how many values will be archived.
-- The push button shows the number of selected items. It is disabled while a removal is unconfirmed.
+- Groups collapse. Rows show a one-line summary. Mobile (390 px) stacks the switch under the label.
+- No confirm dialogs. Push asks only for the step-up when needed.
+- The result view lists counts, warnings (skipped ready, cleared references) and links to the production entries.
 
 ### Entry list (normal sites)
 
-- Checkboxes on each row. A bulk bar appears with **Mark ready (N)** and **Archive (N)**. Owners only, as with the single actions.
-- The result lists per-entry failures with reasons. Successes still apply. This is not all-or-nothing.
+The existing bulk bar (`features/collection/collection-screen.tsx`) calls `bulkEntryActionFn` and gains **Archive (N)**. Failures are listed per entry; successes apply.
 
 ### Activity
 
-- New sentences in `apps/cms/src/features/activity/activity-sentence.ts` for `dev_env.fork`, `dev_env.refresh`, `dev_env.push` (with counts), `dev_env.copy_entry` and `dev_env.delete`.
+Sentences in `apps/cms/src/features/activity/activity-sentence.ts` for `dev_env.fork`, `dev_env.refresh`, `dev_env.push` (with counts), `dev_env.copy_entry`, `dev_env.delete`.
 
 ## MCP tools
 
-All tools below are for agency admins only. For any other caller they are not listed, and a direct call returns NotFound.
+All new tools are agency-admin only: not listed for others, NotFound on a direct call.
 
 | Tool | Connector | Inputs | Result |
 |---|---|---|---|
-| `create_dev_environment` | production | `confirm: true` | `devSlug`, `devConnectorUrl`, counts |
-| `refresh_from_production` | dev | `confirmDiscard?: number` | counts; error if unpushed changes and no matching `confirmDiscard` |
-| `push_to_production` | dev | `dryRun` (default `true`), `planHash?`, `items?`, `decisions?`, `markReady?`, `goLive?`, `confirmDropFields?` | Dry run: the plan (items, conflicts, removals) and `planHash`. Apply: counts, warnings, and the production ids written. Apply needs `planHash`. Removals need `confirmDropFields`. |
-| `copy_entry_to_production` | dev | `id`, `markReady?` (default `false`), `overwrite?` | production id, mapped and cleared references |
-| `mark_ready` | both | `id` or `ids` (new array form; `id` still works) | per-id results |
-| `set_publishing_mode` | dev | any | refused on a dev env: "Development environments stay in Demo mode." |
-| `get_site_info` | both | none | adds `environment` and `productionSlug` |
+| `create_dev_environment` | production | `confirm: true` | `devSlug`, `devConnectorUrl`, counts (tokens are not returned over MCP; the agency copies them from the CMS) |
+| `refresh_from_production` | dev | `confirm: true` | counts, number of discarded changes |
+| `push_to_production` | dev | `dryRun` (default `true`), `planHash?`, `exclude?`, `apply?`, `goLive?` | Dry run: items, Needs attention list, `planHash`. Apply: counts, warnings, production ids. |
+| `copy_entry_to_production` | dev | `id`, `markReady?`, `overwrite?` | production id, mapped and cleared references |
+| `mark_ready` | both | `id` or `ids` | per-id results |
+| `set_publishing_mode` | dev | any | refused: "Development environments stay in Demo mode." |
+| `get_site_info` | both | none | adds `environment`, `productionSlug` (dev), `devEnvironment` (production) |
 
-- Dry run is the default, so a model cannot push by accident.
-- MCP does not ask for a fresh 2FA code on each call. The key or connection that the agency admin approved already required one (existing rule, see `docs/ARCHITECTURE.md`, "AI apps (MCP)").
-- Server instructions and `docs/MCP.md` say that a push is a review step, and that a dry run must be shown to the user before the apply call.
-- The drift test in `skills/areca-mcp` must pass when the tools are added.
+On dev connectors these tools are not listed: `go_live`, `rollback`, `list_publications`, `cancel_build`, `get_release_status`, `get_build_job`, `schedule_entry`, `cancel_schedule`.
 
-## SDK and CLI impact
+Server instructions and `docs/MCP.md` say that a push is a review step, and that a dry run must be shown to the user before the apply call. The skills drift test (`packages/skills/src/drift.test.ts`) must pass.
 
-- **No SDK change is needed for v1.** `areca pull` works with the dev token as it does with any token.
-- Optional, later: the snapshot response can include `environment`, so `areca pull` prints "Pulling development environment". Not part of v1.
-- **Docs only.** Update `docs/ADMIN_GUIDE.md`, `docs/MCP.md`, `docs/AUTHZ_MATRIX.md`, `docs/CMS_GUIDE.md`, `apps/docs` (new page for development environments, plus the local token swap steps), `skills/areca-mcp` and `skills/areca-quickstart`.
-- The `areca-quickstart` skill, when it runs on a live site, connects to the dev env. It must not write to production. The skill tells the user to pull with the dev token and to push through the CMS.
-- Do not edit `version` or `CHANGELOG.md` by hand (see `docs/design/site-content-globals.md`).
+## Docs and skills
+
+Update `docs/ADMIN_GUIDE.md`, `docs/MCP.md`, `docs/AUTHZ_MATRIX.md`, `docs/CMS_GUIDE.md`, `apps/docs` (a development environments page with the local token swap steps), `skills/areca-mcp` and `skills/areca-quickstart` (on a live site, connect to the dev env, pull with the dev token, push through the CMS). Do not edit `version` or `CHANGELOG.md` by hand.
 
 ## Permissions
 
 | Action | Agency admin | Org owner | Org editor |
 |---|---|---|---|
-| See the dev env | yes | no | no |
-| Create or refresh the dev env | yes (fresh step-up) | no | no |
-| Edit, create, delete content in the dev env | yes | no | no |
-| Mark ready in the dev env | yes | no | no |
-| Release for pull (demo) in the dev env | yes | no | no |
-| Go live a dev env | never | never | never |
+| See / edit the dev env | yes | no | no |
+| Create, reset, delete the dev env | yes | no | no |
 | Push or copy to production | yes (fresh step-up) | no | no |
-| Go live production after push | yes, if allowed | yes, if allowed | no |
-| Set Production on a dev env | never | never | never |
-| Delete the dev env | yes (fresh step-up) | no | no |
+| Go live production after push | yes, if allowed | — | — |
+| Go live / schedule / set Production on a dev env | never | never | never |
+| Bulk actions on normal sites | as the single action | as the single action | as the single action |
 
-Each new server function is added to `apps/cms/src/server/security/authz-matrix.ts` and `docs/AUTHZ_MATRIX.md`.
+Each new server function is added to `apps/cms/src/server/security/authz-matrix.ts` and `docs/AUTHZ_MATRIX.md`. New API behaviour is covered in `authz-routes.test.ts` where routes change.
 
 ## Edge cases
 
-1. **Languages added in dev.** The language change is one item in the push list. Entries that lack the new language cannot be marked ready in production. They stay drafts, and the push lists them as warnings.
-2. **Main language changed in dev.** Pushing applies the same stamp rule as the UI (`$locale` stamping in `content-languages.md`). A confirm is shown with the gap count.
-3. **Collection renamed in dev.** A rename is a remove plus an add. The remove needs confirmation if it drops content.
-4. **Collection deleted in dev.** Its dev content is archived in dev. On push, the production collection is removed through the UI's delete path, which archives content, after confirmation.
-5. **Required languages changed.** Entries that cannot satisfy a new requirement stay drafts (see item 1).
-6. **Production entry deleted after the fork, and dev changed it.** The origin link has no foreign key, so it survives. The item is a conflict: "Deleted in production." The default is skip. "Overwrite" recreates the entry as a draft.
-7. **Production entry archived after the fork.** Treated the same as a changed production entry. Overwrite can restore it as a draft.
-8. **Production entry has a scheduled version.** Not pushed. It is a conflict until the schedule is resolved.
-9. **Schema push removes fields that have content.** Requires `confirmDropFields`. The dialog shows how many values will be archived.
-10. **Publication in progress during push.** A push does not change a running publication's snapshot. Go live after push is queued after the commit.
-11. **Slug collisions.** `<slug>-dev` taken: try `-dev-2`, and so on. A new client slug that matches a dev slug is refused. Changing the production slug renames the dev slug or is refused.
-12. **Code-first sites.** The next `areca manifest push` from code is a full sync to production. It overwrites schema changes made by UI push. For code-first sites, update `areca.config.ts` to match before the next manifest push to production.
-13. **Asset delete.** The library is shared, so deleting an asset in dev would delete it for production too. Asset delete must refuse an asset that any production entry uses, not only the current site's entries. Check the current delete path before the first PR ships.
-14. **Dev demo build during refresh.** Refused until the build finishes or is cancelled.
-15. **Dev env deleted while production is in use.** Allowed. Production is not affected. Its audit rows stay.
-16. **Client member guesses a dev site id or slug.** Every path returns NotFound, the same as for a missing site.
-17. **Unpushed changes at refresh.** The plan's count must be confirmed (`confirmDiscard`).
-18. **Dev entry with a draft but no ready version.** Push sends the draft. A dev entry that was never ready has no demo release content until it is marked ready in dev.
+1. **Language added in dev.** One item in the push list. Entries lacking a newly required language cannot be ready in production; they land as drafts with a warning.
+2. **Main language changed in dev.** Needs attention, with the stamp count.
+3. **Collection renamed in dev.** Remove plus add.
+4. **Collection deleted in dev.** `schema.remove`; Needs attention if production has content.
+5. **Production entry deleted after the fork, dev changed it.** Needs attention, "Deleted in production"; Apply recreates it as a draft.
+6. **Production entry archived after the fork.** A production change (`content_version`); conflict if dev also changed it. Apply restores it from dev.
+7. **Production entry scheduled.** Needs attention, cannot be applied until resolved.
+8. **Slug collisions.** `-dev-2` and so on; rename follows the production slug or is refused.
+9. **Code-first sites.** The next `areca manifest push` to production is a full sync and can undo a UI push. Update `areca.config.ts` (`areca manifest pull` with the dev token) before pushing the manifest to production.
+10. **Asset delete.** Already checks usage across the organization; no change.
+11. **Client member guesses a dev id or slug.** NotFound everywhere.
+12. **Dev entry with a draft but no ready version.** Pushed as a production draft only.
 
 ## Testing plan
 
-- **Pure unit tests** (no database): the three-way plan rules (dev changed, production changed, conflict), the item kinds, reference mapping (origin, pass 1 ids, cleared references), slug candidate generation, and the `planHash`.
-- **DB tests** (`*.db.test.ts`, the same style as `docs/design/account-management.md`):
-  - fork copies schema, ready content and not drafts; origin and baseline are set; archived and never-ready entries are skipped;
-  - refresh archives dev content first, and refuses without the matching `confirmDiscard`;
-  - push: schema-first order, drop confirmation, archive instead of delete, reference mapping, baseline update, stale `planHash` refused;
-  - conflicts: keep, overwrite, production deleted after the fork;
-  - copy: schema mismatch refused, overwrite confirmation, new draft for dev-created entries;
-  - concurrency: two pushes on the same production site (one waits); a production draft save during a push is detected;
-  - delete: dev delete archives; production delete removes the dev env with an archive;
-  - visibility: a client member gets NotFound for every site-scoped function on a dev site; `me.ts` site list hides dev envs for clients;
-  - publishing mode: refused on dev, check constraint holds.
-- **MCP tests**: the tools are listed only for agency admins; the dry run applies nothing; a dev connector refuses set_publishing_mode; the drift test passes.
-- **Playwright**: create dev env; edit a schema field and an entry in dev; push with one conflict kept and one overwritten; go live after push (asserting the build is queued); bulk mark ready on a normal site; a client user does not see the dev env in the switcher. Mobile viewport (390) for the push screen.
-- Screenshots of the push screen and the Development tab are needed before the UI PR is opened (see the screenshot rule in the memory notes).
+- **Unit** (no database): plan rules, item kinds, Needs attention flags, reference mapping, slug candidates, `planHash`.
+- **DB tests** (`*.db.test.ts`): fork copies schema and ready content only; reset replaces everything; delete removes dev rows; `content_version` bumps on every write path; push schema-first, Apply/Skip, archive instead of delete, mirrored ready/draft, reference mapping, baseline update, stale `planHash`; conflicts (skip, apply, deleted in production, scheduled); copy (schema mismatch, overwrite, new draft); concurrency (two pushes, a production save during push); visibility (client member gets NotFound on every site-scoped function, `me.ts` hides dev); guards (mode, deployment, schedule, publication, check constraint); live pull snapshot shape and pinned 400; bulk action per-id results.
+- **MCP tests**: tool lists for admin vs others and dev vs production; dry run writes nothing; refusals; drift test.
+- **Playwright**: create dev env; edit a field and an entry in dev; push with one conflict skipped and one applied; go live after push queues a build; bulk archive on a normal site; client user does not see the dev env. Push screen at 390 px.
+- Screenshots of the push screen and the Development tab before the UI PRs.
 
 ## Rollout
 
-Four stacked PRs, each reviewed on its own. Branch `feat/dev-environments`, with the later branches stacked on the earlier ones.
+Four stacked PRs. PR 1 is `feat/developer-environment`; later branches stack on it.
 
-1. **Data model, fork, refresh, visibility, delete.** Migration `0036`, the `site` and `entry` columns, the `environment_push` table, the visibility helper and the MCP access check, the `me.ts` filter, the Development tab (create, refresh, delete), the Publishing-mode guard, audit sentences, DB and authz tests.
-2. **Push.** Plan computation, the push screen, conflicts and their choices, reference mapping, baselines, the drop confirmation, go live after push, the push history list, the audit counts, and the concurrency tests.
-3. **Copy to production, bulk ready and archive.** The single-item copy and its button, bulk mark ready and archive on normal sites with per-id results, and the bulk bar.
-4. **MCP tools, docs and skills.** `create_dev_environment`, `refresh_from_production`, `push_to_production`, `copy_entry_to_production`, the `mark_ready` array form, `get_site_info` fields, `set_publishing_mode` refusal, `docs/MCP.md`, `docs/AUTHZ_MATRIX.md`, `apps/docs` (a development environments page and the token swap steps), `skills/areca-mcp` and `skills/areca-quickstart`.
-
-## Open questions
-
-These are small. The default in each case is the one shown, and it can change during review.
-
-1. **Preview on a dev env.** The dev env copies `production_url`, so its preview links open the live site, not the dev env. Default: hide preview on dev envs in v1 until a dev preview base is set.
-2. **Name in the UI.** "Development" in tabs and headings, "Dev" as a tag. Default: keep both, as written above.
-3. **Dev env for a Demo-mode production site.** Default: allowed. The rule is "the site is a production site (not a dev env)", not "the site is in Production mode".
-4. **Notifications for agency admins about dev envs.** Default: none in v1 (audit only).
+1. **`feat/developer-environment`** — this doc, migration 0036, `content_version` bumps, visibility helper and all visibility filters, fork / reset / delete, live pull, dev guards (mode, deployment, schedule, publication, slug), dev preview URL, Settings › Development tab, switcher nesting, dev banner, hidden Go live, audit sentences, DB and authz tests.
+2. **`feat/developer-environment-2-push`** — plan, push, Needs attention, reference mapping, baselines, go live after push, push screen, push history list, "production changed" notice, tests.
+3. **`feat/developer-environment-3-copy-bulk`** — copy to production, its editor action, bulk entry action and the bulk bar Archive, tests.
+4. **`feat/developer-environment-4-mcp-docs`** — MCP tools and hiding, `get_site_info` fields, server instructions, docs, skills, drift test.
