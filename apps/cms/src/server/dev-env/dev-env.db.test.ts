@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
 import { db } from '#/db'
@@ -12,6 +12,7 @@ import {
 } from '#/db/schema'
 import type { Field } from '#/lib/types'
 import { deleteSite } from '#/server/admin/sites'
+import { assetMutationLock } from '#/server/assets/usage'
 import { getSitesSnapshotCurrent } from '#/routes/api/sites/snapshot/current'
 import {
   createEntry,
@@ -26,6 +27,8 @@ import {
   createTestCollection,
   createTestGlobal,
   createTestSite,
+  observe,
+  waitForAdvisoryWaiter,
   withTestSite,
 } from '#/server/content/test-utils'
 import { authenticateSite } from '#/server/content/site-auth'
@@ -404,6 +407,50 @@ describe.skipIf(!hasDb)(
         expect(pushes.map((p) => p.kind).sort()).toEqual(['fork', 'refresh'])
       })
     })
+
+    it('waits for a dev entry save that holds the asset lock, then resets without a deadlock', async () => {
+      await withTestSite(async (ctx) => {
+        await seedProduction(ctx)
+        const fork = await forkDevEnvironment({ id: ctx.actor.id }, ctx.site.id)
+        const actorId = ctx.actor.id
+        const orgId = ctx.site.organizationId
+        const devReady = (await devEntries(fork.id)).find(
+          (row) => row.slug === 'ready',
+        )!
+
+        // An ordinary dev save: the asset lock first, then the entry row, then
+        // its autosave revision. The reset starts while the save is paused.
+        const attempt = await db.transaction(async (tx) => {
+          await assetMutationLock(tx, orgId)
+          await tx
+            .update(entry)
+            .set({
+              draftData: { title: 'Ready dev', slug: 'ready' },
+              draftVersion: sql`${entry.draftVersion} + 1`,
+              contentVersion: sql`${entry.contentVersion} + 1`,
+              updatedBy: actorId,
+            })
+            .where(eq(entry.id, devReady.id))
+          const reset = observe(refreshDevEnvironment({ id: actorId }, fork.id))
+          // The reset must queue behind the save, before it deletes anything.
+          await waitForAdvisoryWaiter(`assets:${orgId}`)
+          await tx
+            .update(entryRevision)
+            .set({ data: { title: 'Ready dev', slug: 'ready' } })
+            .where(eq(entryRevision.entryId, devReady.id))
+          return reset
+        })
+
+        const result = await attempt.outcome
+        if (!result.ok) throw new Error(String(result.error))
+        expect(result.value.discardedEntries).toBeGreaterThan(0)
+
+        const rows = await devEntries(fork.id)
+        const readyAfter = rows.find((row) => row.slug === 'ready')
+        expect(readyAfter?.publishedData).toMatchObject({ title: 'Ready v1' })
+        expect(readyAfter?.draftData).not.toMatchObject({ title: 'Ready dev' })
+      })
+    })
   },
 )
 
@@ -442,6 +489,43 @@ describe.skipIf(!hasDb)('development environment: delete', () => {
       expect(audit).toBeDefined()
       // The production site is untouched.
       expect((await devEntries(ctx.site.id)).length).toBeGreaterThan(0)
+    })
+  })
+
+  it('waits for a dev entry save that holds the asset lock, then deletes without a deadlock', async () => {
+    await withTestSite(async (ctx) => {
+      await seedProduction(ctx)
+      const fork = await forkDevEnvironment({ id: ctx.actor.id }, ctx.site.id)
+      const actorId = ctx.actor.id
+      const orgId = ctx.site.organizationId
+      const devReady = (await devEntries(fork.id)).find(
+        (row) => row.slug === 'ready',
+      )!
+
+      const attempt = await db.transaction(async (tx) => {
+        await assetMutationLock(tx, orgId)
+        await tx
+          .update(entry)
+          .set({
+            draftData: { title: 'Ready dev', slug: 'ready' },
+            draftVersion: sql`${entry.draftVersion} + 1`,
+            contentVersion: sql`${entry.contentVersion} + 1`,
+            updatedBy: actorId,
+          })
+          .where(eq(entry.id, devReady.id))
+        const deletion = observe(deleteDevEnvironment({ id: actorId }, fork.id))
+        await waitForAdvisoryWaiter(`assets:${orgId}`)
+        await tx
+          .update(entryRevision)
+          .set({ data: { title: 'Ready dev', slug: 'ready' } })
+          .where(eq(entryRevision.entryId, devReady.id))
+        return deletion
+      })
+
+      const result = await attempt.outcome
+      if (!result.ok) throw new Error(String(result.error))
+      expect(await devSiteRow(fork.id)).toBeUndefined()
+      expect(await devEntries(fork.id)).toEqual([])
     })
   })
 

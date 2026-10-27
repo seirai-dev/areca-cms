@@ -49,6 +49,10 @@ import {
   unpublishEntry,
   updateDraft,
 } from '#/server/content/entries'
+import {
+  applyBulkEntryAction,
+  BULK_ENTRY_ACTIONS,
+} from '#/server/content/entry-actions'
 import { listInboundReferences } from '#/server/content/inbound-references'
 import { NotFoundError } from '#/server/content/errors'
 import { AppError } from '#/server/http/app-error'
@@ -391,7 +395,7 @@ export const deleteEntryFn = createServerFn({ method: 'POST' })
 
 const bulkEntryActionSchema = z.object({
   siteId: z.string().min(1).max(ID_MAX_LENGTH),
-  action: z.enum(['ready', 'draft', 'archive', 'delete']),
+  action: z.enum(BULK_ENTRY_ACTIONS),
   ids: z
     .array(z.string().min(1).max(ID_MAX_LENGTH))
     .min(1)
@@ -415,21 +419,7 @@ async function runBulkEntryAction(
     if (found.siteId !== siteId) {
       throw new NotFoundError(m.server_entry_not_found())
     }
-    const actorId = session.user.id
-    switch (action) {
-      case 'ready':
-        await publishEntry(id, actorId)
-        break
-      case 'draft':
-        await unpublishEntry(id, actorId)
-        break
-      case 'archive':
-        await archiveEntry(id, actorId)
-        break
-      case 'delete':
-        await deleteEntry(id, actorId)
-        break
-    }
+    await applyBulkEntryAction(action, id, session.user.id)
     return { id, ok: true }
   } catch (error) {
     return {

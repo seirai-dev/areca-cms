@@ -660,31 +660,27 @@ function CollectionView({
           disabled={markableIds.length === 0 || bulk.isPending}
           onClick={() => runAction('ready', markableIds)}
           testId="bulk-ready"
+          label={m.collection_mark_ready()}
         >
           <CheckCircle />
-          <span className="hidden sm:inline">{m.collection_mark_ready()}</span>
         </BulkButton>
         <BulkButton
           canManage={canManage}
           disabled={draftableIds.length === 0 || bulk.isPending}
           onClick={() => runAction('draft', draftableIds)}
           testId="bulk-draft"
+          label={m.collection_move_to_draft_short()}
         >
           <ArrowUUpLeft />
-          <span className="hidden sm:inline">
-            {m.collection_move_to_draft_short()}
-          </span>
         </BulkButton>
         <BulkButton
           canManage={canManage}
           disabled={selected.size === 0 || bulk.isPending}
           onClick={() => runAction('archive', [...selected])}
           testId="bulk-archive"
+          label={m.collection_bulk_archive({ count: selected.size })}
         >
           <Archive />
-          <span className="hidden sm:inline">
-            {m.collection_bulk_archive({ count: selected.size })}
-          </span>
         </BulkButton>
         <BulkButton
           canManage={canManage}
@@ -692,9 +688,9 @@ function CollectionView({
           disabled={selected.size === 0 || bulk.isPending}
           onClick={() => runAction('delete', [...selected])}
           testId="bulk-delete"
+          label={m.editor_delete()}
         >
           <Trash />
-          <span className="hidden sm:inline">{m.editor_delete()}</span>
         </BulkButton>
         <FloatingBarDivider />
         <Button
@@ -768,12 +764,17 @@ function coverOf(row: EntryRow, imageField: Field | undefined) {
   return typeof value === 'string' && value ? value : undefined
 }
 
+/**
+ * One bulk action. Below `sm` only the icon shows, so the label is also the
+ * accessible name: it is set as `aria-label` at every width.
+ */
 function BulkButton({
   canManage,
   destructive,
   disabled,
   onClick,
   testId,
+  label,
   children,
 }: {
   canManage: boolean
@@ -781,6 +782,9 @@ function BulkButton({
   disabled: boolean
   onClick: () => void
   testId: string
+  /** The action's full name. Shown beside the icon from `sm` up. */
+  label: string
+  /** The icon. */
   children: React.ReactNode
 }) {
   const button = (
@@ -794,9 +798,11 @@ function BulkButton({
       )}
       disabled={!canManage || disabled}
       onClick={onClick}
+      aria-label={label}
       data-testid={testId}
     >
       {children}
+      <span className="hidden sm:inline">{label}</span>
     </Button>
   )
   if (!canManage) {

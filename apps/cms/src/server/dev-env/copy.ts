@@ -1,11 +1,18 @@
 import { and, eq, sql } from 'drizzle-orm'
 
-import { COPY_CONFLICT_MESSAGE, COPY_UNLINKED_MESSAGE } from '#/lib/dev-env'
+import {
+  COPY_CONFLICT_MESSAGE,
+  COPY_UNLINKED_MESSAGE,
+  SCHEDULED_IN_PRODUCTION_MESSAGE,
+} from '#/lib/dev-env'
+import type { DevEnvWarning } from '#/lib/dev-env'
+import { entryTitle } from '#/lib/content/utils'
 import { db } from '#/db'
 import { collection, entry, environmentPush, site } from '#/db/schema'
 import type { EntryData } from '#/lib/types'
 import { audit } from '#/server/audit'
 import { lockOrganizationForMutation } from '#/server/admin/organization-lock'
+import { assetMutationLock } from '#/server/assets/usage'
 import {
   ConflictError,
   NotFoundError,
@@ -17,6 +24,8 @@ import { lockProductionSite } from './lock'
 import { deepEqual } from './plan'
 import { remapReferences } from './references'
 import type { ReferenceWarning } from './references'
+import { findSlugCollisions } from './slug-collisions'
+import type { SlugOwner } from './slug-collisions'
 import {
   lockDevEnvironment,
   lockProductionRow,
@@ -30,7 +39,8 @@ import {
   productionReferenceLookup,
   readyProblems,
   referenceKey,
-  referenceWarnings,
+  referenceWarningList,
+  slugCollisionMessage,
   slugTaken,
 } from './write'
 import type { PushCounts } from './write'
@@ -38,7 +48,10 @@ import type { PushCounts } from './write'
 export type CopyInput = {
   /** The dev entry or section to copy. */
   devEntryId: string
-  /** Also make the production ready version the dev ready version (strict validation). */
+  /**
+   * Also make the copied draft the production ready version. Checked with the
+   * strict rules a push uses; when they fail, the draft is still copied.
+   */
   markReady?: boolean
   /** Replace a production draft that changed since the last sync, or an unlinked one with the same slug. */
   overwrite?: boolean
@@ -51,8 +64,8 @@ export type CopyResult = {
   productionId: string
   /** True when the copy created a new production entry. */
   created: boolean
-  /** Human-readable notes: a ready version that was not copied, cleared references. */
-  warnings: string[]
+  /** Notes: a ready version that was not copied, cleared references. */
+  warnings: DevEnvWarning[]
   clearedReferences: ClearedReference[]
 }
 
@@ -91,10 +104,15 @@ async function runCopy(
   const markReady = input.markReady ?? false
   const overwrite = input.overwrite ?? false
 
-  await lockOrganizationForMutation(tx, organizationId)
+  await lockOrganizationForMutation(tx, organizationId, {
+    mode: 'no-key-update',
+  })
   const dev = await lockDevEnvironment(tx, devSiteId)
   const prod = await lockProductionRow(tx, dev.parentSiteId)
   await lockProductionSite(tx, prod.id)
+  // The lock ordinary entry saves take, last in the order (see push.ts): the
+  // URL owners read below cannot change under this copy.
+  await assetMutationLock(tx, organizationId)
 
   const source = (
     await tx
@@ -201,9 +219,7 @@ async function runCopy(
 
   if (target) {
     if (target.scheduledAt != null) {
-      throw new ConflictError(
-        'Scheduled in production. Resolve the schedule first.',
-      )
+      throw new ConflictError(SCHEDULED_IN_PRODUCTION_MESSAGE)
     }
     const changed =
       !linked || source.originContentVersion !== target.contentVersion
@@ -221,6 +237,27 @@ async function runCopy(
         `Production already has an entry with the slug "${source.slug}", so the entry was not copied.`,
       )
     }
+  }
+
+  // The copied URLs (main and localized) must be free in production, except
+  // at the target itself. Overwrite does not change this.
+  const siblings = await tx
+    .select({ id: entry.id, slug: entry.slug, draftData: entry.draftData })
+    .from(entry)
+    .where(
+      and(eq(entry.siteId, prod.id), eq(entry.collectionId, prodCollection.id)),
+    )
+  const owners: SlugOwner[] = siblings
+    .filter((row) => row.id !== target?.id)
+    .map((row) => ({
+      id: row.id,
+      title: entryTitle(row.draftData, prodCollection.fields, row.slug),
+      slug: row.slug,
+      draftData: row.draftData,
+    }))
+  const collision = findSlugCollisions(source, owners).at(0)
+  if (collision) {
+    throw new ConflictError(slugCollisionMessage(collision, 'in production'))
   }
 
   const created = !target
@@ -247,38 +284,38 @@ async function runCopy(
     productionId = inserted.id
   }
 
+  // The copied entry maps to the production entry it is written to, whether it
+  // was created or matched: a self-reference must point at that entry.
   const lookup = await productionReferenceLookup(
     tx,
     prod.id,
     devEntries,
-    created ? new Map([[source.id, productionId]]) : new Map(),
+    new Map([[source.id, productionId]]),
   )
   const fields = prodCollection.fields
   const draft = remapReferences(source.draftData, fields, lookup)
   const clearedAll: ReferenceWarning[] = [...draft.cleared]
-  const warnings: string[] = []
+  const warnings: DevEnvWarning[] = []
 
+  // markReady makes the copied draft the production ready version.
   let readyStored: EntryData | null = null
   let readySlug: string | null = null
   if (markReady) {
-    if (source.publishedData != null && source.publishedSlug) {
-      const ready = remapReferences(source.publishedData, fields, lookup)
-      clearedAll.push(...ready.cleared)
-      const checked = await readyProblems(tx, prod, {
-        fields,
-        requiredLanguages: prodCollection.requiredLanguages,
-        ready: ready.data,
+    const checked = await readyProblems(tx, prod, {
+      fields,
+      requiredLanguages: prodCollection.requiredLanguages,
+      ready: draft.data,
+    })
+    if (checked.messages.length > 0) {
+      const details = checked.messages.join('; ')
+      warnings.push({
+        code: 'ready-not-copied',
+        params: { details },
+        message: `Ready version not copied, production keeps its previous ready version: ${details}`,
       })
-      if (checked.messages.length > 0) {
-        warnings.push(
-          `Ready version not copied, production keeps its previous ready version: ${checked.messages.join('; ')}`,
-        )
-      } else {
-        readyStored = checked.stored
-        readySlug = source.publishedSlug
-      }
     } else {
-      warnings.push('Not ready in development, so it was copied as a draft.')
+      readyStored = checked.stored
+      readySlug = source.slug
     }
   }
 
@@ -289,11 +326,7 @@ async function runCopy(
     seen.add(key)
     return true
   })
-  warnings.push(
-    ...referenceWarnings(null, clearedReferences, new Set()).map(
-      (warning) => warning.message,
-    ),
-  )
+  warnings.push(...referenceWarningList(clearedReferences, new Set()))
 
   const now = new Date()
   const updated = (

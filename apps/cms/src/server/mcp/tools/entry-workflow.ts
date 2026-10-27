@@ -1,5 +1,6 @@
 import { z } from '#/lib/zod'
 
+import { applyBulkEntryAction } from '#/server/content/entry-actions'
 import {
   archiveEntry,
   cancelSchedule,
@@ -9,14 +10,20 @@ import {
   scheduleEntry,
   unpublishEntry,
 } from '#/server/content/entries'
+import { ValidationError } from '#/server/content/errors'
 
+import { toolErrorMessage } from '../errors'
 import { formatStoredEntry, withImportWarnings } from './entries'
 import { loadEntryInSite } from '../scope'
 import { idSchema } from '../schemas'
+import { PRODUCTION_ONLY } from '../tool-kit'
 import type { ToolRegistry } from '../tool-kit'
 
 const OWNER_ONLY =
   'Only site owners can do this. Ask a site owner, or leave the entry as it is.'
+
+/** Most entry ids one mark_ready call approves. */
+const MARK_READY_MAX_IDS = 200
 
 /** Said after mark_ready, so the agent reports the state accurately. */
 export const APPROVED_MESSAGE =
@@ -36,8 +43,19 @@ export function registerEntryWorkflowTools(registry: ToolRegistry): void {
     name: 'mark_ready',
     title: 'Mark entry ready',
     description:
-      'Owner action. Marks an entry ready: approves its current draft for the next release. The entry status becomes ready. It does NOT change the live site: the approved version goes live with the next release (go_live, or an owner pressing Go live in the CMS). Required fields are checked here and the error names any that are missing. Pass expectedVersion (the version from get_entry) to approve exactly the draft you reviewed; if the entry changed since, the call fails with a conflict and nothing is approved. Check live and pendingRelease in the result.',
-    inputSchema: z.object({ id: idSchema('entry'), expectedVersion }),
+      'Owner action. Marks an entry ready: approves its current draft for the next release. The entry status becomes ready. It does NOT change the live site: the approved version goes live with the next release (go_live, or an owner pressing Go live in the CMS). Required fields are checked here and the error names any that are missing. Pass id for one entry, or ids (up to 200) to approve several at once: each id gets its own result, and one failure does not stop the others. Pass expectedVersion (the version from get_entry) with id to approve exactly the draft you reviewed; if the entry changed since, the call fails with a conflict and nothing is approved. expectedVersion cannot be used with ids. Check live and pendingRelease in the result.',
+    inputSchema: z.object({
+      id: idSchema('entry').optional(),
+      ids: z
+        .array(idSchema('entry'))
+        .min(1)
+        .max(MARK_READY_MAX_IDS)
+        .optional()
+        .describe(
+          `Several entry ids to mark ready, at most ${MARK_READY_MAX_IDS}. Returns a result per id.`,
+        ),
+      expectedVersion,
+    }),
     access: 'owner',
     deniedMessage:
       'Only site owners can mark entries ready. Ask an owner, or leave it as a draft.',
@@ -47,19 +65,49 @@ export function registerEntryWorkflowTools(registry: ToolRegistry): void {
       idempotentHint: true,
     },
     run: async (input, actor) => {
-      const entry = await loadEntryInSite(actor, input.id)
-      const published = await publishEntry(
-        entry.id,
-        actor.userId,
-        input.expectedVersion,
-      )
-      return withImportWarnings(
-        {
-          message: APPROVED_MESSAGE,
-          ...(await formatStoredEntry(actor, entry.id)),
-        },
-        published.importWarnings,
-      )
+      if (input.ids === undefined) {
+        if (input.id === undefined) {
+          throw new ValidationError([
+            {
+              path: 'id',
+              message: 'Send id for one entry, or ids for several.',
+            },
+          ])
+        }
+        const entry = await loadEntryInSite(actor, input.id)
+        const published = await publishEntry(
+          entry.id,
+          actor.userId,
+          input.expectedVersion,
+        )
+        return withImportWarnings(
+          {
+            message: APPROVED_MESSAGE,
+            ...(await formatStoredEntry(actor, entry.id)),
+          },
+          published.importWarnings,
+        )
+      }
+      if (input.expectedVersion !== undefined) {
+        throw new ValidationError([
+          {
+            path: 'expectedVersion',
+            message: 'expectedVersion applies to one entry. Send id, not ids.',
+          },
+        ])
+      }
+      const ids = [...new Set([...(input.id ? [input.id] : []), ...input.ids])]
+      const results: { id: string; ok: boolean; error?: string }[] = []
+      for (const id of ids) {
+        try {
+          await loadEntryInSite(actor, id)
+          await applyBulkEntryAction('ready', id, actor.userId)
+          results.push({ id, ok: true })
+        } catch (error) {
+          results.push({ id, ok: false, error: toolErrorMessage(error) })
+        }
+      }
+      return { message: APPROVED_MESSAGE, results }
     },
   })
 
@@ -127,6 +175,7 @@ export function registerEntryWorkflowTools(registry: ToolRegistry): void {
         ),
     }),
     access: 'go-live',
+    environments: PRODUCTION_ONLY,
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,
@@ -155,6 +204,7 @@ export function registerEntryWorkflowTools(registry: ToolRegistry): void {
       'Owner action. Removes the scheduled go-live time from an entry. The draft and any live version are kept.',
     inputSchema: z.object({ id: idSchema('entry') }),
     access: 'owner',
+    environments: PRODUCTION_ONLY,
     deniedMessage: OWNER_ONLY,
     annotations: {
       readOnlyHint: false,

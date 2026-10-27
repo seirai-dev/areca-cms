@@ -222,7 +222,9 @@ export async function forkDevEnvironment(
   if (!probe) throw new NotFoundError(m.server_site_not_found())
 
   return db.transaction(async (tx) => {
-    await lockOrganizationForMutation(tx, probe.organizationId)
+    await lockOrganizationForMutation(tx, probe.organizationId, {
+      mode: 'no-key-update',
+    })
     const prod = await lockProductionRow(tx, productionSiteId)
     if (isDevSite(prod)) {
       throw new ConflictError(m.server_dev_env_production_only())
@@ -302,6 +304,7 @@ export async function forkDevEnvironment(
     return {
       id: dev.id,
       slug: devSlug,
+      counts,
       token: token.token,
       schemaToken: schemaToken.token,
       previewSecret,

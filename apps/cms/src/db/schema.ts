@@ -602,6 +602,12 @@ export const auditLog = pgTable('audit_log', {
   targetType: text('target_type').notNull(),
   targetId: text('target_id').notNull(),
   meta: jsonb('meta').$type<AuditMeta>(),
+  /**
+   * Agency-only rows: anything for a development environment, and `dev_env.*`
+   * actions. Set by `audit()`. Client-facing activity filters on this flag, so
+   * rows stay hidden after the dev env (and its site_id) is deleted.
+   */
+  agencyOnly: boolean('agency_only').notNull().default(false),
   createdAt: createdAt(),
 })
 

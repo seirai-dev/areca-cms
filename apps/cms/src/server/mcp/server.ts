@@ -3,8 +3,11 @@ import { z } from '#/lib/zod'
 
 import { credentialPhrase } from './guard'
 import type { McpActor } from './keys'
+import { mcpResourceUrl } from './oauth-resource'
+import type { McpSiteContext } from './site-context'
 import { ToolRegistry } from './tool-kit'
 import { registerAssetTools } from './tools/assets'
+import { registerDevEnvTools } from './tools/dev-env'
 import { registerEntryTools } from './tools/entries'
 import { registerEntryWorkflowTools } from './tools/entry-workflow'
 import { registerLanguageTools } from './tools/languages'
@@ -16,9 +19,16 @@ import { registerSiteTools } from './tools/site'
 export const MCP_SERVER_NAME = 'areca-cms'
 export const MCP_SERVER_VERSION = '1.0.0'
 
+const PRODUCTION_CONTEXT: McpSiteContext = {
+  environment: 'production',
+  productionSlug: null,
+  devSlug: null,
+}
+
 /** What the caller may do, in the words the CMS uses. Drives the instructions. */
 function roleInstruction(
   actor: Pick<McpActor, 'role' | 'allowGoLive' | 'credential'>,
+  site: McpSiteContext,
 ): string[] {
   if (actor.role === 'editor') {
     return [
@@ -29,30 +39,57 @@ function roleInstruction(
   const lines = [
     'mark_ready marks an entry ready: it approves the entry for the next release. Ready does not change the live site until the next go live.',
   ]
-  if (actor.allowGoLive) {
-    lines.push(
-      'go_live puts the release live (builds the ready changes and deploys them). Only call it when the user asks.',
-    )
-  } else {
-    const fix =
-      actor.credential === 'oauth'
-        ? ', or that the app can be reconnected from Connect AI with "Allow going live" ticked'
-        : ''
-    lines.push(
-      `Going live is not enabled for ${credentialPhrase(actor.credential)}. When the user asks to go live, explain that a site owner presses Go live in the CMS${fix}.`,
-    )
+  // A development environment has no releases, so go_live and its neighbours are not listed there.
+  if (site.environment === 'production') {
+    if (actor.allowGoLive) {
+      lines.push(
+        'go_live puts the release live (builds the ready changes and deploys them). Only call it when the user asks.',
+      )
+    } else {
+      const fix =
+        actor.credential === 'oauth'
+          ? ', or that the app can be reconnected from Connect AI with "Allow going live" ticked'
+          : ''
+      lines.push(
+        `Going live is not enabled for ${credentialPhrase(actor.credential)}. When the user asks to go live, explain that a site owner presses Go live in the CMS${fix}.`,
+      )
+    }
   }
   if (actor.role === 'agency') {
     lines.push(
       'You can also change collection schemas (upsert_collection, delete_collection) and site content sections (upsert_global, delete_global). If the site syncs its schema from code, prefer changing areca.config.ts. set_site_languages changes the site languages, and set_publishing_mode switches the site between demo and production publishing.',
     )
   }
-  return lines
+  return [...lines, ...environmentInstruction(actor, site)]
+}
+
+/**
+ * Development environment facts for the model. Only agency admins hear about
+ * the development environment of a production site (Decision 3).
+ */
+function environmentInstruction(
+  actor: Pick<McpActor, 'role'>,
+  site: McpSiteContext,
+): string[] {
+  if (site.environment === 'development') {
+    return [
+      `This is a development environment for the production site "${site.productionSlug ?? 'unknown'}". Changes made here stay here until they are pushed to production.`,
+      'A pull with this key reads the ready content of this environment now, without a release.',
+      'To send changes to production, call push_to_production with dryRun (the default) first and show the list to the user. Apply only after the user approves, passing the planHash from that dry run. copy_entry_to_production copies one entry as a draft.',
+    ]
+  }
+  if (site.devSlug && actor.role === 'agency') {
+    return [
+      `This site has a development environment (${mcpResourceUrl(site.devSlug)}). Make changes there, then push.`,
+    ]
+  }
+  return []
 }
 
 /** Read by the model once, at connection time. Keep it short and specific. */
 export function serverInstructions(
   actor: Pick<McpActor, 'siteName' | 'role' | 'allowGoLive' | 'credential'>,
+  site: McpSiteContext = PRODUCTION_CONTEXT,
 ): string {
   return [
     `This server edits one website: "${actor.siteName}". Every tool acts only on that site.`,
@@ -63,7 +100,7 @@ export function serverInstructions(
     'Always fill SEO for new entries: seo.title (about 50-60 characters), seo.description (140-160 characters), seo.focusKeyphrase, seo.summary (2-3 sentences), seo.keyTakeaways (3-5), and seo.faq only when the body really answers questions.',
     "Images: upload_asset_from_url with a direct link to the image file, then use the returned assetId in image fields, seo.ogImage and ![alt](asset:<assetId>). Always give alt text. If an upload fails, do not guess other URLs: ask the user for a working link or continue without the image. An external ![alt](https://...) image in rich text is copied into the media library when the entry is saved; any that could not be copied are listed in the result's warnings.",
     'Drafts are safe. Nothing you write changes the live site until it is approved and a go live happens.',
-    ...roleInstruction(actor),
+    ...roleInstruction(actor, site),
     'Respect the caller role: tools you cannot use are not listed. If an action is refused, explain the reason to the user and say who can do it.',
     'When an update fails with a version conflict, call get_entry again and reapply the change to the current version.',
   ].join('\n')
@@ -88,13 +125,16 @@ const WRITE_POST_TEXT = (
       : '6. You cannot mark the entry ready. When the user wants it approved, tell them a site owner must mark it ready in the CMS.',
   ].join('\n')
 
-export function createArecaMcpServer(actor: McpActor): McpServer {
+export function createArecaMcpServer(
+  actor: McpActor,
+  site: McpSiteContext = PRODUCTION_CONTEXT,
+): McpServer {
   const server = new McpServer(
     { name: MCP_SERVER_NAME, version: MCP_SERVER_VERSION },
-    { instructions: serverInstructions(actor) },
+    { instructions: serverInstructions(actor, site) },
   )
 
-  const registry = new ToolRegistry(server, actor)
+  const registry = new ToolRegistry(server, actor, site)
   registerSiteTools(registry)
   registerEntryTools(registry)
   registerEntryWorkflowTools(registry)
@@ -103,6 +143,7 @@ export function createArecaMcpServer(actor: McpActor): McpServer {
   registerPublishingTools(registry)
   registerSchemaTools(registry)
   registerLanguageTools(registry)
+  registerDevEnvTools(registry)
 
   server.registerPrompt(
     'write_post',

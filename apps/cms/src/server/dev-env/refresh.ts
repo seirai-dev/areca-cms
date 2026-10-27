@@ -2,6 +2,7 @@ import { db } from '#/db'
 import { entry, environmentPush } from '#/db/schema'
 import { audit } from '#/server/audit'
 import { lockOrganizationForMutation } from '#/server/admin/organization-lock'
+import { assetMutationLock } from '#/server/assets/usage'
 import { eq } from 'drizzle-orm'
 
 import { copyProductionIntoDev } from './fork'
@@ -28,10 +29,15 @@ export async function refreshDevEnvironment(
 ): Promise<RefreshResult> {
   const probe = await readDevEnvironment(devSiteId)
   return db.transaction(async (tx) => {
-    await lockOrganizationForMutation(tx, probe.organizationId)
+    await lockOrganizationForMutation(tx, probe.organizationId, {
+      mode: 'no-key-update',
+    })
     const dev = await lockDevEnvironment(tx, devSiteId)
     const prod = await lockProductionRow(tx, dev.parentSiteId)
     await lockProductionSite(tx, prod.id)
+    // The lock ordinary entry saves take, last in the order (see push.ts). A
+    // save holding it is never waiting on a revision this reset deletes.
+    await assetMutationLock(tx, probe.organizationId)
 
     const discarded = (
       await tx

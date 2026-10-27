@@ -1,4 +1,6 @@
+import { NEVER_APPLIED_ATTENTION } from '#/lib/dev-env'
 import type { PlanAttention, PlanItem } from '#/server/dev-env/plan'
+import type { SlugCollision } from '#/server/dev-env/slug-collisions'
 
 /**
  * Pure rules behind the push screen (docs/design/dev-environments.md, "Push
@@ -68,11 +70,101 @@ export type PushDecisions = {
 
 export const NO_PUSH_DECISIONS: PushDecisions = { unticked: [], applied: [] }
 
+/** Sorted-key JSON. Local, so the client never loads `plan.ts` (it imports node:crypto). */
+function fingerprintJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(fingerprintJson).join(',')}]`
+  if (value !== null && typeof value === 'object') {
+    const source = value as Record<string, unknown>
+    const members = Object.keys(source)
+      .sort()
+      .filter((key) => source[key] !== undefined)
+      .map((key) => `${JSON.stringify(key)}:${fingerprintJson(source[key])}`)
+    return `{${members.join(',')}}`
+  }
+  return JSON.stringify(value)
+}
+
+/**
+ * What a decision was made on: the item's id, kind, production version,
+ * attention and summary. A change to any of them means the agency must look
+ * again.
+ */
+export function planItemFingerprint(item: PlanItem): string {
+  return fingerprintJson({
+    id: item.id,
+    kind: item.kind,
+    productionContentVersion: item.productionContentVersion ?? null,
+    attention: item.attention,
+    summary: item.summary,
+  })
+}
+
+export type CarriedPushDecisions = {
+  decisions: PushDecisions
+  /** Items that changed (or are new) since the reviewed plan. The screen highlights them. */
+  changed: string[]
+}
+
+/**
+ * Carries the decisions made on the reviewed plan over to a refreshed one. A
+ * decision stays only while its item is unchanged; a changed item loses it
+ * and is listed in `changed`. Items that left the plan drop out. `reviewed`
+ * is null before the first plan is reviewed: nothing has changed then.
+ */
+export function carryPushDecisions(
+  reviewed: readonly PlanItem[] | null,
+  next: readonly PlanItem[],
+  decisions: PushDecisions,
+): CarriedPushDecisions {
+  if (reviewed === null) return { decisions, changed: [] }
+  const before = new Map(
+    reviewed.map((item) => [item.id, planItemFingerprint(item)]),
+  )
+  const unchanged = new Set<string>()
+  const changed: string[] = []
+  for (const item of next) {
+    if (before.get(item.id) === planItemFingerprint(item)) {
+      unchanged.add(item.id)
+    } else {
+      changed.push(item.id)
+    }
+  }
+  const keep = (ids: readonly string[]) => ids.filter((id) => unchanged.has(id))
+  return {
+    decisions: {
+      unticked: keep(decisions.unticked),
+      applied: keep(decisions.applied),
+    },
+    changed,
+  }
+}
+
+/**
+ * Whether a Needs-attention row may be switched to Apply. A scheduled
+ * production entry, or a URL another entry holds, can never be applied: the
+ * schedule or the URL must be resolved first. The server enforces the same
+ * rule (`selectPlanItems`). Normal rows have no Apply switch: false.
+ */
+export function applyAllowed(item: PlanItem): boolean {
+  return item.attention !== null && !NEVER_APPLIED_ATTENTION.has(item.attention)
+}
+
+/** What a Needs-attention row's Skip | Apply switch shows. */
+export function decisionOf(
+  item: PlanItem,
+  decisions: PushDecisions,
+): { value: 'skip' | 'apply'; applyDisabled: boolean } {
+  const allowed = applyAllowed(item)
+  return {
+    value: allowed && decisions.applied.includes(item.id) ? 'apply' : 'skip',
+    applyDisabled: !allowed,
+  }
+}
+
 /** Whether a push would write this item, given the decisions. */
 export function isPushTaken(item: PlanItem, decisions: PushDecisions): boolean {
   if (item.attention !== null) {
-    // A scheduled production entry can never be applied (Decision 15).
-    return item.attention !== 'scheduled' && decisions.applied.includes(item.id)
+    return applyAllowed(item) && decisions.applied.includes(item.id)
   }
   return !decisions.unticked.includes(item.id)
 }
@@ -118,11 +210,70 @@ export function withId(list: readonly string[], id: string, on: boolean) {
 
 export type ScopeKind = 'ready' | 'draft' | 'both'
 
-/** The row title: `Spring menu · Articles` for an entry, the bare title otherwise. */
-export function planItemLabel(item: PlanItem): string {
-  return item.collectionLabel
-    ? `${item.title} · ${item.collectionLabel}`
-    : item.title
+/**
+ * The row title: `Spring menu · Articles` for an entry, the bare title otherwise.
+ * `title` replaces `item.title` when the screen has a translation for it.
+ */
+export function planItemLabel(
+  item: PlanItem,
+  title: string = item.title,
+): string {
+  return item.collectionLabel ? `${title} · ${item.collectionLabel}` : title
+}
+
+/** A secondary line a row shows beside its summary or reason. */
+export type PushDetail =
+  /** Entry rows: fields a pending removal keeps in production. */
+  | { kind: 'keeps'; fields: string[] }
+  /** Destructive schema items: the production entries they archive. `values` is null when none holds a value. */
+  | { kind: 'archives'; values: number | null; entries: number }
+
+/** The detail lines of an item, in display order. */
+export function pushDetailsOf(item: PlanItem): PushDetail[] {
+  const details: PushDetail[] = []
+  const kept = item.summary.preservedFields ?? []
+  if (kept.length > 0) details.push({ kind: 'keeps', fields: kept })
+  const entries = item.affectedEntries?.length ?? 0
+  if (item.kind.startsWith('schema.') && entries > 0) {
+    const values = droppedValues(item)
+    details.push({
+      kind: 'archives',
+      values: values > 0 ? values : null,
+      entries,
+    })
+  }
+  return details
+}
+
+/**
+ * What a schema row does, for its title: `Remove field 'excerpt' · Posts`,
+ * `Remove collection · Posts`, `Add collection · Case studies`,
+ * `Change collection · Posts`. Null for every other row.
+ */
+export type SchemaAction =
+  | { kind: 'add-collection' }
+  | { kind: 'remove-collection' }
+  | { kind: 'change-collection' }
+  /** A field removal that holds production values: the removed field keys. */
+  | { kind: 'remove-fields'; fields: string[] }
+
+export function schemaActionOf(item: PlanItem): SchemaAction | null {
+  switch (item.kind) {
+    case 'schema.add':
+      return { kind: 'add-collection' }
+    case 'schema.remove':
+      return { kind: 'remove-collection' }
+    case 'schema.change': {
+      const fields = (item.summary.droppedFields ?? []).map(
+        (field) => field.key,
+      )
+      return fields.length > 0
+        ? { kind: 'remove-fields', fields }
+        : { kind: 'change-collection' }
+    }
+    default:
+      return null
+  }
 }
 
 export type PushSummary =
@@ -184,10 +335,14 @@ export function droppedValues(item: PlanItem): number {
 
 export type AttentionReason =
   | { kind: 'conflict' }
-  | { kind: 'drops'; fields: string[]; values: number }
+  /** A field removal: the fields that hold production values. */
+  | { kind: 'drops'; fields: string[] }
+  | { kind: 'remove-collection' }
   | { kind: 'main-language'; entries: number }
-  | { kind: 'scheduled' }
+  /** `titles`: the scheduled production entries a schema item touches. Empty for an entry row. */
+  | { kind: 'scheduled'; titles: string[] }
   | { kind: 'deleted-in-production' }
+  | { kind: 'slug-taken'; collisions: SlugCollision[] }
 
 /**
  * Why a Needs-attention row is listed. Null for items that need no attention.
@@ -200,17 +355,23 @@ export function attentionReasonOf(item: PlanItem): AttentionReason | null {
     case 'conflict':
       return { kind: 'conflict' }
     case 'drops-content':
+      // A removed collection has no dropped fields to name; its entries are the detail line.
+      if (item.kind === 'schema.remove') return { kind: 'remove-collection' }
       return {
         kind: 'drops',
         fields: (item.summary.droppedFields ?? []).map((field) => field.key),
-        values: droppedValues(item),
       }
     case 'main-language':
       return { kind: 'main-language', entries: item.summary.stampCount ?? 0 }
     case 'scheduled':
-      return { kind: 'scheduled' }
+      return { kind: 'scheduled', titles: item.summary.scheduledTitles ?? [] }
     case 'deleted-in-production':
       return { kind: 'deleted-in-production' }
+    case 'slug-taken':
+      return {
+        kind: 'slug-taken',
+        collisions: item.summary.slugCollisions ?? [],
+      }
   }
 }
 

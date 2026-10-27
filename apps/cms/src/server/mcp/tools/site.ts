@@ -12,7 +12,9 @@ import {
 import type { Field, SiteLanguages } from '#/lib/types'
 
 import { credentialPhrase } from '../guard'
+import { mcpResourceUrl } from '../oauth-resource'
 import type { ToolRegistry } from '../tool-kit'
+import type { McpSiteContext } from '../site-context'
 import { loadCollectionInSite, loadSiteRow } from '../scope'
 import type { McpActor } from '../keys'
 import {
@@ -29,14 +31,22 @@ import {
  * What this key cannot do, as sentences a person can act on. Editors and keys
  * without go-live see these; the tools themselves are not listed to them.
  */
-export function cannotDoFor(actor: McpActor): string[] {
+export function cannotDoFor(
+  actor: McpActor,
+  environment: McpSiteContext['environment'] = 'production',
+): string[] {
   const out: string[] = []
   if (actor.role === 'editor') {
     out.push(
       'Mark entries ready, schedule, unpublish, archive, delete, restore revisions, or delete files: ask a site owner.',
     )
   }
-  if (!actor.allowGoLive) {
+  if (environment === 'development') {
+    // A development environment has no releases, so there is nothing to go live here.
+    out.push(
+      'Go live, schedule, roll back or cancel builds: this is a development environment, which has no releases. Push changes to production with push_to_production, and a site owner goes live on the production site in the CMS.',
+    )
+  } else if (!actor.allowGoLive) {
     out.push(
       actor.credential === 'oauth'
         ? `Go live or schedule: going live is not enabled for ${credentialPhrase(actor.credential)}. A site owner presses Go live in the CMS, or the app can be reconnected from Connect AI with "Allow going live" ticked.`
@@ -81,18 +91,21 @@ const LANGUAGES_GUIDE = [
 function writingGuide(
   actor: McpActor,
   languages: SiteLanguages | null,
+  environment: McpSiteContext['environment'],
 ): string {
   const approval =
     actor.role === 'editor'
       ? 'You cannot mark entries ready. When the user asks for approval or publishing, explain that a site owner must mark it ready in the CMS.'
       : 'mark_ready marks an entry ready (approves it for the next release). It does not change the live site.'
+  const release =
+    environment === 'development'
+      ? ' There is no go_live on a development environment: push changes to production with push_to_production, after a dry run the user approves.'
+      : ' go_live puts the release live, and only when the user asks.'
   return [
     'Workflow: 1) get_collection_schema for the collection you need. 2) create_entry with fields and seo (rich text as Markdown). 3) get_preview_url to check it. 4) update_entry to revise (pass the version from get_entry as expectedVersion).',
     'Site content (globals) is not a collection: read a section with get_global and change it with update_global (pass expectedVersion from get_global). Its id works with mark_ready and the other workflow tools.',
     'Images: upload_asset_from_url with a public image URL, then use the returned assetId in image fields, seo.ogImage, or ![alt](asset:<assetId>) in Markdown. Always give alt text.',
-    'Drafts are safe. ' +
-      approval +
-      ' go_live puts the release live, and only when the user asks.',
+    'Drafts are safe. ' + approval + release,
     STATUS_GUIDE,
     DATES_NOTE,
     SEO_GUIDE,
@@ -105,10 +118,10 @@ export function registerSiteTools(registry: ToolRegistry): void {
     name: 'get_site_info',
     title: 'Get site info',
     description:
-      'Call this first. Returns the site this AI connection is for (name, slug, production URL, publishing mode, whether a deployment target is configured), your role and what you may do, every collection with its route and whether it is enabled, the site content sections (globals) with their keys, and a short guide for writing content. Read-only.',
+      'Call this first. Returns the site this AI connection is for (name, slug, production URL, publishing mode, whether a deployment target is configured, and its environment: production or development; a development environment also names its production slug, and a production site with a development environment names it for agency admins), your role and what you may do, every collection with its route and whether it is enabled, the site content sections (globals) with their keys, and a short guide for writing content. Read-only.',
     inputSchema: z.object({}),
     annotations: { readOnlyHint: true, idempotentHint: true },
-    run: async (_input, actor) => {
+    run: async (_input, actor, site) => {
       const siteRow = await loadSiteRow(actor)
       const languages = await loadSiteLanguages(actor.siteId)
       const collections = await listCollections(actor.siteId)
@@ -116,8 +129,10 @@ export function registerSiteTools(registry: ToolRegistry): void {
         enabledOnly: actor.role !== 'agency',
       })
       const isOwner = actor.role !== 'editor'
+      // Development environments have no releases, so going live and scheduling never apply there.
+      const canGoLive = actor.allowGoLive && site.environment === 'production'
       return {
-        cannotDo: cannotDoFor(actor),
+        cannotDo: cannotDoFor(actor, site.environment),
         ...(languages ? { languages: languageSummary(languages) } : {}),
         site: {
           id: siteRow.id,
@@ -126,6 +141,18 @@ export function registerSiteTools(registry: ToolRegistry): void {
           productionUrl: siteRow.productionUrl,
           publishingMode: siteRow.publishingMode,
           deploymentConfigured: isDeploymentConfigured(siteRow),
+          environment: site.environment,
+          ...(site.environment === 'development'
+            ? { productionSlug: site.productionSlug }
+            : {}),
+          ...(site.devSlug && actor.role === 'agency'
+            ? {
+                devEnvironment: {
+                  slug: site.devSlug,
+                  connectorUrl: mcpResourceUrl(site.devSlug),
+                },
+              }
+            : {}),
         },
         you: {
           name: actor.userName,
@@ -136,12 +163,12 @@ export function registerSiteTools(registry: ToolRegistry): void {
             uploadAndEditAssets: true,
             previewEntries: true,
             markReady: isOwner,
-            unpublishArchiveScheduleDelete: isOwner && actor.allowGoLive,
+            unpublishArchiveScheduleDelete: isOwner && canGoLive,
             unpublishArchiveDelete: isOwner,
-            schedule: actor.allowGoLive,
+            schedule: canGoLive,
             restoreRevisions: isOwner,
             deleteAssets: isOwner,
-            goLive: actor.allowGoLive,
+            goLive: canGoLive,
             changeCollectionSchema: actor.role === 'agency',
             changeSiteContentStructure: actor.role === 'agency',
           },
@@ -172,7 +199,7 @@ export function registerSiteTools(registry: ToolRegistry): void {
             ? languageInfo(languages, global.requiredLanguages, global.fields)
             : {}),
         })),
-        guide: writingGuide(actor, languages),
+        guide: writingGuide(actor, languages, site.environment),
       }
     },
   })

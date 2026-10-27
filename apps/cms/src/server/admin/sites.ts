@@ -1,6 +1,6 @@
 import { archiveDeletedContent } from '#/server/content/deletion-archive'
 import { randomBytes } from 'node:crypto'
-import { eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray, ne } from 'drizzle-orm'
 import type { InferSelectModel } from 'drizzle-orm'
 import { z } from '#/lib/zod'
 
@@ -29,6 +29,7 @@ import {
 import { generateSiteToken } from '#/server/content/site-auth'
 import { deleteDevSiteRows } from '#/server/dev-env/delete'
 import { lockProductionSite } from '#/server/dev-env/lock'
+import { lockProductionRow } from '#/server/dev-env/rows'
 
 export const deploymentTargetSchema: z.ZodType<DeploymentTarget | null> =
   z.union([
@@ -299,55 +300,69 @@ export async function updateSite(
  * Changes a site's slug, which is its key in the CMS: the MCP connector URL
  * and each project's `--site-key` use it, so old links stop working. The
  * slug must be unique and follow the shared rule.
+ *
+ * The dev env follows its production slug as `<slug>-dev` (Edge case 8). The
+ * whole change runs under the organization lock, the production row lock and
+ * the dev-env advisory lock, so a concurrent fork or reset cannot read the old
+ * slug and leave the dev env behind (docs/design/dev-environments.md, Locking).
  */
 export async function changeSiteSlug(
   id: string,
   slug: string,
   actorId: string,
 ) {
-  const existing = (
+  const probe = (
     await db.select().from(site).where(eq(site.id, id)).limit(1)
   ).at(0)
-  if (!existing) {
+  if (!probe) {
     throw new NotFoundError(m.server_site_not_found())
   }
-  if (slug === existing.slug) return toPublicSite(existing)
-  if (isDevSite(existing)) {
+  if (slug === probe.slug) return toPublicSite(probe)
+  if (isDevSite(probe)) {
     throw new ConflictError(m.server_dev_env_slug_follows_production())
   }
   assertSiteSlug(slug)
 
-  const taken = (
-    await db
-      .select({ id: site.id })
-      .from(site)
-      .where(eq(site.slug, slug))
-      .limit(1)
-  ).at(0)
-  if (taken) {
-    throw new ConflictError(m.server_slug_already_exists())
-  }
-
-  // The dev env follows its production slug as <slug>-dev (Edge case 8).
-  const devEnv = (
-    await db.select().from(site).where(eq(site.parentSiteId, id)).limit(1)
-  ).at(0)
-  const devSlug = `${slug}-dev`
-  if (devEnv) {
-    const devSlugTaken = (
-      await db
-        .select({ id: site.id })
-        .from(site)
-        .where(eq(site.slug, devSlug))
-        .limit(1)
-    ).at(0)
-    if (devSlugTaken) {
-      throw new ConflictError(m.server_dev_env_slug_taken({ slug: devSlug }))
-    }
-  }
-
   try {
     const updated = await db.transaction(async (tx) => {
+      await lockOrganizationForMutation(tx, probe.organizationId, {
+        mode: 'no-key-update',
+      })
+      const existing = await lockProductionRow(tx, id)
+      await lockProductionSite(tx, id)
+
+      const taken = (
+        await tx
+          .select({ id: site.id })
+          .from(site)
+          .where(eq(site.slug, slug))
+          .limit(1)
+      ).at(0)
+      if (taken) {
+        throw new ConflictError(m.server_slug_already_exists())
+      }
+
+      // Read here, not before the transaction: a fork that committed a moment
+      // ago must be seen, or its dev env keeps the old slug.
+      const devEnv = (
+        await tx.select().from(site).where(eq(site.parentSiteId, id)).limit(1)
+      ).at(0)
+      const devSlug = `${slug}-dev`
+      if (devEnv) {
+        const devSlugTaken = (
+          await tx
+            .select({ id: site.id })
+            .from(site)
+            .where(and(eq(site.slug, devSlug), ne(site.id, devEnv.id)))
+            .limit(1)
+        ).at(0)
+        if (devSlugTaken) {
+          throw new ConflictError(
+            m.server_dev_env_slug_taken({ slug: devSlug }),
+          )
+        }
+      }
+
       const row = (
         await tx
           .update(site)
@@ -357,12 +372,6 @@ export async function changeSiteSlug(
       ).at(0)
       if (!row) {
         throw new NotFoundError(m.server_site_not_found())
-      }
-      if (devEnv) {
-        await tx
-          .update(site)
-          .set({ slug: devSlug, updatedAt: new Date() })
-          .where(eq(site.id, devEnv.id))
       }
       await audit(
         {
@@ -376,11 +385,30 @@ export async function changeSiteSlug(
             fields: ['slug'],
             previousSlug: existing.slug,
             slug,
-            ...(devEnv ? { devSlug } : {}),
           },
         },
         tx,
       )
+
+      if (devEnv) {
+        await tx
+          .update(site)
+          .set({ slug: devSlug, updatedAt: new Date() })
+          .where(eq(site.id, devEnv.id))
+        // Agency-only (the action is dev_env.*): the dev slug is not client data.
+        await audit(
+          {
+            organizationId: existing.organizationId,
+            siteId: id,
+            actorId,
+            action: 'dev_env.rename',
+            targetType: 'site',
+            targetId: devEnv.id,
+            meta: { previousSlug: devEnv.slug, slug: devSlug },
+          },
+          tx,
+        )
+      }
       return row
     })
     return toPublicSite(updated)

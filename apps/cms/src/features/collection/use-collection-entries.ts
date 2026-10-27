@@ -5,11 +5,16 @@ import {
   useMutation,
   useQueryClient,
 } from '@tanstack/react-query'
+import { useRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
 import { queryKeys } from '#/lib/content/query-keys'
 import { errorMessage } from '#/lib/content/utils'
 import { useInvalidateGoLive } from '#/features/golive/use-go-live'
+import {
+  bulkQueryKeys,
+  invalidateQueryKeys,
+} from '#/features/dev-env/invalidate'
 import type { EntryData, EntryStatus } from '#/lib/types'
 import {
   DUE_POLL_MS,
@@ -282,6 +287,7 @@ export function useEntryBulkActions(
   options: { onResult?: (result: BulkResult) => void } = {},
 ) {
   const queryClient = useQueryClient()
+  const router = useRouter()
   const invalidateGoLive = useInvalidateGoLive(siteId)
   const [details, setDetails] = React.useState<BulkResult | null>(null)
   const onResultRef = React.useRef(options.onResult)
@@ -316,11 +322,16 @@ export function useEntryBulkActions(
         }
       }
       await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: ['entries', siteId, collectionKey],
-        }),
-        ...result.ids.map((id) =>
-          queryClient.invalidateQueries({ queryKey: queryKeys.entry(id) }),
+        // The list, each entry touched, and (on a dev site) the sync status,
+        // which counts these changes; the router refreshes its loaders.
+        invalidateQueryKeys(
+          queryClient,
+          router,
+          bulkQueryKeys({
+            siteId,
+            collectionKey,
+            entryIds: result.ids,
+          }),
         ),
         invalidateGoLive(),
       ])

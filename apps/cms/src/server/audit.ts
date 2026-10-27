@@ -1,8 +1,13 @@
+import { eq } from 'drizzle-orm'
+
 import { db } from '#/db'
-import { auditLog } from '#/db/schema'
+import { auditLog, site } from '#/db/schema'
+import { isDevSite } from '#/lib/site-environment'
 import type { AuditMeta } from '#/lib/types'
 
 import { currentAuditContext } from './audit-context.ts'
+
+type AuditConnection = Pick<typeof db, 'insert' | 'select'>
 
 export async function audit(
   input: {
@@ -15,7 +20,7 @@ export async function audit(
     targetId: string
     meta?: AuditMeta
   },
-  connection: Pick<typeof db, 'insert'> = db,
+  connection: AuditConnection = db,
 ) {
   await connection.insert(auditLog).values({
     organizationId: input.organizationId,
@@ -25,7 +30,31 @@ export async function audit(
     targetType: input.targetType,
     targetId: input.targetId,
     meta: mergeMeta(input.meta),
+    agencyOnly: await isAgencyOnlyAudit(input, connection),
   })
+}
+
+/**
+ * Rows only agency admins may read (docs/design/dev-environments.md,
+ * Decision 22): anything written for a development environment, and every
+ * `dev_env.*` action, which names the dev env in its target or meta. The flag
+ * is stored, so the rows stay hidden after the dev env and its `site_id` are
+ * deleted.
+ */
+async function isAgencyOnlyAudit(
+  input: { siteId?: string | null; action: string },
+  connection: AuditConnection,
+): Promise<boolean> {
+  if (input.action.startsWith('dev_env.')) return true
+  if (!input.siteId) return false
+  const row = (
+    await connection
+      .select({ environment: site.environment })
+      .from(site)
+      .where(eq(site.id, input.siteId))
+      .limit(1)
+  ).at(0)
+  return row ? isDevSite(row) : false
 }
 
 function mergeMeta(meta: AuditMeta | undefined): AuditMeta | null {

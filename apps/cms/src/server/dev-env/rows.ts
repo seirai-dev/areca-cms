@@ -34,13 +34,22 @@ export async function readDevEnvironment(
   return { ...row, parentSiteId: row.parentSiteId }
 }
 
-/** Locked re-read of a dev env inside a transaction. */
+/**
+ * Locked re-read of a dev env inside a transaction. `FOR NO KEY UPDATE`, not
+ * `FOR UPDATE`: the audit insert of an ordinary save needs KEY SHARE on this row
+ * while it holds the asset lock, and FOR UPDATE would deadlock with it
+ * (docs/design/dev-environments.md, "Locking and concurrency").
+ */
 export async function lockDevEnvironment(
   tx: Tx,
   devSiteId: string,
 ): Promise<DevEnvRow> {
   const row = (
-    await tx.select().from(site).where(eq(site.id, devSiteId)).for('update')
+    await tx
+      .select()
+      .from(site)
+      .where(eq(site.id, devSiteId))
+      .for('no key update')
   ).at(0)
   if (!row || !isDevSite(row) || !row.parentSiteId) {
     throw new NotFoundError(m.server_site_not_found())
@@ -48,7 +57,11 @@ export async function lockDevEnvironment(
   return { ...row, parentSiteId: row.parentSiteId }
 }
 
-/** Locked re-read of a production site inside a transaction. */
+/**
+ * Locked re-read of a production site inside a transaction, `FOR NO KEY UPDATE`
+ * for the same reason as `lockDevEnvironment`. Used by dev-env paths and the
+ * production slug change, which takes the dev-env lock for its dev rename.
+ */
 export async function lockProductionRow(
   tx: Tx,
   productionSiteId: string,
@@ -58,7 +71,7 @@ export async function lockProductionRow(
       .select()
       .from(site)
       .where(eq(site.id, productionSiteId))
-      .for('update')
+      .for('no key update')
   ).at(0)
   if (!row) throw new NotFoundError(m.server_site_not_found())
   return row

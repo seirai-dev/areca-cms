@@ -1,9 +1,15 @@
-import { and, eq, inArray, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, sql } from 'drizzle-orm'
 
-import { PLAN_CHANGED_MESSAGE } from '#/lib/dev-env'
+import {
+  PLAN_CHANGED_MESSAGE,
+  SCHEDULED_IN_PRODUCTION_MESSAGE,
+} from '#/lib/dev-env'
 import { db } from '#/db'
 import { collection, entry, environmentPush, site } from '#/db/schema'
+import { entryTitle } from '#/lib/content/utils'
+import { carryFieldValues, withoutFieldKeys } from '#/lib/field-content'
 import type {
+  ContentKind,
   EntryData,
   EntryStatus,
   Field,
@@ -14,17 +20,21 @@ import type {
 import { audit } from '#/server/audit'
 import { lockOrganizationForMutation } from '#/server/admin/organization-lock'
 import { applySiteLanguages } from '#/server/admin/site-languages'
+import { assetMutationLock } from '#/server/assets/usage'
 import { archiveDeletedContent } from '#/server/content/deletion-archive'
 import {
   prepareCollectionUpsert,
-  writeCollectionDelete,
   writeCollectionUpsert,
 } from '#/server/content/collections'
 import type { CollectionUpsertInput } from '#/server/content/collections'
+import {
+  assertKindsUnchanged,
+  validateContentDefinitions,
+} from '#/server/content/content-definitions'
+import type { ContentDefinition } from '#/server/content/content-definitions'
 import { ConflictError, ValidationError } from '#/server/content/errors'
 import {
   prepareGlobalUpsert,
-  writeGlobalDelete,
   writeGlobalUpsert,
 } from '#/server/content/globals'
 import type { GlobalInput } from '#/server/content/globals'
@@ -32,8 +42,15 @@ import { AppError } from '#/server/http/app-error'
 import { requestPublication } from '#/server/publishing/publications'
 
 import { lockProductionSite } from './lock'
-import { buildPlan, selectPlanItems, stableStringify } from './plan'
+import {
+  buildPlan,
+  removedFieldKeysOf,
+  selectPlanItems,
+  stableStringify,
+} from './plan'
 import type { PlanEntry, PlanInput, PlanItem } from './plan'
+import { findSlugCollisions } from './slug-collisions'
+import type { SlugOwner } from './slug-collisions'
 import { loadPlanContext } from './load-plan'
 import { remapReferences } from './references'
 import {
@@ -49,7 +66,7 @@ import {
   readSiteRow,
   readyProblems,
   referenceWarnings,
-  slugTaken,
+  slugCollisionMessage,
 } from './write'
 import type { ProductionCollection, PushCounts, PushWarning } from './write'
 
@@ -74,8 +91,16 @@ export type GoLiveOutcome = Awaited<ReturnType<typeof requestPublication>>
 export type PushResult = {
   counts: PushCounts
   warnings: PushWarning[]
-  /** Every item that was written, with the production entry it wrote to (null for schema and languages). */
-  written: { itemId: string; productionId: string | null }[]
+  /**
+   * Every item that was written, with the production entry it wrote to (null
+   * for schema and languages) and that entry's collection kind (null when it
+   * has none). The push screen links a section to its globals page.
+   */
+  written: {
+    itemId: string
+    productionId: string | null
+    collectionKind: ContentKind | null
+  }[]
   /** Set when `goLive` was requested: the production build request, or why it was refused. */
   publication: GoLiveOutcome | null
 }
@@ -139,13 +164,25 @@ async function runPush(
   input: PushInput,
   organizationId: string,
 ): Promise<CommittedPush> {
-  await lockOrganizationForMutation(tx, organizationId)
+  await lockOrganizationForMutation(tx, organizationId, {
+    mode: 'no-key-update',
+  })
   const dev = await lockDevEnvironment(tx, input.devSiteId)
   const prod = await lockProductionRow(tx, dev.parentSiteId)
   await lockProductionSite(tx, prod.id)
+  // The lock ordinary entry saves take (server/content/entries.ts), last in the
+  // order, so the URLs read below cannot change under this push.
+  await assetMutationLock(tx, organizationId)
 
   const context = await loadPlanContext(tx, dev.id)
   const plan = buildPlan(context.planInput)
+  /** Plan entry item id to the collection kind of its dev entry. */
+  const kinds = new Map<string, ContentKind>(
+    context.planInput.devEntries.map((devEntry) => [
+      `entry:${devEntry.id}`,
+      devEntry.collectionKind,
+    ]),
+  )
   if (plan.planHash !== input.planHash) {
     throw new ConflictError(PLAN_CHANGED_MESSAGE)
   }
@@ -153,6 +190,28 @@ async function runPush(
     exclude: input.exclude,
     apply: input.apply,
   })
+  const schemaItems = selected.filter((item) => item.kind.startsWith('schema.'))
+  const languagesItem = selected.find((item) => item.kind === 'languages')
+  const entryItems = selected
+    .filter((item) => item.kind.startsWith('entry.'))
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+
+  // The whole resulting schema is checked once, before any write.
+  checkResultingSchema(context.planInput, schemaItems)
+  // Every production row this push writes or changes is locked and verified
+  // before the schema and language writes, which bump content_version too: the
+  // entries a selected schema or main-language item affects are in that set.
+  const lockedVersions = await lockAndVerifyAffected(tx, [
+    ...entryItems,
+    ...schemaItems,
+    ...(languagesItem ? [languagesItem] : []),
+  ])
+  const devById = new Map(
+    context.planInput.devEntries.map((row) => [row.id, row]),
+  )
+  await assertUrlsFree(tx, prod.id, entryItems, devById)
+  // The versions before any write, for the baselines of entries this push leaves alone.
+  const beforeWrites = new Map(lockedVersions)
 
   const state: PushState = {
     tx,
@@ -163,17 +222,23 @@ async function runPush(
     warnings: [],
     targets: new Map(),
     written: new Map(),
+    selectedIds: new Set(selected.map((item) => item.id)),
+    lockedVersions,
   }
 
   // Schema first, then languages, so entries see the collections and languages they need.
-  const schemaItems = selected.filter((item) => item.kind.startsWith('schema.'))
   await pushSchema(state, schemaItems)
-  const languagesItem = selected.find((item) => item.kind === 'languages')
   if (languagesItem) {
     await pushLanguages(state)
     state.written.set(languagesItem.id, null)
   }
   for (const item of schemaItems) state.written.set(item.id, null)
+
+  // The transaction's own schema and language writes moved some versions. The
+  // rows stay locked, so the versions read now are the ones entries write over.
+  state.lockedVersions = await readContentVersions(tx, [
+    ...lockedVersions.keys(),
+  ])
 
   // Re-read after the schema and languages writes.
   const productionCollections = await tx
@@ -181,13 +246,6 @@ async function runPush(
     .from(collection)
     .where(eq(collection.siteId, prod.id))
   const productionSite = await readSiteRow(tx, prod.id)
-
-  const entryItems = selected
-    .filter((item) => item.kind.startsWith('entry.'))
-    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-  const devById = new Map(
-    context.planInput.devEntries.map((row) => [row.id, row]),
-  )
 
   const created = await pushEntriesPassOne(
     state,
@@ -212,6 +270,12 @@ async function runPush(
   await resolveReadyCandidates(tx, productionSite, candidates, state.warnings)
 
   await writeBaselines(state, entryItems, devById, candidates)
+  await adjustUnwrittenBaselines(
+    state,
+    schemaItems,
+    beforeWrites,
+    context.planInput,
+  )
   await writeSchemaBaseline(state, selected, context.planInput, dev.id)
 
   const writtenItems = plan.items.filter((item) => state.written.has(item.id))
@@ -262,6 +326,7 @@ async function runPush(
     written: [...state.written].map(([itemId, productionId]) => ({
       itemId,
       productionId,
+      collectionKind: kinds.get(itemId) ?? null,
     })),
     productionSiteId: prod.id,
   }
@@ -278,10 +343,246 @@ type PushState = {
   targets: Map<string, string>
   /** Plan item id to the production id it wrote to (null for schema and languages). */
   written: Map<string, string | null>
+  /** Plan item ids the push writes (selected, after exclusions and decisions). */
+  selectedIds: Set<string>
+  /** Production entry id to its content_version, for the rows this push locked. */
+  lockedVersions: Map<string, number>
+}
+
+/**
+ * Fields an entry keeps in production: the ones a pending schema removal would
+ * delete. Empty when that removal is applied in this push.
+ */
+function keptFields(item: PlanItem, selectedIds: Set<string>): string[] {
+  const pending = (item.dependsOn ?? []).some((id) => !selectedIds.has(id))
+  return pending ? (item.summary.preservedFields ?? []) : []
+}
+
+/**
+ * The production schema as it will be after the selected schema items, checked
+ * once before any write, so the order of the items does not matter (a new
+ * collection may reference one that sorts after it). Untouched definitions
+ * stay as they are; an applied removal is disabled, and keeps its rows.
+ */
+function checkResultingSchema(planInput: PlanInput, items: PlanItem[]) {
+  const itemByKey = new Map(
+    items.map((item) => [item.collectionKey ?? '', item]),
+  )
+  const production = planInput.production.collections
+  const keys = [
+    ...new Set([...production.map((def) => def.key), ...itemByKey.keys()]),
+  ]
+  const defs: ContentDefinition[] = []
+  const declared: { key: string; kind: ContentDefinition['kind'] }[] = []
+  for (const key of keys) {
+    const item = itemByKey.get(key)
+    const prod = production.find((def) => def.key === key)
+    if (item?.kind === 'schema.remove') {
+      if (prod) {
+        defs.push({ key, kind: prod.kind, fields: prod.fields, enabled: false })
+      }
+      continue
+    }
+    if (item) {
+      const dev = planInput.dev.collections.find((def) => def.key === key)
+      if (!dev) {
+        throw new ValidationError([
+          { path: key, message: `Collection "${key}" is not in the dev env.` },
+        ])
+      }
+      // The same checks and stored shape the writes use (a collection gets its slug field).
+      let fields = dev.fields
+      if (dev.kind === 'global') {
+        prepareGlobalUpsert(globalInput(dev, []))
+      } else {
+        fields = prepareCollectionUpsert(collectionInput(dev, [])).fields
+      }
+      defs.push({ key, kind: dev.kind, fields, enabled: dev.enabled })
+      declared.push({ key, kind: dev.kind })
+      continue
+    }
+    if (prod) {
+      defs.push({
+        key,
+        kind: prod.kind,
+        fields: prod.fields,
+        enabled: prod.enabled,
+      })
+    }
+  }
+  assertKindsUnchanged(production, declared)
+  validateContentDefinitions(defs)
+}
+
+/**
+ * Locks the production rows the selected items write or change, in id order,
+ * and checks each `content_version` against the plan: entry items, and the
+ * entries a destructive schema item affects. A production entry that these
+ * writes touch must not be scheduled now, whatever the plan showed. Returns
+ * the verified versions.
+ */
+async function lockAndVerifyAffected(
+  tx: Tx,
+  items: PlanItem[],
+): Promise<Map<string, number>> {
+  const expected = new Map<string, number>()
+  const writesTo = new Set<string>()
+  for (const item of items) {
+    if (item.productionId && item.productionContentVersion !== undefined) {
+      expected.set(item.productionId, item.productionContentVersion)
+    }
+    if (item.productionId) writesTo.add(item.productionId)
+    for (const affected of item.affectedEntries ?? []) {
+      expected.set(affected.id, affected.contentVersion)
+      writesTo.add(affected.id)
+    }
+  }
+  if (expected.size === 0) return new Map()
+  const ids = [...expected.keys()].sort()
+  const rows = await tx
+    .select({
+      id: entry.id,
+      contentVersion: entry.contentVersion,
+      scheduledAt: entry.scheduledAt,
+    })
+    .from(entry)
+    .where(inArray(entry.id, ids))
+    .orderBy(asc(entry.id))
+    .for('update')
+  const versions = new Map(rows.map((row) => [row.id, row.contentVersion]))
+  for (const id of ids) {
+    if (versions.get(id) !== expected.get(id)) {
+      throw new ConflictError(PLAN_CHANGED_MESSAGE)
+    }
+  }
+  for (const row of rows) {
+    if (writesTo.has(row.id) && row.scheduledAt != null) {
+      throw new ConflictError(SCHEDULED_IN_PRODUCTION_MESSAGE)
+    }
+  }
+  return versions
+}
+
+function ownerOf(row: {
+  id: string
+  title?: string
+  slug: string
+  draftData?: EntryData
+}): SlugOwner {
+  return {
+    id: row.id,
+    title: row.title ?? row.slug,
+    slug: row.slug,
+    draftData: row.draftData ?? {},
+  }
+}
+
+/**
+ * Apply-time check of the URLs the selected entries write. The owners are read
+ * inside this transaction, after the assets lock, not taken from the plan input:
+ * a URL an ordinary entry save took after the plan was read is refused here.
+ * The plan flags the same collisions (Apply is disabled for them), and its hash
+ * covers them, so this is a backstop. Entries of the same push are checked
+ * against each other too.
+ */
+async function assertUrlsFree(
+  tx: Tx,
+  productionSiteId: string,
+  items: PlanItem[],
+  devById: Map<string, PlanEntry>,
+) {
+  const writes = items.flatMap((item) => {
+    if (item.kind === 'entry.archive') return []
+    const dev = item.devId ? devById.get(item.devId) : undefined
+    return dev ? [{ item, dev }] : []
+  })
+  const ownersByKey = new Map<string, SlugOwner[]>()
+  for (const write of writes) {
+    const { item, dev } = write
+    let owners = ownersByKey.get(dev.collectionKey)
+    if (!owners) {
+      owners = await readProductionUrlOwners(
+        tx,
+        productionSiteId,
+        dev.collectionKey,
+      )
+      ownersByKey.set(dev.collectionKey, owners)
+    }
+    const production = owners.filter((row) => row.id !== item.productionId)
+    const pushed = writes
+      .filter(
+        (other) =>
+          other !== write && other.dev.collectionKey === dev.collectionKey,
+      )
+      .map((other) => ownerOf(other.dev))
+    const holdings: ['in production' | 'in this push', SlugOwner[]][] = [
+      ['in production', production],
+      ['in this push', pushed],
+    ]
+    for (const [where, holders] of holdings) {
+      const collision = findSlugCollisions(dev, holders).at(0)
+      if (!collision) continue
+      throw new ValidationError([
+        {
+          path: collision.locale ? `$i18n.${collision.locale}.$slug` : 'slug',
+          message: slugCollisionMessage(collision, where),
+        },
+      ])
+    }
+  }
+}
+
+/**
+ * The entries of one production collection or section, read now. A section's
+ * title is its label, as in the plan.
+ */
+async function readProductionUrlOwners(
+  tx: Tx,
+  productionSiteId: string,
+  collectionKey: string,
+): Promise<SlugOwner[]> {
+  const rows = await tx
+    .select({
+      id: entry.id,
+      slug: entry.slug,
+      draftData: entry.draftData,
+      kind: collection.kind,
+      label: collection.label,
+      fields: collection.fields,
+    })
+    .from(entry)
+    .innerJoin(collection, eq(entry.collectionId, collection.id))
+    .where(
+      and(
+        eq(collection.siteId, productionSiteId),
+        eq(collection.key, collectionKey),
+      ),
+    )
+  return rows.map((row) => ({
+    id: row.id,
+    title:
+      row.kind === 'global'
+        ? row.label
+        : entryTitle(row.draftData, row.fields, row.slug),
+    slug: row.slug,
+    draftData: row.draftData,
+  }))
+}
+
+async function readContentVersions(
+  tx: Tx,
+  ids: string[],
+): Promise<Map<string, number>> {
+  if (ids.length === 0) return new Map()
+  const rows = await tx
+    .select({ id: entry.id, contentVersion: entry.contentVersion })
+    .from(entry)
+    .where(inArray(entry.id, ids))
+  return new Map(rows.map((row) => [row.id, row.contentVersion]))
 }
 
 async function pushSchema(state: PushState, items: PlanItem[]) {
-  const { tx, actor, production } = state
+  const { tx, production } = state
   // Adds and changes first, so a removal never leaves a reference dangling mid-push.
   const ordered = [
     ...items.filter((item) => item.kind !== 'schema.remove'),
@@ -291,11 +592,7 @@ async function pushSchema(state: PushState, items: PlanItem[]) {
     const key = item.collectionKey ?? ''
     const existing = (
       await tx
-        .select({
-          id: collection.id,
-          key: collection.key,
-          kind: collection.kind,
-        })
+        .select({ id: collection.id })
         .from(collection)
         .where(
           and(eq(collection.siteId, production.id), eq(collection.key, key)),
@@ -304,17 +601,8 @@ async function pushSchema(state: PushState, items: PlanItem[]) {
     ).at(0)
 
     if (item.kind === 'schema.remove') {
-      if (!existing) continue
-      const removal = {
-        id: existing.id,
-        key,
-        organizationId: state.organizationId,
-      }
-      if (existing.kind === 'global') {
-        await writeGlobalDelete(tx, production.id, removal, actor.id)
-      } else {
-        await writeCollectionDelete(tx, production.id, removal, actor.id)
-      }
+      // Disabled and archived, never deleted: production keeps the rows.
+      if (existing) await disableAndArchive(state, existing.id)
       continue
     }
 
@@ -338,22 +626,16 @@ async function pushSchema(state: PushState, items: PlanItem[]) {
         existing.id,
       )
     }
+    // The resulting schema was validated once in checkResultingSchema.
     if (devDef.kind === 'global') {
-      const input: GlobalInput = {
-        key,
-        label: devDef.label,
-        fields: devDef.fields,
-        seo: devDef.seoEnabled,
-        previewPath: devDef.previewPath,
-        enabled: devDef.enabled,
-        requiredLanguages: devDef.requiredLanguages,
-        confirmDropFields,
-      }
+      const input = globalInput(devDef, confirmDropFields)
       await writeGlobalUpsert(
         tx,
         production.id,
         input,
         prepareGlobalUpsert(input),
+        new Date(),
+        { validated: true },
       )
     } else {
       const input = collectionInput(devDef, confirmDropFields)
@@ -362,8 +644,50 @@ async function pushSchema(state: PushState, items: PlanItem[]) {
         production.id,
         input,
         prepareCollectionUpsert(input),
+        new Date(),
+        { validated: true },
       )
     }
+  }
+}
+
+/**
+ * A removal in dev disables the production collection or section and archives
+ * its entries (status archived, content_version bumped). Rows are kept. The
+ * baseline drops the key, and a disabled production collection counts as absent
+ * in the plan, so the removal does not come back.
+ */
+async function disableAndArchive(state: PushState, collectionId: string) {
+  const { tx, actor } = state
+  const now = new Date()
+  await tx
+    .update(collection)
+    .set({ enabled: false, updatedAt: now })
+    .where(eq(collection.id, collectionId))
+  await tx
+    .update(entry)
+    .set({
+      status: 'archived',
+      contentVersion: sql`${entry.contentVersion} + 1`,
+      updatedBy: actor.id,
+      updatedAt: now,
+    })
+    .where(eq(entry.collectionId, collectionId))
+}
+
+function globalInput(
+  def: SchemaSnapshotItem,
+  confirmDropFields: string[],
+): GlobalInput {
+  return {
+    key: def.key,
+    label: def.label,
+    fields: def.fields,
+    seo: def.seoEnabled,
+    previewPath: def.previewPath,
+    enabled: def.enabled,
+    requiredLanguages: def.requiredLanguages,
+    confirmDropFields,
   }
 }
 
@@ -415,7 +739,10 @@ async function pushEntriesPassOne(
       state.targets.set(item.id, item.productionId)
       continue
     }
-    if (item.kind === 'entry.change' && item.attention === null) {
+    if (
+      dev.collectionKind === 'global' &&
+      item.attention !== 'deleted-in-production'
+    ) {
       // A section's single entry: it exists once its section does.
       const match = (
         await tx
@@ -436,25 +763,23 @@ async function pushEntriesPassOne(
       } else {
         state.warnings.push({
           itemId: item.id,
+          code: 'section-entry-missing',
+          params: { slug: dev.slug },
           message: `"${dev.slug}" is not in production, so it was not pushed.`,
         })
       }
       continue
     }
 
-    // A new entry, or one deleted in production: recreated as a draft.
+    // A new entry, or one deleted in production: recreated as a draft. Its URLs
+    // were checked against production in assertUrlsFree.
     const col = productionCollections.find((c) => c.key === dev.collectionKey)
     if (!col) {
       state.warnings.push({
         itemId: item.id,
+        code: 'collection-missing',
+        params: { collectionKey: dev.collectionKey },
         message: `Collection "${dev.collectionKey}" is not in production, so the entry was not pushed. Push the schema first.`,
-      })
-      continue
-    }
-    if (await slugTaken(tx, col.id, dev.slug)) {
-      state.warnings.push({
-        itemId: item.id,
-        message: `Production already has an entry with the slug "${dev.slug}" in ${dev.collectionKey}, so the entry was not pushed.`,
       })
       continue
     }
@@ -515,11 +840,8 @@ async function pushEntriesPassTwo(
         .limit(1)
     ).at(0)
     if (!row) throw new ConflictError(PLAN_CHANGED_MESSAGE)
-    if (
-      !isCreated &&
-      item.productionContentVersion !== undefined &&
-      row.contentVersion !== item.productionContentVersion
-    ) {
+    // Checked in lockAndVerifyAffected, then against this transaction's own writes.
+    if (!isCreated && row.contentVersion !== state.lockedVersions.get(row.id)) {
       throw new ConflictError(PLAN_CHANGED_MESSAGE)
     }
 
@@ -540,31 +862,28 @@ async function pushEntriesPassTwo(
 
     const col = productionCollections.find((c) => c.id === row.collectionId)
     if (!col) throw new ConflictError(PLAN_CHANGED_MESSAGE)
-    if (
-      !isCreated &&
-      dev.slug !== row.slug &&
-      (await slugTaken(tx, row.collectionId, dev.slug, row.id))
-    ) {
-      state.warnings.push({
-        itemId: item.id,
-        message: `Production already has an entry with the slug "${dev.slug}", so the entry was not pushed.`,
-      })
-      continue
-    }
     if (!isCreated) {
       await keepDraftRevision(tx, row, actor.id)
     }
 
     const seen = new Set<string>()
+    // Fields a pending removal keeps: production's values stay in draft and ready.
+    const kept = keptFields(item, state.selectedIds)
     const draft = remapReferences(dev.draftData, col.fields, lookup)
     state.warnings.push(...referenceWarnings(item.id, draft.cleared, seen))
     // A recreated entry comes back as a draft (docs/design/dev-environments.md, Needs attention).
-    const readyData =
+    const readyMapped =
       dev.publishedData != null &&
       dev.publishedSlug &&
       item.attention !== 'deleted-in-production'
         ? remapReferences(dev.publishedData, col.fields, lookup)
         : null
+    const readyData = readyMapped
+      ? {
+          data: carryFieldValues(readyMapped.data, row.publishedData, kept),
+          cleared: readyMapped.cleared,
+        }
+      : null
     if (readyData) {
       state.warnings.push(
         ...referenceWarnings(item.id, readyData.cleared, seen),
@@ -576,7 +895,7 @@ async function pushEntriesPassTwo(
       .update(entry)
       .set({
         slug: dev.slug,
-        draftData: draft.data,
+        draftData: carryFieldValues(draft.data, row.draftData, kept),
         draftVersion: sql`${entry.draftVersion} + 1`,
         contentVersion: sql`${entry.contentVersion} + 1`,
         updatedBy: actor.id,
@@ -643,9 +962,12 @@ async function resolveReadyCandidates(
         })
         .where(eq(entry.id, candidate.entryId))
       candidate.active = false
+      const details = messages.join('; ')
       warnings.push({
         itemId: candidate.itemId,
-        message: `Ready version not pushed, production keeps its previous ready version: ${messages.join('; ')}`,
+        code: 'ready-not-pushed',
+        params: { details },
+        message: `Ready version not pushed, production keeps its previous ready version: ${details}`,
       })
       reverted = true
     }
@@ -664,6 +986,61 @@ async function resolveReadyCandidates(
         .set({ publishedData: stored })
         .where(eq(entry.id, candidate.entryId))
     }
+  }
+}
+
+/**
+ * Dev entries this push did not write, that are linked to production, follow the
+ * changes the push made to their production rows. Own bumps are not a conflict:
+ * an entry that was in step with production before the push (its recorded
+ * `origin_content_version` is the one read before any write) takes the version
+ * the push left it at. An applied field removal also drops the removed keys from
+ * its baseline. Without this, the entry would be listed again after the push.
+ */
+async function adjustUnwrittenBaselines(
+  state: PushState,
+  schemaItems: PlanItem[],
+  beforeWrites: Map<string, number>,
+  planInput: PlanInput,
+) {
+  const { tx } = state
+  const removedByKey = new Map<string, string[]>()
+  for (const item of schemaItems) {
+    if (item.kind !== 'schema.change' || !item.collectionKey) continue
+    const keys = removedFieldKeysOf(planInput, item.collectionKey)
+    if (keys.length > 0) removedByKey.set(item.collectionKey, keys)
+  }
+  for (const dev of planInput.devEntries) {
+    const base = dev.originBaseline
+    if (!base || !dev.originEntryId) continue
+    if (state.written.has(`entry:${dev.id}`)) continue
+    const keys = removedByKey.get(dev.collectionKey) ?? []
+    const before = beforeWrites.get(dev.originEntryId)
+    const inStep = before !== undefined && before === dev.originContentVersion
+    const originVersion = inStep
+      ? (state.lockedVersions.get(dev.originEntryId) ??
+        dev.originContentVersion)
+      : dev.originContentVersion
+    if (keys.length === 0 && originVersion === dev.originContentVersion) {
+      continue
+    }
+    await tx
+      .update(entry)
+      .set({
+        originBaseline:
+          keys.length === 0
+            ? base
+            : {
+                ...base,
+                data: withoutFieldKeys(base.data, keys),
+                publishedData:
+                  base.publishedData == null
+                    ? null
+                    : withoutFieldKeys(base.publishedData, keys),
+              },
+        originContentVersion: originVersion,
+      })
+      .where(eq(entry.id, dev.id))
   }
 }
 
@@ -700,7 +1077,11 @@ async function writeBaselines(
     if (!dev) continue
     const candidate = candidates.find((c) => c.itemId === item.id)
     const readyPushed = candidate ? candidate.active : true
-    const baseline = nextOriginBaseline(dev, readyPushed)
+    const baseline = nextOriginBaseline(
+      dev,
+      readyPushed,
+      keptFields(item, state.selectedIds),
+    )
     await tx
       .update(entry)
       .set({

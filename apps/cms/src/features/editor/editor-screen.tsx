@@ -459,16 +459,18 @@ function EntryEditorView({
       ? (view[titleField.key] as string)
       : m.editor_untitled()
   const uiStatus = entry ? entryUiStatus(entry, live, isDev) : 'draft'
-  const editedSinceReady = entry
-    ? isEditedSinceReady({
-        status: entry.status,
-        updatedAt: entry.updatedAt,
-        draftData: initialEntryData(fields, entry.draftData),
-        publishedData: entry.publishedData
-          ? initialEntryData(fields, entry.publishedData)
-          : entry.publishedData,
-      })
-    : false
+  // A development environment has no releases: no "unreleased changes" dot.
+  const editedSinceReady =
+    entry && !isDev
+      ? isEditedSinceReady({
+          status: entry.status,
+          updatedAt: entry.updatedAt,
+          draftData: initialEntryData(fields, entry.draftData),
+          publishedData: entry.publishedData
+            ? initialEntryData(fields, entry.publishedData)
+            : entry.publishedData,
+        })
+      : false
   const primary: PrimaryState = editor.isNew
     ? 'new'
     : editor.markable

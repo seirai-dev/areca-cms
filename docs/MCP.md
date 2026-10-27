@@ -30,12 +30,14 @@ ChatGPT and Claude connect from the internet, so the CMS must be reachable on it
 | Delete library asset (not in use) | no | yes | yes | yes |
 | `go_live`, `rollback`, `cancel_build` | no | no | yes | yes, if the app or key may publish |
 | `upsert_collection`, `delete_collection`, `set_publishing_mode` | no | no | no | yes |
+| Development environment: create, reset, push, copy to production | no | no | no | yes |
 
 Rules:
 
 - Editors cannot allow publishing, either on the consent screen or on a key (the server refuses it). Owners and agency admins can.
 - A connection or key allowed to publish stops publishing as soon as its user is no longer an owner or agency admin. The app's flag and the live role are both checked on every request.
 - Owners and agency admins see and disconnect or revoke all connected apps and keys on the site. Editors see and revoke only their own.
+- A development environment is agency-only: its connector answers "not found" to everyone else, and its tools are not offered to anyone else. See [Development environments](#development-environments).
 - Agency admins approving a connection, or creating a key, need a fresh authenticator code (step-up).
 - Each user can hold up to 20 active personal keys per site.
 - Connections last until disconnected, or until 90 days without use. Keys expire on their expiry date. Disconnect and revocation are immediate.
@@ -145,7 +147,7 @@ Tools are registered per request for the caller's role, so a tool the caller can
 | Site content | `discard_global_draft` | everyone | `global` (refused until the section was ready once) |
 | Site content | `upsert_global` | agency admin | `key`, `label`, `fields` (complete list; `group?` heading per field; `translatable?` per field on languages sites; no `slug`), `seo?`, `previewPath?`, `enabled?`, `requiredLanguages?` |
 | Site content | `delete_global` | agency admin | `key` (content kept in the deleted-content archive) |
-| Workflow | `mark_ready` | owner | `id` (does not publish) |
+| Workflow | `mark_ready` | owner | `id`, or `ids` (up to 200; returns `results`, one `{ id, ok, error? }` per id, and one failure does not stop the others). `expectedVersion?` with `id` only. Does not publish. |
 | Workflow | `unpublish_entry` | owner | `id` |
 | Workflow | `archive_entry` | owner | `id` |
 | Workflow | `schedule_entry` | go-live permission | `id`, `publishAt` (ISO 8601 with offset, future), `timezone` (IANA) |
@@ -155,6 +157,12 @@ Tools are registered per request for the caller's role, so a tool the caller can
 | Schema | `upsert_collection` | agency admin | `key`, `label`, `routePattern`, `fields` (complete list; `translatable?` per field), `enabled?`, `requiredLanguages?`, `routes?` (route per language, each with `$slug`) |
 | Languages | `set_site_languages` | agency admin | `main`, `all` (every language, in order, including `main`) |
 | Schema | `delete_collection` | agency admin | `key` (deletes its entries) |
+| Development | `create_dev_environment` | agency admin, production connector | `confirm: true`. Returns `devSlug`, `devConnectorUrl`, `counts`. Never returns tokens. |
+| Development | `refresh_from_production` | agency admin, development connector | `confirm: true`. Replaces the development environment with production's schema and ready content. Returns `counts` and `discardedChanges`. |
+| Development | `push_to_production` | agency admin, development connector | `dryRun` (default `true`), `planHash?` (required when `dryRun` is `false`), `exclude?` (item ids the user unticked), `apply?` (ids of needs-attention items the user approved), `goLive?` (default `false`; needs the go-live permission). |
+| Development | `copy_entry_to_production` | agency admin, development connector | `id` (a development entry), `markReady?` (default `false`: the copied draft also becomes the production ready version; not live until a release), `overwrite?` (default `false`) |
+
+On a development environment (its connector is the `connectorUrl` that `get_site_info` gives, not a URL built from the production slug) the publishing tools (`get_release_status`, `list_publications`, `get_build_job`, `go_live`, `rollback`, `cancel_build`) and the schedule tools (`schedule_entry`, `cancel_schedule`) are not listed, because a development environment has no releases. `set_publishing_mode` is listed to agency admins and refuses production mode there: "Development environments stay in Demo mode."
 
 On a site without languages none of the `locale`, `translations`, `missingLanguage`, `translatable` or `requiredLanguages` parameters appear, and their results are unchanged.
 
@@ -187,6 +195,20 @@ A `ready` entry can still have `live: false` until the next go live. Editing a r
 `get_release_status` returns `pendingChanges`: entries marked ready but not live, scheduled entries, and entries withdrawn since the last go live.
 
 `get_site_info` returns `cannotDo`, a list of sentences describing what this key may not do (for example, "Go live: going live is not enabled for this key"), so the model can tell the user who can act.
+
+## Development environments
+
+A production site can have one development environment (a development environment, or dev env): a copy of its schema and ready content, which the agency changes first and then pushes to production. The design is in `docs/design/dev-environments.md`. This section is the MCP side. The CMS side is in the [agency admin guide](ADMIN_GUIDE.md#development-environments).
+
+- **Connectors.** The production connector, `/api/mcp/<slug>`, offers `create_dev_environment`. When the site has a development environment, `get_site_info` names it: `site.devEnvironment: { slug, connectorUrl }`, for agency admins only. The development connector (its URL is the `connectorUrl` above) reports `site.environment: "development"` and `site.productionSlug`. It offers the development tools and `mark_ready`, and not the publishing and schedule tools listed above.
+- **Tokens.** `create_dev_environment` never returns the site token, the schema token or the preview secret. They are shown once, in the browser that created the environment. For a missed token, open the development environment in the CMS, go to Settings › Developer and rotate the site token (and the schema token for code-first sites).
+- **Reading.** An `areca pull` with the development site's token reads the environment's ready content directly, with no publication. Entries show in that pull once they are ready (`mark_ready`, or `mark_ready` with `ids` for several). Nothing goes live.
+- **Pushing is a review step.** Call `push_to_production` with `dryRun` (the default) first. It lists every change since the last push or reset, marks the items that need attention, and returns a `planHash`. Show the list to the user and get their approval. Then call it again with `dryRun: false`, the `planHash`, `exclude` for items the user unticked, and `apply` for needs-attention items the user approved. Items that need attention are skipped unless they are applied. If production changed after the dry run, the call is refused with "The plan changed"; run the dry run again.
+- **What a push writes.** Drafts and ready versions of production entries, schema changes and languages. A removed entry is archived in production, never deleted. `goLive: true` starts a production build after the push and is refused, before anything is written, for a key or connection without the go-live permission.
+- **No fresh authenticator code.** The CMS push screen asks an agency admin for a fresh authenticator code when the session is not fresh. These tools do not: they run with the key or connection, whose owner must still have two-factor sign-in (`ADMIN_MFA_REQUIRED`).
+- **Production stays writable.** Production writes over MCP are not blocked, on the production connector or anywhere else. The review step above is the agreed way to move changes, not a lock.
+- **Copying one entry.** `copy_entry_to_production` writes one development entry into production as its draft. The live version does not change unless `markReady` is set: then the copied draft also becomes the production ready version, checked with the same rules a push uses (on failure the draft is still copied and a warning says why). Ready is not live; a release is still needed. It is refused on a schema mismatch ("Push the schema first"), when production changed since the last sync unless `overwrite` is set, and when a URL (main or localized slug) is used by another production entry.
+- **Reset.** `refresh_from_production` throws away the development environment's content and copies production again. Unpushed changes are discarded, not archived. The result says how many (`discardedChanges`). Ask the user first when there are unpushed changes.
 
 ## Languages
 
@@ -254,6 +276,9 @@ Common tool error messages and what they mean:
 | `Could not import the file: …` | Upload from URL refused (see above). |
 | `Only site owners can …` / `Going live wasn't allowed when this app was connected.` (or `Going live is not enabled for this key.`) / `Only agency admins can …` | Role or key does not allow it. The message says who can. |
 | `No entry with id …` / `No collection …` | Not on this site. Use the list tool to find valid ids. |
+| `The plan changed. Review it again.` | `push_to_production` was given a `planHash` that no longer matches. Run the dry run again and show the new list. |
+| `Development environments stay in Demo mode.` | `set_publishing_mode` with `production` on a development environment. |
+| `Send the planHash from a dry run…` | `push_to_production` with `dryRun: false` and no `planHash`. |
 | `Something went wrong on the Areca server (ref …)` | Unexpected failure. Nothing is confirmed as saved. The ref is in the server log. |
 
 Not found and forbidden answers follow the rules in `AUTHZ_MATRIX.md`: objects on another site look the same as missing ones.
@@ -288,7 +313,9 @@ Connecting an app to a site is audited as `mcp_connection.create` (the activity 
 | `apps/cms/src/server/mcp/keys.ts` | Key generation, hashing, create, list, revoke, `resolveMcpActor`, live role |
 | `apps/cms/src/server/mcp/server.ts` | Server instructions, registration, `write_post` prompt |
 | `apps/cms/src/server/mcp/tool-kit.ts`, `guard.ts`, `scope.ts`, `errors.ts` | Tool registry, access checks, tenancy lookups, error mapping |
-| `apps/cms/src/server/mcp/tools/*.ts` | The tools, grouped by area |
+| `apps/cms/src/server/mcp/tools/*.ts` | The tools, grouped by area; `tools/dev-env.ts` holds the development environment tools |
+| `apps/cms/src/server/mcp/site-context.ts` | Whether a connector's site is a production site or a development environment, and its paired slug |
+| `apps/cms/src/server/content/entry-actions.ts` | The single-entry actions shared by the bulk bar and `mark_ready` with `ids` |
 | `apps/cms/src/server/mcp/entry-format.ts`, `schemas.ts`, `schema-docs.ts` | Field conversion, SEO schema, agent-facing format docs |
 | `apps/cms/src/server/assets/remote.ts` | SSRF-safe download and `uploadAssetFromUrl` |
 | `apps/cms/src/server/richtext/from-markdown.ts` | Markdown to stored rich text |

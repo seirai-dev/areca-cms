@@ -186,6 +186,9 @@ function GoLivePanelBody({
     blockers: release.data?.blockers,
     changesKnown,
   })
+  // Blockers are listed in the red box above; the button area then only points there.
+  const blocked = errors.length > 0 || (release.data?.blockers?.length ?? 0) > 0
+  const disabledText = blocked ? m.golive_fix_items_above() : reason
 
   return (
     <div className="grid divide-y divide-border-default">
@@ -271,7 +274,7 @@ function GoLivePanelBody({
             </label>
           )}
           <Hint
-            label={goLiveAllowed ? null : reason}
+            label={goLiveAllowed ? null : disabledText}
             wrapDisabled={!goLiveAllowed}
             className="w-full"
           >
@@ -294,7 +297,7 @@ function GoLivePanelBody({
           </Hint>
           {!goLiveAllowed ? (
             <p className="text-center text-callout text-text-secondary">
-              {reason}
+              {disabledText}
             </p>
           ) : null}
           {demo && isAgencyAdmin ? (
@@ -313,6 +316,7 @@ function GoLivePanelBody({
       <ReleaseHistory
         siteId={site.id}
         canManage={canPublish}
+        demo={demo}
         focusRelease={focusRelease}
       />
     </div>
@@ -741,10 +745,12 @@ function canRestore(row: PublicationRow) {
 function ReleaseHistory({
   siteId,
   canManage,
+  demo = false,
   focusRelease,
 }: {
   siteId: string
   canManage: boolean
+  demo?: boolean
   focusRelease?: string
 }) {
   const [pages, setPages] = React.useState(1)
@@ -892,7 +898,7 @@ function ReleaseHistory({
         </div>
       ) : rows.length === 0 ? (
         <p className="text-callout text-text-secondary">
-          {m.golive_no_releases()}
+          {demo ? m.golive_demo_no_releases() : m.golive_no_releases()}
         </p>
       ) : (
         <>

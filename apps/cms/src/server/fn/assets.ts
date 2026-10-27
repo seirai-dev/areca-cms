@@ -18,7 +18,11 @@ import {
 } from '#/lib/session.server'
 import { m } from '#/paraglide/messages'
 import { NotFoundError, ValidationError } from '#/server/content/errors'
-import { assertSiteVisibleTo } from '#/server/security/site-visibility'
+import {
+  assertSiteVisibleTo,
+  isAgencyAdminWithMfa,
+} from '#/server/security/site-visibility'
+import type { Asset } from '#/server/assets'
 import { deleteAsset, getAsset, listAssets, updateAsset } from '#/server/assets'
 import { pageLimitSchema, pageOffsetSchema } from '#/server/pagination'
 
@@ -82,21 +86,23 @@ export const listAssetsFn = createServerFn({ method: 'GET' })
       }
       missingAlt = { locale, mainLocale: languages?.main ?? null }
     }
-    return listAssets(data.organizationId, {
+    const rows = await listAssets(data.organizationId, {
       search: data.search,
       imagesOnly: data.imagesOnly,
       missingAlt,
       limit: data.limit,
       offset: data.offset,
     })
+    return forCaller(rows, await isAgencyAdminWithMfa(session))
   })
 
 export const getAssetFn = createServerFn({ method: 'GET' })
   .validator(z.object({ id: z.string().min(1).max(ID_MAX_LENGTH) }))
   .handler(async ({ data }) => {
-    await requireUser()
+    const session = await requireUser()
     // Missing and not-accessible assets both answer null.
-    return (await authorizedAsset(data.id)) ?? null
+    const row = await authorizedAsset(data.id)
+    return row ? forCaller(row, await isAgencyAdminWithMfa(session)) : null
   })
 
 export const updateAssetFn = createServerFn({ method: 'POST' })
@@ -148,11 +154,12 @@ export const updateAssetFn = createServerFn({ method: 'POST' })
         ])
       }
     }
-    return updateAsset(
+    const row = await updateAsset(
       data.id,
       { altText: data.altText, locale, mainLocale },
       existing.organizationId,
     )
+    return forCaller(row, await isAgencyAdminWithMfa(session))
   })
 
 export const deleteAssetFn = createServerFn({ method: 'POST' })
@@ -170,6 +177,18 @@ export const deleteAssetFn = createServerFn({ method: 'POST' })
     await deleteAsset(data.id, existing.organizationId)
     return { ok: true as const }
   })
+
+/**
+ * What a caller may learn about an asset. `originSiteId` names the site that
+ * uploaded it, and that can be a development environment, which only agency
+ * admins may learn of (docs/design/dev-environments.md, Decision 3). Nothing in
+ * the client reads it, so everyone else gets `null`.
+ */
+function forCaller<T extends Asset | Asset[]>(value: T, agency: boolean): T {
+  if (agency) return value
+  const redact = (row: Asset): Asset => ({ ...row, originSiteId: null })
+  return (Array.isArray(value) ? value.map(redact) : redact(value)) as T
+}
 
 /**
  * The asset, when it exists and the caller may act on it with `role`; otherwise

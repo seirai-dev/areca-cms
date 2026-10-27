@@ -81,6 +81,9 @@ export async function loadPlanContext(
       status: entry.status,
       contentVersion: entry.contentVersion,
       scheduledAt: entry.scheduledAt,
+      draftData: entry.draftData,
+      publishedData: entry.publishedData,
+      scheduledData: entry.scheduledData,
       collectionKey: collection.key,
       collectionKind: collection.kind,
     })
@@ -143,6 +146,19 @@ export async function loadPlanContext(
         contentVersion: row.contentVersion,
         status: row.status,
         scheduled: row.scheduledAt != null,
+        title: planEntryTitle(
+          {
+            slug: row.slug,
+            draftData: row.draftData,
+            collectionKind: row.collectionKind,
+          },
+          productionSchema.collections.find(
+            (def) => def.key === row.collectionKey,
+          ),
+        ),
+        draftData: row.draftData,
+        publishedData: row.publishedData,
+        scheduledData: row.scheduledData,
       })),
       productionFieldUsage,
       stampCount: stamped.at(0)?.count ?? 0,

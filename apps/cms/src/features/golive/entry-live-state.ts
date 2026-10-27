@@ -97,6 +97,10 @@ export type EntryLiveState = {
   scheduledAt: string | Date | null
 }
 
+/**
+ * The pill state of an entry. A development environment has no releases, so
+ * it never shows the "unreleased changes" dot either.
+ */
 export function entryLiveState(
   entry: EntryLike,
   live: LiveMembership,
@@ -104,7 +108,7 @@ export function entryLiveState(
 ): EntryLiveState {
   return {
     status: entryUiStatus(entry, live, devSite),
-    editedSinceReady: isEditedSinceReady(entry),
+    editedSinceReady: !devSite && isEditedSinceReady(entry),
     scheduledAt: entry.scheduledAt ?? null,
   }
 }

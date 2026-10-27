@@ -23,6 +23,8 @@ import {
 } from './oauth-resource'
 import { verifyMcpAccessToken } from './oauth-tokens'
 import { createArecaMcpServer } from './server'
+import { isSiteContext, loadSiteContext } from './site-context'
+import type { McpSiteContext } from './site-context'
 
 const log = createLogger('mcp')
 
@@ -30,7 +32,8 @@ const log = createLogger('mcp')
 const MAX_REQUEST_BODY_BYTES = 1_048_576
 
 const handler = createMcpHandler(
-  (ctx: McpRequestContext) => createArecaMcpServer(actorFrom(ctx)),
+  (ctx: McpRequestContext) =>
+    createArecaMcpServer(actorFrom(ctx), siteFrom(ctx)),
   {
     legacy: 'stateless',
     responseMode: 'json',
@@ -48,6 +51,15 @@ function actorFrom(ctx: McpRequestContext): McpActor {
     )
   }
   return actor
+}
+
+/** The site's environment, set per request next to the actor. */
+function siteFrom(ctx: McpRequestContext): McpSiteContext {
+  const context = ctx.authInfo?.extra?.site
+  if (!isSiteContext(context)) {
+    throw new Error('MCP request reached the server without a site context')
+  }
+  return context
 }
 
 function isActor(value: unknown): value is McpActor {
@@ -166,6 +178,12 @@ export async function handleMcpRequest(request: Request): Promise<Response> {
  *   - a personal key (`areca_mcp_…`) whose site must be this site;
  *   - an OAuth access token issued for this site's resource, from an app the
  *     user connected to this site, acting as that user with their live role.
+ *
+ * Development environments (docs/design/dev-environments.md, Decision 3,
+ * Decision 7) answer exactly like a missing slug, the `unknownSite()` 404, to
+ * every caller who is not an agency admin. Unauthenticated requests still get
+ * the 401 challenge, because OAuth needs it to start; the trade-off is that
+ * the 401 (and the discovery document) reveal that a `-dev` slug exists.
  */
 export async function handleSiteMcpRequest(
   request: Request,
@@ -177,6 +195,7 @@ export async function handleSiteMcpRequest(
     .where(eq(site.slug, siteSlug))
     .limit(1)
   if (!found) return unknownSite()
+  const devEnv = isDevSite(found)
 
   const authorization = parseAccessTokenAuthorization(
     request.headers.get('authorization'),
@@ -196,6 +215,7 @@ export async function handleSiteMcpRequest(
       })
     const resolution = await resolveMcpActorResult(token)
     if (!resolution.ok) {
+      // mfa_required is only ever reported for an agency admin's key.
       return resolution.reason === 'mfa_required'
         ? mfaRequired()
         : challenge401(siteSlug, {
@@ -205,13 +225,16 @@ export async function handleSiteMcpRequest(
     }
     if (resolution.actor.siteId !== found.id) {
       // A key for another site is a valid key here but not for this resource.
-      return challenge401(siteSlug, {
-        error: 'invalid_token',
-        description: 'Key is for a different site',
-      })
+      // On a dev env the answer must not depend on the dev env existing.
+      return devEnv
+        ? unknownSite()
+        : challenge401(siteSlug, {
+            error: 'invalid_token',
+            description: 'Key is for a different site',
+          })
     }
     // A dev env answers NotFound to everyone but agency admins (Decision 3).
-    if (isDevSite(found) && resolution.actor.role !== 'agency') {
+    if (devEnv && resolution.actor.role !== 'agency') {
       return unknownSite()
     }
     return runMcp(request, resolution.actor, {
@@ -236,29 +259,7 @@ export async function handleSiteMcpRequest(
     })
   }
   const { userId, clientId, connectionId, resources, scopes } = verdict.token
-  // RFC 8707: a token only works at the resource it was issued for.
-  if (!resources.includes(mcpResourceUrl(siteSlug))) {
-    return challenge401(siteSlug, {
-      error: 'invalid_token',
-      description: 'Access token was issued for a different site',
-      dpop: authorization?.scheme === 'DPoP',
-    })
-  }
-  if (!scopes.includes(MCP_SCOPE))
-    return insufficientScope(siteSlug, authorization?.scheme === 'DPoP')
-
-  const connection = await findUsableConnection({
-    userId,
-    siteId: found.id,
-    clientId,
-  })
-  if (!connection || connection.id !== connectionId) {
-    return challenge401(siteSlug, {
-      error: 'invalid_token',
-      description: 'This app is no longer connected to the site',
-      dpop: authorization?.scheme === 'DPoP',
-    })
-  }
+  const dpop = authorization?.scheme === 'DPoP'
 
   const [owner] = await db
     .select({
@@ -272,20 +273,53 @@ export async function handleSiteMcpRequest(
     .where(eq(user.id, userId))
     .limit(1)
   if (!owner) {
-    return challenge401(siteSlug, {
-      error: 'invalid_token',
-      dpop: authorization?.scheme === 'DPoP',
-    })
+    return challenge401(siteSlug, { error: 'invalid_token', dpop })
   }
+  // The token is verified from here on, so the caller is known. On a dev env
+  // every refusal from here is the missing-slug NotFound, unless the caller is
+  // an agency admin, who keeps the normal answers.
+  const refuse = (respond: () => Response) =>
+    devEnv && !owner.isAgencyAdmin ? unknownSite() : respond()
+
+  // RFC 8707: a token only works at the resource it was issued for.
+  if (!resources.includes(mcpResourceUrl(siteSlug))) {
+    return refuse(() =>
+      challenge401(siteSlug, {
+        error: 'invalid_token',
+        description: 'Access token was issued for a different site',
+        dpop,
+      }),
+    )
+  }
+  if (!scopes.includes(MCP_SCOPE))
+    return refuse(() => insufficientScope(siteSlug, dpop))
+
+  const connection = await findUsableConnection({
+    userId,
+    siteId: found.id,
+    clientId,
+  })
+  if (!connection || connection.id !== connectionId) {
+    return refuse(() =>
+      challenge401(siteSlug, {
+        error: 'invalid_token',
+        description: 'This app is no longer connected to the site',
+        dpop,
+      }),
+    )
+  }
+
   const live = await liveRoleFor(owner, found.organizationId)
   if (!live.ok) {
     return live.reason === 'mfa_required'
       ? mfaRequired()
-      : challenge401(siteSlug, {
-          error: 'invalid_token',
-          description: 'You no longer have access to this site',
-          dpop: authorization?.scheme === 'DPoP',
-        })
+      : refuse(() =>
+          challenge401(siteSlug, {
+            error: 'invalid_token',
+            description: 'You no longer have access to this site',
+            dpop,
+          }),
+        )
   }
 
   const actor: McpActor = {
@@ -301,24 +335,29 @@ export async function handleSiteMcpRequest(
     role: live.role,
     allowGoLive: connection.allowGoLive && live.role !== 'editor',
   }
-  if (isDevSite(found) && actor.role !== 'agency') return unknownSite()
+  if (devEnv && actor.role !== 'agency') return unknownSite()
   const response = await runMcp(request, actor, { clientId, scopes })
   if (await isSuccessfulMcpResponse(response)) await touchConnection(connection)
   return response
 }
 
-function runMcp(
+async function runMcp(
   request: Request,
   actor: McpActor,
   auth: { clientId: string; scopes: string[] },
 ): Promise<Response> {
+  const siteContext = await loadSiteContext(actor.siteId)
+  // Last check for every credential: a development environment is agency-only (Decision 3).
+  if (siteContext.environment === 'development' && actor.role !== 'agency') {
+    return unknownSite()
+  }
   return handler.fetch(request, {
     authInfo: {
       // Never the secret: the connection or key id is enough for logs and audit.
       token: actor.keyId,
       clientId: auth.clientId,
       scopes: auth.scopes,
-      extra: { actor },
+      extra: { actor, site: siteContext },
     },
   })
 }

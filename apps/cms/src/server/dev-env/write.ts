@@ -9,26 +9,27 @@ import { and, eq } from 'drizzle-orm'
 
 import type { collection } from '#/db/schema'
 import { entry, entryRevision, site } from '#/db/schema'
+import type { DevEnvWarning } from '#/lib/dev-env'
+import { carryFieldValues } from '#/lib/field-content'
 import type { EntryData, EntryOriginBaseline, Field } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 import { prepareReadyData } from '#/server/content/entries'
 import { NotFoundError, ValidationError } from '#/server/content/errors'
+import { languageName } from '#/server/content/locale-validation'
 import { validateReferences } from '#/server/content/validation'
 
 import type { PlanEntry } from './plan'
+import type { SlugCollision } from './slug-collisions'
 import { referenceLookup, referenceTargets } from './references'
 import type { ReferenceLookup, ReferenceWarning } from './references'
 import type { SiteRow, Tx } from './rows'
 
 export type ProductionCollection = typeof collection.$inferSelect
 
-export type PushWarning = {
+/** A warning of a push, about one plan item when it has one. */
+export type PushWarning = DevEnvWarning & {
   /** The plan item the warning is about, when there is one. */
   itemId: string | null
-  message: string
-  field?: string
-  locale?: string
-  devTargetId?: string
 }
 
 export type PushCounts = {
@@ -94,28 +95,56 @@ export function referenceKey(item: ReferenceWarning) {
 }
 
 /**
- * Push warnings for references that were cleared. `seen` is shared between
- * the draft and the ready version of one entry, so a reference in both shows once.
+ * Warnings for references that were cleared. `seen` is shared between the
+ * draft and the ready version of one entry, so a reference in both shows once.
  */
-export function referenceWarnings(
-  itemId: string | null,
+export function referenceWarningList(
   cleared: ReferenceWarning[],
   seen: Set<string>,
-): PushWarning[] {
-  const out: PushWarning[] = []
+): DevEnvWarning[] {
+  const out: DevEnvWarning[] = []
   for (const reference of cleared) {
     const key = referenceKey(reference)
     if (seen.has(key)) continue
     seen.add(key)
     out.push({
-      itemId,
+      code: 'reference-cleared',
+      params: {
+        field: reference.field,
+        ...(reference.locale !== undefined ? { locale: reference.locale } : {}),
+        devTargetId: reference.devTargetId,
+      },
       message: `Reference cleared: "${reference.field}" pointed at an entry that is not in production.`,
-      field: reference.field,
-      ...(reference.locale !== undefined ? { locale: reference.locale } : {}),
-      devTargetId: reference.devTargetId,
     })
   }
   return out
+}
+
+/** Push warnings for references that were cleared, about one plan item. */
+export function referenceWarnings(
+  itemId: string | null,
+  cleared: ReferenceWarning[],
+  seen: Set<string>,
+): PushWarning[] {
+  return referenceWarningList(cleared, seen).map((warning) => ({
+    ...warning,
+    itemId,
+  }))
+}
+
+/**
+ * The English error for a URL another entry holds. `where` says which entry
+ * holds it: production, or an entry of the same push.
+ */
+export function slugCollisionMessage(
+  collision: SlugCollision,
+  where: 'in production' | 'in this push',
+): string {
+  const url =
+    collision.locale !== undefined
+      ? `The ${languageName(collision.locale)} URL '${collision.slug}'`
+      : `The URL '${collision.slug}'`
+  return `${url} is already used by '${collision.collidesWith}' ${where}.`
 }
 
 /**
@@ -198,22 +227,35 @@ export async function readyProblems(
 /**
  * The origin baseline a dev entry records after it was written to production.
  * The ready part moves only when the ready version was written; otherwise it
- * keeps the old baseline, so the item stays listed as pending.
+ * keeps the old baseline, so the item stays listed as pending. `keptFields`
+ * are fields a pending removal keeps in production: their baseline is not
+ * advanced, so the entry stays listed until the removal is applied.
  */
 export function nextOriginBaseline(
   dev: DevEntryState,
   readyWritten: boolean,
+  keptFields: string[] = [],
 ): EntryOriginBaseline {
   const old = dev.originBaseline
+  const data = carryFieldValues(dev.draftData, old?.data ?? null, keptFields)
+  let publishedData: EntryData | null = old?.publishedData ?? null
+  if (readyWritten) {
+    publishedData =
+      dev.publishedData == null
+        ? null
+        : carryFieldValues(
+            dev.publishedData,
+            old?.publishedData ?? null,
+            keptFields,
+          )
+  }
   return {
     slug: dev.slug,
-    data: dev.draftData,
+    data,
     publishedSlug: readyWritten
       ? dev.publishedSlug
       : (old?.publishedSlug ?? null),
-    publishedData: readyWritten
-      ? dev.publishedData
-      : (old?.publishedData ?? null),
+    publishedData,
     status: readyWritten ? dev.status : (old?.status ?? 'draft'),
   }
 }

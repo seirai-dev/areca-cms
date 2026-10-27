@@ -172,7 +172,9 @@ Per-row exceptions (see `note`/`override` in the matrix): `verifyStepUpFn` needs
 two-factor session (everyone else gets Forbidden; wrong codes are refused);
 `completeSetupFn` is open but refuses any caller without the setup token;
 `getMeFn`, `getSitesOverviewFn`, `getHomeActivityFn` return only the caller's own
-tenant data (asserted in the cross-tenant tests); `getInvitationFn` and
+tenant data (asserted in the cross-tenant tests); client activity excludes every
+`audit_log` row flagged `agency_only` (dev envs and `dev_env.*`, see
+`dev-environments.md`); `getInvitationFn` and
 `acceptInvitationFn` are authorized by an unguessable, unexpired, unaccepted
 token (+ matching e-mail for accept).
 `listMcpKeysFn`, `createMcpKeyFn` and `revokeMcpKeyFn` answer NotFound for sites
@@ -216,7 +218,9 @@ listings, direct calls, cross-site ids, go-live and the agency schema tools.
 | everyone | any site member (editor, owner, agency admin) | `get_site_info`, `get_collection_schema`, `list_entries`, `get_entry`, `create_entry`, `update_entry`, `list_revisions`, `get_preview_url`, `list_assets`, `get_asset`, `upload_asset_from_url`, `update_asset_alt`, `get_release_status`, `list_publications`, `get_build_job`, `get_global`, `update_global`, `discard_global_draft` |
 | owner | owner or agency admin | `mark_ready`, `unpublish_entry`, `archive_entry`, `cancel_schedule`, `delete_entry`, `restore_revision`, `delete_asset` |
 | go-live | a key with `allowGoLive` (the key flag and a non-editor live role) | `go_live`, `rollback`, `cancel_build`, `schedule_entry` |
-| agency | agency admin only | `upsert_collection`, `delete_collection`, `upsert_global`, `delete_global` |
+| agency | agency admin only | `upsert_collection`, `delete_collection`, `upsert_global`, `delete_global`, `create_dev_environment` (production connector), `refresh_from_production`, `push_to_production`, `copy_entry_to_production` (development connector) |
+
+Tools are also listed by the site's environment (`environments` in the tool spec). On a development connector the publishing and schedule tools (`get_release_status`, `list_publications`, `get_build_job`, `go_live`, `rollback`, `cancel_build`, `schedule_entry`, `cancel_schedule`) are not listed, and `create_dev_environment` is listed only on a production connector. A development connector is NotFound to every role except agency admins, on both the key and the OAuth endpoints (`handleSiteMcpRequest` and `runMcp`, `http.ts`; the 401 and discovery trade-off is in `dev-environments.md`). `push_to_production` with `goLive` needs the same go-live permission as `go_live`, and is refused before anything is written. The dev-env MCP tests are in `mcp/dev-env-tools.db.test.ts`.
 
 Site content (globals) is reached by key through `get_global`, `update_global` and `discard_global_draft`. The section's entry id then works with the owner and go-live tools above. Editors and owners do not see disabled sections; a disabled section answers "not found" for them, as in the CMS. `update_global` refuses `seo` on a section without SEO, and `upsert_global` refuses `slug` fields and the reserved key `globals`.
 
@@ -244,6 +248,16 @@ exists. In the matrix these rows are `hidden: true`, so ownerY expects
 `not-found` instead of `forbidden`. Calls addressed by an organization id
 (`listAssetsFn`, member/invitation/audit functions) answer 403 for non-members,
 identically for existing and missing organizations.
+
+Development environments (see `dev-environments.md`): the MCP connector of a dev
+site answers the same 404 as a missing slug to every caller who is not an agency
+admin (`handleSiteMcpRequest`, `server/mcp/http.ts`). Unauthenticated requests
+still get the 401 challenge, so a `-dev` slug's existence is visible to them. Its
+discovery document is generic (`resource_name` "Areca site", `no-store`). Asset
+`originSiteId` is returned only to agency admins (`listAssetsFn`, `getAssetFn`,
+`updateAssetFn`). `generateEntrySeoFn` checks membership before the language list.
+Tests: `server/mcp/dev-env-connector.db.test.ts`, `server/security/visibility-probes.db.test.ts`,
+`server/security/dev-env-audit-rename.db.test.ts`.
 
 ## Notes
 

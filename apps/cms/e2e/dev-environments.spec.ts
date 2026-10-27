@@ -156,19 +156,13 @@ test('agency admin pushes an edited entry from development to production', async
   await page.getByTestId('dev-env-push').click()
   await expect(page).toHaveURL(new RegExp(`/sites/${devId}/push$`))
   await expect(page.getByTestId('push-screen')).toBeVisible()
-  await expect(page.getByTestId('push-group-changed')).toContainText(
-    slugify(title),
-  )
-  await expect(page.getByTestId('push-submit')).toHaveText(
-    'Push 1 change · 0 skipped',
-  )
+  await expect(page.getByTestId('push-group-changed')).toContainText(edited)
+  await expect(page.getByTestId('push-submit')).toHaveText('Push 1 change')
 
   // Push. Nothing needs attention, so the button pushes directly.
   await page.getByTestId('push-submit').click()
   await expect(page.getByTestId('push-result')).toBeVisible()
-  await expect(page.getByTestId('push-result-written')).toContainText(
-    slugify(title),
-  )
+  await expect(page.getByTestId('push-result-written')).toContainText(edited)
 
   // The production entry the push wrote carries the change.
   await page.getByTestId('push-result-written').locator('a').first().click()

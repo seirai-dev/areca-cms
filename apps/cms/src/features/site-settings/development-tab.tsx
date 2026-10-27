@@ -11,6 +11,7 @@ import { toast } from 'sonner'
 import { errorMessage } from '#/lib/admin/helpers'
 import { Button } from '#/components/ui/button'
 import { ConfirmDialog } from '#/components/ui/confirm-dialog'
+import { ResetDevEnvConfirm } from '#/features/dev-env/reset-confirm'
 import { CopyButton } from '#/components/ui/copy-button'
 import { InsetList, InsetRow } from '#/components/ui/inset-list'
 import { QueryError } from '#/components/ui/query-error'
@@ -22,7 +23,6 @@ import { m } from '#/paraglide/messages'
 import { TokenReveal } from './token-reveal'
 import type { SiteRecord } from './use-site-settings'
 import { useDevEnvironment } from './use-dev-environment'
-import { resetDevEnvDescription } from '#/features/dev-env/reset-copy'
 
 type DevEnvStatus = NonNullable<
   ReturnType<typeof useDevEnvironment>['status']['data']
@@ -99,11 +99,8 @@ export function DevelopmentTab({ site }: { site: SiteRecord }) {
                   {m.dev_env_open()}
                 </Link>
               </Button>
-              <ConfirmDialog
-                title={m.dev_env_reset_title()}
-                description={resetDevEnvDescription(status.unpushedChanges)}
-                confirmLabel={m.dev_env_reset_confirm()}
-                variant="destructive"
+              <ResetDevEnvConfirm
+                devSiteId={status.id}
                 testId="dev-env-reset-dialog"
                 onConfirm={async () => {
                   try {
@@ -124,7 +121,7 @@ export function DevelopmentTab({ site }: { site: SiteRecord }) {
                   {dev.reset.isPending ? null : <ArrowsClockwise />}
                   {m.dev_env_reset()}
                 </Button>
-              </ConfirmDialog>
+              </ResetDevEnvConfirm>
               <ConfirmDialog
                 title={m.dev_env_delete_title()}
                 description={m.dev_env_delete_description()}
@@ -211,6 +208,14 @@ function CreatedTokens({
 }) {
   return (
     <div className="grid gap-4" data-testid="dev-env-created">
+      <div className="grid gap-1">
+        <h3 className="text-headline text-text-primary">
+          {m.dev_env_tokens_title()}
+        </h3>
+        <p className="max-w-[60ch] text-callout text-text-secondary">
+          {m.dev_env_tokens_body()}
+        </p>
+      </div>
       <TokenReveal token={created.token} />
       <TokenReveal token={created.schemaToken} privilege="schema" />
       <div className="grid gap-1.5">
@@ -308,24 +313,31 @@ function kindLabel(kind: string) {
   }
 }
 
-/** "Collections 2 · Sections 1 · Entries 14", read from the stored counts. */
+/**
+ * "Collections 1 · Sections 1 · Entries 4", read from the stored counts. Only
+ * the non-zero counts are listed; a push with none says "No changes".
+ */
 function historySummary(kind: string, counts: Record<string, number>) {
   const n = (key: string) => counts[key] ?? 0
+  let parts: { label: string; value: number }[] | null = null
   if (kind === 'fork' || kind === 'refresh') {
-    return m.dev_env_history_counts_fork({
-      collections: n('collections'),
-      sections: n('sections'),
-      entries: n('entries'),
-    })
+    parts = [
+      { label: m.dev_env_history_collections(), value: n('collections') },
+      { label: m.dev_env_history_sections(), value: n('sections') },
+      { label: m.dev_env_history_entries(), value: n('entries') },
+    ]
+  } else if (kind === 'push') {
+    parts = [
+      { label: m.dev_push_group_schema(), value: n('schema') },
+      { label: m.dev_push_group_new(), value: n('new') },
+      { label: m.dev_push_group_changed(), value: n('changed') },
+      { label: m.dev_push_group_archived(), value: n('archived') },
+      { label: m.dev_push_result_skipped(), value: n('skipped') },
+    ]
   }
-  if (kind === 'push') {
-    return m.dev_env_history_counts_push({
-      schema: n('schema'),
-      added: n('new'),
-      changed: n('changed'),
-      archived: n('archived'),
-      skipped: n('skipped'),
-    })
-  }
-  return null
+  if (parts === null) return null
+  const shown = parts
+    .filter((part) => part.value > 0)
+    .map((part) => `${part.label} ${part.value}`)
+  return shown.length > 0 ? shown.join(' · ') : m.dev_env_history_no_changes()
 }

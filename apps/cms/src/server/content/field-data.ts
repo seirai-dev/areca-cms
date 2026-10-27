@@ -2,8 +2,8 @@ import { and, eq, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { collection, entry } from '#/db/schema'
-import { I18N_KEY } from '#/lib/content-locale'
-import type { EntryData, Field } from '#/lib/types'
+import { holdsAnyFieldKey, withoutFieldKeys } from '#/lib/field-content'
+import type { Field } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 
 import { ValidationError } from './errors.ts'
@@ -16,10 +16,6 @@ import { ValidationError } from './errors.ts'
  */
 
 type DbTx = Parameters<Parameters<typeof db.transaction>[0]>[0]
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
 
 /**
  * Entries of one collection or section that hold a value for each field key,
@@ -191,39 +187,6 @@ export async function planManifestFieldDrops(
   return purge
 }
 
-/** Removes the keys from every stored version of the entries, including translations. */
-function withoutKeys(data: EntryData, keys: string[]): EntryData {
-  const next: EntryData = { ...data }
-  for (const key of keys) delete next[key]
-  const translations = next[I18N_KEY]
-  if (isPlainObject(translations)) {
-    next[I18N_KEY] = Object.fromEntries(
-      Object.entries(translations).map(([locale, values]) => [
-        locale,
-        isPlainObject(values)
-          ? Object.fromEntries(
-              Object.entries(values).filter(([key]) => !keys.includes(key)),
-            )
-          : values,
-      ]),
-    )
-  }
-  return next
-}
-
-function holdsAnyKey(data: EntryData | null, keys: string[]): boolean {
-  if (!data) return false
-  if (keys.some((key) => Object.hasOwn(data, key))) return true
-  const translations = data[I18N_KEY]
-  return (
-    isPlainObject(translations) &&
-    Object.values(translations).some(
-      (values) =>
-        isPlainObject(values) && keys.some((key) => Object.hasOwn(values, key)),
-    )
-  )
-}
-
 /** Deletes the content of the given keys from the collection's entries. */
 export async function purgeFieldContent(
   tx: DbTx,
@@ -243,7 +206,7 @@ export async function purgeFieldContent(
   for (const row of rows) {
     if (
       ![row.draftData, row.publishedData, row.scheduledData].some((data) =>
-        holdsAnyKey(data, keys),
+        holdsAnyFieldKey(data, keys),
       )
     ) {
       continue
@@ -255,12 +218,12 @@ export async function purgeFieldContent(
       .set({
         contentVersion: sql`${entry.contentVersion} + 1`,
         draftVersion: sql`${entry.draftVersion} + 1`,
-        draftData: withoutKeys(row.draftData, keys),
+        draftData: withoutFieldKeys(row.draftData, keys),
         publishedData: row.publishedData
-          ? withoutKeys(row.publishedData, keys)
+          ? withoutFieldKeys(row.publishedData, keys)
           : row.publishedData,
         scheduledData: row.scheduledData
-          ? withoutKeys(row.scheduledData, keys)
+          ? withoutFieldKeys(row.scheduledData, keys)
           : row.scheduledData,
       })
       .where(eq(entry.id, row.id))
