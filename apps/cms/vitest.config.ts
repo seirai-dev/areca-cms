@@ -2,6 +2,8 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { defineConfig } from 'vitest/config'
 
+import { MAX_WORKERS } from './vitest.worker-isolation.ts'
+
 // Suites that need real PostgreSQL / Redis / S3. The unit job in CI sets
 // SKIP_INTEGRATION_TESTS=true to leave these files out; the integration job
 // provisions the services and runs them.
@@ -60,6 +62,11 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts'],
     exclude: ['**/node_modules/**', ...skipped],
+    // Files run in parallel. Each worker has its own database, Redis logical
+    // database and S3 prefix (vitest.worker-isolation.ts), so they do not share
+    // rows, queues or objects.
+    maxWorkers: MAX_WORKERS,
+    globalSetup: ['./vitest.global-setup.ts'],
     setupFiles: ['./vitest.setup.ts'],
     env: {
       WORKER_ENABLED: 'false',

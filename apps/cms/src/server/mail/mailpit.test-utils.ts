@@ -4,12 +4,19 @@
  */
 export type MailpitMail = { subject: string; html: string; text: string }
 
-/** Polls Mailpit for up to five seconds. Null when nothing arrived. */
+/**
+ * Polls Mailpit for up to five seconds. Null when nothing arrived. Searches by
+ * recipient instead of reading the newest page, because every worker shares
+ * one inbox.
+ */
 export async function waitForMail(to: string): Promise<MailpitMail | null> {
   const base = process.env.MAILPIT_URL ?? 'http://localhost:8025'
   const deadline = Date.now() + 5000
   while (Date.now() < deadline) {
-    const list = (await (await fetch(`${base}/api/v1/messages`)).json()) as {
+    const search = encodeURIComponent(`to:"${to}"`)
+    const list = (await (
+      await fetch(`${base}/api/v1/search?query=${search}`)
+    ).json()) as {
       messages?: Array<{ ID: string; To?: Array<{ Address?: string }> }>
     }
     const hit = list.messages?.find((message) =>

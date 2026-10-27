@@ -99,7 +99,12 @@ async function mailpitMessage(to: string) {
   const base = process.env.MAILPIT_URL ?? 'http://localhost:8025'
   const deadline = Date.now() + 5000
   while (Date.now() < deadline) {
-    const list = (await (await fetch(`${base}/api/v1/messages`)).json()) as {
+    // Search by recipient: the inbox is shared by every worker.
+    const list = (await (
+      await fetch(
+        `${base}/api/v1/search?query=${encodeURIComponent(`to:"${to}"`)}`,
+      )
+    ).json()) as {
       messages?: Array<{ ID: string; To?: Array<{ Address?: string }> }>
     }
     const hit = list.messages?.find((msg) =>

@@ -53,8 +53,9 @@ type MailpitMessages = { messages?: MailpitMessage[] }
 
 async function findMailpitMessage(email: string) {
   for (let attempt = 0; attempt < 20; attempt++) {
+    // Search by recipient: the inbox is shared by every worker.
     const res = await fetch(
-      `${process.env.MAILPIT_URL ?? 'http://localhost:8025'}/api/v1/messages`,
+      `${process.env.MAILPIT_URL ?? 'http://localhost:8025'}/api/v1/search?query=${encodeURIComponent(`to:"${email}"`)}`,
     )
     if (res.ok) {
       const body = (await res.json()) as MailpitMessages
