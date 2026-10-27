@@ -222,6 +222,15 @@ describe('skillsInstallCommand', () => {
       'npx @areca-cms/skills --mcp-url https://cms.example.com/api/mcp/acme-site',
     )
   })
+
+  it('emits the agency connector URL that packages/skills accepts', () => {
+    // packages/skills/src/skills.test.ts pins this same literal and validates it.
+    expect(
+      skillsInstallCommand('https://cms.example.com/api/agency/mcp'),
+    ).toBe(
+      'npx @areca-cms/skills --mcp-url https://cms.example.com/api/agency/mcp',
+    )
+  })
 })
 
 describe('connect targets', () => {

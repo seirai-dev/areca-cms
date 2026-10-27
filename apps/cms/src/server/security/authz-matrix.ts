@@ -1466,7 +1466,7 @@ export const ROWS: Row[] = [
     name: 'createAgencyMcpKeyFn',
     fn: mcpKeyFns.createAgencyMcpKeyFn,
     policy: 'agency-fresh',
-    note: 'Agency keys need an agency admin with MFA and a fresh second factor (reauth). They never allow go-live.',
+    note: 'Agency keys need an agency admin with MFA and a fresh second factor (reauth). They have no go-live option, but the agency connector can always go live (allowGoLive is true for agency actors).',
     prepare: () => {
       const name = `authz-agency-key-${uniq()}`
       return {
@@ -1597,7 +1597,7 @@ export const ROWS: Row[] = [
     fn: mcpOauthFns.approveAgencyOAuthConsentFn,
     policy: 'agency-fresh',
     tolerant: true,
-    note: 'Agency admins with MFA and a fresh second factor (reauth) approve the agency connector; the signed query is checked after access. Agency approvals never allow go-live.',
+    note: 'Agency admins with MFA and a fresh second factor (reauth) approve the agency connector; the signed query is checked after access. Agency approvals have no go-live tick; the agency connector can always go live (allowGoLive is true for agency actors).',
     prepare: () => ({
       data: { query: 'client_id=nope&sig=nope&exp=1' },
     }),

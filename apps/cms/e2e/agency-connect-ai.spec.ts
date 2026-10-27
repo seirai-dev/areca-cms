@@ -66,7 +66,7 @@ test.describe('Agency › Connect AI', () => {
     await page.getByTestId('connect-ai-create').click()
     const dialog = page.getByTestId('connect-ai-create-dialog')
     await expect(dialog).toBeVisible()
-    // No go-live switch: agency keys never publish on their own.
+    // No go-live switch on an agency key. Agency credentials can always go live (allowGoLive is true for agency actors), so there is no tick to offer.
     await expect(page.getByTestId('connect-ai-go-live')).toHaveCount(0)
     await page.getByTestId('connect-ai-name').fill(name)
     await page.getByTestId('connect-ai-expiry-30').click()

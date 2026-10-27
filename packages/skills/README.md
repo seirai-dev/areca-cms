@@ -16,15 +16,17 @@ The skills are plain `SKILL.md` folders in the open [Agent Skills](https://agent
 npx @areca-cms/skills
 ```
 
-Pick your agents in the selector (agents found in the project are preselected), then choose the skills and project or user scope. You can optionally add the site's MCP connector URL as well. Only the URL is written, never a secret, and each agent signs in to Areca in the browser on first use.
+Pick your agents in the selector (agents found in the project are preselected), then choose the skills and project or user scope. You can optionally add the MCP connector URL as well: a site's `<cms>/api/mcp/<site-slug>`, or the agency connector `<cms>/api/agency/mcp` for agency admins (it reaches every client and site, and is registered as `areca-agency`). Only the URL is written, never a secret, and each agent signs in to Areca in the browser on first use.
 
 Non-interactive:
 
 ```bash
 npx @areca-cms/skills add -a claude-code,codex,cursor -y
 npx @areca-cms/skills add -a claude-code --mcp-url https://cms.example.com/api/mcp/acme-site -y
+npx @areca-cms/skills add -a claude-code --mcp-url https://cms.example.com/api/agency/mcp -y   # agency connector
 npx @areca-cms/skills add -a codex --global -y      # user-level folders
 npx @areca-cms/skills mcp -a cursor --url https://cms.example.com/api/mcp/acme-site
+npx @areca-cms/skills mcp -a cursor --url https://cms.example.com/api/agency/mcp
 npx @areca-cms/skills export --out ./zips           # Claude app / ChatGPT uploads
 npx @areca-cms/skills remove -a claude-code -y
 npx @areca-cms/skills list                          # agent ids and folders

@@ -155,7 +155,7 @@ unchanged (each row carries a side-effect probe).
 | `createMcpKeyFn` | `mcp-keys.ts` | `org-editor` | any site member (MFA for agency admins); agency admins also need a fresh session (`REAUTH_REQUIRED`); editors cannot allow go-live |
 | `revokeMcpKeyFn` | `mcp-keys.ts` | `org-editor` | editors revoke their own keys; owners and agency admins any key on the site; other keys are NotFound |
 | `listAgencyMcpKeysFn` | `mcp-keys.ts` | `agency` | agency admin (MFA); the caller's own agency keys (no site); other roles are refused |
-| `createAgencyMcpKeyFn` | `mcp-keys.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up); agency keys never allow go-live |
+| `createAgencyMcpKeyFn` | `mcp-keys.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up); agency keys have no go-live option, but the agency connector can always go live (`siteActorFor` sets `allowGoLive: true`, as for the agency admin in the CMS) |
 | `revokeAgencyMcpKeyFn` | `mcp-keys.ts` | `agency` | agency admin revokes their own agency key; another admin's key is NotFound |
 | `getOAuthConsentFn` | `mcp-oauth.ts` | `public` (reason-based) | signed-out, invalid or tampered requests and non-members get a reason instead of data; nothing is changed |
 | `approveOAuthConsentFn` | `mcp-oauth.ts` | `org-editor` | site access first (NotFound for other tenants); agency admins need a fresh second factor; editors cannot allow go-live; the signed query must name this site |
@@ -163,7 +163,7 @@ unchanged (each row carries a side-effect probe).
 | `listMcpConnectionsFn` | `mcp-oauth.ts` | `org-editor` | editors see only their own connected apps; owners and agency admins all on the site |
 | `revokeMcpConnectionFn` | `mcp-oauth.ts` | `org-editor` | editors disconnect their own apps; owners and agency admins any app on the site; others are NotFound |
 | `listAgencyMcpConnectionsFn` | `mcp-oauth.ts` | `agency` | agency admin (MFA); the caller's own agency apps (no site); other roles are refused |
-| `approveAgencyOAuthConsentFn` | `mcp-oauth.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) approves the agency connector for an app; the signed query must name the agency resource; never allows go-live |
+| `approveAgencyOAuthConsentFn` | `mcp-oauth.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) approves the agency connector for an app; the signed query must name the agency resource; agency connections have no go-live tick, and the agency connector can always go live (`allowGoLive: true`) |
 | `revokeAgencyMcpConnectionFn` | `mcp-oauth.ts` | `agency` | agency admin revokes their own agency app; another admin's app is NotFound |
 | `getMyNotificationsFn` | `notifications.ts` | `user` | the caller's own notification choices and org memberships |
 | `setMyNotificationFn` | `notifications.ts` | `org-editor` | members change their own choice (agency admins for the agency scope); locked events refuse; a non-member admin gets a readable refusal |

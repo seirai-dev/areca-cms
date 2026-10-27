@@ -32,7 +32,7 @@ npx @areca-cms/skills
 </Step>
 <Step>
 
-**Optionally add the MCP server.** Paste the connector URL from [Connect AI](/docs/cms/connect-ai). If the project already has `ARECA_CMS_URL` and an `areca.config.ts`, the URL is prefilled. Only the URL is written, never a secret. Each agent asks you to sign in to Areca in the browser the first time it connects.
+**Optionally add the MCP server.** Paste the connector URL from [Connect AI](/docs/cms/connect-ai): `https://<your CMS>/api/mcp/<site-slug>`. Agency admins can paste the agency connector instead, `https://<your CMS>/api/agency/mcp`, which is registered as `areca-agency` (see [Agency connector](/docs/cms/agency-connector)). If the project already has `ARECA_CMS_URL` and an `areca.config.ts`, the site URL is prefilled. Only the URL is written, never a secret. Each agent asks you to sign in to Areca in the browser the first time it connects.
 
 </Step>
 </Steps>
@@ -54,6 +54,7 @@ For agents that keep their MCP settings outside the project (Windsurf, Cline, Ze
 npx @areca-cms/skills add -a claude-code,codex,cursor -y
 npx @areca-cms/skills add -a claude-code -s areca-quickstart -y
 npx @areca-cms/skills add -a claude-code --mcp-url https://cms.example.com/api/mcp/acme-site -y
+npx @areca-cms/skills add -a claude-code --mcp-url https://cms.example.com/api/agency/mcp -y
 npx @areca-cms/skills add -a codex --global -y
 npx @areca-cms/skills export --out ./zips
 npx @areca-cms/skills remove -a claude-code -y

@@ -72,7 +72,7 @@ A production site can have a **development environment**: a copy of the site tha
 - **Going live with a push** (`goLive: true`) starts a production build. Only when the user asks, and only with the go-live permission.
 - **Copy one entry** with `copy_entry_to_production({ id })`. It becomes the production draft; the live version stays unless `markReady` is set, which also makes the copy the production ready version (ready is not live: a release is still needed). It is refused on a schema mismatch ("Push the schema first") and when production changed since the last sync; use `overwrite` only when the user agrees.
 - **Reset** with `refresh_from_production({ confirm: true })`. It discards every unpushed change. Run the dry run first and tell the user how many changes will be lost.
-- **New environment.** `create_dev_environment({ confirm: true })` on the production connector. It never returns tokens. They are shown once, in the browser that created the environment. Tell the user: open the development environment in the CMS, go to Settings › Developer and rotate the site token (and the schema token for code-first sites) to get new values.
+- **New environment.** Ask the user first, and create one only with a yes: `create_dev_environment({ confirm: true })` on the production connector (on the agency connector, pass `site` set to the production slug). It never returns tokens. They are shown once, in the browser that created the environment. Tell the user: open the development environment in the CMS, go to Settings › Developer and rotate the site token (and the schema token for code-first sites) to get new values.
 
 Full tool inputs are in [references/tools.md](references/tools.md#development-environments-agency).
 

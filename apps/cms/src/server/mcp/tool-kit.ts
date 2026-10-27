@@ -22,6 +22,34 @@ export const PRODUCTION_ONLY: readonly SiteEnvironment[] = ['production']
 /** Tools for a development environment only (reset, push and copy). */
 export const DEVELOPMENT_ONLY: readonly SiteEnvironment[] = ['development']
 
+/**
+ * Go-live sentences in per-site descriptions. Each names what a per-site key
+ * needs. The agency connector needs none of it, so agency-server.ts swaps each
+ * one for AGENCY_GO_LIVE_NOTE and nowhere else.
+ */
+export const GO_LIVE_KEY_NOTE =
+  'Requires a key with the "Allow going live" option.'
+export const GO_LIVE_PERMISSION_NOTE = 'Requires permission to go live.'
+export const AGENCY_GO_LIVE_NOTE =
+  'Agency connections can go live; no extra option is needed.'
+
+/** The per-site go-live sentences the agency connector replaces, with their agency text. */
+export const AGENCY_DESCRIPTION_SWAPS: readonly {
+  perSite: string
+  agency: string
+}[] = [
+  { perSite: GO_LIVE_KEY_NOTE, agency: AGENCY_GO_LIVE_NOTE },
+  { perSite: GO_LIVE_PERMISSION_NOTE, agency: AGENCY_GO_LIVE_NOTE },
+]
+
+/** A per-site tool description as the agency connector shows it. */
+export function agencyDescription(description: string): string {
+  return AGENCY_DESCRIPTION_SWAPS.reduce(
+    (text, swap) => text.replace(swap.perSite, swap.agency),
+    description,
+  )
+}
+
 export type ToolSpec<TSchema extends z.ZodObject> = {
   name: string
   title: string

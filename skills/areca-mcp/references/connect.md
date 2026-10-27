@@ -47,7 +47,7 @@ An agency admin can connect one address for every client and site, production an
 <cms-url>/api/agency/mcp
 ```
 
-The agency admin copies it from **Agency › Connect AI** in the CMS, which shows the same install steps as a site's Connect AI page. Use the server name `areca-agency`. Sign-in works as for a site: the app opens a browser, the user approves, and the consent screen says the app can read and change every client and site, including production, and go live. Approving needs a fresh authenticator code. A personal agency key (created on the same page, with the same expiry choices) works here too, and only here.
+The agency admin copies it from **Agency › Connect AI** in the CMS, which shows the same install steps as a site's Connect AI page. Use the server name `areca-agency`. The installer accepts this address too: `npx @areca-cms/skills mcp -a <agent> --url <cms-url>/api/agency/mcp` registers it under that name. Sign-in works as for a site: the app opens a browser, the user approves, and the consent screen says the app can read and change every client and site, including production, and go live. Approving needs a fresh authenticator code. A personal agency key (created on the same page, with the same expiry choices) works here too, and only here.
 
 Every site tool then takes a `site` argument. Find the slug with `list_sites` or `find_site` (see the `areca-mcp` skill). Going live needs no extra tick on this connector. The per-site connector still needs "Allow going live".
 

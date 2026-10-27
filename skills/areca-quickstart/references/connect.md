@@ -44,6 +44,8 @@ This command writes the Areca skills and the connector into the coding agents th
 npx @areca-cms/skills add --mcp-url <url>
 ```
 
+`<url>` is `<cms-url>/api/mcp/<site-slug>`. An agency admin can pass the agency connector, `<cms-url>/api/agency/mcp`, instead; it is registered as `areca-agency`.
+
 It asks which agents to use. With `-y` it also needs `--agent`. Offer it only if the user wants the skills in the same step.
 
 ## Check the role

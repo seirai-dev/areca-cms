@@ -9,6 +9,7 @@ import { AGENCY_NAVIGATION } from './agency-navigation'
 import type { AgencyPrincipal } from './keys'
 import { MCP_SERVER_NAME, MCP_SERVER_VERSION } from './server'
 import { SITE_TOOLS } from './tool-catalog'
+import { agencyDescription } from './tool-kit'
 
 /**
  * Tools deliberately missing from one of the two connectors. Empty in v1: both
@@ -18,7 +19,7 @@ import { SITE_TOOLS } from './tool-catalog'
 export const AGENCY_TOOL_EXCEPTIONS: readonly string[] = []
 
 /** Added to every site tool's description: the site argument is how the call finds its site. */
-const SITE_NOTE =
+export const SITE_NOTE =
   'Acts on the site named by "site" (the slug from list_sites or find_site). Pass it on every call.'
 
 /**
@@ -35,7 +36,7 @@ export function agencyServerInstructions(): string {
     'Drafts are safe. Nothing you write changes the live site until it is approved and a go live happens.',
     'Write rich text fields as Markdown (headings ##, lists, links, ![alt](asset:<assetId>) images). Do not send HTML.',
     'Some tools only apply to one kind of environment. When a call is refused for that reason, the refusal says what to do; explain it to the user and use the right site.',
-    'You are an agency admin: you may change collection schemas and site content sections, mark entries ready, and go live where the site allows it. If a site syncs its schema from code, prefer changing areca.config.ts.',
+    'You are an agency admin: you may change collection schemas and site content sections, mark entries ready, and go live. Agency connections may go live, but only when the user asks, and the confirmation rule above still applies. If a site syncs its schema from code, prefer changing areca.config.ts.',
     'When an update fails with a version conflict, call get_entry again and reapply the change to the current version.',
   ].join('\n')
 }
@@ -69,7 +70,7 @@ export function registerAgencyTools(
       tool.name,
       {
         title: tool.title,
-        description: `${tool.description}\n\n${SITE_NOTE}`,
+        description: `${agencyDescription(tool.description)}\n\n${SITE_NOTE}`,
         inputSchema: agencyInputSchema(tool.inputSchema),
         annotations: tool.annotations,
       },

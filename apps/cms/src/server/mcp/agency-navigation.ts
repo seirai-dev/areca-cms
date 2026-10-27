@@ -3,6 +3,7 @@ import { z } from '#/lib/zod'
 
 import { isDevSite } from '#/lib/site-environment'
 import { NotFoundError } from '#/server/content/errors'
+import { AppError } from '#/server/http/app-error'
 
 import { agencyReachableSites } from './agency-access'
 import type { AgencySite } from './agency-access'
@@ -83,6 +84,36 @@ async function navigationRows(
 
 const FIND_LIMIT = 50
 
+/**
+ * The slug of the client a `client` argument names among the reachable sites,
+ * or null when none does. A client slug (case-insensitive) wins. Otherwise the
+ * argument must be the name of exactly one client: client names are not unique,
+ * so two clients with one name are refused, with their slugs to choose from.
+ */
+export function resolveClientSlug(
+  wanted: string,
+  sites: readonly AgencySite[],
+): string | null {
+  const clients = new Map(sites.map((row) => [row.clientSlug, row.clientName]))
+  const needle = wanted.toLowerCase()
+  const bySlug = [...clients.keys()].find(
+    (slug) => slug.toLowerCase() === needle,
+  )
+  if (bySlug !== undefined) return bySlug
+
+  const byName = [...clients].filter(
+    ([, name]) => name.toLowerCase() === needle,
+  )
+  if (byName.length === 0) return null
+  if (byName.length > 1) {
+    const slugs = byName.map(([slug]) => slug).sort()
+    throw new AppError(
+      `Several clients are named "${byName[0][1]}". Use one of these client slugs: ${slugs.join(', ')}.`,
+    )
+  }
+  return byName[0][0]
+}
+
 export type NavigationTool = {
   name: string
   title: string
@@ -147,23 +178,25 @@ export const AGENCY_NAVIGATION: readonly NavigationTool[] = [
     name: 'list_sites',
     title: 'List sites',
     description:
-      'Lists the sites you can reach, production and development environments, with the slug to pass as "site" to every other tool. Each row has: slug, name, client, environment, linked (the production site of a development environment, or its development environment), publishingMode, live (a live release exists) and pendingReadyChanges (approved entries waiting for the next go live). Pass client to list one client. Read-only.',
+      'Lists the sites you can reach, production and development environments, with the slug to pass as "site" to every other tool. Each row has: slug, name, client, environment, linked (the production site of a development environment, or its development environment), publishingMode, live (a live release exists) and pendingReadyChanges (approved entries waiting for the next go live). Pass client to list one client, by its slug or by its name when only one client has that name. Read-only.',
     inputSchema: z.object({
       client: z
         .string()
         .min(1)
         .optional()
         .describe(
-          'A client slug or client name, from list_clients. Leave out for every client.',
+          'A client slug, or a client name that only one client has, from list_clients. Leave out for every client.',
         ),
     }),
     run: async (input, principal) => {
-      const wanted = input.client?.toLowerCase()
+      // An unknown client lists nothing, as it always has.
+      const sites = await agencyReachableSites(db, principal.user)
+      const wanted =
+        input.client === undefined
+          ? undefined
+          : resolveClientSlug(input.client, sites)
       const rows = await navigationRows(principal, (row) =>
-        wanted === undefined
-          ? true
-          : row.clientSlug.toLowerCase() === wanted ||
-            row.clientName.toLowerCase() === wanted,
+        wanted === undefined ? true : row.clientSlug === wanted,
       )
       return { sites: rows }
     },

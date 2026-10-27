@@ -322,8 +322,25 @@ export function findAgent(id: string): Agent | undefined {
   return AGENTS.find((agent) => agent.id === id)
 }
 
-/** `areca-<slug>` from a connector URL `…/api/mcp/<slug>`, matching the CMS install buttons. */
+/** The agency connector's server name. Must match AGENCY_SERVER_NAME in apps/cms/src/lib/mcp-install.ts. */
+export const AGENCY_SERVER_NAME = 'areca-agency'
+
+/** `<cms>/api/agency/mcp`, with an optional trailing slash. */
+const AGENCY_PATH = /\/api\/agency\/mcp\/?$/
+/** `<cms>/api/mcp/<site-slug>`, with an optional trailing slash. */
+const SITE_PATH = /\/api\/mcp\/[^/]+\/?$/
+
+/** True for the agency-wide connector URL `<cms>/api/agency/mcp`. */
+export function isAgencyConnectorUrl(connectorUrl: string): boolean {
+  return AGENCY_PATH.test(new URL(connectorUrl).pathname)
+}
+
+/**
+ * `areca-<slug>` from a site connector URL `…/api/mcp/<slug>`, matching the CMS
+ * install buttons. The agency URL `…/api/agency/mcp` is `areca-agency`.
+ */
 export function mcpServerName(connectorUrl: string): string {
+  if (isAgencyConnectorUrl(connectorUrl)) return AGENCY_SERVER_NAME
   const slug = new URL(connectorUrl).pathname.split('/').filter(Boolean).at(-1) ?? ''
   const clean = slug
     .toLowerCase()
@@ -332,17 +349,20 @@ export function mcpServerName(connectorUrl: string): string {
   return `areca-${clean || 'site'}`
 }
 
-/** Accepts `https://cms/api/mcp/<slug>` (or http on localhost). Returns an error message or undefined. */
+/**
+ * Accepts a site connector `https://cms/api/mcp/<slug>` or the agency connector
+ * `https://cms/api/agency/mcp` (http on localhost). Returns an error message or undefined.
+ */
 export function validateConnectorUrl(value: string): string | undefined {
   let url: URL
   try {
     url = new URL(value)
   } catch {
-    return 'Enter a full URL, e.g. https://cms.example.com/api/mcp/acme-site'
+    return 'Enter a full URL, e.g. https://cms.example.com/api/mcp/acme-site or https://cms.example.com/api/agency/mcp'
   }
   if (url.protocol !== 'https:' && url.protocol !== 'http:') return 'Use an http(s) URL'
-  if (!/\/api\/mcp\/[^/]+\/?$/.test(url.pathname)) {
-    return 'Use the connector URL from Connect AI: <cms>/api/mcp/<site-slug>'
+  if (!AGENCY_PATH.test(url.pathname) && !SITE_PATH.test(url.pathname)) {
+    return 'Use the connector URL from Connect AI: <cms>/api/mcp/<site-slug> for one site, or <cms>/api/agency/mcp for the agency connector'
   }
   return undefined
 }

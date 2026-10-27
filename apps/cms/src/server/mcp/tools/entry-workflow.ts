@@ -16,7 +16,7 @@ import { toolErrorMessage } from '../errors'
 import { formatStoredEntry, withImportWarnings } from './entries'
 import { loadEntryInSite } from '../scope'
 import { idSchema } from '../schemas'
-import { PRODUCTION_ONLY } from '../tool-kit'
+import { GO_LIVE_PERMISSION_NOTE, PRODUCTION_ONLY } from '../tool-kit'
 import type { ToolCollector } from '../tool-kit'
 
 const OWNER_ONLY =
@@ -154,8 +154,7 @@ export function registerEntryWorkflowTools(registry: ToolCollector): void {
   registry.add({
     name: 'schedule_entry',
     title: 'Schedule entry',
-    description:
-      'Requires permission to go live. Schedules the entry to go live at a set time: status becomes scheduled, and the entry goes live at that time without a go_live call. publishAt is an ISO 8601 instant with an offset, e.g. "2026-10-20T09:00:00+02:00", and must be in the future. timezone is the IANA zone the owner wants shown, e.g. "Europe/Amsterdam". Pass expectedVersion (the version from get_entry) to schedule exactly the draft you reviewed; if the entry changed since, the call fails with a conflict and nothing is scheduled. Date fields in the content are not scheduling; use this tool to schedule.',
+    description: `${GO_LIVE_PERMISSION_NOTE} Schedules the entry to go live at a set time: status becomes scheduled, and the entry goes live at that time without a go_live call. publishAt is an ISO 8601 instant with an offset, e.g. "2026-10-20T09:00:00+02:00", and must be in the future. timezone is the IANA zone the owner wants shown, e.g. "Europe/Amsterdam". Pass expectedVersion (the version from get_entry) to schedule exactly the draft you reviewed; if the entry changed since, the call fails with a conflict and nothing is scheduled. Date fields in the content are not scheduling; use this tool to schedule.`,
     inputSchema: z.object({
       id: idSchema('entry'),
       expectedVersion,
