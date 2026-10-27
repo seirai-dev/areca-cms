@@ -47,6 +47,8 @@ const DAY_MS = 24 * 60 * 60 * 1000
 export const MCP_CONNECTION_IDLE_MS = 90 * DAY_MS
 
 const RESOURCE_PATH_PREFIX = '/api/mcp/'
+/** The agency connector's path (docs/design/agency-mcp.md). Never a site slug. */
+export const AGENCY_MCP_RESOURCE_PATH = '/api/agency/mcp'
 
 function appBaseUrl(): string {
   return env.APP_URL.replace(/\/+$/, '')
@@ -74,6 +76,29 @@ export function siteSlugFromMcpResource(resource: string): string | null {
   return mcpResourceUrl(slug) === resource ? slug : null
 }
 
+/** The protected resource of the agency connector: every site, one address. */
+export function agencyMcpResourceUrl(): string {
+  return `${appBaseUrl()}${AGENCY_MCP_RESOURCE_PATH}`
+}
+
+/** What an MCP resource identifier names. Exact string matches only. */
+export type McpResourceTarget =
+  { kind: 'site'; slug: string } | { kind: 'agency' }
+
+export function mcpResourceTarget(resource: string): McpResourceTarget | null {
+  if (resource === agencyMcpResourceUrl()) return { kind: 'agency' }
+  const slug = siteSlugFromMcpResource(resource)
+  return slug === null ? null : { kind: 'site', slug }
+}
+
+async function registerResource(identifier: string, name: string) {
+  const now = new Date()
+  await db
+    .insert(oauthResource)
+    .values({ identifier, name, createdAt: now, updatedAt: now })
+    .onConflictDoNothing({ target: oauthResource.identifier })
+}
+
 /**
  * Makes sure the authorization server knows an MCP resource for an existing
  * site. The plugin rejects unknown resources, and sites come and go, so the
@@ -92,17 +117,25 @@ export async function ensureMcpSiteResource(
     .limit(1)
   if (!found) return null
 
-  const now = new Date()
-  await db
-    .insert(oauthResource)
-    .values({
-      identifier: resource,
-      name: `${found.name} (Areca CMS)`,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .onConflictDoNothing({ target: oauthResource.identifier })
+  await registerResource(resource, `${found.name} (Areca CMS)`)
   return slug
+}
+
+/**
+ * Makes sure the authorization server knows an MCP resource, for either kind.
+ * Returns what the resource names, or null when it is not one of this
+ * deployment's resources (or names a site that does not exist).
+ */
+export async function ensureMcpResource(
+  resource: string,
+): Promise<McpResourceTarget | null> {
+  const target = mcpResourceTarget(resource)
+  if (!target) return null
+  if (target.kind === 'agency') {
+    await registerResource(resource, 'Areca agency')
+    return target
+  }
+  return (await ensureMcpSiteResource(resource)) === null ? null : target
 }
 
 /** Every `resource` value from a raw or parsed query, in order. */

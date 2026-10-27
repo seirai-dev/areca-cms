@@ -13,6 +13,7 @@ import {
   user,
   site,
 } from '#/db/schema'
+import type { McpScope } from '#/db/schema'
 import { m } from '#/paraglide/messages'
 import { createLogger } from '#/server/log'
 import { audit } from '#/server/audit'
@@ -119,12 +120,15 @@ export async function withConnectionLock<T>(
   }
 }
 
-/** Called under the tuple lock, after OAuth consent has completed. */
+/**
+ * Called under the tuple lock, after OAuth consent has completed. A null
+ * `siteId` is an agency approval (scope 'agency'); it has no organization.
+ */
 export async function saveConnectionApproval(
   input: {
     userId: string
-    siteId: string
-    organizationId: string
+    siteId: string | null
+    organizationId: string | null
     clientId: string
     clientName: string
     allowGoLive: boolean
@@ -133,6 +137,7 @@ export async function saveConnectionApproval(
   now: Date = new Date(),
 ): Promise<McpConnectionRow> {
   const clientName = input.clientName.trim() || 'AI app'
+  const scope: McpScope = input.siteId === null ? 'agency' : 'site'
   const row = await db.transaction(async (tx) => {
     // A new generation retires an idle connection instead of reviving its old tokens.
     const retired = await tx
@@ -141,7 +146,9 @@ export async function saveConnectionApproval(
       .where(
         and(
           eq(mcpConnection.userId, input.userId),
-          eq(mcpConnection.siteId, input.siteId),
+          input.siteId === null
+            ? eq(mcpConnection.scope, 'agency')
+            : eq(mcpConnection.siteId, input.siteId),
           eq(mcpConnection.clientId, input.clientId),
           isNull(mcpConnection.revokedAt),
           sql`${mcpConnection.id} <> ${id}`,
@@ -165,6 +172,7 @@ export async function saveConnectionApproval(
       .values({
         id,
         userId: input.userId,
+        scope,
         siteId: input.siteId,
         clientId: input.clientId,
         clientName,
@@ -186,7 +194,11 @@ export async function saveConnectionApproval(
         action: 'mcp_connection.create',
         targetType: 'mcp_connection',
         targetId: saved.id,
-        meta: { clientName, allowGoLive: saved.allowGoLive },
+        meta: {
+          clientName,
+          allowGoLive: saved.allowGoLive,
+          ...(scope === 'agency' ? { scope } : {}),
+        },
       },
       tx,
     )
@@ -257,6 +269,46 @@ export async function revokeConnection(input: {
   if (!row || (row.userId !== input.actorId && !input.canRevokeOthers)) {
     throw new NotFoundError(m.server_mcp_connection_not_found())
   }
+  await revokeRow(row, {
+    actorId: input.actorId,
+    organizationId: input.organizationId,
+    now: input.now,
+  })
+}
+
+/**
+ * Disconnects one of the caller's agency apps. Other people's connections
+ * answer NotFound, like the per-site list does.
+ */
+export async function revokeAgencyConnection(input: {
+  id: string
+  actorId: string
+  now?: Date
+}): Promise<void> {
+  const [row] = await db
+    .select()
+    .from(mcpConnection)
+    .where(
+      and(
+        eq(mcpConnection.id, input.id),
+        eq(mcpConnection.scope, 'agency'),
+        eq(mcpConnection.userId, input.actorId),
+      ),
+    )
+    .limit(1)
+  if (!row) throw new NotFoundError(m.server_mcp_connection_not_found())
+  await revokeRow(row, {
+    actorId: input.actorId,
+    organizationId: null,
+    now: input.now,
+  })
+}
+
+/** Revokes one connection, its consent and its tokens, under the grant lock. */
+async function revokeRow(
+  row: McpConnectionRow,
+  input: { actorId: string; organizationId: string | null; now?: Date },
+): Promise<void> {
   await withConnectionLock(row, async () => {
     const now = input.now ?? new Date()
     await db.transaction(async (tx) => {
@@ -283,12 +335,16 @@ export async function revokeConnection(input: {
       await audit(
         {
           organizationId: input.organizationId,
-          siteId: input.siteId,
+          siteId: row.siteId,
           actorId: input.actorId,
           action: 'mcp_connection.revoke',
           targetType: 'mcp_connection',
           targetId: row.id,
-          meta: { clientName: row.clientName, allowGoLive: row.allowGoLive },
+          meta: {
+            clientName: row.clientName,
+            allowGoLive: row.allowGoLive,
+            ...(row.scope === 'agency' ? { scope: row.scope } : {}),
+          },
         },
         tx,
       )
@@ -481,6 +537,64 @@ export async function findUsableConnection(input: {
     .limit(1)
   if (!row || !isConnectionUsable(row, now)) return null
   return row
+}
+
+/**
+ * The usable agency connection for a verified token's (user, app), or null.
+ * Agency connections have no site, so they are found by scope instead.
+ */
+export async function findUsableAgencyConnection(input: {
+  userId: string
+  clientId: string
+  now?: Date
+}): Promise<McpConnectionRow | null> {
+  const now = input.now ?? new Date()
+  const [row] = await db
+    .select()
+    .from(mcpConnection)
+    .where(
+      and(
+        eq(mcpConnection.userId, input.userId),
+        eq(mcpConnection.scope, 'agency'),
+        eq(mcpConnection.clientId, input.clientId),
+        isNull(mcpConnection.revokedAt),
+      ),
+    )
+    .limit(1)
+  if (!row || !isConnectionUsable(row, now)) return null
+  return row
+}
+
+/** The caller's usable agency connections, newest first. */
+export async function listAgencyConnections(input: {
+  userId: string
+  now?: Date
+}): Promise<McpConnectionSummary[]> {
+  const now = input.now ?? new Date()
+  const rows = await db
+    .select({ connection: mcpConnection, userName: user.name })
+    .from(mcpConnection)
+    .leftJoin(user, eq(user.id, mcpConnection.userId))
+    .where(
+      and(
+        eq(mcpConnection.userId, input.userId),
+        eq(mcpConnection.scope, 'agency'),
+        isNull(mcpConnection.revokedAt),
+      ),
+    )
+    .orderBy(desc(mcpConnection.createdAt))
+  return rows
+    .filter((row) => isConnectionUsable(row.connection, now))
+    .map((row) => ({
+      id: row.connection.id,
+      clientId: row.connection.clientId,
+      clientName: row.connection.clientName,
+      userId: row.connection.userId,
+      userName: row.userName ?? null,
+      allowGoLive: row.connection.allowGoLive,
+      createdAt: row.connection.createdAt,
+      lastUsedAt: row.connection.lastUsedAt,
+    }))
 }
 
 /** Records use, at most once a minute per connection. */

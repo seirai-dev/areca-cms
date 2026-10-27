@@ -20,6 +20,7 @@ import {
 } from '#/server/http/oauth-token-body'
 
 import {
+  findUsableAgencyConnection,
   findUsableConnection,
   isConnectionUsable,
   revokeReplayedGrant,
@@ -27,9 +28,9 @@ import {
 } from './connections'
 import {
   MCP_REFRESH_TOKEN_PREFIX,
+  mcpResourceTarget,
   resourceParams,
   siteIdForAuthorizationQuery,
-  siteSlugFromMcpResource,
 } from './oauth-resource'
 
 // Only the server-side approval handler can reserve a new grant generation.
@@ -37,22 +38,39 @@ const approvalReference = new AsyncLocalStorage<string>()
 export const withApprovalReference = <T>(id: string, run: () => Promise<T>) =>
   approvalReference.run(id, run)
 
+/**
+ * Consent reference for an agency approval that has no usable connection yet.
+ * It is never a connection id, so the plugin asks for consent again (the same
+ * job the site id does for site requests).
+ */
+export const AGENCY_PENDING_REFERENCE = 'agency:pending'
+
 export async function consentReferenceFor(
   query: string | undefined,
   userId: string | undefined,
 ) {
   const reserved = approvalReference.getStore()
   if (reserved) return reserved
+  if (!query) return undefined
+  const params = new URLSearchParams(query)
+  const clientId = params.get('client_id')
+  const isAgency = params
+    .getAll('resource')
+    .some((resource) => mcpResourceTarget(resource)?.kind === 'agency')
+  if (isAgency) {
+    if (!userId || !clientId) return AGENCY_PENDING_REFERENCE
+    const connection = await findUsableAgencyConnection({ userId, clientId })
+    return connection?.id ?? AGENCY_PENDING_REFERENCE
+  }
   const siteId = await siteIdForAuthorizationQuery(query)
-  if (!siteId || !userId || !query) return siteId
-  const clientId = new URLSearchParams(query).get('client_id')
-  if (!clientId) return siteId
+  if (!siteId || !userId || !clientId) return siteId
   const connection = await findUsableConnection({ siteId, userId, clientId })
   // A site reference cannot match a generation reference, so missing/idle
   // connections must pass through the application's fresh consent screen.
   return connection?.id ?? siteId
 }
 
+/** Exactly one resource, and it must be an Areca MCP resource (site or agency). */
 export function assertSingleMcpResource(
   value: string | string[] | null | undefined,
   required: boolean,
@@ -60,13 +78,32 @@ export function assertSingleMcpResource(
   const values = resourceParams(value)
   if (
     (!required && values.length === 0) ||
-    (values.length === 1 && siteSlugFromMcpResource(values[0]) !== null)
+    (values.length === 1 && mcpResourceTarget(values[0]) !== null)
   )
     return
   throw new APIError('BAD_REQUEST', {
     error: 'invalid_target',
-    error_description: 'Exactly one Areca MCP site resource is required',
+    error_description: 'Exactly one Areca MCP resource is required',
   })
+}
+
+/**
+ * Whether a connection may carry a token for this resource: an agency
+ * connection only for the agency resource, a site connection only for its own
+ * site. Keeps a token from one connector from working on the other.
+ */
+async function connectionMatchesResource(
+  connection: { scope: string; siteId: string | null },
+  resource: string,
+): Promise<boolean> {
+  const target = mcpResourceTarget(resource)
+  if (!target) return false
+  if (target.kind === 'agency') return connection.scope === 'agency'
+  if (connection.scope !== 'site' || connection.siteId === null) return false
+  const siteId = await siteIdForAuthorizationQuery(
+    new URLSearchParams({ resource }).toString(),
+  )
+  return siteId !== undefined && siteId === connection.siteId
 }
 
 function invalidGrant(): never {
@@ -226,13 +263,8 @@ export function mcpOAuthAdapter(
         data.clientId,
       )
       assertSingleMcpResource(data.resources as string[] | undefined, true)
-      const params = new URLSearchParams({
-        resource: (data.resources as string[])[0],
-      })
-      if (
-        (await siteIdForAuthorizationQuery(params.toString())) !==
-        connection.siteId
-      )
+      const resource = (data.resources as string[])[0] ?? ''
+      if (!(await connectionMatchesResource(connection, resource)))
         invalidGrant()
       const scopes = Array.isArray(data.scopes) ? data.scopes : []
       // Offline grants intentionally outlive browser login sessions. Otherwise

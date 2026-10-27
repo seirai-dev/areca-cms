@@ -556,7 +556,7 @@ describe.skipIf(!runnable)(
         })
         expect(push.isError).toBe(true)
         expect(push.text).toBe(
-          'push_to_production is only available on development environments.',
+          "push_to_production only works on a development environment. Use the site's dev environment slug (see list_sites).",
         )
         await agency.close()
       })

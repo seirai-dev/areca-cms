@@ -6,16 +6,25 @@ import { z } from '#/lib/zod'
 import { db } from '#/db'
 import { mcpConnection } from '#/db/schema'
 import { ID_MAX_LENGTH } from '#/lib/content-limits'
-import { requireUser } from '#/lib/session.server'
+import { requireAgencyAdmin, requireUser } from '#/lib/session.server'
 import { m } from '#/paraglide/messages'
 import { NotFoundError } from '#/server/content/errors'
 import {
+  approveAgencyConsentRequest,
   approveConsentRequest,
   denyConsentRequest,
   describeConsentRequest,
 } from '#/server/mcp/consent'
-import { listConnections, revokeConnection } from '#/server/mcp/connections'
-import { mcpResourceUrl } from '#/server/mcp/oauth-resource'
+import {
+  listAgencyConnections,
+  listConnections,
+  revokeAgencyConnection,
+  revokeConnection,
+} from '#/server/mcp/connections'
+import {
+  agencyMcpResourceUrl,
+  mcpResourceUrl,
+} from '#/server/mcp/oauth-resource'
 import { requireMcpSiteAccess } from '#/server/mcp/site-access'
 
 /**
@@ -49,6 +58,19 @@ export const approveOAuthConsentFn = createServerFn({
       siteId: data.siteId,
       allowGoLive: data.allowGoLive,
     }),
+  )
+
+/**
+ * Approves the agency connector for an app (every client and site). Agency
+ * admins only, with a fresh second factor; the server checks both.
+ */
+export const approveAgencyOAuthConsentFn = createServerFn({
+  method: 'POST',
+  ...loose,
+})
+  .validator(z.object({ query: queryField }))
+  .handler(async ({ data }) =>
+    approveAgencyConsentRequest({ query: data.query }),
   )
 
 export const denyOAuthConsentFn = createServerFn({ method: 'POST', ...loose })
@@ -115,5 +137,37 @@ export const revokeMcpConnectionFn = createServerFn({
       organizationId: found.organizationId,
       canRevokeOthers: role !== 'editor',
     })
+    return { ok: true as const }
+  })
+
+/** Apps connected to the agency connector: the caller's own, agency admins only. */
+export const listAgencyMcpConnectionsFn = createServerFn({
+  method: 'GET',
+  ...loose,
+}).handler(async () => {
+  const session = await requireAgencyAdmin()
+  const connections = await listAgencyConnections({
+    userId: session.user.id,
+  })
+  return {
+    connections: connections.map((row) => ({
+      id: row.id,
+      clientName: row.clientName,
+      createdAt: row.createdAt,
+      lastUsedAt: row.lastUsedAt,
+    })),
+    connectorUrl: agencyMcpResourceUrl(),
+  }
+})
+
+/** Disconnects one of the caller's agency apps. Takes effect on its next request. */
+export const revokeAgencyMcpConnectionFn = createServerFn({
+  method: 'POST',
+  ...loose,
+})
+  .validator(z.object({ id: z.string().min(1).max(ID_MAX_LENGTH) }))
+  .handler(async ({ data }) => {
+    const session = await requireAgencyAdmin()
+    await revokeAgencyConnection({ id: data.id, actorId: session.user.id })
     return { ok: true as const }
   })

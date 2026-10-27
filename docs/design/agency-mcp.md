@@ -71,6 +71,19 @@ Migration `0038_agency_mcp`:
 - MCP: tools list on the agency connector equals the per-site list + navigation; a write to two different sites in one session lands on the right sites.
 - Playwright: Agency › Connect AI — create an agency key (step-up), see it listed, revoke it; connected apps list; desktop and 390 px. A full click-through e2e.
 
+## OAuth (step 2) decisions
+
+Built in step 2 of `feat/agency-mcp-1-server`. Where the build is more specific than the contract above:
+
+- **Resource.** `${APP_URL}/api/agency/mcp`. Its row in `oauth_resource` is named "Areca agency", created on the first authorization request (`ensureMcpResource`). Protected-resource metadata at `/.well-known/oauth-protected-resource/api/agency/mcp` is served `no-store` and names the agency resource only. The agency 401 challenge carries that `resource_metadata`.
+- **Authorization.** Exactly one resource per request, either a site resource or the agency resource. A token works only at the resource it names: a site token on the agency address and an agency token on a site address both get a 401 (for an agency admin); for anyone who is not an agency admin, the agency address answers the same 404 as an unknown address.
+- **Approval.** Checks run in this order: agency admin, MFA, fresh session (step-up), then the signed query. The server function is `approveAgencyOAuthConsentFn` (no `siteId`, no `allowGoLive`).
+- **Generations.** Like the site flow: approving while a usable agency connection exists renews that connection in place (same id, its tokens keep working). Approving when the previous connection is idle or revoked creates a new generation and revokes the old one with its tokens. "Re-approve revokes the previous generation" therefore means the idle case.
+- **Consent description.** `describeConsentRequest` returns `kind: 'agency'`, the client, `needsStepUp`, and `warning: { title, body }` already resolved for the request's locale (not a key). The title is "Connect {app} to every client"; the body is the full-access sentence. There is no `site`, no `sites` and no go-live field in the agency variant.
+- **Consent screen.** Until the agency consent UI lands (step 2 UI), `/oauth/consent` answers an agency request with a plain refusal and a way back. Site requests are unchanged.
+- **Connections.** An agency app is listed and revoked by its owner only (`listAgencyMcpConnectionsFn`, `revokeAgencyMcpConnectionFn`). Losing the agency admin role revokes them with the agency keys (Decision 12).
+- **Consent reference.** An agency connection's id, or `agency:pending` when there is no usable connection (never a connection id, so the plugin asks again).
+
 ## Rollout
 
 1. **`feat/agency-mcp-1-server`** — migration 0038, credentials scope, connector + OAuth + discovery, tool parity and generation, navigation tools, central access function, audit, revocation, tests.

@@ -7,7 +7,7 @@ import { db } from '#/db'
 import { membership, oauthClient, site } from '#/db/schema'
 import { env } from '#/env'
 import { auth } from '#/lib/auth'
-import { getSession } from '#/lib/session.server'
+import { getSession, requireAgencyAdmin } from '#/lib/session.server'
 import { ReauthRequiredError } from '#/lib/security-errors'
 import { m } from '#/paraglide/messages'
 import { ForbiddenError, ValidationError } from '#/server/content/errors'
@@ -18,14 +18,16 @@ import {
 } from '#/server/security/site-visibility'
 
 import {
+  findUsableAgencyConnection,
   findUsableConnection,
   saveConnectionApproval,
   withConnectionLock,
 } from './connections'
 import { withApprovalReference } from './oauth-grants'
-import { liveRoleFor } from './keys'
+import { agencyAdminStatus, liveRoleFor } from './keys'
 import type { McpRole } from './keys'
-import { siteSlugFromMcpResource } from './oauth-resource'
+import { mcpResourceTarget } from './oauth-resource'
+import type { McpResourceTarget } from './oauth-resource'
 import { requireMcpSiteAccess } from './site-access'
 
 /**
@@ -35,8 +37,8 @@ import { requireMcpSiteAccess } from './site-access'
 export type ConsentQuery = {
   clientId: string
   redirectUri: string
-  /** Site slug named by the request's MCP resource, if any. */
-  siteSlug: string | null
+  /** The one MCP resource the request names: a site, or the agency connector. */
+  target: McpResourceTarget
 }
 
 /**
@@ -57,11 +59,9 @@ export async function readSignedConsentQuery(
 
   const resources = params.getAll('resource')
   if (resources.length !== 1) return null
-  const siteSlugs = resources
-    .map((resource) => siteSlugFromMcpResource(resource))
-    .filter((slug): slug is string => slug !== null)
-  if (siteSlugs.length !== 1) return null
-  return { clientId, redirectUri, siteSlug: siteSlugs[0] }
+  const target = mcpResourceTarget(resources[0] ?? '')
+  if (!target) return null
+  return { clientId, redirectUri, target }
 }
 
 /** The registered app behind a client id, or null. */
@@ -177,19 +177,31 @@ export async function completePluginConsent(input: {
 
 export type ConsentSite = { id: string; name: string; slug: string }
 
+/** The app as the consent screen shows it. */
+export type ConsentClient = {
+  id: string
+  name: string
+  redirectHost: string
+  logoUri: string | null
+}
+
 export type ConsentInfo =
   | {
       ok: true
-      client: {
-        id: string
-        name: string
-        redirectHost: string
-        logoUri: string | null
-      }
+      kind: 'site'
+      client: ConsentClient
       site: ConsentSite
       sites: ConsentSite[]
       role: McpRole
       canAllowGoLive: boolean
+      needsStepUp: boolean
+    }
+  | {
+      ok: true
+      kind: 'agency'
+      client: ConsentClient
+      /** The plain-language warning shown before the agency approval. Resolved for the request's locale. */
+      warning: { title: string; body: string }
       needsStepUp: boolean
     }
   | {
@@ -199,8 +211,9 @@ export type ConsentInfo =
     }
 
 /**
- * What the consent screen shows for a signed request: the app, the site it
- * asks for, and the signed-in user's role there. Changes nothing.
+ * What the consent screen shows for a signed request: the app, what it asks
+ * for (one site, or every site for the agency connector) and the signed-in
+ * user's role there. Changes nothing.
  */
 export async function describeConsentRequest(
   query: string,
@@ -221,25 +234,29 @@ export async function describeConsentRequest(
       message: m.server_mcp_oauth_signed_out(),
     }
   }
-  const client = await findOAuthClient(parsed.clientId)
-  if (!client) {
+  const registered = await findOAuthClient(parsed.clientId)
+  if (!registered) {
     return {
       ok: false,
       reason: 'invalid_request',
       message: m.server_mcp_oauth_app_unknown(),
     }
   }
-  if (!parsed.siteSlug) {
-    return {
-      ok: false,
-      reason: 'invalid_request',
-      message: m.server_mcp_oauth_no_site(),
-    }
+  const client: ConsentClient = {
+    id: registered.clientId,
+    name: registered.name?.trim() || m.server_mcp_oauth_unnamed_app(),
+    redirectHost: redirectHostOf(parsed.redirectUri),
+    logoUri: safeLogoUri(registered.icon),
   }
+  if (parsed.target.kind === 'agency') {
+    return describeAgencyConsent(session, client)
+  }
+  const siteSlug = parsed.target.slug
+
   const [target] = await db
     .select()
     .from(site)
-    .where(eq(site.slug, parsed.siteSlug))
+    .where(eq(site.slug, siteSlug))
     .limit(1)
   // A dev env is not offered to anyone but an agency admin (Decision 3).
   if (
@@ -267,12 +284,8 @@ export async function describeConsentRequest(
   const role = live.role
   return {
     ok: true,
-    client: {
-      id: client.clientId,
-      name: client.name?.trim() || m.server_mcp_oauth_unnamed_app(),
-      redirectHost: redirectHostOf(parsed.redirectUri),
-      logoUri: safeLogoUri(client.icon),
-    },
+    kind: 'site',
+    client,
     site: { id: target.id, name: target.name, slug: target.slug },
     sites: await listConnectableSites({
       userId: session.user.id,
@@ -281,6 +294,37 @@ export async function describeConsentRequest(
     role,
     canAllowGoLive: role !== 'editor',
     needsStepUp: role === 'agency' && (await needsReauth(session)),
+  }
+}
+
+/**
+ * The agency variant: only an agency admin with two-factor auth may approve
+ * it. The warning says what the app gets; there is no go-live choice.
+ */
+async function describeAgencyConsent(
+  session: NonNullable<Awaited<ReturnType<typeof getSession>>>,
+  client: ConsentClient,
+): Promise<ConsentInfo> {
+  const status = agencyAdminStatus(session.user)
+  if (status !== 'active' || !(await isAgencyAdminWithMfa(session))) {
+    return {
+      ok: false,
+      reason: 'no_access',
+      message:
+        status === 'mfa_required'
+          ? m.server_mcp_oauth_mfa_required()
+          : m.server_mcp_oauth_agency_no_access(),
+    }
+  }
+  return {
+    ok: true,
+    kind: 'agency',
+    client,
+    warning: {
+      title: m.server_mcp_oauth_agency_title({ app: client.name }),
+      body: m.server_mcp_oauth_agency_body(),
+    },
+    needsStepUp: await needsReauth(session),
   }
 }
 
@@ -313,7 +357,7 @@ export async function approveConsentRequest(input: {
       { path: 'query', message: m.server_mcp_oauth_link_invalid() },
     ])
   }
-  if (parsed.siteSlug !== found.slug) {
+  if (parsed.target.kind !== 'site' || parsed.target.slug !== found.slug) {
     throw new ValidationError([
       { path: 'siteId', message: m.server_mcp_oauth_site_mismatch() },
     ])
@@ -350,6 +394,69 @@ export async function approveConsentRequest(input: {
         organizationId: found.organizationId,
         clientName: client.name?.trim() || m.server_mcp_oauth_unnamed_app(),
         allowGoLive: input.allowGoLive && role !== 'editor',
+      },
+      connectionId,
+    )
+    return { redirectTo }
+  })
+}
+
+/**
+ * Allows an app to act on every client and site as the signed-in agency
+ * admin (docs/design/agency-mcp.md). Checks run in this order: the caller is
+ * an agency admin with two-factor auth, the session has a fresh second factor,
+ * then the signed query. There is no go-live option.
+ */
+export async function approveAgencyConsentRequest(input: {
+  query: string
+}): Promise<{ redirectTo: string }> {
+  const session = await requireAgencyAdmin()
+  await assertFreshSession(session)
+
+  const parsed = await readSignedConsentQuery(input.query)
+  if (!parsed) {
+    throw new ValidationError([
+      { path: 'query', message: m.server_mcp_oauth_link_invalid() },
+    ])
+  }
+  if (parsed.target.kind !== 'agency') {
+    throw new ValidationError([
+      { path: 'query', message: m.server_mcp_oauth_link_invalid() },
+    ])
+  }
+  const client = await findOAuthClient(parsed.clientId)
+  if (!client) {
+    throw new ValidationError([
+      { path: 'query', message: m.server_mcp_oauth_app_unknown() },
+    ])
+  }
+
+  const identity = {
+    userId: session.user.id,
+    siteId: null,
+    clientId: client.clientId,
+  }
+  return withConnectionLock(identity, async () => {
+    const existing = await findUsableAgencyConnection({
+      userId: session.user.id,
+      clientId: client.clientId,
+    })
+    const connectionId = existing?.id ?? crypto.randomUUID()
+    const redirectTo = await withApprovalReference(connectionId, () =>
+      completePluginConsent({ query: input.query, accept: true }),
+    )
+    const result = new URL(redirectTo)
+    if (!result.searchParams.has('code')) {
+      throw new ValidationError([
+        { path: 'query', message: m.server_mcp_oauth_link_invalid() },
+      ])
+    }
+    await saveConnectionApproval(
+      {
+        ...identity,
+        organizationId: null,
+        clientName: client.name?.trim() || m.server_mcp_oauth_unnamed_app(),
+        allowGoLive: false,
       },
       connectionId,
     )

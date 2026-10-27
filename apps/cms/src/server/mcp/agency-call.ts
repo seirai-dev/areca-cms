@@ -70,10 +70,24 @@ export function siteActorFor(
   }
 }
 
+/** Production tools that drive releases: the refusal says to push first. */
+const RELEASE_TOOLS: readonly string[] = ['go_live', 'rollback', 'cancel_build']
+/** Production tools that read releases: a dev env has none to read. */
+const RELEASE_READ_TOOLS: readonly string[] = [
+  'get_release_status',
+  'list_publications',
+  'get_build_job',
+]
+const SCHEDULING_TOOLS: readonly string[] = [
+  'schedule_entry',
+  'cancel_schedule',
+]
+
 /**
  * The refusal for a tool that does not fit the site's environment, or null when
- * it fits. Production-only tools name the push as the way forward; the others
- * say they belong on development environments.
+ * it fits. Each refusal says what to do instead (docs/design/agency-mcp.md,
+ * Decision 9). Production-only tools on a development environment, and
+ * development-only tools on production.
  */
 export function environmentRefusal(
   tool: Pick<ToolEntry, 'name' | 'environments'>,
@@ -81,9 +95,22 @@ export function environmentRefusal(
 ): string | null {
   if (!tool.environments || tool.environments.includes(environment)) return null
   if (environment === 'development') {
-    return `${tool.name} isn't available on development environments. Push to production first.`
+    return productionOnlyRefusal(tool.name)
   }
-  return `${tool.name} is only available on development environments.`
+  return `${tool.name} only works on a development environment. Use the site's dev environment slug (see list_sites).`
+}
+
+function productionOnlyRefusal(name: string): string {
+  if (RELEASE_TOOLS.includes(name)) {
+    return `${name} isn't available on development environments. Push to production first.`
+  }
+  if (RELEASE_READ_TOOLS.includes(name)) {
+    return `${name} isn't available on development environments: they have no releases.`
+  }
+  if (SCHEDULING_TOOLS.includes(name)) {
+    return "Scheduling isn't available on development environments."
+  }
+  return `${name} isn't available on development environments.`
 }
 
 /**

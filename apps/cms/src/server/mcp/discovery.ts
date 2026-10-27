@@ -8,7 +8,12 @@ import { auth } from '#/lib/auth'
 import { isDevSite } from '#/lib/site-environment'
 import { createLogger } from '#/server/log'
 
-import { MCP_OAUTH_SCOPES, mcpResourceUrl } from './oauth-resource'
+import {
+  AGENCY_MCP_RESOURCE_PATH,
+  MCP_OAUTH_SCOPES,
+  agencyMcpResourceUrl,
+  mcpResourceUrl,
+} from './oauth-resource'
 
 const log = createLogger('mcp-discovery')
 
@@ -111,6 +116,7 @@ const DEV_RESOURCE_NAME = 'Areca site'
 /** PRM for `/.well-known/oauth-protected-resource/<resource path>`. */
 async function resourceDocument(path: string): Promise<Response> {
   const resourcePath = path.slice(RESOURCE_DOC_PREFIX.length)
+  if (resourcePath === AGENCY_MCP_RESOURCE_PATH) return agencyResourceDocument()
   const match = /\/api\/mcp\/([a-z0-9][a-z0-9-]*)$/.exec(resourcePath)
   const slug = match?.[1] ?? null
   // The path must be exactly the resource's own path (APP_URL origin + path),
@@ -145,6 +151,25 @@ async function resourceDocument(path: string): Promise<Response> {
     // A dev env's document is not cached by shared caches: the response must
     // not say a dev env exists to anyone who fetched it earlier.
     devEnv ? NO_STORE_CACHE_CONTROL : DOC_CACHE_CONTROL,
+  )
+}
+
+/**
+ * PRM for the agency connector. It names no client or site, but it is not
+ * cached by shared caches either: the agency address is for agency admins.
+ */
+async function agencyResourceDocument(): Promise<Response> {
+  const issuer = (await auth.api.getOAuthServerConfig()).issuer
+  return json(
+    {
+      resource: agencyMcpResourceUrl(),
+      authorization_servers: [issuer],
+      scopes_supported: [...MCP_OAUTH_SCOPES],
+      bearer_methods_supported: ['header'],
+      dpop_signing_alg_values_supported: [...DPOP_SIGNING_ALGORITHMS],
+      resource_name: 'Areca agency',
+    },
+    NO_STORE_CACHE_CONTROL,
   )
 }
 

@@ -1585,6 +1585,60 @@ export const ROWS: Row[] = [
     },
   },
 
+  {
+    name: 'listAgencyMcpConnectionsFn',
+    fn: mcpOauthFns.listAgencyMcpConnectionsFn,
+    policy: 'agency',
+    note: 'Agency admins see their own agency apps (no site). Other roles are refused.',
+    prepare: () => ({ data: undefined }),
+  },
+  {
+    name: 'approveAgencyOAuthConsentFn',
+    fn: mcpOauthFns.approveAgencyOAuthConsentFn,
+    policy: 'agency-fresh',
+    tolerant: true,
+    note: 'Agency admins with MFA and a fresh second factor (reauth) approve the agency connector; the signed query is checked after access. Agency approvals never allow go-live.',
+    prepare: () => ({
+      data: { query: 'client_id=nope&sig=nope&exp=1' },
+    }),
+  },
+  {
+    name: 'revokeAgencyMcpConnectionFn',
+    fn: mcpOauthFns.revokeAgencyMcpConnectionFn,
+    policy: 'agency',
+    note: "An agency admin disconnects their own agency app; another admin's app answers NotFound.",
+    override: { adminStale: 'not-found' },
+    prepare: async (w) => {
+      const clientId = `authz-agency-client-${uniq()}`
+      await db.insert(oauthClient).values({
+        clientId,
+        redirectUris: ['http://localhost:9999/callback'],
+        name: 'Authz agency app',
+      })
+      const [connection] = await db
+        .insert(mcpConnection)
+        .values({
+          userId: w.users.adminMfa.id,
+          scope: 'agency',
+          siteId: null,
+          clientId,
+          clientName: 'Authz agency app',
+        })
+        .returning()
+      if (!connection) throw new Error('agency mcp connection insert failed')
+      return {
+        data: { id: connection.id },
+        untouched: exists(
+          mcpConnection,
+          and(
+            eq(mcpConnection.id, connection.id),
+            isNull(mcpConnection.revokedAt),
+          ),
+        ),
+      }
+    },
+  },
+
   // ----------------------------------------------------------- people.ts
   {
     name: 'getUserDetailFn',

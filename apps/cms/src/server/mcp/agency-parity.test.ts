@@ -181,12 +181,26 @@ describe('environment refusals (Decision 9)', () => {
     expect(environmentRefusal(goLive, 'development')).toBe(
       "go_live isn't available on development environments. Push to production first.",
     )
+    expect(
+      environmentRefusal(
+        { name: 'get_release_status', environments: PRODUCTION_ONLY },
+        'development',
+      ),
+    ).toBe(
+      "get_release_status isn't available on development environments: they have no releases.",
+    )
+    expect(
+      environmentRefusal(
+        { name: 'schedule_entry', environments: PRODUCTION_ONLY },
+        'development',
+      ),
+    ).toBe("Scheduling isn't available on development environments.")
     expect(goLive.environments).toBe(PRODUCTION_ONLY)
   })
 
   it('refuses a development-only tool on a production site', () => {
     expect(environmentRefusal(push, 'production')).toBe(
-      'push_to_production is only available on development environments.',
+      "push_to_production only works on a development environment. Use the site's dev environment slug (see list_sites).",
     )
     expect(push.environments).toBe(DEVELOPMENT_ONLY)
   })
