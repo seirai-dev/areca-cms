@@ -290,6 +290,10 @@ function namedSentence(row: ActivityLike): string | null {
         ? m.activity_member_update_role_full({ person, client, role: roleName })
         : m.activity_member_update_role_anon({ client, role: roleName })
     }
+    case 'dev_env.rename': {
+      const slug = text(meta?.slug)
+      return slug ? m.activity_dev_env_rename({ slug }) : null
+    }
     case 'dev_env.push': {
       const count = pushedChangeCount(meta)
       return count === 1

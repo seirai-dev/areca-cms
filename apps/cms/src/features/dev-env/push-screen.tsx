@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Link } from '@tanstack/react-router'
-import { ArrowSquareOut, CaretDown } from '@phosphor-icons/react'
+import { ArrowLeft, ArrowsClockwise, CaretDown } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
 import { Button } from '#/components/ui/button'
@@ -23,10 +23,14 @@ import type { pushToProductionFn } from '#/server/fn/dev-env'
 import {
   NO_PUSH_DECISIONS,
   attentionReasonOf,
+  carryPushDecisions,
+  decisionOf,
   groupPushItems,
   planItemLabel,
   pluralForm,
+  pushDetailsOf,
   pushSelection,
+  schemaActionOf,
   summarizePushItem,
   withId,
 } from './push-model'
@@ -38,6 +42,16 @@ import type {
   PushSummary,
   ScopeKind,
 } from './push-model'
+import {
+  detailText,
+  entriesText,
+  planTitleText,
+  scheduledReasonText,
+  schemaActionText,
+  slugTakenText,
+  valuesText,
+  warningText,
+} from './plan-text'
 import { usePushPlan, usePushToProduction } from './use-push'
 
 type PushOutcome = Awaited<ReturnType<typeof pushToProductionFn>>
@@ -48,6 +62,23 @@ type PushOutcome = Awaited<ReturnType<typeof pushToProductionFn>>
  * and carry their own Skip | Apply switch. The push button pushes directly:
  * no confirm dialog. Only a stale session asks for a code (`useStepUp`).
  */
+/**
+ * The decisions bound to the plan they were made on. `items` is that plan
+ * (null before the first one is reviewed). `changed` lists the items the
+ * latest refresh changed, which the screen highlights.
+ */
+type Review = {
+  items: PlanItem[] | null
+  decisions: PushDecisions
+  changed: string[]
+}
+
+const NO_REVIEW: Review = {
+  items: null,
+  decisions: NO_PUSH_DECISIONS,
+  changed: [],
+}
+
 export function PushScreen({
   devSite,
   productionName,
@@ -58,9 +89,8 @@ export function PushScreen({
   userId: string
 }) {
   const plan = usePushPlan(devSite.id)
-  const push = usePushToProduction(devSite.id)
-  const [decisions, setDecisions] =
-    React.useState<PushDecisions>(NO_PUSH_DECISIONS)
+  const push = usePushToProduction(devSite.id, devSite.parentSiteId ?? '')
+  const [review, setReview] = React.useState<Review>(NO_REVIEW)
   const [planChanged, setPlanChanged] = React.useState(false)
   /** The result, with the items it was pushed from: a push refetches the plan. */
   const [outcome, setOutcome] = React.useState<{
@@ -70,6 +100,22 @@ export function PushScreen({
   const [goLive, setGoLive] = useGoLiveChoice(userId)
 
   const items = React.useMemo(() => plan.data?.items ?? [], [plan.data])
+  // A refreshed plan keeps the decisions on items it did not change. Done
+  // while rendering, so the screen never shows old decisions on new items.
+  if (plan.data && review.items !== plan.data.items) {
+    const carried = carryPushDecisions(
+      review.items,
+      plan.data.items,
+      review.decisions,
+    )
+    setReview({
+      items: plan.data.items,
+      decisions: carried.decisions,
+      changed: carried.changed,
+    })
+  }
+  const { decisions, changed } = review
+  const highlighted = new Set(changed)
   const groups = React.useMemo(() => groupPushItems(items), [items])
   const selection = pushSelection(items, decisions)
 
@@ -98,14 +144,33 @@ export function PushScreen({
     void plan.refetch()
   }
 
+  /**
+   * Refetches the plan. A changed plan is carried over while rendering (see
+   * `carryPushDecisions`): decisions on unchanged items stay, the others
+   * reset and are highlighted. An identical plan keeps its reference, so
+   * nothing is reset.
+   */
+  function onRefresh() {
+    setPlanChanged(false)
+    void plan.refetch()
+  }
+
+  /** A decision on a row is a review of it: its highlight goes. */
+  const decide = (id: string, change: (prev: PushDecisions) => PushDecisions) =>
+    setReview((prev) => ({
+      ...prev,
+      decisions: change(prev.decisions),
+      changed: prev.changed.filter((entry) => entry !== id),
+    }))
+
   const toggle = (id: string, taken: boolean) =>
-    setDecisions((prev) => ({
+    decide(id, (prev) => ({
       ...prev,
       unticked: withId(prev.unticked, id, !taken),
     }))
 
-  const decide = (id: string, apply: boolean) =>
-    setDecisions((prev) => ({
+  const setApply = (id: string, apply: boolean) =>
+    decide(id, (prev) => ({
       ...prev,
       applied: withId(prev.applied, id, apply),
     }))
@@ -140,6 +205,17 @@ export function PushScreen({
                 >
                   {m.dev_push_cancel()}
                 </Link>
+              </Button>
+              <Button
+                type="button"
+                variant="quiet"
+                size="md"
+                loading={plan.isFetching}
+                onClick={onRefresh}
+                data-testid="push-refresh"
+              >
+                <ArrowsClockwise aria-hidden="true" />
+                {m.dev_push_refresh()}
               </Button>
               <Button
                 type="button"
@@ -184,6 +260,16 @@ export function PushScreen({
             </div>
           ) : null}
 
+          {changed.length > 0 ? (
+            <p
+              role="status"
+              data-testid="push-plan-highlight"
+              className="rounded-card border border-border-default bg-status-warning-bg px-4 py-3 text-callout text-text-warning"
+            >
+              {m.dev_push_plan_highlight()}
+            </p>
+          ) : null}
+
           {plan.isPending ? (
             <Skeleton className="h-48 rounded-card" />
           ) : plan.isError ? (
@@ -201,8 +287,9 @@ export function PushScreen({
                   key={group.key}
                   group={group}
                   decisions={decisions}
+                  highlighted={highlighted}
                   onToggle={toggle}
-                  onDecide={decide}
+                  onDecide={setApply}
                 />
               ))}
               <div className="surface-card flex items-start gap-3 px-4 py-3">
@@ -278,11 +365,13 @@ function groupTitle(key: PushGroupKey) {
 function PushGroupSection({
   group,
   decisions,
+  highlighted,
   onToggle,
   onDecide,
 }: {
   group: PushGroup
   decisions: PushDecisions
+  highlighted: ReadonlySet<string>
   onToggle: (id: string, taken: boolean) => void
   onDecide: (id: string, apply: boolean) => void
 }) {
@@ -317,7 +406,8 @@ function PushGroupSection({
               <AttentionRow
                 key={item.id}
                 item={item}
-                applied={decisions.applied.includes(item.id)}
+                decision={decisionOf(item, decisions)}
+                highlighted={highlighted.has(item.id)}
                 onDecide={onDecide}
               />
             ) : (
@@ -325,6 +415,7 @@ function PushGroupSection({
                 key={item.id}
                 item={item}
                 taken={!decisions.unticked.includes(item.id)}
+                highlighted={highlighted.has(item.id)}
                 onToggle={onToggle}
               />
             ),
@@ -335,18 +426,56 @@ function PushGroupSection({
   )
 }
 
+/** A row's title, translated when the item's title is a fixed label. */
+function itemTitle(item: PlanItem): string {
+  return item.titleCode ? planTitleText(item.titleCode) : item.title
+}
+
+/**
+ * The row's title. A schema row names what it does first:
+ * `Remove field 'excerpt' · Posts`. Entries and sections show their collection.
+ */
+function rowTitle(item: PlanItem): string {
+  const action = schemaActionOf(item)
+  return action
+    ? `${schemaActionText(action)} · ${itemTitle(item)}`
+    : planItemLabel(item, itemTitle(item))
+}
+
+/** The secondary lines of a row: one per detail, each on its own line. */
+function DetailLines({ item }: { item: PlanItem }) {
+  return pushDetailsOf(item).map((detail, index) => (
+    <span
+      key={`${detail.kind}-${index}`}
+      data-testid="push-row-detail"
+      className="break-words text-callout text-text-secondary"
+    >
+      {detailText(detail)}
+    </span>
+  ))
+}
+
 function PushRow({
   item,
   taken,
+  highlighted,
   onToggle,
 }: {
   item: PlanItem
   taken: boolean
+  highlighted: boolean
   onToggle: (id: string, taken: boolean) => void
 }) {
   const id = `push-item-${item.id}`
   return (
-    <li data-testid="push-row" className="flex items-start gap-3 px-4 py-3">
+    <li
+      data-testid="push-row"
+      data-highlighted={highlighted || undefined}
+      className={cn(
+        'flex items-start gap-3 px-4 py-3',
+        highlighted && 'bg-status-warning-bg',
+      )}
+    >
       <Checkbox
         id={id}
         checked={taken}
@@ -358,11 +487,12 @@ function PushRow({
         className="grid min-w-0 flex-1 cursor-pointer gap-0.5"
       >
         <span className="break-words text-[14px] leading-5 font-medium text-text-primary">
-          {planItemLabel(item)}
+          {rowTitle(item)}
         </span>
         <span className="text-callout text-text-secondary">
           {summaryText(summarizePushItem(item))}
         </span>
+        <DetailLines item={item} />
       </label>
     </li>
   )
@@ -370,15 +500,16 @@ function PushRow({
 
 function AttentionRow({
   item,
-  applied,
+  decision,
+  highlighted,
   onDecide,
 }: {
   item: PlanItem
-  applied: boolean
+  decision: ReturnType<typeof decisionOf>
+  highlighted: boolean
   onDecide: (id: string, apply: boolean) => void
 }) {
   const reason = attentionReasonOf(item)
-  const scheduled = item.attention === 'scheduled'
   const options: SegmentedOption<'skip' | 'apply'>[] = [
     {
       value: 'skip',
@@ -388,31 +519,39 @@ function AttentionRow({
     {
       value: 'apply',
       label: m.dev_push_apply(),
-      disabled: scheduled,
+      // A row that cannot be applied (scheduled, or a URL another entry holds) shows Apply disabled.
+      disabled: decision.applyDisabled,
       testId: `push-apply-${item.id}`,
     },
   ]
   return (
     <li
       data-testid="push-attention-row"
-      className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:gap-4"
+      data-highlighted={highlighted || undefined}
+      className={cn(
+        'flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:gap-4',
+        highlighted && 'bg-status-warning-bg',
+      )}
     >
       <div className="grid min-w-0 flex-1 gap-0.5">
         <span className="break-words text-[14px] leading-5 font-medium text-text-primary">
-          {planItemLabel(item)}
+          {rowTitle(item)}
         </span>
         {reason ? (
-          <span className="text-callout text-text-warning">
+          <span className="break-words text-callout text-text-warning">
             {reasonText(reason)}
           </span>
         ) : null}
+        <DetailLines item={item} />
       </div>
       <SegmentedControl
         size="sm"
-        value={applied && !scheduled ? 'apply' : 'skip'}
-        onValueChange={(value) => onDecide(item.id, value === 'apply')}
+        value={decision.value}
+        onValueChange={(next) => onDecide(item.id, next === 'apply')}
         options={options}
-        aria-label={m.dev_push_decision_label({ label: planItemLabel(item) })}
+        aria-label={m.dev_push_decision_label({
+          label: rowTitle(item),
+        })}
         className="w-full shrink-0 sm:w-auto"
         data-testid={`push-decision-${item.id}`}
       />
@@ -429,18 +568,6 @@ function scopeText(scope: ScopeKind) {
     case 'draft':
       return m.dev_push_scope_draft()
   }
-}
-
-function valuesText(count: number) {
-  return pluralForm(count) === 'one'
-    ? m.dev_push_values_one()
-    : m.dev_push_values_other({ count })
-}
-
-function entriesText(count: number) {
-  return pluralForm(count) === 'one'
-    ? m.dev_push_entries_one()
-    : m.dev_push_entries_other({ count })
 }
 
 function fieldsChangedText(count: number) {
@@ -489,19 +616,23 @@ function reasonText(reason: AttentionReason): string {
         reason.fields.length === 1
           ? m.dev_push_field_name({ key: reason.fields[0] ?? '' })
           : m.dev_push_fields_many({ count: reason.fields.length })
-      return m.dev_push_reason_drops({
-        fields,
-        values: valuesText(reason.values),
-      })
+      return m.dev_push_reason_drops({ fields })
     }
+    case 'remove-collection':
+      return m.dev_push_reason_remove_collection()
     case 'main-language':
       return m.dev_push_reason_main_language({
         entries: entriesText(reason.entries),
       })
     case 'scheduled':
-      return m.dev_push_reason_scheduled()
+      return scheduledReasonText(reason.titles)
     case 'deleted-in-production':
       return m.dev_push_reason_deleted()
+    case 'slug-taken': {
+      // Always set for this reason: the item is flagged with its collisions.
+      const first = reason.collisions.at(0)
+      return first ? slugTakenText(first) : ''
+    }
   }
 }
 
@@ -519,25 +650,34 @@ function PushResultView({
   const itemById = new Map(items.map((item) => [item.id, item]))
   const { counts } = outcome
   const written = outcome.written.filter((row) => row.productionId !== null)
+  // Only the non-zero counts. Nothing at all says so.
+  const countRows = [
+    { label: m.dev_push_group_schema(), value: counts.schema },
+    { label: m.dev_push_group_new(), value: counts.new },
+    { label: m.dev_push_group_changed(), value: counts.changed },
+    { label: m.dev_push_group_archived(), value: counts.archived },
+    { label: m.dev_push_result_skipped(), value: counts.skipped },
+  ].filter((row) => row.value > 0)
   return (
     <div data-testid="push-result" className="grid gap-6">
       <section className="grid gap-2">
         <h2 className="px-1 text-headline text-text-primary">
           {m.dev_push_done_title()}
         </h2>
-        <InsetList>
-          <CountRow label={m.dev_push_group_schema()} value={counts.schema} />
-          <CountRow label={m.dev_push_group_new()} value={counts.new} />
-          <CountRow label={m.dev_push_group_changed()} value={counts.changed} />
-          <CountRow
-            label={m.dev_push_group_archived()}
-            value={counts.archived}
-          />
-          <CountRow
-            label={m.dev_push_result_skipped()}
-            value={counts.skipped}
-          />
-        </InsetList>
+        {countRows.length > 0 ? (
+          <InsetList data-testid="push-result-counts">
+            {countRows.map((row) => (
+              <CountRow key={row.label} label={row.label} value={row.value} />
+            ))}
+          </InsetList>
+        ) : (
+          <p
+            data-testid="push-result-nothing"
+            className="px-1 text-callout text-text-secondary"
+          >
+            {m.dev_push_result_nothing()}
+          </p>
+        )}
       </section>
 
       {outcome.publication ? (
@@ -563,7 +703,7 @@ function PushResultView({
             {outcome.warnings.map((warning, index) => (
               <InsetRow
                 key={`${warning.itemId ?? 'warning'}-${index}`}
-                title={warning.message}
+                title={warningText(warning)}
                 wrapSubtitle
               />
             ))}
@@ -580,22 +720,34 @@ function PushResultView({
             {written.map((row) => {
               const item = itemById.get(row.itemId)
               if (!item?.collectionKey || !row.productionId) return null
+              const title = rowTitle(item)
+              // A section opens its page; a collection entry opens in the editor.
               return (
                 <InsetRow
                   key={row.itemId}
                   asChild
                   chevron
-                  title={planItemLabel(item)}
+                  title={title}
                   subtitle={m.dev_push_open_in_production()}
                 >
-                  <Link
-                    to="/sites/$siteId/c/$collectionKey/$entryId"
-                    params={{
-                      siteId: productionSiteId,
-                      collectionKey: item.collectionKey,
-                      entryId: row.productionId,
-                    }}
-                  />
+                  {row.collectionKind === 'global' ? (
+                    <Link
+                      to="/sites/$siteId/globals/$globalKey"
+                      params={{
+                        siteId: productionSiteId,
+                        globalKey: item.collectionKey,
+                      }}
+                    />
+                  ) : (
+                    <Link
+                      to="/sites/$siteId/c/$collectionKey/$entryId"
+                      params={{
+                        siteId: productionSiteId,
+                        collectionKey: item.collectionKey,
+                        entryId: row.productionId,
+                      }}
+                    />
+                  )}
                 </InsetRow>
               )
             })}
@@ -610,7 +762,7 @@ function PushResultView({
             params={{ siteId: devSite.id }}
             data-testid="push-back-to-dev"
           >
-            <ArrowSquareOut />
+            <ArrowLeft />
             {m.dev_push_back_to_dev()}
           </Link>
         </Button>

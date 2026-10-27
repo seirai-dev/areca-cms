@@ -98,6 +98,19 @@ export const generateEntrySeoFn = createServerFn({ method: 'POST', ...aiFn })
       await db.select().from(site).where(eq(site.id, data.siteId)).limit(1)
     ).at(0)
     if (!found) throw new NotFoundError(m.server_site_not_found())
+    // Access before anything that depends on the site's settings: a locale
+    // check first would tell a caller which languages a site it cannot see has.
+    // Anyone who can edit the site's content (editor, owner, agency admin).
+    const session = await requireOrgMemberOrNotFound(
+      found.organizationId,
+      undefined,
+      () => new NotFoundError(m.server_site_not_found()),
+    )
+    await assertSiteVisibleTo(
+      session,
+      found,
+      () => new NotFoundError(m.server_site_not_found()),
+    )
     const locale = data.locale ? canonicalLocale(data.locale) : null
     if (locale && found.languages && !found.languages.all.includes(locale)) {
       throw new ValidationError([
@@ -112,17 +125,6 @@ export const generateEntrySeoFn = createServerFn({ method: 'POST', ...aiFn })
       locale && found.languages && locale !== found.languages.main
         ? locale
         : null
-    // Anyone who can edit the site's content (editor, owner, agency admin).
-    const session = await requireOrgMemberOrNotFound(
-      found.organizationId,
-      undefined,
-      () => new NotFoundError(m.server_site_not_found()),
-    )
-    await assertSiteVisibleTo(
-      session,
-      found,
-      () => new NotFoundError(m.server_site_not_found()),
-    )
     const collection = await getCollection(found.id, data.collectionKey)
     if (!collection?.enabled)
       throw new NotFoundError(m.server_collection_not_found())

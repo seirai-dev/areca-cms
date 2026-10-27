@@ -7,13 +7,19 @@ import type {
 } from '#/server/dev-env/plan'
 
 import {
+  applyAllowed,
   attentionReasonOf,
+  carryPushDecisions,
+  decisionOf,
   groupPushItems,
   isPushTaken,
-  pluralForm,
+  planItemFingerprint,
   planItemLabel,
+  pluralForm,
+  pushDetailsOf,
   pushGroupOf,
   pushSelection,
+  schemaActionOf,
   summarizePushItem,
   withId,
 } from './push-model'
@@ -225,15 +231,19 @@ describe('attentionReasonOf', () => {
     expect(attentionReasonOf(item('entry:a', 'entry.change'))).toBeNull()
   })
 
-  it('lists the dropped fields and their values', () => {
-    const removal = item('schema:old', 'schema.remove', 'drops-content', {
+  it('names the dropped fields; the values are a detail line', () => {
+    const removal = item('schema:old', 'schema.change', 'drops-content', {
       droppedFields: [{ key: 'hero', values: 4 }],
     })
     expect(attentionReasonOf(removal)).toEqual({
       kind: 'drops',
       fields: ['hero'],
-      values: 4,
     })
+  })
+
+  it('reads a removed collection as a collection removal', () => {
+    const removal = item('schema:old', 'schema.remove', 'drops-content')
+    expect(attentionReasonOf(removal)).toEqual({ kind: 'remove-collection' })
   })
 
   it('carries the stamp count of a main-language change', () => {
@@ -252,9 +262,245 @@ describe('attentionReasonOf', () => {
     ).toEqual({ kind: 'conflict' })
     expect(
       attentionReasonOf(item('entry:b', 'entry.change', 'scheduled')),
-    ).toEqual({ kind: 'scheduled' })
+    ).toEqual({ kind: 'scheduled', titles: [] })
     expect(
       attentionReasonOf(item('entry:c', 'entry.new', 'deleted-in-production')),
     ).toEqual({ kind: 'deleted-in-production' })
+  })
+})
+
+describe('carryPushDecisions', () => {
+  const reviewed = [
+    item('entry:a', 'entry.change', null, { changedFields: ['title'] }),
+    item('entry:b', 'entry.change', 'conflict'),
+    item('entry:c', 'entry.new'),
+  ]
+
+  it('keeps decisions while every item is unchanged', () => {
+    const carried = carryPushDecisions(reviewed, [...reviewed], {
+      unticked: ['entry:a'],
+      applied: ['entry:b'],
+    })
+    expect(carried.changed).toEqual([])
+    expect(carried.decisions).toEqual({
+      unticked: ['entry:a'],
+      applied: ['entry:b'],
+    })
+  })
+
+  it('resets the decision of a changed item and lists it as changed', () => {
+    const next = [
+      item('entry:a', 'entry.change', null, { changedFields: ['title', 'x'] }),
+      reviewed[1],
+      reviewed[2],
+    ]
+    const carried = carryPushDecisions(reviewed, next, {
+      unticked: ['entry:a', 'entry:c'],
+      applied: ['entry:b'],
+    })
+    expect(carried.changed).toEqual(['entry:a'])
+    expect(carried.decisions).toEqual({
+      unticked: ['entry:c'],
+      applied: ['entry:b'],
+    })
+  })
+
+  it('treats a changed production version or attention as a change', () => {
+    const versioned = { ...reviewed[1], productionContentVersion: 7 }
+    expect(
+      carryPushDecisions(reviewed, [reviewed[0], versioned, reviewed[2]], {
+        unticked: [],
+        applied: ['entry:b'],
+      }),
+    ).toEqual({
+      decisions: { unticked: [], applied: [] },
+      changed: ['entry:b'],
+    })
+    const scheduled = item('entry:b', 'entry.change', 'scheduled')
+    expect(
+      carryPushDecisions(reviewed, [reviewed[0], scheduled, reviewed[2]], {
+        unticked: [],
+        applied: ['entry:b'],
+      }).changed,
+    ).toEqual(['entry:b'])
+  })
+
+  it('drops decisions of items that left the plan, and lists new items as changed', () => {
+    const next = [reviewed[0], item('entry:d', 'entry.new')]
+    const carried = carryPushDecisions(reviewed, next, {
+      unticked: ['entry:c'],
+      applied: ['entry:b'],
+    })
+    expect(carried.changed).toEqual(['entry:d'])
+    expect(carried.decisions).toEqual({ unticked: [], applied: [] })
+  })
+
+  it('changes nothing before the first plan is reviewed', () => {
+    const carried = carryPushDecisions(null, reviewed, {
+      unticked: ['entry:a'],
+      applied: [],
+    })
+    expect(carried.changed).toEqual([])
+    expect(carried.decisions.unticked).toEqual(['entry:a'])
+  })
+})
+
+describe('planItemFingerprint', () => {
+  it('ignores key order inside the summary', () => {
+    const a = item('entry:a', 'entry.change', null, {
+      changedFields: ['x'],
+      draftChanged: true,
+    })
+    const b = item('entry:a', 'entry.change', null, {
+      draftChanged: true,
+      changedFields: ['x'],
+    })
+    expect(planItemFingerprint(a)).toBe(planItemFingerprint(b))
+  })
+})
+
+describe('pushDetailsOf', () => {
+  it('lists the fields an entry keeps in production', () => {
+    const changed = item('entry:a', 'entry.change', null, {
+      preservedFields: ['excerpt'],
+    })
+    expect(pushDetailsOf(changed)).toEqual([
+      { kind: 'keeps', fields: ['excerpt'] },
+    ])
+  })
+
+  it('counts the values and entries a destructive schema item archives', () => {
+    const field = {
+      ...item('schema:news', 'schema.change', 'drops-content', {
+        droppedFields: [{ key: 'hero', values: 4 }],
+      }),
+      affectedEntries: [
+        { id: 'p1', contentVersion: 1 },
+        { id: 'p2', contentVersion: 1 },
+      ],
+    }
+    expect(pushDetailsOf(field)).toEqual([
+      { kind: 'archives', values: 4, entries: 2 },
+    ])
+    const collection = {
+      ...item('schema:old', 'schema.remove', 'drops-content'),
+      affectedEntries: [{ id: 'p1', contentVersion: 1 }],
+    }
+    expect(pushDetailsOf(collection)).toEqual([
+      { kind: 'archives', values: null, entries: 1 },
+    ])
+  })
+
+  it('leaves the scheduled titles to the reason, not a second line', () => {
+    const blocked = item('schema:menu', 'schema.change', 'scheduled', {
+      scheduledTitles: ['Spring menu'],
+    })
+    expect(pushDetailsOf(blocked)).toEqual([])
+    expect(attentionReasonOf(blocked)).toEqual({
+      kind: 'scheduled',
+      titles: ['Spring menu'],
+    })
+  })
+
+  it('has no details for a plain row', () => {
+    expect(pushDetailsOf(item('entry:a', 'entry.change'))).toEqual([])
+  })
+})
+
+const NO_DECISIONS = { unticked: [], applied: [] }
+
+describe('applyAllowed', () => {
+  it('never allows a scheduled or slug-taken item to be applied', () => {
+    expect(applyAllowed(item('entry:a', 'entry.change', 'scheduled'))).toBe(
+      false,
+    )
+    expect(applyAllowed(item('entry:b', 'entry.change', 'slug-taken'))).toBe(
+      false,
+    )
+  })
+
+  it('allows the other attention items to be applied', () => {
+    for (const attention of [
+      'conflict',
+      'drops-content',
+      'main-language',
+      'deleted-in-production',
+    ] as const) {
+      expect(applyAllowed(item('x', 'entry.change', attention))).toBe(true)
+    }
+  })
+
+  it('has no Apply for a normal row', () => {
+    expect(applyAllowed(item('entry:a', 'entry.change'))).toBe(false)
+  })
+})
+
+describe('decisionOf', () => {
+  it('shows Apply disabled and Skip for a slug-taken row, even when it was switched to Apply', () => {
+    const slug = item('entry:a', 'entry.change', 'slug-taken')
+    expect(decisionOf(slug, { unticked: [], applied: ['entry:a'] })).toEqual({
+      value: 'skip',
+      applyDisabled: true,
+    })
+  })
+
+  it('shows Apply disabled for a scheduled row', () => {
+    const scheduled = item('entry:a', 'entry.change', 'scheduled')
+    expect(decisionOf(scheduled, NO_DECISIONS)).toEqual({
+      value: 'skip',
+      applyDisabled: true,
+    })
+  })
+
+  it('leaves Apply enabled for a conflict and shows Apply when chosen', () => {
+    const conflict = item('entry:a', 'entry.change', 'conflict')
+    expect(decisionOf(conflict, NO_DECISIONS)).toEqual({
+      value: 'skip',
+      applyDisabled: false,
+    })
+    expect(
+      decisionOf(conflict, { unticked: [], applied: ['entry:a'] }),
+    ).toEqual({ value: 'apply', applyDisabled: false })
+  })
+})
+
+describe('slug-taken rows', () => {
+  it('are never pushed, even when they are in applied', () => {
+    const slug = item('entry:a', 'entry.change', 'slug-taken')
+    expect(isPushTaken(slug, { unticked: [], applied: ['entry:a'] })).toBe(
+      false,
+    )
+    const selection = pushSelection([slug], {
+      unticked: [],
+      applied: ['entry:a'],
+    })
+    expect(selection.apply).toEqual([])
+    expect(selection.push).toBe(0)
+  })
+})
+
+describe('schemaActionOf', () => {
+  it('reads each schema kind and a field removal that holds values', () => {
+    expect(schemaActionOf(item('schema:a', 'schema.add'))).toEqual({
+      kind: 'add-collection',
+    })
+    expect(schemaActionOf(item('schema:a', 'schema.remove'))).toEqual({
+      kind: 'remove-collection',
+    })
+    expect(schemaActionOf(item('schema:a', 'schema.change'))).toEqual({
+      kind: 'change-collection',
+    })
+    expect(
+      schemaActionOf(
+        item('schema:a', 'schema.change', 'drops-content', {
+          droppedFields: [{ key: 'excerpt', values: 3 }],
+        }),
+      ),
+    ).toEqual({ kind: 'remove-fields', fields: ['excerpt'] })
+  })
+
+  it('is null for entry and language rows', () => {
+    expect(schemaActionOf(item('entry:a', 'entry.change'))).toBeNull()
+    expect(schemaActionOf(item('languages', 'languages'))).toBeNull()
   })
 })

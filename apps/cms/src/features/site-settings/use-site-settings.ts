@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 
+import { invalidateDevSync } from '#/features/dev-env/invalidate'
 import { useStepUp } from '#/features/security/step-up'
 import { adminQueryKeys } from '#/lib/admin/helpers'
 import {
@@ -39,9 +40,13 @@ export function useSiteSettings(siteId: string) {
   })
 
   const refresh = React.useCallback(async () => {
-    await queryClient.invalidateQueries({
-      queryKey: adminQueryKeys.site(siteId),
-    })
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: adminQueryKeys.site(siteId),
+      }),
+      // Languages and name changes on a development site change its unpushed count.
+      invalidateDevSync(queryClient, siteId),
+    ])
     // Name and URL also live in `me.sites` (sidebar, switcher).
     await router.invalidate()
   }, [queryClient, router, siteId])

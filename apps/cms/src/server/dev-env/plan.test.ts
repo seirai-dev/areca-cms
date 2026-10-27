@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { Field, SchemaSnapshotItem } from '#/lib/types'
+import type { EntryData, Field, SchemaSnapshotItem } from '#/lib/types'
 
 import {
   buildPlan,
@@ -651,6 +651,7 @@ describe('selectPlanItems', () => {
         devEntry({ draftData: { title: 'B' } }),
         devEntry({
           id: 'd9',
+          slug: 'z',
           draftData: { title: 'C' },
           originEntryId: 'p9',
           originContentVersion: 1,
@@ -689,6 +690,20 @@ describe('selectPlanItems', () => {
       apply: ['entry:d9'],
     })
     expect(selected.map((item) => item.id)).not.toContain('entry:d9')
+  })
+
+  it('never applies a slug-taken item, even when it is in apply', () => {
+    const taken = items.map((item) =>
+      item.id === 'entry:d1'
+        ? { ...item, attention: 'slug-taken' as const }
+        : item,
+    )
+    const { selected, skipped } = selectPlanItems(taken, {
+      exclude: [],
+      apply: ['entry:d1'],
+    })
+    expect(selected.map((item) => item.id)).not.toContain('entry:d1')
+    expect(skipped.map((item) => item.id)).toContain('entry:d1')
   })
 
   it('drops excluded items even when they are unflagged', () => {
@@ -841,5 +856,667 @@ describe('collectionsMatchProduction', () => {
       production: snapshot([def('home')]),
     })
     expect(matches).toEqual({ home: false })
+  })
+})
+
+describe('buildPlan: fields a pending removal keeps', () => {
+  const withExcerpt = def('articles', [field('title'), field('excerpt')])
+  const withoutExcerpt = def('articles', [field('title')])
+  const baselineWithExcerpt = {
+    slug: 'a',
+    data: { title: 'A', excerpt: 'Intro' },
+    publishedSlug: 'a',
+    publishedData: { title: 'A', excerpt: 'Intro' },
+    status: 'published' as const,
+  }
+
+  function removalInput(production: Partial<PlanProductionEntry> = {}) {
+    return planInput({
+      base: snapshot([withExcerpt]),
+      dev: snapshot([withoutExcerpt]),
+      production: snapshot([withExcerpt]),
+      devEntries: [
+        devEntry({
+          draftData: { title: 'B' },
+          publishedData: { title: 'B' },
+          originBaseline: baselineWithExcerpt,
+        }),
+      ],
+      productionEntries: [
+        prodEntry({
+          draftData: { title: 'A', excerpt: 'Intro' },
+          publishedData: { title: 'A', excerpt: 'Intro' },
+          ...production,
+        }),
+      ],
+      productionFieldUsage: { articles: { excerpt: 1 } },
+    })
+  }
+
+  it('links an entry that holds a value for the removed field to the removal', () => {
+    const plan = buildPlan(removalInput())
+    expect(plan.items.find((item) => item.id === 'entry:d1')).toMatchObject({
+      dependsOn: ['schema:articles'],
+      summary: expect.objectContaining({ preservedFields: ['excerpt'] }),
+    })
+    expect(
+      plan.items.find((item) => item.id === 'schema:articles'),
+    ).toMatchObject({
+      attention: 'drops-content',
+      affectedEntries: [{ id: 'p1', contentVersion: 3 }],
+    })
+  })
+
+  it('does not link an entry that holds no value for the removed field', () => {
+    const plan = buildPlan(
+      removalInput({
+        draftData: { title: 'A' },
+        publishedData: { title: 'A' },
+      }),
+    )
+    const entryItem = plan.items.find((item) => item.id === 'entry:d1')
+    expect(entryItem?.dependsOn).toBeUndefined()
+    expect(entryItem?.summary.preservedFields).toBeUndefined()
+    expect(
+      plan.items.find((item) => item.id === 'schema:articles')?.affectedEntries,
+    ).toBeUndefined()
+  })
+
+  it('counts a value held only in a translation as held', () => {
+    const plan = buildPlan(
+      removalInput({
+        draftData: { title: 'A', $i18n: { nl: { excerpt: 'Inleiding' } } },
+        publishedData: { title: 'A' },
+      }),
+    )
+    expect(
+      plan.items.find((item) => item.id === 'entry:d1')?.summary,
+    ).toMatchObject({
+      preservedFields: ['excerpt'],
+    })
+  })
+
+  it('lists every production entry of a removed collection as affected', () => {
+    const plan = buildPlan(
+      planInput({
+        base: snapshot([withExcerpt]),
+        dev: snapshot([]),
+        production: snapshot([withExcerpt]),
+        productionEntries: [
+          prodEntry({ id: 'p1' }),
+          prodEntry({ id: 'p2', slug: 'b', contentVersion: 5 }),
+        ],
+      }),
+    )
+    expect(
+      plan.items.find((item) => item.id === 'schema:articles'),
+    ).toMatchObject({
+      kind: 'schema.remove',
+      attention: 'drops-content',
+      affectedEntries: [
+        { id: 'p1', contentVersion: 3 },
+        { id: 'p2', contentVersion: 5 },
+      ],
+    })
+  })
+
+  it('changes the plan hash when an affected production entry moves on', () => {
+    const before = buildPlan(removalInput()).planHash
+    const after = buildPlan(removalInput({ contentVersion: 4 })).planHash
+    expect(after).not.toBe(before)
+  })
+
+  it('does not list a removed collection that production already disabled', () => {
+    const disabled = { ...withExcerpt, enabled: false }
+    const plan = buildPlan(
+      planInput({
+        base: snapshot([withExcerpt]),
+        dev: snapshot([]),
+        production: snapshot([disabled]),
+      }),
+    )
+    expect(
+      plan.items.find((item) => item.id === 'schema:articles')?.attention,
+    ).toBeNull()
+  })
+})
+
+describe('disabled production collections count as absent in dev', () => {
+  const articles = def('articles')
+  const disabled = { ...articles, enabled: false }
+
+  it('does not count a disabled production collection the baseline does not have', () => {
+    expect(
+      productionChangeCount(
+        planInput({
+          base: snapshot([]),
+          dev: snapshot([]),
+          production: snapshot([disabled]),
+        }),
+      ),
+    ).toBe(0)
+  })
+
+  it('counts a collection production disabled while the baseline still has it enabled', () => {
+    expect(
+      productionChangeCount(
+        planInput({
+          base: snapshot([articles]),
+          dev: snapshot([articles]),
+          production: snapshot([disabled]),
+        }),
+      ),
+    ).toBe(1)
+  })
+
+  it('matches a collection dev does not have when production has it disabled', () => {
+    expect(
+      collectionsMatchProduction({
+        dev: snapshot([]),
+        production: snapshot([disabled]),
+      }),
+    ).toEqual({ articles: true })
+  })
+})
+
+describe('buildPlan: a kept field is not a change of its own', () => {
+  const withExcerpt = def('articles', [field('title'), field('excerpt')])
+  const withoutExcerpt = def('articles', [field('title')])
+  const baseline = {
+    slug: 'a',
+    data: { title: 'A', excerpt: 'Intro' },
+    publishedSlug: 'a',
+    publishedData: { title: 'A', excerpt: 'Intro' },
+    status: 'published' as const,
+  }
+  const input = (dev: Partial<PlanEntry>) =>
+    planInput({
+      base: snapshot([withExcerpt]),
+      dev: snapshot([withoutExcerpt]),
+      production: snapshot([withExcerpt]),
+      devEntries: [devEntry({ originBaseline: baseline, ...dev })],
+      productionEntries: [
+        prodEntry({
+          draftData: { title: 'A', excerpt: 'Intro' },
+          publishedData: { title: 'A', excerpt: 'Intro' },
+        }),
+      ],
+      productionFieldUsage: { articles: { excerpt: 1 } },
+    })
+
+  it('does not list an entry whose only difference is the kept field', () => {
+    const plan = buildPlan(
+      input({
+        draftData: { title: 'A' },
+        publishedData: { title: 'A' },
+      }),
+    )
+    expect(plan.items.map((item) => item.id)).toEqual(['schema:articles'])
+  })
+
+  it('lists an entry with another change, without the kept field among its changed fields', () => {
+    const plan = buildPlan(
+      input({
+        draftData: { title: 'B' },
+        publishedData: { title: 'B' },
+      }),
+    )
+    const entryItem = plan.items.find((item) => item.id === 'entry:d1')
+    expect(entryItem?.summary).toMatchObject({
+      changedFields: ['title'],
+      preservedFields: ['excerpt'],
+    })
+  })
+})
+
+describe('buildPlan: scheduled entries a destructive schema item touches', () => {
+  const withExcerpt = def('articles', [field('title'), field('excerpt')])
+
+  it('marks a removal with a scheduled affected entry as scheduled, with its title', () => {
+    const plan = buildPlan(
+      planInput({
+        base: snapshot([withExcerpt]),
+        dev: snapshot([]),
+        production: snapshot([withExcerpt]),
+        productionEntries: [
+          prodEntry({ id: 'p1', scheduled: true, title: 'Spring offer' }),
+          prodEntry({ id: 'p2', slug: 'b', title: 'Other' }),
+        ],
+      }),
+    )
+    const item = plan.items.find((entry) => entry.id === 'schema:articles')
+    expect(item).toMatchObject({
+      attention: 'scheduled',
+      summary: expect.objectContaining({ scheduledTitles: ['Spring offer'] }),
+    })
+    expect(
+      selectPlanItems(plan.items, { exclude: [], apply: [item!.id] }).selected,
+    ).toEqual([])
+  })
+
+  it('marks a field removal whose affected entry is scheduled as scheduled', () => {
+    const plan = buildPlan(
+      planInput({
+        base: snapshot([withExcerpt]),
+        dev: snapshot([def('articles', [field('title')])]),
+        production: snapshot([withExcerpt]),
+        productionEntries: [
+          prodEntry({
+            scheduled: true,
+            title: 'Spring offer',
+            draftData: { title: 'A', excerpt: 'Intro' },
+          }),
+        ],
+        productionFieldUsage: { articles: { excerpt: 1 } },
+      }),
+    )
+    expect(
+      plan.items.find((item) => item.id === 'schema:articles')?.attention,
+    ).toBe('scheduled')
+  })
+})
+
+describe('buildPlan: sections made again in dev', () => {
+  const section = def('companyInfo', [field('email')], { kind: 'global' })
+  const sectionEntry = (overrides: Partial<PlanEntry> = {}): PlanEntry =>
+    devEntry({
+      id: 's1',
+      collectionKey: 'companyInfo',
+      collectionKind: 'global',
+      slug: '$global',
+      title: 'Company info',
+      draftData: { email: 'dev@example.test' },
+      publishedSlug: null,
+      publishedData: null,
+      status: 'draft',
+      originEntryId: null,
+      originBaseline: null,
+      originContentVersion: null,
+      ...overrides,
+    })
+  const sectionProd = (
+    overrides: Partial<PlanProductionEntry> = {},
+  ): PlanProductionEntry =>
+    prodEntry({
+      id: 'ps1',
+      collectionKey: 'companyInfo',
+      collectionKind: 'global',
+      slug: '$global',
+      contentVersion: 2,
+      status: 'published',
+      title: 'Company info',
+      draftData: { email: 'prod@example.test' },
+      publishedData: { email: 'prod@example.test' },
+      ...overrides,
+    })
+  const withSection = (overrides: Partial<PlanInput> = {}) =>
+    planInput({
+      base: snapshot([def('articles'), section]),
+      dev: snapshot([def('articles'), section]),
+      production: snapshot([def('articles'), section]),
+      ...overrides,
+    })
+
+  it('lists an unlinked dev section matched by key to production as a conflict', () => {
+    const plan = buildPlan(
+      withSection({
+        devEntries: [sectionEntry()],
+        productionEntries: [sectionProd()],
+      }),
+    )
+    expect(plan.items).toHaveLength(1)
+    expect(plan.items[0]).toMatchObject({
+      id: 'entry:s1',
+      kind: 'entry.change',
+      attention: 'conflict',
+      productionId: 'ps1',
+      productionContentVersion: 2,
+    })
+  })
+
+  it('marks an unlinked section matched to a scheduled production section as scheduled', () => {
+    const plan = buildPlan(
+      withSection({
+        devEntries: [sectionEntry()],
+        productionEntries: [sectionProd({ scheduled: true })],
+      }),
+    )
+    expect(plan.items[0]).toMatchObject({
+      id: 'entry:s1',
+      attention: 'scheduled',
+    })
+  })
+
+  it('leaves an unlinked section alone when production has no section by that key', () => {
+    const plan = buildPlan(
+      withSection({
+        devEntries: [sectionEntry()],
+        productionEntries: [],
+      }),
+    )
+    expect(plan.items).toEqual([])
+  })
+
+  it('applies the conflict only when the agency applies it', () => {
+    const plan = buildPlan(
+      withSection({
+        devEntries: [sectionEntry()],
+        productionEntries: [sectionProd()],
+      }),
+    )
+    expect(
+      selectPlanItems(plan.items, { exclude: [], apply: [] }).selected,
+    ).toEqual([])
+    expect(
+      selectPlanItems(plan.items, {
+        exclude: [],
+        apply: ['entry:s1'],
+      }).selected.map((item) => item.id),
+    ).toEqual(['entry:s1'])
+  })
+})
+
+describe('buildPlan: URLs another entry holds', () => {
+  const newEntry = (overrides: Partial<PlanEntry> = {}): PlanEntry =>
+    devEntry({
+      id: 'n1',
+      slug: 'fresh',
+      title: 'Fresh',
+      draftData: { title: 'Fresh' },
+      publishedSlug: null,
+      publishedData: null,
+      status: 'draft',
+      originEntryId: null,
+      originBaseline: null,
+      originContentVersion: null,
+      ...overrides,
+    })
+  const localized = (locale: string, slug: string): EntryData => ({
+    title: 'Localized',
+    $i18n: { [locale]: { $slug: slug } },
+  })
+
+  it('flags a new entry whose main slug a production entry already uses', () => {
+    const plan = buildPlan(
+      planInput({
+        devEntries: [newEntry({ slug: 'contact' })],
+        productionEntries: [
+          prodEntry({ id: 'pc', slug: 'contact', title: 'Contact page' }),
+        ],
+      }),
+    )
+    expect(plan.items[0]).toMatchObject({
+      id: 'entry:n1',
+      kind: 'entry.new',
+      attention: 'slug-taken',
+      summary: {
+        slugCollisions: [{ slug: 'contact', collidesWith: 'Contact page' }],
+      },
+    })
+  })
+
+  it('flags a changed entry whose localized slug another production entry uses in that language', () => {
+    const plan = buildPlan(
+      planInput({
+        devEntries: [
+          devEntry({
+            draftData: localized('nl', 'contact'),
+            originBaseline: {
+              slug: 'a',
+              data: { title: 'A' },
+              publishedSlug: 'a',
+              publishedData: { title: 'A' },
+              status: 'published',
+            },
+          }),
+        ],
+        productionEntries: [
+          prodEntry({
+            id: 'pc',
+            slug: 'contact-page',
+            title: 'Contact page',
+            draftData: localized('nl', 'contact'),
+          }),
+          prodEntry(),
+        ],
+      }),
+    )
+    expect(plan.items[0]).toMatchObject({
+      attention: 'slug-taken',
+      summary: {
+        slugCollisions: [
+          { locale: 'nl', slug: 'contact', collidesWith: 'Contact page' },
+        ],
+      },
+    })
+  })
+
+  it('flags a localized slug that another production entry uses as its main slug', () => {
+    const plan = buildPlan(
+      planInput({
+        devEntries: [newEntry({ draftData: localized('nl', 'contact') })],
+        productionEntries: [
+          prodEntry({ id: 'pc', slug: 'contact', title: 'Contact' }),
+        ],
+      }),
+    )
+    expect(plan.items[0]).toMatchObject({
+      attention: 'slug-taken',
+      summary: {
+        slugCollisions: [
+          { locale: 'nl', slug: 'contact', collidesWith: 'Contact' },
+        ],
+      },
+    })
+  })
+
+  it('does not flag a localized slug another entry holds in a different language', () => {
+    const plan = buildPlan(
+      planInput({
+        devEntries: [newEntry({ draftData: localized('nl', 'contact') })],
+        productionEntries: [
+          prodEntry({
+            id: 'pc',
+            slug: 'other',
+            draftData: localized('tr', 'contact'),
+          }),
+        ],
+      }),
+    )
+    expect(plan.items[0]?.attention).toBeNull()
+  })
+
+  it('does not flag an entry against its own production entry', () => {
+    const plan = buildPlan(
+      planInput({
+        devEntries: [
+          devEntry({
+            title: 'A changed',
+            draftData: { title: 'A changed', $i18n: { nl: { $slug: 'a-nl' } } },
+          }),
+        ],
+        productionEntries: [prodEntry({ draftData: localized('nl', 'a-nl') })],
+      }),
+    )
+    expect(plan.items[0]?.attention).toBeNull()
+  })
+
+  it('flags two entries in one push that want the same localized slug, on both', () => {
+    const plan = buildPlan(
+      planInput({
+        devEntries: [
+          newEntry({
+            id: 'na',
+            slug: 'alpha',
+            title: 'Alpha',
+            draftData: localized('nl', 'kontakt'),
+          }),
+          newEntry({
+            id: 'nb',
+            slug: 'beta',
+            title: 'Beta',
+            draftData: localized('nl', 'kontakt'),
+          }),
+        ],
+      }),
+    )
+    const byId = Object.fromEntries(plan.items.map((item) => [item.id, item]))
+    expect(byId['entry:na']).toMatchObject({
+      attention: 'slug-taken',
+      summary: {
+        slugCollisions: [
+          { locale: 'nl', slug: 'kontakt', collidesWith: 'Beta' },
+        ],
+      },
+    })
+    expect(byId['entry:nb']).toMatchObject({
+      attention: 'slug-taken',
+      summary: {
+        slugCollisions: [
+          { locale: 'nl', slug: 'kontakt', collidesWith: 'Alpha' },
+        ],
+      },
+    })
+  })
+
+  it('keeps a scheduled production entry as the reason over a URL collision', () => {
+    const plan = buildPlan(
+      planInput({
+        devEntries: [devEntry({ draftData: { title: 'B' } })],
+        productionEntries: [
+          prodEntry({ id: 'p1', slug: 'a', scheduled: true }),
+          prodEntry({ id: 'px', slug: 'a', title: 'Other' }),
+        ],
+      }),
+    )
+    expect(plan.items[0]?.attention).toBe('scheduled')
+  })
+
+  it('never applies a URL collision, even when it is listed in apply', () => {
+    const plan = buildPlan(
+      planInput({
+        devEntries: [newEntry({ slug: 'contact' })],
+        productionEntries: [prodEntry({ id: 'pc', slug: 'contact' })],
+      }),
+    )
+    const { selected } = selectPlanItems(plan.items, {
+      exclude: [],
+      apply: ['entry:n1'],
+    })
+    expect(selected).toEqual([])
+  })
+
+  it('changes the plan hash when the production entry that collides moves', () => {
+    const input = planInput({
+      devEntries: [newEntry({ slug: 'contact' })],
+      productionEntries: [prodEntry({ id: 'pc', slug: 'other' })],
+    })
+    const before = buildPlan(input).planHash
+    const after = buildPlan({
+      ...input,
+      productionEntries: [prodEntry({ id: 'pc', slug: 'contact' })],
+    }).planHash
+    expect(after).not.toBe(before)
+  })
+})
+
+describe('productionChangeCount: forkable entries the dev env does not hold', () => {
+  const section = def('companyInfo', [field('email')], { kind: 'global' })
+
+  it('counts a ready production entry that no dev entry is linked to', () => {
+    expect(
+      productionChangeCount(
+        planInput({
+          productionEntries: [
+            prodEntry({ id: 'px', slug: 'new', publishedData: { title: 'N' } }),
+          ],
+        }),
+      ),
+    ).toBe(1)
+  })
+
+  it('does not count an unready or archived production entry', () => {
+    expect(
+      productionChangeCount(
+        planInput({
+          productionEntries: [
+            prodEntry({ id: 'pu', slug: 'draft', publishedData: null }),
+            prodEntry({
+              id: 'pa',
+              slug: 'old',
+              status: 'archived',
+              publishedData: { title: 'Old' },
+            }),
+          ],
+        }),
+      ),
+    ).toBe(0)
+  })
+
+  it('counts a production section with no dev section linked to it', () => {
+    expect(
+      productionChangeCount({
+        ...planInput({
+          base: snapshot([def('articles'), section]),
+          dev: snapshot([def('articles'), section]),
+          production: snapshot([def('articles'), section]),
+          productionEntries: [
+            prodEntry({
+              id: 'ps',
+              collectionKey: 'companyInfo',
+              collectionKind: 'global',
+              slug: '$global',
+              publishedData: null,
+            }),
+          ],
+        }),
+      }),
+    ).toBe(1)
+  })
+
+  it('does not count an entry a dev entry is linked to, or one of a collection dev does not have', () => {
+    const cases = def('cases')
+    expect(
+      productionChangeCount(
+        planInput({
+          base: snapshot([def('articles'), cases]),
+          dev: snapshot([def('articles')]),
+          production: snapshot([def('articles'), cases]),
+          devEntries: [devEntry({ originEntryId: 'p1' })],
+          productionEntries: [
+            prodEntry({ id: 'p1', publishedData: { title: 'A' } }),
+            prodEntry({
+              id: 'pc',
+              collectionKey: 'cases',
+              slug: 'case-1',
+              publishedData: { title: 'C' },
+            }),
+          ],
+        }),
+      ),
+    ).toBe(0)
+  })
+})
+
+describe('buildPlan: languages item title code', () => {
+  it('gives the languages item a title code the UI translates', () => {
+    const plan = buildPlan(
+      planInput({
+        base: { languages: { main: 'en', all: ['en'] }, collections: [] },
+        dev: { languages: { main: 'en', all: ['en', 'nl'] }, collections: [] },
+        production: {
+          languages: { main: 'en', all: ['en'] },
+          collections: [],
+        },
+        stampCount: 0,
+      }),
+    )
+    expect(plan.items).toEqual([
+      expect.objectContaining({
+        id: 'languages',
+        title: 'Site languages',
+        titleCode: 'site-languages',
+      }),
+    ])
   })
 })

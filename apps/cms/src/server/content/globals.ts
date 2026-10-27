@@ -15,6 +15,7 @@ import {
   assertPreviewPath,
   validateContentDefinitions,
 } from './content-definitions.ts'
+import type { WriteOptions } from './content-definitions.ts'
 import { ConflictError, NotFoundError, ValidationError } from './errors.ts'
 import { confirmedFieldDrops, purgeFieldContent } from './field-data.ts'
 import {
@@ -258,6 +259,7 @@ export async function writeGlobalUpsert(
   input: GlobalInput,
   prepared: PreparedGlobalUpsert,
   now: Date = new Date(),
+  options: WriteOptions = {},
 ) {
   const { label, enabled, seoEnabled, previewPath, requiredLanguages } =
     prepared
@@ -269,10 +271,12 @@ export async function writeGlobalUpsert(
   const previous = existing.find(
     (row) => row.key === input.key && row.kind === 'global',
   )
-  validateContentDefinitions([
-    ...existing.filter((row) => row.key !== input.key),
-    { key: input.key, kind: 'global', fields: input.fields, enabled },
-  ])
+  if (!options.validated) {
+    validateContentDefinitions([
+      ...existing.filter((row) => row.key !== input.key),
+      { key: input.key, kind: 'global', fields: input.fields, enabled },
+    ])
+  }
   const purgedKeys = await confirmedFieldDrops(tx, {
     collectionId: previous?.id,
     before: previous?.fields ?? [],

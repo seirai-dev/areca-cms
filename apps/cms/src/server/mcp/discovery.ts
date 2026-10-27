@@ -5,6 +5,7 @@ import { DPOP_SIGNING_ALGORITHMS } from 'better-auth/oauth2'
 import { db } from '#/db'
 import { site } from '#/db/schema'
 import { auth } from '#/lib/auth'
+import { isDevSite } from '#/lib/site-environment'
 import { createLogger } from '#/server/log'
 
 import { MCP_OAUTH_SCOPES, mcpResourceUrl } from './oauth-resource'
@@ -23,6 +24,7 @@ const CORS_HEADERS = {
 }
 
 const DOC_CACHE_CONTROL = 'public, max-age=300'
+const NO_STORE_CACHE_CONTROL = 'no-store'
 
 /**
  * Discovery documents served from the origin root (RFC 8414, OIDC Discovery,
@@ -99,6 +101,13 @@ async function respond(path: string): Promise<Response | null> {
   }
 }
 
+/**
+ * The resource name a development environment shows. The dev name and its
+ * existence are for agency admins (docs/design/dev-environments.md, Decision 3),
+ * so discovery stays on for OAuth but says nothing about the dev site.
+ */
+const DEV_RESOURCE_NAME = 'Areca site'
+
 /** PRM for `/.well-known/oauth-protected-resource/<resource path>`. */
 async function resourceDocument(path: string): Promise<Response> {
   const resourcePath = path.slice(RESOURCE_DOC_PREFIX.length)
@@ -111,27 +120,37 @@ async function resourceDocument(path: string): Promise<Response> {
   const [found] =
     exact && slug
       ? await db
-          .select({ name: site.name, slug: site.slug })
+          .select({
+            name: site.name,
+            slug: site.slug,
+            environment: site.environment,
+          })
           .from(site)
           .where(eq(site.slug, slug))
           .limit(1)
       : []
   if (!found) return notFound()
   const issuer = (await auth.api.getOAuthServerConfig()).issuer
+  const devEnv = isDevSite(found)
 
-  return json({
-    resource: mcpResourceUrl(found.slug),
-    authorization_servers: [issuer],
-    scopes_supported: [...MCP_OAUTH_SCOPES],
-    bearer_methods_supported: ['header'],
-    dpop_signing_alg_values_supported: [...DPOP_SIGNING_ALGORITHMS],
-    resource_name: `${found.name} (Areca CMS)`,
-  })
+  return json(
+    {
+      resource: mcpResourceUrl(found.slug),
+      authorization_servers: [issuer],
+      scopes_supported: [...MCP_OAUTH_SCOPES],
+      bearer_methods_supported: ['header'],
+      dpop_signing_alg_values_supported: [...DPOP_SIGNING_ALGORITHMS],
+      resource_name: devEnv ? DEV_RESOURCE_NAME : `${found.name} (Areca CMS)`,
+    },
+    // A dev env's document is not cached by shared caches: the response must
+    // not say a dev env exists to anyone who fetched it earlier.
+    devEnv ? NO_STORE_CACHE_CONTROL : DOC_CACHE_CONTROL,
+  )
 }
 
-function json(body: unknown): Response {
+function json(body: unknown, cacheControl = DOC_CACHE_CONTROL): Response {
   return Response.json(body, {
-    headers: { ...CORS_HEADERS, 'Cache-Control': DOC_CACHE_CONTROL },
+    headers: { ...CORS_HEADERS, 'Cache-Control': cacheControl },
   })
 }
 

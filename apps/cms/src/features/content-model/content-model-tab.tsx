@@ -5,6 +5,7 @@ import { useServerFn } from '@tanstack/react-start'
 import { CaretRight, Globe, Plus, Stack } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
+import { invalidateDevSync } from '#/features/dev-env/invalidate'
 import { globalsQueryKey, useSiteGlobals } from '#/features/globals/use-globals'
 import { errorMessage } from '#/lib/admin/helpers'
 import { queryKeys } from '#/lib/content/query-keys'
@@ -263,7 +264,10 @@ function SectionRow({
       toast.error(errorMessage(error))
     },
     onSettled: () =>
-      queryClient.invalidateQueries({ queryKey: globalsQueryKey(siteId) }),
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: globalsQueryKey(siteId) }),
+        invalidateDevSync(queryClient, siteId),
+      ]),
   })
 
   return (
@@ -381,9 +385,12 @@ function ContentTypeRow({
       toast.error(errorMessage(error))
     },
     onSettled: () =>
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.collections(siteId),
-      }),
+      Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.collections(siteId),
+        }),
+        invalidateDevSync(queryClient, siteId),
+      ]),
   })
 
   return (

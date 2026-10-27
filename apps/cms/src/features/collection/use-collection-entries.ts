@@ -10,6 +10,7 @@ import { toast } from 'sonner'
 import { queryKeys } from '#/lib/content/query-keys'
 import { errorMessage } from '#/lib/content/utils'
 import { useInvalidateGoLive } from '#/features/golive/use-go-live'
+import { invalidateDevSync } from '#/features/dev-env/invalidate'
 import type { EntryData, EntryStatus } from '#/lib/types'
 import {
   DUE_POLL_MS,
@@ -322,6 +323,8 @@ export function useEntryBulkActions(
         ...result.ids.map((id) =>
           queryClient.invalidateQueries({ queryKey: queryKeys.entry(id) }),
         ),
+        // On a development site the sync status counts these changes.
+        invalidateDevSync(queryClient, siteId),
         invalidateGoLive(),
       ])
     },

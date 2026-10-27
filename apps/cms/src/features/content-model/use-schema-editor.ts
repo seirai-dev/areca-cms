@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { toast } from 'sonner'
 
+import { invalidateDevSync } from '#/features/dev-env/invalidate'
 import { globalsQueryKey } from '#/features/globals/use-globals'
 import { useSiteLanguages } from '#/features/site-settings/use-site-settings'
 import { errorMessage } from '#/lib/admin/helpers'
@@ -227,11 +228,15 @@ export function useSchemaEditor({
   const dirty = current !== baseline
 
   function invalidateSchemas() {
-    return queryClient.invalidateQueries({
-      queryKey: isGlobal
-        ? globalsQueryKey(siteId)
-        : queryKeys.collections(siteId),
-    })
+    return Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: isGlobal
+          ? globalsQueryKey(siteId)
+          : queryKeys.collections(siteId),
+      }),
+      // A schema edit on a development site changes its unpushed count.
+      invalidateDevSync(queryClient, siteId),
+    ])
   }
 
   const saveMutation = useMutation({

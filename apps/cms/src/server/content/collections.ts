@@ -14,6 +14,7 @@ import {
   assertPreviewPath,
   validateContentDefinitions,
 } from './content-definitions.ts'
+import type { WriteOptions } from './content-definitions.ts'
 import {
   confirmedFieldDrops,
   planManifestFieldDrops,
@@ -313,6 +314,7 @@ export async function writeCollectionUpsert(
   input: CollectionUpsertInput,
   prepared: PreparedCollectionUpsert,
   now: Date = new Date(),
+  options: WriteOptions = {},
 ) {
   const { label, fields, enabled } = prepared
   const existing = await tx
@@ -320,10 +322,12 @@ export async function writeCollectionUpsert(
     .from(collection)
     .where(eq(collection.siteId, siteId))
   assertKindsUnchanged(existing, [{ key: input.key, kind: 'collection' }])
-  validateContentDefinitions([
-    ...existing.filter((row) => row.key !== input.key),
-    { key: input.key, kind: 'collection', fields, enabled },
-  ])
+  if (!options.validated) {
+    validateContentDefinitions([
+      ...existing.filter((row) => row.key !== input.key),
+      { key: input.key, kind: 'collection', fields, enabled },
+    ])
+  }
   const previous = existing.find((row) => row.key === input.key)
   const purgedKeys = await confirmedFieldDrops(tx, {
     collectionId: previous?.id,

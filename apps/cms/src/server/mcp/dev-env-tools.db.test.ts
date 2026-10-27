@@ -490,6 +490,55 @@ describe.skipIf(!hasDb)('development environment tools over MCP', () => {
     expect(row?.publishedData).toBeNull()
   })
 
+  it('flags a URL another production entry holds in the dry run, refuses its copy, and copies markReady as a ready draft', async () => {
+    await createEntry({
+      siteId: prod.site.id,
+      collectionKey: 'articles',
+      data: article('Prod contact', 'contact-page'),
+      actorId: agencyId,
+    })
+    const clash = await createEntry({
+      siteId: devId,
+      collectionKey: 'articles',
+      data: article('Dev contact', 'contact-page'),
+      actorId: agencyId,
+    })
+
+    const dry = await call(devAgency, 'push_to_production', {})
+    expect(dry.data?.needsAttention).toContainEqual(
+      expect.objectContaining({
+        id: `entry:${clash.id}`,
+        attention: 'slug-taken',
+        summary: expect.stringContaining('is already used by "Prod contact"'),
+      }),
+    )
+    const refusedCopy = await call(devAgency, 'copy_entry_to_production', {
+      id: clash.id,
+    })
+    // The same slug as an unlinked production entry: refused until overwrite.
+    expect(refusedCopy.isError).toBe(true)
+    expect(refusedCopy.text).toContain('not linked to this development entry')
+
+    const ready = await createEntry({
+      siteId: devId,
+      collectionKey: 'articles',
+      data: article('Copy ready', 'copy-ready'),
+      actorId: agencyId,
+    })
+    const copied = await call(devAgency, 'copy_entry_to_production', {
+      id: ready.id,
+      markReady: true,
+    })
+    expect(copied.isError).toBe(false)
+    expect(copied.data?.warnings).toEqual([])
+    const [row] = await db
+      .select()
+      .from(entry)
+      .where(eq(entry.id, String(copied.data?.productionId)))
+    expect(row?.status).toBe('published')
+    expect(row?.publishedData).toMatchObject({ title: 'Copy ready' })
+  })
+
   it('refuses to copy an entry that is not on this connector', async () => {
     const outcome = await call(devAgency, 'copy_entry_to_production', {
       id: readyProdEntryId,
@@ -556,9 +605,13 @@ describe.skipIf(!hasDb)('development environment tools over MCP', () => {
       String(created.data?.devSlug),
     )
     expect(created.data?.counts).toBeDefined()
-    // Tokens are never sent over MCP; the CMS shows them once.
+    // Tokens are never sent over MCP; the CMS shows them once, in the browser
+    // that created the environment. A missed one is rotated in Settings › Developer.
     expect(created.data).not.toHaveProperty('token')
-    expect(created.text).toContain('Settings › Development')
+    expect(created.text).toContain('shown only once')
+    expect(created.text).toContain(
+      'rotate the site token (and the schema token for code-first sites)',
+    )
 
     const again = await call(client, 'create_dev_environment', {
       confirm: true,

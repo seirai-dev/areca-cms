@@ -406,6 +406,8 @@ describe.skipIf(!runnable)(
             targetType: 'site',
             targetId: dev.id,
             meta: null,
+            // What audit() writes for a dev site (see dev-env-audit-rename).
+            agencyOnly: true,
           })
           .returning()
         const [forkRow] = await db
@@ -418,6 +420,7 @@ describe.skipIf(!runnable)(
             targetType: 'site',
             targetId: dev.id,
             meta: null,
+            agencyOnly: true,
           })
           .returning()
         expect(devRow).toBeDefined()

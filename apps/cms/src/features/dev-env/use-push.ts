@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 
 import { adminQueryKeys } from '#/lib/admin/helpers'
@@ -9,12 +10,21 @@ import {
   pushToProductionFn,
 } from '#/server/fn/dev-env'
 
-/** The push plan of a dev env: its items and the hash a push echoes back. */
+import { devEnvQueryKeys, invalidateQueryKeys } from './invalidate'
+
+/**
+ * The push plan of a dev env: its items and the hash a push echoes back. It
+ * never refetches on its own (no window-focus or interval refetch), so the
+ * list the agency reviews does not change under them. "Review again" refetches.
+ */
 export function usePushPlan(devSiteId: string) {
   const getPlan = useServerFn(getPushPlanFn)
   return useQuery({
     queryKey: adminQueryKeys.pushPlan(devSiteId),
     queryFn: () => getPlan({ data: { devSiteId } }),
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchInterval: false,
   })
 }
 
@@ -40,21 +50,24 @@ export type PushInput = {
  * `REAUTH_REQUIRED`; `useStepUp` asks for a code and retries once. A refused
  * plan (`The plan changed`) rejects with that message for the screen to show.
  */
-export function usePushToProduction(devSiteId: string) {
+export function usePushToProduction(
+  devSiteId: string,
+  productionSiteId: string,
+) {
   const queryClient = useQueryClient()
+  const router = useRouter()
   const stepUp = useStepUp()
   const push = useServerFn(pushToProductionFn)
   return useMutation({
     mutationFn: (input: PushInput) =>
       stepUp.run(() => push({ data: { devSiteId, ...input } })),
-    onSuccess: async () => {
-      // A push changes the plan, the banner counts, the push history and
-      // every production entry the lists show.
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['push-plan'] }),
-        queryClient.invalidateQueries({ queryKey: ['dev-sync'] }),
-        queryClient.invalidateQueries({ queryKey: ['dev-environment'] }),
-      ])
-    },
+    // A push changes the plan, the banner counts, the push history and the
+    // production content the lists and the Go-live tray show.
+    onSuccess: () =>
+      invalidateQueryKeys(
+        queryClient,
+        router,
+        devEnvQueryKeys({ devSiteId, productionSiteId }),
+      ),
   })
 }

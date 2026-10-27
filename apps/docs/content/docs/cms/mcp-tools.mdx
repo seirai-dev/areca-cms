@@ -230,14 +230,14 @@ If the site syncs its content types from code, the next manifest push replaces c
 
 ### Development environments (agency admins)
 
-A production site can have one development environment. Agency admins work in it first and push the reviewed changes to production. Its own connector is the site's connector with `-dev` after the slug. The production connector offers `create_dev_environment`. The development connector offers the tools below, and does not offer the publishing tools (`go_live`, `rollback`, `cancel_build`, `list_publications`, `get_release_status`, `get_build_job`) or the schedule tools. See [Development environments](/docs/cms/development-environments) for the workflow.
+A production site can have one development environment. Agency admins work in it first and push the reviewed changes to production. Its connector URL is `site.devEnvironment.connectorUrl` in `get_site_info`, which the production connector gives. The production connector offers `create_dev_environment`. The development connector offers the tools below, and does not offer the publishing tools (`go_live`, `rollback`, `cancel_build`, `list_publications`, `get_release_status`, `get_build_job`) or the schedule tools. See [Development environments](/docs/cms/development-environments) for the workflow.
 
 | Tool | Connector | Inputs | What it does |
 | --- | --- | --- | --- |
-| `create_dev_environment` | Production | `confirm` (must be `true`) | Creates the development environment, with the production schema and ready content. Returns its slug and connector URL. Never returns tokens; the CMS shows them once, under Settings › Development. |
+| `create_dev_environment` | Production | `confirm` (must be `true`) | Creates the development environment, with the production schema and ready content. Returns its slug and connector URL. Never returns tokens; they are shown once, in the browser that created the environment. For a missed token, rotate it in Settings › Developer on the development site. |
 | `refresh_from_production` | Development | `confirm` (must be `true`) | Replaces the development environment's content with production's. Unpushed changes are discarded; the result says how many. |
 | `push_to_production` | Development | `dryRun` (default `true`), `planHash`, `exclude`, `apply`, `goLive` | With `dryRun` true, lists every change with its needs-attention items and a `planHash`, and writes nothing. With `dryRun` false and the `planHash`, pushes the changes that were not excluded. Needs-attention items are pushed only when listed in `apply`. `goLive` starts a production build and needs the go-live permission. Refused with "The plan changed" when the plan moved since the dry run. |
-| `copy_entry_to_production` | Development | `id` (required), `markReady`, `overwrite` | Copies one development entry into production as its draft. The live version does not change unless `markReady` is true. Refused on a schema mismatch and on a production change since the last sync, unless `overwrite` is true. |
+| `copy_entry_to_production` | Development | `id` (required), `markReady`, `overwrite` | Copies one development entry into production as its draft. The live version does not change unless `markReady` is true, which also makes the copied draft the production ready version (ready is not live; a release is still needed). Refused on a schema mismatch, on a production change since the last sync unless `overwrite` is true, and when a URL is used by another production entry. |
 
 ### Prompt
 

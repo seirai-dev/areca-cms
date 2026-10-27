@@ -30,6 +30,17 @@ const itemIds = z
  * words, without the field payloads.
  */
 function summarize(item: PlanItem): string {
+  const collisions = (item.summary.slugCollisions ?? []).map((collision) => {
+    const url =
+      collision.locale !== undefined
+        ? `${collision.locale} URL "${collision.slug}"`
+        : `URL "${collision.slug}"`
+    return `${url} is already used by "${collision.collidesWith}" (cannot apply; change the URL in development)`
+  })
+  return [changeSummary(item), ...collisions].join('; ')
+}
+
+function changeSummary(item: PlanItem): string {
   const parts: string[] = []
   const { summary } = item
   if (item.kind === 'entry.new') return 'new entry'
@@ -78,7 +89,7 @@ export function registerDevEnvTools(registry: ToolRegistry): void {
     name: 'create_dev_environment',
     title: 'Create development environment',
     description:
-      "Agency admin only, on the production connector. Creates the development environment of this production site: a copy of its schema and its ready content, with no publications and no releases. The call returns the slug and the connector URL of the new environment, not its tokens. The tokens are shown only once, in the CMS: open Settings › Development to copy them into the development site's .env.local. If they were missed, rotate the site token and the schema token in the development site's Developer settings. Fails if the site already has a development environment. Pass confirm: true.",
+      'Agency admin only, on the production connector. Creates the development environment of this production site: a copy of its schema and its ready content, with no publications and no releases. The call returns the slug and the connector URL of the new environment, not its tokens. The tokens are shown only once, in the browser that created the environment, and this connector never returns them. If the user missed them, tell them: open the development environment in the CMS, go to Settings › Developer and rotate the site token (and the schema token for code-first sites) to get new values. Fails if the site already has a development environment. Pass confirm: true.',
     inputSchema: z.object({
       confirm: z
         .literal(true)
@@ -103,7 +114,7 @@ export function registerDevEnvTools(registry: ToolRegistry): void {
         devConnectorUrl: mcpResourceUrl(created.slug),
         counts: created.counts,
         message:
-          "The development environment is ready. Open the CMS (Settings › Development) to copy its tokens; they are shown only once. If you missed them, rotate the site token and the schema token in the development site's Developer settings.",
+          'The development environment is ready. Its tokens are shown only once, in the browser that created it. Open the development environment in the CMS, go to Settings › Developer and rotate the site token (and the schema token for code-first sites) to get new values.',
       }
     },
   })
@@ -148,7 +159,7 @@ export function registerDevEnvTools(registry: ToolRegistry): void {
     name: 'push_to_production',
     title: 'Push development to production',
     description:
-      'Agency admin only, on a development connector. Pushes changes from this development environment to its production site. ALWAYS call it first with dryRun true (the default): it lists every change since the last push or reset, marks the items that need attention, and returns a planHash and the list. Show that list to the user and get their approval before pushing. Then call again with dryRun false, the planHash from the dry run, and what the user decided: exclude (item ids to leave out) and apply (ids of needs-attention items to apply; they are skipped otherwise). goLive true also starts a production build after the push and needs the go-live permission. If production changed after the dry run, the call fails with "The plan changed"; run the dry run again. Pushing never deletes production content: removed entries are archived.',
+      'Agency admin only, on a development connector. Pushes changes from this development environment to its production site. ALWAYS call it first with dryRun true (the default): it lists every change since the last push or reset, marks the items that need attention, and returns a planHash and the list. Show that list to the user and get their approval before pushing. Then call again with dryRun false, the planHash from the dry run, and what the user decided: exclude (item ids to leave out) and apply (ids of needs-attention items to apply; they are skipped otherwise). Items marked "scheduled" (the production entry has a schedule) or "slug-taken" (a URL is used by another entry) cannot be applied: resolve the schedule in production, or change the URL in development, then dry run again. goLive true also starts a production build after the push and needs the go-live permission. If production changed after the dry run, the call fails with "The plan changed"; run the dry run again. Pushing never deletes production content: removed entries are archived.',
     inputSchema: z.object({
       dryRun: z
         .boolean()
@@ -248,13 +259,15 @@ export function registerDevEnvTools(registry: ToolRegistry): void {
     name: 'copy_entry_to_production',
     title: 'Copy entry to production as draft',
     description:
-      'Agency admin only, on a development connector. Copies one development entry (id from list_entries on this connector) into production as the draft of the matching production entry. The live version is not changed unless markReady is true, which also makes the copied version the production ready version. Refused when the production schema of the collection differs from the development schema ("Push the schema first"), and when production changed since the last sync, unless overwrite is true. References are mapped; references that cannot be mapped are cleared and listed in clearedReferences.',
+      'Agency admin only, on a development connector. Copies one development entry (id from list_entries on this connector) into production as the draft of the matching production entry. The live version is not changed unless markReady is true: then the copied draft also becomes the production ready version, checked the same way a push checks it (if the check fails the draft is still copied and the warnings say why). Ready is not live: the change reaches the live site only after a release (go_live). Refused when the production schema of the collection differs from the development schema ("Push the schema first"), when production changed since the last sync unless overwrite is true, and when a URL (the slug or a localized slug) is already used by another production entry. References are mapped; references that cannot be mapped are cleared and listed in clearedReferences.',
     inputSchema: z.object({
       id: idSchema('development entry'),
       markReady: z
         .boolean()
         .default(false)
-        .describe('true also makes the copied version ready in production.'),
+        .describe(
+          'true also makes the copied draft the production ready version (not live until a release).',
+        ),
       overwrite: z
         .boolean()
         .default(false)

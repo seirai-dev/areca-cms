@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from '@tanstack/react-router'
+import { useNavigate, useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { toast } from 'sonner'
 
@@ -10,6 +10,8 @@ import { m } from '#/paraglide/messages'
 import { useStepUp } from '#/features/security/step-up'
 import { copyEntryToProductionFn } from '#/server/fn/dev-env'
 
+import { devEnvQueryKeys, invalidateQueryKeys } from './invalidate'
+import { warningText } from './plan-text'
 import type { SaveOutcome } from './save-before-copy'
 import { saveBeforeCopy } from './save-before-copy'
 import { useDevSyncStatus } from './use-push'
@@ -31,16 +33,19 @@ export type CopyDestination =
  * that is the only extra step, with no confirm dialog.
  */
 export function useCopyToProduction({
+  devSiteId,
   productionSiteId,
   destination,
   save,
 }: {
+  devSiteId: string
   productionSiteId: string
   destination: CopyDestination
   /** The editor's save: the copy waits for it and stops when it fails. */
   save: () => Promise<SaveOutcome>
 }) {
   const queryClient = useQueryClient()
+  const router = useRouter()
   const navigate = useNavigate()
   const stepUp = useStepUp()
   const copy = useServerFn(copyEntryToProductionFn)
@@ -59,17 +64,14 @@ export function useCopyToProduction({
       )
     },
     onSuccess: async (result) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['push-plan'] }),
-        queryClient.invalidateQueries({ queryKey: ['dev-sync'] }),
-        queryClient.invalidateQueries({ queryKey: ['dev-environment'] }),
-        queryClient.invalidateQueries({
-          queryKey: ['entries', productionSiteId],
-        }),
-      ])
+      await invalidateQueryKeys(
+        queryClient,
+        router,
+        devEnvQueryKeys({ devSiteId, productionSiteId }),
+      )
       toast.success(m.dev_env_copy_success(), {
         description: result.warnings.length
-          ? result.warnings.join(' ')
+          ? result.warnings.map(warningText).join(' ')
           : undefined,
         action: {
           label: m.dev_env_copy_open(),
@@ -145,6 +147,7 @@ export function useCopyEntryAction({
   // Only a dev env has a sync status; the query stays off for production sites.
   const sync = useDevSyncStatus(devSiteId, { enabled: isDevelopment })
   const mutation = useCopyToProduction({
+    devSiteId,
     productionSiteId: productionSiteId ?? '',
     destination,
     save,

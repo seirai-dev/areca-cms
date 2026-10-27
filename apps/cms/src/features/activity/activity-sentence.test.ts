@@ -482,6 +482,18 @@ describe('activityText for development environments', () => {
     ).toBe('Sanne de Vries deleted the development environment')
   })
 
+  it('says a dev env was renamed, with its new slug', () => {
+    expect(
+      activityText(
+        row({
+          action: 'dev_env.rename',
+          targetType: 'site',
+          meta: { previousSlug: 'acme-dev', slug: 'acme-2-dev' },
+        }),
+      ),
+    ).toBe('Sanne de Vries renamed the development environment to acme-2-dev')
+  })
+
   it('counts the changes a push wrote, in the right plural', () => {
     expect(
       activityText(

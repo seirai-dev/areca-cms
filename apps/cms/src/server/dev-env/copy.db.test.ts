@@ -4,7 +4,8 @@ import { describe, expect, it } from 'vitest'
 import { COPY_CONFLICT_MESSAGE, COPY_UNLINKED_MESSAGE } from '#/lib/dev-env'
 import { db } from '#/db'
 import { collection, entry, entryRevision } from '#/db/schema'
-import type { Field } from '#/lib/types'
+import type { Field, SiteLanguages } from '#/lib/types'
+import { setSiteLanguages } from '#/server/admin/site-languages'
 import { upsertCollection } from '#/server/content/collections'
 import {
   createEntry,
@@ -358,7 +359,12 @@ describe.skipIf(!hasDb)('development environment: copy to production', () => {
       expect(about.clearedReferences).toEqual([
         { field: 'related', devTargetId: lonely.id },
       ])
-      expect(about.warnings.join(' ')).toContain('Reference cleared')
+      expect(about.warnings).toEqual([
+        expect.objectContaining({
+          code: 'reference-cleared',
+          params: expect.objectContaining({ field: 'related' }),
+        }),
+      ])
       expect(
         (await entryRow(ctx.site.id, 'posts', 'about'))?.draftData,
       ).not.toHaveProperty('related')
@@ -427,3 +433,169 @@ describe.skipIf(!hasDb)('development environment: copy to production', () => {
     })
   })
 })
+
+describe.skipIf(!hasDb)(
+  'development environment: copy URLs, ready and self-references',
+  () => {
+    it('refuses a localized URL that another production entry already uses, with a clear message', async () => {
+      await withTestSite(async (ctx) => {
+        await seedProduction(ctx)
+        const devId = await fork(ctx)
+        const actorId = ctx.actor.id
+        await createEntry({
+          siteId: ctx.site.id,
+          collectionKey: 'posts',
+          data: { title: 'Contact', slug: 'contact' },
+          actorId,
+        })
+        await setSiteLanguages(
+          devId,
+          { main: 'en', all: ['en', 'nl'] } satisfies SiteLanguages,
+          actorId,
+        )
+        await editEntry(
+          devId,
+          'posts',
+          'about',
+          {
+            title: 'About dev',
+            slug: 'about',
+            $i18n: { nl: { $slug: 'contact' } },
+          },
+          actorId,
+        )
+        const aboutDev = await devEntryId(devId, 'posts', 'about')
+
+        await expect(copy(actorId, aboutDev)).rejects.toThrow(
+          "The Dutch URL 'contact' is already used by 'Contact' in production.",
+        )
+        // Overwrite does not change a URL collision.
+        await expect(
+          copy(actorId, aboutDev, { overwrite: true }),
+        ).rejects.toThrow('already used by')
+        expect(
+          (await entryRow(ctx.site.id, 'posts', 'about'))?.draftData,
+        ).toMatchObject({ title: 'About v1' })
+      })
+    })
+
+    it('makes the copied draft the production ready version with markReady, even when dev has no ready version', async () => {
+      await withTestSite(async (ctx) => {
+        await seedProduction(ctx)
+        const devId = await fork(ctx)
+        const actorId = ctx.actor.id
+        await editEntry(
+          devId,
+          'posts',
+          'about',
+          { title: 'About draft', slug: 'about' },
+          actorId,
+        )
+
+        const result = await copy(
+          actorId,
+          await devEntryId(devId, 'posts', 'about'),
+          { markReady: true },
+        )
+        expect(result.warnings).toEqual([])
+        const prod = await entryRow(ctx.site.id, 'posts', 'about')
+        expect(prod?.status).toBe('published')
+        expect(prod?.publishedData).toMatchObject({ title: 'About draft' })
+        expect(prod?.draftData).toMatchObject({ title: 'About draft' })
+      })
+    })
+
+    it('copies the draft but keeps the production ready version when the draft fails strict validation', async () => {
+      await withTestSite(async (ctx) => {
+        const actorId = ctx.actor.id
+        await createTestCollection(ctx.site.id, {
+          key: 'guides',
+          fields: [
+            { key: 'title', label: 'Title', type: 'text', required: true },
+            { key: 'slug', label: 'Slug', type: 'slug', required: true },
+            { key: 'summary', label: 'Summary', type: 'text', required: true },
+          ],
+          routePattern: '/guides/$slug',
+        })
+        const guide = await createEntry({
+          siteId: ctx.site.id,
+          collectionKey: 'guides',
+          data: { title: 'Guide', slug: 'guide', summary: 'Old summary' },
+          actorId,
+        })
+        await publishEntry(guide.id, actorId)
+        const devId = await fork(ctx)
+        // The draft drops the required summary: a draft may, a ready version may not.
+        await editEntry(
+          devId,
+          'guides',
+          'guide',
+          { title: 'Guide dev', slug: 'guide' },
+          actorId,
+        )
+
+        const result = await copy(
+          actorId,
+          await devEntryId(devId, 'guides', 'guide'),
+          { markReady: true },
+        )
+        expect(result.warnings).toEqual([
+          expect.objectContaining({
+            code: 'ready-not-copied',
+            message: expect.stringContaining(
+              'Ready version not copied, production keeps its previous ready version',
+            ),
+          }),
+        ])
+        const prod = await entryRow(ctx.site.id, 'guides', 'guide')
+        expect(prod?.draftData).toMatchObject({ title: 'Guide dev' })
+        expect(prod?.status).toBe('published')
+        expect(prod?.publishedData).toMatchObject({
+          title: 'Guide',
+          summary: 'Old summary',
+        })
+      })
+    })
+
+    it('maps a self-reference to the production entry it is copied onto, when that entry was not forked', async () => {
+      await withTestSite(async (ctx) => {
+        await seedProduction(ctx)
+        const devId = await fork(ctx)
+        const actorId = ctx.actor.id
+        // Production gets the entry after the fork, so dev has no link to it.
+        await createEntry({
+          siteId: ctx.site.id,
+          collectionKey: 'posts',
+          data: { title: 'Contact v1', slug: 'contact' },
+          actorId,
+        })
+        const devContact = await createEntry({
+          siteId: devId,
+          collectionKey: 'posts',
+          data: { title: 'Contact dev', slug: 'contact' },
+          actorId,
+        })
+        const current = await getEntry(devContact.id)
+        await updateDraft(
+          devContact.id,
+          { title: 'Contact dev', slug: 'contact', related: devContact.id },
+          actorId,
+          current!.draftVersion,
+        )
+
+        await expect(copy(actorId, devContact.id)).rejects.toThrow(
+          COPY_UNLINKED_MESSAGE,
+        )
+        const result = await copy(actorId, devContact.id, { overwrite: true })
+        expect(result.created).toBe(false)
+        expect(result.clearedReferences).toEqual([])
+        const prod = await entryRow(ctx.site.id, 'posts', 'contact')
+        expect(prod?.id).toBe(result.productionId)
+        expect(prod?.draftData).toMatchObject({
+          title: 'Contact dev',
+          related: result.productionId,
+        })
+      })
+    })
+  },
+)

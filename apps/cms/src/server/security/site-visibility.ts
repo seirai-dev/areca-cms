@@ -1,6 +1,6 @@
-import { and, isNull, ne, notLike, or } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 
-import { auditLog, site as siteTable } from '#/db/schema'
+import { auditLog } from '#/db/schema'
 import { isDevSite } from '#/lib/site-environment'
 import { assertAdminMfa } from '#/lib/session.server'
 import { MfaRequiredError } from '#/lib/security-errors'
@@ -60,13 +60,10 @@ export async function assertSiteVisibleTo(
 }
 
 /**
- * Audit rows a non-admin may read. The query must left-join `site` on
- * `audit_log.site_id`. Rows of a dev env and the `dev_env.*` actions (fork,
- * refresh, push, copy, delete) are agency-only (Decision 22).
+ * Audit rows a non-admin may read: every row not flagged `agency_only`. The
+ * flag is set when the row is written (see `audit()`), so the filter needs no
+ * join and keeps working after a dev env and its `site_id` are deleted.
  */
 export function clientVisibleAuditFilter() {
-  return and(
-    or(isNull(siteTable.id), ne(siteTable.environment, 'development')),
-    notLike(auditLog.action, 'dev_env.%'),
-  )
+  return eq(auditLog.agencyOnly, false)
 }

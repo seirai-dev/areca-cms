@@ -3,10 +3,9 @@ import { ArrowsClockwise, UploadSimple } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
 import { Button } from '#/components/ui/button'
-import { ConfirmDialog } from '#/components/ui/confirm-dialog'
 import { Tag } from '#/components/ui/tag'
+import { ResetDevEnvConfirm } from '#/features/dev-env/reset-confirm'
 import { useDevSyncStatus } from '#/features/dev-env/use-push'
-import { resetDevEnvDescription } from '#/features/dev-env/reset-copy'
 import { useDevEnvironment } from '#/features/site-settings/use-dev-environment'
 import { errorMessage } from '#/lib/admin/helpers'
 import { findSite } from '#/lib/site-nav'
@@ -23,7 +22,6 @@ export function DevBanner({ me, site }: { me: Me; site: MeSite }) {
   const production = findSite(me, site.parentSiteId ?? undefined)
   const sync = useDevSyncStatus(site.id)
   const dev = useDevEnvironment(production?.id ?? site.id, false)
-  const unpushed = sync.data?.unpushedChanges ?? 0
   const productionChanges = sync.data?.productionChanges ?? 0
 
   return (
@@ -72,11 +70,8 @@ export function DevBanner({ me, site }: { me: Me; site: MeSite }) {
           <p className="min-w-0 flex-1 break-words">
             {m.dev_env_production_changed({ count: productionChanges })}
           </p>
-          <ConfirmDialog
-            title={m.dev_env_reset_title()}
-            description={resetDevEnvDescription(unpushed)}
-            confirmLabel={m.dev_env_reset_confirm()}
-            variant="destructive"
+          <ResetDevEnvConfirm
+            devSiteId={site.id}
             testId="dev-env-banner-reset-dialog"
             onConfirm={async () => {
               try {
@@ -97,7 +92,7 @@ export function DevBanner({ me, site }: { me: Me; site: MeSite }) {
               {dev.reset.isPending ? null : <ArrowsClockwise />}
               {m.dev_env_reset()}
             </Button>
-          </ConfirmDialog>
+          </ResetDevEnvConfirm>
         </div>
       ) : null}
     </div>

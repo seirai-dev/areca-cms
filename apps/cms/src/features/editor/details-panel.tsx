@@ -169,6 +169,7 @@ export function DetailsPanel({
         <StatusBlock
           entry={entry}
           live={live}
+          devSite={devSite}
           isNew={isNew}
           canManage={canManage}
           onCancelSchedule={onCancelSchedule}
@@ -381,6 +382,7 @@ function LanguageList({
 function StatusBlock({
   entry,
   live,
+  devSite,
   isNew,
   canManage,
   onCancelSchedule,
@@ -389,6 +391,7 @@ function StatusBlock({
 }: {
   entry: EntryRecord | null
   live: LiveMembership
+  devSite: boolean
   isNew: boolean
   canManage: boolean
   onCancelSchedule: () => void
@@ -401,6 +404,7 @@ function StatusBlock({
         <EntryPill
           entry={{ status: 'draft', updatedAt: new Date(0) }}
           live={live}
+          devSite={devSite}
           long
         />
         {languageRows && languageRows.length > 0 ? (
@@ -424,7 +428,13 @@ function StatusBlock({
     : null
   return (
     <div className="grid gap-3">
-      <EntryPill entry={entry} live={live} long testId="details-entry-status" />
+      <EntryPill
+        entry={entry}
+        live={live}
+        devSite={devSite}
+        long
+        testId="details-entry-status"
+      />
       {languageRows && languageRows.length > 0 ? (
         <LanguageList rows={languageRows} onSelect={onSelectLanguage} />
       ) : null}

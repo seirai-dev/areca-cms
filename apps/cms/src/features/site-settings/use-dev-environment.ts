@@ -9,6 +9,10 @@ import {
   getDevEnvironmentFn,
   refreshDevEnvironmentFn,
 } from '#/server/fn/dev-env'
+import {
+  devEnvQueryKeys,
+  invalidateQueryKeys,
+} from '#/features/dev-env/invalidate'
 
 /**
  * A production site's development environment (docs/design/dev-environments.md).
@@ -30,27 +34,32 @@ export function useDevEnvironment(siteId: string, enabled: boolean) {
     enabled,
   })
 
-  async function refresh() {
-    await queryClient.invalidateQueries({
-      queryKey: adminQueryKeys.devEnvironment(siteId),
-    })
-    // Reset and delete change what the push screen and the banner show.
-    await queryClient.invalidateQueries({ queryKey: ['dev-sync'] })
-    await queryClient.invalidateQueries({ queryKey: ['push-plan'] })
-    await router.invalidate()
+  /**
+   * Create, reset and delete change the dev env's status, the push screen and
+   * the banner. A reset also replaces the dev site's content and the production
+   * site's (the copy in the dev site is new), so both are refreshed.
+   */
+  async function refresh(devSiteId?: string) {
+    await invalidateQueryKeys(
+      queryClient,
+      router,
+      devSiteId
+        ? devEnvQueryKeys({ devSiteId, productionSiteId: siteId })
+        : [adminQueryKeys.devEnvironment(siteId), ['dev-sync'], ['push-plan']],
+    )
   }
 
   const createEnv = useMutation({
     mutationFn: () => create({ data: { siteId } }),
-    onSuccess: refresh,
+    onSuccess: () => refresh(),
   })
   const reset = useMutation({
     mutationFn: (devSiteId: string) => refreshFn({ data: { devSiteId } }),
-    onSuccess: refresh,
+    onSuccess: (_result, devSiteId) => refresh(devSiteId),
   })
   const remove = useMutation({
     mutationFn: (devSiteId: string) => deleteFn({ data: { devSiteId } }),
-    onSuccess: refresh,
+    onSuccess: () => refresh(),
   })
 
   return { status, createEnv, reset, remove }

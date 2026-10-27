@@ -21,6 +21,13 @@ export type ContentDefinition = {
 }
 
 /**
+ * Options of the schema writes used by a push. `validated`: the caller has
+ * validated the complete resulting definition set (validateContentDefinitions),
+ * so the single write skips its own check.
+ */
+export type WriteOptions = { validated?: boolean }
+
+/**
  * Validates collections and sites together: keys share one namespace, and
  * references may only target enabled collections (never sections).
  */

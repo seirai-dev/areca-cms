@@ -7,6 +7,13 @@
  */
 import { createHash } from 'node:crypto'
 
+import { NEVER_APPLIED_ATTENTION } from '#/lib/dev-env'
+import type { PlanAttentionCode, PlanTitleCode } from '#/lib/dev-env'
+import {
+  fieldContentKeys,
+  holdsAnyFieldKey,
+  withoutFieldKeys,
+} from '#/lib/field-content'
 import type {
   ContentKind,
   EntryData,
@@ -17,6 +24,9 @@ import type {
   SchemaSnapshotItem,
 } from '#/lib/types'
 
+import { findSlugCollisions } from './slug-collisions'
+import type { SlugCollision, SlugOwner } from './slug-collisions'
+
 export type PlanItemKind =
   | 'schema.add'
   | 'schema.change'
@@ -26,13 +36,8 @@ export type PlanItemKind =
   | 'entry.change'
   | 'entry.archive'
 
-export type PlanAttention =
-  | 'conflict'
-  | 'drops-content'
-  | 'main-language'
-  | 'scheduled'
-  | 'deleted-in-production'
-  | null
+/** Why an item needs attention, or null. See `PLAN_ATTENTION_CODES`. */
+export type PlanAttention = PlanAttentionCode | null
 
 export type PlanSummary = {
   /** Field keys that differ between the baseline and dev (entries), or whose definition differs (schema). */
@@ -41,8 +46,24 @@ export type PlanSummary = {
   draftChanged?: boolean
   /** Fields the item removes that hold production values, with the number of entries holding one. */
   droppedFields?: { key: string; values: number }[]
+  /**
+   * Entry rows only: fields a pending removal in the schema keeps in production
+   * for this entry. They are kept until the removal is applied.
+   */
+  preservedFields?: string[]
   /** Entries a main-language change stamps in production. */
   stampCount?: number
+  /**
+   * Schema items only: titles of affected production entries that are
+   * scheduled. Such an item cannot be applied until the schedule is resolved.
+   */
+  scheduledTitles?: string[]
+  /**
+   * Entry rows only: URLs (main or localized) that another production entry
+   * holds, or that another entry in the same push holds. The item cannot be
+   * applied until the URL changes in development.
+   */
+  slugCollisions?: SlugCollision[]
 }
 
 export type PlanItem = {
@@ -56,6 +77,8 @@ export type PlanItem = {
   title: string
   /** Collection label of an entry row. Not set for sections. Display only. */
   collectionLabel?: string
+  /** Set when the title is a fixed label the UI translates; `title` stays English. */
+  titleCode?: PlanTitleCode
   collectionKey: string | null
   /** Dev entry id, for entry items. */
   devId?: string
@@ -67,6 +90,17 @@ export type PlanItem = {
   productionId?: string
   /** Production `content_version` the plan saw for that entry. */
   productionContentVersion?: number
+  /**
+   * Plan item ids this item depends on. An entry whose field removal is pending
+   * in the schema depends on that `schema:<key>` item (see `summary.preservedFields`).
+   */
+  dependsOn?: string[]
+  /**
+   * Production entries a destructive schema item changes (a removal, or a
+   * removal of fields that hold content), with the `content_version` the plan
+   * saw. Part of the plan hash; a push verifies them under row locks.
+   */
+  affectedEntries?: { id: string; contentVersion: number }[]
 }
 
 export type Plan = { items: PlanItem[]; planHash: string }
@@ -96,6 +130,12 @@ export type PlanProductionEntry = {
   status: EntryStatus
   /** True when the production entry has a scheduled version. */
   scheduled: boolean
+  /** Row title the loader computed (entry title, or section label). Display only. */
+  title?: string
+  /** Stored versions, for which fields hold content. Optional: absent reads as empty. */
+  draftData?: EntryData
+  publishedData?: EntryData | null
+  scheduledData?: EntryData | null
 }
 
 export type PlanInput = {
@@ -189,6 +229,37 @@ type Built = {
   fingerprint: unknown
 }
 
+/**
+ * Production side of a collection for the plan. A disabled production
+ * collection counts as absent when `otherAbsent` (dev or the baseline has no
+ * such collection): the removal was pushed (or made in production), so it
+ * must not show up again.
+ */
+function productionSide(
+  def: SchemaSnapshotItem | undefined,
+  otherAbsent: boolean,
+): SchemaSnapshotItem | undefined {
+  return otherAbsent && def && def.enabled === false ? undefined : def
+}
+
+/** Production entries of one collection or section that a schema change would touch. */
+function affectedRows(
+  input: PlanInput,
+  key: string,
+  dropped: string[] | 'all',
+): PlanProductionEntry[] {
+  return input.productionEntries
+    .filter((row) => row.collectionKey === key)
+    .filter(
+      (row) =>
+        dropped === 'all' ||
+        holdsAnyFieldKey(row.draftData ?? null, dropped) ||
+        holdsAnyFieldKey(row.publishedData ?? null, dropped) ||
+        holdsAnyFieldKey(row.scheduledData ?? null, dropped),
+    )
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+}
+
 function schemaItems(input: PlanInput, base: SchemaSnapshot): Built[] {
   const keys = uniqueSorted([
     ...base.collections.map((def) => def.key),
@@ -199,9 +270,10 @@ function schemaItems(input: PlanInput, base: SchemaSnapshot): Built[] {
   for (const key of keys) {
     const b = findByKey(base.collections, key)
     const d = findByKey(input.dev.collections, key)
-    const p = findByKey(input.production.collections, key)
+    const pRaw = findByKey(input.production.collections, key)
     if (deepEqual(b, d)) continue
 
+    const p = productionSide(pRaw, d === undefined)
     const kind: PlanItemKind = !b
       ? 'schema.add'
       : !d
@@ -211,15 +283,38 @@ function schemaItems(input: PlanInput, base: SchemaSnapshot): Built[] {
     // Dev equal to production leaves nothing to resolve, so it is never a conflict.
     const conflict = productionChanged && !deepEqual(d, p)
     const dropped = droppedFields(
-      p?.fields ?? [],
+      pRaw?.fields ?? [],
       d?.fields ?? [],
       input.productionFieldUsage[key] ?? {},
     )
-    const attention: PlanAttention = conflict
-      ? 'conflict'
-      : dropped.length > 0
-        ? 'drops-content'
-        : null
+    // A removal archives every production entry of the collection; a field
+    // removal purges the entries that hold one of its values.
+    const rows =
+      kind === 'schema.remove'
+        ? affectedRows(input, key, 'all')
+        : dropped.length > 0
+          ? affectedRows(
+              input,
+              key,
+              dropped.map((drop) => drop.key),
+            )
+          : []
+    const affected = rows.map((row) => ({
+      id: row.id,
+      contentVersion: row.contentVersion,
+    }))
+    // A scheduled entry the change would touch blocks it: resolve the schedule first.
+    const scheduledTitles = rows
+      .filter((row) => row.scheduled)
+      .map((row) => row.title ?? row.slug)
+    const attention: PlanAttention =
+      scheduledTitles.length > 0
+        ? 'scheduled'
+        : conflict
+          ? 'conflict'
+          : dropped.length > 0 || (kind === 'schema.remove' && rows.length > 0)
+            ? 'drops-content'
+            : null
     const def = (d ?? b) as SchemaSnapshotItem
     built.push({
       item: {
@@ -230,10 +325,12 @@ function schemaItems(input: PlanInput, base: SchemaSnapshot): Built[] {
         summary: {
           changedFields: changedFieldKeys(b?.fields ?? [], d?.fields ?? []),
           ...(dropped.length > 0 ? { droppedFields: dropped } : {}),
+          ...(scheduledTitles.length > 0 ? { scheduledTitles } : {}),
         },
         devChanged: true,
         productionChanged,
         attention,
+        ...(affected.length > 0 ? { affectedEntries: affected } : {}),
       },
       fingerprint: { base: b ?? null, dev: d ?? null, prod: p ?? null },
     })
@@ -265,6 +362,7 @@ function languageItem(input: PlanInput, base: SchemaSnapshot): Built | null {
       kind: 'languages',
       title: 'Site languages',
       collectionKey: null,
+      titleCode: 'site-languages',
       summary: mainChanged ? { stampCount: input.stampCount } : {},
       devChanged: true,
       productionChanged,
@@ -279,19 +377,73 @@ function languageItem(input: PlanInput, base: SchemaSnapshot): Built | null {
 }
 
 /** Whether a dev entry differs from its baseline (or has none). */
-function entryChanged(dev: PlanEntry): boolean {
+function entryChanged(dev: PlanEntry, ignore: string[] = []): boolean {
   const base = dev.originBaseline
   if (!base) return true
   return (
     dev.slug !== base.slug ||
-    !deepEqual(dev.draftData, base.data) ||
+    !deepEqual(
+      withoutFieldKeys(dev.draftData, ignore),
+      withoutFieldKeys(base.data, ignore),
+    ) ||
     dev.publishedSlug !== base.publishedSlug ||
-    !deepEqual(dev.publishedData, base.publishedData) ||
+    !deepEqual(
+      withoutIgnored(dev.publishedData, ignore),
+      withoutIgnored(base.publishedData, ignore),
+    ) ||
     dev.status !== base.status
   )
 }
 
-function entrySummary(dev: PlanEntry): PlanSummary {
+/** Ready data without the ignored keys; null stays null. */
+function withoutIgnored(
+  data: EntryData | null,
+  ignore: string[],
+): EntryData | null {
+  return data == null ? null : withoutFieldKeys(data, ignore)
+}
+
+/** Field keys a production entry holds content for, in any stored version. */
+function heldFieldKeys(prod: PlanProductionEntry): Set<string> {
+  return new Set([
+    ...fieldContentKeys(prod.draftData),
+    ...fieldContentKeys(prod.publishedData),
+    ...fieldContentKeys(prod.scheduledData),
+  ])
+}
+
+/** Field keys production has and dev does not, for one collection (a field removal in dev). */
+export function removedFieldKeysOf(
+  input: Pick<PlanInput, 'dev' | 'production'>,
+  key: string,
+): string[] {
+  const p = findByKey(input.production.collections, key)
+  const d = findByKey(input.dev.collections, key)
+  if (!p || !d) return []
+  const kept = new Set(d.fields.map((field) => field.key))
+  return p.fields.map((field) => field.key).filter((k) => !kept.has(k))
+}
+
+/**
+ * Fields removed from a collection by a schema change in this plan (in
+ * production, not in dev), by collection key.
+ */
+function removedFieldKeys(
+  input: PlanInput,
+  schema: Built[],
+): Map<string, string[]> {
+  const removed = new Map<string, string[]>()
+  for (const { item } of schema) {
+    if (item.kind !== 'schema.change' || !item.collectionKey) continue
+    removed.set(
+      item.collectionKey,
+      removedFieldKeysOf(input, item.collectionKey),
+    )
+  }
+  return removed
+}
+
+function entrySummary(dev: PlanEntry, ignore: string[] = []): PlanSummary {
   const base = dev.originBaseline
   if (!base) {
     return {
@@ -300,15 +452,18 @@ function entrySummary(dev: PlanEntry): PlanSummary {
       readyChanged: dev.publishedData != null,
     }
   }
-  const draftChanged =
-    dev.slug !== base.slug || !deepEqual(dev.draftData, base.data)
+  const draft = withoutFieldKeys(dev.draftData, ignore)
+  const baseDraft = withoutFieldKeys(base.data, ignore)
+  const published = withoutIgnored(dev.publishedData, ignore)
+  const basePublished = withoutIgnored(base.publishedData, ignore)
+  const draftChanged = dev.slug !== base.slug || !deepEqual(draft, baseDraft)
   const readyChanged =
     dev.publishedSlug !== base.publishedSlug ||
-    !deepEqual(dev.publishedData, base.publishedData) ||
+    !deepEqual(published, basePublished) ||
     dev.status !== base.status
   const changedFields = uniqueSorted([
-    ...changedDataKeys(base.data, dev.draftData),
-    ...changedDataKeys(base.publishedData ?? {}, dev.publishedData ?? {}),
+    ...changedDataKeys(baseDraft, draft),
+    ...changedDataKeys(basePublished ?? {}, published ?? {}),
   ])
   return { changedFields, draftChanged, readyChanged }
 }
@@ -356,7 +511,11 @@ function entryCollectionLabel(
   )
 }
 
-function entryItems(input: PlanInput, addedKeys: Set<string>): Built[] {
+function entryItems(
+  input: PlanInput,
+  addedKeys: Set<string>,
+  removed: Map<string, string[]>,
+): Built[] {
   const productionById = new Map(
     input.productionEntries.map((row) => [row.id, row]),
   )
@@ -368,8 +527,14 @@ function entryItems(input: PlanInput, addedKeys: Set<string>): Built[] {
     const archive = dev.status === 'archived'
 
     if (dev.originEntryId != null) {
-      if (!entryChanged(dev)) continue
       const prod = productionById.get(dev.originEntryId)
+      // Fields a pending removal keeps in production for this entry. They are not
+      // a change: an entry whose only difference is one of them is not listed.
+      const held = prod && !archive ? heldFieldKeys(prod) : new Set<string>()
+      const preserved = (removed.get(dev.collectionKey) ?? []).filter((key) =>
+        held.has(key),
+      )
+      if (!entryChanged(dev, preserved)) continue
       if (!prod && archive) continue
       const productionChanged =
         !prod || prod.contentVersion !== dev.originContentVersion
@@ -386,6 +551,7 @@ function entryItems(input: PlanInput, addedKeys: Set<string>): Built[] {
           attention,
           productionChanged,
           collectionLabel: entryCollectionLabel(input, dev),
+          preservedFields: preserved,
         }),
       )
       continue
@@ -402,12 +568,21 @@ function entryItems(input: PlanInput, addedKeys: Set<string>): Built[] {
           row.slug === dev.slug,
       )
       if (!match && !addedKeys.has(dev.collectionKey)) continue
+      // Matched by key, the section was made in dev without a link: production
+      // holds a value the dev side never saw, so it is a conflict (Skip by
+      // default), and a schedule on it blocks it.
+      const attention: PlanAttention = !match
+        ? null
+        : match.scheduled
+          ? 'scheduled'
+          : 'conflict'
       built.push(
         entryBuilt(dev, match, {
           kind: 'entry.change',
-          attention: null,
-          productionChanged: false,
+          attention,
+          productionChanged: match !== undefined,
           collectionLabel: undefined,
+          preservedFields: [],
         }),
       )
       continue
@@ -423,6 +598,7 @@ function entryItems(input: PlanInput, addedKeys: Set<string>): Built[] {
         attention: null,
         productionChanged: false,
         collectionLabel: entryCollectionLabel(input, dev),
+        preservedFields: [],
       }),
     )
   }
@@ -437,8 +613,11 @@ function entryBuilt(
     attention: PlanAttention
     productionChanged: boolean
     collectionLabel: string | undefined
+    preservedFields: string[]
   },
 ): Built {
+  const preserved = options.preservedFields
+  const summary = entrySummary(dev, preserved)
   const item: PlanItem = {
     id: `entry:${dev.id}`,
     kind: options.kind,
@@ -448,7 +627,10 @@ function entryBuilt(
       : {}),
     collectionKey: dev.collectionKey,
     devId: dev.id,
-    summary: entrySummary(dev),
+    summary:
+      preserved.length > 0
+        ? { ...summary, preservedFields: preserved }
+        : summary,
     devChanged: true,
     productionChanged: options.productionChanged,
     attention: options.attention,
@@ -457,7 +639,62 @@ function entryBuilt(
     item.productionId = prod.id
     item.productionContentVersion = prod.contentVersion
   }
-  return { item, fingerprint: entryFingerprint(dev, prod) }
+  if (preserved.length > 0) {
+    item.dependsOn = [`schema:${dev.collectionKey}`]
+  }
+  return {
+    item,
+    fingerprint: { ...entryFingerprint(dev, prod), preserved },
+  }
+}
+
+/**
+ * Flags the entries a push would write under a URL that another entry holds:
+ * a production entry of the same collection (other than the item's own target),
+ * or another entry this plan writes. Apply is then disabled, so the URL must
+ * change in development. Changes `built` in place.
+ */
+function annotateSlugCollisions(input: PlanInput, built: Built[]) {
+  const devById = new Map(input.devEntries.map((row) => [row.id, row]))
+  const writes = built.flatMap(({ item }) => {
+    if (item.kind !== 'entry.new' && item.kind !== 'entry.change') return []
+    const dev = item.devId ? devById.get(item.devId) : undefined
+    return dev ? [{ item, dev }] : []
+  })
+  for (const write of writes) {
+    const { item, dev } = write
+    const production: SlugOwner[] = input.productionEntries
+      .filter(
+        (row) =>
+          row.collectionKey === item.collectionKey &&
+          row.id !== item.productionId,
+      )
+      .map((row) => ({
+        id: row.id,
+        title: row.title ?? row.slug,
+        slug: row.slug,
+        draftData: row.draftData ?? {},
+      }))
+    const pushed: SlugOwner[] = writes
+      .filter(
+        (other) =>
+          other !== write && other.item.collectionKey === item.collectionKey,
+      )
+      .map((other) => ({
+        id: other.item.id,
+        title: other.item.title,
+        slug: other.dev.slug,
+        draftData: other.dev.draftData,
+      }))
+    const collisions = findSlugCollisions(
+      { slug: dev.slug, draftData: dev.draftData },
+      [...production, ...pushed],
+    )
+    if (collisions.length === 0) continue
+    item.summary = { ...item.summary, slugCollisions: collisions }
+    // A scheduled production entry stays the reason: it is resolved first.
+    if (item.attention !== 'scheduled') item.attention = 'slug-taken'
+  }
 }
 
 /**
@@ -474,7 +711,8 @@ export function buildPlan(input: PlanInput): Plan {
       .map((entry) => entry.item.collectionKey ?? ''),
   )
   const languages = languageItem(input, base)
-  const entries = entryItems(input, addedKeys)
+  const entries = entryItems(input, addedKeys, removedFieldKeys(input, schema))
+  annotateSlugCollisions(input, entries)
   const built = [...schema, ...(languages ? [languages] : []), ...entries]
   const items = built.map((entry) => entry.item)
   const fingerprints = built
@@ -484,6 +722,8 @@ export function buildPlan(input: PlanInput): Plan {
       productionContentVersion: item.productionContentVersion ?? null,
       attention: item.attention,
       summary: item.summary,
+      dependsOn: item.dependsOn ?? null,
+      affectedEntries: item.affectedEntries ?? null,
       fingerprint,
     }))
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
@@ -491,8 +731,9 @@ export function buildPlan(input: PlanInput): Plan {
 }
 
 /**
- * Items a push applies. Undecided Needs-attention items are skipped, and
- * `scheduled` never applies (the production schedule must be resolved first).
+ * Items a push applies. Undecided Needs-attention items are skipped. `scheduled`
+ * and `slug-taken` never apply: the production schedule or the URL must be
+ * resolved first.
  */
 export function selectPlanItems(
   items: PlanItem[],
@@ -506,7 +747,7 @@ export function selectPlanItems(
     const take =
       !excluded.has(item.id) &&
       (item.attention === null ||
-        (item.attention !== 'scheduled' && applied.has(item.id)))
+        (!NEVER_APPLIED_ATTENTION.has(item.attention) && applied.has(item.id)))
     ;(take ? selected : skipped).push(item)
   }
   return { selected, skipped }
@@ -526,23 +767,34 @@ export function productionChangeCount(input: PlanInput): number {
   ])
   let count = 0
   for (const key of keys) {
-    if (
-      !deepEqual(
-        findByKey(base.collections, key),
-        findByKey(input.production.collections, key),
-      )
-    ) {
-      count += 1
-    }
+    const b = findByKey(base.collections, key)
+    const p = productionSide(
+      findByKey(input.production.collections, key),
+      b === undefined,
+    )
+    if (!deepEqual(b, p)) count += 1
   }
   if (!deepEqual(base.languages, input.production.languages)) count += 1
   const productionById = new Map(
     input.productionEntries.map((row) => [row.id, row]),
   )
+  const linked = new Set<string>()
   for (const dev of input.devEntries) {
     if (dev.originEntryId == null) continue
+    linked.add(dev.originEntryId)
     const prod = productionById.get(dev.originEntryId)
     if (!prod || prod.contentVersion !== dev.originContentVersion) count += 1
+  }
+  // A production entry a fork would copy (ready and not archived, or any
+  // section) that dev does not hold is a change too: a new one, or a ready one.
+  // Only collections dev has are counted; the schema covers the others.
+  const devKeys = new Set(input.dev.collections.map((def) => def.key))
+  for (const row of input.productionEntries) {
+    if (linked.has(row.id) || !devKeys.has(row.collectionKey)) continue
+    const forkable =
+      row.collectionKind === 'global' ||
+      (row.status !== 'archived' && row.publishedData != null)
+    if (forkable) count += 1
   }
   return count
 }
@@ -561,9 +813,10 @@ export function collectionsMatchProduction(
   ])
   const matches: Record<string, boolean> = {}
   for (const key of keys) {
+    const d = findByKey(input.dev.collections, key)
     matches[key] = deepEqual(
-      findByKey(input.dev.collections, key),
-      findByKey(input.production.collections, key),
+      d,
+      productionSide(findByKey(input.production.collections, key), !d),
     )
   }
   return matches

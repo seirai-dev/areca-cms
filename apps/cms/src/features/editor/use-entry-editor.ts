@@ -23,6 +23,7 @@ import {
 import type { FieldErrorMap } from '#/lib/content/utils'
 import { isEditedSinceReady } from '#/features/golive/entry-live-state'
 import { useGoLive, useInvalidateGoLive } from '#/features/golive/use-go-live'
+import { invalidateDevSync } from '#/features/dev-env/invalidate'
 import type { EntryData, EntryStatus, Field } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 import type { LocaleBlocker } from './language-state'
@@ -440,6 +441,8 @@ export function useEntryEditor({
         id
           ? queryClient.invalidateQueries({ queryKey: queryKeys.revisions(id) })
           : null,
+        // On a development site the sync status counts these changes.
+        invalidateDevSync(queryClient, siteId),
         invalidateGoLiveRef.current(),
       ]),
     [queryClient, siteId, collectionKey],
