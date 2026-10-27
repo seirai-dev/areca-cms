@@ -9,6 +9,7 @@ import {
   ClockCounterClockwise,
   DotsThree,
   Eye,
+  UploadSimple,
   WarningCircle,
 } from '@phosphor-icons/react'
 
@@ -27,6 +28,7 @@ import { EntryPillView } from '#/features/collection/entry-pill'
 import { SaveIndicator } from '#/features/editor/save-indicator'
 import { ScheduleForm } from '#/features/editor/schedule-form'
 import type { SaveStatus } from '#/features/editor/use-entry-editor'
+import type { CopyEntryAction } from '#/features/dev-env/use-copy-to-production'
 import { editorPublishReason } from '#/features/golive/golive-tray'
 import { useIsMobile } from '#/hooks/use-mobile'
 import type { EntryUiStatus } from '#/lib/status'
@@ -81,6 +83,7 @@ export function GlobalEditorTopBar({
   onOpenHistory,
   languageBar,
   readyBlock = null,
+  copyAction = null,
 }: {
   siteId: string
   label: string
@@ -128,6 +131,8 @@ export function GlobalEditorTopBar({
    * clickable.
    */
   readyBlock?: { message: string; onFix: () => void } | null
+  /** Copy to production as a draft (development environments only; null elsewhere). */
+  copyAction?: CopyEntryAction | null
 }) {
   const mobile = useIsMobile()
   // Ready, unchanged since: the button says so and stays disabled.
@@ -362,6 +367,28 @@ export function GlobalEditorTopBar({
                   <ArrowUUpLeft />
                   {m.globals_discard_draft()}
                 </DropdownMenuItem>
+                {copyAction ? (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      disabled={
+                        copyAction.blockedReason !== null ||
+                        copyAction.pending ||
+                        busy
+                      }
+                      onSelect={copyAction.copy}
+                      data-testid="copy-to-production"
+                    >
+                      <UploadSimple />
+                      {m.dev_env_copy_menu()}
+                    </DropdownMenuItem>
+                    {copyAction.blockedReason ? (
+                      <DropdownMenuLabel className="max-w-64 pt-1 pb-1 text-caption font-normal tracking-normal whitespace-normal normal-case">
+                        {copyAction.blockedReason}
+                      </DropdownMenuLabel>
+                    ) : null}
+                  </>
+                ) : null}
                 {canManage && canSchedule ? (
                   <>
                     <DropdownMenuSeparator />

@@ -45,3 +45,6 @@ export const MAX_SITE_LANGUAGES = 20
 export const MANIFEST_MAX_BYTES = 256 * 1024
 export const MANIFEST_MAX_COLLECTIONS = 100
 export const MAX_FIELDS_PER_COLLECTION = 100
+
+/** Entries one bulk entry action (publish, unpublish, archive, delete) may name. */
+export const BULK_ENTRY_MAX_IDS = 200

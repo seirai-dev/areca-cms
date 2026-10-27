@@ -43,6 +43,7 @@ import {
   entryUiStatus,
   isEditedSinceReady,
 } from '#/features/golive/entry-live-state'
+import { useCopyEntryAction } from '#/features/dev-env/use-copy-to-production'
 import { useReleaseStatus } from '#/features/golive/use-release-status'
 import { QueryError } from '#/components/ui/query-error'
 import { Skeleton } from '#/components/ui/skeleton'
@@ -278,6 +279,17 @@ function GlobalEditorView({
 
   useShortcut('mod+s', () => void editor.save())
 
+  // Copy to production: dev envs only (docs/design/dev-environments.md, Decision 18).
+  const copyAction = useCopyEntryAction({
+    devSiteId: siteId,
+    productionSiteId: site.parentSiteId,
+    isDevelopment: devSite,
+    collectionKey: global.key,
+    destination: { kind: 'global', globalKey: global.key },
+    devEntryId: entryId,
+    save: editor.save,
+  })
+
   if (editor.loading || !entry) return <GlobalEditorSkeleton />
 
   const uiStatus = entryUiStatus(entry, live, devSite)
@@ -369,6 +381,7 @@ function GlobalEditorView({
         <GlobalEditorTopBar
           languageBar={languageBar}
           readyBlock={readyBlock}
+          copyAction={copyAction}
           siteId={siteId}
           label={global.label}
           uiStatus={uiStatus}

@@ -29,6 +29,7 @@ import {
   entryUiStatus,
   isEditedSinceReady,
 } from '#/features/golive/entry-live-state'
+import { useCopyEntryAction } from '#/features/dev-env/use-copy-to-production'
 import { canGoLive } from '#/features/golive/go-live-gate'
 import { useReleaseStatus } from '#/features/golive/use-release-status'
 import { usePanel } from '#/features/shell/panel'
@@ -412,6 +413,17 @@ function EntryEditorView({
     return () => observer.disconnect()
   }, [editor.loading])
 
+  // Copy to production: dev envs only (docs/design/dev-environments.md, Decision 18).
+  const copyAction = useCopyEntryAction({
+    devSiteId: siteId,
+    productionSiteId: site.parentSiteId,
+    isDevelopment: isDev,
+    collectionKey: collection.key,
+    destination: { kind: 'collection', collectionKey: collection.key },
+    devEntryId: editor.entryId,
+    save: editor.save,
+  })
+
   if (routeEntryId && editor.entryQuery.isError && !entry) {
     return (
       <div
@@ -639,6 +651,7 @@ function EntryEditorView({
         <EditorTopBar
           languageBar={languageBar}
           readyBlock={readyBlock}
+          copyAction={copyAction}
           siteId={siteId}
           collectionKey={collection.key}
           collectionLabel={collection.label}

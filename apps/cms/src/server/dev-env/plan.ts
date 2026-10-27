@@ -546,3 +546,25 @@ export function productionChangeCount(input: PlanInput): number {
   }
   return count
 }
+
+/**
+ * Whether each collection or section matches production exactly: same key and
+ * kind, and the same definition down to every field. A copy to production is
+ * refused for a collection that does not match ("Push the schema first.").
+ */
+export function collectionsMatchProduction(
+  input: Pick<PlanInput, 'dev' | 'production'>,
+): Record<string, boolean> {
+  const keys = uniqueSorted([
+    ...input.dev.collections.map((def) => def.key),
+    ...input.production.collections.map((def) => def.key),
+  ])
+  const matches: Record<string, boolean> = {}
+  for (const key of keys) {
+    matches[key] = deepEqual(
+      findByKey(input.dev.collections, key),
+      findByKey(input.production.collections, key),
+    )
+  }
+  return matches
+}

@@ -9,7 +9,11 @@ import { NotFoundError } from '#/server/content/errors'
 import { fieldKeyUsage } from '#/server/content/field-data'
 import { isDevSite } from '#/server/security/site-visibility'
 
-import { buildPlan, productionChangeCount } from './plan'
+import {
+  buildPlan,
+  collectionsMatchProduction,
+  productionChangeCount,
+} from './plan'
 import type { Plan, PlanInput } from './plan'
 import { schemaSnapshot } from './schema-snapshot'
 
@@ -174,5 +178,7 @@ export async function getDevSiteSyncStatus(devSiteId: string) {
   return {
     unpushedChanges: buildPlan(context.planInput).items.length,
     productionChanges: productionChangeCount(context.planInput),
+    /** Per collection or section: does it match production (copy to production needs it)? */
+    schemaMatches: collectionsMatchProduction(context.planInput),
   }
 }

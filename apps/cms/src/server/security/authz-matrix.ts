@@ -600,6 +600,22 @@ export const ROWS: Row[] = [
     },
   },
   {
+    name: 'bulkEntryActionFn',
+    hidden: true,
+    fn: contentFns.bulkEntryActionFn,
+    policy: 'org-owner',
+    prepare: async (w) => {
+      const e = await w.fresh.entry('X')
+      return {
+        data: { siteId: w.X.site.id, action: 'archive', ids: [e.id] },
+        untouched: entryUntouched(e.id, {
+          status: 'draft',
+          draftVersion: e.draftVersion,
+        }),
+      }
+    },
+  },
+  {
     name: 'listRevisionsFn',
     hidden: true,
     fn: contentFns.listRevisionsFn,
@@ -1796,6 +1812,31 @@ export const ROWS: Row[] = [
           exclude: [],
           apply: [],
           goLive: false,
+        },
+        untouched: async () => {
+          const [row] = await db
+            .select({ lastPushedAt: site.lastPushedAt })
+            .from(site)
+            .where(eq(site.id, dev.id))
+          return row?.lastPushedAt == null
+        },
+      }
+    },
+  },
+  {
+    name: 'copyEntryToProductionFn',
+    fn: devEnvFns.copyEntryToProductionFn,
+    policy: 'agency-fresh',
+    tolerant: true,
+    prepare: async (w) => {
+      const s = await w.fresh.site()
+      const dev = await forkDevEnvironment(w.users.adminMfa, s.id)
+      return {
+        // No such entry: an admin gets NotFound, which is a tolerant "allowed".
+        data: {
+          devEntryId: 'missing-entry',
+          markReady: false,
+          overwrite: false,
         },
         untouched: async () => {
           const [row] = await db

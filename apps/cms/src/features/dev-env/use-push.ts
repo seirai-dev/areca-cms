@@ -19,11 +19,12 @@ export function usePushPlan(devSiteId: string) {
 }
 
 /** Unpushed and production change counts for the dev banner and reset confirm. */
-export function useDevSyncStatus(devSiteId: string) {
+export function useDevSyncStatus(devSiteId: string, { enabled = true } = {}) {
   const getSync = useServerFn(getDevSiteSyncStatusFn)
   return useQuery({
     queryKey: adminQueryKeys.devSync(devSiteId),
     queryFn: () => getSync({ data: { devSiteId } }),
+    enabled,
   })
 }
 

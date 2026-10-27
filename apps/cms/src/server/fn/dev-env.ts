@@ -12,6 +12,8 @@ import { getDevEnvironmentStatus } from '#/server/dev-env/status'
 import { getDevSiteSyncStatus, loadPlan } from '#/server/dev-env/load-plan'
 import { db } from '#/db'
 import { pushDevEnvironment } from '#/server/dev-env/push'
+import { copyEntryToProduction } from '#/server/dev-env/copy'
+import { ID_MAX_LENGTH } from '#/lib/content-limits'
 
 // Dev environments are agency-only and throwaway, so these take no step-up
 // (docs/design/dev-environments.md, Decision 6).
@@ -74,6 +76,22 @@ export const pushToProductionFn = createServerFn({
   .handler(async ({ data }) => {
     const session = await requireFreshAgencyAdmin()
     return pushDevEnvironment(session.user, data)
+  })
+
+export const copyEntryToProductionFn = createServerFn({
+  method: 'POST',
+  ...devEnvFn,
+})
+  .validator(
+    z.object({
+      devEntryId: z.string().min(1).max(ID_MAX_LENGTH),
+      markReady: z.boolean().default(false),
+      overwrite: z.boolean().default(false),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const session = await requireFreshAgencyAdmin()
+    return copyEntryToProduction(session.user, data)
   })
 
 export const createDevEnvironmentFn = createServerFn({
