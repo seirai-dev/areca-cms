@@ -3,7 +3,7 @@ title: MCP endpoint and tools
 description: The per-site MCP connector URL, OAuth 2.1 sign-in (discovery, registration, PKCE, resource indicators, scopes and token lifetimes), personal keys, every tool with its inputs and who can call it, the field formats, SEO limits, errors and rate limit.
 ---
 
-This is the technical reference for the per-site MCP endpoint. Editors who want to connect an AI app should start with [Connect AI](/docs/cms/connect-ai). This page is for developers, agency admins and anyone who writes their own MCP client or checks what an AI app is allowed to do.
+This is the technical reference for the MCP endpoints. Editors who want to connect an AI app should start with [Connect AI](/docs/cms/connect-ai). Agency admins who work across many clients can use the [agency connector](/docs/cms/agency-connector), which is one address for every site. This page is for developers, agency admins and anyone who writes their own MCP client or checks what an AI app is allowed to do.
 
 Each site has its own connector URL. AI apps sign in with OAuth 2.1 in the browser, so no secret is pasted into the app. Personal keys still work for scripts and for clients that cannot sign in through a browser. The endpoint belongs to the CMS, not to a site project, so it never uses the site token or the schema token. See [tokens](/docs/security/tokens).
 
@@ -13,6 +13,7 @@ Each site has its own connector URL. AI apps sign in with OAuth 2.1 in the brows
 | --- | --- |
 | Connector URL | `https://<your CMS>/api/mcp/<site-slug>`. One per site. The **Connector URL** on the Connect AI page shows the exact value, built from `APP_URL`. |
 | Key endpoint | `https://<your CMS>/api/mcp`. Accepts personal keys only. The key's site is the one it serves. |
+| Agency connector | `https://<your CMS>/api/agency/mcp`. For agency admins only, for every client and site. Each call names its site with the `site` argument. See [Agency connector](#agency-connector). |
 | Methods | `POST`, `GET` and `DELETE` (Streamable HTTP) |
 | Transport | MCP Streamable HTTP in stateless mode. Each request stands alone and no session ID is needed. Responses are JSON, not event streams. |
 | Protocol | MCP `2026-07-28`. Clients that use the 2025 protocol revisions are served too, statelessly. |
@@ -130,6 +131,43 @@ An agency admin whose account has no two-factor sign-in is refused with HTTP `40
 
 The role is read from the database on each request, so a change of role applies to the next request. The **Last used** time on a key is updated at most once a minute.
 
+## Agency connector
+
+The agency connector at `https://<your CMS>/api/agency/mcp` gives one AI app access to every client and site an agency admin can manage, production and development. The tools are the same as the per-site tools below, with one difference: every site tool takes a required `site` argument, the site's slug, and every result includes a `site` object (`slug`, `name`, `client`, `environment`).
+
+Agency admins sign in with an app connection (OAuth) or with a personal agency key created on **Agency › Connect AI**. Keys last 30 days, 90 days, 1 year or never. Both need two-factor sign-in on the account. Anyone who is not an agency admin gets the same `404 {"error":"Site not found"}` that an unknown address gets. A site key sent to this address is refused, and an agency key sent to a site's connector is refused with `401`.
+
+### Navigation tools
+
+These tools exist only on the agency connector. They are read-only and find the `site` value for the other tools.
+
+| Tool | Inputs | What it returns |
+| --- | --- | --- |
+| `list_clients` | none | The clients you can reach, with `slug`, `name` and `sites` (how many sites each has). |
+| `list_sites` | `client?` (a client slug or name, from `list_clients`) | One row per site, production and development: `slug`, `name`, `client`, `environment`, `linked` (the production site of a development environment, or its development environment), `publishingMode`, `live` and `pendingReadyChanges`. |
+| `find_site` | `query*` (text) | The same rows as `list_sites` for sites whose name, slug, client name or production URL contains the text, up to 50 (`truncated` is set when there are more). |
+
+### Environment rules
+
+Every agency tool is listed, whatever kind of site it is for. A call is checked against the site it names:
+
+- Tools for production only (go live, rollback, cancel build, release and build status, schedule and cancel schedule, and `create_dev_environment`) are refused on a development environment. For release tools the refusal says to push to production first. For scheduling it says scheduling is not available on development environments.
+- Tools for development only (`refresh_from_production`, `push_to_production`, `copy_entry_to_production`) are refused on a production site. The refusal says to use the site's development environment slug from `list_sites`.
+
+A refusal is a normal tool result with `isError: true`, so the model can explain it and choose the other site.
+
+### Going live
+
+Per-site connectors need the **Allow going live** tick. The agency connector does not: an agency admin's connection can use `go_live`, `rollback`, `cancel_build`, `schedule_entry` and `cancel_schedule` on production sites without it. The OAuth consent screen for the agency connector therefore has no tick box, and says the app can "read and change every client and site, including production, and go live". Per-site connections and keys are unchanged.
+
+Production writes over the agency connector are not blocked. The server instructions ask the model to name the client and the site, and to get the user's confirmation before a production change.
+
+### Rules and audit
+
+- **Rate limit.** The same budget as the per-site connectors, 120 requests a minute for each key or connection, shared across all sites. The per-IP budget applies too.
+- **Revocation.** A key or connection stops working as soon as its owner is no longer an agency admin, is blocked, or loses the second factor. Demoting an agency admin also revokes their agency keys and connections at once.
+- **Audit.** Each change is written to the audit log for the site it changed, with the agency connector as its source and the name of the key or connection that made the call.
+
 ## Access levels
 
 Tools are registered per request, based on the caller's current role. A tool that the caller cannot use is not listed by `tools/list`, and calling it by name returns an error.
@@ -138,7 +176,7 @@ Tools are registered per request, based on the caller's current role. A tool tha
 | --- | --- | --- |
 | Everyone | Any member of the site, including editors | All read tools, drafts, uploads, alt text, preview |
 | Owner | Owners, and agency admins | Workflow, delete, Library delete |
-| Go live | A connected app or key allowed to publish, held by an owner or agency admin | `go_live`, `rollback`, `cancel_build` |
+| Go live | A connected app or key allowed to publish, held by an owner or agency admin. On the [agency connector](#agency-connector) no flag is needed. | `go_live`, `rollback`, `cancel_build`, `schedule_entry`, `cancel_schedule` (on production sites) |
 | Agency | Agency admins only | `upsert_collection`, `delete_collection`, `set_publishing_mode`, and the development environment tools |
 
 The publishing permission is ignored for editors. Both the app's flag and the user's live role are checked on each request.
@@ -230,13 +268,13 @@ If the site syncs its content types from code, the next manifest push replaces c
 
 ### Development environments (agency admins)
 
-A production site can have one development environment. Agency admins work in it first and push the reviewed changes to production. Its connector URL is `site.devEnvironment.connectorUrl` in `get_site_info`, which the production connector gives. The production connector offers `create_dev_environment`. The development connector offers the tools below, and does not offer the publishing tools (`go_live`, `rollback`, `cancel_build`, `list_publications`, `get_release_status`, `get_build_job`) or the schedule tools. See [Development environments](/docs/cms/development-environments) for the workflow.
+A production site can have one development environment. Agency admins work in it first and push the reviewed changes to production. Its connector URL is `site.devEnvironment.connectorUrl` in `get_site_info`, which the production connector gives. The production connector offers `create_dev_environment`. The development connector offers the tools below, and does not offer the publishing tools (`go_live`, `rollback`, `cancel_build`, `list_publications`, `get_release_status`, `get_build_job`) or the schedule tools. On the [agency connector](#agency-connector) the same tools are listed for every site, and you pass the development environment's slug as `site`. See [Development environments](/docs/cms/development-environments) for the workflow.
 
 | Tool | Connector | Inputs | What it does |
 | --- | --- | --- | --- |
 | `create_dev_environment` | Production | `confirm` (must be `true`) | Creates the development environment, with the production schema and ready content. Returns its slug and connector URL. Never returns tokens; they are shown once, in the browser that created the environment. For a missed token, rotate it in Settings › Developer on the development site. |
 | `refresh_from_production` | Development | `confirm` (must be `true`) | Replaces the development environment's content with production's. Unpushed changes are discarded; the result says how many. |
-| `push_to_production` | Development | `dryRun` (default `true`), `planHash`, `exclude`, `apply`, `goLive` | With `dryRun` true, lists every change with its needs-attention items and a `planHash`, and writes nothing. With `dryRun` false and the `planHash`, pushes the changes that were not excluded. Needs-attention items are pushed only when listed in `apply`. `goLive` starts a production build and needs the go-live permission. Refused with "The plan changed" when the plan moved since the dry run. |
+| `push_to_production` | Development | `dryRun` (default `true`), `planHash`, `exclude`, `apply`, `goLive` | With `dryRun` true, lists every change with its needs-attention items and a `planHash`, and writes nothing. With `dryRun` false and the `planHash`, pushes the changes that were not excluded. Needs-attention items are pushed only when listed in `apply`. Items marked `scheduled` or `slug-taken` cannot be applied. `goLive` starts a production build and needs the go-live permission. Refused with "The plan changed" when the plan moved since the dry run. |
 | `copy_entry_to_production` | Development | `id` (required), `markReady`, `overwrite` | Copies one development entry into production as its draft. The live version does not change unless `markReady` is true, which also makes the copied draft the production ready version (ready is not live; a release is still needed). Refused on a schema mismatch, on a production change since the last sync unless `overwrite` is true, and when a URL is used by another production entry. |
 
 ### Prompt
@@ -391,7 +429,7 @@ The import is recorded in the activity log as an upload ("uploaded … to the Li
 
 ## Activity and audit
 
-Every change made through a connected app or a personal key is recorded as the user it acts for, with the app's name (or the key's name), so it appears as **via AI · name** in the activity log. Connecting an app to a site is recorded as `mcp_connection.create` and disconnecting it as `mcp_connection.revoke`; personal keys are recorded as `mcp_key.create` and `mcp_key.revoke`. The log stores the action and the name, not the text of the content.
+Every change made through a connected app or a personal key is recorded as the user it acts for, with the app's name (or the key's name), so it appears as **via AI · name** in the activity log. Changes made through the [agency connector](#agency-connector) are recorded with the agency connector as their source and the name of the key or connection. Connecting an app to a site is recorded as `mcp_connection.create` and disconnecting it as `mcp_connection.revoke`; personal keys are recorded as `mcp_key.create` and `mcp_key.revoke`. The log stores the action and the name, not the text of the content. Changes to a development environment are visible to agency admins only.
 
 ## Related
 

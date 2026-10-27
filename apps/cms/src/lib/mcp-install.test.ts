@@ -1,16 +1,20 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  AGENCY_SERVER_NAME,
   claudeCodeCommand,
   claudeCodeConnectCommand,
   claudeDesktopConfig,
+  connectServerName,
   connectSetupPrompt,
+  connectSetupPromptFor,
   connectorJsonConfig,
   cursorConnectLink,
   cursorInstallLink,
   genericMcpConfig,
   mcpServerName,
   setupPrompt,
+  setupPromptFor,
   skillsInstallCommand,
   vscodeConnectLink,
   vscodeInstallLink,
@@ -217,5 +221,46 @@ describe('skillsInstallCommand', () => {
     ).toBe(
       'npx @areca-cms/skills --mcp-url https://cms.example.com/api/mcp/acme-site',
     )
+  })
+
+  it('emits the agency connector URL that packages/skills accepts', () => {
+    // packages/skills/src/skills.test.ts pins this same literal and validates it.
+    expect(skillsInstallCommand('https://cms.example.com/api/agency/mcp')).toBe(
+      'npx @areca-cms/skills --mcp-url https://cms.example.com/api/agency/mcp',
+    )
+  })
+})
+
+describe('connect targets', () => {
+  it('names the server per site or for the agency connector', () => {
+    expect(
+      connectServerName({ kind: 'site', name: 'Acme', slug: 'acme-site' }),
+    ).toBe('areca-acme-site')
+    expect(connectServerName({ kind: 'agency' })).toBe(AGENCY_SERVER_NAME)
+    expect(AGENCY_SERVER_NAME).toBe('areca-agency')
+  })
+
+  it('keeps the site prompts unchanged', () => {
+    const target = { kind: 'site' as const, name: 'Acme', slug: 'acme-site' }
+    expect(setupPromptFor(target, input)).toBe(
+      setupPrompt({ siteName: 'Acme', url: input.url, key: input.key }),
+    )
+    expect(connectSetupPromptFor(target, { url: input.url })).toBe(
+      connectSetupPrompt({ siteName: 'Acme', url: input.url }),
+    )
+  })
+
+  it('tells the model about the site argument for the agency connector', () => {
+    const agency = { kind: 'agency' as const }
+    const prompt = setupPromptFor(agency, input)
+    expect(prompt).toContain(input.url)
+    expect(prompt).toContain(`Authorization: Bearer ${input.key}`)
+    expect(prompt).toContain('"site" argument')
+    expect(prompt).toContain('list_sites')
+
+    const signIn = connectSetupPromptFor(agency, { url: input.url })
+    expect(signIn).toContain(input.url)
+    expect(signIn).toContain('"site" argument')
+    expect(signIn).not.toContain('Authorization')
   })
 })

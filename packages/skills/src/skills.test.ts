@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { inflateRawSync } from 'node:zlib'
 import { describe, expect, it } from 'vitest'
-import { AGENTS, mcpServerName, validateConnectorUrl } from './agents.js'
+import { AGENTS, isAgencyConnectorUrl, mcpServerName, validateConnectorUrl } from './agents.js'
 import { run } from './cli.js'
 import { exportZips, installSkills, removeSkills, resolveTargets } from './install.js'
 import { configureMcp } from './mcp-config.js'
@@ -11,6 +11,7 @@ import { loadSkills, skillsRoot } from './skills.js'
 import { createZip } from './zip.js'
 
 const URL_ = 'https://cms.example.com/api/mcp/acme-site'
+const AGENCY_URL = 'https://cms.example.com/api/agency/mcp'
 const tmp = () => mkdtempSync(join(tmpdir(), 'areca-skills-'))
 const byId = (...ids: string[]) => ids.map((id) => AGENTS.find((agent) => agent.id === id)!)
 const readJson = (path: string) => JSON.parse(readFileSync(path, 'utf8'))
@@ -91,6 +92,43 @@ describe('agents', () => {
     expect(validateConnectorUrl(URL_)).toBeUndefined()
     expect(validateConnectorUrl('https://cms.example.com/api/mcp')).toBeTruthy()
     expect(validateConnectorUrl('nope')).toBeTruthy()
+  })
+
+  it('names and accepts the agency connector URL, with or without a trailing slash', () => {
+    expect(mcpServerName(AGENCY_URL)).toBe('areca-agency')
+    expect(mcpServerName(`${AGENCY_URL}/`)).toBe('areca-agency')
+    expect(isAgencyConnectorUrl(AGENCY_URL)).toBe(true)
+    expect(validateConnectorUrl(AGENCY_URL)).toBeUndefined()
+    expect(validateConnectorUrl(`${AGENCY_URL}/`)).toBeUndefined()
+    expect(validateConnectorUrl('http://localhost:3000/api/agency/mcp')).toBeUndefined()
+  })
+
+  it('keeps site URLs unchanged and not agency', () => {
+    expect(isAgencyConnectorUrl(URL_)).toBe(false)
+    expect(validateConnectorUrl(`${URL_}/`)).toBeUndefined()
+    expect(mcpServerName('https://cms.example.com/api/mcp/acme-site/')).toBe('areca-acme-site')
+  })
+
+  it('rejects junk around the agency path and names both forms in the error', () => {
+    for (const bad of [
+      'https://cms.example.com/api/agency/mcp/extra',
+      'https://cms.example.com/api/agency',
+      'https://cms.example.com/api/agency/',
+      'ftp://cms.example.com/api/agency/mcp',
+    ]) {
+      expect(validateConnectorUrl(bad), bad).toBeTruthy()
+    }
+    const message = validateConnectorUrl('https://cms.example.com/api/mcp')!
+    expect(message).toContain('/api/mcp/<site-slug>')
+    expect(message).toContain('/api/agency/mcp')
+  })
+
+  it('matches the command the CMS prints for the agency page', () => {
+    // Same literal as apps/cms/src/lib/mcp-install.test.ts (skillsInstallCommand); keep them in sync.
+    const command = 'npx @areca-cms/skills --mcp-url https://cms.example.com/api/agency/mcp'
+    const url = command.split(' --mcp-url ')[1]!
+    expect(validateConnectorUrl(url)).toBeUndefined()
+    expect(mcpServerName(url)).toBe('areca-agency')
   })
 })
 
@@ -190,6 +228,14 @@ describe('cli', () => {
       url: URL_,
       enabled: true,
     })
+  })
+
+  it('registers the agency connector under areca-agency', async () => {
+    const cwd = tmp()
+    expect(await run(['mcp', '-a', 'cursor', '--url', AGENCY_URL, '-y'], cwd)).toBe(0)
+    expect(readJson(join(cwd, '.cursor/mcp.json')).mcpServers['areca-agency']).toEqual({ url: AGENCY_URL })
+    expect(await run(['add', '-a', 'cursor', '--mcp-url', `${AGENCY_URL}/`, '-y'], cwd)).toBe(0)
+    expect(await run(['add', '-a', 'cursor', '--mcp-url', `${AGENCY_URL}/extra`, '-y'], cwd)).toBe(1)
   })
 
   it('exports zips for chat apps and rejects unknown agents', async () => {

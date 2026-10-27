@@ -13,6 +13,7 @@ import {
 import { AGENCY_NAVIGATION } from './agency-navigation'
 import {
   AGENCY_TOOL_EXCEPTIONS,
+  SITE_NOTE,
   agencyServerInstructions,
   registerAgencyTools,
 } from './agency-server'
@@ -20,7 +21,14 @@ import type { AgencyPrincipal, McpActor } from './keys'
 import { registerPerSiteTools } from './server'
 import type { McpSiteContext } from './site-context'
 import { SITE_TOOLS } from './tool-catalog'
-import { DEVELOPMENT_ONLY, PRODUCTION_ONLY } from './tool-kit'
+import {
+  AGENCY_GO_LIVE_NOTE,
+  DEVELOPMENT_ONLY,
+  GO_LIVE_KEY_NOTE,
+  GO_LIVE_PERMISSION_NOTE,
+  PRODUCTION_ONLY,
+  agencyDescription,
+} from './tool-kit'
 import type { SiteEnvironment } from './tool-kit'
 
 /** A server stub that records every registered tool, as the SDK would see it. */
@@ -91,6 +99,32 @@ function sorted(values: readonly string[]): string[] {
   return [...values].sort()
 }
 
+type JsonSchema = {
+  properties?: Record<string, unknown>
+  required?: string[]
+  [key: string]: unknown
+}
+
+/** A zod input schema as JSON Schema, the form a client receives. */
+function jsonSchemaOf(schema: z.ZodObject): JsonSchema {
+  return z.toJSONSchema(schema)
+}
+
+/**
+ * The agency schema with its `site` argument (and its `required` entry) taken
+ * out. Nothing else is removed, so the rest must match the per-site schema exactly.
+ */
+function withoutSite(schema: JsonSchema): JsonSchema {
+  const { properties = {}, required = [], ...rest } = schema
+  const { site: _site, ...others } = properties
+  const remaining = required.filter((name) => name !== 'site')
+  return {
+    ...rest,
+    properties: others,
+    ...(remaining.length > 0 ? { required: remaining } : {}),
+  }
+}
+
 describe('agency connector parity with the per-site connector', () => {
   it('lists the same tools as the per-site connector for each environment, plus navigation', () => {
     const agency = recorder()
@@ -121,34 +155,123 @@ describe('agency connector parity with the per-site connector', () => {
     }
   })
 
-  it('gives every shared tool the per-site schema plus a required site argument', () => {
+  it('gives every site tool, in both environments, the per-site JSON schema plus a required site argument and nothing else', () => {
+    const agency = recorder()
+    registerAgencyTools(agency.server, agencyPrincipal)
+
+    for (const [environment, context] of [
+      ['production', production],
+      ['development', development],
+    ] as const) {
+      const perSite = recorder()
+      registerPerSiteTools(perSite.server, siteActor, context)
+      expect(perSite.tools.size, environment).toBeGreaterThan(0)
+
+      for (const [name, tool] of perSite.tools) {
+        const label = `${environment}: ${name}`
+        const shared = agency.tools.get(name)
+        expect(shared, label).toBeDefined()
+        const sharedJson = jsonSchemaOf(shared!.inputSchema)
+        expect(sharedJson.properties?.site, label).toMatchObject({
+          type: 'string',
+          description: expect.stringContaining('site slug'),
+        })
+        expect(sharedJson.required, label).toContain('site')
+        expect(withoutSite(sharedJson), label).toEqual(
+          jsonSchemaOf(tool.inputSchema),
+        )
+      }
+    }
+  })
+
+  it('fails the schema comparison when any part of a schema differs', () => {
+    const tool = SITE_TOOLS.find((entry) => entry.name === 'create_entry')!
+    const agency = recorder()
+    registerAgencyTools(agency.server, agencyPrincipal)
+    const sharedJson = jsonSchemaOf(
+      agency.tools.get('create_entry')!.inputSchema,
+    )
+    const perSiteJson = jsonSchemaOf(tool.inputSchema)
+    const differs = (actual: JsonSchema) => {
+      try {
+        expect(actual).toEqual(perSiteJson)
+        return false
+      } catch {
+        return true
+      }
+    }
+
+    // The comparison itself: a changed property, a changed description, or a
+    // changed required list must each be seen, and the site argument must not be.
+    expect(differs(withoutSite(sharedJson))).toBe(false)
+    const extraProperty = structuredClone(withoutSite(sharedJson))
+    extraProperty.properties!.extra = { type: 'string' }
+    expect(differs(extraProperty)).toBe(true)
+    const renamedDescription = structuredClone(withoutSite(sharedJson))
+    const first = Object.keys(renamedDescription.properties!)[0]
+    renamedDescription.properties![first] = {
+      ...(renamedDescription.properties![first] as object),
+      description: 'changed',
+    }
+    expect(differs(renamedDescription)).toBe(true)
+    const changedRequired = structuredClone(withoutSite(sharedJson))
+    changedRequired.required = [...(changedRequired.required ?? []), 'extra']
+    expect(differs(changedRequired)).toBe(true)
+  })
+
+  it('describes every agency site tool as its per-site description, with the go-live sentence swapped, and the site note', () => {
+    const agency = recorder()
+    registerAgencyTools(agency.server, agencyPrincipal)
+    for (const context of [production, development]) {
+      const perSite = recorder()
+      registerPerSiteTools(perSite.server, siteActor, context)
+      for (const [name, tool] of perSite.tools) {
+        expect(agency.tools.get(name)!.description, name).toBe(
+          `${agencyDescription(tool.description)}\n\n${SITE_NOTE}`,
+        )
+      }
+    }
+  })
+
+  it('gives the go-live tools the agency go-live sentence, and keeps the per-site sentence per-site', () => {
     const agency = recorder()
     registerAgencyTools(agency.server, agencyPrincipal)
     const perSite = recorder()
     registerPerSiteTools(perSite.server, siteActor, production)
-
-    for (const [name, tool] of perSite.tools) {
-      const own = z.toJSONSchema(tool.inputSchema) as {
-        properties?: Record<string, unknown>
-        required?: string[]
-      }
-      const shared = agency.tools.get(name)
-      expect(shared, name).toBeDefined()
-      const wrapped = z.toJSONSchema(shared!.inputSchema) as {
-        properties?: Record<string, unknown>
-        required?: string[]
-      }
-      const { site, ...rest } = wrapped.properties ?? {}
-      expect(site, `${name} site argument`).toMatchObject({
-        type: 'string',
-        description: expect.stringContaining('site slug'),
-      })
-      expect(rest, name).toEqual(own.properties ?? {})
-      expect(sorted(wrapped.required ?? []), name).toEqual(
-        sorted([...(own.required ?? []), 'site']),
-      )
-      expect(shared!.description.startsWith(tool.description), name).toBe(true)
+    const goLiveTools = [
+      'go_live',
+      'rollback',
+      'cancel_build',
+      'schedule_entry',
+    ]
+    for (const name of goLiveTools) {
+      const onAgency = agency.tools.get(name)!.description
+      expect(onAgency, name).toContain(AGENCY_GO_LIVE_NOTE)
+      expect(onAgency, name).not.toContain(GO_LIVE_KEY_NOTE)
+      expect(onAgency, name).not.toContain(GO_LIVE_PERMISSION_NOTE)
     }
+    // The per-site descriptions are unchanged: they still say what a key needs.
+    expect(perSite.tools.get('go_live')!.description).toContain(
+      GO_LIVE_KEY_NOTE,
+    )
+    expect(perSite.tools.get('schedule_entry')!.description).toContain(
+      GO_LIVE_PERMISSION_NOTE,
+    )
+    expect(perSite.tools.get('schedule_entry')!.description).not.toContain(
+      AGENCY_GO_LIVE_NOTE,
+    )
+  })
+
+  it('never mentions a per-site key flag on the agency connector, in any tool or in the instructions', () => {
+    const agency = recorder()
+    registerAgencyTools(agency.server, agencyPrincipal)
+    for (const [name, tool] of agency.tools) {
+      expect(tool.description, name).not.toContain('Allow going live')
+      expect(tool.description, name).not.toContain(
+        'Requires permission to go live',
+      )
+    }
+    expect(agencyServerInstructions()).not.toContain('Allow going live')
   })
 
   it('keeps the named exception list empty in v1', () => {

@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition -- row lookups after .select() are checked defensively */
 import type * as AdminRoster from './agency-admin-roster.ts'
 
-import { and, eq } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { hashPassword } from 'better-auth/crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -15,6 +15,7 @@ import {
   membership,
   notification,
   oauthClient,
+  organization,
   session,
   user,
 } from '#/db/schema'
@@ -358,6 +359,67 @@ describe.skipIf(!hasDb)('a person deletes their own account', () => {
     await expect(selfDeleteBlockers(onlyAdmin.id)).resolves.toMatchObject({
       lastAdmin: true,
     })
+  })
+
+  it('the account page preview takes no locks: it does not wait on a pending admin change', async () => {
+    const admin = await person({ admin: true })
+    const owned = await client()
+    await join(admin.id, owned.id, 'owner')
+
+    // An admin change in flight: holds the roster lock and the person, client
+    // and admin rows until it ends.
+    let release!: () => void
+    const held = new Promise<void>((resolve) => (release = resolve))
+    let locked!: () => void
+    const isLocked = new Promise<void>((resolve) => (locked = resolve))
+    const writer = db.transaction(async (tx) => {
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended('agency-admin-roster', 0))`,
+      )
+      await tx
+        .select({ id: user.id })
+        .from(user)
+        .where(eq(user.isAgencyAdmin, true))
+        .for('update')
+      await tx
+        .select({ id: organization.id })
+        .from(organization)
+        .where(eq(organization.id, owned.id))
+        .for('update')
+      locked()
+      await held
+    })
+    await isLocked
+
+    try {
+      const preview = selfDeleteBlockers(admin.id)
+      const outcome = await Promise.race([
+        preview.then(() => 'done' as const),
+        new Promise<'waited'>((resolve) =>
+          setTimeout(() => resolve('waited'), 2000),
+        ),
+      ])
+      expect(outcome).toBe('done')
+      await expect(preview).resolves.toMatchObject({
+        soleOwnerOf: [owned.name],
+      })
+    } finally {
+      release()
+      await writer
+    }
+  })
+
+  it('many agency admins opening the account page at once do not deadlock', async () => {
+    const admins = await Promise.all(
+      [1, 2, 3, 4].map(() => person({ admin: true })),
+    )
+    const results = await Promise.all(
+      Array.from({ length: 24 }, (_, i) =>
+        selfDeleteBlockers(admins[i % admins.length].id),
+      ),
+    )
+    expect(results).toHaveLength(24)
+    for (const result of results) expect(result.lastAdmin).toBe(false)
   })
 
   it('a password account must re-enter the password, and a wrong one is refused', async () => {

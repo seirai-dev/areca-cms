@@ -52,9 +52,9 @@ A busy build pipeline with several sites sharing an IP address can still stay wi
 
 ## AI app requests
 
-AI apps call the MCP endpoints: the site's connector URL `/api/mcp/<site>`, which connected apps use, and `/api/mcp`, which personal keys use. Each AI app makes many small requests while it works, so these endpoints have their own limit instead of the writes limit.
+AI apps call the MCP endpoints: the site's connector URL `/api/mcp/<site>`, which connected apps use, `/api/mcp`, which personal keys use, and the agency connector `/api/agency/mcp`, which shares the same budgets across all sites. Each AI app makes many small requests while it works, so these endpoints have their own limit instead of the writes limit.
 
-- **Allowed per credential:** 120 requests per minute. A credential is an access token or a personal key, identified by a hash of its value. The raw value is never stored in the limiter.
+- **Allowed per credential:** 120 requests per minute, shared across every site for the agency connector. A credential is an access token or a personal key, identified by a hash of its value. The raw value is never stored in the limiter.
 - **Allowed per IP:** 600 requests per minute across all credentials from one client address. This applies only when Areca knows the client's address, which needs `RATE_LIMIT_TRUST_PROXY=true` behind a reverse proxy. Without it, only the per-credential limit applies.
 - **Requests without a valid credential:** they count against the per-IP limit (when the address is known). The endpoint refuses them with `401` anyway.
 - **Not counted:** these requests do not use the writes limit above.

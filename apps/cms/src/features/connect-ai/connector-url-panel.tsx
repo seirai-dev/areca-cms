@@ -8,10 +8,11 @@ import { m } from '#/paraglide/messages'
  */
 export function ConnectorUrlPanel({
   url,
-  siteName,
+  body,
 }: {
   url: string | undefined
-  siteName: string
+  /** One line on what the address is for (a site, or every client). */
+  body: string
 }) {
   return (
     <section
@@ -26,9 +27,7 @@ export function ConnectorUrlPanel({
         >
           {m.connect_ai_url_title()}
         </h2>
-        <p className="text-callout text-text-secondary">
-          {m.connect_ai_url_body({ site: siteName })}
-        </p>
+        <p className="text-callout text-text-secondary">{body}</p>
       </div>
       {url ? (
         <div className="flex min-w-0 flex-col gap-2.5 sm:flex-row sm:items-center">

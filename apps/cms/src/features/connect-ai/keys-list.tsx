@@ -1,7 +1,6 @@
-import { Key, Trash } from '@phosphor-icons/react'
+import { Key } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
-import { Button } from '#/components/ui/button'
 import { ConfirmDialog } from '#/components/ui/confirm-dialog'
 import { EmptyState } from '#/components/ui/empty-state'
 import { InsetIcon, InsetList, InsetRow } from '#/components/ui/inset-list'
@@ -13,6 +12,7 @@ import { m } from '#/paraglide/messages'
 import type { McpKeySummary } from '#/server/mcp/keys'
 
 import { formatDay } from './format'
+import { RowActionButton, RowMeta } from './row-parts'
 
 /**
  * The site's keys as an inset list. Each row shows when it was made, when it
@@ -70,6 +70,7 @@ export function KeysList({
           <InsetRow
             key={key.id}
             inset={false}
+            wrapSubtitle
             leading={
               <InsetIcon tone={expired ? 'neutral' : 'accent'}>
                 <Key />
@@ -89,12 +90,10 @@ export function KeysList({
               </span>
             }
             subtitle={
-              <span
-                className="block truncate"
+              <RowMeta
+                items={subtitleParts}
                 title={absoluteTimeLabel(key.createdAt)}
-              >
-                {subtitleParts.join(' · ')}
-              </span>
+              />
             }
             trailing={
               <ConfirmDialog
@@ -112,17 +111,11 @@ export function KeysList({
                   }
                 }}
               >
-                <Button
-                  type="button"
-                  variant="quiet"
-                  size="sm"
-                  className="min-h-11 sm:min-h-0"
-                  aria-label={`${m.connect_ai_key_revoke()}: ${key.name}`}
+                <RowActionButton
+                  label={`${m.connect_ai_key_revoke()}: ${key.name}`}
+                  text={m.connect_ai_key_revoke()}
                   data-testid="connect-ai-revoke"
-                >
-                  <Trash />
-                  {m.connect_ai_key_revoke()}
-                </Button>
+                />
               </ConfirmDialog>
             }
           />

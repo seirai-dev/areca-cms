@@ -9,6 +9,7 @@ import {
   House,
   ImageSquare,
   Palette,
+  PlugsConnected,
   Pulse,
   Sparkle,
   Stack,
@@ -182,7 +183,14 @@ export function siteNavItems(me: Me, site: MeSite): SiteNavItem[] {
 
 export type AgencyNavItem = {
   key:
-    'overview' | 'clients' | 'people' | 'activity' | 'branding' | 'ai' | 'mail'
+    | 'overview'
+    | 'clients'
+    | 'people'
+    | 'activity'
+    | 'branding'
+    | 'ai'
+    | 'mail'
+    | 'connect-ai'
   label: string
   icon: Icon
   to:
@@ -193,6 +201,7 @@ export type AgencyNavItem = {
     | '/agency/branding'
     | '/agency/ai'
     | '/agency/mail'
+    | '/agency/connect-ai'
   exact?: boolean
   testId?: string
 }
@@ -248,6 +257,13 @@ export function agencyNavItems(): AgencyNavItem[] {
       icon: EnvelopeSimple,
       to: '/agency/mail',
       testId: 'agency-mail-nav',
+    },
+    {
+      key: 'connect-ai',
+      label: m.shell_nav_connect_ai(),
+      icon: PlugsConnected,
+      to: '/agency/connect-ai',
+      testId: 'agency-connect-ai-nav',
     },
   ]
 }

@@ -154,13 +154,16 @@ unchanged (each row carries a side-effect probe).
 | `listMcpKeysFn` | `mcp-keys.ts` | `org-editor` | any site member; editors see only their own keys, owners and agency admins all keys on the site |
 | `createMcpKeyFn` | `mcp-keys.ts` | `org-editor` | any site member (MFA for agency admins); agency admins also need a fresh session (`REAUTH_REQUIRED`); editors cannot allow go-live |
 | `revokeMcpKeyFn` | `mcp-keys.ts` | `org-editor` | editors revoke their own keys; owners and agency admins any key on the site; other keys are NotFound |
+| `listAgencyMcpKeysFn` | `mcp-keys.ts` | `agency` | agency admin (MFA); the caller's own agency keys (no site); other roles are refused |
+| `createAgencyMcpKeyFn` | `mcp-keys.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up); agency keys have no go-live option, but the agency connector can always go live (`siteActorFor` sets `allowGoLive: true`, as for the agency admin in the CMS) |
+| `revokeAgencyMcpKeyFn` | `mcp-keys.ts` | `agency` | agency admin revokes their own agency key; another admin's key is NotFound |
 | `getOAuthConsentFn` | `mcp-oauth.ts` | `public` (reason-based) | signed-out, invalid or tampered requests and non-members get a reason instead of data; nothing is changed |
 | `approveOAuthConsentFn` | `mcp-oauth.ts` | `org-editor` | site access first (NotFound for other tenants); agency admins need a fresh second factor; editors cannot allow go-live; the signed query must name this site |
 | `denyOAuthConsentFn` | `mcp-oauth.ts` | `user` | any signed-in user may refuse a request addressed to them; the query must be signed by the server |
 | `listMcpConnectionsFn` | `mcp-oauth.ts` | `org-editor` | editors see only their own connected apps; owners and agency admins all on the site |
 | `revokeMcpConnectionFn` | `mcp-oauth.ts` | `org-editor` | editors disconnect their own apps; owners and agency admins any app on the site; others are NotFound |
 | `listAgencyMcpConnectionsFn` | `mcp-oauth.ts` | `agency` | agency admin (MFA); the caller's own agency apps (no site); other roles are refused |
-| `approveAgencyOAuthConsentFn` | `mcp-oauth.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) approves the agency connector for an app; the signed query must name the agency resource; never allows go-live |
+| `approveAgencyOAuthConsentFn` | `mcp-oauth.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) approves the agency connector for an app; the signed query must name the agency resource; agency connections have no go-live tick, and the agency connector can always go live (`allowGoLive: true`) |
 | `revokeAgencyMcpConnectionFn` | `mcp-oauth.ts` | `agency` | agency admin revokes their own agency app; another admin's app is NotFound |
 | `getMyNotificationsFn` | `notifications.ts` | `user` | the caller's own notification choices and org memberships |
 | `setMyNotificationFn` | `notifications.ts` | `org-editor` | members change their own choice (agency admins for the agency scope); locked events refuse; a non-member admin gets a readable refusal |
@@ -180,6 +183,7 @@ tenant data (asserted in the cross-tenant tests); client activity excludes every
 `dev-environments.md`); `getInvitationFn` and
 `acceptInvitationFn` are authorized by an unguessable, unexpired, unaccepted
 token (+ matching e-mail for accept).
+`listAgencyMcpKeysFn`, `createAgencyMcpKeyFn` and `revokeAgencyMcpKeyFn` are agency-only: an agency key has no site, and another admin's key answers NotFound.
 `listMcpKeysFn`, `createMcpKeyFn` and `revokeMcpKeyFn` answer NotFound for sites
 outside the caller's organization. Revoking a key that belongs to someone else
 answers NotFound for editors (the matrix override), so existence is not revealed.
@@ -199,6 +203,8 @@ answers NotFound for editors (the matrix override), so existence is not revealed
 | `/api/sites/manifest` | POST | site **schema** token | 401 for build token; writes only the token's own site |
 | `/api/sites/snapshot/current` | GET | site build token | 401 for schema token; only own publication. A dev env's token builds the snapshot from its ready content (`publicationId: null`); a `publicationId` query returns 400 for it |
 | `/api/sites/preview` | GET | HMAC preview token | 401 expired/tampered/foreign-secret/unknown site; 404 for another site's slug |
+| `/api/agency/mcp` | POST, GET, DELETE | OAuth access token issued for the agency resource (`${APP_URL}/api/agency/mcp`), or a personal agency key (`scope = agency`); agency admin with MFA. Anyone else who presents a valid credential gets `404 {"error":"Site not found"}`; no credential or an invalid one gets 401 with `WWW-Authenticate` naming the agency metadata; a site key here gets 401; an agency key on a site connector gets 401; 403 `mfa_required` for an agency admin without 2FA; 429 shared with the per-site connectors |
+| `/.well-known/oauth-protected-resource/api/agency/mcp` | GET | none | public PRM for the agency resource (`resource_name` "Areca agency", `Cache-Control: no-store`); names no client or site |
 | `/api/mcp/<siteSlug>` | POST, GET, DELETE | OAuth access token issued for that site (RFC 8707 audience), or a personal key for that site; 401 with `WWW-Authenticate: Bearer resource_metadata=…` for none, invalid, expired, revoked, other-site or disconnected credentials; 403 `insufficient_scope` without the `mcp` scope; 403 `mfa_required` as for keys; 404 for an unknown slug |
 | `/.well-known/oauth-authorization-server/api/auth`, `/.well-known/openid-configuration/api/auth` | GET | none | public metadata, CORS `*`; the issuer matches the plugin's; root-level documents are not served |
 | `/.well-known/oauth-protected-resource/api/mcp/<siteSlug>` | GET | none | public PRM for that site, `resource` equal to the connector URL; 404 for unknown slugs |
@@ -221,11 +227,15 @@ listings, direct calls, cross-site ids, go-live and the agency schema tools.
 | everyone | any site member (editor, owner, agency admin) | `get_site_info`, `get_collection_schema`, `list_entries`, `get_entry`, `create_entry`, `update_entry`, `list_revisions`, `get_preview_url`, `list_assets`, `get_asset`, `upload_asset_from_url`, `update_asset_alt`, `get_release_status`, `list_publications`, `get_build_job`, `get_global`, `update_global`, `discard_global_draft` |
 | owner | owner or agency admin | `mark_ready`, `unpublish_entry`, `archive_entry`, `cancel_schedule`, `delete_entry`, `restore_revision`, `delete_asset` |
 | go-live | a key with `allowGoLive` (the key flag and a non-editor live role) | `go_live`, `rollback`, `cancel_build`, `schedule_entry` |
-| agency | agency admin only | `upsert_collection`, `delete_collection`, `upsert_global`, `delete_global`, `create_dev_environment` (production connector), `refresh_from_production`, `push_to_production`, `copy_entry_to_production` (development connector) |
+| agency | agency admin only | `upsert_collection`, `delete_collection`, `upsert_global`, `delete_global`, `set_site_languages`, `set_publishing_mode`, `create_dev_environment` (production connector), `refresh_from_production`, `push_to_production`, `copy_entry_to_production` (development connector) |
 
 Tools are also listed by the site's environment (`environments` in the tool spec). On a development connector the publishing and schedule tools (`get_release_status`, `list_publications`, `get_build_job`, `go_live`, `rollback`, `cancel_build`, `schedule_entry`, `cancel_schedule`) are not listed, and `create_dev_environment` is listed only on a production connector. A development connector is NotFound to every role except agency admins, on both the key and the OAuth endpoints (`handleSiteMcpRequest` and `runMcp`, `http.ts`; the 401 and discovery trade-off is in `dev-environments.md`). `push_to_production` with `goLive` needs the same go-live permission as `go_live`, and is refused before anything is written. The dev-env MCP tests are in `mcp/dev-env-tools.db.test.ts`.
 
 Site content (globals) is reached by key through `get_global`, `update_global` and `discard_global_draft`. The section's entry id then works with the owner and go-live tools above. Editors and owners do not see disabled sections; a disabled section answers "not found" for them, as in the CMS. `update_global` refuses `seo` on a section without SEO, and `upsert_global` refuses `slug` fields and the reserved key `globals`.
+
+### Agency connector (`/api/agency/mcp`)
+
+The agency connector lists every per-site tool, from the same definitions (`tool-catalog.ts`), with a required `site` argument. Its tool access is the `agency` role's, and go-live tools need no flag there (`siteActorFor` sets `allowGoLive: true`). Each call resolves `site` through `resolveAgencySite`, which calls `assertAgencySiteReachable`; a site the caller cannot reach answers the same "not found" as a missing one. A test enforces that agency calls resolve their site only through that function. Navigation tools (`list_clients`, `list_sites`, `find_site`) read only the reachable sites. Every agency call is audited with `via: 'mcp-agency'` and the credential type. Tests: `server/mcp/agency-mcp.db.test.ts`, `server/mcp/agency-oauth.db.test.ts`, `server/mcp/agency-parity.test.ts`, `server/security/authz-routes.test.ts`.
 
 Ids sent by an AI are checked against the key's site (`scope.ts`). An entry,
 build job or publication on another site answers the same "not found" as a

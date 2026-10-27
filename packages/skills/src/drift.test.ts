@@ -76,12 +76,16 @@ describe('areca-sdk covers @areca-cms/site-sdk', () => {
   })
 })
 
-/** Names of the MCP tools registered in apps/cms/src/server/mcp/tools. */
+/** Names of the MCP tools registered in apps/cms/src/server/mcp/tools, plus the agency connector's navigation tools. */
 const mcpToolsDir = 'apps/cms/src/server/mcp/tools'
-const mcpTools = () =>
-  readdirSync(join(repo, mcpToolsDir))
+const mcpToolFiles = [
+  ...readdirSync(join(repo, mcpToolsDir))
     .filter((file) => file.endsWith('.ts') && !file.includes('.test.'))
-    .flatMap((file) => [...read(`${mcpToolsDir}/${file}`).matchAll(/^\s+name: '(\w+)'/gm)].map(([, name]) => name!))
+    .map((file) => `${mcpToolsDir}/${file}`),
+  'apps/cms/src/server/mcp/agency-navigation.ts',
+]
+const mcpTools = () =>
+  mcpToolFiles.flatMap((file) => [...read(file).matchAll(/^\s+name: '(\w+)'/gm)].map(([, name]) => name!))
 
 describe('areca-mcp covers the MCP server', () => {
   const text = skillText('areca-mcp')

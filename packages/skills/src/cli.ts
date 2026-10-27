@@ -41,7 +41,8 @@ Options:
   -a, --agent <id>    Agent id, repeatable or comma separated (see list)
   -s, --skill <name>  Only this skill (areca-sdk, areca-mcp, areca-quickstart); default all
   -g, --global        Install into user-level folders instead of the project
-      --mcp-url <url> Connector URL (<cms>/api/mcp/<site-slug>) to register
+      --mcp-url <url> Connector URL to register: <cms>/api/mcp/<site-slug> (one site)
+                      or <cms>/api/agency/mcp (agency admins, all sites)
       --out <dir>     Zip folder for chat apps and export (default: areca-skills)
   -y, --yes           No prompts; requires --agent for add/mcp/remove
   -h, --help          Show this help`
@@ -185,7 +186,7 @@ async function mcp(options: Options, cwd: string): Promise<number> {
     (agent) => agent.group !== 'chat',
   )
   const url = await chooseMcpUrl({ ...options, yes: options.yes }, cwd, interactive, true)
-  if (!url) throw new Error('Pass --url <cms>/api/mcp/<site-slug>')
+  if (!url) throw new Error('Pass --url <cms>/api/mcp/<site-slug> or <cms>/api/agency/mcp')
   registerMcp(agents, url, 'project', cwd)
   const after = [...new Set(agents.map((agent) => agent.after).filter(Boolean))].map((line) =>
     line!.replaceAll('<name>', mcpServerName(url)),

@@ -4,7 +4,9 @@ Connect AI lets an AI app such as ChatGPT, Claude, Claude Code, Cursor or VS Cod
 
 Personal AI keys still work for scripts, CI and clients that cannot sign in through a browser. They are under **Advanced: personal keys** on the Connect AI page.
 
-This page is the combined guide for editors, owners and agency admins, and the technical reference for the endpoints. The public version is in the docs app: `apps/docs/content/docs/cms/connect-ai.mdx` (for users) and `apps/docs/content/docs/cms/mcp-tools.mdx` (tool and sign-in reference).
+Agency admins can also use one agency-wide connector, `{APP_URL}/api/agency/mcp`, for every client and site, production and development. It is described in [Agency connector](#agency-connector).
+
+This page is the combined guide for editors, owners and agency admins, and the technical reference for the endpoints. The public version is in the docs app: `apps/docs/content/docs/cms/connect-ai.mdx` (for users), `apps/docs/content/docs/cms/agency-connector.mdx` (agency admins) and `apps/docs/content/docs/cms/mcp-tools.mdx` (tool and sign-in reference).
 
 ## Using it
 
@@ -31,6 +33,7 @@ ChatGPT and Claude connect from the internet, so the CMS must be reachable on it
 | `go_live`, `rollback`, `cancel_build` | no | no | yes | yes, if the app or key may publish |
 | `upsert_collection`, `delete_collection`, `set_publishing_mode` | no | no | no | yes |
 | Development environment: create, reset, push, copy to production | no | no | no | yes |
+| Agency connector (every client and site, including go live without the tick) | no | no | no | yes |
 
 Rules:
 
@@ -38,6 +41,7 @@ Rules:
 - A connection or key allowed to publish stops publishing as soon as its user is no longer an owner or agency admin. The app's flag and the live role are both checked on every request.
 - Owners and agency admins see and disconnect or revoke all connected apps and keys on the site. Editors see and revoke only their own.
 - A development environment is agency-only: its connector answers "not found" to everyone else, and its tools are not offered to anyone else. See [Development environments](#development-environments).
+- The agency connector is agency-only too. Everyone else gets the same `404` as an unknown address. See [Agency connector](#agency-connector).
 - Agency admins approving a connection, or creating a key, need a fresh authenticator code (step-up).
 - Each user can hold up to 20 active personal keys per site.
 - Connections last until disconnected, or until 90 days without use. Keys expire on their expiry date. Disconnect and revocation are immediate.
@@ -48,12 +52,13 @@ Rules:
 | --- | --- |
 | Connector URL (per site) | `{APP_URL}/api/mcp/<site-slug>`, shown on the Connect AI page. Accepts OAuth access tokens issued for this site, and personal keys for this site. |
 | Key endpoint | `{APP_URL}/api/mcp`. Accepts personal keys only (`Authorization: Bearer areca_mcp_<43 characters>`); the key's site is used. OAuth tokens are refused here. |
+| Agency connector (all sites) | `{APP_URL}/api/agency/mcp`. Agency admins only. Accepts OAuth access tokens issued for the agency resource, and personal agency keys (`scope = agency`). Every site tool takes a `site` argument. See [Agency connector](#agency-connector). |
 | Methods | `POST` (JSON-RPC), `GET` and `DELETE` (Streamable HTTP) |
 | Transport | MCP Streamable HTTP, stateless, JSON responses |
 | Protocol | MCP `2026-07-28` via `createMcpHandler` (`@modelcontextprotocol/server`). 2025-era clients are served too, statelessly (`legacy: 'stateless'`). |
 | Server name | `areca-<site slug>` |
 | Max request body | 1 MB |
-| Rate limit | 120 requests per minute per access token or key, and 600 per minute per client IP when the IP is known. See [Configuration](#configuration). |
+| Rate limit | 120 requests per minute per access token or key (shared across all sites on the agency connector), and 600 per minute per client IP when the IP is known. See [Configuration](#configuration). |
 
 Cookies are not accepted. Tool errors are not HTTP errors: they return a normal result with `isError: true` and a message written for the model.
 
@@ -110,6 +115,8 @@ Keys are sent as `Authorization: Bearer areca_mcp_…`. `mcp_key.last_used_at` i
 | `401` | connector URL | `invalid_token`: the access token is invalid, expired or revoked, was issued for another site, or the app is no longer connected to the site, or the user no longer has access. The challenge also carries `resource_metadata`. |
 | `403` | connector URL | `insufficient_scope`: the token has no `mcp` scope. |
 | `401` | `/api/mcp` | `{"error":"Invalid or expired Areca MCP key"}` with `WWW-Authenticate: Bearer realm="areca-mcp"`, for a missing, malformed, unknown, revoked or expired key, or a user who is no longer a member. |
+| `401` | `/api/agency/mcp` | No bearer credential, or an invalid, expired or revoked credential. The challenge names `/.well-known/oauth-protected-resource/api/agency/mcp`. A site key sent here gets `invalid_token` with the message "This key is for one site." |
+| `404` | `/api/agency/mcp` | `{"error":"Site not found"}` for a credential that belongs to someone who is not an agency admin (the same answer as an unknown address). |
 | `403` | both | `{"error":"Your account needs two-factor authentication before AI keys work. Turn it on in Account settings.","code":"mfa_required"}` for an agency admin without two-factor sign-in, when `ADMIN_MFA_REQUIRED` is on (the default). |
 | `404` | connector URL | Unknown site slug. |
 | `429` | both | Rate limit exceeded, with `Retry-After`. See [Configuration](#configuration). |
@@ -196,14 +203,37 @@ A `ready` entry can still have `live: false` until the next go live. Editing a r
 
 `get_site_info` returns `cannotDo`, a list of sentences describing what this key may not do (for example, "Go live: going live is not enabled for this key"), so the model can tell the user who can act.
 
+## Agency connector
+
+The agency connector is one MCP address for every client and site an agency admin can reach, production and development. Its design is in `docs/design/agency-mcp.md`.
+
+- **Address.** `{APP_URL}/api/agency/mcp`. Protected resource metadata is at `/.well-known/oauth-protected-resource/api/agency/mcp` (resource name "Areca agency"). The OAuth resource is that same URL, so a site token cannot be used here and an agency token cannot be used on a site address.
+- **Skills installer.** `npx @areca-cms/skills --mcp-url {APP_URL}/api/agency/mcp` (or `mcp --url`) accepts this address with or without a trailing slash, and names the server `areca-agency`. Site addresses keep the name `areca-<site-slug>`.
+- **Who.** Agency admins with two-factor sign-in (`ADMIN_MFA_REQUIRED`). Access is checked live on every request. Anyone else gets `404 {"error":"Site not found"}`, the same as an unknown address. A personal agency key (`areca_mcp_…` with scope `agency`) works only here; a site key is refused here, and an agency key is refused by every site address with `401`.
+- **Credentials.** Personal agency keys (created on **Agency › Connect AI** with a fresh step-up; expiry 30, 90, 365 days or never; no go-live flag) and OAuth app connections approved for the agency resource (fresh step-up; the consent screen says "This app can read and change every client and site, including production, and go live"). Both are stored in `mcp_key` and `mcp_connection` with `scope = 'agency'` and no site.
+- **Revocation.** Demoting an agency admin (`setAgencyAdmin`) and removing an account revoke its agency keys and connections at once (`revokeAgencyMcpCredentials`). A blocked admin is refused on every request.
+- **Site argument.** Every per-site tool takes a required `site` argument (the site slug, for example `acme` or `acme-dev`). There is no current site and no session state. Each result carries `site: { slug, name, client, environment }`. The agency tool list is generated from the per-site list (`tool-catalog.ts`, `agency-server.ts`); a parity test (`agency-parity.test.ts`) fails when the two drift. `AGENCY_TOOL_EXCEPTIONS` is empty.
+- **Navigation tools** (agency connector only, in `agency-navigation.ts`):
+  - `list_clients`: the clients the caller can reach, with slug, name and site count.
+  - `list_sites` (optional `client`, a slug or name): one row per site: `slug`, `name`, `client`, `environment`, `linked` (the production site of a development environment, or its development environment), `publishingMode`, `live` and `pendingReadyChanges`.
+  - `find_site` (`query`): text match on site name, slug, client name and production URL, up to 50 rows, with `truncated` when there are more.
+- **Environment refusals.** Every tool is listed. A call is checked against the site it names (`environmentRefusal` in `agency-call.ts`). Production-only tools on a development environment return an error result: release tools say "isn't available on development environments. Push to production first.", release reads say they have no releases, and scheduling says it is not available there. Development-only tools (`refresh_from_production`, `push_to_production`, `copy_entry_to_production`) on a production site say "only works on a development environment. Use the site's dev environment slug (see list_sites)."
+- **Go live without a flag.** The agency actor is built with `allowGoLive: true` (`siteActorFor`). `go_live`, `rollback`, `cancel_build`, `schedule_entry` and `cancel_schedule` need no "Allow going live" tick here. Per-site connectors are unchanged: a key or connection still needs the tick.
+- **Production writes** are allowed, as for any agency admin. The server instructions (`agencyServerInstructions`) say to name the client and site and confirm before a production change, and say a push is a dry run first. They do not tell the model to prefer the development environment.
+- **Audit.** Every agency call runs in `withAuditContext({ via: 'mcp-agency', mcpKeyId, mcpKeyName, mcpCredential })`, so the credential type (`key` or `oauth`) and its name are recorded with the call. Navigation calls are audited the same way.
+- **Rate limit.** The same 120 a minute per credential, shared across every site (`rate-limit.ts`, `/api/agency/mcp` is in the MCP path check).
+- **Not in v1.** `create_client`, `create_site` (site tokens are shown once, in a browser). `create_dev_environment` stays on the production tools.
+
+Code map for the agency connector: `apps/cms/src/routes/api/agency/mcp.ts` (route), `server/mcp/agency-http.ts` (auth, principal, challenges), `server/mcp/agency-server.ts` (server, instructions, registration), `server/mcp/agency-call.ts` (per-call site resolution, environment check, echo, audit), `server/mcp/agency-access.ts` (reachability: `agencyReachableSites`, `assertAgencySiteReachable`), `server/mcp/agency-navigation.ts`, `server/mcp/tool-catalog.ts` (every per-site tool, defined once), `server/mcp/discovery.ts` (agency protected resource document), `server/fn/mcp-keys.ts` and `server/fn/mcp-oauth.ts` (agency key and app functions).
+
 ## Development environments
 
 A production site can have one development environment (a development environment, or dev env): a copy of its schema and ready content, which the agency changes first and then pushes to production. The design is in `docs/design/dev-environments.md`. This section is the MCP side. The CMS side is in the [agency admin guide](ADMIN_GUIDE.md#development-environments).
 
-- **Connectors.** The production connector, `/api/mcp/<slug>`, offers `create_dev_environment`. When the site has a development environment, `get_site_info` names it: `site.devEnvironment: { slug, connectorUrl }`, for agency admins only. The development connector (its URL is the `connectorUrl` above) reports `site.environment: "development"` and `site.productionSlug`. It offers the development tools and `mark_ready`, and not the publishing and schedule tools listed above.
+- **Connectors.** The production connector, `/api/mcp/<slug>`, offers `create_dev_environment`. When the site has a development environment, `get_site_info` names it: `site.devEnvironment: { slug, connectorUrl }`, for agency admins only. The development connector (its URL is the `connectorUrl` above) reports `site.environment: "development"` and `site.productionSlug`. It offers the development tools and `mark_ready`, and not the publishing and schedule tools listed above. The agency connector offers the same tools for every site, and the development environment is reached by passing its slug as `site`.
 - **Tokens.** `create_dev_environment` never returns the site token, the schema token or the preview secret. They are shown once, in the browser that created the environment. For a missed token, open the development environment in the CMS, go to Settings › Developer and rotate the site token (and the schema token for code-first sites).
 - **Reading.** An `areca pull` with the development site's token reads the environment's ready content directly, with no publication. Entries show in that pull once they are ready (`mark_ready`, or `mark_ready` with `ids` for several). Nothing goes live.
-- **Pushing is a review step.** Call `push_to_production` with `dryRun` (the default) first. It lists every change since the last push or reset, marks the items that need attention, and returns a `planHash`. Show the list to the user and get their approval. Then call it again with `dryRun: false`, the `planHash`, `exclude` for items the user unticked, and `apply` for needs-attention items the user approved. Items that need attention are skipped unless they are applied. If production changed after the dry run, the call is refused with "The plan changed"; run the dry run again.
+- **Pushing is a review step.** Call `push_to_production` with `dryRun` (the default) first. It lists every change since the last push or reset, marks the items that need attention, and returns a `planHash`. Show the list to the user and get their approval. Then call it again with `dryRun: false`, the `planHash`, `exclude` for items the user unticked, and `apply` for needs-attention items the user approved. Items that need attention are skipped unless they are applied. Items marked `scheduled` (the production entry has a schedule) and `slug-taken` (a URL is used by another entry) cannot be applied; resolve the schedule in production, or change the URL in development, then dry run again. If production changed after the dry run, the call is refused with "The plan changed"; run the dry run again.
 - **What a push writes.** Drafts and ready versions of production entries, schema changes and languages. A removed entry is archived in production, never deleted. `goLive: true` starts a production build after the push and is refused, before anything is written, for a key or connection without the go-live permission.
 - **No fresh authenticator code.** The CMS push screen asks an agency admin for a fresh authenticator code when the session is not fresh. These tools do not: they run with the key or connection, whose owner must still have two-factor sign-in (`ADMIN_MFA_REQUIRED`).
 - **Production stays writable.** Production writes over MCP are not blocked, on the production connector or anywhere else. The review step above is the agreed way to move changes, not a lock.
@@ -278,6 +308,9 @@ Common tool error messages and what they mean:
 | `No entry with id …` / `No collection …` | Not on this site. Use the list tool to find valid ids. |
 | `The plan changed. Review it again.` | `push_to_production` was given a `planHash` that no longer matches. Run the dry run again and show the new list. |
 | `Development environments stay in Demo mode.` | `set_publishing_mode` with `production` on a development environment. |
+| `… isn't available on development environments. Push to production first.` | A release tool (`go_live`, `rollback`, `cancel_build`) on a development environment, through the agency connector. |
+| `… only works on a development environment. Use the site's dev environment slug (see list_sites).` | A push, reset or copy tool on a production site, through the agency connector. |
+| `No site with slug "…" is available to you.` | The agency connector's `site` argument names a site the caller cannot reach. Call `list_sites` or `find_site`. |
 | `Send the planHash from a dry run…` | `push_to_production` with `dryRun: false` and no `planHash`. |
 | `Something went wrong on the Areca server (ref …)` | Unexpected failure. Nothing is confirmed as saved. The ref is in the server log. |
 
@@ -285,7 +318,7 @@ Not found and forbidden answers follow the rules in `AUTHZ_MATRIX.md`: objects o
 
 ## Activity and audit
 
-Each MCP tool call runs inside `withAuditContext({ via: 'mcp', mcpKeyId, mcpKeyName })`, where `mcpKeyId` and `mcpKeyName` hold the connection's id and the connected app's name for OAuth connections, and the key's id and name for keys. The activity log shows these actions as **via AI · <app name>**. Audit metadata holds the action, the name and identifiers, not the content text.
+Each MCP tool call runs inside `withAuditContext({ via: 'mcp', mcpKeyId, mcpKeyName, mcpCredential })`, where `mcpKeyId` and `mcpKeyName` hold the connection's id and the connected app's name for OAuth connections, and the key's id and name for keys. The activity log shows these actions as **via AI · <app name>**. Audit metadata holds the action, the name and identifiers, not the content text.
 
 Connecting an app to a site is audited as `mcp_connection.create` (the activity log: "connected … to the site"), and disconnecting as `mcp_connection.revoke`. Key creation and revocation are audited as `mcp_key.create` and `mcp_key.revoke`.
 
@@ -293,7 +326,7 @@ Connecting an app to a site is audited as `mcp_connection.create` (the activity 
 
 - **`APP_URL`** sets the origin of each connector URL (`APP_URL` + `/api/mcp/<slug>`), and the protected resource metadata. Set it to the public HTTPS origin, or the connector URLs will point at an address the AI app cannot reach.
 - **`BETTER_AUTH_URL`** is the OAuth issuer (`BETTER_AUTH_URL` + `/api/auth`), and the origin of the authorization server's discovery documents. Use the same public HTTPS origin as `APP_URL`. A mismatch breaks sign-in. See [CONFIGURATION.md](CONFIGURATION.md).
-- **Reverse proxy.** The proxy must forward `/.well-known/*`, `/api/auth/*` and `/api/mcp/*` to the CMS. See [DEPLOYMENT.md](DEPLOYMENT.md#ai-apps-need-public-https).
+- **Reverse proxy.** The proxy must forward `/.well-known/*`, `/api/auth/*`, `/api/mcp/*` and `/api/agency/mcp` to the CMS. See [DEPLOYMENT.md](DEPLOYMENT.md#ai-apps-need-public-https).
 - **`RATE_LIMIT_TRUST_PROXY`** decides whether the per-IP budgets apply. Without a trusted proxy the client IP is unknown, so `/api/mcp` and `/api/mcp/<slug>` apply only the per-credential budget (120 a minute), and the OAuth registration per-address limit (20 an hour) is skipped. The deployment-wide registration limit (300 an hour) and the token limit (60 a minute per app, and per client address when it is known) still apply. Set it to `true` only behind a proxy that sets the client address header.
 - **`ADMIN_MFA_REQUIRED`** (default `true`): an agency admin without two-factor sign-in gets `403` with `mfa_required` on every connector URL and key, and cannot approve a connection.
 
@@ -313,7 +346,10 @@ Connecting an app to a site is audited as `mcp_connection.create` (the activity 
 | `apps/cms/src/server/mcp/keys.ts` | Key generation, hashing, create, list, revoke, `resolveMcpActor`, live role |
 | `apps/cms/src/server/mcp/server.ts` | Server instructions, registration, `write_post` prompt |
 | `apps/cms/src/server/mcp/tool-kit.ts`, `guard.ts`, `scope.ts`, `errors.ts` | Tool registry, access checks, tenancy lookups, error mapping |
-| `apps/cms/src/server/mcp/tools/*.ts` | The tools, grouped by area; `tools/dev-env.ts` holds the development environment tools |
+| `apps/cms/src/server/mcp/tools/*.ts` | The per-site tools, grouped by area; `tools/dev-env.ts` holds the development environment tools |
+| `apps/cms/src/server/mcp/tool-catalog.ts` | Every per-site tool, defined once. The agency connector reads the same list |
+| `apps/cms/src/server/mcp/agency-*.ts`, `agency-navigation.ts` | The agency connector: auth and principal, server, per-call site resolution, reachability, navigation tools (see [Agency connector](#agency-connector)) |
+| `apps/cms/src/routes/api/agency/mcp.ts` | Route: agency connector, POST, GET, DELETE |
 | `apps/cms/src/server/mcp/site-context.ts` | Whether a connector's site is a production site or a development environment, and its paired slug |
 | `apps/cms/src/server/content/entry-actions.ts` | The single-entry actions shared by the bulk bar and `mark_ready` with `ids` |
 | `apps/cms/src/server/mcp/entry-format.ts`, `schemas.ts`, `schema-docs.ts` | Field conversion, SEO schema, agent-facing format docs |

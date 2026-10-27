@@ -129,6 +129,14 @@ export async function handleAgencyMcpRequest(
   if (!token) return challenge401()
 
   if (token.startsWith(MCP_KEY_PREFIX)) {
+    // Same rule as the site connector: a personal key is sent as Bearer only.
+    if (authorization?.scheme !== 'Bearer') {
+      return challenge401({
+        error: 'invalid_token',
+        dpop: true,
+        description: 'Personal keys require Bearer authorization',
+      })
+    }
     return agencyKeyRequest(request, token)
   }
   return agencyOAuthRequest(request, token, authorization?.scheme === 'DPoP')
@@ -170,13 +178,6 @@ async function agencyOAuthRequest(
   token: string,
   dpop: boolean,
 ): Promise<Response> {
-  if (token.startsWith(MCP_KEY_PREFIX)) {
-    return challenge401({
-      error: 'invalid_token',
-      dpop: true,
-      description: 'Personal keys require Bearer authorization',
-    })
-  }
   const verdict = await verifyMcpAccessToken(
     token,
     request,

@@ -44,6 +44,8 @@ This command writes the Areca skills and the connector into the coding agents th
 npx @areca-cms/skills add --mcp-url <url>
 ```
 
+`<url>` is `<cms-url>/api/mcp/<site-slug>`. An agency admin can pass the agency connector, `<cms-url>/api/agency/mcp`, instead; it is registered as `areca-agency`.
+
 It asks which agents to use. With `-y` it also needs `--agent`. Offer it only if the user wants the skills in the same step.
 
 ## Check the role
@@ -55,7 +57,7 @@ Call `get_site_info`. Read `you.role` and `cannotDo`.
 | Editor | Read, create and edit drafts. |
 | Owner | Also mark ready, archive and delete. |
 | Owner with "Allow going live" | Also go live and schedule. |
-| Agency admin | Also change the schema (`upsert_collection`, `upsert_global`) and languages (`set_site_languages`). Also change the publishing mode. |
+| Agency admin | Also change the schema (`upsert_collection`, `upsert_global`) and languages (`set_site_languages`). Also change the publishing mode. On the agency connector (`/api/agency/mcp`), every client and site is reachable with `site`, and going live needs no flag. |
 
 - Schema changes need an agency admin. If the user is not one, use code-first.
 - Going live needs "Allow going live" on the connection, or an owner who presses Go live in the CMS.

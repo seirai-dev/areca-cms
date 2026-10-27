@@ -26,7 +26,7 @@ import {
   loadSiteRow,
 } from '../scope'
 import { idSchema } from '../schemas'
-import { PRODUCTION_ONLY } from '../tool-kit'
+import { GO_LIVE_KEY_NOTE, PRODUCTION_ONLY } from '../tool-kit'
 import type { ToolCollector } from '../tool-kit'
 import { isDeploymentConfigured } from './site'
 
@@ -226,8 +226,7 @@ export function registerPublishingTools(registry: ToolCollector): void {
     name: 'go_live',
     title: 'Go live',
     environments: PRODUCTION_ONLY,
-    description:
-      'Goes live: builds every ready change and deploys it, so the live site shows what is approved. Only call this when the user asks to go live. It queues a build; follow it with get_build_job or get_release_status. Requires a key with the "Allow going live" option.',
+    description: `Goes live: builds every ready change and deploys it, so the live site shows what is approved. Only call this when the user asks to go live. It queues a build; follow it with get_build_job or get_release_status. ${GO_LIVE_KEY_NOTE}`,
     inputSchema: z.object({
       note: z
         .string()
@@ -266,8 +265,7 @@ export function registerPublishingTools(registry: ToolCollector): void {
     name: 'rollback',
     title: 'Roll back to a publication',
     environments: PRODUCTION_ONLY,
-    description:
-      'Goes live again with an earlier publication, which reverts the live site to it. Only call this when the user asks to roll back. Get publicationId from list_publications. Requires a key with the "Allow going live" option.',
+    description: `Goes live again with an earlier publication, which reverts the live site to it. Only call this when the user asks to roll back. Get publicationId from list_publications. ${GO_LIVE_KEY_NOTE}`,
     inputSchema: z.object({ publicationId: idSchema('publication') }),
     access: 'go-live',
     annotations: {
@@ -294,8 +292,7 @@ export function registerPublishingTools(registry: ToolCollector): void {
     name: 'cancel_build',
     title: 'Cancel queued build',
     environments: PRODUCTION_ONLY,
-    description:
-      'Cancels a build job that is still queued (not started). Running builds cannot be cancelled. Get jobId from get_release_status. Requires a key with the "Allow going live" option.',
+    description: `Cancels a build job that is still queued (not started). Running builds cannot be cancelled. Get jobId from get_release_status. ${GO_LIVE_KEY_NOTE}`,
     inputSchema: z.object({ jobId: idSchema('build job') }),
     access: 'go-live',
     annotations: {

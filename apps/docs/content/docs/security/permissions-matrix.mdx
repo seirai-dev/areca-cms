@@ -143,8 +143,22 @@ These actions manage AI apps connected with OAuth, and personal AI keys, on the 
 | Revoke your own AI key | ✓ | ✓ | ✓ |
 | Revoke someone else's AI key on a site | – | ✓ | ✓ |
 | Allow an AI key to go live | – | ✓ | ✓ |
+| Connect an AI app to the agency connector (every client and site) | – | – | ✓ + fresh sign-in code |
+| Create a personal agency AI key (every client and site) | – | – | ✓ + fresh sign-in code |
+| See and revoke your own agency AI keys and apps | – | – | ✓ |
 
-A connected app or key allowed to publish can publish only while its user is still an owner or agency admin. A connection or key cannot do anything its user cannot do in the rest of this matrix. Approving a connection for a site needs a site role there, and the approval is for that site only.
+A connected app or key allowed to publish can publish only while its user is still an owner or agency admin. A connection or key cannot do anything its user cannot do in the rest of this matrix. Approving a connection for a site needs a site role there, and the approval is for that site only. An agency connection or key reaches every client and site the admin can reach. It does not allow anything the admin cannot do in the CMS. Agency connections and keys end when the admin role ends. See [Agency connector](/docs/cms/agency-connector).
+
+## Development environments
+
+These actions are on the production site's **Settings › Development** tab, and on the development environment itself. A development environment is visible to agency admins only.
+
+| Action | Editor | Owner | Admin |
+| --- | :---: | :---: | :---: |
+| See a development environment, its changes and its activity | – | – | ✓ |
+| Create, reset or delete a development environment | – | – | ✓ |
+| Push to production, or copy one item to production as a draft | – | – | ✓ + fresh sign-in code |
+| Go live, schedule, or set Production mode on a development environment | – | – | never |
 
 ## Your own account
 

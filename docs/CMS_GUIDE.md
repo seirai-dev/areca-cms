@@ -44,7 +44,7 @@ An owner can mark one or several entries ready from the editor or collection lis
 
 Scheduling freezes the approved content and address at the time you schedule it. The editor shows **View approved scheduled version** while you can continue editing the draft separately; those later draft edits do not replace the scheduled version. The schedule uses the selected time zone and runs the release when due. Owners can cancel a scheduled version.
 
-Use **Go live** in the site sidebar or Overview to review the site release. The panel shows changes included, release progress, errors, and prior releases. In **Production** mode, Go live builds and deploys the latest site snapshot, then verifies that the deployed site reports the publication ID. Production mode requires a configured deployment target and health-check URL; without them, publishing is blocked. The previous successful production release stays live if a new release fails. In **Demo** mode, Go live creates a clearly labeled demo publication without a production deploy or live verification; it does not make the website production-live.
+Use **Go live** in the site sidebar or Overview to review the site release. The panel shows changes included, release progress, errors, and prior releases. In **Production** mode, Go live builds and deploys the latest site snapshot, then verifies that the deployed site reports the publication ID. Production mode requires a configured deployment target and health-check URL; without them, publishing is blocked. The previous successful production release stays live if a new release fails. In **Demo** mode the button reads **Publish demo release**. It creates a clearly labeled demo publication without a production deploy or live verification; it does not make the website production-live.
 
 Owners can request a rollback from a prior successful release in the Go-live panel. Areca queues a new, high-priority build using that release's saved snapshot and content hash. It does not build a new snapshot from today's drafts or erase newer drafts. A failed rollback can be retried.
 
@@ -82,7 +82,7 @@ The full guide, including translatable fields and URL paths, is the **Languages*
 
 ## Connect an AI app
 
-Connect AI lets an AI app you use, such as ChatGPT, Claude, Claude Code, Cursor or VS Code, read and write one site as you. Open **Connect AI** in the site's sidebar or from the card on the Overview. Copy the site's connector URL into your app, then sign in to Areca in the browser and select **Allow** on the consent screen. Owners and agency admins can also tick **Allow going live**, which lets the app publish the whole site and is off by default. Connected apps are listed on the same page, and you can disconnect any of them at any time. Personal keys, for scripts, are under **Advanced: personal keys**.
+Connect AI lets an AI app you use, such as ChatGPT, Claude, Claude Code, Cursor or VS Code, read and write one site as you. Open **Connect AI** in the site's sidebar or from the card on the Overview. Copy the site's connector URL into your app, then sign in to Areca in the browser and select **Allow** on the consent screen. Owners and agency admins can also tick **Allow going live**, which lets the app publish the whole site and is off by default. Connected apps are listed on the same page, and you can disconnect any of them at any time. Personal keys, for scripts, are under **Advanced: personal keys**. Agency admins can instead connect one agency-wide connector for every client and site, from **Agency › Connect AI**.
 
 The AI works within your role. Editors can create and edit drafts, upload files from web addresses and edit alt text. Owners can also mark ready, schedule, archive and delete. Only a key with **Allow going live** can publish. Connections stop working when they are disconnected or unused for 90 days, and keys stop working when they expire or are revoked. Owners can see and disconnect every connection on the site. Actions made through a connected app or key appear in the activity log as **via AI**.
 
@@ -90,7 +90,7 @@ For setup steps and troubleshooting, see the [Connect AI guide](/docs/cms/connec
 
 ## Development environments
 
-Your agency may try changes on a copy of your site before they reach the live site. This copy is a **development environment**. Only agency admins can see it, so you will not find it in the CMS. Its changes reach your live site only after the agency pushes them, and the agency reviews each change first. You do not need to do anything for this.
+Your agency may try changes on a copy of your site before they reach the live site. This copy is a **development environment**. Only agency admins can see it, so you will not find it in the CMS, and its activity is hidden from you. Its changes reach your live site only after the agency pushes them, and the agency reviews each change first. You do not need to do anything for this.
 
 ## Keyboard shortcuts
 

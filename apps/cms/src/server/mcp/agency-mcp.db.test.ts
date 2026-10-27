@@ -14,6 +14,7 @@ import {
   mcpConnection,
   mcpKey,
   oauthClient,
+  organization,
   site,
   user,
 } from '#/db/schema'
@@ -106,16 +107,36 @@ async function call(
   return { isError: Boolean(result.isError), text, data }
 }
 
-function pingRequest(url: string, token?: string) {
+function pingRequest(
+  url: string,
+  token?: string,
+  scheme: 'Bearer' | 'DPoP' = 'Bearer',
+) {
   return new Request(url, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
       accept: 'application/json, text/event-stream',
-      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...(token ? { authorization: `${scheme} ${token}` } : {}),
     },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'ping' }),
   })
+}
+
+/** An error result's message, without the site echo line that comes first. */
+function messageOf(outcome: Outcome): string {
+  return outcome.text.replace(/^site: .*\n/, '')
+}
+
+/** The site echo a result carries: the success `site` object, or the echo line of an error. */
+function echoOf(outcome: Outcome): Record<string, unknown> | null {
+  if (outcome.data?.site && typeof outcome.data.site === 'object') {
+    return outcome.data.site as Record<string, unknown>
+  }
+  const line = outcome.text.split('\n').find((row) => row.startsWith('site: '))
+  return line
+    ? (JSON.parse(line.slice('site: '.length)) as Record<string, unknown>)
+    : null
 }
 
 /** The text of a database error, including the Postgres error under drizzle's wrapper. */
@@ -422,6 +443,29 @@ describe.skipIf(!runnable)(
         ).toBe(401)
       })
 
+      it('refuses a personal key sent under the DPoP scheme, on both connectors, and accepts it as Bearer', async () => {
+        const agencyDpop = await handleAgencyMcpRequest(
+          pingRequest(AGENCY_URL, agencyToken, 'DPoP'),
+        )
+        expect(agencyDpop.status).toBe(401)
+        expect(agencyDpop.headers.get('www-authenticate')).toMatch(/^DPoP /)
+        expect(await agencyDpop.json()).toEqual({
+          error: 'Personal keys require Bearer authorization',
+        })
+
+        const siteDpop = await handleSiteMcpRequest(
+          pingRequest(siteUrl(clientX.site.slug), siteKeyAdmin, 'DPoP'),
+          clientX.site.slug,
+        )
+        expect(siteDpop.status).toBe(401)
+        expect(siteDpop.headers.get('www-authenticate')).toMatch(/^DPoP /)
+
+        const agencyBearer = await handleAgencyMcpRequest(
+          pingRequest(AGENCY_URL, agencyToken),
+        )
+        expect(agencyBearer.status).not.toBe(401)
+      })
+
       it('answers mfa_required (403) when the agency admin has lost two-factor auth', async () => {
         await db
           .update(user)
@@ -548,14 +592,14 @@ describe.skipIf(!runnable)(
         const agency = await connectAgency(agencyToken)
         const goLive = await call(agency, 'go_live', { site: devSlug })
         expect(goLive.isError).toBe(true)
-        expect(goLive.text).toBe(
+        expect(messageOf(goLive)).toBe(
           "go_live isn't available on development environments. Push to production first.",
         )
         const push = await call(agency, 'push_to_production', {
           site: clientX.site.slug,
         })
         expect(push.isError).toBe(true)
-        expect(push.text).toBe(
+        expect(messageOf(push)).toBe(
           "push_to_production only works on a development environment. Use the site's dev environment slug (see list_sites).",
         )
         await agency.close()
@@ -623,14 +667,145 @@ describe.skipIf(!runnable)(
         await agency.close()
       })
 
-      it('answers an unknown site slug with a refusal that says how to find one', async () => {
+      it('answers an unknown site slug with a refusal that says how to find one, and no site echo', async () => {
         const agency = await connectAgency(agencyToken)
         const result = await call(agency, 'get_site_info', {
           site: 'no-such-site',
         })
         expect(result.isError).toBe(true)
         expect(result.text).toContain('list_sites or find_site')
+        expect(echoOf(result)).toBeNull()
         await agency.close()
+      })
+
+      it('echoes the site on a refusal and on a tool error, with isError kept', async () => {
+        const agency = await connectAgency(agencyToken)
+        const echoSite = {
+          slug: clientX.site.slug,
+          name: clientX.site.name,
+          client: clientX.org.name,
+          environment: 'production',
+        }
+
+        // Refused by the environment check: go_live on a development environment.
+        const refused = await call(agency, 'go_live', { site: devSlug })
+        expect(refused.isError).toBe(true)
+        expect(echoOf(refused)).toEqual({
+          slug: devSlug,
+          name: expect.any(String),
+          client: clientX.org.name,
+          environment: 'development',
+        })
+
+        // A tool error: an entry that does not exist on this site.
+        const missing = await call(agency, 'get_entry', {
+          site: clientX.site.slug,
+          id: crypto.randomUUID(),
+        })
+        expect(missing.isError).toBe(true)
+        expect(echoOf(missing)).toEqual(echoSite)
+
+        // A tool error: a version conflict on an update.
+        const created = await call(agency, 'create_entry', {
+          site: clientX.site.slug,
+          collection: 'posts',
+          fields: { title: 'Echo me', slug: 'echo-me', body: 'Text' },
+        })
+        expect(created.isError, created.text).toBe(false)
+        const conflict = await call(agency, 'update_entry', {
+          site: clientX.site.slug,
+          id: created.data?.id,
+          expectedVersion: 999,
+          fields: { title: 'Changed' },
+        })
+        expect(conflict.isError).toBe(true)
+        expect(echoOf(conflict)).toEqual(echoSite)
+        // The success echo is unchanged.
+        expect(created.data?.site).toEqual(echoSite)
+
+        // An unresolved site gets no echo, and nothing else changes.
+        const unknown = await call(agency, 'update_entry', {
+          site: 'no-such-site',
+          id: created.data?.id,
+          fields: { title: 'Nope' },
+        })
+        expect(unknown.isError).toBe(true)
+        expect(echoOf(unknown)).toBeNull()
+        await agency.close()
+      })
+    })
+
+    describe('list_sites client filter', () => {
+      const suffix = crypto.randomUUID().slice(0, 8)
+      const made: Awaited<ReturnType<typeof createTestSite>>[] = []
+      const clients: Record<
+        string,
+        Awaited<ReturnType<typeof createTestSite>>
+      > = {}
+
+      // A: slug acme-<s>. B: name ACME-<s> (equal to A's slug, ignoring case), slug other-<s>.
+      // C and D: both named Twin <s>. E: name Solo <s>.
+      const plan = {
+        a: { name: `Acme ${suffix}`, slug: `acme-${suffix}` },
+        b: { name: `ACME-${suffix}`, slug: `other-${suffix}` },
+        c: { name: `Twin ${suffix}`, slug: `twin-a-${suffix}` },
+        d: { name: `Twin ${suffix}`, slug: `twin-b-${suffix}` },
+        e: { name: `Solo ${suffix}`, slug: `solo-${suffix}` },
+      } as const
+
+      beforeAll(async () => {
+        for (const key of Object.keys(plan) as (keyof typeof plan)[]) {
+          const ctx = await createTestSite()
+          made.push(ctx)
+          clients[key] = ctx
+          await db
+            .update(organization)
+            .set(plan[key])
+            .where(eq(organization.id, ctx.org.id))
+        }
+      }, 120_000)
+
+      afterAll(async () => {
+        for (const ctx of made) await cleanupTestSite(ctx)
+      }, 120_000)
+
+      const slugsFor = async (args: Record<string, unknown>) => {
+        const agency = await connectAgency(agencyToken)
+        try {
+          const result = await call(agency, 'list_sites', args)
+          return result
+        } finally {
+          await agency.close()
+        }
+      }
+
+      it('lists only the client whose slug matches, even when another client is named the same way', async () => {
+        const result = await slugsFor({ client: plan.a.slug })
+        expect(result.isError, result.text).toBe(false)
+        const rows = result.data?.sites as { slug: string }[]
+        expect(rows.map((row) => row.slug)).toEqual([clients.a.site.slug])
+      })
+
+      it('lists the client whose name is unique, ignoring case', async () => {
+        const result = await slugsFor({ client: plan.e.name.toLowerCase() })
+        expect(result.isError, result.text).toBe(false)
+        const rows = result.data?.sites as { slug: string }[]
+        expect(rows.map((row) => row.slug)).toEqual([clients.e.site.slug])
+      })
+
+      it('refuses a client name that two clients share, and lists their slugs', async () => {
+        const result = await slugsFor({ client: plan.c.name })
+        expect(result.isError).toBe(true)
+        expect(messageOf(result)).toBe(
+          `Several clients are named "${plan.c.name}". Use one of these client slugs: ${plan.c.slug}, ${plan.d.slug}.`,
+        )
+        expect(echoOf(result)).toBeNull()
+      })
+
+      it('lists nothing for a client that is not known, as before', async () => {
+        const result = await slugsFor({ client: 'no-such-client' })
+        expect(result.isError).toBe(false)
+        expect(result.data?.sites).toEqual([])
       })
     })
 

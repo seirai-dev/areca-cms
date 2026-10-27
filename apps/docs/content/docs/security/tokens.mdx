@@ -115,6 +115,8 @@ A personal AI key lets one AI app work on one site as you. You create it on the 
 - **Revocation.** Revoking takes effect at once. Editors can revoke their own keys. Owners and agency admins can revoke any key on the site. Each key shows when it was last used, which helps you spot a key that is no longer in use.
 - **Limits.** Each person can have 20 active keys per site. Requests made with a key are rate limited to 120 a minute per key, and to 600 a minute per client address when the address is known; see [rate limits](/docs/security/rate-limits#ai-app-requests).
 
+An agency admin can also create a personal **agency key** on **Agency › Connect AI**. It works on the [agency connector](/docs/cms/agency-connector) for every client and site, and on no site's connector. Creating one needs a fresh authenticator code, its lifetime is chosen the same way, and it ends when the admin role ends.
+
 A personal AI key is not a site token. It cannot be used to build a website, and a site token cannot be used to call the MCP endpoint.
 
 ## If a token leaks

@@ -48,6 +48,8 @@ Two details matter in practice:
 - The CMS must be reachable on its public HTTPS address. ChatGPT and Claude connect from the internet, so a CMS that only works on a local network cannot be used with them. If you run Areca yourself, see [production](/docs/self-hosting/production).
 - You need a web browser where you can sign in to Areca and approve. Claude Code, Cursor and VS Code receive the approval on localhost, so their browser must be on the same computer as the app.
 
+Agency admins who manage many clients can connect one [agency connector](/docs/cms/agency-connector) instead of one connector per site. It is one address for every client and site, and each call names the site it acts on.
+
 ## Connect your AI app
 
 Every app uses the same three steps.

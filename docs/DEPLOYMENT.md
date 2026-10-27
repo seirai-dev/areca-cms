@@ -116,8 +116,8 @@ The Docker build calls `GET /api/sites/snapshot/current` on `ARECA_CMS_URL`.
 ChatGPT and Claude connect to the CMS from the internet, so the CMS must answer on a public HTTPS address for them. Claude Code, Cursor and VS Code need HTTPS for any address except `localhost`, so a plain `http://` LAN address does not work for their sign-in.
 
 - Set `APP_URL` and `BETTER_AUTH_URL` to the same public `https://` origin. The connector URL (`<APP_URL>/api/mcp/<site-slug>`), the OAuth issuer (`<BETTER_AUTH_URL>/api/auth`) and the discovery documents are built from them.
-- A reverse proxy must forward every path to the CMS, including `/.well-known/*` (discovery), `/api/auth/*` (sign-in and OAuth) and `/api/mcp/*` (the connectors). A proxy that forwards only some paths breaks AI app sign-in.
-- Check the discovery documents after a deploy. `https://<cms>/.well-known/oauth-protected-resource/api/mcp/<site-slug>` must return a `resource` equal to the connector URL, and `https://<cms>/.well-known/oauth-authorization-server/api/auth` must return the issuer `https://<cms>/api/auth`.
+- A reverse proxy must forward every path to the CMS, including `/.well-known/*` (discovery), `/api/auth/*` (sign-in and OAuth), `/api/mcp/*` (the site connectors) and `/api/agency/mcp` (the agency connector). A proxy that forwards only some paths breaks AI app sign-in.
+- Check the discovery documents after a deploy. `https://<cms>/.well-known/oauth-protected-resource/api/mcp/<site-slug>` must return a `resource` equal to the connector URL, `https://<cms>/.well-known/oauth-protected-resource/api/agency/mcp` must return the agency connector's address as `resource` (if agency admins use it), and `https://<cms>/.well-known/oauth-authorization-server/api/auth` must return the issuer `https://<cms>/api/auth`.
 
 ## 4. CMS site settings
 
@@ -182,6 +182,12 @@ status `demo`, never set `wasLive` or `deployedAt`, and never count as productio
 live or become rollback targets. The site's build token can pull the latest demo
 snapshot for local demonstration. Configure a deployment target and health URL
 and switch to Production before releasing a production site.
+
+A development environment (see [ADMIN_GUIDE.md](ADMIN_GUIDE.md#development-environments)) has no
+deployment target and never goes live, so nothing in this section applies to it.
+Its tokens are separate from the production site's, and the production Dokploy
+build keeps using the production token. Changes reach production by push,
+then the usual **Go live** on the production site.
 
 The queue locks each site when enqueueing or claiming work and enforces one
 queued and one active job per site in PostgreSQL. Sites may share a Dokploy

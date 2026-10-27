@@ -1,6 +1,7 @@
 import type { CallToolResult } from '@modelcontextprotocol/server'
 import { z } from '#/lib/zod'
 
+import { isDevSite } from '#/lib/site-environment'
 import { withAuditContext } from '#/server/audit-context'
 
 import { resolveAgencySite } from './agency-access'
@@ -32,6 +33,11 @@ export type SiteEcho = {
   name: string
   client: string
   environment: SiteEnvironment
+}
+
+/** The environment a resolved site row is, before its context is loaded. */
+export function environmentOf(row: AgencySite): SiteEnvironment {
+  return isDevSite(row) ? 'development' : 'production'
 }
 
 export function siteEchoOf(
@@ -132,9 +138,29 @@ export function withSiteEcho(result: unknown, echo: SiteEcho): unknown {
 }
 
 /**
+ * An error result with the site echo, for a call whose site was resolved. The
+ * text starts with the same `site` object a success carries, on its own line,
+ * then the message. `isError` is kept.
+ */
+export function withErrorEcho(
+  result: CallToolResult,
+  echo: SiteEcho,
+): CallToolResult {
+  const prefix = `site: ${JSON.stringify(echo)}\n`
+  return {
+    ...result,
+    content: result.content.map((part) =>
+      part.type === 'text' ? { ...part, text: prefix + part.text } : part,
+    ),
+  }
+}
+
+/**
  * Runs one agency tool call: resolve the named site (reachability is checked
  * here), build the per-call actor, refuse on a wrong environment, run the
- * tool's own code, and echo the site. Audited as `via: 'mcp-agency'`.
+ * tool's own code, and echo the site on every result, refusals and errors
+ * included, once the site is resolved. An unresolved site gets no echo.
+ * Audited as `via: 'mcp-agency'`.
  */
 export async function runAgencyTool(
   principal: AgencyPrincipal,
@@ -149,20 +175,23 @@ export async function runAgencyTool(
       mcpCredential: principal.credential,
     },
     async () => {
+      let echo: SiteEcho | null = null
       try {
         const { site: slug } = SITE_ARGUMENT.parse(rawInput)
         const row = await resolveAgencySite(principal.user, slug)
+        echo = siteEchoOf(row, environmentOf(row))
         const actor = siteActorFor(principal, row)
         requireAccess(actor, tool.access, tool.deniedMessage)
         const context: McpSiteContext = await loadSiteContext(row.id)
         const refusal = environmentRefusal(tool, context.environment)
-        if (refusal) return toolError(refusal)
+        if (refusal) return withErrorEcho(toolError(refusal), echo)
         const result = await tool.invoke(rawInput, actor, context)
         return toCallResult(
           withSiteEcho(result, siteEchoOf(row, context.environment)),
         )
       } catch (error) {
-        return toToolError(error)
+        const failure = toToolError(error)
+        return echo ? withErrorEcho(failure, echo) : failure
       }
     },
   )
