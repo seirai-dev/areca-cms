@@ -399,7 +399,7 @@ function AgencyNav({
           ))}
         </div>
         {collapsed ? null : (
-          <div className="grid gap-0.5">
+          <div className="grid min-w-0 gap-0.5">
             <NavGroupLabel
               actions={
                 <Button
@@ -418,7 +418,11 @@ function AgencyNav({
               {m.shell_nav_all_sites()}
             </NavGroupLabel>
             {sitesOpen ? (
-              <AllSitesNav collapsed={collapsed} onNavigate={onNavigate} />
+              <AllSitesNav
+                collapsed={collapsed}
+                onNavigate={onNavigate}
+                details
+              />
             ) : null}
           </div>
         )}
