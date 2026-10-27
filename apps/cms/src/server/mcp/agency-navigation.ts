@@ -2,6 +2,7 @@ import type { ToolAnnotations } from '@modelcontextprotocol/server'
 import { z } from '#/lib/zod'
 
 import { isDevSite } from '#/lib/site-environment'
+import { NotFoundError } from '#/server/content/errors'
 
 import { agencyReachableSites } from './agency-access'
 import type { AgencySite } from './agency-access'
@@ -54,7 +55,13 @@ async function navigationRows(
         ? byId.get(row.parentSiteId)
         : undefined
       : sites.find((other) => other.parentSiteId === row.id)
-    const state = await loadReleaseState(row.id)
+    const state = await loadReleaseState(row.id).catch((error: unknown) => {
+      // Deleted after the list was read: a site that is gone is not listed,
+      // and it must not fail the whole listing.
+      if (error instanceof NotFoundError) return null
+      throw error
+    })
+    if (!state) continue
     rows.push({
       slug: row.slug,
       name: row.name,
