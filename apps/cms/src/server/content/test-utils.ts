@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm'
 import { db } from '#/db'
 import { collection, entry, organization, site, user } from '#/db/schema'
 import type { Field, SiteLanguages } from '#/lib/types'
+import { assetMutationLock } from '#/server/assets/usage'
 
 export const sampleRichText = {
   type: 'doc' as const,
@@ -203,4 +204,59 @@ export async function withTestSite(
 /** Instant within the 60s schedule skew so tests can enqueue already-due work. */
 export function dueScheduleIso() {
   return new Date(Date.now() - 30_000).toISOString()
+}
+
+/**
+ * Holds the asset lock an ordinary entry save takes (server/assets/usage.ts),
+ * as a save in progress does. `write` runs inside the holding transaction first,
+ * so its rows are uncommitted until `release` is called. `done` settles then.
+ */
+export async function holdEntryLock(
+  organizationId: string,
+  write?: (
+    tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  ) => Promise<void>,
+) {
+  let release!: () => void
+  const released = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  let acquired!: () => void
+  const held = new Promise<void>((resolve) => {
+    acquired = resolve
+  })
+  const done = db.transaction(async (tx) => {
+    await assetMutationLock(tx, organizationId)
+    await write?.(tx)
+    acquired()
+    await released
+  })
+  await held
+  return { release, done }
+}
+
+/**
+ * Starts `work` and reports, after `waitMs`, whether it has settled. `outcome`
+ * settles with the result or the error, and never rejects.
+ */
+export function observe<T>(work: Promise<T>, waitMs = 300) {
+  let settled = false
+  const outcome = work.then(
+    (value) => {
+      settled = true
+      return { ok: true as const, value }
+    },
+    (error: unknown) => {
+      settled = true
+      return { ok: false as const, error }
+    },
+  )
+  return {
+    outcome,
+    /** True once the work has settled, after `waitMs` of waiting. */
+    async settledAfterWait() {
+      await new Promise((resolve) => setTimeout(resolve, waitMs))
+      return settled
+    },
+  }
 }

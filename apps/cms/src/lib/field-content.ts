@@ -43,6 +43,31 @@ export function fieldContentKeys(
 }
 
 /**
+ * Field keys present in one stored version, base and every language slot, blank
+ * values included. A removal that is not applied keeps exactly what production
+ * stores, so presence (not content) decides what is kept.
+ */
+export function presentFieldKeys(
+  data: EntryData | null | undefined,
+): Set<string> {
+  const keys = new Set<string>()
+  if (!data) return keys
+  const collect = (source: Record<string, unknown>) => {
+    for (const key of Object.keys(source)) {
+      if (!key.startsWith('$')) keys.add(key)
+    }
+  }
+  collect(data)
+  const translations = data[I18N_KEY]
+  if (isPlainObject(translations)) {
+    for (const slot of Object.values(translations)) {
+      if (isPlainObject(slot)) collect(slot)
+    }
+  }
+  return keys
+}
+
+/**
  * Whether a stored version holds any value (blank or not) under one of the
  * keys, base or language slot. Matches what the purge of a removed field deletes.
  */

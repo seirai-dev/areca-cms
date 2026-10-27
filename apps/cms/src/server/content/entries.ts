@@ -251,6 +251,7 @@ export async function createEntry(input: {
 
   return db.transaction(async (tx) => {
     await assetMutationLock(tx, ctx.site.organizationId)
+    await assertUrlsAvailable(tx, ctx.collection.id, parsed.data, slug)
     const ownershipErrors = await validateContentOwnership(
       ctx.site.id,
       ctx.site.organizationId,
@@ -343,6 +344,13 @@ export async function updateDraft(
 
   return db.transaction(async (tx) => {
     await assetMutationLock(tx, ctx.site.organizationId)
+    await assertUrlsAvailable(
+      tx,
+      ctx.collection.id,
+      parsed.data,
+      nextSlug && nextSlug !== ctx.entry.slug ? nextSlug : null,
+      id,
+    )
     const ownershipErrors = await validateContentOwnership(
       ctx.site.id,
       ctx.site.organizationId,
@@ -1068,6 +1076,26 @@ async function writeRevision(
     note,
     kind,
   })
+}
+
+/**
+ * The URL checks of a save, run again under the assets lock (the lock a push
+ * and a copy take too). The checks before the lock read the URLs as they were
+ * before a concurrent push or save committed; this one reads them after.
+ */
+async function assertUrlsAvailable(
+  tx: Pick<typeof db, 'select'>,
+  collectionId: string,
+  data: EntryData,
+  slug: string | null,
+  entryId?: string,
+) {
+  const slugErrors = await validateLocaleSlugs(
+    { collectionId, entryId, data },
+    tx,
+  )
+  if (slugErrors.length) throw new ValidationError(slugErrors)
+  if (slug) await assertSlugAvailable(collectionId, slug, entryId, tx)
 }
 
 async function assertSlugAvailable(

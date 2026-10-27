@@ -6,6 +6,7 @@ import {
 } from '#/lib/dev-env'
 import { db } from '#/db'
 import { collection, entry, environmentPush, site } from '#/db/schema'
+import { entryTitle } from '#/lib/content/utils'
 import { carryFieldValues, withoutFieldKeys } from '#/lib/field-content'
 import type {
   ContentKind,
@@ -19,6 +20,7 @@ import type {
 import { audit } from '#/server/audit'
 import { lockOrganizationForMutation } from '#/server/admin/organization-lock'
 import { applySiteLanguages } from '#/server/admin/site-languages'
+import { assetMutationLock } from '#/server/assets/usage'
 import { archiveDeletedContent } from '#/server/content/deletion-archive'
 import {
   prepareCollectionUpsert,
@@ -166,6 +168,9 @@ async function runPush(
   const dev = await lockDevEnvironment(tx, input.devSiteId)
   const prod = await lockProductionRow(tx, dev.parentSiteId)
   await lockProductionSite(tx, prod.id)
+  // The lock ordinary entry saves take (server/content/entries.ts), last in the
+  // order, so the URLs read below cannot change under this push.
+  await assetMutationLock(tx, organizationId)
 
   const context = await loadPlanContext(tx, dev.id)
   const plan = buildPlan(context.planInput)
@@ -192,17 +197,19 @@ async function runPush(
   // The whole resulting schema is checked once, before any write.
   checkResultingSchema(context.planInput, schemaItems)
   // Every production row this push writes or changes is locked and verified
-  // before the schema and language writes, which bump content_version too.
+  // before the schema and language writes, which bump content_version too: the
+  // entries a selected schema or main-language item affects are in that set.
   const lockedVersions = await lockAndVerifyAffected(tx, [
     ...entryItems,
     ...schemaItems,
+    ...(languagesItem ? [languagesItem] : []),
   ])
   const devById = new Map(
     context.planInput.devEntries.map((row) => [row.id, row]),
   )
-  assertUrlsFree(context.planInput, entryItems, devById)
-  // The versions before any schema write, for the baselines written at the end.
-  const beforeSchema = new Map(lockedVersions)
+  await assertUrlsFree(tx, prod.id, entryItems, devById)
+  // The versions before any write, for the baselines of entries this push leaves alone.
+  const beforeWrites = new Map(lockedVersions)
 
   const state: PushState = {
     tx,
@@ -264,7 +271,7 @@ async function runPush(
   await adjustUnwrittenBaselines(
     state,
     schemaItems,
-    beforeSchema,
+    beforeWrites,
     context.planInput,
   )
   await writeSchemaBaseline(state, selected, context.planInput, dev.id)
@@ -469,14 +476,16 @@ function ownerOf(row: {
 }
 
 /**
- * Apply-time check of the URLs the selected entries write, against the
- * production rows read under this transaction's locks. The plan flags the same
- * collisions (Apply is disabled for them), so this only catches a collision the
- * plan hash does not cover. Entries of the same push are checked against each
- * other too.
+ * Apply-time check of the URLs the selected entries write. The owners are read
+ * inside this transaction, after the assets lock, not taken from the plan input:
+ * a URL an ordinary entry save took after the plan was read is refused here.
+ * The plan flags the same collisions (Apply is disabled for them), and its hash
+ * covers them, so this is a backstop. Entries of the same push are checked
+ * against each other too.
  */
-function assertUrlsFree(
-  planInput: PlanInput,
+async function assertUrlsFree(
+  tx: Tx,
+  productionSiteId: string,
   items: PlanItem[],
   devById: Map<string, PlanEntry>,
 ) {
@@ -485,15 +494,19 @@ function assertUrlsFree(
     const dev = item.devId ? devById.get(item.devId) : undefined
     return dev ? [{ item, dev }] : []
   })
+  const ownersByKey = new Map<string, SlugOwner[]>()
   for (const write of writes) {
     const { item, dev } = write
-    const production = planInput.productionEntries
-      .filter(
-        (row) =>
-          row.collectionKey === dev.collectionKey &&
-          row.id !== item.productionId,
+    let owners = ownersByKey.get(dev.collectionKey)
+    if (!owners) {
+      owners = await readProductionUrlOwners(
+        tx,
+        productionSiteId,
+        dev.collectionKey,
       )
-      .map(ownerOf)
+      ownersByKey.set(dev.collectionKey, owners)
+    }
+    const production = owners.filter((row) => row.id !== item.productionId)
     const pushed = writes
       .filter(
         (other) =>
@@ -504,8 +517,8 @@ function assertUrlsFree(
       ['in production', production],
       ['in this push', pushed],
     ]
-    for (const [where, owners] of holdings) {
-      const collision = findSlugCollisions(dev, owners).at(0)
+    for (const [where, holders] of holdings) {
+      const collision = findSlugCollisions(dev, holders).at(0)
       if (!collision) continue
       throw new ValidationError([
         {
@@ -515,6 +528,43 @@ function assertUrlsFree(
       ])
     }
   }
+}
+
+/**
+ * The entries of one production collection or section, read now. A section's
+ * title is its label, as in the plan.
+ */
+async function readProductionUrlOwners(
+  tx: Tx,
+  productionSiteId: string,
+  collectionKey: string,
+): Promise<SlugOwner[]> {
+  const rows = await tx
+    .select({
+      id: entry.id,
+      slug: entry.slug,
+      draftData: entry.draftData,
+      kind: collection.kind,
+      label: collection.label,
+      fields: collection.fields,
+    })
+    .from(entry)
+    .innerJoin(collection, eq(entry.collectionId, collection.id))
+    .where(
+      and(
+        eq(collection.siteId, productionSiteId),
+        eq(collection.key, collectionKey),
+      ),
+    )
+  return rows.map((row) => ({
+    id: row.id,
+    title:
+      row.kind === 'global'
+        ? row.label
+        : entryTitle(row.draftData, row.fields, row.slug),
+    slug: row.slug,
+    draftData: row.draftData,
+  }))
 }
 
 async function readContentVersions(
@@ -938,17 +988,17 @@ async function resolveReadyCandidates(
 }
 
 /**
- * An applied field removal purges the removed values from the production
- * entries that hold them, and bumps their `content_version`. Dev entries of
- * those collections that this push did not write take the same change in their
- * baseline: the removed keys drop out, and the recorded production version
- * moves with the purge (only when the entry was not in conflict before it).
- * Without this, the removal would list those entries again after it is applied.
+ * Dev entries this push did not write, that are linked to production, follow the
+ * changes the push made to their production rows. Own bumps are not a conflict:
+ * an entry that was in step with production before the push (its recorded
+ * `origin_content_version` is the one read before any write) takes the version
+ * the push left it at. An applied field removal also drops the removed keys from
+ * its baseline. Without this, the entry would be listed again after the push.
  */
 async function adjustUnwrittenBaselines(
   state: PushState,
   schemaItems: PlanItem[],
-  beforeSchema: Map<string, number>,
+  beforeWrites: Map<string, number>,
   planInput: PlanInput,
 ) {
   const { tx } = state
@@ -958,29 +1008,34 @@ async function adjustUnwrittenBaselines(
     const keys = removedFieldKeysOf(planInput, item.collectionKey)
     if (keys.length > 0) removedByKey.set(item.collectionKey, keys)
   }
-  if (removedByKey.size === 0) return
   for (const dev of planInput.devEntries) {
-    const keys = removedByKey.get(dev.collectionKey)
     const base = dev.originBaseline
-    if (!keys || !base || !dev.originEntryId) continue
+    if (!base || !dev.originEntryId) continue
     if (state.written.has(`entry:${dev.id}`)) continue
-    const purgedVersion = beforeSchema.get(dev.originEntryId)
-    const originVersion =
-      purgedVersion !== undefined && purgedVersion === dev.originContentVersion
-        ? (state.lockedVersions.get(dev.originEntryId) ??
-          dev.originContentVersion)
-        : dev.originContentVersion
+    const keys = removedByKey.get(dev.collectionKey) ?? []
+    const before = beforeWrites.get(dev.originEntryId)
+    const inStep = before !== undefined && before === dev.originContentVersion
+    const originVersion = inStep
+      ? (state.lockedVersions.get(dev.originEntryId) ??
+        dev.originContentVersion)
+      : dev.originContentVersion
+    if (keys.length === 0 && originVersion === dev.originContentVersion) {
+      continue
+    }
     await tx
       .update(entry)
       .set({
-        originBaseline: {
-          ...base,
-          data: withoutFieldKeys(base.data, keys),
-          publishedData:
-            base.publishedData == null
-              ? null
-              : withoutFieldKeys(base.publishedData, keys),
-        },
+        originBaseline:
+          keys.length === 0
+            ? base
+            : {
+                ...base,
+                data: withoutFieldKeys(base.data, keys),
+                publishedData:
+                  base.publishedData == null
+                    ? null
+                    : withoutFieldKeys(base.publishedData, keys),
+              },
         originContentVersion: originVersion,
       })
       .where(eq(entry.id, dev.id))

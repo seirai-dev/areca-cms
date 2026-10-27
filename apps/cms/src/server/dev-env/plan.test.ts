@@ -1474,17 +1474,28 @@ describe('productionChangeCount: forkable entries the dev env does not hold', ()
     ).toBe(1)
   })
 
-  it('does not count an entry a dev entry is linked to, or one of a collection dev does not have', () => {
-    const cases = def('cases')
+  it('does not count an entry a dev entry is linked to', () => {
     expect(
       productionChangeCount(
         planInput({
-          base: snapshot([def('articles'), cases]),
-          dev: snapshot([def('articles')]),
-          production: snapshot([def('articles'), cases]),
           devEntries: [devEntry({ originEntryId: 'p1' })],
           productionEntries: [
             prodEntry({ id: 'p1', publishedData: { title: 'A' } }),
+          ],
+        }),
+      ),
+    ).toBe(0)
+  })
+
+  it('does not count the entries of a disabled collection that dev and the baseline both lack', () => {
+    const cases = def('cases', [field('title')], { enabled: false })
+    expect(
+      productionChangeCount(
+        planInput({
+          base: snapshot([def('articles')]),
+          dev: snapshot([def('articles')]),
+          production: snapshot([def('articles'), cases]),
+          productionEntries: [
             prodEntry({
               id: 'pc',
               collectionKey: 'cases',
@@ -1495,6 +1506,40 @@ describe('productionChangeCount: forkable entries the dev env does not hold', ()
         }),
       ),
     ).toBe(0)
+  })
+
+  it('counts a ready entry of a collection dev does not have, as a reset would copy it', () => {
+    const cases = def('cases')
+    expect(
+      productionChangeCount(
+        planInput({
+          base: snapshot([def('articles'), cases]),
+          dev: snapshot([def('articles')]),
+          production: snapshot([def('articles'), cases]),
+          productionEntries: [
+            prodEntry({
+              id: 'pc',
+              collectionKey: 'cases',
+              slug: 'case-1',
+              publishedData: { title: 'C' },
+            }),
+            prodEntry({
+              id: 'pca',
+              collectionKey: 'cases',
+              slug: 'case-old',
+              status: 'archived',
+              publishedData: { title: 'Old' },
+            }),
+            prodEntry({
+              id: 'pcu',
+              collectionKey: 'cases',
+              slug: 'case-draft',
+              publishedData: null,
+            }),
+          ],
+        }),
+      ),
+    ).toBe(1)
   })
 })
 
@@ -1518,5 +1563,232 @@ describe('buildPlan: languages item title code', () => {
         titleCode: 'site-languages',
       }),
     ])
+  })
+})
+
+describe('buildPlan: blank production values a pending removal keeps', () => {
+  const withExcerpt = def('articles', [field('title'), field('excerpt')])
+  const withoutExcerpt = def('articles', [field('title')])
+  const blankBaseline = {
+    slug: 'a',
+    data: { title: 'A', excerpt: '' },
+    publishedSlug: 'a',
+    publishedData: { title: 'A', excerpt: '' },
+    status: 'published' as const,
+  }
+
+  // Production holds `excerpt: ""`, which is not content: no field usage counts it.
+  function blankInput(devOverrides: Partial<PlanEntry> = {}) {
+    return planInput({
+      base: snapshot([withExcerpt]),
+      dev: snapshot([withoutExcerpt]),
+      production: snapshot([withExcerpt]),
+      devEntries: [
+        devEntry({
+          draftData: { title: 'A' },
+          publishedData: { title: 'A' },
+          originBaseline: blankBaseline,
+          ...devOverrides,
+        }),
+      ],
+      productionEntries: [
+        prodEntry({
+          draftData: { title: 'A', excerpt: '' },
+          publishedData: { title: 'A', excerpt: '' },
+        }),
+      ],
+      productionFieldUsage: {},
+    })
+  }
+
+  it('keeps a blank production value, so the entry is linked to the removal', () => {
+    const plan = buildPlan(
+      blankInput({
+        draftData: { title: 'B' },
+        publishedData: { title: 'B' },
+      }),
+    )
+    const entryItem = plan.items.find((item) => item.id === 'entry:d1')
+    expect(entryItem).toMatchObject({
+      dependsOn: ['schema:articles'],
+      summary: expect.objectContaining({ preservedFields: ['excerpt'] }),
+    })
+    expect(entryItem?.summary.changedFields).toEqual(['title'])
+  })
+
+  it('does not list an entry whose only difference is the blank kept field', () => {
+    const plan = buildPlan(blankInput())
+    expect(plan.items.map((item) => item.id)).toEqual(['schema:articles'])
+  })
+})
+
+describe('buildPlan: turning SEO off on a section', () => {
+  const section = (seoEnabled: boolean) =>
+    def('companyInfo', [field('email')], { kind: 'global', seoEnabled })
+  const sectionRow = (contentVersion: number, extra = {}) =>
+    prodEntry({
+      id: 'ps',
+      collectionKey: 'companyInfo',
+      collectionKind: 'global',
+      slug: '$global',
+      contentVersion,
+      draftData: { email: 'a@x.test', $seo: { title: 'Home' } },
+      ...extra,
+    })
+  const seoOff = (row: PlanProductionEntry) =>
+    planInput({
+      base: snapshot([section(true)]),
+      dev: snapshot([section(false)]),
+      production: snapshot([section(true)]),
+      productionEntries: [row],
+    })
+
+  it('lists the section entry as affected, at the version the plan saw', () => {
+    const plan = buildPlan(seoOff(sectionRow(2)))
+    expect(
+      plan.items.find((item) => item.id === 'schema:companyInfo'),
+    ).toMatchObject({
+      attention: null,
+      affectedEntries: [{ id: 'ps', contentVersion: 2 }],
+    })
+  })
+
+  it('changes the plan hash when the section moves on after planning', () => {
+    const before = buildPlan(seoOff(sectionRow(2))).planHash
+    const after = buildPlan(seoOff(sectionRow(3))).planHash
+    expect(after).not.toBe(before)
+  })
+
+  it('marks the item scheduled when the section has a schedule', () => {
+    const plan = buildPlan(
+      seoOff(sectionRow(2, { scheduled: true, title: 'Home' })),
+    )
+    expect(
+      plan.items.find((item) => item.id === 'schema:companyInfo'),
+    ).toMatchObject({
+      attention: 'scheduled',
+      summary: expect.objectContaining({ scheduledTitles: ['Home'] }),
+    })
+  })
+
+  it('affects nothing when SEO stays on', () => {
+    const plan = buildPlan(
+      planInput({
+        base: snapshot([section(true)]),
+        dev: snapshot([{ ...section(true), label: 'Renamed' }]),
+        production: snapshot([section(true)]),
+        productionEntries: [sectionRow(2)],
+      }),
+    )
+    expect(
+      plan.items.find((item) => item.id === 'schema:companyInfo')
+        ?.affectedEntries,
+    ).toBeUndefined()
+  })
+})
+
+describe('buildPlan: the rows a main-language stamp rewrites', () => {
+  const base = snapshot([def('articles')], { main: 'en', all: ['en', 'nl'] })
+  const switchTo = (
+    rows: PlanProductionEntry[],
+    production: PlanInput['production']['languages'] = {
+      main: 'en',
+      all: ['en', 'nl'],
+    },
+  ) =>
+    planInput({
+      base,
+      dev: snapshot([def('articles')], { main: 'nl', all: ['en', 'nl'] }),
+      production: snapshot([def('articles')], production),
+      productionEntries: rows,
+    })
+  const stamped = {
+    draftData: { $locale: 'en', title: 'Stamped' },
+    publishedData: { $locale: 'en', title: 'Stamped' },
+    scheduledData: null,
+  }
+
+  it('lists every row whose draft, ready or scheduled version lacks $locale, in id order', () => {
+    const plan = buildPlan(
+      switchTo([
+        prodEntry({
+          id: 'p2',
+          contentVersion: 5,
+          draftData: { title: 'No locale' },
+        }),
+        prodEntry({
+          id: 'p1',
+          contentVersion: 3,
+          draftData: { $locale: 'en', title: 'Draft only' },
+          publishedData: { title: 'Ready without locale' },
+        }),
+        prodEntry({ id: 'p3', contentVersion: 7, ...stamped }),
+      ]),
+    )
+    expect(plan.items.find((item) => item.id === 'languages')).toMatchObject({
+      attention: 'main-language',
+      affectedEntries: [
+        { id: 'p1', contentVersion: 3 },
+        { id: 'p2', contentVersion: 5 },
+      ],
+    })
+  })
+
+  it('lists a row with a scheduled version that lacks $locale', () => {
+    const plan = buildPlan(
+      switchTo([
+        prodEntry({
+          id: 'p1',
+          contentVersion: 3,
+          draftData: { $locale: 'en' },
+          scheduledData: { title: 'Later' },
+        }),
+      ]),
+    )
+    expect(
+      plan.items.find((item) => item.id === 'languages')?.affectedEntries,
+    ).toEqual([{ id: 'p1', contentVersion: 3 }])
+  })
+
+  it('lists nothing when production already has the new main language', () => {
+    const plan = buildPlan(
+      switchTo([prodEntry({ id: 'p1', draftData: { title: 'No locale' } })], {
+        main: 'nl',
+        all: ['en', 'nl'],
+      }),
+    )
+    expect(
+      plan.items.find((item) => item.id === 'languages')?.affectedEntries,
+    ).toBeUndefined()
+  })
+
+  it('marks the item scheduled when a row it stamps is scheduled', () => {
+    const plan = buildPlan(
+      switchTo([
+        prodEntry({
+          id: 'p1',
+          title: 'Spring menu',
+          scheduled: true,
+          draftData: { title: 'No locale' },
+        }),
+      ]),
+    )
+    expect(plan.items.find((item) => item.id === 'languages')).toMatchObject({
+      attention: 'scheduled',
+      summary: expect.objectContaining({ scheduledTitles: ['Spring menu'] }),
+    })
+  })
+
+  it('changes the plan hash when a row the stamp touches moves on', () => {
+    const rows = (version: number) => [
+      prodEntry({
+        id: 'p1',
+        contentVersion: version,
+        draftData: { title: 'No locale' },
+      }),
+    ]
+    expect(buildPlan(switchTo(rows(4))).planHash).not.toBe(
+      buildPlan(switchTo(rows(5))).planHash,
+    )
   })
 })

@@ -12,6 +12,7 @@ import {
 import {
   devEnvQueryKeys,
   invalidateQueryKeys,
+  resetQueryKeys,
 } from '#/features/dev-env/invalidate'
 
 /**
@@ -35,9 +36,9 @@ export function useDevEnvironment(siteId: string, enabled: boolean) {
   })
 
   /**
-   * Create, reset and delete change the dev env's status, the push screen and
-   * the banner. A reset also replaces the dev site's content and the production
-   * site's (the copy in the dev site is new), so both are refreshed.
+   * Create and delete change the dev env's status, the push screen and the
+   * banner. A reset also replaces the dev site's content (every entry cache
+   * is stale, not only the ones this page showed), so it refreshes both sites.
    */
   async function refresh(devSiteId?: string) {
     await invalidateQueryKeys(
@@ -49,13 +50,21 @@ export function useDevEnvironment(siteId: string, enabled: boolean) {
     )
   }
 
+  async function refreshAfterReset(devSiteId: string) {
+    await invalidateQueryKeys(
+      queryClient,
+      router,
+      resetQueryKeys({ devSiteId, productionSiteId: siteId }),
+    )
+  }
+
   const createEnv = useMutation({
     mutationFn: () => create({ data: { siteId } }),
     onSuccess: () => refresh(),
   })
   const reset = useMutation({
     mutationFn: (devSiteId: string) => refreshFn({ data: { devSiteId } }),
-    onSuccess: (_result, devSiteId) => refresh(devSiteId),
+    onSuccess: (_result, devSiteId) => refreshAfterReset(devSiteId),
   })
   const remove = useMutation({
     mutationFn: (devSiteId: string) => deleteFn({ data: { devSiteId } }),

@@ -16,6 +16,8 @@ import {
 import {
   createTestCollection,
   createTestGlobal,
+  holdEntryLock,
+  observe,
   withTestSite,
 } from '#/server/content/test-utils'
 
@@ -479,7 +481,102 @@ describe.skipIf(!hasDb)(
       })
     })
 
-    it('makes the copied draft the production ready version with markReady, even when dev has no ready version', async () => {
+    it('waits for an entry save that holds the asset lock before it reads the URLs and writes', async () => {
+      await withTestSite(async (ctx) => {
+        const actorId = ctx.actor.id
+        await seedProduction(ctx)
+        const devId = await fork(ctx)
+        await editEntry(
+          devId,
+          'posts',
+          'about',
+          { title: 'About dev', slug: 'about' },
+          actorId,
+        )
+        // Holds the lock only, so nothing else (a row lock) can hold the copy back.
+        const save = await holdEntryLock(ctx.site.organizationId)
+        const attempt = observe(
+          copy(actorId, await devEntryId(devId, 'posts', 'about')),
+        )
+        expect(await attempt.settledAfterWait()).toBe(false)
+        save.release()
+        await save.done
+
+        const result = await attempt.outcome
+        if (!result.ok) throw new Error(String(result.error))
+        expect(result.value.created).toBe(false)
+      })
+    })
+
+    it('refuses a URL that an entry save took while the copy waited', async () => {
+      await withTestSite(async (ctx) => {
+        const actorId = ctx.actor.id
+        await setSiteLanguages(
+          ctx.site.id,
+          { main: 'en', all: ['en', 'nl'] } satisfies SiteLanguages,
+          actorId,
+        )
+        await seedProduction(ctx)
+        const devId = await fork(ctx)
+        await createEntry({
+          siteId: devId,
+          collectionKey: 'posts',
+          data: {
+            title: 'Contact',
+            slug: 'contact',
+            $i18n: { nl: { $slug: 'contact' } },
+          },
+          actorId,
+        })
+        const posts = (
+          await db
+            .select({ id: collection.id })
+            .from(collection)
+            .where(
+              and(
+                eq(collection.siteId, ctx.site.id),
+                eq(collection.key, 'posts'),
+              ),
+            )
+            .limit(1)
+        ).at(0)!
+
+        // An ordinary save takes the Dutch URL and holds the lock until it commits.
+        const save = await holdEntryLock(
+          ctx.site.organizationId,
+          async (tx) => {
+            await tx.insert(entry).values({
+              siteId: ctx.site.id,
+              collectionId: posts.id,
+              slug: 'other',
+              status: 'draft',
+              draftData: {
+                title: 'Other',
+                slug: 'other',
+                $i18n: { nl: { $slug: 'contact' } },
+              },
+              createdBy: actorId,
+              updatedBy: actorId,
+            })
+          },
+        )
+        const attempt = observe(
+          copy(actorId, await devEntryId(devId, 'posts', 'contact')),
+        )
+        expect(await attempt.settledAfterWait()).toBe(false)
+        save.release()
+        await save.done
+
+        const result = await attempt.outcome
+        if (result.ok) throw new Error('the copy should have been refused')
+        expect((result.error as Error).message).toContain(
+          "already used by 'Other' in production",
+        )
+        expect(await entryRow(ctx.site.id, 'posts', 'contact')).toBeUndefined()
+      })
+    })
+
+    it('with markReady, makes the copied draft (not the dev ready version) the production ready version', async () => {
       await withTestSite(async (ctx) => {
         await seedProduction(ctx)
         const devId = await fork(ctx)

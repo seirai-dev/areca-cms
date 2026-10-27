@@ -10,7 +10,7 @@ import { m } from '#/paraglide/messages'
 import { useStepUp } from '#/features/security/step-up'
 import { copyEntryToProductionFn } from '#/server/fn/dev-env'
 
-import { devEnvQueryKeys, invalidateQueryKeys } from './invalidate'
+import { invalidateQueryKeys, writeQueryKeys } from './invalidate'
 import { warningText } from './plan-text'
 import type { SaveOutcome } from './save-before-copy'
 import { saveBeforeCopy } from './save-before-copy'
@@ -67,7 +67,11 @@ export function useCopyToProduction({
       await invalidateQueryKeys(
         queryClient,
         router,
-        devEnvQueryKeys({ devSiteId, productionSiteId }),
+        writeQueryKeys({
+          devSiteId,
+          productionSiteId,
+          productionEntryIds: [result.productionId],
+        }),
       )
       toast.success(m.dev_env_copy_success(), {
         description: result.warnings.length

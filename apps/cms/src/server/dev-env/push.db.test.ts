@@ -9,6 +9,7 @@ import {
   publication,
   site,
 } from '#/db/schema'
+import { SEO_KEY } from '#/lib/seo'
 import type { Field, SiteLanguages } from '#/lib/types'
 import { setSiteLanguages } from '#/server/admin/site-languages'
 import {
@@ -24,11 +25,13 @@ import {
   updateDraft,
 } from '#/server/content/entries'
 import { ConflictError } from '#/server/content/errors'
-import { deleteGlobal } from '#/server/content/globals'
+import { deleteGlobal, upsertGlobal } from '#/server/content/globals'
 import {
   createTestCollection,
   createTestGlobal,
   globalFields,
+  holdEntryLock,
+  observe,
   withTestSite,
 } from '#/server/content/test-utils'
 
@@ -95,6 +98,20 @@ async function entryRow(siteId: string, collectionKey: string, slug: string) {
     )
     .limit(1)
   return rows.at(0)?.entry
+}
+
+async function collectionIdOf(siteId: string, collectionKey: string) {
+  const row = (
+    await db
+      .select({ id: collection.id })
+      .from(collection)
+      .where(
+        and(eq(collection.siteId, siteId), eq(collection.key, collectionKey)),
+      )
+      .limit(1)
+  ).at(0)
+  if (!row) throw new Error(`no collection ${collectionKey}`)
+  return row.id
 }
 
 async function devEntryId(devId: string, collectionKey: string, slug: string) {
@@ -828,6 +845,14 @@ describe.skipIf(!hasDb)('development environment: push', () => {
         },
         actorId,
       )
+      // An independent change to the same entry: it is written with the removal.
+      await editEntry(
+        devId,
+        'posts',
+        'home',
+        { title: 'Home dev', slug: 'home' },
+        actorId,
+      )
       const plan = await loadPlan(db, devId)
       const prodHome = await entryRow(ctx.site.id, 'posts', 'home')
       expect(
@@ -838,9 +863,142 @@ describe.skipIf(!hasDb)('development environment: push', () => {
 
       const result = await push(actorId, devId, { apply: ['schema:posts'] })
       expect(result.counts.schema).toBe(1)
+      expect(result.counts.changed).toBe(1)
       expect(result.warnings).toEqual([])
       const home = await entryRow(ctx.site.id, 'posts', 'home')
+      expect(home?.draftData).toMatchObject({ title: 'Home dev' })
       expect(home?.draftData).not.toHaveProperty('excerpt')
+      expect((await loadPlan(db, devId)).items).toEqual([])
+    })
+  })
+
+  it('keeps a blank production value of a field removal that is not applied, and its baseline', async () => {
+    await withTestSite(async (ctx) => {
+      await seedProduction(ctx)
+      const actorId = ctx.actor.id
+      // Production holds an empty excerpt: stored, but not content.
+      await editEntry(
+        ctx.site.id,
+        'posts',
+        'home',
+        { title: 'Home v1', slug: 'home', excerpt: '' },
+        actorId,
+        { publish: true },
+      )
+      const devId = await fork(ctx)
+      await upsertCollection(
+        devId,
+        {
+          key: 'posts',
+          label: 'Articles',
+          routePattern: '/posts/$slug',
+          fields: postFields.filter((field) => field.key !== 'excerpt'),
+        },
+        actorId,
+      )
+      await editEntry(
+        devId,
+        'posts',
+        'home',
+        { title: 'Home v2', slug: 'home' },
+        actorId,
+        { publish: true },
+      )
+      const homeItem = `entry:${await devEntryId(devId, 'posts', 'home')}`
+      expect(
+        (await loadPlan(db, devId)).items.find((item) => item.id === homeItem),
+      ).toMatchObject({
+        summary: expect.objectContaining({ preservedFields: ['excerpt'] }),
+      })
+
+      // Skip the removal explicitly: a removal whose only values are blank is not
+      // flagged, so it would otherwise be applied by default.
+      await push(actorId, devId, { exclude: ['schema:posts'] })
+      const home = await entryRow(ctx.site.id, 'posts', 'home')
+      expect(home?.draftData).toMatchObject({ title: 'Home v2', excerpt: '' })
+      expect(home?.publishedData).toMatchObject({
+        title: 'Home v2',
+        excerpt: '',
+      })
+      // The kept field's baseline is not advanced: its blank value is the old one.
+      const devHome = await entryRow(devId, 'posts', 'home')
+      expect(devHome?.originBaseline?.data).toHaveProperty('excerpt', '')
+      expect(devHome?.originBaseline?.publishedData).toHaveProperty(
+        'excerpt',
+        '',
+      )
+      expect((await loadPlan(db, devId)).items.map((item) => item.id)).toEqual([
+        'schema:posts',
+      ])
+
+      // Applying the removal does not purge a blank value (only content is purged,
+      // as in the CMS), and the entry settles: nothing is listed again.
+      await push(actorId, devId, { apply: ['schema:posts'] })
+      const applied = await entryRow(ctx.site.id, 'posts', 'home')
+      expect(applied?.draftData).toMatchObject({ title: 'Home v2' })
+      expect((await loadPlan(db, devId)).items).toEqual([])
+    })
+  })
+
+  it('pushes turning SEO off on a section, and refuses it when production changed the section after planning', async () => {
+    await withTestSite(async (ctx) => {
+      const actorId = ctx.actor.id
+      await createTestGlobal(ctx.site.id, {
+        key: 'companyInfo',
+        label: 'Company info',
+        fields: globalFields(),
+        seoEnabled: true,
+      })
+      const devId = await fork(ctx)
+      await upsertGlobal(
+        devId,
+        {
+          key: 'companyInfo',
+          label: 'Company info',
+          fields: globalFields(),
+          seo: false,
+        },
+        actorId,
+      )
+      const section = await entryRow(ctx.site.id, 'companyInfo', '$global')
+      const plan = await loadPlan(db, devId)
+      expect(
+        plan.items.find((item) => item.id === 'schema:companyInfo'),
+      ).toMatchObject({
+        attention: null,
+        affectedEntries: [
+          { id: section!.id, contentVersion: section!.contentVersion },
+        ],
+      })
+
+      // Production adds SEO after the plan: the push must not strip it unseen.
+      await updateDraft(
+        section!.id,
+        { email: 'a@x.test', [SEO_KEY]: { title: 'Added in production' } },
+        actorId,
+        section!.draftVersion,
+      )
+      await expect(
+        pushDevEnvironment(
+          { id: actorId },
+          {
+            devSiteId: devId,
+            planHash: plan.planHash,
+            exclude: [],
+            apply: [],
+            goLive: false,
+          },
+        ),
+      ).rejects.toThrow(PLAN_CHANGED_MESSAGE)
+      const kept = await entryRow(ctx.site.id, 'companyInfo', '$global')
+      expect(kept?.draftData).toMatchObject({
+        [SEO_KEY]: { title: 'Added in production' },
+      })
+
+      // A normal SEO-off push goes through and strips the draft's SEO.
+      await push(actorId, devId)
+      const after = await entryRow(ctx.site.id, 'companyInfo', '$global')
+      expect(after?.draftData).not.toHaveProperty(SEO_KEY)
       expect((await loadPlan(db, devId)).items).toEqual([])
     })
   })
@@ -889,6 +1047,202 @@ describe.skipIf(!hasDb)('development environment: push', () => {
       expect(
         (await loadPlan(db, devId)).items.map((item) => item.id),
       ).not.toContain('languages')
+    })
+  })
+
+  it('refuses a main-language push when an entry it stamps, not in the push, changed in production after planning', async () => {
+    await withTestSite(async (ctx) => {
+      const actorId = ctx.actor.id
+      await setSiteLanguages(
+        ctx.site.id,
+        { main: 'en', all: ['en', 'nl'] },
+        actorId,
+      )
+      await seedProduction(ctx)
+      const devId = await fork(ctx)
+      await setSiteLanguages(devId, { main: 'nl', all: ['en', 'nl'] }, actorId)
+      await editEntry(
+        devId,
+        'posts',
+        'home',
+        { title: 'Home dev', slug: 'home', excerpt: 'Intro' },
+        actorId,
+      )
+      const homeItem = `entry:${await devEntryId(devId, 'posts', 'home')}`
+      const plan = await loadPlan(db, devId)
+      // About is not in the plan (dev did not change it), but the stamp rewrites it.
+      const about = await entryRow(ctx.site.id, 'posts', 'about')
+      expect(
+        plan.items.find((item) => item.id === 'languages')?.affectedEntries,
+      ).toEqual(
+        expect.arrayContaining([
+          { id: about!.id, contentVersion: about!.contentVersion },
+        ]),
+      )
+
+      await editEntry(
+        ctx.site.id,
+        'posts',
+        'about',
+        { title: 'About prod', slug: 'about' },
+        actorId,
+      )
+
+      await expect(
+        pushDevEnvironment(
+          { id: actorId },
+          {
+            devSiteId: devId,
+            planHash: plan.planHash,
+            exclude: [homeItem],
+            apply: ['languages'],
+            goLive: false,
+          },
+        ),
+      ).rejects.toThrow(PLAN_CHANGED_MESSAGE)
+      const prod = (
+        await db.select().from(site).where(eq(site.id, ctx.site.id)).limit(1)
+      ).at(0)
+      expect(prod?.languages).toEqual({ main: 'en', all: ['en', 'nl'] })
+      expect(await entryRow(ctx.site.id, 'posts', 'about')).toMatchObject({
+        draftData: expect.objectContaining({ title: 'About prod' }),
+      })
+    })
+  })
+
+  it('keeps an entry this push did not write in step with production after a main-language stamp', async () => {
+    await withTestSite(async (ctx) => {
+      const actorId = ctx.actor.id
+      await setSiteLanguages(
+        ctx.site.id,
+        { main: 'en', all: ['en', 'nl'] },
+        actorId,
+      )
+      await seedProduction(ctx)
+      const devId = await fork(ctx)
+      await setSiteLanguages(devId, { main: 'nl', all: ['en', 'nl'] }, actorId)
+      // About changed in dev, but the push leaves it out.
+      await editEntry(
+        devId,
+        'posts',
+        'about',
+        { title: 'About dev', slug: 'about' },
+        actorId,
+      )
+      const aboutItem = `entry:${await devEntryId(devId, 'posts', 'about')}`
+
+      await push(actorId, devId, {
+        exclude: [aboutItem],
+        apply: ['languages'],
+      })
+      // The stamp moved About's version in production, but that is ours, not a conflict.
+      const after = await loadPlan(db, devId)
+      expect(after.items.find((item) => item.id === aboutItem)).toMatchObject({
+        attention: null,
+      })
+      expect(after.items.map((item) => item.id)).not.toContain('languages')
+      const about = await entryRow(ctx.site.id, 'posts', 'about')
+      expect(about?.draftData).toMatchObject({ title: 'About v1' })
+    })
+  })
+
+  it('waits for an entry save that holds the asset lock before it reads the URLs and writes', async () => {
+    await withTestSite(async (ctx) => {
+      const actorId = ctx.actor.id
+      await seedProduction(ctx)
+      const devId = await fork(ctx)
+      await editEntry(
+        devId,
+        'posts',
+        'about',
+        { title: 'About dev', slug: 'about' },
+        actorId,
+        { publish: true },
+      )
+      const plan = await loadPlan(db, devId)
+      // Holds the lock only, so nothing else (a row lock) can hold the push back.
+      const save = await holdEntryLock(ctx.site.organizationId)
+      const attempt = observe(
+        pushDevEnvironment(
+          { id: actorId },
+          {
+            devSiteId: devId,
+            planHash: plan.planHash,
+            exclude: [],
+            apply: [],
+            goLive: false,
+          },
+        ),
+      )
+      expect(await attempt.settledAfterWait()).toBe(false)
+      save.release()
+      await save.done
+
+      const result = await attempt.outcome
+      if (!result.ok) throw new Error(String(result.error))
+      expect(result.value.counts.changed).toBe(1)
+    })
+  })
+
+  it('refuses a localized URL that an entry save took while the push waited', async () => {
+    await withTestSite(async (ctx) => {
+      const actorId = ctx.actor.id
+      await setSiteLanguages(
+        ctx.site.id,
+        { main: 'en', all: ['en', 'nl'] },
+        actorId,
+      )
+      await seedProduction(ctx)
+      const devId = await fork(ctx)
+      await createEntry({
+        siteId: devId,
+        collectionKey: 'posts',
+        data: {
+          title: 'Contact',
+          slug: 'contact',
+          $i18n: { nl: { $slug: 'contact' } },
+        },
+        actorId,
+      })
+      const plan = await loadPlan(db, devId)
+      const postsId = await collectionIdOf(ctx.site.id, 'posts')
+
+      // An ordinary save takes the URL and holds the lock until it commits.
+      const save = await holdEntryLock(ctx.site.organizationId, async (tx) => {
+        await tx.insert(entry).values({
+          siteId: ctx.site.id,
+          collectionId: postsId,
+          slug: 'other',
+          status: 'draft',
+          draftData: {
+            title: 'Other',
+            slug: 'other',
+            $i18n: { nl: { $slug: 'contact' } },
+          },
+          createdBy: actorId,
+          updatedBy: actorId,
+        })
+      })
+      const attempt = observe(
+        pushDevEnvironment(
+          { id: actorId },
+          {
+            devSiteId: devId,
+            planHash: plan.planHash,
+            exclude: [],
+            apply: [],
+            goLive: false,
+          },
+        ),
+      )
+      expect(await attempt.settledAfterWait()).toBe(false)
+      save.release()
+      await save.done
+
+      const result = await attempt.outcome
+      if (result.ok) throw new Error('the push should have been refused')
+      expect((result.error as Error).message).toBe(PLAN_CHANGED_MESSAGE)
+      expect(await entryRow(ctx.site.id, 'posts', 'contact')).toBeUndefined()
     })
   })
 

@@ -10,7 +10,7 @@ import {
   pushToProductionFn,
 } from '#/server/fn/dev-env'
 
-import { devEnvQueryKeys, invalidateQueryKeys } from './invalidate'
+import { invalidateQueryKeys, writeQueryKeys } from './invalidate'
 
 /**
  * The push plan of a dev env: its items and the hash a push echoes back. It
@@ -63,11 +63,17 @@ export function usePushToProduction(
       stepUp.run(() => push({ data: { devSiteId, ...input } })),
     // A push changes the plan, the banner counts, the push history and the
     // production content the lists and the Go-live tray show.
-    onSuccess: () =>
+    onSuccess: (result) =>
       invalidateQueryKeys(
         queryClient,
         router,
-        devEnvQueryKeys({ devSiteId, productionSiteId }),
+        writeQueryKeys({
+          devSiteId,
+          productionSiteId,
+          productionEntryIds: result.written.flatMap((item) =>
+            item.productionId ? [item.productionId] : [],
+          ),
+        }),
       ),
   })
 }

@@ -16,6 +16,8 @@ import {
   createTestCollection,
   createTestSite,
   cleanupTestSite,
+  holdEntryLock,
+  observe,
   sampleRichText,
 } from './test-utils.ts'
 
@@ -244,6 +246,70 @@ describe.skipIf(!hasDb)('entry lifecycle with languages', () => {
           second.draftVersion,
         ),
       ).rejects.toBeInstanceOf(ValidationError)
+    } finally {
+      await cleanupTestSite(ctx)
+    }
+  })
+
+  it('rechecks a per-language slug under the save lock, so a URL taken while the save waited is refused', async () => {
+    const ctx = await setup([])
+    try {
+      const first = await createEntry({
+        siteId: ctx.site.id,
+        collectionKey: 'articles',
+        data: { title: 'One', slug: `one-${ctx.suffix}`, body: sampleRichText },
+        actorId: ctx.actor.id,
+      })
+      const second = await createEntry({
+        siteId: ctx.site.id,
+        collectionKey: 'articles',
+        data: { title: 'Two', slug: `two-${ctx.suffix}`, body: sampleRichText },
+        actorId: ctx.actor.id,
+      })
+      const [owner] = await db
+        .select({ collectionId: entry.collectionId })
+        .from(entry)
+        .where(eq(entry.id, first.id))
+        .limit(1)
+      const shared = `shared-${ctx.suffix}`
+
+      // Another save (or a push) holds the lock and takes the URL until it commits.
+      const other = await holdEntryLock(ctx.site.organizationId, async (tx) => {
+        await tx.insert(entry).values({
+          siteId: ctx.site.id,
+          collectionId: owner.collectionId,
+          slug: `other-${ctx.suffix}`,
+          status: 'draft',
+          draftData: {
+            title: 'Other',
+            slug: `other-${ctx.suffix}`,
+            body: sampleRichText,
+            $i18n: { en: { $slug: shared } },
+          },
+          createdBy: ctx.actor.id,
+          updatedBy: ctx.actor.id,
+        })
+      })
+      const save = observe(
+        updateDraft(
+          second.id,
+          {
+            title: 'Two',
+            slug: `two-${ctx.suffix}`,
+            body: sampleRichText,
+            $i18n: { en: { $slug: shared } },
+          },
+          ctx.actor.id,
+          second.draftVersion,
+        ),
+      )
+      expect(await save.settledAfterWait()).toBe(false)
+      other.release()
+      await other.done
+
+      const result = await save.outcome
+      if (result.ok) throw new Error('the save should have been refused')
+      expect(result.error).toBeInstanceOf(ValidationError)
     } finally {
       await cleanupTestSite(ctx)
     }

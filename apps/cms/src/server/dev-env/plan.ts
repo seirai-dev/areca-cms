@@ -10,10 +10,11 @@ import { createHash } from 'node:crypto'
 import { NEVER_APPLIED_ATTENTION } from '#/lib/dev-env'
 import type { PlanAttentionCode, PlanTitleCode } from '#/lib/dev-env'
 import {
-  fieldContentKeys,
   holdsAnyFieldKey,
+  presentFieldKeys,
   withoutFieldKeys,
 } from '#/lib/field-content'
+import { LOCALE_KEY } from '#/lib/content-locale'
 import type {
   ContentKind,
   EntryData,
@@ -260,6 +261,24 @@ function affectedRows(
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
 }
 
+/**
+ * Production rows a main-language stamp rewrites (applySiteLanguages): a row
+ * whose draft, ready or scheduled version has no `$locale`. The stamp bumps the
+ * version of each such row, so all of them are affected, in id order.
+ */
+function stampedRows(rows: PlanProductionEntry[]): PlanProductionEntry[] {
+  const lacksLocale = (data: EntryData | null | undefined) =>
+    !Object.hasOwn(data ?? {}, LOCALE_KEY)
+  return rows
+    .filter(
+      (row) =>
+        lacksLocale(row.draftData) ||
+        (row.publishedData != null && lacksLocale(row.publishedData)) ||
+        (row.scheduledData != null && lacksLocale(row.scheduledData)),
+    )
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+}
+
 function schemaItems(input: PlanInput, base: SchemaSnapshot): Built[] {
   const keys = uniqueSorted([
     ...base.collections.map((def) => def.key),
@@ -287,10 +306,18 @@ function schemaItems(input: PlanInput, base: SchemaSnapshot): Built[] {
       d?.fields ?? [],
       input.productionFieldUsage[key] ?? {},
     )
+    // Turning SEO off on a section strips `$seo` from its production draft, and
+    // the write bumps the section's version (globals.ts writeGlobalUpsert).
+    const seoStripped =
+      kind === 'schema.change' &&
+      p?.kind === 'global' &&
+      p.seoEnabled &&
+      d?.seoEnabled === false
     // A removal archives every production entry of the collection; a field
-    // removal purges the entries that hold one of its values.
+    // removal purges the entries that hold one of its values; SEO-off rewrites
+    // the section's entry.
     const rows =
-      kind === 'schema.remove'
+      kind === 'schema.remove' || seoStripped
         ? affectedRows(input, key, 'all')
         : dropped.length > 0
           ? affectedRows(
@@ -350,12 +377,23 @@ function languageItem(input: PlanInput, base: SchemaSnapshot): Built | null {
   // Only a switch of an existing main language stamps data; a first language has nothing to stamp.
   const mainChanged =
     baseLanguages != null && baseLanguages.main !== devLanguages.main
+  // The push stamps when production's own main language differs from dev's
+  // (applySiteLanguages), so the rows it rewrites are the ones the plan covers.
+  const stamps =
+    productionLanguages != null &&
+    productionLanguages.main !== devLanguages.main
+  const stamped = stamps ? stampedRows(input.productionEntries) : []
+  const scheduledTitles = stamped
+    .filter((row) => row.scheduled)
+    .map((row) => row.title ?? row.slug)
   const attention: PlanAttention =
-    productionChanged && !deepEqual(devLanguages, productionLanguages)
-      ? 'conflict'
-      : mainChanged
-        ? 'main-language'
-        : null
+    scheduledTitles.length > 0
+      ? 'scheduled'
+      : productionChanged && !deepEqual(devLanguages, productionLanguages)
+        ? 'conflict'
+        : mainChanged
+          ? 'main-language'
+          : null
   return {
     item: {
       id: 'languages',
@@ -363,10 +401,21 @@ function languageItem(input: PlanInput, base: SchemaSnapshot): Built | null {
       title: 'Site languages',
       collectionKey: null,
       titleCode: 'site-languages',
-      summary: mainChanged ? { stampCount: input.stampCount } : {},
+      summary: {
+        ...(mainChanged ? { stampCount: input.stampCount } : {}),
+        ...(scheduledTitles.length > 0 ? { scheduledTitles } : {}),
+      },
       devChanged: true,
       productionChanged,
       attention,
+      ...(stamped.length > 0
+        ? {
+            affectedEntries: stamped.map((row) => ({
+              id: row.id,
+              contentVersion: row.contentVersion,
+            })),
+          }
+        : {}),
     },
     fingerprint: {
       base: baseLanguages,
@@ -403,12 +452,15 @@ function withoutIgnored(
   return data == null ? null : withoutFieldKeys(data, ignore)
 }
 
-/** Field keys a production entry holds content for, in any stored version. */
+/**
+ * Field keys a production entry holds in any stored version, blank values
+ * included: a kept field keeps what production stores, even an empty string.
+ */
 function heldFieldKeys(prod: PlanProductionEntry): Set<string> {
   return new Set([
-    ...fieldContentKeys(prod.draftData),
-    ...fieldContentKeys(prod.publishedData),
-    ...fieldContentKeys(prod.scheduledData),
+    ...presentFieldKeys(prod.draftData),
+    ...presentFieldKeys(prod.publishedData),
+    ...presentFieldKeys(prod.scheduledData),
   ])
 }
 
@@ -756,7 +808,8 @@ export function selectPlanItems(
 /**
  * Production changes since the baseline, whatever the dev env holds: schema
  * keys and languages that differ from the baseline, and forked entries whose
- * production `content_version` moved or whose row is gone. Drives the
+ * production `content_version` moved or whose row is gone, and production
+ * entries a reset would copy that no dev entry is linked to. Drives the
  * "Production changed since the last sync" notice.
  */
 export function productionChangeCount(input: PlanInput): number {
@@ -785,12 +838,22 @@ export function productionChangeCount(input: PlanInput): number {
     const prod = productionById.get(dev.originEntryId)
     if (!prod || prod.contentVersion !== dev.originContentVersion) count += 1
   }
-  // A production entry a fork would copy (ready and not archived, or any
-  // section) that dev does not hold is a change too: a new one, or a ready one.
-  // Only collections dev has are counted; the schema covers the others.
+  // A production entry a reset would copy (fork rules: ready and not archived,
+  // or any section) that no dev entry is linked to is a change too: a new one,
+  // or a ready one. Collections dev lacks count as well, since a reset copies
+  // them; the schema count also lists them, so one collection can count twice.
   const devKeys = new Set(input.dev.collections.map((def) => def.key))
+  const baseKeys = new Set(base.collections.map((def) => def.key))
   for (const row of input.productionEntries) {
-    if (linked.has(row.id) || !devKeys.has(row.collectionKey)) continue
+    if (linked.has(row.id)) continue
+    // A disabled production collection that dev and the baseline both lack was
+    // removal-pushed: it counts as absent (see productionSide).
+    const absent =
+      !devKeys.has(row.collectionKey) &&
+      !baseKeys.has(row.collectionKey) &&
+      findByKey(input.production.collections, row.collectionKey)?.enabled ===
+        false
+    if (absent) continue
     const forkable =
       row.collectionKind === 'global' ||
       (row.status !== 'archived' && row.publishedData != null)
