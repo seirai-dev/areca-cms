@@ -347,7 +347,7 @@ export function MobileTabBar() {
                   />
                 ))}
               </InsetList>
-              <div className="grid gap-1">
+              <div className="grid min-w-0 gap-1">
                 <span className="px-1 text-overline text-text-muted">
                   {m.shell_nav_all_sites()}
                 </span>

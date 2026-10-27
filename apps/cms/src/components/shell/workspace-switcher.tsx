@@ -1,7 +1,15 @@
 import * as React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { CaretUpDown, Check, Plus, SquaresFour } from '@phosphor-icons/react'
+import {
+  Buildings,
+  CaretUpDown,
+  Check,
+  Globe,
+  Plus,
+  SquaresFour,
+  Translate,
+} from '@phosphor-icons/react'
 
 import { adminQueryKeys } from '#/lib/admin/helpers'
 import { BrandLogo } from '#/components/brand-mark'
@@ -22,6 +30,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '#/components/ui/popover'
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from '#/components/ui/hover-card'
 import { Sheet, SheetContent, SheetTitle } from '#/components/ui/sheet'
 import { Tag } from '#/components/ui/tag'
 import { LiveDot } from '#/components/ui/status-pill'
@@ -419,45 +432,65 @@ export function WorkspaceSwitcher({
 export function AllSitesNav({
   collapsed,
   onNavigate,
+  details = false,
 }: {
   collapsed: boolean
   onNavigate?: () => void
+  /** Show the full name and site details on hover (desktop sidebar only). */
+  details?: boolean
 }) {
   const { me } = useShell()
   const liveMap = useSitesLive()
   if (collapsed) return null
   const { topLevel, devByParent } = nestDevEnvironments(me.sites)
-  const link = (site: MeSite, nested: boolean) => (
-    <Link
-      to="/sites/$siteId"
-      params={{ siteId: site.id }}
-      onClick={onNavigate}
-      className={cn(
-        'group/nav flex h-8 min-w-0 items-center gap-2.5 rounded-[8px] px-2.5 text-[14px] text-text-secondary outline-none transition-colors hover:bg-surface-state-hover hover:text-text-primary focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-border-focus',
-        nested && 'pl-7',
-      )}
-    >
-      <SiteTile id={site.id} name={site.name} size="xs" />
-      <span className="min-w-0 flex-1 truncate">{site.name}</span>
-      {nested ? <Tag tone="accent">{m.dev_env_tag()}</Tag> : null}
-      {liveMap.get(site.id)?.live ? (
-        <LiveDot pulse="none" />
-      ) : (
-        <span
-          aria-hidden="true"
-          className="size-2 rounded-full border-[1.5px] border-border-strong"
-        />
-      )}
-    </Link>
-  )
+  const link = (site: MeSite, nested: boolean) => {
+    const status = liveMap.get(site.id)
+    const row = (
+      <Link
+        to="/sites/$siteId"
+        params={{ siteId: site.id }}
+        onClick={onNavigate}
+        className={cn(
+          'group/nav flex h-8 min-w-0 items-center gap-2.5 rounded-[8px] px-2.5 text-[14px] text-text-secondary outline-none transition-colors hover:bg-surface-state-hover hover:text-text-primary focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-border-focus',
+          nested && 'pl-7',
+        )}
+      >
+        <SiteTile id={site.id} name={site.name} size="xs" />
+        <span className="min-w-0 flex-1 truncate">{site.name}</span>
+        {nested ? <Tag tone="accent">{m.dev_env_tag()}</Tag> : null}
+        {status?.live ? (
+          <LiveDot pulse="none" />
+        ) : (
+          <span
+            aria-hidden="true"
+            className="size-2 shrink-0 rounded-full border-[1.5px] border-border-strong"
+          />
+        )}
+      </Link>
+    )
+    if (!details) return row
+    return (
+      <HoverCard>
+        <HoverCardTrigger asChild>{row}</HoverCardTrigger>
+        <HoverCardContent side="right" align="start" sideOffset={10}>
+          <SiteDetails site={site} status={status} />
+        </HoverCardContent>
+      </HoverCard>
+    )
+  }
   return (
-    <ul className="grid gap-px" data-testid="agency-sites">
+    // minmax(0, 1fr): without it the grid track grows to the longest site
+    // name and the rows overflow the sidebar instead of truncating.
+    <ul
+      className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-px"
+      data-testid="agency-sites"
+    >
       {topLevel.map((site) => {
         const dev = devByParent.get(site.id)
         return (
           <React.Fragment key={site.id}>
-            <li>{link(site, false)}</li>
-            {dev ? <li>{link(dev, true)}</li> : null}
+            <li className="min-w-0">{link(site, false)}</li>
+            {dev ? <li className="min-w-0">{link(dev, true)}</li> : null}
           </React.Fragment>
         )
       })}
@@ -467,5 +500,105 @@ export function AllSitesNav({
         </li>
       ) : null}
     </ul>
+  )
+}
+
+/**
+ * The sidebar hover card: full site and client name, address, status,
+ * languages. Names and addresses can be one long unbroken string (a UUID, a
+ * long host), so they wrap anywhere rather than push past the card edge.
+ */
+function SiteDetails({
+  site,
+  status,
+}: {
+  site: MeSite
+  status: { live: boolean; pending: number } | undefined
+}) {
+  const host = displayHost(site.productionUrl)
+  const dev = isDevSite(site)
+  const languages = site.languages?.all ?? []
+  return (
+    <div
+      className="grid grid-cols-[minmax(0,1fr)] gap-3"
+      data-testid="site-hover-card"
+    >
+      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2.5">
+        <SiteTile id={site.id} name={site.name} size="sm" />
+        <div className="grid min-w-0 gap-0.5">
+          <p className="text-[14px] leading-5 font-medium wrap-anywhere text-text-primary">
+            {site.name}
+          </p>
+          <p className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-1.5 text-[12px] leading-4 text-text-muted">
+            <Buildings aria-hidden="true" className="mt-px size-3.5" />
+            <span className="wrap-anywhere">{site.organizationName}</span>
+          </p>
+        </div>
+      </div>
+      <div className="grid gap-1.5 border-t border-border-default pt-2.5 text-[12px] leading-4 text-text-secondary">
+        {host ? (
+          <DetailRow icon={<Globe aria-hidden="true" className="size-3.5" />}>
+            <span className="font-mono wrap-anywhere">{host}</span>
+          </DetailRow>
+        ) : null}
+        {status || dev ? (
+          <DetailRow
+            icon={
+              status?.live ? (
+                <LiveDot pulse="none" />
+              ) : (
+                <span
+                  aria-hidden="true"
+                  className="size-2 rounded-full border-[1.5px] border-border-strong"
+                />
+              )
+            }
+          >
+            <span className="wrap-break-word">
+              {dev
+                ? m.dev_env_status()
+                : status?.live
+                  ? m.shell_status_live()
+                  : m.shell_not_live_yet()}
+              {status && status.pending > 0 && !dev ? (
+                <span className="text-text-muted tnum">
+                  {' · '}
+                  {status.pending === 1
+                    ? m.agency_changes_ready_one()
+                    : m.agency_changes_ready_other({ count: status.pending })}
+                </span>
+              ) : null}
+            </span>
+          </DetailRow>
+        ) : null}
+        {languages.length > 1 ? (
+          <DetailRow
+            icon={<Translate aria-hidden="true" className="size-3.5" />}
+          >
+            <span className="font-mono uppercase wrap-anywhere">
+              {languages.join(' · ')}
+            </span>
+          </DetailRow>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+/** One icon + text line in the site hover card; the text wraps under itself. */
+function DetailRow({
+  icon,
+  children,
+}: {
+  icon: React.ReactNode
+  children: React.ReactNode
+}) {
+  return (
+    <div className="grid grid-cols-[14px_minmax(0,1fr)] items-start gap-2">
+      <span className="grid h-4 place-content-center text-icon-muted">
+        {icon}
+      </span>
+      {children}
+    </div>
   )
 }
