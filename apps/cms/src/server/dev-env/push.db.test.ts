@@ -35,6 +35,7 @@ import {
   globalFields,
   holdEntryLock,
   observe,
+  waitForAdvisoryWaiter,
   withTestSite,
 } from '#/server/content/test-utils'
 
@@ -137,27 +138,6 @@ async function editEntry(
   const current = await getEntry(row.id)
   await updateDraft(row.id, data, actorId, current!.draftVersion)
   if (options.publish) await publishEntry(row.id, actorId)
-}
-
-/**
- * Waits until a backend is blocked on the advisory lock hashed from `key`
- * (`hashtextextended(key, 0)`, the asset lock). Matched on the lock key, so a
- * waiter from another test does not count.
- */
-async function waitForAdvisoryWaiter(key: string) {
-  for (let attempt = 0; attempt < 400; attempt += 1) {
-    const waiting = await db.execute<{ n: number }>(sql`
-      with k as (select hashtextextended(${key}, 0) as v)
-      select count(*)::int as n
-      from pg_locks l, k
-      where l.locktype = 'advisory' and not l.granted
-        and l.classid::bigint = ((k.v >> 32) & 4294967295)
-        and l.objid::bigint = (k.v & 4294967295)
-    `)
-    if (Number(waiting.rows[0].n) > 0) return
-    await new Promise((resolve) => setTimeout(resolve, 25))
-  }
-  throw new Error(`no backend waited on the advisory lock for ${key}`)
 }
 
 async function push(
