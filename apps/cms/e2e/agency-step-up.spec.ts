@@ -148,11 +148,6 @@ async function submitNewAgencyKey(page: Page, name: string) {
 }
 
 test.describe('Agency step-up with two-factor', () => {
-  // Serial: concurrent /account loads by agency admins can deadlock in the
-  // server's self-delete check (countActiveAgencyAdmins locks every agency
-  // admin row FOR UPDATE), which fails the enrolment step.
-  test.describe.configure({ mode: 'serial' })
-
   test('cancelling the code prompt creates no agency key', async ({
     browser,
   }) => {

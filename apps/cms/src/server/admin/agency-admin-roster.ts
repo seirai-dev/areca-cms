@@ -32,15 +32,16 @@ export async function lockAgencyAdminRoster(tx: Tx) {
 }
 
 /**
- * Agency admins who are not blocked, row-locked for the transaction. A blocked
- * admin does not count as active. Call under `lockAgencyAdminRoster`.
+ * Agency admins who are not blocked. A blocked admin does not count as active.
+ * A plain read, no row locks: every change that removes an admin takes
+ * `lockAgencyAdminRoster` first, so a caller that holds it reads a settled
+ * count, and a read-only caller (the account page) never blocks anyone.
  */
 export async function countActiveAgencyAdmins(tx: Tx) {
   const rows = await tx
     .select({ id: user.id })
     .from(user)
     .where(and(eq(user.isAgencyAdmin, true), isNull(user.blockedAt)))
-    .for('update')
   return rows.length
 }
 

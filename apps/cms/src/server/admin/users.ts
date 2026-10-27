@@ -57,18 +57,29 @@ export type PersonRow = {
 }
 
 /** Reads and row-locks one person. Missing people answer NotFound. */
+const personColumns = {
+  id: user.id,
+  name: user.name,
+  email: user.email,
+  isAgencyAdmin: user.isAgencyAdmin,
+  blockedAt: user.blockedAt,
+}
+
 export async function lockPerson(tx: Tx, userId: string): Promise<PersonRow> {
   const [row] = await tx
-    .select({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      isAgencyAdmin: user.isAgencyAdmin,
-      blockedAt: user.blockedAt,
-    })
+    .select(personColumns)
     .from(user)
     .where(eq(user.id, userId))
     .for('update')
+  if (!row) throw new NotFoundError(m.server_user_not_found())
+  return row
+}
+
+async function readPerson(tx: Tx, userId: string): Promise<PersonRow> {
+  const [row] = await tx
+    .select(personColumns)
+    .from(user)
+    .where(eq(user.id, userId))
   if (!row) throw new NotFoundError(m.server_user_not_found())
   return row
 }
@@ -92,7 +103,16 @@ function assertNotSelf(actorId: string, userId: string) {
  * The clients a person owns, and whether they are an active agency admin who
  * cannot leave. Read inside the caller's transaction, after its locks.
  */
-async function selfDeleteBlockersIn(tx: Tx, person: PersonRow) {
+/**
+ * `lock: true` (self delete) locks each owned client before counting its
+ * owners. The read-only preview passes `lock: false` and takes no locks, so
+ * opening the account page never waits on, or deadlocks with, another request.
+ */
+async function selfDeleteBlockersIn(
+  tx: Tx,
+  person: PersonRow,
+  { lock }: { lock: boolean },
+) {
   const owned = await tx
     .select({
       organizationId: membership.organizationId,
@@ -104,7 +124,7 @@ async function selfDeleteBlockersIn(tx: Tx, person: PersonRow) {
     .orderBy(membership.organizationId)
   const soleOwnerClients: Array<{ organizationId: string; name: string }> = []
   for (const row of owned) {
-    await lockOrganization(tx, row.organizationId)
+    if (lock) await lockOrganization(tx, row.organizationId)
     if ((await countOwners(tx, row.organizationId)) <= 1) {
       soleOwnerClients.push({
         organizationId: row.organizationId,
@@ -129,8 +149,8 @@ async function selfDeleteBlockersIn(tx: Tx, person: PersonRow) {
  */
 export async function selfDeleteBlockers(userId: string) {
   return db.transaction(async (tx) => {
-    const person = await lockPerson(tx, userId)
-    return selfDeleteBlockersIn(tx, person)
+    const person = await readPerson(tx, userId)
+    return selfDeleteBlockersIn(tx, person, { lock: false })
   })
 }
 
@@ -316,7 +336,7 @@ export async function deleteOwnAccount(input: { userId: string }) {
   await db.transaction(async (tx) => {
     await lockAgencyAdminRoster(tx)
     const person = await lockPerson(tx, input.userId)
-    const blockers = await selfDeleteBlockersIn(tx, person)
+    const blockers = await selfDeleteBlockersIn(tx, person, { lock: true })
     if (blockers.soleOwnerOf.length > 0) {
       throw new ConflictError(
         m.server_self_delete_sole_owner({

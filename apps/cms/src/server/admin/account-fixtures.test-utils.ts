@@ -72,7 +72,6 @@ export async function scopedActiveAdminCount(tx: TestTx, ids: string[]) {
         inArray(user.id, ids),
       ),
     )
-    .for('update')
   return rows.length
 }
 
