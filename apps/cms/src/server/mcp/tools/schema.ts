@@ -20,7 +20,7 @@ import {
 } from '#/server/content/collections'
 import { loadSiteLanguages } from '#/server/content/locale-validation'
 
-import type { ToolRegistry } from '../tool-kit'
+import type { ToolCollector } from '../tool-kit'
 import { languageSummary } from './site'
 
 const FIELD_TYPES = [
@@ -139,7 +139,7 @@ const localizedRoutesInput = z
 const SCHEMA_WARNING =
   'Warning: if this site syncs its schema from code (an areca manifest push), the next push replaces collections changed here. Prefer changing areca.config.ts when the site has one.'
 
-export function registerSchemaTools(registry: ToolRegistry): void {
+export function registerSchemaTools(registry: ToolCollector): void {
   registry.add({
     name: 'upsert_collection',
     title: 'Create or update collection',

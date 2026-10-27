@@ -4,7 +4,7 @@ import type { z } from '#/lib/zod'
 import { registerAssetTools } from '#/server/mcp/tools/assets'
 import { registerEntryTools } from '#/server/mcp/tools/entries'
 import type { McpActor } from '#/server/mcp/keys'
-import type { ToolRegistry, ToolSpec } from '#/server/mcp/tool-kit'
+import type { ToolSpec } from '#/server/mcp/tool-kit'
 import { db } from '#/db'
 import { asset, entry, publication, site } from '#/db/schema'
 import {
@@ -81,6 +81,7 @@ describe.skipIf(!process.env.DATABASE_URL)('site AI media boundary', () => {
         keyId: 'test',
         keyName: 'test',
         credential: 'key',
+        scope: 'site',
         userId: ctx.actor.id,
         userName: ctx.actor.name,
         siteId: ctx.site.id,
@@ -101,7 +102,7 @@ describe.skipIf(!process.env.DATABASE_URL)('site AI media boundary', () => {
             }),
           )
         },
-      } as ToolRegistry
+      }
       registerAssetTools(registry)
       registerEntryTools(registry)
       const run = (name: string, input: unknown) => tools.get(name)!(input)

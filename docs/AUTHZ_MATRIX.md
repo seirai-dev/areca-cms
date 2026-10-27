@@ -159,6 +159,9 @@ unchanged (each row carries a side-effect probe).
 | `denyOAuthConsentFn` | `mcp-oauth.ts` | `user` | any signed-in user may refuse a request addressed to them; the query must be signed by the server |
 | `listMcpConnectionsFn` | `mcp-oauth.ts` | `org-editor` | editors see only their own connected apps; owners and agency admins all on the site |
 | `revokeMcpConnectionFn` | `mcp-oauth.ts` | `org-editor` | editors disconnect their own apps; owners and agency admins any app on the site; others are NotFound |
+| `listAgencyMcpConnectionsFn` | `mcp-oauth.ts` | `agency` | agency admin (MFA); the caller's own agency apps (no site); other roles are refused |
+| `approveAgencyOAuthConsentFn` | `mcp-oauth.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) approves the agency connector for an app; the signed query must name the agency resource; never allows go-live |
+| `revokeAgencyMcpConnectionFn` | `mcp-oauth.ts` | `agency` | agency admin revokes their own agency app; another admin's app is NotFound |
 | `getMyNotificationsFn` | `notifications.ts` | `user` | the caller's own notification choices and org memberships |
 | `setMyNotificationFn` | `notifications.ts` | `org-editor` | members change their own choice (agency admins for the agency scope); locked events refuse; a non-member admin gets a readable refusal |
 | `getOrgNotificationRulesFn` | `notifications.ts` | `org-owner` | org owner, agency admin (MFA) |

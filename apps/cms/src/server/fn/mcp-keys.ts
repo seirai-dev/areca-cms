@@ -7,11 +7,18 @@ import { db } from '#/db'
 import { mcpKey } from '#/db/schema'
 import { env } from '#/env'
 import { ID_MAX_LENGTH } from '#/lib/content-limits'
-import { requireUser } from '#/lib/session.server'
+import { requireAgencyAdmin, requireUser } from '#/lib/session.server'
 import { m } from '#/paraglide/messages'
 import { NotFoundError } from '#/server/content/errors'
 import type { MCP_KEY_EXPIRY_OPTIONS, McpKeySummary } from '#/server/mcp/keys'
-import { createMcpKey, listMcpKeys, revokeMcpKey } from '#/server/mcp/keys'
+import {
+  createAgencyMcpKey,
+  createMcpKey,
+  listAgencyMcpKeys,
+  listMcpKeys,
+  revokeAgencyMcpKey,
+  revokeMcpKey,
+} from '#/server/mcp/keys'
 import { requireMcpSiteAccess } from '#/server/mcp/site-access'
 import { assertFreshSession } from '#/server/security/step-up'
 
@@ -27,6 +34,11 @@ const expirySchema = z.union([
 /** Public URL of the personal-key MCP endpoint, as shown in install snippets. */
 function mcpEndpointUrl() {
   return `${env.APP_URL.replace(/\/+$/, '')}/api/mcp`
+}
+
+/** Public URL of the agency connector (every site, one address). */
+function agencyMcpEndpointUrl() {
+  return `${env.APP_URL.replace(/\/+$/, '')}/api/agency/mcp`
 }
 
 export const listMcpKeysFn = createServerFn({ method: 'GET', ...loose })
@@ -96,7 +108,8 @@ export const revokeMcpKeyFn = createServerFn({ method: 'POST', ...loose })
       .from(mcpKey)
       .where(eq(mcpKey.id, data.id))
       .limit(1)
-    if (!key) throw new NotFoundError(m.server_mcp_key_not_found())
+    // Agency keys have no site; they are revoked from the Agency page.
+    if (!key?.siteId) throw new NotFoundError(m.server_mcp_key_not_found())
 
     const {
       session,
@@ -110,5 +123,51 @@ export const revokeMcpKeyFn = createServerFn({ method: 'POST', ...loose })
       organizationId: found.organizationId,
       canRevokeOthers: role !== 'editor',
     })
+    return { ok: true as const }
+  })
+
+/**
+ * Agency keys: one key for every site, for agency admins only. Creating one
+ * is a privileged act, so it needs a fresh second factor (agency-mcp Decision 11).
+ * The keys list is the caller's own; there is no site.
+ */
+export const listAgencyMcpKeysFn = createServerFn({
+  method: 'GET',
+  ...loose,
+}).handler(async () => {
+  const session = await requireAgencyAdmin()
+  const keys: McpKeySummary[] = await listAgencyMcpKeys({
+    userId: session.user.id,
+  })
+  return { keys, endpointUrl: agencyMcpEndpointUrl() }
+})
+
+export const createAgencyMcpKeyFn = createServerFn({ method: 'POST', ...loose })
+  .validator(
+    z.object({
+      name: z.string().max(200),
+      expiresInDays: expirySchema,
+    }),
+  )
+  .handler(async ({ data }) => {
+    const session = await requireAgencyAdmin()
+    await assertFreshSession(session)
+    const created = await createAgencyMcpKey({
+      userId: session.user.id,
+      name: data.name,
+      expiresInDays: data.expiresInDays,
+    })
+    return {
+      key: created.key,
+      token: created.token,
+      endpointUrl: agencyMcpEndpointUrl(),
+    }
+  })
+
+export const revokeAgencyMcpKeyFn = createServerFn({ method: 'POST', ...loose })
+  .validator(z.object({ id: z.string().min(1).max(ID_MAX_LENGTH) }))
+  .handler(async ({ data }) => {
+    const session = await requireAgencyAdmin()
+    await revokeAgencyMcpKey({ id: data.id, userId: session.user.id })
     return { ok: true as const }
   })

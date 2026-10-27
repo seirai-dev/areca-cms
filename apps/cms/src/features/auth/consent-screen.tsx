@@ -17,7 +17,7 @@ import type { ConsentInfo } from '#/server/mcp/consent'
 import { AuthError, AuthHeading, AuthShell } from './auth-shell'
 import { useHydrated } from './use-auth-forms'
 
-type ConsentOk = Extract<ConsentInfo, { ok: true }>
+type ConsentOk = Extract<ConsentInfo, { ok: true; kind: 'site' }>
 type ConsentProblemInfo = Extract<ConsentInfo, { ok: false }>
 
 /**
@@ -33,6 +33,19 @@ export function ConsentScreen({
   info: ConsentInfo
 }) {
   if (!info.ok) return <ConsentProblem query={query} info={info} />
+  // The agency approval screen is not built yet (agency-mcp step 2 UI).
+  if (info.kind === 'agency') {
+    return (
+      <ConsentProblem
+        query={query}
+        info={{
+          ok: false,
+          reason: 'no_access',
+          message: m.server_mcp_oauth_agency_unavailable(),
+        }}
+      />
+    )
+  }
   return <ConsentRequest query={query} info={info} />
 }
 

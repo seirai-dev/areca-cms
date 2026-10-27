@@ -13,6 +13,7 @@ import {
   user,
   site,
 } from '#/db/schema'
+import type { McpScope } from '#/db/schema'
 import { m } from '#/paraglide/messages'
 import { createLogger } from '#/server/log'
 import { audit } from '#/server/audit'
@@ -84,7 +85,7 @@ export async function upsertConnection(input: {
 
 /** Serialize approval and disconnect for the same grant across processes. */
 export async function withConnectionLock<T>(
-  input: { userId: string; siteId: string; clientId: string },
+  input: { userId: string; siteId: string | null; clientId: string },
   run: () => Promise<T>,
 ): Promise<T> {
   const key = JSON.stringify([input.userId, input.siteId, input.clientId])
@@ -119,12 +120,15 @@ export async function withConnectionLock<T>(
   }
 }
 
-/** Called under the tuple lock, after OAuth consent has completed. */
+/**
+ * Called under the tuple lock, after OAuth consent has completed. A null
+ * `siteId` is an agency approval (scope 'agency'); it has no organization.
+ */
 export async function saveConnectionApproval(
   input: {
     userId: string
-    siteId: string
-    organizationId: string
+    siteId: string | null
+    organizationId: string | null
     clientId: string
     clientName: string
     allowGoLive: boolean
@@ -133,6 +137,7 @@ export async function saveConnectionApproval(
   now: Date = new Date(),
 ): Promise<McpConnectionRow> {
   const clientName = input.clientName.trim() || 'AI app'
+  const scope: McpScope = input.siteId === null ? 'agency' : 'site'
   const row = await db.transaction(async (tx) => {
     // A new generation retires an idle connection instead of reviving its old tokens.
     const retired = await tx
@@ -141,7 +146,9 @@ export async function saveConnectionApproval(
       .where(
         and(
           eq(mcpConnection.userId, input.userId),
-          eq(mcpConnection.siteId, input.siteId),
+          input.siteId === null
+            ? eq(mcpConnection.scope, 'agency')
+            : eq(mcpConnection.siteId, input.siteId),
           eq(mcpConnection.clientId, input.clientId),
           isNull(mcpConnection.revokedAt),
           sql`${mcpConnection.id} <> ${id}`,
@@ -149,19 +156,14 @@ export async function saveConnectionApproval(
       )
       .returning()
     for (const previous of retired) {
-      await revokeGenerationTokens(
-        tx,
-        previous,
-        [previous.id, previous.siteId],
-        now,
-      )
+      await revokeGenerationTokens(tx, previous, connectionRefs(previous), now)
       await tx
         .delete(oauthConsent)
         .where(
           and(
             eq(oauthConsent.userId, previous.userId),
             eq(oauthConsent.clientId, previous.clientId),
-            inArray(oauthConsent.referenceId, [previous.id, previous.siteId]),
+            inArray(oauthConsent.referenceId, connectionRefs(previous)),
           ),
         )
     }
@@ -170,6 +172,7 @@ export async function saveConnectionApproval(
       .values({
         id,
         userId: input.userId,
+        scope,
         siteId: input.siteId,
         clientId: input.clientId,
         clientName,
@@ -191,7 +194,11 @@ export async function saveConnectionApproval(
         action: 'mcp_connection.create',
         targetType: 'mcp_connection',
         targetId: saved.id,
-        meta: { clientName, allowGoLive: saved.allowGoLive },
+        meta: {
+          clientName,
+          allowGoLive: saved.allowGoLive,
+          ...(scope === 'agency' ? { scope } : {}),
+        },
       },
       tx,
     )
@@ -262,6 +269,46 @@ export async function revokeConnection(input: {
   if (!row || (row.userId !== input.actorId && !input.canRevokeOthers)) {
     throw new NotFoundError(m.server_mcp_connection_not_found())
   }
+  await revokeRow(row, {
+    actorId: input.actorId,
+    organizationId: input.organizationId,
+    now: input.now,
+  })
+}
+
+/**
+ * Disconnects one of the caller's agency apps. Other people's connections
+ * answer NotFound, like the per-site list does.
+ */
+export async function revokeAgencyConnection(input: {
+  id: string
+  actorId: string
+  now?: Date
+}): Promise<void> {
+  const [row] = await db
+    .select()
+    .from(mcpConnection)
+    .where(
+      and(
+        eq(mcpConnection.id, input.id),
+        eq(mcpConnection.scope, 'agency'),
+        eq(mcpConnection.userId, input.actorId),
+      ),
+    )
+    .limit(1)
+  if (!row) throw new NotFoundError(m.server_mcp_connection_not_found())
+  await revokeRow(row, {
+    actorId: input.actorId,
+    organizationId: null,
+    now: input.now,
+  })
+}
+
+/** Revokes one connection, its consent and its tokens, under the grant lock. */
+async function revokeRow(
+  row: McpConnectionRow,
+  input: { actorId: string; organizationId: string | null; now?: Date },
+): Promise<void> {
   await withConnectionLock(row, async () => {
     const now = input.now ?? new Date()
     await db.transaction(async (tx) => {
@@ -274,26 +321,30 @@ export async function revokeConnection(input: {
         .returning()
       if (!revoked) return
       // Include legacy site references so deployment also invalidates pre-upgrade tokens.
-      const refs = [row.id, row.siteId]
+      const refs = connectionRefs(row)
       await tx
         .delete(oauthConsent)
         .where(
           and(
             eq(oauthConsent.clientId, row.clientId),
             eq(oauthConsent.userId, row.userId),
-            sql`${oauthConsent.referenceId} in (${row.id}, ${row.siteId})`,
+            inArray(oauthConsent.referenceId, refs),
           ),
         )
       await revokeGenerationTokens(tx, row, refs, now)
       await audit(
         {
           organizationId: input.organizationId,
-          siteId: input.siteId,
+          siteId: row.siteId,
           actorId: input.actorId,
           action: 'mcp_connection.revoke',
           targetType: 'mcp_connection',
           targetId: row.id,
-          meta: { clientName: row.clientName, allowGoLive: row.allowGoLive },
+          meta: {
+            clientName: row.clientName,
+            allowGoLive: row.allowGoLive,
+            ...(row.scope === 'agency' ? { scope: row.scope } : {}),
+          },
         },
         tx,
       )
@@ -324,19 +375,65 @@ export async function revokeMemberMcpConnections(
     )
     .returning()
   for (const row of revoked) {
-    const refs = [row.id, row.siteId]
-    await tx
-      .delete(oauthConsent)
-      .where(
-        and(
-          eq(oauthConsent.clientId, row.clientId),
-          eq(oauthConsent.userId, row.userId),
-          inArray(oauthConsent.referenceId, refs),
-        ),
-      )
-    await revokeGenerationTokens(tx, row, refs, now)
+    await revokeConnectionTokens(tx, row, now)
   }
   return revoked.length
+}
+
+/**
+ * Disconnects every agency app a user connected (the user lost the agency
+ * admin role). Same effect as `revokeMemberMcpConnections`, for agency scope.
+ */
+export async function revokeAgencyMcpConnections(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  input: { userId: string; now?: Date },
+): Promise<number> {
+  const now = input.now ?? new Date()
+  const revoked = await tx
+    .update(mcpConnection)
+    .set({ revokedAt: now })
+    .where(
+      and(
+        eq(mcpConnection.userId, input.userId),
+        eq(mcpConnection.scope, 'agency'),
+        isNull(mcpConnection.revokedAt),
+      ),
+    )
+    .returning()
+  for (const row of revoked) {
+    await revokeConnectionTokens(tx, row, now)
+  }
+  return revoked.length
+}
+
+/**
+ * The reference ids a connection's consent and tokens may carry: the connection
+ * itself, and for a site connection the site too (older rows named the site).
+ */
+export function connectionRefs(row: {
+  id: string
+  siteId: string | null
+}): string[] {
+  return row.siteId ? [row.id, row.siteId] : [row.id]
+}
+
+/** Consent and every token of one connection, in the caller's transaction. */
+async function revokeConnectionTokens(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  row: Pick<McpConnectionRow, 'id' | 'siteId' | 'clientId' | 'userId'>,
+  now: Date,
+) {
+  const refs = connectionRefs(row)
+  await tx
+    .delete(oauthConsent)
+    .where(
+      and(
+        eq(oauthConsent.clientId, row.clientId),
+        eq(oauthConsent.userId, row.userId),
+        inArray(oauthConsent.referenceId, refs),
+      ),
+    )
+  await revokeGenerationTokens(tx, row, refs, now)
 }
 
 /** Clear replay caches too: a disconnected rotated token must never return 200. */
@@ -387,10 +484,13 @@ export async function revokeReplayedGrant(row: McpConnectionRow) {
         .returning()
       await revokeGenerationTokens(tx, row, [row.id], now)
       await tx.delete(oauthConsent).where(eq(oauthConsent.referenceId, row.id))
-      const [target] = await tx
-        .select({ organizationId: site.organizationId })
-        .from(site)
-        .where(eq(site.id, row.siteId))
+      // An agency connection has no site to audit against.
+      const [target] = row.siteId
+        ? await tx
+            .select({ organizationId: site.organizationId })
+            .from(site)
+            .where(eq(site.id, row.siteId))
+        : []
       if (revoked && target)
         await audit(
           {
@@ -437,6 +537,64 @@ export async function findUsableConnection(input: {
     .limit(1)
   if (!row || !isConnectionUsable(row, now)) return null
   return row
+}
+
+/**
+ * The usable agency connection for a verified token's (user, app), or null.
+ * Agency connections have no site, so they are found by scope instead.
+ */
+export async function findUsableAgencyConnection(input: {
+  userId: string
+  clientId: string
+  now?: Date
+}): Promise<McpConnectionRow | null> {
+  const now = input.now ?? new Date()
+  const [row] = await db
+    .select()
+    .from(mcpConnection)
+    .where(
+      and(
+        eq(mcpConnection.userId, input.userId),
+        eq(mcpConnection.scope, 'agency'),
+        eq(mcpConnection.clientId, input.clientId),
+        isNull(mcpConnection.revokedAt),
+      ),
+    )
+    .limit(1)
+  if (!row || !isConnectionUsable(row, now)) return null
+  return row
+}
+
+/** The caller's usable agency connections, newest first. */
+export async function listAgencyConnections(input: {
+  userId: string
+  now?: Date
+}): Promise<McpConnectionSummary[]> {
+  const now = input.now ?? new Date()
+  const rows = await db
+    .select({ connection: mcpConnection, userName: user.name })
+    .from(mcpConnection)
+    .leftJoin(user, eq(user.id, mcpConnection.userId))
+    .where(
+      and(
+        eq(mcpConnection.userId, input.userId),
+        eq(mcpConnection.scope, 'agency'),
+        isNull(mcpConnection.revokedAt),
+      ),
+    )
+    .orderBy(desc(mcpConnection.createdAt))
+  return rows
+    .filter((row) => isConnectionUsable(row.connection, now))
+    .map((row) => ({
+      id: row.connection.id,
+      clientId: row.connection.clientId,
+      clientName: row.connection.clientName,
+      userId: row.connection.userId,
+      userName: row.userName ?? null,
+      allowGoLive: row.connection.allowGoLive,
+      createdAt: row.connection.createdAt,
+      lastUsedAt: row.connection.lastUsedAt,
+    }))
 }
 
 /** Records use, at most once a minute per connection. */

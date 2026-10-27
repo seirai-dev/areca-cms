@@ -65,7 +65,7 @@ import { releaseFlags } from '../release-flags'
 import type { ReleaseState } from '../release-state'
 import { loadReleaseState } from '../release-state'
 import { seoInputSchema, fieldsInputSchema, idSchema } from '../schemas'
-import type { ToolRegistry } from '../tool-kit'
+import type { ToolCollector } from '../tool-kit'
 
 const collectionKey = z
   .string()
@@ -349,7 +349,7 @@ function withWriteNotes<T extends object>(
   return withSharedNote(withImportWarnings(result, warnings), target, shared)
 }
 
-export function registerEntryTools(registry: ToolRegistry): void {
+export function registerEntryTools(registry: ToolCollector): void {
   registry.add({
     name: 'list_entries',
     title: 'List entries',

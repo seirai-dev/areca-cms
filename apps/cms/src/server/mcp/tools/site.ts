@@ -13,7 +13,7 @@ import type { Field, SiteLanguages } from '#/lib/types'
 
 import { credentialPhrase } from '../guard'
 import { mcpResourceUrl } from '../oauth-resource'
-import type { ToolRegistry } from '../tool-kit'
+import type { ToolCollector } from '../tool-kit'
 import type { McpSiteContext } from '../site-context'
 import { loadCollectionInSite, loadSiteRow } from '../scope'
 import type { McpActor } from '../keys'
@@ -113,7 +113,7 @@ function writingGuide(
   ].join('\n')
 }
 
-export function registerSiteTools(registry: ToolRegistry): void {
+export function registerSiteTools(registry: ToolCollector): void {
   registry.add({
     name: 'get_site_info',
     title: 'Get site info',

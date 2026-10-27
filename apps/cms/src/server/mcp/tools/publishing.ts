@@ -27,7 +27,7 @@ import {
 } from '../scope'
 import { idSchema } from '../schemas'
 import { PRODUCTION_ONLY } from '../tool-kit'
-import type { ToolRegistry } from '../tool-kit'
+import type { ToolCollector } from '../tool-kit'
 import { isDeploymentConfigured } from './site'
 
 /** True when the site has ever gone live in production (a publication was live). */
@@ -94,7 +94,7 @@ function describePublication(pub: PublicationLike) {
   }
 }
 
-export function registerPublishingTools(registry: ToolRegistry): void {
+export function registerPublishingTools(registry: ToolCollector): void {
   registry.add({
     name: 'set_publishing_mode',
     title: 'Set publishing mode',

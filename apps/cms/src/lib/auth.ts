@@ -45,7 +45,7 @@ import {
   MCP_REFRESH_TOKEN_PREFIX,
   MCP_REFRESH_TOKEN_REUSE_SECONDS,
   MCP_REFRESH_TOKEN_TTL_SECONDS,
-  ensureMcpSiteResource,
+  ensureMcpResource,
   resourceParams,
 } from '#/server/mcp/oauth-resource'
 import {
@@ -423,14 +423,14 @@ const authBase = betterAuth({
         const body = isRecord(ctx.body) ? ctx.body : {}
         await assertPasswordSignupMayProceed(body.email, body.invitationToken)
       }
-      // Each MCP site is its own protected resource. Create its row when the
-      // authorization request names it, so the plugin accepts the resource.
+      // Each MCP site and the agency connector are protected resources. Create
+      // the row when the authorization request names one, so the plugin accepts it.
       if (ctx.path === '/oauth2/authorize') {
         const session = await getSessionFromCtx(ctx)
         if (session) await assertAuthAdminMfa(session)
         assertSingleMcpResource(ctx.query?.resource, true)
         for (const resource of resourceParams(ctx.query?.resource)) {
-          await ensureMcpSiteResource(resource)
+          await ensureMcpResource(resource)
         }
       }
       if (ctx.path === '/oauth2/token' && isRecord(ctx.body)) {

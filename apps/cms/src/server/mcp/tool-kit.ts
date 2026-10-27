@@ -46,24 +46,86 @@ export type ToolSpec<TSchema extends z.ZodObject> = {
   ) => Promise<unknown>
 }
 
-/** Runs one tool call: access check, audit labelling, and error mapping. */
-export async function runTool<TSchema extends z.ZodObject>(
+/**
+ * A tool as data: everything a connector needs to list it and call it. The
+ * input schema is erased to the base object type, so tools of different
+ * shapes can sit in one list. Built from a ToolSpec by `toolEntry`.
+ */
+export type ToolEntry = {
+  name: string
+  title: string
+  description: string
+  inputSchema: z.ZodObject
+  access: ToolAccess
+  environments?: readonly SiteEnvironment[]
+  deniedMessage?: string
+  annotations: ToolAnnotations
+  /** Parses the raw input with this tool's own schema, then runs it for the site. */
+  invoke: (
+    input: unknown,
+    actor: McpActor,
+    site: McpSiteContext,
+  ) => Promise<unknown>
+}
+
+export function toolEntry<TSchema extends z.ZodObject>(
+  spec: ToolSpec<TSchema>,
+): ToolEntry {
+  return {
+    name: spec.name,
+    title: spec.title,
+    description: spec.description,
+    inputSchema: spec.inputSchema,
+    access: spec.access ?? 'everyone',
+    environments: spec.environments,
+    deniedMessage: spec.deniedMessage,
+    annotations: spec.annotations,
+    invoke: (input, actor, site) =>
+      spec.run(spec.inputSchema.parse(input), actor, site),
+  }
+}
+
+/** What the tool modules register into. The same list then serves every connector. */
+export type ToolCollector = {
+  add: <TSchema extends z.ZodObject>(spec: ToolSpec<TSchema>) => void
+}
+
+/** Collects tool specs as data, in registration order. */
+export class ToolCatalog {
+  readonly entries: ToolEntry[] = []
+
+  add<TSchema extends z.ZodObject>(spec: ToolSpec<TSchema>): void {
+    this.entries.push(toolEntry(spec))
+  }
+}
+
+/** A tool result: a string is sent as is, anything else as pretty JSON. */
+export function toCallResult(result: unknown): CallToolResult {
+  const text =
+    typeof result === 'string'
+      ? result
+      : JSON.stringify(result ?? null, null, 2)
+  return { content: [{ type: 'text', text }] }
+}
+
+/** Runs one per-site tool call: access check, audit labelling, and error mapping. */
+export async function runTool(
   actor: McpActor,
   site: McpSiteContext,
-  spec: ToolSpec<TSchema>,
-  input: z.output<TSchema>,
+  entry: ToolEntry,
+  input: unknown,
 ): Promise<CallToolResult> {
   return withAuditContext(
-    { via: 'mcp', mcpKeyId: actor.keyId, mcpKeyName: actor.keyName },
+    {
+      via: 'mcp',
+      mcpKeyId: actor.keyId,
+      mcpKeyName: actor.keyName,
+      mcpCredential: actor.credential,
+    },
     async () => {
       try {
-        requireAccess(actor, spec.access ?? 'everyone', spec.deniedMessage)
-        const result = await spec.run(input, actor, site)
-        const text =
-          typeof result === 'string'
-            ? result
-            : JSON.stringify(result ?? null, null, 2)
-        return { content: [{ type: 'text', text }] }
+        requireAccess(actor, entry.access, entry.deniedMessage)
+        return toCallResult(await entry.invoke(input, actor, site))
       } catch (error) {
         return toToolError(error)
       }
@@ -72,40 +134,36 @@ export async function runTool<TSchema extends z.ZodObject>(
 }
 
 /**
- * Registers the tools this actor may use. Tools outside the actor's role or
- * the site's environment are not advertised at all, so the model never plans
- * around them, and a direct call to them finds no tool.
+ * Registers the tools this per-site actor may use. Tools outside the actor's
+ * role or the site's environment are not advertised at all, so the model never
+ * plans around them, and a direct call to them finds no tool.
  */
 export class ToolRegistry {
   constructor(
-    private readonly server: McpServer,
+    private readonly server: Pick<McpServer, 'registerTool'>,
     private readonly actor: McpActor,
     private readonly site: McpSiteContext,
   ) {}
 
-  add<TSchema extends z.ZodObject>(spec: ToolSpec<TSchema>): void {
-    if (!canUseTool(this.actor, spec.access ?? 'everyone')) return
+  add(entry: ToolEntry): void {
+    if (!canUseTool(this.actor, entry.access)) return
     if (
-      spec.environments &&
-      !spec.environments.includes(this.site.environment)
+      entry.environments &&
+      !entry.environments.includes(this.site.environment)
     ) {
       return
     }
-    // Typed as the base schema so the SDK's callback type resolves; the
-    // generic S is restored by parsing the input in the callback below.
-    const inputSchema: z.ZodObject = spec.inputSchema
+    // The SDK has already validated the input; the entry parses it again to
+    // give it the schema's output type.
     this.server.registerTool(
-      spec.name,
+      entry.name,
       {
-        title: spec.title,
-        description: spec.description,
-        inputSchema,
-        annotations: spec.annotations,
+        title: entry.title,
+        description: entry.description,
+        inputSchema: entry.inputSchema,
+        annotations: entry.annotations,
       },
-      // The SDK has already validated the input; parsing again gives it the
-      // schema's output type without a cast.
-      (input: unknown) =>
-        runTool(this.actor, this.site, spec, spec.inputSchema.parse(input)),
+      (input: unknown) => runTool(this.actor, this.site, entry, input),
     )
   }
 }

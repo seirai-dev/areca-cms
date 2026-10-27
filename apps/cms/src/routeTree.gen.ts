@@ -33,6 +33,7 @@ import { Route as AppAgencyBrandingRouteImport } from './routes/_app/agency/bran
 import { Route as AppAgencyMailRouteImport } from './routes/_app/agency/mail'
 import { Route as AppSitesIndexRouteImport } from './routes/_app/sites/index'
 import { Route as AppSitesSiteIdRouteImport } from './routes/_app/sites/$siteId'
+import { Route as ApiAgencyMcpRouteImport } from './routes/api/agency/mcp'
 import { Route as ApiAssetsUploadRouteImport } from './routes/api/assets/upload'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiHealthReadyRouteImport } from './routes/api/health.ready'
@@ -184,6 +185,11 @@ const AppSitesSiteIdRoute = AppSitesSiteIdRouteImport.update({
   id: '/sites/$siteId',
   path: '/sites/$siteId',
   getParentRoute: () => AppRoute,
+} as any)
+const ApiAgencyMcpRoute = ApiAgencyMcpRouteImport.update({
+  id: '/api/agency/mcp',
+  path: '/api/agency/mcp',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAssetsUploadRoute = ApiAssetsUploadRouteImport.update({
   id: '/api/assets/upload',
@@ -373,6 +379,7 @@ export interface FileRoutesByFullPath {
   '/agency/branding': typeof AppAgencyBrandingRoute
   '/agency/mail': typeof AppAgencyMailRoute
   '/sites/$siteId': typeof AppSitesSiteIdRouteWithChildren
+  '/api/agency/mcp': typeof ApiAgencyMcpRoute
   '/api/assets/upload': typeof ApiAssetsUploadRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/health/ready': typeof ApiHealthReadyRoute
@@ -427,6 +434,7 @@ export interface FileRoutesByTo {
   '/agency/ai': typeof AppAgencyAiRoute
   '/agency/branding': typeof AppAgencyBrandingRoute
   '/agency/mail': typeof AppAgencyMailRoute
+  '/api/agency/mcp': typeof ApiAgencyMcpRoute
   '/api/assets/upload': typeof ApiAssetsUploadRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/health/ready': typeof ApiHealthReadyRoute
@@ -485,6 +493,7 @@ export interface FileRoutesById {
   '/_app/agency/branding': typeof AppAgencyBrandingRoute
   '/_app/agency/mail': typeof AppAgencyMailRoute
   '/_app/sites/$siteId': typeof AppSitesSiteIdRouteWithChildren
+  '/api/agency/mcp': typeof ApiAgencyMcpRoute
   '/api/assets/upload': typeof ApiAssetsUploadRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/health/ready': typeof ApiHealthReadyRoute
@@ -544,6 +553,7 @@ export interface FileRouteTypes {
     | '/agency/branding'
     | '/agency/mail'
     | '/sites/$siteId'
+    | '/api/agency/mcp'
     | '/api/assets/upload'
     | '/api/auth/$'
     | '/api/health/ready'
@@ -598,6 +608,7 @@ export interface FileRouteTypes {
     | '/agency/ai'
     | '/agency/branding'
     | '/agency/mail'
+    | '/api/agency/mcp'
     | '/api/assets/upload'
     | '/api/auth/$'
     | '/api/health/ready'
@@ -655,6 +666,7 @@ export interface FileRouteTypes {
     | '/_app/agency/branding'
     | '/_app/agency/mail'
     | '/_app/sites/$siteId'
+    | '/api/agency/mcp'
     | '/api/assets/upload'
     | '/api/auth/$'
     | '/api/health/ready'
@@ -704,6 +716,7 @@ export interface RootRouteChildren {
   ApiMetricsRoute: typeof ApiMetricsRoute
   InviteTokenRoute: typeof InviteTokenRoute
   OauthConsentRoute: typeof OauthConsentRoute
+  ApiAgencyMcpRoute: typeof ApiAgencyMcpRoute
   ApiAssetsUploadRoute: typeof ApiAssetsUploadRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiMcpSiteSlugRoute: typeof ApiMcpSiteSlugRoute
@@ -885,6 +898,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/sites/$siteId'
       preLoaderRoute: typeof AppSitesSiteIdRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/api/agency/mcp': {
+      id: '/api/agency/mcp'
+      path: '/api/agency/mcp'
+      fullPath: '/api/agency/mcp'
+      preLoaderRoute: typeof ApiAgencyMcpRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/assets/upload': {
       id: '/api/assets/upload'
@@ -1259,6 +1279,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiMetricsRoute: ApiMetricsRoute,
   InviteTokenRoute: InviteTokenRoute,
   OauthConsentRoute: OauthConsentRoute,
+  ApiAgencyMcpRoute: ApiAgencyMcpRoute,
   ApiAssetsUploadRoute: ApiAssetsUploadRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiMcpSiteSlugRoute: ApiMcpSiteSlugRoute,

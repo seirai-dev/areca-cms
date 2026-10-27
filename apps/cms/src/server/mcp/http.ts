@@ -31,15 +31,18 @@ const log = createLogger('mcp')
 /** Largest JSON-RPC body accepted; a 1 MB entry plus Markdown fits well inside. */
 const MAX_REQUEST_BODY_BYTES = 1_048_576
 
+/** Transport settings shared by the per-site and agency connectors. */
+export const MCP_TRANSPORT_OPTIONS = {
+  legacy: 'stateless',
+  responseMode: 'json',
+  maxRequestBodySize: MAX_REQUEST_BODY_BYTES,
+  onerror: (error: unknown) => log.warn('MCP protocol error', { err: error }),
+} as const
+
 const handler = createMcpHandler(
   (ctx: McpRequestContext) =>
     createArecaMcpServer(actorFrom(ctx), siteFrom(ctx)),
-  {
-    legacy: 'stateless',
-    responseMode: 'json',
-    maxRequestBodySize: MAX_REQUEST_BODY_BYTES,
-    onerror: (error) => log.warn('MCP protocol error', { err: error }),
-  },
+  MCP_TRANSPORT_OPTIONS,
 )
 
 /** The actor travels in authInfo.extra, set per request after authentication. */
@@ -75,14 +78,14 @@ function isActor(value: unknown): value is McpActor {
 export const MFA_REQUIRED_MESSAGE =
   'Your account needs two-factor authentication before AI keys work. Turn it on in Account settings.'
 
-function mfaRequired(): Response {
+export function mfaRequired(): Response {
   return Response.json(
     { error: MFA_REQUIRED_MESSAGE, code: 'mfa_required' },
     { status: 403 },
   )
 }
 
-function unauthorized(): Response {
+export function unauthorized(): Response {
   return Response.json(
     { error: 'Invalid or expired Areca MCP key' },
     {
@@ -92,34 +95,45 @@ function unauthorized(): Response {
   )
 }
 
+/** Where a client finds the authorization server for a resource (RFC 9728). */
+export function protectedResourceMetadataUrlFor(resource: string): string {
+  const url = new URL(resource)
+  return `${url.origin}/.well-known/oauth-protected-resource${url.pathname}`
+}
+
 /** Where a client finds the site's authorization server (RFC 9728). */
 export function protectedResourceMetadataUrl(siteSlug: string): string {
-  const resource = new URL(mcpResourceUrl(siteSlug))
-  return `${resource.origin}/.well-known/oauth-protected-resource${resource.pathname}`
+  return protectedResourceMetadataUrlFor(mcpResourceUrl(siteSlug))
+}
+
+export type ChallengeParams = {
+  error?: string
+  description?: string
+  scope?: string
+  dpop?: boolean
 }
 
 /**
- * The RFC 6750 / RFC 9728 challenge. Every 401 for the per-site endpoint
+ * The RFC 6750 / RFC 9728 challenge for a resource's metadata URL. Every 401
  * carries `resource_metadata`, which is how a client that has no token yet
  * discovers how to sign in.
  */
-function challengeHeader(
-  siteSlug: string,
-  params: {
-    error?: string
-    description?: string
-    scope?: string
-    dpop?: boolean
-  } = {},
+export function challengeHeaderAt(
+  metadataUrl: string,
+  params: ChallengeParams = {},
 ): string {
   const parts: string[] = []
   if (params.error) parts.push(`error="${params.error}"`)
   if (params.description)
     parts.push(`error_description="${params.description}"`)
-  parts.push(`resource_metadata="${protectedResourceMetadataUrl(siteSlug)}"`)
+  parts.push(`resource_metadata="${metadataUrl}"`)
   parts.push(`scope="${params.scope ?? MCP_CHALLENGE_SCOPES.join(' ')}"`)
   if (params.dpop) parts.push(`algs="${DPOP_SIGNING_ALGORITHMS.join(' ')}"`)
   return `${params.dpop ? 'DPoP' : 'Bearer'} ${parts.join(', ')}`
+}
+
+function challengeHeader(siteSlug: string, params: ChallengeParams = {}) {
+  return challengeHeaderAt(protectedResourceMetadataUrl(siteSlug), params)
 }
 
 function challenge401(
@@ -151,7 +165,7 @@ function insufficientScope(siteSlug: string, dpop = false): Response {
   )
 }
 
-function unknownSite(): Response {
+export function unknownSite(): Response {
   return Response.json({ error: 'Site not found' }, { status: 404 })
 }
 
@@ -326,6 +340,7 @@ export async function handleSiteMcpRequest(
     keyId: connection.id,
     keyName: connection.clientName,
     credential: 'oauth',
+    scope: 'site',
     userId: owner.id,
     userName: owner.name,
     siteId: found.id,
@@ -363,7 +378,9 @@ async function runMcp(
 }
 
 /** Only successful protocol results keep the approval's idle window alive. */
-async function isSuccessfulMcpResponse(response: Response): Promise<boolean> {
+export async function isSuccessfulMcpResponse(
+  response: Response,
+): Promise<boolean> {
   if (!response.ok) return false
   try {
     const text = await response.clone().text()

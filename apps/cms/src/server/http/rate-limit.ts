@@ -280,7 +280,12 @@ export async function enforceRequestRateLimit(
   // client is 'unknown', and one shared bucket would throttle all agents
   // together. Keys are 256-bit random values checked with one indexed lookup,
   // so skipping it there costs little.
-  if (path === '/api/mcp' || path.startsWith('/api/mcp/')) {
+  // The agency connector (/api/agency/mcp) shares these budgets: one key, every site.
+  if (
+    path === '/api/mcp' ||
+    path.startsWith('/api/mcp/') ||
+    path === '/api/agency/mcp'
+  ) {
     const now = dependencies.now?.() ?? Date.now()
     try {
       const ip = getClientIp(request, dependencies.trustProxy)
