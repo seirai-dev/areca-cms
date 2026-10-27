@@ -147,7 +147,11 @@ export async function signOut(page: Page) {
 /** Workspace switcher (the card at the top of the sidebar). */
 export async function openSwitcher(page: Page) {
   const list = page.locator('[cmdk-list]')
-  await openFromTrigger(page.getByTestId('sites-nav'), list)
+  // The sidebar card on desktop, the mobile top bar's button on a phone.
+  const trigger = page.locator(
+    '[data-testid="sites-nav"]:visible, [data-testid="sites-nav-mobile"]:visible',
+  )
+  await openFromTrigger(trigger, list)
   return list
 }
 
