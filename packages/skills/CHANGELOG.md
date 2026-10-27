@@ -2,6 +2,17 @@
 
 All notable changes to `@areca-cms/skills`.
 
+## 0.6.0 (2026-10-27)
+
+### Features
+
+- **agency-mcp:** Agency › Connect AI page, agency consent screen, docs and skills (67d17e6)
+
+### Bug fixes
+
+- **agency-mcp:** review fixes for the agency connector and skills installer (1d1ff52)
+- **dev-env:** address review findings for push safety, visibility and UI (91ff99d)
+
 ## 0.5.0 (2026-10-26)
 
 ### Features

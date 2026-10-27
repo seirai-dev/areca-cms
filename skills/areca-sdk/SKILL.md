@@ -3,7 +3,7 @@ name: areca-sdk
 description: Connects a website project to Areca CMS with the @areca-cms/site-sdk package. Covers setup, tokens and env vars, areca.config.ts collections, site content globals and field types, the areca CLI (init, manifest push/pull, pull, run), typed content from the generated areca.gen.ts (import { content }), rich text, SEO head tags, multilingual sites (languages, locales, hreflang), draft preview routes and Go-live builds. Use when a project imports @areca-cms/site-sdk, has an areca.config.ts or areca.gen.ts, mentions ARECA_* env vars, or the user wants to add, render or deploy Areca CMS content.
 license: MIT
 metadata:
-  version: "0.5.0"
+  version: "0.6.0"
 ---
 
 # Areca site SDK
