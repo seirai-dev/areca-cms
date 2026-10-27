@@ -28,6 +28,8 @@ export const adminQueryKeys = {
   sites: (organizationId: string) => ['sites', organizationId] as const,
   site: (id: string) => ['site', id] as const,
   devEnvironment: (siteId: string) => ['dev-environment', siteId] as const,
+  pushPlan: (devSiteId: string) => ['push-plan', devSiteId] as const,
+  devSync: (devSiteId: string) => ['dev-sync', devSiteId] as const,
   members: (organizationId: string) => ['members', organizationId] as const,
   invitations: (organizationId: string) =>
     ['invitations', organizationId] as const,

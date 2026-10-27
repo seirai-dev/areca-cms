@@ -206,11 +206,19 @@ export async function ensureGlobalEntry(
   })
 }
 
-export async function upsertGlobal(
-  siteId: string,
-  input: GlobalInput,
-  actorId?: string,
-) {
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
+
+export type PreparedGlobalUpsert = {
+  label: string
+  enabled: boolean
+  seoEnabled: boolean
+  previewPath: string | null
+  /** Undefined leaves the stored languages alone. */
+  requiredLanguages: string[] | undefined
+}
+
+/** Checks a section save before anything is written, and returns what to store. */
+export function prepareGlobalUpsert(input: GlobalInput): PreparedGlobalUpsert {
   const label = input.label.trim()
   if (!label) {
     throw new ValidationError([{ path: 'label', message: m.server_required() }])
@@ -228,6 +236,114 @@ export async function upsertGlobal(
   }
   const previewPath = input.previewPath || null
   assertPreviewPath(previewPath, input.key)
+  return {
+    label,
+    enabled: input.enabled ?? true,
+    seoEnabled: input.seo ?? false,
+    previewPath,
+    requiredLanguages:
+      input.requiredLanguages === undefined
+        ? undefined
+        : normalizeRequiredLanguages(input.requiredLanguages),
+  }
+}
+
+/**
+ * Writes a section save inside an open transaction. The caller holds the site
+ * row lock. Used by the editor's save and by the development-environment push.
+ */
+export async function writeGlobalUpsert(
+  tx: Tx,
+  siteId: string,
+  input: GlobalInput,
+  prepared: PreparedGlobalUpsert,
+  now: Date = new Date(),
+) {
+  const { label, enabled, seoEnabled, previewPath, requiredLanguages } =
+    prepared
+  const existing = await tx
+    .select()
+    .from(collection)
+    .where(eq(collection.siteId, siteId))
+  assertKindsUnchanged(existing, [{ key: input.key, kind: 'global' }])
+  const previous = existing.find(
+    (row) => row.key === input.key && row.kind === 'global',
+  )
+  validateContentDefinitions([
+    ...existing.filter((row) => row.key !== input.key),
+    { key: input.key, kind: 'global', fields: input.fields, enabled },
+  ])
+  const purgedKeys = await confirmedFieldDrops(tx, {
+    collectionId: previous?.id,
+    before: previous?.fields ?? [],
+    after: input.fields,
+    confirmDropFields: input.confirmDropFields,
+  })
+  const row = (
+    await tx
+      .insert(collection)
+      .values({
+        siteId,
+        key: input.key,
+        label,
+        routePattern: '',
+        kind: 'global',
+        fields: input.fields,
+        enabled,
+        seoEnabled,
+        previewPath,
+        requiredLanguages: requiredLanguages ?? [],
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: [collection.siteId, collection.key],
+        set: {
+          label,
+          fields: input.fields,
+          enabled,
+          seoEnabled,
+          previewPath,
+          ...(requiredLanguages !== undefined ? { requiredLanguages } : {}),
+          updatedAt: now,
+        },
+      })
+      .returning({ id: collection.id })
+  ).at(0)
+  if (!row) {
+    throw new Error(m.server_failed_to_upsert_collection())
+  }
+  if (previous) await purgeFieldContent(tx, previous.id, purgedKeys)
+  await ensureGlobalEntry(tx, siteId, row.id)
+  // Turning SEO off must not leave stale SEO in the draft for a later ready.
+  // Ready and scheduled data are stripped when the snapshot is built.
+  if (previous?.seoEnabled && !seoEnabled) {
+    const [draft] = await tx
+      .select({ draftData: entry.draftData })
+      .from(entry)
+      .where(
+        and(eq(entry.collectionId, row.id), eq(entry.slug, GLOBAL_ENTRY_SLUG)),
+      )
+      .limit(1)
+    await tx
+      .update(entry)
+      .set({
+        contentVersion: sql`${entry.contentVersion} + 1`,
+        draftData: withoutSeoEverywhere(draft.draftData),
+        draftVersion: sql`${entry.draftVersion} + 1`,
+        updatedAt: now,
+      })
+      .where(
+        and(eq(entry.collectionId, row.id), eq(entry.slug, GLOBAL_ENTRY_SLUG)),
+      )
+  }
+}
+
+export async function upsertGlobal(
+  siteId: string,
+  input: GlobalInput,
+  actorId?: string,
+) {
+  const prepared = prepareGlobalUpsert(input)
   const existingSite = (
     await db.select().from(site).where(eq(site.id, siteId)).limit(1)
   ).at(0)
@@ -236,12 +352,6 @@ export async function upsertGlobal(
   }
 
   const now = new Date()
-  const enabled = input.enabled ?? true
-  const seoEnabled = input.seo ?? false
-  const requiredLanguages =
-    input.requiredLanguages === undefined
-      ? undefined
-      : normalizeRequiredLanguages(input.requiredLanguages)
 
   await db.transaction(async (tx) => {
     await tx
@@ -249,87 +359,7 @@ export async function upsertGlobal(
       .from(site)
       .where(eq(site.id, siteId))
       .for('update')
-    const existing = await tx
-      .select()
-      .from(collection)
-      .where(eq(collection.siteId, siteId))
-    assertKindsUnchanged(existing, [{ key: input.key, kind: 'global' }])
-    const previous = existing.find(
-      (row) => row.key === input.key && row.kind === 'global',
-    )
-    validateContentDefinitions([
-      ...existing.filter((row) => row.key !== input.key),
-      { key: input.key, kind: 'global', fields: input.fields, enabled },
-    ])
-    const purgedKeys = await confirmedFieldDrops(tx, {
-      collectionId: previous?.id,
-      before: previous?.fields ?? [],
-      after: input.fields,
-      confirmDropFields: input.confirmDropFields,
-    })
-    const row = (
-      await tx
-        .insert(collection)
-        .values({
-          siteId,
-          key: input.key,
-          label,
-          routePattern: '',
-          kind: 'global',
-          fields: input.fields,
-          enabled,
-          seoEnabled,
-          previewPath,
-          requiredLanguages: requiredLanguages ?? [],
-          updatedAt: now,
-        })
-        .onConflictDoUpdate({
-          target: [collection.siteId, collection.key],
-          set: {
-            label,
-            fields: input.fields,
-            enabled,
-            seoEnabled,
-            previewPath,
-            ...(requiredLanguages !== undefined ? { requiredLanguages } : {}),
-            updatedAt: now,
-          },
-        })
-        .returning({ id: collection.id })
-    ).at(0)
-    if (!row) {
-      throw new Error(m.server_failed_to_upsert_collection())
-    }
-    if (previous) await purgeFieldContent(tx, previous.id, purgedKeys)
-    await ensureGlobalEntry(tx, siteId, row.id)
-    // Turning SEO off must not leave stale SEO in the draft for a later ready.
-    // Ready and scheduled data are stripped when the snapshot is built.
-    if (previous?.seoEnabled && !seoEnabled) {
-      const [draft] = await tx
-        .select({ draftData: entry.draftData })
-        .from(entry)
-        .where(
-          and(
-            eq(entry.collectionId, row.id),
-            eq(entry.slug, GLOBAL_ENTRY_SLUG),
-          ),
-        )
-        .limit(1)
-      await tx
-        .update(entry)
-        .set({
-          contentVersion: sql`${entry.contentVersion} + 1`,
-          draftData: withoutSeoEverywhere(draft.draftData),
-          draftVersion: sql`${entry.draftVersion} + 1`,
-          updatedAt: now,
-        })
-        .where(
-          and(
-            eq(entry.collectionId, row.id),
-            eq(entry.slug, GLOBAL_ENTRY_SLUG),
-          ),
-        )
-    }
+    await writeGlobalUpsert(tx, siteId, input, prepared, now)
   })
 
   const row = await getGlobal(siteId, input.key)
@@ -431,26 +461,39 @@ export async function deleteGlobal(
       .from(site)
       .where(eq(site.id, siteId))
       .for('update')
-    await archiveDeletedContent(
-      tx,
-      existing.organizationId,
-      'collection',
-      existing.id,
-    )
-    await tx.delete(collection).where(eq(collection.id, existing.id))
-    await audit(
-      {
-        organizationId: existing.organizationId,
-        siteId,
-        actorId,
-        action: 'global.delete',
-        targetType: 'collection',
-        targetId: existing.id,
-        meta: { key, kind: 'global' },
-      },
-      tx,
-    )
+    await writeGlobalDelete(tx, siteId, { ...existing, key }, actorId)
   })
+}
+
+/**
+ * Deletes a section and archives its content, inside an open transaction (the
+ * caller holds the site row lock). Audited in the same transaction.
+ */
+export async function writeGlobalDelete(
+  tx: Tx,
+  siteId: string,
+  existing: { id: string; key: string; organizationId: string },
+  actorId: string,
+) {
+  await archiveDeletedContent(
+    tx,
+    existing.organizationId,
+    'collection',
+    existing.id,
+  )
+  await tx.delete(collection).where(eq(collection.id, existing.id))
+  await audit(
+    {
+      organizationId: existing.organizationId,
+      siteId,
+      actorId,
+      action: 'global.delete',
+      targetType: 'collection',
+      targetId: existing.id,
+      meta: { key: existing.key, kind: 'global' },
+    },
+    tx,
+  )
 }
 
 /**

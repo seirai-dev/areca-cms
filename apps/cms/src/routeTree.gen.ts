@@ -53,6 +53,7 @@ import { Route as AppSitesSiteIdConnectAiRouteImport } from './routes/_app/sites
 import { Route as AppSitesSiteIdLibraryRouteImport } from './routes/_app/sites/$siteId/library'
 import { Route as AppSitesSiteIdMediaRouteImport } from './routes/_app/sites/$siteId/media'
 import { Route as AppSitesSiteIdPeopleRouteImport } from './routes/_app/sites/$siteId/people'
+import { Route as AppSitesSiteIdPushRouteImport } from './routes/_app/sites/$siteId/push'
 import { Route as AppSitesSiteIdReleasesRouteImport } from './routes/_app/sites/$siteId/releases'
 import { Route as AppSitesSiteIdSettingsRouteImport } from './routes/_app/sites/$siteId/settings'
 import { Route as AppSitesSiteIdTeamRouteImport } from './routes/_app/sites/$siteId/team'
@@ -285,6 +286,11 @@ const AppSitesSiteIdPeopleRoute = AppSitesSiteIdPeopleRouteImport.update({
   path: '/people',
   getParentRoute: () => AppSitesSiteIdRoute,
 } as any)
+const AppSitesSiteIdPushRoute = AppSitesSiteIdPushRouteImport.update({
+  id: '/push',
+  path: '/push',
+  getParentRoute: () => AppSitesSiteIdRoute,
+} as any)
 const AppSitesSiteIdReleasesRoute = AppSitesSiteIdReleasesRouteImport.update({
   id: '/releases',
   path: '/releases',
@@ -388,6 +394,7 @@ export interface FileRoutesByFullPath {
   '/sites/$siteId/library': typeof AppSitesSiteIdLibraryRoute
   '/sites/$siteId/media': typeof AppSitesSiteIdMediaRoute
   '/sites/$siteId/people': typeof AppSitesSiteIdPeopleRoute
+  '/sites/$siteId/push': typeof AppSitesSiteIdPushRoute
   '/sites/$siteId/releases': typeof AppSitesSiteIdReleasesRoute
   '/sites/$siteId/settings': typeof AppSitesSiteIdSettingsRoute
   '/sites/$siteId/team': typeof AppSitesSiteIdTeamRoute
@@ -441,6 +448,7 @@ export interface FileRoutesByTo {
   '/sites/$siteId/library': typeof AppSitesSiteIdLibraryRoute
   '/sites/$siteId/media': typeof AppSitesSiteIdMediaRoute
   '/sites/$siteId/people': typeof AppSitesSiteIdPeopleRoute
+  '/sites/$siteId/push': typeof AppSitesSiteIdPushRoute
   '/sites/$siteId/releases': typeof AppSitesSiteIdReleasesRoute
   '/sites/$siteId/settings': typeof AppSitesSiteIdSettingsRoute
   '/sites/$siteId/team': typeof AppSitesSiteIdTeamRoute
@@ -498,6 +506,7 @@ export interface FileRoutesById {
   '/_app/sites/$siteId/library': typeof AppSitesSiteIdLibraryRoute
   '/_app/sites/$siteId/media': typeof AppSitesSiteIdMediaRoute
   '/_app/sites/$siteId/people': typeof AppSitesSiteIdPeopleRoute
+  '/_app/sites/$siteId/push': typeof AppSitesSiteIdPushRoute
   '/_app/sites/$siteId/releases': typeof AppSitesSiteIdReleasesRoute
   '/_app/sites/$siteId/settings': typeof AppSitesSiteIdSettingsRoute
   '/_app/sites/$siteId/team': typeof AppSitesSiteIdTeamRoute
@@ -556,6 +565,7 @@ export interface FileRouteTypes {
     | '/sites/$siteId/library'
     | '/sites/$siteId/media'
     | '/sites/$siteId/people'
+    | '/sites/$siteId/push'
     | '/sites/$siteId/releases'
     | '/sites/$siteId/settings'
     | '/sites/$siteId/team'
@@ -609,6 +619,7 @@ export interface FileRouteTypes {
     | '/sites/$siteId/library'
     | '/sites/$siteId/media'
     | '/sites/$siteId/people'
+    | '/sites/$siteId/push'
     | '/sites/$siteId/releases'
     | '/sites/$siteId/settings'
     | '/sites/$siteId/team'
@@ -665,6 +676,7 @@ export interface FileRouteTypes {
     | '/_app/sites/$siteId/library'
     | '/_app/sites/$siteId/media'
     | '/_app/sites/$siteId/people'
+    | '/_app/sites/$siteId/push'
     | '/_app/sites/$siteId/releases'
     | '/_app/sites/$siteId/settings'
     | '/_app/sites/$siteId/team'
@@ -1014,6 +1026,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSitesSiteIdPeopleRouteImport
       parentRoute: typeof AppSitesSiteIdRoute
     }
+    '/_app/sites/$siteId/push': {
+      id: '/_app/sites/$siteId/push'
+      path: '/push'
+      fullPath: '/sites/$siteId/push'
+      preLoaderRoute: typeof AppSitesSiteIdPushRouteImport
+      parentRoute: typeof AppSitesSiteIdRoute
+    }
     '/_app/sites/$siteId/releases': {
       id: '/_app/sites/$siteId/releases'
       path: '/releases'
@@ -1162,6 +1181,7 @@ interface AppSitesSiteIdRouteChildren {
   AppSitesSiteIdLibraryRoute: typeof AppSitesSiteIdLibraryRoute
   AppSitesSiteIdMediaRoute: typeof AppSitesSiteIdMediaRoute
   AppSitesSiteIdPeopleRoute: typeof AppSitesSiteIdPeopleRoute
+  AppSitesSiteIdPushRoute: typeof AppSitesSiteIdPushRoute
   AppSitesSiteIdReleasesRoute: typeof AppSitesSiteIdReleasesRoute
   AppSitesSiteIdSettingsRoute: typeof AppSitesSiteIdSettingsRoute
   AppSitesSiteIdTeamRoute: typeof AppSitesSiteIdTeamRoute
@@ -1176,6 +1196,7 @@ const AppSitesSiteIdRouteChildren: AppSitesSiteIdRouteChildren = {
   AppSitesSiteIdLibraryRoute: AppSitesSiteIdLibraryRoute,
   AppSitesSiteIdMediaRoute: AppSitesSiteIdMediaRoute,
   AppSitesSiteIdPeopleRoute: AppSitesSiteIdPeopleRoute,
+  AppSitesSiteIdPushRoute: AppSitesSiteIdPushRoute,
   AppSitesSiteIdReleasesRoute: AppSitesSiteIdReleasesRoute,
   AppSitesSiteIdSettingsRoute: AppSitesSiteIdSettingsRoute,
   AppSitesSiteIdTeamRoute: AppSitesSiteIdTeamRoute,

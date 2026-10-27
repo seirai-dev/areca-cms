@@ -59,6 +59,9 @@ unchanged (each row carries a side-effect probe).
 | `createDevEnvironmentFn` | `dev-env.ts` | `agency` | agency admin (MFA); no step-up (throwaway dev env); production sites only |
 | `refreshDevEnvironmentFn` | `dev-env.ts` | `agency` | agency admin (MFA); no step-up; discards the dev env's content and forks again |
 | `deleteDevEnvironmentFn` | `dev-env.ts` | `agency` | agency admin (MFA); no step-up; deletes the dev env, nothing is archived |
+| `getDevSiteSyncStatusFn` | `dev-env.ts` | `agency` | agency admin (MFA); unpushed and production change counts of a dev env |
+| `getPushPlanFn` | `dev-env.ts` | `agency` | agency admin (MFA); the push plan items and the plan hash of a dev env. Writes nothing |
+| `pushToProductionFn` | `dev-env.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up); pushes the selected plan items to production; refused when the plan hash is stale |
 | `listMembersFn` | `admin.ts` | `org-owner` | org owner, agency admin (MFA) |
 | `updateMemberRoleFn` | `admin.ts` | `org-owner` | org owner, agency admin (MFA) |
 | `removeMemberFn` | `admin.ts` | `org-owner` | org owner, agency admin (MFA) |

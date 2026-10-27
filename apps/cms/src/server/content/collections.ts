@@ -46,9 +46,13 @@ export async function listCollections(
   }))
 }
 
-export async function getCollection(siteId: string, key: string) {
+export async function getCollection(
+  siteId: string,
+  key: string,
+  connection: Pick<typeof db, 'select'> = db,
+) {
   const row = (
-    await db
+    await connection
       .select()
       .from(collection)
       .where(
@@ -250,23 +254,32 @@ export async function syncManifest(
   })
 }
 
-export async function upsertCollection(
-  siteId: string,
-  input: {
-    key: string
-    label: string
-    routePattern: string
-    fields: Field[]
-    enabled?: boolean
-    /** Languages besides main that must be complete. Left unchanged when omitted. */
-    requiredLanguages?: string[]
-    /** Per-language route patterns. Left unchanged when omitted; null clears them. */
-    localizedRoutes?: Record<string, string> | null
-    /** Keys of fields that are removed together with their content. */
-    confirmDropFields?: string[]
-  },
-  actorId?: string,
-) {
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
+
+export type CollectionUpsertInput = {
+  key: string
+  label: string
+  routePattern: string
+  fields: Field[]
+  enabled?: boolean
+  /** Languages besides main that must be complete. Left unchanged when omitted. */
+  requiredLanguages?: string[]
+  /** Per-language route patterns. Left unchanged when omitted; null clears them. */
+  localizedRoutes?: Record<string, string> | null
+  /** Keys of fields that are removed together with their content. */
+  confirmDropFields?: string[]
+}
+
+export type PreparedCollectionUpsert = {
+  label: string
+  fields: Field[]
+  enabled: boolean
+}
+
+/** Checks a collection save before anything is written, and returns what to store. */
+export function prepareCollectionUpsert(
+  input: CollectionUpsertInput,
+): PreparedCollectionUpsert {
   const label = input.label.trim()
   if (!label) {
     throw new ValidationError([{ path: 'label', message: m.server_required() }])
@@ -282,7 +295,86 @@ export async function upsertCollection(
       },
     ])
   }
-  const fields = withRequiredSlugField(input.fields)
+  return {
+    label,
+    fields: withRequiredSlugField(input.fields),
+    enabled: input.enabled ?? true,
+  }
+}
+
+/**
+ * Writes a collection save inside an open transaction. The caller holds the
+ * site row lock. Used by the editor's save and by the development-environment
+ * push, which runs many of these in one transaction.
+ */
+export async function writeCollectionUpsert(
+  tx: Tx,
+  siteId: string,
+  input: CollectionUpsertInput,
+  prepared: PreparedCollectionUpsert,
+  now: Date = new Date(),
+) {
+  const { label, fields, enabled } = prepared
+  const existing = await tx
+    .select()
+    .from(collection)
+    .where(eq(collection.siteId, siteId))
+  assertKindsUnchanged(existing, [{ key: input.key, kind: 'collection' }])
+  validateContentDefinitions([
+    ...existing.filter((row) => row.key !== input.key),
+    { key: input.key, kind: 'collection', fields, enabled },
+  ])
+  const previous = existing.find((row) => row.key === input.key)
+  const purgedKeys = await confirmedFieldDrops(tx, {
+    collectionId: previous?.id,
+    before: previous?.fields ?? [],
+    after: fields,
+    confirmDropFields: input.confirmDropFields,
+  })
+  await tx
+    .insert(collection)
+    .values({
+      siteId,
+      key: input.key,
+      label,
+      routePattern: input.routePattern,
+      fields,
+      enabled,
+      requiredLanguages: normalizeRequiredLanguages(
+        input.requiredLanguages ?? [],
+      ),
+      localizedRoutes: input.localizedRoutes ?? null,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: [collection.siteId, collection.key],
+      set: {
+        label,
+        routePattern: input.routePattern,
+        fields,
+        enabled,
+        ...(input.requiredLanguages !== undefined
+          ? {
+              requiredLanguages: normalizeRequiredLanguages(
+                input.requiredLanguages,
+              ),
+            }
+          : {}),
+        ...(input.localizedRoutes !== undefined
+          ? { localizedRoutes: input.localizedRoutes }
+          : {}),
+        updatedAt: now,
+      },
+    })
+  if (previous) await purgeFieldContent(tx, previous.id, purgedKeys)
+}
+
+export async function upsertCollection(
+  siteId: string,
+  input: CollectionUpsertInput,
+  actorId?: string,
+) {
+  const prepared = prepareCollectionUpsert(input)
   const existingSite = (
     await db.select().from(site).where(eq(site.id, siteId)).limit(1)
   ).at(0)
@@ -291,7 +383,6 @@ export async function upsertCollection(
   }
 
   const now = new Date()
-  const enabled = input.enabled ?? true
 
   await db.transaction(async (tx) => {
     await tx
@@ -299,58 +390,7 @@ export async function upsertCollection(
       .from(site)
       .where(eq(site.id, siteId))
       .for('update')
-    const existing = await tx
-      .select()
-      .from(collection)
-      .where(eq(collection.siteId, siteId))
-    assertKindsUnchanged(existing, [{ key: input.key, kind: 'collection' }])
-    validateContentDefinitions([
-      ...existing.filter((row) => row.key !== input.key),
-      { key: input.key, kind: 'collection', fields, enabled },
-    ])
-    const previous = existing.find((row) => row.key === input.key)
-    const purgedKeys = await confirmedFieldDrops(tx, {
-      collectionId: previous?.id,
-      before: previous?.fields ?? [],
-      after: fields,
-      confirmDropFields: input.confirmDropFields,
-    })
-    await tx
-      .insert(collection)
-      .values({
-        siteId,
-        key: input.key,
-        label,
-        routePattern: input.routePattern,
-        fields,
-        enabled,
-        requiredLanguages: normalizeRequiredLanguages(
-          input.requiredLanguages ?? [],
-        ),
-        localizedRoutes: input.localizedRoutes ?? null,
-        updatedAt: now,
-      })
-      .onConflictDoUpdate({
-        target: [collection.siteId, collection.key],
-        set: {
-          label,
-          routePattern: input.routePattern,
-          fields,
-          enabled,
-          ...(input.requiredLanguages !== undefined
-            ? {
-                requiredLanguages: normalizeRequiredLanguages(
-                  input.requiredLanguages,
-                ),
-              }
-            : {}),
-          ...(input.localizedRoutes !== undefined
-            ? { localizedRoutes: input.localizedRoutes }
-            : {}),
-          updatedAt: now,
-        },
-      })
-    if (previous) await purgeFieldContent(tx, previous.id, purgedKeys)
+    await writeCollectionUpsert(tx, siteId, input, prepared, now)
   })
 
   const row = await getCollection(siteId, input.key)
@@ -405,33 +445,44 @@ export async function deleteCollection(
       .from(site)
       .where(eq(site.id, siteId))
       .for('update')
-    const remaining = await tx
-      .select()
-      .from(collection)
-      .where(eq(collection.siteId, siteId))
-    validateContentDefinitions(
-      remaining.filter((row) => row.id !== existing.id),
-    )
-    await archiveDeletedContent(
-      tx,
-      existing.organizationId,
-      'collection',
-      existing.id,
-    )
-    await tx.delete(collection).where(eq(collection.id, existing.id))
-    await audit(
-      {
-        organizationId: existing.organizationId,
-        siteId,
-        actorId,
-        action: 'collection.delete',
-        targetType: 'collection',
-        targetId: existing.id,
-        meta: { key: existing.key },
-      },
-      tx,
-    )
+    await writeCollectionDelete(tx, siteId, existing, actorId)
   })
+}
+
+/**
+ * Deletes a collection and archives its content, inside an open transaction
+ * (the caller holds the site row lock). Audited in the same transaction.
+ */
+export async function writeCollectionDelete(
+  tx: Tx,
+  siteId: string,
+  existing: { id: string; key: string; organizationId: string },
+  actorId: string,
+) {
+  const remaining = await tx
+    .select()
+    .from(collection)
+    .where(eq(collection.siteId, siteId))
+  validateContentDefinitions(remaining.filter((row) => row.id !== existing.id))
+  await archiveDeletedContent(
+    tx,
+    existing.organizationId,
+    'collection',
+    existing.id,
+  )
+  await tx.delete(collection).where(eq(collection.id, existing.id))
+  await audit(
+    {
+      organizationId: existing.organizationId,
+      siteId,
+      actorId,
+      action: 'collection.delete',
+      targetType: 'collection',
+      targetId: existing.id,
+      meta: { key: existing.key },
+    },
+    tx,
+  )
 }
 
 /** Collection-only validation (every definition is a collection). */

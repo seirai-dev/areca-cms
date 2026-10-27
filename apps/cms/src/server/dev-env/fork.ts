@@ -18,6 +18,7 @@ import { generateSiteToken } from '#/server/content/site-auth'
 import { isDevSite } from '#/server/security/site-visibility'
 
 import { schemaSnapshot } from './schema-snapshot'
+import { remapReferences } from './references'
 import { lockProductionSite } from './lock'
 import { DEV_SLUG_ATTEMPTS, devSlugCandidates, pickDevSlug } from './slug'
 import { lockProductionRow } from './rows'
@@ -85,8 +86,14 @@ export async function copyProductionIntoDev(
     .from(entry)
     .where(eq(entry.siteId, prod.id))
 
-  const entryRows: (typeof entry.$inferInsert)[] = []
-  const revisionRows: (typeof entryRevision.$inferInsert)[] = []
+  // Which production entries are copied, and the dev id each one gets. Done
+  // first, so references can be re-pointed at dev ids before anything is written.
+  const copies: {
+    row: (typeof prodEntries)[number]
+    id: string
+    collectionId: string
+    isSection: boolean
+  }[] = []
   let collectionEntries = 0
   for (const row of prodEntries) {
     const isSection = sectionCollectionIds.has(row.collectionId)
@@ -100,19 +107,43 @@ export async function copyProductionIntoDev(
     }
     const collectionId = devCollectionIds.get(row.collectionId)
     if (!collectionId) continue
+    copies.push({ row, id: randomUUID(), collectionId, isSection })
+    if (!isSection) collectionEntries += 1
+  }
 
+  // A reference holds the target's id. A copied target is re-pointed at its
+  // dev id; a target that was not copied keeps its production id, which the
+  // push passes through unchanged (docs/design/dev-environments.md, "Reference
+  // mapping").
+  const devIdByOrigin = new Map(copies.map((copy) => [copy.row.id, copy.id]))
+  const lookup = (productionId: string) =>
+    devIdByOrigin.get(productionId) ?? productionId
+  const fieldsByCollection = new Map(
+    prodCollections.map((col) => [col.id, col.fields]),
+  )
+
+  const entryRows: (typeof entry.$inferInsert)[] = []
+  const revisionRows: (typeof entryRevision.$inferInsert)[] = []
+  for (const { row, id, collectionId } of copies) {
     const ready = row.publishedData != null
     const slug = row.publishedSlug ?? row.slug
+    const publishedData =
+      row.publishedData == null
+        ? null
+        : remapReferences(
+            row.publishedData,
+            fieldsByCollection.get(row.collectionId) ?? [],
+            lookup,
+          ).data
     // Unfinished production drafts are not copied (Decision 9): a section
     // without a ready version starts empty.
-    const draftData: EntryData = row.publishedData ?? {}
+    const draftData: EntryData = publishedData ?? {}
     const publishedSlug = ready ? slug : null
-    const id = randomUUID()
     const originBaseline: EntryOriginBaseline = {
       slug,
       data: draftData,
       publishedSlug,
-      publishedData: row.publishedData ?? null,
+      publishedData,
       status: ready ? 'published' : 'draft',
     }
     entryRows.push({
@@ -122,7 +153,7 @@ export async function copyProductionIntoDev(
       slug,
       status: ready ? 'published' : 'draft',
       draftData,
-      publishedData: row.publishedData ?? null,
+      publishedData,
       publishedSlug,
       publishedAt: ready ? now : null,
       draftVersion: 1,
@@ -138,7 +169,6 @@ export async function copyProductionIntoDev(
       note: 'fork',
       kind: 'milestone',
     })
-    if (!isSection) collectionEntries += 1
   }
   await insertChunked(entryRows, (rows) => tx.insert(entry).values(rows))
   await insertChunked(revisionRows, (rows) =>

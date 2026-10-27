@@ -169,6 +169,10 @@ export function AppShell({
   children: React.ReactNode
 }) {
   const mode = useShellMode()
+  const hideDevBanner = useMatches({
+    select: (matches) =>
+      matches.some((match) => match.staticData.hideDevBanner),
+  })
   const params = useParams({ strict: false })
   const site = findSite(me, params.siteId)
   const pathname = useRouterState({
@@ -275,7 +279,7 @@ export function AppShell({
               {me.user.isAgencyAdmin && mode !== 'focus' ? (
                 <MailBanners />
               ) : null}
-              {site && isDevSite(site) && mode !== 'focus' ? (
+              {site && isDevSite(site) && mode !== 'focus' && !hideDevBanner ? (
                 <DevBanner me={me} site={site} />
               ) : null}
               {children}
