@@ -94,7 +94,9 @@ describe.skipIf(!hasDb)('worker job pool against the database', () => {
         .poll(() => state(jobB.id), { timeout: 10_000 })
         .toBe('succeeded')
       expect(await state(jobA.id)).toBe('deploying')
-      expect(pool.inFlight()).toBe(1)
+      // B's status is written inside its transaction; the pool lets go of B a
+      // moment later, once the job's run has fully returned.
+      await expect.poll(() => pool.inFlight()).toBe(1)
       expect(await pool.drain(100)).toBe(false)
     } finally {
       await cleanupTestSite(a)
