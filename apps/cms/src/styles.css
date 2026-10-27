@@ -1,4 +1,11 @@
 @import 'tailwindcss';
+/* Never scan build output. Locally the root .gitignore hides these, but the
+   Docker build context has no .gitignore: the server build then scanned the
+   client build's .output and linked a stylesheet that was never shipped. */
+@source not '../.output';
+@source not '../.nitro';
+@source not '../.tanstack';
+@source not '../.docker';
 @plugin '@tailwindcss/typography';
 /* Inter with the optical-size axis: display sizes get Inter Display cuts. */
 @import '@fontsource-variable/inter/opsz.css';
