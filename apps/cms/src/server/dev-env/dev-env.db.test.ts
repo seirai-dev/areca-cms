@@ -431,9 +431,7 @@ describe.skipIf(!hasDb)(
               updatedBy: actorId,
             })
             .where(eq(entry.id, devReady.id))
-          const reset = observe(
-            refreshDevEnvironment({ id: actorId }, fork.id),
-          )
+          const reset = observe(refreshDevEnvironment({ id: actorId }, fork.id))
           // The reset must queue behind the save, before it deletes anything.
           await waitForAdvisoryWaiter(`assets:${orgId}`)
           await tx
