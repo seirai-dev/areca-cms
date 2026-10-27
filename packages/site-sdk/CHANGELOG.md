@@ -2,6 +2,12 @@
 
 All notable changes to `@areca-cms/site-sdk`.
 
+## 0.8.0 (2026-10-27)
+
+### Features
+
+- **dev-env:** Development tab, switcher nesting, dev banner and hidden releases (179f923)
+
 ## 0.7.0 (2026-10-26)
 
 ### Features
