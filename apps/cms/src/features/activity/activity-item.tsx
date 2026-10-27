@@ -11,11 +11,7 @@ import { GLOBAL_ENTRY_SLUG } from '#/lib/globals'
 import type { EntryData } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 import { getEntryFn } from '#/server/fn/content'
-import {
-  activityParts,
-  entryTargetIds,
-  viaMcpKeyName,
-} from './activity-sentence'
+import { activityParts, entryTargetIds, viaMcpKey } from './activity-sentence'
 import type { ActivityLike } from './activity-sentence'
 
 type EntryRef = {
@@ -134,7 +130,8 @@ export function ActivityTimelineItem({
         : m.activity_repeat_times({ count })
       : null
   const metaLine = [scope, repeat].filter(Boolean).join(' · ')
-  const viaKey = viaMcpKeyName(row)
+  const via = viaMcpKey(row)
+  const viaKey = via?.name ?? null
 
   const icon =
     row.action === 'publication.live' ? (
@@ -180,7 +177,9 @@ export function ActivityTimelineItem({
             {metaLine}
             {viaKey ? (
               <Tag tone="accent" data-testid="activity-via-ai">
-                {m.activity_via_ai({ name: viaKey })}
+                {via?.agency
+                  ? m.activity_via_agency_ai({ name: viaKey })
+                  : m.activity_via_ai({ name: viaKey })}
               </Tag>
             ) : null}
           </span>

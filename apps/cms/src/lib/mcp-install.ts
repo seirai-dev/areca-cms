@@ -188,3 +188,42 @@ export function connectSetupPrompt({
 }): string {
   return `Please connect to my Areca CMS site "${siteName}" as an MCP server. Server URL: ${url} (Streamable HTTP). If the connection asks me to sign in, I will sign in with my Areca account and approve access. Once connected, call get_site_info to see what you can do.`
 }
+
+/**
+ * Who a connector is for: one site (its name and slug), or the agency
+ * connector that reaches every client and site at one address.
+ */
+export type ConnectTarget =
+  { kind: 'site'; name: string; slug: string } | { kind: 'agency' }
+
+/** The agency connector's server name in an AI app. */
+export const AGENCY_SERVER_NAME = 'areca-agency'
+
+/** The server name an AI app shows: `areca-<slug>`, or `areca-agency`. */
+export function connectServerName(target: ConnectTarget): string {
+  return target.kind === 'agency'
+    ? AGENCY_SERVER_NAME
+    : mcpServerName(target.slug)
+}
+
+/** The key-carrying prompt for the target (see setupPrompt). */
+export function setupPromptFor(
+  target: ConnectTarget,
+  { url, key }: McpInstallInput,
+): string {
+  if (target.kind === 'agency') {
+    return `Please connect to my Areca CMS agency connector as an MCP server. Server URL: ${url} (Streamable HTTP). Send the header Authorization: ${bearer(key)}. This one connector reaches every client and site: pass the site slug in the "site" argument of each call, and start with list_sites or find_site. Once connected, call list_sites to see what I can reach.`
+  }
+  return setupPrompt({ siteName: target.name, url, key })
+}
+
+/** The sign-in prompt for the target (see connectSetupPrompt). No secret. */
+export function connectSetupPromptFor(
+  target: ConnectTarget,
+  { url }: { url: string },
+): string {
+  if (target.kind === 'agency') {
+    return `Please connect to my Areca CMS agency connector as an MCP server. Server URL: ${url} (Streamable HTTP). It reaches every client and site: pass the site slug in the "site" argument of each call, and start with list_sites or find_site. If the connection asks me to sign in, I will sign in with my Areca account and approve access. Once connected, call list_sites to see what I can reach.`
+  }
+  return connectSetupPrompt({ siteName: target.name, url })
+}

@@ -30,6 +30,7 @@ import { Route as AppAgencyIndexRouteImport } from './routes/_app/agency/index'
 import { Route as AppAgencyActivityRouteImport } from './routes/_app/agency/activity'
 import { Route as AppAgencyAiRouteImport } from './routes/_app/agency/ai'
 import { Route as AppAgencyBrandingRouteImport } from './routes/_app/agency/branding'
+import { Route as AppAgencyConnectAiRouteImport } from './routes/_app/agency/connect-ai'
 import { Route as AppAgencyMailRouteImport } from './routes/_app/agency/mail'
 import { Route as AppSitesIndexRouteImport } from './routes/_app/sites/index'
 import { Route as AppSitesSiteIdRouteImport } from './routes/_app/sites/$siteId'
@@ -169,6 +170,11 @@ const AppAgencyAiRoute = AppAgencyAiRouteImport.update({
 const AppAgencyBrandingRoute = AppAgencyBrandingRouteImport.update({
   id: '/branding',
   path: '/branding',
+  getParentRoute: () => AppAgencyRoute,
+} as any)
+const AppAgencyConnectAiRoute = AppAgencyConnectAiRouteImport.update({
+  id: '/connect-ai',
+  path: '/connect-ai',
   getParentRoute: () => AppAgencyRoute,
 } as any)
 const AppAgencyMailRoute = AppAgencyMailRouteImport.update({
@@ -377,6 +383,7 @@ export interface FileRoutesByFullPath {
   '/agency/activity': typeof AppAgencyActivityRoute
   '/agency/ai': typeof AppAgencyAiRoute
   '/agency/branding': typeof AppAgencyBrandingRoute
+  '/agency/connect-ai': typeof AppAgencyConnectAiRoute
   '/agency/mail': typeof AppAgencyMailRoute
   '/sites/$siteId': typeof AppSitesSiteIdRouteWithChildren
   '/api/agency/mcp': typeof ApiAgencyMcpRoute
@@ -433,6 +440,7 @@ export interface FileRoutesByTo {
   '/agency/activity': typeof AppAgencyActivityRoute
   '/agency/ai': typeof AppAgencyAiRoute
   '/agency/branding': typeof AppAgencyBrandingRoute
+  '/agency/connect-ai': typeof AppAgencyConnectAiRoute
   '/agency/mail': typeof AppAgencyMailRoute
   '/api/agency/mcp': typeof ApiAgencyMcpRoute
   '/api/assets/upload': typeof ApiAssetsUploadRoute
@@ -491,6 +499,7 @@ export interface FileRoutesById {
   '/_app/agency/activity': typeof AppAgencyActivityRoute
   '/_app/agency/ai': typeof AppAgencyAiRoute
   '/_app/agency/branding': typeof AppAgencyBrandingRoute
+  '/_app/agency/connect-ai': typeof AppAgencyConnectAiRoute
   '/_app/agency/mail': typeof AppAgencyMailRoute
   '/_app/sites/$siteId': typeof AppSitesSiteIdRouteWithChildren
   '/api/agency/mcp': typeof ApiAgencyMcpRoute
@@ -551,6 +560,7 @@ export interface FileRouteTypes {
     | '/agency/activity'
     | '/agency/ai'
     | '/agency/branding'
+    | '/agency/connect-ai'
     | '/agency/mail'
     | '/sites/$siteId'
     | '/api/agency/mcp'
@@ -607,6 +617,7 @@ export interface FileRouteTypes {
     | '/agency/activity'
     | '/agency/ai'
     | '/agency/branding'
+    | '/agency/connect-ai'
     | '/agency/mail'
     | '/api/agency/mcp'
     | '/api/assets/upload'
@@ -664,6 +675,7 @@ export interface FileRouteTypes {
     | '/_app/agency/activity'
     | '/_app/agency/ai'
     | '/_app/agency/branding'
+    | '/_app/agency/connect-ai'
     | '/_app/agency/mail'
     | '/_app/sites/$siteId'
     | '/api/agency/mcp'
@@ -876,6 +888,13 @@ declare module '@tanstack/react-router' {
       path: '/branding'
       fullPath: '/agency/branding'
       preLoaderRoute: typeof AppAgencyBrandingRouteImport
+      parentRoute: typeof AppAgencyRoute
+    }
+    '/_app/agency/connect-ai': {
+      id: '/_app/agency/connect-ai'
+      path: '/connect-ai'
+      fullPath: '/agency/connect-ai'
+      preLoaderRoute: typeof AppAgencyConnectAiRouteImport
       parentRoute: typeof AppAgencyRoute
     }
     '/_app/agency/mail': {
@@ -1151,6 +1170,7 @@ interface AppAgencyRouteChildren {
   AppAgencyActivityRoute: typeof AppAgencyActivityRoute
   AppAgencyAiRoute: typeof AppAgencyAiRoute
   AppAgencyBrandingRoute: typeof AppAgencyBrandingRoute
+  AppAgencyConnectAiRoute: typeof AppAgencyConnectAiRoute
   AppAgencyMailRoute: typeof AppAgencyMailRoute
   AppAgencyIndexRoute: typeof AppAgencyIndexRoute
   AppAgencyClientsOrgIdRoute: typeof AppAgencyClientsOrgIdRoute
@@ -1163,6 +1183,7 @@ const AppAgencyRouteChildren: AppAgencyRouteChildren = {
   AppAgencyActivityRoute: AppAgencyActivityRoute,
   AppAgencyAiRoute: AppAgencyAiRoute,
   AppAgencyBrandingRoute: AppAgencyBrandingRoute,
+  AppAgencyConnectAiRoute: AppAgencyConnectAiRoute,
   AppAgencyMailRoute: AppAgencyMailRoute,
   AppAgencyIndexRoute: AppAgencyIndexRoute,
   AppAgencyClientsOrgIdRoute: AppAgencyClientsOrgIdRoute,

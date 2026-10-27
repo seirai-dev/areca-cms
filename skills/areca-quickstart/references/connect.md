@@ -55,7 +55,7 @@ Call `get_site_info`. Read `you.role` and `cannotDo`.
 | Editor | Read, create and edit drafts. |
 | Owner | Also mark ready, archive and delete. |
 | Owner with "Allow going live" | Also go live and schedule. |
-| Agency admin | Also change the schema (`upsert_collection`, `upsert_global`) and languages (`set_site_languages`). Also change the publishing mode. |
+| Agency admin | Also change the schema (`upsert_collection`, `upsert_global`) and languages (`set_site_languages`). Also change the publishing mode. On the agency connector (`/api/agency/mcp`), every client and site is reachable with `site`, and going live needs no flag. |
 
 - Schema changes need an agency admin. If the user is not one, use code-first.
 - Going live needs "Allow going live" on the connection, or an owner who presses Go live in the CMS.

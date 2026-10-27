@@ -1,12 +1,12 @@
 import * as React from 'react'
-import { CaretDown, Key, Plus } from '@phosphor-icons/react'
+import { CaretDown, Key } from '@phosphor-icons/react'
 
-import { Button } from '#/components/ui/button'
 import { PageHeader } from '#/components/ui/page-header'
 import { QueryError } from '#/components/ui/query-error'
 import { Skeleton } from '#/components/ui/skeleton'
 import { useShell } from '#/components/shell/shell-context'
-import { mcpServerName } from '#/lib/mcp-install'
+import { connectServerName } from '#/lib/mcp-install'
+import type { ConnectTarget } from '#/lib/mcp-install'
 import type { MeSite } from '#/lib/site-nav'
 import { m } from '#/paraglide/messages'
 import type { McpKeySummary } from '#/server/mcp/keys'
@@ -15,8 +15,9 @@ import { ConnectApps, ConnectPrompt } from './connect-apps'
 import { ConnectedAppsSection } from './connected-apps'
 import { ConnectorUrlPanel } from './connector-url-panel'
 import { CreateKeyDialog } from './create-key-dialog'
-import { KeysList, KeysListSkeleton } from './keys-list'
+import { KeysSection } from './keys-section'
 import { RoleNote } from './role-note'
+import { TechnicalDetails } from './technical-details'
 import { useMcpConnections } from './use-mcp-connections'
 import { useMcpKeys } from './use-mcp-keys'
 
@@ -27,6 +28,11 @@ import { useMcpKeys } from './use-mcp-keys'
  */
 export function ConnectAiScreen({ site }: { site: MeSite }) {
   const { me } = useShell()
+  const target: ConnectTarget = {
+    kind: 'site',
+    name: site.name,
+    slug: site.slug,
+  }
   const { keys, create, revoke } = useMcpKeys(site.id)
   const { connections, revoke: disconnect } = useMcpConnections(site.id)
   const [createOpen, setCreateOpen] = React.useState(false)
@@ -34,7 +40,7 @@ export function ConnectAiScreen({ site }: { site: MeSite }) {
   const role = keyData?.role
   const showOwners = role === 'owner' || role === 'agency'
   const connectorUrl = connections.data?.connectorUrl
-  const serverName = mcpServerName(site.slug)
+  const serverName = connectServerName(target)
 
   return (
     <div
@@ -54,22 +60,26 @@ export function ConnectAiScreen({ site }: { site: MeSite }) {
           retrying={connections.isFetching}
         />
       ) : (
-        <ConnectorUrlPanel url={connectorUrl} siteName={site.name} />
+        <ConnectorUrlPanel
+          url={connectorUrl}
+          body={m.connect_ai_url_body({ site: site.name })}
+        />
       )}
 
       {connectorUrl ? (
         <>
           <ConnectApps
             input={{ name: serverName, url: connectorUrl }}
-            siteName={site.name}
+            target={target}
           />
-          <ConnectPrompt url={connectorUrl} siteName={site.name} />
+          <ConnectPrompt url={connectorUrl} target={target} />
         </>
       ) : (
         <Skeleton className="h-64 rounded-card" />
       )}
 
       <ConnectedAppsSection
+        target={target}
         connections={connections.data?.connections}
         currentUserId={me.user.id}
         showOwners={showOwners}
@@ -82,6 +92,7 @@ export function ConnectAiScreen({ site }: { site: MeSite }) {
       {role ? <RoleNote role={role} /> : null}
 
       <Advanced
+        target={target}
         keysLoaded={keyData}
         keysError={keys.isError ? keys.error : null}
         keysRetrying={keys.isFetching}
@@ -97,7 +108,7 @@ export function ConnectAiScreen({ site }: { site: MeSite }) {
       <CreateKeyDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
-        site={{ id: site.id, name: site.name, slug: site.slug }}
+        target={target}
         canAllowGoLive={keyData?.canAllowGoLive ?? false}
         create={(input) => create.mutateAsync(input)}
       />
@@ -110,6 +121,7 @@ export function ConnectAiScreen({ site }: { site: MeSite }) {
  * Collapsed by default, because most people never need one.
  */
 function Advanced({
+  target,
   keysLoaded,
   keysError,
   keysRetrying,
@@ -121,6 +133,7 @@ function Advanced({
   onCreate,
   onRevoke,
 }: {
+  target: ConnectTarget
   keysLoaded: { keys: McpKeySummary[] } | undefined
   keysError: unknown
   keysRetrying: boolean
@@ -152,121 +165,20 @@ function Advanced({
           {m.connect_ai_advanced_description()}
         </p>
 
-        <section
-          className="grid gap-4"
-          aria-labelledby="connect-ai-keys-heading"
-        >
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div className="grid gap-0.5">
-              <h2
-                id="connect-ai-keys-heading"
-                className="text-headline text-text-primary"
-              >
-                {m.connect_ai_keys_title()}
-              </h2>
-              <p className="text-callout text-text-secondary">
-                {showOwners
-                  ? m.connect_ai_keys_description_all()
-                  : m.connect_ai_keys_description_own()}
-              </p>
-            </div>
-            <Button
-              type="button"
-              variant="secondary"
-              className="w-full sm:w-auto"
-              onClick={onCreate}
-              data-testid="connect-ai-create"
-            >
-              <Plus />
-              {m.connect_ai_create_key()}
-            </Button>
-          </div>
-
-          {keysError ? (
-            <QueryError
-              title={m.connect_ai_keys_load_error()}
-              error={keysError}
-              onRetry={onRetry}
-              retrying={keysRetrying}
-            />
-          ) : keysLoaded ? (
-            <KeysList
-              keys={keysLoaded.keys}
-              currentUserId={currentUserId}
-              showOwners={showOwners}
-              onRevoke={onRevoke}
-            />
-          ) : (
-            <KeysListSkeleton />
-          )}
-        </section>
+        <KeysSection
+          target={target}
+          keysLoaded={keysLoaded}
+          keysError={keysError}
+          keysRetrying={keysRetrying}
+          onRetry={onRetry}
+          currentUserId={currentUserId}
+          showOwners={showOwners}
+          onCreate={onCreate}
+          onRevoke={onRevoke}
+        />
 
         <TechnicalDetails endpointUrl={endpointUrl} serverName={serverName} />
       </div>
     </details>
-  )
-}
-
-/** For technical users: the transport, header and server name. */
-function TechnicalDetails({
-  endpointUrl,
-  serverName,
-}: {
-  endpointUrl: string | undefined
-  serverName: string
-}) {
-  return (
-    <section
-      className="grid gap-4 border-t border-border-default pt-6"
-      aria-labelledby="connect-ai-details-heading"
-      data-testid="connect-ai-details"
-    >
-      <h2
-        id="connect-ai-details-heading"
-        className="text-overline text-text-muted"
-      >
-        {m.connect_ai_details()}
-      </h2>
-      <dl className="grid gap-4 text-callout">
-        <div className="grid gap-1 sm:grid-cols-[120px_minmax(0,1fr)]">
-          <dt className="text-caption text-text-muted">
-            {m.connect_ai_details_transport()}
-          </dt>
-          <dd className="text-text-primary">
-            {m.connect_ai_details_transport_value()}
-          </dd>
-        </div>
-        <div className="grid gap-1 sm:grid-cols-[120px_minmax(0,1fr)]">
-          <dt className="text-caption text-text-muted">
-            {m.connect_ai_details_server_name()}
-          </dt>
-          <dd>
-            <code className="font-mono text-[12.5px] text-text-primary">
-              {serverName}
-            </code>
-          </dd>
-        </div>
-        <div className="grid gap-1 sm:grid-cols-[120px_minmax(0,1fr)]">
-          <dt className="text-caption text-text-muted">
-            {m.connect_ai_details_server_url()}
-          </dt>
-          <dd>
-            <code className="font-mono text-[12.5px] break-all text-text-primary">
-              {endpointUrl ?? '—'}
-            </code>
-          </dd>
-        </div>
-        <div className="grid gap-1 sm:grid-cols-[120px_minmax(0,1fr)]">
-          <dt className="text-caption text-text-muted">
-            {m.connect_ai_details_header()}
-          </dt>
-          <dd>
-            <code className="font-mono text-[12.5px] break-all text-text-primary">
-              {m.connect_ai_details_header_value()}
-            </code>
-          </dd>
-        </div>
-      </dl>
-    </section>
   )
 }

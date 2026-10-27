@@ -5,7 +5,7 @@ import {
   activityText,
   collapseRepeats,
   entryTargetIds,
-  viaMcpKeyName,
+  viaMcpKey,
 } from './activity-sentence'
 import type { ActivityLike } from './activity-sentence'
 
@@ -341,10 +341,18 @@ describe('MCP keys in the activity log', () => {
 
   it('reads the via-AI key name only for MCP-performed rows', () => {
     expect(
-      viaMcpKeyName(row({ meta: { via: 'mcp', mcpKeyName: 'Claude' } })),
-    ).toBe('Claude')
-    expect(viaMcpKeyName(row({ meta: { via: 'ui' } }))).toBeNull()
-    expect(viaMcpKeyName(row({ meta: null }))).toBeNull()
+      viaMcpKey(row({ meta: { via: 'mcp', mcpKeyName: 'Claude' } })),
+    ).toEqual({ name: 'Claude', agency: false })
+    expect(viaMcpKey(row({ meta: { via: 'ui' } }))).toBeNull()
+    expect(viaMcpKey(row({ meta: null }))).toBeNull()
+  })
+
+  it('marks rows made through the agency connector', () => {
+    expect(
+      viaMcpKey(
+        row({ meta: { via: 'mcp-agency', mcpKeyName: 'Areca agency' } }),
+      ),
+    ).toEqual({ name: 'Areca agency', agency: true })
   })
 })
 

@@ -17,10 +17,10 @@ import {
   claudeDesktopConfig,
   cursorInstallLink,
   genericMcpConfig,
-  setupPrompt,
+  setupPromptFor,
   vscodeInstallLink,
 } from '#/lib/mcp-install'
-import type { McpInstallInput } from '#/lib/mcp-install'
+import type { ConnectTarget, McpInstallInput } from '#/lib/mcp-install'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
@@ -58,21 +58,17 @@ export function appLabel(app: AiApp): string {
  */
 export function KeyReveal({
   install,
-  siteName,
+  target,
   initialApp,
   onDone,
 }: {
   install: McpInstallInput
-  siteName: string
+  target: ConnectTarget
   initialApp: AiApp
   onDone: () => void
 }) {
   const [app, setApp] = React.useState<AiApp>(initialApp)
-  const prompt = setupPrompt({
-    siteName,
-    url: install.url,
-    key: install.key,
-  })
+  const prompt = setupPromptFor(target, install)
 
   return (
     <div className="grid gap-5" data-testid="connect-ai-reveal">

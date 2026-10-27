@@ -39,6 +39,18 @@ When you edit an existing config file, merge into the existing object. Don't rep
 - **ChatGPT:** Settings > Apps (or Connectors) > Create. If Create isn't there, turn on Developer mode under Advanced first. Paste the URL as the MCP server URL, set Authentication to OAuth, then Create. Sign in and approve.
 - **Any other app:** paste the URL wherever it asks for an MCP server, remote connector or custom connector. If it needs JSON, use `{"mcpServers":{"NAME":{"url":"URL"}}}`.
 
+## Agency connector (agency admins)
+
+An agency admin can connect one address for every client and site, production and development:
+
+```text
+<cms-url>/api/agency/mcp
+```
+
+The agency admin copies it from **Agency › Connect AI** in the CMS, which shows the same install steps as a site's Connect AI page. Use the server name `areca-agency`. Sign-in works as for a site: the app opens a browser, the user approves, and the consent screen says the app can read and change every client and site, including production, and go live. Approving needs a fresh authenticator code. A personal agency key (created on the same page, with the same expiry choices) works here too, and only here.
+
+Every site tool then takes a `site` argument. Find the slug with `list_sites` or `find_site` (see the `areca-mcp` skill). Going live needs no extra tick on this connector. The per-site connector still needs "Allow going live".
+
 ## Personal keys (scripts, CI, clients without OAuth)
 
 - The user creates one under Connect AI > Advanced: personal keys > Create AI key. It lasts 30 days, 90 (default), 1 year or never, with optional "Allow going live". It is shown once, and each user can have up to 20 per site.
@@ -62,5 +74,8 @@ When you edit an existing config file, merge into the existing object. Don't rep
 | 401 "Key is for a different site" | Use the connector URL of the key's site, or create a key there |
 | 401 "This app is no longer connected" | Someone disconnected it in Connect AI. Reconnect. |
 | 403 `mfa_required` | The agency admin must enable 2FA in Account settings |
-| 404 "Site not found" | Wrong site slug in the URL |
+| 404 "Site not found" | Wrong site slug in the URL. On the agency address, the account is not an agency admin, or the address is wrong. |
+| 401 "This key is for one site" on `/api/agency/mcp` | Use an agency key there, or the connector URL of the site the key belongs to |
+| 401 "Invalid or expired key" on a site URL with an agency key | Agency keys work only on the agency address |
+| "No site with slug … is available to you" | Use the slug from `list_sites` or `find_site` |
 | Go-live tools missing | Reconnect with "Allow going live" ticked (owners only), or ask an owner to press Go live |

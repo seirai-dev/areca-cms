@@ -8,7 +8,7 @@ metadata:
 
 # Areca MCP
 
-Every Areca site has its own remote MCP server. Through it an AI can read and write that site's content: entries, site content (single sections such as company info), the media Library, releases and, for agency admins, content types and site content structure. It edits CMS content and is separate from the `@areca-cms/site-sdk` website code (see the `areca-sdk` skill).
+Every Areca site has its own remote MCP server. Through it an AI can read and write that site's content: entries, site content (single sections such as company info), the media Library, releases and, for agency admins, content types and site content structure. Agency admins can also use one agency-wide connector for every client and site (see [Agency connector](#agency-connector-agency-admins)). It edits CMS content and is separate from the `@areca-cms/site-sdk` website code (see the `areca-sdk` skill).
 
 ## Connect
 
@@ -16,7 +16,18 @@ Every Areca site has its own remote MCP server. Through it an AI can read and wr
 - **Transport:** Streamable HTTP (stateless, JSON responses). Suggested server name: `areca-<site-slug>`.
 - **Auth:** OAuth 2.1 in the browser. Add only the URL, and the client opens a sign-in and consent page on first use. No secret goes in config.
 - Claude Code: `claude mcp add --transport http areca-<slug> <url>`, then `/mcp` > Authenticate.
+- **Agency connector (agency admins only):** `https://<cms-host>/api/agency/mcp`, one address for every client and site. Shown on **Agency › Connect AI**. Same sign-in (OAuth, or an agency key with the `areca_mcp_…` prefix).
 - Other clients: see [references/connect.md](references/connect.md). It covers Cursor, VS Code/Copilot, Codex, OpenCode, Gemini, Windsurf, ChatGPT, the Claude app and more, plus personal keys (`areca_mcp_…`) for clients without OAuth.
+
+## Agency connector (agency admins)
+
+When the user has the agency connector, use it instead of one connector per site. It reaches every client and every site, production and development.
+
+- **Every site tool takes `site`**, the site slug, for example `acme` or `acme-dev`. There is no current site, so pass `site` on every call. Each result has a `site` object (`slug`, `name`, `client`, `environment`): report where each change happened.
+- **Find the slug first.** `list_clients` lists clients. `list_sites({ client? })` lists sites, production and development, with `environment`, `linked` (the production site of a development environment, or its development environment), `publishingMode`, `live` and `pendingReadyChanges`. `find_site({ query })` matches the site name, slug, client name or production URL.
+- **Go live needs no flag here.** Still get the user's confirmation, and name the client and site, before any production change. Production changes reach visitors once the site goes live.
+- **Environment refusals are normal results.** Go live, rollback, cancel build and scheduling are refused on a development environment ("Push to production first"). `refresh_from_production`, `push_to_production` and `copy_entry_to_production` are refused on a production site ("use the site's dev environment slug"). Take the other site, or explain the refusal.
+- **Per-site connector.** If the user has only a site connector, use the connector URL from that site's Connect AI page.
 
 ## First calls (always)
 
@@ -49,13 +60,13 @@ schedule_entry            -> scheduled goes live at a set time (also publishes o
 | editor | read everything, create and edit drafts, upload images, edit alt text, preview |
 | owner | everything an editor can, plus `mark_ready`, `unpublish_entry`, `archive_entry`, `cancel_schedule`, `delete_entry`, `restore_revision`, `delete_asset` |
 | + go-live permission | `go_live`, `schedule_entry`, `rollback`, `cancel_build`. Granted per connection or key with "Allow going live" (owners and agency admins only). |
-| agency admin | everything above, plus `upsert_collection`, `delete_collection`, `upsert_global`, `delete_global`, `set_site_languages`, `set_publishing_mode` (needs 2FA) and the development environment tools (see below) |
+| agency admin | everything above, plus `upsert_collection`, `delete_collection`, `upsert_global`, `delete_global`, `set_site_languages`, `set_publishing_mode` (needs 2FA) and the development environment tools (see below). On the agency connector, go live needs no flag, and every site is reachable with `site`. |
 
 ## Development environments (agency admins)
 
 A production site can have a **development environment**: a copy of the site that changes are made in first, then pushed to production. Only agency admins can see it.
 
-- **Which connector.** `get_site_info` on the production connector shows `devEnvironment` with its `connectorUrl` when one exists. `get_site_info` on the development connector shows `environment: "development"` and the `productionSlug`. Make the changes on the development connector, then push.
+- **Which connector.** `get_site_info` on the production connector shows `devEnvironment` with its `connectorUrl` when one exists. `get_site_info` on the development connector shows `environment: "development"` and the `productionSlug`. Make the changes on the development connector, then push. On the agency connector, pass the development environment's slug (from `list_sites`) as `site` instead.
 - **No releases there.** A development environment has no go live, schedule or rollback tools. Its content reaches the production site only through a push, and a push never deletes production content.
 - **Push is a review.** First call `push_to_production` with no arguments. That is a dry run: it writes nothing and returns `items`, `needsAttention` and a `planHash`. Show the list to the user and ask which items to leave out (`exclude`) and which needs-attention items to apply (`apply`). Then call it with `dryRun: false`, the `planHash`, `exclude` and `apply`. If the answer is "The plan changed", run the dry run again.
 - **Going live with a push** (`goLive: true`) starts a production build. Only when the user asks, and only with the go-live permission.
@@ -99,4 +110,4 @@ Tool errors come back as normal results with `isError: true` and a message that 
 - A refusal from `mark_ready` or `schedule_entry` that names languages: fill in those languages with `update_entry` and `locale`.
 - `Something went wrong on the Areca server (ref …)`: nothing is confirmed saved. Retry once, then report the ref.
 
-Over HTTP, `401` means sign in again or reconnect. `403 mfa_required` means the agency admin must turn on 2FA. `429` means wait for `Retry-After` (120 requests/min per credential).
+Over HTTP, `401` means sign in again or reconnect. `403 mfa_required` means the agency admin must turn on 2FA. `404 Site not found` on the agency address means the account is not an agency admin, or the address is wrong. `429` means wait for `Retry-After` (120 requests/min per credential; shared across all sites on the agency connector).

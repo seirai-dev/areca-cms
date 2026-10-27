@@ -12,13 +12,13 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import {
   claudeCodeConnectCommand,
-  connectSetupPrompt,
+  connectSetupPromptFor,
   connectorJsonConfig,
   cursorConnectLink,
   skillsInstallCommand,
   vscodeConnectLink,
 } from '#/lib/mcp-install'
-import type { McpConnectInput } from '#/lib/mcp-install'
+import type { ConnectTarget, McpConnectInput } from '#/lib/mcp-install'
 import { m } from '#/paraglide/messages'
 
 import {
@@ -64,13 +64,18 @@ function connectAppLabel(app: ConnectApp): string {
  */
 export function ConnectApps({
   input,
-  siteName,
+  target,
 }: {
   input: McpConnectInput
-  siteName: string
+  target: ConnectTarget
 }) {
   const [app, setApp] = React.useState<ConnectApp>('chatgpt')
   const choose = (value: string) => setApp(value as ConnectApp)
+  // The name the guides ask people to give the connector in their app.
+  const connectorLabel =
+    target.kind === 'agency'
+      ? m.connect_ai_agency_connector_name()
+      : target.name
 
   return (
     <section className="grid gap-5" aria-labelledby="connect-ai-apps-title">
@@ -79,7 +84,9 @@ export function ConnectApps({
           id="connect-ai-apps-title"
           className="text-title-2 text-text-primary"
         >
-          {m.connect_ai_apps_title()}
+          {target.kind === 'agency'
+            ? m.connect_ai_agency_apps_title()
+            : m.connect_ai_apps_title()}
         </h2>
         <p className="text-callout text-text-secondary">
           {m.connect_ai_apps_hint()}
@@ -125,7 +132,7 @@ export function ConnectApps({
             <GuideStep number={2} text={m.connect_ai_chatgpt_2()} />
             <GuideStep
               number={3}
-              text={m.connect_ai_chatgpt_3({ site: siteName })}
+              text={m.connect_ai_chatgpt_3({ site: connectorLabel })}
             >
               <GuideUrl url={input.url} />
             </GuideStep>
@@ -140,7 +147,7 @@ export function ConnectApps({
             <GuideStep number={2} text={m.connect_ai_claude_2()} />
             <GuideStep
               number={3}
-              text={m.connect_ai_claude_3({ site: siteName })}
+              text={m.connect_ai_claude_3({ site: connectorLabel })}
             >
               <GuideUrl url={input.url} />
             </GuideStep>
@@ -248,10 +255,10 @@ export function ConnectApps({
  */
 export function ConnectPrompt({
   url,
-  siteName,
+  target,
 }: {
   url: string
-  siteName: string
+  target: ConnectTarget
 }) {
   return (
     <section className="grid gap-5" aria-labelledby="connect-ai-prompt-title">
@@ -267,7 +274,7 @@ export function ConnectPrompt({
         </p>
       </div>
       <CodeBlock
-        text={connectSetupPrompt({ siteName, url })}
+        text={connectSetupPromptFor(target, { url })}
         copyLabel={m.connect_ai_reveal_copy_prompt()}
         testId="connect-ai-prompt"
         wrap

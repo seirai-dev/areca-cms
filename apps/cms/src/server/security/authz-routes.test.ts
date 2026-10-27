@@ -61,7 +61,7 @@ const ROUTE_INVENTORY: Record<string, string> = {
   '/src/routes/api/mcp/$siteSlug.ts':
     'POST/GET/DELETE per-site MCP: OAuth access token or personal key for that site (bearer only)',
   '/src/routes/api/agency/mcp.ts':
-    'POST/GET/DELETE agency MCP: personal agency key only (bearer), agency admin with MFA; others 404 as an unknown site',
+    'POST/GET/DELETE agency MCP: personal agency key or OAuth access token for the agency resource (bearer), agency admin with MFA; others 404 as an unknown site',
   '/src/routes/api/sites/manifest.ts':
     'GET site build token; POST site schema token',
   '/src/routes/api/sites/preview.ts': 'GET HMAC-signed, expiring preview token',

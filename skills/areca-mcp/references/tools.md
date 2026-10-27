@@ -1,6 +1,20 @@
 # Areca MCP tools
 
-`*` means required. Access: **all** = every role, **owner** = owners and agency admins, **go-live** = also needs "Allow going live" on the connection or key, **agency** = agency admins only. Tools a caller cannot use are not listed by the server.
+`*` means required. Access: **all** = every role, **owner** = owners and agency admins, **go-live** = also needs "Allow going live" on the connection or key (not on the agency connector), **agency** = agency admins only. Tools a caller cannot use are not listed by the server.
+
+On the **agency connector** (`/api/agency/mcp`) every tool below also takes a required `site` argument, the site slug, and the navigation tools in [Agency connector](#agency-connector) find it. The per-site connector takes no `site`.
+
+## Agency connector
+
+Only on `https://<cms-host>/api/agency/mcp`, for agency admins. These tools read; they do not change anything, and they take no `site`.
+
+| Tool | Access | Inputs | Returns |
+| --- | --- | --- | --- |
+| `list_clients` | agency | none | `clients[]`: `slug`, `name`, `sites` (how many sites the client has) |
+| `list_sites` | agency | `client?` (a client slug or name, from `list_clients`) | `sites[]`, production and development: `slug` (pass it as `site`), `name`, `client`, `environment`, `linked` (`{ environment, slug }` of the production site of a development environment, or of its development environment), `publishingMode`, `live`, `pendingReadyChanges` |
+| `find_site` | agency | `query*` (text) | The same rows as `list_sites`, for sites whose name, slug, client name or production URL contains the text. Up to 50; `truncated` and a note when there are more. |
+
+Every other tool in this file, on the agency connector, takes `site*` as well. Its result carries a `site` object (`slug`, `name`, `client`, `environment`). A call that does not fit the site's environment is refused with a reason, as a normal result with `isError: true`: release and schedule tools on a development environment say to push first, and `refresh_from_production`, `push_to_production` and `copy_entry_to_production` on a production site say to use the development slug from `list_sites`.
 
 ## Site and schema
 
@@ -62,11 +76,11 @@ Single sections such as company info or the home page. Editors and owners see en
 | `set_publishing_mode` | agency | `mode*` (`demo` or `production`) | `publishingMode`, `deploymentConfigured`. `demo`: `go_live` builds a release that `areca pull` can fetch without a deployment; demo releases never reach visitors. `production`: `go_live` deploys to the live site and needs a deployment target (application ID and health check URL, set in Settings › Deployment). Refused with a conflict when switching to `demo` after the site has ever gone live, or to `production` without a deployment target. The same mode changes nothing and writes no audit entry. Each change is audited with the MCP caller. |
 | `list_publications` | all | `limit?` (1-50, default 10) | Publications, newest first |
 | `get_build_job` | all | `jobId*` | Status, attempts, timing, error |
-| `go_live` | go-live | `note?` | Queues a build that publishes **all** ready changes and returns `publicationId` and `jobId`. Poll `get_build_job`. |
+| `go_live` | go-live (no flag on the agency connector) | `note?` | Queues a build that publishes **all** ready changes and returns `publicationId` and `jobId`. Poll `get_build_job`. |
 | `rollback` | go-live | `publicationId*` | Queues a rollback to an earlier publication |
 | `cancel_build` | go-live | `jobId*` | Cancels a queued build |
 
-On a development environment (its connector is `site.devEnvironment.connectorUrl`, never a URL built from the production slug), `get_release_status`, `list_publications`, `get_build_job`, `go_live`, `rollback`, `cancel_build`, `schedule_entry` and `cancel_schedule` are not listed, because it has no releases. `set_publishing_mode` is listed to agency admins and refuses `production` there.
+On a development environment (its connector is `site.devEnvironment.connectorUrl`, never a URL built from the production slug), `get_release_status`, `list_publications`, `get_build_job`, `go_live`, `rollback`, `cancel_build`, `schedule_entry` and `cancel_schedule` are not listed, because it has no releases. `set_publishing_mode` is listed to agency admins and refuses `production` there. On the agency connector these tools are listed for every site, and a call on a development environment is refused instead.
 
 ## Development environments (agency)
 

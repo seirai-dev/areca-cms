@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Check, Sparkle } from '@phosphor-icons/react'
+import { Check, Sparkle, Warning } from '@phosphor-icons/react'
 import { useServerFn } from '@tanstack/react-start'
 
 import { Button } from '#/components/ui/button'
@@ -9,6 +9,7 @@ import { errorMessage } from '#/lib/admin/helpers'
 import { REAUTH_REQUIRED, securityErrorCode } from '#/lib/security-errors'
 import { m } from '#/paraglide/messages'
 import {
+  approveAgencyOAuthConsentFn,
   approveOAuthConsentFn,
   denyOAuthConsentFn,
 } from '#/server/fn/mcp-oauth'
@@ -18,6 +19,7 @@ import { AuthError, AuthHeading, AuthShell } from './auth-shell'
 import { useHydrated } from './use-auth-forms'
 
 type ConsentOk = Extract<ConsentInfo, { ok: true; kind: 'site' }>
+type ConsentAgencyOk = Extract<ConsentInfo, { ok: true; kind: 'agency' }>
 type ConsentProblemInfo = Extract<ConsentInfo, { ok: false }>
 
 /**
@@ -33,18 +35,8 @@ export function ConsentScreen({
   info: ConsentInfo
 }) {
   if (!info.ok) return <ConsentProblem query={query} info={info} />
-  // The agency approval screen is not built yet (agency-mcp step 2 UI).
   if (info.kind === 'agency') {
-    return (
-      <ConsentProblem
-        query={query}
-        info={{
-          ok: false,
-          reason: 'no_access',
-          message: m.server_mcp_oauth_agency_unavailable(),
-        }}
-      />
-    )
+    return <AgencyConsentRequest query={query} info={info} />
   }
   return <ConsentRequest query={query} info={info} />
 }
@@ -103,6 +95,150 @@ function ConsentProblem({
           {m.oauth_consent_back()}
         </Button>
       ) : null}
+    </AuthShell>
+  )
+}
+
+/**
+ * The agency request: an app asks to act on every client and site. The
+ * warning says so in plain words (calm, not an alarm); there is no go-live
+ * choice, because agency approvals always carry the full admin power.
+ */
+function AgencyConsentRequest({
+  query,
+  info,
+}: {
+  query: string
+  info: ConsentAgencyOk
+}) {
+  const { client, warning, needsStepUp } = info
+  const approve = useServerFn(approveAgencyOAuthConsentFn)
+  const deny = useServerFn(denyOAuthConsentFn)
+  const stepUp = useStepUp()
+  const ready = useHydrated()
+  const [pending, setPending] = React.useState<'allow' | 'cancel' | null>(null)
+  const [error, setError] = React.useState<string | null>(null)
+
+  async function allow() {
+    setPending('allow')
+    setError(null)
+    try {
+      // Agency approvals need a fresh authenticator code; the step-up dialog
+      // retries the approval once the code is accepted.
+      const { redirectTo } = await stepUp.run(() =>
+        approve({ data: { query } }),
+      )
+      window.location.assign(redirectTo)
+    } catch (err) {
+      setError(
+        securityErrorCode(err) === REAUTH_REQUIRED
+          ? m.oauth_consent_reauth()
+          : errorMessage(err),
+      )
+      setPending(null)
+    }
+  }
+
+  async function cancel() {
+    setPending('cancel')
+    setError(null)
+    try {
+      const { redirectTo } = await deny({ data: { query } })
+      window.location.assign(redirectTo)
+    } catch (err) {
+      setError(errorMessage(err))
+      setPending(null)
+    }
+  }
+
+  return (
+    <AuthShell>
+      <div
+        className="grid gap-6"
+        data-testid="oauth-consent"
+        data-variant="agency"
+        data-ready={ready ? 'true' : 'false'}
+      >
+        <div className="grid gap-3">
+          <span
+            aria-hidden="true"
+            className="grid size-14 place-content-center rounded-[14px] bg-accent-soft text-icon-accent"
+          >
+            <Sparkle weight="duotone" className="size-7" />
+          </span>
+          <AuthHeading
+            title={warning.title}
+            description={m.oauth_consent_agency_subtitle({ app: client.name })}
+          />
+          <p
+            className="text-caption text-text-muted"
+            data-testid="oauth-consent-host"
+          >
+            {m.oauth_consent_redirect_host({ host: client.redirectHost })}
+          </p>
+        </div>
+
+        <section
+          className="flex gap-3 rounded-card border border-border-default bg-status-warning-bg p-4"
+          aria-labelledby="oauth-consent-warning-title"
+          data-testid="oauth-consent-warning"
+        >
+          <Warning
+            weight="duotone"
+            aria-hidden="true"
+            className="mt-0.5 size-5 shrink-0 text-icon-warning"
+          />
+          <div className="grid min-w-0 gap-1">
+            <h2
+              id="oauth-consent-warning-title"
+              className="text-[14px] leading-5 font-semibold text-text-primary"
+            >
+              {m.oauth_consent_agency_warning_title()}
+            </h2>
+            <p className="text-[15px] leading-6 text-text-primary">
+              {warning.body}
+            </p>
+          </div>
+        </section>
+
+        {needsStepUp ? (
+          <p
+            className="text-callout text-text-secondary"
+            data-testid="oauth-consent-stepup"
+          >
+            {m.oauth_consent_stepup_hint()}
+          </p>
+        ) : null}
+
+        {error ? <AuthError>{error}</AuthError> : null}
+
+        <div className="grid gap-2">
+          <Button
+            type="button"
+            variant="accent"
+            size="lg"
+            className="min-h-11 w-full"
+            loading={pending === 'allow'}
+            disabled={!ready || pending === 'cancel'}
+            onClick={() => void allow()}
+            data-testid="oauth-consent-allow"
+          >
+            {m.oauth_consent_allow()}
+          </Button>
+          <Button
+            type="button"
+            variant="quiet"
+            size="lg"
+            className="min-h-11 w-full"
+            loading={pending === 'cancel'}
+            disabled={!ready || pending === 'allow'}
+            onClick={() => void cancel()}
+            data-testid="oauth-consent-cancel"
+          >
+            {m.oauth_consent_cancel()}
+          </Button>
+        </div>
+      </div>
     </AuthShell>
   )
 }

@@ -226,13 +226,28 @@ pnpm exec areca pull --out .cache/areca-content
 ```
 
 The generated manifest records publication ID, snapshot hash, creation time,
-and collection counts. The published snapshot itself contains all collections
+and collection counts. A pull with a development environment's token has no
+publication, so its `publicationId` is `null` (see below). The published snapshot itself contains all collections
 and entries. Treat this snapshot as build input: visitor requests should read
 the local generated files rather than call the CMS. A pull overwrites the
 manifest and JSON files for collections in the new snapshot, but it does not
 delete JSON files for collections removed since an earlier pull. Use the
 collection keys in the latest `manifest.json` as the list of current data; do
 not discover collections by listing the directory.
+
+### Pull from a development environment
+
+The site token decides what `areca pull` reads. With the token of a development
+environment (see [Development environments](/docs/cms/development-environments)),
+the pull builds the snapshot from that environment's current ready content. No
+release is needed, so a draft shows only after it is marked ready. The manifest
+has `publicationId: null`, and nothing is stored on the CMS.
+
+A development token refuses a pinned publication. `areca pull --publication <id>`,
+`fetchSnapshot({ publicationId })` and a set `ARECA_SNAPSHOT_ID` all return
+`400` with "Development environments have no releases. Pull without a publication
+id." Unset `ARECA_SNAPSHOT_ID` for local work on a development environment. The
+Dokploy build of a production site uses the production token and is not affected.
 
 ### Pull automatically before a build
 
@@ -625,7 +640,7 @@ remaining schema limits and rate-limit response details.
 
 ```text
 areca init [--cms-url <url>] [--token <token>] [--site-key <key>] [--yes] [--force]
-areca pull [--out <directory>] [--types <path>]
+areca pull [--out <directory>] [--publication <id>] [--config <path>] [--types <path>]
 areca manifest push [config]
 areca manifest pull [--config <path>] [--yes]
 areca run -- <command>

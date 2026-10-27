@@ -369,13 +369,15 @@ export function activityText(row: ActivityLike, entryTitle?: string | null) {
 }
 
 /**
- * The name of the MCP key that performed a row's action ("via AI · Laptop"),
- * or null for actions taken in the UI.
+ * The MCP key that performed a row's action ("via AI · Laptop"), and whether
+ * it came through the agency connector. Null for actions taken in the UI.
  */
-export function viaMcpKeyName(row: ActivityLike): string | null {
+export function viaMcpKey(
+  row: ActivityLike,
+): { name: string | null; agency: boolean } | null {
   const meta = metaOf(row)
-  if (meta?.via !== 'mcp') return null
-  return text(meta.mcpKeyName)
+  if (meta?.via !== 'mcp' && meta?.via !== 'mcp-agency') return null
+  return { name: text(meta.mcpKeyName), agency: meta.via === 'mcp-agency' }
 }
 
 /** Consecutive repeats (the same person, action and target) closer together

@@ -1,7 +1,6 @@
-import { Plug, Trash } from '@phosphor-icons/react'
+import { Plug } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
-import { Button } from '#/components/ui/button'
 import { ConfirmDialog } from '#/components/ui/confirm-dialog'
 import { EmptyState } from '#/components/ui/empty-state'
 import { InsetIcon, InsetList, InsetRow } from '#/components/ui/inset-list'
@@ -9,10 +8,12 @@ import { QueryError } from '#/components/ui/query-error'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Tag } from '#/components/ui/tag'
 import { errorMessage } from '#/lib/admin/helpers'
+import type { ConnectTarget } from '#/lib/mcp-install'
 import { absoluteTimeLabel, formatRelativeTime } from '#/lib/relative-time'
 import { m } from '#/paraglide/messages'
 
 import { formatDay } from './format'
+import { RowActionButton, RowMeta } from './row-parts'
 
 export type ConnectedApp = {
   id: string
@@ -30,6 +31,7 @@ export type ConnectedApp = {
  * first and takes effect on the app's next request.
  */
 export function ConnectedAppsSection({
+  target,
   connections,
   currentUserId,
   showOwners,
@@ -38,6 +40,7 @@ export function ConnectedAppsSection({
   error,
   onDisconnect,
 }: {
+  target: ConnectTarget
   connections: ConnectedApp[] | undefined
   currentUserId: string
   showOwners: boolean
@@ -59,9 +62,11 @@ export function ConnectedAppsSection({
           {m.connect_ai_connected_title()}
         </h2>
         <p className="text-callout text-text-secondary">
-          {showOwners
-            ? m.connect_ai_connected_description_all()
-            : m.connect_ai_connected_description()}
+          {target.kind === 'agency'
+            ? m.connect_ai_agency_connected_description()
+            : showOwners
+              ? m.connect_ai_connected_description_all()
+              : m.connect_ai_connected_description()}
         </p>
       </div>
 
@@ -97,6 +102,7 @@ export function ConnectedAppsSection({
               key={app.id}
               app={app}
               showBy={showOwners && app.userId !== currentUserId}
+              target={target}
               onDisconnect={onDisconnect}
             />
           ))}
@@ -109,10 +115,12 @@ export function ConnectedAppsSection({
 function ConnectedAppRow({
   app,
   showBy,
+  target,
   onDisconnect,
 }: {
   app: ConnectedApp
   showBy: boolean
+  target: ConnectTarget
   onDisconnect: (id: string) => Promise<unknown>
 }) {
   const parts = [
@@ -144,21 +152,22 @@ function ConnectedAppRow({
       }
       wrapSubtitle
       subtitle={
-        <span
-          className="block break-words"
-          title={absoluteTimeLabel(app.createdAt)}
-        >
-          {parts.join(' · ')}
-        </span>
+        <RowMeta items={parts} title={absoluteTimeLabel(app.createdAt)} />
       }
       trailing={
         <ConfirmDialog
           title={m.connect_ai_connected_disconnect_title({
             app: app.clientName,
           })}
-          description={m.connect_ai_connected_disconnect_description({
-            app: app.clientName,
-          })}
+          description={
+            target.kind === 'agency'
+              ? m.connect_ai_agency_connected_disconnect_description({
+                  app: app.clientName,
+                })
+              : m.connect_ai_connected_disconnect_description({
+                  app: app.clientName,
+                })
+          }
           confirmLabel={m.connect_ai_connected_disconnect_confirm()}
           variant="destructive"
           testId="connect-ai-disconnect-dialog"
@@ -173,17 +182,11 @@ function ConnectedAppRow({
             }
           }}
         >
-          <Button
-            type="button"
-            variant="quiet"
-            size="sm"
-            className="min-h-11 sm:min-h-0"
-            aria-label={`${m.connect_ai_connected_disconnect()}: ${app.clientName}`}
+          <RowActionButton
+            label={`${m.connect_ai_connected_disconnect()}: ${app.clientName}`}
+            text={m.connect_ai_connected_disconnect()}
             data-testid="connect-ai-disconnect"
-          >
-            <Trash />
-            {m.connect_ai_connected_disconnect()}
-          </Button>
+          />
         </ConfirmDialog>
       }
     />

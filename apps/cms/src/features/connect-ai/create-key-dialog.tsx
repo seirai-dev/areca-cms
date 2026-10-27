@@ -21,8 +21,8 @@ import {
 } from '#/components/ui/select'
 import { Switch } from '#/components/ui/switch'
 import { errorMessage } from '#/lib/admin/helpers'
-import { mcpServerName } from '#/lib/mcp-install'
-import type { McpInstallInput } from '#/lib/mcp-install'
+import { connectServerName } from '#/lib/mcp-install'
+import type { ConnectTarget, McpInstallInput } from '#/lib/mcp-install'
 import { m } from '#/paraglide/messages'
 
 import { AI_APPS, KeyReveal, appLabel } from './key-reveal'
@@ -42,7 +42,6 @@ const EXPIRY_OPTIONS: {
   { value: 'never', label: m.connect_ai_expires_never(), days: null },
 ]
 
-export type CreateKeySite = { id: string; name: string; slug: string }
 export type CreatedKey = { token: string; endpointUrl: string }
 
 /**
@@ -53,13 +52,13 @@ export type CreatedKey = { token: string; endpointUrl: string }
 export function CreateKeyDialog({
   open,
   onOpenChange,
-  site,
+  target,
   canAllowGoLive,
   create,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  site: CreateKeySite
+  target: ConnectTarget
   canAllowGoLive: boolean
   create: (input: McpKeyInput) => Promise<CreatedKey>
 }) {
@@ -67,7 +66,7 @@ export function CreateKeyDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="md" data-testid="connect-ai-create-dialog">
         <CreateKeyFlow
-          site={site}
+          target={target}
           canAllowGoLive={canAllowGoLive}
           create={create}
           onClose={() => onOpenChange(false)}
@@ -78,12 +77,12 @@ export function CreateKeyDialog({
 }
 
 function CreateKeyFlow({
-  site,
+  target,
   canAllowGoLive,
   create,
   onClose,
 }: {
-  site: CreateKeySite
+  target: ConnectTarget
   canAllowGoLive: boolean
   create: (input: McpKeyInput) => Promise<CreatedKey>
   onClose: () => void
@@ -115,7 +114,7 @@ function CreateKeyFlow({
         allowGoLive: canAllowGoLive && goLive,
       })
       setInstall({
-        name: mcpServerName(site.slug),
+        name: connectServerName(target),
         url: created.endpointUrl,
         key: created.token,
       })
@@ -130,7 +129,7 @@ function CreateKeyFlow({
     return (
       <KeyReveal
         install={install}
-        siteName={site.name}
+        target={target}
         initialApp={app}
         onDone={onClose}
       />
@@ -146,7 +145,9 @@ function CreateKeyFlow({
       <DialogHeader className="pr-8">
         <DialogTitle>{m.connect_ai_create_title()}</DialogTitle>
         <DialogDescription>
-          {m.connect_ai_create_description()}
+          {target.kind === 'agency'
+            ? m.connect_ai_agency_create_description()
+            : m.connect_ai_create_description()}
         </DialogDescription>
       </DialogHeader>
 

@@ -1,11 +1,11 @@
 ---
 title: Development environments
-description: Try content and code changes on a copy of a live client site, then push the reviewed changes to production. The agency workflow, the local token steps, and the push screen.
+description: Try content and code changes on a copy of a live client site, then push the reviewed changes to production. The agency workflow, the local token steps, the push screen, and how AI apps work on a development environment.
 ---
 
 A **development environment** (dev env) is a copy of a production site that only agency admins can see. You change it first, check the changes on your local machine, and then push the ones you want to production. Changes stay in the development environment until you push them, so the live site is never edited by accident.
 
-Each production site has at most one development environment. Clients never see it.
+Each production site has at most one development environment, and every agency admin shares it. Clients never see it, its changes, or its push history.
 
 ## Why it exists
 
@@ -27,11 +27,11 @@ When the client asks for something new later, reset the development environment 
 
 All three are in **Settings › Development** on the production site. Each is one click with a plain confirmation. No authenticator code is needed, because nothing is lost that is not already in production or on your machine.
 
-- **Create development environment.** Copies the production schema and the ready content of every entry. Draft-only entries are not copied. Media files are shared with production, so nothing is duplicated. The development site's name is the production name with "(dev)", and its slug is the production slug with `-dev`.
+- **Create development environment.** Copies the production schema (collections, sections and their fields, and the site languages) and the ready version of every entry. Entries that were never ready in production, and archived entries, are not copied. Media files are shared with production, so nothing is duplicated. The development site's name is the production name with "(dev)", and its slug is the production slug with `-dev`. If that slug is taken, the next free one is used, for example `-dev-2`.
 - **Reset from production.** Throws away everything in the development environment and copies production again. Unpushed changes are lost and not archived. The dialog says how many. The tokens and the preview URL stay.
-- **Delete development environment.** Removes it. Production is not changed.
+- **Delete development environment.** Removes it. Production is not changed. The same action is in the development site's **Settings › General**.
 
-If production changed since the last reset, the development environment shows **Production changed since the last sync** with a count, and offers a reset.
+If production changed since the last reset or push, the development environment shows **Production changed since the last sync** with a count, and offers a reset.
 
 ## Set up the local project
 
@@ -77,37 +77,55 @@ An `areca pull` with the development token reads the development environment's r
 
 A development token refuses a pinned publication. The `--publication` option, and the `publicationId` query, return an error for a development environment: "Development environments have no releases. Pull without a publication id."
 
+## Preview links
+
+The development environment has its own **Preview URL**, in its **Settings › General**. It defaults to `http://localhost:3000`, so preview links from the development editor open your local site with your draft. Change it if your local site runs on another port.
+
 ## The push screen
 
-Open **Push to production** from the banner at the top of the development environment, or from the Development tab. The screen is one list of everything that changed in the development environment since the last reset or push. Everything is ticked by default.
+Open **Push to production** from the banner at the top of the development environment. The screen is one list of everything that changed in the development environment since the last reset or push. Everything is ticked by default. **Refresh** reloads the list. The production site's **Settings › Development** tab shows the history of past pushes, resets and copies.
 
 - **Needs attention** is at the top. These items are risky for production, so each one is set to **Skip** unless you switch it to **Apply**. Skip is the default, so an item you do not decide on is never pushed. The items are:
-  - **Changed in production since the fork.** Production and the development environment both changed the same item. Apply overwrites production with the development version.
+  - **Changed in production since the last sync.** Production and the development environment both changed the same item. Apply overwrites production with the development version.
   - **Remove field, which drops content.** The row says how many values will be archived.
   - **Change of the main language.** The row says how many entries it stamps.
   - **Scheduled in production.** Apply is not available until the schedule is resolved in production.
   - **Deleted in production.** Apply recreates the entry in production as a draft.
+  - **URL already used.** Another production entry, or another entry in the same push, uses the same URL (the main slug, or a language's slug). Apply is not available. Change the URL in the development environment, then review the list again.
 - The other groups are **Schema**, **Languages**, **New entries**, **Changed** and **Archived**. Untick anything you do not want to push.
+- A removed field keeps the production values until you apply the removal. A row shows "Keeps 'excerpt' in production until the field removal is applied" when an entry depends on it.
 - The button shows the count and the skipped items, for example "Push 12 changes · 2 skipped". Pushing needs no confirmation dialog. It asks only for a fresh authenticator code when your session is not fresh.
 - **Go live after push** starts the production build once the push is saved. It is off by default. The browser remembers your last choice. It needs permission to go live.
 
+If production or the development environment changed while you were reviewing, the list is refused with **The plan changed**. Your decisions stay for items that did not change. Items that did change are highlighted, with the note "The plan changed. Review the highlighted items again." Review them, then push again. Select **Review again** to reload the list.
+
 Pushing never deletes content in production. An entry you removed in the development environment is archived in production. Drafts and ready versions are written; the live version changes only at the next production go live, unless you use **Go live after push**.
 
-The result lists the counts, any warnings (for example, a ready version that could not be made ready in production, or references that were cleared), and links to the production entries.
+The result lists the counts, any warnings (for example, a ready version that could not be made ready in production, or references that were cleared), and links to the production entries. If nothing changed, it says "Nothing was pushed."
 
 ## Copy one entry to production
 
-To send only one entry or section, open it in the development environment and choose **Copy to production as draft** in the top bar menu. The copy becomes the draft of the matching production entry. The live version stays as it is, and the copy is not ready in production. Approving it is a separate step in the production CMS.
+To send only one entry or section, open it in the development environment and choose **Copy to production as draft** in the top bar menu. The copy becomes the draft of the matching production entry. The live version stays as it is, and the copy is not ready in production. Approving it is a separate step in the production CMS, or use `markReady` over MCP.
 
-The copy is refused when the production schema for that collection does not match the development schema. Push the schema first. It is also refused when production changed since the last sync. The message then offers **Overwrite**, which replaces the production draft with your copy.
+The copy is refused in three cases:
+
+- The production schema for that collection does not match the development schema. The message says to push the schema first.
+- Production changed since the last sync. The message then offers **Overwrite**, which replaces the production draft with your copy.
+- The entry's URL is already used by another production entry, in the main language or in another language. Change the URL in development first. Overwrite does not change this.
 
 ## Bulk actions on a normal site
 
 On a site that is not a development environment, the collection list's bulk bar has an **Archive** action next to **Mark as ready**, **Move to draft** and **Delete**. Each entry is handled on its own, so one failure does not stop the rest, and the entries that could not be changed are listed.
 
-## MCP and AI apps
+## AI apps and the agency connector
 
-The development environment has its own connector, `/api/mcp/<slug>-dev`. Agency admins can connect an AI app to it, and the production connector reports the development environment. The AI app can make the same changes, and it always does a dry run of a push and shows you the list before it pushes. See [Connect AI](/docs/cms/connect-ai) and the [MCP tools](/docs/cms/mcp-tools) reference.
+A development environment has its own connector, shown as `site.devEnvironment.connectorUrl` by `get_site_info` on the production connector. It is usually `/api/mcp/<slug>-dev`, but always use the URL the CMS gives you. Agency admins can connect an AI app to it, and the production connector reports the development environment to them.
+
+The AI app can make the same changes as you can in the CMS. Its push is a review step: the first call is a dry run that lists every change and returns a plan. The push is refused unless the AI app gives back that plan, and the list needs your approval. Its **Go live** and scheduling tools are not offered on a development environment.
+
+Agency admins can also use one **agency connector** for every client and site, instead of a connector per site. It is covered in [Agency connector](/docs/cms/agency-connector). Through it, pass the development environment's slug as `site` on each call.
+
+See [Connect AI](/docs/cms/connect-ai) and the [MCP tools](/docs/cms/mcp-tools) reference.
 
 ## What a development environment does not do
 
@@ -116,4 +134,4 @@ The development environment has its own connector, `/api/mcp/<slug>-dev`. Agency
 - There is only one per production site. It is shared by all agency admins.
 - It does not merge production changes into itself. Reset replaces it.
 - Site settings such as the AI prompt, URLs and the deployment target are not pushed.
-- Clients cannot see it, its changes, or its push history.
+- Clients cannot see it, its changes, or its push history. Its activity is visible to agency admins only.
