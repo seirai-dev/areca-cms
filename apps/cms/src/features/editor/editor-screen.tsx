@@ -33,6 +33,7 @@ import { canGoLive } from '#/features/golive/go-live-gate'
 import { useReleaseStatus } from '#/features/golive/use-release-status'
 import { usePanel } from '#/features/shell/panel'
 import { useIsMobile, useMediaQuery } from '#/hooks/use-mobile'
+import { isDevSite } from '#/lib/site-environment'
 import { canManageSite } from '#/lib/site-nav'
 import type { MeSite } from '#/lib/site-nav'
 import type { Field } from '#/lib/types'
@@ -190,6 +191,7 @@ function EntryEditorView({
 }) {
   const siteId = site.id
   const canManage = canManageSite(me, site.organizationId)
+  const isDev = isDevSite(site)
   const release = useReleaseStatus(siteId)
   const live = release.liveMembership
   const panel = usePanel()
@@ -444,7 +446,7 @@ function EntryEditorView({
     (view[titleField.key] as string).trim()
       ? (view[titleField.key] as string)
       : m.editor_untitled()
-  const uiStatus = entry ? entryUiStatus(entry, live) : 'draft'
+  const uiStatus = entry ? entryUiStatus(entry, live, isDev) : 'draft'
   const editedSinceReady = entry
     ? isEditedSinceReady({
         status: entry.status,
@@ -508,6 +510,7 @@ function EntryEditorView({
   const details = (
     <DetailsPanel
       siteId={siteId}
+      devSite={isDev}
       organizationId={site.organizationId}
       productionUrl={site.productionUrl}
       routePattern={collection.routePattern}
@@ -674,7 +677,10 @@ function EntryEditorView({
               blockers: release.data?.blockers,
             })
           }
+          // A development environment has no releases and no scheduling.
+          canGoLive={!isDev}
           onSchedule={() => setScheduleOpen(true)}
+          canSchedule={!isDev}
           onCancelSchedule={editor.cancelSchedule}
           onUnpublish={editor.unpublish}
           onArchive={editor.archive}

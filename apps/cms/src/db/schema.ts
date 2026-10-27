@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm'
 import {
   bigint,
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -19,11 +20,15 @@ import type {
   ContentKind,
   DeploymentTarget,
   EntryData,
+  EntryOriginBaseline,
   EntryStatus,
+  EnvironmentPushKind,
   Field,
   MailSecure,
   MembershipRole,
   PublicationStatus,
+  SchemaSnapshot,
+  SiteEnvironment,
   SiteLanguages,
   SiteManifest,
   Snapshot,
@@ -226,30 +231,65 @@ export const invitation = pgTable('invitation', {
   createdAt: createdAt(),
 })
 
-export const site = pgTable('site', {
-  id: id(),
-  organizationId: text('organization_id')
-    .notNull()
-    .references(() => organization.id, { onDelete: 'cascade' }),
-  name: text('name').notNull(),
-  slug: text('slug').notNull().unique(),
-  tokenHash: text('token_hash').notNull().unique(),
-  schemaTokenHash: text('schema_token_hash').unique(),
-  productionUrl: text('production_url').notNull(),
-  previewSecret: text('preview_secret').notNull(),
-  publishingMode: text('publishing_mode')
-    .$type<'production' | 'demo'>()
-    .notNull()
-    .default('production'),
-  deploymentTarget: jsonb('deployment_target').$type<DeploymentTarget | null>(),
-  lastManifest: jsonb('last_manifest').$type<SiteManifest | null>(),
-  /** Extra instructions appended to the AI SEO system prompt for this site. */
-  aiPrompt: text('ai_prompt'),
-  /** Content languages. Null = single-language site. */
-  languages: jsonb('languages').$type<SiteLanguages | null>(),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-})
+export const site = pgTable(
+  'site',
+  {
+    id: id(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    slug: text('slug').notNull().unique(),
+    tokenHash: text('token_hash').notNull().unique(),
+    schemaTokenHash: text('schema_token_hash').unique(),
+    productionUrl: text('production_url').notNull(),
+    previewSecret: text('preview_secret').notNull(),
+    publishingMode: text('publishing_mode')
+      .$type<'production' | 'demo'>()
+      .notNull()
+      .default('production'),
+    deploymentTarget: jsonb(
+      'deployment_target',
+    ).$type<DeploymentTarget | null>(),
+    lastManifest: jsonb('last_manifest').$type<SiteManifest | null>(),
+    /** Extra instructions appended to the AI SEO system prompt for this site. */
+    aiPrompt: text('ai_prompt'),
+    /** Content languages. Null = single-language site. */
+    languages: jsonb('languages').$type<SiteLanguages | null>(),
+    /** `development` sites are forks of a production site. */
+    environment: text('environment')
+      .$type<SiteEnvironment>()
+      .notNull()
+      .default('production'),
+    /** Dev environments only: the production site this one was forked from. */
+    parentSiteId: text('parent_site_id').references(
+      (): AnyPgColumn => site.id,
+      { onDelete: 'cascade' },
+    ),
+    /** Dev environments only: production schema at the last fork or push. */
+    schemaBaseline: jsonb('schema_baseline').$type<SchemaSnapshot | null>(),
+    /** Dev environments only: last fork or reset. */
+    lastForkedAt: timestamptz('last_forked_at'),
+    /** Dev environments only: last push or copy. */
+    lastPushedAt: timestamptz('last_pushed_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    // One development environment per production site.
+    uniqueIndex('site_parent_site_id_unique')
+      .on(t.parentSiteId)
+      .where(sql`${t.parentSiteId} is not null`),
+    check(
+      'site_environment_production_check',
+      sql`environment = 'production' or (parent_site_id is not null and publishing_mode = 'demo' and deployment_target is null)`,
+    ),
+    check(
+      'site_environment_parent_check',
+      sql`environment = 'development' or parent_site_id is null`,
+    ),
+  ],
+)
 
 export const collection = pgTable(
   'collection',
@@ -298,6 +338,16 @@ export const entry = pgTable(
     publishedData: jsonb('published_data').$type<EntryData | null>(),
     publishedSlug: text('published_slug'),
     draftVersion: integer('draft_version').notNull().default(1),
+    /** Bumped on every write to this row (docs/design/dev-environments.md, Decision 12). */
+    contentVersion: integer('content_version').notNull().default(1),
+    /** Dev environments only: production entry this one was forked or pushed from. No foreign key, so the link survives production hard-deletes. */
+    originEntryId: text('origin_entry_id'),
+    /** Dev environments only: dev-side content at the last fork or push. */
+    originBaseline: jsonb(
+      'origin_baseline',
+    ).$type<EntryOriginBaseline | null>(),
+    /** Dev environments only: production `content_version` at the last fork or push. */
+    originContentVersion: integer('origin_content_version'),
     scheduledData: jsonb('scheduled_data').$type<EntryData | null>(),
     scheduledSlug: text('scheduled_slug'),
     scheduledVersion: text('scheduled_version'),
@@ -354,6 +404,36 @@ export const entryRevision = pgTable(
     index('entry_revision_entry_created_idx').on(t.entryId, t.createdAt, t.id),
     // Retention scans autosave rows by age.
     index('entry_revision_kind_created_idx').on(t.kind, t.createdAt),
+  ],
+)
+
+/**
+ * Log of fork, reset, push and copy actions between a production site and its
+ * development environment. Listed on the production site.
+ */
+export const environmentPush = pgTable(
+  'environment_push',
+  {
+    id: id(),
+    devSiteId: text('dev_site_id').references(() => site.id, {
+      onDelete: 'set null',
+    }),
+    productionSiteId: text('production_site_id')
+      .notNull()
+      .references(() => site.id, { onDelete: 'cascade' }),
+    kind: text('kind').$type<EnvironmentPushKind>().notNull(),
+    actorId: text('actor_id').references(() => user.id, {
+      onDelete: 'set null',
+    }),
+    counts: jsonb('counts').$type<Record<string, number>>().notNull(),
+    items: jsonb('items').$type<unknown[]>().notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('environment_push_production_created_idx').on(
+      t.productionSiteId,
+      t.createdAt,
+    ),
   ],
 )
 

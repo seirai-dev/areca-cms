@@ -51,6 +51,7 @@ import {
   singularLabel,
 } from '#/lib/site-nav'
 import type { MeSite } from '#/lib/site-nav'
+import { isDevSite } from '#/lib/site-environment'
 import type { Field } from '#/lib/types'
 import { isMultilingual, nonMainLanguages } from '#/lib/site-languages'
 import { cn } from '#/lib/utils'
@@ -187,6 +188,7 @@ function CollectionView({
   const imageField = collection.fields.find((field) => field.type === 'image')
   const release = useReleaseStatus(siteId)
   const live = release.liveMembership
+  const devSite = isDevSite(site)
 
   const [status, setStatus] = React.useState<StatusFilter>('all')
   const [searchInput, setSearchInput] = React.useState('')
@@ -435,6 +437,7 @@ function CollectionView({
         <div className="flex flex-wrap items-center gap-3">
           <StatusFilterControl
             value={status}
+            devSite={devSite}
             onChange={(next) => {
               setStatus(next)
               setSelected(new Set())
@@ -452,6 +455,7 @@ function CollectionView({
       ) : (
         <StatusFilterControl
           value={status}
+          devSite={devSite}
           onChange={(next) => {
             setStatus(next)
             setSelected(new Set())
@@ -555,6 +559,7 @@ function CollectionView({
                     )}
                     coverAssetId={coverOf(row, imageField)}
                     live={live}
+                    devSite={devSite}
                     canManage={canManage}
                     selectMode={selectMode}
                     selected={selected.has(row.id)}
@@ -595,6 +600,7 @@ function CollectionView({
                     )}
                     coverAssetId={coverOf(row, imageField)}
                     live={live}
+                    devSite={devSite}
                     canManage={canManage}
                     selectMode={selectMode}
                     selected={selected.has(row.id)}

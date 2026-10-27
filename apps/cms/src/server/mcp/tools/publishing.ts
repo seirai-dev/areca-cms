@@ -7,7 +7,9 @@ import { publication } from '#/db/schema'
 import { z } from '#/lib/zod'
 
 import { updateSite } from '#/server/admin/sites'
+import { m } from '#/paraglide/messages'
 import { ConflictError } from '#/server/content/errors'
+import { isDevSite } from '#/server/security/site-visibility'
 import {
   cancelJob,
   getSiteReleaseStatus,
@@ -119,6 +121,9 @@ export function registerPublishingTools(registry: ToolRegistry): void {
           publishingMode: current.publishingMode,
           deploymentConfigured: isDeploymentConfigured(current),
         }
+      }
+      if (isDevSite(current) && input.mode === 'production') {
+        throw new ConflictError(m.server_dev_env_stays_demo())
       }
       if (input.mode === 'demo' && (await everWentLive(actor.siteId))) {
         throw new ConflictError(

@@ -42,6 +42,7 @@ export type EntryItemProps = {
   title: string
   coverAssetId: string | undefined
   live: LiveMembership
+  devSite: boolean
   canManage: boolean
   selectMode: boolean
   selected: boolean
@@ -235,6 +236,7 @@ export function EntryCard(props: EntryItemProps) {
     title,
     coverAssetId,
     live,
+    devSite,
     canManage,
     selectMode,
     selected,
@@ -257,7 +259,13 @@ export function EntryCard(props: EntryItemProps) {
         </h3>
         {coverage ? <LocaleChips coverage={coverage} /> : null}
         <div className="flex items-center justify-between gap-2">
-          <EntryPill entry={row} live={live} size="sm" testId="entry-status" />
+          <EntryPill
+            entry={row}
+            live={live}
+            devSite={devSite}
+            size="sm"
+            testId="entry-status"
+          />
           <span className="flex min-w-0 items-center gap-1.5 text-caption font-normal text-text-muted">
             <span className="truncate">
               {m.collection_edited()} <RelativeTime value={row.updatedAt} />
@@ -341,6 +349,7 @@ export function EntryListRow(props: EntryItemProps) {
     title,
     coverAssetId,
     live,
+    devSite,
     canManage,
     selectMode,
     selected,
@@ -414,7 +423,13 @@ export function EntryListRow(props: EntryItemProps) {
           <LocaleChips coverage={coverage} />
         </span>
       ) : null}
-      <EntryPill entry={row} live={live} size="sm" testId="entry-status" />
+      <EntryPill
+        entry={row}
+        live={live}
+        devSite={devSite}
+        size="sm"
+        testId="entry-status"
+      />
       <span className="hidden w-24 shrink-0 text-right text-caption font-normal text-text-muted tnum md:block">
         <RelativeTime value={row.updatedAt} />
       </span>

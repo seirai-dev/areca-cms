@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { entryUiStatus, isEditedSinceReady } from './entry-live-state'
+import {
+  entryLiveState,
+  entryUiStatus,
+  isEditedSinceReady,
+} from './entry-live-state'
 
 const live = {
   liveEntryIds: ['live-1'],
@@ -94,6 +98,50 @@ describe('entryUiStatus', () => {
         null,
       ),
     ).toBe('ready')
+  })
+})
+
+describe('development environment', () => {
+  const published = {
+    id: 'live-1',
+    status: 'published' as const,
+    publishedSlug: 'hello',
+    updatedAt: '2026-01-01T00:00:00Z',
+  }
+
+  it('reads a published entry as Ready even when the live snapshot contains it', () => {
+    expect(entryUiStatus(published, live, true)).toBe('ready')
+  })
+
+  it('reads a published entry as Ready when the release state is still loading', () => {
+    expect(entryUiStatus(published, undefined, true)).toBe('ready')
+  })
+
+  it('never reads a development environment entry as pending a release', () => {
+    expect(
+      entryUiStatus(published, { ...live, pendingEntryIds: ['live-1'] }, true),
+    ).toBe('ready')
+  })
+
+  it('keeps draft, scheduled and archived as they are', () => {
+    for (const status of ['draft', 'scheduled', 'archived'] as const) {
+      expect(
+        entryUiStatus(
+          { id: 'live-1', status, updatedAt: '2026-01-01' },
+          live,
+          true,
+        ),
+      ).toBe(status)
+    }
+  })
+
+  it('passes the flag through entryLiveState', () => {
+    expect(entryLiveState(published, live, true).status).toBe('ready')
+    expect(entryLiveState(published, live).status).toBe('live')
+  })
+
+  it('leaves production sites unchanged by default', () => {
+    expect(entryUiStatus(published, live)).toBe('live')
   })
 })
 

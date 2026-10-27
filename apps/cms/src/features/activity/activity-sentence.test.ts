@@ -454,3 +454,66 @@ describe('site content (globals) in the activity log', () => {
     expect(text).not.toMatch(/entry[ ._]discard/)
   })
 })
+
+describe('activityText for development environments', () => {
+  it('says what happened to the dev env, without an entry title', () => {
+    expect(
+      activityText(
+        row({
+          action: 'dev_env.fork',
+          targetType: 'site',
+          meta: { slug: 'acme-dev', collections: 2, sections: 1, entries: 9 },
+        }),
+      ),
+    ).toBe('Sanne de Vries created a development environment')
+    expect(
+      activityText(
+        row({
+          action: 'dev_env.refresh',
+          targetType: 'site',
+          meta: { slug: 'acme-dev', discardedEntries: 3 },
+        }),
+      ),
+    ).toBe('Sanne de Vries reset the development environment from production')
+    expect(
+      activityText(
+        row({ action: 'dev_env.delete', targetType: 'site', meta: {} }),
+      ),
+    ).toBe('Sanne de Vries deleted the development environment')
+  })
+
+  it('counts the changes a push wrote, in the right plural', () => {
+    expect(
+      activityText(
+        row({
+          action: 'dev_env.push',
+          targetType: 'site',
+          meta: { schema: 1, new: 2, changed: 4, archived: 1, skipped: 2 },
+        }),
+      ),
+    ).toBe('Sanne de Vries pushed 8 changes to production')
+    expect(
+      activityText(
+        row({
+          action: 'dev_env.push',
+          targetType: 'site',
+          meta: { new: 1, changed: 0, skipped: 0 },
+        }),
+      ),
+    ).toBe('Sanne de Vries pushed 1 change to production')
+  })
+
+  it('names the entry a copy to production was made from', () => {
+    expect(
+      activityText(
+        row({
+          action: 'dev_env.copy_entry',
+          targetType: 'entry',
+          targetId: 'e9',
+          meta: {},
+        }),
+        'Spring menu',
+      ),
+    ).toBe('Sanne de Vries copied “Spring menu” to production as a draft')
+  })
+})

@@ -213,7 +213,8 @@ export type SeoMeta = {
 }
 
 export type Snapshot = {
-  publicationId: string
+  /** Null for a development environment's live pull (no publication). */
+  publicationId: string | null
   siteKey: string
   createdAt: string
   hash: string
@@ -301,7 +302,8 @@ export type PreviewGlobalResult = {
 export type PreviewResult = PreviewEntryResult | PreviewGlobalResult
 
 export type PulledContentManifest = {
-  publicationId: string
+  /** Null for a development environment's live pull. */
+  publicationId: string | null
   hash: string
   createdAt: string
   collections: Record<string, number>

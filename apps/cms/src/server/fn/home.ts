@@ -14,6 +14,7 @@ import {
 import type { EntryData, Field } from '#/lib/types'
 import { requireUser } from '#/lib/session.server'
 import { requireAdminLocalMfa } from '#/server/security/local-mfa'
+import { clientVisibleAuditFilter } from '#/server/security/site-visibility'
 
 const loose = { strict: { output: false } as const }
 
@@ -60,6 +61,10 @@ export const getHomeActivityFn = createServerFn({
     return { scheduled: [], activity: [] }
   }
   const scope = orgIds ? inArray(site.organizationId, orgIds) : undefined
+  // Dev envs are agency-only (docs/design/dev-environments.md, Decision 3).
+  const productionOnly = isAgencyAdmin
+    ? undefined
+    : eq(site.environment, 'production')
 
   const scheduledRows = await db
     .select({
@@ -82,6 +87,7 @@ export const getHomeActivityFn = createServerFn({
         eq(collection.kind, 'collection'),
         isNotNull(entry.scheduledAt),
         ...(scope ? [scope] : []),
+        ...(productionOnly ? [productionOnly] : []),
       ),
     )
     .orderBy(asc(entry.scheduledAt))
@@ -138,7 +144,12 @@ export const getHomeActivityFn = createServerFn({
     .leftJoin(organization, eq(auditLog.organizationId, organization.id))
     .leftJoin(site, eq(auditLog.siteId, site.id))
     .where(
-      ownerOrgIds ? inArray(auditLog.organizationId, ownerOrgIds) : undefined,
+      ownerOrgIds
+        ? and(
+            inArray(auditLog.organizationId, ownerOrgIds),
+            clientVisibleAuditFilter(),
+          )
+        : undefined,
     )
     .orderBy(desc(auditLog.createdAt))
     .limit(ACTIVITY_LIMIT)

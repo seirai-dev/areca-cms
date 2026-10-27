@@ -84,7 +84,9 @@ export function EditorTopBar({
   onMarkReady,
   onGoLiveNow,
   goLiveBlocked = false,
+  canGoLive = true,
   onSchedule,
+  canSchedule = true,
   onCancelSchedule,
   onUnpublish,
   onArchive,
@@ -130,7 +132,11 @@ export function EditorTopBar({
   onGoLiveNow: () => void
   /** A blocked site cannot go live; the menu item stays visible but disabled. */
   goLiveBlocked?: boolean
+  /** False on a development environment: it has no releases (Decision 7). */
+  canGoLive?: boolean
   onSchedule: () => void
+  /** False on a development environment: no scheduling (Decision 8). */
+  canSchedule?: boolean
   onCancelSchedule: () => void
   onUnpublish: () => void
   onArchive: () => void
@@ -220,7 +226,7 @@ export function EditorTopBar({
             <DropdownMenuSeparator />
           </>
         ) : null}
-        {primary === 'mark' || primary === 'ready' ? (
+        {canGoLive && (primary === 'mark' || primary === 'ready') ? (
           <DropdownMenuItem
             onSelect={onGoLiveNow}
             disabled={goLiveBlocked || readyBlock !== null}
@@ -232,15 +238,17 @@ export function EditorTopBar({
               : m.editor_go_live_now()}
           </DropdownMenuItem>
         ) : null}
-        <DropdownMenuItem
-          onSelect={onSchedule}
-          disabled={readyBlock !== null}
-          data-testid="schedule-entry"
-        >
-          <CalendarDots />
-          {m.editor_schedule_ellipsis()}
-        </DropdownMenuItem>
-        {scheduled ? (
+        {canSchedule ? (
+          <DropdownMenuItem
+            onSelect={onSchedule}
+            disabled={readyBlock !== null}
+            data-testid="schedule-entry"
+          >
+            <CalendarDots />
+            {m.editor_schedule_ellipsis()}
+          </DropdownMenuItem>
+        ) : null}
+        {canSchedule && scheduled ? (
           <DropdownMenuItem
             onSelect={onCancelSchedule}
             data-testid="cancel-schedule"

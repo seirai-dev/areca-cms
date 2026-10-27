@@ -18,6 +18,7 @@ import {
 } from '#/lib/session.server'
 import { m } from '#/paraglide/messages'
 import { NotFoundError, ValidationError } from '#/server/content/errors'
+import { assertSiteVisibleTo } from '#/server/security/site-visibility'
 import { deleteAsset, getAsset, listAssets, updateAsset } from '#/server/assets'
 import { pageLimitSchema, pageOffsetSchema } from '#/server/pagination'
 
@@ -42,7 +43,7 @@ export const listAssetsFn = createServerFn({ method: 'GET' })
     }),
   )
   .handler(async ({ data }) => {
-    await requireOrgMember(data.organizationId)
+    const session = await requireOrgMember(data.organizationId)
     let missingAlt:
       { locale: string | null; mainLocale: string | null } | undefined
     if (data.missingAlt) {
@@ -51,6 +52,7 @@ export const listAssetsFn = createServerFn({ method: 'GET' })
           .select({
             organizationId: site.organizationId,
             languages: site.languages,
+            environment: site.environment,
           })
           .from(site)
           .where(eq(site.id, data.missingAlt.siteId))
@@ -59,6 +61,11 @@ export const listAssetsFn = createServerFn({ method: 'GET' })
       if (!found || found.organizationId !== data.organizationId) {
         throw new NotFoundError(m.server_site_not_found())
       }
+      await assertSiteVisibleTo(
+        session,
+        found,
+        () => new NotFoundError(m.server_site_not_found()),
+      )
       const languages = found.languages
       // A single-language site has no per-language descriptions: main only.
       const locale =
@@ -104,7 +111,7 @@ export const updateAssetFn = createServerFn({ method: 'POST' })
     }),
   )
   .handler(async ({ data }) => {
-    await requireUser()
+    const session = await requireUser()
     const existing = await authorizedAsset(data.id)
     if (!existing) {
       throw new NotFoundError(m.server_asset_not_found())
@@ -117,6 +124,7 @@ export const updateAssetFn = createServerFn({ method: 'POST' })
           .select({
             organizationId: site.organizationId,
             languages: site.languages,
+            environment: site.environment,
           })
           .from(site)
           .where(eq(site.id, data.siteId))
@@ -125,6 +133,11 @@ export const updateAssetFn = createServerFn({ method: 'POST' })
       if (!found || found.organizationId !== existing.organizationId) {
         throw new NotFoundError(m.server_site_not_found())
       }
+      await assertSiteVisibleTo(
+        session,
+        found,
+        () => new NotFoundError(m.server_site_not_found()),
+      )
       mainLocale = found.languages?.main ?? null
       if (locale && !found.languages?.all.includes(locale)) {
         throw new ValidationError([

@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { CaretRight, RocketLaunch } from '@phosphor-icons/react'
+import { Link } from '@tanstack/react-router'
 
 import { Button } from '#/components/ui/button'
 import {
@@ -33,6 +34,19 @@ export function changesReadyLabel(count: number) {
 
 export function editorPublishReason() {
   return m.golive_editor_reason()
+}
+
+/**
+ * Renders `command` in mono wherever it appears in `text`, so a CLI command
+ * in a translated sentence stays recognisable.
+ */
+export function withMonoCommand(text: string, command: string) {
+  return text.split(command).map((part, index) => (
+    <React.Fragment key={index}>
+      {index > 0 ? <span className="font-mono">{command}</span> : null}
+      {part}
+    </React.Fragment>
+  ))
 }
 
 /** Remembers a going-live → up-to-date transition for the check bloom. */
@@ -218,10 +232,13 @@ function GoLiveButton({
 export function GoLiveTray({
   siteId,
   canPublish: canPublishRole,
+  canChangeMode = false,
   collapsed = false,
 }: {
   siteId: string
   canPublish: boolean
+  /** Agency admins can switch the site between Demo and Production. */
+  canChangeMode?: boolean
   collapsed?: boolean
 }) {
   const release = useReleaseStatus(siteId)
@@ -255,36 +272,63 @@ export function GoLiveTray({
     if (result && 'ok' in result && result.ok === false) panel.open('golive')
   }
 
+  if (collapsed) {
+    return (
+      <TrayRailButton release={release} onOpen={() => panel.open('golive')} />
+    )
+  }
+
   if (release.data?.publishingMode === 'demo') {
+    // A demo site publishes only to the demo release that `areca pull` reads,
+    // so the card says that, not "live". Same card as the other states.
+    const busy = isPending || Boolean(release.data.activeJob)
     return (
       <div
         data-testid="release-status"
         data-state="demo"
-        className="grid gap-2 rounded-control border border-border-default p-3"
+        className="grid gap-2.5 rounded-[14px] border border-border-default bg-background-surface p-3 shadow-card"
       >
-        <button type="button" onClick={() => panel.open('golive')}>
-          {m.golive_demo_mode()} ·{' '}
-          {release.data.demo ? m.golive_demo_ready() : m.golive_not_published()}{' '}
-          · {m.golive_never_production_live()}
+        <button
+          type="button"
+          onClick={() => panel.open('golive')}
+          className="grid min-w-0 gap-0.5 rounded-[8px] text-left outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-border-focus"
+        >
+          <span className="text-[13.5px] leading-5 font-semibold text-text-primary">
+            {m.golive_demo_mode()}
+          </span>
+          <span className="text-[12px] leading-4 font-medium text-text-secondary">
+            {release.data.demo
+              ? m.golive_demo_tray_ready()
+              : m.golive_demo_tray_none()}
+          </span>
         </button>
-        {canPublish ? (
-          <button
-            type="button"
-            disabled={
-              !goLiveAllowed || isPending || Boolean(release.data.activeJob)
-            }
-            onClick={() => void handleGoLive()}
+        <p className="text-[12px] leading-4 text-text-muted">
+          {withMonoCommand(
+            m.golive_demo_tray_hint({ command: 'areca pull' }),
+            'areca pull',
+          )}
+        </p>
+        {canPublishRole ? (
+          <GoLiveButton
+            testId="publish-demo"
+            label={m.golive_demo_publish_release()}
+            canPublish={goLiveAllowed && !busy}
+            reason={changesReason ?? (busy ? m.golive_going_live() : undefined)}
+            pending={isPending}
+            onGoLive={() => void handleGoLive()}
+          />
+        ) : null}
+        {canChangeMode ? (
+          <Link
+            to="/sites/$siteId/settings"
+            params={{ siteId }}
+            search={{ tab: 'deployment' }}
+            className="justify-self-center text-caption font-medium text-text-accent hover:underline"
           >
-            {m.golive_publish_demo()}
-          </button>
+            {m.golive_switch_to_production()}
+          </Link>
         ) : null}
       </div>
-    )
-  }
-
-  if (collapsed) {
-    return (
-      <TrayRailButton release={release} onOpen={() => panel.open('golive')} />
     )
   }
 
@@ -539,8 +583,10 @@ function TrayRailButton({
   release: ReleaseStatus
   onOpen: () => void
 }) {
-  const label =
-    release.state === 'ready'
+  const demo = release.data?.publishingMode === 'demo'
+  const label = demo
+    ? m.golive_demo_mode()
+    : release.state === 'ready'
       ? changesReadyLabel(release.pending)
       : release.state === 'going-live'
         ? m.golive_going_live()
@@ -555,7 +601,7 @@ function TrayRailButton({
         type="button"
         onClick={onOpen}
         data-testid="release-status"
-        data-state={release.state}
+        data-state={demo ? 'demo' : release.state}
         aria-label={label}
         className="relative grid size-10 place-content-center rounded-[10px] outline-none transition-colors hover:bg-surface-state-hover focus-visible:outline-2 focus-visible:outline-border-focus"
       >
@@ -568,7 +614,7 @@ function TrayRailButton({
         ) : (
           <RocketLaunch size={18} className="text-icon-accent" />
         )}
-        {release.state === 'ready' ? (
+        {release.state === 'ready' && !demo ? (
           <span className="absolute top-1 right-1 grid h-4 min-w-4 place-content-center rounded-full bg-accent px-1 text-[10px] leading-none font-semibold text-accent-contrast tnum">
             {release.pending}
           </span>
@@ -583,8 +629,16 @@ export function GoLivePill({ siteId }: { siteId: string }) {
   const release = useReleaseStatus(siteId)
   const panel = usePanel()
   if (release.state === 'loading') return null
-  const label =
-    release.state === 'ready'
+  // A demo site is neutral: it is not live, and nothing is waiting to go live.
+  const neutral =
+    release.data?.publishingMode === 'demo' &&
+    release.state !== 'going-live' &&
+    release.state !== 'failed'
+  const label = neutral
+    ? release.data?.demo
+      ? m.golive_demo_pill_ready()
+      : m.golive_demo_pill()
+    : release.state === 'ready'
       ? m.golive_pill_ready({ count: release.pending })
       : release.state === 'going-live'
         ? m.golive_pill_going_live()
@@ -598,22 +652,26 @@ export function GoLivePill({ siteId }: { siteId: string }) {
       type="button"
       onClick={() => panel.open('golive')}
       data-testid="golive-pill"
-      data-state={release.state}
+      data-state={neutral ? 'demo' : release.state}
       className={cn(
         'flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12.5px] font-medium outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus',
-        release.state === 'ready' || release.state === 'never-live'
-          ? 'bg-accent-soft text-accent-text'
-          : release.state === 'failed'
-            ? 'bg-status-error-bg text-text-error'
-            : 'bg-background-subtle text-text-secondary',
+        neutral
+          ? 'bg-background-subtle text-text-secondary'
+          : release.state === 'ready' || release.state === 'never-live'
+            ? 'bg-accent-soft text-accent-text'
+            : release.state === 'failed'
+              ? 'bg-status-error-bg text-text-error'
+              : 'bg-background-subtle text-text-secondary',
       )}
     >
       {release.state === 'going-live' ? (
         <SpinnerRing size={12} />
-      ) : release.state === 'up-to-date' ? (
-        <LiveDot pulse="none" />
       ) : release.state === 'failed' ? (
         <FailedIcon size={12} />
+      ) : neutral ? (
+        <span className="size-1.5 rounded-full bg-border-strong" />
+      ) : release.state === 'up-to-date' ? (
+        <LiveDot pulse="none" />
       ) : (
         <span className="size-1.5 rounded-full bg-accent" />
       )}

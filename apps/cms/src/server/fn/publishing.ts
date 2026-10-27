@@ -15,6 +15,7 @@ import {
   resolveUncertainDeploymentJob,
 } from '#/server/publishing/worker'
 import { NotFoundError } from '#/server/content/errors'
+import { assertSiteVisibleTo } from '#/server/security/site-visibility'
 import { AppError } from '#/server/http/app-error'
 import { pageLimitSchema, pageOffsetSchema } from '#/server/pagination'
 import {
@@ -46,11 +47,24 @@ async function requireSiteAccess(
   if (!found) {
     throw new NotFoundError(notFoundMessage())
   }
-  const session = await requireOrgMemberOrNotFound(
+  const member = await requireOrgMemberOrNotFound(
     found.organizationId,
-    role,
+    undefined,
     () => new NotFoundError(notFoundMessage()),
   )
+  // Before the role check: a dev env is NotFound for an editor as for an owner.
+  await assertSiteVisibleTo(
+    member,
+    found,
+    () => new NotFoundError(notFoundMessage()),
+  )
+  const session = role
+    ? await requireOrgMemberOrNotFound(
+        found.organizationId,
+        role,
+        () => new NotFoundError(notFoundMessage()),
+      )
+    : member
   return { session, site: found }
 }
 

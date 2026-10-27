@@ -7,7 +7,9 @@ import { publication } from '#/db/schema'
 import { globalsAsEntryLists } from '#/lib/globals'
 import type { Snapshot } from '#/lib/types'
 import { snapshotAssets } from '#/server/assets/published-assets'
+import { buildSnapshot } from '#/server/content/snapshot'
 import { authenticateSite } from '#/server/content/site-auth'
+import { isDevSite } from '#/lib/site-environment'
 
 const NO_STORE = { 'Cache-Control': 'no-store' }
 
@@ -21,6 +23,20 @@ export async function getSitesSnapshotCurrent(request: Request) {
   }
 
   const requestedId = new URL(request.url).searchParams.get('publicationId')
+  if (isDevSite(site)) {
+    // Dev envs have no releases (docs/design/dev-environments.md, Decision 7).
+    // The live pull builds the snapshot from the dev env's ready content.
+    if (requestedId !== null) {
+      return Response.json(
+        {
+          error:
+            'Development environments have no releases. Pull without a publication id.',
+        },
+        { status: 400, headers: NO_STORE },
+      )
+    }
+    return devSnapshot(site)
+  }
   if (requestedId !== null && !requestedId.trim()) {
     return Response.json(
       { error: 'publicationId must not be empty' },
@@ -69,6 +85,31 @@ export async function getSitesSnapshotCurrent(request: Request) {
   }
 
   return Response.json(snapshot, { headers: NO_STORE })
+}
+
+/**
+ * Live pull for a development environment: the same builder that freezes a
+ * publication, run in memory and never stored. `publicationId` is null.
+ */
+async function devSnapshot(site: { id: string; productionUrl: string }) {
+  const built = await buildSnapshot(site.id)
+  if (!built.ok) {
+    return Response.json(
+      {
+        error: 'The development environment has content that cannot be pulled.',
+        errors: built.errors,
+      },
+      { status: 422, headers: NO_STORE },
+    )
+  }
+  return Response.json(
+    {
+      ...built.snapshot,
+      publicationId: null,
+      siteUrl: siteOrigin(site.productionUrl),
+    },
+    { headers: NO_STORE },
+  )
 }
 
 /** Lets sites build absolute URLs (og:image) for files they host themselves. */

@@ -21,6 +21,7 @@ import { audit } from '#/server/audit'
 import { getCollection } from '#/server/content/collections'
 import { getEntry } from '#/server/content/entries'
 import { NotFoundError, ValidationError } from '#/server/content/errors'
+import { assertSiteVisibleTo } from '#/server/security/site-visibility'
 import { languageName } from '#/server/content/locale-validation'
 import { allowUserAction } from '#/server/http/rate-limit.server'
 
@@ -64,6 +65,11 @@ export const translateContentFn = createServerFn({
     const session = await requireOrgMemberOrNotFound(
       found.organizationId,
       undefined,
+      () => new NotFoundError(m.server_site_not_found()),
+    )
+    await assertSiteVisibleTo(
+      session,
+      found,
       () => new NotFoundError(m.server_site_not_found()),
     )
 

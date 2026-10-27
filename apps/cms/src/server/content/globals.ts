@@ -318,6 +318,7 @@ export async function upsertGlobal(
       await tx
         .update(entry)
         .set({
+          contentVersion: sql`${entry.contentVersion} + 1`,
           draftData: withoutSeoEverywhere(draft.draftData),
           draftVersion: sql`${entry.draftVersion} + 1`,
           updatedAt: now,
@@ -516,6 +517,7 @@ export async function discardGlobalDraft(
       await tx
         .update(entry)
         .set({
+          contentVersion: sql`${entry.contentVersion} + 1`,
           draftData: ready,
           draftVersion: sql`${entry.draftVersion} + 1`,
           updatedBy: actorId,

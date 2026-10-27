@@ -17,7 +17,7 @@ import {
   summarizeEntry,
   toStoredFields,
 } from './entry-format'
-import { releaseFlags } from './release-flags'
+import { NO_RELEASE_STATE, releaseFlags } from './release-flags'
 
 const NOT_LIVE = { live: false, pendingRelease: false }
 const LIVE_AND_PENDING = { live: true, pendingRelease: true }
@@ -210,9 +210,42 @@ describe('releaseFlags', () => {
     })
     expect(releaseFlags(state, 'unknown')).toEqual(NOT_LIVE)
   })
+
+  it('reports nothing live or pending on a development environment', () => {
+    expect(releaseFlags(NO_RELEASE_STATE, 'live-only')).toEqual(NOT_LIVE)
+  })
 })
 
 describe('formatEntry', () => {
+  it('reads a ready entry as ready, not live, on a development environment', () => {
+    const out = formatEntry({
+      entry: {
+        id: 'entry-1',
+        slug: 'hello',
+        status: 'published' as const,
+        draftVersion: 1,
+        draftData: { title: 'Hello' },
+        publishedData: { title: 'Hello' },
+        publishedAt: new Date('2026-10-10T08:00:00.000Z'),
+        scheduledAt: null,
+        scheduleTimezone: null,
+        updatedAt: new Date('2026-10-10T08:00:00.000Z'),
+        collectionKey: 'posts',
+      },
+      fields,
+      ctx: {
+        assets: lookup(),
+        assetUrl: (key: string) => `https://cms.test/api/assets/file/${key}`,
+      },
+      release: releaseFlags(NO_RELEASE_STATE, 'entry-1'),
+      previewAvailable: true,
+      includePublished: false,
+    })
+    expect(out.status).toBe('ready')
+    expect(out.live).toBe(false)
+    expect(out.pendingRelease).toBe(false)
+  })
+
   const now = new Date('2026-10-10T08:00:00.000Z')
   const entry = {
     id: 'entry-1',

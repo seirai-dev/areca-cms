@@ -52,7 +52,12 @@ export const getSitesOverviewFn = createServerFn({
       totals: { organizations: 0, sites: 0, collections: 0, entries: 0 },
     }
   }
-  const scope = orgIds ? inArray(site.organizationId, orgIds) : undefined
+  // Dev envs are not separate sites here: they are listed under their
+  // production site (docs/design/dev-environments.md, Decision 3).
+  const scope = and(
+    orgIds ? inArray(site.organizationId, orgIds) : undefined,
+    eq(site.environment, 'production'),
+  )
 
   const sites = await db
     .select({

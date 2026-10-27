@@ -2,14 +2,20 @@ import { and, desc, eq } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { auditLog, organization, site, user } from '#/db/schema'
+import { clientVisibleAuditFilter } from '#/server/security/site-visibility'
 
 export async function listAuditLog(input: {
   organizationId?: string
   siteId?: string
   limit: number
   offset: number
+  /** Agency admins see development environment rows; everyone else does not. */
+  includeDevEnvs?: boolean
 }) {
   const filters = []
+  if (!input.includeDevEnvs) {
+    filters.push(clientVisibleAuditFilter())
+  }
   if (input.organizationId) {
     filters.push(eq(auditLog.organizationId, input.organizationId))
   }

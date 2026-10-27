@@ -12,6 +12,10 @@ import { ReauthRequiredError } from '#/lib/security-errors'
 import { m } from '#/paraglide/messages'
 import { ForbiddenError, ValidationError } from '#/server/content/errors'
 import { assertFreshSession } from '#/server/security/step-up'
+import {
+  isAgencyAdminWithMfa,
+  isDevSite,
+} from '#/server/security/site-visibility'
 
 import {
   findUsableConnection,
@@ -118,9 +122,12 @@ export async function listConnectableSites(input: {
     .select({ id: site.id, name: site.name, slug: site.slug })
     .from(site)
     .where(
-      inArray(
-        site.organizationId,
-        orgIds.map((row) => row.organizationId),
+      and(
+        inArray(
+          site.organizationId,
+          orgIds.map((row) => row.organizationId),
+        ),
+        eq(site.environment, 'production'),
       ),
     )
     .orderBy(asc(site.name))
@@ -234,7 +241,11 @@ export async function describeConsentRequest(
     .from(site)
     .where(eq(site.slug, parsed.siteSlug))
     .limit(1)
-  if (!target) {
+  // A dev env is not offered to anyone but an agency admin (Decision 3).
+  if (
+    !target ||
+    (isDevSite(target) && !(await isAgencyAdminWithMfa(session)))
+  ) {
     return {
       ok: false,
       reason: 'unknown_site',

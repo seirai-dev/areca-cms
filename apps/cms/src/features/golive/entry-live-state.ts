@@ -50,10 +50,14 @@ function approvedSlug(entry: EntryLike) {
  *
  * `live` is snapshot membership from `useReleaseStatus`. While it is still
  * loading (`undefined`), published entries read as Live.
+ *
+ * A development environment (`devSite`) has no releases, so a published entry
+ * is always Ready there: it is never Live and never pending a release.
  */
 export function entryUiStatus(
   entry: EntryLike,
   live: LiveMembership,
+  devSite = false,
 ): EntryUiStatus {
   switch (entry.status) {
     case 'draft':
@@ -63,6 +67,7 @@ export function entryUiStatus(
     case 'archived':
       return 'archived'
     case 'published': {
+      if (devSite) return 'ready'
       if (live === undefined) return 'live'
       if (live === null) return 'ready'
       if (!entry.id || !live.liveEntryIds.includes(entry.id)) return 'ready'
@@ -95,9 +100,10 @@ export type EntryLiveState = {
 export function entryLiveState(
   entry: EntryLike,
   live: LiveMembership,
+  devSite = false,
 ): EntryLiveState {
   return {
-    status: entryUiStatus(entry, live),
+    status: entryUiStatus(entry, live, devSite),
     editedSinceReady: isEditedSinceReady(entry),
     scheduledAt: entry.scheduledAt ?? null,
   }

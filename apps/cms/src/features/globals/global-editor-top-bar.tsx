@@ -77,6 +77,7 @@ export function GlobalEditorTopBar({
   scheduleInitialTimeZone,
   onScheduleSubmit,
   onCancelSchedule,
+  canSchedule = true,
   onOpenHistory,
   languageBar,
   readyBlock = null,
@@ -116,6 +117,8 @@ export function GlobalEditorTopBar({
   scheduleInitialTimeZone?: string | null
   onScheduleSubmit: (at: Date, timeZone: string) => void
   onCancelSchedule: () => void
+  /** False on a development environment: no scheduling (Decision 8). */
+  canSchedule?: boolean
   onOpenHistory: () => void
   /** The language bar, rendered as the second row of the sticky header. */
   languageBar?: ReactNode
@@ -266,7 +269,7 @@ export function GlobalEditorTopBar({
               </Button>
             </Hint>
 
-            {canManage ? (
+            {canManage && canSchedule ? (
               scheduled ? (
                 <Button
                   type="button"
@@ -359,7 +362,7 @@ export function GlobalEditorTopBar({
                   <ArrowUUpLeft />
                   {m.globals_discard_draft()}
                 </DropdownMenuItem>
-                {canManage ? (
+                {canManage && canSchedule ? (
                   <>
                     <DropdownMenuSeparator />
                     {scheduled ? (

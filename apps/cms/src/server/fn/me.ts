@@ -49,6 +49,10 @@ export type Me = {
     productionUrl: string
     /** Content languages. Null = single-language site. */
     languages: SiteLanguages | null
+    /** Development environments are listed for agency admins only. */
+    environment: 'production' | 'development'
+    /** Set on development environments: the production site they belong to. */
+    parentSiteId: string | null
   }>
   organizationCount: number
 }
@@ -101,6 +105,8 @@ export const getMeFn = createServerFn({ method: 'GET', ...meFn }).handler(
       organizationName: organization.name,
       productionUrl: site.productionUrl,
       languages: site.languages,
+      environment: site.environment,
+      parentSiteId: site.parentSiteId,
     }
 
     // Agency-wide data (every site, the organization count) waits until an
@@ -133,9 +139,13 @@ export const getMeFn = createServerFn({ method: 'GET', ...meFn }).handler(
             .from(site)
             .innerJoin(organization, eq(site.organizationId, organization.id))
             .where(
-              inArray(
-                site.organizationId,
-                memberships.map((member) => member.organizationId),
+              and(
+                inArray(
+                  site.organizationId,
+                  memberships.map((member) => member.organizationId),
+                ),
+                // Dev envs are agency-only (docs/design/dev-environments.md, Decision 3).
+                eq(site.environment, 'production'),
               ),
             )
             .orderBy(site.name)

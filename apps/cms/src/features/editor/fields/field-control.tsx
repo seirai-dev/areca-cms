@@ -38,6 +38,7 @@ export function FieldControl({
   error,
   siteId,
   organizationId,
+  devSite = false,
 }: {
   field: Field
   value: unknown
@@ -45,6 +46,7 @@ export function FieldControl({
   error?: string
   siteId: string
   organizationId: string
+  devSite?: boolean
 }) {
   const id = fieldId(field)
   const invalid = Boolean(error)
@@ -155,6 +157,7 @@ export function FieldControl({
           <ReferencePicker
             id={id}
             siteId={siteId}
+            devSite={devSite}
             field={field}
             value={value}
             onChange={onChange}

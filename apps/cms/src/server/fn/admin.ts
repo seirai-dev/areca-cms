@@ -54,7 +54,12 @@ import {
 import { localeTagSchema } from '#/lib/content-locale'
 import { MAX_SITE_LANGUAGES, SLUG_MAX_LENGTH } from '#/lib/content-limits'
 import { NotFoundError } from '#/server/content/errors'
+import {
+  assertSiteVisibleTo,
+  isAgencyAdminWithMfa,
+} from '#/server/security/site-visibility'
 import { pageLimitSchema, pageOffsetSchema } from '#/server/pagination'
+import { hasGoneLive } from '#/server/dev-env/status'
 
 const membershipRoleSchema = z.enum(['owner', 'editor'])
 const adminFn = { strict: { output: false } as const }
@@ -177,12 +182,17 @@ export const listSitesFn = createServerFn({ method: 'GET', ...adminFn })
 export const getSiteFn = createServerFn({ method: 'GET', ...adminFn })
   .validator(z.object({ id: z.string().min(1) }))
   .handler(async ({ data }) => {
-    await requireAgencyAdmin()
+    const session = await requireAgencyAdmin()
     const found = await getSite(data.id)
     if (!found) {
       throw new NotFoundError(m.server_site_not_found())
     }
-    return found
+    await assertSiteVisibleTo(
+      session,
+      found,
+      () => new NotFoundError(m.server_site_not_found()),
+    )
+    return { ...found, hasGoneLive: await hasGoneLive(found.id) }
   })
 
 export const createSiteFn = createServerFn({ method: 'POST', ...adminFn })
@@ -425,12 +435,13 @@ export const listAuditLogFn = createServerFn({ method: 'GET', ...adminFn })
     }),
   )
   .handler(async ({ data }) => {
-    if (data.organizationId) {
-      await requireOrgMember(data.organizationId, 'owner')
-    } else {
-      await requireAgencyAdmin()
-    }
-    return listAuditLog(data)
+    const session = data.organizationId
+      ? await requireOrgMember(data.organizationId, 'owner')
+      : await requireAgencyAdmin()
+    return listAuditLog({
+      ...data,
+      includeDevEnvs: await isAgencyAdminWithMfa(session),
+    })
   })
 
 export const setAgencyAdminFn = createServerFn({ method: 'POST', ...adminFn })

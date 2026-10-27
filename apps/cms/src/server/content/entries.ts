@@ -22,6 +22,7 @@ import {
   readLocale,
 } from '#/lib/content-locale'
 import { SEO_KEY } from '#/lib/seo'
+import { isDevSite } from '#/server/security/site-visibility'
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
 import { importExternalImages } from '#/server/assets/external-images'
@@ -355,6 +356,7 @@ export async function updateDraft(
       await tx
         .update(entry)
         .set({
+          contentVersion: sql`${entry.contentVersion} + 1`,
           draftVersion: sql`${entry.draftVersion} + 1`,
           draftData: parsed.data,
           slug: nextSlug ?? ctx.entry.slug,
@@ -534,6 +536,7 @@ export async function restoreRevision(
       await tx
         .update(entry)
         .set({
+          contentVersion: sql`${entry.contentVersion} + 1`,
           draftVersion: sql`${entry.draftVersion} + 1`,
           draftData: restoredData,
           slug: nextSlug ?? ctx.entry.slug,
@@ -717,6 +720,7 @@ export async function publishEntry(
       await tx
         .update(entry)
         .set({
+          contentVersion: sql`${entry.contentVersion} + 1`,
           ...(images.imported > 0 || draftData !== images.data
             ? { draftData }
             : {}),
@@ -771,6 +775,7 @@ export async function unpublishEntry(id: string, actorId: string) {
     await db
       .update(entry)
       .set({
+        contentVersion: sql`${entry.contentVersion} + 1`,
         status: 'draft',
         publishedData: null,
         publishedSlug: null,
@@ -813,6 +818,7 @@ export async function archiveEntry(id: string, actorId: string) {
     await db
       .update(entry)
       .set({
+        contentVersion: sql`${entry.contentVersion} + 1`,
         status: 'archived',
         updatedBy: actorId,
         updatedAt: now,
@@ -846,6 +852,9 @@ export async function scheduleEntry(
   expectedVersion?: number,
 ) {
   const ctx = await loadEntryContext(id)
+  if (isDevSite(ctx.site)) {
+    throw new ConflictError(m.server_dev_env_no_scheduling())
+  }
   const reviewed = approvedVersion(ctx.entry.draftVersion, expectedVersion)
   if (!timezone) {
     throw new ValidationError([
@@ -887,6 +896,7 @@ export async function scheduleEntry(
       await tx
         .update(entry)
         .set({
+          contentVersion: sql`${entry.contentVersion} + 1`,
           ...(images.imported > 0 || draftData !== images.data
             ? { draftData }
             : {}),
@@ -944,6 +954,7 @@ export async function cancelSchedule(id: string, actorId: string) {
     await db
       .update(entry)
       .set({
+        contentVersion: sql`${entry.contentVersion} + 1`,
         status: nextStatus,
         scheduledData: null,
         scheduledSlug: null,
@@ -978,6 +989,12 @@ export async function cancelSchedule(id: string, actorId: string) {
 export async function deleteEntry(id: string, actorId: string) {
   const ctx = await loadEntryContext(id)
   assertCollectionEntry(ctx.collection)
+  if (isDevSite(ctx.site) && ctx.entry.originEntryId) {
+    // A forked dev entry is archived, not deleted: the origin link must
+    // survive so that a push can archive the production entry.
+    await archiveEntry(id, actorId)
+    return
+  }
   return db.transaction(async (tx) => {
     await archiveDeletedContent(tx, ctx.site.organizationId, 'entry', id)
     await audit(

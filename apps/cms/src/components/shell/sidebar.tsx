@@ -42,6 +42,7 @@ import {
   newEntryLabel,
   siteNavItems,
 } from '#/lib/site-nav'
+import { isDevSite } from '#/lib/site-environment'
 import type { MeSite } from '#/lib/site-nav'
 import type { Field } from '#/lib/types'
 import { cn } from '#/lib/utils'
@@ -574,11 +575,15 @@ export function Sidebar({
         )}
       >
         {siteMode ? (
-          <GoLiveTray
-            siteId={site.id}
-            canPublish={canManageSite(me, site.organizationId)}
-            collapsed={collapsed}
-          />
+          // A development environment has no releases (Decision 7).
+          isDevSite(site) ? null : (
+            <GoLiveTray
+              siteId={site.id}
+              canPublish={canManageSite(me, site.organizationId)}
+              canChangeMode={me.user.isAgencyAdmin}
+              collapsed={collapsed}
+            />
+          )
         ) : mode === 'agency' ? (
           <AttentionCard collapsed={collapsed} />
         ) : null}

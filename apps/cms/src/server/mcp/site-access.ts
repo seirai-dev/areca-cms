@@ -6,6 +6,7 @@ import { membership, site } from '#/db/schema'
 import { requireOrgMemberOrNotFound, requireUser } from '#/lib/session.server'
 import { m } from '#/paraglide/messages'
 import { NotFoundError } from '#/server/content/errors'
+import { assertSiteVisibleTo } from '#/server/security/site-visibility'
 
 import type { McpRole } from './keys'
 
@@ -25,6 +26,11 @@ export async function requireMcpSiteAccess(siteId: string) {
   const session = await requireOrgMemberOrNotFound(
     found.organizationId,
     undefined,
+    () => new NotFoundError(m.server_site_not_found()),
+  )
+  await assertSiteVisibleTo(
+    session,
+    found,
     () => new NotFoundError(m.server_site_not_found()),
   )
   const role = await roleFor(session, found.organizationId)

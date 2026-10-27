@@ -8,6 +8,7 @@ import {
 } from 'better-auth/oauth2'
 
 import { db } from '#/db'
+import { isDevSite } from '#/server/security/site-visibility'
 import { site, user } from '#/db/schema'
 import { createLogger } from '#/server/log'
 import { bearerToken } from '#/server/http/bearer-token'
@@ -209,6 +210,10 @@ export async function handleSiteMcpRequest(
         description: 'Key is for a different site',
       })
     }
+    // A dev env answers NotFound to everyone but agency admins (Decision 3).
+    if (isDevSite(found) && resolution.actor.role !== 'agency') {
+      return unknownSite()
+    }
     return runMcp(request, resolution.actor, {
       clientId: resolution.actor.keyId,
       scopes: [],
@@ -296,6 +301,7 @@ export async function handleSiteMcpRequest(
     role: live.role,
     allowGoLive: connection.allowGoLive && live.role !== 'editor',
   }
+  if (isDevSite(found) && actor.role !== 'agency') return unknownSite()
   const response = await runMcp(request, actor, { clientId, scopes })
   if (await isSuccessfulMcpResponse(response)) await touchConnection(connection)
   return response

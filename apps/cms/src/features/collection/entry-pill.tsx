@@ -22,6 +22,7 @@ import type { EntryUiStatus } from '#/lib/status'
 export function EntryPill({
   entry,
   live,
+  devSite = false,
   long = false,
   size,
   testId,
@@ -29,12 +30,14 @@ export function EntryPill({
 }: {
   entry: EntryLike
   live: LiveMembership
+  /** A development environment has no releases: published reads as Ready. */
+  devSite?: boolean
   long?: boolean
   size?: 'sm' | 'md'
   testId?: string
   className?: string
 }) {
-  const state = entryLiveState(entry, live)
+  const state = entryLiveState(entry, live, devSite)
   return (
     <EntryPillView
       status={state.status}

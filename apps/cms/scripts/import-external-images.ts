@@ -4,7 +4,7 @@
 //
 //   pnpm assets:import-external [--dry-run]
 import { randomUUID } from 'node:crypto'
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, eq, isNull, sql } from 'drizzle-orm'
 
 import { db, pool } from '#/db'
 import { collection, entry, site } from '#/db/schema'
@@ -76,6 +76,7 @@ try {
       return tx
         .update(entry)
         .set({
+          contentVersion: sql`${entry.contentVersion} + 1`,
           ...changes,
           // A release already building for the old approval must not promote
           // the rewritten data; the scheduler builds the new version instead.

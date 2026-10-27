@@ -23,12 +23,17 @@ import {
   PopoverTrigger,
 } from '#/components/ui/popover'
 import { Sheet, SheetContent, SheetTitle } from '#/components/ui/sheet'
+import { Tag } from '#/components/ui/tag'
 import { LiveDot } from '#/components/ui/status-pill'
 import { useReleaseStatus } from '#/features/golive/use-release-status'
 import { readRecentSites } from '#/features/shell/last-site'
 import { useIsMobile } from '#/hooks/use-mobile'
 import { useBranding } from '#/lib/use-branding'
-import { displayHost, groupSitesByOrg } from '#/lib/site-nav'
+import {
+  displayHost,
+  groupSitesByOrg,
+  nestDevEnvironments,
+} from '#/lib/site-nav'
 import type { MeSite } from '#/lib/site-nav'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
@@ -183,7 +188,9 @@ function SwitcherList({ onDone }: { onDone: () => void }) {
     .map((id) => me.sites.find((site) => site.id === id))
     .filter((site): site is MeSite => Boolean(site))
     .slice(0, 3)
-  const groups = groupSitesByOrg(me.sites)
+  // Dev envs are agency-only, so `nestDevEnvironments` only nests them for admins.
+  const { topLevel, devByParent } = nestDevEnvironments(me.sites)
+  const groups = groupSitesByOrg(topLevel)
   const isAdmin = me.user.isAgencyAdmin
 
   function go(siteId: string) {
@@ -191,7 +198,7 @@ function SwitcherList({ onDone }: { onDone: () => void }) {
     void navigate({ to: '/sites/$siteId', params: { siteId } })
   }
 
-  const row = (site: MeSite, keyPrefix = '') => {
+  const row = (site: MeSite, keyPrefix = '', nested = false) => {
     const state = liveMap.get(site.id)
     const selected = mode !== 'agency' && current?.id === site.id
     return (
@@ -200,10 +207,14 @@ function SwitcherList({ onDone }: { onDone: () => void }) {
         value={`${keyPrefix}${site.name} ${site.slug} ${site.organizationName} ${site.id}`}
         onSelect={() => go(site.id)}
         data-testid={`switch-site-${site.slug}`}
+        className={cn(nested && 'pl-7')}
       >
         <SiteTile id={site.id} name={site.name} size="sm" />
         <span className="grid min-w-0 flex-1">
-          <span className="truncate font-medium">{site.name}</span>
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate font-medium">{site.name}</span>
+            {nested ? <Tag tone="accent">{m.dev_env_tag()}</Tag> : null}
+          </span>
           <span
             data-slot="command-meta"
             className="truncate text-[12px] leading-4 text-text-muted"
@@ -238,7 +249,15 @@ function SwitcherList({ onDone }: { onDone: () => void }) {
                 : m.shell_switcher_sites()
             }
           >
-            {group.sites.map((site) => row(site))}
+            {group.sites.map((site) => {
+              const dev = devByParent.get(site.id)
+              return (
+                <React.Fragment key={site.id}>
+                  {row(site)}
+                  {dev ? row(dev, '', true) : null}
+                </React.Fragment>
+              )
+            })}
           </CommandGroup>
         ))}
         {isAdmin ? (
@@ -389,7 +408,11 @@ export function WorkspaceSwitcher({
   )
 }
 
-/** Agency sidebar "All sites": every site with its live dot. */
+/**
+ * Agency sidebar "All sites": every site with its live dot. Each production
+ * site's development environment is nested under it with the Dev tag, as in
+ * the switcher.
+ */
 export function AllSitesNav({
   collapsed,
   onNavigate,
@@ -400,29 +423,41 @@ export function AllSitesNav({
   const { me } = useShell()
   const liveMap = useSitesLive()
   if (collapsed) return null
+  const { topLevel, devByParent } = nestDevEnvironments(me.sites)
+  const link = (site: MeSite, nested: boolean) => (
+    <Link
+      to="/sites/$siteId"
+      params={{ siteId: site.id }}
+      onClick={onNavigate}
+      className={cn(
+        'group/nav flex h-8 min-w-0 items-center gap-2.5 rounded-[8px] px-2.5 text-[14px] text-text-secondary outline-none transition-colors hover:bg-surface-state-hover hover:text-text-primary focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-border-focus',
+        nested && 'pl-7',
+      )}
+    >
+      <SiteTile id={site.id} name={site.name} size="xs" />
+      <span className="min-w-0 flex-1 truncate">{site.name}</span>
+      {nested ? <Tag tone="accent">{m.dev_env_tag()}</Tag> : null}
+      {liveMap.get(site.id)?.live ? (
+        <LiveDot pulse="none" />
+      ) : (
+        <span
+          aria-hidden="true"
+          className="size-2 rounded-full border-[1.5px] border-border-strong"
+        />
+      )}
+    </Link>
+  )
   return (
     <ul className="grid gap-px" data-testid="agency-sites">
-      {me.sites.map((site) => (
-        <li key={site.id}>
-          <Link
-            to="/sites/$siteId"
-            params={{ siteId: site.id }}
-            onClick={onNavigate}
-            className="group/nav flex h-8 min-w-0 items-center gap-2.5 rounded-[8px] px-2.5 text-[14px] text-text-secondary outline-none transition-colors hover:bg-surface-state-hover hover:text-text-primary focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-border-focus"
-          >
-            <SiteTile id={site.id} name={site.name} size="xs" />
-            <span className="min-w-0 flex-1 truncate">{site.name}</span>
-            {liveMap.get(site.id)?.live ? (
-              <LiveDot pulse="none" />
-            ) : (
-              <span
-                aria-hidden="true"
-                className="size-2 rounded-full border-[1.5px] border-border-strong"
-              />
-            )}
-          </Link>
-        </li>
-      ))}
+      {topLevel.map((site) => {
+        const dev = devByParent.get(site.id)
+        return (
+          <React.Fragment key={site.id}>
+            <li>{link(site, false)}</li>
+            {dev ? <li>{link(dev, true)}</li> : null}
+          </React.Fragment>
+        )
+      })}
       {me.sites.length === 0 ? (
         <li className="px-2.5 py-1 text-callout text-text-muted">
           {m.shell_nav_no_sites()}

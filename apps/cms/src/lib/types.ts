@@ -245,7 +245,46 @@ export type SiteManifest = {
   globals?: Record<string, GlobalConfig>
 }
 
+/**
+ * One collection or site content section as a fork copies it, enabled or
+ * not (docs/design/dev-environments.md, "Schema snapshot"). Collections are
+ * compared by `key` and `kind`; fields by `key`.
+ */
+export type SchemaSnapshotItem = {
+  key: string
+  label: string
+  routePattern: string
+  fields: Field[]
+  enabled: boolean
+  kind: ContentKind
+  seoEnabled: boolean
+  previewPath: string | null
+  requiredLanguages: string[]
+  localizedRoutes: Record<string, string> | null
+}
+
+/** Schema and languages of a site at one moment. `site.schema_baseline` holds one. */
+export type SchemaSnapshot = {
+  languages: SiteLanguages | null
+  collections: SchemaSnapshotItem[]
+}
+
 export type EntryData = Record<string, unknown>
+
+/** `development` sites are forks of a production site (docs/design/dev-environments.md). */
+export type SiteEnvironment = 'production' | 'development'
+
+/** Dev-side content of an entry at its last fork or push (`entry.origin_baseline`). */
+export type EntryOriginBaseline = {
+  slug: string
+  data: EntryData
+  publishedSlug: string | null
+  publishedData: EntryData | null
+  status: EntryStatus
+}
+
+/** Kind of an `environment_push` log row. */
+export type EnvironmentPushKind = 'fork' | 'refresh' | 'push' | 'copy'
 
 /** SMTP transport security: STARTTLS (587), implicit TLS (465), or none (private hosts only). */
 export type MailSecure = 'starttls' | 'tls' | 'none'

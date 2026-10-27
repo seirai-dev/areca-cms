@@ -42,6 +42,7 @@ import {
   collectionIcon,
   siteNavItems,
 } from '#/lib/site-nav'
+import { isDevSite } from '#/lib/site-environment'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
@@ -60,7 +61,9 @@ export function MobileTopBar() {
       <div className="min-w-0 flex-1">
         <WorkspaceSwitcher compact testId="sites-nav-mobile" />
       </div>
-      {mode === 'site' && site ? <GoLivePill siteId={site.id} /> : null}
+      {mode === 'site' && site && !isDevSite(site) ? (
+        <GoLivePill siteId={site.id} />
+      ) : null}
       <button
         type="button"
         aria-label={m.shell_search()}
@@ -263,24 +266,26 @@ export function MobileTabBar() {
                     />
                   </InsetRow>
                 ) : null}
-                <InsetRow
-                  asChild
-                  chevron
-                  leading={
-                    <InsetIcon tone="accent">
-                      <RocketLaunch weight="fill" />
-                    </InsetIcon>
-                  }
-                  title={m.golive_go_live()}
-                >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      close()
-                      panel.open('golive')
-                    }}
-                  />
-                </InsetRow>
+                {isDevSite(site) ? null : (
+                  <InsetRow
+                    asChild
+                    chevron
+                    leading={
+                      <InsetIcon tone="accent">
+                        <RocketLaunch weight="fill" />
+                      </InsetIcon>
+                    }
+                    title={m.golive_go_live()}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        close()
+                        panel.open('golive')
+                      }}
+                    />
+                  </InsetRow>
+                )}
               </InsetList>
             </SheetBody>
           </SheetContent>
