@@ -32,7 +32,8 @@ export function AccountScreen({
   me: Me
   /** Accounts with a password see the change-password section. */
   hasPassword: boolean
-  deletion: MyAccountDeletion
+  /** Null while an agency admin still has to enrol in two-factor. */
+  deletion: MyAccountDeletion | null
 }) {
   const router = useRouter()
   const [pending, setPending] = React.useState(false)
@@ -131,11 +132,13 @@ export function AccountScreen({
         required={me.mfaEnrolmentRequired}
       />
 
-      <DeleteAccountSection
-        me={me}
-        hasPassword={hasPassword}
-        deletion={deletion}
-      />
+      {deletion ? (
+        <DeleteAccountSection
+          me={me}
+          hasPassword={hasPassword}
+          deletion={deletion}
+        />
+      ) : null}
     </div>
   )
 }
