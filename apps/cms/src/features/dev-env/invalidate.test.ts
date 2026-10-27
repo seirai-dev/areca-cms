@@ -45,6 +45,10 @@ describe('devEnvQueryKeys', () => {
     expect(keys).toContainEqual(ME_QUERY_KEY)
   })
 
+  it('covers the go-live tray pending list of the production site', () => {
+    expect(keys).toContainEqual(['golive-pending', 'prod'])
+  })
+
   it('does not reach the entry family on its own', () => {
     expect(keys).not.toContainEqual(['entry'])
   })
@@ -81,6 +85,26 @@ describe('writeQueryKeys (push and copy)', () => {
   it('has no entry keys when nothing was written', () => {
     const none = writeQueryKeys({ ...ids, productionEntryIds: [] })
     expect(none.some((key) => key[0] === 'entry')).toBe(false)
+  })
+
+  it('invalidates the whole entry family when a schema or language item was written', () => {
+    const withSchema = writeQueryKeys({
+      ...ids,
+      productionEntryIds: ['e1'],
+      wholeEntryFamily: true,
+    })
+    expect(withSchema).toContainEqual(['entry'])
+    for (const key of keys) expect(withSchema).toContainEqual(key)
+  })
+
+  it('keeps the per-id entry keys when the family flag is off', () => {
+    const perId = writeQueryKeys({
+      ...ids,
+      productionEntryIds: ['e1'],
+      wholeEntryFamily: false,
+    })
+    expect(perId).toContainEqual(queryKeys.entry('e1'))
+    expect(perId).not.toContainEqual(['entry'])
   })
 })
 

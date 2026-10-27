@@ -28,7 +28,9 @@ export async function refreshDevEnvironment(
 ): Promise<RefreshResult> {
   const probe = await readDevEnvironment(devSiteId)
   return db.transaction(async (tx) => {
-    await lockOrganizationForMutation(tx, probe.organizationId)
+    await lockOrganizationForMutation(tx, probe.organizationId, {
+      mode: 'no-key-update',
+    })
     const dev = await lockDevEnvironment(tx, devSiteId)
     const prod = await lockProductionRow(tx, dev.parentSiteId)
     await lockProductionSite(tx, prod.id)

@@ -164,7 +164,9 @@ async function runPush(
   input: PushInput,
   organizationId: string,
 ): Promise<CommittedPush> {
-  await lockOrganizationForMutation(tx, organizationId)
+  await lockOrganizationForMutation(tx, organizationId, {
+    mode: 'no-key-update',
+  })
   const dev = await lockDevEnvironment(tx, input.devSiteId)
   const prod = await lockProductionRow(tx, dev.parentSiteId)
   await lockProductionSite(tx, prod.id)

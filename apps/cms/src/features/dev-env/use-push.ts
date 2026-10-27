@@ -62,7 +62,8 @@ export function usePushToProduction(
     mutationFn: (input: PushInput) =>
       stepUp.run(() => push({ data: { devSiteId, ...input } })),
     // A push changes the plan, the banner counts, the push history and the
-    // production content the lists and the Go-live tray show.
+    // production content the lists and the Go-live tray show. A schema or
+    // language item (no production id) bumps entries the push does not name.
     onSuccess: (result) =>
       invalidateQueryKeys(
         queryClient,
@@ -72,6 +73,9 @@ export function usePushToProduction(
           productionSiteId,
           productionEntryIds: result.written.flatMap((item) =>
             item.productionId ? [item.productionId] : [],
+          ),
+          wholeEntryFamily: result.written.some(
+            (item) => item.productionId === null,
           ),
         }),
       ),

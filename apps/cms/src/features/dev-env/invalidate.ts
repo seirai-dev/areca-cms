@@ -12,6 +12,11 @@ import { globalsQueryKey } from '#/features/globals/use-globals'
  */
 export const ENTRY_FAMILY_KEYS: QueryKey[] = [['entry']]
 
+/** The go-live tray's pending list of one site (`features/golive/use-pending-entries.ts`). */
+function goLivePendingQueryKey(siteId: string): QueryKey {
+  return ['golive-pending', siteId]
+}
+
 /**
  * Globals editors are keyed `['global', siteId, key]`. The prefix covers every
  * section of one site, the single-section editor included.
@@ -39,7 +44,8 @@ export function devSiteQueryKeys(devSiteId: string): QueryKey[] {
 /**
  * Query keys of the production site a reset, push or copy writes to: its
  * content, its settings and languages (`['site', id]`, which the push can
- * change), its release and publishing state.
+ * change), its release and publishing state, and the go-live tray's pending
+ * list (`['golive-pending', id]`), which shows the changes a push makes.
  */
 export function productionQueryKeys(productionSiteId: string): QueryKey[] {
   return [
@@ -51,6 +57,7 @@ export function productionQueryKeys(productionSiteId: string): QueryKey[] {
     queryKeys.releaseStatus(productionSiteId),
     queryKeys.publications(productionSiteId),
     queryKeys.buildJobs(productionSiteId),
+    goLivePendingQueryKey(productionSiteId),
   ]
 }
 
@@ -95,15 +102,22 @@ export function resetQueryKeys(input: {
  * A push or a copy writes production entries. `productionEntryIds` are the
  * ids it wrote (a push's `written`, a copy's `productionId`); their caches are
  * stale, and so is everything `devEnvQueryKeys` covers.
+ *
+ * `wholeEntryFamily` is set when a push also wrote schema or language items:
+ * those bump the content version of entries the push does not name, so the
+ * whole entry family is invalidated, as a reset does.
  */
 export function writeQueryKeys(input: {
   devSiteId: string
   productionSiteId: string
   productionEntryIds: readonly string[]
+  wholeEntryFamily?: boolean
 }): QueryKey[] {
   return [
     ...devEnvQueryKeys(input),
-    ...entryQueryKeys(input.productionEntryIds),
+    ...(input.wholeEntryFamily
+      ? ENTRY_FAMILY_KEYS
+      : entryQueryKeys(input.productionEntryIds)),
   ]
 }
 

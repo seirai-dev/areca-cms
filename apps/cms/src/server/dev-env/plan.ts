@@ -14,7 +14,7 @@ import {
   presentFieldKeys,
   withoutFieldKeys,
 } from '#/lib/field-content'
-import { LOCALE_KEY } from '#/lib/content-locale'
+import { I18N_KEY, LOCALE_KEY } from '#/lib/content-locale'
 import type {
   ContentKind,
   EntryData,
@@ -432,8 +432,8 @@ function entryChanged(dev: PlanEntry, ignore: string[] = []): boolean {
   return (
     dev.slug !== base.slug ||
     !deepEqual(
-      withoutFieldKeys(dev.draftData, ignore),
-      withoutFieldKeys(base.data, ignore),
+      withoutKeysForCompare(dev.draftData, ignore),
+      withoutKeysForCompare(base.data, ignore),
     ) ||
     dev.publishedSlug !== base.publishedSlug ||
     !deepEqual(
@@ -449,7 +449,30 @@ function withoutIgnored(
   data: EntryData | null,
   ignore: string[],
 ): EntryData | null {
-  return data == null ? null : withoutFieldKeys(data, ignore)
+  return data == null ? null : withoutKeysForCompare(data, ignore)
+}
+
+/**
+ * `withoutFieldKeys` for comparing two versions of an entry. An empty language
+ * slot (left by a removed field, or by the purge of one) and an `$i18n` with no
+ * slot count as absent: dev has no slot for a field it removed, so its draft
+ * has none either.
+ */
+function withoutKeysForCompare(data: EntryData, ignore: string[]): EntryData {
+  const next = withoutFieldKeys(data, ignore)
+  const translations = next[I18N_KEY]
+  if (!isPlainObject(translations)) return next
+  const slots = Object.entries(translations).filter(
+    ([, slot]) => !(isPlainObject(slot) && Object.keys(slot).length === 0),
+  )
+  const { [I18N_KEY]: _translations, ...rest } = next
+  return slots.length > 0
+    ? { ...rest, [I18N_KEY]: Object.fromEntries(slots) }
+    : rest
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 /**
@@ -504,8 +527,8 @@ function entrySummary(dev: PlanEntry, ignore: string[] = []): PlanSummary {
       readyChanged: dev.publishedData != null,
     }
   }
-  const draft = withoutFieldKeys(dev.draftData, ignore)
-  const baseDraft = withoutFieldKeys(base.data, ignore)
+  const draft = withoutKeysForCompare(dev.draftData, ignore)
+  const baseDraft = withoutKeysForCompare(base.data, ignore)
   const published = withoutIgnored(dev.publishedData, ignore)
   const basePublished = withoutIgnored(base.publishedData, ignore)
   const draftChanged = dev.slug !== base.slug || !deepEqual(draft, baseDraft)

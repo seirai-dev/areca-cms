@@ -1,8 +1,9 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
 import { db } from '#/db'
 import {
+  auditLog,
   collection,
   deletedContentArchive,
   entry,
@@ -12,6 +13,8 @@ import {
 import { SEO_KEY } from '#/lib/seo'
 import type { Field, SiteLanguages } from '#/lib/types'
 import { setSiteLanguages } from '#/server/admin/site-languages'
+import { audit } from '#/server/audit'
+import { assetMutationLock } from '#/server/assets/usage'
 import {
   deleteCollection,
   upsertCollection,
@@ -134,6 +137,27 @@ async function editEntry(
   const current = await getEntry(row.id)
   await updateDraft(row.id, data, actorId, current!.draftVersion)
   if (options.publish) await publishEntry(row.id, actorId)
+}
+
+/**
+ * Waits until a backend is blocked on the advisory lock hashed from `key`
+ * (`hashtextextended(key, 0)`, the asset lock). Matched on the lock key, so a
+ * waiter from another test does not count.
+ */
+async function waitForAdvisoryWaiter(key: string) {
+  for (let attempt = 0; attempt < 400; attempt += 1) {
+    const waiting = await db.execute<{ n: number }>(sql`
+      with k as (select hashtextextended(${key}, 0) as v)
+      select count(*)::int as n
+      from pg_locks l, k
+      where l.locktype = 'advisory' and not l.granted
+        and l.classid::bigint = ((k.v >> 32) & 4294967295)
+        and l.objid::bigint = (k.v & 4294967295)
+    `)
+    if (Number(waiting.rows[0].n) > 0) return
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
+  throw new Error(`no backend waited on the advisory lock for ${key}`)
 }
 
 async function push(
@@ -940,6 +964,108 @@ describe.skipIf(!hasDb)('development environment: push', () => {
     })
   })
 
+  // Blank values production stores for a removed field. Key presence keeps each
+  // one in draft, ready and baseline; the purge is not run until the removal is
+  // applied. An empty list or object is not a valid textarea value, so the
+  // strict check refuses the ready mirror: production keeps its ready version
+  // and the push lists that as a warning.
+  const blankStored: Array<
+    [string, Record<string, unknown>, string[], unknown, boolean]
+  > = [
+    ['null', { excerpt: null }, ['excerpt'], null, true],
+    ['an empty list', { excerpt: [] }, ['excerpt'], [], false],
+    ['an empty object', { excerpt: {} }, ['excerpt'], {}, false],
+    [
+      'a blank Dutch value',
+      { $i18n: { nl: { excerpt: '' } } },
+      ['$i18n', 'nl', 'excerpt'],
+      '',
+      true,
+    ],
+  ]
+
+  it.each(blankStored)(
+    'keeps a production %s of a field removal that is not applied, in draft, ready and baseline',
+    async (_label, stored, path, value, readyMirrors) => {
+      await withTestSite(async (ctx) => {
+        const actorId = ctx.actor.id
+        await setSiteLanguages(
+          ctx.site.id,
+          { main: 'en', all: ['en', 'nl'] },
+          actorId,
+        )
+        await seedProduction(ctx)
+        // Stored as is: an ordinary save would strip a null or an empty value.
+        const home = await entryRow(ctx.site.id, 'posts', 'home')
+        await db
+          .update(entry)
+          .set({
+            draftData: { title: 'Home v1', slug: 'home', ...stored },
+            publishedData: { title: 'Home v1', slug: 'home', ...stored },
+          })
+          .where(eq(entry.id, home!.id))
+        const devId = await fork(ctx)
+        await upsertCollection(
+          devId,
+          {
+            key: 'posts',
+            label: 'Articles',
+            routePattern: '/posts/$slug',
+            fields: postFields.filter((field) => field.key !== 'excerpt'),
+          },
+          actorId,
+        )
+        await editEntry(
+          devId,
+          'posts',
+          'home',
+          { title: 'Home v2', slug: 'home' },
+          actorId,
+          { publish: true },
+        )
+        const homeItem = `entry:${await devEntryId(devId, 'posts', 'home')}`
+        expect(
+          (await loadPlan(db, devId)).items.find(
+            (item) => item.id === homeItem,
+          ),
+        ).toMatchObject({
+          summary: expect.objectContaining({ preservedFields: ['excerpt'] }),
+        })
+
+        const pushResult = await push(actorId, devId, {
+          exclude: ['schema:posts'],
+        })
+        const pushed = await entryRow(ctx.site.id, 'posts', 'home')
+        expect(pushed?.draftData).toMatchObject({ title: 'Home v2' })
+        expect(pushed?.draftData).toHaveProperty(path, value)
+        expect(pushed?.publishedData).toMatchObject({
+          title: readyMirrors ? 'Home v2' : 'Home v1',
+        })
+        expect(pushed?.publishedData).toHaveProperty(path, value)
+        expect(pushResult.warnings).toHaveLength(readyMirrors ? 0 : 1)
+        // The baseline keeps the stored value, so the removal stays listed.
+        const devHome = await entryRow(devId, 'posts', 'home')
+        expect(devHome?.originBaseline?.data).toHaveProperty(path, value)
+        expect(devHome?.originBaseline?.publishedData).toHaveProperty(
+          path,
+          value,
+        )
+        // A refused ready mirror stays listed, with the removal.
+        expect(
+          (await loadPlan(db, devId)).items.map((item) => item.id),
+        ).toEqual(readyMirrors ? ['schema:posts'] : ['schema:posts', homeItem])
+
+        // Applying the removal purges the value, so the ready mirror passes and
+        // the entry settles.
+        await push(actorId, devId, { apply: ['schema:posts'] })
+        const applied = await entryRow(ctx.site.id, 'posts', 'home')
+        expect(applied?.draftData).toMatchObject({ title: 'Home v2' })
+        expect(applied?.publishedData).toMatchObject({ title: 'Home v2' })
+        expect((await loadPlan(db, devId)).items).toEqual([])
+      })
+    },
+  )
+
   it('pushes turning SEO off on a section, and refuses it when production changed the section after planning', async () => {
     await withTestSite(async (ctx) => {
       const actorId = ctx.actor.id
@@ -1243,6 +1369,91 @@ describe.skipIf(!hasDb)('development environment: push', () => {
       if (result.ok) throw new Error('the push should have been refused')
       expect((result.error as Error).message).toBe(PLAN_CHANGED_MESSAGE)
       expect(await entryRow(ctx.site.id, 'posts', 'contact')).toBeUndefined()
+    })
+  })
+
+  it('finishes an entry save that writes its audit row while a push waits for the asset lock', async () => {
+    await withTestSite(async (ctx) => {
+      const actorId = ctx.actor.id
+      await seedProduction(ctx)
+      const devId = await fork(ctx)
+      await editEntry(
+        devId,
+        'posts',
+        'about',
+        { title: 'About dev', slug: 'about' },
+        actorId,
+        { publish: true },
+      )
+      const plan = await loadPlan(db, devId)
+      const home = await entryRow(ctx.site.id, 'posts', 'home')
+      const orgId = ctx.site.organizationId
+
+      // An ordinary save takes the asset lock first. The push then takes the
+      // organization and site rows and waits for that lock. The save writes its
+      // entry and audit row while the push waits: the audit row's foreign keys
+      // need KEY SHARE on the organization and site rows. With FOR UPDATE on
+      // those rows the two transactions deadlock (40P01); with FOR NO KEY UPDATE
+      // both finish.
+      const attempt = await db.transaction(async (tx) => {
+        await assetMutationLock(tx, orgId)
+        const pushed = observe(
+          pushDevEnvironment(
+            { id: actorId },
+            {
+              devSiteId: devId,
+              planHash: plan.planHash,
+              exclude: [],
+              apply: [],
+              goLive: false,
+            },
+          ),
+        )
+        await waitForAdvisoryWaiter(`assets:${orgId}`)
+        await tx
+          .update(entry)
+          .set({
+            draftData: { title: 'Home v2', slug: 'home' },
+            draftVersion: sql`${entry.draftVersion} + 1`,
+            contentVersion: sql`${entry.contentVersion} + 1`,
+          })
+          .where(eq(entry.id, home!.id))
+        await audit(
+          {
+            organizationId: orgId,
+            siteId: ctx.site.id,
+            actorId,
+            action: 'entry.update',
+            targetType: 'entry',
+            targetId: home!.id,
+          },
+          tx,
+        )
+        return pushed
+      })
+
+      const result = await attempt.outcome
+      if (!result.ok) throw new Error(String(result.error))
+      expect(result.value.counts.changed).toBe(1)
+      // The push saw the save as committed: its own plan is empty afterwards,
+      // the save's draft is kept, and the push wrote the dev entry it planned.
+      expect(await entryRow(ctx.site.id, 'posts', 'home')).toMatchObject({
+        draftData: { title: 'Home v2', slug: 'home' },
+      })
+      expect(await entryRow(ctx.site.id, 'posts', 'about')).toMatchObject({
+        publishedData: { title: 'About dev' },
+      })
+      const audits = await db
+        .select({ id: auditLog.id })
+        .from(auditLog)
+        .where(
+          and(
+            eq(auditLog.targetId, home!.id),
+            eq(auditLog.action, 'entry.update'),
+          ),
+        )
+      expect(audits).toHaveLength(1)
+      expect((await loadPlan(db, devId)).items).toEqual([])
     })
   })
 

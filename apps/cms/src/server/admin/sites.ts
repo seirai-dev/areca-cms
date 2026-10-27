@@ -325,7 +325,9 @@ export async function changeSiteSlug(
 
   try {
     const updated = await db.transaction(async (tx) => {
-      await lockOrganizationForMutation(tx, probe.organizationId)
+      await lockOrganizationForMutation(tx, probe.organizationId, {
+        mode: 'no-key-update',
+      })
       const existing = await lockProductionRow(tx, id)
       await lockProductionSite(tx, id)
 

@@ -104,7 +104,9 @@ async function runCopy(
   const markReady = input.markReady ?? false
   const overwrite = input.overwrite ?? false
 
-  await lockOrganizationForMutation(tx, organizationId)
+  await lockOrganizationForMutation(tx, organizationId, {
+    mode: 'no-key-update',
+  })
   const dev = await lockDevEnvironment(tx, devSiteId)
   const prod = await lockProductionRow(tx, dev.parentSiteId)
   await lockProductionSite(tx, prod.id)
