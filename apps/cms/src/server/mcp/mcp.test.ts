@@ -1179,6 +1179,7 @@ describe.skipIf(!hasDb)('MCP server', () => {
       keyId: 'conn-1',
       keyName: 'ChatGPT',
       credential: 'oauth' as const,
+      scope: 'site' as const,
       userId: world.owner,
       userName: 'Owner',
       siteId: world.ctx.site.id,

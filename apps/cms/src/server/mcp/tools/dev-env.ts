@@ -14,7 +14,7 @@ import { mcpResourceUrl } from '../oauth-resource'
 import { loadEntryInSite } from '../scope'
 import { idSchema } from '../schemas'
 import { DEVELOPMENT_ONLY, PRODUCTION_ONLY } from '../tool-kit'
-import type { ToolRegistry } from '../tool-kit'
+import type { ToolCollector } from '../tool-kit'
 
 /** Plan item ids: `schema:<key>`, `languages`, or `entry:<devId>`. */
 const ITEM_ID_MAX_LENGTH = 300
@@ -84,7 +84,7 @@ function describeItem(item: PlanItem) {
   }
 }
 
-export function registerDevEnvTools(registry: ToolRegistry): void {
+export function registerDevEnvTools(registry: ToolCollector): void {
   registry.add({
     name: 'create_dev_environment',
     title: 'Create development environment',

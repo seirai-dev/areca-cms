@@ -31,7 +31,10 @@ import type { EnqueuedEmail } from '#/server/mail/outbox'
 import { invitationAcceptUrl } from '#/server/mail/render/templates/invitation'
 import { PARAMS_SECRET_CONTEXT } from '#/server/mail/render/templates/password-reset'
 import { revokeMemberMcpConnections } from '#/server/mcp/connections'
-import { revokeMemberMcpKeys } from '#/server/mcp/keys'
+import {
+  revokeAgencyMcpCredentials,
+  revokeMemberMcpKeys,
+} from '#/server/mcp/keys'
 import { notifyInviteAccepted } from '#/server/notifications/triggers'
 
 import {
@@ -870,6 +873,10 @@ export async function setAgencyAdmin(
     }
 
     if (existing.isAgencyAdmin !== isAgencyAdmin) {
+      // Agency keys and agency app connections end with the role (agency-mcp Decision 12).
+      if (!isAgencyAdmin) {
+        await revokeAgencyMcpCredentials(tx, { userId })
+      }
       await audit(
         {
           organizationId: null,

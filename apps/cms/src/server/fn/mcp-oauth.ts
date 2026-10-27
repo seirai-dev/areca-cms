@@ -99,7 +99,8 @@ export const revokeMcpConnectionFn = createServerFn({
       .from(mcpConnection)
       .where(eq(mcpConnection.id, data.id))
       .limit(1)
-    if (!connection)
+    // Agency connections have no site; they are revoked from the Agency page.
+    if (!connection?.siteId)
       throw new NotFoundError(m.server_mcp_connection_not_found())
 
     const {

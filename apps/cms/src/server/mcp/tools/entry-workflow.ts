@@ -17,7 +17,7 @@ import { formatStoredEntry, withImportWarnings } from './entries'
 import { loadEntryInSite } from '../scope'
 import { idSchema } from '../schemas'
 import { PRODUCTION_ONLY } from '../tool-kit'
-import type { ToolRegistry } from '../tool-kit'
+import type { ToolCollector } from '../tool-kit'
 
 const OWNER_ONLY =
   'Only site owners can do this. Ask a site owner, or leave the entry as it is.'
@@ -38,7 +38,7 @@ const expectedVersion = z
     'The "version" you last read with get_entry. Omit to use the current version.',
   )
 
-export function registerEntryWorkflowTools(registry: ToolRegistry): void {
+export function registerEntryWorkflowTools(registry: ToolCollector): void {
   registry.add({
     name: 'mark_ready',
     title: 'Mark entry ready',

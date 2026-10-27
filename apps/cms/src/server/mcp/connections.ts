@@ -84,7 +84,7 @@ export async function upsertConnection(input: {
 
 /** Serialize approval and disconnect for the same grant across processes. */
 export async function withConnectionLock<T>(
-  input: { userId: string; siteId: string; clientId: string },
+  input: { userId: string; siteId: string | null; clientId: string },
   run: () => Promise<T>,
 ): Promise<T> {
   const key = JSON.stringify([input.userId, input.siteId, input.clientId])
@@ -149,19 +149,14 @@ export async function saveConnectionApproval(
       )
       .returning()
     for (const previous of retired) {
-      await revokeGenerationTokens(
-        tx,
-        previous,
-        [previous.id, previous.siteId],
-        now,
-      )
+      await revokeGenerationTokens(tx, previous, connectionRefs(previous), now)
       await tx
         .delete(oauthConsent)
         .where(
           and(
             eq(oauthConsent.userId, previous.userId),
             eq(oauthConsent.clientId, previous.clientId),
-            inArray(oauthConsent.referenceId, [previous.id, previous.siteId]),
+            inArray(oauthConsent.referenceId, connectionRefs(previous)),
           ),
         )
     }
@@ -274,14 +269,14 @@ export async function revokeConnection(input: {
         .returning()
       if (!revoked) return
       // Include legacy site references so deployment also invalidates pre-upgrade tokens.
-      const refs = [row.id, row.siteId]
+      const refs = connectionRefs(row)
       await tx
         .delete(oauthConsent)
         .where(
           and(
             eq(oauthConsent.clientId, row.clientId),
             eq(oauthConsent.userId, row.userId),
-            sql`${oauthConsent.referenceId} in (${row.id}, ${row.siteId})`,
+            inArray(oauthConsent.referenceId, refs),
           ),
         )
       await revokeGenerationTokens(tx, row, refs, now)
@@ -324,19 +319,65 @@ export async function revokeMemberMcpConnections(
     )
     .returning()
   for (const row of revoked) {
-    const refs = [row.id, row.siteId]
-    await tx
-      .delete(oauthConsent)
-      .where(
-        and(
-          eq(oauthConsent.clientId, row.clientId),
-          eq(oauthConsent.userId, row.userId),
-          inArray(oauthConsent.referenceId, refs),
-        ),
-      )
-    await revokeGenerationTokens(tx, row, refs, now)
+    await revokeConnectionTokens(tx, row, now)
   }
   return revoked.length
+}
+
+/**
+ * Disconnects every agency app a user connected (the user lost the agency
+ * admin role). Same effect as `revokeMemberMcpConnections`, for agency scope.
+ */
+export async function revokeAgencyMcpConnections(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  input: { userId: string; now?: Date },
+): Promise<number> {
+  const now = input.now ?? new Date()
+  const revoked = await tx
+    .update(mcpConnection)
+    .set({ revokedAt: now })
+    .where(
+      and(
+        eq(mcpConnection.userId, input.userId),
+        eq(mcpConnection.scope, 'agency'),
+        isNull(mcpConnection.revokedAt),
+      ),
+    )
+    .returning()
+  for (const row of revoked) {
+    await revokeConnectionTokens(tx, row, now)
+  }
+  return revoked.length
+}
+
+/**
+ * The reference ids a connection's consent and tokens may carry: the connection
+ * itself, and for a site connection the site too (older rows named the site).
+ */
+export function connectionRefs(row: {
+  id: string
+  siteId: string | null
+}): string[] {
+  return row.siteId ? [row.id, row.siteId] : [row.id]
+}
+
+/** Consent and every token of one connection, in the caller's transaction. */
+async function revokeConnectionTokens(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  row: Pick<McpConnectionRow, 'id' | 'siteId' | 'clientId' | 'userId'>,
+  now: Date,
+) {
+  const refs = connectionRefs(row)
+  await tx
+    .delete(oauthConsent)
+    .where(
+      and(
+        eq(oauthConsent.clientId, row.clientId),
+        eq(oauthConsent.userId, row.userId),
+        inArray(oauthConsent.referenceId, refs),
+      ),
+    )
+  await revokeGenerationTokens(tx, row, refs, now)
 }
 
 /** Clear replay caches too: a disconnected rotated token must never return 200. */
@@ -387,10 +428,13 @@ export async function revokeReplayedGrant(row: McpConnectionRow) {
         .returning()
       await revokeGenerationTokens(tx, row, [row.id], now)
       await tx.delete(oauthConsent).where(eq(oauthConsent.referenceId, row.id))
-      const [target] = await tx
-        .select({ organizationId: site.organizationId })
-        .from(site)
-        .where(eq(site.id, row.siteId))
+      // An agency connection has no site to audit against.
+      const [target] = row.siteId
+        ? await tx
+            .select({ organizationId: site.organizationId })
+            .from(site)
+            .where(eq(site.id, row.siteId))
+        : []
       if (revoked && target)
         await audit(
           {

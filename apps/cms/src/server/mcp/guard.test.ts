@@ -10,6 +10,7 @@ function actor(overrides: Partial<McpActor> = {}): McpActor {
     keyId: 'k1',
     keyName: 'Test',
     credential: 'key',
+    scope: 'site',
     userId: 'u1',
     userName: 'Owner',
     siteId: 's1',

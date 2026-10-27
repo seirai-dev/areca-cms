@@ -6,15 +6,7 @@ import type { McpActor } from './keys'
 import { mcpResourceUrl } from './oauth-resource'
 import type { McpSiteContext } from './site-context'
 import { ToolRegistry } from './tool-kit'
-import { registerAssetTools } from './tools/assets'
-import { registerDevEnvTools } from './tools/dev-env'
-import { registerEntryTools } from './tools/entries'
-import { registerEntryWorkflowTools } from './tools/entry-workflow'
-import { registerLanguageTools } from './tools/languages'
-import { registerGlobalTools } from './tools/globals'
-import { registerPublishingTools } from './tools/publishing'
-import { registerSchemaTools } from './tools/schema'
-import { registerSiteTools } from './tools/site'
+import { SITE_TOOLS } from './tool-catalog'
 
 export const MCP_SERVER_NAME = 'areca-cms'
 export const MCP_SERVER_VERSION = '1.0.0'
@@ -125,6 +117,16 @@ const WRITE_POST_TEXT = (
       : '6. You cannot mark the entry ready. When the user wants it approved, tell them a site owner must mark it ready in the CMS.',
   ].join('\n')
 
+/** Registers the per-site tools this actor may use on this site's environment. */
+export function registerPerSiteTools(
+  server: Pick<McpServer, 'registerTool'>,
+  actor: McpActor,
+  site: McpSiteContext,
+): void {
+  const registry = new ToolRegistry(server, actor, site)
+  for (const entry of SITE_TOOLS) registry.add(entry)
+}
+
 export function createArecaMcpServer(
   actor: McpActor,
   site: McpSiteContext = PRODUCTION_CONTEXT,
@@ -134,16 +136,7 @@ export function createArecaMcpServer(
     { instructions: serverInstructions(actor, site) },
   )
 
-  const registry = new ToolRegistry(server, actor, site)
-  registerSiteTools(registry)
-  registerEntryTools(registry)
-  registerEntryWorkflowTools(registry)
-  registerGlobalTools(registry)
-  registerAssetTools(registry)
-  registerPublishingTools(registry)
-  registerSchemaTools(registry)
-  registerLanguageTools(registry)
-  registerDevEnvTools(registry)
+  registerPerSiteTools(server, actor, site)
 
   server.registerPrompt(
     'write_post',

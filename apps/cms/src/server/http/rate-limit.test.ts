@@ -97,6 +97,22 @@ describe('request rate limiting', () => {
     expect(store.keys.join('\n')).not.toContain('areca_mcp_secret-key')
   })
 
+  it('applies the same AI key budget to the agency endpoint', async () => {
+    const store = countingStore()
+    const deps = dependencies(store)
+    const request = new Request('https://cms.test/api/agency/mcp', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer areca_mcp_secret-key' },
+    })
+
+    for (let i = 0; i < 120; i += 1) {
+      expect(await enforceRequestRateLimit(request, deps)).toBeNull()
+    }
+    expect((await enforceRequestRateLimit(request, deps))?.status).toBe(429)
+    expect(deps.resolveUserId).not.toHaveBeenCalled()
+    expect(store.keys.join('\n')).not.toContain('areca_mcp_secret-key')
+  })
+
   it('buckets an AI key by the SHA-256 of its token, never the raw token', async () => {
     const store = countingStore()
     const deps = dependencies(store)

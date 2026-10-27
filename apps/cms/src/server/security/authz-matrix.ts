@@ -1455,6 +1455,55 @@ export const ROWS: Row[] = [
       }
     },
   },
+  {
+    name: 'listAgencyMcpKeysFn',
+    fn: mcpKeyFns.listAgencyMcpKeysFn,
+    policy: 'agency',
+    note: 'Agency admins see their own agency keys (no site). Other roles are refused.',
+    prepare: () => ({ data: undefined }),
+  },
+  {
+    name: 'createAgencyMcpKeyFn',
+    fn: mcpKeyFns.createAgencyMcpKeyFn,
+    policy: 'agency-fresh',
+    note: 'Agency keys need an agency admin with MFA and a fresh second factor (reauth). They never allow go-live.',
+    prepare: () => {
+      const name = `authz-agency-key-${uniq()}`
+      return {
+        data: { name, expiresInDays: 30 },
+        untouched: absent(mcpKey, eq(mcpKey.name, name)),
+      }
+    },
+  },
+  {
+    name: 'revokeAgencyMcpKeyFn',
+    fn: mcpKeyFns.revokeAgencyMcpKeyFn,
+    policy: 'agency',
+    note: "An agency admin revokes their own agency key; another admin's key answers NotFound.",
+    override: { adminStale: 'not-found' },
+    prepare: async (w) => {
+      const [key] = await db
+        .insert(mcpKey)
+        .values({
+          userId: w.users.adminMfa.id,
+          scope: 'agency',
+          siteId: null,
+          name: `authz-agency-revoke-${uniq()}`,
+          tokenPrefix: 'areca_mcp_agcy',
+          tokenHash: `authz-${crypto.randomUUID()}`,
+          expiresAt: new Date(Date.now() + 86_400_000),
+        })
+        .returning()
+      if (!key) throw new Error('agency mcp key insert failed')
+      return {
+        data: { id: key.id },
+        untouched: exists(
+          mcpKey,
+          and(eq(mcpKey.id, key.id), isNull(mcpKey.revokedAt)),
+        ),
+      }
+    },
+  },
   // ------------------------------------------------------- mcp-oauth.ts
   {
     name: 'getOAuthConsentFn',

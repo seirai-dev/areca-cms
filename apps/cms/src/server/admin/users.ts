@@ -29,7 +29,10 @@ import { AppError } from '#/server/http/app-error'
 import { sendAccountEmail } from '#/server/mail/account-emails'
 import { cancelAllQueuedNotificationEmails } from '#/server/mail/outbox'
 import { revokeMemberMcpConnections } from '#/server/mcp/connections'
-import { revokeMemberMcpKeys } from '#/server/mcp/keys'
+import {
+  revokeAgencyMcpCredentials,
+  revokeMemberMcpKeys,
+} from '#/server/mcp/keys'
 
 import {
   LastAgencyAdminError,
@@ -231,13 +234,15 @@ async function removeAccount(
     .selectDistinct({ siteId: mcpConnection.siteId })
     .from(mcpConnection)
     .where(eq(mcpConnection.userId, person.id))
+  // Agency keys and connections have no site; they are revoked with the agency role.
   const siteIds = [
     ...new Set([...keySites, ...connectionSites].map((row) => row.siteId)),
-  ]
+  ].filter((siteId): siteId is string => siteId !== null)
   const mcpKeysRevoked = await revokeMemberMcpKeys(tx, {
     userId: person.id,
     siteIds,
   })
+  await revokeAgencyMcpCredentials(tx, { userId: person.id })
   const mcpConnectionsRevoked = await revokeMemberMcpConnections(tx, {
     userId: person.id,
     siteIds,

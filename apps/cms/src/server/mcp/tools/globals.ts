@@ -40,7 +40,7 @@ import {
 } from './entries'
 import { loadGlobalInSite } from '../scope'
 import { fieldsInputSchema, seoInputSchema } from '../schemas'
-import type { ToolRegistry } from '../tool-kit'
+import type { ToolCollector } from '../tool-kit'
 import { fieldSchema, requiredLanguagesInput } from './schema'
 
 /**
@@ -67,7 +67,7 @@ async function loadSection(actor: McpActor, key: string) {
   return found
 }
 
-export function registerGlobalTools(registry: ToolRegistry): void {
+export function registerGlobalTools(registry: ToolCollector): void {
   registry.add({
     name: 'get_global',
     title: 'Get site content',

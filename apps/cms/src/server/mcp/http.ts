@@ -31,15 +31,18 @@ const log = createLogger('mcp')
 /** Largest JSON-RPC body accepted; a 1 MB entry plus Markdown fits well inside. */
 const MAX_REQUEST_BODY_BYTES = 1_048_576
 
+/** Transport settings shared by the per-site and agency connectors. */
+export const MCP_TRANSPORT_OPTIONS = {
+  legacy: 'stateless',
+  responseMode: 'json',
+  maxRequestBodySize: MAX_REQUEST_BODY_BYTES,
+  onerror: (error: unknown) => log.warn('MCP protocol error', { err: error }),
+} as const
+
 const handler = createMcpHandler(
   (ctx: McpRequestContext) =>
     createArecaMcpServer(actorFrom(ctx), siteFrom(ctx)),
-  {
-    legacy: 'stateless',
-    responseMode: 'json',
-    maxRequestBodySize: MAX_REQUEST_BODY_BYTES,
-    onerror: (error) => log.warn('MCP protocol error', { err: error }),
-  },
+  MCP_TRANSPORT_OPTIONS,
 )
 
 /** The actor travels in authInfo.extra, set per request after authentication. */
@@ -75,14 +78,14 @@ function isActor(value: unknown): value is McpActor {
 export const MFA_REQUIRED_MESSAGE =
   'Your account needs two-factor authentication before AI keys work. Turn it on in Account settings.'
 
-function mfaRequired(): Response {
+export function mfaRequired(): Response {
   return Response.json(
     { error: MFA_REQUIRED_MESSAGE, code: 'mfa_required' },
     { status: 403 },
   )
 }
 
-function unauthorized(): Response {
+export function unauthorized(): Response {
   return Response.json(
     { error: 'Invalid or expired Areca MCP key' },
     {
@@ -151,7 +154,7 @@ function insufficientScope(siteSlug: string, dpop = false): Response {
   )
 }
 
-function unknownSite(): Response {
+export function unknownSite(): Response {
   return Response.json({ error: 'Site not found' }, { status: 404 })
 }
 
@@ -326,6 +329,7 @@ export async function handleSiteMcpRequest(
     keyId: connection.id,
     keyName: connection.clientName,
     credential: 'oauth',
+    scope: 'site',
     userId: owner.id,
     userName: owner.name,
     siteId: found.id,

@@ -16,7 +16,7 @@ import { resolveLocale } from '../locales'
 import { localeInput } from './entries'
 
 import { idSchema } from '../schemas'
-import type { ToolRegistry } from '../tool-kit'
+import type { ToolCollector } from '../tool-kit'
 import type { McpActor } from '../keys'
 
 function describeAsset(row: Asset) {
@@ -44,7 +44,7 @@ async function requireAsset(actor: McpActor, id: string): Promise<Asset> {
   return row
 }
 
-export function registerAssetTools(registry: ToolRegistry): void {
+export function registerAssetTools(registry: ToolCollector): void {
   registry.add({
     name: 'list_assets',
     title: 'List assets',

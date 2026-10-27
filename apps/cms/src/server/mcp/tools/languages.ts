@@ -4,13 +4,13 @@ import { LOCALE_TAG_MAX_LENGTH, MAX_SITE_LANGUAGES } from '#/lib/content-limits'
 import { languageName } from '#/server/content/locale-validation'
 import { setSiteLanguages } from '#/server/admin/site-languages'
 
-import type { ToolRegistry } from '../tool-kit'
+import type { ToolCollector } from '../tool-kit'
 import { languageSummary } from './site'
 
 const languageCode = z.string().min(1).max(LOCALE_TAG_MAX_LENGTH)
 
 /** Agency-only: the languages a site publishes in, and its main language. */
-export function registerLanguageTools(registry: ToolRegistry): void {
+export function registerLanguageTools(registry: ToolCollector): void {
   registry.add({
     name: 'set_site_languages',
     title: 'Set site languages',

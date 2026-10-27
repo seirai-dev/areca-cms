@@ -916,6 +916,9 @@ export const schedulerBackoff = pgTable('scheduler_backoff', {
   dismissedAt: timestamptz('dismissed_at'),
 })
 
+/** Which sites an MCP credential reaches: one site, or every site (agency admins). */
+export type McpScope = 'site' | 'agency'
+
 /**
  * Personal per-site API keys for the MCP server. Only the sha256 hash is
  * stored; `tokenPrefix` is the first characters of the token, for display.
@@ -928,9 +931,10 @@ export const mcpKey = pgTable(
     userId: text('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
-    siteId: text('site_id')
-      .notNull()
-      .references(() => site.id, { onDelete: 'cascade' }),
+    /** 'site' keys act on one site; 'agency' keys act on every site (no site_id). */
+    scope: text('scope').$type<McpScope>().notNull().default('site'),
+    /** Null for agency scope. */
+    siteId: text('site_id').references(() => site.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
     tokenPrefix: text('token_prefix').notNull(),
     tokenHash: text('token_hash').notNull().unique(),
@@ -944,6 +948,10 @@ export const mcpKey = pgTable(
   (t) => [
     index('mcp_key_site_id_idx').on(t.siteId),
     index('mcp_key_user_id_idx').on(t.userId),
+    check(
+      'mcp_key_scope_check',
+      sql`${t.scope} in ('site', 'agency') and ((${t.scope} = 'site') = (${t.siteId} is not null))`,
+    ),
   ],
 )
 
@@ -1157,9 +1165,10 @@ export const mcpConnection = pgTable(
     userId: text('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
-    siteId: text('site_id')
-      .notNull()
-      .references(() => site.id, { onDelete: 'cascade' }),
+    /** 'site' connects one site; 'agency' connects every site (no site_id). */
+    scope: text('scope').$type<McpScope>().notNull().default('site'),
+    /** Null for agency scope. */
+    siteId: text('site_id').references(() => site.id, { onDelete: 'cascade' }),
     clientId: text('client_id')
       .notNull()
       .references(() => oauthClient.clientId, { onDelete: 'cascade' }),
@@ -1178,5 +1187,13 @@ export const mcpConnection = pgTable(
     uniqueIndex('mcp_connection_active_unique')
       .on(t.userId, t.siteId, t.clientId)
       .where(sql`${t.revokedAt} is null`),
+    // Agency connections have no site, so the index above cannot see them.
+    uniqueIndex('mcp_connection_agency_active_unique')
+      .on(t.userId, t.clientId)
+      .where(sql`${t.revokedAt} is null and ${t.scope} = 'agency'`),
+    check(
+      'mcp_connection_scope_check',
+      sql`${t.scope} in ('site', 'agency') and ((${t.scope} = 'site') = (${t.siteId} is not null))`,
+    ),
   ],
 )
