@@ -28,6 +28,11 @@ jobs:
   # the client-bundle scan pass.
   ci:
     uses: ./.github/workflows/ci.yml
+    # ci.yml's change detection job needs pull-requests read; a called workflow
+    # cannot request more than the caller grants.
+    permissions:
+      contents: read
+      pull-requests: read
 
   amd64:
     needs: [ci]

@@ -1,14 +1,25 @@
 name: CI
 
+# Pull requests run this workflow. Pushes to master do not: cms-docker-amd64.yml
+# calls it for master pushes that touch the CMS (before anything is published),
+# and other master pushes were already checked on their pull request. Run it by
+# hand from the Actions tab with workflow_dispatch if needed.
 on:
   pull_request:
-  push:
-    branches: [master]
   # Called by cms-docker-amd64.yml so images only publish after CI passes.
   workflow_call:
+  workflow_dispatch:
 
 permissions:
   contents: read
+
+# Cancel superseded pull request runs. A called run (workflow_call) is keyed by
+# its event, and only pull_request runs are cancelled. Reusable-workflow
+# concurrency uses the caller's github context, so this keeps the callee's
+# group distinct from the caller's own group and never cancels the publish.
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   # Keep in step with apps/cms/Dockerfile (NODE_VERSION / PNPM_VERSION).
@@ -16,6 +27,37 @@ env:
   PNPM_VERSION: 12.8.1
 
 jobs:
+  # Pull requests only. Everything runs for workflow_call, workflow_dispatch and
+  # push, because the gated jobs below treat a non-pull_request event as a full run.
+  changes:
+    name: Detect changed paths
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      cms: ${{ steps.filter.outputs.cms }}
+    steps:
+      - id: filter
+        uses: dorny/paths-filter@v4.0.3
+        with:
+          filters: |
+            cms:
+              - 'apps/cms/**'
+              - 'docker/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - '.npmrc'
+              - '.dockerignore'
+              - '.github/workflows/**'
+              # packages/ is left out on purpose: the CMS does not import
+              # packages/skills, and packages/site-sdk is only imported by a unit
+              # test (which always runs). So release PRs, which only bump those
+              # versions and changelogs, skip the gated jobs.
+
   test:
     name: Typecheck and unit tests
     runs-on: ubuntu-24.04
@@ -89,6 +131,8 @@ jobs:
 
   integration:
     name: CMS integration tests (PostgreSQL, Redis, S3)
+    needs: changes
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (needs.changes.result == 'success' && needs.changes.outputs.cms == 'true')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     # Service containers run on the runner, so the suites reach them on
@@ -190,14 +234,23 @@ jobs:
       - name: Apply database migrations
         run: pnpm --filter @areca/cms db:migrate
       - name: CMS integration tests
-        # Suites share one database and some clean up rows that others queue,
-        # so they run one file at a time to stay deterministic.
-        run: pnpm --filter @areca/cms test -- --no-file-parallelism
+        # Files run in parallel. Each test worker gets its own copy of the
+        # migrated database, Redis database and S3 prefix (vitest.global-setup.ts).
+        run: pnpm --filter @areca/cms test
 
   smoke:
     name: Chromium smoke test (production build)
+    needs: changes
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (needs.changes.result == 'success' && needs.changes.outputs.cms == 'true')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    # Runs in the Playwright image, which ships Chromium and its system libraries.
+    # Installing them with apt on each run was the slow, flaky step (4 to 14
+    # minutes when the mirrors were slow), and the image is pinned to the same
+    # Playwright version. Bump the tag with @playwright/test; the version check
+    # step fails the job if the two drift.
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
     services:
       postgres:
         image: pgvector/pgvector:pg17
@@ -205,15 +258,11 @@ jobs:
           POSTGRES_USER: ci
           POSTGRES_PASSWORD: ci
           POSTGRES_DB: areca_smoke
-        ports:
-          - 5432:5432
         options: >-
           --health-cmd "pg_isready -U ci -d areca_smoke"
           --health-interval 5s --health-timeout 5s --health-retries 20
       redis:
         image: redis:7-alpine
-        ports:
-          - 6379:6379
         options: >-
           --health-cmd "redis-cli ping"
           --health-interval 5s --health-timeout 3s --health-retries 20
@@ -223,33 +272,33 @@ jobs:
           RUSTFS_ACCESS_KEY: ciaccess
           RUSTFS_SECRET_KEY: ci-dummy-storage-secret
           RUSTFS_VOLUMES: /data
-        ports:
-          - 9000:9000
       mailpit:
         # Invitations and account mail are sent here; the smoke test reads the
         # invite link from the UI, not from this service. Pinned to match
         # docker/compose.yml.
         image: axllent/mailpit:v1.31.3
-        ports:
-          - 1025:1025
-          - 8025:8025
     env:
-      # The CMS runs as a production build on localhost:3000. Better Auth
-      # cookies are bound to BETTER_AUTH_URL, so the browser uses localhost too.
-      DATABASE_URL: postgres://ci:ci@127.0.0.1:5432/areca_smoke
-      REDIS_URL: redis://127.0.0.1:6379
+      # The job runs inside the Playwright container, so the services are reached
+      # by their service names. The CMS runs in the same container on
+      # localhost:3000. Better Auth cookies are bound to BETTER_AUTH_URL, so the
+      # browser uses localhost too.
+      PLAYWRIGHT_IMAGE_VERSION: "1.63.0"
+      # The image sets this too; set it so the browsers are found either way.
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      DATABASE_URL: postgres://ci:ci@postgres:5432/areca_smoke
+      REDIS_URL: redis://redis:6379
       BETTER_AUTH_SECRET: ci-dummy-auth-secret-not-real
       BETTER_AUTH_URL: http://localhost:3000
       APP_URL: http://localhost:3000
       PORT: "3000"
       ADMIN_MFA_REQUIRED: "false"
-      S3_ENDPOINT: http://127.0.0.1:9000
+      S3_ENDPOINT: http://s3:9000
       S3_REGION: us-east-1
       S3_BUCKET: areca-smoke
       S3_ACCESS_KEY: ciaccess
       S3_SECRET_KEY: ci-dummy-storage-secret
       S3_FORCE_PATH_STYLE: "true"
-      SMTP_HOST: 127.0.0.1
+      SMTP_HOST: mailpit
       SMTP_PORT: "1025"
       SMTP_FROM: ci@example.test
       DOKPLOY_CREDENTIALS_ENCRYPTION_KEY: AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=
@@ -271,14 +320,22 @@ jobs:
           key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: pnpm-store-${{ runner.os }}-
       - run: pnpm install --frozen-lockfile
+      - name: Check the Playwright image matches @playwright/test
+        run: |
+          installed=$(pnpm --filter @areca/cms exec playwright --version | awk '{print $2}')
+          if [ "$installed" != "$PLAYWRIGHT_IMAGE_VERSION" ]; then
+            echo "@playwright/test is $installed but container.image is $PLAYWRIGHT_IMAGE_VERSION; update the tag." >&2
+            exit 1
+          fi
       - name: Compile paraglide messages
         run: pnpm --filter @areca/cms exec paraglide-js compile --project ./project.inlang --outdir ./src/paraglide
       - name: Build CMS
         run: pnpm --filter @areca/cms build
+      # The image has no curl, so the health checks use Node's fetch.
       - name: Wait for the S3 service
         run: |
           for _ in $(seq 1 30); do
-            if curl -fsS "${S3_ENDPOINT}/health" >/dev/null; then exit 0; fi
+            if node -e "fetch(process.argv[1]).then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))" "${S3_ENDPOINT}/health"; then exit 0; fi
             sleep 2
           done
           echo "S3 service did not become healthy" >&2
@@ -286,16 +343,24 @@ jobs:
       - name: Wait for the mail sink
         run: |
           for _ in $(seq 1 30); do
-            if curl -fsS "http://127.0.0.1:8025/api/v1/info" >/dev/null; then exit 0; fi
+            if node -e "fetch(process.argv[1]).then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))" "http://mailpit:8025/api/v1/info"; then exit 0; fi
             sleep 2
           done
           echo "Mailpit did not become healthy" >&2
           exit 1
       - name: Create the bucket
+        # The image has no AWS CLI, so the repo's S3 client creates the bucket.
         run: |
-          AWS_ACCESS_KEY_ID="$S3_ACCESS_KEY" AWS_SECRET_ACCESS_KEY="$S3_SECRET_KEY" \
-            AWS_DEFAULT_REGION="$S3_REGION" \
-            aws --endpoint-url "$S3_ENDPOINT" s3api create-bucket --bucket "$S3_BUCKET"
+          pnpm --filter @areca/cms exec node --input-type=module -e "
+            import { CreateBucketCommand, S3Client } from '@aws-sdk/client-s3'
+            const s3 = new S3Client({
+              endpoint: process.env.S3_ENDPOINT,
+              region: process.env.S3_REGION,
+              forcePathStyle: true,
+              credentials: { accessKeyId: process.env.S3_ACCESS_KEY, secretAccessKey: process.env.S3_SECRET_KEY },
+            })
+            await s3.send(new CreateBucketCommand({ Bucket: process.env.S3_BUCKET }))
+          "
       - name: Apply migrations and seed the admin, organization and site
         run: |
           pnpm --filter @areca/cms db:migrate
@@ -308,37 +373,35 @@ jobs:
           NODE_ENV=production nohup node apps/cms/scripts/docker-entrypoint.mjs \
             > "$RUNNER_TEMP/cms.log" 2>&1 &
           for _ in $(seq 1 60); do
-            if curl -fsS "http://127.0.0.1:${PORT}/api/health" >/dev/null; then exit 0; fi
+            if node -e "fetch(process.argv[1]).then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))" "http://127.0.0.1:${PORT}/api/health"; then exit 0; fi
             sleep 2
           done
           echo "The CMS did not become healthy" >&2
           cat "$RUNNER_TEMP/cms.log" >&2
           exit 1
-      - id: playwright-version
-        run: echo "version=$(pnpm --filter @areca/cms exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
-      - id: playwright-browsers
-        uses: actions/cache@v6.1.0
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-chromium-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
-      - name: Install Chromium with its system dependencies
-        if: steps.playwright-browsers.outputs.cache-hit != 'true'
-        run: pnpm --filter @areca/cms exec playwright install --with-deps chromium
-      - name: Install Chromium system dependencies (browsers cached)
-        if: steps.playwright-browsers.outputs.cache-hit == 'true'
-        run: pnpm --filter @areca/cms exec playwright install-deps chromium
       - name: Smoke tests
         run: pnpm --filter @areca/cms exec playwright test --project=smoke
       - name: CMS server log
         if: failure()
         run: cat "$RUNNER_TEMP/cms.log"
 
+  # Lint, format, and both secret scans share one setup. The client-bundle build
+  # and scan only run on pull requests that touch the CMS (or on other events).
   lint:
-    name: Lint and format check
+    name: Lint, format and secret scans
+    needs: changes
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 20
+    env:
+      GITLEAKS_VERSION: 8.30.1
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          # The secret scan reads the full git history.
+          fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -359,19 +422,6 @@ jobs:
         run: pnpm --filter @areca/cms lint
       - name: CMS format check (non-mutating)
         run: pnpm --filter @areca/cms check
-
-  secret-scan:
-    name: Secret scan (git history)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    env:
-      GITLEAKS_VERSION: 8.30.1
-      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
-    steps:
-      - uses: actions/checkout@v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
       # The pinned binary needs no license key, unlike gitleaks-action for orgs.
       - name: Install gitleaks
         run: |
@@ -382,49 +432,31 @@ jobs:
           sudo install gitleaks /usr/local/bin/gitleaks
       - name: Scan full history
         run: gitleaks git . --config .gitleaks.toml --redact --verbose --no-banner
-
-  client-bundle:
-    name: Client bundle secret scan
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    env:
-      # The build must not need real services. These dummy values are also what
-      # the scanner searches for in the output: any of them appearing in client
-      # assets means a server value was bundled.
-      SKIP_ENV_VALIDATION: "true"
-      DATABASE_URL: postgres://ci:ci-db-password@127.0.0.1:1/ci
-      REDIS_URL: redis://127.0.0.1:1
-      BETTER_AUTH_SECRET: ci-dummy-auth-secret-not-real
-      BETTER_AUTH_URL: http://localhost:3000
-      APP_URL: http://localhost:3000
-      S3_ENDPOINT: http://127.0.0.1:1
-      S3_REGION: us-east-1
-      S3_BUCKET: ci
-      S3_ACCESS_KEY: ci-access-key-value
-      S3_SECRET_KEY: ci-dummy-storage-secret
-      SMTP_HOST: smtp.ci.example.test
-      SMTP_PORT: "1025"
-      SMTP_FROM: ci@example.test
-      DOKPLOY_URL: http://dokploy.ci.example.test
-      DOKPLOY_API_KEY: ci-dummy-dokploy-api-key
-      DOKPLOY_CREDENTIALS_ENCRYPTION_KEY: AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=
-      SETUP_TOKEN: ci-dummy-setup-token-value
-      METRICS_TOKEN: ci-dummy-metrics-token-value
-    steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-node@v7.0.0
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      - run: npm install --global "pnpm@${PNPM_VERSION}"
-      - id: store
-        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v6.1.0
-        with:
-          path: ${{ steps.store.outputs.path }}
-          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: pnpm-store-${{ runner.os }}-
-      - run: pnpm install --frozen-lockfile
-      - name: Build CMS
-        run: pnpm --filter @areca/cms build
-      - name: Scan client assets
-        run: pnpm --filter @areca/cms scan:client
+      # These dummy values are also what the scanner searches for in the output:
+      # any of them appearing in client assets means a server value was bundled.
+      - name: Build CMS and scan client assets
+        if: ${{ github.event_name != 'pull_request' || (needs.changes.result == 'success' && needs.changes.outputs.cms == 'true') }}
+        env:
+          # The build must not need real services.
+          SKIP_ENV_VALIDATION: "true"
+          DATABASE_URL: postgres://ci:ci-db-password@127.0.0.1:1/ci
+          REDIS_URL: redis://127.0.0.1:1
+          BETTER_AUTH_SECRET: ci-dummy-auth-secret-not-real
+          BETTER_AUTH_URL: http://localhost:3000
+          APP_URL: http://localhost:3000
+          S3_ENDPOINT: http://127.0.0.1:1
+          S3_REGION: us-east-1
+          S3_BUCKET: ci
+          S3_ACCESS_KEY: ci-access-key-value
+          S3_SECRET_KEY: ci-dummy-storage-secret
+          SMTP_HOST: smtp.ci.example.test
+          SMTP_PORT: "1025"
+          SMTP_FROM: ci@example.test
+          DOKPLOY_URL: http://dokploy.ci.example.test
+          DOKPLOY_API_KEY: ci-dummy-dokploy-api-key
+          DOKPLOY_CREDENTIALS_ENCRYPTION_KEY: AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=
+          SETUP_TOKEN: ci-dummy-setup-token-value
+          METRICS_TOKEN: ci-dummy-metrics-token-value
+        run: |
+          pnpm --filter @areca/cms build
+          pnpm --filter @areca/cms scan:client
