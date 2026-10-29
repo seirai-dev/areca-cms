@@ -112,3 +112,4 @@ Test-first where possible.
 2. **PR 2:** SDK bridge (`/visual`, `/visual-react`), live payload function, Tier 2 live updates, Northbound wiring.
 3. **PR 3:** Tier 3: markers, select / browse, both-way highlight, full-screen click exit + Back pill, hidden-field reveal, cross-owner verification + popover, editable areas, browse-away bar.
 4. **PR 4:** section content (globals) visual mode, SDK and CMS docs with screenshots, `areca-sdk` skill, polish.
+   *As built:* a section previews on its `previewPath` (`?arecaPreview=`); the live endpoint and bridge carry `{ kind: 'global' }` results, which a site renders with `content.previewGlobals(result)`. Visual mode is a focus screen everywhere: site content (normally a page with the sidebar) hides the sidebar in Visual mode too, without remounting the editor. A section with no `previewPath` can never preview, so `?view=visual` is dropped there and it opens in Write mode (the "Open" popover for Company info lands there).

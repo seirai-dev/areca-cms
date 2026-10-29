@@ -13,10 +13,11 @@ import { VISUAL_AVAILABLE_QUERY } from './visual-layout'
  */
 export const VISUAL_TOKEN_REFRESH_MS = 50 * 60 * 1000
 
-/** The two entry editor routes (see editor-host.tsx). */
+/** The entry and site content editor routes (see editor-host.tsx). */
 const EDITOR_ROUTE_IDS = [
   '/_app/sites/$siteId/c/$collectionKey/new',
   '/_app/sites/$siteId/c/$collectionKey/$entryId',
+  '/_app/sites/$siteId/globals/$globalKey',
 ]
 
 /**
@@ -46,7 +47,7 @@ function useViewParam(): unknown {
 }
 
 /**
- * Whether the current page is an entry editor asked to show Visual mode,
+ * Whether the current page is an entry or site content editor asked to show Visual mode,
  * ignoring the viewport. The app shell reads this to go full-bleed.
  */
 function useEditorRouteRequestsVisual(): boolean {
@@ -59,7 +60,7 @@ function useEditorRouteRequestsVisual(): boolean {
 
 /**
  * True when the editor shows Visual mode: a viewport of at least 1280 px and
- * `?view=visual` on an entry editor. Below 1280 the URL is kept but Write
+ * `?view=visual` on an entry or site content editor. Below 1280 the URL is kept but Write
  * mode renders.
  */
 export function useVisualModeActive(): boolean {
@@ -77,16 +78,19 @@ export function useVisualModeActive(): boolean {
  *   choice per browser. Visual is ignored when not available.
  * - On the first mount, with no `view` param, a remembered visual mode is
  *   applied. Pass `autoEnter: false` where there is no preview yet.
+ * - `supported: false` (no preview is possible) keeps Write mode and removes
+ *   `?view=visual` from the URL.
  */
 export function useVisualMode({
   autoEnter = true,
-}: { autoEnter?: boolean } = {}) {
+  supported = true,
+}: { autoEnter?: boolean; supported?: boolean } = {}) {
   const navigate = useNavigate()
   const available = useMediaQuery(VISUAL_AVAILABLE_QUERY)
   const viewParam = useViewParam()
   const requested = viewParam === 'visual'
   const prefs = useVisualPreferences()
-  const active = available && requested
+  const active = supported && available && requested
 
   const applyMode = React.useCallback(
     (mode: EditorMode) => {
@@ -126,13 +130,20 @@ export function useVisualMode({
         hasViewParam,
         lastMode,
         available,
-        autoEnter,
+        autoEnter: autoEnter && supported,
       })
     ) {
       applyMode('visual')
     }
     // Mount-only: later changes come from the user through setMode.
   }, [])
+
+  // A document that can never have a preview (a section without a preview
+  // path) drops `?view=visual`, so a shared or "Open" link lands in Write mode.
+  // The remembered mode is left alone.
+  React.useEffect(() => {
+    if (!supported && requested) applyMode('write')
+  }, [supported, requested, applyMode])
 
   return {
     available,

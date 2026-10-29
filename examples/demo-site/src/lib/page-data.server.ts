@@ -6,10 +6,15 @@
  */
 import { setResponseHeader } from '@tanstack/react-start/server'
 import { previewHeaders } from '@areca-cms/site-sdk'
-import type { PreviewEntry } from '@areca-cms/site-sdk'
+import type { PreviewEntry, PreviewResult } from '@areca-cms/site-sdk'
 import { content } from '../generated/content/areca.gen.ts'
 import { SITE_DESCRIPTION, SITE_NAME } from './seo.ts'
-import { articlesByAuthor, articlesFeaturingCoffee } from './content.ts'
+import {
+  articlesByAuthor,
+  articlesFeaturingCoffee,
+  getArticles,
+  getCoffees,
+} from './content.ts'
 import type { PreviewData, PreviewLoad } from './queries.ts'
 
 /**
@@ -55,6 +60,70 @@ export function aboutFrom(globals: Sections) {
   return globals.aboutPage ?? ABOUT_FALLBACK
 }
 
+/** The site content a page shows, and whether a draft of its section is shown. */
+export type SectionView = {
+  globals: Sections
+  /** The page shows a draft of its section. */
+  preview: boolean
+  /** A draft of its section exists but is incomplete, so the published values are shown. */
+  incomplete: boolean
+}
+
+/** What a site content page's server function returns besides its own data. */
+export type SectionFlags = SectionView & { noindex: boolean }
+
+/**
+ * The view of a page for `section` from a preview of site content. A preview that
+ * targets `section` shows its draft; when the draft is incomplete, `previewGlobals`
+ * already holds the published values. A preview for another section changes nothing.
+ */
+export function sectionView(
+  preview: { globals: Sections; previewing: string | null; complete: boolean },
+  section: 'homePage' | 'aboutPage',
+): SectionView {
+  if (preview.previewing !== section) {
+    return { globals: content.globals, preview: false, incomplete: false }
+  }
+  return { globals: preview.globals, preview: true, incomplete: !preview.complete }
+}
+
+/**
+ * Home page data. Shared by the saved and the live preview, so both render the
+ * same way.
+ */
+export function homeData(flags: SectionFlags) {
+  const home = homeFrom(flags.globals)
+  return {
+    home,
+    featuredCoffee: content.resolve(home.featuredCoffee),
+    articles: getArticles().slice(0, 3),
+    coffees: getCoffees().slice(0, 3),
+    preview: flags.preview,
+    incomplete: flags.incomplete,
+    noindex: flags.noindex,
+  }
+}
+
+/** About page data. Shared by the saved and the live preview. */
+export function aboutData(flags: SectionFlags) {
+  return {
+    about: aboutFrom(flags.globals),
+    preview: flags.preview,
+    incomplete: flags.incomplete,
+    noindex: flags.noindex,
+  }
+}
+
+/** Home page data for an unsaved site content result from the visual editor. Nothing is saved. */
+export async function liveHomeData(result: PreviewResult) {
+  return homeData({ ...sectionView(await content.previewGlobals(result), 'homePage'), noindex: true })
+}
+
+/** About page data for an unsaved site content result from the visual editor. Nothing is saved. */
+export async function liveAboutData(result: PreviewResult) {
+  return aboutData({ ...sectionView(await content.previewGlobals(result), 'aboutPage'), noindex: true })
+}
+
 /**
  * Site content for a page that shows `section`. A token for that section
  * shows its draft (`preview: true`); when the draft is incomplete, the published
@@ -65,22 +134,16 @@ export function aboutFrom(globals: Sections) {
 export async function readGlobals(
   token: string | undefined,
   section: 'homePage' | 'aboutPage',
-): Promise<{ globals: Sections; preview: boolean; incomplete: boolean; noindex: boolean }> {
+): Promise<SectionFlags> {
   if (!token) return { globals: content.globals, preview: false, incomplete: false, noindex: false }
-  const headers = previewHeaders()
-  setResponseHeader('X-Robots-Tag', headers['X-Robots-Tag'])
-  setResponseHeader('Cache-Control', headers['Cache-Control'])
+  setNoStoreHeaders()
   try {
-    // previewGlobals fetches the token once. Its `previewing` says which section
-    // the token targets; only that section's page is changed by the preview.
-    const { globals, previewing, complete } = await content.previewGlobals(token)
-    if (previewing === section) {
-      return { globals, preview: true, incomplete: !complete, noindex: true }
-    }
+    // previewGlobals fetches the token once.
+    return { ...sectionView(await content.previewGlobals(token), section), noindex: true }
   } catch {
     // An expired or mistyped link shows the published page instead of an error.
+    return { globals: content.globals, preview: false, incomplete: false, noindex: true }
   }
-  return { globals: content.globals, preview: false, incomplete: false, noindex: true }
 }
 
 export function setNoStoreHeaders(): void {

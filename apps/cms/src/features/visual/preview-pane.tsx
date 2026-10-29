@@ -36,6 +36,7 @@ import type { Tier } from './live-channel'
 import { useClickToEdit } from './use-click-to-edit'
 import type { ClickField, OwnerSelection } from './use-click-to-edit'
 import { useLivePreviewChannel } from './use-live-preview'
+import type { LiveTarget } from './use-live-preview'
 import { framePresentation } from './visual-layout'
 import type { PreviewWidth } from './visual-layout'
 import { useVisualFullScreen } from './visual-context'
@@ -46,6 +47,9 @@ const FRAME_GUTTER_PX = 16
 /** Saves within this window reload the frame once. */
 export const RELOAD_DEBOUNCE_MS = 800
 
+/** Passed to the channel when there is no target. The channel is off then, so it is never sent. */
+const NO_TARGET: LiveTarget = { kind: 'entry', collection: '', entryId: '' }
+
 const SANDBOX =
   'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox'
 
@@ -54,9 +58,8 @@ export type LiveSource = {
   /** The preview site's origin (`previewOrigin(site)`). Null turns the channel off. */
   origin: string | null
   siteId: string
-  collection: string
-  /** The saved entry. Null (not saved yet) turns the channel off. */
-  entryId: string | undefined
+  /** The saved entry or site content section. Null (not saved yet) turns the channel off. */
+  target: LiveTarget | null
   /** The unsaved entry data, every language. */
   data: EntryData
   /** The content language being edited, or null. */
@@ -108,7 +111,9 @@ export function PreviewPane({
   const keys = useModifierKeys()
 
   const iframeRef = React.useRef<HTMLIFrameElement>(null)
-  const channelEnabled = Boolean(previewUrl && live.origin && live.entryId)
+  const channelEnabled = Boolean(
+    previewUrl && live.origin && live.target !== null,
+  )
   // Select is the default each time; Browse lets the page work normally.
   const [select, setSelect] = React.useState(true)
   const [ownerSelection, setOwnerSelection] =
@@ -141,8 +146,7 @@ export function PreviewPane({
     enabled: channelEnabled,
     onSiteMessage: clicks.onSiteMessage,
     siteId: live.siteId,
-    collection: live.collection,
-    entryId: live.entryId ?? '',
+    target: live.target ?? NO_TARGET,
     data: live.data,
     locale: live.locale,
   })

@@ -795,6 +795,7 @@ function EntryEditorView({
           await navigate({
             to: '/sites/$siteId/globals/$globalKey',
             params: { siteId, globalKey: owner.globalKey },
+            search: { view: 'visual' },
           })
         }
       })()
@@ -942,8 +943,13 @@ function EntryEditorView({
                   live={{
                     origin: previewOrigin(site),
                     siteId,
-                    collection: collection.key,
-                    entryId: editor.entryId,
+                    target: editor.entryId
+                      ? {
+                          kind: 'entry',
+                          collection: collection.key,
+                          entryId: editor.entryId,
+                        }
+                      : null,
                     data,
                     locale: active,
                   }}

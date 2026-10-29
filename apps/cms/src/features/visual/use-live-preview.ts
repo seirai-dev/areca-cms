@@ -19,6 +19,11 @@ import type {
   SiteMessage,
 } from './protocol'
 
+/** What the live channel previews: one entry, or one site content section. */
+export type LiveTarget =
+  | { kind: 'entry'; collection: string; entryId: string }
+  | { kind: 'global'; global: string }
+
 export type LivePreviewOptions = {
   /** The preview iframe. Messages go to its `contentWindow` only. */
   iframeRef: React.RefObject<HTMLIFrameElement | null>
@@ -26,8 +31,7 @@ export type LivePreviewOptions = {
   origin: string | null
   enabled: boolean
   siteId: string
-  collection: string
-  entryId: string
+  target: LiveTarget
   /** The unsaved entry data, including every content language. */
   data: EntryData
   /** The content language being edited, or null for single-language sites. */
@@ -48,6 +52,25 @@ export type LivePreviewChannel = {
 
 /** The endpoint that builds a preview from unsaved values (see `live-preview.ts`). */
 export const LIVE_PREVIEW_PATH = '/api/editor/live-preview'
+
+/** The JSON body for `LIVE_PREVIEW_PATH`. Entries and globals never share keys. */
+export function liveRequestBody({
+  siteId,
+  target,
+  data,
+  locale,
+}: {
+  siteId: string
+  target: LiveTarget
+  data: EntryData
+  locale: string | null
+}) {
+  const id =
+    target.kind === 'entry'
+      ? { entryId: target.entryId, collection: target.collection }
+      : { global: target.global }
+  return { siteId, ...id, data, locale }
+}
 
 /**
  * The CMS side of the live channel (docs/design/visual-editor.md, Decisions 2-4).
@@ -113,13 +136,7 @@ export function useLivePreviewChannel(
           method: 'POST',
           credentials: 'same-origin',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            siteId: sent.siteId,
-            entryId: sent.entryId,
-            collection: sent.collection,
-            data: sent.data,
-            locale: sent.locale,
-          }),
+          body: JSON.stringify(liveRequestBody(sent)),
           signal: request.signal,
         })
         if (response.ok) result = (await response.json()) as LivePreviewResult

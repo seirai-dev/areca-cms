@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { setResponseHeader } from '@tanstack/react-start/server'
 import { visualEditingHeaders } from '@areca-cms/site-sdk/visual'
+import type { PreviewResult } from '@areca-cms/site-sdk'
 import { z } from 'zod'
 import { content } from '../generated/content/areca.gen.ts'
 import type {
@@ -10,9 +11,11 @@ import type {
 } from '../generated/content/areca.gen.ts'
 import { entryAlternates } from './i18n.ts'
 import {
-  aboutFrom,
+  aboutData,
   companyFrom,
-  homeFrom,
+  homeData,
+  liveAboutData,
+  liveHomeData,
   readGlobals,
   setNoStoreHeaders,
   toPreviewLoad,
@@ -47,28 +50,59 @@ export const loadCompanyInfo = createServerFn({ method: 'GET', ...loose }).handl
   () => ({ company: companyFrom(content.globals) }),
 )
 
+/**
+ * Lets the CMS frame a draft page for the visual editor: sends the visual editing
+ * CSP when the CMS origin is known. Returns that origin, or null.
+ */
+function frameForVisualEditing(): string | null {
+  const cmsOrigin = cmsOriginFrom(process.env.ARECA_CMS_URL)
+  if (cmsOrigin !== null) {
+    const csp = visualEditingHeaders({ cmsOrigin })
+    setResponseHeader('Content-Security-Policy', csp['Content-Security-Policy'])
+  }
+  return cmsOrigin
+}
+
+/**
+ * Input of the live site content functions: a site content result as the bridge
+ * forwards it. `previewGlobals` checks the section and the entry; this only
+ * checks the outer shape.
+ */
+const liveGlobalInput = z.looseObject({
+  kind: z.literal('global'),
+  global: z.string().min(1),
+  entry: z.looseObject({ data: z.record(z.string(), z.unknown()) }),
+})
+
 /** Home: hero copy, the featured coffee, the newest journal entries and the first coffees in the shop order. */
 export const loadHome = createServerFn({ method: 'GET', ...loose })
   .validator(previewInput)
   .handler(async ({ data }) => {
-    const { globals, preview, incomplete, noindex } = await readGlobals(data.arecaPreview, 'homePage')
-    const home = homeFrom(globals)
-    return {
-      home,
-      featuredCoffee: content.resolve(home.featuredCoffee),
-      articles: getArticles().slice(0, 3),
-      coffees: getCoffees().slice(0, 3),
-      preview,
-      incomplete,
-      noindex,
-    }
+    const cmsOrigin = data.arecaPreview ? frameForVisualEditing() : null
+    return { ...homeData(await readGlobals(data.arecaPreview, 'homePage')), cmsOrigin }
   })
 
 export const loadAbout = createServerFn({ method: 'GET', ...loose })
   .validator(previewInput)
   .handler(async ({ data }) => {
-    const { globals, preview, incomplete, noindex } = await readGlobals(data.arecaPreview, 'aboutPage')
-    return { about: aboutFrom(globals), preview, incomplete, noindex }
+    const cmsOrigin = data.arecaPreview ? frameForVisualEditing() : null
+    return { ...aboutData(await readGlobals(data.arecaPreview, 'aboutPage')), cmsOrigin }
+  })
+
+/** The home page with an unsaved draft from the visual editor. Nothing is saved. */
+export const loadLiveHome = createServerFn({ method: 'POST', ...loose })
+  .validator((input: unknown) => liveGlobalInput.parse(input))
+  .handler(async ({ data }) => {
+    setNoStoreHeaders()
+    return liveHomeData(data as unknown as PreviewResult)
+  })
+
+/** The about page with an unsaved draft from the visual editor. Nothing is saved. */
+export const loadLiveAbout = createServerFn({ method: 'POST', ...loose })
+  .validator((input: unknown) => liveGlobalInput.parse(input))
+  .handler(async ({ data }) => {
+    setNoStoreHeaders()
+    return liveAboutData(data as unknown as PreviewResult)
   })
 
 export const loadCoffees = createServerFn({ method: 'GET', ...loose }).handler(
@@ -178,11 +212,7 @@ export const loadPreview = createServerFn({ method: 'GET', ...loose })
   .validator(z.object({ token: z.string().min(1) }))
   .handler(async ({ data }): Promise<PreviewPageLoad> => {
     setNoStoreHeaders()
-    const cmsOrigin = cmsOriginFrom(process.env.ARECA_CMS_URL)
-    if (cmsOrigin !== null) {
-      const csp = visualEditingHeaders({ cmsOrigin })
-      setResponseHeader('Content-Security-Policy', csp['Content-Security-Policy'])
-    }
+    const cmsOrigin = frameForVisualEditing()
     try {
       return { ...toPreviewLoad(await content.preview(data.token)), cmsOrigin }
     } catch (error) {

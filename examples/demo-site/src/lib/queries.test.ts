@@ -2,11 +2,18 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { ArecaClient, PreviewResult, SnapshotEntry } from '@areca-cms/site-sdk'
-import { readContent } from '@areca-cms/site-sdk/pull'
+import { readContent, readContentManifest, readGlobalsFile } from '@areca-cms/site-sdk/pull'
 import { FIXTURE_SLUGS, writeFixtureContent } from '../../scripts/fixture-content.ts'
 import { content } from '../generated/content/areca.gen.ts'
 import { CONTENT_DIR } from './content.ts'
-import { aboutFrom, companyFrom, homeFrom, toPreviewLoad } from './page-data.server.ts'
+import {
+  aboutFrom,
+  companyFrom,
+  homeFrom,
+  liveAboutData,
+  liveHomeData,
+  toPreviewLoad,
+} from './page-data.server.ts'
 import { cmsOriginFrom, livePreviewInput } from './queries.ts'
 import { SITE_DESCRIPTION, SITE_NAME, sectionHead } from './seo.ts'
 
@@ -108,5 +115,64 @@ describe('live preview', () => {
     expect(cmsOriginFrom('   ')).toBeNull()
     expect(cmsOriginFrom('not a url')).toBeNull()
     expect(cmsOriginFrom('file:///tmp/cms')).toBeNull()
+  })
+})
+
+describe('live site content', () => {
+  /** A draft of a site content section, built from the fixture's published row as the CMS sends it. */
+  async function globalDraft(
+    section: 'homePage' | 'aboutPage',
+    change: (data: Record<string, unknown>) => Record<string, unknown>,
+  ): Promise<PreviewResult> {
+    await writeFixtureContent()
+    const row = readGlobalsFile(CONTENT_DIR, readContentManifest(CONTENT_DIR))[section]
+    if (!row) throw new Error(`Fixture section ${section} is missing`)
+    return { kind: 'global', global: section, entry: { ...row, data: change({ ...row.data }) } }
+  }
+
+  it('shows a complete home page draft', async () => {
+    const result = await globalDraft('homePage', (data) => ({
+      ...data,
+      heroIntro: 'An unsaved intro from the visual editor.',
+    }))
+
+    const home = await liveHomeData(result)
+    expect(home.home.heroIntro).toBe('An unsaved intro from the visual editor.')
+    expect(home).toMatchObject({ preview: true, incomplete: false, noindex: true })
+  })
+
+  it('keeps the published home page when the result is for another section', async () => {
+    const published = homeFrom(content.globals)
+    const result = await globalDraft('aboutPage', (data) => ({
+      ...data,
+      heading: 'An unsaved heading for the about page.',
+    }))
+
+    const home = await liveHomeData(result)
+    expect(home.home).toEqual(published)
+    expect(home).toMatchObject({ preview: false, incomplete: false })
+  })
+
+  it('keeps the published values and flags an incomplete draft', async () => {
+    const published = homeFrom(content.globals)
+    const result = await globalDraft('homePage', ({ heroIntro: _intro, ...data }) => ({
+      ...data,
+      heroEyebrow: 'Unsaved eyebrow',
+    }))
+
+    const home = await liveHomeData(result)
+    expect(home.home).toEqual(published)
+    expect(home).toMatchObject({ preview: true, incomplete: true })
+  })
+
+  it('shows a complete about page draft', async () => {
+    const result = await globalDraft('aboutPage', (data) => ({
+      ...data,
+      heading: 'An unsaved heading.',
+    }))
+
+    const about = await liveAboutData(result)
+    expect(about.about.heading).toBe('An unsaved heading.')
+    expect(about).toMatchObject({ preview: true, incomplete: false, noindex: true })
   })
 })

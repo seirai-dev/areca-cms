@@ -169,9 +169,12 @@ export function AppShell({
   me: Me
   children: React.ReactNode
 }) {
-  const mode = useShellMode()
-  // Visual mode in the entry editor is full-bleed: no max width, no padding.
+  const routeMode = useShellMode()
+  // Visual mode in the entry and site content editors is full-bleed: no max width, no padding.
   const visualFullBleed = useVisualModeActive()
+  // Visual mode is a focus screen: site content (a site page in Write mode)
+  // hides the sidebar there too, like the entry editor.
+  const mode: ShellMode = visualFullBleed ? 'focus' : routeMode
   const hideDevBanner = useMatches({
     select: (matches) =>
       matches.some((match) => match.staticData.hideDevBanner),
@@ -269,8 +272,9 @@ export function AppShell({
             )}
           >
             <div
-              // A fresh page tree per path, but never remount the editor.
-              key={mode === 'focus' ? 'focus' : pathname}
+              // A fresh page tree per path, but never remount an editor (entries,
+              // or site content switching between Write and Visual).
+              key={routeMode === 'focus' ? 'focus' : pathname}
               className={cn(
                 'mx-auto w-full min-w-0',
                 mode === 'focus'

@@ -1,13 +1,15 @@
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { m } from '#/paraglide/messages'
+import { useLivePreview } from '@areca-cms/site-sdk/visual-react'
 import { ArticleCard } from '../components/article-card.tsx'
 import { AuthorCard } from '../components/author-card.tsx'
 import { CoffeeCard } from '../components/coffee-card.tsx'
 import { CmsImage, PreviewBanner } from '../components/cms-image.tsx'
 import { buttonGhostOnImage, buttonOnImage, Eyebrow, SectionHeading } from '../components/ui.tsx'
 import { pageAlternates } from '../lib/i18n.ts'
-import { loadHome, loadTeam, sitePreviewSearch } from '../lib/queries.ts'
+import { loadHome, loadLiveHome, loadTeam, sitePreviewSearch } from '../lib/queries.ts'
 import { noindexHead, sectionHead, SITE_NAME } from '../lib/seo.ts'
+import { useField } from '../lib/visual-markers.tsx'
 
 export const Route = createFileRoute('/')({
   validateSearch: (search) => sitePreviewSearch.parse(search),
@@ -28,7 +30,18 @@ export const Route = createFileRoute('/')({
 })
 
 function Home() {
-  const { articles, coffees, authors, home, featuredCoffee, preview, incomplete } = Route.useLoaderData()
+  const loaded = Route.useLoaderData()
+  // Shows the saved draft (or the published page) until the visual editor sends unsaved values, then those.
+  const { articles, coffees, authors, home, featuredCoffee, preview, incomplete } = useLivePreview({
+    initial: loaded,
+    cmsOrigin: loaded.cmsOrigin,
+    resolve: async (result) => ({
+      ...(await loadLiveHome({ data: result })),
+      authors: loaded.authors,
+      cmsOrigin: loaded.cmsOrigin,
+    }),
+  })
+  const field = useField()
   const heroImage = articles[0]?.data.heroImage ?? coffees[0]?.data.image ?? null
   const [lead, ...rest] = articles
 
@@ -47,14 +60,20 @@ function Home() {
         <div aria-hidden="true" className="absolute inset-0 -z-10 bg-linear-to-t from-[#0c120f]/92 via-[#0c120f]/70 to-[#0c120f]/25" />
         <div className="mx-auto w-full max-w-6xl px-5 pb-16 pt-40 sm:px-8 md:pb-24">
           {home.heroEyebrow ? (
-            <p className="text-[0.72rem] font-medium uppercase tracking-[0.2em] text-on-image/90">
+            <p
+              {...field('heroEyebrow')}
+              className="text-[0.72rem] font-medium uppercase tracking-[0.2em] text-on-image/90"
+            >
               {home.heroEyebrow}
             </p>
           ) : null}
           <h1 className="mt-5 max-w-4xl font-display text-5xl font-normal leading-[0.98] tracking-tight sm:text-6xl md:text-7xl lg:text-[5.5rem]">
             {m.hero_title()}
           </h1>
-          <p className="mt-6 max-w-xl text-base leading-7 text-on-image/85 md:text-lg">
+          <p
+            {...field('heroIntro')}
+            className="mt-6 max-w-xl text-base leading-7 text-on-image/85 md:text-lg"
+          >
             {home.heroIntro}
           </p>
           <div className="mt-9 flex flex-wrap gap-3">
@@ -66,7 +85,7 @@ function Home() {
             </Link>
           </div>
           {featuredCoffee ? (
-            <p className="mt-8 text-sm text-on-image/85">
+            <p {...field('featuredCoffee')} className="mt-8 text-sm text-on-image/85">
               {m.featured_this_season()}{' '}
               <Link
                 to="/coffees/$slug"
