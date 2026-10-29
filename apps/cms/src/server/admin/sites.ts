@@ -15,6 +15,7 @@ import {
   site,
 } from '#/db/schema'
 import { isValidSlug } from '#/lib/slug'
+import { normalizePreviewUrl } from '#/lib/preview-url'
 import { isDevSite } from '#/server/security/site-visibility'
 import type { DeploymentTarget } from '#/lib/types'
 import { m } from '#/paraglide/messages'
@@ -58,6 +59,7 @@ const publicSiteColumns = {
   name: site.name,
   slug: site.slug,
   productionUrl: site.productionUrl,
+  previewUrl: site.previewUrl,
   publishingMode: site.publishingMode,
   deploymentTarget: site.deploymentTarget,
   lastManifest: site.lastManifest,
@@ -102,6 +104,20 @@ export async function getSite(id: string): Promise<PublicSite | null> {
       .limit(1)
   ).at(0)
   return row ?? null
+}
+
+/**
+ * The preview URL setting (`#/lib/preview-url`). Empty input clears it. A bad
+ * value is a validation error on `previewUrl`.
+ */
+function parsePreviewUrl(value: string | null): string | null {
+  try {
+    return normalizePreviewUrl(value)
+  } catch {
+    throw new ValidationError([
+      { path: 'previewUrl', message: m.server_site_preview_url_invalid() },
+    ])
+  }
 }
 
 /** The shared slug rule (`#/lib/slug`), as a validation error on `slug`. */
@@ -210,6 +226,7 @@ export async function updateSite(
   input: {
     name?: string
     productionUrl?: string
+    previewUrl?: string | null
     publishingMode?: 'production' | 'demo'
     deploymentTarget?: DeploymentTarget | null
     aiPrompt?: string | null
@@ -224,7 +241,7 @@ export async function updateSite(
   }
   if (isDevSite(existing)) {
     // Dev envs stay in Demo mode with no deployment target (Decision 7).
-    // The preview URL (productionUrl) stays editable.
+    // The production URL and the preview URL stay editable.
     if (input.publishingMode === 'production' || input.deploymentTarget) {
       throw new ConflictError(m.server_dev_env_stays_demo())
     }
@@ -233,6 +250,7 @@ export async function updateSite(
   const patch: {
     name?: string
     productionUrl?: string
+    previewUrl?: string | null
     publishingMode?: 'production' | 'demo'
     deploymentTarget?: DeploymentTarget | null
     aiPrompt?: string | null
@@ -246,6 +264,8 @@ export async function updateSite(
   if (input.name !== undefined) patch.name = input.name
   if (input.productionUrl !== undefined)
     patch.productionUrl = input.productionUrl
+  if (input.previewUrl !== undefined)
+    patch.previewUrl = parsePreviewUrl(input.previewUrl)
   if (input.aiPrompt !== undefined)
     patch.aiPrompt = input.aiPrompt?.trim() ? input.aiPrompt : null
   if ('deploymentTarget' in input) {

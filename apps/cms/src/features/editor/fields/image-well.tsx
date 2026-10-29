@@ -49,6 +49,7 @@ export function ImageWell({
             id={id}
             onClick={() => setOpen(true)}
             aria-label={m.editor_replace_image()}
+            data-image-well="filled"
             className="group relative aspect-[16/10] w-full overflow-hidden rounded-[10px] border border-border-default bg-background-subtle outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus"
           >
             {image ? (
@@ -126,6 +127,7 @@ export function ImageWell({
           type="button"
           id={id}
           onClick={() => setOpen(true)}
+          data-image-well="empty"
           className={cn(
             'group grid aspect-[16/10] w-full place-content-center justify-items-center gap-2 rounded-[10px] border border-dashed bg-background-subtle/60 text-center outline-none',
             'transition-colors duration-150 hover:border-accent hover:bg-accent-soft/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus',

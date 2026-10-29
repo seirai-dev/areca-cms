@@ -34,6 +34,18 @@ export const SONNER_STYLE_HASH =
  */
 const EMPTY_STYLE_HASH = "'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='"
 
+/**
+ * Where the editor may frame a site's preview page (the visual editor, Visual
+ * mode). Not per site: the CMS is a single-page app, so this header arrives
+ * with the first document and applies to every editor opened later, whatever
+ * site it shows. Production allows any https origin plus local http, since
+ * http on another host would be mixed content from an https CMS anyway. The
+ * CMS itself still cannot be framed (`frame-ancestors 'none'`).
+ */
+const PRODUCTION_FRAME_SOURCES =
+  "'self' https: http://localhost:* http://127.0.0.1:*"
+const DEVELOPMENT_FRAME_SOURCES = "'self' http: https:"
+
 /** Directives that do not depend on the mode. */
 const SHARED_DIRECTIVES = [
   "img-src 'self' data: blob:",
@@ -56,6 +68,7 @@ export function productionCsp(nonce: string): string {
     "style-src-attr 'unsafe-inline'",
     `font-src 'self' data: ${GOOGLE_FONT_ORIGIN}`,
     "connect-src 'self'",
+    `frame-src ${PRODUCTION_FRAME_SOURCES}`,
     ...SHARED_DIRECTIVES,
   ].join('; ')
 }
@@ -72,6 +85,7 @@ export function developmentCsp(): string {
     `style-src 'self' 'unsafe-inline' ${GOOGLE_STYLESHEET_ORIGIN}`,
     `font-src 'self' data: ${GOOGLE_FONT_ORIGIN}`,
     "connect-src 'self' ws: wss:",
+    `frame-src ${DEVELOPMENT_FRAME_SOURCES}`,
     ...SHARED_DIRECTIVES,
   ].join('; ')
 }

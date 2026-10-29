@@ -125,6 +125,7 @@ export function useEntryEditor({
   onCreated,
   onDeleted,
   onRevealError,
+  previewRefetchInterval,
 }: {
   siteId: string
   collectionKey: string
@@ -141,6 +142,11 @@ export function useEntryEditor({
   onDeleted?: () => Promise<unknown> | void
   /** Bring a field with an error into view. */
   onRevealError?: (fieldKey: string) => void
+  /**
+   * Refetch the signed preview URL every this many ms (Visual mode keeps its
+   * token fresh; tokens last an hour). Off when omitted.
+   */
+  previewRefetchInterval?: number
 }) {
   const sessionQuery = authClient.useSession()
   const recoveryUserId = sessionQuery.data?.user.id
@@ -182,6 +188,7 @@ export function useEntryEditor({
           }),
     enabled: globalKey ? Boolean(entry) : Boolean(entry?.slug),
     staleTime: 5 * 60 * 1000,
+    refetchInterval: previewRefetchInterval ?? false,
   })
 
   /* ----------------------------------------------------------------------

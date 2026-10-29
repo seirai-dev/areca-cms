@@ -221,6 +221,8 @@ export const updateSiteFn = createServerFn({ method: 'POST', ...adminFn })
       id: z.string().min(1),
       name: z.string().min(1).optional(),
       productionUrl: z.string().url().optional(),
+      /** Null clears it: previews then use the production URL. */
+      previewUrl: z.string().max(2048).nullable().optional(),
       publishingMode: z.enum(['production', 'demo']).optional(),
       deploymentTarget: deploymentTargetSchema.optional(),
       aiPrompt: z.string().max(AI_PROMPT_MAX_LENGTH).nullable().optional(),

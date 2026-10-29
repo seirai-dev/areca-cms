@@ -4,6 +4,8 @@ import { LayoutGroup, motion, useReducedMotion } from 'motion/react'
 import { SPRING_SMALL } from '#/lib/motion'
 import { cn } from '#/lib/utils'
 
+import { Hint } from './tooltip'
+
 export type SegmentedOption<T extends string> = {
   value: T
   label: React.ReactNode
@@ -12,6 +14,8 @@ export type SegmentedOption<T extends string> = {
   ariaLabel?: string
   disabled?: boolean
   testId?: string
+  /** Tooltip on the segment (not shown while the segment is disabled). */
+  hint?: React.ReactNode
 }
 
 /**
@@ -31,6 +35,7 @@ export function SegmentedControl<T extends string>({
   semantics = 'radio',
   fullWidth = false,
   iconOnly = false,
+  hintSide,
   className,
   'aria-label': ariaLabel,
   'data-testid': testId,
@@ -42,6 +47,8 @@ export function SegmentedControl<T extends string>({
   semantics?: 'radio' | 'tabs'
   fullWidth?: boolean
   iconOnly?: boolean
+  /** Where segment tooltips open (default: above). */
+  hintSide?: 'top' | 'bottom'
   className?: string
   'aria-label'?: string
   'data-testid'?: string
@@ -90,9 +97,8 @@ export function SegmentedControl<T extends string>({
       >
         {options.map((option, index) => {
           const selected = option.value === value
-          return (
+          const button = (
             <button
-              key={option.value}
               ref={(node) => {
                 refs.current[index] = node
               }}
@@ -162,6 +168,17 @@ export function SegmentedControl<T extends string>({
                 )}
               </span>
             </button>
+          )
+          return (
+            <React.Fragment key={option.value}>
+              {option.hint && !option.disabled ? (
+                <Hint label={option.hint} side={hintSide}>
+                  {button}
+                </Hint>
+              ) : (
+                button
+              )}
+            </React.Fragment>
           )
         })}
       </div>

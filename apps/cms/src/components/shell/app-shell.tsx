@@ -27,6 +27,7 @@ import {
 import { ActivityPanel } from '#/features/activity/activity-panel'
 import { MailBanners } from '#/features/agency/mail-banners'
 import { GoLivePanel } from '#/features/golive/golive-panel'
+import { useVisualModeActive } from '#/features/visual/visual-mode'
 import { useIsMobile, useIsTablet } from '#/hooks/use-mobile'
 import { isDevSite } from '#/lib/site-environment'
 import { canManageSite, findSite } from '#/lib/site-nav'
@@ -169,6 +170,8 @@ export function AppShell({
   children: React.ReactNode
 }) {
   const mode = useShellMode()
+  // Visual mode in the entry editor is full-bleed: no max width, no padding.
+  const visualFullBleed = useVisualModeActive()
   const hideDevBanner = useMatches({
     select: (matches) =>
       matches.some((match) => match.staticData.hideDevBanner),
@@ -271,7 +274,9 @@ export function AppShell({
               className={cn(
                 'mx-auto w-full min-w-0',
                 mode === 'focus'
-                  ? 'max-w-[1440px] px-6 py-6'
+                  ? visualFullBleed
+                    ? 'w-full'
+                    : 'max-w-[1440px] px-6 py-6'
                   : 'max-w-(--content-max) px-4 pt-6 pb-16 md:px-8 md:pt-10',
               )}
             >

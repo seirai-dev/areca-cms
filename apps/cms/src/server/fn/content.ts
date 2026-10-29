@@ -1,5 +1,6 @@
 import { isSafeIdentifier } from '#/lib/content-identifiers'
 import { localeTagSchema } from '#/lib/content-locale'
+import { previewBaseUrl } from '#/lib/preview-url'
 import {
   GLOBAL_GROUP_MAX_LENGTH,
   GLOBAL_PREVIEW_PATH_MAX_LENGTH,
@@ -516,7 +517,7 @@ export const getPreviewUrlFn = createServerFn({ method: 'GET' })
     return {
       token,
       url: buildPreviewUrl(
-        found.productionUrl,
+        previewBaseUrl(found),
         data.collection,
         data.slug,
         token,
@@ -678,7 +679,7 @@ export const getGlobalPreviewUrlFn = createServerFn({ method: 'GET' })
     return {
       token,
       url: buildGlobalPreviewUrl(
-        found.productionUrl,
+        previewBaseUrl(found),
         global.previewPath,
         token,
         data.locale,

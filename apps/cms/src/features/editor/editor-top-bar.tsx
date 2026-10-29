@@ -43,6 +43,10 @@ import type { EntryUiStatus } from '#/lib/status'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
+import { VisualModeControl } from '#/features/visual/visual-mode-control'
+import { useVisualModeActive } from '#/features/visual/visual-mode'
+import type { EditorMode } from '#/features/visual/visual-preferences'
+
 import { SaveIndicator } from './save-indicator'
 import type { SaveStatus } from './use-entry-editor'
 
@@ -100,6 +104,8 @@ export function EditorTopBar({
   languageBar,
   readyBlock = null,
   copyAction = null,
+  visualMode,
+  showDetailsToggle = true,
 }: {
   siteId: string
   collectionKey: string
@@ -159,10 +165,21 @@ export function EditorTopBar({
   readyBlock?: { message: string; onFix: () => void } | null
   /** Copy to production as a draft (development environments only; null elsewhere). */
   copyAction?: CopyEntryAction | null
+  /** The Write | Visual switch. Omitted where Visual mode is unavailable. */
+  visualMode?: {
+    active: boolean
+    canVisual: boolean
+    disabledReason: string | null
+    onSetMode: (mode: EditorMode) => void
+  }
+  /** False in Visual mode: the details live in the editor column there. */
+  showDetailsToggle?: boolean
 }) {
   const reduce = useReducedMotion()
   const mod = useModifierKey()
   const saving = saveStatus === 'saving'
+  // Full-bleed (Visual mode) drops the page padding the bar compensates for.
+  const fullBleed = useVisualModeActive()
 
   const primaryLabel =
     primary === 'ready'
@@ -282,7 +299,10 @@ export function EditorTopBar({
   return (
     <header
       data-testid="editor-toolbar"
-      className="sticky top-0 z-navbar -mx-6 -mt-6 mb-6 border-b border-border-default bg-background-default/85 backdrop-blur-xl md:-mx-6"
+      className={cn(
+        'sticky top-0 z-navbar border-b border-border-default bg-background-default/85 backdrop-blur-xl',
+        !fullBleed && '-mx-6 -mt-6 mb-6 md:-mx-6',
+      )}
     >
       <div className="flex h-14 items-center gap-2 px-3 md:px-4">
         <Button
@@ -341,6 +361,15 @@ export function EditorTopBar({
             />
           </span>
         </div>
+
+        {visualMode ? (
+          <VisualModeControl
+            active={visualMode.active}
+            canVisual={visualMode.canVisual}
+            disabledReason={visualMode.disabledReason}
+            onSetMode={visualMode.onSetMode}
+          />
+        ) : null}
 
         <div className="flex shrink-0 items-center gap-1">
           <div className="mr-1 hidden min-w-0 md:block">
@@ -571,33 +600,35 @@ export function EditorTopBar({
             )}
           </div>
 
-          <Hint
-            label={
-              <span className="inline-flex items-center gap-1.5">
-                {m.editor_details()}
-                <span className="opacity-60">{mod}.</span>
-              </span>
-            }
-          >
-            <Button
-              type="button"
-              variant="quiet"
-              size="icon-sm"
-              aria-label={m.editor_details()}
-              aria-pressed={detailsOpen}
-              onClick={onToggleDetails}
-              data-testid="toggle-details"
-              className={cn(
-                'ml-1',
-                detailsOpen && 'bg-surface-state-hover text-text-primary',
-              )}
+          {showDetailsToggle ? (
+            <Hint
+              label={
+                <span className="inline-flex items-center gap-1.5">
+                  {m.editor_details()}
+                  <span className="opacity-60">{mod}.</span>
+                </span>
+              }
             >
-              <SidebarSimple
-                weight={detailsOpen ? 'fill' : 'regular'}
-                className="-scale-x-100"
-              />
-            </Button>
-          </Hint>
+              <Button
+                type="button"
+                variant="quiet"
+                size="icon-sm"
+                aria-label={m.editor_details()}
+                aria-pressed={detailsOpen}
+                onClick={onToggleDetails}
+                data-testid="toggle-details"
+                className={cn(
+                  'ml-1',
+                  detailsOpen && 'bg-surface-state-hover text-text-primary',
+                )}
+              >
+                <SidebarSimple
+                  weight={detailsOpen ? 'fill' : 'regular'}
+                  className="-scale-x-100"
+                />
+              </Button>
+            </Hint>
+          ) : null}
         </div>
       </div>
       {languageBar}

@@ -33,11 +33,28 @@ export function KbdCombo({
   )
 }
 
+/** Key captions for a platform string (`navigator.platform`). */
+export function modifierLabels(platform: string) {
+  const apple = /Mac|iPhone|iPad/.test(platform)
+  return {
+    mod: apple ? '⌘' : 'Ctrl',
+    shift: apple ? '⇧' : 'Shift',
+  }
+}
+
+/**
+ * "⌘" and "⇧" on Apple platforms, "Ctrl" and "Shift" elsewhere. Resolved
+ * after mount (SSR-safe), so the first render shows the non-Apple captions.
+ */
+export function useModifierKeys() {
+  const [labels, setLabels] = React.useState(() => modifierLabels(''))
+  React.useEffect(() => {
+    setLabels(modifierLabels(navigator.platform))
+  }, [])
+  return labels
+}
+
 /** "⌘" on Apple platforms, "Ctrl" elsewhere. Resolved after mount (SSR-safe). */
 export function useModifierKey() {
-  const [modifier, setModifier] = React.useState('Ctrl')
-  React.useEffect(() => {
-    if (/Mac|iPhone|iPad/.test(navigator.platform)) setModifier('⌘')
-  }, [])
-  return modifier
+  return useModifierKeys().mod
 }

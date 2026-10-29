@@ -24,6 +24,7 @@ import {
 import { requestPublication } from '#/server/publishing/publications'
 
 import { listAuditLog } from './audit.ts'
+import { previewBaseUrl } from '#/lib/preview-url'
 import {
   acceptInvitation,
   inviteMember,
@@ -41,6 +42,7 @@ import {
 import {
   createSite,
   deleteSite,
+  getSite,
   rotateSiteTokenAdmin,
   updateSite,
 } from './sites.ts'
@@ -234,6 +236,69 @@ describe.skipIf(!hasDb)('admin', () => {
           actor.id,
         ),
       ).rejects.toThrow()
+    } finally {
+      await cleanup(orgIds, userIds)
+    }
+  })
+
+  it('sets, clears and validates the preview URL, and previews use it', async () => {
+    const suffix = crypto.randomUUID()
+    const actor = await createActor(suffix)
+    const orgIds: string[] = []
+    const userIds = [actor.id]
+
+    try {
+      const org = await createOrganization({
+        name: `Preview Org ${suffix}`,
+        slug: `preview-org-${suffix}`,
+        actorId: actor.id,
+      })
+      orgIds.push(org.id)
+
+      const created = await createSite({
+        organizationId: org.id,
+        name: `Preview Site ${suffix}`,
+        slug: `preview-site-${suffix}`,
+        productionUrl: 'https://preview.example.test',
+        actorId: actor.id,
+      })
+      expect(created.previewUrl).toBeNull()
+
+      const set = await updateSite(
+        created.id,
+        { previewUrl: 'http://localhost:3000/' },
+        actor.id,
+      )
+      expect(set.previewUrl).toBe('http://localhost:3000')
+      expect(previewBaseUrl(set)).toBe('http://localhost:3000')
+
+      const audit = await listAuditLog({
+        organizationId: org.id,
+        limit: 5,
+        offset: 0,
+      })
+      const siteUpdate = audit.find(
+        (row) => row.action === 'site.update' && row.targetId === created.id,
+      )
+      expect(siteUpdate?.meta).toMatchObject({ fields: ['previewUrl'] })
+
+      await expect(
+        updateSite(created.id, { previewUrl: 'ftp://x' }, actor.id),
+      ).rejects.toThrow()
+      await expect(
+        updateSite(created.id, { previewUrl: 'https://x.com/path' }, actor.id),
+      ).rejects.toThrow()
+
+      const stillSet = (await getSite(created.id))?.previewUrl
+      expect(stillSet).toBe('http://localhost:3000')
+
+      const cleared = await updateSite(
+        created.id,
+        { previewUrl: null },
+        actor.id,
+      )
+      expect(cleared.previewUrl).toBeNull()
+      expect(previewBaseUrl(cleared)).toBe('https://preview.example.test')
     } finally {
       await cleanup(orgIds, userIds)
     }

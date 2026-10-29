@@ -1017,3 +1017,17 @@ html.dark,
     animation: none;
   }
 }
+
+/*
+ * Visual mode's editor column (docs/design/visual-editor.md, Decision 7): wide
+ * columns would make the 16:10 image wells very tall. An empty well stays
+ * 200 px; a filled one keeps its ratio up to 320 px. Write mode is unchanged.
+ */
+[data-visual-column] [data-image-well='empty'] {
+  aspect-ratio: auto;
+  height: 200px;
+}
+
+[data-visual-column] [data-image-well='filled'] {
+  max-height: 320px;
+}

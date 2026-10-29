@@ -10,6 +10,7 @@ function site(partial: Partial<MeSite> & Pick<MeSite, 'id'>): MeSite {
     organizationId: 'org',
     organizationName: 'Acme',
     productionUrl: 'https://example.com',
+    previewUrl: null,
     languages: null,
     environment: 'production',
     parentSiteId: null,
