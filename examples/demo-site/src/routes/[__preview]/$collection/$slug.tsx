@@ -1,11 +1,16 @@
 import { createFileRoute, type ErrorComponentProps } from '@tanstack/react-router'
 import { m } from '#/paraglide/messages'
+import { useLivePreview } from '@areca-cms/site-sdk/visual-react'
 import { z } from 'zod'
 import { ArticleView } from '../../../components/article-view.tsx'
 import { AuthorView } from '../../../components/author-view.tsx'
 import { CoffeeView } from '../../../components/coffee-view.tsx'
 import { PageMessage, PreviewBanner } from '../../../components/cms-image.tsx'
-import { loadPreview } from '../../../lib/queries.ts'
+import {
+  loadLivePreview,
+  loadPreview,
+  type PreviewPageLoad,
+} from '../../../lib/queries.ts'
 import { pageHead } from '../../../lib/seo.ts'
 
 const previewSearchSchema = z.object({
@@ -28,7 +33,16 @@ export const Route = createFileRoute('/__preview/$collection/$slug')({
 
 function PreviewPage() {
   const { collection } = Route.useParams()
-  const result = Route.useLoaderData()
+  const loaded = Route.useLoaderData()
+  // Shows the saved draft until the visual editor sends unsaved values, then those.
+  const result = useLivePreview<PreviewPageLoad>({
+    initial: loaded,
+    cmsOrigin: loaded.cmsOrigin,
+    resolve: async (preview) => ({
+      ...(await loadLivePreview({ data: preview })),
+      cmsOrigin: loaded.cmsOrigin,
+    }),
+  })
 
   if (!result.ok) {
     return <PreviewMessage title={m.preview_unavailable()} body={result.error} />

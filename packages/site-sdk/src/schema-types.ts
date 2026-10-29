@@ -442,6 +442,12 @@ export type Content<
     options?: { client?: ArecaClient; locale?: Locale },
   ): Promise<PreviewEntry<S>>
   /**
+   * The same entry as `preview()`, from a preview result the CMS already returned
+   * (for example the live payload for unsaved values). Makes no request. Throws
+   * like `preview()` for a site content result or a collection not in the schema.
+   */
+  previewFrom(result: PreviewResult, options?: { locale?: Locale }): PreviewEntry<S>
+  /**
    * A view of this content that reads `locale` by default. Per-call `locale`
    * options still win. Same shape: collections, globals, resolve, href, preview.
    * Hrefs narrow to the route of `locale`.

@@ -21,9 +21,12 @@ import {
 import { SegmentedControl } from '#/components/ui/segmented-control'
 import type { SegmentedOption } from '#/components/ui/segmented-control'
 import { SpinnerRing } from '#/components/ui/status-pill'
+import type { EntryData } from '#/lib/types'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
+import type { Tier } from './live-channel'
+import { useLivePreviewChannel } from './use-live-preview'
 import { framePresentation } from './visual-layout'
 import type { PreviewWidth } from './visual-layout'
 import { useVisualFullScreen } from './visual-context'
@@ -37,33 +40,65 @@ export const RELOAD_DEBOUNCE_MS = 800
 const SANDBOX =
   'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox'
 
+/** What the live channel needs from the editor: the unsaved entry and the preview origin. */
+export type LiveSource = {
+  /** The preview site's origin (`previewOrigin(site)`). Null turns the channel off. */
+  origin: string | null
+  siteId: string
+  collection: string
+  /** The saved entry. Null (not saved yet) turns the channel off. */
+  entryId: string | undefined
+  /** The unsaved entry data, every language. */
+  data: EntryData
+  /** The content language being edited, or null. */
+  locale: string | null
+}
+
 /**
- * The live preview pane of Visual mode (Tier 0 and 1). The frame reloads
- * after each successful save and on the Reload button. The iframe element
- * never remounts when entering or leaving full screen: only the pane's
- * position classes change, so the page keeps its state.
+ * The live preview pane of Visual mode. Tier 2 (live) sends unsaved changes to the
+ * page and does not reload it on save. Tier 1 (on-save) reloads after each successful
+ * save. Both reload on the Reload button and when the page changes (a new slug).
+ * The iframe element never remounts when entering or leaving full screen: only the
+ * pane's position classes change, so the page keeps its state.
  */
 export function PreviewPane({
   previewUrl,
   title,
   lastSavedAt,
   unavailableReason,
+  live,
 }: {
   /** The signed preview URL, when the entry has one. */
   previewUrl: string | undefined
   /** The entry title, for the frame's accessible name. */
   title: string
-  /** The last successful save. Each new value reloads the frame. */
+  /** The last successful save. Each new value reloads the frame (unless live). */
   lastSavedAt: Date | null
   /** Why there is no preview yet (Tier 0), or null while it loads. */
   unavailableReason: string | null
+  live: LiveSource
 }) {
   const { fullScreen, setFullScreen } = useVisualFullScreen()
   const prefs = useVisualPreferences()
   const width = prefs.width
   const keys = useModifierKeys()
 
-  const frame = useFrameReload({ previewUrl, lastSavedAt })
+  const iframeRef = React.useRef<HTMLIFrameElement>(null)
+  const channel = useLivePreviewChannel({
+    iframeRef,
+    origin: live.origin,
+    enabled: Boolean(previewUrl && live.origin && live.entryId),
+    siteId: live.siteId,
+    collection: live.collection,
+    entryId: live.entryId ?? '',
+    data: live.data,
+    locale: live.locale,
+  })
+  const frame = useFrameReload({
+    previewUrl,
+    lastSavedAt,
+    live: channel.tier === 'live',
+  })
   const stage = useStageSize()
 
   const presentation = framePresentation(
@@ -190,7 +225,11 @@ export function PreviewPane({
                 sandbox={SANDBOX}
                 referrerPolicy="no-referrer-when-downgrade"
                 data-testid="visual-frame"
-                onLoad={frame.onLoad}
+                ref={iframeRef}
+                onLoad={() => {
+                  frame.onLoad()
+                  channel.onFrameLoad()
+                }}
                 className="block h-full w-full border-0 bg-background-surface"
               />
             ) : null}
@@ -253,8 +292,8 @@ export function PreviewPane({
         </div>
       ) : (
         <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border-default px-3">
-          <StatusBadge />
-          <BlankHelp />
+          <StatusBadge tier={channel.tier} failed={channel.failed} />
+          {channel.tier === 'on-save' ? <BlankHelp /> : null}
           <span className="flex-1" />
           {widthControl}
           {reloadButton}
@@ -301,22 +340,79 @@ export function PreviewPane({
   )
 }
 
-/** The status is always "Updates on save" until the live bridge exists. */
-function StatusBadge() {
-  return (
-    <Hint label={m.visual_status_hint()} side="bottom">
+type StatusTone = 'neutral' | 'info' | 'success' | 'warning'
+
+const STATUS_TONE: Record<StatusTone, { pill: string; dot: string }> = {
+  neutral: {
+    pill: 'bg-status-neutral-bg text-text-secondary',
+    dot: 'bg-text-muted',
+  },
+  info: { pill: 'bg-status-info-bg text-text-accent', dot: 'bg-status-info' },
+  success: {
+    pill: 'bg-status-success-bg text-text-success',
+    dot: 'bg-status-success',
+  },
+  warning: {
+    pill: 'bg-status-warning-bg text-text-warning',
+    dot: 'bg-status-warning',
+  },
+}
+
+/** The label, tone and hint for each tier. A failed live request reads "Retrying". */
+function statusView(tier: Tier, failed: boolean) {
+  if (tier === 'live') {
+    return failed
+      ? {
+          tone: 'warning' as const,
+          label: m.visual_status_retrying(),
+          hint: m.visual_status_retrying_hint(),
+        }
+      : {
+          tone: 'success' as const,
+          label: m.visual_status_live(),
+          hint: m.visual_status_live_hint(),
+        }
+  }
+  if (tier === 'connecting') {
+    return {
+      tone: 'neutral' as const,
+      label: m.visual_status_connecting(),
+      hint: null,
+    }
+  }
+  return {
+    tone: 'info' as const,
+    label: m.visual_status_updates_on_save(),
+    hint: m.visual_status_hint(),
+  }
+}
+
+function StatusBadge({ tier, failed }: { tier: Tier; failed: boolean }) {
+  const view = statusView(tier, failed)
+  const tone = STATUS_TONE[view.tone]
+  const pill = (
+    <span
+      data-testid="visual-status"
+      data-tier={tier}
+      data-error={failed ? 'true' : 'false'}
+      className={cn(
+        'inline-flex h-[22px] shrink-0 items-center gap-1.5 rounded-full px-2 text-[12px] font-medium whitespace-nowrap',
+        tone.pill,
+      )}
+    >
       <span
-        data-testid="visual-status"
-        data-status="updates-on-save"
-        className="inline-flex h-[22px] shrink-0 items-center gap-1.5 rounded-full bg-status-info-bg px-2 text-[12px] font-medium whitespace-nowrap text-text-accent"
-      >
-        <span
-          aria-hidden="true"
-          className="size-1.5 rounded-full bg-status-info"
-        />
-        {m.visual_status_updates_on_save()}
-      </span>
+        aria-hidden="true"
+        className={cn('size-1.5 rounded-full', tone.dot)}
+      />
+      {view.label}
+    </span>
+  )
+  return view.hint ? (
+    <Hint label={view.hint} side="bottom">
+      {pill}
     </Hint>
+  ) : (
+    pill
   )
 }
 
@@ -345,41 +441,71 @@ function BlankHelp() {
   )
 }
 
+/** A preview URL without its signed token: the same page part means the same document. */
+function pagePart(url: string): string {
+  try {
+    const parsed = new URL(url)
+    parsed.searchParams.delete('token')
+    return parsed.toString()
+  } catch {
+    return url
+  }
+}
+
 /**
- * The frame URL and reloads. The frame keeps its loaded URL: a refreshed
- * signed token does not reload it, only a save or the Reload button does.
+ * The frame URL and reloads. A refreshed signed token does not reload the frame.
+ * A changed page (the slug changed) does. A save reloads it only when the bridge is
+ * not live: a live page already shows the saved value and keeps its scroll.
  * Saves are debounced so a burst of autosaves reloads once.
  */
 function useFrameReload({
   previewUrl,
   lastSavedAt,
+  live,
 }: {
   previewUrl: string | undefined
   lastSavedAt: Date | null
+  live: boolean
 }) {
   const [src, setSrc] = React.useState<string | undefined>(previewUrl)
   const [nonce, setNonce] = React.useState(0)
   const [loaded, setLoaded] = React.useState(false)
   const latest = React.useRef(previewUrl)
+  // The URL the frame was last told to load.
+  const shown = React.useRef(previewUrl)
+  const liveRef = React.useRef(live)
 
   React.useEffect(() => {
-    latest.current = previewUrl
-    // The first URL arrives after the entry loads.
-    if (!src && previewUrl) setSrc(previewUrl)
-  }, [previewUrl, src])
+    liveRef.current = live
+  }, [live])
 
   const reload = React.useCallback(() => {
+    shown.current = latest.current
     setSrc(latest.current)
     setNonce((value) => value + 1)
     setLoaded(false)
   }, [])
+
+  React.useEffect(() => {
+    latest.current = previewUrl
+    if (!previewUrl) return
+    // The first URL arrives after the entry loads.
+    if (!shown.current) {
+      shown.current = previewUrl
+      setSrc(previewUrl)
+      return
+    }
+    if (pagePart(shown.current) !== pagePart(previewUrl)) reload()
+  }, [previewUrl, reload])
 
   const seen = React.useRef(lastSavedAt)
   React.useEffect(() => {
     if (seen.current === lastSavedAt) return
     seen.current = lastSavedAt
     if (!lastSavedAt) return
-    const timer = window.setTimeout(reload, RELOAD_DEBOUNCE_MS)
+    const timer = window.setTimeout(() => {
+      if (!liveRef.current) reload()
+    }, RELOAD_DEBOUNCE_MS)
     return () => window.clearTimeout(timer)
   }, [lastSavedAt, reload])
 

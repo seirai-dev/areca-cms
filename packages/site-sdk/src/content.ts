@@ -104,7 +104,7 @@ export function createContent<
   for (const name of Object.keys(schema)) {
     if (isReservedCollectionKey(name)) {
       throw new Error(
-        `Collection "${name}" uses a reserved name (resolve, href, preview, globals, previewGlobals, in, languages, matchLocale)`,
+        `Collection "${name}" uses a reserved name (resolve, href, preview, globals, previewGlobals, previewFrom, in, languages, matchLocale)`,
       )
     }
   }
@@ -415,6 +415,14 @@ export function createContent<
         client,
         ...(explicit !== undefined ? { locale: explicit } : {}),
       })
+      return previewFrom(result, previewOptions)
+    }
+
+    /** Validates and camelises a preview result the CMS already returned, without a request. */
+    function previewFrom(
+      result: PreviewResult,
+      previewOptions?: { locale?: string },
+    ): PreviewEntry<S> {
       if (result.kind === 'global') {
         throw new Error(
           `Preview token is for site content "${result.global}". Use previewGlobals() for it.`,
@@ -539,6 +547,7 @@ export function createContent<
           : hrefFor(ref.collection, ref.slug, requestedLocale(scope, undefined))
       },
       preview,
+      previewFrom,
       previewGlobals,
       in: (locale: string) => buildContent(locale),
       matchLocale: (input: string | readonly string[] | null | undefined) =>

@@ -33,6 +33,7 @@ export const RESERVED_CONTENT_KEYS: readonly string[] = [
   'preview',
   'globals',
   'previewGlobals',
+  'previewFrom',
   'in',
   'languages',
   'matchLocale',

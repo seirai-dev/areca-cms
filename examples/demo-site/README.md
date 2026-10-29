@@ -77,6 +77,12 @@ also has a `noindex, nofollow` robots meta tag. Invalid or expired tokens and
 missing entries render an error message. The preview URL token is temporary:
 do not log or store it.
 
+Inside the Areca visual editor, the preview also shows unsaved changes as they
+are typed: `loadLivePreview` renders the values the CMS sends, without saving
+them. The preview document sends `Content-Security-Policy: frame-ancestors 'self'`
+plus the origin of `ARECA_CMS_URL`, so only that CMS can frame it; other sites
+still cannot.
+
 ## Site content (globals)
 
 `areca.config.ts` defines three site content sections under `globals`:

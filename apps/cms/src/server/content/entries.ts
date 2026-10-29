@@ -54,7 +54,7 @@ import {
  * Stored data in the shape a site with languages expects: the base holds the
  * main language. Single-language sites are returned unchanged.
  */
-function normalizeEntryData(
+export function normalizeEntryData(
   ctx: {
     site: { languages: SiteLanguages | null }
     collection: { fields: Field[] }

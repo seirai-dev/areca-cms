@@ -34,6 +34,7 @@ import { canGoLive } from '#/features/golive/go-live-gate'
 import { useReleaseStatus } from '#/features/golive/use-release-status'
 import { usePanel } from '#/features/shell/panel'
 import { useIsMobile, useMediaQuery } from '#/hooks/use-mobile'
+import { previewOrigin } from '#/lib/preview-url'
 import { isDevSite } from '#/lib/site-environment'
 import { canManageSite } from '#/lib/site-nav'
 import type { MeSite } from '#/lib/site-nav'
@@ -888,6 +889,14 @@ function EntryEditorView({
                   title={title}
                   lastSavedAt={editor.lastSavedAt}
                   unavailableReason={previewReason}
+                  live={{
+                    origin: previewOrigin(site),
+                    siteId,
+                    collection: collection.key,
+                    entryId: editor.entryId,
+                    data,
+                    locale: active,
+                  }}
                 />
               }
             />

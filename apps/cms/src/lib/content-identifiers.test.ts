@@ -33,6 +33,13 @@ describe('isReservedCollectionKey', () => {
     },
   )
 
+  it.each(['previewFrom', 'preview-from', 'preview_from'])(
+    'rejects the collection key %s (reserved for the previewFrom member)',
+    (name) => {
+      expect(isReservedCollectionKey(name)).toBe(true)
+    },
+  )
+
   // The SDK camelCases keys (`preview-globals` -> `previewGlobals`) before it
   // checks reserved names, so the CMS must reject the raw spellings too.
   it.each([

@@ -4,13 +4,14 @@ import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { db } from '#/db'
-import { collection } from '#/db/schema'
+import { collection, entry } from '#/db/schema'
 import { Route as brandingUploadRoute } from '#/routes/api/admin/branding/upload'
 import { Route as assetUploadRoute } from '#/routes/api/assets/upload'
 import {
   getSitesManifest,
   postSitesManifest,
 } from '#/routes/api/sites/manifest'
+import { postLivePreview } from '#/routes/api/editor/live-preview'
 import { getSitesPreview } from '#/routes/api/sites/preview'
 import { getSitesSnapshotCurrent } from '#/routes/api/sites/snapshot/current'
 import { signPreviewToken } from '#/server/content/preview-token'
@@ -51,6 +52,8 @@ const ROUTE_INVENTORY: Record<string, string> = {
     'GET public by design (public asset delivery); OPTIONS CORS',
   '/src/routes/api/auth/$.ts':
     'Better Auth handler (own endpoint-level auth; out of scope here)',
+  '/src/routes/api/editor/live-preview.ts':
+    'POST org editor of the entry or section (cookie session); 401 signed out, 404 other tenants, 403 MFA_REQUIRED admin without 2FA',
   '/src/routes/api/health.ts': 'GET public liveness',
   '/src/routes/api/health.ready.ts': 'GET public readiness',
   '/src/routes/api/metrics.ts': 'GET bearer METRICS_TOKEN; 404 when unset',
@@ -458,6 +461,59 @@ describe.skipIf(!runnable)('API routes: site token authentication', () => {
       ).toBe(401)
     })
   })
+})
+
+describe.skipIf(!runnable)('API routes: live preview authorization', () => {
+  let w: World
+  beforeAll(async () => {
+    w = await seedWorld()
+  }, 60_000)
+  afterAll(async () => {
+    await w?.destroy()
+  })
+
+  // Same policy as updateDraftFn: org editor or better, agency admins need
+  // two-factor. A refused call must not touch the draft.
+  const expectations: Record<ActorName, number> = {
+    anonymous: 401,
+    editorX: 200,
+    ownerX: 200,
+    ownerY: 404,
+    adminNoMfa: 403,
+    adminMfa: 200,
+    adminStale: 200,
+  }
+  for (const actor of ACTORS) {
+    it(`POST /api/editor/live-preview for an entry of org X as ${actor} -> ${expectations[actor]}`, async () => {
+      setCurrentSession(w.sessions[actor])
+      const before = await db
+        .select()
+        .from(entry)
+        .where(eq(entry.id, w.X.entry.id))
+        .then((rows) => rows[0])
+      const res = await postLivePreview(
+        new Request('http://cms.test/api/editor/live-preview', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            siteId: w.X.site.id,
+            entryId: w.X.entry.id,
+            collection: 'articles',
+            data: { title: 'Live edit' },
+          }),
+        }),
+      )
+      expect(res.status).toBe(expectations[actor])
+      if (actor === 'adminNoMfa') expect(await res.text()).toBe('MFA_REQUIRED')
+      const after = await db
+        .select()
+        .from(entry)
+        .where(eq(entry.id, w.X.entry.id))
+        .then((rows) => rows[0])
+      expect(after?.draftVersion).toBe(before?.draftVersion)
+      expect(after?.draftData).toEqual(before?.draftData)
+    })
+  }
 })
 
 describe('API routes: operational endpoints', () => {

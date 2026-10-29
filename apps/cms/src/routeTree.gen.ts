@@ -37,6 +37,7 @@ import { Route as AppSitesSiteIdRouteImport } from './routes/_app/sites/$siteId'
 import { Route as ApiAgencyMcpRouteImport } from './routes/api/agency/mcp'
 import { Route as ApiAssetsUploadRouteImport } from './routes/api/assets/upload'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiEditorLivePreviewRouteImport } from './routes/api/editor/live-preview'
 import { Route as ApiHealthReadyRouteImport } from './routes/api/health.ready'
 import { Route as ApiMcpIndexRouteImport } from './routes/api/mcp/index'
 import { Route as ApiMcpSiteSlugRouteImport } from './routes/api/mcp/$siteSlug'
@@ -205,6 +206,11 @@ const ApiAssetsUploadRoute = ApiAssetsUploadRouteImport.update({
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiEditorLivePreviewRoute = ApiEditorLivePreviewRouteImport.update({
+  id: '/api/editor/live-preview',
+  path: '/api/editor/live-preview',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiHealthReadyRoute = ApiHealthReadyRouteImport.update({
@@ -389,6 +395,7 @@ export interface FileRoutesByFullPath {
   '/api/agency/mcp': typeof ApiAgencyMcpRoute
   '/api/assets/upload': typeof ApiAssetsUploadRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/editor/live-preview': typeof ApiEditorLivePreviewRoute
   '/api/health/ready': typeof ApiHealthReadyRoute
   '/api/mcp/$siteSlug': typeof ApiMcpSiteSlugRoute
   '/api/notifications/unsubscribe': typeof ApiNotificationsUnsubscribeRoute
@@ -445,6 +452,7 @@ export interface FileRoutesByTo {
   '/api/agency/mcp': typeof ApiAgencyMcpRoute
   '/api/assets/upload': typeof ApiAssetsUploadRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/editor/live-preview': typeof ApiEditorLivePreviewRoute
   '/api/health/ready': typeof ApiHealthReadyRoute
   '/api/mcp/$siteSlug': typeof ApiMcpSiteSlugRoute
   '/api/notifications/unsubscribe': typeof ApiNotificationsUnsubscribeRoute
@@ -505,6 +513,7 @@ export interface FileRoutesById {
   '/api/agency/mcp': typeof ApiAgencyMcpRoute
   '/api/assets/upload': typeof ApiAssetsUploadRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/editor/live-preview': typeof ApiEditorLivePreviewRoute
   '/api/health/ready': typeof ApiHealthReadyRoute
   '/api/mcp/$siteSlug': typeof ApiMcpSiteSlugRoute
   '/api/notifications/unsubscribe': typeof ApiNotificationsUnsubscribeRoute
@@ -566,6 +575,7 @@ export interface FileRouteTypes {
     | '/api/agency/mcp'
     | '/api/assets/upload'
     | '/api/auth/$'
+    | '/api/editor/live-preview'
     | '/api/health/ready'
     | '/api/mcp/$siteSlug'
     | '/api/notifications/unsubscribe'
@@ -622,6 +632,7 @@ export interface FileRouteTypes {
     | '/api/agency/mcp'
     | '/api/assets/upload'
     | '/api/auth/$'
+    | '/api/editor/live-preview'
     | '/api/health/ready'
     | '/api/mcp/$siteSlug'
     | '/api/notifications/unsubscribe'
@@ -681,6 +692,7 @@ export interface FileRouteTypes {
     | '/api/agency/mcp'
     | '/api/assets/upload'
     | '/api/auth/$'
+    | '/api/editor/live-preview'
     | '/api/health/ready'
     | '/api/mcp/$siteSlug'
     | '/api/notifications/unsubscribe'
@@ -731,6 +743,7 @@ export interface RootRouteChildren {
   ApiAgencyMcpRoute: typeof ApiAgencyMcpRoute
   ApiAssetsUploadRoute: typeof ApiAssetsUploadRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiEditorLivePreviewRoute: typeof ApiEditorLivePreviewRoute
   ApiMcpSiteSlugRoute: typeof ApiMcpSiteSlugRoute
   ApiNotificationsUnsubscribeRoute: typeof ApiNotificationsUnsubscribeRoute
   ApiSitesManifestRoute: typeof ApiSitesManifestRoute
@@ -937,6 +950,13 @@ declare module '@tanstack/react-router' {
       path: '/api/auth/$'
       fullPath: '/api/auth/$'
       preLoaderRoute: typeof ApiAuthSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/editor/live-preview': {
+      id: '/api/editor/live-preview'
+      path: '/api/editor/live-preview'
+      fullPath: '/api/editor/live-preview'
+      preLoaderRoute: typeof ApiEditorLivePreviewRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/health/ready': {
@@ -1303,6 +1323,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAgencyMcpRoute: ApiAgencyMcpRoute,
   ApiAssetsUploadRoute: ApiAssetsUploadRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiEditorLivePreviewRoute: ApiEditorLivePreviewRoute,
   ApiMcpSiteSlugRoute: ApiMcpSiteSlugRoute,
   ApiNotificationsUnsubscribeRoute: ApiNotificationsUnsubscribeRoute,
   ApiSitesManifestRoute: ApiSitesManifestRoute,

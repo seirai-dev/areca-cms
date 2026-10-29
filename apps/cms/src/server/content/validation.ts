@@ -7,6 +7,7 @@ import { asset, collection, entry } from '#/db/schema'
 import {
   ENTRY_DATA_MAX_BYTES,
   ID_MAX_LENGTH,
+  MAX_FIELDS_PER_COLLECTION,
   SELECT_VALUE_MAX_LENGTH,
   SLUG_MAX_LENGTH,
   TEXTAREA_MAX_LENGTH,
@@ -31,6 +32,13 @@ import { getCollection } from './collections.ts'
 
 const ISO_DATETIME =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/
+
+/** Entry or section data as sent by a client: any object of field values, capped in field count. */
+export const entryDataSchema = z
+  .record(z.string(), z.unknown())
+  .refine((data) => Object.keys(data).length <= MAX_FIELDS_PER_COLLECTION, {
+    error: () => m.server_too_many_fields(),
+  })
 
 export type FieldError = { path: string; message: string }
 

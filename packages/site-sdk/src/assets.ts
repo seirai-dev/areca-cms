@@ -28,7 +28,6 @@ import { DEFAULT_ASSETS_DIR } from './args.js'
 export const ASSET_INDEX_FILE = '.assets.json'
 
 const DOWNLOAD_CONCURRENCY = 6
-const DOWNLOAD_TIMEOUT_MS = 60_000
 const LOCAL_FILE_NAME = /^[a-z0-9][a-z0-9-]*\.[a-z0-9]+$/
 // Storage keys are `<organization>/<uuid>.<ext>`. Matching on the path, not
 // the origin, also covers an APP_URL that differs from ARECA_CMS_URL.
@@ -216,7 +215,9 @@ function mapStrings<T>(value: T, map: (value: string) => string): T {
   return value
 }
 
-export type AssetDownloader = (asset: SnapshotAsset) => Promise<Uint8Array>
+export type { AssetDownloader } from './asset-download.js'
+export { cmsAssetDownloader } from './asset-download.js'
+import type { AssetDownloader } from './asset-download.js'
 
 /** Media written by a pull, undone together with the pull's content. */
 export type MediaChanges = {
@@ -331,28 +332,6 @@ function writeExclusive(filePath: string, bytes: Uint8Array): void {
     writeFileSync(fd, bytes)
   } finally {
     closeSync(fd)
-  }
-}
-
-/** Downloads from the CMS the SDK talks to (`ARECA_CMS_URL`), not the URL in the content. */
-export function cmsAssetDownloader(
-  cmsUrl: string,
-  fetchImpl: typeof fetch = fetch,
-): AssetDownloader {
-  const base = cmsUrl.replace(/\/+$/, '')
-  return async (asset) => {
-    const path = asset.storageKey.split('/').map(encodeURIComponent).join('/')
-    let res: Response
-    try {
-      res = await fetchImpl(`${base}/api/assets/file/${path}`, {
-        signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
-      })
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error)
-      throw new Error(`could not reach ${base}: ${detail}`)
-    }
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    return new Uint8Array(await res.arrayBuffer())
   }
 }
 

@@ -2,6 +2,18 @@
 
 All notable changes to `@areca-cms/site-sdk`.
 
+## 0.9.0 (2026-10-29)
+
+### Features
+
+- **visual editing:** `@areca-cms/site-sdk/visual` adds `createVisualBridge`, which connects a preview page to the CMS over `postMessage` and applies each newer update. It only talks to the CMS origin, and it does nothing outside an iframe. `visualEditingHeaders` builds the `frame-ancestors` policy for the preview route.
+- **visual editing:** `@areca-cms/site-sdk/visual-react` adds `useLivePreview`, which shows the published value until the CMS sends an update, then the latest resolved value.
+- **content:** `content.previewFrom(result)` turns a preview result the CMS already returned into the same entry `content.preview(token)` gives, without a request. `preview()` behaves as before. `previewFrom` is now a reserved collection and site content name.
+
+### Bug Fixes
+
+- **browser:** the main entry (`@areca-cms/site-sdk`) no longer pulls `node:crypto` and `node:path` into browser bundles through the client's asset downloader. Pages that imported `seoHead` or `richTextDocument` failed to hydrate under Vite.
+
 ## 0.8.0 (2026-10-27)
 
 ### Features

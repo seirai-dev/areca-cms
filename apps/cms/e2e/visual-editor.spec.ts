@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 
@@ -434,4 +437,216 @@ test('the View draft link still opens a signed preview in both modes', async ({
     'target',
     '_blank',
   )
+})
+
+/** The built SDK bridge, served to the preview page as a module (see the bridge fixtures). */
+const SDK_BUNDLE = fileURLToPath(
+  new URL('../../../packages/site-sdk/dist/visual.js', import.meta.url),
+)
+const SDK_PATH = '/__sdk/visual.js'
+const BRIDGE_TITLE = 'A season in the hills'
+const LIVE_ENDPOINT = '**/api/editor/live-preview'
+
+/**
+ * The fixture page with the real SDK bridge: its module imports
+ * `createVisualBridge` from the SDK path and writes each update into the page.
+ */
+function bridgePage(cmsOrigin: string, title: string) {
+  return FIXTURE.replace('__TITLE__', title).replace(
+    '</body>',
+    `<script type="module">
+import { createVisualBridge } from '${SDK_PATH}'
+createVisualBridge({
+  cmsOrigin: ${JSON.stringify(cmsOrigin)},
+  onUpdate(result, info) {
+    document.querySelector('h1').textContent = result.entry.data.title
+    document.querySelector('.meta').textContent = result.entry.data.excerpt ?? ''
+    document.body.dataset.seq = String(info.seq)
+  },
+})
+</script></body>`,
+  )
+}
+
+/**
+ * Serves the preview with the real bridge. The CMS origin is read from the
+ * page at request time (the editor), unless a test passes another one. Counts
+ * page loads only, not the SDK file.
+ */
+async function serveBridgePreview(
+  page: Page,
+  options: { cmsOrigin?: string } = {},
+) {
+  const sdk = readFileSync(SDK_BUNDLE, 'utf8')
+  let pages = 0
+  await page.route(SITE_ROUTE, (route) => {
+    if (new URL(route.request().url()).pathname === SDK_PATH) {
+      return route.fulfill({ contentType: 'text/javascript', body: sdk })
+    }
+    pages += 1
+    const cmsOrigin = options.cmsOrigin ?? new URL(page.url()).origin
+    return route.fulfill({
+      contentType: 'text/html',
+      body: bridgePage(cmsOrigin, BRIDGE_TITLE),
+    })
+  })
+  return { count: () => pages }
+}
+
+/** The preview frame's document, for markers and reload checks. */
+function previewDocument(page: Page) {
+  const frame = page
+    .frames()
+    .find((candidate) => candidate.url().startsWith(SITE_ORIGIN))
+  if (!frame) throw new Error('the preview frame has no document yet')
+  return frame
+}
+
+function statusBadge(page: Page) {
+  return page.getByTestId('visual-status')
+}
+
+function frameHeading(page: Page) {
+  return page.frameLocator('[data-testid="visual-frame"]').locator('h1')
+}
+
+/** Opens Visual against a saved entry and waits for the bridge to go live. */
+async function openLiveVisual(page: Page, title: string) {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const preview = await serveBridgePreview(page)
+  await savedEntry(page, title)
+  await openVisual(page)
+  await expect(statusBadge(page)).toHaveAttribute('data-tier', 'live', {
+    timeout: 15_000,
+  })
+  return preview
+}
+
+test('with the SDK bridge, Visual goes live and typing updates the frame without a reload', async ({
+  page,
+}) => {
+  const preview = await openLiveVisual(page, `Live ${uniqueSuffix()}`)
+  await expect(statusBadge(page)).toContainText('Live')
+
+  // A marker on the page: a reload would clear it.
+  await expect.poll(() => preview.count()).toBeGreaterThan(0)
+  await previewDocument(page).evaluate(() => {
+    document.body.dataset.marker = 'kept'
+  })
+  const pagesBefore = preview.count()
+
+  // The title moves the slug (and so the page); the excerpt keeps the page.
+  const next = `Live excerpt ${uniqueSuffix()}`
+  await page.getByPlaceholder('Enter excerpt...').fill(next)
+  const meta = page.frameLocator('[data-testid="visual-frame"]').locator('.meta')
+  await expect(meta).toHaveText(next, { timeout: 5_000 })
+
+  // Autosave runs after the live update; the frame must not reload for it.
+  await expect(page.getByTestId('entry-editor')).toHaveAttribute(
+    'data-dirty',
+    'false',
+    { timeout: 30_000 },
+  )
+  // A save-triggered reload would land within ~1 s of the save.
+  await page.waitForTimeout(1500)
+  expect(preview.count()).toBe(pagesBefore)
+  expect(
+    await previewDocument(page).evaluate(() => document.body.dataset.marker),
+  ).toBe('kept')
+  await expect(meta).toHaveText(next)
+})
+
+test('fast typing ends on the final title and sends far fewer requests than keystrokes', async ({
+  page,
+}) => {
+  await openLiveVisual(page, `Fast ${uniqueSuffix()}`)
+
+  let posts = 0
+  page.on('request', (request) => {
+    if (
+      request.method() === 'POST' &&
+      request.url().includes('/api/editor/live-preview')
+    ) {
+      posts += 1
+    }
+  })
+
+  const text = 'abcdefghijklmnopqrstuvwxyz0123' // 30 keystrokes
+  await titleInput(page).fill('')
+  await titleInput(page).pressSequentially(text, { delay: 20 })
+
+  await expect(frameHeading(page)).toHaveText(text, { timeout: 5_000 })
+  expect(posts).toBeGreaterThan(0)
+  expect(posts).toBeLessThanOrEqual(10)
+})
+
+test('without the bridge the status is on-save, and autosave reloads the frame', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const preview = await servePreview(page)
+  await savedEntry(page, `No bridge ${uniqueSuffix()}`)
+  await openVisual(page)
+
+  await expect(statusBadge(page)).toHaveAttribute('data-tier', 'on-save', {
+    timeout: 10_000,
+  })
+  await expect(statusBadge(page)).toContainText('Updates on save')
+
+  const before = preview.count()
+  await titleInput(page).fill(`No bridge renamed ${uniqueSuffix()}`)
+  await expect
+    .poll(() => preview.count(), { timeout: 30_000 })
+    .toBeGreaterThan(before)
+})
+
+test('a bridge configured for another origin never goes live', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const preview = await serveBridgePreview(page, {
+    cmsOrigin: 'https://evil.example',
+  })
+  await savedEntry(page, `Wrong origin ${uniqueSuffix()}`)
+  await openVisual(page)
+
+  await expect(statusBadge(page)).toHaveAttribute('data-tier', 'on-save', {
+    timeout: 10_000,
+  })
+
+  // Typing does not reach the frame: autosave reloads it, and the page keeps its
+  // own (fixture) title, not the typed one.
+  const before = preview.count()
+  const typed = `Not live ${uniqueSuffix()}`
+  await titleInput(page).fill(typed)
+  await expect
+    .poll(() => preview.count(), { timeout: 30_000 })
+    .toBeGreaterThan(before)
+  await expect(frameHeading(page)).toHaveText(BRIDGE_TITLE)
+  await expect(statusBadge(page)).toHaveAttribute('data-tier', 'on-save')
+})
+
+test('a failing live endpoint shows Retrying and recovers when it works again', async ({
+  page,
+}) => {
+  await openLiveVisual(page, `Failing ${uniqueSuffix()}`)
+
+  await page.route(LIVE_ENDPOINT, (route) =>
+    route.fulfill({ status: 500, body: 'error' }),
+  )
+  await titleInput(page).fill(`Failing ${uniqueSuffix()}`)
+  await expect(statusBadge(page)).toHaveAttribute('data-error', 'true', {
+    timeout: 10_000,
+  })
+  await expect(statusBadge(page)).toContainText('Retrying')
+  await expect(statusBadge(page)).toHaveAttribute('data-tier', 'live')
+
+  await page.unroute(LIVE_ENDPOINT)
+  const recovered = `Recovered ${uniqueSuffix()}`
+  await titleInput(page).fill(recovered)
+  await expect(statusBadge(page)).toHaveAttribute('data-error', 'false', {
+    timeout: 10_000,
+  })
+  await expect(statusBadge(page)).toContainText('Live')
+  await expect(frameHeading(page)).toHaveText(recovered, { timeout: 5_000 })
 })

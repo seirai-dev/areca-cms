@@ -357,6 +357,43 @@ const headers = previewHeaders();
 so do not log it, persist it, or expose it beyond the preview request. Show a
 clear error for expired/invalid tokens (401) and missing preview entries (404).
 
+## Visual editing (live preview)
+
+The CMS visual editor shows the site's preview route in an iframe and sends it
+unsaved changes as you type. The site needs two things.
+
+1. **Let the CMS frame the preview route.** Send `visualEditingHeaders` on that
+   route only, next to `previewHeaders()`:
+
+   ```ts
+   import { visualEditingHeaders } from "@areca-cms/site-sdk/visual";
+
+   const headers = visualEditingHeaders({ cmsOrigin: "https://cms.example.com" });
+   // Add to the preview response: { ...previewHeaders(), ...headers }
+   ```
+
+2. **Render the live values.** `useLivePreview` shows `initial` until the CMS sends
+   an update, then the value `resolve` returns. Content is read from files on the
+   server, so `resolve` calls a server function that runs `content.previewFrom(result)`:
+
+   ```tsx
+   import { useLivePreview } from "@areca-cms/site-sdk/visual-react";
+
+   const post = useLivePreview({
+     initial: entry, // from the loader; keep it stable
+     cmsOrigin: "https://cms.example.com",
+     resolve: async (result) => (await previewPost(result)).entry,
+   });
+   ```
+
+   `previewPost` is your server function: it calls `content.previewFrom(result)` and
+   returns the result. `previewFrom` validates and camelises the same way
+   `content.preview()` does, without a request.
+
+The bridge only talks to the CMS origin. It replies to that origin alone and
+ignores messages from any other origin or window. Outside an iframe it does nothing,
+so a published page is unaffected.
+
 ## Programmatic client and errors
 
 `createArecaClient({ cmsUrl?, siteToken?, schemaToken? })` uses the matching
@@ -400,4 +437,6 @@ for complete field details and examples.
 - `@areca-cms/site-sdk/pull`: `pullContent()`, `readContent()` and `readContentManifest()`.
 - `@areca-cms/site-sdk/content`: `createContent()`, the typed content object (Node only).
 - `@areca-cms/site-sdk/seo`: SEO helpers and types.
+- `@areca-cms/site-sdk/visual`: the live preview bridge and `visualEditingHeaders` (browser-safe).
+- `@areca-cms/site-sdk/visual-react`: `useLivePreview` for React sites.
 - `@areca-cms/site-sdk/rich-text`: rich-text helpers.

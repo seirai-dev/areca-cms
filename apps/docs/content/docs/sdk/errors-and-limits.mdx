@@ -30,7 +30,7 @@ No collection, site content section or field may use these names:
 
 A collection key or a site content key may not be one of these names. The SDK compares the camelCase form of the key, so `preview-globals` and `preview_globals` count as `previewGlobals`:
 
-`resolve`, `href`, `preview`, `globals`, `previewGlobals`, `in`, `languages`, `matchLocale`
+`resolve`, `href`, `preview`, `globals`, `previewGlobals`, `previewFrom`, `in`, `languages`, `matchLocale`
 
 These are the members of the generated content object. Field keys may use them: a field called `href` or `preview` is fine.
 
@@ -41,8 +41,8 @@ These messages come from `areca manifest push`, `areca manifest pull`, and `arec
 | Message | Meaning | What to do |
 | --- | --- | --- |
 | `Unsafe collection or field identifier: manifest` | A collection, section or field name is reserved, or breaks the character rules. | Rename it in your config and push again. See [renaming keys](/docs/sdk/defining-content#identifiers). |
-| `Collection "globals" uses the reserved name "globals". resolve, href, preview, globals, previewGlobals, in, languages and matchLocale are reserved.` | A collection key is a reserved content name after camelCase. | Rename the collection. |
-| `Global "preview-globals" uses the reserved name "previewGlobals". resolve, href, preview, globals, previewGlobals, in, languages and matchLocale are reserved.` | A site content key is a reserved content name after camelCase. | Rename the section. |
+| `Collection "globals" uses the reserved name "globals". resolve, href, preview, globals, previewGlobals, previewFrom, in, languages and matchLocale are reserved.` | A collection key is a reserved content name after camelCase. | Rename the collection. |
+| `Global "preview-globals" uses the reserved name "previewGlobals". resolve, href, preview, globals, previewGlobals, previewFrom, in, languages and matchLocale are reserved.` | A site content key is a reserved content name after camelCase. | Rename the section. |
 | `Collection keys blog-posts and blog_posts both map to "blogPosts". Rename one of them.` | Two collection keys have the same camelCase name. | Rename one of them. |
 | `Collection identifiers differ only by case: Articles, articles` | Two collection keys differ only by letter case. Mac and Windows file systems treat them as one folder. | Rename one of them. |
 | `Duplicate field identifier: title` | Two fields in one collection have the same key. | Rename one of them. |
@@ -55,7 +55,7 @@ These messages come from `areca manifest push`, `areca manifest pull`, and `arec
 | --- | --- | --- |
 | `Collection keys <a> and <b> both map to "<name>". Rename one of them.` | Two collection keys have the same camelCase name, such as `blog-posts` and `blog_posts`. | Rename one of them in the config, push, and publish. |
 | `Field keys <a> and <b> in <collection> both map to "<name>". Rename one of them.` | Two field keys in one collection have the same camelCase name. | Rename one of them, push, and publish. |
-| `Collection "<key>" uses a reserved name (resolve, href, preview, globals, previewGlobals, in, languages, matchLocale)` | `createContent` was given a collection with a reserved name. | Rename the collection in `areca.config.ts`, then run `areca pull` again. |
+| `Collection "<key>" uses a reserved name (resolve, href, preview, globals, previewGlobals, previewFrom, in, languages, matchLocale)` | `createContent` was given a collection with a reserved name. | Rename the collection in `areca.config.ts`, then run `areca pull` again. |
 | `Publication does not match its schema:` | Each following line is `<collection>/<slug>.<field>: <problem>`, for example `is required` or `must be a YYYY-MM-DD date`. Up to 20 lines are listed, then `...and N more`. | Fix the entry in the CMS, or fix the schema and publish again. |
 | `Types output must not be a symbolic link` | The `areca.gen.ts` path is a symlink. | Delete the symlink and pull again. |
 
