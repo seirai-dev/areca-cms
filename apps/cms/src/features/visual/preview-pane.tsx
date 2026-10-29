@@ -2,12 +2,16 @@ import * as React from 'react'
 import {
   ArrowClockwise,
   ArrowSquareOut,
+  ArrowLeft,
   ArrowsInLineHorizontal,
   CornersIn,
   CornersOut,
+  Cursor,
   DeviceMobile,
   DeviceTablet,
+  HandPointing,
   Monitor,
+  SelectionAll,
 } from '@phosphor-icons/react'
 
 import { Button } from '#/components/ui/button'
@@ -15,6 +19,7 @@ import { Hint } from '#/components/ui/tooltip'
 import { Kbd, KbdCombo, useModifierKeys } from '#/components/ui/kbd'
 import {
   Popover,
+  PopoverAnchor,
   PopoverContent,
   PopoverTrigger,
 } from '#/components/ui/popover'
@@ -25,7 +30,11 @@ import type { EntryData } from '#/lib/types'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
+import { isAwayFrom } from './click-to-edit'
+import type { SelfIdentity } from './click-to-edit'
 import type { Tier } from './live-channel'
+import { useClickToEdit } from './use-click-to-edit'
+import type { ClickField, OwnerSelection } from './use-click-to-edit'
 import { useLivePreviewChannel } from './use-live-preview'
 import { framePresentation } from './visual-layout'
 import type { PreviewWidth } from './visual-layout'
@@ -54,6 +63,18 @@ export type LiveSource = {
   locale: string | null
 }
 
+/** What click to edit needs from the editor (PR 3, Decisions 12-17). */
+export type ClickSource = {
+  /** The document being edited, so markers naming it count as its own. */
+  self: SelfIdentity
+  /** Every field the editor column shows, with its label. */
+  fields: readonly ClickField[]
+  /** Scrolls to, focuses and pulses a field. */
+  onSelectField: (key: string) => void
+  /** Saves, then opens another entry or section in the visual editor. */
+  onOpenOwner: (owner: OwnerSelection['owner']) => void
+}
+
 /**
  * The live preview pane of Visual mode. Tier 2 (live) sends unsaved changes to the
  * page and does not reload it on save. Tier 1 (on-save) reloads after each successful
@@ -67,6 +88,7 @@ export function PreviewPane({
   lastSavedAt,
   unavailableReason,
   live,
+  click,
 }: {
   /** The signed preview URL, when the entry has one. */
   previewUrl: string | undefined
@@ -77,23 +99,54 @@ export function PreviewPane({
   /** Why there is no preview yet (Tier 0), or null while it loads. */
   unavailableReason: string | null
   live: LiveSource
+  click: ClickSource
 }) {
-  const { fullScreen, setFullScreen } = useVisualFullScreen()
+  const { fullScreen, setFullScreen, canReturn, onPreviewSelection } =
+    useVisualFullScreen()
   const prefs = useVisualPreferences()
   const width = prefs.width
   const keys = useModifierKeys()
 
   const iframeRef = React.useRef<HTMLIFrameElement>(null)
+  const channelEnabled = Boolean(previewUrl && live.origin && live.entryId)
+  // Select is the default each time; Browse lets the page work normally.
+  const [select, setSelect] = React.useState(true)
+  const [ownerSelection, setOwnerSelection] =
+    React.useState<OwnerSelection | null>(null)
+  const postRef = React.useRef<
+    ReturnType<typeof useLivePreviewChannel>['post']
+  >(() => {})
+  const post = React.useCallback<
+    ReturnType<typeof useLivePreviewChannel>['post']
+  >((message) => postRef.current(message), [])
+  const clicks = useClickToEdit({
+    enabled: channelEnabled,
+    siteId: live.siteId,
+    self: click.self,
+    fields: click.fields,
+    select,
+    showAreas: prefs.showAreas,
+    cursorHint: fullScreen,
+    post,
+    onSelectField: (key) => {
+      setOwnerSelection(null)
+      onPreviewSelection()
+      click.onSelectField(key)
+    },
+    onSelectOwner: setOwnerSelection,
+  })
   const channel = useLivePreviewChannel({
     iframeRef,
     origin: live.origin,
-    enabled: Boolean(previewUrl && live.origin && live.entryId),
+    enabled: channelEnabled,
+    onSiteMessage: clicks.onSiteMessage,
     siteId: live.siteId,
     collection: live.collection,
     entryId: live.entryId ?? '',
     data: live.data,
     locale: live.locale,
   })
+  postRef.current = channel.post
   const frame = useFrameReload({
     previewUrl,
     lastSavedAt,
@@ -107,6 +160,15 @@ export function PreviewPane({
     stage.height - (width === 'desktop' ? 0 : FRAME_GUTTER_PX * 2),
   )
   const framed = width !== 'desktop'
+  const clickable = clicks.targetCount > 0
+  // Away: the bridge says so, or the page reloaded itself and no bridge answered.
+  const away = clicks.pageUrl
+    ? isAwayFrom(clicks.pageUrl, previewUrl)
+    : frame.strayLoad && channel.tier === 'on-save'
+  const backToEntry = () => {
+    setOwnerSelection(null)
+    frame.reload()
+  }
   // The label is hidden (not removed) under the pane breakpoint, so the
   // accessible name and tooltip always carry the full name.
   const widthOption = (
@@ -116,7 +178,12 @@ export function PreviewPane({
     testId: string,
   ): SegmentedOption<PreviewWidth> => ({
     value,
-    label: <span className="hidden @[900px]/preview:inline">{name}</span>,
+    // With the "Back to full preview" pill there is no room for the labels.
+    label: (
+      <span className={cn('hidden', !canReturn && '@[900px]/preview:inline')}>
+        {name}
+      </span>
+    ),
     icon,
     ariaLabel: name,
     hint: name,
@@ -177,6 +244,124 @@ export function PreviewPane({
     </Hint>
   )
 
+  const selectControl = clickable ? (
+    <SegmentedControl
+      hintSide="bottom"
+      size="sm"
+      value={select ? 'select' : 'browse'}
+      onValueChange={(value) => setSelect(value === 'select')}
+      aria-label={m.visual_select_group()}
+      data-testid="visual-select-mode"
+      options={[
+        {
+          value: 'select',
+          label: (
+            <span className="hidden @[1100px]/preview:inline">
+              {m.visual_select()}
+            </span>
+          ),
+          icon: <Cursor />,
+          ariaLabel: m.visual_select(),
+          hint: m.visual_select_hint({ key: keys.alt }),
+          testId: 'visual-select',
+        },
+        {
+          value: 'browse',
+          label: (
+            <span className="hidden @[1100px]/preview:inline">
+              {m.visual_browse()}
+            </span>
+          ),
+          icon: <HandPointing />,
+          ariaLabel: m.visual_browse(),
+          hint: m.visual_browse_hint(),
+          testId: 'visual-browse',
+        },
+      ]}
+    />
+  ) : null
+
+  const areasToggle = clickable ? (
+    <Hint label={m.visual_show_areas()} side="bottom">
+      <Button
+        type="button"
+        variant="quiet"
+        size="icon-sm"
+        aria-label={m.visual_show_areas()}
+        aria-pressed={prefs.showAreas}
+        onClick={() => prefs.setShowAreas(!prefs.showAreas)}
+        data-testid="visual-show-areas"
+        className={cn(
+          prefs.showAreas &&
+            'bg-accent-soft text-accent-text hover:bg-accent-soft',
+        )}
+      >
+        <SelectionAll />
+      </Button>
+    </Hint>
+  ) : null
+
+  const ownerPopover = (
+    <Popover
+      open={ownerSelection !== null}
+      onOpenChange={(open) => {
+        if (!open) setOwnerSelection(null)
+      }}
+    >
+      {ownerSelection ? (
+        <PopoverAnchor asChild>
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute"
+            style={{
+              left: ownerSelection.rect.x * presentation.scale,
+              top: ownerSelection.rect.y * presentation.scale,
+              width: ownerSelection.rect.width * presentation.scale,
+              height: ownerSelection.rect.height * presentation.scale,
+            }}
+          />
+        </PopoverAnchor>
+      ) : null}
+      <PopoverContent
+        side="bottom"
+        align="start"
+        collisionPadding={12}
+        className="z-above-overlay grid w-80 gap-3 text-callout"
+        data-testid="visual-owner-popover"
+      >
+        <p className="text-text-secondary">
+          {m.visual_owner_part_of()}{' '}
+          <strong className="font-medium text-text-primary">
+            {ownerSelection?.label}
+          </strong>
+        </p>
+        <div className="flex justify-end gap-2">
+          <Button
+            type="button"
+            variant="quiet"
+            size="sm"
+            onClick={() => setOwnerSelection(null)}
+          >
+            {m.visual_owner_cancel()}
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            data-testid="visual-owner-open"
+            onClick={() => {
+              const owner = ownerSelection?.owner
+              setOwnerSelection(null)
+              if (owner) click.onOpenOwner(owner)
+            }}
+          >
+            {m.visual_owner_open()}
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+
   const frameStage = (
     <div
       ref={stage.ref}
@@ -228,12 +413,14 @@ export function PreviewPane({
                 ref={iframeRef}
                 onLoad={() => {
                   frame.onLoad()
+                  clicks.onFrameLoad()
                   channel.onFrameLoad()
                 }}
                 className="block h-full w-full border-0 bg-background-surface"
               />
             ) : null}
           </div>
+          {ownerPopover}
           {frame.loaded ? null : (
             <div
               role="status"
@@ -269,6 +456,13 @@ export function PreviewPane({
       {fullScreen ? (
         <div className="absolute inset-x-0 top-3 z-10 flex justify-center px-3">
           <div className="surface-float flex h-11 max-w-full items-center gap-2 rounded-card px-2">
+            {selectControl}
+            {selectControl ? (
+              <span
+                className="mx-1 h-5 w-px bg-border-default"
+                aria-hidden="true"
+              />
+            ) : null}
             {widthControl}
             {reloadButton}
             <span
@@ -292,9 +486,34 @@ export function PreviewPane({
         </div>
       ) : (
         <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border-default px-3">
-          <StatusBadge tier={channel.tier} failed={channel.failed} />
+          <StatusBadge
+            tier={channel.tier}
+            failed={channel.failed}
+            clickable={clickable}
+          />
           {channel.tier === 'on-save' ? <BlankHelp /> : null}
+          {canReturn ? (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="shrink-0 rounded-full whitespace-nowrap"
+              onClick={() => setFullScreen(true)}
+              data-testid="visual-back-fullscreen"
+            >
+              <CornersOut />
+              {m.visual_back_fullscreen()}
+            </Button>
+          ) : null}
           <span className="flex-1" />
+          {selectControl}
+          {areasToggle}
+          {selectControl ? (
+            <span
+              className="mx-0.5 h-5 w-px shrink-0 bg-border-default"
+              aria-hidden="true"
+            />
+          ) : null}
           {widthControl}
           {reloadButton}
           {previewUrl ? (
@@ -335,6 +554,28 @@ export function PreviewPane({
           </Hint>
         </div>
       )}
+      {away && !fullScreen ? (
+        <div
+          role="status"
+          data-testid="visual-away"
+          className="flex shrink-0 items-center gap-3 border-b border-border-default bg-status-info-bg px-3 py-2 text-callout text-text-primary"
+        >
+          <span className="min-w-0 flex-1 truncate">{m.visual_away()}</span>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="shrink-0"
+            onClick={backToEntry}
+            data-testid="visual-away-back"
+          >
+            <ArrowLeft />
+            <span className="max-w-[24ch] truncate">
+              {m.visual_away_back({ title })}
+            </span>
+          </Button>
+        </div>
+      ) : null}
       {frameStage}
     </div>
   )
@@ -359,7 +600,7 @@ const STATUS_TONE: Record<StatusTone, { pill: string; dot: string }> = {
 }
 
 /** The label, tone and hint for each tier. A failed live request reads "Retrying". */
-function statusView(tier: Tier, failed: boolean) {
+function statusView(tier: Tier, failed: boolean, clickable: boolean) {
   if (tier === 'live') {
     return failed
       ? {
@@ -370,7 +611,9 @@ function statusView(tier: Tier, failed: boolean) {
       : {
           tone: 'success' as const,
           label: m.visual_status_live(),
-          hint: m.visual_status_live_hint(),
+          hint: clickable
+            ? m.visual_status_click_hint()
+            : m.visual_status_live_hint(),
         }
   }
   if (tier === 'connecting') {
@@ -387,14 +630,23 @@ function statusView(tier: Tier, failed: boolean) {
   }
 }
 
-function StatusBadge({ tier, failed }: { tier: Tier; failed: boolean }) {
-  const view = statusView(tier, failed)
+function StatusBadge({
+  tier,
+  failed,
+  clickable,
+}: {
+  tier: Tier
+  failed: boolean
+  clickable: boolean
+}) {
+  const view = statusView(tier, failed, clickable)
   const tone = STATUS_TONE[view.tone]
   const pill = (
     <span
       data-testid="visual-status"
       data-tier={tier}
       data-error={failed ? 'true' : 'false'}
+      data-clickable={clickable ? 'true' : 'false'}
       className={cn(
         'inline-flex h-[22px] shrink-0 items-center gap-1.5 rounded-full px-2 text-[12px] font-medium whitespace-nowrap',
         tone.pill,
@@ -470,6 +722,9 @@ function useFrameReload({
   const [src, setSrc] = React.useState<string | undefined>(previewUrl)
   const [nonce, setNonce] = React.useState(0)
   const [loaded, setLoaded] = React.useState(false)
+  // A load we did not ask for: the page navigated by itself (a link in Browse).
+  const [strayLoad, setStrayLoad] = React.useState(false)
+  const expecting = React.useRef(true)
   const latest = React.useRef(previewUrl)
   // The URL the frame was last told to load.
   const shown = React.useRef(previewUrl)
@@ -480,6 +735,8 @@ function useFrameReload({
   }, [live])
 
   const reload = React.useCallback(() => {
+    expecting.current = true
+    setStrayLoad(false)
     shown.current = latest.current
     setSrc(latest.current)
     setNonce((value) => value + 1)
@@ -509,9 +766,13 @@ function useFrameReload({
     return () => window.clearTimeout(timer)
   }, [lastSavedAt, reload])
 
-  const onLoad = React.useCallback(() => setLoaded(true), [])
+  const onLoad = React.useCallback(() => {
+    setLoaded(true)
+    if (expecting.current) expecting.current = false
+    else setStrayLoad(true)
+  }, [])
 
-  return { src, nonce, loaded, onLoad, reload }
+  return { src, nonce, loaded, strayLoad, onLoad, reload }
 }
 
 /** The stage's measured size, updated on resize. */

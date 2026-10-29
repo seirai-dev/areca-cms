@@ -3,12 +3,21 @@ import { describe, expect, it } from 'vitest'
 import {
   createVisualBridge,
   isArecaMessage as sdkIsArecaMessage,
+  markerKey as sdkMarkerKey,
 } from '../../../../../packages/site-sdk/src/visual'
 import type {
   BridgeMessageEvent,
   BridgeWindow,
 } from '../../../../../packages/site-sdk/src/visual'
-import { isSiteMessage, pingMessage, updateMessage } from './protocol'
+import {
+  highlightMessage,
+  isSiteMessage,
+  markerKey,
+  modeMessage,
+  ownerKey,
+  pingMessage,
+  updateMessage,
+} from './protocol'
 import type { LivePreviewResult } from './protocol'
 
 // The CMS copy of the bridge protocol must agree with the SDK's. These tests
@@ -90,6 +99,58 @@ describe('CMS messages pass the SDK guard', () => {
     expect(sdkIsArecaMessage(updateMessage(seq, result, locale))).toBe(true)
   })
 
+  it.each([
+    ['a field', { field: 'title', owner: null }],
+    ['an entry owner', { field: 'name', owner: { entry: 'a1' } }],
+    ['a section owner', { field: 'email', owner: { global: 'company' } }],
+    ['nothing', null],
+  ] as const)('highlight with %s', (_name, target) => {
+    expect(sdkIsArecaMessage(highlightMessage(target))).toBe(true)
+  })
+
+  it('mode with targets', () => {
+    expect(
+      sdkIsArecaMessage(
+        modeMessage({
+          select: true,
+          showAreas: false,
+          cursorHint: true,
+          color: '#5b5bd6',
+          targets: [
+            { field: 'title', owner: null, label: 'Title' },
+            { field: 'name', owner: { global: 'company' }, label: 'Company' },
+          ],
+        }),
+      ),
+    ).toBe(true)
+  })
+
+  it('mode with a colour that is not #rrggbb is refused by the SDK', () => {
+    expect(
+      sdkIsArecaMessage(
+        modeMessage({
+          select: true,
+          showAreas: false,
+          cursorHint: false,
+          color: 'red',
+          targets: [],
+        }),
+      ),
+    ).toBe(false)
+  })
+
+  it('markerKey is the same string on both sides', () => {
+    for (const marker of [
+      { field: 'title', owner: null },
+      { field: 'name', owner: { entry: 'a1' } },
+      { field: 'email', owner: { global: 'company' } },
+    ]) {
+      expect(markerKey(marker)).toBe(sdkMarkerKey(marker))
+    }
+    expect(ownerKey({ global: 'company' })).toBe('global:company')
+    expect(ownerKey(null)).toBe('')
+  })
+
   it('update carries the seq, result and locale it was built with', () => {
     expect(updateMessage(7, entryResult, 'nl')).toEqual({
       type: 'areca:v1:update',
@@ -142,18 +203,104 @@ describe('isSiteMessage', () => {
     ],
     ['a CMS-only message (ping)', pingMessage()],
     ['a CMS-only message (update)', updateMessage(1, entryResult, null)],
-    ['an unknown site message', { type: 'areca:v1:select', field: 'title' }],
+    [
+      'hello without url',
+      { type: 'areca:v1:hello', sdkVersion: '0.9.0', markers: true },
+    ],
+    [
+      'select without a rect',
+      { type: 'areca:v1:select', field: 'title', owner: null },
+    ],
+    [
+      'select with an owner that has two keys',
+      {
+        type: 'areca:v1:select',
+        field: 'title',
+        owner: { entry: 'a', global: 'b' },
+        rect: { x: 0, y: 0, width: 1, height: 1 },
+      },
+    ],
+    [
+      'markers with an empty field',
+      { type: 'areca:v1:markers', markers: [{ field: '', owner: null }] },
+    ],
+    [
+      'too many markers',
+      {
+        type: 'areca:v1:markers',
+        markers: Array.from({ length: 501 }, (_, i) => ({
+          field: `f${i}`,
+          owner: null,
+        })),
+      },
+    ],
+    ['navigate without url', { type: 'areca:v1:navigate' }],
+    [
+      'a CMS-only message (mode)',
+      modeMessage({
+        select: true,
+        showAreas: false,
+        cursorHint: false,
+        color: '#000000',
+        targets: [],
+      }),
+    ],
+    ['an unknown site message', { type: 'areca:v1:hover', field: 'title' }],
   ])('rejects %s', (_name, value) => {
     expect(isSiteMessage(value)).toBe(false)
   })
 
-  it('accepts a hello with markers true', () => {
-    expect(
-      isSiteMessage({
+  it.each<[string, unknown]>([
+    [
+      'hello',
+      {
         type: 'areca:v1:hello',
         sdkVersion: '0.9.0',
         markers: true,
-      }),
-    ).toBe(true)
+        url: 'https://site.test/__preview/articles/a',
+      },
+    ],
+    [
+      'markers',
+      {
+        type: 'areca:v1:markers',
+        markers: [
+          { field: 'title', owner: null },
+          { field: 'name', owner: { global: 'company' } },
+        ],
+      },
+    ],
+    [
+      'select',
+      {
+        type: 'areca:v1:select',
+        field: 'name',
+        owner: { entry: 'a1' },
+        rect: { x: 1, y: 2, width: 30, height: 40 },
+      },
+    ],
+    [
+      'navigate',
+      { type: 'areca:v1:navigate', url: 'https://site.test/journal' },
+    ],
+  ])('accepts %s', (_name, value) => {
+    expect(isSiteMessage(value)).toBe(true)
+  })
+
+  it('accepts every message the SDK guard accepts from a site', () => {
+    const fromSite = [
+      { type: 'areca:v1:markers', markers: [{ field: 'title', owner: null }] },
+      { type: 'areca:v1:navigate', url: 'https://site.test/x' },
+      {
+        type: 'areca:v1:select',
+        field: 'title',
+        owner: null,
+        rect: { x: 0, y: 0, width: 1, height: 1 },
+      },
+    ]
+    for (const message of fromSite) {
+      expect(sdkIsArecaMessage(message)).toBe(true)
+      expect(isSiteMessage(message)).toBe(true)
+    }
   })
 })

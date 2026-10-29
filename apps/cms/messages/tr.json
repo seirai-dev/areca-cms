@@ -2648,5 +2648,19 @@
   "visual_width_fit": "1440 sığdır",
   "visual_width_group": "Önizleme genişliği",
   "visual_width_mobile": "Mobil",
-  "visual_width_tablet": "Tablet"
+  "visual_width_tablet": "Tablet",
+  "visual_select": "Seç",
+  "visual_browse": "Gez",
+  "visual_select_group": "Önizlemedeki tıklamalar",
+  "visual_select_hint": "Düzenlemek için sayfanın bir bölümüne tıklayın. Gezinmek için {key} tuşunu basılı tutun.",
+  "visual_browse_hint": "Sayfayı ziyaretçiler gibi kullanın: bağlantılar ve düğmeler çalışır.",
+  "visual_show_areas": "Düzenlenebilir alanları göster",
+  "visual_back_fullscreen": "Tam ekran önizlemeye dön",
+  "visual_away": "Başka bir sayfayı görüntülüyorsunuz.",
+  "visual_away_back": "{title} sayfasına dön",
+  "visual_owner_part_of": "Şunun bir parçası:",
+  "visual_owner_open": "Görsel düzenleyicide aç",
+  "visual_owner_cancel": "İptal",
+  "visual_owner_site_content": "Site içeriği",
+  "visual_status_click_hint": "Değişiklikler yazdıkça görünür. Düzenlemek için sayfanın bir bölümüne tıklayın."
 }

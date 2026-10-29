@@ -439,11 +439,21 @@ test('the View draft link still opens a signed preview in both modes', async ({
   )
 })
 
-/** The built SDK bridge, served to the preview page as a module (see the bridge fixtures). */
-const SDK_BUNDLE = fileURLToPath(
-  new URL('../../../packages/site-sdk/dist/visual.js', import.meta.url),
-)
+/** The built SDK bridge (packages/site-sdk/dist), served to the preview page as modules. */
 const SDK_PATH = '/__sdk/visual.js'
+const SDK_DIR = '/__sdk/'
+
+/** Serves a built SDK module (`visual.js` imports `visual-overlay.js`). */
+function sdkModule(pathname: string) {
+  const name = pathname.slice(SDK_DIR.length)
+  if (!/^[a-z-]+\.js$/.test(name)) return null
+  return readFileSync(
+    fileURLToPath(
+      new URL(`../../../packages/site-sdk/dist/${name}`, import.meta.url),
+    ),
+    'utf8',
+  )
+}
 const BRIDGE_TITLE = 'A season in the hills'
 const LIVE_ENDPOINT = '**/api/editor/live-preview'
 
@@ -477,11 +487,14 @@ async function serveBridgePreview(
   page: Page,
   options: { cmsOrigin?: string } = {},
 ) {
-  const sdk = readFileSync(SDK_BUNDLE, 'utf8')
   let pages = 0
   await page.route(SITE_ROUTE, (route) => {
-    if (new URL(route.request().url()).pathname === SDK_PATH) {
-      return route.fulfill({ contentType: 'text/javascript', body: sdk })
+    const { pathname } = new URL(route.request().url())
+    if (pathname.startsWith(SDK_DIR)) {
+      const body = sdkModule(pathname)
+      return body === null
+        ? route.fulfill({ status: 404, body: '' })
+        : route.fulfill({ contentType: 'text/javascript', body })
     }
     pages += 1
     const cmsOrigin = options.cmsOrigin ?? new URL(page.url()).origin
@@ -538,7 +551,9 @@ test('with the SDK bridge, Visual goes live and typing updates the frame without
   // The title moves the slug (and so the page); the excerpt keeps the page.
   const next = `Live excerpt ${uniqueSuffix()}`
   await page.getByPlaceholder('Enter excerpt...').fill(next)
-  const meta = page.frameLocator('[data-testid="visual-frame"]').locator('.meta')
+  const meta = page
+    .frameLocator('[data-testid="visual-frame"]')
+    .locator('.meta')
   await expect(meta).toHaveText(next, { timeout: 5_000 })
 
   // Autosave runs after the live update; the frame must not reload for it.
@@ -649,4 +664,215 @@ test('a failing live endpoint shows Retrying and recovers when it works again', 
   })
   await expect(statusBadge(page)).toContainText('Live')
   await expect(frameHeading(page)).toHaveText(recovered, { timeout: 5_000 })
+})
+
+// ---------------------------------------------------------------------------
+// Tier 3: click to edit (docs/design/visual-editor.md, Decisions 12-17).
+
+/**
+ * The bridge fixture with field markers: the page's own title, excerpt and
+ * SEO summary, an element owned by another entry, and one whose owner does
+ * not exist (it must behave as unmarked).
+ */
+function markedPage(cmsOrigin: string, ownerEntryId: string | null) {
+  return bridgePage(cmsOrigin, BRIDGE_TITLE)
+    .replace('<h1>', '<h1 data-areca-field="title">')
+    .replace(
+      '<div class="meta">',
+      '<div class="meta" data-areca-field="excerpt">',
+    )
+    .replace(
+      '</main>',
+      `<p class="summary" data-areca-field="$seo.summary">In short: a season of tasting.</p>
+<aside style="margin-top:48px;font-family:system-ui">
+${ownerEntryId ? `<div class="owner" data-areca-field="title" data-areca-entry="${ownerEntryId}">Read next: the owner article</div>` : ''}
+<div class="ghost" data-areca-field="name" data-areca-entry="does-not-exist">A card for an entry that is gone</div>
+</aside></main>`,
+    )
+}
+
+/** Serves the marked fixture for every page (other pages too, for Browse). */
+async function serveMarkedPreview(page: Page, owner: { id: string | null }) {
+  await page.route(SITE_ROUTE, (route) => {
+    const { pathname } = new URL(route.request().url())
+    if (pathname.startsWith(SDK_DIR)) {
+      const body = sdkModule(pathname)
+      return body === null
+        ? route.fulfill({ status: 404, body: '' })
+        : route.fulfill({ contentType: 'text/javascript', body })
+    }
+    return route.fulfill({
+      contentType: 'text/html',
+      body: markedPage(new URL(page.url()).origin, owner.id),
+    })
+  })
+}
+
+function previewFrame(page: Page) {
+  return page.frameLocator('[data-testid="visual-frame"]')
+}
+
+/** The field key of the element focused in the editor. */
+function focusedField(page: Page) {
+  return page.evaluate(
+    () =>
+      document.activeElement
+        ?.closest('[data-field]')
+        ?.getAttribute('data-field') ?? null,
+  )
+}
+
+/** Number of boxes of a kind the bridge draws in its shadow root. */
+function overlayBoxes(page: Page, kind: 'hover' | 'highlight' | 'area') {
+  return previewDocument(page).evaluate((name) => {
+    const root = document.querySelector(
+      '[data-areca-visual="overlay"]',
+    )?.shadowRoot
+    if (!root) return 0
+    return [...root.querySelectorAll(`.box.${name}`)].filter(
+      (box) => (box as HTMLElement).style.display !== 'none',
+    ).length
+  }, kind)
+}
+
+async function openClickableVisual(
+  page: Page,
+  owner = { id: null as string | null },
+) {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await serveMarkedPreview(page, owner)
+  await savedEntry(page, `Clickable ${uniqueSuffix()}`)
+  await openVisual(page)
+  await expect(statusBadge(page)).toHaveAttribute('data-tier', 'live', {
+    timeout: 15_000,
+  })
+  await expect(statusBadge(page)).toHaveAttribute('data-clickable', 'true', {
+    timeout: 10_000,
+  })
+}
+
+test('click to edit: hover outlines a field, a click focuses and pulses it', async ({
+  page,
+}) => {
+  await openClickableVisual(page)
+  await expect(page.getByTestId('visual-select-mode')).toBeVisible()
+
+  await previewFrame(page).locator('h1').hover()
+  await expect.poll(() => overlayBoxes(page, 'hover')).toBe(1)
+
+  // Move focus away first, so the click is what focuses the title.
+  await page.getByPlaceholder('Enter excerpt...').focus()
+  await previewFrame(page).locator('h1').click()
+  await expect.poll(() => focusedField(page)).toBe('title')
+  await expect(page.locator('[data-field="title"][data-pulse]')).toHaveCount(1)
+})
+
+test('click to edit: focusing a field in the editor outlines it in the preview', async ({
+  page,
+}) => {
+  await openClickableVisual(page)
+  await page.getByPlaceholder('Enter excerpt...').focus()
+  await expect.poll(() => overlayBoxes(page, 'highlight')).toBe(1)
+  // A field the page does not show clears the outline.
+  await titleInput(page).focus()
+  await expect.poll(() => overlayBoxes(page, 'highlight')).toBe(1)
+  await page.locator('[data-field="slug"] input').focus()
+  await expect.poll(() => overlayBoxes(page, 'highlight')).toBe(0)
+})
+
+test('click to edit: an SEO marker opens its collapsed group and focuses the field', async ({
+  page,
+}) => {
+  await openClickableVisual(page)
+  await expect(page.locator('[data-field="$seo.summary"]')).toHaveCount(0)
+  await previewFrame(page).locator('.summary').click()
+  await expect.poll(() => focusedField(page)).toBe('$seo.summary')
+})
+
+test('Select keeps links from navigating; Browse follows them and the away bar returns', async ({
+  page,
+}) => {
+  await openClickableVisual(page)
+  const link = previewFrame(page).locator('nav a').nth(1)
+
+  await link.click()
+  await page.waitForTimeout(500)
+  await expect(page.getByTestId('visual-away')).toBeHidden()
+
+  await page.getByTestId('visual-browse').click()
+  await link.click()
+  await expect(page.getByTestId('visual-away')).toBeVisible({ timeout: 10_000 })
+  await page.getByTestId('visual-away-back').click()
+  await expect(page.getByTestId('visual-away')).toBeHidden({ timeout: 10_000 })
+})
+
+test('a click in full screen exits, focuses the field and offers Back to full preview', async ({
+  page,
+}) => {
+  await openClickableVisual(page)
+  const root = page.getByTestId('visual-preview')
+  await page.getByTestId('visual-fullscreen').click()
+  await expect(root).toHaveAttribute('data-fullscreen', 'true')
+
+  await previewFrame(page).locator('h1').click()
+  await expect(root).toHaveAttribute('data-fullscreen', 'false')
+  await expect.poll(() => focusedField(page)).toBe('title')
+
+  const back = page.getByTestId('visual-back-fullscreen')
+  await expect(back).toBeVisible()
+  await back.click()
+  await expect(root).toHaveAttribute('data-fullscreen', 'true')
+  await page.keyboard.press('Escape')
+  await expect(root).toHaveAttribute('data-fullscreen', 'false')
+  await expect(back).toBeHidden()
+})
+
+test('another entry on the page opens a popover; unknown owners stay unmarked; Open goes there', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const owner = { id: null as string | null }
+  await serveMarkedPreview(page, owner)
+  const ownerTitle = `Owner ${uniqueSuffix()}`
+  const ownerUrl = await savedEntry(page, ownerTitle)
+  owner.id = new URL(ownerUrl).pathname.split('/').pop() ?? null
+  await backToCollection(page)
+  await createArticle(page, `Referrer ${uniqueSuffix()}`)
+  await openVisual(page)
+  await expect(statusBadge(page)).toHaveAttribute('data-clickable', 'true', {
+    timeout: 15_000,
+  })
+
+  // The missing entry is not a target: no popover, no field.
+  await previewFrame(page).locator('.ghost').click()
+  await page.waitForTimeout(400)
+  await expect(page.getByTestId('visual-owner-popover')).toBeHidden()
+
+  await previewFrame(page).locator('.owner').click()
+  const popover = page.getByTestId('visual-owner-popover')
+  await expect(popover).toBeVisible({ timeout: 10_000 })
+  await expect(popover).toContainText(`Articles › ${ownerTitle}`)
+  await page.getByTestId('visual-owner-open').click()
+  await expect(page).toHaveURL(new RegExp(`/${owner.id}\\?view=visual`))
+  await expect(titleInput(page)).toHaveValue(ownerTitle)
+})
+
+test('Show editable areas outlines every target and is remembered', async ({
+  page,
+}) => {
+  await openClickableVisual(page)
+  const toggle = page.getByTestId('visual-show-areas')
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+  // Title, excerpt and SEO summary (the ghost owner is not a target).
+  await expect.poll(() => overlayBoxes(page, 'area')).toBe(3)
+
+  await page.reload()
+  await expect(page.getByTestId('visual-show-areas')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+    { timeout: 20_000 },
+  )
+  await page.getByTestId('visual-show-areas').click()
 })

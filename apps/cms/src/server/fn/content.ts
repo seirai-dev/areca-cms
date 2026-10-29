@@ -51,6 +51,7 @@ import {
   BULK_ENTRY_ACTIONS,
 } from '#/server/content/entry-actions'
 import { listInboundReferences } from '#/server/content/inbound-references'
+import { resolvePreviewOwners } from '#/server/content/preview-owners'
 import { NotFoundError } from '#/server/content/errors'
 import {
   requireEntryAccess,
@@ -444,6 +445,32 @@ export const getPreviewUrlFn = createServerFn({ method: 'GET' })
         data.locale,
       ),
     }
+  })
+
+/**
+ * Which owners a preview marks really exist on this site and the caller may
+ * edit them (Visual editor, Decision 15). GET, so it does not count against the
+ * mutation rate budget.
+ */
+export const resolvePreviewOwnersFn = createServerFn({ method: 'GET' })
+  .validator(
+    z.object({
+      siteId: z.string().min(1).max(ID_MAX_LENGTH),
+      owners: z
+        .array(
+          z.union([
+            z.object({ entry: z.string().min(1).max(200) }).strict(),
+            z.object({ global: z.string().min(1).max(200) }).strict(),
+          ]),
+        )
+        .max(100),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const { session } = await requireSiteAccess(data.siteId)
+    return resolvePreviewOwners(data.siteId, data.owners, {
+      isAgencyAdmin: session.user.isAgencyAdmin,
+    })
   })
 
 export const upsertCollectionFn = createServerFn({ method: 'POST' })

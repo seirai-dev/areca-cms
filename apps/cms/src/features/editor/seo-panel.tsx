@@ -29,6 +29,7 @@ import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
 import { ImageWell } from './fields/image-well'
+import { useRevealListener } from './reveal-field'
 
 type GroupKey = 'search' | 'social' | 'answers' | 'structured' | 'advanced'
 
@@ -332,6 +333,15 @@ export function SeoPanel({
       return next
     })
   }, [errorKey])
+
+  // The visual editor reveals a field: open the group that holds it.
+  useRevealListener((key) => {
+    if (!key.startsWith(`${SEO_KEY}.`)) return
+    const group = GROUP_OF[key.slice(SEO_KEY.length + 1) as keyof EntrySeo] as
+      GroupKey | undefined
+    if (group)
+      setOpen((prev) => (prev[group] ? prev : { ...prev, [group]: true }))
+  })
 
   const set = <TKey extends keyof EntrySeo>(key: TKey, value: EntrySeo[TKey]) =>
     onChange(compactSeo({ ...seo, [key]: value }))

@@ -2,20 +2,24 @@ import type { ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
 import type { ImageValue } from '@areca-cms/site-sdk'
 import { m } from '#/paraglide/messages'
+import type { FieldMarker } from '../lib/visual-markers.tsx'
 import { buttonSecondary, Eyebrow } from './ui.tsx'
 
 /**
  * Renders a CMS image with its intrinsic size (to prevent layout shift) and
  * alt text. Images load lazily unless they are above the fold (`priority`).
+ * `marker` is the image field's visual editor marker.
  */
 export function CmsImage({
   image,
   className,
   priority = false,
+  marker = {},
 }: {
   image: ImageValue
   className?: string
   priority?: boolean
+  marker?: FieldMarker
 }) {
   return (
     <img
@@ -27,6 +31,7 @@ export function CmsImage({
       fetchPriority={priority ? 'high' : undefined}
       decoding="async"
       className={className}
+      {...marker}
     />
   )
 }

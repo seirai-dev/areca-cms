@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router'
 import { m } from '#/paraglide/messages'
 import type { ArticlesEntry, AuthorsEntry } from '../generated/content/areca.gen.ts'
+import { useField } from '../lib/visual-markers.tsx'
 import { CmsImage } from './cms-image.tsx'
 import { formatDate } from './formatters.ts'
 import { CategoryPill } from './ui.tsx'
@@ -9,6 +10,8 @@ import { CategoryPill } from './ui.tsx'
  * `feature` is the large side-by-side lead story, `lead` a large stacked one
  * for narrower columns, `row` a compact side-by-side card, and `default` a
  * vertical card. `author` adds a byline with a round portrait.
+ * Fields are marked as the article's (and its author's) entry, since a card can
+ * sit on a page that belongs to another entry.
  */
 export function ArticleCard({
   article,
@@ -20,6 +23,8 @@ export function ArticleCard({
   variant?: 'default' | 'feature' | 'lead' | 'row'
 }) {
   const { data } = article
+  const field = useField()
+  const owner = { entry: article.id }
   const rawDate = data.publishedAt ?? article.publishedAt
   const published = formatDate(rawDate)
   const isFeature = variant === 'feature'
@@ -36,6 +41,7 @@ export function ArticleCard({
     >
       <CmsImage
         image={data.heroImage}
+        marker={field('heroImage', owner)}
         className={`group-hover:scale-[1.035] h-full w-full object-cover transition-transform duration-700 ease-out ${
           isFeature
             ? 'aspect-[4/3] md:aspect-[5/4]'
@@ -51,6 +57,7 @@ export function ArticleCard({
 
   const title = (
     <h2
+      {...field('title', owner)}
       className={`font-display leading-[1.1] tracking-tight text-ink ${
         isFeature
           ? 'mt-6 text-4xl md:text-5xl'
@@ -74,25 +81,35 @@ export function ArticleCard({
   const byline = author ? (
     <p className="mt-5 flex items-center gap-3 text-sm text-muted">
       {author.data.portrait ? (
-        <CmsImage image={author.data.portrait} className="size-8 rounded-full object-cover" />
+        <CmsImage
+          image={author.data.portrait}
+          marker={field('portrait', { entry: author.id })}
+          className="size-8 rounded-full object-cover"
+        />
       ) : null}
       <span>
-        {m.by()} <span className="font-medium text-ink">{author.data.name}</span>
+        {m.by()}{' '}
+        <span className="font-medium text-ink" {...field('name', { entry: author.id })}>
+          {author.data.name}
+        </span>
       </span>
     </p>
   ) : null
 
   const meta = (
     <div className="flex flex-wrap items-center gap-3 text-sm text-muted">
-      <CategoryPill category={data.category} />
+      <CategoryPill category={data.category} marker={field('category', owner)} />
       {published ? (
-        <time dateTime={rawDate ?? undefined}>{published}</time>
+        <time dateTime={rawDate ?? undefined} {...field('publishedAt', owner)}>
+          {published}
+        </time>
       ) : null}
     </div>
   )
 
   const excerpt = data.excerpt ? (
     <p
+      {...field('excerpt', owner)}
       className={`text-muted ${
         isFeature || isLead ? 'mt-5 text-lg leading-8' : isRow ? 'mt-2 line-clamp-2 text-sm leading-6' : 'mt-3 line-clamp-3 leading-7'
       }`}

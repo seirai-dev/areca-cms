@@ -36,7 +36,7 @@ The visual editor puts a live preview of the page beside the fields. It updates 
 11. **Full screen is in-app.** The preview fills the window, the app chrome and editor column hide, and a floating toolbar stays with a clearly visible **Exit full screen** button (text + "Esc" hint). Esc or the button exits.
 12. **Selection (PR 3).** Select is the default: hovering a marked element outlines it with the field's label; clicking scrolls to, focuses and pulses the field (~1.2 s). Links don't navigate in Select. A **Browse** toggle (or holding ⌥/Alt) uses the page normally. Focusing a field in the CMS outlines its element in the preview and scrolls it into view.
 13. **Click in full screen (PR 3).** Clicking a marked element exits full screen, then focuses the field; the element stays outlined. Unmarked elements do nothing. A label hint follows the cursor over marked elements. After such an exit, a **Back to full preview** pill shows in the toolbar until used, ⌘⇧Enter, or another selection. Never re-enter full screen automatically.
-14. **Hidden fields (PR 3).** A click on a field inside a collapsed group (SEO panel, section group) opens the group first. If the preview shows another language than the editor, the editor switches to the previewed language.
+14. **Hidden fields (PR 3).** A click on a field inside a collapsed group (SEO panel, section group) opens the group first. If the preview shows another language than the editor, the editor switches to the previewed language. *As built:* live updates always carry the editor's language, so a clickable (Tier 3) preview never shows another one and no switch is needed.
 15. **Other owners (PR 3).** Elements marked with another entry or section (header, footer, referenced author) are verified in one server call: it exists on this site, is not deleted or archived, and this user can edit it. Only verified ones are outlined and open a popover "This is part of *Site content › Footer*. Open in visual editor", which saves the current entry before navigating. Unverified ones behave as unmarked.
 16. **Show editable areas (PR 3).** A toolbar toggle draws faint outlines on every verified marker. Off by default, remembered.
 17. **Browsing away (PR 3).** When the iframe leaves the entry's preview page, a bar shows: "You're viewing another page. Back to *Entry title*".
@@ -69,7 +69,7 @@ Helper `previewBaseUrl(site) = site.previewUrl ?? site.productionUrl` in a plain
 - **CSP `frame-src`.** The CMS is a single-page app: the CSP header arrives with the first document and applies to every editor opened later, so `frame-src` cannot follow the current editor's site. Production: `frame-src 'self' https: http://localhost:* http://127.0.0.1:*` (http on other hosts would be mixed content from an https CMS anyway). Development: `frame-src 'self' http: https:`. `frame-ancestors 'none'` and `X-Frame-Options: DENY` stay: nothing may frame the CMS.
 - **Live payload endpoint (PR 2).** `POST /api/editor/live-preview` with `{ siteId, entryId, collection | global, data, locale }` returns exactly the `/api/sites/preview` JSON for the unsaved data, built by the same builders (`buildPreviewEntryFromDraft`, `buildPreviewGlobalFromDraft`) without writing. An API route rather than a server function so it can have its own rate budget (600/min per user, outside the 60/min mutation budget that autosave uses). Authz as `updateDraftFn`. Invalid data gives 400 and the editor keeps the last good preview. An empty or malformed unsaved slug falls back to the saved one.
 - **Site side (PR 2).** The bridge forwards each update to the site, which renders it with `content.previewFrom(result)` (on its server, since content reads files). The demo does this with a POST server function. `visualEditingHeaders({ cmsOrigin })` sends `frame-ancestors` on the preview route.
-- **Marker verification (PR 3).** `resolvePreviewOwnersFn({ siteId, owners: [{ entry } | { global }] })` returns, per owner, `{ label, collectionLabel, href }` or nothing. At most 100 owners per call.
+- **Marker verification (PR 3).** `resolvePreviewOwnersFn({ siteId, owners: [{ entry } | { global }] })` (GET, outside the mutation budget) returns, per owner and in order, `{ kind: 'entry', entryId, collectionKey, collectionLabel, label }`, `{ kind: 'global', entryId, globalKey, label }` or null. The editor builds the link. At most 100 owners per call. Entries must be on this site and not archived; sections match by key or camelCase key and must be enabled (unless agency). Owners equal to the document being edited count as its own fields.
 - **Preview token refresh.** The editor refetches the preview URL every 50 minutes while Visual mode is open (tokens last 1 h).
 
 ## Bridge protocol (PR 2/3)
@@ -78,14 +78,16 @@ All messages are `{ type: 'areca:v1:<name>', … }`.
 
 | Direction | Type | Payload |
 | --- | --- | --- |
-| site → CMS | `hello` | `{ sdkVersion, markers: boolean }` (answers `ping`) |
+| site → CMS | `hello` | `{ sdkVersion, markers: boolean, url }` (on start and answering `ping`) |
 | CMS → site | `ping` | `{}` (sent on iframe load until `hello`, max 3 s) |
-| CMS → site | `update` | `{ seq, entry | global, locale }` |
-| site → CMS | `markers` | `{ owners: Owner[] }` (after render) |
-| site → CMS | `select` | `{ field, owner }` |
-| CMS → site | `highlight` | `{ field, owner } \| null` |
-| CMS → site | `mode` | `{ select: boolean, showAreas: boolean, labels, verified: Owner[] }` |
-| site → CMS | `navigate` | `{ url, onEntryPage: boolean }` |
+| CMS → site | `update` | `{ seq, result, locale }` |
+| site → CMS | `markers` | `{ markers: { field, owner }[] }` (after render, on change, and after every `ping`) |
+| site → CMS | `select` | `{ field, owner, rect }` (a click on a target in Select mode) |
+| CMS → site | `highlight` | `{ target: { field, owner } \| null }` |
+| CMS → site | `mode` | `{ select, showAreas, cursorHint, color: '#rrggbb', targets: { field, owner, label }[] }` |
+| site → CMS | `navigate` | `{ url }` (client-side navigation; the CMS compares it with the preview page) |
+
+`owner` is `null` (the page's own entry), `{ entry: id }` or `{ global: key }`. Only markers listed in `targets` are outlined or clickable; every other marker behaves as unmarked. Holding ⌥/Alt makes a click browse. A full reload that no bridge answers also counts as browsing away.
 
 The bridge draws outlines and label chips itself, in a shadow root so site CSS cannot reach them, using styles the CMS sends.
 

@@ -7,6 +7,8 @@ All notable changes to `@areca-cms/site-sdk`.
 ### Features
 
 - **visual editing:** `@areca-cms/site-sdk/visual` adds `createVisualBridge`, which connects a preview page to the CMS over `postMessage` and applies each newer update. It only talks to the CMS origin, and it does nothing outside an iframe. `visualEditingHeaders` builds the `frame-ancestors` policy for the preview route.
+- **visual editing:** `field(key, owner?)` in `@areca-cms/site-sdk/visual` marks an element as showing a field. The editor outlines marked elements in Select mode and jumps to the field on click. Owners are another entry (`{ entry }`) or a site content section (`{ global }`, such as the header or footer). Browse, or holding Option/Alt, uses the page normally. Markers do nothing outside the visual editor.
+- **visual editing:** the bridge reports client-side navigations, so the editor can show when the preview has left the entry's page. `hello` now includes the page address and whether markers are reported. `createVisualBridge` takes `markers: false` to turn the overlay off.
 - **visual editing:** `@areca-cms/site-sdk/visual-react` adds `useLivePreview`, which shows the published value until the CMS sends an update, then the latest resolved value.
 - **content:** `content.previewFrom(result)` turns a preview result the CMS already returned into the same entry `content.preview(token)` gives, without a request. `preview()` behaves as before. `previewFrom` is now a reserved collection and site content name.
 

@@ -5,6 +5,13 @@ type VisualFullScreen = {
   setFullScreen: (value: boolean) => void
   /** For the keyboard shortcut (mod+Shift+Enter) and the menus. */
   toggleFullScreen: () => void
+  /**
+   * True after a click in the full-screen preview left full screen to open a
+   * field: the toolbar offers "Back to full preview" (Decision 13).
+   */
+  canReturn: boolean
+  /** A click in the preview selected something. Leaves full screen if needed. */
+  onPreviewSelection: () => void
 }
 
 const VisualFullScreenContext = React.createContext<VisualFullScreen | null>(
@@ -24,16 +31,32 @@ export function VisualFullScreenProvider({
   active: boolean
   children: React.ReactNode
 }) {
-  const [fullScreen, setFullScreen] = React.useState(false)
+  const [fullScreen, setFullScreenState] = React.useState(false)
+  const [canReturn, setCanReturn] = React.useState(false)
+  const fullRef = React.useRef(fullScreen)
+  fullRef.current = fullScreen
 
-  const toggleFullScreen = React.useCallback(
-    () => setFullScreen((value) => !value),
-    [],
-  )
+  // Any explicit change (button, Esc, shortcut, the pill) ends the offer to return.
+  const setFullScreen = React.useCallback((value: boolean) => {
+    setCanReturn(false)
+    setFullScreenState(value)
+  }, [])
+
+  const toggleFullScreen = React.useCallback(() => {
+    setCanReturn(false)
+    setFullScreenState((value) => !value)
+  }, [])
+
+  // Never re-enters full screen by itself: only the pill or the shortcut do.
+  const onPreviewSelection = React.useCallback(() => {
+    const wasFull = fullRef.current
+    setCanReturn(wasFull)
+    if (wasFull) setFullScreenState(false)
+  }, [])
 
   React.useEffect(() => {
     if (!active) setFullScreen(false)
-  }, [active])
+  }, [active, setFullScreen])
 
   React.useEffect(() => {
     if (!fullScreen) return
@@ -43,11 +66,23 @@ export function VisualFullScreenProvider({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [fullScreen])
+  }, [fullScreen, setFullScreen])
 
   const value = React.useMemo(
-    () => ({ fullScreen, setFullScreen, toggleFullScreen }),
-    [fullScreen, toggleFullScreen],
+    () => ({
+      fullScreen,
+      setFullScreen,
+      toggleFullScreen,
+      canReturn,
+      onPreviewSelection,
+    }),
+    [
+      fullScreen,
+      setFullScreen,
+      toggleFullScreen,
+      canReturn,
+      onPreviewSelection,
+    ],
   )
 
   return (

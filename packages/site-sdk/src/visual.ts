@@ -11,6 +11,7 @@
  * accepts messages from that origin sent by its parent window.
  */
 import type { PreviewResult } from './types.js'
+import { startOverlay, type OverlayHandle } from './visual-overlay.js'
 
 /** The SDK version the bridge announces in `hello`. Matches the package version. */
 export const SDK_VERSION = '0.9.0'
@@ -23,8 +24,16 @@ export type PreviewUpdateInfo = { seq: number; locale: string | null }
 /** CMS → site. Asks the bridge to announce itself again. */
 export type PingMessage = { type: 'areca:v1:ping' }
 
-/** Site → CMS. Announces the bridge, its SDK version and whether it reports markers. */
-export type HelloMessage = { type: 'areca:v1:hello'; sdkVersion: string; markers: boolean }
+/**
+ * Site → CMS. Announces the bridge, its SDK version, whether it reports markers and
+ * the page it is on (`location.href`).
+ */
+export type HelloMessage = {
+  type: 'areca:v1:hello'
+  sdkVersion: string
+  markers: boolean
+  url: string
+}
 
 /** CMS → site. A preview result built from unsaved values. */
 export type UpdateMessage = {
@@ -34,7 +43,69 @@ export type UpdateMessage = {
   locale: string | null
 }
 
-export type ArecaMessage = PingMessage | HelloMessage | UpdateMessage
+/**
+ * Who owns a marked element when it is not the page's own entry: another entry
+ * (by id) or a site content section (by key). `null` means the page's own entry.
+ */
+export type MarkerOwner = { entry: string } | { global: string }
+
+/** One marked field on the page: `field('title')` or `field('name', { global: 'company' })`. */
+export type Marker = { field: string; owner: MarkerOwner | null }
+
+/** A marker the CMS can open, with the label the outline chip shows. */
+export type MarkerTarget = Marker & { label: string }
+
+/** An element's box in the preview page's viewport, in CSS pixels. */
+export type MarkerRect = { x: number; y: number; width: number; height: number }
+
+/** Site → CMS. The distinct markers on the page. Sent after render and when they change. */
+export type MarkersMessage = { type: 'areca:v1:markers'; markers: Marker[] }
+
+/** Site → CMS. A marked element was clicked in Select mode. */
+export type SelectMessage = {
+  type: 'areca:v1:select'
+  field: string
+  owner: MarkerOwner | null
+  rect: MarkerRect
+}
+
+/** Site → CMS. The page changed its address without a reload (client-side navigation). */
+export type NavigateMessage = { type: 'areca:v1:navigate'; url: string }
+
+/** CMS → site. Outline this marker (a field was focused in the CMS), or nothing. */
+export type HighlightMessage = { type: 'areca:v1:highlight'; target: Marker | null }
+
+/**
+ * CMS → site. How the bridge behaves. `targets` lists the markers the CMS can open;
+ * any other marker behaves as if unmarked. `select` false is Browse: the page works
+ * normally. `showAreas` outlines every target faintly. `cursorHint` shows the label
+ * next to the cursor (full screen). `color` is the outline colour (`#rrggbb`).
+ */
+export type ModeMessage = {
+  type: 'areca:v1:mode'
+  select: boolean
+  showAreas: boolean
+  cursorHint: boolean
+  color: string
+  targets: MarkerTarget[]
+}
+
+export type ArecaMessage =
+  | PingMessage
+  | HelloMessage
+  | UpdateMessage
+  | MarkersMessage
+  | SelectMessage
+  | NavigateMessage
+  | HighlightMessage
+  | ModeMessage
+
+/** Longest field key, owner id or label the protocol accepts. */
+export const MARKER_TEXT_MAX = 200
+/** Most markers or targets in one message. */
+export const MARKERS_MAX = 500
+/** Longest URL in `hello` and `navigate`. */
+export const URL_MAX = 4096
 
 type Loose = Record<string, unknown>
 
@@ -52,6 +123,39 @@ function isPreviewResult(value: unknown): value is PreviewResult {
   )
 }
 
+function isText(value: unknown, max = MARKER_TEXT_MAX): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= max
+}
+
+function isOwner(value: unknown): value is MarkerOwner | null {
+  if (value === null) return true
+  if (!isRecord(value)) return false
+  const keys = Object.keys(value)
+  if (keys.length !== 1) return false
+  return keys[0] === 'entry' ? isText(value.entry) : keys[0] === 'global' && isText(value.global)
+}
+
+function isMarker(value: unknown): value is Marker {
+  return isRecord(value) && isText(value.field) && isOwner(value.owner)
+}
+
+function isTarget(value: unknown): value is MarkerTarget {
+  return isMarker(value) && isText((value as Loose).label)
+}
+
+function isRect(value: unknown): value is MarkerRect {
+  return (
+    isRecord(value) &&
+    [value.x, value.y, value.width, value.height].every(
+      (n) => typeof n === 'number' && Number.isFinite(n),
+    )
+  )
+}
+
+function isList<T>(value: unknown, item: (v: unknown) => v is T): value is T[] {
+  return Array.isArray(value) && value.length <= MARKERS_MAX && value.every(item)
+}
+
 /** True for a message this protocol version defines, with every field the right type. */
 export function isArecaMessage(value: unknown): value is ArecaMessage {
   if (!isRecord(value) || typeof value.type !== 'string' || !value.type.startsWith(PREFIX)) {
@@ -61,7 +165,11 @@ export function isArecaMessage(value: unknown): value is ArecaMessage {
     case 'areca:v1:ping':
       return true
     case 'areca:v1:hello':
-      return typeof value.sdkVersion === 'string' && typeof value.markers === 'boolean'
+      return (
+        typeof value.sdkVersion === 'string' &&
+        typeof value.markers === 'boolean' &&
+        isText(value.url, URL_MAX)
+      )
     case 'areca:v1:update':
       return (
         typeof value.seq === 'number' &&
@@ -70,9 +178,65 @@ export function isArecaMessage(value: unknown): value is ArecaMessage {
         (value.locale === null || typeof value.locale === 'string') &&
         isPreviewResult(value.result)
       )
+    case 'areca:v1:markers':
+      return isList(value.markers, isMarker)
+    case 'areca:v1:select':
+      return isText(value.field) && isOwner(value.owner) && isRect(value.rect)
+    case 'areca:v1:navigate':
+      return isText(value.url, URL_MAX)
+    case 'areca:v1:highlight':
+      return value.target === null || isMarker(value.target)
+    case 'areca:v1:mode':
+      return (
+        typeof value.select === 'boolean' &&
+        typeof value.showAreas === 'boolean' &&
+        typeof value.cursorHint === 'boolean' &&
+        typeof value.color === 'string' &&
+        /^#[0-9a-fA-F]{6}$/.test(value.color) &&
+        isList(value.targets, isTarget)
+      )
     default:
       return false
   }
+}
+
+/** A stable string for a marker, equal on both sides: `|title`, `entry:abc|name`, `global:company|email`. */
+export function markerKey(marker: Marker): string {
+  const owner =
+    marker.owner === null
+      ? ''
+      : 'entry' in marker.owner
+        ? `entry:${marker.owner.entry}`
+        : `global:${marker.owner.global}`
+  return `${owner}|${marker.field}`
+}
+
+/** The attributes `field()` returns. Spread them on the element that shows the field. */
+export type VisualFieldAttributes = {
+  'data-areca-field': string
+  'data-areca-entry'?: string
+  'data-areca-global'?: string
+}
+
+/**
+ * Marks an element as showing a field, so the visual editor can outline it and jump
+ * to the field on click. Use the key as your site code sees it (camelCase, or
+ * `$seo.title` for SEO). Without an owner the field belongs to the page's own entry;
+ * pass `{ entry: id }` or `{ global: key }` for a referenced entry or a site content
+ * section (header, footer). The attributes are inert outside the visual editor.
+ *
+ * @example
+ * <h1 {...field('title')}>{article.title}</h1>
+ * <p {...field('email', { global: 'company' })}>{company.email}</p>
+ */
+export function field(
+  key: string,
+  owner?: { entry: string } | { global: string },
+): VisualFieldAttributes {
+  if (!isText(key)) throw new TypeError(`field(): the key must be 1-${MARKER_TEXT_MAX} characters`)
+  if (owner && 'entry' in owner) return { 'data-areca-field': key, 'data-areca-entry': owner.entry }
+  if (owner && 'global' in owner) return { 'data-areca-field': key, 'data-areca-global': owner.global }
+  return { 'data-areca-field': key }
 }
 
 /** The part of `MessageEvent` the bridge reads. */
@@ -86,8 +250,11 @@ export interface BridgeMessageEvent {
 export interface BridgeWindow {
   readonly self: unknown
   readonly parent: { postMessage(message: unknown, targetOrigin: string): void }
+  readonly location?: { readonly href: string }
   addEventListener(type: 'message', listener: (event: BridgeMessageEvent) => void): void
+  addEventListener(type: 'popstate' | 'hashchange', listener: () => void): void
   removeEventListener(type: 'message', listener: (event: BridgeMessageEvent) => void): void
+  removeEventListener(type: 'popstate' | 'hashchange', listener: () => void): void
 }
 
 export type VisualBridgeOptions = {
@@ -97,6 +264,11 @@ export type VisualBridgeOptions = {
   onUpdate: (result: PreviewResult, info: PreviewUpdateInfo) => void
   /** Defaults to `globalThis.window`. */
   window?: BridgeWindow
+  /**
+   * Whether to report markers and draw the click-to-edit overlay. Defaults to true. The
+   * overlay only starts on the real page (not with a `window` option).
+   */
+  markers?: boolean
 }
 
 export type VisualBridge = {
@@ -107,6 +279,9 @@ export type VisualBridge = {
 }
 
 const inert: VisualBridge = { destroy() {}, connected: () => false }
+
+/** How often the bridge checks the address for changes no event reports. */
+const NAVIGATION_POLL_MS = 300
 
 /** `new URL(value).origin`, refusing values with no origin such as `file:` URLs. */
 function normaliseOrigin(value: string): string {
@@ -122,18 +297,47 @@ function normaliseOrigin(value: string): string {
 
 /**
  * Connects a site's preview page to the CMS. It answers `ping` with `hello`, announces
- * itself once when created, and passes each newer `update` to `onUpdate`. Does nothing
- * when there is no window or the page is not framed.
+ * itself once when created, and passes each newer `update` to `onUpdate`. It reports
+ * client-side navigations, and draws the marker overlay on the real page (see
+ * `markers`). Does nothing when there is no window or the page is not framed.
  */
 export function createVisualBridge(options: VisualBridgeOptions): VisualBridge {
   const cmsOrigin = normaliseOrigin(options.cmsOrigin)
   const win = options.window ?? (globalThis as { window?: BridgeWindow }).window
   if (win === undefined || win.parent === win.self) return inert
   const target: BridgeWindow = win
+  const markers = options.markers ?? true
 
-  const hello: HelloMessage = { type: 'areca:v1:hello', sdkVersion: SDK_VERSION, markers: false }
   let connected = false
   let lastSeq = -1
+  let destroyed = false
+
+  function currentHref(): string {
+    const href = target.location?.href
+    return href && href.length <= URL_MAX ? href : 'about:blank'
+  }
+
+  function post(message: unknown) {
+    target.parent.postMessage(message, cmsOrigin)
+  }
+
+  function hello(): HelloMessage {
+    return { type: 'areca:v1:hello', sdkVersion: SDK_VERSION, markers, url: currentHref() }
+  }
+
+  let lastHref = currentHref()
+
+  /** Reports the address once per change. Called by events, the poll and destroy. */
+  function reportNavigation() {
+    const href = currentHref()
+    if (href === lastHref) return
+    lastHref = href
+    post({ type: 'areca:v1:navigate', url: href } satisfies NavigateMessage)
+  }
+
+  function onNavigation() {
+    if (!destroyed) reportNavigation()
+  }
 
   function onMessage(event: BridgeMessageEvent) {
     if (event.origin !== cmsOrigin || event.source !== target.parent) return
@@ -141,21 +345,49 @@ export function createVisualBridge(options: VisualBridgeOptions): VisualBridge {
     const message = event.data
     if (message.type === 'areca:v1:ping') {
       connected = true
-      target.parent.postMessage(hello, cmsOrigin)
+      post(hello())
+      // The CMS forgets markers when the frame reloads, so answer every ping with them.
+      overlay?.resend()
     } else if (message.type === 'areca:v1:update') {
       connected = true
       if (message.seq <= lastSeq) return
       lastSeq = message.seq
       options.onUpdate(message.result, { seq: message.seq, locale: message.locale })
+    } else if (message.type === 'areca:v1:mode') {
+      overlay?.setMode(message)
+    } else if (message.type === 'areca:v1:highlight') {
+      overlay?.highlight(message.target)
     }
   }
 
   target.addEventListener('message', onMessage)
-  target.parent.postMessage(hello, cmsOrigin)
+  target.addEventListener('popstate', onNavigation)
+  target.addEventListener('hashchange', onNavigation)
+  const poll = globalThis.setInterval(onNavigation, NAVIGATION_POLL_MS)
+  post(hello())
+
+  // The overlay draws on the real page only. A fake window (tests) never touches the DOM.
+  // It starts after hello, so its first markers message follows the announcement.
+  const overlay: OverlayHandle | null =
+    markers && options.window === undefined && typeof document !== 'undefined'
+      ? startOverlay({
+          post: (message) => post(message),
+          document,
+          window: target as unknown as Window,
+        })
+      : null
 
   return {
     destroy() {
+      if (destroyed) return
+      destroyed = true
+      globalThis.clearInterval(poll)
+      // The page may unmount after its address changed (client-side routers), so report it last.
+      reportNavigation()
       target.removeEventListener('message', onMessage)
+      target.removeEventListener('popstate', onNavigation)
+      target.removeEventListener('hashchange', onNavigation)
+      overlay?.destroy()
     },
     connected: () => connected,
   }

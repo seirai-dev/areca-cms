@@ -2648,5 +2648,19 @@
   "visual_width_fit": "1440 passend",
   "visual_width_group": "Breedte van voorbeeld",
   "visual_width_mobile": "Mobiel",
-  "visual_width_tablet": "Tablet"
+  "visual_width_tablet": "Tablet",
+  "visual_select": "Selecteren",
+  "visual_browse": "Bladeren",
+  "visual_select_group": "Klikken in het voorbeeld",
+  "visual_select_hint": "Klik op een deel van de pagina om het te bewerken. Houd {key} ingedrukt om te bladeren.",
+  "visual_browse_hint": "Gebruik de pagina zoals bezoekers dat doen: links en knoppen werken.",
+  "visual_show_areas": "Bewerkbare delen tonen",
+  "visual_back_fullscreen": "Terug naar volledig scherm",
+  "visual_away": "Je bekijkt een andere pagina.",
+  "visual_away_back": "Terug naar {title}",
+  "visual_owner_part_of": "Dit hoort bij",
+  "visual_owner_open": "Openen in visuele editor",
+  "visual_owner_cancel": "Annuleren",
+  "visual_owner_site_content": "Sitecontent",
+  "visual_status_click_hint": "Wijzigingen verschijnen terwijl je typt. Klik op een deel van de pagina om het te bewerken."
 }

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createLatestResolver,
   createVisualBridge,
@@ -22,24 +22,33 @@ const result: PreviewResult = {
 
 type Posted = { message: unknown; targetOrigin: string }
 
+const PAGE = 'https://site.test/blog/alpha'
+
 /**
  * A window with an injectable parent. `framed: false` makes the parent the window
  * itself, as a top-level page sees it. Messages from the CMS come from `parent`.
+ * `navigate` changes the address and fires `popstate`, as a client-side router does.
  */
-function fakeWindow(options: { framed?: boolean } = {}) {
+function fakeWindow(options: { framed?: boolean; href?: string | null } = {}) {
   const listeners = new Set<(event: BridgeMessageEvent) => void>()
+  const navListeners = new Set<() => void>()
   const posted: Posted[] = []
   const parent = {
     postMessage(message: unknown, targetOrigin: string) {
       posted.push({ message, targetOrigin })
     },
   }
+  const location: { href?: string } = {}
+  if (options.href !== null) location.href = options.href ?? PAGE
   const win: Record<string, unknown> = {
-    addEventListener(type: string, listener: (event: BridgeMessageEvent) => void) {
-      if (type === 'message') listeners.add(listener)
+    location,
+    addEventListener(type: string, listener: (event: never) => void) {
+      if (type === 'message') listeners.add(listener as (event: BridgeMessageEvent) => void)
+      else if (type === 'popstate' || type === 'hashchange') navListeners.add(listener as () => void)
     },
-    removeEventListener(type: string, listener: (event: BridgeMessageEvent) => void) {
-      if (type === 'message') listeners.delete(listener)
+    removeEventListener(type: string, listener: (event: never) => void) {
+      if (type === 'message') listeners.delete(listener as (event: BridgeMessageEvent) => void)
+      else navListeners.delete(listener as () => void)
     },
   }
   win.self = win
@@ -49,6 +58,7 @@ function fakeWindow(options: { framed?: boolean } = {}) {
     parent: win.parent,
     posted,
     listeners,
+    navListeners,
     /** Delivers a message event to every listener, as the browser does. */
     dispatch(event: Partial<BridgeMessageEvent>) {
       const full: BridgeMessageEvent = {
@@ -59,15 +69,39 @@ function fakeWindow(options: { framed?: boolean } = {}) {
       }
       for (const listener of [...listeners]) listener(full)
     },
+    /** Changes the address and fires `popstate`, as a client-side router does. */
+    navigate(href: string) {
+      location.href = href
+      for (const listener of [...navListeners]) listener()
+    },
+    /** Changes the address without firing any event, as a router that only polls would see it. */
+    move(href: string) {
+      location.href = href
+    },
   }
 }
+
+const hello = (overrides: Record<string, unknown> = {}) => ({
+  type: 'areca:v1:hello',
+  sdkVersion: SDK_VERSION,
+  markers: true,
+  url: PAGE,
+  ...overrides,
+})
 
 describe('isArecaMessage', () => {
   const update = { type: 'areca:v1:update', seq: 3, result, locale: null }
 
   it.each([
     ['ping', { type: 'areca:v1:ping' }],
-    ['hello', { type: 'areca:v1:hello', sdkVersion: '0.9.0', markers: false }],
+    ['hello', { type: 'areca:v1:hello', sdkVersion: '0.9.0', markers: false, url: PAGE }],
+    ['mode', { type: 'areca:v1:mode', select: true, showAreas: false, cursorHint: false, color: '#4f46e5', targets: [] }],
+    ['mode with a target', { type: 'areca:v1:mode', select: false, showAreas: true, cursorHint: true, color: '#00aa00', targets: [{ field: 'title', owner: null, label: 'Title' }] }],
+    ['highlight', { type: 'areca:v1:highlight', target: { field: 'name', owner: { entry: 'a1' } } }],
+    ['highlight cleared', { type: 'areca:v1:highlight', target: null }],
+    ['markers', { type: 'areca:v1:markers', markers: [{ field: 'title', owner: null }, { field: 'email', owner: { global: 'company' } }] }],
+    ['select', { type: 'areca:v1:select', field: 'title', owner: null, rect: { x: 1, y: 2, width: 3, height: 4 } }],
+    ['navigate', { type: 'areca:v1:navigate', url: PAGE }],
     ['update', update],
     ['update with a locale', { ...update, locale: 'nl' }],
     ['update with a global result', { ...update, result: { kind: 'global', global: 'company-info', entry: { id: 'g', publishedAt: null, data: {} } } }],
@@ -84,7 +118,14 @@ describe('isArecaMessage', () => {
     ['another version', { type: 'areca:v2:ping' }],
     ['an unknown name', { type: 'areca:v1:nope' }],
     ['hello without sdkVersion', { type: 'areca:v1:hello', markers: false }],
-    ['hello with markers as a string', { type: 'areca:v1:hello', sdkVersion: '0.9.0', markers: 'no' }],
+    ['hello with markers as a string', { type: 'areca:v1:hello', sdkVersion: '0.9.0', markers: 'no', url: PAGE }],
+    ['hello without a url', { type: 'areca:v1:hello', sdkVersion: '0.9.0', markers: true }],
+    ['mode with a bad colour', { type: 'areca:v1:mode', select: true, showAreas: false, cursorHint: false, color: 'red', targets: [] }],
+    ['mode with a target without a label', { type: 'areca:v1:mode', select: true, showAreas: false, cursorHint: false, color: '#000000', targets: [{ field: 'title', owner: null }] }],
+    ['highlight without a target', { type: 'areca:v1:highlight' }],
+    ['markers with an empty field', { type: 'areca:v1:markers', markers: [{ field: '', owner: null }] }],
+    ['select with a rect missing height', { type: 'areca:v1:select', field: 'title', owner: null, rect: { x: 1, y: 2, width: 3 } }],
+    ['navigate without a url', { type: 'areca:v1:navigate' }],
     ['update with a string seq', { ...update, seq: '3' }],
     ['update with a negative seq', { ...update, seq: -1 }],
     ['update with a fractional seq', { ...update, seq: 1.5 }],
@@ -100,13 +141,20 @@ describe('isArecaMessage', () => {
 })
 
 describe('createVisualBridge', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('sends one unsolicited hello to the CMS origin when created', () => {
     const { win, posted } = fakeWindow()
     createVisualBridge({ cmsOrigin: CMS, onUpdate: () => {}, window: win })
 
     expect(posted).toEqual([
       {
-        message: { type: 'areca:v1:hello', sdkVersion: SDK_VERSION, markers: false },
+        message: hello(),
         targetOrigin: CMS,
       },
     ])
@@ -135,7 +183,7 @@ describe('createVisualBridge', () => {
 
     expect(posted).toEqual([
       {
-        message: { type: 'areca:v1:hello', sdkVersion: SDK_VERSION, markers: false },
+        message: hello(),
         targetOrigin: CMS,
       },
     ])
@@ -256,6 +304,121 @@ describe('createVisualBridge', () => {
     expect(listeners.size).toBe(0)
     expect(posted).toEqual([])
     expect(calls).toEqual([])
+  })
+
+  it('says whether it reports markers, true by default and false when the option is off', () => {
+    const first = fakeWindow()
+    createVisualBridge({ cmsOrigin: CMS, onUpdate: () => {}, window: first.win })
+    const second = fakeWindow()
+    createVisualBridge({ cmsOrigin: CMS, onUpdate: () => {}, window: second.win, markers: false })
+
+    expect((first.posted[0]!.message as { markers: boolean }).markers).toBe(true)
+    expect((second.posted[0]!.message as { markers: boolean }).markers).toBe(false)
+  })
+
+  it('announces the page address in hello', () => {
+    const { win, posted } = fakeWindow({ href: 'https://site.test/blog/beta?x=1' })
+    createVisualBridge({ cmsOrigin: CMS, onUpdate: () => {}, window: win })
+
+    expect((posted[0]!.message as { url: string }).url).toBe('https://site.test/blog/beta?x=1')
+  })
+
+  it('falls back to about:blank when the page has no address', () => {
+    const { win, posted } = fakeWindow({ href: null })
+    createVisualBridge({ cmsOrigin: CMS, onUpdate: () => {}, window: win })
+
+    expect((posted[0]!.message as { url: string }).url).toBe('about:blank')
+  })
+
+  it('reports a client-side navigation on popstate, and on hashchange', () => {
+    const { win, posted, navigate } = fakeWindow()
+    createVisualBridge({ cmsOrigin: CMS, onUpdate: () => {}, window: win })
+    posted.length = 0
+
+    navigate('https://site.test/blog/beta')
+    navigate('https://site.test/blog/beta#comments')
+
+    expect(posted).toEqual([
+      { message: { type: 'areca:v1:navigate', url: 'https://site.test/blog/beta' }, targetOrigin: CMS },
+      { message: { type: 'areca:v1:navigate', url: 'https://site.test/blog/beta#comments' }, targetOrigin: CMS },
+    ])
+  })
+
+  it('does not report a navigation to the address it already reported', () => {
+    const { win, posted, navigate } = fakeWindow()
+    createVisualBridge({ cmsOrigin: CMS, onUpdate: () => {}, window: win })
+    posted.length = 0
+
+    navigate(PAGE)
+
+    expect(posted).toEqual([])
+  })
+
+  it('polls the address every 300 ms, so a router that never fires an event is still seen', () => {
+    const { win, posted, move } = fakeWindow()
+    createVisualBridge({ cmsOrigin: CMS, onUpdate: () => {}, window: win })
+    posted.length = 0
+
+    move('https://site.test/blog/gamma')
+    vi.advanceTimersByTime(299)
+    expect(posted).toEqual([])
+    vi.advanceTimersByTime(1)
+
+    expect(posted).toEqual([
+      { message: { type: 'areca:v1:navigate', url: 'https://site.test/blog/gamma' }, targetOrigin: CMS },
+    ])
+  })
+
+  it('reports a navigation once when the poll and an event both see it', () => {
+    const { win, posted, navigate } = fakeWindow()
+    createVisualBridge({ cmsOrigin: CMS, onUpdate: () => {}, window: win })
+    posted.length = 0
+
+    navigate('https://site.test/blog/delta')
+    vi.advanceTimersByTime(900)
+
+    expect(posted).toHaveLength(1)
+  })
+
+  it('reports a navigation that happened before destroy, once, when destroy runs', () => {
+    const { win, posted, move } = fakeWindow()
+    const bridge = createVisualBridge({ cmsOrigin: CMS, onUpdate: () => {}, window: win })
+    posted.length = 0
+
+    move('https://site.test/blog/epsilon')
+    bridge.destroy()
+    bridge.destroy()
+
+    expect(posted).toEqual([
+      { message: { type: 'areca:v1:navigate', url: 'https://site.test/blog/epsilon' }, targetOrigin: CMS },
+    ])
+  })
+
+  it('stops polling and listening on destroy', () => {
+    const { win, posted, navListeners, move } = fakeWindow()
+    const bridge = createVisualBridge({ cmsOrigin: CMS, onUpdate: () => {}, window: win })
+    bridge.destroy()
+    posted.length = 0
+
+    move('https://site.test/blog/zeta')
+    vi.advanceTimersByTime(1000)
+
+    expect(navListeners.size).toBe(0)
+    expect(posted).toEqual([])
+  })
+
+  it('accepts mode and highlight messages without a page to draw on, and posts nothing', () => {
+    const { win, parent, posted, dispatch } = fakeWindow()
+    createVisualBridge({ cmsOrigin: CMS, onUpdate: () => {}, window: win })
+    posted.length = 0
+
+    dispatch({
+      source: parent,
+      data: { type: 'areca:v1:mode', select: true, showAreas: false, cursorHint: false, color: '#4f46e5', targets: [] },
+    })
+    dispatch({ source: parent, data: { type: 'areca:v1:highlight', target: null } })
+
+    expect(posted).toEqual([])
   })
 
   it('does nothing when the page is not framed', () => {

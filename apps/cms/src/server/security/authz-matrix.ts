@@ -658,6 +658,18 @@ export const ROWS: Row[] = [
     }),
   },
   {
+    name: 'resolvePreviewOwnersFn',
+    hidden: true,
+    fn: contentFns.resolvePreviewOwnersFn,
+    policy: 'org-editor',
+    prepare: (w) => ({
+      data: {
+        siteId: w.X.site.id,
+        owners: [{ entry: w.X.entry.id }],
+      },
+    }),
+  },
+  {
     name: 'upsertCollectionFn',
     fn: contentFns.upsertCollectionFn,
     policy: 'agency',

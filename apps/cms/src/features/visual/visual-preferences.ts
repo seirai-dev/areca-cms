@@ -9,6 +9,8 @@ export const RATIO_STORAGE_KEY = 'areca:visual:ratio'
 export const WIDTH_STORAGE_KEY = 'areca:visual:width'
 /** The last editor mode, per browser. Mirrored in `?view=visual`. */
 export const MODE_STORAGE_KEY = 'areca:editor:mode'
+/** "Show editable areas" in the preview toolbar, per browser. Off by default. */
+export const AREAS_STORAGE_KEY = 'areca:visual:areas'
 /** Set once the user has entered Visual mode; hides the "New" dot. */
 export const SEEN_STORAGE_KEY = 'areca:visual:seen'
 
@@ -67,6 +69,15 @@ export function useVisualPreferences() {
     parseStoredMode(readStorage(MODE_STORAGE_KEY)),
   )
 
+  const [showAreas, setShowAreasState] = React.useState<boolean>(
+    () => readStorage(AREAS_STORAGE_KEY) === 'on',
+  )
+
+  const setShowAreas = React.useCallback((next: boolean) => {
+    setShowAreasState(next)
+    writeStorage(AREAS_STORAGE_KEY, next ? 'on' : null)
+  }, [])
+
   const setRatio = React.useCallback((next: number | null) => {
     setRatioState(next)
     writeStorage(RATIO_STORAGE_KEY, next === null ? null : String(next))
@@ -82,7 +93,16 @@ export function useVisualPreferences() {
     writeStorage(MODE_STORAGE_KEY, next)
   }, [])
 
-  return { ratio, setRatio, width, setWidth, lastMode, setLastMode }
+  return {
+    ratio,
+    setRatio,
+    width,
+    setWidth,
+    lastMode,
+    setLastMode,
+    showAreas,
+    setShowAreas,
+  }
 }
 
 /**

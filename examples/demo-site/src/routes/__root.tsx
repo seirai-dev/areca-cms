@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react'
-import { HeadContent, Outlet, Scripts, createRootRoute } from '@tanstack/react-router'
+import { HeadContent, Outlet, Scripts, createRootRoute, useMatch } from '@tanstack/react-router'
 import { m } from '#/paraglide/messages'
 import { PageMessage } from '../components/cms-image.tsx'
 import { SiteFooter, SiteHeader } from '../components/site-chrome.tsx'
 import { currentLocale } from '../lib/i18n.ts'
 import { loadCompanyInfo } from '../lib/queries.ts'
 import { SITE_DESCRIPTION, SITE_NAME } from '../lib/seo.ts'
+import { VisualMarkers } from '../lib/visual-markers.tsx'
 import appCss from '../styles.css?url'
 
 export const Route = createRootRoute({
@@ -38,8 +39,10 @@ export const Route = createRootRoute({
 
 function RootLayout() {
   const { company } = Route.useLoaderData()
+  // Field markers for the visual editor only on the preview route, never on public pages.
+  const preview = useMatch({ from: '/__preview/$collection/$slug', shouldThrow: false }) !== undefined
   return (
-    <>
+    <VisualMarkers enabled={preview}>
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-full focus:bg-primary focus:px-5 focus:py-3 focus:text-sm focus:font-medium focus:text-on-primary"
@@ -51,7 +54,7 @@ function RootLayout() {
         <Outlet />
       </main>
       <SiteFooter company={company} />
-    </>
+    </VisualMarkers>
   )
 }
 

@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, Stack, WarningCircle } from '@phosphor-icons/react'
 
 import { queryKeys } from '#/lib/content/query-keys'
@@ -78,6 +78,9 @@ import { PreviewPane } from '#/features/visual/preview-pane'
 import { VisualEditorLayout } from '#/features/visual/visual-editor-layout'
 import { VisualFullScreenProvider } from '#/features/visual/visual-context'
 import { VisualShortcuts } from '#/features/visual/visual-shortcuts'
+import { seoClickFields } from '#/features/visual/use-click-to-edit'
+import type { ClickSource } from '#/features/visual/preview-pane'
+import { announceReveal, pulseField } from './reveal-field'
 import {
   VISUAL_TOKEN_REFRESH_MS,
   useVisualMode,
@@ -219,6 +222,14 @@ function EntryEditorView({
   const [titleVisible, setTitleVisible] = React.useState(true)
 
   const fields = collection.fields
+  const navigate = useNavigate()
+  const clickFields = React.useMemo(
+    () => [
+      ...fields.map((field) => ({ key: field.key, label: field.label })),
+      ...seoClickFields(),
+    ],
+    [fields],
+  )
   // Visual mode (docs/design/visual-editor.md). A new entry has no preview
   // until its first save, so it does not reopen in Visual by itself.
   const visual = useVisualMode({ autoEnter: Boolean(routeEntryId) })
@@ -383,12 +394,18 @@ function EntryEditorView({
     else setSheetOpen((value) => !value)
   }
 
-  function revealField(key: string) {
+  /**
+   * Scrolls to and focuses a field. Panels that hide it open first (the
+   * details panel, a collapsed SEO group). `pulse` makes it glow briefly, for
+   * a click in the visual preview.
+   */
+  function revealField(key: string, options: { pulse?: boolean } = {}) {
     const inPanel =
       key === slugField?.key ||
       key.startsWith(`${SEO_KEY}.`) ||
       panelFields.some((field) => field.key === key)
     if (inPanel) openDetails()
+    announceReveal(key)
     const attempt = (tries: number) => {
       const node = document.querySelector<HTMLElement>(
         `[data-field="${CSS.escape(key)}"]`,
@@ -398,11 +415,15 @@ function EntryEditorView({
         return
       }
       node.scrollIntoView({ block: 'center', behavior: 'smooth' })
-      node
-        .querySelector<HTMLElement>(
-          'input, textarea, [contenteditable="true"], button',
-        )
-        ?.focus({ preventScroll: true })
+      const focusable = node.matches(
+        'input, textarea, [contenteditable="true"], button',
+      )
+        ? node
+        : node.querySelector<HTMLElement>(
+            'input, textarea, [contenteditable="true"], button',
+          )
+      focusable?.focus({ preventScroll: true })
+      if (options.pulse) pulseField(node)
     }
     requestAnimationFrame(() => attempt(5))
   }
@@ -751,6 +772,35 @@ function EntryEditorView({
     canvas
   )
 
+  // Click to edit: the fields a preview may open, and where "Open" goes.
+  const clickSource: ClickSource = {
+    self: { entryId: editor.entryId ?? null, globalKey: null },
+    fields: clickFields,
+    onSelectField: (key) => revealField(key, { pulse: true }),
+    onOpenOwner: (owner) => {
+      void (async () => {
+        // Save first, so nothing typed here is left behind.
+        await editor.save().catch(() => null)
+        if (owner.kind === 'entry') {
+          await navigate({
+            to: '/sites/$siteId/c/$collectionKey/$entryId',
+            params: {
+              siteId,
+              collectionKey: owner.collectionKey,
+              entryId: owner.entryId,
+            },
+            search: { view: 'visual' },
+          })
+        } else {
+          await navigate({
+            to: '/sites/$siteId/globals/$globalKey',
+            params: { siteId, globalKey: owner.globalKey },
+          })
+        }
+      })()
+    },
+  }
+
   // Visual mode has no preview until the entry has a URL (Tier 0).
   const canVisual = Boolean(editor.previewUrl)
   const previewReason = canVisual
@@ -897,6 +947,7 @@ function EntryEditorView({
                     data,
                     locale: active,
                   }}
+                  click={clickSource}
                 />
               }
             />

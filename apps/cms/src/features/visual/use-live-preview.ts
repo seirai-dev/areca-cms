@@ -12,7 +12,12 @@ import {
 } from './live-channel'
 import type { ChannelEvent, ChannelState, Tier } from './live-channel'
 import { isSiteMessage, pingMessage, updateMessage } from './protocol'
-import type { LivePreviewResult } from './protocol'
+import type {
+  HighlightMessage,
+  LivePreviewResult,
+  ModeMessage,
+  SiteMessage,
+} from './protocol'
 
 export type LivePreviewOptions = {
   /** The preview iframe. Messages go to its `contentWindow` only. */
@@ -27,6 +32,8 @@ export type LivePreviewOptions = {
   data: EntryData
   /** The content language being edited, or null for single-language sites. */
   locale: string | null
+  /** Every valid message from the frame (hello, markers, select, navigate). */
+  onSiteMessage?: (message: SiteMessage) => void
 }
 
 export type LivePreviewChannel = {
@@ -35,6 +42,8 @@ export type LivePreviewChannel = {
   failed: boolean
   /** Call on every iframe `load`. The handshake starts again each time. */
   onFrameLoad: () => void
+  /** Sends a mode or highlight message to the frame, at the preview origin only. */
+  post: (message: ModeMessage | HighlightMessage) => void
 }
 
 /** The endpoint that builds a preview from unsaved values (see `live-preview.ts`). */
@@ -183,9 +192,12 @@ export function useLivePreviewChannel(
       )
         return
       if (!isSiteMessage(event.data)) return
-      stopHandshake()
-      dispatch({ type: 'hello' })
-      flush()
+      if (event.data.type === 'areca:v1:hello') {
+        stopHandshake()
+        dispatch({ type: 'hello' })
+        flush()
+      }
+      latest.current.onSiteMessage?.(event.data)
     }
     window.addEventListener('message', onMessage)
     return () => window.removeEventListener('message', onMessage)
@@ -214,9 +226,19 @@ export function useLivePreviewChannel(
     }
   }, [enabled, origin, stopHandshake])
 
+  const post = React.useCallback(
+    (message: ModeMessage | HighlightMessage) => {
+      const target = latest.current.origin
+      const frame = iframeRef.current?.contentWindow
+      if (target && frame) frame.postMessage(message, target)
+    },
+    [iframeRef],
+  )
+
   return {
     tier: view.tier,
     failed: view.failures > 0,
     onFrameLoad,
+    post,
   }
 }

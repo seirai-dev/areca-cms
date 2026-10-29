@@ -83,6 +83,23 @@ them. The preview document sends `Content-Security-Policy: frame-ancestors 'self
 plus the origin of `ARECA_CMS_URL`, so only that CMS can frame it; other sites
 still cannot.
 
+### Field markers for the visual editor
+
+The views put `data-areca-*` markers on the elements that show a field, so the
+visual editor can outline them and jump to the field on click. Markers come from
+`useField()` in `src/lib/visual-markers.tsx`, which returns the SDK's `field()` on
+the preview route and `{}` everywhere else. The root layout turns them on from
+the route match, so public pages render no markers.
+
+- The page's own entry: `field('title')` and so on, with no owner.
+- A referenced entry (the article's author, featured coffee and the related
+  article cards): `field('name', { entry: author.id })`.
+- Site content: the footer uses `field('email', { global: 'companyInfo' })`. The
+  header shows no company field.
+- SEO blocks use `$seo.*` keys, for example `$seo.summary`.
+
+Keys match `areca.config.ts`. A new visible field needs a marker too.
+
 ## Site content (globals)
 
 `areca.config.ts` defines three site content sections under `globals`:

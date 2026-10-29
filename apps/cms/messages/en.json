@@ -2648,5 +2648,19 @@
   "visual_width_fit": "1440 fit",
   "visual_width_group": "Preview width",
   "visual_width_mobile": "Mobile",
-  "visual_width_tablet": "Tablet"
+  "visual_width_tablet": "Tablet",
+  "visual_select": "Select",
+  "visual_browse": "Browse",
+  "visual_select_group": "Clicks in the preview",
+  "visual_select_hint": "Click part of the page to edit it. Hold {key} to browse.",
+  "visual_browse_hint": "Use the page as visitors do: links and buttons work.",
+  "visual_show_areas": "Show editable areas",
+  "visual_back_fullscreen": "Back to full preview",
+  "visual_away": "You're viewing another page.",
+  "visual_away_back": "Back to {title}",
+  "visual_owner_part_of": "This is part of",
+  "visual_owner_open": "Open in visual editor",
+  "visual_owner_cancel": "Cancel",
+  "visual_owner_site_content": "Site content",
+  "visual_status_click_hint": "Changes show as you type. Click part of the page to edit it."
 }

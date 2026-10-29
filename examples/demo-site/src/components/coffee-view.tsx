@@ -1,12 +1,13 @@
 import { Link } from '@tanstack/react-router'
 import { m } from '#/paraglide/messages'
 import type { ArticlesEntry, CoffeesEntry } from '../generated/content/areca.gen.ts'
+import { useField } from '../lib/visual-markers.tsx'
 import { ArticleBody } from './article-body.tsx'
 import { ArticleCard } from './article-card.tsx'
 import { CmsImage, PreviewBanner } from './cms-image.tsx'
 import { CoffeeSpecs } from './coffee-specs.tsx'
 import { formatPrice, processLabel, splitTastingNotes } from './formatters.ts'
-import { buttonPrimary, Eyebrow, RoastScale, SectionHeading, TastingChips } from './ui.tsx'
+import { buttonPrimary, Eyebrow, JoinedParts, RoastScale, SectionHeading, TastingChips } from './ui.tsx'
 
 export function CoffeeView({
   coffee,
@@ -18,9 +19,9 @@ export function CoffeeView({
   preview?: boolean
 }) {
   const { data } = coffee
+  const field = useField()
   const notes = splitTastingNotes(coffee.data.tastingNotes)
   const price = formatPrice(data.price)
-  const origin = [data.origin, data.region].filter(Boolean).join(' · ')
   const process = processLabel(data.process)
 
   return (
@@ -34,37 +35,55 @@ export function CoffeeView({
         <div className="md:col-span-7">
           {data.image ? (
             <div className="overflow-hidden rounded-3xl bg-surface">
-              <CmsImage image={data.image} priority className="aspect-[4/5] w-full object-cover" />
+              <CmsImage
+                image={data.image}
+                marker={field('image')}
+                priority
+                className="aspect-[4/5] w-full object-cover"
+              />
             </div>
           ) : null}
         </div>
 
         <div className="md:col-span-5">
           <div className="md:sticky md:top-28">
-            <Eyebrow>{[origin, process].filter(Boolean).join(' · ')}</Eyebrow>
+            <Eyebrow>
+              <JoinedParts
+                parts={[
+                  { value: data.origin, marker: field('origin') },
+                  { value: data.region, marker: field('region') },
+                  { value: process, marker: field('process') },
+                ]}
+              />
+            </Eyebrow>
             {data.limited ? (
-              <span className="mt-4 inline-flex rounded-full bg-accent-strong px-3 py-1 text-[0.66rem] font-medium uppercase tracking-[0.14em] text-on-accent">
+              <span
+                {...field('limited')}
+                className="mt-4 inline-flex rounded-full bg-accent-strong px-3 py-1 text-[0.66rem] font-medium uppercase tracking-[0.14em] text-on-accent"
+              >
                 {m.limited_release()}
               </span>
             ) : null}
-            <h1 className="mt-4 font-display text-5xl leading-[1.02] tracking-tight text-ink md:text-6xl">
+            <h1 {...field('name')} className="mt-4 font-display text-5xl leading-[1.02] tracking-tight text-ink md:text-6xl">
               {data.name}
             </h1>
 
             <div className="mt-7 flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
               {price ? (
                 <p className="text-ink">
-                  <span className="font-display text-4xl">{price}</span>
+                  <span {...field('price')} className="font-display text-4xl">
+                    {price}
+                  </span>
                   <span className="text-sm text-muted"> {m.price_per_250g()}</span>
                 </p>
               ) : null}
-              <RoastScale level={data.roastLevel} />
+              <RoastScale level={data.roastLevel} marker={field('roastLevel')} />
             </div>
 
             {notes.length ? (
               <div className="mt-8">
                 <Eyebrow>{m.tasting_notes()}</Eyebrow>
-                <TastingChips notes={notes} className="mt-3" />
+                <TastingChips notes={notes} className="mt-3" marker={field('tastingNotes')} />
               </div>
             ) : null}
 
@@ -74,6 +93,7 @@ export function CoffeeView({
 
             {data.shopUrl ? (
               <a
+                {...field('shopUrl')}
                 href={data.shopUrl}
                 rel="noopener noreferrer"
                 target="_blank"
@@ -90,7 +110,7 @@ export function CoffeeView({
 
       {data.description ? (
         <div className="max-w-3xl md:pr-16">
-          <ArticleBody body={data.description} />
+          <ArticleBody body={data.description} marker={field('description')} />
         </div>
       ) : null}
 

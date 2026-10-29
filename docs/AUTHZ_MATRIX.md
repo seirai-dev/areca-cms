@@ -104,6 +104,7 @@ unchanged (each row carries a side-effect probe).
 | `listRevisionsFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
 | `restoreRevisionFn` | `content.ts` | `org-owner` | org owner, agency admin (MFA) |
 | `getPreviewUrlFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA) |
+| `resolvePreviewOwnersFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA); lists only the marked owners that exist on the site and are visible to the caller (archived, foreign-site and disabled-section owners come back null) |
 | `upsertCollectionFn` | `content.ts` | `agency` | agency admin (MFA) |
 | `deleteCollectionFn` | `content.ts` | `agency` | agency admin (MFA) |
 | `listGlobalsFn` | `content.ts` | `org-editor` | org editor, org owner, agency admin (MFA); disabled site content only for agency admin |

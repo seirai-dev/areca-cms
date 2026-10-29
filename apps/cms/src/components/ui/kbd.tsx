@@ -39,6 +39,7 @@ export function modifierLabels(platform: string) {
   return {
     mod: apple ? '⌘' : 'Ctrl',
     shift: apple ? '⇧' : 'Shift',
+    alt: apple ? '⌥' : 'Alt',
   }
 }
 
