@@ -39,7 +39,8 @@ Commands:
 
 Options:
   -a, --agent <id>    Agent id, repeatable or comma separated (see list)
-  -s, --skill <name>  Only this skill (areca-sdk, areca-mcp, areca-quickstart); default all
+  -s, --skill <name>  Only this skill (areca-sdk, areca-mcp, areca-quickstart,
+                      areca-visual-editing); default all
   -g, --global        Install into user-level folders instead of the project
       --mcp-url <url> Connector URL to register: <cms>/api/mcp/<site-slug> (one site)
                       or <cms>/api/agency/mcp (agency admins, all sites)
@@ -282,6 +283,7 @@ function hintFor(name: string): string {
   if (name === 'areca-sdk') return 'website code: setup, config, CLI, content, preview, deploy'
   if (name === 'areca-mcp') return 'AI content editing: connect, tools, workflow'
   if (name === 'areca-quickstart') return 'Set up Areca in a new site project (interview + wiring)'
+  if (name === 'areca-visual-editing') return 'CMS visual editor: live preview and click to edit on the site'
   return ''
 }
 

@@ -192,7 +192,7 @@ Read [references/production.md](references/production.md) when the user needs an
 - The CMS settings needed: production URL, deployment target, publishing mode.
 - Direct use of `createArecaClient` and error messages.
 
-Visual editing (the CMS visual editor's live preview and click to edit, SDK 0.9.0+). Details in [references/production.md](references/production.md):
+Visual editing (the CMS visual editor's live preview and click to edit, SDK 0.9.0+, click to edit complete in 0.10.0). For setting a site up step by step, per framework, with troubleshooting, use the `areca-visual-editing` skill. Summary in [references/production.md](references/production.md):
 
 - `visualEditingHeaders({ cmsOrigin })` from `@areca-cms/site-sdk/visual` sends `frame-ancestors` on the preview route only.
 - Live updates: `useLivePreview({ initial, cmsOrigin, resolve })` from `@areca-cms/site-sdk/visual-react` (React), or `createVisualBridge({ cmsOrigin, onUpdate })` from `@areca-cms/site-sdk/visual`. Render each unsaved result on the server with `content.previewFrom(result)`, or `content.previewGlobals(result)` for site content.

@@ -76,6 +76,34 @@ describe('areca-sdk covers @areca-cms/site-sdk', () => {
   })
 })
 
+describe('areca-visual-editing covers visual editing', () => {
+  const text = skillText('areca-visual-editing')
+  const visual = read('packages/site-sdk/src/visual.ts')
+
+  it('documents every export of the visual subpaths', () => {
+    const names = new Set<string>()
+    for (const source of [visual, read('packages/site-sdk/src/visual-react.ts')]) {
+      for (const [, name] of source.matchAll(/export (?:async )?(?:function|const|type|class) (\w+)/g)) names.add(name!)
+    }
+    expect(names.size).toBeGreaterThan(10)
+    expect([...names].filter((name) => !text.includes(name))).toEqual([])
+  })
+
+  it('documents every protocol message', () => {
+    const types = [...new Set([...visual.matchAll(/'areca:v1:(\w+)'/g)].map(([, name]) => name!))]
+    expect(types.length).toBeGreaterThan(5)
+    expect(types.filter((name) => !text.includes(`\`${name}\``))).toEqual([])
+  })
+
+  it('quotes CMS status labels that exist', () => {
+    const messages = read('apps/cms/messages/en.json')
+    for (const label of ['Updates on save', 'Live', 'Connecting…', 'Retrying…', 'Preview blank?', 'Preview URL']) {
+      expect(text).toContain(label)
+      expect(messages).toContain(`"${label}"`)
+    }
+  })
+})
+
 /** Names of the MCP tools registered in apps/cms/src/server/mcp/tools, plus the agency connector's navigation tools. */
 const mcpToolsDir = 'apps/cms/src/server/mcp/tools'
 const mcpToolFiles = [

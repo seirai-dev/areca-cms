@@ -135,6 +135,7 @@ Run these checks in order. Stop at the first failure and report it.
 5. Home and about pages: `200`, and the hero or heading text from the sections.
 6. Health route (only if it was added): `curl -s http://localhost:<port>/api/health` should show `"ok":true` and a `publicationId`.
 7. Preview (only if it was added): open the URL that `get_preview_url` returns for a sample entry. It needs the production URL in the CMS to be the local dev URL. Expect the page to show a draft banner or the draft text.
+   Visual editing (only if it was added): the preview response sends `frame-ancestors` with the CMS origin, and the public page does not. Then ask the user to open a sample entry in the CMS, switch to Visual and report the status pill ("Live" is the goal). See the `areca-visual-editing` skill, Step 5.
 8. Stop the dev server when you are done, unless the user wants it running.
 
 Report the results in a short list: what passed, what did not, and the URLs you checked.

@@ -340,7 +340,7 @@ export function PostDetail({ post }: { post: PostPage }) {
 
 ### Preview route (optional)
 
-Only when the user wants drafts. The CMS opens `<productionUrl>/__preview/<collection>/<slug>?token=…`.
+Only when the user wants drafts. The CMS opens `<productionUrl>/__preview/<collection>/<slug>?token=…`. When the user also wants the visual editor (D3b), build this route first, then add the visual editing parts from the `areca-visual-editing` skill (references/react.md for TanStack Start and Next.js, references/other-frameworks.md for the rest).
 
 - Name the folder `[__preview]` so the router keeps the `__preview` path (the demo does this).
 - Read the token from the search params. Call `content.preview(token)` in a server function. Check `result.complete` before you render the entry. When it is false, show `result.issues`.

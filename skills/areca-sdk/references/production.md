@@ -32,7 +32,7 @@ A site content section preview is different. The CMS opens the section's `previe
 
 ## Visual editing
 
-The CMS visual editor shows the preview route in an iframe and sends it unsaved values (SDK 0.9.0+). Add this to preview routes only, never to public pages.
+The CMS visual editor shows the preview route in an iframe and sends it unsaved values (SDK 0.9.0+). Add this to preview routes only, never to public pages. The `areca-visual-editing` skill has the full setup per framework, the CMS settings, the marker rules and troubleshooting.
 
 - `visualEditingHeaders({ cmsOrigin })` from `@areca-cms/site-sdk/visual` returns a `Content-Security-Policy: frame-ancestors` header. Set it on the preview response, next to `previewHeaders()`.
 - React: `useLivePreview({ initial, cmsOrigin, resolve })` from `@areca-cms/site-sdk/visual-react`. `initial` shows until an update arrives, so keep it referentially stable. A `cmsOrigin` of null or undefined turns the hook off. `resolve` runs in the browser, so have it call a POST server function that runs `content.previewFrom(result)`. If it throws, the last good value stays.

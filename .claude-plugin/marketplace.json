@@ -8,7 +8,7 @@
     {
       "name": "areca",
       "source": "./",
-      "description": "Agent skills for Areca CMS: the site SDK (areca-sdk), the MCP server (areca-mcp) and a quickstart that sets up a new site (areca-quickstart)."
+      "description": "Agent skills for Areca CMS: the site SDK (areca-sdk), the MCP server (areca-mcp) a quickstart that sets up a new site (areca-quickstart) and visual editor setup (areca-visual-editing)."
     }
   ]
 }
