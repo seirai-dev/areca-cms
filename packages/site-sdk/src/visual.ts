@@ -14,7 +14,7 @@ import type { PreviewResult } from './types.js'
 import { startOverlay, type OverlayHandle } from './visual-overlay.js'
 
 /** The SDK version the bridge announces in `hello`. Matches the package version. */
-export const SDK_VERSION = '0.10.0'
+export const SDK_VERSION = '0.10.1'
 
 const PREFIX = 'areca:v1:'
 

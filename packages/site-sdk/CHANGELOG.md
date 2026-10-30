@@ -2,6 +2,10 @@
 
 All notable changes to `@areca-cms/site-sdk`.
 
+## 0.10.1 (2026-10-30)
+
+No user-facing changes.
+
 ## 0.10.0 (2026-10-30)
 
 ### Features
