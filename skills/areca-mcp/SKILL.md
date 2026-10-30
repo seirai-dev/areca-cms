@@ -3,7 +3,7 @@ name: areca-mcp
 description: Connects an AI client to an Areca CMS site through its MCP server and uses its tools to write, edit, review and publish content. Covers the per-site connector URL, OAuth sign-in or personal keys, roles and go-live permission, the draft/ready/live workflow, development environments (review and push), field and Markdown formats, SEO, images, and every tool. Use when the user wants to connect Areca to an AI app or coding agent, or to create, update, approve, schedule or publish Areca CMS entries, upload images, or check what is live.
 license: MIT
 metadata:
-  version: "0.7.0"
+  version: "0.7.1"
 ---
 
 # Areca MCP
