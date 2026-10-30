@@ -19,6 +19,7 @@ import {
 import { queryKeys } from '#/lib/content/query-keys'
 import { entryTitle } from '#/lib/content/utils'
 import { matchesSearch } from '#/lib/search-match'
+import { usePageCommands } from '#/components/shell/page-commands'
 import { useShell } from '#/components/shell/shell-context'
 import { SiteTile } from '#/components/shell/site-tile'
 import {
@@ -130,6 +131,7 @@ export function CommandPalette() {
     staleTime: 15_000,
   })
   const people = searchingPeople ? (peopleQuery.data ?? []) : []
+  const pageCommands = usePageCommands()
 
   function run(action: () => void) {
     setPaletteOpen(false)
@@ -202,6 +204,22 @@ export function CommandPalette() {
         <CommandEmpty>
           {searchingNow ? m.shell_palette_searching() : m.shell_search_empty()}
         </CommandEmpty>
+
+        {pageCommands.length > 0 ? (
+          <CommandGroup heading={m.shell_palette_this_page()}>
+            {pageCommands.map((command) => (
+              <CommandItem
+                key={command.id}
+                value={`page ${command.id} ${command.label}`}
+                keywords={[command.label, ...(command.keywords ?? [])]}
+                onSelect={() => run(command.run)}
+              >
+                {command.icon}
+                {command.label}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        ) : null}
 
         {entryResults.length > 0 ? (
           <CommandGroup heading={m.shell_palette_entries()}>

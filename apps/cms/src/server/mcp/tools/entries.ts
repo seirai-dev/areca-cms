@@ -7,6 +7,7 @@ import {
   richTextAssetRefs,
 } from '#/server/assets/richtext-ownership'
 import { SEO_KEY } from '#/lib/seo'
+import { previewBaseUrl } from '#/lib/preview-url'
 import {
   ID_MAX_LENGTH,
   SEARCH_MAX_LENGTH,
@@ -168,7 +169,8 @@ async function previewUrlFor(
   locale?: string,
 ): Promise<string | null> {
   const siteRow = await loadSiteRow(actor)
-  if (!siteRow.productionUrl) return null
+  const base = previewBaseUrl(siteRow)
+  if (!base) return null
   if (source.kind === 'global') {
     if (!source.previewPath) return null
     const token = signPreviewToken({
@@ -177,12 +179,7 @@ async function previewUrlFor(
       secret: siteRow.previewSecret,
       locale,
     })
-    return buildGlobalPreviewUrl(
-      siteRow.productionUrl,
-      source.previewPath,
-      token,
-      locale,
-    )
+    return buildGlobalPreviewUrl(base, source.previewPath, token, locale)
   }
   const token = signPreviewToken({
     siteId: siteRow.id,
@@ -191,7 +188,7 @@ async function previewUrlFor(
     secret: siteRow.previewSecret,
     locale,
   })
-  return buildPreviewUrl(siteRow.productionUrl, source.key, slug, token, locale)
+  return buildPreviewUrl(base, source.key, slug, token, locale)
 }
 
 /** The live version of an entry as the production site serves it now, if it is live. */
@@ -298,7 +295,7 @@ export async function formatStoredEntry(
     fields: content.fields,
     ctx: { assets, assetUrl: (storageKey: string) => assetUrl({ storageKey }) },
     release: releaseFlags(release, row.id),
-    previewAvailable: Boolean(siteRow.productionUrl),
+    previewAvailable: Boolean(previewBaseUrl(siteRow)),
     includePublished: options.includePublished ?? false,
     liveFields: liveEntry ? formatSnapshotFields(liveEntry.data, assets) : null,
   }

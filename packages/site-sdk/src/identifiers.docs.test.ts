@@ -37,11 +37,11 @@ describe('errors and limits: identifier messages', () => {
   const examples: Array<[string, () => unknown]> = [
     ['Unsafe collection or field identifier: manifest', () => camelCollectionKeys(['manifest'])],
     [
-      'Collection "globals" uses the reserved name "globals". resolve, href, preview, globals, previewGlobals, in, languages and matchLocale are reserved.',
+      'Collection "globals" uses the reserved name "globals". resolve, href, preview, globals, previewGlobals, previewFrom, in, languages and matchLocale are reserved.',
       () => camelCollectionKeys(['globals']),
     ],
     [
-      'Global "preview-globals" uses the reserved name "previewGlobals". resolve, href, preview, globals, previewGlobals, in, languages and matchLocale are reserved.',
+      'Global "preview-globals" uses the reserved name "previewGlobals". resolve, href, preview, globals, previewGlobals, previewFrom, in, languages and matchLocale are reserved.',
       () => camelGlobalKeys(['preview-globals']),
     ],
     ['Collection keys blog-posts and blog_posts both map to "blogPosts". Rename one of them.', () =>

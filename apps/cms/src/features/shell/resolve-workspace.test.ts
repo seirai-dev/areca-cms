@@ -9,6 +9,7 @@ const site = (id: string) => ({
   organizationId: 'org',
   organizationName: 'Org',
   productionUrl: 'https://example.com',
+  previewUrl: null,
   languages: null,
   environment: 'production' as const,
   parentSiteId: null,

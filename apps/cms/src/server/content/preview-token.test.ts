@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 // for a site content section (payload gains optional `global`), and
 // buildGlobalPreviewUrl(productionUrl, previewPath, token) builds
 // `<site><previewPath>?arecaPreview=<token>`.
+import { previewBaseUrl } from '#/lib/preview-url'
 import {
   buildGlobalPreviewUrl,
   buildPreviewUrl,
@@ -99,6 +100,32 @@ describe('preview token', () => {
     expect(
       buildPreviewUrl('http://localhost:3001/', 'articles', 'hello', 'tok'),
     ).toBe('http://localhost:3001/__preview/articles/hello?token=tok')
+  })
+})
+
+describe('preview base URL', () => {
+  it('builds previews on the preview URL when one is set, else on production', () => {
+    const withPreview = {
+      previewUrl: 'http://localhost:3000/',
+      productionUrl: 'https://acme.test',
+    }
+    expect(
+      buildPreviewUrl(previewBaseUrl(withPreview), 'articles', 'hello', 'tok'),
+    ).toBe('http://localhost:3000/__preview/articles/hello?token=tok')
+    expect(
+      buildGlobalPreviewUrl(previewBaseUrl(withPreview), '/about', 'tok'),
+    ).toBe('http://localhost:3000/about?arecaPreview=tok')
+    expect(
+      buildPreviewUrl(
+        previewBaseUrl({
+          previewUrl: null,
+          productionUrl: 'https://acme.test',
+        }),
+        'articles',
+        'hello',
+        'tok',
+      ),
+    ).toBe('https://acme.test/__preview/articles/hello?token=tok')
   })
 })
 

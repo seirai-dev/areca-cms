@@ -192,6 +192,7 @@ export function RichTextEditor({
   previewing = false,
   preview,
   invalid,
+  compact = false,
 }: {
   id?: string
   label?: string
@@ -202,6 +203,8 @@ export function RichTextEditor({
   previewing?: boolean
   preview?: React.ReactNode
   invalid?: boolean
+  /** Drops the Write-mode minimum height (Visual mode's editor column). */
+  compact?: boolean
 }) {
   const mod = useMod()
   const wrapperRef = React.useRef<HTMLDivElement>(null)
@@ -236,7 +239,8 @@ export function RichTextEditor({
     editorProps: {
       attributes: {
         class: cn(
-          'prose max-w-none min-h-64 pb-8 text-body-lg text-text-primary focus:outline-none',
+          'prose max-w-none pb-8 text-body-lg text-text-primary focus:outline-none',
+          compact ? 'min-h-0' : 'min-h-64',
           'prose-p:my-3 prose-headings:tracking-[-0.015em] prose-h2:mt-10 prose-h2:mb-3 prose-h3:mt-8 prose-h3:mb-2',
           '[&_img]:h-auto [&_img]:max-w-full [&_img]:min-h-16 [&_a]:underline',
         ),

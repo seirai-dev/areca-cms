@@ -3,6 +3,7 @@ import { Markdown } from '@tanstack/markdown/react'
 import type { MarkdownComponents } from '@tanstack/markdown/react'
 import { richTextDocument } from '@areca-cms/site-sdk'
 import type { RichTextValue } from '@areca-cms/site-sdk'
+import type { FieldMarker } from '../lib/visual-markers.tsx'
 
 /**
  * The site owns how published content looks. The CMS ships a TanStack
@@ -128,11 +129,13 @@ export const articleComponents = {
 
 export function ArticleBody({
   body,
+  marker = {},
 }: {
   body: RichTextValue | null | undefined
+  marker?: FieldMarker
 }) {
   return (
-    <div className="mt-10 max-w-[68ch]">
+    <div className="mt-10 max-w-[68ch]" {...marker}>
       <Markdown components={richTextComponents(articleComponents)}>
         {richTextDocument(body)}
       </Markdown>

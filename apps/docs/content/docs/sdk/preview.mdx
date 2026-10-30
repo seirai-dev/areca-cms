@@ -196,6 +196,10 @@ export async function loadAboutPage(token: string | undefined) {
 
 `content.previewGlobals()` returns `previewing`, the section the token targets, so the page can check it matches. When `complete` is `false`, the page shows the published section and a note, as in the example above. A section's draft is shown on its preview path only. An entry token on that page is ignored. The rules for noindex, caching and the token in the URL are the same as for entries. See [site content](/docs/sdk/globals#preview) for the full API.
 
+## Live preview in the visual editor
+
+The CMS [visual editor](/docs/cms/visual-editor) can show this preview route beside the fields and update it as editors type. Your site connects to it with two additions: send the `visualEditingHeaders` policy on this route, and render unsaved results with `useLivePreview` (React) or `createVisualBridge`. Send the policy on preview routes only, never on public pages. See [visual editing](/docs/sdk/visual-editing) for the steps.
+
 ## Security
 
 <Callout type="warn" title="The token is in the URL">
@@ -222,5 +226,6 @@ Anyone who has the preview URL can read that draft until the token expires. Brow
 
 - [Preview](/docs/cms/preview) for what editors do in the CMS.
 - [Go live builds](/docs/sdk/go-live-builds) for the runtime variables a deployed site needs.
+- [Visual editing](/docs/sdk/visual-editing) for live updates and click to edit in the visual editor.
 - [Tokens](/docs/security/tokens) for the site token, the schema token and the preview token.
 - [The client](/docs/sdk/client) for the client options.

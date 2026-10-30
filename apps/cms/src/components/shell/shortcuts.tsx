@@ -167,4 +167,6 @@ export const SHORTCUT_LIST = [
   { keys: ['/'], id: 'search' },
   { keys: ['mod', 'S'], id: 'save' },
   { keys: ['mod', '.'], id: 'details' },
+  { keys: ['mod', 'shift', 'E'], id: 'visual' },
+  { keys: ['mod', 'shift', 'Enter'], id: 'fullscreen' },
 ] as const

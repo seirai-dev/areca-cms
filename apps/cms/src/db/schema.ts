@@ -243,6 +243,8 @@ export const site = pgTable(
     tokenHash: text('token_hash').notNull().unique(),
     schemaTokenHash: text('schema_token_hash').unique(),
     productionUrl: text('production_url').notNull(),
+    /** Where previews and the visual editor load from. Null = productionUrl. */
+    previewUrl: text('preview_url'),
     previewSecret: text('preview_secret').notNull(),
     publishingMode: text('publishing_mode')
       .$type<'production' | 'demo'>()

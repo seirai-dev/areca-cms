@@ -1,6 +1,6 @@
 {
   "name": "@areca-cms/site-sdk",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Schema, content sync, and preview tools for sites powered by Areca CMS.",
   "keywords": [
     "areca",
@@ -51,6 +51,14 @@
     "./rich-text-react": {
       "types": "./dist/rich-text-react.d.ts",
       "import": "./dist/rich-text-react.js"
+    },
+    "./visual": {
+      "types": "./dist/visual.d.ts",
+      "import": "./dist/visual.js"
+    },
+    "./visual-react": {
+      "types": "./dist/visual-react.d.ts",
+      "import": "./dist/visual-react.js"
     }
   },
   "files": [

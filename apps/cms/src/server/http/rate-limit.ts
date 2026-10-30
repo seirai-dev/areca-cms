@@ -21,6 +21,11 @@ export interface RequestRateLimitDependencies {
 }
 
 const MUTATION_RULE = { limit: 60, windowSeconds: 60 } as const
+// Live visual editing posts the unsaved entry about every 150 ms while typing.
+// Under the mutation budget that would be exhausted in seconds and starve
+// autosave, so the live preview has its own budget per user.
+const LIVE_PREVIEW_RULE = { limit: 600, windowSeconds: 60 } as const
+const LIVE_PREVIEW_PATH = '/api/editor/live-preview'
 const UPLOAD_RULE = { limit: 10, windowSeconds: 60 } as const
 const SITE_API_RULE = { limit: 300, windowSeconds: 60 } as const
 // Per AI key. Agents make several small calls per entry (read, write, preview).
@@ -224,6 +229,30 @@ async function clientIdOf(request: Request): Promise<string | null> {
   }
 }
 
+async function enforceLivePreview(
+  request: Request,
+  dependencies: RequestRateLimitDependencies,
+): Promise<Response | null> {
+  const now = dependencies.now?.() ?? Date.now()
+  try {
+    const userId = await dependencies.resolveUserId(request)
+    const identifier = userId
+      ? `user:${userId}`
+      : `ip:${getClientIp(request, dependencies.trustProxy)}`
+    const allowed = await consumeRateLimit(
+      dependencies.store,
+      'live-preview',
+      identifier,
+      LIVE_PREVIEW_RULE,
+      now,
+    )
+    return allowed ? null : tooManyRequests(LIVE_PREVIEW_RULE, now)
+  } catch (error) {
+    dependencies.logError?.('Rate limiting unavailable; request allowed', error)
+    return null
+  }
+}
+
 /**
  * Returns a 429 response when blocked and null when the request may continue.
  * The store falls back to in-memory counters when Redis fails, so the budgets
@@ -270,6 +299,10 @@ export async function enforceRequestRateLimit(
       )
       return null
     }
+  }
+
+  if (path === LIVE_PREVIEW_PATH && method === 'POST') {
+    return enforceLivePreview(request, dependencies)
   }
 
   // The MCP endpoint has its own budgets and is exempt from the general

@@ -636,6 +636,12 @@ function previewLocaleStatus(
   )
 }
 
+type PreviewSite = typeof site.$inferSelect
+type PreviewCollection = NonNullable<Awaited<ReturnType<typeof getCollection>>>
+type PreviewGlobalRow = NonNullable<
+  Awaited<ReturnType<typeof getGlobalEntry>>
+>['global']
+
 /**
  * Draft preview of one section (`data` is the draft, not the ready version).
  * `locale` picks the language, with the snapshot's fallback chain.
@@ -649,18 +655,42 @@ export async function buildPreviewGlobal(
   const existingSite = (
     await db.select().from(site).where(eq(site.id, siteId)).limit(1)
   ).at(0)
-  if (!found || !existingSite || !found.global.enabled) return null
-  const { global, entry: row } = found
+  if (!found || !existingSite) return null
+  return buildPreviewGlobalFromDraft({
+    site: existingSite,
+    global: found.global,
+    entryRow: found.entry,
+    draftData: found.entry.draftData,
+    locale,
+  })
+}
+
+/**
+ * `buildPreviewGlobal` for a draft the caller supplies (the live preview's
+ * unsaved values). Reads nothing and writes nothing; `entryRow` only supplies
+ * the section entry's id and publish date. Null when the section is disabled.
+ */
+export async function buildPreviewGlobalFromDraft(input: {
+  site: PreviewSite
+  global: PreviewGlobalRow
+  entryRow: { id: string; publishedAt: Date | null }
+  draftData: EntryData
+  locale?: string | null
+}): Promise<PreviewGlobal | null> {
+  const { global, draftData, locale } = input
+  const existingSite = input.site
+  const row = input.entryRow
+  if (!global.enabled) return null
   const languages = existingSite.languages ?? null
 
   const expanded = await expandAcrossLanguages(
     languages,
     global.fields,
-    row.draftData,
+    draftData,
     async (view, loc) => {
       const data = await convertFields(global.fields, view, {
         includedById: new Map(),
-        siteId,
+        siteId: existingSite.id,
         organizationId: existingSite.organizationId,
         strict: false,
         locale: loc ?? undefined,
@@ -696,7 +726,7 @@ export async function buildPreviewGlobal(
     data: expanded.top.data,
     ...(expanded.top.seo ? { seo: expanded.top.seo } : {}),
     ...localeFields(expanded),
-    ...previewLanguageFields(expanded, languages, global.fields, row.draftData),
+    ...previewLanguageFields(expanded, languages, global.fields, draftData),
   }
 }
 
@@ -724,12 +754,37 @@ export async function buildPreviewEntry(
       .limit(1)
   ).at(0)
   if (!row) return null
+  return buildPreviewEntryFromDraft({
+    site: existingSite,
+    collection: col,
+    entryRow: row,
+    draftData: row.draftData,
+    locale,
+  })
+}
+
+/**
+ * `buildPreviewEntry` for a draft the caller supplies (the live preview's
+ * unsaved values). Reads nothing and writes nothing. `entryRow` gives the
+ * entry's id, the slug to show (the caller decides it, e.g. an unsaved slug)
+ * and its publish date.
+ */
+export async function buildPreviewEntryFromDraft(input: {
+  site: PreviewSite
+  collection: PreviewCollection
+  entryRow: { id: string; slug: string; publishedAt: Date | null }
+  draftData: EntryData
+  locale?: string | null
+}): Promise<PreviewEntry> {
+  const { collection: col, draftData, locale } = input
+  const existingSite = input.site
+  const row = input.entryRow
   const languages = existingSite.languages ?? null
 
   const expanded = await expandAcrossLanguages(
     languages,
     col.fields,
-    row.draftData,
+    draftData,
     async (view, loc) => {
       const isTranslation = Boolean(languages && loc && loc !== languages.main)
       const localSlug = isTranslation ? view[SLUG_KEY] : undefined
@@ -740,7 +795,7 @@ export async function buildPreviewEntry(
       if (isTranslation && slugField) shown[slugField.key] = entrySlug
       const data = await convertFields(col.fields, shown, {
         includedById: new Map(),
-        siteId,
+        siteId: existingSite.id,
         organizationId: existingSite.organizationId,
         strict: false,
         locale: loc ?? undefined,
@@ -782,7 +837,7 @@ export async function buildPreviewEntry(
     data: expanded.top.data,
     seo: expanded.top.seo,
     ...localeFields(expanded),
-    ...previewLanguageFields(expanded, languages, col.fields, row.draftData),
+    ...previewLanguageFields(expanded, languages, col.fields, draftData),
   }
 }
 

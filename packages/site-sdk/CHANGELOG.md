@@ -2,6 +2,23 @@
 
 All notable changes to `@areca-cms/site-sdk`.
 
+## 0.9.0 (2026-10-29)
+
+### Features
+
+- **visual editing:** `@areca-cms/site-sdk/visual` adds `createVisualBridge`, which connects a preview page to the CMS over `postMessage` and applies each newer update. It only talks to the CMS origin, and it does nothing outside an iframe. `visualEditingHeaders` builds the `frame-ancestors` policy for the preview route.
+- **visual editing:** `field(key, owner?)` in `@areca-cms/site-sdk/visual` marks an element as showing a field. The editor outlines marked elements in Select mode and jumps to the field on click. Owners are another entry (`{ entry }`) or a site content section (`{ global }`, such as the header or footer). Browse, or holding Option/Alt, uses the page normally. Markers do nothing outside the visual editor.
+- **visual editing:** the bridge reports client-side navigations, so the editor can show when the preview has left the entry's page. `hello` now includes the page address and whether markers are reported. `createVisualBridge` takes `markers: false` to turn the overlay off.
+- **visual editing:** `@areca-cms/site-sdk/visual-react` adds `useLivePreview`, which shows the published value until the CMS sends an update, then the latest resolved value.
+- **content:** `content.previewFrom(result)` turns a preview result the CMS already returned into the same entry `content.preview(token)` gives, without a request. `preview()` behaves as before. `previewFrom` is now a reserved collection and site content name.
+- **visual editing:** pressing Escape in the preview sends `escape` to the CMS, so full screen can be left from inside the preview.
+
+### Bug Fixes
+
+- **content:** `content.previewFrom(result)` and `content.preview(token)` serve a draft in its own language (`entry.locale`) when no `locale` option or `content.in(locale)` scope is set. Before, a multilingual site showed the main language for a Dutch draft.
+- **visual editing:** in Select mode only clicks on marked fields are cancelled, and only form submits from inside a marked field are blocked. Links, buttons and forms elsewhere on a page with no matching fields work again.
+- **browser:** the main entry (`@areca-cms/site-sdk`) no longer pulls `node:crypto` and `node:path` into browser bundles through the client's asset downloader. Pages that imported `seoHead` or `richTextDocument` failed to hydrate under Vite.
+
 ## 0.8.0 (2026-10-27)
 
 ### Features

@@ -30,6 +30,17 @@ A site content section preview is different. The CMS opens the section's `previe
 
 `getPreviewEntry` needs `ARECA_CMS_URL` and `ARECA_SITE_TOKEN` at runtime. Exclude `/__preview` from prerendering and CDN caching. In TanStack Start, wrap the fetch in a `createServerFn` handler.
 
+## Visual editing
+
+The CMS visual editor shows the preview route in an iframe and sends it unsaved values (SDK 0.9.0+). Add this to preview routes only, never to public pages.
+
+- `visualEditingHeaders({ cmsOrigin })` from `@areca-cms/site-sdk/visual` returns a `Content-Security-Policy: frame-ancestors` header. Set it on the preview response, next to `previewHeaders()`.
+- React: `useLivePreview({ initial, cmsOrigin, resolve })` from `@areca-cms/site-sdk/visual-react`. `initial` shows until an update arrives, so keep it referentially stable. A `cmsOrigin` of null or undefined turns the hook off. `resolve` runs in the browser, so have it call a POST server function that runs `content.previewFrom(result)`. If it throws, the last good value stays.
+- Other frameworks: `createVisualBridge({ cmsOrigin, onUpdate })` from `@areca-cms/site-sdk/visual`. Call `destroy()` when the page goes away. Updates can finish out of order, so compare `info.seq` or use `createLatestResolver` from the same subpath.
+- Site content pages: `content.previewGlobals(result)` takes the bridge's `{ kind: "global", ... }` result. Change the section only when `previewing` is that page's section.
+- Click to edit: `field(key, owner?)` returns `data-areca-*` attributes and never checks where it runs, so render them only on preview pages. Unknown keys are ignored. Owners the CMS cannot verify are not clickable.
+- Blank preview: check `frame-ancestors`, and that no `X-Frame-Options` is sent on that response. Stuck on "Updates on save": the bridge is not loaded, or `cmsOrigin` is not the CMS origin.
+
 ## Health route (Production mode)
 
 Go live waits until the deployed site reports the publication it was built from:

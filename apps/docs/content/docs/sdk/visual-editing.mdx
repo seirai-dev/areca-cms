@@ -1,0 +1,276 @@
+---
+title: Visual editing
+description: Connect your site to the CMS visual editor. Show unsaved changes as editors type, and let editors click a part of the page to jump to its field.
+---
+
+The CMS [visual editor](/docs/cms/visual-editor) shows your site's preview beside the fields. Without any work on your side, the preview reloads after each autosave. Your site can do more: it can show unsaved changes while the editor types, and let editors click part of the page to jump to the field that fills it.
+
+The visual editor only reads. It never saves or publishes anything, and the values it sends your site are not written to disk.
+
+## The three levels
+
+The CMS detects what your site supports, so there is nothing to switch on in the CMS. The status pill in the preview toolbar shows the current level.
+
+| Level | What the editor gets | What your site adds |
+| --- | --- | --- |
+| **Updates on save** | The preview reloads after each successful autosave. Status: "Updates on save". | Nothing. This is the default. |
+| **Live** | Unsaved values reach the page on every change. Status: "Live". | Steps 1 and 2 |
+| **Click to edit** | Hovering outlines a marked element with the field's label. Clicking it focuses that field. | Step 4 |
+
+The live level needs the bridge, which is the part of the SDK that talks to the CMS from inside the preview page. The bridge is inert outside an iframe, so a published page is not affected.
+
+The only CMS setting is the optional **Preview URL** in **Settings › General**. Agency admins can use it to point previews at staging or `localhost`. When it is empty, the editor uses the site's production URL.
+
+The SDK's visual editing support is in `@areca-cms/site-sdk/visual` (framework-agnostic) and `@areca-cms/site-sdk/visual-react` (React hook). Both subpaths were added in version 0.9.0. The React hook needs React, which is an optional peer.
+
+## Step 1: let the CMS frame the preview route
+
+The CMS shows the preview in an iframe. Browsers refuse to frame a page unless its `Content-Security-Policy` allows it. Send the policy from `visualEditingHeaders` on the **preview route only**, next to the headers from `previewHeaders()`:
+
+```ts
+import { visualEditingHeaders } from "@areca-cms/site-sdk/visual";
+
+const headers = visualEditingHeaders({ cmsOrigin: "https://cms.example.com" });
+// Add to the preview response: { ...previewHeaders(), ...headers }
+```
+
+The helper returns one header, `Content-Security-Policy: frame-ancestors 'self' <cms origin>`. It replaces any policy the response already sends, so if your site sets its own policy on that route, add the `frame-ancestors` directive to it instead. You can pass an array of origins, for example a local CMS during development.
+
+<Callout type="warn" title="Public pages must not send this header">
+
+`frame-ancestors` lets the listed origin frame the page. Only responses that show a preview should send it: the preview route, or a page opened with `?arecaPreview=`. Public responses never should.
+
+</Callout>
+
+In TanStack Start, set the header in the server function that loads the page. The demo site does this with `setResponseHeader`.
+
+## Step 2: show live updates
+
+The CMS sends the unsaved draft to the bridge as a **preview result**. The bridge hands it to your code, which renders it. Rendering happens on the server. Entries and site content are read from files, so the code that turns a result into a page must run on the server.
+
+### React
+
+`useLivePreview` shows the value you pass as `initial` until the first update arrives, then the value `resolve` returns:
+
+```ts title="src/lib/preview.server.ts"
+import { createServerFn } from '@tanstack/react-start'
+import { z } from 'zod'
+import { content } from '../generated/content/areca.gen'
+
+const liveInput = z.looseObject({
+  kind: z.literal('entry').optional(),
+  collection: z.string().min(1),
+  slug: z.string().min(1),
+  entry: z.looseObject({
+    id: z.string(),
+    slug: z.string(),
+    publishedAt: z.string().nullable(),
+    data: z.record(z.string(), z.unknown()),
+  }),
+})
+
+// Renders the unsaved result. Nothing is saved.
+export const renderLivePreview = createServerFn({ method: 'POST' })
+  .validator((input: unknown) => liveInput.parse(input))
+  .handler(({ data }) => content.previewFrom(data))
+```
+
+```tsx title="src/routes/[__preview]/$collection/$slug.tsx"
+import { useLivePreview } from '@areca-cms/site-sdk/visual-react'
+import { renderLivePreview } from '../../../lib/preview.server'
+
+function PreviewPage() {
+  const loaded = Route.useLoaderData() // { result, cmsOrigin } from the loader
+  const result = useLivePreview({
+    initial: loaded.result,
+    cmsOrigin: loaded.cmsOrigin,
+    resolve: (preview) => renderLivePreview({ data: preview }),
+  })
+  if (!result.complete) return <p>Incomplete draft: {result.issues.join(', ')}</p>
+  return <ArticleView article={result.entry} />
+}
+```
+
+The loader comes from [draft preview](/docs/sdk/preview) and returns `{ result, cmsOrigin }`, where `result` is the `content.preview(token)` result and `cmsOrigin` is the origin of `ARECA_CMS_URL`, or `null` when the variable is unset. The demo site's loader does this in its `frameForVisualEditing` helper, which also sends the Step 1 header.
+
+What the hook does:
+
+- **`initial`** is shown until an update resolves. Keep it referentially stable, such as loader data. A new identity resets the hook to it.
+- **`cmsOrigin`** turns the hook on. When it is `null` or `undefined`, the hook does nothing, which is what happens on the server and on published pages.
+- **`resolve(result, info)`** runs in the browser and may return a promise. If it throws or rejects, the hook keeps the last good value and logs a warning.
+- Updates that finish out of order never replace a newer one. `info.seq` orders them.
+
+### Without React
+
+`createVisualBridge` does the same job for any framework:
+
+```ts
+import { createVisualBridge } from '@areca-cms/site-sdk/visual'
+
+const bridge = createVisualBridge({
+  cmsOrigin: 'https://cms.example.com',
+  onUpdate: async (result, info) => {
+    const entry = await renderLivePreview(result) // your server function
+    render(entry, info.seq)
+  },
+})
+
+// later, when the page goes away:
+bridge.destroy()
+```
+
+| Option | Required | Meaning |
+| --- | --- | --- |
+| `cmsOrigin` | Yes | The CMS origin, such as `https://cms.example.com`. A path is ignored. |
+| `onUpdate(result, info)` | Yes | Called with each update newer than the last one applied. `info` has `seq` and `locale`. |
+| `window` | No | Defaults to the global window. Tests pass a fake. |
+| `markers` | No | Defaults to `true`. Set `false` to keep only the live updates and skip the click-to-edit overlay. |
+
+The bridge returns `{ destroy(), connected() }`. `connected()` is true once the CMS has sent a valid message. Updates can still finish out of order, so ignore a render whose `info.seq` is older than the last one you showed. `createLatestResolver` from the same subpath does that check for you.
+
+## Step 3: site content pages
+
+A site content section shows its draft on its **preview path**, not on `/__preview`. The CMS opens `<your site><previewPath>?arecaPreview=<token>`. See [site content previews](/docs/sdk/globals#preview).
+
+For a live update, the bridge sends a preview result of the form `{ kind: 'global', global, entry }`. Pass it to `content.previewGlobals(result)`, which accepts a preview result as well as a token and needs no request. Only change the page when `previewing` is that page's section.
+
+The demo's home page works like this. Trimmed to the parts that matter:
+
+```ts title="src/lib/queries.ts (server functions)"
+export const loadHome = createServerFn({ method: 'GET' })
+  .validator(z.object({ arecaPreview: z.string().optional() }))
+  .handler(async ({ data }) => {
+    // Only a preview link gets the CSP and a cmsOrigin. Public requests get null.
+    const cmsOrigin = data.arecaPreview ? frameForVisualEditing() : null
+    return { ...homeData(await readGlobals(data.arecaPreview, 'homePage')), cmsOrigin }
+  })
+
+export const loadLiveHome = createServerFn({ method: 'POST' })
+  .validator((input: unknown) => liveGlobalInput.parse(input))
+  .handler(({ data }) => liveHomeData(data as unknown as PreviewResult))
+```
+
+`liveHomeData` calls `content.previewGlobals(result)` and keeps the section's draft only when `previewing` is `homePage`. `readGlobals` serves the published values for a missing, expired or mistyped token, so a stale link shows the live page.
+
+```tsx title="src/routes/index.tsx (trimmed)"
+function Home() {
+  const loaded = Route.useLoaderData()
+  const { home, preview, incomplete } = useLivePreview({
+    initial: loaded,
+    cmsOrigin: loaded.cmsOrigin,
+    resolve: async (result) => ({
+      ...(await loadLiveHome({ data: result })),
+      authors: loaded.authors,
+      cmsOrigin: loaded.cmsOrigin,
+    }),
+  })
+  const field = useField()
+  return (
+    <section>
+      {preview ? <PreviewBanner incomplete={incomplete} /> : null}
+      <p {...field('heroEyebrow')}>{home.heroEyebrow}</p>
+      <p {...field('heroIntro')}>{home.heroIntro}</p>
+    </section>
+  )
+}
+```
+
+A live update for a different section leaves this page unchanged. The rest of the page comes from the same snapshot as the published page.
+
+## Step 4: click to edit
+
+Mark each element that shows a field. `field(key, owner?)` returns the attributes to spread on the element:
+
+```tsx
+import { field } from '@areca-cms/site-sdk/visual'
+
+<h1 {...field('title')}>{article.title}</h1>
+<p {...field('$seo.description')}>{article.seo.description}</p>
+<p {...field('email', { global: 'companyInfo' })}>{company.email}</p>
+<span {...field('name', { entry: author.id })}>{author.name}</span>
+```
+
+Without an owner, the field belongs to the page's own entry. Pass an owner when the element shows something that belongs to another document:
+
+| Call | Use it for |
+| --- | --- |
+| `field('title')` | A field of the entry this page shows |
+| `field('heroIntro', { global: 'homePage' })` | A field of a site content section, such as the header or footer |
+| `field('name', { entry: author.id })` | A field of another entry, such as a referenced author |
+
+Keys can be the camelCase name your code sees (`heroImage`) or the raw CMS key (`hero_image`). Both work. For SEO fields, use `$seo.title`, or `seo.title`. Unknown keys are ignored, and the element behaves as if it were not marked.
+
+Owners are checked in the CMS. A section or entry must exist on this site, not be deleted or archived, and be editable by the person who is previewing. Elements with an owner that fails the check are not outlined. Clicking a marked element in Select mode focuses the field. Browse mode, or holding Option (Alt on Windows and Linux), uses the page normally.
+
+Select mode only blocks clicks on marked elements. The rest of the page works as usual: links, buttons and forms are not affected. Press Esc inside the preview to leave full screen. This works when the bridge is present, because the bridge forwards the key press to the CMS.
+
+### Only mark preview pages
+
+`field()` always returns attributes. It does not check where it runs. Public pages must render no `data-areca-*` attributes, so gate the markers yourself. The demo does it with a context that is on only for preview pages:
+
+```tsx title="src/lib/visual-markers.tsx (trimmed)"
+import { createContext, useContext, type ReactNode } from 'react'
+import { field, type VisualFieldAttributes } from '@areca-cms/site-sdk/visual'
+
+type FieldFn = (
+  key: string,
+  owner?: { entry: string } | { global: string },
+) => Partial<VisualFieldAttributes>
+
+const noMarkers: FieldFn = () => ({})
+const MarkersContext = createContext<FieldFn>(noMarkers)
+
+export function VisualMarkers({ enabled, children }: { enabled: boolean; children: ReactNode }) {
+  return <MarkersContext.Provider value={enabled ? field : noMarkers}>{children}</MarkersContext.Provider>
+}
+
+export function useField(): FieldFn {
+  return useContext(MarkersContext)
+}
+```
+
+The root layout wraps the page in `<VisualMarkers enabled={...}>`, enabled on the `__preview` route and when the URL has `?arecaPreview=`. Components call `useField()` and spread the result, so they stay the same on preview and published pages.
+
+## Security
+
+- **Origins are pinned both ways.** The bridge replies only to the CMS origin you configure, and it ignores messages from any other origin or window. The CMS talks only to the preview URL's origin.
+- **Messages are versioned.** Every message type starts with `areca:v1:`. Unknown or malformed messages are ignored.
+- **Unsaved values are not saved.** The CMS builds the live result without writing it. Your server function renders it and returns the HTML or data. Still validate the input, as the demo does with zod.
+- **Preview tokens expire after an hour.** While Visual mode is open, the editor fetches a fresh preview URL every 50 minutes, so a reload of the preview still works after the first hour. Keep the preview response `no-store` as described in [draft preview](/docs/sdk/preview).
+
+## Protocol reference
+
+You only need this if you write your own bridge. The bridge in `@areca-cms/site-sdk/visual` already implements it. All messages are `{ type: 'areca:v1:<name>', ... }`.
+
+| Direction | Type | Payload |
+| --- | --- | --- |
+| site → CMS | `hello` | `{ sdkVersion, markers: boolean, url }` (on start and answering `ping`) |
+| CMS → site | `ping` | `{}` (sent on iframe load until `hello`, max 3 s) |
+| CMS → site | `update` | `{ seq, result, locale }` |
+| site → CMS | `markers` | `{ markers: { field, owner }[] }` (after render, on change, and after every `ping`) |
+| site → CMS | `select` | `{ field, owner, rect }` (a click on a target in Select mode) |
+| CMS → site | `highlight` | `{ target: { field, owner } \| null }` |
+| CMS → site | `mode` | `{ select, showAreas, cursorHint, color: '#rrggbb', targets: { field, owner, label }[] }` |
+| site → CMS | `navigate` | `{ url }` (client-side navigation; the CMS compares it with the preview page) |
+| site → CMS | `escape` | `{}` (Escape pressed in the page; exits full screen) |
+
+`owner` is `null` for the page's own entry, `{ entry: id }` or `{ global: key }`. Only markers listed in `targets` are outlined or clickable.
+
+## Troubleshooting
+
+| Symptom | Likely cause and fix |
+| --- | --- |
+| The preview is blank | The browser refused to frame the page. Check that the preview response sends `frame-ancestors` with the CMS origin. Remove any `X-Frame-Options` header from that response. Browsers that support `frame-ancestors` ignore it when both are present, but other tools may not. |
+| The preview is blank, and the Preview URL is `http://` | The production CMS only frames `https:` addresses, plus `localhost` and `127.0.0.1`. Use HTTPS, or a local address. |
+| The status stays on "Updates on save" | The bridge is not running, or it does not accept the CMS. Check that the preview page loads `useLivePreview` or `createVisualBridge`. Check that `cmsOrigin` is the exact CMS origin, with the same scheme and port. A `cmsOrigin` of `null` usually means `ARECA_CMS_URL` is not set on the server. |
+| Live updates arrive but the page does not change | The result is for another section, or the page does not read the draft. For a site content page, check that `previewing` equals that page's section. |
+| Elements are not clickable | No markers on the page (`VisualMarkers` is off on that route), the key matches no field (check the spelling or camelCase name), the owner is not verified (deleted, archived, on another site, or not editable by you), or Browse mode is on. |
+| Links on the page don't work in the preview | Select mode blocks clicks on marked elements only, so a marked link edits its field instead of opening. The rest of the page works. Use Browse, or hold Option (Alt), to follow the link. |
+| Esc does not leave full screen | Esc is forwarded only when the bridge is present (`useLivePreview` or `createVisualBridge`). Without it, use the Exit full screen button. |
+
+## Related
+
+- [Draft preview](/docs/sdk/preview) for the preview route and its headers.
+- [Site content (globals)](/docs/sdk/globals) for sections and `previewGlobals`.
+- [The example site](/docs/sdk/example-site) for the complete demo the code here comes from.
+- [Visual editor](/docs/cms/visual-editor) for what editors see and do.

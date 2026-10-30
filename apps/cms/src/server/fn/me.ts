@@ -47,6 +47,8 @@ export type Me = {
     organizationId: string
     organizationName: string
     productionUrl: string
+    /** Preview origin override; null = productionUrl. */
+    previewUrl: string | null
     /** Content languages. Null = single-language site. */
     languages: SiteLanguages | null
     /** Development environments are listed for agency admins only. */
@@ -104,6 +106,7 @@ export const getMeFn = createServerFn({ method: 'GET', ...meFn }).handler(
       organizationId: site.organizationId,
       organizationName: organization.name,
       productionUrl: site.productionUrl,
+      previewUrl: site.previewUrl,
       languages: site.languages,
       environment: site.environment,
       parentSiteId: site.parentSiteId,

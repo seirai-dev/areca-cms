@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, Stack, WarningCircle } from '@phosphor-icons/react'
 
 import { queryKeys } from '#/lib/content/query-keys'
@@ -34,6 +34,7 @@ import { canGoLive } from '#/features/golive/go-live-gate'
 import { useReleaseStatus } from '#/features/golive/use-release-status'
 import { usePanel } from '#/features/shell/panel'
 import { useIsMobile, useMediaQuery } from '#/hooks/use-mobile'
+import { previewOrigin } from '#/lib/preview-url'
 import { isDevSite } from '#/lib/site-environment'
 import { canManageSite } from '#/lib/site-nav'
 import type { MeSite } from '#/lib/site-nav'
@@ -73,6 +74,18 @@ import { conflictReadyBlock, EditorConflictNotice } from './conflict-notice'
 import { SeoPanel, plainTextOf } from './seo-panel'
 import { useContentLanguage } from './use-content-language'
 import { useEntryEditor } from './use-entry-editor'
+import { PreviewPane } from '#/features/visual/preview-pane'
+import { VisualEditorLayout } from '#/features/visual/visual-editor-layout'
+import { VisualFullScreenProvider } from '#/features/visual/visual-context'
+import { VisualShortcuts } from '#/features/visual/visual-shortcuts'
+import { seoClickFields } from '#/features/visual/use-click-to-edit'
+import type { ClickSource } from '#/features/visual/preview-pane'
+import { announceReveal, pulseField } from './reveal-field'
+import {
+  VISUAL_TOKEN_REFRESH_MS,
+  useVisualMode,
+  useVisualModeActive,
+} from '#/features/visual/visual-mode'
 
 type CollectionRecord = {
   key: string
@@ -209,6 +222,17 @@ function EntryEditorView({
   const [titleVisible, setTitleVisible] = React.useState(true)
 
   const fields = collection.fields
+  const navigate = useNavigate()
+  const clickFields = React.useMemo(
+    () => [
+      ...fields.map((field) => ({ key: field.key, label: field.label })),
+      ...seoClickFields(),
+    ],
+    [fields],
+  )
+  // Visual mode (docs/design/visual-editor.md). A new entry has no preview
+  // until its first save, so it does not reopen in Visual by itself.
+  const visual = useVisualMode({ autoEnter: Boolean(routeEntryId) })
   const editor = useEntryEditor({
     siteId,
     collectionKey: collection.key,
@@ -217,6 +241,7 @@ function EntryEditorView({
     onCreated,
     onDeleted,
     onRevealError: (key) => revealField(key),
+    previewRefetchInterval: visual.active ? VISUAL_TOKEN_REFRESH_MS : undefined,
   })
   const { entry, data, titleField, slugField } = editor
 
@@ -369,12 +394,18 @@ function EntryEditorView({
     else setSheetOpen((value) => !value)
   }
 
-  function revealField(key: string) {
+  /**
+   * Scrolls to and focuses a field. Panels that hide it open first (the
+   * details panel, a collapsed SEO group). `pulse` makes it glow briefly, for
+   * a click in the visual preview.
+   */
+  function revealField(key: string, options: { pulse?: boolean } = {}) {
     const inPanel =
       key === slugField?.key ||
       key.startsWith(`${SEO_KEY}.`) ||
       panelFields.some((field) => field.key === key)
     if (inPanel) openDetails()
+    announceReveal(key)
     const attempt = (tries: number) => {
       const node = document.querySelector<HTMLElement>(
         `[data-field="${CSS.escape(key)}"]`,
@@ -384,11 +415,15 @@ function EntryEditorView({
         return
       }
       node.scrollIntoView({ block: 'center', behavior: 'smooth' })
-      node
-        .querySelector<HTMLElement>(
-          'input, textarea, [contenteditable="true"], button',
-        )
-        ?.focus({ preventScroll: true })
+      const focusable = node.matches(
+        'input, textarea, [contenteditable="true"], button',
+      )
+        ? node
+        : node.querySelector<HTMLElement>(
+            'input, textarea, [contenteditable="true"], button',
+          )
+      focusable?.focus({ preventScroll: true })
+      if (options.pulse) pulseField(node)
     }
     requestAnimationFrame(() => attempt(5))
   }
@@ -632,327 +667,430 @@ function EntryEditorView({
       transitionName={
         editor.entryId ? entryTransitionName(editor.entryId) : undefined
       }
+      compact={visual.active}
     />
   )
 
-  return (
-    <LocaleFieldsContext.Provider value={localeFields}>
-      <div
-        data-testid="entry-editor"
-        data-ready={editor.ready ? 'true' : 'false'}
-        data-dirty={editor.dirty ? 'true' : 'false'}
-        data-entry-id={editor.entryId}
-        style={
-          {
-            // Sticky offsets below the header: 56px row, plus the 44px language row.
-            '--editor-bar-h': languageBar ? '100px' : '56px',
-          } as React.CSSProperties
-        }
-        className="-mb-6 min-h-[calc(100dvh-3rem)]"
-      >
-        <EditorTopBar
-          languageBar={languageBar}
-          readyBlock={readyBlock}
-          copyAction={copyAction}
-          siteId={siteId}
-          collectionKey={collection.key}
-          collectionLabel={collection.label}
-          title={title}
-          showTitle={!titleVisible}
-          uiStatus={uiStatus}
-          backendStatus={entry?.status ?? 'draft'}
-          scheduledAt={entry?.scheduledAt}
-          editedSinceReady={editedSinceReady}
-          saveStatus={editor.status}
-          conflict={editor.conflict}
-          isNew={editor.isNew}
-          lastSavedAt={editor.lastSavedAt}
-          updatedAt={entry?.updatedAt}
-          errorCount={editor.errorCount}
-          onSave={() => void editor.save()}
-          previewUrl={editor.previewUrl}
-          canManage={canManage}
-          primary={primary}
-          busy={editor.busy}
-          primaryPending={editor.markReadyPending || editor.goLiveNowPending}
-          scheduled={entry?.status === 'scheduled'}
-          canUnpublish={entry?.status === 'published'}
-          canArchive={entry?.status !== 'archived'}
-          hasRichText={canvasFields.some((field) => field.type === 'richtext')}
-          previewing={previewing}
-          onTogglePreviewing={() => setPreviewing((value) => !value)}
-          onGenerateSeo={
-            aiQuery.data?.enabled === true ? () => setAiOpen(true) : undefined
-          }
-          onMarkReady={editor.markReady}
-          onGoLiveNow={() => void goLiveNow()}
-          goLiveBlocked={
-            !canGoLive({
-              canPublish: canManage,
-              blockers: release.data?.blockers,
-            })
-          }
-          // A development environment has no releases and no scheduling.
-          canGoLive={!isDev}
-          onSchedule={() => setScheduleOpen(true)}
-          canSchedule={!isDev}
-          onCancelSchedule={editor.cancelSchedule}
-          onUnpublish={editor.unpublish}
-          onArchive={editor.archive}
-          onDelete={() => setDeleteOpen(true)}
-          detailsOpen={detailsOpen}
-          onToggleDetails={toggleDetails}
-          entryId={editor.entryId}
-          scheduleAnchor={(node) =>
-            mobile ? (
-              node
-            ) : (
-              <Popover open={scheduleOpen} onOpenChange={setScheduleOpen}>
-                <PopoverAnchor asChild>{node}</PopoverAnchor>
-                <PopoverContent
-                  align="end"
-                  sideOffset={10}
-                  className="w-[360px] p-5"
-                  data-testid="schedule-popover"
-                >
-                  <div className="mb-4 grid gap-0.5">
-                    <p className="text-headline text-text-primary">
-                      {m.editor_schedule_title()}
-                    </p>
-                    <p className="text-callout text-text-secondary">
-                      {m.editor_schedule_description()}
-                    </p>
-                  </div>
-                  {scheduleForm}
-                </PopoverContent>
-              </Popover>
-            )
-          }
-        />
-
-        <div
-          className={cn(
-            'grid grid-cols-[minmax(0,1fr)] items-start gap-10 pb-24',
-            desktop && detailsOpen && 'lg:grid-cols-[minmax(0,1fr)_340px]',
-          )}
+  // Shared by both layouts: the same notices, in the same order.
+  const notices = (
+    <>
+      <EditorConflictNotice
+        conflict={editor.conflict}
+        approvalConflict={editor.approvalConflict}
+        recoveredDraft={Boolean(editor.recoveredDraft)}
+        className="mx-auto grid w-full max-w-[720px] gap-3 rounded-card border border-border-error/30 p-4"
+        onReload={() => void editor.reloadServerDraft()}
+        onReapply={() => void editor.reapplyRecoveredDraft()}
+        onDiscard={editor.discardRecoveredDraft}
+      />
+      {editor.restoreSkippedFields.length > 0 ? (
+        <section
+          role="status"
+          className="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"
         >
-          <section
-            className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6 px-1 pt-4 sm:pt-10"
-            aria-label={m.editor_canvas_label()}
+          <h2 className="font-semibold">
+            {m.editor_revision_skipped_fields()}
+          </h2>
+          <p className="mt-1">{m.editor_revision_keep_current()}</p>
+          <ul className="mt-3 list-disc space-y-1 pl-5">
+            {editor.restoreSkippedFields.map((field) => (
+              <li key={field.key}>
+                <strong>{field.label}</strong>: {field.reason}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      {entry?.status === 'scheduled' &&
+      entry.scheduledData &&
+      entry.scheduledSlug ? (
+        <ScheduledVersion
+          fields={fields}
+          data={entry.scheduledData}
+          slug={entry.scheduledSlug}
+          siteId={siteId}
+          organizationId={site.organizationId}
+        />
+      ) : null}
+      {hasErrors ? (
+        <div
+          role="alert"
+          data-testid="editor-errors"
+          className="mx-auto flex w-full max-w-[720px] items-start gap-3 rounded-card border border-border-error/30 bg-status-error-bg px-4 py-3 text-[14px] leading-5 text-text-primary"
+        >
+          <WarningCircle
+            weight="fill"
+            className="mt-0.5 size-4 shrink-0 text-icon-error"
+          />
+          <span className="grid gap-0.5">
+            <span className="font-medium">
+              {editor.errorCount > 0
+                ? editor.errorCount === 1
+                  ? m.editor_save_fix_one()
+                  : m.editor_save_fix_other({ count: editor.errorCount })
+                : m.editor_save_failed()}
+            </span>
+            {errorKeys.length > 0 ? (
+              <span className="flex flex-wrap gap-x-3 gap-y-1">
+                {errorKeys.map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => revealField(key)}
+                    className="text-callout font-medium text-text-primary underline decoration-border-error underline-offset-4 hover:decoration-current"
+                  >
+                    {fieldLabels([key], fields)[0] ?? key}
+                  </button>
+                ))}
+              </span>
+            ) : null}
+            {editor.formError ? (
+              <span className="text-callout text-text-secondary">
+                {editor.formError}
+              </span>
+            ) : null}
+          </span>
+        </div>
+      ) : null}
+      {previewing ? (
+        <div className="mx-auto flex w-full max-w-[720px] items-center justify-between gap-3 rounded-[12px] bg-accent-soft px-4 py-2.5 text-callout text-accent-text">
+          <span>{m.editor_previewing_formatting()}</span>
+          <button
+            type="button"
+            className="font-medium hover:underline"
+            onClick={() => setPreviewing(false)}
           >
-            <EditorConflictNotice
-              conflict={editor.conflict}
-              approvalConflict={editor.approvalConflict}
-              recoveredDraft={Boolean(editor.recoveredDraft)}
-              className="mx-auto grid w-full max-w-[720px] gap-3 rounded-card border border-border-error/30 p-4"
-              onReload={() => void editor.reloadServerDraft()}
-              onReapply={() => void editor.reapplyRecoveredDraft()}
-              onDiscard={editor.discardRecoveredDraft}
-            />
-            {editor.restoreSkippedFields.length > 0 ? (
-              <section
-                role="status"
-                className="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"
-              >
-                <h2 className="font-semibold">
-                  {m.editor_revision_skipped_fields()}
-                </h2>
-                <p className="mt-1">{m.editor_revision_keep_current()}</p>
-                <ul className="mt-3 list-disc space-y-1 pl-5">
-                  {editor.restoreSkippedFields.map((field) => (
-                    <li key={field.key}>
-                      <strong>{field.label}</strong>: {field.reason}
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ) : null}
-            {entry?.status === 'scheduled' &&
-            entry.scheduledData &&
-            entry.scheduledSlug ? (
-              <ScheduledVersion
-                fields={fields}
-                data={entry.scheduledData}
-                slug={entry.scheduledSlug}
-                siteId={siteId}
-                organizationId={site.organizationId}
-              />
-            ) : null}
-            {hasErrors ? (
-              <div
-                role="alert"
-                data-testid="editor-errors"
-                className="mx-auto flex w-full max-w-[720px] items-start gap-3 rounded-card border border-border-error/30 bg-status-error-bg px-4 py-3 text-[14px] leading-5 text-text-primary"
-              >
-                <WarningCircle
-                  weight="fill"
-                  className="mt-0.5 size-4 shrink-0 text-icon-error"
-                />
-                <span className="grid gap-0.5">
-                  <span className="font-medium">
-                    {editor.errorCount > 0
-                      ? editor.errorCount === 1
-                        ? m.editor_save_fix_one()
-                        : m.editor_save_fix_other({ count: editor.errorCount })
-                      : m.editor_save_failed()}
-                  </span>
-                  {errorKeys.length > 0 ? (
-                    <span className="flex flex-wrap gap-x-3 gap-y-1">
-                      {errorKeys.map((key) => (
-                        <button
-                          key={key}
-                          type="button"
-                          onClick={() => revealField(key)}
-                          className="text-callout font-medium text-text-primary underline decoration-border-error underline-offset-4 hover:decoration-current"
-                        >
-                          {fieldLabels([key], fields)[0] ?? key}
-                        </button>
-                      ))}
-                    </span>
-                  ) : null}
-                  {editor.formError ? (
-                    <span className="text-callout text-text-secondary">
-                      {editor.formError}
-                    </span>
-                  ) : null}
-                </span>
-              </div>
-            ) : null}
-            {previewing ? (
-              <div className="mx-auto flex w-full max-w-[720px] items-center justify-between gap-3 rounded-[12px] bg-accent-soft px-4 py-2.5 text-callout text-accent-text">
-                <span>{m.editor_previewing_formatting()}</span>
-                <button
-                  type="button"
-                  className="font-medium hover:underline"
-                  onClick={() => setPreviewing(false)}
-                >
-                  {m.editor_back_to_editing()}
-                </button>
-              </div>
-            ) : null}
-            {active ? (
-              <LanguageFade locale={active}>{canvas}</LanguageFade>
-            ) : (
-              canvas
-            )}
-          </section>
+            {m.editor_back_to_editing()}
+          </button>
+        </div>
+      ) : null}
+    </>
+  )
+  const canvasBlock = active ? (
+    <LanguageFade locale={active}>{canvas}</LanguageFade>
+  ) : (
+    canvas
+  )
 
-          {desktop && detailsOpen ? (
-            <aside
-              className="sticky top-[calc(var(--editor-bar-h,56px)+16px)] -mr-2 max-h-[calc(100dvh-var(--editor-bar-h,56px)-32px)] overflow-y-auto pr-2 pb-6 scroll-quiet"
-              aria-label={m.editor_entry_details()}
+  // Click to edit: the fields a preview may open, and where "Open" goes.
+  const clickSource: ClickSource = {
+    self: { entryId: editor.entryId ?? null, globalKey: null },
+    fields: clickFields,
+    onSelectField: (key) => revealField(key, { pulse: true }),
+    onOpenOwner: (owner) => {
+      void (async () => {
+        // Save first, so nothing typed here is left behind.
+        await editor.save().catch(() => null)
+        if (owner.kind === 'entry') {
+          await navigate({
+            to: '/sites/$siteId/c/$collectionKey/$entryId',
+            params: {
+              siteId,
+              collectionKey: owner.collectionKey,
+              entryId: owner.entryId,
+            },
+            search: { view: 'visual' },
+          })
+        } else {
+          await navigate({
+            to: '/sites/$siteId/globals/$globalKey',
+            params: { siteId, globalKey: owner.globalKey },
+            search: { view: 'visual' },
+          })
+        }
+      })()
+    },
+  }
+
+  // Visual mode has no preview until the entry has a URL (Tier 0).
+  const canVisual = Boolean(editor.previewUrl)
+  const previewReason = canVisual
+    ? null
+    : editor.isNew
+      ? m.visual_mode_first_save()
+      : entry?.slug
+        ? null
+        : m.editor_preview_no_slug()
+
+  return (
+    <VisualFullScreenProvider active={visual.active}>
+      <VisualShortcuts mode={visual} canVisual={canVisual} />
+      <LocaleFieldsContext.Provider value={localeFields}>
+        <div
+          data-testid="entry-editor"
+          data-ready={editor.ready ? 'true' : 'false'}
+          data-dirty={editor.dirty ? 'true' : 'false'}
+          data-entry-id={editor.entryId}
+          data-view={visual.active ? 'visual' : 'write'}
+          style={
+            {
+              // Sticky offsets below the header: 56px row, plus the 44px language row.
+              '--editor-bar-h': languageBar ? '100px' : '56px',
+            } as React.CSSProperties
+          }
+          className={
+            visual.active ? 'min-h-[100dvh]' : '-mb-6 min-h-[calc(100dvh-3rem)]'
+          }
+        >
+          <EditorTopBar
+            languageBar={languageBar}
+            readyBlock={readyBlock}
+            copyAction={copyAction}
+            siteId={siteId}
+            collectionKey={collection.key}
+            collectionLabel={collection.label}
+            title={title}
+            showTitle={!titleVisible}
+            uiStatus={uiStatus}
+            backendStatus={entry?.status ?? 'draft'}
+            scheduledAt={entry?.scheduledAt}
+            editedSinceReady={editedSinceReady}
+            saveStatus={editor.status}
+            conflict={editor.conflict}
+            isNew={editor.isNew}
+            lastSavedAt={editor.lastSavedAt}
+            updatedAt={entry?.updatedAt}
+            errorCount={editor.errorCount}
+            onSave={() => void editor.save()}
+            previewUrl={editor.previewUrl}
+            canManage={canManage}
+            primary={primary}
+            busy={editor.busy}
+            primaryPending={editor.markReadyPending || editor.goLiveNowPending}
+            scheduled={entry?.status === 'scheduled'}
+            canUnpublish={entry?.status === 'published'}
+            canArchive={entry?.status !== 'archived'}
+            hasRichText={canvasFields.some(
+              (field) => field.type === 'richtext',
+            )}
+            previewing={previewing}
+            onTogglePreviewing={() => setPreviewing((value) => !value)}
+            onGenerateSeo={
+              aiQuery.data?.enabled === true ? () => setAiOpen(true) : undefined
+            }
+            onMarkReady={editor.markReady}
+            onGoLiveNow={() => void goLiveNow()}
+            goLiveBlocked={
+              !canGoLive({
+                canPublish: canManage,
+                blockers: release.data?.blockers,
+              })
+            }
+            // A development environment has no releases and no scheduling.
+            canGoLive={!isDev}
+            onSchedule={() => setScheduleOpen(true)}
+            canSchedule={!isDev}
+            onCancelSchedule={editor.cancelSchedule}
+            onUnpublish={editor.unpublish}
+            onArchive={editor.archive}
+            onDelete={() => setDeleteOpen(true)}
+            detailsOpen={detailsOpen}
+            onToggleDetails={toggleDetails}
+            showDetailsToggle={!visual.active}
+            visualMode={
+              visual.available
+                ? {
+                    active: visual.active,
+                    canVisual,
+                    disabledReason: previewReason,
+                    onSetMode: visual.setMode,
+                  }
+                : undefined
+            }
+            entryId={editor.entryId}
+            scheduleAnchor={(node) =>
+              mobile ? (
+                node
+              ) : (
+                <Popover open={scheduleOpen} onOpenChange={setScheduleOpen}>
+                  <PopoverAnchor asChild>{node}</PopoverAnchor>
+                  <PopoverContent
+                    align="end"
+                    sideOffset={10}
+                    className="w-[360px] p-5"
+                    data-testid="schedule-popover"
+                  >
+                    <div className="mb-4 grid gap-0.5">
+                      <p className="text-headline text-text-primary">
+                        {m.editor_schedule_title()}
+                      </p>
+                      <p className="text-callout text-text-secondary">
+                        {m.editor_schedule_description()}
+                      </p>
+                    </div>
+                    {scheduleForm}
+                  </PopoverContent>
+                </Popover>
+              )
+            }
+          />
+
+          {visual.active ? (
+            <VisualEditorLayout
+              column={
+                <>
+                  {notices}
+                  {canvasBlock}
+                  {details}
+                </>
+              }
+              preview={
+                <PreviewPane
+                  previewUrl={editor.previewUrl}
+                  title={title}
+                  lastSavedAt={editor.lastSavedAt}
+                  unavailableReason={previewReason}
+                  live={{
+                    origin: previewOrigin(site),
+                    siteId,
+                    target: editor.entryId
+                      ? {
+                          kind: 'entry',
+                          collection: collection.key,
+                          entryId: editor.entryId,
+                        }
+                      : null,
+                    data,
+                    locale: active,
+                  }}
+                  click={clickSource}
+                />
+              }
+            />
+          ) : (
+            <div
+              className={cn(
+                'grid grid-cols-[minmax(0,1fr)] items-start gap-10 pb-24',
+                desktop && detailsOpen && 'lg:grid-cols-[minmax(0,1fr)_340px]',
+              )}
+            >
+              <section
+                className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6 px-1 pt-4 sm:pt-10"
+                aria-label={m.editor_canvas_label()}
+              >
+                {notices}
+                {canvasBlock}
+              </section>
+
+              {desktop && detailsOpen ? (
+                <aside
+                  className="sticky top-[calc(var(--editor-bar-h,56px)+16px)] -mr-2 max-h-[calc(100dvh-var(--editor-bar-h,56px)-32px)] overflow-y-auto pr-2 pb-6 scroll-quiet"
+                  aria-label={m.editor_entry_details()}
+                >
+                  {details}
+                </aside>
+              ) : null}
+            </div>
+          )}
+
+          {!desktop ? (
+            <SlideOver
+              open={sheetOpen}
+              onOpenChange={setSheetOpen}
+              title={m.editor_entry_details()}
+              description={title}
+              data-testid="details-sheet"
+              bodyClassName="bg-background-default pt-2"
             >
               {details}
-            </aside>
+            </SlideOver>
           ) : null}
+
+          {mobile ? (
+            <SlideOver
+              open={scheduleOpen}
+              onOpenChange={setScheduleOpen}
+              title={m.editor_schedule_title()}
+              description={m.editor_schedule_description()}
+              data-testid="schedule-sheet"
+              fit
+            >
+              {scheduleForm}
+            </SlideOver>
+          ) : null}
+
+          {translate.dialog}
+
+          <AiSeoDialog
+            open={aiOpen}
+            onOpenChange={setAiOpen}
+            siteId={siteId}
+            collectionKey={collection.key}
+            entryId={editor.entryId}
+            locale={ctx ? active : null}
+            data={view}
+            seo={seo}
+            onApply={(next) => onLocaleChange(SEO_KEY, next)}
+          />
+
+          <ConfirmDialog
+            open={deleteOpen}
+            onOpenChange={setDeleteOpen}
+            title={m.editor_delete_entry_title()}
+            description={
+              inboundTitles.length > 0
+                ? `${m.editor_delete_entry_description()} ${m.editor_delete_entry_inbound(
+                    {
+                      titles: inboundTitles.join(', '),
+                    },
+                  )}`
+                : m.editor_delete_entry_description()
+            }
+            confirmLabel={m.editor_delete()}
+            variant="destructive"
+            onConfirm={async () => {
+              await editor.remove().catch(() => undefined)
+            }}
+          />
+
+          <ConfirmDialog
+            open={restoreId !== null}
+            onOpenChange={(open) => {
+              if (!open) setRestoreId(null)
+            }}
+            title={m.editor_restore_revision_title()}
+            description={m.editor_restore_revision_description()}
+            confirmLabel={m.editor_restore()}
+            onConfirm={async () => {
+              if (restoreId)
+                await editor.restore(restoreId).catch(() => undefined)
+            }}
+          />
+
+          <AlertDialog open={editor.blocker.status === 'blocked'}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  {m.editor_leave_unsaved_title()}
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  {editor.status === 'blocked'
+                    ? m.editor_leave_unsaved_new()
+                    : m.editor_leave_unsaved_failed()}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => editor.blocker.reset?.()}>
+                  {m.editor_stay()}
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  variant="destructive"
+                  onClick={editor.leaveAnyway}
+                  data-testid="discard-changes"
+                >
+                  {m.editor_leave_anyway()}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
-
-        {!desktop ? (
-          <SlideOver
-            open={sheetOpen}
-            onOpenChange={setSheetOpen}
-            title={m.editor_entry_details()}
-            description={title}
-            data-testid="details-sheet"
-            bodyClassName="bg-background-default pt-2"
-          >
-            {details}
-          </SlideOver>
-        ) : null}
-
-        {mobile ? (
-          <SlideOver
-            open={scheduleOpen}
-            onOpenChange={setScheduleOpen}
-            title={m.editor_schedule_title()}
-            description={m.editor_schedule_description()}
-            data-testid="schedule-sheet"
-            fit
-          >
-            {scheduleForm}
-          </SlideOver>
-        ) : null}
-
-        {translate.dialog}
-
-        <AiSeoDialog
-          open={aiOpen}
-          onOpenChange={setAiOpen}
-          siteId={siteId}
-          collectionKey={collection.key}
-          entryId={editor.entryId}
-          locale={ctx ? active : null}
-          data={view}
-          seo={seo}
-          onApply={(next) => onLocaleChange(SEO_KEY, next)}
-        />
-
-        <ConfirmDialog
-          open={deleteOpen}
-          onOpenChange={setDeleteOpen}
-          title={m.editor_delete_entry_title()}
-          description={
-            inboundTitles.length > 0
-              ? `${m.editor_delete_entry_description()} ${m.editor_delete_entry_inbound(
-                  {
-                    titles: inboundTitles.join(', '),
-                  },
-                )}`
-              : m.editor_delete_entry_description()
-          }
-          confirmLabel={m.editor_delete()}
-          variant="destructive"
-          onConfirm={async () => {
-            await editor.remove().catch(() => undefined)
-          }}
-        />
-
-        <ConfirmDialog
-          open={restoreId !== null}
-          onOpenChange={(open) => {
-            if (!open) setRestoreId(null)
-          }}
-          title={m.editor_restore_revision_title()}
-          description={m.editor_restore_revision_description()}
-          confirmLabel={m.editor_restore()}
-          onConfirm={async () => {
-            if (restoreId)
-              await editor.restore(restoreId).catch(() => undefined)
-          }}
-        />
-
-        <AlertDialog open={editor.blocker.status === 'blocked'}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>
-                {m.editor_leave_unsaved_title()}
-              </AlertDialogTitle>
-              <AlertDialogDescription>
-                {editor.status === 'blocked'
-                  ? m.editor_leave_unsaved_new()
-                  : m.editor_leave_unsaved_failed()}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => editor.blocker.reset?.()}>
-                {m.editor_stay()}
-              </AlertDialogCancel>
-              <AlertDialogAction
-                variant="destructive"
-                onClick={editor.leaveAnyway}
-                data-testid="discard-changes"
-              >
-                {m.editor_leave_anyway()}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </div>
-    </LocaleFieldsContext.Provider>
+      </LocaleFieldsContext.Provider>
+    </VisualFullScreenProvider>
   )
 }
 
 function EditorSkeleton() {
+  const fullBleed = useVisualModeActive()
   return (
     <div
       className="grid gap-10"
@@ -960,7 +1098,12 @@ function EditorSkeleton() {
       data-ready="false"
       aria-busy="true"
     >
-      <div className="-mx-6 -mt-6 flex h-14 items-center gap-3 border-b border-border-default px-4">
+      <div
+        className={cn(
+          'flex h-14 items-center gap-3 border-b border-border-default px-4',
+          !fullBleed && '-mx-6 -mt-6',
+        )}
+      >
         <Skeleton className="h-6 w-24" />
         <Skeleton className="h-5 w-14 rounded-full" />
         <span className="flex-1" />

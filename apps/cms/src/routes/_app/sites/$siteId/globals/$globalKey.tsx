@@ -14,6 +14,8 @@ export const Route = createFileRoute('/_app/sites/$siteId/globals/$globalKey')({
   /** Content language shown in the editor, e.g. `?lang=en`. Optional. */
   validateSearch: z.object({
     lang: localeTagSchema.optional().catch(undefined),
+    /** Visual mode (docs/design/visual-editor.md). Below 1280 px it is ignored. */
+    view: z.enum(['visual']).optional().catch(undefined),
   }),
   component: GlobalRoute,
 })

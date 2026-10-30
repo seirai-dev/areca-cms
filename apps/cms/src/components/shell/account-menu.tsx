@@ -22,7 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '#/components/ui/dialog'
-import { Kbd, useModifierKey } from '#/components/ui/kbd'
+import { Kbd, useModifierKeys } from '#/components/ui/kbd'
 import {
   Popover,
   PopoverContent,
@@ -290,7 +290,7 @@ export function AccountMenu({
 /** "Keyboard shortcuts" dialog opened from the account menu. */
 export function ShortcutsDialog() {
   const { shortcutsOpen, setShortcutsOpen } = useShell()
-  const modifier = useModifierKey()
+  const keys = useModifierKeys()
   const labels: Record<(typeof SHORTCUT_LIST)[number]['id'], string> = {
     palette: m.shell_shortcut_palette(),
     overview: m.shell_shortcut_overview(),
@@ -301,6 +301,8 @@ export function ShortcutsDialog() {
     search: m.shell_shortcut_search(),
     save: m.shell_shortcut_save(),
     details: m.shell_shortcut_details(),
+    visual: m.shell_shortcut_visual(),
+    fullscreen: m.shell_shortcut_fullscreen(),
   }
   return (
     <Dialog open={shortcutsOpen} onOpenChange={setShortcutsOpen}>
@@ -328,7 +330,13 @@ export function ShortcutsDialog() {
                         {m.shell_shortcut_then()}
                       </span>
                     ) : null}
-                    <Kbd>{key === 'mod' ? modifier : key}</Kbd>
+                    <Kbd>
+                      {key === 'mod'
+                        ? keys.mod
+                        : key === 'shift'
+                          ? keys.shift
+                          : key}
+                    </Kbd>
                   </React.Fragment>
                 ))}
               </span>

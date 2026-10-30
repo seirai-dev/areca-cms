@@ -27,6 +27,7 @@ import {
 import { ActivityPanel } from '#/features/activity/activity-panel'
 import { MailBanners } from '#/features/agency/mail-banners'
 import { GoLivePanel } from '#/features/golive/golive-panel'
+import { useVisualModeActive } from '#/features/visual/visual-mode'
 import { useIsMobile, useIsTablet } from '#/hooks/use-mobile'
 import { isDevSite } from '#/lib/site-environment'
 import { canManageSite, findSite } from '#/lib/site-nav'
@@ -168,7 +169,12 @@ export function AppShell({
   me: Me
   children: React.ReactNode
 }) {
-  const mode = useShellMode()
+  const routeMode = useShellMode()
+  // Visual mode in the entry and site content editors is full-bleed: no max width, no padding.
+  const visualFullBleed = useVisualModeActive()
+  // Visual mode is a focus screen: site content (a site page in Write mode)
+  // hides the sidebar there too, like the entry editor.
+  const mode: ShellMode = visualFullBleed ? 'focus' : routeMode
   const hideDevBanner = useMatches({
     select: (matches) =>
       matches.some((match) => match.staticData.hideDevBanner),
@@ -266,12 +272,15 @@ export function AppShell({
             )}
           >
             <div
-              // A fresh page tree per path, but never remount the editor.
-              key={mode === 'focus' ? 'focus' : pathname}
+              // A fresh page tree per path, but never remount an editor (entries,
+              // or site content switching between Write and Visual).
+              key={routeMode === 'focus' ? 'focus' : pathname}
               className={cn(
                 'mx-auto w-full min-w-0',
                 mode === 'focus'
-                  ? 'max-w-[1440px] px-6 py-6'
+                  ? visualFullBleed
+                    ? 'w-full'
+                    : 'max-w-[1440px] px-6 py-6'
                   : 'max-w-(--content-max) px-4 pt-6 pb-16 md:px-8 md:pt-10',
               )}
             >

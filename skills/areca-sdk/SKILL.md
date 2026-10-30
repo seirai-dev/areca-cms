@@ -192,6 +192,12 @@ Read [references/production.md](references/production.md) when the user needs an
 - The CMS settings needed: production URL, deployment target, publishing mode.
 - Direct use of `createArecaClient` and error messages.
 
+Visual editing (the CMS visual editor's live preview and click to edit, SDK 0.9.0+). Details in [references/production.md](references/production.md):
+
+- `visualEditingHeaders({ cmsOrigin })` from `@areca-cms/site-sdk/visual` sends `frame-ancestors` on the preview route only.
+- Live updates: `useLivePreview({ initial, cmsOrigin, resolve })` from `@areca-cms/site-sdk/visual-react` (React), or `createVisualBridge({ cmsOrigin, onUpdate })` from `@areca-cms/site-sdk/visual`. Render each unsaved result on the server with `content.previewFrom(result)`, or `content.previewGlobals(result)` for site content.
+- `field(key, owner?)` from `@areca-cms/site-sdk/visual` returns the attributes to spread on the element that shows a field. Owner is `{ entry: id }` or `{ global: key }`. Keys are camelCase or raw; SEO is `$seo.title`. Render the attributes only on preview pages.
+
 Read [references/api.md](references/api.md) for every export, type and signature, and [references/languages.md](references/languages.md) for languages.
 
 ## Rules
@@ -200,5 +206,6 @@ Read [references/api.md](references/api.md) for every export, type and signature
 - Commit `areca.gen.ts`. Keep the pulled JSON out of Git.
 - Never import the content object, `@areca-cms/site-sdk/pull` or a client with tokens into browser bundles.
 - Exclude `/__preview/*` from prerendering and caching.
+- Never render `data-areca-*` markers or send `frame-ancestors` headers on public pages. Only preview routes do.
 - The SDK doesn't create CMS sites or tokens. An agency admin creates the site in the CMS. Ask the user for the URL, site key and tokens instead of guessing them.
 - To edit content (not code) through an AI, use the Areca MCP server (see the `areca-mcp` skill).

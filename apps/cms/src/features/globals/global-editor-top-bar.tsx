@@ -31,7 +31,11 @@ import type { SaveStatus } from '#/features/editor/use-entry-editor'
 import type { CopyEntryAction } from '#/features/dev-env/use-copy-to-production'
 import { editorPublishReason } from '#/features/golive/golive-tray'
 import { useIsMobile } from '#/hooks/use-mobile'
+import { VisualModeControl } from '#/features/visual/visual-mode-control'
+import { useVisualModeActive } from '#/features/visual/visual-mode'
+import type { EditorMode } from '#/features/visual/visual-preferences'
 import type { EntryUiStatus } from '#/lib/status'
+import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
 /**
@@ -84,6 +88,7 @@ export function GlobalEditorTopBar({
   languageBar,
   readyBlock = null,
   copyAction = null,
+  visualMode,
 }: {
   siteId: string
   label: string
@@ -133,8 +138,17 @@ export function GlobalEditorTopBar({
   readyBlock?: { message: string; onFix: () => void } | null
   /** Copy to production as a draft (development environments only; null elsewhere). */
   copyAction?: CopyEntryAction | null
+  /** The Write | Visual switch. Omitted where Visual mode is unavailable. */
+  visualMode?: {
+    active: boolean
+    canVisual: boolean
+    disabledReason: string | null
+    onSetMode: (mode: EditorMode) => void
+  }
 }) {
   const mobile = useIsMobile()
+  // Full-bleed (Visual mode) drops the page padding the header compensates for.
+  const fullBleed = useVisualModeActive()
   // Ready, unchanged since: the button says so and stays disabled.
   const readyDone = hasReady && !markable && backendStatus === 'published'
   const markDisabled = !canManage || busy || readyDone || readyBlock !== null
@@ -186,9 +200,17 @@ export function GlobalEditorTopBar({
   return (
     <header
       data-testid="global-toolbar"
-      className="sticky top-0 z-navbar -mx-4 -mt-6 mb-6 border-b border-border-default bg-background-default/85 backdrop-blur-xl md:-mx-8 md:-mt-10"
+      className={cn(
+        'sticky top-0 z-navbar border-b border-border-default bg-background-default/85 backdrop-blur-xl',
+        !fullBleed && '-mx-4 -mt-6 mb-6 md:-mx-8 md:-mt-10',
+      )}
     >
-      <div className="flex min-h-14 flex-wrap items-center gap-x-2 gap-y-1 px-4 py-2 md:px-8">
+      <div
+        className={cn(
+          'flex min-h-14 flex-wrap items-center gap-x-2 gap-y-1 px-4 py-2 md:px-8',
+          fullBleed && 'px-3 md:px-4',
+        )}
+      >
         <Button
           asChild
           variant="quiet"
@@ -216,6 +238,15 @@ export function GlobalEditorTopBar({
             testId="global-status"
           />
         </div>
+
+        {visualMode ? (
+          <VisualModeControl
+            active={visualMode.active}
+            canVisual={visualMode.canVisual}
+            disabledReason={visualMode.disabledReason}
+            onSetMode={visualMode.onSetMode}
+          />
+        ) : null}
 
         {/* Phones: this group is flattened (contents) so Ready and the ⋯ menu
             sit on the first line and the save status wraps below them. */}

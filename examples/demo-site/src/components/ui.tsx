@@ -1,6 +1,7 @@
-import type { ReactNode } from 'react'
+import { Fragment, type ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
 import { m } from '#/paraglide/messages'
+import type { FieldMarker } from '../lib/visual-markers.tsx'
 import { categoryLabel, ROAST_STEPS, roastLabel } from './formatters.ts'
 
 const BUTTON_BASE =
@@ -18,25 +19,54 @@ export const buttonGhostOnImage = `${BUTTON_BASE} border border-on-image/60 text
 export function Eyebrow({
   children,
   className = '',
+  marker = {},
 }: {
   children: ReactNode
   className?: string
+  marker?: FieldMarker
 }) {
   return (
     <p
       className={`text-[0.72rem] font-medium uppercase tracking-[0.18em] text-muted ${className}`}
+      {...marker}
     >
       {children}
     </p>
   )
 }
 
+/** Values with a field marker each, shown on one line separated by `separator`. Empty values are left out. */
+export function JoinedParts({
+  parts,
+  separator = ' · ',
+}: {
+  parts: Array<{ value: string | null | undefined; marker?: FieldMarker }>
+  separator?: string
+}) {
+  const visible = parts.filter((part): part is { value: string; marker?: FieldMarker } => Boolean(part.value))
+  return visible.map((part, index) => (
+    <Fragment key={index}>
+      {index > 0 ? separator : null}
+      <span {...part.marker}>{part.value}</span>
+    </Fragment>
+  ))
+}
+
 /** Pill naming an article category. */
-export function CategoryPill({ category }: { category: string | null | undefined }) {
+export function CategoryPill({
+  category,
+  marker = {},
+}: {
+  category: string | null | undefined
+  marker?: FieldMarker
+}) {
   const label = categoryLabel(category)
   if (!label) return null
   return (
-    <span className="inline-flex items-center rounded-full border border-fjord/30 px-3 py-1 text-[0.7rem] font-medium uppercase tracking-[0.14em] text-fjord">
+    <span
+      className="inline-flex items-center rounded-full border border-fjord/30 px-3 py-1 text-[0.7rem] font-medium uppercase tracking-[0.14em] text-fjord"
+      {...marker}
+    >
       {label}
     </span>
   )
@@ -46,9 +76,11 @@ export function CategoryPill({ category }: { category: string | null | undefined
 export function RoastScale({
   level,
   className = '',
+  marker = {},
 }: {
   level: string | null | undefined
   className?: string
+  marker?: FieldMarker
 }) {
   const index = level ? ROAST_STEPS.indexOf(level as (typeof ROAST_STEPS)[number]) : -1
   const label = roastLabel(level)
@@ -58,6 +90,7 @@ export function RoastScale({
       role="img"
       aria-label={m.aria_roast_level({ level: label.toLowerCase(), step: index + 1, total: ROAST_STEPS.length })}
       className={`inline-flex items-center gap-2.5 text-sm text-ink ${className}`}
+      {...marker}
     >
       <span className="inline-flex items-center gap-1" aria-hidden="true">
         {ROAST_STEPS.map((step, i) => (
@@ -75,13 +108,15 @@ export function RoastScale({
 export function TastingChips({
   notes,
   className = '',
+  marker = {},
 }: {
   notes: string[]
   className?: string
+  marker?: FieldMarker
 }) {
   if (!notes.length) return null
   return (
-    <ul className={`flex flex-wrap gap-2 ${className}`}>
+    <ul className={`flex flex-wrap gap-2 ${className}`} {...marker}>
       {notes.map((note) => (
         <li
           key={note}

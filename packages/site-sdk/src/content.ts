@@ -104,7 +104,7 @@ export function createContent<
   for (const name of Object.keys(schema)) {
     if (isReservedCollectionKey(name)) {
       throw new Error(
-        `Collection "${name}" uses a reserved name (resolve, href, preview, globals, previewGlobals, in, languages, matchLocale)`,
+        `Collection "${name}" uses a reserved name (resolve, href, preview, globals, previewGlobals, previewFrom, in, languages, matchLocale)`,
       )
     }
   }
@@ -415,6 +415,14 @@ export function createContent<
         client,
         ...(explicit !== undefined ? { locale: explicit } : {}),
       })
+      return previewFrom(result, previewOptions)
+    }
+
+    /** Validates and camelises a preview result the CMS already returned, without a request. */
+    function previewFrom(
+      result: PreviewResult,
+      previewOptions?: { locale?: string },
+    ): PreviewEntry<S> {
       if (result.kind === 'global') {
         throw new Error(
           `Preview token is for site content "${result.global}". Use previewGlobals() for it.`,
@@ -442,9 +450,15 @@ export function createContent<
         type: field.type,
       }))
       const camelized = camelizeEntry(result.entry, collection, fields)
-      // The draft is served in the language asked for, or the main one.
+      // The draft is served in the language asked for: per call, then the scope, then the
+      // language the CMS says the draft is in, then the resolver or the main language.
       const languages = languagesOf()
-      const requested = requestedLocale(scope, previewOptions?.locale)
+      const draftLocale =
+        languages !== null && typeof result.entry.locale === 'string' && result.entry.locale !== ''
+          ? result.entry.locale
+          : undefined
+      const requested =
+        previewOptions?.locale ?? scope ?? draftLocale ?? requestedLocale(undefined, undefined)
       const entry = localizeRow(collection, camelized, requested, true, languages)!
       if (issues.length === 0) {
         return {
@@ -539,6 +553,7 @@ export function createContent<
           : hrefFor(ref.collection, ref.slug, requestedLocale(scope, undefined))
       },
       preview,
+      previewFrom,
       previewGlobals,
       in: (locale: string) => buildContent(locale),
       matchLocale: (input: string | readonly string[] | null | undefined) =>

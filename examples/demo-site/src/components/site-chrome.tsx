@@ -4,6 +4,7 @@ import { m } from '#/paraglide/messages'
 import type { CompanyInfoGlobal } from '../generated/content/areca.gen.ts'
 import { LOCALES, pageAlternates, currentLocale } from '../lib/i18n.ts'
 import type { Alternates, Locale } from '../lib/i18n.ts'
+import { useField } from '../lib/visual-markers.tsx'
 import { Wordmark } from './brand.tsx'
 
 /** Main navigation. Labels are read when rendered so they follow the active language. */
@@ -171,16 +172,18 @@ function MobileNav() {
   )
 }
 
-/** Company details; only the name is guaranteed, the rest is shown when set. */
+/** Company details; only the name is guaranteed, the rest is shown when set. Fields belong to the `companyInfo` section. */
 export function SiteFooter({ company }: { company: Partial<CompanyInfoGlobal> & { name: string } }) {
   const nav = navItems()
+  const field = useField()
+  const owner = { global: 'companyInfo' }
   return (
     <footer className="bg-brand text-brand-ink">
       <div className="mx-auto grid max-w-6xl gap-12 px-5 py-16 sm:px-8 md:grid-cols-12 md:py-20">
         <div className="md:col-span-5">
           <Wordmark inverse />
           {company.tagline ? (
-            <p className="mt-6 max-w-sm font-display text-2xl leading-snug text-brand-ink/90">
+            <p {...field('tagline', owner)} className="mt-6 max-w-sm font-display text-2xl leading-snug text-brand-ink/90">
               {company.tagline}
             </p>
           ) : null}
@@ -200,20 +203,31 @@ export function SiteFooter({ company }: { company: Partial<CompanyInfoGlobal> & 
         <div className="md:col-span-4">
           <h2 className="text-[0.7rem] font-medium uppercase tracking-[0.18em] text-brand-ink/60">{m.footer_roastery()}</h2>
           <address className="mt-4 space-y-1 not-italic text-sm leading-7">
-            <span className="block">{company.name}</span>
-            {company.address ? <span className="block whitespace-pre-line">{company.address}</span> : null}
+            <span {...field('name', owner)} className="block">{company.name}</span>
+            {company.address ? (
+              <span {...field('address', owner)} className="block whitespace-pre-line">{company.address}</span>
+            ) : null}
             {company.email ? (
-              <a href={`mailto:${company.email}`} className="block underline decoration-brand-ink/30 underline-offset-4 transition-colors hover:decoration-brand-ink">
+              <a
+                {...field('email', owner)}
+                href={`mailto:${company.email}`}
+                className="block underline decoration-brand-ink/30 underline-offset-4 transition-colors hover:decoration-brand-ink"
+              >
                 {company.email}
               </a>
             ) : null}
             {company.phone ? (
-              <a href={`tel:${company.phone.replace(/\s+/g, '')}`} className="block underline decoration-brand-ink/30 underline-offset-4 transition-colors hover:decoration-brand-ink">
+              <a
+                {...field('phone', owner)}
+                href={`tel:${company.phone.replace(/\s+/g, '')}`}
+                className="block underline decoration-brand-ink/30 underline-offset-4 transition-colors hover:decoration-brand-ink"
+              >
                 {company.phone}
               </a>
             ) : null}
             {company.instagramUrl ? (
               <a
+                {...field('instagramUrl', owner)}
                 href={company.instagramUrl}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -228,7 +242,7 @@ export function SiteFooter({ company }: { company: Partial<CompanyInfoGlobal> & 
       <div className="border-t border-brand-ink/15">
         <div className="mx-auto flex max-w-6xl flex-col gap-2 px-5 py-6 text-xs text-brand-ink/70 sm:flex-row sm:justify-between sm:px-8">
           <p>
-            © {new Date().getUTCFullYear()} {company.name}
+            © {new Date().getUTCFullYear()} <span {...field('name', owner)}>{company.name}</span>
           </p>
           <p>{m.footer_content_note()}</p>
         </div>

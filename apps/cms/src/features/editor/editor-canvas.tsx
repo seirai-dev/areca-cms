@@ -69,6 +69,7 @@ export function EditorCanvas({
   previewing,
   titleRef,
   transitionName,
+  compact = false,
 }: {
   titleField?: Field
   canvasFields: Field[]
@@ -79,6 +80,8 @@ export function EditorCanvas({
   previewing: boolean
   titleRef: React.RefObject<HTMLTextAreaElement | null>
   transitionName?: string
+  /** Visual mode's narrow column: no Write-mode minimum height on the body. */
+  compact?: boolean
 }) {
   const firstBodyRef = React.useRef<HTMLElement | null>(null)
   const locale = useLocaleFields()
@@ -201,6 +204,7 @@ export function EditorCanvas({
                   organizationId={organizationId}
                   invalid={Boolean(errors[field.key])}
                   previewing={previewing}
+                  compact={compact}
                   preview={<RichTextPreview value={data[field.key]} />}
                 />
               </div>

@@ -1,4 +1,4 @@
-import { cmsAssetDownloader } from './assets.js'
+import { cmsAssetDownloader } from './asset-download.js'
 import { manifestFromConfig } from './config.js'
 import type {
   PreviewResult,

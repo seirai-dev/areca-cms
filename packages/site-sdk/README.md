@@ -357,6 +357,81 @@ const headers = previewHeaders();
 so do not log it, persist it, or expose it beyond the preview request. Show a
 clear error for expired/invalid tokens (401) and missing preview entries (404).
 
+## Visual editing (live preview)
+
+The CMS visual editor shows the site's preview route in an iframe and sends it
+unsaved changes as you type. The site needs two things.
+
+1. **Let the CMS frame the preview route.** Send `visualEditingHeaders` on that
+   route only, next to `previewHeaders()`:
+
+   ```ts
+   import { visualEditingHeaders } from "@areca-cms/site-sdk/visual";
+
+   const headers = visualEditingHeaders({ cmsOrigin: "https://cms.example.com" });
+   // Add to the preview response: { ...previewHeaders(), ...headers }
+   ```
+
+2. **Render the live values.** `useLivePreview` shows `initial` until the CMS sends
+   an update, then the value `resolve` returns. Content is read from files on the
+   server, so `resolve` calls a server function that runs `content.previewFrom(result)`:
+
+   ```tsx
+   import { useLivePreview } from "@areca-cms/site-sdk/visual-react";
+
+   const post = useLivePreview({
+     initial: entry, // from the loader; keep it stable
+     cmsOrigin: "https://cms.example.com",
+     resolve: async (result) => (await previewPost(result)).entry,
+   });
+   ```
+
+   `previewPost` is your server function: it calls `content.previewFrom(result)` and
+   returns the result. `previewFrom` validates and camelises the same way
+   `content.preview()` does, without a request.
+
+The bridge only talks to the CMS origin. It replies to that origin alone and
+ignores messages from any other origin or window. Outside an iframe it does nothing,
+so a published page is unaffected.
+
+### Click to edit
+
+Mark the elements that show a field, and the visual editor outlines them. Clicking
+one jumps to that field in the editor.
+
+```tsx
+import { field } from "@areca-cms/site-sdk/visual";
+
+<h1 {...field("title")}>{article.title}</h1>
+<p {...field("$seo.description")}>{article.seo.description}</p>
+<p {...field("email", { global: "company" })}>{company.email}</p>
+<span {...field("name", { entry: author.id })}>{author.name}</span>
+```
+
+- `field(key)` marks a field of the page's own entry. Use the key as your code
+  sees it (camelCase), or `$seo.<key>` for SEO fields.
+- `{ global: key }` marks a field of a site content section, such as the header or
+  footer. Those elements are outlined too, and a click explains where the field lives.
+- `{ entry: id }` marks a field of another entry on the site, such as a referenced
+  author. Only entries the editor can open are outlined.
+
+The attributes do nothing outside the visual editor, so leave them on in production.
+
+The visual editor has two modes for the preview. **Select** (the default) outlines
+marked elements as you hover and jumps to the field on click. Only clicks on marked
+fields are taken over in Select; other links and forms work normally. **Browse** uses
+the page normally. Switch with the toolbar toggle, or hold Option (Alt on Windows and
+Linux) for a moment.
+
+A preview result is served in its own language (`entry.locale`) unless you pass a
+`locale` or use `content.in(locale)`, so a Dutch draft renders in Dutch. Pressing Escape
+in the preview sends `escape` to the editor, so it can leave full screen.
+
+The bridge reports each client-side navigation to the editor (through `popstate`,
+`hashchange` and a short poll), so the editor can tell when the preview has left the
+entry's page. Pass `markers: false` to `createVisualBridge` to turn the outlines and
+click handling off and keep only the live updates.
+
 ## Programmatic client and errors
 
 `createArecaClient({ cmsUrl?, siteToken?, schemaToken? })` uses the matching
@@ -400,4 +475,6 @@ for complete field details and examples.
 - `@areca-cms/site-sdk/pull`: `pullContent()`, `readContent()` and `readContentManifest()`.
 - `@areca-cms/site-sdk/content`: `createContent()`, the typed content object (Node only).
 - `@areca-cms/site-sdk/seo`: SEO helpers and types.
+- `@areca-cms/site-sdk/visual`: the live preview bridge, `field` for click-to-edit markers, and `visualEditingHeaders` (browser-safe).
+- `@areca-cms/site-sdk/visual-react`: `useLivePreview` for React sites.
 - `@areca-cms/site-sdk/rich-text`: rich-text helpers.

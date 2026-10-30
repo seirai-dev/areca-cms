@@ -222,6 +222,83 @@ describe('request rate limiting', () => {
     expect(getClientIp(request, true)).toBe('203.0.113.9')
   })
 
+  it('gives the live preview its own 600 per minute budget per user, outside the mutation budget', async () => {
+    const store = countingStore()
+    const deps = dependencies(store)
+    const request = new Request('https://cms.test/api/editor/live-preview', {
+      method: 'POST',
+    })
+
+    for (let i = 0; i < 600; i += 1) {
+      expect(await enforceRequestRateLimit(request, deps)).toBeNull()
+    }
+    const blocked = await enforceRequestRateLimit(request, deps)
+
+    expect(blocked?.status).toBe(429)
+    expect(blocked?.headers.get('RateLimit-Limit')).toBe('600')
+    expect(blocked?.headers.get('Retry-After')).toBe('60')
+    expect(new Set(store.keys)).toHaveLength(1)
+    expect(store.keys[0]).toContain(':live-preview:')
+    expect(store.keys.some((key) => key.includes(':mutation:'))).toBe(false)
+  })
+
+  it('keeps live typing out of the autosave budget: 600 live previews leave the 60 mutations free', async () => {
+    const store = countingStore()
+    const deps = dependencies(store)
+    const preview = new Request('https://cms.test/api/editor/live-preview', {
+      method: 'POST',
+    })
+    const mutation = new Request('https://cms.test/_server/example', {
+      method: 'POST',
+    })
+
+    for (let i = 0; i < 600; i += 1) {
+      await enforceRequestRateLimit(preview, deps)
+    }
+    for (let i = 0; i < 60; i += 1) {
+      expect(await enforceRequestRateLimit(mutation, deps)).toBeNull()
+    }
+    expect((await enforceRequestRateLimit(mutation, deps))?.status).toBe(429)
+  })
+
+  it('buckets the live preview per user, so one editor does not starve another', async () => {
+    const store = countingStore()
+    const request = new Request('https://cms.test/api/editor/live-preview', {
+      method: 'POST',
+    })
+    const asAlice = dependencies(store, 'alice')
+    const asBob = dependencies(store, 'bob')
+
+    for (let i = 0; i < 600; i += 1) {
+      await enforceRequestRateLimit(request, asAlice)
+    }
+    expect((await enforceRequestRateLimit(request, asAlice))?.status).toBe(429)
+    expect(await enforceRequestRateLimit(request, asBob)).toBeNull()
+  })
+
+  it('does not limit GET requests to the live preview path', async () => {
+    const store = countingStore()
+    const deps = dependencies(store)
+    const request = new Request('https://cms.test/api/editor/live-preview')
+
+    expect(await enforceRequestRateLimit(request, deps)).toBeNull()
+    expect(store.keys).toEqual([])
+  })
+
+  it('fails open for the live preview when Redis is unavailable', async () => {
+    const deps = dependencies({
+      increment: async () => {
+        throw new Error('redis down')
+      },
+    })
+    const request = new Request('https://cms.test/api/editor/live-preview', {
+      method: 'POST',
+    })
+
+    expect(await enforceRequestRateLimit(request, deps)).toBeNull()
+    expect(deps.logError).toHaveBeenCalled()
+  })
+
   it('leaves Better Auth rate limiting untouched', async () => {
     const store = countingStore()
     const deps = dependencies(store)

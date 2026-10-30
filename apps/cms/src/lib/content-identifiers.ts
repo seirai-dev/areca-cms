@@ -25,6 +25,7 @@ const reservedCollectionKeys = new Set([
   'preview',
   'globals',
   'previewglobals',
+  'previewfrom',
   'in',
   'languages',
   'matchlocale',

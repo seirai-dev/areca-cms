@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { createArecaClient } from './client.js'
 import { createContent } from './content.js'
 import { pullContent, readContentManifest } from './pull.js'
-import type { Snapshot } from './types.js'
+import type { PreviewResult, Snapshot } from './types.js'
 
 // Generated shape: camel keys, raw `key` kept for the CMS.
 const schema = {
@@ -625,6 +625,99 @@ describe('createContent: preview', () => {
     await expect(content.preview('tok', { client: clientFor() })).rejects.toThrow(
       /mystery/,
     )
+  })
+})
+
+/** The test schema with a required reference, so a draft can be missing one. */
+function draftSchemaFor() {
+  return {
+    ...schema,
+    blogPosts: {
+      ...schema.blogPosts,
+      fields: {
+        ...schema.blogPosts.fields,
+        editor: { key: 'editor', type: 'reference', required: true, collection: 'authors' },
+      },
+    },
+  } as const
+}
+
+describe('createContent: previewFrom', () => {
+  it('gives the same output as preview() for the same result, without a request', async () => {
+    fakeCms()
+    const result: PreviewResult = {
+      collection: 'authors',
+      slug: 'ada',
+      entry: rawSnapshot().collections.authors![0]!,
+    }
+    served.preview = result
+    const content = createContent({ schema, dir: directory() })
+
+    const fetched = await content.preview('tok', { client: clientFor() })
+    const requests = previewRequests.length
+    const direct = content.previewFrom(result)
+
+    expect(direct).toEqual(fetched)
+    expect(direct.collection).toBe('authors')
+    expect(direct.entry.data).toMatchObject({
+      favoritePost: { collection: 'blogPosts', slug: 'alpha', id: 'p1' },
+    })
+    expect(previewRequests).toHaveLength(requests)
+  })
+
+  it('matches preview() for an incomplete draft, with camel issue keys', async () => {
+    fakeCms()
+    const result: PreviewResult = {
+      collection: 'blog-posts',
+      slug: 'draft',
+      entry: {
+        id: 'p9',
+        slug: 'draft',
+        publishedAt: null,
+        data: { slug: 'draft', title: '', 'published-on': 'soon', author: null, editor: null },
+      },
+    }
+    served.preview = result
+    const content = createContent({ schema: draftSchemaFor(), dir: directory() })
+
+    const fetched = await content.preview('tok', { client: clientFor() })
+
+    expect(content.previewFrom(result)).toEqual(fetched)
+    expect(content.previewFrom(result).issues).toEqual(fetched.issues)
+    expect(content.previewFrom(result).complete).toBe(false)
+  })
+
+  it('throws for a site content result, pointing to previewGlobals()', () => {
+    const content = createContent({ schema, dir: directory() })
+    const result = {
+      kind: 'global',
+      global: 'company-info',
+      entry: { id: 'g1', publishedAt: null, data: {} },
+    } as unknown as PreviewResult
+
+    expect(() => content.previewFrom(result)).toThrow(/Use previewGlobals\(\) for it/)
+  })
+
+  it('a single-language site serves its draft unchanged, with or without a locale on the result', () => {
+    const content = createContent({ schema, dir: directory() })
+    const base = rawSnapshot().collections.authors![0]!
+    const plain: PreviewResult = { collection: 'authors', slug: 'ada', entry: base }
+    const tagged: PreviewResult = { collection: 'authors', slug: 'ada', entry: { ...base, locale: 'nl' } }
+
+    expect(content.previewFrom(plain).entry.isFallback).toBe(false)
+    expect(content.previewFrom(tagged).entry.isFallback).toBe(false)
+    expect(content.previewFrom(tagged).entry.data).toEqual(content.previewFrom(plain).entry.data)
+  })
+
+  it('throws for a collection that is not in the schema', () => {
+    const content = createContent({ schema, dir: directory() })
+    const result: PreviewResult = {
+      collection: 'mystery',
+      slug: 'x',
+      entry: rawSnapshot().collections['blog-posts']![0]!,
+    }
+
+    expect(() => content.previewFrom(result)).toThrow(/mystery/)
   })
 })
 

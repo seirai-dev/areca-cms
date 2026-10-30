@@ -87,7 +87,7 @@ function camelKeys(rawKeys: string[], noun: 'Collection' | 'Global'): Map<string
     assertSafeIdentifier(camel)
     if (isReservedCollectionKey(camel)) {
       throw new Error(
-        `${noun} "${raw}" uses the reserved name "${camel}". resolve, href, preview, globals, previewGlobals, in, languages and matchLocale are reserved.`,
+        `${noun} "${raw}" uses the reserved name "${camel}". resolve, href, preview, globals, previewGlobals, previewFrom, in, languages and matchLocale are reserved.`,
       )
     }
     const previous = rawByCamel.get(camel)

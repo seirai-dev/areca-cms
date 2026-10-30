@@ -912,6 +912,32 @@ html.dark,
   }
 }
 
+/* Visual editor: a field opened from the preview glows once (1.2s). The
+   attribute is set and removed by pulseField in features/editor/reveal-field.ts. */
+@keyframes field-pulse {
+  0%,
+  40% {
+    box-shadow: 0 0 0 3px var(--color-accent-soft);
+    background-color: var(--color-accent-soft);
+  }
+  to {
+    box-shadow: 0 0 0 3px transparent;
+    background-color: transparent;
+  }
+}
+
+[data-field][data-pulse] {
+  animation: field-pulse 1.2s ease-out;
+  border-radius: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-field][data-pulse] {
+    animation: none;
+    box-shadow: 0 0 0 2px var(--color-accent-soft);
+  }
+}
+
 /* ---------------------------------------------------------------------------
    Auth art (features/auth/auth-art.tsx): layered dunes and soft light drawn
    from the branding accent. Text sits on the "front" dune and the top of the
@@ -1016,4 +1042,18 @@ html.dark,
   .auth-art-float {
     animation: none;
   }
+}
+
+/*
+ * Visual mode's editor column (docs/design/visual-editor.md, Decision 7): wide
+ * columns would make the 16:10 image wells very tall. An empty well stays
+ * 200 px; a filled one keeps its ratio up to 320 px. Write mode is unchanged.
+ */
+[data-visual-column] [data-image-well='empty'] {
+  aspect-ratio: auto;
+  height: 200px;
+}
+
+[data-visual-column] [data-image-well='filled'] {
+  max-height: 320px;
 }

@@ -58,6 +58,12 @@ describe('productionCsp', () => {
     expect(directive(policy, 'frame-ancestors')).toBe("frame-ancestors 'none'")
   })
 
+  it('lets the editor frame https previews and local http previews only', () => {
+    expect(directive(policy, 'frame-src')).toBe(
+      "frame-src 'self' https: http://localhost:* http://127.0.0.1:*",
+    )
+  })
+
   it('uses a different script nonce for each request', () => {
     expect(productionCsp(createCspNonce())).not.toBe(
       productionCsp(createCspNonce()),
@@ -94,6 +100,10 @@ describe('developmentCsp', () => {
   it('keeps the framing and object restrictions', () => {
     expect(directive(policy, 'object-src')).toBe("object-src 'none'")
     expect(directive(policy, 'frame-ancestors')).toBe("frame-ancestors 'none'")
+  })
+
+  it('allows http previews in development', () => {
+    expect(directive(policy, 'frame-src')).toBe("frame-src 'self' http: https:")
   })
 })
 

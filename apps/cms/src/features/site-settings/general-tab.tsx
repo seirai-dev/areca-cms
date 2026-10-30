@@ -4,6 +4,7 @@ import { Trash } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
 import { errorMessage } from '#/lib/admin/helpers'
+import { normalizePreviewUrl } from '#/lib/preview-url'
 import { isDevSite } from '#/lib/site-environment'
 import { Button } from '#/components/ui/button'
 import { ConfirmDialog } from '#/components/ui/confirm-dialog'
@@ -25,7 +26,7 @@ function isUrl(value: string) {
   }
 }
 
-/** Settings › General: name, production URL, and the danger zone. */
+/** Settings › General: name, production URL, preview URL, and the danger zone. */
 export function GeneralTab({
   site,
   settings,
@@ -39,19 +40,27 @@ export function GeneralTab({
   const dev = isDevSite(site)
   const [name, setName] = React.useState(site.name)
   const [url, setUrl] = React.useState(site.productionUrl)
-  const [errors, setErrors] = React.useState<{ name?: string; url?: string }>(
-    {},
-  )
+  const [previewUrl, setPreviewUrl] = React.useState(site.previewUrl ?? '')
+  const [errors, setErrors] = React.useState<{
+    name?: string
+    url?: string
+    previewUrl?: string
+  }>({})
 
   // Follow the server copy until the user starts editing.
   React.useEffect(() => setName(site.name), [site.name])
   React.useEffect(() => setUrl(site.productionUrl), [site.productionUrl])
+  React.useEffect(() => setPreviewUrl(site.previewUrl ?? ''), [site.previewUrl])
 
-  const dirty = name !== site.name || url !== site.productionUrl
+  const dirty =
+    name !== site.name ||
+    url !== site.productionUrl ||
+    previewUrl.trim() !== (site.previewUrl ?? '')
 
   function discard() {
     setName(site.name)
     setUrl(site.productionUrl)
+    setPreviewUrl(site.previewUrl ?? '')
     setErrors({})
   }
 
@@ -61,15 +70,24 @@ export function GeneralTab({
     const problems: typeof errors = {}
     if (!next.name) problems.name = m.settings_name_required()
     if (!isUrl(next.url)) problems.url = m.settings_url_invalid()
+    let nextPreview: string | null = null
+    try {
+      nextPreview = normalizePreviewUrl(previewUrl)
+    } catch {
+      problems.previewUrl = m.settings_preview_url_invalid()
+    }
     setErrors(problems)
-    if (problems.name || problems.url) return
+    if (problems.name || problems.url || problems.previewUrl) return
     try {
       await settings.update.mutateAsync({
         name: next.name,
         productionUrl: next.url,
+        // Null clears the setting: previews fall back to the production URL.
+        previewUrl: nextPreview,
       })
       setName(next.name)
       setUrl(next.url)
+      setPreviewUrl(nextPreview ?? '')
       toast.success(m.sites_updated())
     } catch (error) {
       toast.error(errorMessage(error))
@@ -121,6 +139,28 @@ export function GeneralTab({
               onChange={(event) => setUrl(event.target.value)}
             />
           </FormField>
+          {/* A dev environment's main URL already is its preview address. */}
+          {dev ? null : (
+            <FormField
+              label={m.settings_preview_url()}
+              htmlFor="settings-preview-url"
+              hint={
+                errors.previewUrl ? undefined : m.settings_preview_url_hint()
+              }
+              error={errors.previewUrl}
+            >
+              <Input
+                id="settings-preview-url"
+                data-testid="site-preview-url"
+                type="url"
+                inputMode="url"
+                placeholder={site.productionUrl}
+                value={previewUrl}
+                aria-invalid={errors.previewUrl ? true : undefined}
+                onChange={(event) => setPreviewUrl(event.target.value)}
+              />
+            </FormField>
+          )}
         </SettingsSection>
       </form>
 
