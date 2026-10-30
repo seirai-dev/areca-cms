@@ -1,6 +1,6 @@
 {
   "name": "@areca-cms/skills",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Agent skills for Areca CMS: the site SDK and the MCP server. Installs into Claude Code, Codex, Cursor, Copilot, OpenCode, Gemini CLI and 20+ other agents.",
   "keywords": [
     "areca",
