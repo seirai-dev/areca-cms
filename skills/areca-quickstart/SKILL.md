@@ -34,7 +34,7 @@ Keep the details in the reference files:
 - [references/frameworks.md](references/frameworks.md): wiring code for TanStack Start, Next.js, Astro and plain Node.
 - [references/first-release.md](references/first-release.md): sample entries, release, pull, checks and troubleshooting.
 
-For API detail, read the `areca-sdk` skill (config, fields, CLI, content API) and the `areca-mcp` skill (tools, roles, workflow). Do not copy their detail into the project. Name the skill and use what it says. If those skills are not installed, read the docs in the `skills/` folder of https://github.com/seirai-dev/areca-cms instead.
+For API detail, read the `areca-sdk` skill (config, fields, CLI, content API), the `areca-mcp` skill (tools, roles, workflow) and the `areca-visual-editing` skill (live preview and click to edit in the CMS visual editor). Do not copy their detail into the project. Name the skill and use what it says. If those skills are not installed, read the docs in the `skills/` folder of https://github.com/seirai-dev/areca-cms instead.
 
 ## Ground rules
 
@@ -171,6 +171,7 @@ Do these in order. Show the user each file you will change before you change it 
    - head tags from `seoHead` or `seoHeadHtml`,
    - the home and about pages when they are in the plan,
    - a preview route when the user asked for it,
+   - visual editing on the preview route and the section pages when the user asked for it (D3b). Follow the `areca-visual-editing` skill,
    - a health route only when the user plans go-live builds.
 4. **Existing pages**: when the user chose "connect into existing pages", change only the data source. Keep the markup and styles. Show the diff.
 5. **Build output**: keep `src/generated/content/*.json` out of Git. The `.gitignore` entries from `init` do that. Commit `areca.gen.ts` once it exists. Do not commit unless the user asks.

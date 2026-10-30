@@ -3,13 +3,14 @@ title: Agent skills
 description: Install the Areca skills so AI coding agents and chat apps know how to use the site SDK and the MCP server.
 ---
 
-`@areca-cms/skills` installs three [Agent Skills](https://agentskills.io) into the AI tools your team uses. Skills are plain instruction folders, and the agent loads them only when a task needs them.
+`@areca-cms/skills` installs four [Agent Skills](https://agentskills.io) into the AI tools your team uses. Skills are plain instruction folders, and the agent loads them only when a task needs them.
 
 | Skill | The agent learns |
 | --- | --- |
 | `areca-sdk` | Setting up `@areca-cms/site-sdk`: tokens and env vars, `areca.config.ts`, the `areca` CLI, reading content, rich text, SEO, the preview and health routes, and Go-live builds. |
 | `areca-mcp` | Connecting to the site's [MCP server](/docs/cms/mcp-tools) and using it well: roles, the draft, ready and live workflow, field formats, SEO, images, and every tool. |
 | `areca-quickstart` | Setting up Areca in a new website project, step by step: checking the project, the content model, languages, the SDK wiring and a first release. Run it as `/areca-quickstart`. See [Quickstart with an AI agent](/docs/sdk/agent-quickstart). |
+| `areca-visual-editing` | Setting up the site for the CMS [visual editor](/docs/sdk/visual-editing): the frame header, live updates, site content pages, click-to-edit markers, the CMS settings, framework recipes and troubleshooting. |
 
 ## Install
 
@@ -66,5 +67,5 @@ npx @areca-cms/skills list
 ## Other install options
 
 - **Claude Code plugin:** run `/plugin marketplace add seirai-dev/areca-cms`, then `/plugin install areca@areca-cms`.
-- **skills CLI:** `npx skills add seirai-dev/areca-cms --skill areca-sdk --skill areca-mcp --skill areca-quickstart`.
-- **By hand:** copy the `skills/areca-sdk`, `skills/areca-mcp` and `skills/areca-quickstart` folders from the repository into your agent's skills folder.
+- **skills CLI:** `npx skills add seirai-dev/areca-cms --skill areca-sdk --skill areca-mcp --skill areca-quickstart --skill areca-visual-editing`.
+- **By hand:** copy the `skills/areca-sdk`, `skills/areca-mcp`, `skills/areca-quickstart` and `skills/areca-visual-editing` folders from the repository into your agent's skills folder.

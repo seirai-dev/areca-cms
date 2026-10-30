@@ -116,6 +116,8 @@ D. Build and preview
 2. Connect the home page and the about page to their sections? [yes, when the plan has them]
 3. Draft preview route (so editors can see drafts in the site)? [yes]
    It needs the production URL in the CMS. A localhost URL is fine for development.
+   b. Visual editor support (live preview while editors type, and click a part of the page to edit it)? [yes, when 3 is yes and the framework can run server code per request]
+      It adds a header and a small bridge to the preview route and the section pages. Public pages do not change.
 4. Run a content pull before every build and before the dev server? [yes, prebuild only; predev only after the first release]
 5. Will you deploy with go-live builds (Dokploy) later? [no]
    If yes, I add the health route now. Read the areca-sdk skill, references/production.md.
@@ -158,7 +160,7 @@ Pages
 - posts: list and detail, simple pages
 - home and about: connected to their sections
 
-Preview route: yes. Prebuild pull: yes.
+Preview route: yes. Visual editor: yes. Prebuild pull: yes.
 First release: demo mode.
 ```
 
