@@ -3,12 +3,14 @@ import { join } from 'node:path'
 
 // Each package releases on its own. `paths` decide which commits count towards
 // a release; `versionFiles` are bumped together (drift.test.ts checks the
-// skills ones match).
+// skills ones match). `versionConstants` are `export const NAME = '<version>'`
+// lines in source that must match package.json.
 export const PACKAGES = {
   'site-sdk': {
     name: '@areca-cms/site-sdk',
     dir: 'packages/site-sdk',
     paths: ['packages/site-sdk'],
+    versionConstants: [{ file: 'packages/site-sdk/src/visual.ts', name: 'SDK_VERSION' }],
   },
   skills: {
     name: '@areca-cms/skills',
@@ -195,6 +197,12 @@ function setJsonVersion(file, version) {
   writeFileSync(file, `${JSON.stringify(json, null, 2)}\n`)
 }
 
+export function setConstantVersion(source, name, version) {
+  const pattern = new RegExp(`^(export const ${name} = ')[^']*(')`, 'm')
+  if (!pattern.test(source)) throw new Error(`No "export const ${name} = '...'" line to bump`)
+  return source.replace(pattern, `$1${version}$2`)
+}
+
 export function readVersion(root, pkg) {
   return JSON.parse(readFileSync(join(root, pkg.dir, 'package.json'), 'utf8')).version
 }
@@ -208,6 +216,10 @@ export function writeRelease(root, pkg, version, entry) {
   if (pkg.pluginJson) {
     setJsonVersion(join(root, pkg.pluginJson), version)
     changed.push(pkg.pluginJson)
+  }
+  for (const { file, name } of pkg.versionConstants ?? []) {
+    writeFileSync(join(root, file), setConstantVersion(readFileSync(join(root, file), 'utf8'), name, version))
+    changed.push(file)
   }
   if (pkg.skillsDir) {
     for (const dirent of readdirSync(join(root, pkg.skillsDir), { withFileTypes: true })) {
