@@ -32,7 +32,7 @@ jobs:
   changes:
     name: Detect changed paths
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 5
     permissions:
       contents: read
@@ -60,7 +60,7 @@ jobs:
 
   test:
     name: Typecheck and unit tests
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 20
     env:
       # Integration suites (PostgreSQL, Redis, S3) run in the integration job;
@@ -83,7 +83,7 @@ jobs:
       SMTP_FROM: ci@example.test
       DOKPLOY_CREDENTIALS_ENCRYPTION_KEY: AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: useblacksmith/checkout@v1
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -133,7 +133,7 @@ jobs:
     name: CMS integration tests (PostgreSQL, Redis, S3)
     needs: changes
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || (needs.changes.result == 'success' && needs.changes.outputs.cms == 'true')) }}
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
     # Service containers run on the runner, so the suites reach them on
     # 127.0.0.1. Every value here is a throwaway for these containers only.
@@ -193,7 +193,7 @@ jobs:
       SMTP_FROM: ci@example.test
       DOKPLOY_CREDENTIALS_ENCRYPTION_KEY: AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: useblacksmith/checkout@v1
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -242,7 +242,7 @@ jobs:
     name: Chromium smoke test (production build)
     needs: changes
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || (needs.changes.result == 'success' && needs.changes.outputs.cms == 'true')) }}
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
     # Runs in the Playwright image, which ships Chromium and its system libraries.
     # Installing them with apt on each run was the slow, flaky step (4 to 14
@@ -307,7 +307,7 @@ jobs:
       # must not start `vite dev`.
       PW_EXTERNAL_SERVER: "true"
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: useblacksmith/checkout@v1
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -391,13 +391,13 @@ jobs:
     name: Lint, format and secret scans
     needs: changes
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 20
     env:
       GITLEAKS_VERSION: 8.30.1
       GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: useblacksmith/checkout@v1
         with:
           # The secret scan reads the full git history.
           fetch-depth: 0

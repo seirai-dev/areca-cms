@@ -45,7 +45,7 @@ jobs:
   release:
     name: Release ${{ matrix.package }}
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -57,7 +57,7 @@ jobs:
     env:
       PACKAGE: ${{ matrix.package }}
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: useblacksmith/checkout@v1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -201,7 +201,7 @@ jobs:
     name: Publish ${{ matrix.package }}
     needs: release
     if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 10
     permissions:
       contents: write
