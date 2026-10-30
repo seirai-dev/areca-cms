@@ -3,7 +3,7 @@ name: areca-visual-editing
 description: Sets up a website for the Areca CMS visual editor, which shows the site's preview page in an iframe next to the fields, updates it live as editors type and lets them click part of the page to jump to its field. Covers the frame-ancestors header, the bridge (useLivePreview, createVisualBridge), rendering unsaved values on the server with content.previewFrom and content.previewGlobals, site content pages with previewPath and arecaPreview, click-to-edit markers with field() and owners, gating markers to preview pages, the CMS Preview URL setting, languages, React, Next.js, Astro, SvelteKit and plain Node, and troubleshooting a blank preview or one stuck on Updates on save. Use when the user mentions the visual editor, live preview, click to edit, data-areca attributes, @areca-cms/site-sdk/visual or visual-react, or a preview that is blank or does not update.
 license: MIT
 metadata:
-  version: "0.7.1"
+  version: "0.8.0"
 ---
 
 # Areca visual editing

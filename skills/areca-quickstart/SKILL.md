@@ -3,7 +3,7 @@ name: areca-quickstart
 description: Sets up Areca CMS in a new or existing website project for a web agency. Detects the framework, interviews the user, creates the content model over MCP or in code, wires the site and publishes a first release. Use when the user wants to set up, connect or integrate Areca CMS, run the quickstart, add Areca to a website, or add collections like blog or vacancies.
 license: MIT
 metadata:
-  version: "0.7.1"
+  version: "0.8.0"
 ---
 
 # Areca quickstart
