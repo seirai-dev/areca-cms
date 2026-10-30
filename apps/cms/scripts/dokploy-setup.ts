@@ -13,7 +13,7 @@
  *
  * Optional env:
  *   APP_NAME          default acme-demo-site
- *   GIT_BRANCH        default master
+ *   GIT_BRANCH        default main
  *   GIT_BUILD_PATH    default /
  *   DOCKERFILE        default examples/demo-site/Dockerfile
  *   DOCKER_CONTEXT    default .
@@ -46,7 +46,7 @@ const SSH_KEY_ID = process.env.SSH_KEY_ID!
 const SITE_TOKEN = process.env.SITE_TOKEN!
 const CMS_URL = process.env.CMS_URL!.replace(/\/$/, '')
 const APP_NAME = process.env.APP_NAME?.trim() || 'acme-demo-site'
-const GIT_BRANCH = process.env.GIT_BRANCH?.trim() || 'master'
+const GIT_BRANCH = process.env.GIT_BRANCH?.trim() || 'main'
 const GIT_BUILD_PATH = process.env.GIT_BUILD_PATH?.trim() || '/'
 const DOCKERFILE =
   process.env.DOCKERFILE?.trim() || 'examples/demo-site/Dockerfile'

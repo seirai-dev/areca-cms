@@ -28,7 +28,7 @@ credentials are configured per CMS organization.
 
 Required env for `dokploy:setup`: `DOKPLOY_URL`, `DOKPLOY_API_KEY`,
 `DOKPLOY_ENVIRONMENT_ID`, `GIT_URL`, `SSH_KEY_ID`, `SITE_TOKEN`, `CMS_URL`.
-Optional: `APP_NAME` (default `acme-demo-site`), `GIT_BRANCH` (`master`),
+Optional: `APP_NAME` (default `acme-demo-site`), `GIT_BRANCH` (`main`),
 `DOCKERFILE` (`examples/demo-site/Dockerfile`), `PUBLISHED_PORT` (`3101`),
 `TARGET_PORT` (`3000`), `AUTO_DEPLOY` (`false`). Production/shared URLs must
 use HTTPS. For local or LAN-only testing, set `DOKPLOY_ALLOW_INSECURE_HTTP=true`.

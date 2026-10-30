@@ -54,7 +54,7 @@ pnpm --filter @areca/cms dokploy:setup
 - [code] `dokploy:setup` script exists in `apps/cms/package.json`.
 
 Required env for `dokploy:setup`: `DOKPLOY_URL`, `DOKPLOY_API_KEY`, `DOKPLOY_ENVIRONMENT_ID`, `GIT_URL`, `SSH_KEY_ID`, `SITE_TOKEN`, `CMS_URL`.
-Optional: `APP_NAME` (default `acme-demo-site`), `GIT_BRANCH` (`master`), `DOCKERFILE` (`examples/demo-site/Dockerfile`), `PUBLISHED_PORT` (`3101`), `TARGET_PORT` (`3000`), `AUTO_DEPLOY` (`false`).
+Optional: `APP_NAME` (default `acme-demo-site`), `GIT_BRANCH` (`main`), `DOCKERFILE` (`examples/demo-site/Dockerfile`), `PUBLISHED_PORT` (`3101`), `TARGET_PORT` (`3000`), `AUTO_DEPLOY` (`false`).
 Production/shared URLs must use HTTPS. Local/LAN-only testing: `DOKPLOY_ALLOW_INSECURE_HTTP=true`.
 
 CMS env required for Dokploy credentials:
@@ -485,8 +485,8 @@ Image starts through `apps/cms/scripts/docker-entrypoint.mjs`, which on every co
 - Rehearsal step "outbound deployments blocked" has no mechanism described; RECOVERY.md does not explain how to block them.
 - "A different `APP_URL` as described in RECOVERY.md": RECOVERY.md does not describe this as a rehearsal step for `APP_URL`; it covers `APP_URL` only in the authoring import context.
 - PostgreSQL major version upgrade: "needs dump/restore" with no procedure.
-- `CMS_IMAGE` default in compose is `ghcr.io/ekozf/areca-cms:latest` (compose.yml line 5). The "do not follow latest" rule is enforced only by the operator setting `CMS_IMAGE`. Consider calling this out.
-- The `ghcr.io/<owner>/` placeholder vs the concrete `ghcr.io/ekozf/areca-cms` in docker/README.md and compose.yml.
+- `CMS_IMAGE` default in compose is `ghcr.io/seirai-dev/areca-cms:latest` (compose.yml line 5). The "do not follow latest" rule is enforced only by the operator setting `CMS_IMAGE`. Consider calling this out.
+- The `ghcr.io/<owner>/` placeholder vs the concrete `ghcr.io/seirai-dev/areca-cms` in docker/README.md and compose.yml.
 - No version numbering or changelog location; releases are identified by `sha-` tags only.
 - Migration numbering and rollback rules for pre-0007 installs are not described.
 
@@ -931,15 +931,15 @@ CMS_IMAGE=areca-cms:local docker compose up -d --wait
 
 ### GitHub Actions and image tags
 - Two workflows build natively on `ubuntu-24.04` (AMD64) and `ubuntu-24.04-arm` (ARM64), separate BuildKit caches.
-- AMD64 release workflow runs on matching pushes to `master`. Calls CI workflow first (typecheck, unit tests, secret scan, client bundle scan). Only if passing: builds AMD64 and reusable ARM64 in parallel; publishes shared manifest only after both succeed, using exact digests.
+- AMD64 release workflow runs on matching pushes to `main`. Calls CI workflow first (typecheck, unit tests, secret scan, client bundle scan). Only if passing: builds AMD64 and reusable ARM64 in parallel; publishes shared manifest only after both succeed, using exact digests.
 - Matching paths: `apps/cms/**`, root dependency configuration, Docker workflows, `.dockerignore`, `docker/**`.
 - Actions tab: **CMS Docker AMD64 and multi-platform release** (both arches, shared tags). **CMS Docker ARM64** (ARM64 only; does not change shared manifest).
 
-Tags (verbatim table under `ghcr.io/ekozf/areca-cms`):
+Tags (verbatim table under `ghcr.io/seirai-dev/areca-cms`):
 | Tag | Content |
 | --- | --- |
-| `latest` | Both architectures, updated only from `master` |
-| `latest-amd64`, `latest-arm64` | Architecture-specific images from `master` |
+| `latest` | Both architectures, updated only from `main` |
+| `latest-amd64`, `latest-arm64` | Architecture-specific images from `main` |
 | `sha-<full-commit-sha>` | Both architectures for that commit |
 | `sha-<full-commit-sha>-amd64`, `sha-<full-commit-sha>-arm64` | A specific commit and architecture |
 
@@ -1055,7 +1055,7 @@ Run from `apps/cms` (same command as ASSET_RETENTION.md). Processes up to 1,000 
 ### Services and ports
 | Service | Image | Host ports | Internal | Notes |
 | --- | --- | --- | --- | --- |
-| cms | `${CMS_IMAGE:-ghcr.io/ekozf/areca-cms:latest}` | `127.0.0.1:${CMS_PORT:-3000}:3000` | 3000 | `restart: unless-stopped`, `init: true` |
+| cms | `${CMS_IMAGE:-ghcr.io/seirai-dev/areca-cms:latest}` | `127.0.0.1:${CMS_PORT:-3000}:3000` | 3000 | `restart: unless-stopped`, `init: true` |
 | postgres | `postgres:17-alpine` | none | 5432 | user/db `areca`; healthcheck `pg_isready -U areca -d areca` every 5s, 20 retries |
 | redis | `redis:8-alpine` | none | 6379 | `redis-server --appendonly yes`; healthcheck `redis-cli ping`; no password |
 | rustfs | `rustfs/rustfs:1.0.0` | `127.0.0.1:9001:9001` (console) | 9000 (S3 API) | command `/data`; healthcheck `curl -fsS http://127.0.0.1:9000/health` (start_period 20s) |

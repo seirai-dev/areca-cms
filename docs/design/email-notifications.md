@@ -280,7 +280,7 @@ owners), Agency → Mail page, password reset. `docs/CONFIGURATION.md`,
 
 ## PRs
 
-1. **Mail foundation** (`feature/mail-foundation` from `master`): env
+1. **Mail foundation** (`feature/mail-foundation` from `main`): env
    changes, `mail_settings`, `email_outbox`, `server/mail/*`, outbox loop,
    errors + logging, branded layout, invites moved onto the outbox, Agency
    → Mail tab (server + Recent emails), banners for not-set-up/failing,

@@ -1,8 +1,8 @@
 name: CI
 
-# Pull requests run this workflow. Pushes to master do not: cms-docker-amd64.yml
-# calls it for master pushes that touch the CMS (before anything is published),
-# and other master pushes were already checked on their pull request. Run it by
+# Pull requests run this workflow. Pushes to main do not: cms-docker-amd64.yml
+# calls it for main pushes that touch the CMS (before anything is published),
+# and other main pushes were already checked on their pull request. Run it by
 # hand from the Actions tab with workflow_dispatch if needed.
 on:
   pull_request:

@@ -84,7 +84,7 @@ The supported envelope is one CMS replica, up to 50 sites, up to 2,000 entries p
 
 ## Image tags and registry
 
-The CMS image is published to the GitHub Container Registry at `ghcr.io/ekozf/areca-cms`. The Compose file reads the image name from `CMS_IMAGE` and uses `latest` when you do not set it.
+The CMS image is published to the GitHub Container Registry at `ghcr.io/seirai-dev/areca-cms`. The Compose file reads the image name from `CMS_IMAGE` and uses `latest` when you do not set it.
 
 The available tags, which one to pin in production, and how to record the tag you run for rollback are described on the [upgrades](/docs/self-hosting/upgrades#choose-an-image-tag) page. In short: use `latest` only to try Areca, and pin a `sha-<full-commit-sha>` tag or an image digest in production.
 
