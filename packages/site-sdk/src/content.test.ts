@@ -698,6 +698,17 @@ describe('createContent: previewFrom', () => {
     expect(() => content.previewFrom(result)).toThrow(/Use previewGlobals\(\) for it/)
   })
 
+  it('a single-language site serves its draft unchanged, with or without a locale on the result', () => {
+    const content = createContent({ schema, dir: directory() })
+    const base = rawSnapshot().collections.authors![0]!
+    const plain: PreviewResult = { collection: 'authors', slug: 'ada', entry: base }
+    const tagged: PreviewResult = { collection: 'authors', slug: 'ada', entry: { ...base, locale: 'nl' } }
+
+    expect(content.previewFrom(plain).entry.isFallback).toBe(false)
+    expect(content.previewFrom(tagged).entry.isFallback).toBe(false)
+    expect(content.previewFrom(tagged).entry.data).toEqual(content.previewFrom(plain).entry.data)
+  })
+
   it('throws for a collection that is not in the schema', () => {
     const content = createContent({ schema, dir: directory() })
     const result: PreviewResult = {

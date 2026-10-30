@@ -38,7 +38,7 @@ The helper returns one header, `Content-Security-Policy: frame-ancestors 'self' 
 
 <Callout type="warn" title="Public pages must not send this header">
 
-`frame-ancestors` lets the listed origin frame the page. Only the preview routes should send it. Public pages never should.
+`frame-ancestors` lets the listed origin frame the page. Only responses that show a preview should send it: the preview route, or a page opened with `?arecaPreview=`. Public responses never should.
 
 </Callout>
 
@@ -202,6 +202,8 @@ Keys can be the camelCase name your code sees (`heroImage`) or the raw CMS key (
 
 Owners are checked in the CMS. A section or entry must exist on this site, not be deleted or archived, and be editable by the person who is previewing. Elements with an owner that fails the check are not outlined. Clicking a marked element in Select mode focuses the field. Browse mode, or holding Option (Alt on Windows and Linux), uses the page normally.
 
+Select mode only blocks clicks on marked elements. The rest of the page works as usual: links, buttons and forms are not affected. Press Esc inside the preview to leave full screen. This works when the bridge is present, because the bridge forwards the key press to the CMS.
+
 ### Only mark preview pages
 
 `field()` always returns attributes. It does not check where it runs. Public pages must render no `data-areca-*` attributes, so gate the markers yourself. The demo does it with a context that is on only for preview pages:
@@ -250,6 +252,7 @@ You only need this if you write your own bridge. The bridge in `@areca-cms/site-
 | CMS → site | `highlight` | `{ target: { field, owner } \| null }` |
 | CMS → site | `mode` | `{ select, showAreas, cursorHint, color: '#rrggbb', targets: { field, owner, label }[] }` |
 | site → CMS | `navigate` | `{ url }` (client-side navigation; the CMS compares it with the preview page) |
+| site → CMS | `escape` | `{}` (Escape pressed in the page; exits full screen) |
 
 `owner` is `null` for the page's own entry, `{ entry: id }` or `{ global: key }`. Only markers listed in `targets` are outlined or clickable.
 
@@ -262,6 +265,8 @@ You only need this if you write your own bridge. The bridge in `@areca-cms/site-
 | The status stays on "Updates on save" | The bridge is not running, or it does not accept the CMS. Check that the preview page loads `useLivePreview` or `createVisualBridge`. Check that `cmsOrigin` is the exact CMS origin, with the same scheme and port. A `cmsOrigin` of `null` usually means `ARECA_CMS_URL` is not set on the server. |
 | Live updates arrive but the page does not change | The result is for another section, or the page does not read the draft. For a site content page, check that `previewing` equals that page's section. |
 | Elements are not clickable | No markers on the page (`VisualMarkers` is off on that route), the key matches no field (check the spelling or camelCase name), the owner is not verified (deleted, archived, on another site, or not editable by you), or Browse mode is on. |
+| Links on the page don't work in the preview | Select mode blocks clicks on marked elements only, so a marked link edits its field instead of opening. The rest of the page works. Use Browse, or hold Option (Alt), to follow the link. |
+| Esc does not leave full screen | Esc is forwarded only when the bridge is present (`useLivePreview` or `createVisualBridge`). Without it, use the Exit full screen button. |
 
 ## Related
 

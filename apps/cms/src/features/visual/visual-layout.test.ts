@@ -136,12 +136,24 @@ describe('framePresentation', () => {
     })
   })
 
-  it('shrinks tablet and mobile to the pane when the pane is narrower', () => {
-    expect(framePresentation('mobile', 300, 700)).toEqual({
-      width: 300,
-      height: 700,
-      scale: 1,
-    })
+  it('keeps tablet at 768 and scales it to fit a narrower pane', () => {
+    const frame = framePresentation('tablet', 384, 600)
+    expect(frame.width).toBe(768)
+    expect(frame.scale).toBeCloseTo(0.5)
+    // Height is unscaled so the scaled box fills the pane height.
+    expect(frame.height * frame.scale).toBeCloseTo(600)
+  })
+
+  it('keeps mobile at 390 and scales it to fit a narrower pane', () => {
+    const frame = framePresentation('mobile', 300, 600)
+    expect(frame.width).toBe(390)
+    expect(frame.scale).toBeCloseTo(300 / 390)
+    expect(frame.height * frame.scale).toBeCloseTo(600)
+  })
+
+  it('does not scale tablet or mobile up in a wide pane', () => {
+    expect(framePresentation('tablet', 1200, 700).scale).toBe(1)
+    expect(framePresentation('mobile', 1200, 700).scale).toBe(1)
   })
 
   it('does not divide by zero for an unmeasured pane', () => {

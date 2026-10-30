@@ -450,9 +450,15 @@ export function createContent<
         type: field.type,
       }))
       const camelized = camelizeEntry(result.entry, collection, fields)
-      // The draft is served in the language asked for, or the main one.
+      // The draft is served in the language asked for: per call, then the scope, then the
+      // language the CMS says the draft is in, then the resolver or the main language.
       const languages = languagesOf()
-      const requested = requestedLocale(scope, previewOptions?.locale)
+      const draftLocale =
+        languages !== null && typeof result.entry.locale === 'string' && result.entry.locale !== ''
+          ? result.entry.locale
+          : undefined
+      const requested =
+        previewOptions?.locale ?? scope ?? draftLocale ?? requestedLocale(undefined, undefined)
       const entry = localizeRow(collection, camelized, requested, true, languages)!
       if (issues.length === 0) {
         return {

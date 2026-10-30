@@ -136,7 +136,9 @@ export function useClickToEdit(options: ClickToEditOptions): ClickToEdit {
     if (!enabled || bridgeId === 0) return
     post(
       modeMessage({
-        select,
+        // With nothing to click, Select would only get in the way: the
+        // Select/Browse control is hidden then. This effect reruns when targets change.
+        select: select && builtRef.current.targets.length > 0,
         showAreas,
         cursorHint,
         color: accentColor(),
@@ -195,8 +197,11 @@ export function useClickToEdit(options: ClickToEditOptions): ClickToEdit {
     }
   }, [])
 
+  // A new document reports its URL again (hello or navigate). Until it does,
+  // the preview falls back to "stray load" for a page without the bridge.
   const onFrameLoad = React.useCallback(() => {
     setMarkers([])
+    setPageUrl(null)
   }, [])
 
   return {

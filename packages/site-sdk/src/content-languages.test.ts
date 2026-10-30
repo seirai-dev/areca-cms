@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { createArecaClient } from './client.js'
 import { createContent } from './content.js'
 import { pullContent, readContentManifest } from './pull.js'
-import type { SeoMeta, Snapshot } from './types.js'
+import type { PreviewResult, SeoMeta, Snapshot } from './types.js'
 
 // Generated shape: camel keys, raw `key` kept for the CMS. Mirrors areca.gen.ts.
 const schema = {
@@ -613,5 +613,54 @@ describe('languages: preview', () => {
     const result = await content.in('en').previewGlobals('tok', { client: clientFor() })
     expect(previewRequests).toEqual(['?token=tok&locale=en'])
     expect(result.globals.homePage).toMatchObject({ headline: 'Draft', $locale: 'en' })
+  })
+})
+
+describe('languages: previewFrom', () => {
+  // The CMS sends a Dutch draft (entry.locale 'nl') with every language's values.
+  const dutchDraft = {
+    kind: 'entry',
+    collection: 'vacancies',
+    slug: 'backend-ontwikkelaar',
+    entry: {
+      id: 'v1',
+      slug: 'backend-ontwikkelaar',
+      publishedAt: null,
+      locale: 'nl',
+      data: { slug: 'backend-ontwikkelaar', title: 'Backend ontwikkelaar (concept)', 'job-type': 'fulltime' },
+      locales: {
+        nl: {
+          slug: 'backend-ontwikkelaar',
+          data: { slug: 'backend-ontwikkelaar', title: 'Backend ontwikkelaar (concept)', 'job-type': 'fulltime' },
+        },
+        en: {
+          slug: 'backend-developer',
+          data: { slug: 'backend-developer', title: 'Backend developer', 'job-type': 'fulltime' },
+        },
+      },
+    },
+  } as unknown as PreviewResult
+
+  it('serves the draft in its own language when no locale is given', async () => {
+    // A resolver that returns the main language (as Paraglide's getLocale does on the server).
+    const { outDir } = await setup()
+    const content = createContent({ schema, globalSchema, dir: outDir, locale: () => 'en' })
+    const preview = content.previewFrom(dutchDraft)
+    expect(preview.entry.locale).toBe('nl')
+    expect(preview.entry.data).toMatchObject({ title: 'Backend ontwikkelaar (concept)' })
+  })
+
+  it('an explicit per-call locale still wins over the draft language', async () => {
+    const { content } = await setup()
+    const preview = content.previewFrom(dutchDraft, { locale: 'en' })
+    expect(preview.entry.locale).toBe('en')
+    expect(preview.entry.data).toMatchObject({ title: 'Backend developer' })
+  })
+
+  it('a content.in(locale) scope still wins over the draft language', async () => {
+    const { content } = await setup()
+    const preview = content.in('en').previewFrom(dutchDraft)
+    expect(preview.entry.locale).toBe('en')
+    expect(preview.entry.data).toMatchObject({ title: 'Backend developer' })
   })
 })

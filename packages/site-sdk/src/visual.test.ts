@@ -102,6 +102,7 @@ describe('isArecaMessage', () => {
     ['markers', { type: 'areca:v1:markers', markers: [{ field: 'title', owner: null }, { field: 'email', owner: { global: 'company' } }] }],
     ['select', { type: 'areca:v1:select', field: 'title', owner: null, rect: { x: 1, y: 2, width: 3, height: 4 } }],
     ['navigate', { type: 'areca:v1:navigate', url: PAGE }],
+    ['escape', { type: 'areca:v1:escape' }],
     ['update', update],
     ['update with a locale', { ...update, locale: 'nl' }],
     ['update with a global result', { ...update, result: { kind: 'global', global: 'company-info', entry: { id: 'g', publishedAt: null, data: {} } } }],

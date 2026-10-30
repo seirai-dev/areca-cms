@@ -701,6 +701,13 @@ async function serveMarkedPreview(page: Page, owner: { id: string | null }) {
         ? route.fulfill({ status: 404, body: '' })
         : route.fulfill({ contentType: 'text/javascript', body })
     }
+    // A page of the site without the bridge (a public page).
+    if (pathname === '/plain') {
+      return route.fulfill({
+        contentType: 'text/html',
+        body: FIXTURE.replace('__TITLE__', 'A public page'),
+      })
+    }
     return route.fulfill({
       contentType: 'text/html',
       body: markedPage(new URL(page.url()).origin, owner.id),
@@ -789,17 +796,18 @@ test('click to edit: an SEO marker opens its collapsed group and focuses the fie
   await expect.poll(() => focusedField(page)).toBe('$seo.summary')
 })
 
-test('Select keeps links from navigating; Browse follows them and the away bar returns', async ({
+test('Select only takes over marked elements; other links navigate and the away bar returns', async ({
   page,
 }) => {
   await openClickableVisual(page)
   const link = previewFrame(page).locator('nav a').nth(1)
 
-  await link.click()
+  // A marked element is selected, not followed.
+  await previewFrame(page).locator('h1').first().click()
   await page.waitForTimeout(500)
   await expect(page.getByTestId('visual-away')).toBeHidden()
 
-  await page.getByTestId('visual-browse').click()
+  // An unmarked link works as on the site, even in Select.
   await link.click()
   await expect(page.getByTestId('visual-away')).toBeVisible({ timeout: 10_000 })
   await page.getByTestId('visual-away-back').click()
@@ -875,4 +883,36 @@ test('Show editable areas outlines every target and is remembered', async ({
     { timeout: 20_000 },
   )
   await page.getByTestId('visual-show-areas').click()
+})
+
+test('a full page load to a page without the bridge shows the away bar', async ({
+  page,
+}) => {
+  await openClickableVisual(page)
+  // A plain link or language switcher: a full load, and no bridge answers.
+  await previewDocument(page).evaluate(() => {
+    window.location.href = '/plain'
+  })
+  await expect(page.getByTestId('visual-away')).toBeVisible({ timeout: 15_000 })
+  await page.getByTestId('visual-away-back').click()
+  await expect(page.getByTestId('visual-away')).toBeHidden({ timeout: 15_000 })
+  await expect(statusBadge(page)).toHaveAttribute('data-clickable', 'true', {
+    timeout: 15_000,
+  })
+})
+
+test('Esc pressed inside the preview exits full screen', async ({ page }) => {
+  await openClickableVisual(page)
+  await page.getByTestId('visual-fullscreen').click()
+  await expect(page.getByTestId('visual-preview')).toHaveAttribute(
+    'data-fullscreen',
+    'true',
+  )
+  // An unmarked part of the page: focus moves into the frame, nothing opens.
+  await previewFrame(page).locator('.ghost').click()
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('visual-preview')).toHaveAttribute(
+    'data-fullscreen',
+    'false',
+  )
 })

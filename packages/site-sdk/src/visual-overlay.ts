@@ -10,6 +10,7 @@ import {
   MARKER_TEXT_MAX,
   MARKERS_MAX,
   markerKey,
+  type EscapeMessage,
   type Marker,
   type MarkersMessage,
   type ModeMessage,
@@ -92,7 +93,7 @@ export function findTarget<E extends MarkedElement>(
 
 export type OverlayOptions = {
   /** Sends a message to the CMS. */
-  post(message: MarkersMessage | SelectMessage): void
+  post(message: MarkersMessage | SelectMessage | EscapeMessage): void
   document: Document
   window: Window
 }
@@ -288,12 +289,16 @@ export function startOverlay({ post, document, window }: OverlayOptions): Overla
     if (mode?.cursorHint) scheduleRender()
   }
 
+  /**
+   * In Select mode, a click on a target opens its field and is cancelled. A click anywhere
+   * else behaves as on the page, so links and buttons still work.
+   */
   function onClick(event: Event) {
     if (!isSelecting(event)) return
-    event.preventDefault()
-    event.stopPropagation()
     const found = findTarget(targetOf(event), labels)
     if (!found) return
+    event.preventDefault()
+    event.stopPropagation()
     const box = found.element.getBoundingClientRect()
     post({
       type: 'areca:v1:select',
@@ -311,12 +316,22 @@ export function startOverlay({ post, document, window }: OverlayOptions): Overla
     }
   }
 
+  /** In Select mode, a form submit from inside a target is cancelled. Other forms submit normally. */
   function onSubmit(event: Event) {
-    if (isSelecting(event)) event.preventDefault()
+    if (!isSelecting(event)) return
+    const submitter = (event as SubmitEvent).submitter ?? null
+    const inTarget =
+      findTarget(targetOf(event), labels) !== null ||
+      (submitter instanceof Element && findTarget(submitter, labels) !== null)
+    if (inTarget) event.preventDefault()
   }
 
+  /** Alt and Escape are read here. Escape is forwarded so the CMS can leave full screen; it is not cancelled. */
   function onKey(event: Event) {
     altHeld(event)
+    if (event.type === 'keydown' && (event as KeyboardEvent).key === 'Escape') {
+      post({ type: 'areca:v1:escape' } satisfies EscapeMessage)
+    }
   }
 
   function setMode(next: ModeMessage) {

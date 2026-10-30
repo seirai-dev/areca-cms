@@ -38,9 +38,6 @@ export const PREVIEW_WIDTHS: Record<PreviewWidth, number | 'fill'> = {
   mobile: 390,
 }
 
-/** The desktop size that "Fit 1440" renders at before it scales down. */
-const FIT_WIDTH = 1440
-
 function clampToLayout(px: number, layoutWidth: number): number {
   const max = layoutWidth * EDITOR_MAX_RATIO
   return Math.min(Math.max(px, EDITOR_MIN_PX), max)
@@ -90,9 +87,24 @@ export type FramePresentation = {
 }
 
 /**
+ * A frame rendered at `renderWidth` px that scales down to fit a pane of
+ * `paneWidth` × `paneHeight`. Never scales up. Height is unscaled so that
+ * `height * scale` fills the pane height.
+ */
+function scaledToFit(
+  renderWidth: number,
+  paneWidth: number,
+  paneHeight: number,
+): FramePresentation {
+  const scale = paneWidth > 0 ? Math.min(1, paneWidth / renderWidth) : 1
+  return { width: renderWidth, height: paneHeight / scale, scale }
+}
+
+/**
  * How the preview frame is drawn inside a pane of `paneWidth` × `paneHeight`.
- * Fit 1440 renders the frame at 1440 px and scales it down with a transform,
- * so `width * scale` and `height * scale` are the box the pane shows.
+ * Fit 1440, Tablet and Mobile keep their own width and scale down with a
+ * transform when the pane is narrower, so `width * scale` and `height * scale`
+ * are the box the pane shows. Desktop fills the pane.
  */
 export function framePresentation(
   preset: PreviewWidth,
@@ -102,19 +114,9 @@ export function framePresentation(
   if (preset === 'desktop') {
     return { width: paneWidth, height: paneHeight, scale: 1 }
   }
-  if (preset === 'fit1440') {
-    const scale = paneWidth > 0 ? Math.min(1, paneWidth / FIT_WIDTH) : 1
-    return {
-      width: FIT_WIDTH,
-      height: paneHeight / scale,
-      scale,
-    }
-  }
   const fixed = PREVIEW_WIDTHS[preset]
-  const width = typeof fixed === 'number' ? fixed : paneWidth
-  return {
-    width: Math.min(width, paneWidth),
-    height: paneHeight,
-    scale: 1,
+  if (typeof fixed === 'number') {
+    return scaledToFit(fixed, paneWidth, paneHeight)
   }
+  return { width: paneWidth, height: paneHeight, scale: 1 }
 }

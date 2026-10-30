@@ -418,9 +418,14 @@ import { field } from "@areca-cms/site-sdk/visual";
 The attributes do nothing outside the visual editor, so leave them on in production.
 
 The visual editor has two modes for the preview. **Select** (the default) outlines
-marked elements as you hover and jumps to the field on click. Links and forms don't
-navigate in Select. **Browse** uses the page normally. Switch with the toolbar toggle,
-or hold Option (Alt on Windows and Linux) for a moment.
+marked elements as you hover and jumps to the field on click. Only clicks on marked
+fields are taken over in Select; other links and forms work normally. **Browse** uses
+the page normally. Switch with the toolbar toggle, or hold Option (Alt on Windows and
+Linux) for a moment.
+
+A preview result is served in its own language (`entry.locale`) unless you pass a
+`locale` or use `content.in(locale)`, so a Dutch draft renders in Dutch. Pressing Escape
+in the preview sends `escape` to the editor, so it can leave full screen.
 
 The bridge reports each client-side navigation to the editor (through `popstate`,
 `hashchange` and a short poll), so the editor can tell when the preview has left the

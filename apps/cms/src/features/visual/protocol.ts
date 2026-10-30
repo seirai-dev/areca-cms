@@ -70,9 +70,16 @@ export type ModeMessage = {
   targets: MarkerTarget[]
 }
 
+/** Site → CMS. Escape was pressed inside the page: leave full screen. */
+export type EscapeMessage = { type: 'areca:v1:escape' }
+
 /** Every message the site can send to the CMS in this protocol version. */
 export type SiteMessage =
-  HelloMessage | MarkersMessage | SelectMessage | NavigateMessage
+  | HelloMessage
+  | MarkersMessage
+  | SelectMessage
+  | NavigateMessage
+  | EscapeMessage
 
 export const MARKER_TEXT_MAX = 200
 export const MARKERS_MAX = 500
@@ -175,6 +182,8 @@ export function isSiteMessage(value: unknown): value is SiteMessage {
       return isText(value.field) && isOwner(value.owner) && isRect(value.rect)
     case 'areca:v1:navigate':
       return isText(value.url, URL_MAX)
+    case 'areca:v1:escape':
+      return true
     default:
       return false
   }

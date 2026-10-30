@@ -72,6 +72,9 @@ export type SelectMessage = {
 /** Site → CMS. The page changed its address without a reload (client-side navigation). */
 export type NavigateMessage = { type: 'areca:v1:navigate'; url: string }
 
+/** Site → CMS. Escape was pressed in the preview, so the CMS can leave full screen. */
+export type EscapeMessage = { type: 'areca:v1:escape' }
+
 /** CMS → site. Outline this marker (a field was focused in the CMS), or nothing. */
 export type HighlightMessage = { type: 'areca:v1:highlight'; target: Marker | null }
 
@@ -97,6 +100,7 @@ export type ArecaMessage =
   | MarkersMessage
   | SelectMessage
   | NavigateMessage
+  | EscapeMessage
   | HighlightMessage
   | ModeMessage
 
@@ -184,6 +188,8 @@ export function isArecaMessage(value: unknown): value is ArecaMessage {
       return isText(value.field) && isOwner(value.owner) && isRect(value.rect)
     case 'areca:v1:navigate':
       return isText(value.url, URL_MAX)
+    case 'areca:v1:escape':
+      return true
     case 'areca:v1:highlight':
       return value.target === null || isMarker(value.target)
     case 'areca:v1:mode':

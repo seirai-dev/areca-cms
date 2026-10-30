@@ -268,11 +268,15 @@ test('a footer marked with another section opens the Open popover', async ({
     timeout: 15_000,
   })
 
-  await previewFrame(page)
-    .locator('[data-areca-field="email"][data-areca-global="companyInfo"]')
-    .click()
+  // The footer becomes clickable once the CMS has verified its owner, which
+  // can land just after the page's own fields: retry the click until then.
   const popover = page.getByTestId('visual-owner-popover')
-  await expect(popover).toBeVisible({ timeout: 10_000 })
+  await expect(async () => {
+    await previewFrame(page)
+      .locator('[data-areca-field="email"][data-areca-global="companyInfo"]')
+      .click()
+    await expect(popover).toBeVisible({ timeout: 2_000 })
+  }).toPass({ timeout: 20_000 })
   await expect(popover).toContainText('Company info')
 
   await page.getByTestId('visual-owner-open').click()

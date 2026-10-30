@@ -1,6 +1,12 @@
-import { describe, expect, it } from 'vitest'
-import { collectMarkers, findTarget, readMarker, type MarkedElement } from './visual-overlay.js'
-import { MARKER_TEXT_MAX, MARKERS_MAX, markerKey } from './visual.js'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import {
+  collectMarkers,
+  findTarget,
+  readMarker,
+  startOverlay,
+  type MarkedElement,
+} from './visual-overlay.js'
+import { MARKER_TEXT_MAX, MARKERS_MAX, markerKey, type ModeMessage } from './visual.js'
 
 /** A tiny stand-in for an element: attributes plus a parent link. */
 function el(attributes: Record<string, string> = {}, parent: MarkedElement | null = null): MarkedElement {
@@ -136,5 +142,211 @@ describe('findTarget', () => {
 
   it('returns null for a null start', () => {
     expect(findTarget(null, labels)).toBeNull()
+  })
+})
+
+/** A DOM node with just what the overlay reads and writes. */
+class FakeElement {
+  readonly attributes = new Map<string, string>()
+  readonly children: FakeElement[] = []
+  readonly style: Record<string, unknown> & { setProperty(name: string, value: string): void } = {
+    setProperty() {},
+  }
+  parentElement: FakeElement | null
+  isConnected = true
+  className = ''
+  textContent = ''
+
+  constructor(attributes: Record<string, string> = {}, parent: FakeElement | null = null) {
+    for (const [name, value] of Object.entries(attributes)) this.attributes.set(name, value)
+    this.parentElement = parent
+  }
+  getAttribute(name: string) {
+    return this.attributes.get(name) ?? null
+  }
+  setAttribute(name: string, value: string) {
+    this.attributes.set(name, value)
+  }
+  removeAttribute(name: string) {
+    this.attributes.delete(name)
+  }
+  getBoundingClientRect() {
+    return { left: 10, top: 20, width: 100, height: 30, right: 110, bottom: 50 }
+  }
+  append(...nodes: FakeElement[]) {
+    this.children.push(...nodes)
+  }
+  attachShadow() {
+    return new FakeElement()
+  }
+  remove() {
+    this.isConnected = false
+  }
+}
+
+type Listener = (event: Event) => void
+
+/**
+ * A document and window that record the listeners the overlay adds. `fire` runs them as
+ * the browser would, with `preventDefault` recorded. Mount needs a `MutationObserver`,
+ * which Node lacks, so it is stubbed for each test.
+ */
+function fakeDom(marked: FakeElement[] = []) {
+  const listeners = new Map<string, Listener[]>()
+  const posted: unknown[] = []
+  const document = {
+    documentElement: new FakeElement(),
+    head: new FakeElement(),
+    createElement: () => new FakeElement(),
+    addEventListener(type: string, listener: Listener) {
+      listeners.set(type, [...(listeners.get(type) ?? []), listener])
+    },
+    removeEventListener(type: string, listener: Listener) {
+      listeners.set(type, (listeners.get(type) ?? []).filter((item) => item !== listener))
+    },
+    querySelectorAll: () => marked,
+  }
+  const window = {
+    innerHeight: 800,
+    innerWidth: 1200,
+    requestAnimationFrame: () => 1,
+    cancelAnimationFrame() {},
+    setTimeout: () => 1,
+    clearTimeout() {},
+    addEventListener() {},
+    removeEventListener() {},
+  }
+  const overlay = startOverlay({
+    post: (message) => {
+      posted.push(message)
+    },
+    document: document as unknown as Document,
+    window: window as unknown as Window,
+  })
+  return {
+    overlay,
+    posted,
+    /** Runs the listeners for one event type. `defaultPrevented` tells whether any cancelled it. */
+    fire(type: string, target: FakeElement | null, init: Record<string, unknown> = {}) {
+      const state = { prevented: false }
+      const event = {
+        type,
+        target,
+        altKey: false,
+        key: '',
+        ...init,
+        preventDefault() {
+          state.prevented = true
+        },
+        stopPropagation() {},
+      }
+      for (const listener of listeners.get(type) ?? []) listener(event as unknown as Event)
+      return { get defaultPrevented() { return state.prevented } }
+    },
+  }
+}
+
+const SELECT_MODE: ModeMessage = {
+  type: 'areca:v1:mode',
+  select: true,
+  showAreas: false,
+  cursorHint: false,
+  color: '#4f46e5',
+  targets: [{ field: 'title', owner: null, label: 'Title' }],
+}
+
+describe('startOverlay: Select mode blocks only marked targets', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  function setUp() {
+    vi.stubGlobal('Element', FakeElement)
+    vi.stubGlobal(
+      'MutationObserver',
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    )
+    const title = new FakeElement({ 'data-areca-field': 'title' })
+    const dom = fakeDom([title])
+    dom.overlay.setMode(SELECT_MODE)
+    return { ...dom, title }
+  }
+
+  it('does not cancel a click on a link that is not a target', () => {
+    const { fire, posted } = setUp()
+    const link = new FakeElement({ href: '/about' })
+    const click = fire('click', link)
+    expect(click.defaultPrevented).toBe(false)
+    expect(posted.filter((message) => (message as { type: string }).type === 'areca:v1:select')).toEqual([])
+  })
+
+  it('cancels a click on a target and posts select', () => {
+    const { fire, posted, title } = setUp()
+    const click = fire('click', title)
+    expect(click.defaultPrevented).toBe(true)
+    expect(posted).toContainEqual({
+      type: 'areca:v1:select',
+      field: 'title',
+      owner: null,
+      rect: { x: 10, y: 20, width: 100, height: 30 },
+    })
+  })
+
+  it('does not cancel a submit outside any target', () => {
+    const { fire } = setUp()
+    const form = new FakeElement({})
+    expect(fire('submit', form).defaultPrevented).toBe(false)
+  })
+
+  it('cancels a submit inside a target', () => {
+    const { fire, title } = setUp()
+    const form = new FakeElement({}, title)
+    expect(fire('submit', form).defaultPrevented).toBe(true)
+  })
+
+  it('does not block clicks in Browse mode', () => {
+    const { fire, overlay, title } = setUp()
+    overlay.setMode({ ...SELECT_MODE, select: false })
+    expect(fire('click', title).defaultPrevented).toBe(false)
+  })
+})
+
+describe('startOverlay: Escape', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  function setUp() {
+    vi.stubGlobal('Element', FakeElement)
+    vi.stubGlobal(
+      'MutationObserver',
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    )
+    return fakeDom()
+  }
+
+  it('posts escape to the CMS when Escape is pressed in the preview', () => {
+    const { fire, posted } = setUp()
+    const key = fire('keydown', null, { key: 'Escape' })
+    expect(posted).toContainEqual({ type: 'areca:v1:escape' })
+    expect(key.defaultPrevented).toBe(false)
+  })
+
+  it('posts escape once per key press, not on release', () => {
+    const { fire, posted } = setUp()
+    fire('keyup', null, { key: 'Escape' })
+    expect(posted.filter((message) => (message as { type: string }).type === 'areca:v1:escape')).toEqual([])
+  })
+
+  it('does not post for other keys', () => {
+    const { fire, posted } = setUp()
+    fire('keydown', null, { key: 'Enter' })
+    expect(posted.filter((message) => (message as { type: string }).type === 'areca:v1:escape')).toEqual([])
   })
 })

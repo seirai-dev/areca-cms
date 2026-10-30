@@ -41,6 +41,7 @@ import { framePresentation } from './visual-layout'
 import type { PreviewWidth } from './visual-layout'
 import { useVisualFullScreen } from './visual-context'
 import { useVisualPreferences } from './visual-preferences'
+import type { SiteMessage } from './protocol'
 
 /** Gap around a framed (tablet, mobile, fit) preview inside the pane. */
 const FRAME_GUTTER_PX = 16
@@ -140,11 +141,22 @@ export function PreviewPane({
     },
     onSelectOwner: setOwnerSelection,
   })
+  // Esc inside the page never reaches the CMS window, so the bridge forwards it.
+  const onSiteMessage = React.useCallback(
+    (message: SiteMessage) => {
+      if (message.type === 'areca:v1:escape' && fullScreen) {
+        setFullScreen(false)
+        return
+      }
+      clicks.onSiteMessage(message)
+    },
+    [fullScreen, setFullScreen, clicks.onSiteMessage],
+  )
   const channel = useLivePreviewChannel({
     iframeRef,
     origin: live.origin,
     enabled: channelEnabled,
-    onSiteMessage: clicks.onSiteMessage,
+    onSiteMessage,
     siteId: live.siteId,
     target: live.target ?? NO_TARGET,
     data: live.data,

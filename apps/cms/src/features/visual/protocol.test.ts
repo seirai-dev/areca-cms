@@ -283,6 +283,7 @@ describe('isSiteMessage', () => {
       'navigate',
       { type: 'areca:v1:navigate', url: 'https://site.test/journal' },
     ],
+    ['escape', { type: 'areca:v1:escape' }],
   ])('accepts %s', (_name, value) => {
     expect(isSiteMessage(value)).toBe(true)
   })
@@ -297,6 +298,7 @@ describe('isSiteMessage', () => {
         owner: null,
         rect: { x: 0, y: 0, width: 1, height: 1 },
       },
+      { type: 'areca:v1:escape' },
     ]
     for (const message of fromSite) {
       expect(sdkIsArecaMessage(message)).toBe(true)
