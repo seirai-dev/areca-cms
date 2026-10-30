@@ -2,6 +2,12 @@
 
 All notable changes to `@areca-cms/skills`.
 
+## 0.8.0 (2026-10-30)
+
+### Features
+
+- **skills:** add areca-visual-editing skill for the CMS visual editor (31053ba)
+
 ## 0.7.1 (2026-10-30)
 
 No user-facing changes.
