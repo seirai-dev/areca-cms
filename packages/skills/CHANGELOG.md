@@ -2,6 +2,12 @@
 
 All notable changes to `@areca-cms/skills`.
 
+## 0.7.0 (2026-10-30)
+
+### Features
+
+- **visual-editor:** site content in Visual mode, docs and skill (visual editor PR 4) (739039f)
+
 ## 0.6.0 (2026-10-27)
 
 ### Features
