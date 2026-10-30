@@ -2,6 +2,16 @@
 
 All notable changes to `@areca-cms/site-sdk`.
 
+## 0.10.0 (2026-10-30)
+
+### Features
+
+- **visual-editor:** click to edit in the live preview (visual editor PR 3) (ce7bc23)
+
+### Bug fixes
+
+- **visual-editor:** review fixes across the visual editor stack (6fa90d8)
+
 ## 0.9.0 (2026-10-29)
 
 ### Features
