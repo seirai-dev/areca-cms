@@ -6,9 +6,9 @@ export const docsRoute = '/docs'
 // Set `editLinks` to true once the repository is public. Readers then get an
 // "Edit on GitHub" link on every page; editing still needs push access.
 export const gitConfig = {
-  user: 'ekozf',
+  user: 'seirai-dev',
   repo: 'areca-cms',
-  branch: 'master',
+  branch: 'main',
   contentDir: 'apps/docs/content/docs',
   editLinks: false,
 }

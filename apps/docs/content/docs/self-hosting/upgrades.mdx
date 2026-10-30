@@ -11,19 +11,19 @@ There is no down migration. The only way back from a bad upgrade is the backup y
 
 ## Choose an image tag
 
-The CMS image is published to `ghcr.io/ekozf/areca-cms`. Set the image in the `CMS_IMAGE` variable in `docker/.env`. The Compose file defaults to `latest` if the variable is not set.
+The CMS image is published to `ghcr.io/seirai-dev/areca-cms`. Set the image in the `CMS_IMAGE` variable in `docker/.env`. The Compose file defaults to `latest` if the variable is not set.
 
 | Tag | Contents | Use it for |
 | --- | --- | --- |
-| `latest` | Both architectures, built from `master` | Trying the demo only. |
-| `latest-amd64`, `latest-arm64` | One architecture, built from `master` | Trying the demo only. |
+| `latest` | Both architectures, built from `main` | Trying the demo only. |
+| `latest-amd64`, `latest-arm64` | One architecture, built from `main` | Trying the demo only. |
 | `sha-<full-commit-sha>` | Both architectures for one commit | Production. |
 | `sha-<full-commit-sha>-amd64`, `sha-<full-commit-sha>-arm64` | One architecture for one commit | Production, on a single-architecture host. |
 
-For production, pin the image to a `sha-` tag, or to a digest such as `ghcr.io/ekozf/areca-cms@sha256:<digest>`. A digest cannot change under you, so it is the most predictable choice. Record the tag or digest before and after each upgrade, because that is the value you roll back to.
+For production, pin the image to a `sha-` tag, or to a digest such as `ghcr.io/seirai-dev/areca-cms@sha256:<digest>`. A digest cannot change under you, so it is the most predictable choice. Record the tag or digest before and after each upgrade, because that is the value you roll back to.
 
 ```sh title="docker/.env"
-CMS_IMAGE=ghcr.io/ekozf/areca-cms:sha-<full-commit-sha>
+CMS_IMAGE=ghcr.io/seirai-dev/areca-cms:sha-<full-commit-sha>
 ```
 
 The PostgreSQL, Redis, RustFS and Mailpit images in the Compose file are also pinned to fixed versions. Change them as separate, deliberate upgrades. A PostgreSQL major version change is not an image swap. It needs a dump and restore, and the project does not provide a script for it.

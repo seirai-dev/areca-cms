@@ -36,7 +36,7 @@ Writer map: w01 start section, w02 editor pages, w03 going-live/library/account,
 
 **5. `docker/compose.yml` drops most operational settings and has unsafe defaults [CONFIRMED]** [w08, w09, w10]
 - Summary: the CMS `environment` block passes none of `RATE_LIMIT_TRUST_PROXY`, `WORKER_ENABLED`, `WORKER_CONCURRENCY`, `LOG_LEVEL`, `ADMIN_MFA_REQUIRED`, `AUTH_EMAIL_PASSWORD_ENABLED`, the SSO/social sign-in variables, `DOKPLOY_ALLOW_INSECURE_HTTP`, or `NODE_OPTIONS`. Values set in `.env` have no effect.
-- Evidence: `docker/compose.yml` cms `environment` block (checked). `S3_ACCESS_KEY` defaults to `areca-demo` (also used by `rustfs`). `CMS_IMAGE` defaults to `ghcr.io/ekozf/areca-cms:latest` (w10). The CMS port is bound to `127.0.0.1` only (w10), while `DEPLOYMENT.md` needs the Dokploy host to reach the CMS.
+- Evidence: `docker/compose.yml` cms `environment` block (checked). `S3_ACCESS_KEY` defaults to `areca-demo` (also used by `rustfs`). `CMS_IMAGE` defaults to `ghcr.io/seirai-dev/areca-cms:latest` (w10). The CMS port is bound to `127.0.0.1` only (w10), while `DEPLOYMENT.md` needs the Dokploy host to reach the CMS.
 - Docs now: `self-hosting/production` and `self-hosting/configuration` tell operators to add the variables to a production copy.
 - Fix: pass the variables through; make `S3_ACCESS_KEY` required like `S3_SECRET_KEY`; pin the default image tag; document the reverse-proxy binding for production.
 

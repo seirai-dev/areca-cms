@@ -1,8 +1,8 @@
 # MCP review: merged PRs #6 and #7
 
-Review scope: [#6](https://github.com/ekozf/areca-cms/pull/6), merged as
+Review scope: [#6](https://github.com/seirai-dev/areca-cms/pull/6), merged as
 `7024899ea03f91bd8bf618a1a3ea5c989a56900e`, and
-[#7](https://github.com/ekozf/areca-cms/pull/7), merged as
+[#7](https://github.com/seirai-dev/areca-cms/pull/7), merged as
 `9de44dc40001ffe9ae47f96d4833a0263272a93e`. Three parallel reviewers inspected
 MCP tools, OAuth and its installed provider, and UI/integration behavior. Findings
 below concern those changes and their interactions; unrelated historical defects

@@ -24,7 +24,7 @@ RUN pnpm --filter @areca/cms build \
 FROM base AS runner
 ENV NODE_ENV=production PORT=3000 HOST=0.0.0.0
 WORKDIR /app/apps/cms
-LABEL org.opencontainers.image.source="https://github.com/ekozf/areca-cms"
+LABEL org.opencontainers.image.source="https://github.com/seirai-dev/areca-cms"
 # Nitro traces runtime dependencies into .output. The startup bundle includes
 # its own dependencies; neither workspace node_modules nor pnpm is needed.
 COPY --from=build --chown=node:node /app/apps/cms/.output ./.output

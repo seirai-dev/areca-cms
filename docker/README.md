@@ -80,7 +80,7 @@ context. Dependency layers are reused across source changes. The runtime runs as
 
 Two workflows build natively on `ubuntu-24.04` (AMD64) and `ubuntu-24.04-arm`
 (ARM64), using separate GitHub Actions BuildKit caches. The AMD64 release workflow
-runs on matching pushes to `master`. It first calls the CI workflow (typecheck,
+runs on matching pushes to `main`. It first calls the CI workflow (typecheck,
 unit tests, secret scan and client bundle scan); only if that passes does it build,
 in parallel, AMD64 and the reusable ARM64 workflow. It only publishes a shared manifest after both builds succeed, using their exact
 digests so architectures always come from the same commit.
@@ -96,12 +96,12 @@ In GitHub's **Actions** tab:
 - Run **CMS Docker ARM64** to rebuild only ARM64 tags. It does not change the
   shared manifest; run the release workflow to update that.
 
-Tags under `ghcr.io/ekozf/areca-cms`:
+Tags under `ghcr.io/seirai-dev/areca-cms`:
 
 | Tag                                                          | Content                                      |
 | ------------------------------------------------------------ | -------------------------------------------- |
-| `latest`                                                     | Both architectures, updated only from `master` |
-| `latest-amd64`, `latest-arm64`                               | Architecture-specific images from `master`   |
+| `latest`                                                     | Both architectures, updated only from `main` |
+| `latest-amd64`, `latest-arm64`                               | Architecture-specific images from `main`   |
 | `sha-<full-commit-sha>`                                      | Both architectures for that commit           |
 | `sha-<full-commit-sha>-amd64`, `sha-<full-commit-sha>-arm64` | A specific commit and architecture           |
 

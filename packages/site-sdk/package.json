@@ -9,13 +9,13 @@
     "sdk",
     "static-site"
   ],
-  "homepage": "https://github.com/ekozf/areca-cms/tree/master/packages/site-sdk#readme",
+  "homepage": "https://github.com/seirai-dev/areca-cms/tree/main/packages/site-sdk#readme",
   "bugs": {
-    "url": "https://github.com/ekozf/areca-cms/issues"
+    "url": "https://github.com/seirai-dev/areca-cms/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ekozf/areca-cms.git",
+    "url": "git+https://github.com/seirai-dev/areca-cms.git",
     "directory": "packages/site-sdk"
   },
   "license": "MIT",

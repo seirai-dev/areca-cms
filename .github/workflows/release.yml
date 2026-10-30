@@ -12,7 +12,7 @@ name: Release packages
 # for this workflow file. Renaming the file breaks publishing.
 on:
   push:
-    branches: [master]
+    branches: [main]
     paths:
       - packages/site-sdk/**
       - packages/skills/**
@@ -44,7 +44,7 @@ env:
 jobs:
   release:
     name: Release ${{ matrix.package }}
-    if: github.ref == 'refs/heads/master'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
@@ -185,14 +185,14 @@ jobs:
             cat "$RUNNER_TEMP/notes.md"
             echo
             echo
-            echo "_This PR is updated on every push to master that touches $NAME, so edits here are overwritten. To force a bump, run the Release packages workflow manually._"
+            echo "_This PR is updated on every push to main that touches $NAME, so edits here are overwritten. To force a bump, run the Release packages workflow manually._"
           } > "$RUNNER_TEMP/body.md"
 
-          pr=$(gh pr list --head "$branch" --base master --state open --json number,isCrossRepository --jq 'map(select(.isCrossRepository | not)) | .[0].number // empty')
+          pr=$(gh pr list --head "$branch" --base main --state open --json number,isCrossRepository --jq 'map(select(.isCrossRepository | not)) | .[0].number // empty')
           if [ -n "$pr" ]; then
             gh pr edit "$pr" --title "$title" --body-file "$RUNNER_TEMP/body.md"
           else
-            gh pr create --head "$branch" --base master --title "$title" --body-file "$RUNNER_TEMP/body.md"
+            gh pr create --head "$branch" --base main --title "$title" --body-file "$RUNNER_TEMP/body.md"
           fi
 
   # Kept apart from the release job so the OIDC token for npm is never
@@ -200,7 +200,7 @@ jobs:
   publish:
     name: Publish ${{ matrix.package }}
     needs: release
-    if: ${{ !cancelled() && github.ref == 'refs/heads/master' }}
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:

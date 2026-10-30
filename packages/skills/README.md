@@ -47,8 +47,8 @@ MCP config is written to the project file for Claude Code (`.mcp.json`), Cursor,
 
 ## Other ways to install
 
-- **Claude Code plugin:** `/plugin marketplace add ekozf/areca-cms`, then `/plugin install areca@areca-cms`.
-- **skills CLI:** `npx skills add ekozf/areca-cms --skill areca-sdk --skill areca-mcp --skill areca-quickstart`.
+- **Claude Code plugin:** `/plugin marketplace add seirai-dev/areca-cms`, then `/plugin install areca@areca-cms`.
+- **skills CLI:** `npx skills add seirai-dev/areca-cms --skill areca-sdk --skill areca-mcp --skill areca-quickstart`.
 - **Manually:** copy `skills/areca-*` from the repository into your agent's skills folder.
 
 ## Development

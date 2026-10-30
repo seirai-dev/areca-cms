@@ -265,7 +265,7 @@ Set `METRICS_TOKEN` in `.env` to enable metrics. The Compose file already passes
 Set `CMS_IMAGE` in `.env` to a commit tag or a digest, not `latest`:
 
 ```sh
-CMS_IMAGE=ghcr.io/ekozf/areca-cms:sha-<full-commit-sha>
+CMS_IMAGE=ghcr.io/seirai-dev/areca-cms:sha-<full-commit-sha>
 ```
 
 A pinned image means a restart never installs a new release by accident. Record the tag before and after each upgrade, because it is your rollback target. See [upgrades](/docs/self-hosting/upgrades).

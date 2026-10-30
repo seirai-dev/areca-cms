@@ -34,7 +34,7 @@ Keep the details in the reference files:
 - [references/frameworks.md](references/frameworks.md): wiring code for TanStack Start, Next.js, Astro and plain Node.
 - [references/first-release.md](references/first-release.md): sample entries, release, pull, checks and troubleshooting.
 
-For API detail, read the `areca-sdk` skill (config, fields, CLI, content API) and the `areca-mcp` skill (tools, roles, workflow). Do not copy their detail into the project. Name the skill and use what it says. If those skills are not installed, read the docs in the `skills/` folder of https://github.com/ekozf/areca-cms instead.
+For API detail, read the `areca-sdk` skill (config, fields, CLI, content API) and the `areca-mcp` skill (tools, roles, workflow). Do not copy their detail into the project. Name the skill and use what it says. If those skills are not installed, read the docs in the `skills/` folder of https://github.com/seirai-dev/areca-cms instead.
 
 ## Ground rules
 
@@ -217,7 +217,7 @@ Keep content up to date:
 
 Add more later: run /areca-quickstart again. It skips what is done.
 Going live: see the areca-sdk skill, references/production.md (Dokploy builds and the health route).
-Docs: https://github.com/ekozf/areca-cms
+Docs: https://github.com/seirai-dev/areca-cms
 ```
 
 Remove lines that do not apply. Mention any step you skipped and why.

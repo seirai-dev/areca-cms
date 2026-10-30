@@ -498,7 +498,7 @@ describe('createDokployAdapter', () => {
     const dispatchedAt = new Date('2026-01-02T00:00:00.000Z')
     const dispatchContext = { ...context, dispatchedAt }
     const gitCommitTitle = {
-      title: 'Merge pull request #13 from ekozf/release/site-sdk',
+      title: 'Merge pull request #13 from seirai-dev/release/site-sdk',
       description: 'Commit: 8917f62a',
     }
     const previous = {

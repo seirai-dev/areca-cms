@@ -2,7 +2,7 @@ name: areca-demo
 
 services:
   cms:
-    image: ${CMS_IMAGE:-ghcr.io/ekozf/areca-cms:latest}
+    image: ${CMS_IMAGE:-ghcr.io/seirai-dev/areca-cms:latest}
     restart: unless-stopped
     init: true
     ports:

@@ -81,7 +81,7 @@ const version = readVersion(root, pkg)
 const tag = tagName(pkg.id, version)
 
 // The commit to publish and tag. Once a package has tags, that is the commit
-// that set the version (the merged release PR), even if master has moved on.
+// that set the version (the merged release PR), even if main has moved on.
 // The first run baselines at HEAD.
 function releaseCommit() {
   const head = git('rev-parse', 'HEAD').trim()

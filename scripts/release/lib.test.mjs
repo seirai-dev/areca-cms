@@ -29,7 +29,7 @@ test('parses conventional commit subjects', () => {
   })
   assert.equal(parseCommit(commit('fix!: drop node 20')).breaking, true)
   assert.equal(parseCommit(commit('fix: x', 'Details\n\nBREAKING CHANGE: renamed export')).breaking, true)
-  assert.equal(parseCommit(commit('Merge pull request #7 from ekozf/x')), null)
+  assert.equal(parseCommit(commit('Merge pull request #7 from seirai-dev/x')), null)
 })
 
 test('only feat, fix, perf and breaking commits release', () => {

@@ -2,7 +2,7 @@
 
 Use the section for the framework detected in step 0. Each section gives the pattern and a small example. The API is in the `areca-sdk` skill. Do not add other helpers.
 
-The reference implementation is the demo site: https://github.com/ekozf/areca-cms/tree/master/examples/demo-site (TanStack Start with Paraglide, two languages, drafts, health route). Copy its patterns, not its copy.
+The reference implementation is the demo site: https://github.com/seirai-dev/areca-cms/tree/main/examples/demo-site (TanStack Start with Paraglide, two languages, drafts, health route). Copy its patterns, not its copy.
 
 Rules for every framework:
 
