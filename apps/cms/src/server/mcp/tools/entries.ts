@@ -53,6 +53,7 @@ import {
   seoPatchFromInput,
   storedStatus,
   summarizeEntry,
+  codeLanguageWarnings,
   toStoredFields,
 } from '../entry-format'
 import type { McpActor } from '../keys'
@@ -503,7 +504,10 @@ export function registerEntryTools(registry: ToolCollector): void {
           locale: target?.locale,
           translations: true,
         }),
-        created.importWarnings,
+        [
+          ...codeLanguageWarnings(col.fields, inputs),
+          ...created.importWarnings,
+        ],
         target,
         shared,
       )
@@ -582,7 +586,10 @@ export function registerEntryTools(registry: ToolCollector): void {
           locale: target?.locale,
           translations: true,
         }),
-        updated.importWarnings,
+        [
+          ...codeLanguageWarnings(col.fields, inputs),
+          ...updated.importWarnings,
+        ],
         target,
         shared,
       )

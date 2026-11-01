@@ -3,6 +3,7 @@ import { ValidationError } from '#/server/content/errors'
 import { SEO_KEY } from '#/lib/seo'
 import { isEditedSinceReady } from '#/features/golive/entry-live-state'
 import { isTranslatable } from '#/lib/content-locale'
+import { CODE_LANGUAGES, isSupportedCodeLanguage } from '#/lib/highlight'
 import type { EntryData, EntryStatus, Field, SiteLanguages } from '#/lib/types'
 
 import {
@@ -153,6 +154,51 @@ function convertValue(
     return value.entryId
   }
   return value
+}
+
+/**
+ * One warning per code block language that is not supported. Such a block is
+ * saved as written, but it is shown without colours.
+ */
+export function codeLanguageWarnings(
+  fields: Field[],
+  input: Record<string, unknown>,
+): string[] {
+  const unknown = new Set<string>()
+  for (const field of fields) {
+    const value = input[field.key]
+    if (field.type !== 'richtext' || typeof value !== 'string') continue
+    const doc = markdownToRichText(value) as { content: CodeScan[] }
+    collectUnknownLanguages(doc.content, unknown)
+  }
+  if (unknown.size === 0) return []
+  const supported = CODE_LANGUAGES.filter(
+    (language) => language.id !== 'plaintext',
+  )
+    .map((language) => language.id)
+    .join(', ')
+  return [...unknown].map(
+    (language) =>
+      `Code block language "${language}" is not supported; it is saved but shown without colours. Supported: ${supported}`,
+  )
+}
+
+type CodeScan = {
+  type?: string
+  attrs?: { language?: unknown }
+  content?: CodeScan[]
+}
+
+function collectUnknownLanguages(nodes: CodeScan[], out: Set<string>): void {
+  for (const node of nodes) {
+    if (node.type === 'codeBlock') {
+      const language = node.attrs?.language
+      if (typeof language === 'string' && !isSupportedCodeLanguage(language)) {
+        out.add(language)
+      }
+    }
+    if (node.content) collectUnknownLanguages(node.content, out)
+  }
 }
 
 /**

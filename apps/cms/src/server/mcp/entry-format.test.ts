@@ -6,6 +6,7 @@ import { ValidationError } from '#/server/content/errors'
 import type { AssetLookup } from './entry-format'
 import {
   agentStatus,
+  codeLanguageWarnings,
   collectAssetIds,
   formatEntry,
   formatSnapshotFields,
@@ -159,6 +160,30 @@ describe('asset references', () => {
     expect(linkAssetRefs(md, lookup())).toBe(
       `Look ![cap](asset:${ASSET_ID}) and ![x](https://example.com/a.png)`,
     )
+  })
+})
+
+describe('codeLanguageWarnings', () => {
+  const body: Field = { key: 'body', label: 'Body', type: 'richtext' }
+
+  it('warns once for each code block language that is not supported', () => {
+    const warnings = codeLanguageWarnings([body], {
+      body: '```cobol\nDISPLAY 1.\n```\n\n```cobol\n2\n```\n\n```foo\n3\n```',
+    })
+    const supported =
+      'ts, tsx, js, jsx, html, css, json, shell, python, php, sql, yaml, markdown, go, rust, diff'
+    expect(warnings).toEqual([
+      `Code block language "cobol" is not supported; it is saved but shown without colours. Supported: ${supported}`,
+      `Code block language "foo" is not supported; it is saved but shown without colours. Supported: ${supported}`,
+    ])
+  })
+
+  it('is silent for supported languages, aliases and plain fences', () => {
+    expect(
+      codeLanguageWarnings([body], {
+        body: '```bash\nls\n```\n\n```typescript\nx\n```\n\n```\nplain\n```',
+      }),
+    ).toEqual([])
   })
 })
 
