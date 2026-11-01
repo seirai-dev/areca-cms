@@ -28,6 +28,9 @@ A section has the same field types as a collection, except `slug`. Its fields ca
 - Use `##` for sections and `###` or `####` for subsections. Other heading levels are clamped.
 - Separate paragraphs with a blank line. `**bold**`, `*italic*`, `[link](https://…)`, lists, `>` quotes and tables all work.
 - Images: `![alt text](asset:<assetId>)`. The asset must be in this client's Library. Read-back keeps the `asset:` form, so the text can be sent again as is.
+- Inline code goes in backticks, such as `` `parse()` `` or `` `--force` ``. It is saved as inline code and read back the same way.
+- Code, commands, file contents and config go in fenced blocks with a language: a fence named `ts`, `shell`, `json` and so on. Read-back keeps the fences, so the text can be sent again as is. Never paste code as plain paragraphs.
+- Language ids: `ts`, `tsx`, `js`, `jsx`, `html`, `css`, `json`, `shell`, `python`, `php`, `sql`, `yaml`, `markdown`, `go`, `rust`, `diff`, `plaintext`. Aliases such as `bash`, `sh`, `typescript` and `py` are stored as their id (`shell`, `ts`, `python`). A fence with no language is plain text. An unknown language is saved as written and shown without colours. The result lists a warning that names the supported ids, so fix the fence name if you meant one of them.
 - Never send HTML: it is not rendered, and the tags end up as visible text. A full https image URL is copied into the Library on save; if the copy fails it stays external and the result lists it in `warnings`. Uploaded assets are still better, because you set their alt text.
 
 ## SEO object (`seo` on create/update)

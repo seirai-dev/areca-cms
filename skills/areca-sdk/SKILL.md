@@ -174,6 +174,18 @@ import { richTextDocument } from "@areca-cms/site-sdk";
 
 `RichTextValue` = `{ document, markdown, html, json }`. Outside React, use `richTextHtml(value)`, which is trusted CMS HTML, or `richTextMarkdown(value)`. Keep `img { max-width: 100% }` and don't force `width: 100%`, because editors set image sizes.
 
+**Code blocks.** `html` already marks code: inline code is a plain `<code>`, and each code block is `<pre class="tm-code" data-lang="ts">` with `<span class="th-token th-keyword">` tokens. The SDK adds no colours, so the site supplies the theme. Add `@tanstack/highlight` (`pnpm add @tanstack/highlight`, not an SDK dependency), then build the CSS once:
+
+```ts
+import { createThemeCss } from "@tanstack/highlight/theme";
+import { githubDarkTheme } from "@tanstack/highlight/themes/github-dark";
+import { githubLightTheme } from "@tanstack/highlight/themes/github-light";
+
+export const codeThemeCss = createThemeCss({ light: githubLightTheme, dark: githubDarkTheme, codeBlockSelector: ".tm-code" });
+```
+
+Save the string as a stylesheet and import it globally. Light applies on `:root`, dark under `.dark` (pass `lightSelector` / `darkSelector` to change them). For your own colours, style the `th-*` classes (`th-token`, `th-keyword`, `th-string`, `th-comment` and the rest of the token list in [references/api.md](references/api.md)) instead. `document` code nodes are not highlighted. To colour them in a React `Markdown` renderer, pass `highlighter={createTanStackMarkdownHighlighter(createHighlighter({ languages: [ts] }))}` from `@tanstack/highlight/markdown` and `@tanstack/highlight/core`. Import only the languages you use.
+
 ## SEO
 
 - TanStack Router: `head: ({ loaderData }) => seoHead(loaderData?.post.seo, { titleTemplate: "%s · Acme", siteName: "Acme" })`.
