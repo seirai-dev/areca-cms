@@ -794,6 +794,9 @@ html.dark,
 
 .prose pre.code-block > code {
   display: block;
+  /* Tiptap sets pre-wrap inline on node view content; long lines scroll
+     sideways instead, so indentation stays readable on narrow screens. */
+  white-space: pre !important;
 }
 
 .code-block-language {
