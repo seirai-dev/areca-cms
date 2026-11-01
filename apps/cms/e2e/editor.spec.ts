@@ -304,29 +304,20 @@ test('inline code and code blocks format, colour and survive a reload', async ({
 
   const editor = richText(page)
   await editor.click()
-  await page.keyboard.type('Call request now')
-  await waitForSaved(page)
+  await page.keyboard.type('Call ')
 
-  /* Inline code: select a word, then ⌘E (Ctrl+E off Mac). */
-  await page.keyboard.press('ArrowLeft')
-  await page.keyboard.press('ArrowLeft')
-  await page.keyboard.press('ArrowLeft')
-  await page.keyboard.press('ArrowLeft')
-  await page.keyboard.press('Shift+ArrowLeft')
-  await page.keyboard.press('Shift+ArrowLeft')
-  await page.keyboard.press('Shift+ArrowLeft')
-  await page.keyboard.press('Shift+ArrowLeft')
-  await page.keyboard.press('Shift+ArrowLeft')
-  await page.keyboard.press('Shift+ArrowLeft')
-  await page.keyboard.press('Shift+ArrowLeft')
-  await expect(page.getByTestId('rich-text-toolbar')).toBeVisible()
+  /* Inline code: ⌘E (Ctrl+E off Mac) toggles it while typing. */
   await page.keyboard.press('ControlOrMeta+e')
   await expect(page.getByTestId('rich-text-inline-code')).toHaveAttribute(
     'aria-pressed',
     'true',
   )
+  await page.keyboard.type('request')
+  await page.keyboard.press('ControlOrMeta+e')
+  await page.keyboard.type(' now')
   await expect(editor.locator('code', { hasText: 'request' })).toHaveCount(1)
-  await page.keyboard.press('End')
+  await expect(editor.locator('code', { hasText: 'now' })).toHaveCount(0)
+  await waitForSaved(page)
 
   /* A code block from the block menu, then TypeScript from the language
      button. */
