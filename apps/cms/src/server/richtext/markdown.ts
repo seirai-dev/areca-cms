@@ -232,6 +232,8 @@ function extractPlain(node: PMNode): string {
   if (node.type === 'image')
     return typeof node.attrs?.alt === 'string' ? node.attrs.alt : ''
   if (node.type === 'horizontalRule') return ''
+  // Code blocks are not prose; they would fill descriptions with source code.
+  if (node.type === 'codeBlock') return ''
   const parts = (node.content ?? []).map(extractPlain)
   if (BLOCK_JOIN.has(node.type)) {
     return parts.filter((part) => part.length > 0).join('\n')

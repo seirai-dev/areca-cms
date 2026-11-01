@@ -487,7 +487,7 @@ describe('convertRichText', () => {
 })
 
 describe('richTextPlainText', () => {
-  it('extracts searchable text', () => {
+  it('extracts prose text and skips code blocks', () => {
     expect(richTextPlainText(representativeDoc)).toBe(
       [
         'Hello',
@@ -497,7 +497,6 @@ describe('richTextPlainText', () => {
         'One',
         'Two',
         'Quoted',
-        'const x = 1',
         'A photo',
         'Line',
         'break',

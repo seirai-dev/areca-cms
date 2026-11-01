@@ -172,3 +172,31 @@ describe('validator and marks', () => {
     expect(errors).toContain('Unknown mark type "underline"')
   })
 })
+
+describe('plain text for descriptions', () => {
+  it('skips code blocks and keeps inline code', async () => {
+    const { richTextPlainText } = await import('./index')
+    const { plainTextOf } = await import('#/features/editor/seo-panel')
+    const doc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'Call ' },
+            { type: 'text', text: 'getPost', marks: [{ type: 'code' }] },
+            { type: 'text', text: ' on the server.' },
+          ],
+        },
+        {
+          type: 'codeBlock',
+          attrs: { language: 'ts' },
+          content: [{ type: 'text', text: 'import { x } from "y"' }],
+        },
+        { type: 'paragraph', content: [{ type: 'text', text: 'Done.' }] },
+      ],
+    }
+    expect(richTextPlainText(doc)).toBe('Call getPost on the server.\nDone.')
+    expect(plainTextOf(doc)).toBe('Call getPost on the server. Done.')
+  })
+})
