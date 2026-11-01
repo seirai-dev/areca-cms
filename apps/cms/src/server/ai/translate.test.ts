@@ -20,6 +20,8 @@ const {
   fromTranslatedMarkdown,
   normalizeTranslation,
   planTranslation,
+  protectCode,
+  restoreCode,
   translateContent,
   translationRequest,
   TRANSLATE_SYSTEM_PROMPT,
@@ -218,6 +220,96 @@ describe('fromTranslatedMarkdown', () => {
       assets,
     )
     expect(doc).toBeNull()
+  })
+})
+
+describe('code in rich text', () => {
+  const codeBody = markdownToRichText(
+    'Run `npm i` first.\n\n```ts\n// Dutch comment\nconst a = `x`\n```',
+  )
+  const codeSource: EntryData = { ...source, body: codeBody }
+
+  it('protects fenced blocks and inline code, and restores them verbatim', () => {
+    const { markdown, code } = protectCode(
+      'Run `npm i` first.\n\n```ts\n// Dutch comment\nconst a = `x`\n```',
+    )
+    // Fenced blocks are protected first, so they take the lower numbers.
+    expect(code).toEqual([
+      '```ts\n// Dutch comment\nconst a = `x`\n```',
+      '`npm i`',
+    ])
+    expect(markdown).toBe('Run ⟦code-2⟧ first.\n\n⟦code-1⟧')
+    expect(restoreCode(markdown, code)).toBe(
+      'Run `npm i` first.\n\n```ts\n// Dutch comment\nconst a = `x`\n```',
+    )
+  })
+
+  it('sends placeholders to the model, never the code', () => {
+    const plan = planTranslation({
+      fields,
+      source: codeSource,
+      target: {},
+      seoEnabled: false,
+      explicit: ['body'],
+      assets,
+    })
+    const item = plan.items.find((entry) => entry.key === 'body')
+    expect(item?.kind).toBe('richtext')
+    if (item?.kind !== 'richtext') return
+    expect(item.source).not.toContain('npm i')
+    expect(item.source).not.toContain('Dutch comment')
+    expect(item.source).toContain('⟦code-1⟧')
+    expect(item.source).toContain('⟦code-2⟧')
+  })
+
+  it('restores the code the translation kept, byte for byte', () => {
+    const doc = fromTranslatedMarkdown(
+      'Voer ⟦code-1⟧ uit.\n\n⟦code-2⟧',
+      'Run ⟦code-1⟧ first.\n\n⟦code-2⟧',
+      assets,
+      ['`npm i`', '```ts\n// Dutch comment\nconst a = `x`\n```'],
+    )
+    expect(JSON.stringify(doc)).toContain('"text":"npm i"')
+    expect(JSON.stringify(doc)).toContain('// Dutch comment')
+    expect(JSON.stringify(doc)).toContain('"language":"ts"')
+  })
+
+  it('skips the field when a placeholder is missing or duplicated', () => {
+    const code = ['`npm i`']
+    expect(
+      fromTranslatedMarkdown('Voer uit.', 'Run ⟦code-1⟧.', assets, code),
+    ).toBeNull()
+    expect(
+      fromTranslatedMarkdown(
+        '⟦code-1⟧ and ⟦code-1⟧',
+        'Run ⟦code-1⟧.',
+        assets,
+        code,
+      ),
+    ).toBeNull()
+    expect(
+      fromTranslatedMarkdown('⟦code-9⟧', 'Run ⟦code-1⟧.', assets, code),
+    ).toBeNull()
+
+    const result = normalizeTranslation(
+      planTranslation({
+        fields,
+        source: codeSource,
+        target: {},
+        seoEnabled: false,
+        explicit: ['body'],
+        assets,
+      }).items,
+      { body: 'Voer uit.\n\n⟦code-2⟧' },
+      assets,
+    )
+    expect(result.values).not.toHaveProperty('body')
+    expect(result.skipped).toContain('body')
+  })
+
+  it('tells the model to keep placeholders unchanged', () => {
+    expect(TRANSLATE_SYSTEM_PROMPT).toContain('⟦code-1⟧')
+    expect(TRANSLATE_SYSTEM_PROMPT).toContain('Copy each placeholder exactly')
   })
 })
 

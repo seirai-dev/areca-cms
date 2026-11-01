@@ -8,6 +8,7 @@ import {
   ArrowUUpRight,
   CaretDown,
   Code,
+  CodeSimple,
   Columns,
   ColumnsPlusRight,
   Image,
@@ -58,6 +59,11 @@ import { richTextExtensions } from '#/server/richtext/extensions'
 import { MediaPickerDialog } from '../media-picker'
 import type { MediaAsset } from '../media-picker'
 
+import { editorExtensions } from './code-block-extension'
+
+/** The shared server list with the editor's code block (see code-block-extension). */
+const EDITOR_EXTENSIONS = editorExtensions(richTextExtensions)
+
 function useMod() {
   const [mod, setMod] = React.useState('Ctrl+')
   React.useEffect(() => {
@@ -83,6 +89,7 @@ const EMPTY_STATE = {
   block: 'paragraph' as BlockType,
   bold: false,
   italic: false,
+  code: false,
   link: false,
   bulletList: false,
   orderedList: false,
@@ -232,7 +239,7 @@ export function RichTextEditor({
   // TipTap writes its base ProseMirror stylesheet into <head>; it needs the nonce.
   const cspNonce = useCspNonce()
   const editor = useEditor({
-    extensions: richTextExtensions,
+    extensions: EDITOR_EXTENSIONS,
     content: (value as object | null) ?? emptyRichText(),
     immediatelyRender: false,
     injectNonce: cspNonce,
@@ -266,6 +273,7 @@ export function RichTextEditor({
             block: currentBlock(e),
             bold: e.isActive('bold'),
             italic: e.isActive('italic'),
+            code: e.isActive('code'),
             link: e.isActive('link'),
             bulletList: e.isActive('bulletList'),
             orderedList: e.isActive('orderedList'),
@@ -612,6 +620,7 @@ export function RichTextEditor({
             label={m.editor_toolbar_bold()}
             shortcut={`${mod}B`}
             active={state.bold}
+            disabled={state.code}
             onClick={() => chain().toggleBold().run()}
           >
             <TextB weight="bold" />
@@ -620,9 +629,19 @@ export function RichTextEditor({
             label={m.editor_toolbar_italic()}
             shortcut={`${mod}I`}
             active={state.italic}
+            disabled={state.code}
             onClick={() => chain().toggleItalic().run()}
           >
             <TextItalic weight="bold" />
+          </BarButton>
+          <BarButton
+            label={m.editor_toolbar_inline_code()}
+            shortcut={`${mod}E`}
+            active={state.code}
+            onClick={() => chain().toggleCode().run()}
+            data-testid="rich-text-inline-code"
+          >
+            <CodeSimple weight="bold" />
           </BarButton>
           <Popover
             open={linkOpen}
@@ -866,6 +885,7 @@ export function RichTextEditor({
         <BarButton
           label={m.editor_toolbar_bold()}
           active={state.bold}
+          disabled={state.code}
           onClick={() => chain().toggleBold().run()}
         >
           <TextB weight="bold" />
@@ -873,9 +893,18 @@ export function RichTextEditor({
         <BarButton
           label={m.editor_toolbar_italic()}
           active={state.italic}
+          disabled={state.code}
           onClick={() => chain().toggleItalic().run()}
         >
           <TextItalic weight="bold" />
+        </BarButton>
+        <BarButton
+          label={m.editor_toolbar_inline_code()}
+          shortcut={`${mod}E`}
+          active={state.code}
+          onClick={() => chain().toggleCode().run()}
+        >
+          <CodeSimple weight="bold" />
         </BarButton>
         <BarButton
           label={

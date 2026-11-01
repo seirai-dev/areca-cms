@@ -38,11 +38,30 @@ function destination(value: string): string {
   )
 }
 
+/**
+ * A code span whose backtick run cannot close inside the text. Padding with a
+ * space keeps leading or trailing backticks, and edge spaces, from being
+ * trimmed by the parser.
+ */
+function codeSpan(text: string): string {
+  const runs = text.match(/`+/g) ?? []
+  const fence = '`'.repeat(Math.max(1, ...runs.map((run) => run.length + 1)))
+  const padded =
+    text.startsWith('`') ||
+    text.endsWith('`') ||
+    (text.startsWith(' ') && text.endsWith(' ') && text.trim().length > 0)
+  const pad = padded ? ' ' : ''
+  return `${fence}${pad}${text}${pad}${fence}`
+}
+
 function wrapMarks(text: string, marks: Mark[] | undefined): string {
   if (!marks?.length) return text
   let out = text
-  if (marks.some((mark) => mark.type === 'italic')) out = `_${out}_`
-  if (marks.some((mark) => mark.type === 'bold')) out = `**${out}**`
+  // Code takes no bold or italic, so their markers are never added to it.
+  if (!marks.some((mark) => mark.type === 'code')) {
+    if (marks.some((mark) => mark.type === 'italic')) out = `_${out}_`
+    if (marks.some((mark) => mark.type === 'bold')) out = `**${out}**`
+  }
   const link = marks.find((mark) => mark.type === 'link')
   if (link) {
     const href = typeof link.attrs?.href === 'string' ? link.attrs.href : ''
@@ -59,8 +78,11 @@ function serializeInline(nodes: PMNode[] | undefined): string {
 function serializeInlineNode(node: PMNode): string {
   // TanStack Markdown only recognises backslash hard breaks.
   if (node.type === 'hardBreak') return '\\\n'
-  if (node.type === 'text')
-    return wrapMarks(escapeText(node.text ?? ''), node.marks)
+  if (node.type === 'text') {
+    const text = node.text ?? ''
+    const isCode = node.marks?.some((mark) => mark.type === 'code')
+    return wrapMarks(isCode ? codeSpan(text) : escapeText(text), node.marks)
+  }
   if (node.content) return serializeInline(node.content)
   return ''
 }
@@ -210,6 +232,8 @@ function extractPlain(node: PMNode): string {
   if (node.type === 'image')
     return typeof node.attrs?.alt === 'string' ? node.attrs.alt : ''
   if (node.type === 'horizontalRule') return ''
+  // Code blocks are not prose; they would fill descriptions with source code.
+  if (node.type === 'codeBlock') return ''
   const parts = (node.content ?? []).map(extractPlain)
   if (BLOCK_JOIN.has(node.type)) {
     return parts.filter((part) => part.length > 0).join('\n')

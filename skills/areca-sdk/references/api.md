@@ -19,7 +19,7 @@ ESM only. Import paths and their exports:
 | `seoJsonLd` | `(seo) => string[]` | Escaped JSON-LD strings |
 | `richTextDocument` | `(value: RichTextValue \| null \| undefined) => MarkdownDocument` | Parses `markdown` for old snapshots; empty root for null |
 | `richTextMarkdown` | `(value) => string` | `''` when empty |
-| `richTextHtml` | `(value) => string` | Static HTML; trusted CMS output only |
+| `richTextHtml` | `(value) => string` | Static HTML; trusted CMS output only. Code blocks carry `th-*` token classes and no colours; inline code is a plain `<code>` |
 
 `SeoHeadOptions` = `{ titleTemplate?: string /* contains %s */ | ((title: string) => string); siteName?: string; locale?: string; alternates?: Partial<Record<string, string>>; main?: string }`. `locale` sets `og:locale`, `alternates` become `hreflang` links and `og:locale:alternate`, and `main` makes its alternate `x-default`.
 
@@ -109,7 +109,7 @@ Typed content types (main entry, generated against `Register`):
 ## Other subpaths
 
 - `@areca-cms/site-sdk/seo`: `seoHead`, `seoHeadHtml`, `seoJsonLd`, `ogLocale(tag)` (`nl-BE` gives `nl_BE` for `og:locale`) and their types.
-- `@areca-cms/site-sdk/rich-text`: `richTextDocument`, `richTextMarkdown`, `richTextHtml`.
+- `@areca-cms/site-sdk/rich-text`: `richTextDocument`, `richTextMarkdown`, `richTextHtml`. For code colours, install `@tanstack/highlight` in the site and generate the theme with `createThemeCss` from `@tanstack/highlight/theme` (`light: githubLightTheme`, `dark: githubDarkTheme` from `@tanstack/highlight/themes/*`, `codeBlockSelector: ".tm-code"`). Token classes: `th-token` plus one kind class, one of `th-attr`, `th-code-inline`, `th-command`, `th-comment`, `th-deleted`, `th-function`, `th-heading`, `th-inserted`, `th-keyword`, `th-link`, `th-literal`, `th-meta`, `th-number`, `th-operator`, `th-property`, `th-selector`, `th-string`, `th-tag`, `th-type`, `th-variable`.
 - `@areca-cms/site-sdk/rich-text-react`: `richTextComponents(components?: MarkdownComponents) => MarkdownComponents`. Wraps `img` so editor sizes are kept. Needs `react` (optional peer) and `@tanstack/markdown@1.0.0`.
 
 ## SeoMeta (snapshot `entry.seo`, already resolved with fallbacks)

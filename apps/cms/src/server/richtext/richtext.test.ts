@@ -283,7 +283,9 @@ describe('convertRichText', () => {
     expect(result.html).toContain(
       '<pre class="tm-code" data-lang="ts"><code class="language-ts">',
     )
-    expect(result.html).toContain('const x = 1')
+    expect(result.html).toContain(
+      '<span class="th-token th-keyword">const</span> x = ',
+    )
     expect(result.html).toContain(`src="${photoSrc}"`)
     expect(result.html).toContain('alt="A photo"')
     expect(result.html).toContain('width="480"')
@@ -485,7 +487,7 @@ describe('convertRichText', () => {
 })
 
 describe('richTextPlainText', () => {
-  it('extracts searchable text', () => {
+  it('extracts prose text and skips code blocks', () => {
     expect(richTextPlainText(representativeDoc)).toBe(
       [
         'Hello',
@@ -495,7 +497,6 @@ describe('richTextPlainText', () => {
         'One',
         'Two',
         'Quoted',
-        'const x = 1',
         'A photo',
         'Line',
         'break',

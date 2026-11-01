@@ -9,6 +9,7 @@ import type {
 } from '@tanstack/markdown'
 
 import { ID_MAX_LENGTH } from '#/lib/content-limits'
+import { normalizeCodeLanguage } from '#/lib/highlight'
 
 import { isAllowedImageSrc, isAllowedLinkHref } from './allowlist'
 import { serializeMarkdown } from './markdown'
@@ -32,6 +33,7 @@ export type MarkdownToRichTextOptions = {
 type Mark =
   | { type: 'bold' }
   | { type: 'italic' }
+  | { type: 'code' }
   | { type: 'link'; attrs: { href: string } }
 
 type PMNode = {
@@ -53,7 +55,8 @@ const ASSET_SRC_PREFIX = 'asset:'
 const MARK_ORDER: Record<Mark['type'], number> = {
   bold: 0,
   italic: 1,
-  link: 2,
+  code: 2,
+  link: 3,
 }
 
 function emptyDoc(): RichTextDoc {
@@ -62,9 +65,18 @@ function emptyDoc(): RichTextDoc {
 
 function withMark(marks: Mark[], mark: Mark): Mark[] {
   if (marks.some((existing) => existing.type === mark.type)) return marks
-  return [...marks, mark].sort(
-    (a, b) => MARK_ORDER[a.type] - MARK_ORDER[b.type],
-  )
+  // Code takes no bold or italic: they yield to code in either order.
+  const isEmphasis = mark.type === 'bold' || mark.type === 'italic'
+  if (isEmphasis && marks.some((existing) => existing.type === 'code')) {
+    return marks
+  }
+  const base =
+    mark.type === 'code'
+      ? marks.filter(
+          (existing) => existing.type !== 'bold' && existing.type !== 'italic',
+        )
+      : marks
+  return [...base, mark].sort((a, b) => MARK_ORDER[a.type] - MARK_ORDER[b.type])
 }
 
 function sameMarks(a: Mark[] | undefined, b: Mark[]): boolean {
@@ -123,9 +135,13 @@ function inlinePieces(
   for (const node of nodes) {
     switch (node.type) {
       case 'text':
+        pushText(out, node.value, marks)
+        break
       case 'inlineCode':
+        pushText(out, node.value, withMark(marks, { type: 'code' }))
+        break
       case 'inlineHtml':
-        // Code spans and raw HTML are not supported; keep their literal text.
+        // Raw HTML is not supported; keep its literal text.
         pushText(out, node.value, marks)
         break
       case 'strong':
@@ -308,11 +324,11 @@ function blockNodes(block: BlockNode, ctx: Converter): PMNode[] {
     case 'paragraph':
       return piecesToBlocks(inlinePieces(block.children, [], ctx))
     case 'code': {
-      const lang = block.lang?.trim()
+      const language = normalizeCodeLanguage(block.lang)
       return [
         {
           type: 'codeBlock',
-          ...(lang && { attrs: { language: lang } }),
+          ...(language && { attrs: { language } }),
           ...(block.value.length > 0 && {
             content: [{ type: 'text', text: block.value }],
           }),

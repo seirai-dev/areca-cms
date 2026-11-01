@@ -121,9 +121,39 @@ describe('markdownToRichText: basics', () => {
   })
 
   it('keeps text of unsupported inline constructs as plain text', () => {
-    const [paragraph] = doc('a ~~gone~~ and `code` b').content
+    const [paragraph] = doc('a ~~gone~~ and b').content
+    expect(paragraph.content).toEqual([{ type: 'text', text: 'a gone and b' }])
+  })
+
+  it('maps inline code to a code mark', () => {
+    const [paragraph] = doc('use `npm i` now').content
     expect(paragraph.content).toEqual([
-      { type: 'text', text: 'a gone and code b' },
+      { type: 'text', text: 'use ' },
+      { type: 'text', text: 'npm i', marks: [{ type: 'code' }] },
+      { type: 'text', text: ' now' },
+    ])
+    expect(validateRichText(doc('use `npm i` now'))).toEqual([])
+  })
+
+  it('keeps a link around inline code', () => {
+    const [paragraph] = doc('see [`parse()`](https://example.com)').content
+    expect(paragraph.content?.at(-1)).toEqual({
+      type: 'text',
+      text: 'parse()',
+      marks: [
+        { type: 'code' },
+        { type: 'link', attrs: { href: 'https://example.com' } },
+      ],
+    })
+  })
+
+  it('does not put bold or italic inside inline code', () => {
+    const [paragraph] = doc('**bold `code`** and `*raw*`').content
+    expect(paragraph.content).toEqual([
+      { type: 'text', text: 'bold ', marks: [{ type: 'bold' }] },
+      { type: 'text', text: 'code', marks: [{ type: 'code' }] },
+      { type: 'text', text: ' and ' },
+      { type: 'text', text: '*raw*', marks: [{ type: 'code' }] },
     ])
   })
 
@@ -319,6 +349,16 @@ describe('markdownToRichText: blocks', () => {
     const result = doc('> quoted **text**')
     expect(result.content[0].type).toBe('blockquote')
     expect(result.content[0].content?.[0].type).toBe('paragraph')
+  })
+
+  it('normalises fence languages and keeps unknown ones verbatim', () => {
+    const language = (fence: string) =>
+      doc(`${fence}\nx\n\`\`\``).content[0].attrs?.language
+    expect(language('```bash')).toBe('shell')
+    expect(language('```typescript')).toBe('ts')
+    expect(language('```TS')).toBe('ts')
+    expect(language('```text')).toBeUndefined()
+    expect(language('```cobol')).toBe('cobol')
   })
 
   it('maps code blocks with language and without content when empty', () => {

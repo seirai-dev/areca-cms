@@ -47,7 +47,7 @@ export const getPost = createServerFn({ method: 'GET' })
 
 ## 7.2 Show rich text
 
-The body is stored as rich text. The SDK turns it into a document, and a small library draws it. You choose how each part looks.
+The body is stored as rich text. The SDK turns it into a document, and a small library draws it. You choose how each part looks. If the body has code blocks, they arrive without colours until you add the code theme; [Code blocks](/docs/sdk/rich-text#code-blocks) shows how.
 
 Create `src/components/article-body.tsx`:
 

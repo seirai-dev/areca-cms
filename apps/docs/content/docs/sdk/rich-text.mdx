@@ -98,6 +98,89 @@ const html = richTextHtml(article.data.body)
 
 The HTML is generated from the same tree as `document`, so the two always match. It does not go through your components map, so you cannot restyle elements with it. Prefer `richTextDocument` with a renderer whenever you can.
 
+## Code blocks
+
+Editors can mark inline code and add fenced code blocks with a language. The CMS publishes both in each of the three properties:
+
+| Form | `html` | `markdown` | `document` |
+| --- | --- | --- | --- |
+| Inline code | `<code>npm install</code>`, not highlighted | `` `npm install` `` | an `inlineCode` node |
+| Code block | `<pre class="tm-code" data-lang="ts"><code class="language-ts">` with highlighted `<span>`s | a fence: ` ```ts ` | a `code` node with `lang` and `value`, not highlighted |
+
+Highlighting happens at publish time, so `html` already has the token classes. Each token is a `<span class="th-token th-*">`: `th-token` is on every token, and the second class names its kind (`th-keyword`, `th-string`, `th-comment` and so on). The published HTML has no colours or inline styles. Your CSS chooses them.
+
+The language ids are:
+
+| Id | Language |
+| --- | --- |
+| `ts`, `tsx` | TypeScript, TSX |
+| `js`, `jsx` | JavaScript, JSX |
+| `html`, `css`, `json` | HTML, CSS, JSON |
+| `shell` | Shell (`bash`, `sh` and `zsh` are stored as `shell`) |
+| `python`, `php`, `go`, `rust` | Python, PHP, Go, Rust |
+| `sql`, `yaml`, `markdown`, `diff` | SQL, YAML, Markdown, Diff |
+| `plaintext` | No language: a fence without a name, shown without colours |
+
+A code block in any other language is kept as written and shown without colours.
+
+### Colour the code
+
+`@tanstack/highlight` generates the CSS for these classes. Install it in your website project. The SDK does not depend on it:
+
+<Tabs items={['pnpm', 'npm']}>
+  <Tab value="pnpm">`pnpm add @tanstack/highlight`</Tab>
+  <Tab value="npm">`npm install @tanstack/highlight`</Tab>
+</Tabs>
+
+```ts title="app/lib/code-theme.ts"
+import { createThemeCss } from '@tanstack/highlight/theme'
+import { githubDarkTheme } from '@tanstack/highlight/themes/github-dark'
+import { githubLightTheme } from '@tanstack/highlight/themes/github-light'
+
+export const codeThemeCss = createThemeCss({
+  light: githubLightTheme,
+  dark: githubDarkTheme,
+  codeBlockSelector: '.tm-code',
+})
+```
+
+`createThemeCss` returns a CSS string. Save it as a stylesheet and import it from your global CSS. Light colours apply on `:root`, and dark colours apply under `.dark`. If your site switches themes another way, pass `lightSelector` or `darkSelector`. With `codeBlockSelector: '.tm-code'`, the generated rules also give code blocks their padding, background and horizontal scrolling.
+
+To use your own colours, skip `createThemeCss` and write rules for the token classes:
+
+```css title="app/styles/code.css"
+.tm-code { overflow-x: auto; padding: 1rem; background: #f6f8fa; }
+.th-keyword { color: #cf222e; }
+.th-string { color: #0a7f64; }
+.th-comment { color: #6e7781; font-style: italic; }
+```
+
+The token classes are `th-token`, `th-attr`, `th-code-inline`, `th-command`, `th-comment`, `th-deleted`, `th-function`, `th-heading`, `th-inserted`, `th-keyword`, `th-link`, `th-literal`, `th-meta`, `th-number`, `th-operator`, `th-property`, `th-selector`, `th-string`, `th-tag`, `th-type` and `th-variable`. Inline code is not highlighted, so style `code` in your own CSS.
+
+### Highlight `document` yourself
+
+If you render `richTextDocument` with `Markdown`, the code blocks come out without token spans. To colour them, create a highlighter with the languages you need and pass it to the renderer. `createTanStackMarkdownHighlighter` adapts it to the renderer's `highlighter` option:
+
+```tsx title="components/article-body.tsx"
+import { Markdown } from '@tanstack/markdown/react'
+import { createHighlighter } from '@tanstack/highlight/core'
+import { createTanStackMarkdownHighlighter } from '@tanstack/highlight/markdown'
+import { js } from '@tanstack/highlight/languages/js'
+import { ts } from '@tanstack/highlight/languages/ts'
+import { richTextDocument } from '@areca-cms/site-sdk/rich-text'
+import type { RichTextValue } from '@areca-cms/site-sdk'
+
+const highlightCode = createTanStackMarkdownHighlighter(
+  createHighlighter({ languages: [ts, js] }),
+)
+
+export function ArticleBody({ body }: { body: RichTextValue | null | undefined }) {
+  return <Markdown highlighter={highlightCode}>{richTextDocument(body)}</Markdown>
+}
+```
+
+Import only the languages you use. The package root imports every grammar, which makes the bundle much larger. Keep the CSS from the previous step, because the classes are the same.
+
 ## Safety
 
 - **Editors choose from a fixed set of formatting.** The body can hold headings, lists, block quotes, code blocks, tables, images, bold, italic and links. It cannot hold arbitrary HTML, so there is no `<script>` tag to pass through.
