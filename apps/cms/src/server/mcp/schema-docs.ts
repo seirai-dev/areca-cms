@@ -1,6 +1,8 @@
 import { isTranslatable } from '#/lib/content-locale'
 import type { Field, FieldType } from '#/lib/types'
 
+import { CODE_FORMAT } from './rich-text-guide'
+
 /**
  * Agent-facing documentation of content fields: the format each field type
  * takes, and an example payload an agent can copy and adapt.
@@ -11,7 +13,8 @@ const TYPE_FORMAT: Record<FieldType, string> = {
   textarea:
     'Plain text, several lines allowed, up to 50000 characters. No Markdown.',
   richtext:
-    'Markdown string. Section headings start with ## (### and #### for subsections; other levels are clamped), paragraphs separated by a blank line, **bold**, *italic*, [links](https://...), bullet and numbered lists, > blockquotes, tables, and images as ![alt text](asset:<assetId>). Raw HTML is dropped. Images from a full https URL also work but prefer uploaded assets.',
+    'Markdown string. Section headings start with ## (### and #### for subsections; other levels are clamped), paragraphs separated by a blank line, **bold**, *italic*, [links](https://...), bullet and numbered lists, > blockquotes, tables, and images as ![alt text](asset:<assetId>). Raw HTML is dropped. Images from a full https URL also work but prefer uploaded assets. ' +
+    CODE_FORMAT,
   image:
     'Asset id string from list_assets or upload_asset_from_url. Alt text comes from the asset (set it with update_asset_alt).',
   date: 'Calendar date as YYYY-MM-DD, e.g. 2026-10-10. Content only: a date field does not schedule the entry.',
@@ -77,10 +80,14 @@ const EXAMPLE_MARKDOWN = [
   '',
   '## The main idea',
   '',
-  'A paragraph with **bold** text and a [link](https://example.com).',
+  'A paragraph with **bold** text, `inline code` and a [link](https://example.com).',
   '',
   '- First point',
   '- Second point',
+  '',
+  '```ts',
+  "const greeting = 'hello'",
+  '```',
   '',
   '![Describe what the image shows](asset:<assetId>)',
   '',

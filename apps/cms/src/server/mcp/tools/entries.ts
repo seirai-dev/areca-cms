@@ -444,7 +444,7 @@ export function registerEntryTools(registry: ToolCollector): void {
     name: 'create_entry',
     title: 'Create entry',
     description:
-      'Creates a draft entry in a collection. Call get_collection_schema first for the field formats. The slug is a field of the collection: the one with type "slug" (usually key "slug"). Put it in fields as lowercase letters, numbers and dashes, unique within the collection, e.g. fields.slug "my-first-post". Rich text takes Markdown, images take an asset id, and seo takes the SEO object. The new draft is not live: an owner marks it ready, and it goes live with the next release. Returns the saved entry and a preview URL.',
+      'Creates a draft entry in a collection. Call get_collection_schema first for the field formats. The slug is a field of the collection: the one with type "slug" (usually key "slug"). Put it in fields as lowercase letters, numbers and dashes, unique within the collection, e.g. fields.slug "my-first-post". Rich text takes Markdown (with `inline code` and fenced code blocks with a language), images take an asset id, and seo takes the SEO object. The new draft is not live: an owner marks it ready, and it goes live with the next release. Returns the saved entry and a preview URL.',
     inputSchema: z.object({
       collection: collectionKey,
       fields: fieldsInputSchema.optional(),

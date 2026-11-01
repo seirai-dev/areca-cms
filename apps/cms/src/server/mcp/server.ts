@@ -3,6 +3,10 @@ import { z } from '#/lib/zod'
 
 import { credentialPhrase } from './guard'
 import type { McpActor } from './keys'
+import {
+  CODE_BLOCK_INSTRUCTION,
+  RICH_TEXT_MARKDOWN_INSTRUCTION,
+} from './rich-text-guide'
 import { mcpResourceUrl } from './oauth-resource'
 import type { McpSiteContext } from './site-context'
 import { ToolRegistry } from './tool-kit'
@@ -88,7 +92,8 @@ export function serverInstructions(
     'Before writing: call get_site_info (your role, what you cannot do, and the collections), then get_collection_schema for the collection you need. The schema gives the exact field formats and an example payload.',
     'Entry status: draft (not approved), ready (approved for the next release; status "ready" is not the same as live), scheduled, archived. Check the live and pendingRelease flags to know what visitors see.',
     'Site content (globals) is a single section of values, such as company info or the home page. Read it with get_global and change it with update_global; it is not a collection, so create_entry and list_entries do not apply. Its id works with mark_ready and the other workflow tools.',
-    'Write rich text fields as Markdown (headings ##, lists, links, ![alt](asset:<assetId>) images). Do not send HTML.',
+    RICH_TEXT_MARKDOWN_INSTRUCTION,
+    CODE_BLOCK_INSTRUCTION,
     'Always fill SEO for new entries: seo.title (about 50-60 characters), seo.description (140-160 characters), seo.focusKeyphrase, seo.summary (2-3 sentences), seo.keyTakeaways (3-5), and seo.faq only when the body really answers questions.',
     "Images: upload_asset_from_url with a direct link to the image file, then use the returned assetId in image fields, seo.ogImage and ![alt](asset:<assetId>). Always give alt text. If an upload fails, do not guess other URLs: ask the user for a working link or continue without the image. An external ![alt](https://...) image in rich text is copied into the media library when the entry is saved; any that could not be copied are listed in the result's warnings.",
     'Drafts are safe. Nothing you write changes the live site until it is approved and a go live happens.',

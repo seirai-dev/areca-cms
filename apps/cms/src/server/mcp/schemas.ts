@@ -176,5 +176,5 @@ export type SeoInput = z.output<typeof seoInputSchema>
 export const fieldsInputSchema = z
   .record(z.string(), z.unknown())
   .describe(
-    'Field values keyed by field key, as listed by get_collection_schema. Rich text (richtext) takes a Markdown string; image takes an asset id; reference takes an entry id; date takes YYYY-MM-DD; datetime takes ISO 8601 with an offset. To clear a field on update, send an empty string.',
+    'Field values keyed by field key, as listed by get_collection_schema. Rich text (richtext) takes a Markdown string, with `inline code` in backticks and code in fenced blocks with a language; image takes an asset id; reference takes an entry id; date takes YYYY-MM-DD; datetime takes ISO 8601 with an offset. To clear a field on update, send an empty string.',
   )

@@ -68,7 +68,7 @@ export const fieldSchema = z.object({
   type: z
     .enum(FIELD_TYPES)
     .describe(
-      'text, textarea, richtext (Markdown), image (asset), date (YYYY-MM-DD), datetime (ISO with offset), select (needs options), reference (needs collection), slug, boolean, number, url.',
+      'text, textarea, richtext (Markdown, with inline code and fenced code), image (asset), date (YYYY-MM-DD), datetime (ISO with offset), select (needs options), reference (needs collection), slug, boolean, number, url.',
     ),
   required: z
     .boolean()

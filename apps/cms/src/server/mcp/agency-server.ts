@@ -8,6 +8,10 @@ import {
 import { AGENCY_NAVIGATION } from './agency-navigation'
 import type { AgencyPrincipal } from './keys'
 import { MCP_SERVER_NAME, MCP_SERVER_VERSION } from './server'
+import {
+  CODE_BLOCK_INSTRUCTION,
+  RICH_TEXT_MARKDOWN_INSTRUCTION,
+} from './rich-text-guide'
 import { SITE_TOOLS } from './tool-catalog'
 import { agencyDescription } from './tool-kit'
 
@@ -34,7 +38,8 @@ export function agencyServerInstructions(): string {
     "Before a change to a production site, name the client and the site, and get the user's confirmation first. Production changes reach visitors once they go live.",
     'A development environment holds changes that are not in production yet. Pushing to production is a review step: call push_to_production with dryRun first, show the list to the user, and apply only after they approve the planHash from that dry run. copy_entry_to_production copies one entry as a draft.',
     'Drafts are safe. Nothing you write changes the live site until it is approved and a go live happens.',
-    'Write rich text fields as Markdown (headings ##, lists, links, ![alt](asset:<assetId>) images). Do not send HTML.',
+    RICH_TEXT_MARKDOWN_INSTRUCTION,
+    CODE_BLOCK_INSTRUCTION,
     'Some tools only apply to one kind of environment. When a call is refused for that reason, the refusal says what to do; explain it to the user and use the right site.',
     'You are an agency admin: you may change collection schemas and site content sections, mark entries ready, and go live. Agency connections may go live, but only when the user asks, and the confirmation rule above still applies. If a site syncs its schema from code, prefer changing areca.config.ts.',
     'When an update fails with a version conflict, call get_entry again and reapply the change to the current version.',
