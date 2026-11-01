@@ -51,9 +51,12 @@ work into three stacked PRs.
    rendered without colours; the picker shows it as is.
 3. **Published `html` carries highlight classes.** `renderRichTextHtml` passes
    a `createTanStackMarkdownHighlighter(highlighter)` from
-   `@tanstack/highlight/markdown` to TanStack Markdown, so code spans get
-   `token …` classes. No colours or inline styles are published: sites choose a
-   theme in CSS. `markdown` and `document` are unchanged.
+   `@tanstack/highlight/markdown` to TanStack Markdown, so each code block's
+   tokens are `<span class="th-token th-<kind>">` (`th-token` on every token,
+   the second class names its kind, e.g. `th-keyword`, `th-string`). Inline
+   `code` is published as a plain `<code>`, not highlighted. No colours or
+   inline styles are published: sites choose a theme in CSS. `markdown` and
+   `document` are unchanged.
 4. **Existing content.** Markdown import maps `` `x` `` to the `code` mark and
    fences to `codeBlock` with a normalised language. Paste keeps `<code>` and
    `<pre><code class="language-x">`. No migration of content that was already
@@ -88,8 +91,9 @@ work into three stacked PRs.
 11. **Site builders.** No new SDK dependency or export. The docs app
     (`apps/docs/content/docs/sdk/rich-text.mdx`) and `skills/areca-sdk` get a
     recipe: `pnpm add @tanstack/highlight`, then
-    `createThemeCss({ light: githubLight, dark: githubDark, codeBlockSelector: '.tm-code' })`
-    or custom CSS for the token classes; sites rendering `document` themselves
+    `createThemeCss({ light: githubLightTheme, dark: githubDarkTheme, codeBlockSelector: '.tm-code' })`
+    (exports from `@tanstack/highlight/theme` and `@tanstack/highlight/themes/*`)
+    or custom CSS for the `th-*` classes; sites rendering `document` themselves
     use `createTanStackMarkdownHighlighter`.
 
 ## PR stack
