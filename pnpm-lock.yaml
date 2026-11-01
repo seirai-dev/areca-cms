@@ -69,6 +69,9 @@ importers:
       '@tanstack/ai-openrouter':
         specifier: ^0.21.1
         version: 0.21.1(@tanstack/ai@0.65.1(zod@4.6.6))
+      '@tanstack/highlight':
+        specifier: ^1.2.0
+        version: 1.2.0
       '@tanstack/markdown':
         specifier: 1.0.0
         version: 1.0.0(react@19.3.0)
@@ -96,6 +99,9 @@ importers:
       '@tiptap/core':
         specifier: ^3.31.3
         version: 3.31.3(@tiptap/pm@3.31.3)
+      '@tiptap/extension-code':
+        specifier: ^3.31.3
+        version: 3.31.3(@tiptap/core@3.31.3(@tiptap/pm@3.31.3))
       '@tiptap/extension-image':
         specifier: ^3.31.3
         version: 3.31.3(@tiptap/core@3.31.3(@tiptap/pm@3.31.3))
@@ -2820,6 +2826,10 @@ packages:
     engines: {node: '>=18'}
     peerDependencies:
       eslint: ^9.0.0 || ^10.0.0
+
+  '@tanstack/highlight@1.2.0':
+    resolution: {integrity: sha512-rC9pPLrZXW6Col4ugZlx6EHfIcrx8p6geKkYdTWH1XFAZ2xTYDIIHoxo0QhqZPBEfrWQobkm8dEVrjW0V9r5YA==}
+    engines: {node: '>=18'}
 
   '@tanstack/history@1.162.4':
     resolution: {integrity: sha512-utTS5L2OkeYUzXGohL1Z8sefu1GLNOJcxe8Hd6iIdc/Xo1K1nDB2JEp4iSFhvYh33xKC9V91TxrS8qfrpoKobQ==}
@@ -8148,6 +8158,8 @@ snapshots:
       - eslint-import-resolver-node
       - supports-color
       - typescript
+
+  '@tanstack/highlight@1.2.0': {}
 
   '@tanstack/history@1.162.4': {}
 
