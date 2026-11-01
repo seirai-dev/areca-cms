@@ -10,6 +10,10 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts'],
+    // The test files share one scratch content folder (the pid above is the
+    // main process, not a worker), and writeFixtureContent rewrites it. Run
+    // files one at a time so one file never deletes what another is writing.
+    fileParallelism: false,
     env: {
       ARECA_CONTENT_DIR: join(scratch, 'content'),
       ARECA_MEDIA_DIR: join(scratch, 'media'),
