@@ -29,15 +29,26 @@ function languageLabel(language: string | null): string {
   return known ? known.label : language
 }
 
-/** Moves the caret into the code, so typing resumes where it was. */
-function focusCode(editor: Editor, getPos: () => number | undefined) {
+/**
+ * Returns focus to the code. Does nothing when the caret is already inside
+ * this block (the popover can report its close more than once), otherwise
+ * puts the caret back at `caret`, or at the end of the code.
+ */
+function focusCode(
+  editor: Editor,
+  getPos: () => number | undefined,
+  caret: number | null,
+) {
   const pos = getPos()
   if (typeof pos !== 'number') return
-  editor
-    .chain()
-    .focus()
-    .setTextSelection(pos + 1)
-    .run()
+  const node = editor.state.doc.nodeAt(pos)
+  if (!node) return
+  const start = pos + 1
+  const end = pos + node.nodeSize - 1
+  const { from, to } = editor.state.selection
+  if (editor.isFocused && from >= start && to <= end) return
+  const target = caret !== null && caret >= start && caret <= end ? caret : end
+  editor.chain().focus().setTextSelection(target).run()
 }
 
 /**
@@ -52,12 +63,20 @@ export function CodeBlockView({
 }: NodeViewProps) {
   const language = (node.attrs.language as string | null | undefined) ?? null
   const [open, setOpen] = React.useState(false)
+  // Where the caret was when the picker opened, so focus returns there.
+  const caretRef = React.useRef<number | null>(null)
+  const openChange = (next: boolean) => {
+    if (next) caretRef.current = editor.state.selection.from
+    setOpen(next)
+  }
   const known = language === null || isSupportedCodeLanguage(language)
   const label = languageLabel(language)
 
   const choose = (id: string) => {
     updateAttributes({ language: id === PLAIN_TEXT ? null : id })
     setOpen(false)
+    // The popover's focus scope lets go after this tick; focus the code then.
+    window.setTimeout(() => focusCode(editor, getPos, caretRef.current), 0)
   }
 
   return (
@@ -67,7 +86,7 @@ export function CodeBlockView({
       data-testid="rich-text-code-block"
       data-language={language ?? ''}
     >
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover open={open} onOpenChange={openChange}>
         <PopoverTrigger asChild>
           <button
             type="button"
@@ -89,7 +108,7 @@ export function CodeBlockView({
           onCloseAutoFocus={(event) => {
             // Esc or a pick returns focus to the code, not the trigger.
             event.preventDefault()
-            focusCode(editor, getPos)
+            focusCode(editor, getPos, caretRef.current)
           }}
         >
           <Command loop>

@@ -334,6 +334,7 @@ test('inline code and code blocks format, colour and survive a reload', async ({
     'TypeScript',
   )
   // The picker returns focus to the code, so typing lands in the block.
+  await expect(editor).toBeFocused()
   await page.keyboard.type('const answer: number = 42')
   await page.keyboard.press('Enter')
   await page.keyboard.press('Tab')
