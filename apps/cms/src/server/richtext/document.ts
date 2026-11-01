@@ -1,6 +1,11 @@
+import { createTanStackMarkdownHighlighter } from '@tanstack/highlight/markdown'
 import { renderHtml } from '@tanstack/markdown/html'
 import { parseMarkdown } from '@tanstack/markdown/parser'
 import type { MarkdownDocument } from '@tanstack/markdown'
+
+import { codeHighlighter } from '#/lib/highlight'
+
+const highlightCode = createTanStackMarkdownHighlighter(codeHighlighter)
 
 /**
  * Parse serialized rich text markdown into a TanStack Markdown document.
@@ -13,7 +18,13 @@ export function parseRichTextDocument(markdown: string): MarkdownDocument {
   return parseMarkdown(markdown, { frontmatter: false })
 }
 
-/** Static HTML fallback for sites that do not render the document themselves. */
+/**
+ * Static HTML fallback for sites that do not render the document themselves.
+ * Code blocks get `token …` classes only; colours are left to the site's CSS.
+ */
 export function renderRichTextHtml(document: MarkdownDocument): string {
-  return renderHtml(document).replace(/<\/img>/g, '')
+  return renderHtml(document, { highlighter: highlightCode }).replace(
+    /<\/img>/g,
+    '',
+  )
 }

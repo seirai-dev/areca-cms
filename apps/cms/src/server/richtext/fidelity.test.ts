@@ -147,6 +147,35 @@ const corpus: Array<[string, JSONContent]> = [
       },
     }),
   ],
+  [
+    'inline code, alone and inside a link',
+    doc(
+      paragraph(
+        text('run '),
+        text('npm `i`', [{ type: 'code' }]),
+        text(' and '),
+        text('parse()', [
+          { type: 'code' },
+          { type: 'link', attrs: { href: 'https://example.com/api' } },
+        ]),
+      ),
+    ),
+  ],
+  [
+    'highlighted code block with a known and an unknown language',
+    doc(
+      {
+        type: 'codeBlock',
+        attrs: { language: 'ts' },
+        content: [text('const a: number = 1 // note')],
+      },
+      {
+        type: 'codeBlock',
+        attrs: { language: 'cobol' },
+        content: [text('DISPLAY "hi".')],
+      },
+    ),
+  ],
 ]
 
 describe('editor fidelity and renderer parity', () => {

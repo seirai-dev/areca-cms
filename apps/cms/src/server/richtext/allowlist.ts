@@ -17,7 +17,7 @@ export const ALLOWED_NODE_TYPES = new Set([
   'tableCell',
 ])
 
-export const ALLOWED_MARK_TYPES = new Set(['bold', 'italic', 'link'])
+export const ALLOWED_MARK_TYPES = new Set(['bold', 'italic', 'link', 'code'])
 
 export function isAllowedLinkHref(href: string): boolean {
   try {

@@ -60,10 +60,14 @@ export function richTextDocumentFromJson(json: JSONContent): MarkdownDocument {
         return [{ type: 'image', ...properties } as InlineNode]
       }
       if (node.type !== 'text') return inline(node.content)
-      let value: InlineNode = { type: 'text', value: node.text ?? '' }
-      if (node.marks?.some((mark) => mark.type === 'italic'))
+      const isCode = node.marks?.some((mark) => mark.type === 'code')
+      let value: InlineNode = isCode
+        ? { type: 'inlineCode', value: node.text ?? '' }
+        : { type: 'text', value: node.text ?? '' }
+      // Code takes no bold or italic (same rule as the editor and Markdown export).
+      if (!isCode && node.marks?.some((mark) => mark.type === 'italic'))
         value = { type: 'emphasis', children: [value] }
-      if (node.marks?.some((mark) => mark.type === 'bold'))
+      if (!isCode && node.marks?.some((mark) => mark.type === 'bold'))
         value = { type: 'strong', children: [value] }
       const link = node.marks?.find((mark) => mark.type === 'link')
       if (link)
