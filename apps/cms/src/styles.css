@@ -100,6 +100,17 @@
   --color-segment-thumb: #ffffff;
   --color-segment-edge: rgb(0 0 0 / 0.05);
 
+  /* Code blocks. Recessed surface; token colours are read by `.prose pre`
+     rules below, so the editor and the preview use the same palette. */
+  --color-code-bg: #efefec;
+  --color-code-border: rgb(0 0 0 / 0.08);
+  --color-code-keyword: #4b49c4;
+  --color-code-string: #1d6b52;
+  --color-code-literal: #8a5300;
+  --color-code-comment: #67676c;
+  --color-code-function: #1d1d1f;
+  --color-code-punctuation: #5e5e63;
+
   /* Type */
   --font-sans:
     'Inter Variable', ui-sans-serif, system-ui, -apple-system, sans-serif;
@@ -355,6 +366,16 @@ html.dark,
   --color-segment-thumb: #636369;
   --color-segment-edge: rgb(255 255 255 / 0.14);
 
+  /* Code blocks: recessed below the dark surface. */
+  --color-code-bg: #0b0b0d;
+  --color-code-border: rgb(255 255 255 / 0.07);
+  --color-code-keyword: #a9a7ff;
+  --color-code-string: #7fcdaa;
+  --color-code-literal: #e2b46a;
+  --color-code-comment: #8a8a8e;
+  --color-code-function: #f5f5f7;
+  --color-code-punctuation: #a1a1a6;
+
   --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3);
   --shadow-float:
     0 16px 48px -8px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(255 255 255 / 0.04);
@@ -428,6 +449,17 @@ html.dark,
   --color-segment-track: rgb(118 118 128 / 0.12);
   --color-segment-thumb: #ffffff;
   --color-segment-edge: rgb(0 0 0 / 0.05);
+
+  /* Code blocks. Recessed surface; token colours are read by `.prose pre`
+     rules below, so the editor and the preview use the same palette. */
+  --color-code-bg: #efefec;
+  --color-code-border: rgb(0 0 0 / 0.08);
+  --color-code-keyword: #4b49c4;
+  --color-code-string: #1d6b52;
+  --color-code-literal: #8a5300;
+  --color-code-comment: #67676c;
+  --color-code-function: #1d1d1f;
+  --color-code-punctuation: #5e5e63;
 
   --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04);
   --shadow-float: 0 12px 40px -8px rgb(0 0 0 / 0.18);
@@ -715,8 +747,146 @@ html.dark,
   --tw-prose-td-borders: var(--color-border-default);
 }
 
+/* Code. Inline `code` keeps the base style above; the typography plugin's
+   backtick marks and bold would make it look different, so both are reset.
+   Code blocks: recessed surface, hairline border, 13px/1.6 mono, no wrapping. */
+.prose :not(pre) > code {
+  font-weight: 400;
+  color: var(--color-text-primary);
+}
+
+.prose code::before,
+.prose code::after {
+  content: none;
+}
+
 .prose pre {
-  border-radius: var(--radius-control);
+  margin: 1.25em 0;
+  padding: 14px 16px;
+  border: 1px solid var(--color-code-border);
+  border-radius: 8px;
+  background: var(--color-code-bg);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.6;
+  white-space: pre;
+  overflow-x: auto;
+  tab-size: 2;
+}
+
+.prose pre code {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  white-space: inherit;
+}
+
+/* The editor's code block: the language button sits in a header row above
+   the text, so it never covers a line of code. */
+.prose pre.code-block {
+  padding-top: 8px;
+}
+
+.prose pre.code-block > code {
+  display: block;
+}
+
+.code-block-language {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  height: 22px;
+  margin: 0 0 6px auto;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1;
+  white-space: nowrap;
+  user-select: none;
+  cursor: pointer;
+  transition: background-color var(--motion-duration-fast) var(--ease-standard);
+}
+
+.code-block-language:hover,
+.code-block-language[aria-expanded='true'] {
+  background: var(--color-surface-state-hover);
+  color: var(--color-text-primary);
+}
+
+.code-block-language > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.code-block-language svg {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+}
+
+/* Token colours. Classes come from @tanstack/highlight (`th-token th-<kind>`),
+   the same ones published html carries. Unknown languages have no tokens. */
+.prose pre .th-keyword,
+.prose pre .th-selector,
+.prose pre .th-tag,
+.prose pre .th-meta,
+.prose pre .th-heading,
+.prose pre .th-link {
+  color: var(--color-code-keyword);
+}
+
+.prose pre .th-heading {
+  font-weight: 600;
+}
+
+.prose pre .th-link {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.prose pre .th-string,
+.prose pre .th-code-inline {
+  color: var(--color-code-string);
+}
+
+.prose pre .th-number,
+.prose pre .th-literal,
+.prose pre .th-type,
+.prose pre .th-attr {
+  color: var(--color-code-literal);
+}
+
+.prose pre .th-comment {
+  color: var(--color-code-comment);
+  font-style: italic;
+}
+
+.prose pre .th-function,
+.prose pre .th-command {
+  color: var(--color-code-function);
+  font-weight: 500;
+}
+
+.prose pre .th-operator {
+  color: var(--color-code-punctuation);
+}
+
+.prose pre .th-deleted {
+  color: var(--color-text-error);
+}
+
+.prose pre .th-inserted {
+  color: var(--color-text-success);
 }
 
 .prose :where(h1, h2, h3, h4) {

@@ -287,3 +287,101 @@ test('an existing entry opens from the collection and keeps its address', async 
   )
   await waitForSaved(page)
 })
+
+test('inline code and code blocks format, colour and survive a reload', async ({
+  page,
+}) => {
+  test.setTimeout(180_000)
+  const suffix = uniqueSuffix()
+  const title = `Code ${suffix}`
+  const { siteSlug } = await createIsolatedAcmeSite(page, `code-${suffix}`)
+
+  await login(page, OWNER)
+  await openSite(page, siteSlug)
+  await openCollection(page, 'articles')
+  await startNewEntry(page)
+  await titleInput(page).fill(title)
+
+  const editor = richText(page)
+  await editor.click()
+  await page.keyboard.type('Call request now')
+  await waitForSaved(page)
+
+  /* Inline code: select a word, then ⌘E (Ctrl+E off Mac). */
+  await page.keyboard.press('ArrowLeft')
+  await page.keyboard.press('ArrowLeft')
+  await page.keyboard.press('ArrowLeft')
+  await page.keyboard.press('ArrowLeft')
+  await page.keyboard.press('Shift+ArrowLeft')
+  await page.keyboard.press('Shift+ArrowLeft')
+  await page.keyboard.press('Shift+ArrowLeft')
+  await page.keyboard.press('Shift+ArrowLeft')
+  await page.keyboard.press('Shift+ArrowLeft')
+  await page.keyboard.press('Shift+ArrowLeft')
+  await page.keyboard.press('Shift+ArrowLeft')
+  await expect(page.getByTestId('rich-text-toolbar')).toBeVisible()
+  await page.keyboard.press('ControlOrMeta+e')
+  await expect(page.getByTestId('rich-text-inline-code')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+  await expect(editor.locator('code', { hasText: 'request' })).toHaveCount(1)
+  await page.keyboard.press('End')
+
+  /* A code block from the block menu, then TypeScript from the language
+     button. */
+  await page.keyboard.press('Enter')
+  await page.getByTestId('rich-text-block-type').click()
+  await page.getByRole('menuitem', { name: 'Code block' }).click()
+  const block = editor.locator('[data-testid="rich-text-code-block"]')
+  await expect(block).toBeVisible()
+  await expect(block).toHaveAttribute('data-language', '')
+  await page.getByTestId('rich-text-code-language').click()
+  await page.getByRole('option', { name: 'TypeScript' }).click()
+  await expect(block).toHaveAttribute('data-language', 'ts')
+  await expect(page.getByTestId('rich-text-code-language')).toHaveText(
+    'TypeScript',
+  )
+  // The picker returns focus to the code, so typing lands in the block.
+  await page.keyboard.type('const answer: number = 42')
+  await page.keyboard.press('Enter')
+  await page.keyboard.press('Tab')
+  await page.keyboard.type('const next = answer + 1')
+  await expect(block.locator('.th-keyword').first()).toHaveText('const')
+  await expect
+    .poll(() => block.locator('code').evaluate((el) => el.textContent))
+    .toContain('  const next = answer + 1')
+
+  /* A fence typed on its own line becomes a block, too. */
+  // ArrowDown on the last line leaves the block for a new paragraph.
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.type('```py ')
+  await expect(
+    editor.locator('[data-testid="rich-text-code-block"]'),
+  ).toHaveCount(2)
+  await expect(
+    editor.locator('[data-testid="rich-text-code-block"]').nth(1),
+  ).toHaveAttribute('data-language', 'python')
+
+  await waitForSaved(page)
+
+  /* Everything survives a reload, with the colours. */
+  await page.reload()
+  await hydrated(page, titleInput(page))
+  await expect(page.getByTestId('entry-editor')).toHaveAttribute(
+    'data-ready',
+    'true',
+  )
+  await expect(editor.locator('code', { hasText: 'request' })).toHaveCount(1)
+  const saved = editor.locator('[data-testid="rich-text-code-block"]').first()
+  await expect(saved).toHaveAttribute('data-language', 'ts')
+  await expect(page.getByTestId('rich-text-code-language').first()).toHaveText(
+    'TypeScript',
+  )
+  await expect(saved.locator('.th-token.th-keyword').first()).toHaveText(
+    'const',
+  )
+  await expect
+    .poll(() => saved.locator('code').evaluate((el) => el.textContent))
+    .toContain('const answer: number = 42')
+})
