@@ -39,7 +39,8 @@ import type { LoopName } from '#/server/ops/heartbeat'
 import { createLogger, redactString } from '#/server/log'
 
 import { installShutdownHandlers } from './shutdown.ts'
-import { getDeploymentAdapterForOrganization } from '#/server/admin/dokploy-credentials'
+import { resolveDeploymentAdapter } from './deployment-adapters.ts'
+import { hasCompleteDeploymentTarget } from '#/lib/deployment-target'
 
 import { deploymentIdentity, getPublication } from './publications.ts'
 import {
@@ -57,6 +58,15 @@ const fallbackConnectionUrl =
     ? new URL(env.DOKPLOY_URL).href.replace(/\/+$/, '')
     : null
 
+/**
+ * SQL test for a Dokploy target. Rows written before the provider field existed
+ * have no `provider`, which means Dokploy. Only these rows may get a legacy key
+ * built from the Dokploy connection URL and the application ID.
+ */
+function dokployTargetSql(target: string) {
+  return `coalesce(${target}->>'provider', 'dokploy') = 'dokploy'`
+}
+
 export function resourceBlockerSql(fallbackUrl: string | null) {
   const fallbackLiteral =
     fallbackUrl === null ? 'NULL' : `'${fallbackUrl.replaceAll("'", "''")}'`
@@ -67,6 +77,7 @@ LEFT JOIN dokploy_credential credential ON credential.organization_id=legacy_sit
 WHERE a.id<>q.id AND (a.status IN ('building','validating','deploying') OR a.dispatch_uncertain)
 AND coalesce(a.deployment_resource_key,
   CASE WHEN coalesce(a.dispatch_connection_url, credential.url, ${fallbackLiteral}) IS NOT NULL
+  AND ${dokployTargetSql('coalesce(a.dispatch_target, legacy_site.deployment_target)')}
   THEN encode(sha256(convert_to(rtrim(coalesce(a.dispatch_connection_url, credential.url, ${fallbackLiteral}), '/') || E'\\n' || (coalesce(a.dispatch_target, legacy_site.deployment_target)->>'applicationId'), 'UTF8')), 'hex') END
 )=q.deployment_resource_key
 `
@@ -126,7 +137,10 @@ const g = globalThis as typeof globalThis & {
 
 export type ProcessJobDeps = {
   adapter?: DeploymentAdapter
-  resolveAdapter?: (organizationId: string) => Promise<DeploymentAdapter>
+  resolveAdapter?: (
+    organizationId: string,
+    target: DeploymentTarget,
+  ) => Promise<DeploymentAdapter>
   audit?: typeof audit
 }
 
@@ -169,6 +183,7 @@ export async function claimNextJob() {
     WHERE j.site_id=s.id AND j.publication_id=p.id AND p.publishing_mode='production'
       AND j.status='queued' AND j.deployment_resource_key IS NULL
       AND coalesce(j.dispatch_target,s.deployment_target)->>'applicationId' IS NOT NULL
+      AND ${dokployTargetSql('coalesce(j.dispatch_target,s.deployment_target)')}
       AND coalesce(j.dispatch_connection_url,c.url,$1::text) IS NOT NULL`,
     [fallbackConnectionUrl],
   )
@@ -375,19 +390,15 @@ export async function processJob(
     if (demo) {
       log('Demo publication: no production deployment or live verification')
     } else {
-      if (!target?.applicationId || !target.healthCheckUrl)
+      if (!hasCompleteDeploymentTarget(target))
         throw new Error(
           'Production publishing requires a deployment target and publication-aware health URL',
         )
-      const adapterTarget: DeploymentTarget = {
-        provider: 'dokploy',
-        applicationId: target.applicationId,
-        healthCheckUrl: target.healthCheckUrl ?? '',
-      }
       const adapter =
         deps.adapter ??
-        (await (deps.resolveAdapter ?? getDeploymentAdapterForOrganization)(
+        (await (deps.resolveAdapter ?? resolveDeploymentAdapter)(
           existingSite.organizationId,
+          target,
         ))
       const context: DeploymentContext = {
         jobId: job.id,
@@ -400,7 +411,7 @@ export async function processJob(
         // A durable intent survives process death. Even without an upstream ID,
         // recovery only reconciles; absence of a match never authorizes a POST.
         if (!deploymentId) {
-          const found = await adapter.reconcile?.(adapterTarget, context, log)
+          const found = await adapter.reconcile?.(target, context, log)
           if (!found)
             throw new DeploymentUncertainError(
               'Deployment acceptance remains unknown; manual investigation required',
@@ -415,7 +426,7 @@ export async function processJob(
             .update(buildJob)
             .set({
               dispatchStartedAt: dispatchedAt,
-              dispatchTarget: adapterTarget,
+              dispatchTarget: target,
               dispatchUncertain: true,
             })
             .where(fence)
@@ -423,7 +434,7 @@ export async function processJob(
         ).at(0)
         if (!intent) throw new Error('Publication worker lease lost')
         dispatchUncertain = true
-        const result = await adapter.deploy(adapterTarget, log, {
+        const result = await adapter.deploy(target, log, {
           ...context,
           dispatchedAt,
         })
@@ -438,7 +449,7 @@ export async function processJob(
       ).at(0)
       if (!ownedDispatch) throw new Error('Publication worker lease lost')
       const wait = await adapter.waitForCompletion(
-        adapterTarget,
+        target,
         deploymentId,
         { timeoutMs: DEPLOY_TIMEOUT_MS, pollMs: DEPLOY_POLL_MS },
         log,
@@ -465,22 +476,20 @@ export async function processJob(
         )
         return
       }
-      if (target.healthCheckUrl) {
-        log(`health check ${target.healthCheckUrl}`)
-        const healthy = await adapter.healthCheck(target.healthCheckUrl, {
-          timeoutMs: HEALTH_TIMEOUT_MS,
-          intervalMs: HEALTH_POLL_MS,
-          expectPublicationId: pub.id,
-        })
-        if (!healthy) {
-          await failJob(
-            job,
-            pub.id,
-            'Health check failed',
-            existingSite.organizationId,
-          )
-          return
-        }
+      log(`health check ${target.healthCheckUrl}`)
+      const healthy = await adapter.healthCheck(target.healthCheckUrl, {
+        timeoutMs: HEALTH_TIMEOUT_MS,
+        intervalMs: HEALTH_POLL_MS,
+        expectPublicationId: pub.id,
+      })
+      if (!healthy) {
+        await failJob(
+          job,
+          pub.id,
+          'Health check failed',
+          existingSite.organizationId,
+        )
+        return
       }
     }
 
@@ -732,7 +741,7 @@ export async function reconcileDeploymentJob(
       )
       if (blocked.rows.length)
         throw new Error(
-          'Another deployment for this Dokploy application must finish or be resolved first',
+          'Another deployment for this upstream resource must finish or be resolved first',
         )
     }
     const job = (

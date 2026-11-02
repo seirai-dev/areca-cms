@@ -482,7 +482,11 @@ describe.skipIf(!hasDb)('publishing pipeline', () => {
       await db
         .update(site)
         .set({
-          deploymentTarget: { provider: 'dokploy', applicationId: 'app' },
+          // Legacy shape without a health URL: publish must refuse it.
+          deploymentTarget: {
+            provider: 'dokploy',
+            applicationId: 'app',
+          } as never,
         })
         .where(eq(site.id, ctx.site.id))
       expect(

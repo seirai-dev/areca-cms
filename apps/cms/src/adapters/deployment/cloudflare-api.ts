@@ -1,9 +1,10 @@
 /**
  * Typed client for the parts of the Cloudflare API that Areca uses: token
- * verification, Pages projects, Workers scripts and Workers Builds triggers.
- * Every call sends a user API token (Workers Builds accepts only user tokens).
- * Shapes Cloudflare documents loosely are mapped defensively; see
- * docs/design/cloudflare-deploy.md for the endpoint table.
+ * verification, Pages projects and deployments, Workers scripts, and Workers
+ * Builds triggers and builds. Every call sends a user API token (Workers
+ * Builds accepts only user tokens). Shapes Cloudflare documents loosely are
+ * mapped defensively; see docs/design/cloudflare-deploy.md for the endpoint
+ * table and cloudflare-api-notes.md for what was verified live.
  */
 
 export const CLOUDFLARE_API_BASE_URL = 'https://api.cloudflare.com/client/v4'
@@ -11,7 +12,14 @@ export const CLOUDFLARE_API_BASE_URL = 'https://api.cloudflare.com/client/v4'
 const REQUEST_TIMEOUT_MS = 15_000
 const PAGE_SIZE = 50
 const MAX_PAGES = 20
+const MAX_LOG_PAGES = 50
 const ACCOUNT_ID_PATTERN = /^[0-9a-f]{32}$/i
+
+/**
+ * Errors that mean the connection never reached Cloudflare, so the request
+ * cannot have been received. Any other failure after sending is uncertain.
+ */
+const NOT_SENT_CODES = new Set(['ENOTFOUND', 'EAI_AGAIN', 'ECONNREFUSED'])
 
 type FetchFn = typeof fetch
 
@@ -26,6 +34,21 @@ export type CloudflarePagesProject = {
   sourceType: 'github' | 'gitlab' | null
 }
 
+export type CloudflarePagesDeployment = {
+  id: string
+  shortId: string | null
+  url: string | null
+  environment: 'production' | 'preview' | null
+  trigger: {
+    type: string | null
+    branch: string | null
+    commitHash: string | null
+  }
+  createdOn: string | null
+  latestStage: { name: string | null; status: string | null }
+  stages: { name: string; status: string }[]
+}
+
 export type CloudflareWorkerScript = { name: string; tag: string }
 
 export type CloudflareWorkerTrigger = {
@@ -34,6 +57,26 @@ export type CloudflareWorkerTrigger = {
   branchIncludes: string[]
   buildCommand: string | null
   deployCommand: string | null
+}
+
+/**
+ * A Workers Builds build. `buildTriggerSource` is `manual` for builds created
+ * through the API and `push_event` for git pushes. The create response omits
+ * the metadata, so those fields are null until the build is read back.
+ */
+export type CloudflareWorkerBuild = {
+  buildUuid: string
+  status: string | null
+  buildOutcome: string | null
+  createdOn: string | null
+  triggerUuid: string | null
+  buildTriggerSource: string | null
+  branch: string | null
+}
+
+export type CloudflareWorkerScriptSubdomain = {
+  enabled: boolean
+  previewsEnabled: boolean
 }
 
 /**
@@ -66,12 +109,20 @@ export type CloudflarePermissionChecks = {
 }
 
 export class CloudflareApiError extends Error {
+  /**
+   * True only when Cloudflare refused the request, or it never left this
+   * server. A write that fails with this flag definitely did not start work.
+   */
+  readonly notDispatched: boolean
+
   constructor(
     message: string,
     readonly status: number | null,
+    options: { notDispatched?: boolean } = {},
   ) {
     super(message)
     this.name = 'CloudflareApiError'
+    this.notDispatched = options.notDispatched ?? false
   }
 }
 
@@ -122,21 +173,60 @@ function errorMessages(body: unknown) {
   )
 }
 
-function parsePagesProject(raw: unknown): CloudflarePagesProject[] {
-  if (!isRecord(raw)) return []
+/** A connection failure before any byte reached Cloudflare. */
+function neverReached(error: unknown) {
+  const cause = isRecord(error) ? error.cause : undefined
+  const code = isRecord(cause) ? cause.code : undefined
+  return typeof code === 'string' && NOT_SENT_CODES.has(code)
+}
+
+function parsePagesProject(raw: unknown): CloudflarePagesProject | null {
+  if (!isRecord(raw)) return null
   const name = text(raw.name)
-  if (!name) return []
-  const sourceType = isRecord(raw.source) ? raw.source.type : undefined
-  return [
-    {
-      name,
-      subdomain: text(raw.subdomain) ?? '',
-      domains: textArray(raw.domains),
-      productionBranch: text(raw.production_branch) ?? '',
-      sourceType:
-        sourceType === 'github' || sourceType === 'gitlab' ? sourceType : null,
+  if (!name) return null
+  const source = isRecord(raw.source) ? raw.source : {}
+  const sourceConfig = isRecord(source.config) ? source.config : {}
+  const sourceType = source.type
+  return {
+    name,
+    subdomain: text(raw.subdomain) ?? '',
+    domains: textArray(raw.domains),
+    productionBranch:
+      text(raw.production_branch) ?? text(sourceConfig.production_branch) ?? '',
+    sourceType:
+      sourceType === 'github' || sourceType === 'gitlab' ? sourceType : null,
+  }
+}
+
+function parsePagesDeployment(raw: unknown): CloudflarePagesDeployment | null {
+  if (!isRecord(raw)) return null
+  const id = text(raw.id)
+  if (!id) return null
+  const trigger = isRecord(raw.deployment_trigger) ? raw.deployment_trigger : {}
+  const metadata = isRecord(trigger.metadata) ? trigger.metadata : {}
+  const latest = isRecord(raw.latest_stage) ? raw.latest_stage : {}
+  const environment = raw.environment
+  return {
+    id,
+    shortId: text(raw.short_id),
+    url: text(raw.url),
+    environment:
+      environment === 'production' || environment === 'preview'
+        ? environment
+        : null,
+    trigger: {
+      type: text(trigger.type),
+      branch: text(metadata.branch),
+      commitHash: text(metadata.commit_hash),
     },
-  ]
+    createdOn: text(raw.created_on),
+    latestStage: { name: text(latest.name), status: text(latest.status) },
+    stages: (Array.isArray(raw.stages) ? raw.stages : []).flatMap((stage) =>
+      isRecord(stage) && text(stage.name) && text(stage.status)
+        ? [{ name: stage.name as string, status: stage.status as string }]
+        : [],
+    ),
+  }
 }
 
 function parseWorkerScript(raw: unknown): CloudflareWorkerScript[] {
@@ -157,6 +247,25 @@ function parseWorkerTrigger(raw: unknown): CloudflareWorkerTrigger {
   }
 }
 
+function parseWorkerBuild(raw: unknown): CloudflareWorkerBuild | null {
+  if (!isRecord(raw)) return null
+  const buildUuid = text(raw.build_uuid)
+  if (!buildUuid) return null
+  const trigger = isRecord(raw.trigger) ? raw.trigger : {}
+  const metadata = isRecord(raw.build_trigger_metadata)
+    ? raw.build_trigger_metadata
+    : {}
+  return {
+    buildUuid,
+    status: text(raw.status),
+    buildOutcome: text(raw.build_outcome),
+    createdOn: text(raw.created_on),
+    triggerUuid: text(trigger.trigger_uuid),
+    buildTriggerSource: text(metadata.build_trigger_source),
+    branch: text(metadata.branch),
+  }
+}
+
 function isTokenStatus(value: unknown): value is CloudflareTokenStatus {
   return value === 'active' || value === 'disabled' || value === 'expired'
 }
@@ -172,24 +281,36 @@ export function createCloudflareClient(options: CloudflareClientOptions) {
   const fetchFn: FetchFn = options.fetch ?? fetch
   const accountPath = `/accounts/${options.accountId}`
 
-  /** GET one endpoint and return the envelope's `result`. */
-  async function get(path: string, label: string): Promise<unknown> {
+  /**
+   * One call to the API. Returns the envelope's `result`. A POST is never
+   * retried by this client; its caller decides from `notDispatched`.
+   */
+  async function call(
+    method: 'GET' | 'POST' | 'PUT',
+    path: string,
+    label: string,
+    body?: FormData | string,
+  ): Promise<unknown> {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
     let response: Response
-    let body: unknown
+    let parsed: unknown
     try {
       response = await fetchFn(`${baseUrl}${path}`, {
-        method: 'GET',
+        method,
         headers: {
           authorization: `Bearer ${options.apiToken}`,
           accept: 'application/json',
+          ...(typeof body === 'string'
+            ? { 'content-type': 'application/json' }
+            : {}),
         },
+        body,
         redirect: 'error',
         signal: controller.signal,
       })
-      body = await response.json().catch(() => null)
-    } catch {
+      parsed = await response.json().catch(() => null)
+    } catch (error) {
       if (controller.signal.aborted) {
         throw new CloudflareApiError(
           `Cloudflare ${label} did not answer within 15 seconds`,
@@ -199,19 +320,34 @@ export function createCloudflareClient(options: CloudflareClientOptions) {
       throw new CloudflareApiError(
         `Could not reach Cloudflare for ${label}`,
         null,
+        { notDispatched: neverReached(error) },
       )
     } finally {
       clearTimeout(timer)
     }
 
-    if (!response.ok || !isRecord(body) || body.success !== true) {
-      const detail = errorMessages(body).join('; ') || 'no details returned'
+    if (!response.ok || !isRecord(parsed) || parsed.success !== true) {
+      const detail = errorMessages(parsed).join('; ') || 'no details returned'
+      // A 4xx with Cloudflare's own error envelope is a refusal. 408 is a
+      // server-side timeout, so it may have started work and stays uncertain.
+      const refused =
+        response.status >= 400 &&
+        response.status < 500 &&
+        response.status !== 408 &&
+        isRecord(parsed) &&
+        Array.isArray(parsed.errors) &&
+        parsed.errors.length > 0
       throw new CloudflareApiError(
         `Cloudflare ${label} failed (HTTP ${response.status}): ${detail}`,
         response.status,
+        { notDispatched: refused },
       )
     }
-    return body.result
+    return parsed.result
+  }
+
+  function get(path: string, label: string) {
+    return call('GET', path, label)
   }
 
   async function verifyToken(): Promise<{
@@ -239,10 +375,91 @@ export function createCloudflareClient(options: CloudflareClientOptions) {
         'Pages projects',
       )
       const items = Array.isArray(result) ? result : []
-      projects.push(...items.flatMap(parsePagesProject))
+      for (const item of items) {
+        const project = parsePagesProject(item)
+        if (project) projects.push(project)
+      }
       if (items.length < PAGE_SIZE) break
     }
     return projects
+  }
+
+  async function getPagesProject(
+    projectName: string,
+  ): Promise<CloudflarePagesProject> {
+    const result = await get(
+      `${accountPath}/pages/projects/${encodeURIComponent(projectName)}`,
+      'Pages project',
+    )
+    const project = parsePagesProject(result)
+    if (!project) {
+      throw new CloudflareApiError(
+        'Cloudflare returned an invalid Pages project',
+        null,
+      )
+    }
+    return project
+  }
+
+  /**
+   * Starts a git build of `branch`. Sent once, never retried. Cloudflare has
+   * no idempotency key, so a second identical POST makes a second build.
+   */
+  async function createPagesDeployment(
+    projectName: string,
+    branch: string,
+  ): Promise<CloudflarePagesDeployment> {
+    const form = new FormData()
+    form.append('branch', branch)
+    const result = await call(
+      'POST',
+      `${accountPath}/pages/projects/${encodeURIComponent(projectName)}/deployments`,
+      'Pages deployment',
+      form,
+    )
+    return parseRequired(parsePagesDeployment(result), 'Pages deployment')
+  }
+
+  async function getPagesDeployment(
+    projectName: string,
+    deploymentId: string,
+  ): Promise<CloudflarePagesDeployment> {
+    const result = await get(
+      `${accountPath}/pages/projects/${encodeURIComponent(projectName)}/deployments/${encodeURIComponent(deploymentId)}`,
+      'Pages deployment',
+    )
+    return parseRequired(parsePagesDeployment(result), 'Pages deployment')
+  }
+
+  async function listPagesDeployments(
+    projectName: string,
+    query: { environment?: 'production' | 'preview' } = {},
+  ): Promise<CloudflarePagesDeployment[]> {
+    const env = query.environment ? `&env=${query.environment}` : ''
+    const result = await get(
+      `${accountPath}/pages/projects/${encodeURIComponent(projectName)}/deployments?per_page=${PAGE_SIZE}${env}`,
+      'Pages deployments',
+    )
+    return (Array.isArray(result) ? result : []).flatMap((item) => {
+      const deployment = parsePagesDeployment(item)
+      return deployment ? [deployment] : []
+    })
+  }
+
+  /** Build log lines for a Pages deployment, oldest first. */
+  async function getPagesDeploymentLogs(
+    projectName: string,
+    deploymentId: string,
+  ): Promise<string[]> {
+    const result = await get(
+      `${accountPath}/pages/projects/${encodeURIComponent(projectName)}/deployments/${encodeURIComponent(deploymentId)}/history/logs`,
+      'Pages deployment logs',
+    )
+    const data =
+      isRecord(result) && Array.isArray(result.data) ? result.data : []
+    return data.flatMap((entry) =>
+      isRecord(entry) && typeof entry.line === 'string' ? [entry.line] : [],
+    )
   }
 
   async function listWorkers(): Promise<CloudflareWorkerScript[]> {
@@ -261,6 +478,119 @@ export function createCloudflareClient(options: CloudflareClientOptions) {
       'Workers Builds triggers',
     )
     return (Array.isArray(result) ? result : []).map(parseWorkerTrigger)
+  }
+
+  /**
+   * Queues one build on a trigger for `branch`. Sent once, never retried. The
+   * API does not deduplicate: a repeated POST queues another build.
+   */
+  async function createWorkerBuild(
+    triggerUuid: string,
+    branch: string,
+  ): Promise<CloudflareWorkerBuild> {
+    const result = await call(
+      'POST',
+      `${accountPath}/builds/triggers/${encodeURIComponent(triggerUuid)}/builds`,
+      'Workers Builds build',
+      JSON.stringify({ branch }),
+    )
+    return parseRequired(parseWorkerBuild(result), 'Workers Builds build')
+  }
+
+  async function getWorkerBuild(
+    buildUuid: string,
+  ): Promise<CloudflareWorkerBuild> {
+    const result = await get(
+      `${accountPath}/builds/builds/${encodeURIComponent(buildUuid)}`,
+      'Workers Builds build',
+    )
+    return parseRequired(parseWorkerBuild(result), 'Workers Builds build')
+  }
+
+  /** Newest first. Builds of every trigger on the Worker. */
+  async function listWorkerBuilds(
+    scriptTag: string,
+    query: { perPage?: number } = {},
+  ): Promise<CloudflareWorkerBuild[]> {
+    const perPage = query.perPage ?? PAGE_SIZE
+    const result = await get(
+      `${accountPath}/builds/workers/${encodeURIComponent(scriptTag)}/builds?per_page=${perPage}`,
+      'Workers Builds builds',
+    )
+    return (Array.isArray(result) ? result : []).flatMap((item) => {
+      const build = parseWorkerBuild(item)
+      return build ? [build] : []
+    })
+  }
+
+  /**
+   * All log lines of a build, oldest first. Follows the cursor while the
+   * response says `truncated`, up to a page cap.
+   */
+  async function getWorkerBuildLogs(buildUuid: string): Promise<string[]> {
+    const lines: string[] = []
+    let cursor: string | null = null
+    for (let page = 0; page < MAX_LOG_PAGES; page += 1) {
+      const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''
+      const result = await get(
+        `${accountPath}/builds/builds/${encodeURIComponent(buildUuid)}/logs${query}`,
+        'Workers Builds logs',
+      )
+      if (!isRecord(result)) break
+      const rows = Array.isArray(result.lines) ? result.lines : []
+      for (const row of rows) {
+        if (Array.isArray(row) && typeof row[1] === 'string') lines.push(row[1])
+      }
+      const next = text(result.cursor)
+      if (result.truncated !== true || !next || next === cursor) break
+      cursor = next
+    }
+    return lines
+  }
+
+  async function cancelWorkerBuild(
+    buildUuid: string,
+  ): Promise<CloudflareWorkerBuild> {
+    const result = await call(
+      'PUT',
+      `${accountPath}/builds/builds/${encodeURIComponent(buildUuid)}/cancel`,
+      'Workers Builds cancel',
+    )
+    return parseRequired(parseWorkerBuild(result), 'Workers Builds build')
+  }
+
+  /** The account's workers.dev subdomain, or null when none is set. */
+  async function getWorkersSubdomain(): Promise<string | null> {
+    const result = await get(
+      `${accountPath}/workers/subdomain`,
+      'workers.dev subdomain',
+    )
+    return isRecord(result) ? text(result.subdomain) : null
+  }
+
+  async function getWorkerScriptSubdomain(
+    scriptName: string,
+  ): Promise<CloudflareWorkerScriptSubdomain> {
+    const result = await get(
+      `${accountPath}/workers/scripts/${encodeURIComponent(scriptName)}/subdomain`,
+      'Worker workers.dev route',
+    )
+    const record = isRecord(result) ? result : {}
+    return {
+      enabled: record.enabled === true,
+      previewsEnabled: record.previews_enabled === true,
+    }
+  }
+
+  /** Hostnames of the custom domains routed to a Worker. */
+  async function listWorkerDomains(scriptName: string): Promise<string[]> {
+    const result = await get(
+      `${accountPath}/workers/domains?service=${encodeURIComponent(scriptName)}`,
+      'Worker custom domains',
+    )
+    return (Array.isArray(result) ? result : []).flatMap((item) =>
+      isRecord(item) && text(item.hostname) ? [item.hostname as string] : [],
+    )
   }
 
   /**
@@ -328,15 +658,36 @@ export function createCloudflareClient(options: CloudflareClientOptions) {
   }
 
   return {
+    accountId: options.accountId,
     verifyToken,
     listPagesProjects,
+    getPagesProject,
+    createPagesDeployment,
+    getPagesDeployment,
+    listPagesDeployments,
+    getPagesDeploymentLogs,
     listWorkers,
     listWorkerTriggers,
+    createWorkerBuild,
+    getWorkerBuild,
+    listWorkerBuilds,
+    getWorkerBuildLogs,
+    cancelWorkerBuild,
+    getWorkersSubdomain,
+    getWorkerScriptSubdomain,
+    listWorkerDomains,
     checkPermissions,
   }
 }
 
 export type CloudflareClient = ReturnType<typeof createCloudflareClient>
+
+function parseRequired<T>(value: T | null, what: string): T {
+  if (value === null) {
+    throw new CloudflareApiError(`Cloudflare returned an invalid ${what}`, null)
+  }
+  return value
+}
 
 async function attempt(
   run: () => Promise<CloudflareCheck>,

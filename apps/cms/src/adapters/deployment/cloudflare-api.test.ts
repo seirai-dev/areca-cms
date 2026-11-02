@@ -508,3 +508,341 @@ describe('checkPermissions', () => {
     expect(checks.token.message).toContain('Could not reach Cloudflare')
   })
 })
+
+const ACCOUNT_PATH = `${ROUTE_PREFIX}/accounts/${ACCOUNT_ID}`
+const PROJECT_PATH = `${ACCOUNT_PATH}/pages/projects/areca-site`
+const TRIGGER = '11111111-2222-4333-8444-555555555555'
+const SCRIPT_TAG = 'a'.repeat(32)
+
+function pagesDeploymentRaw(
+  id: string,
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    id,
+    short_id: id.slice(0, 8),
+    url: `https://${id}.areca-site.pages.dev`,
+    environment: 'production',
+    deployment_trigger: {
+      type: 'ad_hoc',
+      metadata: { branch: 'main', commit_hash: 'abc123' },
+    },
+    latest_stage: { name: 'build', status: 'active' },
+    stages: [{ name: 'build', status: 'active' }],
+    created_on: '2026-11-02T10:00:00.000Z',
+    ...overrides,
+  }
+}
+
+function workerBuildRaw(uuid: string, overrides: Record<string, unknown> = {}) {
+  return {
+    build_uuid: uuid,
+    status: 'queued',
+    build_outcome: null,
+    created_on: '2026-11-02T10:00:00.000Z',
+    trigger: { trigger_uuid: TRIGGER },
+    build_trigger_metadata: { build_trigger_source: 'manual', branch: 'main' },
+    ...overrides,
+  }
+}
+
+/** A fetch that rejects with a connection error code, as Node's fetch does. */
+function failingFetch(code: string): typeof fetch {
+  return async () => {
+    throw new TypeError('fetch failed', {
+      cause: Object.assign(new Error(code), { code }),
+    })
+  }
+}
+
+describe('Pages and Workers Builds calls', () => {
+  it('posts a Pages build as form data carrying only the branch', async () => {
+    const { fetchFn, calls } = routedFetch({
+      [`${PROJECT_PATH}/deployments`]: (_url, init) => {
+        if (init.method === 'POST') return ok(pagesDeploymentRaw('dep-1'))
+        return ok([pagesDeploymentRaw('dep-1')])
+      },
+    })
+    const client = createCloudflareClient({
+      apiToken: TOKEN,
+      accountId: ACCOUNT_ID,
+      fetch: fetchFn,
+    })
+    const created = await client.createPagesDeployment('areca-site', 'main')
+    expect(created).toMatchObject({
+      id: 'dep-1',
+      environment: 'production',
+      trigger: { type: 'ad_hoc', branch: 'main', commitHash: 'abc123' },
+    })
+    const post = calls[0]
+    expect(post.init.method).toBe('POST')
+    expect(post.init.body).toBeInstanceOf(FormData)
+    expect((post.init.body as FormData).get('branch')).toBe('main')
+    expect(
+      (post.init.headers as Record<string, string>)['content-type'],
+    ).toBeUndefined()
+  })
+
+  it('reads a Pages deployment and filters the list to production', async () => {
+    const { fetchFn, calls } = routedFetch({
+      [`${PROJECT_PATH}/deployments/dep-1`]: () =>
+        ok(pagesDeploymentRaw('dep-1')),
+      [`${PROJECT_PATH}/deployments`]: () =>
+        ok([pagesDeploymentRaw('dep-1'), { no: 'id' }]),
+    })
+    const client = createCloudflareClient({
+      apiToken: TOKEN,
+      accountId: ACCOUNT_ID,
+      fetch: fetchFn,
+    })
+    expect((await client.getPagesDeployment('areca-site', 'dep-1')).id).toBe(
+      'dep-1',
+    )
+    const list = await client.listPagesDeployments('areca-site', {
+      environment: 'production',
+    })
+    expect(list.map((item) => item.id)).toEqual(['dep-1'])
+    expect(calls.at(-1)?.url.searchParams.get('env')).toBe('production')
+  })
+
+  it('maps Pages deployment logs and the project production branch', async () => {
+    const { fetchFn } = routedFetch({
+      [`${PROJECT_PATH}/deployments/dep-1/history/logs`]: () =>
+        ok({
+          data: [
+            { ts: 1, line: 'first' },
+            { ts: 2, line: 'second' },
+          ],
+        }),
+      [PROJECT_PATH]: () =>
+        ok({
+          name: 'areca-site',
+          subdomain: 'areca-site.pages.dev',
+          domains: ['www.example.test'],
+          source: { type: 'github', config: { production_branch: 'trunk' } },
+        }),
+    })
+    const client = createCloudflareClient({
+      apiToken: TOKEN,
+      accountId: ACCOUNT_ID,
+      fetch: fetchFn,
+    })
+    expect(await client.getPagesDeploymentLogs('areca-site', 'dep-1')).toEqual([
+      'first',
+      'second',
+    ])
+    expect(await client.getPagesProject('areca-site')).toMatchObject({
+      productionBranch: 'trunk',
+      sourceType: 'github',
+      domains: ['www.example.test'],
+    })
+  })
+
+  it('creates a Workers build with a JSON branch body and never retries it', async () => {
+    const { fetchFn, calls } = routedFetch({
+      [`${ACCOUNT_PATH}/builds/triggers/${TRIGGER}/builds`]: () =>
+        ok({
+          build_uuid: 'build-1',
+          status: 'queued',
+          build_outcome: null,
+          created_on: '2026-11-02T10:00:00.000Z',
+          trigger: { trigger_uuid: TRIGGER },
+        }),
+    })
+    const client = createCloudflareClient({
+      apiToken: TOKEN,
+      accountId: ACCOUNT_ID,
+      fetch: fetchFn,
+    })
+    const build = await client.createWorkerBuild(TRIGGER, 'main')
+    expect(build).toMatchObject({
+      buildUuid: 'build-1',
+      status: 'queued',
+      buildOutcome: null,
+      triggerUuid: TRIGGER,
+      buildTriggerSource: null,
+    })
+    expect(calls).toHaveLength(1)
+    expect(calls[0].init.method).toBe('POST')
+    expect(JSON.parse(String(calls[0].init.body))).toEqual({ branch: 'main' })
+  })
+
+  it('lists Worker builds newest-first with a page size and reads their metadata', async () => {
+    const { fetchFn, calls } = routedFetch({
+      [`${ACCOUNT_PATH}/builds/workers/${SCRIPT_TAG}/builds`]: () =>
+        ok([
+          workerBuildRaw('build-2', {
+            status: 'stopped',
+            build_outcome: 'success',
+            build_trigger_metadata: {
+              build_trigger_source: 'push_event',
+              branch: 'main',
+            },
+          }),
+          workerBuildRaw('build-1'),
+        ]),
+    })
+    const client = createCloudflareClient({
+      apiToken: TOKEN,
+      accountId: ACCOUNT_ID,
+      fetch: fetchFn,
+    })
+    const builds = await client.listWorkerBuilds(SCRIPT_TAG)
+    expect(builds.map((item) => item.buildUuid)).toEqual(['build-2', 'build-1'])
+    expect(builds[0]).toMatchObject({
+      buildOutcome: 'success',
+      buildTriggerSource: 'push_event',
+    })
+    expect(calls[0].url.searchParams.get('per_page')).toBe('50')
+  })
+
+  it('follows the log cursor while truncated and keeps every page in order', async () => {
+    const { fetchFn, calls } = routedFetch({
+      [`${ACCOUNT_PATH}/builds/builds/build-1/logs`]: (url) => {
+        if (url.searchParams.get('cursor') === 'c1') {
+          return ok({
+            cursor: 'c2',
+            truncated: false,
+            lines: [[3, 'line 3']],
+            events: [],
+          })
+        }
+        return ok({
+          cursor: 'c1',
+          truncated: true,
+          lines: [
+            [1, 'line 1'],
+            [2, 'line 2'],
+          ],
+          events: [],
+        })
+      },
+    })
+    const client = createCloudflareClient({
+      apiToken: TOKEN,
+      accountId: ACCOUNT_ID,
+      fetch: fetchFn,
+    })
+    expect(await client.getWorkerBuildLogs('build-1')).toEqual([
+      'line 1',
+      'line 2',
+      'line 3',
+    ])
+    expect(calls.map((call) => call.url.searchParams.get('cursor'))).toEqual([
+      null,
+      'c1',
+    ])
+  })
+
+  it('cancels a build and reads the workers.dev and custom domain settings', async () => {
+    const { fetchFn } = routedFetch({
+      [`${ACCOUNT_PATH}/builds/builds/build-1/cancel`]: (_url, init) => {
+        expect(init.method).toBe('PUT')
+        return ok(
+          workerBuildRaw('build-1', {
+            status: 'stopped',
+            build_outcome: 'cancelled',
+          }),
+        )
+      },
+      [`${ACCOUNT_PATH}/workers/subdomain`]: () =>
+        ok({ subdomain: 'areca-team' }),
+      [`${ACCOUNT_PATH}/workers/scripts/areca-worker/subdomain`]: () =>
+        ok({ enabled: true, previews_enabled: false }),
+      [`${ACCOUNT_PATH}/workers/domains`]: () =>
+        ok([{ hostname: 'site.example.test' }, { id: 'no-host' }]),
+    })
+    const client = createCloudflareClient({
+      apiToken: TOKEN,
+      accountId: ACCOUNT_ID,
+      fetch: fetchFn,
+    })
+    expect((await client.cancelWorkerBuild('build-1')).buildOutcome).toBe(
+      'cancelled',
+    )
+    expect(await client.getWorkersSubdomain()).toBe('areca-team')
+    expect(await client.getWorkerScriptSubdomain('areca-worker')).toEqual({
+      enabled: true,
+      previewsEnabled: false,
+    })
+    expect(await client.listWorkerDomains('areca-worker')).toEqual([
+      'site.example.test',
+    ])
+  })
+})
+
+describe('error classification for writes', () => {
+  async function postError(fetchFn: typeof fetch) {
+    const client = createCloudflareClient({
+      apiToken: TOKEN,
+      accountId: ACCOUNT_ID,
+      fetch: fetchFn,
+    })
+    return client.createWorkerBuild(TRIGGER, 'main').then(
+      () => null,
+      (error: unknown) => error as CloudflareApiError,
+    )
+  }
+
+  it('marks a 4xx with a Cloudflare error envelope as not dispatched', async () => {
+    for (const status of [400, 403, 404, 409, 422, 429]) {
+      const error = await postError(
+        routedFetch({
+          [`${ACCOUNT_PATH}/builds/triggers/${TRIGGER}/builds`]: () =>
+            fail(status, ['Trigger not found']),
+        }).fetchFn,
+      )
+      expect(error, `status ${status}`).toBeInstanceOf(CloudflareApiError)
+      expect(error?.notDispatched, `status ${status}`).toBe(true)
+    }
+  })
+
+  it('keeps 5xx, 408 and an unparseable 2xx uncertain', async () => {
+    const routes = (response: () => Response) => ({
+      [`${ACCOUNT_PATH}/builds/triggers/${TRIGGER}/builds`]: response,
+    })
+    const cases = [
+      () => fail(500, ['internal']),
+      () => fail(503, []),
+      () => fail(408, ['request timeout']),
+      () => new Response('<html>gateway</html>', { status: 200 }),
+      () => json(200, { success: true, result: 'not a build' }),
+    ]
+    for (const response of cases) {
+      const error = await postError(routedFetch(routes(response)).fetchFn)
+      expect(error?.notDispatched).toBe(false)
+    }
+  })
+
+  it('marks a refused connection as not dispatched and a reset as uncertain', async () => {
+    const refused = await postError(failingFetch('ECONNREFUSED'))
+    expect(refused?.notDispatched).toBe(true)
+    const dnsFailure = await postError(failingFetch('ENOTFOUND'))
+    expect(dnsFailure?.notDispatched).toBe(true)
+    const reset = await postError(failingFetch('ECONNRESET'))
+    expect(reset?.notDispatched).toBe(false)
+  })
+
+  it('treats a POST that never answers within 15 seconds as uncertain', async () => {
+    vi.useFakeTimers()
+    const fetchFn: typeof fetch = (_input, init) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () =>
+          reject(new Error('aborted')),
+        )
+      })
+    const client = createCloudflareClient({
+      apiToken: TOKEN,
+      accountId: ACCOUNT_ID,
+      fetch: fetchFn,
+    })
+    const pending = client
+      .createWorkerBuild(TRIGGER, 'main')
+      .catch((error: unknown) => error as CloudflareApiError)
+    await vi.advanceTimersByTimeAsync(15_000)
+    const error = await pending
+    expect(error).toBeInstanceOf(CloudflareApiError)
+    expect((error as CloudflareApiError).message).toContain('did not answer')
+    expect((error as CloudflareApiError).notDispatched).toBe(false)
+  })
+})

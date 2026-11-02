@@ -63,8 +63,11 @@ export function DeploymentTab({
 }) {
   const formId = React.useId()
   const dokploy = useDokployApplications(site.organizationId)
-  const savedApp = site.deploymentTarget?.applicationId ?? ''
-  const savedHealth = site.deploymentTarget?.healthCheckUrl ?? ''
+  // This form only edits Dokploy targets. A Cloudflare target shows as unset here.
+  const dokployTarget =
+    site.deploymentTarget?.provider === 'dokploy' ? site.deploymentTarget : null
+  const savedApp = dokployTarget?.applicationId ?? ''
+  const savedHealth = dokployTarget?.healthCheckUrl ?? ''
   const [mode, setMode] = React.useState<'production' | 'demo'>(
     site.publishingMode,
   )

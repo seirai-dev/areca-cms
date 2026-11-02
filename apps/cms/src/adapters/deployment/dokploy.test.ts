@@ -1,11 +1,8 @@
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { describe, expect, it } from 'vitest'
-import {
-  createDokployAdapter,
-  listDokployApplications,
-  pinnedRequest,
-} from './dokploy'
+import { createDokployAdapter, listDokployApplications } from './dokploy'
+import { pinnedRequest } from './health-check'
 import { DeploymentUncertainError } from './types'
 import type { DeploymentTarget } from './types'
 

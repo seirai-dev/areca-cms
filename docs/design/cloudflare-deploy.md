@@ -50,7 +50,7 @@ Base URL `https://api.cloudflare.com/client/v4`. Auth `Authorization: Bearer <to
    | { provider: 'cloudflare'; kind: 'pages'; projectName: string; branch: string; healthCheckUrl: string }
    | { provider: 'cloudflare'; kind: 'workers'; scriptName: string; scriptTag: string; triggerUuid: string; branch: string; healthCheckUrl: string }
    ```
-   Existing rows (`provider: 'dokploy'`) stay valid. The deployment resource key for Cloudflare is `sha256("cloudflare\n<accountId>\n<projectName|scriptTag>")`.
+   Existing rows (`provider: 'dokploy'`) stay valid. The connection URL for Cloudflare is `https://api.cloudflare.com/client/v4/accounts/<accountId>` and the deployment resource key is `sha256("<connectionUrl>\n<projectName|scriptTag>")`, the same shape as Dokploy.
 9. **Branch.** The production branch is saved when the project is selected (Pages: `source.config.production_branch`; Workers: the trigger's branch). It is shown read-only. No override. Re-selecting the project refreshes it.
 10. **Workers trigger.** The trigger covering the production branch is picked automatically. When more than one matches, a small "Build trigger" select appears.
 11. **Site Deployment tab.** A segmented control **Dokploy | Cloudflare** at the top. A provider the client has not configured is disabled with a link to the client's Deployment settings. Switching clears the chosen target. Saving is blocked while a deployment is pending (existing check). Publishing mode and Stop deploying are unchanged.

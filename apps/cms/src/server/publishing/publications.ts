@@ -1,9 +1,11 @@
 import { createHash } from 'node:crypto'
 import { and, desc, eq, inArray, lte, sql } from 'drizzle-orm'
 
+import { CLOUDFLARE_API_BASE_URL } from '#/adapters/deployment/cloudflare-api'
 import { db } from '#/db'
 import {
   buildJob,
+  cloudflareCredential,
   dokployCredential,
   schedulerBackoff,
   entry,
@@ -12,7 +14,11 @@ import {
   site,
   user,
 } from '#/db/schema'
-import type { BuildJobStatus } from '#/lib/types'
+import type { BuildJobStatus, DeploymentTarget } from '#/lib/types'
+import {
+  deploymentTargetResourceId,
+  hasCompleteDeploymentTarget,
+} from '#/lib/deployment-target'
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
 import { env } from '#/env'
@@ -40,8 +46,7 @@ export function dbActorId(actorId: string | null | undefined) {
  */
 export function deploymentBlockers(row: typeof site.$inferSelect): string[] {
   if (row.publishingMode === 'demo') return []
-  const target = row.deploymentTarget
-  return target?.applicationId && target.healthCheckUrl
+  return hasCompleteDeploymentTarget(row.deploymentTarget)
     ? []
     : [m.server_publication_deployment_required()]
 }
@@ -415,8 +420,7 @@ export async function requestRollback(input: {
     if (!lockedSite) throw new NotFoundError(m.server_site_not_found())
     if (
       lockedSite.publishingMode !== 'demo' &&
-      (!lockedSite.deploymentTarget?.applicationId ||
-        !lockedSite.deploymentTarget.healthCheckUrl)
+      !hasCompleteDeploymentTarget(lockedSite.deploymentTarget)
     )
       throw new ConflictError(
         'Production publishing requires a deployment target and publication-aware health URL',
@@ -709,34 +713,75 @@ export async function getSiteReleaseStatus(siteId: string) {
   }
 }
 
-/** Freeze the hosting destination when a release is requested. */
-export async function deploymentIdentity(
-  tx: RequestTx,
-  existingSite: typeof site.$inferSelect,
+/**
+ * The Cloudflare account API URL that identifies a client's Cloudflare
+ * connection. Stable across the test stub base URL override.
+ */
+export function cloudflareConnectionUrl(accountId: string) {
+  return `${CLOUDFLARE_API_BASE_URL}/accounts/${accountId}`
+}
+
+/**
+ * Identity of one upstream resource: the connection it is reached through and
+ * the target's resource ID. Two sites with the same key share a resource, and
+ * only one build for it may be in flight at a time.
+ */
+export function deploymentResourceKey(
+  connectionUrl: string,
+  target: DeploymentTarget,
 ) {
-  if (existingSite.publishingMode === 'demo') return {}
+  return createHash('sha256')
+    .update(`${connectionUrl}\n${deploymentTargetResourceId(target)}`)
+    .digest('hex')
+}
+
+/** Connection URL for the site's provider, or null when none is configured. */
+async function dispatchConnectionUrl(
+  tx: RequestTx,
+  organizationId: string,
+  target: DeploymentTarget | null,
+) {
+  if (target?.provider === 'cloudflare') {
+    const credential = (
+      await tx
+        .select({ accountId: cloudflareCredential.accountId })
+        .from(cloudflareCredential)
+        .where(eq(cloudflareCredential.organizationId, organizationId))
+    ).at(0)
+    return credential ? cloudflareConnectionUrl(credential.accountId) : null
+  }
   const credential = (
     await tx
       .select()
       .from(dokployCredential)
-      .where(eq(dokployCredential.organizationId, existingSite.organizationId))
+      .where(eq(dokployCredential.organizationId, organizationId))
   ).at(0)
   const rawUrl =
     credential?.url ??
     (process.env.NODE_ENV !== 'production' && env.DOKPLOY_DEV_FALLBACK_ENABLED
       ? env.DOKPLOY_URL
       : undefined)
-  const connectionUrl = rawUrl ? new URL(rawUrl).href.replace(/\/+$/, '') : null
+  return rawUrl ? new URL(rawUrl).href.replace(/\/+$/, '') : null
+}
+
+/** Freeze the hosting destination when a release is requested. */
+export async function deploymentIdentity(
+  tx: RequestTx,
+  existingSite: typeof site.$inferSelect,
+) {
+  if (existingSite.publishingMode === 'demo') return {}
+  const connectionUrl = await dispatchConnectionUrl(
+    tx,
+    existingSite.organizationId,
+    existingSite.deploymentTarget,
+  )
+  const target = existingSite.deploymentTarget
   return {
-    dispatchTarget: existingSite.deploymentTarget,
+    dispatchTarget: target,
     dispatchConnectionUrl: connectionUrl,
     deploymentResourceKey:
-      connectionUrl && existingSite.deploymentTarget
-        ? createHash('sha256')
-            .update(
-              `${connectionUrl}\n${existingSite.deploymentTarget.applicationId}`,
-            )
-            .digest('hex')
+      connectionUrl && target
+        ? deploymentResourceKey(connectionUrl, target)
         : null,
   }
 }

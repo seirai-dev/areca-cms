@@ -18,6 +18,7 @@ import { isValidSlug } from '#/lib/slug'
 import { normalizePreviewUrl } from '#/lib/preview-url'
 import { isDevSite } from '#/server/security/site-visibility'
 import type { DeploymentTarget } from '#/lib/types'
+import { deploymentTargetResourceId } from '#/lib/deployment-target'
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
 import { lockOrganizationForMutation } from './organization-lock'
@@ -32,18 +33,48 @@ import { deleteDevSiteRows } from '#/server/dev-env/delete'
 import { lockProductionSite } from '#/server/dev-env/lock'
 import { lockProductionRow } from '#/server/dev-env/rows'
 
+const healthCheckUrlSchema = z
+  .string()
+  .url()
+  .refine(
+    (value) => ['http:', 'https:'].includes(new URL(value).protocol),
+    'Health URL must use HTTP or HTTPS',
+  )
+
+const cloudflareProjectNameSchema = z
+  .string()
+  .regex(
+    /^[a-z0-9][a-z0-9-]*$/,
+    'Use the Pages project name (lowercase letters, digits and hyphens)',
+  )
+
+const branchSchema = z.string().trim().min(1)
+
+/** Validates the target a site publishes to. Null clears it. */
 export const deploymentTargetSchema: z.ZodType<DeploymentTarget | null> =
   z.union([
     z.object({
       provider: z.literal('dokploy'),
       applicationId: z.string().min(1),
-      healthCheckUrl: z
+      healthCheckUrl: healthCheckUrlSchema,
+    }),
+    z.object({
+      provider: z.literal('cloudflare'),
+      kind: z.literal('pages'),
+      projectName: cloudflareProjectNameSchema,
+      branch: branchSchema,
+      healthCheckUrl: healthCheckUrlSchema,
+    }),
+    z.object({
+      provider: z.literal('cloudflare'),
+      kind: z.literal('workers'),
+      scriptName: z.string().min(1),
+      scriptTag: z
         .string()
-        .url()
-        .refine(
-          (value) => ['http:', 'https:'].includes(new URL(value).protocol),
-          'Health URL must use HTTP or HTTPS',
-        ),
+        .regex(/^[0-9a-f]{32}$/i, 'Use the Worker script tag'),
+      triggerUuid: z.string().uuid(),
+      branch: branchSchema,
+      healthCheckUrl: healthCheckUrlSchema,
     }),
     z.null(),
   ])
@@ -303,7 +334,10 @@ export async function updateSite(
             : {}),
           ...('deploymentTarget' in patch
             ? {
-                deploymentTarget: patch.deploymentTarget?.applicationId ?? null,
+                deploymentTarget: patch.deploymentTarget
+                  ? deploymentTargetResourceId(patch.deploymentTarget)
+                  : null,
+                deploymentProvider: patch.deploymentTarget?.provider ?? null,
               }
             : {}),
         },

@@ -1,15 +1,14 @@
-import type { LookupAddress, LookupOptions } from 'node:dns'
-import { request as httpRequest } from 'node:http'
-import { request as httpsRequest } from 'node:https'
-import { isIP } from 'node:net'
-
 import { DeploymentNotDispatchedError, DeploymentUncertainError } from './types'
-import type { DeploymentAdapter, DeploymentContext } from './types'
+import type {
+  DeploymentAdapter,
+  DeploymentContext,
+  DeploymentTarget,
+  DokployDeploymentTarget,
+} from './types'
+import { createHealthChecker } from './health-check'
+import { sleep } from './shared'
 import { collectSecretValues, redactString } from '#/server/log'
-import {
-  assertSecureServiceUrl,
-  resolveSafeHealthCheckUrl,
-} from '#/server/http/outbound-url'
+import { assertSecureServiceUrl } from '#/server/http/outbound-url'
 import type { ResolveHost } from '#/server/http/outbound-url'
 
 // Request bodies for later demo-app provisioning: see dokploy-api-notes.md
@@ -183,7 +182,7 @@ export function createDokployAdapter(
   opts: DokployAdapterOptions,
 ): DeploymentAdapter {
   const request = createDokployRequest(opts)
-  const fetchFn = opts.fetch ?? fetch
+  const healthCheck = createHealthChecker(opts)
 
   function getApplication(applicationId: string) {
     return retrySafe(() =>
@@ -227,10 +226,14 @@ export function createDokployAdapter(
   return {
     async deploy(target, log, context) {
       log(
-        `Deploying application=${target.applicationId} job=${context.jobId} publication=${context.publicationId} snapshot=${context.snapshotHash}`,
+        `Deploying application=${requireDokploy(target).applicationId} job=${context.jobId} publication=${context.publicationId} snapshot=${context.snapshotHash}`,
       )
       try {
-        await bustContentCache(target.applicationId, log, context)
+        await bustContentCache(
+          requireDokploy(target).applicationId,
+          log,
+          context,
+        )
       } catch (error) {
         throw new DeploymentNotDispatchedError(
           error instanceof Error ? error.message : String(error),
@@ -242,7 +245,7 @@ export function createDokployAdapter(
         await request('/api/application.deploy', {
           method: 'POST',
           body: JSON.stringify({
-            applicationId: target.applicationId,
+            applicationId: requireDokploy(target).applicationId,
             ...dispatchIdentity(context),
           }),
         })
@@ -257,7 +260,11 @@ export function createDokployAdapter(
           'Deploy response uncertain; reconciling the same dispatch before proceeding',
         )
       }
-      const found = await reconcile(target.applicationId, context, log)
+      const found = await reconcile(
+        requireDokploy(target).applicationId,
+        context,
+        log,
+      )
       if (!found)
         throw new DeploymentUncertainError(
           `Deployment acceptance unknown for job=${context.jobId} publication=${context.publicationId}; reconcile manually, do not redeploy`,
@@ -267,7 +274,11 @@ export function createDokployAdapter(
     },
 
     async reconcile(target, context, log) {
-      const found = await reconcile(target.applicationId, context, log)
+      const found = await reconcile(
+        requireDokploy(target).applicationId,
+        context,
+        log,
+      )
       log(
         found
           ? `Reconciled upstream deployment=${found.deploymentId}`
@@ -280,7 +291,7 @@ export function createDokployAdapter(
       const deadline = Date.now() + timeoutMs
       let lastStatus: string | undefined
       while (Date.now() < deadline) {
-        const app = await getApplication(target.applicationId)
+        const app = await getApplication(requireDokploy(target).applicationId)
         const deployment = app.deployments?.find(
           (item) => item.deploymentId === deploymentId,
         )
@@ -299,25 +310,7 @@ export function createDokployAdapter(
       }
       return 'timeout'
     },
-
-    async healthCheck(url, { timeoutMs, intervalMs, expectPublicationId }) {
-      const deadline = Date.now() + timeoutMs
-      for (;;) {
-        try {
-          const res = await fetchHealthUrl(url, deadline)
-          if (res.status === 200) {
-            if (!expectPublicationId) return true
-            const body = (await res.json()) as { publicationId?: string }
-            if (body.publicationId === expectPublicationId) return true
-          }
-        } catch {
-          // retry until timeout
-        }
-        const wait = Math.min(intervalMs, deadline - Date.now())
-        if (wait <= 0) return false
-        await sleep(wait)
-      }
-    },
+    healthCheck,
   }
 
   async function reconcile(
@@ -369,80 +362,6 @@ export function createDokployAdapter(
       await sleep(wait)
     }
   }
-
-  async function fetchHealthUrl(
-    rawUrl: string,
-    deadline: number,
-    redirects = 0,
-  ): Promise<Response> {
-    const resolved = await resolveSafeHealthCheckUrl(rawUrl, {
-      resolve: opts.resolveHost,
-      allowInsecureHttp: opts.allowInsecureHttp,
-      allowPrivateNetwork: opts.allowPrivateHealthChecks,
-    })
-    const { url } = resolved
-    const remaining = deadline - Date.now()
-    if (remaining <= 0) throw new Error('Health-check timeout')
-    const response = opts.fetch
-      ? await fetchFn(url, {
-          redirect: 'manual',
-          signal: AbortSignal.timeout(remaining),
-        })
-      : await pinnedRequest(url, resolved.addresses, remaining)
-    if (response.status >= 300 && response.status < 400) {
-      const location = response.headers.get('location')
-      if (!location || redirects >= 4) return response
-      return fetchHealthUrl(
-        new URL(location, url).href,
-        deadline,
-        redirects + 1,
-      )
-    }
-    return response
-  }
-}
-
-/**
- * Connects only to the addresses that were checked for being public, so DNS
- * cannot change between the check and the connection. Exported for tests.
- */
-export function pinnedRequest(
-  url: URL,
-  addresses: string[],
-  timeoutMs: number,
-) {
-  return new Promise<Response>((resolve, reject) => {
-    const transport = url.protocol === 'https:' ? httpsRequest : httpRequest
-    const request = transport(
-      url,
-      {
-        signal: AbortSignal.timeout(timeoutMs),
-        ...(addresses.length > 0 ? { lookup: pinnedLookup(addresses) } : {}),
-      },
-      (incoming) => {
-        const chunks: Buffer[] = []
-        let size = 0
-        incoming.on('data', (chunk: Buffer) => {
-          size += chunk.byteLength
-          if (size > 64 * 1024) {
-            request.destroy(new Error('Health-check response is too large'))
-            return
-          }
-          chunks.push(chunk)
-        })
-        incoming.on('end', () => {
-          resolve(
-            new Response(Buffer.concat(chunks), {
-              status: incoming.statusCode ?? 500,
-              headers: incoming.headers as Record<string, string>,
-            }),
-          )
-        })
-      },
-    )
-    request.on('error', reject)
-    request.end()
-  })
 }
 
 interface DokployDeployment {
@@ -516,6 +435,13 @@ function findDeploymentsCreatedSince(
   })
 }
 
+function requireDokploy(target: DeploymentTarget): DokployDeploymentTarget {
+  if (target.provider !== 'dokploy') {
+    throw new Error('The Dokploy adapter received a non-Dokploy target')
+  }
+  return target
+}
+
 /** Bounded retry only for read operations or an identical idempotent write. */
 async function retrySafe<T>(operation: () => Promise<T>): Promise<T> {
   for (let attempt = 0; ; attempt++) {
@@ -531,48 +457,5 @@ async function retrySafe<T>(operation: () => Promise<T>): Promise<T> {
         throw error
       await sleep(100 * 2 ** attempt)
     }
-  }
-}
-
-function sleep(ms: number) {
-  return new Promise<void>((resolve) => setTimeout(resolve, ms))
-}
-
-/**
- * A `lookup` that answers with the pinned addresses. Node (22+) asks with
- * `{ all: true }` for Happy Eyeballs and then needs the whole list, not a
- * single address; answering with one address fails every connection.
- */
-function pinnedLookup(addresses: string[]) {
-  const records = addresses.map((address) => ({
-    address,
-    family: isIP(address),
-  }))
-  return (
-    _hostname: string,
-    options: LookupOptions,
-    callback: (
-      error: NodeJS.ErrnoException | null,
-      address: string | LookupAddress[],
-      family?: number,
-    ) => void,
-  ) => {
-    const family =
-      options.family === 4 || options.family === 6 ? options.family : undefined
-    const pool = family
-      ? records.filter((record) => record.family === family)
-      : records
-    const first = pool.at(0)
-    if (!first) {
-      callback(
-        Object.assign(new Error('No pinned address for this address family'), {
-          code: 'ENOTFOUND',
-        }),
-        '',
-      )
-      return
-    }
-    if (options.all) callback(null, pool)
-    else callback(null, first.address, first.family)
   }
 }
