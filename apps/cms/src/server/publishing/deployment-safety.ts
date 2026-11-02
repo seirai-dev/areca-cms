@@ -27,6 +27,7 @@ export async function assertSiteHasNoPendingDeployment(
 export async function assertOrganizationHasNoPendingDeployment(
   tx: Transaction,
   organizationId: string,
+  connection = 'the Dokploy connection',
 ) {
   const pending = (
     await tx
@@ -38,7 +39,7 @@ export async function assertOrganizationHasNoPendingDeployment(
   ).at(0)
   if (pending)
     throw new ConflictError(
-      'Finish or cancel pending releases and reconcile uncertain deployments before changing the Dokploy connection',
+      `Finish or cancel pending releases and reconcile uncertain deployments before changing ${connection}`,
     )
 }
 

@@ -2,6 +2,7 @@ import { queryOptions } from '@tanstack/react-query'
 
 import { adminQueryKeys } from '#/lib/admin/helpers'
 import {
+  getCloudflareCredentialStatusFn,
   getDokployCredentialStatusFn,
   listInvitationsFn,
   listOrganizationsFn,
@@ -75,6 +76,14 @@ export function dokployStatusQuery(organizationId: string) {
   return queryOptions({
     queryKey: adminQueryKeys.dokployCredentials(organizationId),
     queryFn: () => getDokployCredentialStatusFn({ data: { organizationId } }),
+  })
+}
+
+export function cloudflareStatusQuery(organizationId: string) {
+  return queryOptions({
+    queryKey: adminQueryKeys.cloudflareCredentials(organizationId),
+    queryFn: () =>
+      getCloudflareCredentialStatusFn({ data: { organizationId } }),
   })
 }
 

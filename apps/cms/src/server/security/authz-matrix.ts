@@ -16,6 +16,7 @@ import {
   buildJob,
   collection,
   aiSettings,
+  cloudflareCredential,
   dokployCredential,
   entry,
   entryRevision,
@@ -208,6 +209,50 @@ export const ROWS: Row[] = [
   {
     name: 'removeDokployCredentialsFn',
     fn: adminFns.removeDokployCredentialsFn,
+    policy: 'agency-fresh',
+    tolerant: true,
+    prepare: async (w) => ({
+      data: { organizationId: (await w.fresh.org()).id },
+    }),
+  },
+  {
+    name: 'getCloudflareCredentialStatusFn',
+    fn: adminFns.getCloudflareCredentialStatusFn,
+    policy: 'agency',
+    prepare: (w) => ({ data: { organizationId: w.X.org.id } }),
+  },
+  {
+    name: 'saveCloudflareCredentialsFn',
+    fn: adminFns.saveCloudflareCredentialsFn,
+    policy: 'agency-fresh',
+    tolerant: true,
+    prepare: async (w) => {
+      const org = await w.fresh.org()
+      return {
+        data: {
+          organizationId: org.id,
+          accountId: '0123456789abcdef0123456789abcdef',
+          apiToken: 'attacker-token',
+        },
+        untouched: absent(
+          cloudflareCredential,
+          eq(cloudflareCredential.organizationId, org.id),
+        ),
+      }
+    },
+  },
+  {
+    name: 'verifyCloudflareCredentialsFn',
+    fn: adminFns.verifyCloudflareCredentialsFn,
+    policy: 'agency',
+    tolerant: true,
+    prepare: async (w) => ({
+      data: { organizationId: (await w.fresh.org()).id },
+    }),
+  },
+  {
+    name: 'removeCloudflareCredentialsFn',
+    fn: adminFns.removeCloudflareCredentialsFn,
     policy: 'agency-fresh',
     tolerant: true,
     prepare: async (w) => ({

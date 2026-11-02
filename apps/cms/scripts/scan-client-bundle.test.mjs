@@ -8,6 +8,15 @@ import { scanContent, scanDirectory } from './scan-client-bundle.mjs'
 const rules = (content, env) =>
   scanContent('a.js', content, env).map((f) => f.rule)
 
+test('a UI-named env variable may appear as a name, but not with its value', () => {
+  const name = 'CLOUDFLARE_CREDENTIALS_ENCRYPTION_KEY'
+  assert.deepEqual(rules(`Set ${name} on the server`), [])
+  const value = 'Zm9vYmFyYmF6cXV4enl6MTIzNDU2Nzg5MGFiY2RlZmdoaWo='
+  assert.deepEqual(rules(`const k = "${value}"`, { [name]: value }), [
+    `server-env-value:${name}`,
+  ])
+})
+
 test('clean client code passes', () => {
   assert.deepEqual(rules('const a = 1;\nexport { a }'), [])
 })

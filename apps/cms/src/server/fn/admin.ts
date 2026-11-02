@@ -17,6 +17,12 @@ import {
   verifyDokployCredentials,
 } from '#/server/admin/dokploy-credentials'
 import {
+  getCloudflareCredentialStatus,
+  removeCloudflareCredentials,
+  saveCloudflareCredentials,
+  verifyCloudflareCredentials,
+} from '#/server/admin/cloudflare-credentials'
+import {
   getInvitationById,
   inviteMember,
   listInvitations,
@@ -167,6 +173,61 @@ export const removeDokployCredentialsFn = createServerFn({
   .handler(async ({ data }) => {
     const session = await requireFreshAgencyAdmin()
     return removeDokployCredentials({
+      organizationId: data.organizationId,
+      actorId: session.user.id,
+    })
+  })
+
+export const getCloudflareCredentialStatusFn = createServerFn({
+  method: 'GET',
+  ...adminFn,
+})
+  .validator(z.object({ organizationId: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    await requireAgencyAdmin()
+    return getCloudflareCredentialStatus(data.organizationId)
+  })
+
+export const saveCloudflareCredentialsFn = createServerFn({
+  method: 'POST',
+  ...adminFn,
+})
+  .validator(
+    z.object({
+      organizationId: z.string().min(1),
+      accountId: z.string().regex(/^[0-9a-f]{32}$/i),
+      apiToken: z.string().min(1).optional(),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const session = await requireFreshAgencyAdmin()
+    return saveCloudflareCredentials({
+      ...data,
+      actorId: session.user.id,
+    })
+  })
+
+export const verifyCloudflareCredentialsFn = createServerFn({
+  method: 'POST',
+  ...adminFn,
+})
+  .validator(z.object({ organizationId: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    const session = await requireAgencyAdmin()
+    return verifyCloudflareCredentials({
+      organizationId: data.organizationId,
+      actorId: session.user.id,
+    })
+  })
+
+export const removeCloudflareCredentialsFn = createServerFn({
+  method: 'POST',
+  ...adminFn,
+})
+  .validator(z.object({ organizationId: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    const session = await requireFreshAgencyAdmin()
+    return removeCloudflareCredentials({
       organizationId: data.organizationId,
       actorId: session.user.id,
     })

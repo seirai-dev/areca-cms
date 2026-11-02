@@ -26,6 +26,7 @@ export const SERVER_ENV_NAMES = [
   'DOKPLOY_URL',
   'DOKPLOY_API_KEY',
   'DOKPLOY_CREDENTIALS_ENCRYPTION_KEY',
+  'CLOUDFLARE_CREDENTIALS_ENCRYPTION_KEY',
   'AI_SETTINGS_ENCRYPTION_KEY',
   'SETUP_TOKEN',
   'METRICS_TOKEN',
@@ -37,6 +38,11 @@ export const SERVER_ENV_NAMES = [
 
 // Not listed on purpose: SMTP_FROM / SMTP_PORT are not secret and the sender
 // setting's help text in the UI legitimately names SMTP_FROM.
+
+// Names the UI may print: the Cloudflare notice tells an operator which variable
+// to set. Only the name is allowed in client code; the value is still scanned
+// through SERVER_ENV_NAMES above.
+const NAMED_IN_UI = new Set(['CLOUDFLARE_CREDENTIALS_ENCRYPTION_KEY'])
 
 // better-auth's client ships an env reader whose getters merely name
 // BETTER_AUTH_SECRET; it reads process.env lazily and holds no value. Minifiers
@@ -52,7 +58,9 @@ const PATTERN_RULES = [
   {
     rule: 'server-env-name',
     // \b treats `_` as a word character, so FOO_DATABASE_URL does not match.
-    regex: new RegExp(`\\b(?:${SERVER_ENV_NAMES.join('|')})\\b`),
+    regex: new RegExp(
+      `\\b(?:${SERVER_ENV_NAMES.filter((name) => !NAMED_IN_UI.has(name)).join('|')})\\b`,
+    ),
   },
   { rule: 'database-url', regex: /\bpostgres(?:ql)?:\/\/[^\s"'`]+/i },
   { rule: 'redis-url', regex: /\brediss?:\/\/[^\s"'`]+/i },

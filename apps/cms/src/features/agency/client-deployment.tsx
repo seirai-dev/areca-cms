@@ -22,6 +22,7 @@ import {
   verifyDokployCredentialsFn,
 } from '#/server/fn/admin'
 
+import { CloudflareCard } from './cloudflare-card'
 import { dokployStatusQuery } from './queries'
 
 type Applications = Awaited<ReturnType<typeof verifyDokployCredentialsFn>>
@@ -330,6 +331,8 @@ export function ClientDeployment({
           </div>
         </SettingsSection>
       ) : null}
+
+      <CloudflareCard organizationId={organizationId} />
     </div>
   )
 }

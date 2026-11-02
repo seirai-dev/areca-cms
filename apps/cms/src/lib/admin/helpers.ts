@@ -25,6 +25,8 @@ export const adminQueryKeys = {
   organizations: ['organizations'] as const,
   dokployCredentials: (organizationId: string) =>
     ['dokploy-credentials', organizationId] as const,
+  cloudflareCredentials: (organizationId: string) =>
+    ['cloudflare-credentials', organizationId] as const,
   sites: (organizationId: string) => ['sites', organizationId] as const,
   site: (id: string) => ['site', id] as const,
   devEnvironment: (siteId: string) => ['dev-environment', siteId] as const,

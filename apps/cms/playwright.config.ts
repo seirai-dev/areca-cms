@@ -90,6 +90,8 @@ export default defineConfig({
           // A frozen dev server: no watcher, no hot reloads (see vite.config.ts).
           env: {
             VITE_FREEZE: 'true',
+            // The Cloudflare stub that global-setup.ts starts (e2e/cloudflare-stub.ts).
+            CLOUDFLARE_API_BASE_URL: `http://127.0.0.1:${process.env.CLOUDFLARE_STUB_PORT ?? 4607}/client/v4`,
             // Setup spec token; the seeded admins have no two-factor enrolled.
             SETUP_TOKEN:
               process.env.SETUP_TOKEN ?? 'e2e-setup-token-0123456789',

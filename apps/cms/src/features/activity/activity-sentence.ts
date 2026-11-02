@@ -66,6 +66,16 @@ const SENTENCES: Partial<Record<string, Sentence>> = {
     m.activity_organization_dokploy_verified({ target }),
   'organization.dokploy_credentials_validation_failed': (target) =>
     m.activity_organization_dokploy_failed({ target }),
+  'organization.cloudflare_credentials_created': (target) =>
+    m.activity_organization_cloudflare_created({ target }),
+  'organization.cloudflare_credentials_updated': (target) =>
+    m.activity_organization_cloudflare_updated({ target }),
+  'organization.cloudflare_credentials_removed': (target) =>
+    m.activity_organization_cloudflare_removed({ target }),
+  'organization.cloudflare_credentials_verified': (target) =>
+    m.activity_organization_cloudflare_verified({ target }),
+  'organization.cloudflare_credentials_validation_failed': (target) =>
+    m.activity_organization_cloudflare_failed({ target }),
   'member.invite': (target) => m.activity_member_invite({ target }),
   'member.update_role': (target) => m.activity_member_update_role({ target }),
   'member.remove': (target) => m.activity_member_remove({ target }),
