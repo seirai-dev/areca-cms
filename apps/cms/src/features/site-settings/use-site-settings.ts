@@ -6,11 +6,13 @@ import { useServerFn } from '@tanstack/react-start'
 import { invalidateDevSync } from '#/features/dev-env/invalidate'
 import { useStepUp } from '#/features/security/step-up'
 import { adminQueryKeys } from '#/lib/admin/helpers'
+import { cloudflareStatusQuery } from '#/features/agency/queries'
 import {
   changeSiteSlugFn,
   deleteSiteFn,
   getDokployCredentialStatusFn,
   getSiteFn,
+  listCloudflareDeployTargetsFn,
   rotateSiteTokenFn,
   setSiteLanguagesFn,
   updateSiteFn,
@@ -21,6 +23,9 @@ export type SiteRecord = Awaited<ReturnType<typeof getSiteFn>>
 export type DokployApplication = Awaited<
   ReturnType<typeof verifyDokployCredentialsFn>
 >['applications'][number]
+export type CloudflareDeployTargets = Awaited<
+  ReturnType<typeof listCloudflareDeployTargetsFn>
+>
 
 /** The full site record (admins only) plus the settings mutations. */
 export function useSiteSettings(siteId: string) {
@@ -104,6 +109,33 @@ export function useDokployApplications(organizationId: string) {
     retry: false,
   })
   return { status, applications }
+}
+
+/**
+ * The client's Cloudflare Pages projects and Workers. Listing calls
+ * Cloudflare, so it runs only when the connection is configured, and it is
+ * cached for a minute. `refetch` ignores the cache (the refresh button).
+ */
+export function useCloudflareDeployTargets(
+  organizationId: string,
+  enabled: boolean,
+) {
+  const list = useServerFn(listCloudflareDeployTargetsFn)
+  return useQuery({
+    queryKey: [
+      ...adminQueryKeys.cloudflareCredentials(organizationId),
+      'deploy-targets',
+    ],
+    queryFn: () => list({ data: { organizationId } }),
+    enabled,
+    staleTime: 60_000,
+    retry: false,
+  })
+}
+
+/** The client's Cloudflare connection status (shared with the agency card). */
+export function useCloudflareConnection(organizationId: string) {
+  return useQuery(cloudflareStatusQuery(organizationId))
 }
 
 /**

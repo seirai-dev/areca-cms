@@ -61,6 +61,8 @@ export type CloudflareWorkerTrigger = {
   branchIncludes: string[]
   buildCommand: string | null
   deployCommand: string | null
+  /** Set once the trigger is removed; a deleted trigger cannot build. */
+  deletedOn: string | null
 }
 
 /**
@@ -248,6 +250,7 @@ function parseWorkerTrigger(raw: unknown): CloudflareWorkerTrigger {
     branchIncludes: textArray(record.branch_includes),
     buildCommand: text(record.build_command),
     deployCommand: text(record.deploy_command),
+    deletedOn: text(record.deleted_on),
   }
 }
 

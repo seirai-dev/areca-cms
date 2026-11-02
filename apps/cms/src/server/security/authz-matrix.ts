@@ -260,6 +260,13 @@ export const ROWS: Row[] = [
     }),
   },
   {
+    name: 'listCloudflareDeployTargetsFn',
+    fn: adminFns.listCloudflareDeployTargetsFn,
+    policy: 'agency',
+    tolerant: true,
+    prepare: (w) => ({ data: { organizationId: w.X.org.id } }),
+  },
+  {
     name: 'listSitesFn',
     fn: adminFns.listSitesFn,
     policy: 'agency',

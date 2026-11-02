@@ -31,7 +31,7 @@ export function SettingsSection({
       aria-labelledby={headingId}
       data-slot="settings-section"
       className={cn(
-        'grid gap-4 border-t border-border-default py-8 first:border-t-0 first:pt-0 min-[900px]:grid-cols-[280px_minmax(0,1fr)] min-[900px]:gap-10',
+        'grid grid-cols-[minmax(0,1fr)] gap-4 border-t border-border-default py-8 first:border-t-0 first:pt-0 min-[900px]:grid-cols-[280px_minmax(0,1fr)] min-[900px]:gap-10',
         className,
       )}
       {...props}
@@ -51,7 +51,7 @@ export function SettingsSection({
       ) : (
         <div
           className={cn(
-            'grid min-w-0 gap-5 p-5 surface-card',
+            'grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 p-5 surface-card',
             danger &&
               'border-[color-mix(in_oklab,var(--color-status-error)_30%,transparent)]',
           )}

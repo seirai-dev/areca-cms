@@ -357,6 +357,7 @@ describe('listWorkers and listWorkerTriggers', () => {
         branchIncludes: ['main'],
         buildCommand: 'pnpm build',
         deployCommand: 'npx wrangler deploy',
+        deletedOn: null,
       },
       {
         triggerUuid: null,
@@ -364,6 +365,7 @@ describe('listWorkers and listWorkerTriggers', () => {
         branchIncludes: [],
         buildCommand: null,
         deployCommand: null,
+        deletedOn: null,
       },
     ])
   })

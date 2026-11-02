@@ -22,6 +22,7 @@ import {
   saveCloudflareCredentials,
   verifyCloudflareCredentials,
 } from '#/server/admin/cloudflare-credentials'
+import { listCloudflareDeployTargets } from '#/server/admin/cloudflare-targets'
 import {
   getInvitationById,
   inviteMember,
@@ -231,6 +232,17 @@ export const removeCloudflareCredentialsFn = createServerFn({
       organizationId: data.organizationId,
       actorId: session.user.id,
     })
+  })
+
+/** Pages projects and Workers for the site Deployment tab. Lists only. */
+export const listCloudflareDeployTargetsFn = createServerFn({
+  method: 'GET',
+  ...adminFn,
+})
+  .validator(z.object({ organizationId: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    await requireAgencyAdmin()
+    return listCloudflareDeployTargets(data.organizationId)
   })
 
 export const listSitesFn = createServerFn({ method: 'GET', ...adminFn })

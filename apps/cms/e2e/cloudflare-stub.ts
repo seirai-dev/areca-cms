@@ -9,6 +9,11 @@ import type { IncomingMessage, Server, ServerResponse } from 'node:http'
  * The behaviour depends on the token, so specs need no shared state: a token
  * containing `disabled` gets a disabled status, one containing `nopages` is
  * refused for Pages, and any other `cfut_e2e_` token passes every check.
+ *
+ * The account holds two Pages projects (one git-connected, one direct upload)
+ * and three Workers (one with a production and a preview trigger, one with
+ * none, and one older Worker), so the deployment target picker has both
+ * groups and disabled rows to show.
  */
 
 export const CLOUDFLARE_STUB_PORT = Number(
@@ -21,6 +26,91 @@ export const E2E_CLOUDFLARE_TOKENS = {
   noPages: 'cfut_e2e_nopages_0002',
   disabled: 'cfut_e2e_disabled_0003',
 } as const
+
+/** The Pages projects the stub lists. `marketing-site` is buildable from git, `legacy-upload` is a direct upload. */
+const E2E_PAGES_PROJECTS = [
+  {
+    name: 'northbound-site',
+    subdomain: 'northbound-site.pages.dev',
+    domains: ['northbound.example.com'],
+    production_branch: 'main',
+    source: { type: 'github' },
+  },
+  {
+    name: 'marketing-site',
+    subdomain: 'marketing-site.pages.dev',
+    domains: ['marketing.example.com'],
+    production_branch: 'main',
+    source: { type: 'github', config: { production_branch: 'main' } },
+  },
+  {
+    name: 'legacy-upload',
+    subdomain: 'legacy-upload.pages.dev',
+    domains: [],
+    production_branch: 'main',
+    source: null,
+  },
+]
+
+/** The account's workers.dev subdomain. */
+export const E2E_WORKERS_SUBDOMAIN = 'e2e-acct'
+/** Trigger UUIDs and script tags are real UUID and 32-hex shapes: the CMS validates them. */
+export const E2E_SHOP_PROD_TRIGGER = '5b1f0c2e-7a3d-4c8e-9f10-2d4a6b8c0e11'
+export const E2E_SHOP_PREVIEW_TRIGGER = '6c2e1d3f-8b4e-4d9f-8a21-3e5b7c9d1f22'
+export const E2E_SHOP_TAG = 'a1b2c3d4e5f60718293a4b5c6d7e8f90'
+export const E2E_PLAIN_TAG = '0f1e2d3c4b5a69788796a5b4c3d2e1f0'
+
+const E2E_WORKERS = [
+  {
+    name: 'northbound-worker',
+    tag: 'tag-northbound',
+    workersDev: false,
+    domains: ['northbound-api.example.com'],
+    triggers: [
+      {
+        trigger_uuid: 'trigger-main',
+        trigger_name: 'main',
+        branch_includes: ['main'],
+        build_command: 'pnpm build',
+        deploy_command: 'npx wrangler deploy',
+        deleted_on: null,
+      },
+    ],
+  },
+  {
+    // A production trigger and a versions-upload preview on the same branch:
+    // the production one is picked, and the select offers both.
+    name: 'shop-worker',
+    tag: E2E_SHOP_TAG,
+    workersDev: true,
+    domains: [],
+    triggers: [
+      {
+        trigger_uuid: E2E_SHOP_PREVIEW_TRIGGER,
+        trigger_name: 'preview',
+        branch_includes: ['main'],
+        build_command: 'pnpm build',
+        deploy_command: 'npx wrangler versions upload',
+        deleted_on: null,
+      },
+      {
+        trigger_uuid: E2E_SHOP_PROD_TRIGGER,
+        trigger_name: 'main',
+        branch_includes: ['main'],
+        build_command: 'pnpm build',
+        deploy_command: 'npx wrangler deploy',
+        deleted_on: null,
+      },
+    ],
+  },
+  {
+    name: 'plain-worker',
+    tag: E2E_PLAIN_TAG,
+    workersDev: false,
+    domains: [],
+    triggers: [],
+  },
+]
 
 const PREFIX = '/client/v4'
 
@@ -74,7 +164,8 @@ function handle(req: IncomingMessage, res: ServerResponse) {
       return send(res, 403, refused('Authentication error'))
     }
     // The real API rejects Pages list requests with per_page above 10.
-    if (Number(url.searchParams.get('per_page') ?? '10') > 10) {
+    const perPage = Number(url.searchParams.get('per_page') ?? '10')
+    if (perPage > 10) {
       return send(
         res,
         400,
@@ -83,46 +174,58 @@ function handle(req: IncomingMessage, res: ServerResponse) {
         ),
       )
     }
-    return send(
-      res,
-      200,
-      envelope([
-        {
-          name: 'northbound-site',
-          subdomain: 'northbound-site.pages.dev',
-          domains: ['northbound.example.com'],
-          production_branch: 'main',
-          source: { type: 'github' },
-        },
-      ]),
-    )
+    return send(res, 200, envelope(E2E_PAGES_PROJECTS))
   }
 
   if (route === `/accounts/${E2E_CLOUDFLARE_ACCOUNT_ID}/workers/scripts`) {
     return send(
       res,
       200,
-      envelope([{ id: 'northbound-worker', tag: 'tag-northbound' }]),
+      envelope(
+        E2E_WORKERS.map((worker) => ({ id: worker.name, tag: worker.tag })),
+      ),
     )
   }
 
-  if (
-    route ===
-    `/accounts/${E2E_CLOUDFLARE_ACCOUNT_ID}/builds/workers/tag-northbound/triggers`
-  ) {
+  if (route === `/accounts/${E2E_CLOUDFLARE_ACCOUNT_ID}/workers/subdomain`) {
+    return send(res, 200, envelope({ subdomain: E2E_WORKERS_SUBDOMAIN }))
+  }
+
+  const workerRoute = route.match(
+    new RegExp(
+      `^/accounts/${E2E_CLOUDFLARE_ACCOUNT_ID}/workers/scripts/([^/]+)/subdomain$`,
+    ),
+  )
+  if (workerRoute) {
+    const worker = E2E_WORKERS.find((item) => item.name === workerRoute[1])
     return send(
       res,
       200,
-      envelope([
-        {
-          trigger_uuid: 'trigger-main',
-          trigger_name: 'main',
-          branch_includes: ['main'],
-          build_command: 'pnpm build',
-          deploy_command: 'npx wrangler deploy',
-        },
-      ]),
+      envelope({
+        enabled: worker?.workersDev ?? false,
+        previews_enabled: false,
+      }),
     )
+  }
+
+  if (route === `/accounts/${E2E_CLOUDFLARE_ACCOUNT_ID}/workers/domains`) {
+    const service = url.searchParams.get('service') ?? ''
+    const worker = E2E_WORKERS.find((item) => item.name === service)
+    return send(
+      res,
+      200,
+      envelope((worker?.domains ?? []).map((hostname) => ({ hostname }))),
+    )
+  }
+
+  const triggerRoute = route.match(
+    new RegExp(
+      `^/accounts/${E2E_CLOUDFLARE_ACCOUNT_ID}/builds/workers/([^/]+)/triggers$`,
+    ),
+  )
+  if (triggerRoute) {
+    const worker = E2E_WORKERS.find((item) => item.tag === triggerRoute[1])
+    return send(res, 200, envelope(worker ? worker.triggers : []))
   }
 
   return send(res, 404, refused('No such route in the Cloudflare stub'))
