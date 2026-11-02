@@ -29,3 +29,19 @@ export function hasCompleteDeploymentTarget(
     target.branch.length > 0
   )
 }
+
+/**
+ * Whether two stored targets are the same settings: same provider, same
+ * resource, same branch, same health URL. A missing target equals only another
+ * missing target. Targets are flat objects, so comparing their fields is enough.
+ */
+export function sameDeploymentTarget(
+  a: DeploymentTarget | null | undefined,
+  b: DeploymentTarget | null | undefined,
+): boolean {
+  if (!a || !b) return !a && !b
+  const left = a as Record<string, unknown>
+  const right = b as Record<string, unknown>
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)])
+  return [...keys].every((key) => left[key] === right[key])
+}

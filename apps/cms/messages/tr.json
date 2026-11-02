@@ -2271,6 +2271,8 @@
   "settings_cloudflare_not_connected_body": "Önce {client} için Cloudflare'i bağlayın.",
   "settings_cloudflare_no_git": "Git bağlantısı yok",
   "settings_cloudflare_no_builds": "Workers Builds bağlı değil",
+  "settings_cloudflare_no_production_trigger": "Üretim derleme tetikleyicisi yok",
+  "settings_deployment_locked": "Bir yayın sürüyor ya da sonucu bilinmiyor. Dağıtım ayarlarını yayın bittiğinde ya da kontrol edildiğinde değiştirebilirsiniz.",
   "settings_cloudflare_branch_label": "Derleme dalı",
   "settings_cloudflare_trigger_label": "Derleme tetikleyicisi",
   "settings_cloudflare_trigger_choose": "Bir derleme tetikleyicisi seçin",

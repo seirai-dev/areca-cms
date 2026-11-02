@@ -82,6 +82,11 @@ test.describe('Cloudflare deployment target', () => {
     await expect(
       page.getByTestId('target-option-workers-plain-worker'),
     ).toContainText('Workers Builds not connected')
+    const previewOnly = page.getByTestId(
+      'target-option-workers-preview-only-worker',
+    )
+    await expect(previewOnly).toHaveAttribute('aria-disabled', 'true')
+    await expect(previewOnly).toContainText('No production build trigger')
 
     // Search matches the name, the domain and the branch.
     const search = page.getByTestId('target-combobox-search')

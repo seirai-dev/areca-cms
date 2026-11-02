@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   deploymentTargetResourceId,
   hasCompleteDeploymentTarget,
+  sameDeploymentTarget,
 } from './deployment-target'
 import type { DeploymentTarget } from './types'
 
@@ -68,5 +69,35 @@ describe('hasCompleteDeploymentTarget', () => {
     expect(hasCompleteDeploymentTarget({ ...workers, triggerUuid: '' })).toBe(
       false,
     )
+  })
+})
+
+describe('sameDeploymentTarget', () => {
+  it('matches equal targets whatever the key order, and no target only with no target', () => {
+    const reordered = {
+      healthCheckUrl: pages.healthCheckUrl,
+      branch: 'main',
+      projectName: 'areca-site',
+      kind: 'pages',
+      provider: 'cloudflare',
+    } as DeploymentTarget
+    expect(sameDeploymentTarget(pages, reordered)).toBe(true)
+    expect(sameDeploymentTarget(null, undefined)).toBe(true)
+    expect(sameDeploymentTarget(null, pages)).toBe(false)
+    expect(sameDeploymentTarget(pages, null)).toBe(false)
+  })
+
+  it('sees a change in the resource, the branch, the health URL or the provider', () => {
+    expect(
+      sameDeploymentTarget(pages, { ...pages, projectName: 'other' }),
+    ).toBe(false)
+    expect(sameDeploymentTarget(pages, { ...pages, branch: 'dev' })).toBe(false)
+    expect(
+      sameDeploymentTarget(pages, {
+        ...pages,
+        healthCheckUrl: 'https://site.example.test/up',
+      }),
+    ).toBe(false)
+    expect(sameDeploymentTarget(pages, dokploy)).toBe(false)
   })
 })

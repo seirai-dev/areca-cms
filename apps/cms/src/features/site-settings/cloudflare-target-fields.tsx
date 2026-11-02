@@ -22,6 +22,8 @@ import type { TargetComboboxGroup, TargetComboboxItem } from './target-combobox'
 function disabledCopy(reason: CloudflareDeployTarget['disabledReason']) {
   if (reason === 'no_git') return m.settings_cloudflare_no_git()
   if (reason === 'no_builds') return m.settings_cloudflare_no_builds()
+  if (reason === 'no_production_trigger')
+    return m.settings_cloudflare_no_production_trigger()
   return null
 }
 
@@ -57,6 +59,7 @@ export function CloudflareTargetFields({
   targets,
   selection,
   error,
+  disabled = false,
   onPick,
   onPickTrigger,
 }: {
@@ -65,6 +68,7 @@ export function CloudflareTargetFields({
   targets: UseQueryResult<CloudflareDeployTargets>
   selection: CloudflareSelection | null
   error?: string
+  disabled?: boolean
   onPick: (target: CloudflareDeployTarget) => void
   onPickTrigger: (triggerUuid: string) => void
 }) {
@@ -126,6 +130,7 @@ export function CloudflareTargetFields({
         refreshing={targets.isFetching}
         refreshLabel={m.settings_cloudflare_refresh()}
         invalid={Boolean(error)}
+        disabled={disabled}
         onSelect={(value) => {
           const target = data
             ? [...data.pages, ...data.workers].find(
@@ -168,6 +173,7 @@ export function CloudflareTargetFields({
             id="cloudflare-trigger"
             data-testid="cloudflare-trigger-select"
             value={selection.triggerUuid ?? ''}
+            disabled={disabled}
             onChange={(event) => onPickTrigger(event.target.value)}
             className="h-10 w-full min-w-0 rounded-control border border-border-default bg-background-surface px-3 font-mono text-[13px] text-text-primary"
           >
@@ -175,7 +181,11 @@ export function CloudflareTargetFields({
               <option value="">{m.settings_cloudflare_trigger_choose()}</option>
             )}
             {triggers.map((trigger) => (
-              <option key={trigger.triggerUuid} value={trigger.triggerUuid}>
+              <option
+                key={trigger.triggerUuid}
+                value={trigger.triggerUuid}
+                disabled={trigger.preview}
+              >
                 {triggerLabel(trigger)}
               </option>
             ))}

@@ -285,6 +285,21 @@ describe('saved selection status', () => {
     ).toBe('missing')
   })
 
+  it('counts a Worker whose saved trigger is now a preview as missing', () => {
+    expect(
+      selectionStatus(
+        {
+          kind: 'workers',
+          name: 'shop-worker',
+          scriptTag: TAG,
+          triggerUuid: 'other-trigger',
+          branch: 'main',
+        },
+        targets,
+      ),
+    ).toBe('missing')
+  })
+
   it('finds the listed item for a selection', () => {
     expect(findListed(saved('marketing-site'), targets)).toBe(pages)
     expect(findListed(saved('nope'), targets)).toBeNull()

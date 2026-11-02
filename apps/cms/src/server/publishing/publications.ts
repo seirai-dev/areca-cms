@@ -24,6 +24,7 @@ import { audit } from '#/server/audit'
 import { env } from '#/env'
 import { lockOrganizationForMutation } from '#/server/admin/organization-lock'
 import { assetMutationLock } from '#/server/assets/usage'
+import { siteHasPendingDeployment } from '#/server/publishing/deployment-safety'
 import { buildSnapshot } from '#/server/content/snapshot'
 import { sectionBlockers } from '#/server/content/globals'
 import {
@@ -706,6 +707,8 @@ export async function getSiteReleaseStatus(siteId: string) {
     publishingMode: existingSite.publishingMode,
     demo,
     activeJob: activeJob ?? queuedJob ?? null,
+    // The same rule as the deployment-settings guard in updateSite.
+    deploymentPending: await siteHasPendingDeployment(db, siteId),
     pendingEntries: diff.pendingCount,
     liveEntryIds: diff.liveEntryIds,
     liveSlugsByEntryId: diff.liveSlugsByEntryId,

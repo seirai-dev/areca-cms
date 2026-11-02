@@ -23,9 +23,12 @@ export function ProviderSwitch({
   clientName,
   dokploy,
   cloudflare,
+  locked = false,
 }: {
   value: ProviderChoice
   onChange: (next: ProviderChoice) => void
+  /** A release is pending: the provider cannot change. */
+  locked?: boolean
   organizationId: string
   clientName: string
   dokploy: { configured: boolean; pending: boolean; host: string }
@@ -48,12 +51,13 @@ export function ProviderSwitch({
             value: 'dokploy',
             label: m.settings_provider_dokploy(),
             testId: 'deployment-provider-dokploy',
+            disabled: locked,
           },
           {
             value: 'cloudflare',
             label: m.settings_provider_cloudflare(),
             testId: 'deployment-provider-cloudflare',
-            disabled: !cloudflare.configured,
+            disabled: locked || !cloudflare.configured,
           },
         ]}
       />

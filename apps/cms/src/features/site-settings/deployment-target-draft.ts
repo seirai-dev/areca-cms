@@ -96,7 +96,8 @@ export function findListed(
 
 /**
  * Whether the saved selection still exists in Cloudflare. A Worker whose
- * saved trigger is gone counts as missing too. `unknown` until the list loads.
+ * saved trigger is gone, or is now a preview trigger (which never goes live),
+ * counts as missing too. `unknown` until the list loads.
  */
 export function selectionStatus(
   selection: CloudflareSelection,
@@ -109,7 +110,8 @@ export function selectionStatus(
     selection.kind === 'workers' &&
     selection.triggerUuid &&
     !listed.triggers.some(
-      (trigger) => trigger.triggerUuid === selection.triggerUuid,
+      (trigger) =>
+        trigger.triggerUuid === selection.triggerUuid && !trigger.preview,
     )
   ) {
     return 'missing'

@@ -11,9 +11,9 @@ import type { IncomingMessage, Server, ServerResponse } from 'node:http'
  * refused for Pages, and any other `cfut_e2e_` token passes every check.
  *
  * The account holds two Pages projects (one git-connected, one direct upload)
- * and three Workers (one with a production and a preview trigger, one with
- * none, and one older Worker), so the deployment target picker has both
- * groups and disabled rows to show.
+ * and four Workers (one with a production and a preview trigger, one with
+ * none, one with only a preview trigger, and one plain Worker), so the
+ * deployment target picker has both groups and disabled rows to show.
  */
 
 export const CLOUDFLARE_STUB_PORT = Number(
@@ -59,6 +59,7 @@ export const E2E_SHOP_PROD_TRIGGER = '5b1f0c2e-7a3d-4c8e-9f10-2d4a6b8c0e11'
 export const E2E_SHOP_PREVIEW_TRIGGER = '6c2e1d3f-8b4e-4d9f-8a21-3e5b7c9d1f22'
 export const E2E_SHOP_TAG = 'a1b2c3d4e5f60718293a4b5c6d7e8f90'
 export const E2E_PLAIN_TAG = '0f1e2d3c4b5a69788796a5b4c3d2e1f0'
+export const E2E_PREVIEW_ONLY_TAG = 'e5f4d3c2b1a0918f7e6d5c4b3a291807'
 
 const E2E_WORKERS = [
   {
@@ -109,6 +110,23 @@ const E2E_WORKERS = [
     workersDev: false,
     domains: [],
     triggers: [],
+  },
+  {
+    // Only a versions-upload preview trigger: listed, but not buildable.
+    name: 'preview-only-worker',
+    tag: E2E_PREVIEW_ONLY_TAG,
+    workersDev: false,
+    domains: [],
+    triggers: [
+      {
+        trigger_uuid: '7d3f2e1c-9a4b-4e5f-8b32-4f6a8c0d2e33',
+        trigger_name: 'preview',
+        branch_includes: ['main'],
+        build_command: 'pnpm build',
+        deploy_command: 'npx wrangler versions upload',
+        deleted_on: null,
+      },
+    ],
   },
 ]
 
