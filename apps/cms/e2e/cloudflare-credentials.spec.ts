@@ -53,7 +53,9 @@ test.describe('Cloudflare credentials', () => {
     const permissions = guide.getByTestId('cloudflare-guide-permissions')
     await expect(permissions).toContainText('Account › Cloudflare Pages › Edit')
     await expect(permissions).toContainText('Account › Workers Scripts › Read')
-    await expect(permissions).toContainText('Account › Workers Builds Configuration › Edit')
+    await expect(permissions).toContainText(
+      'Account › Workers Builds Configuration › Edit',
+    )
     await expect(
       guide.getByTestId('cloudflare-guide-steps').locator(':scope > li'),
     ).toHaveCount(9)
@@ -102,6 +104,21 @@ test.describe('Cloudflare credentials', () => {
     await expect(page.getByTestId('cloudflare-saved-by')).toBeVisible()
     await expect(page.getByTestId('cloudflare-last-verified')).toContainText(
       /./,
+    )
+
+    // Verify refreshes the check results but never touches what the admin
+    // has typed, even though it updates the saved status.
+    await page
+      .getByTestId('cloudflare-account-id')
+      .fill('ffffffffffffffffffffffffffffffff')
+    await page.getByTestId('cloudflare-api-token').fill('cfut_unsaved_example')
+    await page.getByTestId('cloudflare-verify').click()
+    await expectToast(page, 'Cloudflare credentials checked')
+    await expect(page.getByTestId('cloudflare-account-id')).toHaveValue(
+      'ffffffffffffffffffffffffffffffff',
+    )
+    await expect(page.getByTestId('cloudflare-api-token')).toHaveValue(
+      'cfut_unsaved_example',
     )
 
     // A reload shows the same connection without the token anywhere.
