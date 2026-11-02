@@ -46,6 +46,9 @@ export function GeneralTab({
     url?: string
     previewUrl?: string
   }>({})
+  // This tab's own save. The settings mutation is shared, so its pending state
+  // would open the save bar on every other tab too.
+  const [saving, setSaving] = React.useState(false)
 
   // Follow the server copy until the user starts editing.
   React.useEffect(() => setName(site.name), [site.name])
@@ -78,6 +81,7 @@ export function GeneralTab({
     }
     setErrors(problems)
     if (problems.name || problems.url || problems.previewUrl) return
+    setSaving(true)
     try {
       await settings.update.mutateAsync({
         name: next.name,
@@ -91,6 +95,8 @@ export function GeneralTab({
       toast.success(m.sites_updated())
     } catch (error) {
       toast.error(errorMessage(error))
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -215,7 +221,7 @@ export function GeneralTab({
 
       <SettingsSaveBar
         dirty={dirty}
-        saving={settings.update.isPending}
+        saving={saving}
         onDiscard={discard}
         formId={formId}
         saveTestId="save-general"

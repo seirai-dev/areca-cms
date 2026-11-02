@@ -99,7 +99,7 @@ export function registerPublishingTools(registry: ToolCollector): void {
     name: 'set_publishing_mode',
     title: 'Set publishing mode',
     description:
-      'Agency admin only. Sets how this site publishes. "demo": go_live builds a release that `areca pull` can fetch without a deployment; demo releases never reach visitors. "production": go_live builds and deploys to the live site, which needs a deployment target with an application ID and a health check URL (set in Settings › Deployment). A site that has ever gone live in production cannot switch to demo; change it in Settings › Deployment instead. Setting the mode the site already has changes nothing. Returns publishingMode and deploymentConfigured.',
+      'Agency admin only. Sets how this site publishes. "demo": go_live builds a release that `areca pull` can fetch without a deployment; demo releases never reach visitors. "production": go_live builds and deploys to the live site, which needs a deployment target (a Dokploy application, or a Cloudflare Pages project or Worker) and a health check URL (set in Settings › Deployment). A site that has ever gone live in production cannot switch to demo; change it in Settings › Deployment instead. Setting the mode the site already has changes nothing. Returns publishingMode and deploymentConfigured.',
     inputSchema: z.object({
       mode: z
         .enum(['demo', 'production'])
@@ -133,7 +133,7 @@ export function registerPublishingTools(registry: ToolCollector): void {
       }
       if (input.mode === 'production' && !isDeploymentConfigured(current)) {
         throw new ConflictError(
-          'Production publishing needs a deployment target with an application ID and a health check URL. Set them in Settings › Deployment first, or keep demo mode.',
+          'Production publishing needs a deployment target (a Dokploy application, or a Cloudflare Pages project or Worker) and a health check URL. Set them in Settings › Deployment first, or keep demo mode.',
         )
       }
       await updateSite(

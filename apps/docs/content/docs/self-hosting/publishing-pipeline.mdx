@@ -1,6 +1,6 @@
 ---
 title: Publishing pipeline
-description: How a Go live request moves through the queue, build leases, Dokploy deployment and health check, and how to recover a stuck or uncertain release.
+description: How a Go live request moves through the queue, build leases, deployment (Dokploy or Cloudflare) and health check, and how to recover a stuck or uncertain release.
 ---
 
 Editors press **Go live** in the CMS, but the release itself is carried out by the publishing worker that runs inside your CMS instances. This page follows a release from the operator's side: what the worker does at each stage, what each outcome means for the live site, and what to do when a release stops moving. For the editor's view, see [going live](/docs/cms/going-live).
@@ -12,7 +12,7 @@ Each release creates a **publication** (the release record) and a **build job** 
 <Steps>
 <Step>
 
-**Request.** An owner presses **Go live**. The CMS checks that a production site has a Dokploy application and a health check URL. If either is missing, the request is rejected with the message "Production publishing requires a deployment target and a publication-aware health URL." Otherwise it freezes the content into an immutable snapshot, and creates a publication in `pending` and a build job in `queued`. Only one job can be active for a site at a time.
+**Request.** An owner presses **Go live**. The CMS checks that a production site has a deployment target (a Dokploy application or a Cloudflare project) and a health check URL. If either is missing, the request is rejected with the message "Production publishing requires a deployment target and a publication-aware health URL." Otherwise it freezes the content into an immutable snapshot, and creates a publication in `pending` and a build job in `queued`. Only one job can be active for a site at a time.
 
 </Step>
 <Step>
@@ -27,12 +27,12 @@ Each release creates a **publication** (the release record) and a **build job** 
 </Step>
 <Step>
 
-**Dispatch.** The worker records in the database that it is about to contact Dokploy, then sets `ARECA_SNAPSHOT_ID` as a build argument to the publication ID and sends one deploy request. The deployment is tagged `areca:<jobId>`. See [how the snapshot reaches the build](/docs/self-hosting/deployment-targets#how-the-snapshot-reaches-the-build).
+**Dispatch.** The worker records in the database that it is about to contact the deployment provider. For Dokploy, it sets `ARECA_SNAPSHOT_ID` as a build argument to the publication ID and sends one deploy request, and the deployment is tagged `areca:<jobId>`. For Cloudflare, it writes `ARECA_SNAPSHOT_ID` as a build variable on the project, then starts one build. See [how the snapshot reaches the build](/docs/self-hosting/deployment-targets#how-the-snapshot-reaches-the-build) and [how the snapshot reaches a Cloudflare build](/docs/self-hosting/deployment-targets#how-the-snapshot-reaches-a-cloudflare-build).
 
 </Step>
 <Step>
 
-**Wait for the build.** The worker checks the Dokploy deployment every 5 seconds, for up to 15 minutes. If Dokploy reports an error, the release fails with `Deploy error`.
+**Wait for the build.** The worker checks the deployment in the provider every 5 seconds, for up to 15 minutes. A status check that fails with a network error or an HTTP 408, 429 or 5xx response is retried for about 30 seconds before the release is treated as uncertain. If the provider reports an error, the release fails with `Deploy error`. For Cloudflare, a Pages deployment is done when its deploy stage succeeds, and a Worker build when it ends with the outcome `success`.
 
 </Step>
 <Step>
@@ -52,8 +52,8 @@ Each release creates a **publication** (the release record) and a **build job** 
 | Outcome | Publication | Previous release | What to do |
 | --- | --- | --- | --- |
 | Succeeded | `live` | Marked `superseded` | Nothing. |
-| Failed before the deploy request was sent | `failed` | Stays live | Fix the cause (for example a missing target or a rejected Dokploy request), then press **Go live** again. |
-| Failed after the deploy request, with a Dokploy error or failed health check | `failed` | Stays live | Read the Dokploy build log and the job log, fix the cause, then publish again. |
+| Failed before the deploy request was sent | `failed` | Stays live | Fix the cause (for example a missing target, or a rejected deploy request), then press **Go live** again. |
+| Failed after the deploy request, with a deployment error or failed health check | `failed` | Stays live | Read the build log in the provider and the job log, fix the cause, then publish again. |
 | Uncertain: the deploy request may have been accepted | Blocked | Stays live | Reconcile the job. See [uncertain deployments](#uncertain-deployments). |
 | Cancelled | `superseded` | Stays live | Only queued jobs can be cancelled, with **Cancel job**. |
 | Lease expired | `failed`, or blocked if the deploy request had been sent | Stays live | Retry if no deploy request was sent. Otherwise reconcile. |
@@ -62,7 +62,7 @@ A failed release never takes the live site down on its own. The previous release
 
 ## Uncertain deployments
 
-A release is uncertain when Areca cannot tell whether Dokploy accepted the deploy request. This happens when the request times out or gets an ambiguous response, or when the worker stops after sending the request but before it records the result. While a job is uncertain, the site is blocked: no new **Go live** can start for it.
+A release is uncertain when Areca cannot tell whether the deployment provider accepted the deploy request. This happens when the request times out or gets an ambiguous response, or when the worker stops after sending the request but before it records the result. A status check that is still failing after about 30 seconds of retries also makes it uncertain. While a job is uncertain, the site is blocked: no new **Go live** can start for it.
 
 Areca never sends a second deploy request to resolve an uncertain job. Recovery is manual.
 
@@ -74,35 +74,35 @@ Areca never sends a second deploy request to resolve an uncertain job. Recovery 
 </Step>
 <Step>
 
-**Check Dokploy.** In the application's deployment history, look for a deployment titled `areca:<jobId>` whose description contains the matching publication ID and snapshot hash. For applications built from a Git provider, Dokploy replaces that title and description with the commit message and `Commit: <sha>`. Areca then matches the one deployment created after the dispatch, if there is exactly one. If there are several, check the deployment history by hand. Do not start a replacement build while the original might still be running.
+**Check the provider.** For Dokploy, look in the application's deployment history for a deployment titled `areca:<jobId>` whose description contains the matching publication ID and snapshot hash. For applications built from a Git provider, Dokploy replaces that title and description with the commit message and `Commit: <sha>`. Areca then matches the one deployment created after the dispatch, if there is exactly one. For Cloudflare, look in **Workers & Pages** › the project › **Deployments** for a Pages deployment started by the API (type `ad_hoc`) on the production branch, or in the Worker's **Builds** for a build started by the API (trigger source `manual`) on the same trigger and branch. If there are several matches, check the history by hand. Do not start a replacement build while the original might still be running.
 
 </Step>
 <Step>
 
-**Check the deployment status.** If you find the deployment, or if Dokploy's connection has been restored since the failure, an owner selects **Check deployment status** on that job. Areca resumes watching the same deployment, then checks the health response for that publication.
+**Check the deployment status.** If you find the deployment, or if the provider's connection has been restored since the failure, an owner selects **Check deployment status** on that job. Areca resumes watching the same deployment, then checks the health response for that publication.
 
 </Step>
 <Step>
 
-**If no deployment matches, investigate.** A missing record does not prove the request was rejected. Keep the block in place while you find out what happened, for example by checking Dokploy's logs and whether any build is still queued or running.
+**If no deployment matches, investigate.** A missing record does not prove the request was rejected. Keep the block in place while you find out what happened, for example by checking the provider's logs and whether any build is still queued or running.
 
 </Step>
 <Step>
 
-**Release the block, if you must.** Once you have confirmed that every possibly running or queued Dokploy deployment for this request has been stopped or cancelled, an agency admin can select **Release publishing block**. Enter the reason you verified this, for example at least ten characters describing the check you made, and confirm. The release is marked `failed`, the site is unblocked, and the action is recorded in the audit log. Areca does not deploy again, and it never marks the uncertain release live.
+**Release the block, if you must.** Once you have confirmed that every possibly running or queued deployment or build for this request has been stopped or cancelled in the provider, an agency admin can select **Release publishing block**. Enter the reason you verified this, for example at least ten characters describing the check you made, and confirm. The release is marked `failed`, the site is unblocked, and the action is recorded in the audit log. Areca does not deploy again, and it never marks the uncertain release live.
 
 </Step>
 </Steps>
 
-<Callout type="warn" title="Releasing the block does not stop Dokploy">
+<Callout type="warn" title="Releasing the block does not stop the deployment">
 
-Releasing the block only unblocks Areca. If a deployment is still running in Dokploy, it may finish later and serve content from the uncertain release. Stop or cancel it in Dokploy first, and only then release the block.
+Releasing the block only unblocks Areca. If a deployment or build is still running in the provider, it may finish later and serve content from the uncertain release. Stop or cancel it in the provider's dashboard first, and only then release the block.
 
 </Callout>
 
 Owners can check the deployment status but cannot release the block. Only agency admins can do that.
 
-Do not change the Dokploy host or the application for a site while one of its jobs is uncertain. Recovery uses the connection that was saved for the job.
+The server refuses to change the publishing mode or the deployment target of a site while one of its jobs is queued, running or uncertain. It also refuses to change the Dokploy host or the Cloudflare account of a client while any of its sites has such a job. The Deployment tab locks these settings in the same cases. Recovery uses the connection that was saved for the job.
 
 ## Urgent releases
 
@@ -134,16 +134,17 @@ Start with the job log. In **Go live**, open the release and select **View log**
 - Look for worker errors in the CMS logs.
 
 **The job stays `deploying`.**
-- Check the deployment status in Dokploy. Its build log shows clone and build errors, for example a deploy key that cannot clone the repository.
+- Check the deployment status in the provider. In Dokploy, its build log shows clone and build errors, for example a deploy key that cannot clone the repository. In Cloudflare, check the Pages deployment or the Worker build in the dashboard.
 - Wait up to 15 minutes. If the wait runs out, the release becomes uncertain, and you reconcile it.
 
 **The job fails with `Health check failed`.**
-- Open the health check URL in a browser or with `curl`. It must return JSON with the new publication ID. If it returns the old ID, the new container is not serving. Check that `ARECA_SNAPSHOT_ID` is in the build arguments and that the Dockerfile declares it after the SDK build.
+- Open the health check URL in a browser or with `curl`. It must return JSON with the new publication ID. If it returns the old ID, the new build is not serving. Check that `ARECA_SNAPSHOT_ID` is set (as a build argument in Dokploy, or as a build variable in Cloudflare), and that a Dokploy Dockerfile declares it after the SDK build.
 - If the URL uses a LAN address, check the two switches in [HTTPS and private addresses](/docs/self-hosting/deployment-targets#https-and-private-addresses).
-- Check that the host publishing port maps to the container's port and that the update order is stop-first.
+- For Dokploy, check that the host publishing port maps to the container's port and that the update order is stop-first.
+- For Cloudflare, check that the build command runs `areca pull` before the build, and that the health route is served by the build. See [Cloudflare builds](/docs/sdk/go-live-builds#cloudflare-builds).
 
 **The job fails with `Deploy error`.**
-- Read the Dokploy deployment log for the failing build. A cloning error usually points to the deploy key or the repository URL.
+- Read the deployment log in Dokploy for the failing build, or the build log in Cloudflare. In Dokploy, a cloning error usually points to the deploy key or the repository URL.
 
 **The site is blocked and you see a message about an unknown outcome.**
 - Follow [uncertain deployments](#uncertain-deployments).
@@ -154,7 +155,7 @@ Start with the job log. In **Go live**, open the release and select **View log**
 
 ## Related
 
-- [Deployment targets (Dokploy)](/docs/self-hosting/deployment-targets): the Dokploy setup, credentials and health check rules.
+- [Deployment targets (Dokploy and Cloudflare)](/docs/self-hosting/deployment-targets): the provider setup, credentials and health check rules.
 - [Operations and monitoring](/docs/self-hosting/operations): metrics, alerts, logs and worker shutdown.
 - [Going live](/docs/cms/going-live): the editor's view of a release.
 - [Deployments](/docs/cms/deployments): assigning a deployment to a site.

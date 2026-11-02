@@ -32,6 +32,8 @@ export type ReleaseStatusData = {
     error: string | null
   } | null
   pendingEntries: number
+  /** A release is queued, running, or uncertain: deployment settings wait. */
+  deploymentPending?: boolean
   liveEntryIds?: string[]
   liveSlugsByEntryId?: Record<string, string>
   pendingEntryIds?: string[]

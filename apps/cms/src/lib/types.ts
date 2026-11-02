@@ -61,11 +61,40 @@ export type BuildJobStatus =
   | 'failed'
   | 'cancelled'
 
-export type DeploymentTarget = {
+/** Dokploy application. The application ID is the upstream identity. */
+export type DokployDeploymentTarget = {
   provider: 'dokploy'
   applicationId: string
-  healthCheckUrl?: string
+  healthCheckUrl: string
 }
+
+/** Cloudflare Pages project connected to git. `branch` is the production branch. */
+export type CloudflarePagesDeploymentTarget = {
+  provider: 'cloudflare'
+  kind: 'pages'
+  projectName: string
+  branch: string
+  healthCheckUrl: string
+}
+
+/**
+ * Cloudflare Worker connected to Workers Builds. `scriptTag` identifies the
+ * Worker, `triggerUuid` the build trigger that covers `branch`.
+ */
+export type CloudflareWorkersDeploymentTarget = {
+  provider: 'cloudflare'
+  kind: 'workers'
+  scriptName: string
+  scriptTag: string
+  triggerUuid: string
+  branch: string
+  healthCheckUrl: string
+}
+
+export type DeploymentTarget =
+  | DokployDeploymentTarget
+  | CloudflarePagesDeploymentTarget
+  | CloudflareWorkersDeploymentTarget
 
 export type SnapshotRichText = {
   json: unknown

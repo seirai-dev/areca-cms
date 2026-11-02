@@ -18,6 +18,10 @@ import { isValidSlug } from '#/lib/slug'
 import { normalizePreviewUrl } from '#/lib/preview-url'
 import { isDevSite } from '#/server/security/site-visibility'
 import type { DeploymentTarget } from '#/lib/types'
+import {
+  deploymentTargetResourceId,
+  sameDeploymentTarget,
+} from '#/lib/deployment-target'
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
 import { lockOrganizationForMutation } from './organization-lock'
@@ -32,18 +36,48 @@ import { deleteDevSiteRows } from '#/server/dev-env/delete'
 import { lockProductionSite } from '#/server/dev-env/lock'
 import { lockProductionRow } from '#/server/dev-env/rows'
 
+const healthCheckUrlSchema = z
+  .string()
+  .url()
+  .refine(
+    (value) => ['http:', 'https:'].includes(new URL(value).protocol),
+    'Health URL must use HTTP or HTTPS',
+  )
+
+const cloudflareProjectNameSchema = z
+  .string()
+  .regex(
+    /^[a-z0-9][a-z0-9-]*$/,
+    'Use the Pages project name (lowercase letters, digits and hyphens)',
+  )
+
+const branchSchema = z.string().trim().min(1)
+
+/** Validates the target a site publishes to. Null clears it. */
 export const deploymentTargetSchema: z.ZodType<DeploymentTarget | null> =
   z.union([
     z.object({
       provider: z.literal('dokploy'),
       applicationId: z.string().min(1),
-      healthCheckUrl: z
+      healthCheckUrl: healthCheckUrlSchema,
+    }),
+    z.object({
+      provider: z.literal('cloudflare'),
+      kind: z.literal('pages'),
+      projectName: cloudflareProjectNameSchema,
+      branch: branchSchema,
+      healthCheckUrl: healthCheckUrlSchema,
+    }),
+    z.object({
+      provider: z.literal('cloudflare'),
+      kind: z.literal('workers'),
+      scriptName: z.string().min(1),
+      scriptTag: z
         .string()
-        .url()
-        .refine(
-          (value) => ['http:', 'https:'].includes(new URL(value).protocol),
-          'Health URL must use HTTP or HTTPS',
-        ),
+        .regex(/^[0-9a-f]{32}$/i, 'Use the Worker script tag'),
+      triggerUuid: z.string().uuid(),
+      branch: branchSchema,
+      healthCheckUrl: healthCheckUrlSchema,
     }),
     z.null(),
   ])
@@ -221,6 +255,31 @@ export async function createSite(input: {
   }
 }
 
+/**
+ * Whether a patch changes the deployment settings (the publishing mode or the
+ * deployment target) compared with the stored row. Unchanged values do not count.
+ */
+function changesDeploymentSettings(
+  patch: {
+    publishingMode?: 'production' | 'demo'
+    deploymentTarget?: DeploymentTarget | null
+  },
+  stored: {
+    publishingMode: 'production' | 'demo'
+    deploymentTarget: DeploymentTarget | null
+  },
+) {
+  if (
+    patch.publishingMode !== undefined &&
+    patch.publishingMode !== stored.publishingMode
+  )
+    return true
+  return (
+    'deploymentTarget' in patch &&
+    !sameDeploymentTarget(patch.deploymentTarget, stored.deploymentTarget)
+  )
+}
+
 export async function updateSite(
   id: string,
   input: {
@@ -277,7 +336,25 @@ export async function updateSite(
   const changed = (Object.keys(patch) as (keyof typeof patch)[]).filter(
     (key) => key !== 'updatedAt',
   )
+  // Changing the deployment settings waits for pending releases. The check
+  // runs under the organization lock, like enqueue, against the locked row.
+  const mayChangeDeployment =
+    patch.publishingMode !== undefined || 'deploymentTarget' in patch
   const updated = await db.transaction(async (tx) => {
+    if (mayChangeDeployment) {
+      await lockOrganizationForMutation(tx, existing.organizationId)
+      const locked = (
+        await tx.select().from(site).where(eq(site.id, id)).for('update')
+      ).at(0)
+      if (!locked) throw new NotFoundError(m.server_site_not_found())
+      if (changesDeploymentSettings(patch, locked)) {
+        await assertSiteHasNoPendingDeployment(
+          tx,
+          id,
+          'changing the deployment settings of this site',
+        )
+      }
+    }
     const row = (
       await tx.update(site).set(patch).where(eq(site.id, id)).returning()
     ).at(0)
@@ -303,7 +380,10 @@ export async function updateSite(
             : {}),
           ...('deploymentTarget' in patch
             ? {
-                deploymentTarget: patch.deploymentTarget?.applicationId ?? null,
+                deploymentTarget: patch.deploymentTarget
+                  ? deploymentTargetResourceId(patch.deploymentTarget)
+                  : null,
+                deploymentProvider: patch.deploymentTarget?.provider ?? null,
               }
             : {}),
         },

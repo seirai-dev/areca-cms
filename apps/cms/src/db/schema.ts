@@ -191,6 +191,26 @@ export const dokployCredential = pgTable('dokploy_credential', {
   updatedAt: updatedAt(),
 })
 
+/** Server-only Cloudflare credentials. Never include encryptedApiToken in UI DTOs. */
+export const cloudflareCredential = pgTable('cloudflare_credential', {
+  organizationId: text('organization_id')
+    .primaryKey()
+    .references(() => organization.id, { onDelete: 'cascade' }),
+  accountId: text('account_id').notNull(),
+  encryptedApiToken: text('encrypted_api_token').notNull(),
+  tokenLast4: text('token_last4').notNull(),
+  lastVerifiedAt: timestamp('last_verified_at', {
+    withTimezone: true,
+    mode: 'date',
+  }),
+  lastVerifyResult: jsonb('last_verify_result'),
+  updatedBy: text('updated_by').references(() => user.id, {
+    onDelete: 'set null',
+  }),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+})
+
 export const membership = pgTable(
   'membership',
   {

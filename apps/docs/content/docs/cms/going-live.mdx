@@ -34,7 +34,7 @@ Open **Go live** from the site sidebar or from the Overview. The publishing indi
 
 Each site runs in one of two publishing modes, set by an agency admin on **Settings › Deployment**. **Production** deploys the site and counts a release as live only after its health check passes. **Demo** creates a release without deploying it, and the release never counts as live. On a Demo site the button reads **Publish demo release** instead of **Go live**. Use Demo only for previews and testing. See [Deployments](/docs/cms/deployments) for how to set up each mode.
 
-In Production mode, Go live is blocked until the site has an application and a health check URL.
+In Production mode, Go live is blocked until the site has a deployment target (a Dokploy application or a Cloudflare project) and a health check URL.
 
 ## Urgent: skip the queue
 

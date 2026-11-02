@@ -98,6 +98,15 @@ export const env = createEnv({
       .string()
       .regex(/^[A-Za-z0-9+/]{43}=$/, 'Must be a base64-encoded 32-byte key')
       .optional(),
+    // Encrypts the Cloudflare API tokens saved per client. Optional: the
+    // Cloudflare card stays read-only until it is set.
+    CLOUDFLARE_CREDENTIALS_ENCRYPTION_KEY: z
+      .string()
+      .regex(/^[A-Za-z0-9+/]{43}=$/, 'Must be a base64-encoded 32-byte key')
+      .optional(),
+    // Test stub only: points the Cloudflare API client at a local server. Ignored
+    // in production (see cloudflare-credentials.ts).
+    CLOUDFLARE_API_BASE_URL: z.url().optional(),
     DOKPLOY_DEV_FALLBACK_ENABLED: z
       .enum(['true', 'false'])
       .optional()

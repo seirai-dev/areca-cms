@@ -6,27 +6,37 @@ import { ConflictError } from '#/server/content/errors'
 
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
-// Callers hold the organization and/or site mutation lock before checking.
-export async function assertSiteHasNoPendingDeployment(
-  tx: Transaction,
+/** Whether a site has a release queued, running, or with an uncertain dispatch. */
+export async function siteHasPendingDeployment(
+  executor: Pick<typeof db, 'select'>,
   siteId: string,
 ) {
   const pending = (
-    await tx
+    await executor
       .select({ id: buildJob.id })
       .from(buildJob)
       .where(and(eq(buildJob.siteId, siteId), pendingDeployment()))
       .limit(1)
   ).at(0)
-  if (pending)
+  return Boolean(pending)
+}
+
+// Callers hold the organization and/or site mutation lock before checking.
+export async function assertSiteHasNoPendingDeployment(
+  tx: Transaction,
+  siteId: string,
+  action = 'deleting this site',
+) {
+  if (await siteHasPendingDeployment(tx, siteId))
     throw new ConflictError(
-      'Finish or cancel pending releases and reconcile uncertain deployments before deleting this site',
+      `Finish or cancel pending releases and reconcile uncertain deployments before ${action}`,
     )
 }
 
 export async function assertOrganizationHasNoPendingDeployment(
   tx: Transaction,
   organizationId: string,
+  connection = 'the Dokploy connection',
 ) {
   const pending = (
     await tx
@@ -38,7 +48,7 @@ export async function assertOrganizationHasNoPendingDeployment(
   ).at(0)
   if (pending)
     throw new ConflictError(
-      'Finish or cancel pending releases and reconcile uncertain deployments before changing the Dokploy connection',
+      `Finish or cancel pending releases and reconcile uncertain deployments before changing ${connection}`,
     )
 }
 

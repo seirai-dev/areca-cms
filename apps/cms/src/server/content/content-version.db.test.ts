@@ -254,6 +254,7 @@ describe.skipIf(!hasDb)('development environment site constraints', () => {
             deploymentTarget: {
               provider: 'dokploy',
               applicationId: 'app-1',
+              healthCheckUrl: 'https://example.test/health',
             },
           }),
         'site_environment_production_check',

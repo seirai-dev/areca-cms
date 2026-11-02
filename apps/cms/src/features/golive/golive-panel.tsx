@@ -90,6 +90,13 @@ import type { PendingEntry, PendingLanguages } from './use-pending-entries'
 import { useReleaseStatus } from './use-release-status'
 import type { ReleaseStatus } from './use-release-status'
 
+const ACTIVE_JOB_STATUSES = new Set<string>([
+  'queued',
+  'building',
+  'validating',
+  'deploying',
+])
+
 /**
  * The Go‑live panel (brief §3.6): a right slide-over opened by
  * `?panel=golive`. Status hero, what's changing, controls (urgent + Go live),
@@ -813,7 +820,12 @@ function ReleaseHistory({
   return (
     <Section title={m.golive_releases()} className="pb-8">
       {(jobs.data ?? [])
-        .filter((job) => job.dispatchUncertain)
+        // Every deploy is marked uncertain while it runs; only a job that
+        // stopped with that mark needs someone to check it.
+        .filter(
+          (job) =>
+            job.dispatchUncertain && !ACTIVE_JOB_STATUSES.has(job.status),
+        )
         .map((job) => (
           <div
             key={job.id}

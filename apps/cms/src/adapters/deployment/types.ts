@@ -1,8 +1,11 @@
-export interface DeploymentTarget {
-  provider: 'dokploy'
-  applicationId: string
-  healthCheckUrl: string
-}
+import type { DeploymentTarget } from '#/lib/types'
+
+export type {
+  CloudflarePagesDeploymentTarget,
+  CloudflareWorkersDeploymentTarget,
+  DeploymentTarget,
+  DokployDeploymentTarget,
+} from '#/lib/types'
 
 /** Immutable identity of a single logical dispatch, stable across recovery. */
 export interface DeploymentContext {

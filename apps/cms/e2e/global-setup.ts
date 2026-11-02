@@ -1,6 +1,8 @@
 import { chromium } from '@playwright/test'
 import type { FullConfig } from '@playwright/test'
 
+import { startCloudflareStub } from './cloudflare-stub'
+
 /**
  * Warms the dev server up before any spec runs. Vite compiles modules on
  * first request and the app hydrates slowly on a cold server, which made the
@@ -9,6 +11,20 @@ import type { FullConfig } from '@playwright/test'
  * screens so their module graphs are compiled too.
  */
 export default async function globalSetup(config: FullConfig) {
+  // The Cloudflare stub serves the CMS dev server for the whole run.
+  const stopCloudflareStub = await startCloudflareStub()
+  try {
+    await warmDevServer(config)
+  } catch (error) {
+    await stopCloudflareStub()
+    throw error
+  }
+  return async () => {
+    await stopCloudflareStub()
+  }
+}
+
+async function warmDevServer(config: FullConfig) {
   const baseURL = config.projects[0].use.baseURL ?? 'http://localhost:3000'
   const executablePath = process.env.PW_CHROMIUM_PATH || undefined
   const browser = await chromium.launch(

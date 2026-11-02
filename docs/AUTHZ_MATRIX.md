@@ -49,6 +49,7 @@ unchanged (each row carries a side-effect probe).
 | `saveDokployCredentialsFn` | `admin.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) |
 | `verifyDokployCredentialsFn` | `admin.ts` | `agency` | agency admin (MFA) |
 | `removeDokployCredentialsFn` | `admin.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) |
+| `listCloudflareDeployTargetsFn` | `admin.ts` | `agency` | agency admin (MFA); lists the client's Cloudflare Pages and Workers (outbound calls, no audit) |
 | `listSitesFn` | `admin.ts` | `agency` | agency admin (MFA) |
 | `getSiteFn` | `admin.ts` | `agency` | agency admin (MFA) |
 | `createSiteFn` | `admin.ts` | `agency-fresh` | agency admin (MFA) with fresh session (step-up) |

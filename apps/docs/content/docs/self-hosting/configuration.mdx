@@ -22,11 +22,14 @@ Four values must be set before the CMS starts. The CMS checks them at startup, a
 | `POSTGRES_PASSWORD` | Password for the database user. Compose only. |
 | `S3_SECRET_KEY` | Secret key for the storage service. Compose only. |
 
+`CLOUDFLARE_CREDENTIALS_ENCRYPTION_KEY` is optional. Set it if you connect Cloudflare. Without it the CMS still starts, but the Cloudflare card shows "Encryption key not set" and saving a Cloudflare token is disabled. See [Cloudflare](#cloudflare).
+
 Generate each secret with `openssl`. Use `openssl rand -hex 32` for `BETTER_AUTH_SECRET`, and `openssl rand -base64 32` for the encryption keys:
 
 ```sh
 openssl rand -hex 32       # BETTER_AUTH_SECRET
 openssl rand -base64 32    # DOKPLOY_CREDENTIALS_ENCRYPTION_KEY
+openssl rand -base64 32    # CLOUDFLARE_CREDENTIALS_ENCRYPTION_KEY, if you use Cloudflare
 openssl rand -base64 32    # AI_SETTINGS_ENCRYPTION_KEY, if you use AI settings
 openssl rand -base64 32    # SECRETS_ENCRYPTION_KEY, if you save an SMTP password in Agency › Mail
 ```
@@ -34,7 +37,7 @@ openssl rand -base64 32    # SECRETS_ENCRYPTION_KEY, if you save an SMTP passwor
 An encryption key must be the base64 encoding of exactly 32 bytes: 44 characters, ending in `=`. The CMS rejects any other format.
 
 <Callout type="warn" title="Back up the encryption keys with the database">
-`DOKPLOY_CREDENTIALS_ENCRYPTION_KEY` and `AI_SETTINGS_ENCRYPTION_KEY` are used to decrypt values stored in the database. There is no automatic re-encryption. If you change or lose a key, the saved values become unreadable, and you must enter them again. Keep each key with the matching database backup. See [backup and recovery](/docs/self-hosting/backup-and-recovery).
+`DOKPLOY_CREDENTIALS_ENCRYPTION_KEY`, `CLOUDFLARE_CREDENTIALS_ENCRYPTION_KEY` and `AI_SETTINGS_ENCRYPTION_KEY` are used to decrypt values stored in the database. There is no automatic re-encryption. If you change or lose a key, the saved values become unreadable, and you must enter them again. Keep each key with the matching database backup. See [backup and recovery](/docs/self-hosting/backup-and-recovery).
 </Callout>
 
 The `docker/.env.example` file leaves `BETTER_AUTH_SECRET` and `DOKPLOY_CREDENTIALS_ENCRYPTION_KEY` empty, so you must generate both. Compose stops with a message if they are missing.
@@ -43,13 +46,13 @@ In production (`NODE_ENV=production`), the CMS refuses to start unless these che
 
 - `REDIS_URL` is set. Compose sets it for you. Outside Compose, set it yourself, for example `redis://redis:6379`.
 - `BETTER_AUTH_SECRET` is a real value. The CMS refuses the example values: `change-me`, and any value starting with `replace-` or `replace_`. It tells you how to generate one, with `openssl rand -hex 32`.
-- No encryption key is all zero bytes. Each one that is set (`DOKPLOY_CREDENTIALS_ENCRYPTION_KEY`, `SECRETS_ENCRYPTION_KEY`, `AI_SETTINGS_ENCRYPTION_KEY`) is refused if it decodes to 32 zero bytes, and the error names it. Generate each one with `openssl rand -base64 32`.
+- No encryption key is all zero bytes. Each one that is set (`DOKPLOY_CREDENTIALS_ENCRYPTION_KEY`, `CLOUDFLARE_CREDENTIALS_ENCRYPTION_KEY`, `SECRETS_ENCRYPTION_KEY`, `AI_SETTINGS_ENCRYPTION_KEY`) is refused if it decodes to 32 zero bytes, and the error names it. Generate each one with `openssl rand -base64 32`.
 
 ## Core
 
 | Variable | Required | Default | Meaning |
 | --- | --- | --- | --- |
-| `APP_URL` | Yes | Compose: `${CMS_URL}`, default `http://localhost:3000` | The public CMS address, used in invitation links, uploaded file URLs and each site's AI connector URL (`/api/mcp/<site>`). Browsers and the Dokploy host must be able to reach it. Do not use `localhost` in production. |
+| `APP_URL` | Yes | Compose: `${CMS_URL}`, default `http://localhost:3000` | The public CMS address, used in invitation links, uploaded file URLs and each site's AI connector URL (`/api/mcp/<site>`). Browsers and the build hosts (Dokploy, or Cloudflare builds) must be able to reach it. Do not use `localhost` in production. |
 | `BETTER_AUTH_URL` | Yes | Compose: `${CMS_URL}`, default `http://localhost:3000` | The public CMS address used for sign-in callbacks. It must match the address people use to open the CMS, including the scheme. It is also the OAuth issuer (`<BETTER_AUTH_URL>/api/auth`) that AI apps sign in with, so use the public HTTPS address and the same origin as `APP_URL`. |
 | `SERVER_URL` | No | Unset | Accepted by the configuration check, but the CMS does not read it at runtime. Leave it unset. |
 | `PORT` | No | `3000` (set by the image) | The port the server listens on inside the container. Compose maps the host port `CMS_PORT` to it. |
@@ -131,9 +134,9 @@ The stock Compose file passes all of these mail variables to the CMS container. 
 
 Use a mail server on your private network, or a transactional email provider, and do not expose an open relay to the internet. For provider settings and how to make your mail arrive, see [storage and email](/docs/self-hosting/storage-and-email).
 
-## Dokploy and deployments
+## Dokploy, Cloudflare and deployments
 
-Each organization saves its own Dokploy URL and API key in the CMS, after an agency admin enters them. The variables below are for development and for the legacy setup. In production, leave them unset.
+Each client saves its own Dokploy and Cloudflare credentials in the CMS, after an agency admin enters them. The Dokploy variables below are for development and for the legacy setup. In production, leave them unset.
 
 | Variable | Required | Default | Meaning |
 | --- | --- | --- | --- |
@@ -150,6 +153,15 @@ These switches relax security checks so a local or LAN test setup can reach Dokp
 | --- | --- | --- | --- |
 | `DOKPLOY_ALLOW_INSECURE_HTTP` | No | Unset | Allows `http://` Dokploy API URLs. Production requires `https://`. |
 | `ALLOW_PRIVATE_HEALTH_CHECKS` | No | Unset | Allows health-check URLs on private or local addresses. |
+
+### Cloudflare
+
+Cloudflare API tokens are saved per client, on the **Deployment** tab of the client, the same way as Dokploy keys. The token is encrypted with the key below. For the token steps, see [deployment targets](/docs/self-hosting/deployment-targets#cloudflare).
+
+| Variable | Required | Default | Meaning |
+| --- | --- | --- | --- |
+| `CLOUDFLARE_CREDENTIALS_ENCRYPTION_KEY` | No | Compose: optional, from `.env` | Base64-encoded 32-byte key that encrypts each client's Cloudflare API token in the database. Generate it with `openssl rand -base64 32`. Without it, the Cloudflare card shows "Encryption key not set" and saving is disabled. Keep it the same on every CMS instance, and back it up with the database. |
+| `CLOUDFLARE_API_BASE_URL` | No | Unset | Development and testing only. Points Areca at a fake Cloudflare API. Ignored in production, where Areca always calls `https://api.cloudflare.com/client/v4`. |
 
 ## Publishing worker
 

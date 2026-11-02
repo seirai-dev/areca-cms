@@ -1,35 +1,43 @@
 import * as React from 'react'
-import { Link } from '@tanstack/react-router'
-import {
-  ArrowUpRight,
-  CheckCircle,
-  CloudArrowUp,
-  MagnifyingGlass,
-  Prohibit,
-} from '@phosphor-icons/react'
+import { CheckCircle, Prohibit } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
+import type { CloudflareDeployTarget } from '#/adapters/deployment/cloudflare-targets'
 import { errorMessage } from '#/lib/admin/helpers'
+import { useReleaseStatus } from '#/features/golive/use-release-status'
 import { Tag } from '#/components/ui/tag'
 import { Button } from '#/components/ui/button'
 import { ConfirmDialog } from '#/components/ui/confirm-dialog'
 import { FormField } from '#/components/ui/form-field'
-import { InsetIcon } from '#/components/ui/inset-list'
 import { Input } from '#/components/ui/input'
 import { SettingsSection } from '#/components/ui/settings-section'
-import { Skeleton } from '#/components/ui/skeleton'
 import { displayHost } from '#/lib/site-nav'
 import type { MeSite } from '#/lib/site-nav'
-import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
-import { SettingsSaveBar } from './settings-save-bar'
-import { useDokployApplications } from './use-site-settings'
+import { CloudflareTargetFields } from './cloudflare-target-fields'
+import {
+  buildDeploymentTarget,
+  findListed,
+  nextHealthUrl,
+  pickTrigger,
+  selectionFromListed,
+  selectionFromTarget,
+  targetIdentity,
+} from './deployment-target-draft'
 import type {
-  DokployApplication,
-  SiteRecord,
-  useSiteSettings,
+  CloudflareSelection,
+  ProviderChoice,
+} from './deployment-target-draft'
+import { DokployTargetFields } from './dokploy-target-fields'
+import { ProviderSwitch } from './provider-switch'
+import { SettingsSaveBar } from './settings-save-bar'
+import {
+  useCloudflareConnection,
+  useCloudflareDeployTargets,
+  useDokployApplications,
 } from './use-site-settings'
+import type { SiteRecord, useSiteSettings } from './use-site-settings'
 
 function isUrl(value: string) {
   try {
@@ -40,17 +48,10 @@ function isUrl(value: string) {
   }
 }
 
-function statusTone(status: string | null) {
-  const value = (status ?? '').toLowerCase()
-  if (value === 'done' || value === 'running') return 'success' as const
-  if (value === 'error') return 'error' as const
-  return 'neutral' as const
-}
-
 /**
- * Settings › Deployment (brief §3.10): the provider card, an application
- * picker fed by the client's verified Dokploy connection (with a manual
- * Application ID input as fallback), health check URL, and Stop deploying.
+ * Settings › Deployment (brief §3.10). A Dokploy | Cloudflare switch, one
+ * shared searchable target picker for the chosen provider, the health check
+ * URL, and Stop deploying. Edits stay local until Save.
  */
 export function DeploymentTab({
   site,
@@ -62,77 +63,175 @@ export function DeploymentTab({
   settings: ReturnType<typeof useSiteSettings>
 }) {
   const formId = React.useId()
+  const client = meSite.organizationName
   const dokploy = useDokployApplications(site.organizationId)
-  const savedApp = site.deploymentTarget?.applicationId ?? ''
-  const savedHealth = site.deploymentTarget?.healthCheckUrl ?? ''
+  const cloudflareStatus = useCloudflareConnection(site.organizationId)
+  const cloudflareConfigured = cloudflareStatus.data?.configured === true
+  const targets = useCloudflareDeployTargets(
+    site.organizationId,
+    cloudflareConfigured,
+  )
+  const dokployConfigured = dokploy.status.data?.configured === true
+  // While a release is queued, running or uncertain, the deployment settings wait.
+  const release = useReleaseStatus(site.id)
+  const locked = release.data?.deploymentPending === true
+  const applications = dokploy.applications.data?.applications ?? []
+
+  // The saved target, as the draft starts from it.
+  const saved = site.deploymentTarget
+  const savedProvider: ProviderChoice =
+    saved?.provider === 'cloudflare' ? 'cloudflare' : 'dokploy'
+  const savedApp = saved?.provider === 'dokploy' ? saved.applicationId : ''
+  const savedHealth = saved?.healthCheckUrl ?? ''
+  const savedSelection = React.useMemo(
+    () => selectionFromTarget(saved),
+    [saved],
+  )
+  const savedIdentity = targetIdentity(savedProvider, savedApp, savedSelection)
+
   const [mode, setMode] = React.useState<'production' | 'demo'>(
     site.publishingMode,
   )
-  React.useEffect(() => setMode(site.publishingMode), [site.publishingMode])
+  const [provider, setProvider] = React.useState<ProviderChoice>(savedProvider)
   const [appId, setAppId] = React.useState(savedApp)
-  const [health, setHealth] = React.useState(savedHealth)
-  const [errors, setErrors] = React.useState<{ app?: string; health?: string }>(
-    {},
+  const [selection, setSelection] = React.useState<CloudflareSelection | null>(
+    savedSelection,
   )
+  const [health, setHealth] = React.useState(savedHealth)
+  const [errors, setErrors] = React.useState<{
+    target?: string
+    health?: string
+  }>({})
   const [stopOpen, setStopOpen] = React.useState(false)
+  // This tab's own save. The settings mutation is shared with the other tabs.
+  const [saving, setSaving] = React.useState(false)
 
-  React.useEffect(() => setAppId(savedApp), [savedApp])
-  React.useEffect(() => setHealth(savedHealth), [savedHealth])
+  // Re-seed the draft whenever the saved settings change (after a save, or a refetch).
+  React.useEffect(() => {
+    setMode(site.publishingMode)
+    setProvider(savedProvider)
+    setAppId(savedApp)
+    setSelection(savedSelection)
+    setHealth(savedHealth)
+    setErrors({})
+  }, [
+    site.publishingMode,
+    savedProvider,
+    savedApp,
+    savedHealth,
+    savedSelection,
+  ])
 
+  const listed =
+    selection && targets.data ? findListed(selection, targets.data) : null
   const dirty =
     mode !== site.publishingMode ||
-    appId.trim() !== savedApp ||
+    targetIdentity(provider, appId.trim(), selection) !== savedIdentity ||
     health.trim() !== savedHealth
-  const configured = dokploy.status.data?.configured === true
-  const client = meSite.organizationName
-  const applications = dokploy.applications.data?.applications ?? []
-  const selectedApp = applications.find(
-    (app) => app.applicationId === appId.trim(),
-  )
-  const savedAppInfo = applications.find(
-    (app) => app.applicationId === savedApp,
-  )
 
   function discard() {
     setMode(site.publishingMode)
+    setProvider(savedProvider)
     setAppId(savedApp)
+    setSelection(savedSelection)
     setHealth(savedHealth)
     setErrors({})
   }
 
+  /** Switching provider clears the chosen target and the health URL. */
+  function changeProvider(next: ProviderChoice) {
+    if (next === provider) return
+    setProvider(next)
+    setSelection(null)
+    setAppId('')
+    setHealth('')
+    setErrors({})
+  }
+
+  /** The health URL follows the project's suggestion unless the admin typed one. */
+  function pickCloudflare(target: CloudflareDeployTarget) {
+    const fill = nextHealthUrl({
+      current: health,
+      previousSuggestion: listed?.suggestedHealthUrl ?? null,
+      suggestion: target.suggestedHealthUrl,
+    })
+    setSelection(selectionFromListed(target))
+    if (fill !== null) setHealth(fill)
+    setErrors((prev) => ({ ...prev, target: undefined }))
+  }
+
+  function pickCloudflareTrigger(triggerUuid: string) {
+    setSelection((prev) =>
+      prev ? pickTrigger(prev, listed, triggerUuid) : prev,
+    )
+  }
+
+  function targetProblem() {
+    if (provider === 'dokploy') return m.settings_health_needs_app()
+    if (selection?.kind === 'workers' && !selection.triggerUuid) {
+      return m.settings_cloudflare_needs_trigger()
+    }
+    return m.settings_cloudflare_needs_target()
+  }
+
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault()
-    const next = { app: appId.trim(), health: health.trim() }
+    const trimmedHealth = health.trim()
+    const target = buildDeploymentTarget({
+      provider,
+      applicationId: appId.trim(),
+      selection,
+      healthCheckUrl: trimmedHealth,
+    })
     const problems: typeof errors = {}
-    if (mode === 'production' && !next.app)
-      problems.app = m.settings_health_needs_app()
+    if (mode === 'production' && !target) problems.target = targetProblem()
     if (
-      (mode === 'production' && !next.health) ||
-      (next.health && !isUrl(next.health))
+      (mode === 'production' && !trimmedHealth) ||
+      (trimmedHealth && !isUrl(trimmedHealth))
     )
       problems.health = m.settings_url_invalid()
     setErrors(problems)
-    if (problems.app || problems.health) return
+    if (problems.target || problems.health) return
+    await persist({ publishingMode: mode, deploymentTarget: target })
+  }
+
+  async function persist(
+    patch: Parameters<typeof settings.update.mutateAsync>[0],
+  ) {
+    setSaving(true)
     try {
-      await settings.update.mutateAsync({
-        publishingMode: mode,
-        deploymentTarget:
-          next.app && next.health
-            ? {
-                provider: 'dokploy',
-                applicationId: next.app,
-                healthCheckUrl: next.health,
-              }
-            : null,
-      })
+      await settings.update.mutateAsync(patch)
       toast.success(m.sites_deployment_target_updated())
     } catch (error) {
       toast.error(errorMessage(error))
+    } finally {
+      setSaving(false)
     }
   }
 
+  const savedAppInfo = applications.find(
+    (app) => app.applicationId === savedApp,
+  )
+  const savedSummary = !saved
+    ? null
+    : saved.provider === 'dokploy'
+      ? m.settings_deploy_on({ app: savedAppInfo?.name ?? saved.applicationId })
+      : saved.kind === 'pages'
+        ? m.settings_deploy_on_cloudflare_pages({ name: saved.projectName })
+        : m.settings_deploy_on_cloudflare_workers({ name: saved.scriptName })
+
   return (
     <div data-testid="settings-deployment">
+      {locked ? (
+        <p
+          role="status"
+          data-testid="deployment-locked-notice"
+          className="rounded-control bg-status-warning-bg px-3 py-2.5 text-callout text-text-warning"
+        >
+          {m.settings_deployment_locked()}
+        </p>
+      ) : null}
+
       <SettingsSection
         title={m.settings_publishing_mode_title()}
         description={m.settings_publishing_mode_description()}
@@ -144,10 +243,11 @@ export function DeploymentTab({
           id="publishing-mode"
           data-testid="publishing-mode"
           value={mode}
+          disabled={locked}
           onChange={(event) =>
             setMode(event.target.value as 'production' | 'demo')
           }
-          className="rounded-control border border-border-default p-2"
+          className="w-full min-w-0 rounded-control border border-border-default p-2"
         >
           <option value="production">
             {m.settings_publishing_mode_production()}
@@ -158,77 +258,38 @@ export function DeploymentTab({
           <Tag tone="warning">{m.settings_publishing_mode_demo_warning()}</Tag>
         ) : null}
       </SettingsSection>
+
       <SettingsSection
         title={m.settings_provider_title()}
         description={m.settings_provider_description()}
       >
-        <div
-          className="flex flex-col gap-3 sm:flex-row sm:items-center"
-          data-testid="deployment-provider"
-        >
-          <div className="flex min-w-0 flex-1 items-center gap-3">
-            <InsetIcon
-              tone={configured ? 'accent' : 'neutral'}
-              className="size-10 rounded-[11px]"
-            >
-              <CloudArrowUp weight="duotone" />
-            </InsetIcon>
-            <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)] gap-0.5">
-              <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[14px] leading-5 font-medium text-text-primary">
-                {m.settings_provider_dokploy()}
-                {dokploy.status.isPending ? null : configured ? (
-                  <Tag tone="success">
-                    {m.settings_provider_connected_tag()}
-                  </Tag>
-                ) : null}
-              </span>
-              <span className="truncate text-callout text-text-secondary">
-                {dokploy.status.isPending ? (
-                  <Skeleton className="h-4 w-48" />
-                ) : configured ? (
-                  m.settings_provider_connected({
-                    client,
-                    host: displayHost(dokploy.status.data?.url ?? ''),
-                  })
-                ) : (
-                  m.settings_provider_not_connected({ client })
-                )}
-              </span>
-            </div>
-          </div>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            className="w-full sm:w-auto"
-            asChild
-          >
-            <Link
-              to="/agency/clients/$orgId"
-              params={{ orgId: site.organizationId }}
-              search={{ tab: 'deployment' }}
-              data-testid="deployment-setup-link"
-            >
-              {configured
-                ? m.settings_provider_manage()
-                : m.settings_provider_setup({ client })}
-              <ArrowUpRight />
-            </Link>
-          </Button>
-        </div>
+        <ProviderSwitch
+          value={provider}
+          onChange={changeProvider}
+          locked={locked}
+          organizationId={site.organizationId}
+          clientName={client}
+          dokploy={{
+            configured: dokployConfigured,
+            pending: dokploy.status.isPending,
+            host: displayHost(dokploy.status.data?.url ?? ''),
+          }}
+          cloudflare={{
+            configured: cloudflareConfigured,
+            pending: cloudflareStatus.isPending,
+          }}
+        />
         <p
           className="flex items-center gap-2 rounded-control bg-background-subtle px-3 py-2 text-callout text-text-secondary"
           data-testid="deployment-state"
         >
-          {savedApp ? (
+          {savedSummary ? (
             <>
               <CheckCircle
                 weight="fill"
                 className="size-4 shrink-0 text-icon-success"
               />
-              <span className="min-w-0 truncate">
-                {m.settings_deploy_on({ app: savedAppInfo?.name ?? savedApp })}
-              </span>
+              <span className="min-w-0 truncate">{savedSummary}</span>
             </>
           ) : (
             <>
@@ -241,55 +302,56 @@ export function DeploymentTab({
 
       <form id={formId} noValidate onSubmit={onSubmit}>
         <SettingsSection
-          title={m.settings_app_title()}
-          description={m.settings_app_description()}
+          title={
+            provider === 'cloudflare'
+              ? m.settings_cloudflare_project_title()
+              : m.settings_app_title()
+          }
+          description={
+            provider === 'cloudflare'
+              ? m.settings_cloudflare_project_description()
+              : m.settings_app_description()
+          }
         >
-          {configured ? (
-            <ApplicationPicker
-              query={dokploy.applications}
-              value={appId.trim()}
-              onChange={(next) => {
+          {provider === 'cloudflare' ? (
+            <CloudflareTargetFields
+              enabled={cloudflareConfigured}
+              clientName={client}
+              targets={targets}
+              selection={selection}
+              error={errors.target}
+              disabled={locked}
+              onPick={pickCloudflare}
+              onPickTrigger={pickCloudflareTrigger}
+            />
+          ) : (
+            <DokployTargetFields
+              configured={dokployConfigured}
+              applications={dokploy.applications}
+              appId={appId.trim()}
+              error={errors.target}
+              disabled={locked}
+              onPick={(next) => {
                 setAppId(next)
-                setErrors((prev) => ({ ...prev, app: undefined }))
+                setErrors((prev) => ({ ...prev, target: undefined }))
+              }}
+              onManualChange={(next) => {
+                setAppId(next)
+                setErrors((prev) => ({ ...prev, target: undefined }))
               }}
             />
-          ) : null}
-
-          <FormField
-            label={
-              configured ? m.settings_app_manual() : m.sites_application_id()
-            }
-            htmlFor="application-id"
-            hint={errors.app ? undefined : m.settings_app_manual_hint()}
-            error={errors.app}
-            trailing={
-              appId.trim() &&
-              configured &&
-              dokploy.applications.isSuccess &&
-              !selectedApp ? (
-                <Tag tone="warning">{m.settings_app_unknown()}</Tag>
-              ) : undefined
-            }
-          >
-            <Input
-              id="application-id"
-              data-testid="application-id"
-              className="font-mono text-[13px]"
-              autoComplete="off"
-              spellCheck={false}
-              value={appId}
-              aria-invalid={errors.app ? true : undefined}
-              onChange={(event) => {
-                setAppId(event.target.value)
-                setErrors((prev) => ({ ...prev, app: undefined }))
-              }}
-            />
-          </FormField>
+          )}
 
           <FormField
             label={m.sites_health_check_url()}
             htmlFor="health-check-url"
-            hint={errors.health ? undefined : m.settings_health_hint()}
+            hint={
+              errors.health
+                ? undefined
+                : mode === 'production'
+                  ? m.settings_health_hint_required()
+                  : m.settings_health_hint()
+            }
             error={errors.health}
           >
             <Input
@@ -299,6 +361,7 @@ export function DeploymentTab({
               inputMode="url"
               placeholder={m.sites_health_check_placeholder()}
               value={health}
+              disabled={locked}
               aria-invalid={errors.health ? true : undefined}
               onChange={(event) => {
                 setHealth(event.target.value)
@@ -309,19 +372,19 @@ export function DeploymentTab({
         </SettingsSection>
       </form>
 
-      {site.deploymentTarget ? (
+      {saved ? (
         <SettingsSection
           title={m.settings_stop_title()}
           description={m.settings_stop_description()}
         >
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="min-w-0 text-callout text-text-secondary">
-              {m.settings_deploy_on({ app: savedAppInfo?.name ?? savedApp })}
+              {savedSummary}
             </p>
             <Button
               type="button"
               variant="outline"
-              disabled={settings.update.isPending}
+              disabled={settings.update.isPending || locked}
               onClick={() => setStopOpen(true)}
               data-testid="stop-deploying"
             >
@@ -335,167 +398,25 @@ export function DeploymentTab({
         open={stopOpen}
         onOpenChange={setStopOpen}
         title={m.settings_stop_confirm_title()}
-        description={m.settings_stop_confirm_description()}
+        description={
+          saved?.provider === 'cloudflare'
+            ? m.settings_stop_confirm_description_cloudflare()
+            : m.settings_stop_confirm_description()
+        }
         confirmLabel={m.settings_stop_confirm()}
         variant="destructive"
         testId="stop-deploying-dialog"
-        onConfirm={async () => {
-          try {
-            await settings.update.mutateAsync({ deploymentTarget: null })
-            toast.success(m.sites_deployment_target_updated())
-          } catch (error) {
-            toast.error(errorMessage(error))
-          }
-        }}
+        onConfirm={() => persist({ deploymentTarget: null })}
       />
 
       <SettingsSaveBar
         dirty={dirty}
-        saving={settings.update.isPending && !stopOpen}
+        saving={saving && !stopOpen}
         onDiscard={discard}
         formId={formId}
         saveTestId="save-deployment-target"
+        disabled={locked}
       />
     </div>
-  )
-}
-
-/** Searchable single-choice list of the client's Dokploy applications. */
-function ApplicationPicker({
-  query,
-  value,
-  onChange,
-}: {
-  query: ReturnType<typeof useDokployApplications>['applications']
-  value: string
-  onChange: (applicationId: string) => void
-}) {
-  const [search, setSearch] = React.useState('')
-  const applications = query.data?.applications ?? []
-  const needle = search.trim().toLowerCase()
-  const visible = needle
-    ? applications.filter((app) =>
-        `${app.name} ${app.appName ?? ''} ${app.applicationId}`
-          .toLowerCase()
-          .includes(needle),
-      )
-    : applications
-
-  if (query.isPending) {
-    return (
-      <div
-        className="grid gap-2"
-        aria-busy="true"
-        aria-label={m.settings_app_loading()}
-      >
-        {Array.from({ length: 3 }).map((_, index) => (
-          <Skeleton key={index} className="h-12 rounded-control" />
-        ))}
-      </div>
-    )
-  }
-  if (query.isError) {
-    return (
-      <p
-        role="alert"
-        className="rounded-control bg-status-error-bg px-3 py-2.5 text-callout text-text-error"
-      >
-        {m.settings_app_load_error({ error: errorMessage(query.error) })}
-      </p>
-    )
-  }
-
-  return (
-    <div className="grid gap-2" data-testid="application-picker">
-      {applications.length > 5 ? (
-        <div className="relative">
-          <MagnifyingGlass className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-icon-muted" />
-          <Input
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder={m.settings_app_search()}
-            aria-label={m.settings_app_search()}
-            className="pl-9"
-            data-testid="application-search"
-          />
-        </div>
-      ) : null}
-      <div
-        role="radiogroup"
-        aria-label={m.settings_app_title()}
-        className="scroll-quiet grid max-h-[288px] overflow-y-auto rounded-control border border-border-default"
-      >
-        {visible.length === 0 ? (
-          <p className="px-3 py-4 text-center text-callout text-text-muted">
-            {m.settings_app_none()}
-          </p>
-        ) : (
-          visible.map((app) => (
-            <ApplicationOption
-              key={app.applicationId}
-              app={app}
-              selected={app.applicationId === value}
-              onSelect={() => onChange(app.applicationId)}
-            />
-          ))
-        )}
-      </div>
-      <p className="px-0.5 text-caption font-normal text-text-muted">
-        {m.settings_app_count({ count: applications.length })}
-      </p>
-    </div>
-  )
-}
-
-function ApplicationOption({
-  app,
-  selected,
-  onSelect,
-}: {
-  app: DokployApplication
-  selected: boolean
-  onSelect: () => void
-}) {
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={selected}
-      onClick={onSelect}
-      data-testid={`application-option-${app.applicationId}`}
-      className={cn(
-        'flex w-full items-center gap-3 border-b border-border-default px-3 py-2.5 text-left last:border-b-0',
-        'transition-colors outline-none hover:bg-surface-state-hover focus-visible:bg-surface-state-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-border-focus',
-        selected && 'bg-accent-soft/60 hover:bg-accent-soft/60',
-      )}
-    >
-      <span
-        aria-hidden="true"
-        className={cn(
-          'grid size-[18px] shrink-0 place-content-center rounded-full border',
-          selected
-            ? 'border-accent bg-accent'
-            : 'border-border-strong bg-background-surface',
-        )}
-      >
-        {selected ? (
-          <span className="size-1.5 rounded-full bg-accent-contrast" />
-        ) : null}
-      </span>
-      <span className="grid min-w-0 flex-1 gap-0.5">
-        <span className="truncate text-[14px] leading-5 font-medium text-text-primary">
-          {app.name}
-        </span>
-        <span className="truncate text-mono text-text-muted">
-          {app.appName ?? app.applicationId}
-        </span>
-      </span>
-      {app.applicationStatus ? (
-        <Tag tone={statusTone(app.applicationStatus)}>
-          {app.applicationStatus}
-        </Tag>
-      ) : null}
-    </button>
   )
 }
