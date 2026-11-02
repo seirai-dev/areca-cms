@@ -771,6 +771,104 @@ describe('Pages and Workers Builds calls', () => {
   })
 })
 
+describe('build variable writes', () => {
+  it('sets a Workers Builds trigger variable with a PATCH JSON body', async () => {
+    const { fetchFn, calls } = routedFetch({
+      [`${ACCOUNT_PATH}/builds/triggers/${TRIGGER}/environment_variables`]:
+        () => ok({}),
+    })
+    const client = createCloudflareClient({
+      apiToken: TOKEN,
+      accountId: ACCOUNT_ID,
+      fetch: fetchFn,
+    })
+    await expect(
+      client.setWorkerBuildVariable(TRIGGER, 'ARECA_SNAPSHOT_ID', 'pub-1'),
+    ).resolves.toBeUndefined()
+    expect(calls).toHaveLength(1)
+    expect(calls[0].init.method).toBe('PATCH')
+    expect(calls[0].url.toString()).toBe(
+      `${BASE}/accounts/${ACCOUNT_ID}/builds/triggers/${TRIGGER}/environment_variables`,
+    )
+    expect(JSON.parse(String(calls[0].init.body))).toEqual({
+      ARECA_SNAPSHOT_ID: { is_secret: false, value: 'pub-1' },
+    })
+    const headers = new Headers(calls[0].init.headers)
+    expect(headers.get('authorization')).toBe(`Bearer ${TOKEN}`)
+    expect(headers.get('content-type')).toBe('application/json')
+    expect(headers.get('accept')).toBe('application/json')
+  })
+
+  it('sets a Pages production env var with a PATCH JSON body', async () => {
+    const { fetchFn, calls } = routedFetch({
+      [`${ACCOUNT_PATH}/pages/projects/areca-site`]: () => ok({}),
+    })
+    const client = createCloudflareClient({
+      apiToken: TOKEN,
+      accountId: ACCOUNT_ID,
+      fetch: fetchFn,
+    })
+    await expect(
+      client.setPagesProductionBuildVariable(
+        'areca-site',
+        'ARECA_SNAPSHOT_ID',
+        'pub-1',
+      ),
+    ).resolves.toBeUndefined()
+    expect(calls).toHaveLength(1)
+    expect(calls[0].init.method).toBe('PATCH')
+    expect(calls[0].url.toString()).toBe(
+      `${BASE}/accounts/${ACCOUNT_ID}/pages/projects/areca-site`,
+    )
+    expect(JSON.parse(String(calls[0].init.body))).toEqual({
+      deployment_configs: {
+        production: {
+          env_vars: {
+            ARECA_SNAPSHOT_ID: { type: 'plain_text', value: 'pub-1' },
+          },
+        },
+      },
+    })
+    const headers = new Headers(calls[0].init.headers)
+    expect(headers.get('authorization')).toBe(`Bearer ${TOKEN}`)
+    expect(headers.get('content-type')).toBe('application/json')
+  })
+
+  it('throws CloudflareApiError for an error envelope on either write', async () => {
+    const refuse = routedFetch({
+      [`${ACCOUNT_PATH}/builds/triggers/${TRIGGER}/environment_variables`]:
+        () => fail(403, ['Missing scope']),
+      [`${ACCOUNT_PATH}/pages/projects/areca-site`]: () =>
+        fail(403, ['Missing scope']),
+    })
+    const client = createCloudflareClient({
+      apiToken: TOKEN,
+      accountId: ACCOUNT_ID,
+      fetch: refuse.fetchFn,
+    })
+    const workers = await client
+      .setWorkerBuildVariable(TRIGGER, 'ARECA_SNAPSHOT_ID', 'pub-1')
+      .catch((error: unknown) => error)
+    expect(workers).toBeInstanceOf(CloudflareApiError)
+    expect((workers as CloudflareApiError).message).toBe(
+      'Cloudflare Workers Builds variables failed (HTTP 403): Missing scope',
+    )
+    expect((workers as CloudflareApiError).notDispatched).toBe(true)
+
+    const pages = await client
+      .setPagesProductionBuildVariable(
+        'areca-site',
+        'ARECA_SNAPSHOT_ID',
+        'pub-1',
+      )
+      .catch((error: unknown) => error)
+    expect(pages).toBeInstanceOf(CloudflareApiError)
+    expect((pages as CloudflareApiError).message).toBe(
+      'Cloudflare Pages project variables failed (HTTP 403): Missing scope',
+    )
+  })
+})
+
 describe('error classification for writes', () => {
   async function postError(fetchFn: typeof fetch) {
     const client = createCloudflareClient({

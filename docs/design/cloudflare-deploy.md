@@ -24,6 +24,8 @@ Base URL `https://api.cloudflare.com/client/v4`. Auth `Authorization: Bearer <to
 | Get build                    | `GET /accounts/{account_id}/builds/builds/{build_uuid}` → `status` (`queued`/`initializing`/`running`/`stopped`), `build_outcome` (`success`/`fail`/`skipped`/`cancelled`/`terminated`) | Workers CI Read/Write |
 | List builds for a Worker     | `GET /accounts/{account_id}/builds/workers/{script_tag}/builds`                                                                                                                         | Workers CI Read/Write |
 | Build logs                   | `GET /accounts/{account_id}/builds/builds/{build_uuid}/logs`                                                                                                                            | Workers CI Read/Write |
+| Set Pages build variable     | `PATCH /accounts/{account_id}/pages/projects/{project_name}` with `deployment_configs.production.env_vars`                                                                              | Pages Write           |
+| Set Workers build variable   | `PATCH /accounts/{account_id}/builds/triggers/{trigger_uuid}/environment_variables` (merges, keeps secrets)                                                                             | Workers CI Write      |
 
 - **The Workers Builds API requires a user-scoped token** (My Profile › API Tokens). Account-owned tokens do not work for it, so Areca uses a user token for both products.
 - New tokens start with `cfut_`. The secret is shown once by Cloudflare.
@@ -61,6 +63,7 @@ Base URL `https://api.cloudflare.com/client/v4`. Auth `Authorization: Bearer <to
     - Workers reconcile: list builds for the Worker; accept only a unique build on the target trigger/branch with an API trigger source created at or after `dispatchedAt`.
     - Otherwise the job stays uncertain.
       Completion: Pages = the `deploy` stage of the deployment is `success` (done) or `failure`/`canceled` (error); Workers = `status: stopped` with `build_outcome: success` (done), anything else stopped (error).
+      Snapshot. Before the dispatch Areca writes the build variable `ARECA_SNAPSHOT_ID` = publication ID (Workers: trigger environment variables; Pages: production env_vars), like Dokploy's build argument. A failed write means not dispatched. The variable stays set after the release, so a later git-push build pulls the same publication.
 15. **Logs.** The job log gets a link to the Cloudflare dashboard page for the deployment/build. On failure the last ~100 log lines are fetched and appended.
 16. **Removing credentials.** Blocked only while a deployment is pending. The confirm dialog shows how many sites deploy with Cloudflare ("their next go-live will fail until you reconnect"). Sites keep their target. A go-live then fails with "Cloudflare credentials are not configured for this client".
 17. **Copy** in en, nl and tr, including the guide.
