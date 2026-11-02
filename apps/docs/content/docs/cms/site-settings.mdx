@@ -28,9 +28,9 @@ Use this tab to add the site's content languages and choose the main language. T
 
 ## Deployment
 
-Use this tab to decide whether a site goes live through a deployment target or only as a marked release. The tab sets the **Publishing mode**, connects the site to a Dokploy application, and sets the **Health check URL**.
+Use this tab to decide whether a site goes live through a deployment target or only as a marked release. The tab sets the **Publishing mode**, chooses the **Provider** (**Dokploy** or **Cloudflare**), connects the site to a Dokploy application or a Cloudflare project, and sets the **Health check URL**.
 
-- **Production** deploys each release to the site's Dokploy application and checks its health before the release counts as live. Production requires an application and a Health check URL, even though the field is labelled optional.
+- **Production** deploys each release to the site's Dokploy application or Cloudflare project, and checks its health before the release counts as live. Production requires a target and a Health check URL. The Health check URL field is required in Production mode.
 - **Demo** keeps the release in Areca without a production deployment. No deploy or health check runs. Demo releases are labelled and never count as live.
 
 The full steps are in [deployments](/docs/cms/deployments).
@@ -67,6 +67,6 @@ The content types usually come from the website project. Read [content types](/d
 ## Related
 
 - [Clients and sites](/docs/cms/clients-and-sites): create sites, copy the site key and rotate tokens.
-- [Deployments](/docs/cms/deployments): connect a site to Dokploy.
+- [Deployments](/docs/cms/deployments): connect a site to Dokploy or Cloudflare.
 - [Content types](/docs/cms/content-types): how content types are defined and kept in sync.
 - [AI settings](/docs/cms/ai-settings): the agency-wide OpenRouter connection.

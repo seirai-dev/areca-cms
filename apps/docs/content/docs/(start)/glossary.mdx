@@ -20,15 +20,16 @@ These are the terms used across the CMS, the site SDK and self-hosting documenta
 - **[Client](/docs/cms/clients-and-sites)**: The organisation an agency builds websites for. A client has one or more sites, a shared Library and its own people.
 - **[Client editor](/docs/security/roles-and-permissions)**: A person with the **Editor** role for a client. Editors write and edit drafts, preview entries and upload files, but cannot mark entries ready, go live or manage people.
 - **[Client owner](/docs/security/roles-and-permissions)**: A person with the **Owner** role for a client. Owners approve content, schedule entries, go live, roll back releases and manage the client's people.
+- **[Cloudflare](/docs/self-hosting/deployment-targets#cloudflare)**: One of the two deployment providers that Areca uses to build and deploy production websites, as Cloudflare Pages projects or Workers with Workers Builds. Each client connects its own Cloudflare account with an API token.
 - **[Collection](/docs/cms/content-types)**: A content type on a site, such as Articles or Team members. It has fields and a route on the website. The CMS UI calls it a content type.
 - **[Content type](/docs/cms/content-types)**: The name the CMS UI uses for a collection.
 
 ## D
 
-- **[Deployment target](/docs/cms/deployments)**: The application on the hosting provider that serves a production site, together with its health check URL. Set under the site's **Settings › Deployment**.
+- **[Deployment target](/docs/cms/deployments)**: The application or project on Dokploy or Cloudflare that serves a production site, together with its health check URL. Set under the site's **Settings › Deployment**.
 - **[Demo mode](/docs/cms/deployments)**: A site publishing mode for local trials. Go live creates a demo release that a local build can pull, but nothing is deployed and the site is never production live.
 - **[Draft](/docs/cms/statuses-and-review)**: The latest saved version of an entry. Saving changes the draft, and the draft is visible only in the CMS and in preview.
-- **[Dokploy](/docs/self-hosting/deployment-targets)**: The deployment provider that Areca uses to build and deploy production websites. Each client connects its own Dokploy instance.
+- **[Dokploy](/docs/self-hosting/deployment-targets)**: One of the two deployment providers that Areca uses to build and deploy production websites. The other is Cloudflare. Each client connects its own Dokploy instance.
 
 ## E
 

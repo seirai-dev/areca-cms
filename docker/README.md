@@ -18,7 +18,8 @@ The values in `.env.example` are for trying the local demo. Replace them before
 using a shared or public instance. Keep `DOKPLOY_CREDENTIALS_ENCRYPTION_KEY`
 stable and backed up with PostgreSQL; it is required even if you do not use
 Dokploy yet. If you enable AI settings, also generate and retain
-`AI_SETTINGS_ENCRYPTION_KEY`. See [CMS configuration](../docs/CONFIGURATION.md).
+`AI_SETTINGS_ENCRYPTION_KEY`. To deploy sites to Cloudflare, do the same with
+`CLOUDFLARE_CREDENTIALS_ENCRYPTION_KEY`. See [CMS configuration](../docs/CONFIGURATION.md).
 
 Open <http://localhost:3000/setup> to create the first administrator. The setup
 form asks for a setup token: set `SETUP_TOKEN` (16+ characters) in `.env`, or

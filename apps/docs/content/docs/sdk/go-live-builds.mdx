@@ -9,7 +9,7 @@ This page is for the developer who owns the site's Dockerfile and health route. 
 
 ## What Areca sends to the build
 
-Areca's Dokploy integration sets these values on your application before each deploy.
+For a Dokploy application, Areca's Dokploy integration sets these values before each deploy. For a Cloudflare project, see [Cloudflare builds](#cloudflare-builds).
 
 | Setting | Kind | Set by Areca | Your site uses it for |
 | --- | --- | --- | --- |
@@ -18,7 +18,7 @@ Areca's Dokploy integration sets these values on your application before each de
 | `ARECA_SITE_TOKEN` | BuildKit secret | No, you set it once | Authenticating `areca pull` during the build |
 | `ARECA_SITE_TOKEN` and `ARECA_CMS_URL` | Runtime environment | No, you set it once | Only needed if the running site serves [draft previews](/docs/sdk/preview) |
 
-`ARECA_SNAPSHOT_ID` holds the publication ID. `areca pull` reads it and pulls exactly that publication. It also changes the Docker build input, so a rebuild cannot reuse a cached pull from an earlier publication. Your Dockerfile must declare it as an `ARG`, as shown below.
+`ARECA_SNAPSHOT_ID` holds the publication ID. `areca pull` reads it and pulls exactly that publication. It also changes the Docker build input, so a rebuild cannot reuse a cached pull from an earlier publication. Your Dockerfile must declare it as an `ARG`, as shown below. Cloudflare builds use the same ID, but as a build variable, and they need no Dockerfile.
 
 <Callout type="warn" title="Keep the site token out of build arguments">
 
@@ -122,7 +122,18 @@ export const Route = createFileRoute('/api/health')({
 
 Keep the route public, and do not require a login or a token for it. Do not return content or the site token from it.
 
-Set the URL in the CMS, on the **Deployment** tab of the site settings, in the **Health check URL** field. The CMS labels this field optional, but Go live is blocked in Production mode until it is set. Use an address the CMS can reach. For the rules on HTTP and private addresses, see [Deployment targets](/docs/self-hosting/deployment-targets).
+Set the URL in the CMS, on the **Deployment** tab of the site settings, in the **Health check URL** field. The field is required in Production mode, and Go live is blocked until it is set. Use an address the CMS can reach. For the rules on HTTP and private addresses, see [Deployment targets](/docs/self-hosting/deployment-targets).
+
+## Cloudflare builds
+
+A site that deploys to a Cloudflare Pages project or a Worker with Workers Builds needs no Dockerfile. Cloudflare builds the site from your repository, so the build command must do the pull itself.
+
+- **Build command.** Run `areca pull` before the site is built, for example `areca pull && <your build>`, or in a prebuild script. `areca` must be installed in the project, so the command can find it.
+- **Build variables.** Set `ARECA_CMS_URL` (the CMS address the build can reach) and `ARECA_SITE_TOKEN` (the site token, stored as a secret) on the project. For Pages, use **Settings** › **Variables and Secrets** for the production environment. For a Worker, use **Settings** › **Builds** › **Variables and secrets**, as build variables and not runtime variables. Areca does not set these two values.
+- **`ARECA_SNAPSHOT_ID`.** Areca sets this build variable before each deploy, to the publication ID of the release. Do not set it yourself. It stays set after the release, so a build that Cloudflare starts from a git push pulls the same release until the next go-live.
+- **Health route.** The site must serve its health route from the build, as described above. A route, or a static `/api/health` JSON file generated at build time, both work, as long as the JSON contains the publication ID from the pulled manifest.
+
+For the setup in Cloudflare and the CMS, see [Cloudflare](/docs/self-hosting/deployment-targets#cloudflare).
 
 ## Troubleshooting
 
@@ -135,7 +146,7 @@ Set the URL in the CMS, on the **Deployment** tab of the site settings, in the *
 
 ## Related
 
-- [Deployment targets](/docs/self-hosting/deployment-targets) for connecting the Dokploy application to the CMS.
+- [Deployment targets](/docs/self-hosting/deployment-targets) for connecting a Dokploy application or a Cloudflare project to the CMS.
 - [Pulling content](/docs/sdk/pulling-content) for the pull command and its output.
 - [Draft preview](/docs/sdk/preview) for the runtime variables previews need.
 - [Example site](/docs/sdk/example-site) for a complete working build.

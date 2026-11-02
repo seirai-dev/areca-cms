@@ -107,3 +107,20 @@ test("backup rejects a different AI encryption key in the supplied environment",
     ["AI_SETTINGS_ENCRYPTION_KEY=actual-key"],
   );
 });
+
+test("backup rejects a different Cloudflare encryption key in the supplied environment", () => {
+  assert.throws(
+    () =>
+      verifyContainerCredentials(
+        "cms",
+        { CLOUDFLARE_CREDENTIALS_ENCRYPTION_KEY: "stale-key" },
+        ["CLOUDFLARE_CREDENTIALS_ENCRYPTION_KEY=actual-key"],
+      ),
+    /CLOUDFLARE_CREDENTIALS_ENCRYPTION_KEY/,
+  );
+  verifyContainerCredentials(
+    "cms",
+    { CLOUDFLARE_CREDENTIALS_ENCRYPTION_KEY: "actual-key" },
+    ["CLOUDFLARE_CREDENTIALS_ENCRYPTION_KEY=actual-key"],
+  );
+});
