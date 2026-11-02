@@ -162,6 +162,7 @@ describe('deploy', () => {
       ) {
         return ok(pagesDeployment('dep-1'))
       }
+      if (req.method === 'PATCH') return ok({})
       return fail(404, 'unexpected')
     })
     const lines: string[] = []
@@ -186,6 +187,7 @@ describe('deploy', () => {
       ) {
         return ok(workerBuild('build-1', { status: 'queued' }))
       }
+      if (req.method === 'PATCH') return ok({})
       return fail(404, 'unexpected')
     })
     const lines: string[] = []
@@ -204,7 +206,9 @@ describe('deploy', () => {
   })
 
   it('refuses without retry when Cloudflare rejects the POST', async () => {
-    const { adapter, calls } = adapterFor(() => fail(404, 'Trigger not found'))
+    const { adapter, calls } = adapterFor((req) =>
+      req.method === 'PATCH' ? ok({}) : fail(404, 'Trigger not found'),
+    )
     await expect(
       adapter.deploy(workersTarget, () => {}, context),
     ).rejects.toBeInstanceOf(DeploymentNotDispatchedError)
@@ -216,6 +220,7 @@ describe('deploy', () => {
     let listed = 0
     const { adapter, calls } = adapterFor((req) => {
       if (req.method === 'POST') return fail(503, 'upstream unavailable')
+      if (req.method === 'PATCH') return ok({})
       listed += 1
       return ok([workerBuild('build-9', { createdOn: AFTER })])
     })
@@ -235,7 +240,9 @@ describe('deploy', () => {
 
   it('stays uncertain when a lost POST has no matching upstream build', async () => {
     const { adapter, calls } = adapterFor((req) =>
-      req.method === 'POST' ? fail(500, 'boom') : ok([]),
+      req.method === 'POST'
+        ? fail(500, 'boom')
+        : ok(req.method === 'PATCH' ? {} : []),
     )
     await expect(
       adapter.deploy(workersTarget, () => {}, context),
@@ -247,12 +254,119 @@ describe('deploy', () => {
     const { adapter } = adapterFor((req) =>
       req.method === 'POST'
         ? fail(500, 'boom')
-        : ok([workerBuild('build-a'), workerBuild('build-b')]),
+        : ok(
+            req.method === 'PATCH'
+              ? {}
+              : [workerBuild('build-a'), workerBuild('build-b')],
+          ),
     )
     await expect(
       adapter.deploy(workersTarget, () => {}, context),
     ).rejects.toThrow(/Multiple upstream builds/)
   })
+})
+
+describe('ARECA_SNAPSHOT_ID build variable', () => {
+  const VARIABLE_PATH = {
+    pages: `${ACCOUNT}/pages/projects/${PROJECT}`,
+    workers: `${ACCOUNT}/builds/triggers/${TRIGGER}/environment_variables`,
+  } as const
+  const DISPATCH_PATH = {
+    pages: `${ACCOUNT}/pages/projects/${PROJECT}/deployments`,
+    workers: `${ACCOUNT}/builds/triggers/${TRIGGER}/builds`,
+  } as const
+  const dispatchResult = {
+    pages: () => ok(pagesDeployment('dep-1')),
+    workers: () => ok(workerBuild('build-1', { status: 'queued' })),
+  } as const
+  const targets = {
+    pages: pagesTarget,
+    workers: workersTarget,
+  } as const
+  const expectedBody = {
+    pages: {
+      deployment_configs: {
+        production: {
+          env_vars: {
+            ARECA_SNAPSHOT_ID: { type: 'plain_text', value: 'pub-1' },
+          },
+        },
+      },
+    },
+    workers: {
+      ARECA_SNAPSHOT_ID: { is_secret: false, value: 'pub-1' },
+    },
+  } as const
+
+  /** Answers the write with `write` and the dispatch POST with the target's result. */
+  function fakeFor(
+    kind: 'pages' | 'workers',
+    write: (attempt: number) => Response,
+  ) {
+    let writes = 0
+    return adapterFor((req) => {
+      if (req.method === 'PATCH' && req.path === VARIABLE_PATH[kind]) {
+        writes += 1
+        return write(writes)
+      }
+      if (req.method === 'POST' && req.path === DISPATCH_PATH[kind]) {
+        return dispatchResult[kind]()
+      }
+      return fail(404, 'unexpected')
+    })
+  }
+
+  it.each(['pages', 'workers'] as const)(
+    'writes the publication ID before the dispatch POST (%s)',
+    async (kind) => {
+      const { adapter, calls } = fakeFor(kind, () => ok({}))
+      const lines: string[] = []
+      await adapter.deploy(targets[kind], (l) => lines.push(l), context)
+
+      const order = calls.map((call) => `${call.method} ${call.path}`)
+      const write = order.indexOf(`PATCH ${VARIABLE_PATH[kind]}`)
+      const dispatch = order.indexOf(`POST ${DISPATCH_PATH[kind]}`)
+      expect(write).toBeGreaterThanOrEqual(0)
+      expect(dispatch).toBeGreaterThan(write)
+
+      const body = JSON.parse(String(calls[write].init.body))
+      expect(body).toEqual(expectedBody[kind])
+      expect(new Headers(calls[write].init.headers).get('authorization')).toBe(
+        `Bearer ${TOKEN}`,
+      )
+      expect(lines).toContain('build variable ARECA_SNAPSHOT_ID=pub-1')
+    },
+  )
+
+  it.each(['pages', 'workers'] as const)(
+    'does not dispatch when the write is refused (%s)',
+    async (kind) => {
+      const { adapter, calls } = fakeFor(kind, () =>
+        fail(403, 'Authentication error'),
+      )
+      await expect(
+        adapter.deploy(targets[kind], () => {}, context),
+      ).rejects.toBeInstanceOf(DeploymentNotDispatchedError)
+      expect(posts(calls)).toHaveLength(0)
+      expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(1)
+    },
+  )
+
+  it.each(['pages', 'workers'] as const)(
+    'retries a write that fails once with 503, then dispatches (%s)',
+    async (kind) => {
+      const { adapter, calls } = fakeFor(kind, (attempt) =>
+        attempt === 1 ? fail(503, 'busy') : ok({}),
+      )
+      await expect(
+        adapter.deploy(targets[kind], () => {}, context),
+      ).resolves.toEqual({
+        deploymentId: kind === 'pages' ? 'dep-1' : 'build-1',
+      })
+      expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(2)
+      expect(posts(calls)).toHaveLength(1)
+    },
+  )
 })
 
 describe('reconcile', () => {

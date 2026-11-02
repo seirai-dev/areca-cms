@@ -293,7 +293,7 @@ export function createCloudflareClient(options: CloudflareClientOptions) {
    * retried by this client; its caller decides from `notDispatched`.
    */
   async function call(
-    method: 'GET' | 'POST' | 'PUT',
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH',
     path: string,
     label: string,
     body?: FormData | string,
@@ -566,6 +566,46 @@ export function createCloudflareClient(options: CloudflareClientOptions) {
     return parseRequired(parseWorkerBuild(result), 'Workers Builds build')
   }
 
+  /**
+   * Sets one plain-text build variable on a Workers Builds trigger. Idempotent
+   * and merges: other variables, secrets included, are kept.
+   */
+  async function setWorkerBuildVariable(
+    triggerUuid: string,
+    name: string,
+    value: string,
+  ): Promise<void> {
+    await call(
+      'PATCH',
+      `${accountPath}/builds/triggers/${encodeURIComponent(triggerUuid)}/environment_variables`,
+      'Workers Builds variables',
+      JSON.stringify({ [name]: { is_secret: false, value } }),
+    )
+  }
+
+  /**
+   * Sets one plain-text production build variable on a Pages project. Idempotent
+   * and merges with existing variables: only the named key changes.
+   */
+  async function setPagesProductionBuildVariable(
+    projectName: string,
+    name: string,
+    value: string,
+  ): Promise<void> {
+    await call(
+      'PATCH',
+      `${accountPath}/pages/projects/${encodeURIComponent(projectName)}`,
+      'Pages project variables',
+      JSON.stringify({
+        deployment_configs: {
+          production: {
+            env_vars: { [name]: { type: 'plain_text', value } },
+          },
+        },
+      }),
+    )
+  }
+
   /** The account's workers.dev subdomain, or null when none is set. */
   async function getWorkersSubdomain(): Promise<string | null> {
     const result = await get(
@@ -680,6 +720,8 @@ export function createCloudflareClient(options: CloudflareClientOptions) {
     listWorkerBuilds,
     getWorkerBuildLogs,
     cancelWorkerBuild,
+    setWorkerBuildVariable,
+    setPagesProductionBuildVariable,
     getWorkersSubdomain,
     getWorkerScriptSubdomain,
     listWorkerDomains,

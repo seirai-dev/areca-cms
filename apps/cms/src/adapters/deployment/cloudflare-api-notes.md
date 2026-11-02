@@ -129,3 +129,25 @@ reference calls the same group **Workers CI**. Setup copy uses the dashboard nam
 
 The real sites use build variables `ARECA_CMS_URL` (the CMS origin) and
 `ARECA_SITE_TOKEN` (a secret). Set them on the Worker's build settings, the same as for Dokploy.
+
+## Build variables
+
+Areca sets `ARECA_SNAPSHOT_ID` to the publication ID before every dispatch, so the
+build's `areca pull` fetches that publication. Without it the build pulls the
+previous live publication and the health check fails.
+
+- `PATCH /accounts/<account-id>/builds/triggers/<trigger_uuid>/environment_variables`
+  with the JSON body `{"ARECA_SNAPSHOT_ID":{"is_secret":false,"value":"<publication-id>"}}`.
+  **Verified live on 2 Nov 2026: it merges.** Other variables, secrets included, are
+  kept. The opt-in live test reads the variable back with `GET` on the same path and
+  removes it with `DELETE` on `.../environment_variables/ARECA_SNAPSHOT_ID`; those two
+  shapes are not yet confirmed by a recorded live run.
+- `PATCH /accounts/<account-id>/pages/projects/<name>` with the JSON body
+  `{"deployment_configs":{"production":{"env_vars":{"ARECA_SNAPSHOT_ID":{"type":"plain_text","value":"<publication-id>"}}}}}`.
+  **Docs only:** there is no Pages project on the test account, so this has not been
+  seen live. Per the docs, keys are updated one at a time and setting a key to `null`
+  deletes it.
+
+Both writes are idempotent, so the adapter retries them on transient failures (no
+response, 429, 5xx). A refused write (4xx with an error envelope) means nothing was
+dispatched. The deploy POST itself is never retried.

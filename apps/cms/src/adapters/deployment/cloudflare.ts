@@ -22,6 +22,7 @@ const LOG_TAIL_LINES = 100
 const DEFAULT_RECONCILE_TIMEOUT_MS = 30_000
 const DEFAULT_RECONCILE_POLL_MS = 1_000
 const READ_ATTEMPTS = 3
+const SNAPSHOT_VARIABLE = 'ARECA_SNAPSHOT_ID'
 const DASHBOARD = 'https://dash.cloudflare.com'
 
 export type CloudflareAdapterOptions = HealthCheckOptions & {
@@ -49,6 +50,29 @@ export function createCloudflareAdapter(
   const { client, accountId } = options
   const now = () => (options.now ? options.now() : new Date()).getTime()
   const healthCheck = createHealthChecker(options)
+
+  /**
+   * Writes ARECA_SNAPSHOT_ID so the build pulls this publication, as Dokploy's
+   * build arg does. Throws on failure; the caller must not dispatch then.
+   */
+  async function setSnapshotVariable(
+    target: CloudflareTarget,
+    publicationId: string,
+  ): Promise<void> {
+    await readWithRetry(() =>
+      target.kind === 'pages'
+        ? client.setPagesProductionBuildVariable(
+            target.projectName,
+            SNAPSHOT_VARIABLE,
+            publicationId,
+          )
+        : client.setWorkerBuildVariable(
+            target.triggerUuid,
+            SNAPSHOT_VARIABLE,
+            publicationId,
+          ),
+    )
+  }
 
   /** Pages: the deployment ID. Workers: the build UUID. */
   async function dispatch(target: CloudflareTarget): Promise<string> {
@@ -170,6 +194,14 @@ export function createCloudflareAdapter(
       log(
         `Deploying ${describeTarget(cf)} job=${context.jobId} publication=${context.publicationId} snapshot=${context.snapshotHash}`,
       )
+      try {
+        await setSnapshotVariable(cf, context.publicationId)
+      } catch (error) {
+        throw new DeploymentNotDispatchedError(
+          error instanceof Error ? error.message : String(error),
+        )
+      }
+      log(`build variable ${SNAPSHOT_VARIABLE}=${context.publicationId}`)
       let started: string
       try {
         // This POST is deliberately never retried: a lost response or a 5xx
@@ -299,7 +331,10 @@ function createdSince(createdOn: string | null, sinceMs: number) {
   return Number.isFinite(created) && created >= sinceMs
 }
 
-/** Retries a read a few times on a transient failure. Never used for writes. */
+/**
+ * Retries a read or an idempotent write a few times on a transient failure.
+ * Never used for the deploy POST, which may have started a build.
+ */
 async function readWithRetry<T>(operation: () => Promise<T>): Promise<T> {
   for (let attempt = 0; ; attempt++) {
     try {
