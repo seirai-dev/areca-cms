@@ -14,6 +14,8 @@ const REQUEST_TIMEOUT_MS = 15_000
 // live on 2 Nov 2026), so Pages lists page in tens.
 const PAGE_SIZE = 10
 const MAX_PAGES = 50
+// Workers Builds lists accept larger pages (50 checked live).
+const BUILDS_PAGE_SIZE = 50
 const MAX_LOG_PAGES = 50
 const ACCOUNT_ID_PATTERN = /^[0-9a-f]{32}$/i
 
@@ -514,7 +516,7 @@ export function createCloudflareClient(options: CloudflareClientOptions) {
     scriptTag: string,
     query: { perPage?: number } = {},
   ): Promise<CloudflareWorkerBuild[]> {
-    const perPage = query.perPage ?? PAGE_SIZE
+    const perPage = query.perPage ?? BUILDS_PAGE_SIZE
     const result = await get(
       `${accountPath}/builds/workers/${encodeURIComponent(scriptTag)}/builds?per_page=${perPage}`,
       'Workers Builds builds',
