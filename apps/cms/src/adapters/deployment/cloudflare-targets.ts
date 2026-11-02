@@ -19,7 +19,8 @@ const HEALTH_PATH = '/api/health'
 const WILDCARD_BRANCH = '*'
 const PREVIEW_DEPLOY = /\bwrangler\s+versions\s+upload\b/i
 
-export type CloudflareDisabledReason = 'no_git' | 'no_builds'
+export type CloudflareDisabledReason =
+  'no_git' | 'no_builds' | 'no_production_trigger'
 
 /** A Workers Builds trigger that deploys exactly one branch. */
 export type CloudflareBuildTrigger = {
@@ -98,14 +99,14 @@ export function usableBuildTriggers(
 }
 
 /**
- * The trigger picked without asking. A single usable trigger always is. With
- * several, the one production trigger is picked when exactly one is not a
- * preview; otherwise the admin chooses.
+ * The trigger picked without asking: the only production trigger. Preview
+ * triggers never qualify, because a preview upload never goes live and the
+ * health check of a release would fail. With no production trigger, or with
+ * several, the admin chooses.
  */
 export function autoPickTrigger(
   triggers: CloudflareBuildTrigger[],
 ): CloudflareBuildTrigger | null {
-  if (triggers.length === 1) return triggers[0]
   const production = triggers.filter((trigger) => !trigger.preview)
   return production.length === 1 ? production[0] : null
 }
@@ -171,7 +172,8 @@ async function workerTarget(
       primaryDomain = `${script.name}.${accountSubdomain}.workers.dev`
   }
   const auto = autoPickTrigger(triggers)
-  const buildable = triggers.length > 0
+  // A Worker can only deploy through a production trigger. Preview triggers are listed, not buildable.
+  const buildable = triggers.some((trigger) => !trigger.preview)
   return {
     kind: 'workers',
     name: script.name,
@@ -180,7 +182,11 @@ async function workerTarget(
     primaryDomain,
     suggestedHealthUrl: suggestedHealthUrl(primaryDomain),
     buildable,
-    disabledReason: buildable ? null : 'no_builds',
+    disabledReason: buildable
+      ? null
+      : triggers.length === 0
+        ? 'no_builds'
+        : 'no_production_trigger',
     triggers,
     autoTriggerUuid: auto?.triggerUuid ?? null,
   }

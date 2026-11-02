@@ -135,7 +135,24 @@ function workerBuild(
   }
 }
 
-function adapterFor(respond: Responder) {
+/**
+ * A clock the adapter reads and sleeps on. A sleep records its length and
+ * advances the clock at once, so retries and polls never wait in real time.
+ */
+function fakeClock(start: Date = DISPATCHED_AT) {
+  let current = start.getTime()
+  const sleeps: number[] = []
+  return {
+    now: () => new Date(current),
+    sleep: async (ms: number) => {
+      sleeps.push(ms)
+      current += ms
+    },
+    sleeps,
+  }
+}
+
+function adapterFor(respond: Responder, clock = fakeClock()) {
   const fake = fakeCloudflare(respond)
   const client = createCloudflareClient({
     apiToken: TOKEN,
@@ -147,8 +164,10 @@ function adapterFor(respond: Responder) {
     accountId: ACCOUNT_ID,
     reconciliationTimeoutMs: 40,
     reconciliationPollMs: 5,
+    now: clock.now,
+    sleep: clock.sleep,
   })
-  return { adapter, calls: fake.calls }
+  return { adapter, calls: fake.calls, sleeps: clock.sleeps }
 }
 
 const posts = (calls: Req[]) => calls.filter((call) => call.method === 'POST')
@@ -204,6 +223,31 @@ describe('deploy', () => {
       `dashboard https://dash.cloudflare.com/${ACCOUNT_ID}/workers/services/view/areca-worker/production/builds/build-1`,
     )
   })
+
+  it.each([
+    ['a 503', () => fail(503, 'upstream unavailable')],
+    [
+      'a network error',
+      () => {
+        throw Object.assign(new TypeError('fetch failed'), {
+          cause: { code: 'ECONNRESET' },
+        })
+      },
+    ],
+  ])(
+    'sends the deploy POST once when it fails with %s',
+    async (_name, failure) => {
+      const { adapter, calls } = adapterFor((req) => {
+        if (req.method === 'POST') return failure()
+        if (req.method === 'PATCH') return ok({})
+        return ok([])
+      })
+      await expect(
+        adapter.deploy(workersTarget, () => {}, context),
+      ).rejects.toBeInstanceOf(DeploymentUncertainError)
+      expect(posts(calls)).toHaveLength(1)
+    },
+  )
 
   it('refuses without retry when Cloudflare rejects the POST', async () => {
     const { adapter, calls } = adapterFor((req) =>
@@ -593,6 +637,116 @@ describe('waitForCompletion', () => {
       await adapter.waitForCompletion(workersTarget, 'build-1', poll, () => {}),
     ).toBe('done')
     expect(reads).toBe(2)
+  })
+
+  describe('status polls survive transient failures', () => {
+    const networkError = () => {
+      throw Object.assign(new TypeError('fetch failed'), {
+        cause: { code: 'ENOTFOUND' },
+      })
+    }
+    const transient: [string, () => Response | never, string][] = [
+      ['a 429 error envelope', () => fail(429, 'rate limited'), 'HTTP 429'],
+      ['a DNS failure', networkError, 'no response'],
+      ['a 503', () => fail(503, 'busy'), 'HTTP 503'],
+    ]
+
+    it.each(transient)(
+      'succeeds after two failed polls with %s',
+      async (_name, failure, reason) => {
+        let reads = 0
+        const logs: string[] = []
+        const { adapter, sleeps } = adapterFor(() => {
+          reads += 1
+          if (reads <= 2) return failure()
+          return ok(
+            workerBuild('build-1', { status: 'stopped', outcome: 'success' }),
+          )
+        })
+        expect(
+          await adapter.waitForCompletion(
+            workersTarget,
+            'build-1',
+            { timeoutMs: 60_000, pollMs: 5 },
+            (line) => logs.push(line),
+          ),
+        ).toBe('done')
+        expect(reads).toBe(3)
+        expect(sleeps).toEqual([500, 1_000])
+        expect(logs.filter((line) => line.startsWith('poll failed'))).toEqual([
+          `poll failed (${reason}); retrying in 500ms`,
+          `poll failed (${reason}); retrying in 1s`,
+        ])
+      },
+    )
+
+    it('logs the HTTP status of a failed poll', async () => {
+      let reads = 0
+      const logs: string[] = []
+      const { adapter } = adapterFor(() => {
+        reads += 1
+        if (reads === 1) return fail(429, 'slow down')
+        return ok(
+          workerBuild('build-1', { status: 'stopped', outcome: 'success' }),
+        )
+      })
+      await adapter.waitForCompletion(
+        workersTarget,
+        'build-1',
+        { timeoutMs: 60_000, pollMs: 5 },
+        (line) => logs.push(line),
+      )
+      expect(logs).toContain('poll failed (HTTP 429); retrying in 500ms')
+    })
+
+    it('backs off 0.5, 1, 2, 4, 8, 15 seconds, then throws', async () => {
+      let reads = 0
+      const { adapter, sleeps } = adapterFor(() => {
+        reads += 1
+        return fail(503, 'busy')
+      })
+      await expect(
+        adapter.waitForCompletion(
+          workersTarget,
+          'build-1',
+          { timeoutMs: 60_000, pollMs: 5 },
+          () => {},
+        ),
+      ).rejects.toThrow('failed (HTTP 503)')
+      expect(reads).toBe(7)
+      expect(sleeps).toEqual([500, 1_000, 2_000, 4_000, 8_000, 15_000])
+    })
+
+    it('caps the retry waits to the wait deadline', async () => {
+      let reads = 0
+      const { adapter, sleeps } = adapterFor(() => {
+        reads += 1
+        return fail(503, 'busy')
+      })
+      await expect(
+        adapter.waitForCompletion(
+          workersTarget,
+          'build-1',
+          { timeoutMs: 10_000, pollMs: 5 },
+          () => {},
+        ),
+      ).rejects.toThrow('failed (HTTP 503)')
+      expect(reads).toBe(6)
+      expect(sleeps).toEqual([500, 1_000, 2_000, 4_000, 2_500])
+    })
+
+    it('throws at once on a 403 during polling', async () => {
+      let reads = 0
+      const { adapter, sleeps } = adapterFor(() => {
+        reads += 1
+        return fail(403, 'forbidden')
+      })
+      await expect(
+        adapter.waitForCompletion(workersTarget, 'build-1', poll, () => {}),
+      ).rejects.toThrow('failed (HTTP 403)')
+      expect(reads).toBe(1)
+      expect(sleeps).toEqual([])
+    })
   })
 })
 

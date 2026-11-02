@@ -2271,6 +2271,8 @@
   "settings_cloudflare_not_connected_body": "Connect Cloudflare for {client} first.",
   "settings_cloudflare_no_git": "No git connection",
   "settings_cloudflare_no_builds": "Workers Builds not connected",
+  "settings_cloudflare_no_production_trigger": "No production build trigger",
+  "settings_deployment_locked": "A release is in progress or its outcome is unknown. You can change deployment settings once it has finished or been checked.",
   "settings_cloudflare_branch_label": "Builds branch",
   "settings_cloudflare_trigger_label": "Build trigger",
   "settings_cloudflare_trigger_choose": "Choose a build trigger",

@@ -27,6 +27,7 @@ export function DokployTargetFields({
   applications,
   appId,
   error,
+  disabled = false,
   onPick,
   onManualChange,
 }: {
@@ -34,6 +35,7 @@ export function DokployTargetFields({
   applications: ReturnType<typeof useDokployApplications>['applications']
   appId: string
   error?: string
+  disabled?: boolean
   onPick: (applicationId: string) => void
   onManualChange: (value: string) => void
 }) {
@@ -86,6 +88,7 @@ export function DokployTargetFields({
           emptyMessage={m.settings_app_none()}
           searchPlaceholder={m.settings_app_search()}
           invalid={Boolean(error)}
+          disabled={disabled}
           onSelect={onPick}
         />
       ) : null}
@@ -108,6 +111,7 @@ export function DokployTargetFields({
           autoComplete="off"
           spellCheck={false}
           value={appId}
+          disabled={disabled}
           aria-invalid={error ? true : undefined}
           onChange={(event) => onManualChange(event.target.value)}
         />

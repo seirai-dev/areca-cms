@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 
 import type { CloudflareDeployTarget } from '#/adapters/deployment/cloudflare-targets'
 import { errorMessage } from '#/lib/admin/helpers'
+import { useReleaseStatus } from '#/features/golive/use-release-status'
 import { Tag } from '#/components/ui/tag'
 import { Button } from '#/components/ui/button'
 import { ConfirmDialog } from '#/components/ui/confirm-dialog'
@@ -71,6 +72,9 @@ export function DeploymentTab({
     cloudflareConfigured,
   )
   const dokployConfigured = dokploy.status.data?.configured === true
+  // While a release is queued, running or uncertain, the deployment settings wait.
+  const release = useReleaseStatus(site.id)
+  const locked = release.data?.deploymentPending === true
   const applications = dokploy.applications.data?.applications ?? []
 
   // The saved target, as the draft starts from it.
@@ -218,6 +222,16 @@ export function DeploymentTab({
 
   return (
     <div data-testid="settings-deployment">
+      {locked ? (
+        <p
+          role="status"
+          data-testid="deployment-locked-notice"
+          className="rounded-control bg-status-warning-bg px-3 py-2.5 text-callout text-text-warning"
+        >
+          {m.settings_deployment_locked()}
+        </p>
+      ) : null}
+
       <SettingsSection
         title={m.settings_publishing_mode_title()}
         description={m.settings_publishing_mode_description()}
@@ -229,6 +243,7 @@ export function DeploymentTab({
           id="publishing-mode"
           data-testid="publishing-mode"
           value={mode}
+          disabled={locked}
           onChange={(event) =>
             setMode(event.target.value as 'production' | 'demo')
           }
@@ -251,6 +266,7 @@ export function DeploymentTab({
         <ProviderSwitch
           value={provider}
           onChange={changeProvider}
+          locked={locked}
           organizationId={site.organizationId}
           clientName={client}
           dokploy={{
@@ -304,6 +320,7 @@ export function DeploymentTab({
               targets={targets}
               selection={selection}
               error={errors.target}
+              disabled={locked}
               onPick={pickCloudflare}
               onPickTrigger={pickCloudflareTrigger}
             />
@@ -313,6 +330,7 @@ export function DeploymentTab({
               applications={dokploy.applications}
               appId={appId.trim()}
               error={errors.target}
+              disabled={locked}
               onPick={(next) => {
                 setAppId(next)
                 setErrors((prev) => ({ ...prev, target: undefined }))
@@ -343,6 +361,7 @@ export function DeploymentTab({
               inputMode="url"
               placeholder={m.sites_health_check_placeholder()}
               value={health}
+              disabled={locked}
               aria-invalid={errors.health ? true : undefined}
               onChange={(event) => {
                 setHealth(event.target.value)
@@ -365,7 +384,7 @@ export function DeploymentTab({
             <Button
               type="button"
               variant="outline"
-              disabled={settings.update.isPending}
+              disabled={settings.update.isPending || locked}
               onClick={() => setStopOpen(true)}
               data-testid="stop-deploying"
             >
@@ -396,6 +415,7 @@ export function DeploymentTab({
         onDiscard={discard}
         formId={formId}
         saveTestId="save-deployment-target"
+        disabled={locked}
       />
     </div>
   )

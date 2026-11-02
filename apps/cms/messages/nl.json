@@ -2271,6 +2271,8 @@
   "settings_cloudflare_not_connected_body": "Koppel eerst Cloudflare voor {client}.",
   "settings_cloudflare_no_git": "Geen git-koppeling",
   "settings_cloudflare_no_builds": "Workers Builds niet gekoppeld",
+  "settings_cloudflare_no_production_trigger": "Geen productie-buildtrigger",
+  "settings_deployment_locked": "Er loopt een release, of de uitkomst ervan is onbekend. Je kunt de deploymentinstellingen wijzigen zodra die klaar of gecontroleerd is.",
   "settings_cloudflare_branch_label": "Build-branch",
   "settings_cloudflare_trigger_label": "Build-trigger",
   "settings_cloudflare_trigger_choose": "Kies een build-trigger",

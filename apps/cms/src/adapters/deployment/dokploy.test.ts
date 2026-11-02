@@ -724,3 +724,119 @@ describe('createDokployAdapter', () => {
     }
   })
 })
+
+describe('waitForCompletion status polls', () => {
+  /** A clock the adapter reads and sleeps on. Sleeps advance it at once. */
+  function fakeTiming() {
+    let current = 0
+    const sleeps: number[] = []
+    return {
+      now: () => new Date(current),
+      sleep: async (ms: number) => {
+        sleeps.push(ms)
+        current += ms
+      },
+      sleeps,
+    }
+  }
+
+  const networkError = () => {
+    throw Object.assign(new TypeError('fetch failed'), {
+      cause: { code: 'ENOTFOUND' },
+    })
+  }
+  const done = () =>
+    json({ deployments: [{ deploymentId: 'dep-1', status: 'done' }] })
+
+  function adapterWith(respond: () => Response | never, timing = fakeTiming()) {
+    let reads = 0
+    const adapter = createDokployAdapter({
+      baseUrl: 'https://dokploy.test',
+      apiKey: 'key',
+      now: timing.now,
+      sleep: timing.sleep,
+      fetch: fakeFetch(() => {
+        reads += 1
+        return respond()
+      }),
+    })
+    return { adapter, timing, reads: () => reads }
+  }
+
+  it.each([
+    ['a 429', () => json({}, 429), 'HTTP 429'],
+    ['a DNS failure', networkError, 'no response'],
+    ['a 503', () => json({}, 503), 'HTTP 503'],
+  ])(
+    'succeeds after two failed polls with %s',
+    async (_name, failure, reason) => {
+      let reads = 0
+      const { adapter, timing } = adapterWith(() => {
+        reads += 1
+        return reads <= 2 ? failure() : done()
+      })
+      const logs: string[] = []
+      await expect(
+        adapter.waitForCompletion(
+          target,
+          'dep-1',
+          { timeoutMs: 60_000, pollMs: 10 },
+          (line) => logs.push(line),
+        ),
+      ).resolves.toBe('done')
+      expect(reads).toBe(3)
+      expect(timing.sleeps).toEqual([500, 1_000])
+      expect(logs).toEqual(
+        expect.arrayContaining([
+          `poll failed (${reason}); retrying in 500ms`,
+          `poll failed (${reason}); retrying in 1s`,
+        ]),
+      )
+    },
+  )
+
+  it.each([
+    ['401', () => json({}, 401)],
+    ['404', () => json({}, 404)],
+  ])('throws at once on a %s during polling', async (_name, failure) => {
+    const { adapter, timing, reads } = adapterWith(failure)
+    await expect(
+      adapter.waitForCompletion(
+        target,
+        'dep-1',
+        { timeoutMs: 60_000, pollMs: 10 },
+        () => {},
+      ),
+    ).rejects.toThrow(/failed: \d{3}/)
+    expect(reads()).toBe(1)
+    expect(timing.sleeps).toEqual([])
+  })
+
+  it('backs off 0.5, 1, 2, 4, 8, 15 seconds, then throws when polling keeps failing', async () => {
+    const { adapter, timing, reads } = adapterWith(() => json({}, 503))
+    await expect(
+      adapter.waitForCompletion(
+        target,
+        'dep-1',
+        { timeoutMs: 60_000, pollMs: 10 },
+        () => {},
+      ),
+    ).rejects.toThrow('failed: 503')
+    expect(reads()).toBe(7)
+    expect(timing.sleeps).toEqual([500, 1_000, 2_000, 4_000, 8_000, 15_000])
+  })
+
+  it('caps the retry waits to the wait deadline', async () => {
+    const { adapter, timing, reads } = adapterWith(() => json({}, 503))
+    await expect(
+      adapter.waitForCompletion(
+        target,
+        'dep-1',
+        { timeoutMs: 10_000, pollMs: 10 },
+        () => {},
+      ),
+    ).rejects.toThrow('failed: 503')
+    expect(reads()).toBe(6)
+    expect(timing.sleeps).toEqual([500, 1_000, 2_000, 4_000, 2_500])
+  })
+})

@@ -6,7 +6,12 @@ import type {
 } from './cloudflare-api'
 import { createHealthChecker } from './health-check'
 import type { HealthCheckOptions } from './health-check'
-import { sleep } from './shared'
+import {
+  POLL_RETRY_DELAYS_MS,
+  formatRetryDelay,
+  retryTransient,
+  sleep as defaultSleep,
+} from './shared'
 import { DeploymentNotDispatchedError, DeploymentUncertainError } from './types'
 import type {
   CloudflarePagesDeploymentTarget,
@@ -21,7 +26,8 @@ const DISPATCH_CLOCK_SKEW_MS = 5_000
 const LOG_TAIL_LINES = 100
 const DEFAULT_RECONCILE_TIMEOUT_MS = 30_000
 const DEFAULT_RECONCILE_POLL_MS = 1_000
-const READ_ATTEMPTS = 3
+/** Short retry for reads inside reconcile and the failure-log tail, and for the variable write. */
+const SHORT_RETRY_DELAYS_MS = [100, 200]
 const SNAPSHOT_VARIABLE = 'ARECA_SNAPSHOT_ID'
 const DASHBOARD = 'https://dash.cloudflare.com'
 
@@ -31,6 +37,8 @@ export type CloudflareAdapterOptions = HealthCheckOptions & {
   now?: () => Date
   reconciliationTimeoutMs?: number
   reconciliationPollMs?: number
+  /** Injectable for tests; defaults to a real timer. */
+  sleep?: (ms: number) => Promise<void>
 }
 
 type CloudflareTarget =
@@ -49,7 +57,19 @@ export function createCloudflareAdapter(
 ): DeploymentAdapter {
   const { client, accountId } = options
   const now = () => (options.now ? options.now() : new Date()).getTime()
+  const sleep = options.sleep ?? defaultSleep
   const healthCheck = createHealthChecker(options)
+
+  /** Short bounded retry for reads and idempotent writes. Never for a POST. */
+  function readWithRetry<T>(operation: () => Promise<T>): Promise<T> {
+    return retryTransient(operation, {
+      delays: SHORT_RETRY_DELAYS_MS,
+      isTransient,
+      sleep,
+      now,
+      deadline: Infinity,
+    })
+  }
 
   /**
    * Writes ARECA_SNAPSHOT_ID so the build pulls this publication, as Dokploy's
@@ -246,7 +266,19 @@ export function createCloudflareAdapter(
       const deadline = now() + timeoutMs
       let lastStatus: string | undefined
       while (now() < deadline) {
-        const state = await readWithRetry(() => poll(cf, deploymentId))
+        // A status poll survives about 30 seconds of transient failures, capped
+        // to this wait's deadline, before the error is thrown as before.
+        const state = await retryTransient(() => poll(cf, deploymentId), {
+          delays: POLL_RETRY_DELAYS_MS,
+          isTransient,
+          sleep,
+          now,
+          deadline,
+          onRetry: (error, delay) =>
+            log(
+              `poll failed (${failureReason(error)}); retrying in ${formatRetryDelay(delay)}`,
+            ),
+        })
         if (state.status !== lastStatus) {
           log(`deployment=${deploymentId} status=${state.status}`)
           lastStatus = state.status
@@ -332,22 +364,15 @@ function createdSince(createdOn: string | null, sinceMs: number) {
 }
 
 /**
- * Retries a read or an idempotent write a few times on a transient failure.
- * Never used for the deploy POST, which may have started a build.
+ * Whether a failed read or idempotent write is worth retrying. Independent of
+ * `notDispatched`, which only classifies the deploy POST.
  */
-async function readWithRetry<T>(operation: () => Promise<T>): Promise<T> {
-  for (let attempt = 0; ; attempt++) {
-    try {
-      return await operation()
-    } catch (error) {
-      if (attempt + 1 >= READ_ATTEMPTS || !isTransient(error)) throw error
-      await sleep(100 * 2 ** attempt)
-    }
-  }
+function isTransient(error: unknown) {
+  return error instanceof CloudflareApiError && error.transient
 }
 
-function isTransient(error: unknown) {
-  if (!(error instanceof CloudflareApiError)) return false
-  if (error.notDispatched) return false
-  return error.status === null || error.status === 429 || error.status >= 500
+function failureReason(error: unknown) {
+  return error instanceof CloudflareApiError && error.status !== null
+    ? `HTTP ${error.status}`
+    : 'no response'
 }

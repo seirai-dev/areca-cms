@@ -37,6 +37,11 @@ import {
   verifyCloudflareCredentialsFn,
 } from '#/server/fn/admin'
 
+import type {
+  CloudflareFormEvent,
+  CloudflareFormFields,
+} from './cloudflare-card-form'
+import { nextCloudflareFormFields } from './cloudflare-card-form'
 import { CloudflareSetupGuide } from './cloudflare-setup-guide'
 import { cloudflareStatusQuery } from './queries'
 
@@ -201,9 +206,18 @@ export function CloudflareCard({ organizationId }: { organizationId: string }) {
   const stepUp = useStepUp()
   const status = useQuery(cloudflareStatusQuery(organizationId))
   const [guideOpen, setGuideOpen] = React.useState(false)
-  const [accountId, setAccountId] = React.useState('')
-  const [apiToken, setApiToken] = React.useState('')
+  const [fields, setFields] = React.useState<CloudflareFormFields>({
+    accountId: '',
+    apiToken: '',
+  })
+  const { accountId, apiToken } = fields
+  const setAccountId = (value: string) =>
+    setFields((current) => ({ ...current, accountId: value }))
+  const setApiToken = (value: string) =>
+    setFields((current) => ({ ...current, apiToken: value }))
   const [failure, setFailure] = React.useState<string | null>(null)
+  // The organization the form was last seeded for.
+  const seededFor = React.useRef<string | null>(null)
 
   const configured = Boolean(status.data?.configured)
   const encryptionAvailable = Boolean(status.data?.encryptionAvailable)
@@ -211,13 +225,42 @@ export function CloudflareCard({ organizationId }: { organizationId: string }) {
   const checks = status.data?.lastVerifyResult ?? null
   const sitesUsingCloudflare = status.data?.sitesUsingCloudflare ?? 0
 
-  // Seed the account ID from the stored connection; the token is never shown.
+  // Background refetches keep the admin's edits; only load, org change and
+  // the explicit events below reseed the form.
   React.useEffect(() => {
-    if (status.data) {
-      setAccountId(status.data.accountId ?? '')
-      setApiToken('')
-    }
-  }, [status.data])
+    if (!status.data) return
+    const previous = seededFor.current
+    const event: CloudflareFormEvent =
+      previous === null
+        ? 'load'
+        : previous === organizationId
+          ? 'refresh'
+          : 'org-change'
+    seededFor.current = organizationId
+    setFields((current) =>
+      nextCloudflareFormFields({
+        previousOrganizationId: previous,
+        organizationId,
+        event,
+        current,
+        saved: status.data,
+      }),
+    )
+  }, [status.data, organizationId])
+
+  const applyForm = (
+    event: CloudflareFormEvent,
+    saved: { accountId: string | null } | null,
+  ) =>
+    setFields((current) =>
+      nextCloudflareFormFields({
+        previousOrganizationId: seededFor.current,
+        organizationId,
+        event,
+        current,
+        saved,
+      }),
+    )
 
   const refresh = () =>
     queryClient.invalidateQueries({
@@ -232,6 +275,7 @@ export function CloudflareCard({ organizationId }: { organizationId: string }) {
     onMutate: () => setFailure(null),
     onSuccess: async (result) => {
       notifyChecks(result.checks, m.agency_cloudflare_saved())
+      applyForm('saved', result)
       await refresh()
     },
     onError: (err) => {
@@ -244,9 +288,15 @@ export function CloudflareCard({ organizationId }: { organizationId: string }) {
     mutationFn: () =>
       verifyCloudflareCredentialsFn({ data: { organizationId } }),
     onMutate: () => setFailure(null),
-    onSuccess: async (result) => {
-      notifyChecks(result.checks, m.agency_cloudflare_verified())
-      await refresh()
+    onSuccess: (result) => {
+      // The verify response is the full status: show its results directly.
+      // No refetch, so the form (and any unsaved token) is left alone.
+      const { checks: verifiedChecks, ...verifiedStatus } = result
+      notifyChecks(verifiedChecks, m.agency_cloudflare_verified())
+      queryClient.setQueryData(
+        adminQueryKeys.cloudflareCredentials(organizationId),
+        verifiedStatus,
+      )
     },
     onError: (err) => {
       setFailure(errorMessage(err))
@@ -262,6 +312,7 @@ export function CloudflareCard({ organizationId }: { organizationId: string }) {
     onSuccess: async () => {
       toast.success(m.agency_cloudflare_removed())
       setFailure(null)
+      applyForm('removed', null)
       await refresh()
     },
     onError: (err) => toast.error(errorMessage(err)),

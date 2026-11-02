@@ -18,7 +18,10 @@ import { isValidSlug } from '#/lib/slug'
 import { normalizePreviewUrl } from '#/lib/preview-url'
 import { isDevSite } from '#/server/security/site-visibility'
 import type { DeploymentTarget } from '#/lib/types'
-import { deploymentTargetResourceId } from '#/lib/deployment-target'
+import {
+  deploymentTargetResourceId,
+  sameDeploymentTarget,
+} from '#/lib/deployment-target'
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
 import { lockOrganizationForMutation } from './organization-lock'
@@ -252,6 +255,31 @@ export async function createSite(input: {
   }
 }
 
+/**
+ * Whether a patch changes the deployment settings (the publishing mode or the
+ * deployment target) compared with the stored row. Unchanged values do not count.
+ */
+function changesDeploymentSettings(
+  patch: {
+    publishingMode?: 'production' | 'demo'
+    deploymentTarget?: DeploymentTarget | null
+  },
+  stored: {
+    publishingMode: 'production' | 'demo'
+    deploymentTarget: DeploymentTarget | null
+  },
+) {
+  if (
+    patch.publishingMode !== undefined &&
+    patch.publishingMode !== stored.publishingMode
+  )
+    return true
+  return (
+    'deploymentTarget' in patch &&
+    !sameDeploymentTarget(patch.deploymentTarget, stored.deploymentTarget)
+  )
+}
+
 export async function updateSite(
   id: string,
   input: {
@@ -308,7 +336,25 @@ export async function updateSite(
   const changed = (Object.keys(patch) as (keyof typeof patch)[]).filter(
     (key) => key !== 'updatedAt',
   )
+  // Changing the deployment settings waits for pending releases. The check
+  // runs under the organization lock, like enqueue, against the locked row.
+  const mayChangeDeployment =
+    patch.publishingMode !== undefined || 'deploymentTarget' in patch
   const updated = await db.transaction(async (tx) => {
+    if (mayChangeDeployment) {
+      await lockOrganizationForMutation(tx, existing.organizationId)
+      const locked = (
+        await tx.select().from(site).where(eq(site.id, id)).for('update')
+      ).at(0)
+      if (!locked) throw new NotFoundError(m.server_site_not_found())
+      if (changesDeploymentSettings(patch, locked)) {
+        await assertSiteHasNoPendingDeployment(
+          tx,
+          id,
+          'changing the deployment settings of this site',
+        )
+      }
+    }
     const row = (
       await tx.update(site).set(patch).where(eq(site.id, id)).returning()
     ).at(0)

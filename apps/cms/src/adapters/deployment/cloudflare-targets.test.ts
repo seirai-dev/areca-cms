@@ -293,7 +293,7 @@ describe('collectCloudflareDeployTargets: Workers', () => {
     ])
   })
 
-  it('uses the only trigger, even a preview one', async () => {
+  it('does not build a Worker whose only trigger is a preview', async () => {
     const { fetchFn } = workersFake({
       'preview-only': [trigger('trigger-only', ['main'], PREVIEW)],
     })
@@ -301,8 +301,55 @@ describe('collectCloudflareDeployTargets: Workers', () => {
       now: NOW,
     })
     expect(result.workers[0]).toMatchObject({
-      autoTriggerUuid: 'trigger-only',
+      name: 'preview-only',
+      buildable: false,
+      disabledReason: 'no_production_trigger',
+      productionBranch: null,
+      autoTriggerUuid: null,
+    })
+    expect(result.workers[0].triggers).toEqual([
+      {
+        triggerUuid: 'trigger-only',
+        name: 'name-trigger-only',
+        branch: 'main',
+        preview: true,
+      },
+    ])
+  })
+
+  it('picks the production trigger when one production and one preview trigger exist', async () => {
+    const { fetchFn } = workersFake({
+      'mixed-worker': [
+        trigger('trigger-preview', ['main'], PREVIEW),
+        trigger('trigger-prod', ['main'], DEPLOY),
+      ],
+    })
+    const result = await collectCloudflareDeployTargets(clientFor(fetchFn), {
+      now: NOW,
+    })
+    expect(result.workers[0]).toMatchObject({
+      buildable: true,
+      disabledReason: null,
+      autoTriggerUuid: 'trigger-prod',
       productionBranch: 'main',
+    })
+  })
+
+  it('leaves the trigger to the admin when two production triggers name the same branch', async () => {
+    const { fetchFn } = workersFake({
+      'twin-worker': [
+        trigger('trigger-a', ['main'], DEPLOY),
+        trigger('trigger-b', ['main'], DEPLOY),
+      ],
+    })
+    const result = await collectCloudflareDeployTargets(clientFor(fetchFn), {
+      now: NOW,
+    })
+    expect(result.workers[0]).toMatchObject({
+      buildable: true,
+      disabledReason: null,
+      autoTriggerUuid: null,
+      productionBranch: null,
     })
   })
 
@@ -532,10 +579,12 @@ describe('trigger rules', () => {
       branch: 'main',
       preview: true,
     }
-    expect(autoPickTrigger([preview])).toBe(preview)
+    expect(autoPickTrigger([preview])).toBeNull()
+    expect(autoPickTrigger([prod])).toBe(prod)
     expect(autoPickTrigger([preview, prod])).toBe(prod)
     expect(autoPickTrigger([])).toBeNull()
     expect(autoPickTrigger([prod, { ...prod, triggerUuid: 'q' }])).toBeNull()
+    expect(autoPickTrigger([preview, preview, prod])).toBe(prod)
   })
 
   it('builds the health suggestion from a domain', () => {

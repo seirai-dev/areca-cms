@@ -63,6 +63,7 @@ Base URL `https://api.cloudflare.com/client/v4`. Auth `Authorization: Bearer <to
     - Workers reconcile: list builds for the Worker; accept only a unique build on the target trigger/branch with an API trigger source created at or after `dispatchedAt`.
     - Otherwise the job stays uncertain.
       Completion: Pages = the `deploy` stage of the deployment is `success` (done) or `failure`/`canceled` (error); Workers = `status: stopped` with `build_outcome: success` (done), anything else stopped (error).
+      Status polls retry transient failures (network, 408, 429, 5xx) for about 30 seconds before the job is marked uncertain.
       Snapshot. Before the dispatch Areca writes the build variable `ARECA_SNAPSHOT_ID` = publication ID (Workers: trigger environment variables; Pages: production env_vars), like Dokploy's build argument. A failed write means not dispatched. The variable stays set after the release, so a later git-push build pulls the same publication.
 15. **Logs.** The job log gets a link to the Cloudflare dashboard page for the deployment/build. On failure the last ~100 log lines are fetched and appended.
 16. **Removing credentials.** Blocked only while a deployment is pending. The confirm dialog shows how many sites deploy with Cloudflare ("their next go-live will fail until you reconnect"). Sites keep their target. A go-live then fails with "Cloudflare credentials are not configured for this client".
