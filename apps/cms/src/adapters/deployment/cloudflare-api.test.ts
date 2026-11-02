@@ -271,13 +271,13 @@ describe('listPagesProjects', () => {
   })
 
   it('pages until a short page and stops there', async () => {
-    const full = Array.from({ length: 50 }, (_, i) => ({ name: `p-${i}` }))
+    const full = Array.from({ length: 10 }, (_, i) => ({ name: `p-${i}` }))
     const seen: string[] = []
     const { fetchFn } = routedFetch({
       ...pagesRoutes((url) => {
         seen.push(url.searchParams.get('page') ?? '')
         const page = Number(url.searchParams.get('page'))
-        expect(url.searchParams.get('per_page')).toBe('50')
+        expect(url.searchParams.get('per_page')).toBe('10')
         return ok(page === 1 ? full : [{ name: 'last' }])
       }),
     })
@@ -287,12 +287,12 @@ describe('listPagesProjects', () => {
       fetch: fetchFn,
     })
     const projects = await client.listPagesProjects()
-    expect(projects).toHaveLength(51)
+    expect(projects).toHaveLength(11)
     expect(seen).toEqual(['1', '2'])
   })
 
-  it('caps pagination at 20 pages', async () => {
-    const full = Array.from({ length: 50 }, (_, i) => ({ name: `p-${i}` }))
+  it('caps pagination at 50 pages', async () => {
+    const full = Array.from({ length: 10 }, (_, i) => ({ name: `p-${i}` }))
     let requests = 0
     const { fetchFn } = routedFetch({
       ...pagesRoutes(() => {
@@ -306,8 +306,8 @@ describe('listPagesProjects', () => {
       fetch: fetchFn,
     })
     const projects = await client.listPagesProjects()
-    expect(requests).toBe(20)
-    expect(projects).toHaveLength(1000)
+    expect(requests).toBe(50)
+    expect(projects).toHaveLength(500)
   })
 })
 

@@ -9,8 +9,10 @@
 export const CLOUDFLARE_API_BASE_URL = 'https://api.cloudflare.com/client/v4'
 
 const REQUEST_TIMEOUT_MS = 15_000
-const PAGE_SIZE = 50
-const MAX_PAGES = 20
+// Cloudflare rejects Pages list requests with per_page above 10 (checked
+// live on 2 Nov 2026), so Pages lists page in tens.
+const PAGE_SIZE = 10
+const MAX_PAGES = 50
 const ACCOUNT_ID_PATTERN = /^[0-9a-f]{32}$/i
 
 type FetchFn = typeof fetch
