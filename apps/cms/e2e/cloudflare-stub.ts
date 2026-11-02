@@ -73,6 +73,16 @@ function handle(req: IncomingMessage, res: ServerResponse) {
     if (token.includes('nopages')) {
       return send(res, 403, refused('Authentication error'))
     }
+    // The real API rejects Pages list requests with per_page above 10.
+    if (Number(url.searchParams.get('per_page') ?? '10') > 10) {
+      return send(
+        res,
+        400,
+        refused(
+          'Invalid list options provided. Review the `page` or `per_page` parameter.',
+        ),
+      )
+    }
     return send(
       res,
       200,
