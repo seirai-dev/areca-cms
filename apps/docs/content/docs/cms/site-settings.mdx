@@ -33,6 +33,8 @@ Use this tab to decide whether a site goes live through a deployment target or o
 - **Production** deploys each release to the site's Dokploy application or Cloudflare project, and checks its health before the release counts as live. Production requires a target and a Health check URL. The Health check URL field is required in Production mode.
 - **Demo** keeps the release in Areca without a production deployment. No deploy or health check runs. Demo releases are labelled and never count as live.
 
+While a release is queued, building, validating or deploying, or its outcome is unknown, the publishing mode, provider and target are locked, and the server refuses changes to them.
+
 The full steps are in [deployments](/docs/cms/deployments).
 
 ## Developer

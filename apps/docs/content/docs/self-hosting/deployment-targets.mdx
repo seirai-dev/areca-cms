@@ -154,7 +154,7 @@ Save the token in Areca under **Agency** › **Clients** › [client] › **Depl
 Set up each project before you choose it for a site. Areca lists a project that cannot be built, but disables it and shows the reason.
 
 - **Pages.** The project must be connected to GitHub or GitLab. A direct-upload project is shown disabled with **No git connection**.
-- **Workers.** Connect Workers Builds in Cloudflare (**Worker** › **Settings** › **Builds** › **Connect**), with a trigger for the production branch. A Worker without it is shown disabled with **Workers Builds not connected**.
+- **Workers.** Connect Workers Builds in Cloudflare (**Worker** › **Settings** › **Builds** › **Connect**), with a trigger for the production branch. The trigger must deploy with `wrangler deploy`. A trigger that runs `wrangler versions upload` only uploads a preview, so a Worker whose triggers all do that is shown disabled with **No production build trigger**. A Worker without any trigger is shown disabled with **Workers Builds not connected**.
 
 ### Set the build variables
 
@@ -228,7 +228,7 @@ The variable stays set after the release. A build that Cloudflare starts from a 
 
 Then Areca starts one build. For Pages, this is a production deployment of the production branch. For Workers, it is one build on the production trigger. The request is sent once and never retried, because Cloudflare does not deduplicate builds, so a retry would start a second one.
 
-Areca checks the build every 5 seconds for up to 15 minutes. A Pages deployment is done when its deploy stage succeeds. A Worker build is done when it stops with the outcome `success`. Any other end is a failure. Areca copies the last 100 lines of the build log into the job log, together with a link to the deployment or build in the Cloudflare dashboard.
+Areca checks the build every 5 seconds for up to 15 minutes. A Pages deployment is done when its deploy stage succeeds. A Worker build is done when it stops with the outcome `success`. Any other end is a failure. If the build fails, Areca copies the last 100 lines of the build log into the job log. When it starts the build, it logs a link to the deployment or build in the Cloudflare dashboard.
 
 After that, the same health check as for Dokploy runs. See [health checks](#health-checks).
 
@@ -288,8 +288,9 @@ For the variables, see [configuration](/docs/self-hosting/configuration).
 | Dokploy API request | 15 seconds | Counted as a failed attempt. |
 | Cloudflare API request | 15 seconds | Counted as a failed attempt. |
 | Dokploy read calls and identical environment writes | Up to 3 attempts, with a short backoff of about 100 ms and then 200 ms | Retried on network errors and on HTTP 408, 429, 500, 502, 503 and 504. Other HTTP errors are not retried. |
-| Cloudflare reads and the `ARECA_SNAPSHOT_ID` write | Up to 3 attempts, with a backoff of about 100 ms and then 200 ms | Retried on network errors, HTTP 429 and 5xx. |
+| Cloudflare reads and the `ARECA_SNAPSHOT_ID` write | Up to 3 attempts, with a backoff of about 100 ms and then 200 ms | Retried on network errors, request timeouts, and HTTP 408, 429 and 5xx. |
 | Deploy request (Dokploy or Cloudflare) | Sent once, never retried | If the response is lost or ambiguous, Areca searches the provider for the matching deployment or build for up to 30 seconds. |
+| Status check while waiting for a build (Dokploy or Cloudflare) | Retried for about 30 seconds in total, with a backoff of 0.5, 1, 2, 4, 8 and 15 seconds | Retried on network errors, request timeouts, and HTTP 408, 429 and 5xx. If the checks still fail, or fail with another error, the release becomes uncertain. |
 | Deployment completion | Checked every 5 seconds, for up to 15 minutes | The release fails if the provider reports an error. It becomes uncertain if the wait runs out. |
 | Health check | Checked every 5 seconds, for up to 2 minutes | The release fails. |
 | Build job lease | 60 seconds, renewed every 15 seconds | See the [publishing pipeline](/docs/self-hosting/publishing-pipeline). |

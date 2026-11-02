@@ -91,7 +91,15 @@ Open the site's **Settings › Deployment** tab. Under **Provider**, select **Do
 - A provider that the client has not connected is disabled, with a link such as **Set up Cloudflare for `<client>`** that opens the client's Deployment settings.
 - When the client is connected, the row shows **Connected for `<client>`** and **Manage in Agency**.
 - Switching the provider clears the chosen target. Choose the project again after you switch.
-- You can't save changes while a deployment is pending.
+- While a release is pending, these settings are locked. See [changes locked during a release](#changes-locked-during-a-release).
+
+## Changes locked during a release
+
+While a release of the site is queued, building, validating or deploying, or while its outcome is unknown, you can't change the **Publishing mode**, the **Provider**, the project or application, or the **Health check URL**. The Deployment tab disables these controls, and **Save** and **Stop deploying…** too. The tab shows this notice:
+
+> A release is in progress or its outcome is unknown. You can change deployment settings once it has finished or been checked.
+
+The server refuses the same change when it is sent another way, such as the MCP tool `set_publishing_mode`. Other site settings, such as the name and the URLs, stay editable. When the release has finished, or an uncertain release has been reconciled, the settings unlock. See [uncertain deployments](/docs/self-hosting/publishing-pipeline#uncertain-deployments).
 
 ## Set the application for a Dokploy site
 
@@ -114,12 +122,14 @@ With **Cloudflare** selected, choose the project in the **Project** field. This 
 - **Search.** Type to filter the list. The search matches the project name, the domain and the branch.
 - **Groups.** Projects are grouped under **Pages** and **Workers**.
 - **Rows.** Each row shows the project name, its production branch and its main domain.
-- **Disabled rows.** A project that cannot be built is disabled, with the reason beside it. A Pages project without a Git connection shows **No git connection**. A Worker without Workers Builds shows **Workers Builds not connected**.
+- **Disabled rows.** A project that cannot be built is disabled, with the reason beside it. A Pages project without a Git connection shows **No git connection**. A Worker without any Workers Builds trigger shows **Workers Builds not connected**. A Worker whose triggers all upload preview versions shows **No production build trigger**.
 - **Refresh list.** Select the refresh icon to reload the list from Cloudflare.
 
 When you choose a project, Areca saves its production branch and shows it as **Builds branch**. For a Pages project, this is the project's production branch. For a Worker, it is the branch of the build trigger. To pick up a change in Cloudflare, choose the project again.
 
-For a Worker, Areca chooses the trigger for the production branch automatically. If more than one trigger matches, a **Build trigger** select appears, with the note "The trigger for the production branch. Preview uploads never go live."
+For a Worker with exactly one production trigger, Areca pre-selects that trigger. A preview trigger is one whose deploy command is `wrangler versions upload`. It never goes live, so Areca never pre-selects it. Areca doesn't check which branch is the production branch, so check **Builds branch** before you save.
+
+When the Worker has more than one trigger, a **Build trigger** select appears, with the note "The trigger for the production branch. Preview uploads never go live." Preview triggers are listed in it but can't be chosen. If the Worker has two or more production triggers, choose one in the select before you save. A Worker whose triggers are all preview triggers is disabled with **No production build trigger**.
 
 **Health check URL** is filled in from the project's first custom domain, followed by `/api/health`. If there is no custom domain, Areca uses `<project>.pages.dev` for a Pages project, or `<worker>.<account-subdomain>.workers.dev` for a Worker. Edit it if the site serves its health route somewhere else. The field is required in Production mode, and Go live is blocked until it is set.
 

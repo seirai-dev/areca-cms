@@ -28,12 +28,12 @@ Build arguments and `ENV` lines are stored in the image history, so anyone with 
 
 ## What the pull receives
 
-`areca pull` calls the CMS endpoint `GET /api/sites/snapshot/current` with your site token. The CMS decides which publication to return:
+`areca pull` calls the CMS endpoint `GET /api/sites/snapshot/current` with your site token. If `ARECA_SNAPSHOT_ID` is set, `areca pull` also sends it as the `publicationId` parameter. The CMS decides which publication to return:
 
-- While a release is deploying, it returns that release's publication, to any caller that holds a valid site token.
-- Otherwise, it returns the live publication.
+- With a `publicationId`, it returns that publication, whatever its status.
+- Without one, it returns the live publication. For a site in Demo mode, it returns the demo publication. A release that is still deploying is never returned.
 
-So a Go-live build receives the release being built, not whatever is live at that moment. If there is no publication at all, the pull fails with `No publication exists for this site`. Publish content in the CMS first.
+A Go-live build receives the release being built because the build is pinned to it by `ARECA_SNAPSHOT_ID`, not because that release is the one deploying. If there is no publication to return, the pull fails. An ordinary pull fails with `No publication exists for this site`, so publish content in the CMS first.
 
 The pull writes `manifest.json` (which holds the `publicationId`) and one JSON file per collection into the directory you give it. The demo site uses `src/generated/content`.
 
@@ -140,7 +140,8 @@ For the setup in Cloudflare and the CMS, see [Cloudflare](/docs/self-hosting/dep
 | Symptom | Likely cause |
 | --- | --- |
 | The deploy finishes quickly, but the site still shows older content | Docker reused the pull layer. Check that `ARG ARECA_SNAPSHOT_ID` comes after the install step and before the pull. |
-| `No publication exists for this site` during the build | Nothing has been published yet. Publish in the CMS, then retry. |
+| `No publication exists for this site` | An ordinary pull found no live or demo publication. Publish in the CMS, then retry. |
+| `Failed to fetch snapshot (404): No publication exists` | The build's `ARECA_SNAPSHOT_ID` is not a publication of this site. Check the build argument or variable. |
 | `Health check failed` | The URL does not return `200`, or its `publicationId` does not match. Open the URL yourself and compare the value with the release in the CMS. |
 | The build cannot read the token | The secret is missing from the build configuration, or the Dockerfile's `--mount` id does not match. The id is `ARECA_SITE_TOKEN`. |
 

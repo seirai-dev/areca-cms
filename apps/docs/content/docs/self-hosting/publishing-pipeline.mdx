@@ -32,7 +32,7 @@ Each release creates a **publication** (the release record) and a **build job** 
 </Step>
 <Step>
 
-**Wait for the build.** The worker checks the deployment in the provider every 5 seconds, for up to 15 minutes. If the provider reports an error, the release fails with `Deploy error`. For Cloudflare, a Pages deployment is done when its deploy stage succeeds, and a Worker build when it ends with the outcome `success`.
+**Wait for the build.** The worker checks the deployment in the provider every 5 seconds, for up to 15 minutes. A status check that fails with a network error or an HTTP 408, 429 or 5xx response is retried for about 30 seconds before the release is treated as uncertain. If the provider reports an error, the release fails with `Deploy error`. For Cloudflare, a Pages deployment is done when its deploy stage succeeds, and a Worker build when it ends with the outcome `success`.
 
 </Step>
 <Step>
@@ -62,7 +62,7 @@ A failed release never takes the live site down on its own. The previous release
 
 ## Uncertain deployments
 
-A release is uncertain when Areca cannot tell whether the deployment provider accepted the deploy request. This happens when the request times out or gets an ambiguous response, or when the worker stops after sending the request but before it records the result. While a job is uncertain, the site is blocked: no new **Go live** can start for it.
+A release is uncertain when Areca cannot tell whether the deployment provider accepted the deploy request. This happens when the request times out or gets an ambiguous response, or when the worker stops after sending the request but before it records the result. A status check that is still failing after about 30 seconds of retries also makes it uncertain. While a job is uncertain, the site is blocked: no new **Go live** can start for it.
 
 Areca never sends a second deploy request to resolve an uncertain job. Recovery is manual.
 
@@ -102,7 +102,7 @@ Releasing the block only unblocks Areca. If a deployment or build is still runni
 
 Owners can check the deployment status but cannot release the block. Only agency admins can do that.
 
-Do not change the Dokploy host, the Cloudflare account or the target for a site while one of its jobs is uncertain. Recovery uses the connection that was saved for the job.
+The server refuses to change the publishing mode or the deployment target of a site while one of its jobs is queued, running or uncertain. It also refuses to change the Dokploy host or the Cloudflare account of a client while any of its sites has such a job. The Deployment tab locks these settings in the same cases. Recovery uses the connection that was saved for the job.
 
 ## Urgent releases
 
