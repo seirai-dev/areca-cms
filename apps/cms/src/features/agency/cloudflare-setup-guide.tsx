@@ -14,7 +14,7 @@ const TOKEN_GUIDE =
 const PERMISSIONS = [
   'Account › Cloudflare Pages › Edit',
   'Account › Workers Scripts › Read',
-  'Account › Workers CI › Edit',
+  'Account › Workers Builds Configuration › Edit',
 ]
 
 /**

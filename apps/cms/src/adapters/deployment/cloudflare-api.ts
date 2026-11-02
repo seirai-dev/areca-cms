@@ -258,7 +258,7 @@ export function createCloudflareClient(options: CloudflareClientOptions) {
   ): Promise<CloudflareWorkerTrigger[]> {
     const result = await get(
       `${accountPath}/builds/workers/${encodeURIComponent(scriptTag)}/triggers`,
-      'Workers CI triggers',
+      'Workers Builds triggers',
     )
     return (Array.isArray(result) ? result : []).map(parseWorkerTrigger)
   }

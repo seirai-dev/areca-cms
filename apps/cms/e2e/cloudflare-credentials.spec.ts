@@ -53,7 +53,7 @@ test.describe('Cloudflare credentials', () => {
     const permissions = guide.getByTestId('cloudflare-guide-permissions')
     await expect(permissions).toContainText('Account › Cloudflare Pages › Edit')
     await expect(permissions).toContainText('Account › Workers Scripts › Read')
-    await expect(permissions).toContainText('Account › Workers CI › Edit')
+    await expect(permissions).toContainText('Account › Workers Builds Configuration › Edit')
     await expect(
       guide.getByTestId('cloudflare-guide-steps').locator(':scope > li'),
     ).toHaveCount(9)

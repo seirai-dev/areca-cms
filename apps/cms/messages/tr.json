@@ -502,7 +502,7 @@
   "agency_cloudflare_check_token": "API belirteci",
   "agency_cloudflare_check_pages": "Cloudflare Pages",
   "agency_cloudflare_check_workers_scripts": "Workers Scripts",
-  "agency_cloudflare_check_workers_ci": "Workers CI",
+  "agency_cloudflare_check_workers_ci": "Workers Builds",
   "agency_cloudflare_check_passed": "Başarılı",
   "agency_cloudflare_check_failed": "Başarısız",
   "agency_cloudflare_check_skipped": "Atlandı",
