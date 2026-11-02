@@ -149,5 +149,6 @@ previous live publication and the health check fails.
   deletes it.
 
 Both writes are idempotent, so the adapter retries them on transient failures (no
-response, 429, 5xx). A refused write (4xx with an error envelope) means nothing was
-dispatched. The deploy POST itself is never retried.
+response, 408, 429, 5xx). A refused write (4xx with an error envelope) means nothing was
+dispatched. The deploy POST itself is never retried. Status polls retry the same
+failures for about 30 seconds (0.5, 1, 2, 4, 8, 15 s) before the job is marked uncertain.

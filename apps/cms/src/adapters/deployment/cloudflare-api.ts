@@ -7,6 +7,8 @@
  * table and cloudflare-api-notes.md for what was verified live.
  */
 
+import { isTransientStatus } from './shared'
+
 export const CLOUDFLARE_API_BASE_URL = 'https://api.cloudflare.com/client/v4'
 
 const REQUEST_TIMEOUT_MS = 15_000
@@ -116,17 +118,24 @@ export class CloudflareApiError extends Error {
   /**
    * True only when Cloudflare refused the request, or it never left this
    * server. A write that fails with this flag definitely did not start work.
+   * Only the deploy POST reads it; retry decisions use `transient`.
    */
   readonly notDispatched: boolean
+  /**
+   * True when a retry of a read or an idempotent write may succeed: no HTTP
+   * response (network, DNS, refused, timeout), 408, 429 or 5xx.
+   */
+  readonly transient: boolean
 
   constructor(
     message: string,
     readonly status: number | null,
-    options: { notDispatched?: boolean } = {},
+    options: { notDispatched?: boolean; transient?: boolean } = {},
   ) {
     super(message)
     this.name = 'CloudflareApiError'
     this.notDispatched = options.notDispatched ?? false
+    this.transient = options.transient ?? false
   }
 }
 
@@ -319,12 +328,13 @@ export function createCloudflareClient(options: CloudflareClientOptions) {
         throw new CloudflareApiError(
           `Cloudflare ${label} did not answer within 15 seconds`,
           null,
+          { transient: true },
         )
       }
       throw new CloudflareApiError(
         `Could not reach Cloudflare for ${label}`,
         null,
-        { notDispatched: neverReached(error) },
+        { notDispatched: neverReached(error), transient: true },
       )
     } finally {
       clearTimeout(timer)
@@ -344,7 +354,10 @@ export function createCloudflareClient(options: CloudflareClientOptions) {
       throw new CloudflareApiError(
         `Cloudflare ${label} failed (HTTP ${response.status}): ${detail}`,
         response.status,
-        { notDispatched: refused },
+        {
+          notDispatched: refused,
+          transient: isTransientStatus(response.status),
+        },
       )
     }
     return parsed.result

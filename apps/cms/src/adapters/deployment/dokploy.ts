@@ -6,7 +6,13 @@ import type {
   DokployDeploymentTarget,
 } from './types'
 import { createHealthChecker } from './health-check'
-import { sleep } from './shared'
+import {
+  POLL_RETRY_DELAYS_MS,
+  formatRetryDelay,
+  isTransientStatus,
+  retryTransient,
+  sleep,
+} from './shared'
 import { collectSecretValues, redactString } from '#/server/log'
 import { assertSecureServiceUrl } from '#/server/http/outbound-url'
 import type { ResolveHost } from '#/server/http/outbound-url'
@@ -37,6 +43,9 @@ type DokployAdapterOptions = DokployConnectionOptions & {
   allowPrivateHealthChecks?: boolean
   reconciliationTimeoutMs?: number
   reconciliationPollMs?: number
+  /** Injectable for tests; both default to the real clock and timer. */
+  now?: () => Date
+  sleep?: (ms: number) => Promise<void>
 }
 
 class DokployHttpError extends Error {
@@ -47,6 +56,9 @@ class DokployHttpError extends Error {
     super(message)
   }
 }
+
+/** The request never got an HTTP response: DNS, refused, reset or timeout. */
+class DokployNoResponseError extends Error {}
 
 function createDokployRequest(opts: DokployConnectionOptions) {
   const baseUrl = assertSecureServiceUrl(
@@ -80,7 +92,7 @@ function createDokployRequest(opts: DokployConnectionOptions) {
         signal: init.signal ?? AbortSignal.timeout(15_000),
       })
     } catch (error) {
-      throw new Error(
+      throw new DokployNoResponseError(
         redactString(error instanceof Error ? error.message : String(error), [
           ...collectSecretValues(),
           opts.apiKey,
@@ -183,13 +195,17 @@ export function createDokployAdapter(
 ): DeploymentAdapter {
   const request = createDokployRequest(opts)
   const healthCheck = createHealthChecker(opts)
+  const now = () => (opts.now ? opts.now() : new Date()).getTime()
+  const sleepBetweenPolls = opts.sleep ?? sleep
+
+  function fetchApplication(applicationId: string) {
+    return request<DokployApplication>(
+      `/api/application.one?applicationId=${encodeURIComponent(applicationId)}`,
+    )
+  }
 
   function getApplication(applicationId: string) {
-    return retrySafe(() =>
-      request<DokployApplication>(
-        `/api/application.one?applicationId=${encodeURIComponent(applicationId)}`,
-      ),
-    )
+    return retrySafe(() => fetchApplication(applicationId))
   }
 
   async function bustContentCache(
@@ -288,10 +304,25 @@ export function createDokployAdapter(
     },
 
     async waitForCompletion(target, deploymentId, { timeoutMs, pollMs }, log) {
-      const deadline = Date.now() + timeoutMs
+      const deadline = now() + timeoutMs
       let lastStatus: string | undefined
-      while (Date.now() < deadline) {
-        const app = await getApplication(requireDokploy(target).applicationId)
+      while (now() < deadline) {
+        // A status poll survives about 30 seconds of transient failures, capped
+        // to this wait's deadline, before the error is thrown as before.
+        const app = await retryTransient(
+          () => fetchApplication(requireDokploy(target).applicationId),
+          {
+            delays: POLL_RETRY_DELAYS_MS,
+            isTransient: isDokployTransient,
+            sleep: sleepBetweenPolls,
+            now,
+            deadline,
+            onRetry: (error, delay) =>
+              log(
+                `poll failed (${failureReason(error)}); retrying in ${formatRetryDelay(delay)}`,
+              ),
+          },
+        )
         const deployment = app.deployments?.find(
           (item) => item.deploymentId === deploymentId,
         )
@@ -304,9 +335,9 @@ export function createDokployAdapter(
         if (status === 'done') return 'done'
         // Application-wide status belongs to no particular dispatch. Missing
         // deployment records are uncertain, never evidence of success/failure.
-        const wait = Math.min(pollMs, deadline - Date.now())
+        const wait = Math.min(pollMs, deadline - now())
         if (wait <= 0) break
-        await sleep(wait)
+        await sleepBetweenPolls(wait)
       }
       return 'timeout'
     },
@@ -440,6 +471,17 @@ function requireDokploy(target: DeploymentTarget): DokployDeploymentTarget {
     throw new Error('The Dokploy adapter received a non-Dokploy target')
   }
   return target
+}
+
+function isDokployTransient(error: unknown) {
+  if (error instanceof DokployNoResponseError) return true
+  return error instanceof DokployHttpError && isTransientStatus(error.status)
+}
+
+function failureReason(error: unknown) {
+  return error instanceof DokployHttpError
+    ? `HTTP ${error.status}`
+    : 'no response'
 }
 
 /** Bounded retry only for read operations or an identical idempotent write. */
