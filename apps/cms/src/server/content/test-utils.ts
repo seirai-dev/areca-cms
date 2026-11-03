@@ -4,7 +4,7 @@ import { eq, sql } from 'drizzle-orm'
 import { db } from '#/db'
 import { collection, entry, organization, site, user } from '#/db/schema'
 import type { Field, SiteLanguages } from '#/lib/types'
-import { assetMutationLock } from '#/server/assets/usage'
+import { assetAttachLock } from '#/server/assets/usage'
 
 export const sampleRichText = {
   type: 'doc' as const,
@@ -226,7 +226,7 @@ export async function holdEntryLock(
     acquired = resolve
   })
   const done = db.transaction(async (tx) => {
-    await assetMutationLock(tx, organizationId)
+    await assetAttachLock(tx, organizationId)
     await write?.(tx)
     acquired()
     await released

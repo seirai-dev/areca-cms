@@ -23,7 +23,7 @@ import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
 import { env } from '#/env'
 import { lockOrganizationForMutation } from '#/server/admin/organization-lock'
-import { assetMutationLock } from '#/server/assets/usage'
+import { assetAttachLock } from '#/server/assets/usage'
 import { siteHasPendingDeployment } from '#/server/publishing/deployment-safety'
 import { buildSnapshot } from '#/server/content/snapshot'
 import { sectionBlockers } from '#/server/content/globals'
@@ -258,7 +258,7 @@ export async function requestPublication(input: {
       }
     }
     await assertDispatchResolved(tx, input.siteId)
-    await assetMutationLock(tx, lockedSite.organizationId)
+    await assetAttachLock(tx, lockedSite.organizationId)
     const built = await buildSnapshot(input.siteId, tx)
     if (!built.ok) return { ok: false as const, errors: built.errors }
     const snapshot = { ...built.snapshot, publicationId }

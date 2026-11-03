@@ -20,7 +20,7 @@ import type {
 import { audit } from '#/server/audit'
 import { lockOrganizationForMutation } from '#/server/admin/organization-lock'
 import { applySiteLanguages } from '#/server/admin/site-languages'
-import { assetMutationLock } from '#/server/assets/usage'
+import { assetExclusiveLock } from '#/server/assets/usage'
 import { archiveDeletedContent } from '#/server/content/deletion-archive'
 import {
   prepareCollectionUpsert,
@@ -172,7 +172,7 @@ async function runPush(
   await lockProductionSite(tx, prod.id)
   // The lock ordinary entry saves take (server/content/entries.ts), last in the
   // order, so the URLs read below cannot change under this push.
-  await assetMutationLock(tx, organizationId)
+  await assetExclusiveLock(tx, organizationId)
 
   const context = await loadPlanContext(tx, dev.id)
   const plan = buildPlan(context.planInput)

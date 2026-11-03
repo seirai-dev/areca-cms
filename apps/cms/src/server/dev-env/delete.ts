@@ -11,7 +11,7 @@ import {
 } from '#/db/schema'
 import { audit } from '#/server/audit'
 import { lockOrganizationForMutation } from '#/server/admin/organization-lock'
-import { assetMutationLock } from '#/server/assets/usage'
+import { assetExclusiveLock } from '#/server/assets/usage'
 
 import { lockProductionSite } from './lock'
 import {
@@ -69,7 +69,7 @@ export async function deleteDevEnvironment(
     await lockProductionSite(tx, prod.id)
     // The lock ordinary entry saves take, last in the order (see push.ts): the
     // delete below must not wait on a revision a save holds, or the reverse.
-    await assetMutationLock(tx, probe.organizationId)
+    await assetExclusiveLock(tx, probe.organizationId)
     await audit(
       {
         organizationId: prod.organizationId,

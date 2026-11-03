@@ -13,7 +13,6 @@ import {
 
 import { queryKeys } from '#/lib/content/query-keys'
 import { EntryThumb } from '#/features/collection/entry-cover'
-import { entryTitle } from '#/lib/content/utils'
 import { useShell } from '#/components/shell/shell-context'
 import { useSiteCollections } from '#/components/shell/sidebar'
 import type { SidebarCollection } from '#/components/shell/sidebar'
@@ -52,20 +51,8 @@ import {
   newEntryLabel,
 } from '#/lib/site-nav'
 import type { MeSite } from '#/lib/site-nav'
-import type { EntryData, EntryStatus } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 import { listEntriesFn } from '#/server/fn/content'
-
-type RecentRow = {
-  id: string
-  slug: string
-  status: EntryStatus
-  draftData: EntryData
-  publishedData: EntryData | null
-  updatedAt: string | Date
-  scheduledAt: string | Date | null
-  updatedByName: string | null
-}
 
 /**
  * Site Overview (brief §3.3), phase 1: greeting, the attention strip, create
@@ -571,10 +558,9 @@ function RecentlyEdited({
 
   const rows = collections
     .flatMap((collection, index) =>
-      ((results[index]?.data?.items ?? []) as RecentRow[]).map((row) => ({
+      (results[index]?.data?.items ?? []).map((row) => ({
         row,
         collection,
-        fields: collection.fields,
       })),
     )
     .sort(
@@ -607,24 +593,18 @@ function RecentlyEdited({
         </p>
       ) : (
         <InsetList data-testid="recently-edited">
-          {rows.map(({ row, collection, fields }) => {
+          {rows.map(({ row, collection }) => {
             const state = entryLiveState(
               row,
               release.liveMembership,
               isDevSite(site),
             )
-            const imageField = fields.find((field) => field.type === 'image')
-            const cover = imageField ? row.draftData[imageField.key] : undefined
             return (
               <InsetRow
                 key={row.id}
                 asChild
-                leading={
-                  <EntryThumb
-                    assetId={typeof cover === 'string' ? cover : undefined}
-                  />
-                }
-                title={entryTitle(row.draftData, fields, row.slug)}
+                leading={<EntryThumb assetId={row.cover ?? undefined} />}
+                title={row.title}
                 subtitle={
                   <span className="text-caption font-normal text-text-muted">
                     {collection.label}
@@ -700,16 +680,12 @@ function useDraftsWaiting(
   if (!enabled) return []
   return collections
     .flatMap((collection, index) =>
-      (
-        (results[index]?.data?.items ?? []) as Array<
-          RecentRow & { updatedBy: string | null }
-        >
-      )
+      (results[index]?.data?.items ?? [])
         .filter((row) => row.updatedBy && row.updatedBy !== myUserId)
         .map((row) => ({
           id: row.id,
           collectionKey: collection.key,
-          title: entryTitle(row.draftData, collection.fields, row.slug),
+          title: row.title,
           by: row.updatedByName ?? '',
           updatedAt: row.updatedAt,
         })),

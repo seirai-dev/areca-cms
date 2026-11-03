@@ -12,7 +12,7 @@ import { collection, entry, environmentPush, site } from '#/db/schema'
 import type { EntryData } from '#/lib/types'
 import { audit } from '#/server/audit'
 import { lockOrganizationForMutation } from '#/server/admin/organization-lock'
-import { assetMutationLock } from '#/server/assets/usage'
+import { assetExclusiveLock } from '#/server/assets/usage'
 import {
   ConflictError,
   NotFoundError,
@@ -112,7 +112,7 @@ async function runCopy(
   await lockProductionSite(tx, prod.id)
   // The lock ordinary entry saves take, last in the order (see push.ts): the
   // URL owners read below cannot change under this copy.
-  await assetMutationLock(tx, organizationId)
+  await assetExclusiveLock(tx, organizationId)
 
   const source = (
     await tx

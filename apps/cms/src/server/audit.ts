@@ -9,6 +9,10 @@ import { currentAuditContext } from './audit-context.ts'
 
 type AuditConnection = Pick<typeof db, 'insert' | 'select'>
 
+/**
+ * `knownSite` is the site row the caller already loaded for `siteId`. When it
+ * is given, the agency-only check reads it instead of selecting the site again.
+ */
 export async function audit(
   input: {
     /** Null for instance-level events that belong to no organization. */
@@ -21,6 +25,7 @@ export async function audit(
     meta?: AuditMeta
   },
   connection: AuditConnection = db,
+  knownSite?: { id: string; environment: string },
 ) {
   await connection.insert(auditLog).values({
     organizationId: input.organizationId,
@@ -30,7 +35,7 @@ export async function audit(
     targetType: input.targetType,
     targetId: input.targetId,
     meta: mergeMeta(input.meta),
-    agencyOnly: await isAgencyOnlyAudit(input, connection),
+    agencyOnly: await isAgencyOnlyAudit(input, connection, knownSite),
   })
 }
 
@@ -44,9 +49,11 @@ export async function audit(
 async function isAgencyOnlyAudit(
   input: { siteId?: string | null; action: string },
   connection: AuditConnection,
+  knownSite: { id: string; environment: string } | undefined,
 ): Promise<boolean> {
   if (input.action.startsWith('dev_env.')) return true
   if (!input.siteId) return false
+  if (knownSite && knownSite.id === input.siteId) return isDevSite(knownSite)
   const row = (
     await connection
       .select({ environment: site.environment })

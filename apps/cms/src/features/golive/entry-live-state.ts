@@ -1,5 +1,8 @@
 import type { EntryUiStatus } from '#/lib/status'
+import { isEditedSinceReady } from '#/lib/content/edited-since-ready'
 import type { EntryStatus } from '#/lib/types'
+
+export { isEditedSinceReady }
 
 export type EntryLike = {
   id?: string
@@ -10,6 +13,11 @@ export type EntryLike = {
   publishedData?: unknown
   publishedSlug?: string | null
   slug?: string
+  /**
+   * Set by a list summary, which carries no draft or published data. When
+   * absent, it is computed from `draftData` and `publishedData`.
+   */
+  editedSinceReady?: boolean
 }
 
 export type LiveMembership =
@@ -20,21 +28,6 @@ export type LiveMembership =
     }
   | null
   | undefined
-
-/** Order-insensitive JSON for comparing draft and published data. */
-function stable(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`
-  if (value && typeof value === 'object') {
-    return `{${Object.keys(value as Record<string, unknown>)
-      .sort()
-      .map(
-        (key) =>
-          `${JSON.stringify(key)}:${stable((value as Record<string, unknown>)[key])}`,
-      )
-      .join(',')}}`
-  }
-  return JSON.stringify(value ?? null)
-}
 
 function approvedSlug(entry: EntryLike) {
   return entry.publishedSlug ?? entry.slug ?? null
@@ -81,16 +74,6 @@ export function entryUiStatus(
   }
 }
 
-/**
- * A published entry whose draft differs from what was marked ready
- * ("Edited since ready"). Needs both `draftData` and `publishedData`.
- */
-export function isEditedSinceReady(entry: EntryLike) {
-  if (entry.status !== 'published') return false
-  if (entry.draftData === undefined || entry.publishedData == null) return false
-  return stable(entry.draftData) !== stable(entry.publishedData)
-}
-
 export type EntryLiveState = {
   status: EntryUiStatus
   editedSinceReady: boolean
@@ -108,7 +91,8 @@ export function entryLiveState(
 ): EntryLiveState {
   return {
     status: entryUiStatus(entry, live, devSite),
-    editedSinceReady: !devSite && isEditedSinceReady(entry),
+    editedSinceReady:
+      !devSite && (entry.editedSinceReady ?? isEditedSinceReady(entry)),
     scheduledAt: entry.scheduledAt ?? null,
   }
 }

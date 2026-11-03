@@ -395,6 +395,14 @@ export const entry = pgTable(
     index('entry_scheduled_due_idx')
       .on(t.scheduledAt)
       .where(sql`${t.status} = 'scheduled'`),
+    // A collection list reads one collection's rows newest first (with the
+    // slug as tie-break): the index returns them in that order, so a page
+    // reads only its rows. The collection fixes the site, so it leads.
+    index('entry_collection_updated_idx').on(
+      t.collectionId,
+      sql`${t.updatedAt} desc`,
+      t.slug,
+    ),
   ],
 )
 
@@ -507,6 +515,12 @@ export const asset = pgTable(
     uniqueIndex('asset_org_source_url_unique')
       .on(t.organizationId, t.sourceUrl)
       .where(sql`${t.sourceUrl} is not null`),
+    // The media library lists one organization's assets newest first.
+    index('asset_organization_created_idx').on(
+      t.organizationId,
+      sql`${t.createdAt} desc`,
+      sql`${t.id} desc`,
+    ),
   ],
 )
 

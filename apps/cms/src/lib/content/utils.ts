@@ -25,6 +25,17 @@ export function entryTitle(data: EntryData, fields: Field[], slug: string) {
   return slug
 }
 
+/**
+ * The asset id a list shows as the entry's cover: the value of the first image
+ * field, when the draft sets one.
+ */
+export function firstImageAssetId(data: EntryData, fields: Field[]) {
+  const imageField = fields.find((field) => field.type === 'image')
+  if (!imageField) return null
+  const value = data[imageField.key]
+  return typeof value === 'string' && value ? value : null
+}
+
 export function formatDateTime(value: unknown) {
   if (value == null || value === '') return '—'
   const date = value instanceof Date ? value : new Date(String(value))

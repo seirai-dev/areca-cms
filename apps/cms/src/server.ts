@@ -8,6 +8,7 @@ import type { RequestHandler } from '@tanstack/react-start/server'
 import { env } from '#/env'
 import { paraglideMiddleware } from '#/paraglide/server.js'
 import { enforceCmsRateLimit } from '#/server/http/rate-limit.server'
+import { withRequestScope } from '#/server/http/request-scope.server'
 import { createCspNonce, withCspNonce } from '#/server/http/csp-nonce'
 import { withSecurityHeaders } from '#/server/http/security-headers'
 import { getSetupStatus } from '#/server/admin/setup'
@@ -45,26 +46,30 @@ const fetch: typeof startFetch = (req, ...args) => {
       development: import.meta.env.DEV,
     })
 
-  return withCspNonce(nonce, async () => {
-    const invalidOrigin = validateCookieMutationOrigin(req, [
-      env.BETTER_AUTH_URL,
-      env.APP_URL,
-    ])
-    if (invalidOrigin) return secure(invalidOrigin)
+  // The request scope lets the rate limiter and every guard share one session
+  // lookup per request (see `request-scope.server.ts`).
+  return withCspNonce(nonce, () =>
+    withRequestScope(async () => {
+      const invalidOrigin = validateCookieMutationOrigin(req, [
+        env.BETTER_AUTH_URL,
+        env.APP_URL,
+      ])
+      if (invalidOrigin) return secure(invalidOrigin)
 
-    // OAuth discovery documents live at the origin root, which file routing does
-    // not serve reliably for dot-folders such as `.well-known`.
-    const discovery = await handleDiscoveryRequest(req)
-    if (discovery) return secure(discovery)
+      // OAuth discovery documents live at the origin root, which file routing does
+      // not serve reliably for dot-folders such as `.well-known`.
+      const discovery = await handleDiscoveryRequest(req)
+      if (discovery) return secure(discovery)
 
-    const rateLimited = await enforceCmsRateLimit(req)
-    if (rateLimited) return secure(rateLimited)
+      const rateLimited = await enforceCmsRateLimit(req)
+      if (rateLimited) return secure(rateLimited)
 
-    const response = await paraglideMiddleware(req, () =>
-      startFetch(req, ...args),
-    )
-    return secure(response)
-  })
+      const response = await paraglideMiddleware(req, () =>
+        startFetch(req, ...args),
+      )
+      return secure(response)
+    }),
+  )
 }
 
 export type ServerEntry = { fetch: RequestHandler<Register> }

@@ -13,7 +13,7 @@ import {
   hasExternalImages,
   importExternalImages,
 } from '#/server/assets/external-images'
-import { assetMutationLock } from '#/server/assets/usage'
+import { assetAttachLock } from '#/server/assets/usage'
 
 const COLUMNS = ['draftData', 'publishedData', 'scheduledData'] as const
 
@@ -72,7 +72,7 @@ try {
     // updatedAt, so the schedule version and status are checked too.
     const { scheduledVersion } = row.entry
     const written = await db.transaction(async (tx) => {
-      await assetMutationLock(tx, row.site.organizationId)
+      await assetAttachLock(tx, row.site.organizationId)
       return tx
         .update(entry)
         .set({

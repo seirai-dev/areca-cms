@@ -19,6 +19,10 @@ present even when no Dokploy account has been configured yet.
 | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` | S3-compatible object storage for uploaded assets and branding. |
 | `DOKPLOY_CREDENTIALS_ENCRYPTION_KEY` | Base64-encoded 32-byte key that encrypts organization Dokploy credentials in PostgreSQL. |
 
+`S3_ENDPOINT` should be the storage service's internal address, such as
+`http://rustfs:9000` on the Docker network, not its public HTTPS URL. The CMS
+proxies asset bytes itself, so browsers never contact the storage host.
+
 Generate independent secrets rather than reusing example values:
 
 ```sh
@@ -193,6 +197,7 @@ documented in [operations](OPERATIONS.md). Common optional settings are:
 | `DB_CONNECT_TIMEOUT_MS` | `5000` | PostgreSQL connection wait limit; `0` disables it. |
 | `DB_STATEMENT_TIMEOUT_MS` | `15000` | Per-query PostgreSQL statement deadline; `0` disables it. |
 | `DB_IDLE_IN_TX_TIMEOUT_MS` | `30000` | Closes transactions idle while holding a connection or lock; `0` disables it. |
+| `DB_POOL_MAX` | `10` | Max PostgreSQL connections in this process's main pool. Each process also opens up to 4 each for MCP grants and factor locks. |
 | `READINESS_TIMEOUT_MS` | `3000` | Per-dependency readiness deadline. |
 | `READINESS_MAX_QUEUE_AGE_SECONDS` | `900` | Oldest queued build age before readiness fails. |
 | `READINESS_MAX_TICK_AGE_SECONDS` | `300` | Worker/scheduler heartbeat and stale-lease age before readiness fails. |

@@ -54,6 +54,14 @@ const snapshot: MetricsSnapshot = {
   readiness,
   uptimeSeconds: 100,
   memory: { rss: 1, heapUsed: 2, heapTotal: 3, external: 4 },
+  pools: [
+    { label: 'main', total: 5, idle: 3, waiting: 2, max: 10 },
+    { label: 'mcp', total: 1, idle: 1, waiting: 0, max: 4 },
+  ],
+  eventLoop: {
+    utilization: 0.25,
+    delaySeconds: { p50: 0.02, p99: 0.04, max: 0.075 },
+  },
 }
 
 describe('renderPrometheus', () => {
@@ -105,6 +113,41 @@ describe('renderPrometheus', () => {
         /^(# (HELP|TYPE) [a-z_]+ .+|[a-z_]+(\{[a-z_]+="[^"]*"(,[a-z_]+="[^"]*")*\})? -?[0-9.]+(e[+-]?\d+)?)$/,
       )
     }
+  })
+
+  it('exposes pool connection states, waiting requests and configured max', () => {
+    expect(text).toContain('# TYPE areca_db_pool_connections gauge')
+    expect(text).toContain(
+      'areca_db_pool_connections{pool="main",state="total"} 5',
+    )
+    expect(text).toContain(
+      'areca_db_pool_connections{pool="main",state="idle"} 3',
+    )
+    expect(text).toContain(
+      'areca_db_pool_connections{pool="mcp",state="idle"} 1',
+    )
+    expect(text).toContain('areca_db_pool_waiting{pool="main"} 2')
+    expect(text).toContain('areca_db_pool_max_connections{pool="main"} 10')
+    expect(text).toContain('areca_db_pool_max_connections{pool="mcp"} 4')
+  })
+
+  it('exposes event loop utilization and delay percentiles', () => {
+    expect(text).toContain('# TYPE areca_event_loop_utilization gauge')
+    expect(text).toContain('areca_event_loop_utilization 0.25')
+    expect(text).toContain('areca_event_loop_delay_seconds{stat="p50"} 0.02')
+    expect(text).toContain('areca_event_loop_delay_seconds{stat="p99"} 0.04')
+    expect(text).toContain('areca_event_loop_delay_seconds{stat="max"} 0.075')
+  })
+
+  it('omits pool families without pools and delay without samples', () => {
+    const out = renderPrometheus({
+      ...snapshot,
+      pools: [],
+      eventLoop: { utilization: 0, delaySeconds: null },
+    })
+    expect(out).not.toContain('areca_db_pool_')
+    expect(out).not.toContain('areca_event_loop_delay_seconds')
+    expect(out).toContain('areca_event_loop_utilization 0')
   })
 
   it('omits tick ages when loops are disabled', () => {

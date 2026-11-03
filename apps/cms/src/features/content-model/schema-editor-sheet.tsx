@@ -93,6 +93,8 @@ export function SchemaEditorSheet({
     queryKey: queryKeys.collections(siteId),
     queryFn: () => listCollectionsFn({ data: { siteId } }),
     enabled: open,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   })
   const collectionKeys = (collectionsQuery.data ?? []).map((item) => ({
     key: item.key,

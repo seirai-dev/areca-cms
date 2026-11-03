@@ -1,14 +1,35 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type * as DbModule from '#/db'
+
+import { withRequestScope } from '#/server/http/request-scope.server'
 import { securityErrorCode } from './security-errors.ts'
 import {
   assertAdminMfa,
+  forgetSession,
+  getSession as loadCurrentSession,
+  hasRole,
   requireAgencyAdmin,
   requireFreshAgencyAdmin,
   requireOrgMember,
+  requireOrgMemberOrNotFound,
+  requireUser,
 } from './session.server.ts'
 
 const getSession = vi.hoisted(() => vi.fn())
+const memberRows = vi.hoisted(() => ({
+  rows: [] as Array<{ role: 'editor' | 'owner' }>,
+}))
+vi.mock('#/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof DbModule>()),
+  db: {
+    select: () => ({
+      from: () => ({
+        where: () => ({ limit: async () => memberRows.rows }),
+      }),
+    }),
+  },
+}))
 const factorProof = vi.hoisted(() => vi.fn())
 const factorVerifiedAt = vi.hoisted(() => vi.fn())
 vi.mock('#/server/security/local-mfa', () => ({
@@ -40,8 +61,15 @@ async function rejection(promise: Promise<unknown>) {
   throw new Error('expected a rejection')
 }
 
+const notFoundMarker = () => new Error('NOT_FOUND_MARKER')
+
+function isForbidden(error: unknown) {
+  return error instanceof Response && error.status === 403
+}
+
 beforeEach(() => {
   getSession.mockReset()
+  memberRows.rows = []
   factorProof.mockReset()
   factorProof.mockResolvedValue(undefined)
   factorVerifiedAt.mockReset()
@@ -133,5 +161,134 @@ describe('requireFreshAgencyAdmin', () => {
       sessionFor({ isAgencyAdmin: true, twoFactorEnabled: true }),
     )
     await expect(requireFreshAgencyAdmin()).resolves.toBeDefined()
+  })
+})
+
+describe('membership roles', () => {
+  it('ranks owner above editor, and a role satisfies itself', () => {
+    expect(hasRole('owner', 'editor')).toBe(true)
+    expect(hasRole('owner', 'owner')).toBe(true)
+    expect(hasRole('editor', 'editor')).toBe(true)
+    expect(hasRole('editor', 'owner')).toBe(false)
+  })
+
+  it('answers a non-member with notFound, whatever role is asked', async () => {
+    getSession.mockResolvedValue(
+      sessionFor({ isAgencyAdmin: false, twoFactorEnabled: false }),
+    )
+    for (const role of [undefined, 'editor', 'owner'] as const) {
+      const error = await rejection(
+        requireOrgMemberOrNotFound('org-1', role, notFoundMarker),
+      )
+      expect(error).toEqual(new Error('NOT_FOUND_MARKER'))
+    }
+  })
+
+  it('keeps the 403 for a member whose role is too low', async () => {
+    getSession.mockResolvedValue(
+      sessionFor({ isAgencyAdmin: false, twoFactorEnabled: false }),
+    )
+    memberRows.rows = [{ role: 'editor' }]
+    const error = await rejection(
+      requireOrgMemberOrNotFound('org-1', 'owner', notFoundMarker),
+    )
+    expect(isForbidden(error)).toBe(true)
+  })
+
+  it('lets a member through with the role or with no role asked', async () => {
+    getSession.mockResolvedValue(
+      sessionFor({ isAgencyAdmin: false, twoFactorEnabled: false }),
+    )
+    memberRows.rows = [{ role: 'owner' }]
+    await expect(
+      requireOrgMemberOrNotFound('org-1', 'owner', notFoundMarker),
+    ).resolves.toMatchObject({ user: { id: 'user-1' } })
+    memberRows.rows = [{ role: 'editor' }]
+    await expect(
+      requireOrgMemberOrNotFound('org-1', undefined, notFoundMarker),
+    ).resolves.toBeDefined()
+  })
+
+  it('applies the same role rule in requireOrgMember', async () => {
+    getSession.mockResolvedValue(
+      sessionFor({ isAgencyAdmin: false, twoFactorEnabled: false }),
+    )
+    memberRows.rows = [{ role: 'editor' }]
+    expect(
+      isForbidden(await rejection(requireOrgMember('org-1', 'owner'))),
+    ).toBe(true)
+    // A non-member is a plain 403 here: only the OrNotFound variant maps it.
+    memberRows.rows = []
+    expect(
+      isForbidden(await rejection(requireOrgMember('org-1', 'owner'))),
+    ).toBe(true)
+  })
+
+  it('lets an enrolled agency admin through any role, without a membership row', async () => {
+    getSession.mockResolvedValue(
+      sessionFor({ isAgencyAdmin: true, twoFactorEnabled: true }),
+    )
+    await expect(
+      requireOrgMemberOrNotFound('org-1', 'owner', notFoundMarker),
+    ).resolves.toBeDefined()
+    expect(factorProof).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('session memo', () => {
+  it('reads the session once across the guards of one request', async () => {
+    getSession.mockResolvedValue(
+      sessionFor({ isAgencyAdmin: false, twoFactorEnabled: false }),
+    )
+    memberRows.rows = [{ role: 'owner' }]
+    await withRequestScope(async () => {
+      await loadCurrentSession()
+      await requireUser()
+      await requireOrgMemberOrNotFound('org-1', 'owner', notFoundMarker)
+    })
+    expect(getSession).toHaveBeenCalledTimes(1)
+  })
+
+  it('reads again in the next request', async () => {
+    getSession.mockResolvedValue(
+      sessionFor({ isAgencyAdmin: false, twoFactorEnabled: false }),
+    )
+    await withRequestScope(() => loadCurrentSession())
+    await withRequestScope(() => loadCurrentSession())
+    expect(getSession).toHaveBeenCalledTimes(2)
+  })
+
+  it('reads fresh outside a request', async () => {
+    getSession.mockResolvedValue(
+      sessionFor({ isAgencyAdmin: false, twoFactorEnabled: false }),
+    )
+    await loadCurrentSession()
+    await loadCurrentSession()
+    expect(getSession).toHaveBeenCalledTimes(2)
+  })
+
+  it('reads fresh after forgetSession, for a session that just ended', async () => {
+    getSession.mockResolvedValueOnce(
+      sessionFor({ isAgencyAdmin: false, twoFactorEnabled: false }),
+    )
+    getSession.mockResolvedValueOnce(null)
+    await withRequestScope(async () => {
+      await expect(loadCurrentSession()).resolves.not.toBeNull()
+      forgetSession()
+      await expect(loadCurrentSession()).resolves.toBeNull()
+    })
+  })
+
+  it('keeps the blocked-user rejection on the memoized session', async () => {
+    getSession.mockResolvedValue({
+      ...sessionFor({ isAgencyAdmin: false, twoFactorEnabled: false }),
+      user: { id: 'user-1', blockedAt: new Date() },
+    })
+    await withRequestScope(async () => {
+      const first = await rejection(requireUser())
+      expect(first).toBeDefined()
+      expect(await rejection(requireUser())).toBeDefined()
+    })
+    expect(getSession).toHaveBeenCalledTimes(1)
   })
 })

@@ -288,6 +288,13 @@
       "when": 1793609783935,
       "tag": "0040_cloudflare_credentials",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1793699573345,
+      "tag": "0041_entry_asset_list_indexes",
+      "breakpoints": true
     }
   ]
 }

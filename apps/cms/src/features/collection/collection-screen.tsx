@@ -17,8 +17,8 @@ import {
   Trash,
 } from '@phosphor-icons/react'
 
+import type { EntrySummary } from '#/lib/content/entry-summary'
 import { queryKeys } from '#/lib/content/query-keys'
-import { entryTitle } from '#/lib/content/utils'
 import { useShortcut } from '#/components/shell/shortcuts'
 import { Button } from '#/components/ui/button'
 import { ConfirmDialog } from '#/components/ui/confirm-dialog'
@@ -65,7 +65,6 @@ import {
   MissingLanguageFilter,
   StatusFilterControl,
 } from './collection-controls'
-import { entryCoverage } from './entry-coverage'
 import { EntryCard, EntryListRow } from './entry-item'
 import {
   useCollectionEntries,
@@ -75,7 +74,6 @@ import {
 import type {
   BulkAction,
   BulkTarget,
-  EntryRow,
   StatusFilter,
 } from './use-collection-entries'
 import { BulkFailuresDialog } from './bulk-failures-dialog'
@@ -114,6 +112,8 @@ export function CollectionScreen({
   const collectionsQuery = useQuery({
     queryKey: queryKeys.collections(site.id),
     queryFn: () => listCollectionsFn({ data: { siteId: site.id } }),
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   })
   const collection = (
     collectionsQuery.data as CollectionRecord[] | undefined
@@ -210,7 +210,6 @@ function CollectionView({
   // multilingual site; a stale `?missing=` is ignored.
   const languages = site.languages ?? null
   const multilingual = isMultilingual(languages)
-  const requiredLanguages = collection.requiredLanguages ?? []
   const missingFilter =
     multilingual &&
     missingLanguage &&
@@ -268,9 +267,7 @@ function CollectionView({
       const row = rows.find((item) => item.id === id)
       return {
         id,
-        title: row
-          ? entryTitle(row.draftData, collection.fields, row.slug)
-          : m.editor_untitled(),
+        title: row ? row.title : m.editor_untitled(),
         slug: row?.slug ?? '',
       }
     })
@@ -285,7 +282,7 @@ function CollectionView({
     bulk.mutate({ action, targets: targetsFor(ids) })
   }
 
-  function onItemAction(action: BulkAction, row: EntryRow) {
+  function onItemAction(action: BulkAction, row: EntrySummary) {
     runAction(action, [row.id])
   }
 
@@ -553,12 +550,8 @@ function CollectionView({
                     siteId={siteId}
                     collectionKey={collection.key}
                     row={row}
-                    title={entryTitle(
-                      row.draftData,
-                      collection.fields,
-                      row.slug,
-                    )}
-                    coverAssetId={coverOf(row, imageField)}
+                    title={row.title}
+                    coverAssetId={row.cover ?? undefined}
                     live={live}
                     devSite={devSite}
                     canManage={canManage}
@@ -567,16 +560,7 @@ function CollectionView({
                     onToggleSelect={() => toggle(row.id)}
                     onAction={onItemAction}
                     muted={!collection.enabled}
-                    coverage={
-                      languages && multilingual
-                        ? entryCoverage(
-                            row.draftData,
-                            collection.fields,
-                            languages,
-                            requiredLanguages,
-                          )
-                        : undefined
-                    }
+                    coverage={row.coverage ?? undefined}
                   />
                 </StaggerItem>
               ))}
@@ -594,12 +578,8 @@ function CollectionView({
                     siteId={siteId}
                     collectionKey={collection.key}
                     row={row}
-                    title={entryTitle(
-                      row.draftData,
-                      collection.fields,
-                      row.slug,
-                    )}
-                    coverAssetId={coverOf(row, imageField)}
+                    title={row.title}
+                    coverAssetId={row.cover ?? undefined}
                     live={live}
                     devSite={devSite}
                     canManage={canManage}
@@ -608,16 +588,7 @@ function CollectionView({
                     onToggleSelect={() => toggle(row.id)}
                     onAction={onItemAction}
                     muted={!collection.enabled}
-                    coverage={
-                      languages && multilingual
-                        ? entryCoverage(
-                            row.draftData,
-                            collection.fields,
-                            languages,
-                            requiredLanguages,
-                          )
-                        : undefined
-                    }
+                    coverage={row.coverage ?? undefined}
                   />
                 </StaggerItem>
               ))}
@@ -756,12 +727,6 @@ function CollectionView({
       ) : null}
     </div>
   )
-}
-
-function coverOf(row: EntryRow, imageField: Field | undefined) {
-  if (!imageField) return undefined
-  const value = row.draftData[imageField.key]
-  return typeof value === 'string' && value ? value : undefined
 }
 
 /**

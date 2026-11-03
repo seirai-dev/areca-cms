@@ -6,6 +6,11 @@ import { db } from '#/db'
 import { membership } from '#/db/schema'
 import { env } from '#/env'
 import { MfaRequiredError } from '#/lib/security-errors'
+import {
+  SESSION_MEMO_KEY,
+  forgetForRequest,
+  memoizeForRequest,
+} from '#/server/http/request-scope.server'
 import { requireAdminLocalMfa } from '#/server/security/local-mfa'
 import { assertFreshSession } from '#/server/security/step-up'
 
@@ -17,10 +22,27 @@ const roleRank: Record<MembershipRole, number> = {
   owner: 2,
 }
 
-export async function getSession() {
-  return auth.api.getSession({
-    headers: getRequestHeaders(),
-  })
+/**
+ * The session for these request headers. Loaded at most once per request: the
+ * guards of one request ask for it several times, and each load is a Better
+ * Auth lookup plus database reads (no cookie cache is configured).
+ */
+export function loadSession(headers: Headers) {
+  return memoizeForRequest(SESSION_MEMO_KEY, () =>
+    auth.api.getSession({ headers }),
+  )
+}
+
+export function getSession() {
+  return loadSession(getRequestHeaders())
+}
+
+/**
+ * Call after anything that changes which session this request would see
+ * (a session ended, a sign-out). The next `getSession` reads fresh.
+ */
+export function forgetSession() {
+  forgetForRequest(SESSION_MEMO_KEY)
 }
 
 /**
@@ -82,12 +104,24 @@ export async function requireFreshAgencyAdmin() {
   return session
 }
 
-export async function requireOrgMember(orgId: string, role?: MembershipRole) {
+/** True when a member holding `actual` may do what needs `required`. */
+export function hasRole(actual: MembershipRole, required: MembershipRole) {
+  return roleRank[actual] >= roleRank[required]
+}
+
+type OrgMembership = {
+  session: Awaited<ReturnType<typeof requireUser>>
+  /** Null for an agency admin, who is not a member and holds every role. */
+  member: { role: MembershipRole } | null
+}
+
+/** Signed-in user and their membership of the organization, with no role check. */
+async function loadOrgMembership(orgId: string): Promise<OrgMembership> {
   const session = await requireUser()
   if (session.user.isAgencyAdmin) {
     assertAdminMfa(session.user)
     await requireAdminLocalMfa(session)
-    return session
+    return { session, member: null }
   }
 
   const rows = await db
@@ -106,11 +140,23 @@ export async function requireOrgMember(orgId: string, role?: MembershipRole) {
     throw new Response('Forbidden', { status: 403 })
   }
 
-  if (role && roleRank[member.role] < roleRank[role]) {
+  return { session, member }
+}
+
+/** The 403 for a member whose role is below the one required. */
+export function assertMembershipRole(
+  found: OrgMembership,
+  role: MembershipRole | undefined,
+) {
+  if (role && found.member && !hasRole(found.member.role, role)) {
     throw new Response('Forbidden', { status: 403 })
   }
+}
 
-  return session
+export async function requireOrgMember(orgId: string, role?: MembershipRole) {
+  const found = await loadOrgMembership(orgId)
+  assertMembershipRole(found, role)
+  return found.session
 }
 
 /**
@@ -125,11 +171,24 @@ export async function requireOrgMemberOrNotFound(
   role: MembershipRole | undefined,
   notFound: () => Error,
 ) {
+  const found = await loadOrgMembershipOrNotFound(orgId, notFound)
+  assertMembershipRole(found, role)
+  return found.session
+}
+
+/**
+ * Membership without a role check, for callers that need the membership row
+ * and then decide about the role themselves (see `requireSiteAccess`). A
+ * non-member gets `notFound()`.
+ */
+export async function loadOrgMembershipOrNotFound(
+  orgId: string,
+  notFound: () => Error,
+): Promise<OrgMembership> {
   try {
-    await requireOrgMember(orgId)
+    return await loadOrgMembership(orgId)
   } catch (error) {
     if (error instanceof Response && error.status === 403) throw notFound()
     throw error
   }
-  return requireOrgMember(orgId, role)
 }

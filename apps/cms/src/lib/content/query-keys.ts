@@ -1,5 +1,7 @@
 export const queryKeys = {
   collections: (siteId: string) => ['collections', siteId] as const,
+  /** Entries per collection of one site (sidebar and mobile bar). */
+  entryCounts: (siteId: string) => ['entry-counts', siteId] as const,
   entries: (
     siteId: string,
     collectionKey: string,

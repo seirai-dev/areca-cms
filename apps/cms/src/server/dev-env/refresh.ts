@@ -2,7 +2,7 @@ import { db } from '#/db'
 import { entry, environmentPush } from '#/db/schema'
 import { audit } from '#/server/audit'
 import { lockOrganizationForMutation } from '#/server/admin/organization-lock'
-import { assetMutationLock } from '#/server/assets/usage'
+import { assetExclusiveLock } from '#/server/assets/usage'
 import { eq } from 'drizzle-orm'
 
 import { copyProductionIntoDev } from './fork'
@@ -37,7 +37,7 @@ export async function refreshDevEnvironment(
     await lockProductionSite(tx, prod.id)
     // The lock ordinary entry saves take, last in the order (see push.ts). A
     // save holding it is never waiting on a revision this reset deletes.
-    await assetMutationLock(tx, probe.organizationId)
+    await assetExclusiveLock(tx, probe.organizationId)
 
     const discarded = (
       await tx

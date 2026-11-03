@@ -22,11 +22,16 @@ import {
 } from '#/lib/content/utils'
 import type { FieldErrorMap } from '#/lib/content/utils'
 import { isEditedSinceReady } from '#/features/golive/entry-live-state'
-import { useGoLive, useInvalidateGoLive } from '#/features/golive/use-go-live'
+import {
+  invalidateGoLiveKeys,
+  useGoLive,
+  useInvalidateGoLive,
+} from '#/features/golive/use-go-live'
 import { invalidateDevSync } from '#/features/dev-env/invalidate'
 import type { EntryData, EntryStatus, Field } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 import type { LocaleBlocker } from './language-state'
+import { autosaveDelay, scheduledPollInterval } from './editor-timing'
 import {
   archiveEntryFn,
   cancelScheduleFn,
@@ -44,8 +49,6 @@ import {
   updateGlobalDraftFn,
 } from '#/server/fn/content'
 
-/** Autosave waits this long after the last change (brief §3.5). */
-const AUTOSAVE_DELAY = 2000
 /** Navigation waits at most this long for a pending save. */
 const LEAVE_WAIT = 3000
 
@@ -109,8 +112,9 @@ const sleep = (ms: number) =>
  *
  * - loads the entry, its revisions and the signed preview URL;
  * - keeps the local draft, the slug-follows-title rule and field errors;
- * - **autosave**: 2s after the last change, on window blur / tab hide,
- *   before navigation (up to 3s) and on ⌘S; one save in flight, edits made
+ * - **autosave**: 3s after the last change, but at most 10s after the first
+ *   unsaved change while typing; also on window blur / tab hide, before
+ *   navigation (up to 3s) and on ⌘S; one save in flight, edits made
  *   meanwhile are kept and saved next; a new entry is created on the first
  *   save that has a valid slug;
  * - the entry actions (mark as ready, go live now, schedule, cancel, move
@@ -169,9 +173,14 @@ export function useEntryEditor({
     queryKey: queryKeys.entry(entryId ?? 'new'),
     queryFn: () => getEntryFn({ data: { id: entryId! } }),
     enabled: Boolean(entryId),
+    // While editing, a focus refetch is wasted: the DRAFT_CONFLICT version
+    // check already protects against a concurrent edit.
+    refetchOnWindowFocus: false,
     refetchInterval: (query) => {
       const data = query.state.data as EntryRecord | undefined
-      return data?.status === 'scheduled' ? 2000 : false
+      return data?.status === 'scheduled'
+        ? scheduledPollInterval(data.scheduledAt, Date.now())
+        : false
     },
   })
   const entry = (entryQuery.data ?? null) as EntryRecord | null
@@ -407,6 +416,8 @@ export function useEntryEditor({
   ---------------------------------------------------------------------- */
 
   const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** When the first change not yet saved was made; null when none is pending. */
+  const firstChangeAtRef = React.useRef<number | null>(null)
   const runningRef = React.useRef<Promise<Outcome> | null>(null)
   const pendingRef = React.useRef(false)
   /** The running save was asked for (⌘S, Save, an action), not a timer. */
@@ -437,21 +448,31 @@ export function useEntryEditor({
     if (first) onRevealRef.current?.(first.key)
   }, [])
 
-  const invalidateGoLiveRef = React.useRef(invalidateGoLive)
-  invalidateGoLiveRef.current = invalidateGoLive
+  /**
+   * Marks the entry's lists, revisions and release state stale. With
+   * `refetch` the active ones reload now (milestone actions). Without it they
+   * only reload when next shown, so an autosave does not refetch them every few
+   * seconds. The dev sync count always reloads: it is shown on the editor's dev
+   * banner and a draft save changes it.
+   */
   const invalidateLists = React.useCallback(
-    (id?: string) =>
-      Promise.all([
+    (id?: string, refetch = true) => {
+      const refetchType = refetch ? 'active' : 'none'
+      return Promise.all([
         queryClient.invalidateQueries({
           queryKey: ['entries', siteId, collectionKey],
+          refetchType,
         }),
         id
-          ? queryClient.invalidateQueries({ queryKey: queryKeys.revisions(id) })
+          ? queryClient.invalidateQueries({
+              queryKey: queryKeys.revisions(id),
+              refetchType,
+            })
           : null,
-        // On a development site the sync status counts these changes.
         invalidateDevSync(queryClient, siteId),
-        invalidateGoLiveRef.current(),
-      ]),
+        invalidateGoLiveKeys(queryClient, siteId, refetchType),
+      ])
+    },
     [queryClient, siteId, collectionKey],
   )
 
@@ -528,8 +549,14 @@ export function useEntryEditor({
           ...saved,
         }),
       )
-      void invalidateLists(saved.id)
+      // A save is not a milestone: the lists reload when next shown.
+      void invalidateLists(saved.id, false)
       if (!id) {
+        // The first save creates the entry, so the sidebar's counts change.
+        // Later autosaves leave them alone.
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.entryCounts(siteId),
+        })
         entryIdRef.current = saved.id
         setCreatedId(saved.id)
         setHydratedId(saved.id)
@@ -616,6 +643,7 @@ export function useEntryEditor({
       clearTimeout(timerRef.current)
       timerRef.current = null
     }
+    firstChangeAtRef.current = null
     explicitRef.current = true
     return run()
   }, [run])
@@ -623,14 +651,23 @@ export function useEntryEditor({
   const runRef = React.useRef(run)
   runRef.current = run
 
-  // Debounce: save 2s after the last change (only a change restarts it).
+  // Debounce: save 3s after the last change, and at most 10s after the first
+  // unsaved change (see editor-timing.ts). Each change restarts the timer.
   React.useEffect(() => {
-    if (!dirty) return
+    if (!dirty) {
+      firstChangeAtRef.current = null
+      return
+    }
+    if (firstChangeAtRef.current === null) firstChangeAtRef.current = Date.now()
     if (timerRef.current) clearTimeout(timerRef.current)
-    timerRef.current = setTimeout(() => {
-      timerRef.current = null
-      void runRef.current()
-    }, AUTOSAVE_DELAY)
+    timerRef.current = setTimeout(
+      () => {
+        timerRef.current = null
+        firstChangeAtRef.current = null
+        void runRef.current()
+      },
+      autosaveDelay(Date.now(), firstChangeAtRef.current),
+    )
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)
     }
@@ -837,6 +874,9 @@ export function useEntryEditor({
       await Promise.all([
         queryClient.invalidateQueries({
           queryKey: ['entries', siteId, collectionKey],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.entryCounts(siteId),
         }),
         invalidateGoLive(),
       ])

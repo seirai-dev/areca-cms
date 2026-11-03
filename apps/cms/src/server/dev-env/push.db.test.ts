@@ -14,7 +14,7 @@ import { SEO_KEY } from '#/lib/seo'
 import type { Field, SiteLanguages } from '#/lib/types'
 import { setSiteLanguages } from '#/server/admin/site-languages'
 import { audit } from '#/server/audit'
-import { assetMutationLock } from '#/server/assets/usage'
+import { assetAttachLock } from '#/server/assets/usage'
 import {
   deleteCollection,
   upsertCollection,
@@ -1376,7 +1376,7 @@ describe.skipIf(!hasDb)('development environment: push', () => {
       // those rows the two transactions deadlock (40P01); with FOR NO KEY UPDATE
       // both finish.
       const attempt = await db.transaction(async (tx) => {
-        await assetMutationLock(tx, orgId)
+        await assetAttachLock(tx, orgId)
         const pushed = observe(
           pushDevEnvironment(
             { id: actorId },

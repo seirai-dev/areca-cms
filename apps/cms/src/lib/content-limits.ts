@@ -48,3 +48,5 @@ export const MAX_FIELDS_PER_COLLECTION = 100
 
 /** Entries one bulk entry action (publish, unpublish, archive, delete) may name. */
 export const BULK_ENTRY_MAX_IDS = 200
+/** Entries one activity lookup may name (a page of activity shows 25 rows). */
+export const ACTIVITY_ENTRIES_MAX_IDS = 50

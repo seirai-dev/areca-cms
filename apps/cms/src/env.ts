@@ -128,6 +128,8 @@ export const env = createEnv({
     DB_CONNECT_TIMEOUT_MS: z.coerce.number().int().min(0).default(5_000),
     DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(0).default(15_000),
     DB_IDLE_IN_TX_TIMEOUT_MS: z.coerce.number().int().min(0).default(30_000),
+    // Max connections in the main pool of this process (pg's default is 10).
+    DB_POOL_MAX: z.coerce.number().int().min(1).default(10),
     // Readiness (/api/health/ready) thresholds.
     READINESS_TIMEOUT_MS: z.coerce.number().int().min(100).default(3_000),
     READINESS_MAX_QUEUE_AGE_SECONDS: z.coerce

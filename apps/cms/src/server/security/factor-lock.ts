@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import { Pool } from 'pg'
 
 import { pool } from '#/db'
+import { registerPool } from '#/db/pool-registry'
 import { createLogger } from '#/server/log'
 
 // Waiting factor attempts must not occupy the data connections needed by
@@ -10,6 +11,7 @@ const locks = new Pool({ ...pool.options, max: 4 })
 locks.on('error', (err) =>
   createLogger('factor-lock').error('Factor lock failed', { err }),
 )
+registerPool('factor_lock', locks)
 const held = new AsyncLocalStorage<string>()
 
 export async function withFactorLock<T>(

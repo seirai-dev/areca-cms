@@ -2,13 +2,17 @@ import { eq } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { site } from '#/db/schema'
-import { requireOrgMemberOrNotFound, requireUser } from '#/lib/session.server'
+import {
+  assertMembershipRole,
+  loadOrgMembershipOrNotFound,
+  requireUser,
+} from '#/lib/session.server'
 import { m } from '#/paraglide/messages'
 import { assertSiteVisibleTo } from '#/server/security/site-visibility'
 
-import { getEntry } from './entries.ts'
+import { findEntryAndSection } from './entries.ts'
 import { NotFoundError } from './errors.ts'
-import { getGlobalEntry, isHiddenSectionEntry } from './globals.ts'
+import { getGlobalEntry } from './globals.ts'
 
 /**
  * Who may read or edit a site, entry or section. Shared by the server
@@ -33,25 +37,19 @@ export async function requireSiteAccess(
   if (!found) {
     throw new NotFoundError(notFoundMessage())
   }
-  const member = await requireOrgMemberOrNotFound(
+  // One membership read serves both the visibility and the role check.
+  const membership = await loadOrgMembershipOrNotFound(
     found.organizationId,
-    undefined,
     () => new NotFoundError(notFoundMessage()),
   )
   // Before the role check: a dev env is NotFound for an editor as for an owner.
   await assertSiteVisibleTo(
-    member,
+    membership.session,
     found,
     () => new NotFoundError(notFoundMessage()),
   )
-  const session = role
-    ? await requireOrgMemberOrNotFound(
-        found.organizationId,
-        role,
-        () => new NotFoundError(notFoundMessage()),
-      )
-    : member
-  return { session, site: found }
+  assertMembershipRole(membership, role)
+  return { session: membership.session, site: found }
 }
 
 /**
@@ -69,21 +67,20 @@ export async function requireGlobalAccess(siteId: string, key: string) {
 
 export async function requireEntryAccess(entryId: string, role?: 'owner') {
   const viewer = await requireUser()
-  const existing = await getEntry(entryId)
-  if (!existing) {
+  const found = await findEntryAndSection(entryId)
+  if (!found) {
     throw new NotFoundError(m.server_entry_not_found())
   }
   // A disabled section is NotFound by id too, before the role check, so an
   // editor gets the same answer as an owner. Same rule as requireGlobalAccess.
-  if (
-    await isHiddenSectionEntry(existing.collectionId, viewer.user.isAgencyAdmin)
-  ) {
+  // Agency admins see disabled sections.
+  if (found.hiddenSection && !viewer.user.isAgencyAdmin) {
     throw new NotFoundError(m.server_entry_not_found())
   }
   const access = await requireSiteAccess(
-    existing.siteId,
+    found.entry.siteId,
     role,
     m.server_entry_not_found,
   )
-  return { ...access, entry: existing }
+  return { ...access, entry: found.entry }
 }

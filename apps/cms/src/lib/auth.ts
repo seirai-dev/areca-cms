@@ -57,6 +57,10 @@ import {
 } from '#/server/mcp/oauth-grants'
 import { normaliseRegistrationBody } from '#/server/mcp/oauth-registration'
 import {
+  SESSION_MEMO_KEY,
+  forgetForRequest,
+} from '#/server/http/request-scope.server'
+import {
   TWO_FACTOR_MANAGEMENT_PATHS,
   assertPasswordlessFresh,
   assertTotpUriAvailable,
@@ -616,10 +620,16 @@ const authBase = betterAuth({
 // Keep token issuance/replay and connection revocation under the same grant lock.
 export const auth: typeof authBase = {
   ...authBase,
-  handler: (request) =>
-    handleMcpOAuthTokenRequest(request, (incoming) =>
-      handleLocalFactorRequest(incoming, authBase.handler, () =>
-        authBase.api.getSession({ headers: incoming.headers }),
-      ),
-    ),
+  handler: async (request) => {
+    try {
+      return await handleMcpOAuthTokenRequest(request, (incoming) =>
+        handleLocalFactorRequest(incoming, authBase.handler, () =>
+          authBase.api.getSession({ headers: incoming.headers }),
+        ),
+      )
+    } finally {
+      // Sign-in, sign-out and revocation change the session this request sees.
+      forgetForRequest(SESSION_MEMO_KEY)
+    }
+  },
 }

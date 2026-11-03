@@ -26,7 +26,7 @@ import { isDevSite } from '#/server/security/site-visibility'
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
 import { importExternalImages } from '#/server/assets/external-images'
-import { assetMutationLock } from '#/server/assets/usage'
+import { assetAttachLock } from '#/server/assets/usage'
 
 import { archiveDeletedContent } from './deletion-archive'
 import { getCollection } from './collections.ts'
@@ -34,10 +34,14 @@ import { ConflictError, NotFoundError, ValidationError } from './errors.ts'
 import { notCompleteInLocale } from './missing-language.ts'
 import { assertSectionSeo, sectionSeoIssue } from './globals.ts'
 import { SLUG_PATTERN } from '#/lib/slug'
+import { toEntrySummary } from '#/lib/content/entry-summary'
+import type { EntrySummary } from '#/lib/content/entry-summary'
 import {
+  claimedSlugs,
   formatLanguageBlockers,
   languageBlockers,
   localeCtxFor,
+  lockSlugClaims,
   toLanguageBlockerDetail,
   validateLocaleSlugs,
 } from './locale-validation.ts'
@@ -108,31 +112,43 @@ export function prepareReadyData(
   return { stored: data, referenceData: mainView }
 }
 
-export async function listEntries(
+export type ListEntriesOptions = {
+  status?: EntryStatus
+  /** Approved reference targets only; do not combine with `status`. */
+  referenceTargets?: boolean
+  search?: string
+  /**
+   * Entries whose draft is not complete in this language (any state:
+   * empty, partial or missing a required field). Ignored when the site has
+   * no such language, so a stale filter in a URL still shows the list.
+   */
+  missingLanguage?: string
+  limit?: number
+  offset?: number
+}
+
+/**
+ * The collection, the site's languages and the WHERE clause that both list
+ * reads share, so a page and its `total` always count the same rows.
+ */
+async function listScope(
   siteId: string,
   collectionKey: string,
-  options: {
-    status?: EntryStatus
-    /** Approved reference targets only; do not combine with `status`. */
-    referenceTargets?: boolean
-    search?: string
-    /**
-     * Entries whose draft is not complete in this language (any state:
-     * empty, partial or missing a required field). Ignored when the site has
-     * no such language, so a stale filter in a URL still shows the list.
-     */
-    missingLanguage?: string
-    limit?: number
-    offset?: number
-  } = {},
+  options: ListEntriesOptions,
 ) {
   const col = await getCollection(siteId, collectionKey)
   if (!col) {
     throw new NotFoundError(m.server_collection_not_found())
   }
+  const siteRow = (
+    await db
+      .select({ languages: site.languages })
+      .from(site)
+      .where(eq(site.id, siteId))
+      .limit(1)
+  ).at(0)
+  const languages = siteRow?.languages ?? null
 
-  const limit = options.limit ?? 50
-  const offset = options.offset ?? 0
   const filters = [eq(entry.siteId, siteId), eq(entry.collectionId, col.id)]
   if (options.referenceTargets) {
     filters.push(
@@ -150,30 +166,37 @@ export async function listEntries(
       or(ilike(entry.slug, term), sql`${entry.draftData}::text ilike ${term}`)!,
     )
   }
-
-  if (options.missingLanguage) {
-    const siteRow = (
-      await db
-        .select({ languages: site.languages })
-        .from(site)
-        .where(eq(site.id, siteId))
-        .limit(1)
-    ).at(0)
-    const languages = siteRow?.languages
-    if (languages?.all.includes(options.missingLanguage)) {
-      // Completeness is one predicate on the draft, so paging and `total` stay
-      // exact and the database reads only the rows of the page.
-      filters.push(
-        notCompleteInLocale(options.missingLanguage, {
-          main: languages.main,
-          all: languages.all,
-          fields: col.fields,
-        }),
-      )
-    }
+  if (
+    options.missingLanguage &&
+    languages?.all.includes(options.missingLanguage)
+  ) {
+    // Completeness is one predicate on the draft, so paging and `total` stay
+    // exact and the database reads only the rows of the page.
+    filters.push(
+      notCompleteInLocale(options.missingLanguage, {
+        main: languages.main,
+        all: languages.all,
+        fields: col.fields,
+      }),
+    )
   }
+  return { col, languages, where: and(...filters) }
+}
 
-  const where = and(...filters)
+/**
+ * Full entry rows of one collection, newest first. Used by the MCP tools and
+ * other server callers that need the whole record. The UI reads
+ * `listEntrySummaries`.
+ */
+export async function listEntries(
+  siteId: string,
+  collectionKey: string,
+  options: ListEntriesOptions = {},
+) {
+  const limit = options.limit ?? 50
+  const offset = options.offset ?? 0
+  const { where } = await listScope(siteId, collectionKey, options)
+
   const rows = await db
     .select({ entry, updatedByName: user.name })
     .from(entry)
@@ -197,12 +220,112 @@ export async function listEntries(
   return { items, total: totalRow?.count ?? 0 }
 }
 
+/**
+ * One page of list summaries (see `EntrySummary`), in the same order and with
+ * the same `total` as `listEntries`. Only the columns the summary needs are
+ * read: no origin baseline and no scheduled draft.
+ */
+export async function listEntrySummaries(
+  siteId: string,
+  collectionKey: string,
+  options: ListEntriesOptions = {},
+): Promise<{ items: EntrySummary[]; total: number }> {
+  const limit = options.limit ?? 50
+  const offset = options.offset ?? 0
+  const { col, languages, where } = await listScope(
+    siteId,
+    collectionKey,
+    options,
+  )
+
+  const rows = await db
+    .select({
+      id: entry.id,
+      slug: entry.slug,
+      status: entry.status,
+      draftData: entry.draftData,
+      publishedData: entry.publishedData,
+      publishedSlug: entry.publishedSlug,
+      createdAt: entry.createdAt,
+      updatedAt: entry.updatedAt,
+      scheduledAt: entry.scheduledAt,
+      publishedAt: entry.publishedAt,
+      updatedBy: entry.updatedBy,
+      updatedByName: user.name,
+    })
+    .from(entry)
+    .leftJoin(user, eq(entry.updatedBy, user.id))
+    .where(where)
+    .orderBy(desc(entry.updatedAt), entry.slug)
+    .limit(limit)
+    .offset(offset)
+  const items = rows.map((row) =>
+    toEntrySummary({
+      collectionKey: col.key,
+      fields: col.fields,
+      languages,
+      requiredLanguages: col.requiredLanguages,
+      row,
+    }),
+  )
+
+  const totalRow = (
+    await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(entry)
+      .where(where)
+  ).at(0)
+
+  return { items, total: totalRow?.count ?? 0 }
+}
+
+/**
+ * Entries per collection key of one site, in one grouped query. Counts every
+ * entry the collection holds, whatever its status, as `listEntries` does with
+ * no filter. `enabledOnly` leaves out switched-off collections (what a
+ * non-admin sees).
+ */
+export async function countEntriesByCollection(
+  siteId: string,
+  options: { enabledOnly?: boolean } = {},
+): Promise<Record<string, number>> {
+  const filters = [
+    eq(collection.siteId, siteId),
+    eq(collection.kind, 'collection'),
+  ]
+  if (options.enabledOnly) filters.push(eq(collection.enabled, true))
+  const rows = await db
+    .select({
+      key: collection.key,
+      count: sql<number>`count(${entry.id})::int`,
+    })
+    .from(collection)
+    .leftJoin(
+      entry,
+      and(eq(entry.collectionId, collection.id), eq(entry.siteId, siteId)),
+    )
+    .where(and(...filters))
+    .groupBy(collection.id, collection.key)
+  return Object.fromEntries(rows.map((row) => [row.key, row.count]))
+}
+
 export async function getEntry(id: string) {
+  return (await findEntryAndSection(id))?.entry ?? null
+}
+
+/**
+ * The entry, and whether its section is disabled, in the one entry⋈collection
+ * read. Access checks use this to decide NotFound for a hidden section without a
+ * second query (`access.ts`).
+ */
+export async function findEntryAndSection(id: string) {
   const row = (
     await db
       .select({
         entry,
         collectionKey: collection.key,
+        sectionKind: collection.kind,
+        sectionEnabled: collection.enabled,
       })
       .from(entry)
       .innerJoin(collection, eq(entry.collectionId, collection.id))
@@ -210,7 +333,10 @@ export async function getEntry(id: string) {
       .limit(1)
   ).at(0)
   if (!row) return null
-  return { ...row.entry, collectionKey: row.collectionKey }
+  return {
+    entry: { ...row.entry, collectionKey: row.collectionKey },
+    hiddenSection: row.sectionKind === 'global' && !row.sectionEnabled,
+  }
 }
 
 export async function createEntry(input: {
@@ -250,7 +376,8 @@ export async function createEntry(input: {
   await assertSlugAvailable(ctx.collection.id, slug)
 
   return db.transaction(async (tx) => {
-    await assetMutationLock(tx, ctx.site.organizationId)
+    await assetAttachLock(tx, ctx.site.organizationId)
+    await lockSlugClaims(tx, ctx.collection.id, claimedSlugs(slug, parsed.data))
     await assertUrlsAvailable(tx, ctx.collection.id, parsed.data, slug)
     const ownershipErrors = await validateContentOwnership(
       ctx.site.id,
@@ -294,6 +421,7 @@ export async function createEntry(input: {
         meta: { collectionKey: input.collectionKey, slug },
       },
       tx,
+      ctx.site,
     )
 
     return {
@@ -343,7 +471,12 @@ export async function updateDraft(
   }
 
   return db.transaction(async (tx) => {
-    await assetMutationLock(tx, ctx.site.organizationId)
+    await assetAttachLock(tx, ctx.site.organizationId)
+    await lockSlugClaims(
+      tx,
+      ctx.collection.id,
+      claimedSlugs(nextSlug ?? ctx.entry.slug, parsed.data),
+    )
     await assertUrlsAvailable(
       tx,
       ctx.collection.id,
@@ -392,6 +525,7 @@ export async function updateDraft(
         targetId: id,
       },
       tx,
+      ctx.site,
     )
 
     return {
@@ -485,13 +619,21 @@ export async function restoreRevision(
       .where(eq(site.id, initial.site.id))
       .for('update')
     const ctx = await loadEntryContext(entryId, tx)
-    await assetMutationLock(tx, ctx.site.organizationId)
+    await assetAttachLock(tx, ctx.site.organizationId)
     const prepared = prepareRevisionRestore(
       ctx.collection.fields,
       revision.data,
       ctx.entry.draftData,
     )
     const restoredData = prepared.data
+    await lockSlugClaims(
+      tx,
+      ctx.collection.id,
+      claimedSlugs(
+        resolveSlug(restoredData, ctx.collection.fields) ?? ctx.entry.slug,
+        restoredData,
+      ),
+    )
     const skippedFields = prepared.skippedFields
     // A revision saved while SEO was on keeps the current draft's SEO (none)
     // when the section has SEO off now, as a skipped field, not an error.
@@ -575,6 +717,7 @@ export async function restoreRevision(
         meta: { revisionId },
       },
       tx,
+      ctx.site,
     )
 
     return { ...updated, collectionKey: ctx.collection.key, skippedFields }
@@ -714,7 +857,7 @@ export async function publishEntry(
   }
 
   return db.transaction(async (tx) => {
-    await assetMutationLock(tx, ctx.site.organizationId)
+    await assetAttachLock(tx, ctx.site.organizationId)
     const ownershipErrors = await validateContentOwnership(
       ctx.site.id,
       ctx.site.organizationId,
@@ -764,6 +907,7 @@ export async function publishEntry(
         targetId: id,
       },
       tx,
+      ctx.site,
     )
 
     return {
@@ -806,14 +950,18 @@ export async function unpublishEntry(id: string, actorId: string) {
   }
 
   await writeRevision(id, ctx.entry.draftData, actorId, 'unpublish')
-  await audit({
-    organizationId: ctx.site.organizationId,
-    siteId: ctx.site.id,
-    actorId,
-    action: 'entry.unpublish',
-    targetType: 'entry',
-    targetId: id,
-  })
+  await audit(
+    {
+      organizationId: ctx.site.organizationId,
+      siteId: ctx.site.id,
+      actorId,
+      action: 'entry.unpublish',
+      targetType: 'entry',
+      targetId: id,
+    },
+    db,
+    ctx.site,
+  )
 
   return { ...updated, collectionKey: ctx.collection.key }
 }
@@ -840,14 +988,18 @@ export async function archiveEntry(id: string, actorId: string) {
   }
 
   await writeRevision(id, ctx.entry.draftData, actorId, 'archive')
-  await audit({
-    organizationId: ctx.site.organizationId,
-    siteId: ctx.site.id,
-    actorId,
-    action: 'entry.archive',
-    targetType: 'entry',
-    targetId: id,
-  })
+  await audit(
+    {
+      organizationId: ctx.site.organizationId,
+      siteId: ctx.site.id,
+      actorId,
+      action: 'entry.archive',
+      targetType: 'entry',
+      targetId: id,
+    },
+    db,
+    ctx.site,
+  )
 
   return { ...updated, collectionKey: ctx.collection.key }
 }
@@ -889,7 +1041,7 @@ export async function scheduleEntry(
   const draftData = normalizeEntryData(ctx, images.data)
 
   return db.transaction(async (tx) => {
-    await assetMutationLock(tx, ctx.site.organizationId)
+    await assetAttachLock(tx, ctx.site.organizationId)
     const ownershipErrors = await validateContentOwnership(
       ctx.site.id,
       ctx.site.organizationId,
@@ -938,6 +1090,7 @@ export async function scheduleEntry(
         meta: { scheduledAt, timezone },
       },
       tx,
+      ctx.site,
     )
 
     return {
@@ -982,14 +1135,18 @@ export async function cancelSchedule(id: string, actorId: string) {
   }
 
   await writeRevision(id, ctx.entry.draftData, actorId, 'cancel_schedule')
-  await audit({
-    organizationId: ctx.site.organizationId,
-    siteId: ctx.site.id,
-    actorId,
-    action: 'entry.cancel_schedule',
-    targetType: 'entry',
-    targetId: id,
-  })
+  await audit(
+    {
+      organizationId: ctx.site.organizationId,
+      siteId: ctx.site.id,
+      actorId,
+      action: 'entry.cancel_schedule',
+      targetType: 'entry',
+      targetId: id,
+    },
+    db,
+    ctx.site,
+  )
 
   return { ...updated, collectionKey: ctx.collection.key }
 }
@@ -1016,6 +1173,7 @@ export async function deleteEntry(id: string, actorId: string) {
         meta: { slug: ctx.entry.slug },
       },
       tx,
+      ctx.site,
     )
     await tx.delete(entry).where(eq(entry.id, id))
   })

@@ -6,11 +6,9 @@ import { SystemAvatar, UserAvatar } from '#/components/ui/avatar'
 import { Tag } from '#/components/ui/tag'
 import { RelativeTime, TimelineItem } from '#/components/ui/timeline'
 import { GLOBAL_ROUTE } from '#/features/globals/site-content'
-import { queryKeys } from '#/lib/content/query-keys'
-import { GLOBAL_ENTRY_SLUG } from '#/lib/globals'
-import type { EntryData } from '#/lib/types'
+import { ACTIVITY_ENTRIES_MAX_IDS } from '#/lib/content-limits'
 import { m } from '#/paraglide/messages'
-import { getEntryFn } from '#/server/fn/content'
+import { getActivityEntriesFn } from '#/server/fn/activity-entries'
 import { activityParts, entryTargetIds, viaMcpKey } from './activity-sentence'
 import type { ActivityLike } from './activity-sentence'
 
@@ -22,50 +20,37 @@ type EntryRef = {
   global: boolean
 }
 
-/** A readable title from entry data without its schema. */
-function titleOf(data: EntryData | null | undefined) {
-  if (!data) return null
-  for (const key of ['title', 'name', 'heading', 'label']) {
-    const value = data[key]
-    if (typeof value === 'string' && value.trim()) return value.trim()
-  }
-  return null
-}
-
 /**
- * Titles (and editor links) for the entries a page of activity mentions.
- * Shares the editor's `['entry', id]` cache, so opening one is instant and
- * the lookups are not repeated. Deleted entries fall back to their slug.
+ * Titles (and editor links) for the entries a page of activity mentions. One
+ * server call per chunk of ids, not one per entry. The result is cached under
+ * its own key: it is not the editor's entry record. Entries that are gone or
+ * not visible to the viewer are absent; the caller falls back to the slug.
  */
 export function useActivityEntries(rows: ReadonlyArray<ActivityLike>) {
-  const ids = entryTargetIds(rows)
+  const ids = [...entryTargetIds(rows)].sort()
+  const chunks: string[][] = []
+  for (let i = 0; i < ids.length; i += ACTIVITY_ENTRIES_MAX_IDS) {
+    chunks.push(ids.slice(i, i + ACTIVITY_ENTRIES_MAX_IDS))
+  }
   const results = useQueries({
-    queries: ids.map((id) => ({
-      queryKey: queryKeys.entry(id),
-      queryFn: () => getEntryFn({ data: { id } }),
+    queries: chunks.map((chunk) => ({
+      queryKey: ['activity-entries', chunk] as const,
+      queryFn: () => getActivityEntriesFn({ data: { ids: chunk } }),
       staleTime: 60_000,
       retry: false,
     })),
   })
   const map = new Map<string, EntryRef>()
-  ids.forEach((id, index) => {
-    const entry = results[index]?.data as
-      | {
-          siteId: string
-          collectionKey?: string
-          slug: string
-          draftData?: EntryData
-        }
-      | null
-      | undefined
-    if (!entry?.collectionKey) return
-    map.set(id, {
-      title: titleOf(entry.draftData),
-      collectionKey: entry.collectionKey,
-      siteId: entry.siteId,
-      global: entry.slug === GLOBAL_ENTRY_SLUG,
-    })
-  })
+  for (const result of results) {
+    for (const entry of result.data ?? []) {
+      map.set(entry.id, {
+        title: entry.title,
+        collectionKey: entry.collectionKey,
+        siteId: entry.siteId,
+        global: entry.global,
+      })
+    }
+  }
   return map
 }
 

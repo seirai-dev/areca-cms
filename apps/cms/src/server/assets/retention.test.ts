@@ -271,7 +271,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
             'SELECT pg_backend_pid() AS pid',
           )
           await connection.query(
-            'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+            'SELECT pg_advisory_xact_lock_shared(hashtextextended($1, 0))',
             [`assets:${ctx.org.id}`],
           )
           await connection.query(

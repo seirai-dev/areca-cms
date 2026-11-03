@@ -38,7 +38,8 @@ import {
   cancelSchedule,
   createEntry,
   deleteEntry,
-  listEntries,
+  countEntriesByCollection,
+  listEntrySummaries,
   listRevisions,
   publishEntry,
   restoreRevision,
@@ -181,13 +182,27 @@ export const listEntriesFn = createServerFn({ method: 'GET', ...entryFn })
   )
   .handler(async ({ data }) => {
     await requireSiteAccess(data.siteId)
-    return listEntries(data.siteId, data.collectionKey, {
+    return listEntrySummaries(data.siteId, data.collectionKey, {
       status: data.status,
       referenceTargets: data.referenceTargets,
       search: data.search,
       missingLanguage: data.missingLanguage,
       limit: data.limit,
       offset: data.offset,
+    })
+  })
+
+/**
+ * Entries per collection key, for the sidebar and the mobile bar. One query
+ * for the whole site. Non-admins get only the collections they can open
+ * (switched-off ones are hidden from them), the same set the sidebar lists.
+ */
+export const listEntryCountsFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ siteId: z.string().min(1).max(ID_MAX_LENGTH) }))
+  .handler(async ({ data }) => {
+    const { session } = await requireSiteAccess(data.siteId)
+    return countEntriesByCollection(data.siteId, {
+      enabledOnly: !session.user.isAgencyAdmin,
     })
   })
 

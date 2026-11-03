@@ -17,7 +17,6 @@ import {
 } from '@phosphor-icons/react'
 
 import { queryKeys } from '#/lib/content/query-keys'
-import { entryTitle } from '#/lib/content/utils'
 import { matchesSearch } from '#/lib/search-match'
 import { usePageCommands } from '#/components/shell/page-commands'
 import { useShell } from '#/components/shell/shell-context'
@@ -225,11 +224,7 @@ export function CommandPalette() {
           <CommandGroup heading={m.shell_palette_entries()}>
             {entryResults.map(({ entry, collection }) => {
               const Icon = collectionIcon(collection.key, collection.label)
-              const title = entryTitle(
-                entry.draftData,
-                collection.fields,
-                entry.slug,
-              )
+              const title = entry.title
               return (
                 <CommandItem
                   key={`${collection.key}-${entry.id}`}

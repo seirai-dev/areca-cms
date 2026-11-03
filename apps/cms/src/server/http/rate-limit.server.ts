@@ -1,5 +1,5 @@
 import { env } from '#/env'
-import { auth } from '#/lib/auth'
+import { loadSession } from '#/lib/session.server'
 import { createLogger } from '#/server/log'
 
 import type { RateLimitRule } from './rate-limit.ts'
@@ -13,7 +13,8 @@ export function enforceCmsRateLimit(request: Request) {
     store: rateLimitStore,
     trustProxy: env.RATE_LIMIT_TRUST_PROXY,
     resolveUserId: async (incoming) => {
-      const session = await auth.api.getSession({ headers: incoming.headers })
+      // Shares the request's session lookup with the server functions.
+      const session = await loadSession(incoming.headers)
       return session?.user.id ?? null
     },
     // Do not log the Redis error object: connection errors may contain a URL.

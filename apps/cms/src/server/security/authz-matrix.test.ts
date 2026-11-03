@@ -980,6 +980,51 @@ describe.skipIf(!runnable)(
   },
 )
 
+describe.skipIf(!runnable)(
+  'listEntryCountsFn: counts and switched-off collections',
+  () => {
+    let w: World
+    beforeAll(async () => {
+      w = await seedWorld()
+    }, 60_000)
+    afterAll(async () => {
+      await w?.destroy()
+    })
+
+    it('counts every entry of each collection, and hides a switched-off collection from editors only', async () => {
+      const { contentFns } = await fns()
+      const off = await w.fresh.collection('X')
+      await db
+        .update(collection)
+        .set({ enabled: false })
+        .where(eq(collection.id, off.id))
+      // The seeded entry of X, plus these two.
+      await w.fresh.entry('X')
+      await w.fresh.entry('X')
+
+      const editor = await callServerFn(
+        contentFns.listEntryCountsFn as never,
+        { siteId: w.X.site.id },
+        w.sessions.editorX,
+      )
+      expect(editor.error).toBeUndefined()
+      const editorCounts = editor.result as Record<string, number>
+      expect(editorCounts[w.X.collection.key]).toBe(3)
+      expect(editorCounts).not.toHaveProperty(off.key)
+
+      const admin = await callServerFn(
+        contentFns.listEntryCountsFn as never,
+        { siteId: w.X.site.id },
+        w.sessions.adminMfa,
+      )
+      expect(admin.error).toBeUndefined()
+      const adminCounts = admin.result as Record<string, number>
+      expect(adminCounts[w.X.collection.key]).toBe(3)
+      expect(adminCounts[off.key]).toBe(0)
+    })
+  },
+)
+
 async function fns() {
   return {
     adminFns: await import('#/server/fn/admin'),

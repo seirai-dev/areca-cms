@@ -15,7 +15,7 @@ import {
   bulkQueryKeys,
   invalidateQueryKeys,
 } from '#/features/dev-env/invalidate'
-import type { EntryData, EntryStatus } from '#/lib/types'
+import type { EntryStatus } from '#/lib/types'
 import {
   DUE_POLL_MS,
   nextPollStart,
@@ -30,18 +30,6 @@ import type { BulkEntryActionResult } from '#/server/fn/content'
 const PAGE_SIZE = 25
 
 export type StatusFilter = 'all' | EntryStatus
-
-export type EntryRow = {
-  id: string
-  slug: string
-  status: EntryStatus
-  draftData: EntryData
-  publishedData?: EntryData | null
-  updatedAt: string | Date
-  createdAt?: string | Date
-  scheduledAt: string | Date | null
-  updatedByName?: string | null
-}
 
 /** A page's rows. A malformed response (no `items`) reads as an empty page. */
 function pageItems<T>(page: { items?: T[] } | null | undefined): T[] {
@@ -114,9 +102,7 @@ export function useCollectionEntries({
   // A malformed response shows the list's normal empty or error state rather
   // than throwing to the route error boundary.
   const rows = React.useMemo(
-    () =>
-      (query.data?.pages.flatMap((page) => pageItems(page)) ??
-        []) as EntryRow[],
+    () => query.data?.pages.flatMap((page) => pageItems(page)) ?? [],
     [query.data],
   )
   const total = query.data?.pages[0]?.total

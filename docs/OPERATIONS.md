@@ -111,6 +111,15 @@ time, so they are correct across restarts and replicas.
 | `areca_ready`                                |          | 1 when readiness would return 200                                                |
 | `areca_process_uptime_seconds`               |          |                                                                                  |
 | `areca_process_memory_bytes`                 | `kind`   | rss, heap_used, heap_total, external                                             |
+| `areca_db_pool_connections`                  | `pool`, `state` | `state` is total or idle; pools are `main`, `mcp`, `factor_lock`          |
+| `areca_db_pool_waiting`                      | `pool`   | Requests waiting for a pooled connection; sustained values above 0 mean the pool is too small or queries are slow |
+| `areca_db_pool_max_connections`              | `pool`   | Configured maximum (`DB_POOL_MAX` for `main`)                                    |
+| `areca_event_loop_utilization`               |          | Share of time the event loop was busy since the previous scrape, 0 to 1          |
+| `areca_event_loop_delay_seconds`             | `stat`   | Event loop delay since the previous scrape: `p50`, `p99` or `max` (sampled every 20ms) |
+
+Pool and event-loop gauges read in-process counters, so they cost no database
+query. Each scrape resets the event-loop window; with a 15s interval, the
+numbers describe that interval.
 
 Scrape config:
 
@@ -226,6 +235,7 @@ expose a new error type to the UI, extend `AppError`
 | `DB_CONNECT_TIMEOUT_MS`    | `5000`  | Time to get a pooled connection                                              |
 | `DB_STATEMENT_TIMEOUT_MS`  | `15000` | Server-side `statement_timeout` for every statement                          |
 | `DB_IDLE_IN_TX_TIMEOUT_MS` | `30000` | `idle_in_transaction_session_timeout`; frees locks of abandoned transactions |
+| `DB_POOL_MAX` | `10` | Max connections in the main pool. Size it against PostgreSQL's `max_connections` across all CMS replicas. |
 
 `0` disables a timeout. Migrations run in a separate process
 (`scripts/docker-entrypoint.mjs`) and are not subject to these limits. Code that
@@ -406,6 +416,7 @@ entrypoint forwards the signal to the server process and waits for it to exit.
 | `DB_CONNECT_TIMEOUT_MS`           | `5000`  | See above                                                                                              |
 | `DB_STATEMENT_TIMEOUT_MS`         | `15000` | See above                                                                                              |
 | `DB_IDLE_IN_TX_TIMEOUT_MS`        | `30000` | See above                                                                                              |
+| `DB_POOL_MAX`                     | `10`    | Max connections in the main PostgreSQL pool of this process                                            |
 | `READINESS_TIMEOUT_MS`            | `3000`  | Per-check timeout for readiness                                                                        |
 | `READINESS_MAX_QUEUE_AGE_SECONDS` | `900`   | Oldest queued job age that fails readiness                                                             |
 | `READINESS_MAX_TICK_AGE_SECONDS`  | `300`   | Worker/scheduler tick age (and expired-lease age) that fails readiness                                 |
