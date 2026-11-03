@@ -1,0 +1,43 @@
+import { Plus } from '@phosphor-icons/react'
+import { m } from '@/paraglide/messages'
+import { Container, WithCode } from '../ui'
+
+const QA = [
+  [m.faq_q1, m.faq_a1],
+  [m.faq_q2, m.faq_a2],
+  [m.faq_q3, m.faq_a3],
+  [m.faq_q4, m.faq_a4],
+  [m.faq_q5, m.faq_a5],
+  [m.faq_q6, m.faq_a6],
+] as const
+
+export function Faq() {
+  return (
+    <section aria-labelledby="faq-title" className="py-24 sm:py-32">
+      <Container className="grid grid-cols-1 gap-10 lg:grid-cols-[1fr_2fr]">
+        <h2
+          id="faq-title"
+          className="text-[2.125rem] leading-[1.1] font-[620] tracking-[-0.035em] sm:text-title"
+        >
+          {m.faq_title()}
+        </h2>
+        <div className="divide-y divide-line border-y border-line">
+          {QA.map(([q, a]) => (
+            <details key={q()} className="group py-1">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-6 rounded-md py-4 text-body font-medium [&::-webkit-details-marker]:hidden">
+                {q()}
+                <Plus
+                  size={18}
+                  className="shrink-0 text-faint transition-transform duration-200 group-open:rotate-45"
+                />
+              </summary>
+              <p className="max-w-[40rem] pb-5 text-small text-muted">
+                <WithCode text={a()} terms={['areca pull']} />
+              </p>
+            </details>
+          ))}
+        </div>
+      </Container>
+    </section>
+  )
+}

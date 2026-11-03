@@ -1,0 +1,248 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/inter';
+@import '@fontsource/ibm-plex-mono/400.css';
+@import '@fontsource/ibm-plex-mono/500.css';
+
+/* Dark is the default. The `light` class on <html> switches the palette. */
+@custom-variant light (&:where(.light, .light *));
+
+:root {
+  --bg: #0e0e10;
+  --bg-raised: #161619;
+  --bg-sunken: #0a0a0c;
+  --line: #26262b;
+  --line-strong: #3a3a41;
+  --fg: #f5f5f7;
+  --fg-muted: #a1a1a8;
+  --fg-faint: #6e6e76;
+  --iris: #5856d6;
+  --iris-hover: #6967e0;
+  --iris-ink: #a5a3ff;
+  --iris-soft: rgb(88 86 214 / 0.16);
+  --frond: #7d7aff;
+  --live: #34c759;
+  --ready: #a5a3ff;
+  --shadow-frame:
+    0 1px 0 rgb(255 255 255 / 0.04) inset,
+    0 40px 120px -40px rgb(88 86 214 / 0.35);
+  color-scheme: dark;
+}
+
+.light {
+  --bg: #f6f6f4;
+  --bg-raised: #ffffff;
+  --bg-sunken: #eeeeea;
+  --line: #e2e2dd;
+  --line-strong: #cfcfc9;
+  --fg: #1d1d1f;
+  --fg-muted: #5e5e63;
+  --fg-faint: #8a8a8f;
+  --iris-ink: #4b49c4;
+  --iris-soft: rgb(88 86 214 / 0.1);
+  --frond: #5856d6;
+  --live: #1f9d45;
+  --ready: #5856d6;
+  --shadow-frame: 0 40px 100px -50px rgb(29 29 31 / 0.35);
+  color-scheme: light;
+}
+
+@theme {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-bg: var(--bg);
+  --color-raised: var(--bg-raised);
+  --color-sunken: var(--bg-sunken);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-muted: var(--fg-muted);
+  --color-faint: var(--fg-faint);
+  --color-iris: var(--iris);
+  --color-iris-hover: var(--iris-hover);
+  --color-iris-ink: var(--iris-ink);
+  --color-iris-soft: var(--iris-soft);
+  --color-frond: var(--frond);
+  --color-live: var(--live);
+
+  /* Type scale: a 1.25 ratio from 17px body, display sizes tightened. */
+  --text-display: 5rem;
+  --text-display--line-height: 1;
+  --text-display--letter-spacing: -0.045em;
+  --text-title: 2.75rem;
+  --text-title--line-height: 1.08;
+  --text-title--letter-spacing: -0.035em;
+  --text-lead: 1.25rem;
+  --text-lead--line-height: 1.6;
+  --text-body: 1.0625rem;
+  --text-body--line-height: 1.65;
+  --text-small: 0.9375rem;
+  --text-small--line-height: 1.55;
+  --text-micro: 0.8125rem;
+  --text-micro--line-height: 1.4;
+
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@layer base {
+  html {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    font-feature-settings: 'cv11', 'ss01', 'ss03';
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
+    /* iOS Safari reads overflow from the root element, not body. */
+    overflow-x: clip;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+  }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    /* Nothing on the page may cause sideways scrolling. */
+    overflow-x: clip;
+  }
+  ::selection {
+    background: var(--iris);
+    color: #fff;
+  }
+  :focus-visible {
+    outline: 2px solid var(--iris-ink);
+    outline-offset: 3px;
+    border-radius: 6px;
+  }
+  code,
+  kbd,
+  pre {
+    font-family: var(--font-mono);
+  }
+}
+
+/* Theme-paired screenshots: show the one that matches the page. */
+.light .only-dark,
+html:not(.light) .only-light {
+  display: none;
+}
+
+/* Inline code in prose, like `areca pull`. */
+.code-inline {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  padding: 0.12em 0.4em;
+  border-radius: 6px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+/* Syntax colours for the small static code samples. */
+.tok-k {
+  color: #c792ea;
+}
+.tok-s {
+  color: #a5d6a7;
+}
+.tok-f {
+  color: var(--iris-ink);
+}
+.tok-c {
+  color: var(--fg-faint);
+}
+.light .tok-k {
+  color: #8e3fbf;
+}
+.light .tok-s {
+  color: #2f7d32;
+}
+
+/* Flow diagrams. Animations only run while their container is on screen. */
+.flow-dash {
+  stroke-dashoffset: 0;
+  animation: flow-dash 2.2s linear infinite;
+}
+.flow-meter {
+  animation: flow-meter 0.9s ease-in-out infinite alternate;
+}
+.flow-build {
+  stroke-dashoffset: 1.25;
+  animation: flow-build 5s ease-in-out infinite;
+}
+.flow-build-label {
+  animation: flow-build-label 5s ease-in-out infinite;
+}
+.flow-zzz {
+  animation: flow-zzz 5s ease-in-out infinite;
+}
+[data-active='false'] .flow-dash,
+[data-active='false'] .flow-meter,
+[data-active='false'] .flow-build,
+[data-active='false'] .flow-build-label,
+[data-active='false'] .flow-zzz {
+  animation-play-state: paused;
+}
+@keyframes flow-dash {
+  to {
+    stroke-dashoffset: -146;
+  }
+}
+@keyframes flow-meter {
+  from {
+    transform: scaleY(0.35);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+@keyframes flow-build {
+  0%,
+  62% {
+    stroke-dashoffset: 1.25;
+  }
+  80% {
+    stroke-dashoffset: 0;
+  }
+  92%,
+  100% {
+    stroke-dashoffset: -1;
+  }
+}
+@keyframes flow-build-label {
+  0%,
+  58%,
+  100% {
+    opacity: 0.7;
+  }
+  70%,
+  90% {
+    opacity: 1;
+    fill: var(--iris-ink);
+  }
+}
+@keyframes flow-zzz {
+  0%,
+  55%,
+  100% {
+    opacity: 0.8;
+  }
+  65%,
+  92% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .flow-dash,
+  .flow-meter,
+  .flow-build,
+  .flow-build-label,
+  .flow-zzz {
+    animation: none;
+  }
+  .flow-build {
+    stroke-dashoffset: 0;
+  }
+}
