@@ -420,6 +420,13 @@ jobs:
         run: pnpm --filter @areca/cms exec paraglide-js compile --project ./project.inlang --outdir ./src/paraglide
       - name: CMS lint
         run: pnpm --filter @areca/cms lint
+      - name: Benchmark syntax and offline workload checks
+        run: |
+          for file in apps/cms/benchmarks/*.js apps/cms/benchmarks/*.mjs apps/cms/benchmarks/*.cjs; do
+            node --check "$file"
+          done
+          node apps/cms/benchmarks/build.mjs
+          node --test apps/cms/benchmarks/workload.test.mjs
       - name: CMS format check (non-mutating)
         run: pnpm --filter @areca/cms check
       # The pinned binary needs no license key, unlike gitleaks-action for orgs.
