@@ -19,6 +19,10 @@ present even when no Dokploy account has been configured yet.
 | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` | S3-compatible object storage for uploaded assets and branding. |
 | `DOKPLOY_CREDENTIALS_ENCRYPTION_KEY` | Base64-encoded 32-byte key that encrypts organization Dokploy credentials in PostgreSQL. |
 
+`S3_ENDPOINT` should be the storage service's internal address, such as
+`http://rustfs:9000` on the Docker network, not its public HTTPS URL. The CMS
+proxies asset bytes itself, so browsers never contact the storage host.
+
 Generate independent secrets rather than reusing example values:
 
 ```sh
@@ -166,7 +170,7 @@ their hash is stored, so the link is never kept in plain text.
 
 | Variable | Default | Use |
 | --- | --- | --- |
-| `WORKER_ENABLED` | `true` | Runs publication workers and schedule processing in this CMS process. Set false only during maintenance or when publication and scheduled publishing are intentionally paused. |
+| `WORKER_ENABLED` | `true` | Runs publication workers and schedule processing in this CMS process. Set false on web processes when a separate worker process (same image, `WORKER_ENABLED=true`, no domain) runs the loops, see [operations](OPERATIONS.md#separate-worker-process). Otherwise false only during maintenance or when publication and scheduled publishing are intentionally paused. |
 | `WORKER_CONCURRENCY` | `2` | Maximum concurrent build jobs per process, from 1 to 16. |
 | `WORKER_DRAIN_TIMEOUT_MS` | `8000` | How long shutdown waits for active jobs. Keep below the container stop grace period. |
 | `DOKPLOY_DEV_FALLBACK_ENABLED` | `false` | Allows the legacy process-wide `DOKPLOY_URL` and `DOKPLOY_API_KEY` pair in non-production development only. Production ignores this fallback. |
@@ -193,6 +197,9 @@ documented in [operations](OPERATIONS.md). Common optional settings are:
 | `DB_CONNECT_TIMEOUT_MS` | `5000` | PostgreSQL connection wait limit; `0` disables it. |
 | `DB_STATEMENT_TIMEOUT_MS` | `15000` | Per-query PostgreSQL statement deadline; `0` disables it. |
 | `DB_IDLE_IN_TX_TIMEOUT_MS` | `30000` | Closes transactions idle while holding a connection or lock; `0` disables it. |
+| `DB_POOL_MAX` | `10` | Max PostgreSQL connections in this process's main pool. Each process also opens up to 4 each for MCP grants and factor locks. |
+| `SESSION_COOKIE_CACHE_SECONDS` | `60` | Seconds a signed session cookie is trusted for read (GET) requests before the session is read from the database again. Writes always check the database. Signing out elsewhere, a deleted session or a block can take this long to stop reads from a browser that already holds the cookie. `0` reads the session on every request. Max 300. |
+| `HTTP_KEEP_ALIVE_TIMEOUT_MS` | `120000` | How long the server keeps an idle keep-alive connection open. Must be longer than the reverse proxy's idle timeout (Traefik: 90 s), otherwise the proxy can reuse a connection the server is closing and answer 502. |
 | `READINESS_TIMEOUT_MS` | `3000` | Per-dependency readiness deadline. |
 | `READINESS_MAX_QUEUE_AGE_SECONDS` | `900` | Oldest queued build age before readiness fails. |
 | `READINESS_MAX_TICK_AGE_SECONDS` | `300` | Worker/scheduler heartbeat and stale-lease age before readiness fails. |

@@ -8,3 +8,7 @@ project.inlang
 .output
 test-results
 playwright-report
+# Private benchmark captures and generated historical artifacts.
+benchmarks/.local
+benchmarks/results/**/*.html
+benchmarks/results/**/*.json

@@ -12,6 +12,7 @@ import {
   updateDraft,
 } from './entries.ts'
 import { ValidationError } from './errors.ts'
+import { lockSlugClaims } from './locale-validation.ts'
 import {
   createTestCollection,
   createTestSite,
@@ -273,8 +274,9 @@ describe.skipIf(!hasDb)('entry lifecycle with languages', () => {
         .limit(1)
       const shared = `shared-${ctx.suffix}`
 
-      // Another save (or a push) holds the lock and takes the URL until it commits.
+      // Another save (or a push) holds the attach lock and the slug claim, and takes the URL until it commits.
       const other = await holdEntryLock(ctx.site.organizationId, async (tx) => {
+        await lockSlugClaims(tx, owner.collectionId, [shared])
         await tx.insert(entry).values({
           siteId: ctx.site.id,
           collectionId: owner.collectionId,

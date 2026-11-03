@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+html,body{margin:0;background:none;color:var(--foreground);font-family:var(--font-sans)}
+#journey{width:100%;text-align:center}h3{font:inherit;font-weight:500;margin:0 0 12px}.node{border:1px solid var(--border);padding:10px;border-radius:var(--radius)}.start{max-width:410px;margin:auto}.arrow{padding:4px;color:var(--muted-foreground)}.branches{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.label{font-weight:500;margin-bottom:7px}.detail{color:var(--muted-foreground);margin:5px 0}.loop{margin-top:10px;padding:8px;border-top:1px solid var(--border)}@media(max-width:600px){.branches{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style></head><body><main id="journey" aria-label="Benchmark user journey with randomized choices and pauses">
+<h3>One benchmark user — repeated throughout the run</h3>
+<div class="node start">Already signed in → open collection page<br><span class="detail">Load account, collections, counts and entries</span></div>
+<div class="arrow" aria-hidden="true">↓</div>
+<div class="node start">Wait 2–9 seconds → choose next action</div>
+<div class="arrow" aria-hidden="true">↓</div>
+<div class="branches">
+<div class="node"><div class="label">Browse</div><div>Search · filter · next page · switch collection</div></div>
+<div class="node"><div class="label">Edit / create</div><div>Read entry → edit 5–20 s → fetch + save</div><div class="detail">New entry: 6–22 s<br>Owners/admins: lifecycle actions</div></div>
+<div class="node"><div class="label">Media</div><div>Browse → optionally upload → alt text → download</div><div class="detail">Owners/admins may delete</div></div>
+<div class="node"><div class="label">Admin only</div><div>Browse clients/sites → optionally create client + site + collection</div><div class="detail">5–15 s preparation; max 2 sets per admin</div></div>
+</div>
+<div class="loop">↻ Remain on that screen or return to collections; wait 2–9 s before the next choice</div>
+</main></body></html>

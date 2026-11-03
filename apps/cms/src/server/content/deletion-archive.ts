@@ -8,7 +8,7 @@ import {
   publication,
   site,
 } from '#/db/schema'
-import { assetMutationLock } from '#/server/assets/usage'
+import { assetAttachLock } from '#/server/assets/usage'
 import type { AssetTransaction } from '#/server/assets/usage'
 
 /** Preserve deleted authoring versions until the organization itself is deleted. */
@@ -18,7 +18,7 @@ export async function archiveDeletedContent(
   entityType: 'entry' | 'collection' | 'site',
   entityId: string,
 ) {
-  await assetMutationLock(tx, organizationId)
+  await assetAttachLock(tx, organizationId)
   const entries = await tx
     .select()
     .from(entry)

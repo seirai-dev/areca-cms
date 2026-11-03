@@ -1,7 +1,7 @@
 /**
  * Language coverage of one entry, for the list chips (one per site language).
- * Computed on the draft the list already returns, with `localeStatus`, so the
- * list needs no extra data. See docs/design/content-languages.md.
+ * The server computes it for each list summary (`listEntrySummaries`), from
+ * the draft it reads, with `localeStatus`. See docs/design/content-languages.md.
  */
 import { localeStatus } from '#/lib/content-locale'
 import type { EntryData, Field, SiteLanguages } from '#/lib/types'

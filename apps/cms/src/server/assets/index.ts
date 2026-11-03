@@ -18,7 +18,7 @@ import { m } from '#/paraglide/messages'
 import { NotFoundError } from '#/server/content/errors'
 import { AppError } from '#/server/http/app-error'
 
-import { assetMutationLock, referencesAsset } from './usage'
+import { assetAttachLock, assetExclusiveLock, referencesAsset } from './usage'
 import { AssetValidationError } from './errors'
 import { validateImageBytes } from './image-validation'
 import { missingAltFilter } from './missing-alt'
@@ -120,7 +120,7 @@ export async function uploadAsset(input: {
   try {
     await storage.put(storageKey, input.file.buffer, mimeType)
     return await db.transaction(async (tx) => {
-      await assetMutationLock(tx, input.organizationId)
+      await assetAttachLock(tx, input.organizationId)
       const row = (
         await tx
           .insert(asset)
@@ -339,7 +339,7 @@ export async function assetUsage(
   organizationId: string,
 ): Promise<number> {
   return db.transaction(async (tx) => {
-    await assetMutationLock(tx, organizationId)
+    await assetExclusiveLock(tx, organizationId)
     const existing = (
       await tx
         .select()
@@ -356,7 +356,7 @@ export async function deleteAsset(
   organizationId: string,
 ): Promise<void> {
   await db.transaction(async (tx) => {
-    await assetMutationLock(tx, organizationId)
+    await assetExclusiveLock(tx, organizationId)
     const existing = (
       await tx
         .select()

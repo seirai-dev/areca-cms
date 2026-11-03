@@ -4,6 +4,7 @@ import { Pool } from 'pg'
 import { env } from '#/env'
 import { createLogger } from '#/server/log'
 
+import { registerPool } from './pool-registry.ts'
 import * as schema from './schema.ts'
 
 const log = createLogger('db')
@@ -20,10 +21,12 @@ const log = createLogger('db')
  */
 export const pool = new Pool({
   connectionString: env.DATABASE_URL,
+  max: env.DB_POOL_MAX,
   connectionTimeoutMillis: env.DB_CONNECT_TIMEOUT_MS,
   statement_timeout: env.DB_STATEMENT_TIMEOUT_MS,
   idle_in_transaction_session_timeout: env.DB_IDLE_IN_TX_TIMEOUT_MS,
 })
+registerPool('main', pool)
 
 // An idle client erroring (server restart, network drop) emits on the pool;
 // without a listener Node would crash the process.

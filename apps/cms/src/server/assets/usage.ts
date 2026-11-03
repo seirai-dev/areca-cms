@@ -5,13 +5,47 @@ export type AssetTransaction = Parameters<
   Parameters<typeof db.transaction>[0]
 >[0]
 
-/** Serialize attaching retained content and deleting assets within an organization. */
-export async function assetMutationLock(
+/*
+ * Asset reference invariant (per organization): a committed reference to an
+ * asset is only written by a transaction that validated the asset as present
+ * under the lock, and an asset is only deleted when no committed content
+ * references it. Both sides use the same advisory key, `assets:<orgId>`:
+ *
+ * - Attachers write references (entry saves, publish, schedule, restore,
+ *   archiving deleted content, uploads). They take `assetAttachLock` (SHARED),
+ *   so they run concurrently with each other and only wait for deleters.
+ * - Deleters and reference checks (asset delete, asset usage, organization
+ *   delete, development-environment copy/push/refresh/delete) take
+ *   `assetExclusiveLock` (EXCLUSIVE), which excludes every attacher until
+ *   COMMIT. Deleting a reference-checked asset therefore never races a save
+ *   that attaches it.
+ *
+ * Attachers do not need to exclude each other: they only add references and
+ * validate existence, and nothing derives state from the set of references.
+ * Take the lock before validating asset existence or writing references; take
+ * it before any entry row write, so lock order matches the dev-environment
+ * ordering comments.
+ */
+const assetLockKey = (organizationId: string) =>
+  sql`hashtextextended(${`assets:${organizationId}`}, 0)`
+
+/** Shared: taken by every transaction that attaches asset references. */
+export async function assetAttachLock(
   tx: AssetTransaction,
   organizationId: string,
 ) {
   await tx.execute(
-    sql`select pg_advisory_xact_lock(hashtextextended(${`assets:${organizationId}`}, 0))`,
+    sql`select pg_advisory_xact_lock_shared(${assetLockKey(organizationId)})`,
+  )
+}
+
+/** Exclusive: taken by asset deletion, reference checks and bulk dev-env writes. */
+export async function assetExclusiveLock(
+  tx: AssetTransaction,
+  organizationId: string,
+) {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(${assetLockKey(organizationId)})`,
   )
 }
 

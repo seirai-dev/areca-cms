@@ -47,7 +47,7 @@ import type { MeSite } from '#/lib/site-nav'
 import type { Field } from '#/lib/types'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
-import { listCollectionsFn, listEntriesFn } from '#/server/fn/content'
+import { listCollectionsFn, listEntryCountsFn } from '#/server/fn/content'
 
 export type SidebarCollection = {
   id: string
@@ -68,6 +68,7 @@ export function useSiteCollections(
     queryFn: () => listCollectionsFn({ data: { siteId: siteId! } }),
     enabled: Boolean(siteId),
     staleTime: 60_000,
+    refetchOnWindowFocus: false,
   })
   const all = (query.data ?? []) as SidebarCollection[]
   const visible = isAdmin ? all : all.filter((item) => item.enabled)
@@ -75,28 +76,18 @@ export function useSiteCollections(
     (a, b) =>
       Number(b.enabled) - Number(a.enabled) || a.label.localeCompare(b.label),
   )
-  // Entry counts share the Content screen's cached count query.
-  const counts = useQueries({
-    queries: sorted.map((collection) => ({
-      queryKey: queryKeys.entries(siteId ?? '', collection.key, {
-        status: 'count',
-      }),
-      queryFn: () =>
-        listEntriesFn({
-          data: {
-            siteId: siteId!,
-            collectionKey: collection.key,
-            limit: 1,
-            offset: 0,
-          },
-        }),
-      enabled: Boolean(siteId),
-      staleTime: 60_000,
-    })),
+  // One request counts every collection of the site. The server applies the
+  // same visibility rule as `visible` above.
+  const countsQuery = useQuery({
+    queryKey: queryKeys.entryCounts(siteId ?? ''),
+    queryFn: () => listEntryCountsFn({ data: { siteId: siteId! } }),
+    enabled: Boolean(siteId),
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   })
   return {
     collections: sorted,
-    counts: counts.map((item) => item.data?.total),
+    counts: sorted.map((collection) => countsQuery.data?.[collection.key]),
     isLoading: query.isLoading,
     isError: query.isError,
     error: query.error,

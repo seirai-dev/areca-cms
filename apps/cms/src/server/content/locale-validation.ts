@@ -130,6 +130,39 @@ function localeSlugs(data: EntryData): [string, string][] {
   })
 }
 
+/** Every slug value a save stores in its collection: the main slug and each language slug. */
+export function claimedSlugs(
+  mainSlug: string | null | undefined,
+  data: EntryData,
+): string[] {
+  return [
+    ...(mainSlug ? [mainSlug] : []),
+    ...localeSlugs(data).map(([, slug]) => slug),
+  ]
+}
+
+/**
+ * Slug uniqueness is a check-then-write among saves, so a save takes an
+ * exclusive per-value lock on each slug it stores before checking. Two saves
+ * serialize only when they claim the same value; the uniqueness check that
+ * follows sees the other's commit. Keys are taken in sorted order, so
+ * concurrent claimers cannot wait on each other in a cycle. Callers hold the
+ * shared asset attach lock first (server/assets/usage.ts).
+ */
+export async function lockSlugClaims(
+  tx: Pick<typeof db, 'execute'>,
+  collectionId: string,
+  slugs: readonly string[],
+) {
+  const keys = [...new Set(slugs.map((slug) => `slug:${collectionId}:${slug}`))]
+  keys.sort()
+  for (const key of keys) {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${key}, 0))`,
+    )
+  }
+}
+
 /**
  * Per-language slug rules. The format is the main slug's format. A value must
  * be unique in its collection for its language: no other entry may use it as

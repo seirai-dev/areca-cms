@@ -1,0 +1,1560 @@
+{
+  "generatedAt": "2026-11-03T13:15:00.286Z",
+  "environment": {
+    "image": "ghcr.io/ekozf/areca-cms-app-3vywdg:latest",
+    "generator": {
+      "cpu": "13th Gen Intel(R) Core(TM) i5-13600KF",
+      "cores": 20,
+      "totalMemory": 51305025536
+    },
+    "vcpus": 2,
+    "memoryGiB": 3.7252731323242188
+  },
+  "totalMeasuredRequests": 59773,
+  "reports": [
+    {
+      "target": 500,
+      "requests": 59773,
+      "rps": 99.62166666666667,
+      "failureRate": 0,
+      "samples": 59773,
+      "p95": 1487.13756,
+      "p99": 2158.3476159999996,
+      "max": 4494.7373,
+      "firstMeasuredRequest": "2026-11-03T13:51:48.0692908+01:00",
+      "lastMeasuredRequest": "2026-11-03T14:01:48.0552745+01:00",
+      "firstEvents": {
+        "over500": {
+          "at": "2026-11-03T13:51:48.0698057+01:00",
+          "operation": "updateDraftFn",
+          "ms": 1306.1086
+        },
+        "over1000": {
+          "at": "2026-11-03T13:51:48.0698057+01:00",
+          "operation": "updateDraftFn",
+          "ms": 1306.1086
+        }
+      },
+      "failureKinds": {},
+      "requestThresholdsPass": false,
+      "journeyFailureRate": 0,
+      "operations": {
+        "getEntryFn": {
+          "samples": 13323,
+          "p95": 733.031,
+          "p99": 1179.4279340000019,
+          "max": 2044.5686,
+          "requests": 13323,
+          "failureRate": 0
+        },
+        "updateDraftFn": {
+          "samples": 8623,
+          "p95": 1817.3172399999996,
+          "p99": 2121.108226000004,
+          "max": 2700.5982,
+          "requests": 8623,
+          "failureRate": 0
+        },
+        "listRevisionsFn": {
+          "samples": 2107,
+          "p95": 1526.7076799999993,
+          "p99": 1964.1795900000006,
+          "max": 2673.1136,
+          "requests": 2107,
+          "failureRate": 0
+        },
+        "listCollectionsFn": {
+          "samples": 4596,
+          "p95": 834.0939249999999,
+          "p99": 1002.4340600000003,
+          "max": 1795.4281,
+          "requests": 4596,
+          "failureRate": 0
+        },
+        "getPreviewUrlFn": {
+          "samples": 3399,
+          "p95": 535.0024999999999,
+          "p99": 676.132042,
+          "max": 1172.1187,
+          "requests": 3399,
+          "failureRate": 0
+        },
+        "listEntriesFn": {
+          "samples": 12168,
+          "p95": 1243.3007249999998,
+          "p99": 1665.776186,
+          "max": 2669.6973,
+          "requests": 12168,
+          "failureRate": 0
+        },
+        "getMeFn": {
+          "samples": 1682,
+          "p95": 900.90963,
+          "p99": 1322.9830170000005,
+          "max": 2042.8198,
+          "requests": 1682,
+          "failureRate": 0
+        },
+        "publishEntryFn": {
+          "samples": 191,
+          "p95": 2123.8978500000003,
+          "p99": 2327.91911,
+          "max": 2650.3873,
+          "requests": 191,
+          "failureRate": 0
+        },
+        "assetFile": {
+          "samples": 1016,
+          "p95": 598.30395,
+          "p99": 707.3174450000001,
+          "max": 872.8791,
+          "requests": 1016,
+          "failureRate": 0
+        },
+        "createEntryFn": {
+          "samples": 1244,
+          "p95": 2495.6584299999995,
+          "p99": 2952.5655859999997,
+          "max": 3290.4254,
+          "requests": 1244,
+          "failureRate": 0
+        },
+        "listAssetsFn": {
+          "samples": 4174,
+          "p95": 908.75781,
+          "p99": 1221.1321129999942,
+          "max": 2043.1293,
+          "requests": 4174,
+          "failureRate": 0
+        },
+        "listInboundReferencesFn": {
+          "samples": 1435,
+          "p95": 1176.5150899999999,
+          "p99": 1434.8811840000012,
+          "max": 2292.3644,
+          "requests": 1435,
+          "failureRate": 0
+        },
+        "listEntryCountsFn": {
+          "samples": 1201,
+          "p95": 839.9846,
+          "p99": 1041.949,
+          "max": 1647.1055,
+          "requests": 1201,
+          "failureRate": 0
+        },
+        "upsertCollectionFn": {
+          "samples": 28,
+          "p95": 2390.8068749999998,
+          "p99": 2752.9462470000003,
+          "max": 2858.4984,
+          "requests": 28,
+          "failureRate": 0
+        },
+        "unpublishEntryFn": {
+          "samples": 191,
+          "p95": 2417.2279,
+          "p99": 3108.16813,
+          "max": 3377.2073,
+          "requests": 191,
+          "failureRate": 0
+        },
+        "listGlobalsFn": {
+          "samples": 1201,
+          "p95": 815.1732,
+          "p99": 1026.2704,
+          "max": 1744.8634,
+          "requests": 1201,
+          "failureRate": 0
+        },
+        "scheduleEntryFn": {
+          "samples": 183,
+          "p95": 1989.39849,
+          "p99": 2468.085018000001,
+          "max": 2701.8424,
+          "requests": 183,
+          "failureRate": 0
+        },
+        "pageDocument": {
+          "samples": 234,
+          "p95": 1381.6964199999995,
+          "p99": 2088.4160439999973,
+          "max": 2540.4522,
+          "requests": 234,
+          "failureRate": 0
+        },
+        "uploadAsset": {
+          "samples": 1014,
+          "p95": 2664.7593699999998,
+          "p99": 3008.507415,
+          "max": 3456.6596,
+          "requests": 1014,
+          "failureRate": 0
+        },
+        "updateAssetFn": {
+          "samples": 1014,
+          "p95": 2142.503854999999,
+          "p99": 2609.3418500000002,
+          "max": 2828.8751,
+          "requests": 1014,
+          "failureRate": 0
+        },
+        "cancelScheduleFn": {
+          "samples": 184,
+          "p95": 2454.1089949999996,
+          "p99": 2925.8002569999985,
+          "max": 3101.27,
+          "requests": 184,
+          "failureRate": 0
+        },
+        "createOrganizationFn": {
+          "samples": 27,
+          "p95": 1999.29722,
+          "p99": 2270.6390039999997,
+          "max": 2348.9587,
+          "requests": 27,
+          "failureRate": 0
+        },
+        "createSiteFn": {
+          "samples": 27,
+          "p95": 2471.92573,
+          "p99": 2721.8744279999996,
+          "max": 2789.7701,
+          "requests": 27,
+          "failureRate": 0
+        },
+        "archiveEntryFn": {
+          "samples": 185,
+          "p95": 2295.7049199999997,
+          "p99": 3005.0011879999993,
+          "max": 3192.7469,
+          "requests": 185,
+          "failureRate": 0
+        },
+        "deleteEntryFn": {
+          "samples": 65,
+          "p95": 2189.4867799999997,
+          "p99": 2494.4652439999995,
+          "max": 2642.0895,
+          "requests": 65,
+          "failureRate": 0
+        },
+        "listOrganizationsFn": {
+          "samples": 88,
+          "p95": 1057.1815049999998,
+          "p99": 1381.7549259999998,
+          "max": 1435.9213,
+          "requests": 88,
+          "failureRate": 0
+        },
+        "listSitesFn": {
+          "samples": 88,
+          "p95": 932.5294849999999,
+          "p99": 1083.8413379999997,
+          "max": 1140.7938,
+          "requests": 88,
+          "failureRate": 0
+        },
+        "deleteAssetFn": {
+          "samples": 85,
+          "p95": 3910.24726,
+          "p99": 4476.718712,
+          "max": 4494.7373,
+          "requests": 85,
+          "failureRate": 0
+        }
+      },
+      "minutes": {
+        "2026-11-03T12:51": {
+          "samples": 1151,
+          "p95": 1419.18385,
+          "p99": 1766.36065,
+          "max": 2378.9492,
+          "requests": 1151,
+          "failureRate": 0
+        },
+        "2026-11-03T12:52": {
+          "samples": 5807,
+          "p95": 1594.0713599999995,
+          "p99": 2186.0606939999952,
+          "max": 3891.9423,
+          "requests": 5807,
+          "failureRate": 0
+        },
+        "2026-11-03T12:53": {
+          "samples": 5974,
+          "p95": 1631.0981599999986,
+          "p99": 2248.119176,
+          "max": 3433.7022,
+          "requests": 5974,
+          "failureRate": 0
+        },
+        "2026-11-03T12:54": {
+          "samples": 5984,
+          "p95": 1565.0630849999993,
+          "p99": 2202.555349,
+          "max": 4328.1006,
+          "requests": 5984,
+          "failureRate": 0
+        },
+        "2026-11-03T12:55": {
+          "samples": 5928,
+          "p95": 1506.9620599999996,
+          "p99": 2114.8165029999977,
+          "max": 2991.7078,
+          "requests": 5928,
+          "failureRate": 0
+        },
+        "2026-11-03T12:56": {
+          "samples": 6128,
+          "p95": 1352.122525,
+          "p99": 2046.443359999998,
+          "max": 3912.1016,
+          "requests": 6128,
+          "failureRate": 0
+        },
+        "2026-11-03T12:57": {
+          "samples": 5828,
+          "p95": 1643.0226899999989,
+          "p99": 2295.9162059999962,
+          "max": 3937.0133,
+          "requests": 5828,
+          "failureRate": 0
+        },
+        "2026-11-03T12:58": {
+          "samples": 6010,
+          "p95": 1854.0705100000002,
+          "p99": 2579.847029999995,
+          "max": 4494.7373,
+          "requests": 6010,
+          "failureRate": 0
+        },
+        "2026-11-03T12:59": {
+          "samples": 6231,
+          "p95": 847.43535,
+          "p99": 1227.3306899999998,
+          "max": 2385.5225,
+          "requests": 6231,
+          "failureRate": 0
+        },
+        "2026-11-03T13:00": {
+          "samples": 6008,
+          "p95": 1234.8979549999997,
+          "p99": 2101.4418720000003,
+          "max": 3548.7331,
+          "requests": 6008,
+          "failureRate": 0
+        },
+        "2026-11-03T13:01": {
+          "samples": 4724,
+          "p95": 1189.591954999998,
+          "p99": 1655.5033779999958,
+          "max": 2799.9987,
+          "requests": 4724,
+          "failureRate": 0
+        }
+      },
+      "resources": {
+        "scope": "measured request window",
+        "samples": 120,
+        "minAvailableMB": 1827.53125,
+        "maxCpuPercent": 96.18473895582329,
+        "minDiskFreeGB": 27.013816833496094,
+        "oom": false,
+        "components": {
+          "cms": {
+            "samples": 120,
+            "maxCpuPercent": 137.71,
+            "maxMemoryMiB": 329.8,
+            "avgCpuPercent": 107.11741666666668
+          },
+          "worker": {
+            "samples": 120,
+            "maxCpuPercent": 38.42,
+            "maxMemoryMiB": 148.6,
+            "avgCpuPercent": 1.2311666666666656
+          },
+          "rustfs": {
+            "samples": 120,
+            "maxCpuPercent": 46.7,
+            "maxMemoryMiB": 353.4,
+            "avgCpuPercent": 7.6596666666666655
+          },
+          "redis": {
+            "samples": 120,
+            "maxCpuPercent": 0.68,
+            "maxMemoryMiB": 12.19,
+            "avgCpuPercent": 0.5024166666666666
+          },
+          "postgres": {
+            "samples": 120,
+            "maxCpuPercent": 61.03,
+            "maxMemoryMiB": 212.9,
+            "avgCpuPercent": 39.07466666666666
+          },
+          "proxy": {
+            "samples": 120,
+            "maxCpuPercent": 24.96,
+            "maxMemoryMiB": 472.1,
+            "avgCpuPercent": 15.470500000000003
+          }
+        },
+        "postgres": {
+          "maxConnections": 20,
+          "maxActive": 3,
+          "maxLockWaiters": 0,
+          "maxOldestQuerySeconds": 0.064634
+        },
+        "postgresCounters": {
+          "commits": 165173,
+          "rollbacks": 0,
+          "deadlocks": 0,
+          "temp_bytes": 0,
+          "blocks_read": 0,
+          "blocks_hit": 4909577
+        },
+        "cpu_percent": {
+          "avg": 89.38392938427714,
+          "max": 96.18473895582329
+        },
+        "cpu_steal_percent": {
+          "avg": 0.021825423168440123,
+          "max": 0.30120481927710846
+        },
+        "cpu_iowait_percent": {
+          "avg": 0.20091483247597525,
+          "max": 0.4044489383215369
+        },
+        "appMetrics": {
+          "areca_build_jobs{status=\"queued\"}": {
+            "samples": 40,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "min": 0,
+            "avg": 0
+          },
+          "areca_build_jobs{status=\"building\"}": {
+            "samples": 40,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "min": 0,
+            "avg": 0
+          },
+          "areca_build_jobs{status=\"validating\"}": {
+            "samples": 40,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "min": 0,
+            "avg": 0
+          },
+          "areca_build_jobs{status=\"deploying\"}": {
+            "samples": 40,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "min": 0,
+            "avg": 0
+          },
+          "areca_build_jobs{status=\"succeeded\"}": {
+            "samples": 40,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "min": 0,
+            "avg": 0
+          },
+          "areca_build_jobs{status=\"failed\"}": {
+            "samples": 40,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "min": 0,
+            "avg": 0
+          },
+          "areca_build_jobs{status=\"cancelled\"}": {
+            "samples": 40,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "min": 0,
+            "avg": 0
+          },
+          "areca_build_jobs_oldest_queued_age_seconds": {
+            "samples": 40,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "min": 0,
+            "avg": 0
+          },
+          "areca_build_jobs_active": {
+            "samples": 40,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "min": 0,
+            "avg": 0
+          },
+          "areca_build_jobs_failed_total": {
+            "samples": 40,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "min": 0,
+            "avg": 0
+          },
+          "areca_build_jobs_failed_backlog": {
+            "samples": 40,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "min": 0,
+            "avg": 0
+          },
+          "areca_publications{status=\"pending\"}": {
+            "samples": 40,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "min": 0,
+            "avg": 0
+          },
+          "areca_publications{status=\"building\"}": {
+            "samples": 40,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "min": 0,
+            "avg": 0
+          },
+          "areca_publications{status=\"demo\"}": {
+            "samples": 40,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "min": 0,
+            "avg": 0
+          },
+          "areca_publications{status=\"live\"}": {
+            "samples": 40,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "min": 0,
+            "avg": 0
+          },
+          "areca_publications{status=\"failed\"}": {
+            "samples": 40,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "min": 0,
+            "avg": 0
+          },
+          "areca_publications{status=\"superseded\"}": {
+            "samples": 40,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "min": 0,
+            "avg": 0
+          },
+          "areca_publications{status=\"rolled_back\"}": {
+            "samples": 40,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "min": 0,
+            "avg": 0
+          },
+          "areca_scheduled_entries_overdue": {
+            "samples": 40,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "min": 0,
+            "avg": 0
+          },
+          "areca_worker_enabled": {
+            "samples": 40,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "min": 0,
+            "avg": 0
+          },
+          "areca_readiness_check_up{check=\"db\"}": {
+            "samples": 40,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "min": 1,
+            "avg": 1
+          },
+          "areca_readiness_check_up{check=\"storage\"}": {
+            "samples": 40,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "min": 1,
+            "avg": 1
+          },
+          "areca_readiness_check_up{check=\"redis\"}": {
+            "samples": 40,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "min": 1,
+            "avg": 1
+          },
+          "areca_readiness_check_up{check=\"worker\"}": {
+            "samples": 40,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "min": 1,
+            "avg": 1
+          },
+          "areca_readiness_check_up{check=\"queue\"}": {
+            "samples": 40,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "min": 1,
+            "avg": 1
+          },
+          "areca_readiness_check_up{check=\"mail\"}": {
+            "samples": 40,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "min": 1,
+            "avg": 1
+          },
+          "areca_readiness_check_up{check=\"loops\"}": {
+            "samples": 40,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "min": 1,
+            "avg": 1
+          },
+          "areca_mail_pending": {
+            "samples": 40,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "min": 0,
+            "avg": 0
+          },
+          "areca_mail_oldest_pending_age_seconds": {
+            "samples": 40,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "min": 0,
+            "avg": 0
+          },
+          "areca_mail_expired_leases": {
+            "samples": 40,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "min": 0,
+            "avg": 0
+          },
+          "areca_notification_events_pending": {
+            "samples": 40,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "min": 0,
+            "avg": 0
+          },
+          "areca_notification_events_oldest_pending_age_seconds": {
+            "samples": 40,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "min": 0,
+            "avg": 0
+          },
+          "areca_storage_deletions_paused": {
+            "samples": 40,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "min": 0,
+            "avg": 0
+          },
+          "areca_schedules_exhausted": {
+            "samples": 40,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "min": 0,
+            "avg": 0
+          },
+          "areca_ready": {
+            "samples": 40,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "min": 1,
+            "avg": 1
+          },
+          "areca_process_uptime_seconds": {
+            "samples": 40,
+            "p95": 755.27918599045,
+            "p99": 778.4760232906,
+            "max": 784.380863047,
+            "min": 199.567965907,
+            "avg": 491.8689890427751
+          },
+          "areca_process_memory_bytes{kind=\"rss\"}": {
+            "samples": 40,
+            "p95": 347714150.4,
+            "p99": 350568243.2,
+            "max": 351838208,
+            "min": 329543680,
+            "avg": 340620595.2
+          },
+          "areca_process_memory_bytes{kind=\"heap_used\"}": {
+            "samples": 40,
+            "p95": 136129056.4,
+            "p99": 139499516.16,
+            "max": 141100176,
+            "min": 91304120,
+            "avg": 119589786.2
+          },
+          "areca_process_memory_bytes{kind=\"heap_total\"}": {
+            "samples": 40,
+            "p95": 196349952,
+            "p99": 198394675.2,
+            "max": 198905856,
+            "min": 184487936,
+            "avg": 191696896
+          },
+          "areca_process_memory_bytes{kind=\"external\"}": {
+            "samples": 40,
+            "p95": 30534960.2,
+            "p99": 33720687.949999996,
+            "max": 35383646,
+            "min": 18327591,
+            "avg": 26051016.425
+          },
+          "areca_db_pool_connections{pool=\"main\",state=\"total\"}": {
+            "samples": 40,
+            "p95": 16,
+            "p99": 16,
+            "max": 16,
+            "min": 16,
+            "avg": 16
+          },
+          "areca_db_pool_connections{pool=\"main\",state=\"idle\"}": {
+            "samples": 40,
+            "p95": 10.049999999999997,
+            "p99": 12.219999999999999,
+            "max": 13,
+            "min": 0,
+            "avg": 1.1
+          },
+          "areca_db_pool_connections{pool=\"mcp\",state=\"total\"}": {
+            "samples": 40,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "min": 0,
+            "avg": 0
+          },
+          "areca_db_pool_connections{pool=\"mcp\",state=\"idle\"}": {
+            "samples": 40,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "min": 0,
+            "avg": 0
+          },
+          "areca_db_pool_connections{pool=\"factor_lock\",state=\"total\"}": {
+            "samples": 40,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "min": 0,
+            "avg": 0
+          },
+          "areca_db_pool_connections{pool=\"factor_lock\",state=\"idle\"}": {
+            "samples": 40,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "min": 0,
+            "avg": 0
+          },
+          "areca_db_pool_waiting{pool=\"main\"}": {
+            "samples": 40,
+            "p95": 83.1,
+            "p99": 97.19999999999999,
+            "max": 105,
+            "min": 0,
+            "avg": 33.15
+          },
+          "areca_db_pool_waiting{pool=\"mcp\"}": {
+            "samples": 40,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "min": 0,
+            "avg": 0
+          },
+          "areca_db_pool_waiting{pool=\"factor_lock\"}": {
+            "samples": 40,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "min": 0,
+            "avg": 0
+          },
+          "areca_db_pool_max_connections{pool=\"main\"}": {
+            "samples": 40,
+            "p95": 16,
+            "p99": 16,
+            "max": 16,
+            "min": 16,
+            "avg": 16
+          },
+          "areca_db_pool_max_connections{pool=\"mcp\"}": {
+            "samples": 40,
+            "p95": 4,
+            "p99": 4,
+            "max": 4,
+            "min": 4,
+            "avg": 4
+          },
+          "areca_db_pool_max_connections{pool=\"factor_lock\"}": {
+            "samples": 40,
+            "p95": 4,
+            "p99": 4,
+            "max": 4,
+            "min": 4,
+            "avg": 4
+          },
+          "areca_event_loop_utilization": {
+            "samples": 40,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "min": 0.8894374918531757,
+            "avg": 0.9790943956336455
+          },
+          "areca_event_loop_delay_seconds{stat=\"p50\"}": {
+            "samples": 40,
+            "p95": 0.036918066199999995,
+            "p99": 0.03832512412,
+            "max": 0.038567935,
+            "min": 0.022446079,
+            "avg": 0.030802328599999994
+          },
+          "areca_event_loop_delay_seconds{stat=\"p99\"}": {
+            "samples": 40,
+            "p95": 0.1468923894,
+            "p99": 0.15696265116,
+            "max": 0.160694271,
+            "min": 0.065437695,
+            "avg": 0.11370905499999999
+          },
+          "areca_event_loop_delay_seconds{stat=\"max\"}": {
+            "samples": 40,
+            "p95": 0.28554035099999997,
+            "p99": 0.31109152667999995,
+            "max": 0.326631423,
+            "min": 0.105447423,
+            "avg": 0.1843838966
+          }
+        },
+        "redisProbes": {
+          "samples": 40,
+          "p95": 255.34999999999997,
+          "p99": 315.06999999999994,
+          "max": 349,
+          "errors": 0
+        },
+        "s3Probes": {
+          "samples": 40,
+          "p95": 253.09999999999988,
+          "p99": 301.53999999999996,
+          "max": 307,
+          "errors": 0
+        },
+        "cmsProbes": {
+          "samples": 40,
+          "p95": 195.1,
+          "p99": 238.47999999999996,
+          "max": 265,
+          "errors": 0
+        },
+        "redisCounters": {
+          "rejected_connections": 0,
+          "evicted_keys": 0,
+          "total_error_replies": 0,
+          "total_commands_processed": 31136
+        }
+      },
+      "requestTimings": {
+        "updateDraftFn": {
+          "http_req_sending": {
+            "samples": 8623,
+            "p95": 0.2741399999998892,
+            "p99": 1.897504000000047,
+            "max": 13.6535,
+            "avg": 0.06573953380494028
+          },
+          "http_req_waiting": {
+            "samples": 8623,
+            "p95": 1796.3126099999997,
+            "p99": 2097.6924720000015,
+            "max": 2679.9494,
+            "avg": 871.703446863043
+          },
+          "http_req_receiving": {
+            "samples": 8623,
+            "p95": 32.3183,
+            "p99": 42.12965400000001,
+            "max": 121.9634,
+            "avg": 20.007097437086852
+          }
+        },
+        "listRevisionsFn": {
+          "http_req_sending": {
+            "samples": 2107,
+            "p95": 0,
+            "p99": 0.37945200000000007,
+            "max": 1.0057,
+            "avg": 0.012080541053630756
+          },
+          "http_req_waiting": {
+            "samples": 2107,
+            "p95": 1526.7076799999993,
+            "p99": 1963.7627000000007,
+            "max": 2672.6089,
+            "avg": 611.7487834361652
+          },
+          "http_req_receiving": {
+            "samples": 2107,
+            "p95": 3.617589999999996,
+            "p99": 7.027590000000005,
+            "max": 20.1397,
+            "avg": 0.5833341718082579
+          }
+        },
+        "listCollectionsFn": {
+          "http_req_sending": {
+            "samples": 4596,
+            "p95": 0,
+            "p99": 0.6477350000000004,
+            "max": 7.096,
+            "avg": 0.02948755439512621
+          },
+          "http_req_waiting": {
+            "samples": 4596,
+            "p95": 833.13055,
+            "p99": 1002.4034350000002,
+            "max": 1795.4281,
+            "avg": 356.22408664055746
+          },
+          "http_req_receiving": {
+            "samples": 4596,
+            "p95": 4.4112,
+            "p99": 8.262910000000035,
+            "max": 44.3173,
+            "avg": 0.9044961270670145
+          }
+        },
+        "getPreviewUrlFn": {
+          "http_req_sending": {
+            "samples": 3399,
+            "p95": 0,
+            "p99": 0.554006,
+            "max": 5.9094,
+            "avg": 0.02234889673433363
+          },
+          "http_req_waiting": {
+            "samples": 3399,
+            "p95": 535.0024999999999,
+            "p99": 676.109792,
+            "max": 1172.1187,
+            "avg": 242.028503324507
+          },
+          "http_req_receiving": {
+            "samples": 3399,
+            "p95": 3.7309099999999997,
+            "p99": 8.216325999999999,
+            "max": 23.6956,
+            "avg": 0.6121728155339807
+          }
+        },
+        "listEntriesFn": {
+          "http_req_sending": {
+            "samples": 12168,
+            "p95": 0,
+            "p99": 0.464698,
+            "max": 9.7421,
+            "avg": 0.019907511505588418
+          },
+          "http_req_waiting": {
+            "samples": 12168,
+            "p95": 1226.00918,
+            "p99": 1650.3606519999998,
+            "max": 2669.1944,
+            "avg": 510.5830862179493
+          },
+          "http_req_receiving": {
+            "samples": 12168,
+            "p95": 31.434654999999996,
+            "p99": 39.27483599999999,
+            "max": 107.0048,
+            "avg": 16.508322633136082
+          }
+        },
+        "getEntryFn": {
+          "http_req_sending": {
+            "samples": 13322,
+            "p95": 0,
+            "p99": 0.3834789999999999,
+            "max": 11.4295,
+            "avg": 0.013519494069959451
+          },
+          "http_req_waiting": {
+            "samples": 13322,
+            "p95": 714.4696899999998,
+            "p99": 1158.931638999998,
+            "max": 2020.9219,
+            "avg": 303.5666890106594
+          },
+          "http_req_receiving": {
+            "samples": 13322,
+            "p95": 32.356184999999996,
+            "p99": 40.32867599999996,
+            "max": 126.7494,
+            "avg": 19.477215508181953
+          }
+        },
+        "getMeFn": {
+          "http_req_sending": {
+            "samples": 1682,
+            "p95": 0,
+            "p99": 0.359114,
+            "max": 2.0091,
+            "avg": 0.008244054696789535
+          },
+          "http_req_waiting": {
+            "samples": 1682,
+            "p95": 899.4895399999998,
+            "p99": 1291.1467450000014,
+            "max": 2042.8198,
+            "avg": 377.0011371581449
+          },
+          "http_req_receiving": {
+            "samples": 1682,
+            "p95": 4.922239999999997,
+            "p99": 43.493150000000036,
+            "max": 64.0767,
+            "avg": 1.4494876932223546
+          }
+        },
+        "publishEntryFn": {
+          "http_req_sending": {
+            "samples": 191,
+            "p95": 0,
+            "p99": 0.51147,
+            "max": 2.8272,
+            "avg": 0.022654450261780104
+          },
+          "http_req_waiting": {
+            "samples": 191,
+            "p95": 2086.7371000000003,
+            "p99": 2308.3582699999997,
+            "max": 2632.3308,
+            "avg": 968.2885397905762
+          },
+          "http_req_receiving": {
+            "samples": 191,
+            "p95": 34.5908,
+            "p99": 43.99043999999998,
+            "max": 87.9495,
+            "avg": 23.65473455497381
+          }
+        },
+        "assetFile": {
+          "http_req_sending": {
+            "samples": 1016,
+            "p95": 0,
+            "p99": 0.5419450000000007,
+            "max": 10.3419,
+            "avg": 0.03935590551181102
+          },
+          "http_req_waiting": {
+            "samples": 1016,
+            "p95": 482.153575,
+            "p99": 588.2410450000002,
+            "max": 777.6964,
+            "avg": 236.6263998031496
+          },
+          "http_req_receiving": {
+            "samples": 1016,
+            "p95": 142.27980000000002,
+            "p99": 221.49248500000027,
+            "max": 382.9402,
+            "avg": 107.12742175196868
+          }
+        },
+        "createEntryFn": {
+          "http_req_sending": {
+            "samples": 1244,
+            "p95": 1.0132700000000001,
+            "p99": 1.096448999999999,
+            "max": 1.2475,
+            "avg": 0.1553594051446945
+          },
+          "http_req_waiting": {
+            "samples": 1244,
+            "p95": 2488.5157999999983,
+            "p99": 2927.0428739999998,
+            "max": 3273.1023,
+            "avg": 1173.485958842446
+          },
+          "http_req_receiving": {
+            "samples": 1244,
+            "p95": 32.49930499999999,
+            "p99": 38.952148999999956,
+            "max": 107.6216,
+            "avg": 22.330992765273315
+          }
+        },
+        "listAssetsFn": {
+          "http_req_sending": {
+            "samples": 4174,
+            "p95": 0,
+            "p99": 0.48348499999998795,
+            "max": 2.2496,
+            "avg": 0.017062458073790133
+          },
+          "http_req_waiting": {
+            "samples": 4174,
+            "p95": 887.2268049999999,
+            "p99": 1194.740676999992,
+            "max": 2024.6235,
+            "avg": 384.5386245567798
+          },
+          "http_req_receiving": {
+            "samples": 4174,
+            "p95": 32.43945,
+            "p99": 39.009210999999986,
+            "max": 101.8361,
+            "avg": 16.81130905606134
+          }
+        },
+        "listInboundReferencesFn": {
+          "http_req_sending": {
+            "samples": 1435,
+            "p95": 0,
+            "p99": 0.36929200000000006,
+            "max": 0.6188,
+            "avg": 0.010238048780487806
+          },
+          "http_req_waiting": {
+            "samples": 1435,
+            "p95": 1176.5150899999999,
+            "p99": 1434.8811840000012,
+            "max": 2292.3644,
+            "avg": 484.5524434843212
+          },
+          "http_req_receiving": {
+            "samples": 1435,
+            "p95": 3.07562,
+            "p99": 5.90366400000002,
+            "max": 14.7146,
+            "avg": 0.4839942160278746
+          }
+        },
+        "listEntryCountsFn": {
+          "http_req_sending": {
+            "samples": 1201,
+            "p95": 0,
+            "p99": 0.5201,
+            "max": 11.6308,
+            "avg": 0.03277868442964197
+          },
+          "http_req_waiting": {
+            "samples": 1201,
+            "p95": 839.9846,
+            "p99": 1041.949,
+            "max": 1645.5793,
+            "avg": 354.87450674438
+          },
+          "http_req_receiving": {
+            "samples": 1201,
+            "p95": 3.3677,
+            "p99": 6.7075,
+            "max": 32.7441,
+            "avg": 0.558978351373855
+          }
+        },
+        "upsertCollectionFn": {
+          "http_req_sending": {
+            "samples": 28,
+            "p95": 0.502925,
+            "p99": 0.503173,
+            "max": 0.5032,
+            "avg": 0.053889285714285716
+          },
+          "http_req_waiting": {
+            "samples": 28,
+            "p95": 2390.8068749999998,
+            "p99": 2752.9462470000003,
+            "max": 2858.4984,
+            "avg": 1069.5681892857144
+          },
+          "http_req_receiving": {
+            "samples": 28,
+            "p95": 1.7302899999999992,
+            "p99": 3.099659000000001,
+            "max": 3.5258,
+            "avg": 0.3773892857142857
+          }
+        },
+        "unpublishEntryFn": {
+          "http_req_sending": {
+            "samples": 191,
+            "p95": 0,
+            "p99": 0.4249099999999995,
+            "max": 0.5089,
+            "avg": 0.014490575916230366
+          },
+          "http_req_waiting": {
+            "samples": 191,
+            "p95": 2396.72665,
+            "p99": 3081.13109,
+            "max": 3351.5931,
+            "avg": 1086.753764397906
+          },
+          "http_req_receiving": {
+            "samples": 191,
+            "p95": 34.6334,
+            "p99": 38.12303999999999,
+            "max": 44.7861,
+            "avg": 21.222868062827224
+          }
+        },
+        "listGlobalsFn": {
+          "http_req_sending": {
+            "samples": 1201,
+            "p95": 0,
+            "p99": 0.5313,
+            "max": 9.4404,
+            "avg": 0.027237468776019985
+          },
+          "http_req_waiting": {
+            "samples": 1201,
+            "p95": 815.1732,
+            "p99": 1026.2704,
+            "max": 1744.2314,
+            "avg": 347.3376616153208
+          },
+          "http_req_receiving": {
+            "samples": 1201,
+            "p95": 3.3808,
+            "p99": 7.4137,
+            "max": 29.3575,
+            "avg": 0.5712458784346378
+          }
+        },
+        "scheduleEntryFn": {
+          "http_req_sending": {
+            "samples": 183,
+            "p95": 0,
+            "p99": 0.9595820000000045,
+            "max": 4.0106,
+            "avg": 0.05124371584699453
+          },
+          "http_req_waiting": {
+            "samples": 183,
+            "p95": 1964.9516400000002,
+            "p99": 2449.0589920000007,
+            "max": 2678.5577,
+            "avg": 929.7974142076501
+          },
+          "http_req_receiving": {
+            "samples": 183,
+            "p95": 33.8506,
+            "p99": 38.747964000000024,
+            "max": 44.5401,
+            "avg": 22.79356393442623
+          }
+        },
+        "pageDocument": {
+          "http_req_sending": {
+            "samples": 234,
+            "p95": 0,
+            "p99": 0,
+            "max": 0.8866,
+            "avg": 0.005960683760683761
+          },
+          "http_req_waiting": {
+            "samples": 234,
+            "p95": 1333.9307549999994,
+            "p99": 2038.3149259999977,
+            "max": 2494.5833,
+            "avg": 511.40443418803426
+          },
+          "http_req_receiving": {
+            "samples": 234,
+            "p95": 63.38091,
+            "p99": 72.70769699999998,
+            "max": 113.7448,
+            "avg": 46.953025641025654
+          }
+        },
+        "uploadAsset": {
+          "http_req_sending": {
+            "samples": 1014,
+            "p95": 163.88406499999996,
+            "p99": 223.423089,
+            "max": 340.4231,
+            "avg": 41.96912297830374
+          },
+          "http_req_waiting": {
+            "samples": 1014,
+            "p95": 2634.860875,
+            "p99": 2990.005368,
+            "max": 3456.0917,
+            "avg": 1403.443362228797
+          },
+          "http_req_receiving": {
+            "samples": 1014,
+            "p95": 3.303589999999991,
+            "p99": 6.078341,
+            "max": 12.5589,
+            "avg": 0.5249771203155819
+          }
+        },
+        "updateAssetFn": {
+          "http_req_sending": {
+            "samples": 1014,
+            "p95": 0,
+            "p99": 0.5945910000000002,
+            "max": 5.3205,
+            "avg": 0.02236913214990138
+          },
+          "http_req_waiting": {
+            "samples": 1014,
+            "p95": 2141.6786599999996,
+            "p99": 2609.3418500000002,
+            "max": 2828.8751,
+            "avg": 922.464540039447
+          },
+          "http_req_receiving": {
+            "samples": 1014,
+            "p95": 3.4413699999999716,
+            "p99": 7.33207,
+            "max": 14.9646,
+            "avg": 0.620367357001973
+          }
+        },
+        "cancelScheduleFn": {
+          "http_req_sending": {
+            "samples": 184,
+            "p95": 0,
+            "p99": 0.5028009999999999,
+            "max": 1.003,
+            "avg": 0.010935326086956522
+          },
+          "http_req_waiting": {
+            "samples": 184,
+            "p95": 2450.404174999999,
+            "p99": 2900.047013999998,
+            "max": 3101.27,
+            "avg": 967.5907994565217
+          },
+          "http_req_receiving": {
+            "samples": 184,
+            "p95": 30.960055,
+            "p99": 39.12083499999997,
+            "max": 58.6384,
+            "avg": 14.859082608695651
+          }
+        },
+        "createOrganizationFn": {
+          "http_req_sending": {
+            "samples": 27,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "avg": 0
+          },
+          "http_req_waiting": {
+            "samples": 27,
+            "p95": 1999.29722,
+            "p99": 2270.6390039999997,
+            "max": 2348.9587,
+            "avg": 987.9883481481479
+          },
+          "http_req_receiving": {
+            "samples": 27,
+            "p95": 1.9553699999999992,
+            "p99": 6.965369999999989,
+            "max": 8.61,
+            "avg": 0.49030740740740736
+          }
+        },
+        "createSiteFn": {
+          "http_req_sending": {
+            "samples": 27,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "avg": 0
+          },
+          "http_req_waiting": {
+            "samples": 27,
+            "p95": 2471.92573,
+            "p99": 2721.8744279999996,
+            "max": 2789.7701,
+            "avg": 1119.7208629629629
+          },
+          "http_req_receiving": {
+            "samples": 27,
+            "p95": 0.35636999999999963,
+            "p99": 2.0744219999999967,
+            "max": 2.6244,
+            "avg": 0.11605555555555556
+          }
+        },
+        "archiveEntryFn": {
+          "http_req_sending": {
+            "samples": 185,
+            "p95": 0.39295999999999165,
+            "p99": 1.0051759999999998,
+            "max": 4.4619,
+            "avg": 0.05460216216216216
+          },
+          "http_req_waiting": {
+            "samples": 185,
+            "p95": 2259.43154,
+            "p99": 2984.4268719999995,
+            "max": 3161.0338,
+            "avg": 892.9494718918921
+          },
+          "http_req_receiving": {
+            "samples": 185,
+            "p95": 30.869919999999997,
+            "p99": 41.562891999999984,
+            "max": 52.4098,
+            "avg": 18.103610270270266
+          }
+        },
+        "deleteEntryFn": {
+          "http_req_sending": {
+            "samples": 65,
+            "p95": 0,
+            "p99": 0.1208879999999998,
+            "max": 0.3358,
+            "avg": 0.005166153846153846
+          },
+          "http_req_waiting": {
+            "samples": 65,
+            "p95": 2189.4867799999997,
+            "p99": 2494.4652439999995,
+            "max": 2642.0895,
+            "avg": 1080.26944
+          },
+          "http_req_receiving": {
+            "samples": 65,
+            "p95": 4.631939999999999,
+            "p99": 8.830344,
+            "max": 8.989,
+            "avg": 0.7677061538461539
+          }
+        },
+        "listOrganizationsFn": {
+          "http_req_sending": {
+            "samples": 88,
+            "p95": 0,
+            "p99": 0.04659199999999837,
+            "max": 0.3584,
+            "avg": 0.004072727272727273
+          },
+          "http_req_waiting": {
+            "samples": 88,
+            "p95": 1029.1507799999997,
+            "p99": 1361.4163399999998,
+            "max": 1416.2507,
+            "avg": 481.21869999999996
+          },
+          "http_req_receiving": {
+            "samples": 88,
+            "p95": 31.40783,
+            "p99": 39.46883299999989,
+            "max": 60.422,
+            "avg": 23.490317045454546
+          }
+        },
+        "listSitesFn": {
+          "http_req_sending": {
+            "samples": 88,
+            "p95": 0,
+            "p99": 1.2616099999999908,
+            "max": 3.0077,
+            "avg": 0.05701704545454545
+          },
+          "http_req_waiting": {
+            "samples": 88,
+            "p95": 931.726995,
+            "p99": 1083.8413379999997,
+            "max": 1140.7938,
+            "avg": 405.2136443181818
+          },
+          "http_req_receiving": {
+            "samples": 88,
+            "p95": 2.599509999999994,
+            "p99": 6.702762999999985,
+            "max": 9.613,
+            "avg": 0.5507818181818182
+          }
+        },
+        "deleteAssetFn": {
+          "http_req_sending": {
+            "samples": 85,
+            "p95": 0,
+            "p99": 0.509248,
+            "max": 0.5095,
+            "avg": 0.01198470588235294
+          },
+          "http_req_waiting": {
+            "samples": 85,
+            "p95": 3910.24726,
+            "p99": 4476.718712,
+            "max": 4494.7373,
+            "avg": 1882.56984
+          },
+          "http_req_receiving": {
+            "samples": 85,
+            "p95": 3.0520599999999973,
+            "p99": 6.841867999999984,
+            "max": 10.6448,
+            "avg": 0.5174047058823529
+          }
+        }
+      },
+      "exitCode": 99,
+      "guard": null
+    }
+  ],
+  "untested": [
+    750,
+    1000
+  ]
+}

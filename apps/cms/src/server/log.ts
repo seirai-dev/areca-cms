@@ -11,6 +11,8 @@
  * error|silent, default info) filters.
  */
 
+import { currentRequestId } from './http/request-scope.server'
+
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 type Threshold = LogLevel | 'silent'
 
@@ -256,6 +258,8 @@ export function createLogger(component: string): Logger {
       component,
       msg: truncate(redactString(msg, secrets)),
     }
+    const requestId = currentRequestId()
+    if (requestId) line.requestId = requestId
     if (fields) {
       for (const [key, value] of Object.entries(fields)) {
         if (value === undefined) continue

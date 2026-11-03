@@ -234,6 +234,14 @@ export function useSchemaEditor({
           ? globalsQueryKey(siteId)
           : queryKeys.collections(siteId),
       }),
+      // A collection's entries, and whether the sidebar lists it, change with its schema.
+      ...(isGlobal
+        ? []
+        : [
+            queryClient.invalidateQueries({
+              queryKey: queryKeys.entryCounts(siteId),
+            }),
+          ]),
       // A schema edit on a development site changes its unpushed count.
       invalidateDevSync(queryClient, siteId),
     ])

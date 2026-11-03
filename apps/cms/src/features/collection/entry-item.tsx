@@ -1,5 +1,4 @@
 import * as React from 'react'
-import { useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import {
   ArrowSquareOut,
@@ -10,7 +9,7 @@ import {
   Trash,
 } from '@phosphor-icons/react'
 
-import { queryKeys } from '#/lib/content/query-keys'
+import type { EntrySummary } from '#/lib/content/entry-summary'
 import { UserAvatar } from '#/components/ui/avatar'
 import { Button } from '#/components/ui/button'
 import { Checkbox } from '#/components/ui/checkbox'
@@ -24,7 +23,6 @@ import {
 } from '#/components/ui/dropdown-menu'
 import { RelativeTime } from '#/components/ui/timeline'
 import { editorPublishReason } from '#/features/golive/golive-tray'
-import { isEditedSinceReady } from '#/features/golive/entry-live-state'
 import type { LiveMembership } from '#/features/golive/entry-live-state'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
@@ -32,13 +30,13 @@ import { m } from '#/paraglide/messages'
 import { EntryCover, EntryThumb } from './entry-cover'
 import { EntryPill } from './entry-pill'
 import { LocaleChips } from './locale-chips'
-import type { LocaleCoverage } from './entry-coverage'
-import type { BulkAction, EntryRow } from './use-collection-entries'
+import type { LocaleCoverage } from '#/lib/content/entry-coverage'
+import type { BulkAction } from './use-collection-entries'
 
 export type EntryItemProps = {
   siteId: string
   collectionKey: string
-  row: EntryRow
+  row: EntrySummary
   title: string
   coverAssetId: string | undefined
   live: LiveMembership
@@ -47,7 +45,7 @@ export type EntryItemProps = {
   selectMode: boolean
   selected: boolean
   onToggleSelect: () => void
-  onAction: (action: BulkAction, row: EntryRow) => void
+  onAction: (action: BulkAction, row: EntrySummary) => void
   muted?: boolean
   /** Language coverage chips; only on multilingual sites. */
   coverage?: LocaleCoverage[]
@@ -58,41 +56,26 @@ export function entryTransitionName(id: string) {
   return `entry-${id}`
 }
 
-/**
- * Seed the editor's entry query from the list row so the editor can paint
- * its title at once (which is what lets the view transition morph). The
- * editor still refetches the full record.
- */
-function useSeedEntry(row: EntryRow, collectionKey: string) {
-  const queryClient = useQueryClient()
-  return React.useCallback(() => {
-    const key = queryKeys.entry(row.id)
-    if (queryClient.getQueryData(key)) return
-    queryClient.setQueryData(key, { ...row, collectionKey }, { updatedAt: 1 })
-  }, [queryClient, row, collectionKey])
-}
-
 function EditorLink({
   siteId,
   collectionKey,
   row,
   className,
   children,
-  onSeed,
 }: {
   siteId: string
   collectionKey: string
-  row: EntryRow
+  row: EntrySummary
   className?: string
   children: React.ReactNode
-  onSeed: () => void
 }) {
+  // The list row is a summary, not the editor's record: the editor loads the
+  // full entry itself, so nothing is seeded into its cache here.
   return (
     <Link
       to="/sites/$siteId/c/$collectionKey/$entryId"
       params={{ siteId, collectionKey, entryId: row.id }}
       viewTransition
-      onClick={onSeed}
       className={className}
     >
       {children}
@@ -112,20 +95,13 @@ function EntryQuickMenu({
 }: {
   siteId: string
   collectionKey: string
-  row: EntryRow
+  row: EntrySummary
   title: string
   canManage: boolean
-  onAction: (action: BulkAction, row: EntryRow) => void
+  onAction: (action: BulkAction, row: EntrySummary) => void
   className?: string
 }) {
-  const markable =
-    row.status !== 'published' ||
-    isEditedSinceReady({
-      status: row.status,
-      updatedAt: row.updatedAt,
-      draftData: row.draftData,
-      publishedData: row.publishedData,
-    })
+  const markable = row.status !== 'published' || row.editedSinceReady
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
@@ -245,8 +221,6 @@ export function EntryCard(props: EntryItemProps) {
     muted,
     coverage,
   } = props
-  const seed = useSeedEntry(row, collectionKey)
-
   const body = (
     <>
       <EntryCover assetId={coverAssetId} title={title} />
@@ -307,7 +281,6 @@ export function EntryCard(props: EntryItemProps) {
           siteId={siteId}
           collectionKey={collectionKey}
           row={row}
-          onSeed={seed}
           className="block outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-border-focus"
         >
           {body}
@@ -358,8 +331,6 @@ export function EntryListRow(props: EntryItemProps) {
     muted,
     coverage,
   } = props
-  const seed = useSeedEntry(row, collectionKey)
-
   const content = (
     <>
       <EntryThumb assetId={coverAssetId} title={title} size={32} />
@@ -412,7 +383,6 @@ export function EntryListRow(props: EntryItemProps) {
           siteId={siteId}
           collectionKey={collectionKey}
           row={row}
-          onSeed={seed}
           className="flex min-w-0 flex-1 items-center gap-3 self-stretch rounded-[12px] py-2 pl-3 text-left outline-none focus-visible:outline-2 focus-visible:outline-border-focus"
         >
           {content}

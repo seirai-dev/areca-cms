@@ -10,7 +10,7 @@ import {
   storageObjectDeletion,
 } from '#/db/schema'
 import { m } from '#/paraglide/messages'
-import { assetMutationLock } from '#/server/assets/usage'
+import { assetExclusiveLock } from '#/server/assets/usage'
 import { drainStorageObjectDeletions } from '#/server/assets'
 import { audit } from '#/server/audit'
 import { ConflictError, NotFoundError } from '#/server/content/errors'
@@ -140,7 +140,7 @@ export async function deleteOrganization(id: string, actorId: string) {
       .limit(1)
     if (siteRow)
       throw new ConflictError(m.server_cannot_delete_org_with_sites())
-    await assetMutationLock(tx, id)
+    await assetExclusiveLock(tx, id)
     const objects = await tx
       .select({ storageKey: asset.storageKey })
       .from(asset)

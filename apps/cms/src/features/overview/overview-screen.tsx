@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { useQueries, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import {
   ArrowUpRight,
@@ -13,7 +13,6 @@ import {
 
 import { queryKeys } from '#/lib/content/query-keys'
 import { EntryThumb } from '#/features/collection/entry-cover'
-import { entryTitle } from '#/lib/content/utils'
 import { useShell } from '#/components/shell/shell-context'
 import { useSiteCollections } from '#/components/shell/sidebar'
 import type { SidebarCollection } from '#/components/shell/sidebar'
@@ -52,20 +51,8 @@ import {
   newEntryLabel,
 } from '#/lib/site-nav'
 import type { MeSite } from '#/lib/site-nav'
-import type { EntryData, EntryStatus } from '#/lib/types'
 import { m } from '#/paraglide/messages'
-import { listEntriesFn } from '#/server/fn/content'
-
-type RecentRow = {
-  id: string
-  slug: string
-  status: EntryStatus
-  draftData: EntryData
-  publishedData: EntryData | null
-  updatedAt: string | Date
-  scheduledAt: string | Date | null
-  updatedByName: string | null
-}
+import { listRecentEntriesFn } from '#/server/fn/content'
 
 /**
  * Site Overview (brief §3.3), phase 1: greeting, the attention strip, create
@@ -121,7 +108,6 @@ export function OverviewScreen({ site }: { site: MeSite }) {
         site={site}
         canPublish={manage}
         collections={collections}
-        myUserId={me.user.id}
       />
 
       <ConnectAiCard siteId={site.id} siteName={site.name} />
@@ -283,12 +269,10 @@ function AttentionStrip({
   site,
   canPublish,
   collections,
-  myUserId,
 }: {
   site: MeSite
   canPublish: boolean
   collections: SidebarCollection[]
-  myUserId: string
 }) {
   const release = useReleaseStatus(site.id)
   const panel = usePanel()
@@ -479,8 +463,8 @@ function AttentionStrip({
     )
   }
 
-  const drafts = useDraftsWaiting(site.id, collections, myUserId, canPublish)
-  if (drafts.length > 0) {
+  const drafts = useDraftsWaiting(site.id, collections, canPublish)
+  if (drafts.total > 0 && drafts.items.length > 0) {
     cards.push(
       <Card
         key="drafts"
@@ -494,12 +478,12 @@ function AttentionStrip({
           />
           <div className="grid min-w-0 flex-1 gap-2">
             <p className="text-headline text-text-primary tnum">
-              {drafts.length === 1
+              {drafts.total === 1
                 ? m.overview_drafts_waiting_one()
-                : m.overview_drafts_waiting_other({ count: drafts.length })}
+                : m.overview_drafts_waiting_other({ count: drafts.total })}
             </p>
             <ul className="grid gap-1.5 max-sm:[&>li:nth-child(n+3)]:hidden">
-              {drafts.slice(0, 3).map((draft) => (
+              {drafts.items.map((draft) => (
                 <li key={draft.id} className="grid min-w-0">
                   <Link
                     to="/sites/$siteId/c/$collectionKey/$entryId"
@@ -548,41 +532,19 @@ function RecentlyEdited({
   collections: SidebarCollection[]
 }) {
   const release = useReleaseStatus(site.id)
-  const results = useQueries({
-    queries: collections.map((collection) => ({
-      queryKey: [
-        ...queryKeys.entries(site.id, collection.key),
-        'recent',
-      ] as const,
-      queryFn: () =>
-        listEntriesFn({
-          data: {
-            siteId: site.id,
-            collectionKey: collection.key,
-            limit: 8,
-            offset: 0,
-          },
-        }),
-      staleTime: 15_000,
-    })),
+  const recent = useQuery({
+    queryKey: queryKeys.recentEntries(site.id, 'recent'),
+    queryFn: () => listRecentEntriesFn({ data: { siteId: site.id, limit: 8 } }),
+    staleTime: 15_000,
   })
-  const loading = results.some((result) => result.isLoading)
-  const failed = results.find((result) => result.isError)
+  const loading = recent.isLoading
+  const failed = recent.isError ? recent : undefined
+  const byKey = new Map(collections.map((c) => [c.key, c]))
 
-  const rows = collections
-    .flatMap((collection, index) =>
-      ((results[index]?.data?.items ?? []) as RecentRow[]).map((row) => ({
-        row,
-        collection,
-        fields: collection.fields,
-      })),
-    )
-    .sort(
-      (a, b) =>
-        new Date(b.row.updatedAt).getTime() -
-        new Date(a.row.updatedAt).getTime(),
-    )
-    .slice(0, 8)
+  const rows = (recent.data?.items ?? []).flatMap((row) => {
+    const collection = byKey.get(row.collectionKey)
+    return collection ? [{ row, collection }] : []
+  })
 
   return (
     <section className="grid gap-3" aria-labelledby="overview-recent">
@@ -598,8 +560,8 @@ function RecentlyEdited({
       ) : failed && rows.length === 0 ? (
         <QueryError
           error={failed.error}
-          retrying={results.some((result) => result.isFetching)}
-          onRetry={() => void Promise.all(results.map((r) => r.refetch()))}
+          retrying={recent.isFetching}
+          onRetry={() => void recent.refetch()}
         />
       ) : rows.length === 0 ? (
         <p className="rounded-card border border-dashed border-border-strong px-4 py-6 text-center text-callout text-text-secondary">
@@ -607,24 +569,18 @@ function RecentlyEdited({
         </p>
       ) : (
         <InsetList data-testid="recently-edited">
-          {rows.map(({ row, collection, fields }) => {
+          {rows.map(({ row, collection }) => {
             const state = entryLiveState(
               row,
               release.liveMembership,
               isDevSite(site),
             )
-            const imageField = fields.find((field) => field.type === 'image')
-            const cover = imageField ? row.draftData[imageField.key] : undefined
             return (
               <InsetRow
                 key={row.id}
                 asChild
-                leading={
-                  <EntryThumb
-                    assetId={typeof cover === 'string' ? cover : undefined}
-                  />
-                }
-                title={entryTitle(row.draftData, fields, row.slug)}
+                leading={<EntryThumb assetId={row.cover ?? undefined} />}
+                title={row.title}
                 subtitle={
                   <span className="text-caption font-normal text-text-muted">
                     {collection.label}
@@ -669,53 +625,35 @@ function RecentlyEdited({
 
 /**
  * Owners and admins: recent drafts written by other people, newest first
- * (brief §3.3 "Drafts waiting"). One small query per enabled collection.
+ * (brief §3.3 "Drafts waiting"): the newest three and how many there are,
+ * in one query for the whole site.
  */
 function useDraftsWaiting(
   siteId: string,
   collections: SidebarCollection[],
-  myUserId: string,
   enabled: boolean,
 ) {
-  const results = useQueries({
-    queries: collections.map((collection) => ({
-      queryKey: [
-        ...queryKeys.entries(siteId, collection.key, { status: 'draft' }),
-        'overview-drafts',
-      ] as const,
-      queryFn: () =>
-        listEntriesFn({
-          data: {
-            siteId,
-            collectionKey: collection.key,
-            status: 'draft' as const,
-            limit: 10,
-            offset: 0,
-          },
-        }),
-      enabled,
-      staleTime: 30_000,
-    })),
+  const result = useQuery({
+    queryKey: queryKeys.recentEntries(siteId, 'drafts-by-others'),
+    queryFn: () =>
+      listRecentEntriesFn({
+        data: { siteId, draftsByOthers: true, limit: 3 },
+      }),
+    enabled,
+    staleTime: 30_000,
   })
-  if (!enabled) return []
-  return collections
-    .flatMap((collection, index) =>
-      (
-        (results[index]?.data?.items ?? []) as Array<
-          RecentRow & { updatedBy: string | null }
-        >
-      )
-        .filter((row) => row.updatedBy && row.updatedBy !== myUserId)
-        .map((row) => ({
-          id: row.id,
-          collectionKey: collection.key,
-          title: entryTitle(row.draftData, collection.fields, row.slug),
-          by: row.updatedByName ?? '',
-          updatedAt: row.updatedAt,
-        })),
-    )
-    .sort(
-      (a, b) =>
-        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-    )
+  if (!enabled || !result.data) return { total: 0, items: [] }
+  const keys = new Set(collections.map((c) => c.key))
+  return {
+    total: result.data.total,
+    items: result.data.items
+      .filter((row) => keys.has(row.collectionKey))
+      .map((row) => ({
+        id: row.id,
+        collectionKey: row.collectionKey,
+        title: row.title,
+        by: row.updatedByName ?? '',
+        updatedAt: row.updatedAt,
+      })),
+  }
 }

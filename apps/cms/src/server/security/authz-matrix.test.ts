@@ -16,6 +16,7 @@ import {
   membership,
   site,
 } from '#/db/schema'
+import { createEntry } from '#/server/content/entries'
 import { NotFoundError } from '#/server/content/errors'
 
 import { ALL_FN_MODULES, ROWS } from './authz-matrix'
@@ -976,6 +977,102 @@ describe.skipIf(!runnable)(
       )
       expect(ids).not.toContain(victim)
       expect(ids).toContain(w.Y.site.id)
+    })
+  },
+)
+
+describe.skipIf(!runnable)(
+  'listEntryCountsFn: counts and switched-off collections',
+  () => {
+    let w: World
+    beforeAll(async () => {
+      w = await seedWorld()
+    }, 60_000)
+    afterAll(async () => {
+      await w?.destroy()
+    })
+
+    it('counts every entry of each collection, and hides a switched-off collection from editors only', async () => {
+      const { contentFns } = await fns()
+      const off = await w.fresh.collection('X')
+      await db
+        .update(collection)
+        .set({ enabled: false })
+        .where(eq(collection.id, off.id))
+      // The seeded entry of X, plus these two.
+      await w.fresh.entry('X')
+      await w.fresh.entry('X')
+
+      const editor = await callServerFn(
+        contentFns.listEntryCountsFn as never,
+        { siteId: w.X.site.id },
+        w.sessions.editorX,
+      )
+      expect(editor.error).toBeUndefined()
+      const editorCounts = editor.result as Record<string, number>
+      expect(editorCounts[w.X.collection.key]).toBe(3)
+      expect(editorCounts).not.toHaveProperty(off.key)
+
+      const admin = await callServerFn(
+        contentFns.listEntryCountsFn as never,
+        { siteId: w.X.site.id },
+        w.sessions.adminMfa,
+      )
+      expect(admin.error).toBeUndefined()
+      const adminCounts = admin.result as Record<string, number>
+      expect(adminCounts[w.X.collection.key]).toBe(3)
+      expect(adminCounts[off.key]).toBe(0)
+    })
+  },
+)
+
+describe.skipIf(!runnable)(
+  'listRecentEntriesFn: site-wide overview lists',
+  () => {
+    let w: World
+    beforeAll(async () => {
+      w = await seedWorld()
+    }, 60_000)
+    afterAll(async () => {
+      await w?.destroy()
+    })
+
+    it('hides entries of a switched-off collection from editors only', async () => {
+      const { contentFns } = await fns()
+      const off = await w.fresh.collection('X')
+      const hidden = await createEntry({
+        siteId: w.X.site.id,
+        collectionKey: off.key,
+        data: { title: 'Switched off', slug: `off-${w.run}` },
+        actorId: w.users.ownerX.id,
+      })
+      await db
+        .update(collection)
+        .set({ enabled: false })
+        .where(eq(collection.id, off.id))
+
+      const editor = await callServerFn(
+        contentFns.listRecentEntriesFn as never,
+        { siteId: w.X.site.id, limit: 20 },
+        w.sessions.editorX,
+      )
+      expect(editor.error).toBeUndefined()
+      const editorIds = (
+        editor.result as { items: { id: string }[] }
+      ).items.map((item) => item.id)
+      expect(editorIds).toContain(w.X.entry.id)
+      expect(editorIds).not.toContain(hidden.id)
+
+      const admin = await callServerFn(
+        contentFns.listRecentEntriesFn as never,
+        { siteId: w.X.site.id, limit: 20 },
+        w.sessions.adminMfa,
+      )
+      expect(admin.error).toBeUndefined()
+      const adminIds = (admin.result as { items: { id: string }[] }).items.map(
+        (item) => item.id,
+      )
+      expect(adminIds).toContain(hidden.id)
     })
   },
 )

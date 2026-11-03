@@ -27,7 +27,7 @@ import { entryUiStatus } from '#/features/golive/entry-live-state'
 import { useReleaseStatus } from '#/features/golive/use-release-status'
 import { useDebouncedValue } from '#/hooks/use-debounced-value'
 import { ENTRY_STATUS } from '#/lib/status'
-import type { EntryData, EntryStatus, Field } from '#/lib/types'
+import type { Field } from '#/lib/types'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 import {
@@ -38,22 +38,12 @@ import {
 
 import { referencePickerUiStatus } from './reference-picker-status'
 
-type EntryRow = {
-  id: string
-  slug: string
-  status: EntryStatus
-  draftData: EntryData
-  updatedAt: string | Date
-  scheduledAt?: string | Date | null
-  publishedSlug?: string | null
-}
-
-const PAGE = 50
+const PAGE = 25
 
 /**
  * Reference field (brief §3.5): a searchable picker of entries in the target
  * collection, server-side search so large collections stay usable. Shows the
- * chosen entry's title even when it is not in the current page. Pages of 50
+ * chosen entry's title even when it is not in the current page. Pages of 25
  * with Load more; only Ready/Live and snapshot-eligible scheduled targets.
  */
 export function ReferencePicker({
@@ -85,6 +75,7 @@ export function ReferencePicker({
     queryKey: queryKeys.collections(siteId),
     queryFn: () => listCollectionsFn({ data: { siteId } }),
     staleTime: 60_000,
+    refetchOnWindowFocus: false,
   })
   const targetFields: Field[] =
     collectionsQuery.data?.find((item) => item.key === collectionKey)?.fields ??
@@ -120,9 +111,7 @@ export function ReferencePicker({
   })
 
   const items = React.useMemo(
-    () =>
-      (entriesQuery.data?.pages.flatMap((page) => page.items) ??
-        []) as EntryRow[],
+    () => entriesQuery.data?.pages.flatMap((page) => page.items) ?? [],
     [entriesQuery.data],
   )
   const total = entriesQuery.data?.pages[0]?.total ?? 0
@@ -133,15 +122,26 @@ export function ReferencePicker({
     queryFn: () => getEntryFn({ data: { id: selectedId } }),
     enabled: Boolean(selectedId) && !inList,
   })
-  const selected = inList ?? selectedQuery.data
+  // The chosen entry's title: from the page when it is there, else from the
+  // full record fetched for it.
+  const selectedTitle = inList
+    ? inList.title
+    : selectedQuery.data
+      ? entryTitle(
+          selectedQuery.data.draftData,
+          targetFields,
+          selectedQuery.data.slug,
+        )
+      : null
 
-  const label = selected
-    ? entryTitle(selected.draftData, targetFields, selected.slug)
-    : selectedId
-      ? selectedQuery.isError
-        ? m.editor_entry_no_longer_exists()
-        : m.editor_loading()
-      : m.editor_select_an_entry()
+  const label =
+    selectedTitle !== null
+      ? selectedTitle
+      : selectedId
+        ? selectedQuery.isError
+          ? m.editor_entry_no_longer_exists()
+          : m.editor_loading()
+        : m.editor_select_an_entry()
 
   return (
     <div className="flex items-center gap-1.5">
@@ -223,13 +223,7 @@ export function ReferencePicker({
                                 : 'opacity-0',
                             )}
                           />
-                          <span className="truncate">
-                            {entryTitle(
-                              item.draftData,
-                              targetFields,
-                              item.slug,
-                            )}
-                          </span>
+                          <span className="truncate">{item.title}</span>
                           {uiStatus ? (
                             <span className="ml-auto shrink-0 text-caption text-text-muted">
                               {ENTRY_STATUS[uiStatus].label()}

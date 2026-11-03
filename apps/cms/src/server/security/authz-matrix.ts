@@ -31,6 +31,7 @@ import {
   user,
 } from '#/db/schema'
 import * as accountFns from '#/server/fn/account'
+import * as activityEntryFns from '#/server/fn/activity-entries'
 import * as adminFns from '#/server/fn/admin'
 import * as aiFns from '#/server/fn/ai'
 import * as mailFns from '#/server/fn/mail'
@@ -551,11 +552,36 @@ export const ROWS: Row[] = [
     }),
   },
   {
+    name: 'listEntryCountsFn',
+    note: 'Non-admins see only enabled collections; the count of a switched-off collection is omitted for them.',
+    hidden: true,
+    fn: contentFns.listEntryCountsFn,
+    policy: 'org-editor',
+    prepare: (w) => ({ data: { siteId: w.X.site.id } }),
+  },
+  {
+    name: 'listRecentEntriesFn',
+    note: 'Overview lists across the site. Non-admins see only entries of enabled collections, the same set as the sidebar.',
+    hidden: true,
+    fn: contentFns.listRecentEntriesFn,
+    policy: 'org-editor',
+    prepare: (w) => ({ data: { siteId: w.X.site.id, limit: 8 } }),
+  },
+  {
     name: 'getEntryFn',
     hidden: true,
     fn: contentFns.getEntryFn,
     policy: 'org-editor',
     prepare: (w) => ({ data: { id: w.X.entry.id } }),
+  },
+  {
+    name: 'getActivityEntriesFn',
+    note: 'Missing, foreign and hidden ids are omitted, not refused: the other tenant gets an empty list.',
+    hidden: true,
+    override: { ownerY: 'allowed' },
+    fn: activityEntryFns.getActivityEntriesFn,
+    policy: 'org-editor',
+    prepare: (w) => ({ data: { ids: [w.X.entry.id] } }),
   },
   {
     name: 'listInboundReferencesFn',
@@ -2019,6 +2045,7 @@ export const ROWS: Row[] = [
 
 export const ALL_FN_MODULES = {
   account: accountFns,
+  'activity-entries': activityEntryFns,
   'dev-env': devEnvFns,
   notifications: notificationFns,
   admin: adminFns,

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { QueryClient, QueryKey } from '@tanstack/react-query'
 
 import { adminQueryKeys } from '#/lib/admin/helpers'
-import { queryKeys } from '#/lib/content/query-keys'
+import { OVERVIEW_ENTRIES, queryKeys } from '#/lib/content/query-keys'
 import { ME_QUERY_KEY } from '#/lib/me-query'
 
 import {
@@ -21,6 +21,7 @@ const keys = devEnvQueryKeys(ids)
 describe('devEnvQueryKeys', () => {
   it('covers the dev site content, settings and languages', () => {
     expect(keys).toContainEqual(['collections', 'dev'])
+    expect(keys).toContainEqual(['entry-counts', 'dev'])
     expect(keys).toContainEqual(['entries', 'dev'])
     expect(keys).toContainEqual(['globals', 'dev'])
     expect(keys).toContainEqual(['global', 'dev'])
@@ -30,6 +31,7 @@ describe('devEnvQueryKeys', () => {
 
   it('covers the production content, settings, release and publishing queries', () => {
     expect(keys).toContainEqual(['collections', 'prod'])
+    expect(keys).toContainEqual(['entry-counts', 'prod'])
     expect(keys).toContainEqual(['entries', 'prod'])
     expect(keys).toContainEqual(['globals', 'prod'])
     expect(keys).toContainEqual(['global', 'prod'])
@@ -127,6 +129,8 @@ describe('bulkQueryKeys', () => {
       }),
     ).toEqual([
       ['entries', 'dev', 'posts'],
+      ['entries', 'dev', OVERVIEW_ENTRIES],
+      ['entry-counts', 'dev'],
       ['entry', 'e1'],
       ['dev-sync', 'dev'],
     ])

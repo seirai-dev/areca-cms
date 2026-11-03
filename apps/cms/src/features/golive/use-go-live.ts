@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type { QueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
 import { authClient } from '#/lib/auth-client'
@@ -17,20 +18,39 @@ import {
 
 const errorsKey = (siteId: string) => ['golive-errors', siteId] as const
 
+/**
+ * Invalidate everything Go‑live reads for one site. `refetchType: 'none'`
+ * only marks it stale, for changes that do not move the release (a draft save).
+ */
+export function invalidateGoLiveKeys(
+  queryClient: QueryClient,
+  siteId: string,
+  refetchType: 'active' | 'none' = 'active',
+) {
+  return Promise.all([
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.releaseStatus(siteId),
+      refetchType,
+    }),
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.publications(siteId),
+      refetchType,
+    }),
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.buildJobs(siteId),
+      refetchType,
+    }),
+    queryClient.invalidateQueries({
+      queryKey: ['golive-pending', siteId],
+      refetchType,
+    }),
+  ])
+}
+
 /** Invalidate everything Go‑live reads for one site. */
 export function useInvalidateGoLive(siteId: string) {
   const queryClient = useQueryClient()
-  return () =>
-    Promise.all([
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.releaseStatus(siteId),
-      }),
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.publications(siteId),
-      }),
-      queryClient.invalidateQueries({ queryKey: queryKeys.buildJobs(siteId) }),
-      queryClient.invalidateQueries({ queryKey: ['golive-pending', siteId] }),
-    ])
+  return () => invalidateGoLiveKeys(queryClient, siteId)
 }
 
 /**

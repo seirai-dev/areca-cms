@@ -21,6 +21,9 @@ export default [
       'prettier.config.js',
       'src/paraglide/**',
       '.output/**',
+      // Standalone Node/k6 tooling is outside the application TS project.
+      // CI checks its syntax and runs the offline benchmark tests separately.
+      'benchmarks/**',
     ],
   },
 ]

@@ -12,7 +12,7 @@ import {
 } from '#/db/schema'
 import type { Field } from '#/lib/types'
 import { deleteSite } from '#/server/admin/sites'
-import { assetMutationLock } from '#/server/assets/usage'
+import { assetAttachLock } from '#/server/assets/usage'
 import { getSitesSnapshotCurrent } from '#/routes/api/sites/snapshot/current'
 import {
   createEntry,
@@ -421,7 +421,7 @@ describe.skipIf(!hasDb)(
         // An ordinary dev save: the asset lock first, then the entry row, then
         // its autosave revision. The reset starts while the save is paused.
         const attempt = await db.transaction(async (tx) => {
-          await assetMutationLock(tx, orgId)
+          await assetAttachLock(tx, orgId)
           await tx
             .update(entry)
             .set({
@@ -503,7 +503,7 @@ describe.skipIf(!hasDb)('development environment: delete', () => {
       )!
 
       const attempt = await db.transaction(async (tx) => {
-        await assetMutationLock(tx, orgId)
+        await assetAttachLock(tx, orgId)
         await tx
           .update(entry)
           .set({

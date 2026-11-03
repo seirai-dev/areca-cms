@@ -121,6 +121,8 @@ export function EditorScreen({
   const collectionsQuery = useQuery({
     queryKey: queryKeys.collections(site.id),
     queryFn: () => listCollectionsFn({ data: { siteId: site.id } }),
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   })
   const collection = (
     collectionsQuery.data as CollectionRecord[] | undefined

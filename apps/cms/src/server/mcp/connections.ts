@@ -5,6 +5,7 @@ import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { Pool } from 'pg'
 
 import { db, pool } from '#/db'
+import { registerPool } from '#/db/pool-registry'
 import {
   mcpConnection,
   oauthAccessToken,
@@ -30,6 +31,7 @@ grantLockPool.on('error', (error) =>
     err: error,
   }),
 )
+registerPool('mcp', grantLockPool)
 const heldGrantLock = new AsyncLocalStorage<string>()
 
 export type McpConnectionRow = typeof mcpConnection.$inferSelect

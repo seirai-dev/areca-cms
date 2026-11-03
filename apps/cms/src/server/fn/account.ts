@@ -8,6 +8,7 @@ import { account, user, verification } from '#/db/schema'
 import { auth } from '#/lib/auth'
 import { emailPasswordEnabled } from '#/lib/auth-providers'
 import {
+  forgetSession,
   requireAccountUser,
   requireAgencyAdmin,
   requireUser,
@@ -203,6 +204,7 @@ export const revokeMySessionFn = createServerFn({
       body: { token },
       headers: getRequestHeaders(),
     })
+    forgetSession()
     return { ok: true as const }
   })
 
@@ -216,6 +218,7 @@ export const revokeMyOtherSessionsFn = createServerFn({
 }).handler(async () => {
   await requireAccountUser()
   await auth.api.revokeOtherSessions({ headers: getRequestHeaders() })
+  forgetSession()
   return { ok: true as const }
 })
 
@@ -308,5 +311,6 @@ export const deleteMyAccountFn = createServerFn({
     })
 
     await deleteOwnAccount({ userId: id })
+    forgetSession()
     return { ok: true as const }
   })

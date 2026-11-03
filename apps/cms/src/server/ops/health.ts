@@ -135,17 +135,50 @@ async function defaultCheckStorage(signal: AbortSignal) {
   })
 }
 
-async function defaultCheckRedis() {
+/**
+ * One Redis connection for readiness, opened on first use and reopened only
+ * after it drops. A new client per check added a connect handshake (and, with
+ * the client's defaults, an ERR in Redis's error stats) to every probe.
+ */
+let healthRedis: ReturnType<typeof createHealthRedis> | undefined
+let healthRedisConnect: Promise<unknown> | undefined
+
+function createHealthRedis() {
   const client = createClient({
     url: env.REDIS_URL,
     socket: { connectTimeout: 1_000, reconnectStrategy: false },
+    // Redis Enterprise only; open-source Redis answers it with an ERR.
+    maintNotifications: 'disabled',
+    disableClientInfo: true,
   })
   client.on('error', () => {})
+  return client
+}
+
+async function defaultCheckRedis() {
+  healthRedis ??= createHealthRedis()
+  const client = healthRedis
+  if (!client.isReady) {
+    healthRedisConnect ??= (
+      client.isOpen ? Promise.resolve() : client.connect()
+    ).finally(() => {
+      healthRedisConnect = undefined
+    })
+    try {
+      await healthRedisConnect
+    } catch (error) {
+      // A failed connect leaves the client unusable; start over next time.
+      client.destroy()
+      if (healthRedis === client) healthRedis = undefined
+      throw error
+    }
+  }
   try {
-    await client.connect()
     await client.ping()
-  } finally {
+  } catch (error) {
     client.destroy()
+    if (healthRedis === client) healthRedis = undefined
+    throw error
   }
 }
 
@@ -213,6 +246,32 @@ export function evaluateQueue(
     }
   }
   return { ok: true, detail }
+}
+
+/** How long one readiness report is reused by probes and metric scrapes. */
+const READINESS_CACHE_MS = 5_000
+
+let cachedReadiness:
+  { at: number; report: Promise<ReadinessReport> } | undefined
+
+/**
+ * `runReadinessChecks` with its defaults, shared for a few seconds: probes
+ * and scrapes that arrive together get one set of database, storage and Redis
+ * checks instead of one each.
+ */
+export function cachedReadinessChecks(
+  now = Date.now(),
+): Promise<ReadinessReport> {
+  if (cachedReadiness && now - cachedReadiness.at < READINESS_CACHE_MS) {
+    return cachedReadiness.report
+  }
+  const report = runReadinessChecks()
+  const entry = { at: now, report }
+  cachedReadiness = entry
+  report.catch(() => {
+    if (cachedReadiness === entry) cachedReadiness = undefined
+  })
+  return report
 }
 
 export async function runReadinessChecks(

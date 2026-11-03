@@ -1,7 +1,7 @@
 import type { QueryClient, QueryKey } from '@tanstack/react-query'
 
 import { adminQueryKeys } from '#/lib/admin/helpers'
-import { queryKeys } from '#/lib/content/query-keys'
+import { OVERVIEW_ENTRIES, queryKeys } from '#/lib/content/query-keys'
 import { ME_QUERY_KEY } from '#/lib/me-query'
 import { globalsQueryKey } from '#/features/globals/use-globals'
 
@@ -33,6 +33,7 @@ function globalFamilyKey(siteId: string): QueryKey {
 export function devSiteQueryKeys(devSiteId: string): QueryKey[] {
   return [
     queryKeys.collections(devSiteId),
+    queryKeys.entryCounts(devSiteId),
     ['entries', devSiteId],
     globalsQueryKey(devSiteId),
     globalFamilyKey(devSiteId),
@@ -50,6 +51,7 @@ export function devSiteQueryKeys(devSiteId: string): QueryKey[] {
 export function productionQueryKeys(productionSiteId: string): QueryKey[] {
   return [
     queryKeys.collections(productionSiteId),
+    queryKeys.entryCounts(productionSiteId),
     ['entries', productionSiteId],
     globalsQueryKey(productionSiteId),
     globalFamilyKey(productionSiteId),
@@ -122,8 +124,9 @@ export function writeQueryKeys(input: {
 }
 
 /**
- * A bulk action on one collection of a site: its entry list, the entries it
- * touched, and the site's sync status (a dev site counts these changes).
+ * A bulk action on one collection of a site: its entry list, the site's
+ * per-collection counts (a delete changes them), the entries it touched, and
+ * the site's sync status (a dev site counts these changes).
  */
 export function bulkQueryKeys({
   siteId,
@@ -136,6 +139,8 @@ export function bulkQueryKeys({
 }): QueryKey[] {
   return [
     ['entries', siteId, collectionKey],
+    ['entries', siteId, OVERVIEW_ENTRIES],
+    queryKeys.entryCounts(siteId),
     ...entryQueryKeys(entryIds),
     adminQueryKeys.devSync(siteId),
   ]

@@ -3,7 +3,10 @@ import { uiLanguageName } from '#/lib/site-languages'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
-import type { CoverageState, LocaleCoverage } from './entry-coverage'
+import type {
+  CoverageState,
+  LocaleCoverage,
+} from '#/lib/content/entry-coverage'
 
 /**
  * One small chip per site language on an entry row or card (brief: coverage

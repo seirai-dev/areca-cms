@@ -51,6 +51,8 @@ export function ContentModelTab({ siteId }: { siteId: string }) {
   const query = useQuery({
     queryKey: queryKeys.collections(siteId),
     queryFn: () => listCollectionsFn({ data: { siteId } }),
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   })
   const collections = (query.data ?? []) as ContentType[]
 
@@ -388,6 +390,10 @@ function ContentTypeRow({
       Promise.all([
         queryClient.invalidateQueries({
           queryKey: queryKeys.collections(siteId),
+        }),
+        // Turning a collection off or on changes what non-admins see counted.
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.entryCounts(siteId),
         }),
         invalidateDevSync(queryClient, siteId),
       ]),

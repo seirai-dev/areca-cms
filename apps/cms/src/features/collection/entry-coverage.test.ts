@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { sampleRichText } from '#/server/content/test-utils'
 import type { Field } from '#/lib/types'
 
-import { entryCoverage } from './entry-coverage.ts'
+import { entryCoverage } from '#/lib/content/entry-coverage.ts'
 import { coverageLabel } from './locale-chips.tsx'
 
 const fields: Field[] = [

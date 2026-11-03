@@ -16,6 +16,9 @@ const log = createLogger('rate-limit')
 const redis = createClient({
   url: env.REDIS_URL,
   socket: { connectTimeout: 1_000, reconnectStrategy: false },
+  // Redis Enterprise only. With the default ('auto') every connect sends
+  // CLIENT MAINT_NOTIFICATIONS, which open-source Redis answers with an ERR.
+  maintNotifications: 'disabled',
 })
 let connectPromise: Promise<unknown> | undefined
 

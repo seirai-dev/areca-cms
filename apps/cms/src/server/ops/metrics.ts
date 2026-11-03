@@ -3,11 +3,13 @@ import { createHash, timingSafeEqual } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 
 import { db } from '#/db'
+import { poolStats } from '#/db/pool-registry'
+import type { PoolStats } from '#/db/pool-registry'
 import { env } from '#/env'
 import { createLogger } from '#/server/log'
 import type { BuildJobStatus, PublicationStatus } from '#/lib/types'
 
-import { runReadinessChecks } from './health'
+import { cachedReadinessChecks } from './health'
 import type { CheckName, ReadinessReport } from './health'
 import {
   LOOP_INTERVAL_SECONDS,
@@ -18,6 +20,8 @@ import {
 import type { LoopName } from './heartbeat'
 import { collectBacklog } from './backlog'
 import type { Backlog } from './backlog'
+import { sampleEventLoop } from './event-loop'
+import type { EventLoopStats } from './event-loop'
 
 const log = createLogger('metrics')
 
@@ -57,6 +61,9 @@ export type MetricsSnapshot = {
   readiness: ReadinessReport
   uptimeSeconds: number
   memory: { rss: number; heapUsed: number; heapTotal: number; external: number }
+  /** Connection pools registered in this process, see `#/db/pool-registry`. */
+  pools: PoolStats[]
+  eventLoop: EventLoopStats
 }
 
 type Sample = { labels?: Record<string, string>; value: number }
@@ -220,6 +227,47 @@ export function renderPrometheus(snapshot: MetricsSnapshot): string {
     { labels: { kind: 'heap_total' }, value: snapshot.memory.heapTotal },
     { labels: { kind: 'external' }, value: snapshot.memory.external },
   ])
+  gauge(
+    'areca_db_pool_connections',
+    'PostgreSQL connections per pool: total open and idle.',
+    snapshot.pools.flatMap((pool) => [
+      { labels: { pool: pool.label, state: 'total' }, value: pool.total },
+      { labels: { pool: pool.label, state: 'idle' }, value: pool.idle },
+    ]),
+  )
+  gauge(
+    'areca_db_pool_waiting',
+    'Requests waiting for a pooled PostgreSQL connection.',
+    snapshot.pools.map((pool) => ({
+      labels: { pool: pool.label },
+      value: pool.waiting,
+    })),
+  )
+  gauge(
+    'areca_db_pool_max_connections',
+    'Configured maximum connections per pool.',
+    snapshot.pools.map((pool) => ({
+      labels: { pool: pool.label },
+      value: pool.max,
+    })),
+  )
+  gauge(
+    'areca_event_loop_utilization',
+    'Share of time the event loop was busy since the previous scrape, 0 to 1.',
+    [{ value: snapshot.eventLoop.utilization }],
+  )
+  if (snapshot.eventLoop.delaySeconds) {
+    const { p50, p99, max } = snapshot.eventLoop.delaySeconds
+    gauge(
+      'areca_event_loop_delay_seconds',
+      'Event loop delay since the previous scrape (sampled every 20ms).',
+      [
+        { labels: { stat: 'p50' }, value: p50 },
+        { labels: { stat: 'p99' }, value: p99 },
+        { labels: { stat: 'max' }, value: max },
+      ],
+    )
+  }
 
   const lines: string[] = []
   for (const family of families) {
@@ -240,6 +288,9 @@ export function renderPrometheus(snapshot: MetricsSnapshot): string {
 export async function collectMetrics(
   readiness?: ReadinessReport,
 ): Promise<MetricsSnapshot> {
+  // Sampled before any await so the window covers only this process's
+  // event loop since the previous scrape.
+  const eventLoop = sampleEventLoop()
   const [jobs, pubs, overdue, failures, report, backlog] = await Promise.all([
     db.execute<{ status: string; n: string; oldest: string | null }>(sql`
       select status, count(*) as n,
@@ -254,7 +305,7 @@ export async function collectMetrics(
     db.execute<{ value: string }>(
       sql`select value from ops_counter where name = 'publication_failures'`,
     ),
-    readiness ?? runReadinessChecks(),
+    readiness ?? cachedReadinessChecks(),
     collectBacklog(),
   ])
   const jobsByStatus: Record<string, number> = {}
@@ -292,6 +343,8 @@ export async function collectMetrics(
       heapTotal: mem.heapTotal,
       external: mem.external,
     },
+    pools: poolStats(),
+    eventLoop,
   }
 }
 

@@ -1,0 +1,2 @@
+CREATE INDEX "asset_organization_created_idx" ON "asset" USING btree ("organization_id","created_at" desc,"id" desc);--> statement-breakpoint
+CREATE INDEX "entry_collection_updated_idx" ON "entry" USING btree ("collection_id","updated_at" desc,"slug");

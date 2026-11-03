@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: none;
+      }
+      #areca-benchmark {
+        font-family: var(--font-sans, system-ui);
+        color: var(--foreground, CanvasText);
+        --viz-series-1: var(--chart-1, Highlight);
+        --viz-series-2: var(--chart-2, LinkText);
+      }
+      #areca-benchmark h3 {
+        font-size: inherit;
+        font-weight: 500;
+        margin: 12px 0 8px;
+      }
+      #areca-benchmark p {
+        margin: 6px 0;
+        color: var(--muted-foreground, GrayText);
+      }
+      #areca-benchmark .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        margin: 8px 0;
+      }
+      #areca-benchmark .swatch {
+        display: inline-block;
+        width: 16px;
+        height: 8px;
+        margin-right: 6px;
+      }
+      #areca-benchmark svg {
+        display: block;
+        width: 100%;
+      }
+      #areca-benchmark svg text {
+        font-family: var(--font-sans, system-ui);
+        font-size: 12px;
+        fill: var(--foreground, CanvasText);
+      }
+      #areca-benchmark .chart {
+        margin-bottom: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <main id="areca-benchmark">
+      <h3>Latency at each concurrency tier</h3>
+      <div class="legend">
+        <span
+          ><i class="swatch" style="background: var(--viz-series-1)"></i
+          >p95</span
+        ><span
+          ><i class="swatch" style="background: var(--viz-series-2)"></i
+          >p99</span
+        >
+      </div>
+      <p>Limits: p95 &lt;500 ms · p99 &lt;1,000 ms · failures &lt;1%.</p>
+      <div class="chart" id="latency"></div>
+      <h3 id="cpu-title">Where CPU time went</h3>
+      <p>
+        Measured-window averages. 100% means one CPU core; this VPS has two.
+      </p>
+      <div class="chart" id="cpu"></div>
+    </main>
+    <script>
+      const DATA = {"lastTarget":500,"failureRate":0,"tiers":[{"target":500,"label":"Earlier 500","p95":1825.4669999999999,"p99":2512.0617949999996,"status":"FAIL"},{"target":500,"p95":1487.13756,"p99":2158.3476159999996,"status":"FAIL","label":"Now 500"},{"target":750,"status":"UNTESTED"},{"target":1000,"status":"UNTESTED"}],"components":{"cms":{"samples":120,"maxCpuPercent":137.71,"maxMemoryMiB":329.8,"avgCpuPercent":107.11741666666668},"worker":{"samples":120,"maxCpuPercent":38.42,"maxMemoryMiB":148.6,"avgCpuPercent":1.2311666666666656},"rustfs":{"samples":120,"maxCpuPercent":46.7,"maxMemoryMiB":353.4,"avgCpuPercent":7.6596666666666655},"redis":{"samples":120,"maxCpuPercent":0.68,"maxMemoryMiB":12.19,"avgCpuPercent":0.5024166666666666},"postgres":{"samples":120,"maxCpuPercent":61.03,"maxMemoryMiB":212.9,"avgCpuPercent":39.07466666666666},"proxy":{"samples":120,"maxCpuPercent":24.96,"maxMemoryMiB":472.1,"avgCpuPercent":15.470500000000003}}}
+      const root = document.getElementById('areca-benchmark'),
+        NS = 'http://www.w3.org/2000/svg'
+      const fg = 'var(--foreground,CanvasText)',
+        border = 'var(--border,ButtonBorder)'
+      function element(parent, name, attrs = {}, text) {
+        const e = document.createElementNS(NS, name)
+        for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v)
+        if (text !== undefined) e.textContent = text
+        parent.appendChild(e)
+        return e
+      }
+      function canvas(id, width, height, label) {
+        const parent = root.querySelector('#' + id)
+        parent.replaceChildren()
+        const svg = element(parent, 'svg', {
+          viewBox: `0 0 ${width} ${height}`,
+          height,
+          role: 'img',
+          'aria-label': label,
+        })
+        element(svg, 'title', {}, label)
+        return svg
+      }
+      function text(svg, x, y, value, attrs = {}) {
+        return element(svg, 'text', { x, y, ...attrs }, value)
+      }
+      function draw() {
+        const width = Math.max(300, root.clientWidth),
+          left = 86,
+          right = 86,
+          plot = width - left - right
+        const rows = DATA.tiers.length,
+          top = 28,
+          rowHeight = 44,
+          bottom = top + rows * rowHeight,
+          height = bottom + 48
+        const maximum =
+          Math.ceil(
+            (Math.max(
+              1000,
+              ...DATA.tiers.filter((t) => t.p99).map((t) => t.p99),
+            ) *
+              1.1) /
+              1000,
+          ) * 1000
+        const x = (value) => left + (value / maximum) * plot
+        const svg = canvas(
+          'latency',
+          width,
+          height,
+          DATA.tiers
+            .map((t) => `${t.label || t.target} users: ${t.status}`)
+            .join('. '),
+        )
+        text(svg, 0, 17, 'Users', { class: 'axis-title', 'data-axis': 'y' })
+        element(svg, 'rect', {
+          x: left,
+          y: top - 6,
+          width: plot,
+          height: rows * rowHeight,
+          fill: 'none',
+          stroke: border,
+          'data-chart-frame': '',
+        })
+        const tickStep = maximum / (width < 450 ? 2 : 4)
+        for (let v = 0; v <= maximum; v += tickStep) {
+          element(svg, 'line', {
+            x1: x(v),
+            x2: x(v),
+            y1: top - 6,
+            y2: bottom - 6,
+            stroke: border,
+            'stroke-width': 1,
+            opacity: 0.55,
+          })
+          text(svg, x(v), bottom + 13, v.toLocaleString(), {
+            'text-anchor': v === 0 ? 'start' : 'middle',
+          })
+        }
+        for (const limit of [500, 1000])
+          element(svg, 'line', {
+            x1: x(limit),
+            x2: x(limit),
+            y1: top - 6,
+            y2: bottom - 6,
+            stroke: fg,
+            'stroke-width': 1,
+            'stroke-dasharray': '3 3',
+            opacity: 0.65,
+          })
+        DATA.tiers.forEach((tier, index) => {
+          const y = top + index * rowHeight
+          text(svg, 0, y + 10, tier.label || tier.target.toLocaleString())
+          text(svg, 0, y + 27, tier.status, { opacity: 0.7 })
+          if (!tier.p95) {
+            text(svg, left + 6, y + 18, 'Not measured', { opacity: 0.6 })
+            return
+          }
+          for (const [key, offset, color] of [
+            ['p95', 0, 'var(--viz-series-1)'],
+            ['p99', 16, 'var(--viz-series-2)'],
+          ]) {
+            element(svg, 'rect', {
+              x: left,
+              y: y + offset,
+              width: x(tier[key]) - left,
+              height: 10,
+              fill: color,
+            })
+            text(
+              svg,
+              left + plot + 8,
+              y + offset + 10,
+              `${Math.round(tier[key]).toLocaleString()} ms`,
+            )
+          }
+        })
+        text(svg, left + plot / 2, height - 6, 'Request latency (ms)', {
+          'text-anchor': 'middle',
+          class: 'axis-title',
+          'data-axis': 'x',
+        })
+        const services = [
+          ['cms', 'CMS'],
+          ...(DATA.components.worker ? [['worker', 'Worker']] : []),
+          ['postgres', 'PostgreSQL'],
+          ['proxy', 'Traefik'],
+          ['rustfs', 'RustFS'],
+          ['redis', 'Redis'],
+        ]
+        const cpuTop = 26,
+          cpuRow = 34,
+          cpuBottom = cpuTop + services.length * cpuRow,
+          cpuHeight = cpuBottom + 47,
+          cx = (v) => left + (v / 200) * plot
+        const cpu = canvas(
+          'cpu',
+          width,
+          cpuHeight,
+          `Average service CPU at ${DATA.lastTarget || 500} users; 100 percent is one core.`,
+        )
+        root.querySelector('#cpu-title').textContent =
+          `Where CPU time went at ${DATA.lastTarget || 500} users`
+        text(cpu, 0, 16, 'Service', { class: 'axis-title', 'data-axis': 'y' })
+        element(cpu, 'rect', {
+          x: left,
+          y: cpuTop - 5,
+          width: plot,
+          height: services.length * cpuRow,
+          fill: 'none',
+          stroke: border,
+          'data-chart-frame': '',
+        })
+        for (const v of [0, 100, 200]) {
+          element(cpu, 'line', {
+            x1: cx(v),
+            x2: cx(v),
+            y1: cpuTop - 5,
+            y2: cpuBottom - 5,
+            stroke: border,
+            'stroke-width': 1,
+          })
+          text(cpu, cx(v), cpuBottom + 14, `${v}%`, {
+            'text-anchor': v === 0 ? 'start' : v === 200 ? 'end' : 'middle',
+          })
+        }
+        services.forEach(([key, label], i) => {
+          const value = DATA.components[key].avgCpuPercent,
+            y = cpuTop + i * cpuRow
+          text(cpu, 0, y + 14, label)
+          element(cpu, 'rect', {
+            x: left,
+            y: y + 2,
+            width: cx(value) - left,
+            height: 16,
+            fill: 'var(--viz-series-1)',
+          })
+          text(cpu, left + plot + 8, y + 15, `${value.toFixed(1)}%`)
+        })
+        text(cpu, left + plot / 2, cpuHeight - 6, 'CPU usage (% of one core)', {
+          'text-anchor': 'middle',
+          class: 'axis-title',
+          'data-axis': 'x',
+        })
+      }
+      let lastWidth = 0
+      new ResizeObserver(() => {
+        if (root.clientWidth !== lastWidth) {
+          lastWidth = root.clientWidth
+          draw()
+        }
+      }).observe(root)
+      draw()
+    </script>
+  </body>
+</html>
