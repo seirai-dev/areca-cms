@@ -1,4 +1,6 @@
 node_modules
+# Local agent worktrees must not be committed as submodules.
+.claude/worktrees/
 .DS_Store
 dist
 dist-ssr
