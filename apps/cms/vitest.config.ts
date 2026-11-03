@@ -71,6 +71,9 @@ export default defineConfig({
     env: {
       WORKER_ENABLED: 'false',
       LOG_LEVEL: 'silent',
+      // Tests check revocation and blocking against the database at once; the
+      // read-only cookie cache is covered in access.db.test.ts.
+      SESSION_COOKIE_CACHE_SECONDS: '0',
       DOKPLOY_CREDENTIALS_ENCRYPTION_KEY:
         'AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=',
       AI_SETTINGS_ENCRYPTION_KEY:

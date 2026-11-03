@@ -1,5 +1,8 @@
-import { richTextAssetsAuthorized } from '#/server/assets/richtext-ownership'
-import { and, eq } from 'drizzle-orm'
+import {
+  richTextAssetRefs,
+  richTextAssetsAuthorizedFrom,
+} from '#/server/assets/richtext-ownership'
+import { and, eq, inArray, or } from 'drizzle-orm'
 import { z } from '#/lib/zod'
 
 import { db } from '#/db'
@@ -562,6 +565,11 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  * Drafts may be incomplete, but supplied IDs must belong to their authorized
  * scope. Checks the base values and every `$i18n.<locale>` slot, so a
  * translation cannot point at another organization's asset or entry.
+ *
+ * Every id in the document is collected first and looked up in at most two
+ * queries (assets by id or storage key, referenced entries), so a long article
+ * with many images costs the same as a short one. This runs inside the save
+ * transaction, where each round trip holds a pool connection.
  */
 export async function validateContentOwnership(
   siteId: string,
@@ -570,108 +578,95 @@ export async function validateContentOwnership(
   data: EntryData,
   connection: Pick<typeof db, 'select'> = db,
 ) {
-  const errors: FieldError[] = [
-    ...(await ownershipErrors(
-      siteId,
-      organizationId,
-      fields,
-      data,
-      '',
-      connection,
-    )),
-  ]
+  const scopes: { data: EntryData; prefix: string }[] = [{ data, prefix: '' }]
   const translations = data[I18N_KEY]
   if (isPlainObject(translations)) {
     for (const [locale, slot] of Object.entries(translations)) {
       if (!isPlainObject(slot)) continue
-      errors.push(
-        ...(await ownershipErrors(
-          siteId,
-          organizationId,
-          fields,
-          slot,
-          `${I18N_KEY}.${locale}.`,
-          connection,
-        )),
-      )
+      scopes.push({ data: slot, prefix: `${I18N_KEY}.${locale}.` })
     }
   }
-  return errors
-}
 
-/** Ownership of one scope: the base, or one language slot (`prefix`). */
-async function ownershipErrors(
-  siteId: string,
-  organizationId: string,
-  fields: Field[],
-  data: EntryData,
-  prefix: string,
-  connection: Pick<typeof db, 'select'>,
-): Promise<FieldError[]> {
+  const assetIds = new Set<string>()
+  const storageKeys = new Set<string>()
+  const referenceIds = new Set<string>()
+  for (const scope of scopes) {
+    const ogImage = readEntrySeo(scope.data).ogImage
+    if (ogImage) assetIds.add(ogImage)
+    for (const field of fields) {
+      const value = scope.data[field.key]
+      if (field.type === 'richtext') {
+        const refs = richTextAssetRefs(value)
+        if (!refs.malformed) refs.storageKeys.forEach((k) => storageKeys.add(k))
+      }
+      if (typeof value !== 'string' || !value) continue
+      if (field.type === 'reference' && field.collection)
+        referenceIds.add(value)
+      if (field.type === 'image') assetIds.add(value)
+    }
+  }
+
+  const ownedIds = new Set<string>()
+  const ownedKeys = new Map<string, unknown>()
+  if (assetIds.size > 0 || storageKeys.size > 0) {
+    const matches = []
+    if (assetIds.size > 0) matches.push(inArray(asset.id, [...assetIds]))
+    if (storageKeys.size > 0)
+      matches.push(inArray(asset.storageKey, [...storageKeys]))
+    const rows = await connection
+      .select({ id: asset.id, storageKey: asset.storageKey })
+      .from(asset)
+      .where(and(eq(asset.organizationId, organizationId), or(...matches)))
+    for (const row of rows) {
+      ownedIds.add(row.id)
+      ownedKeys.set(row.storageKey, true)
+    }
+  }
+  const references = new Set<string>()
+  if (referenceIds.size > 0) {
+    const rows = await connection
+      .select({ id: entry.id, collectionKey: collection.key })
+      .from(entry)
+      .innerJoin(collection, eq(entry.collectionId, collection.id))
+      .where(
+        and(inArray(entry.id, [...referenceIds]), eq(entry.siteId, siteId)),
+      )
+    for (const row of rows)
+      references.add(`${row.collectionKey}\u0000${row.id}`)
+  }
+
   const errors: FieldError[] = []
-  const ogImage = readEntrySeo(data).ogImage
-  if (ogImage) {
-    const found = (
-      await connection
-        .select({ id: asset.id })
-        .from(asset)
-        .where(
-          and(eq(asset.id, ogImage), eq(asset.organizationId, organizationId)),
-        )
-        .limit(1)
-    ).at(0)
-    if (!found)
+  for (const { data: scopeData, prefix } of scopes) {
+    const ogImage = readEntrySeo(scopeData).ogImage
+    if (ogImage && !ownedIds.has(ogImage))
       errors.push({
         path: `${prefix}${SEO_KEY}.ogImage`,
         message: m.server_asset_not_found_in_organization(),
       })
-  }
-  for (const field of fields) {
-    const value = data[field.key]
-    if (
-      field.type === 'richtext' &&
-      !(await richTextAssetsAuthorized(value, organizationId, connection))
-    ) {
-      errors.push({
-        path: `${prefix}${field.key}`,
-        message: m.server_embedded_asset_not_found_in_organization(),
-      })
-    }
-    if (typeof value !== 'string' || !value) continue
-    if (field.type === 'reference') {
-      const found = (
-        field.collection
-          ? await connection
-              .select({ id: entry.id })
-              .from(entry)
-              .innerJoin(collection, eq(entry.collectionId, collection.id))
-              .where(
-                and(
-                  eq(entry.id, value),
-                  eq(entry.siteId, siteId),
-                  eq(collection.key, field.collection),
-                ),
-              )
-              .limit(1)
-          : []
-      ).at(0)
-      if (!found)
+    for (const field of fields) {
+      const value = scopeData[field.key]
+      if (
+        field.type === 'richtext' &&
+        !richTextAssetsAuthorizedFrom(value, { byStorageKey: ownedKeys })
+      ) {
+        errors.push({
+          path: `${prefix}${field.key}`,
+          message: m.server_embedded_asset_not_found_in_organization(),
+        })
+      }
+      if (typeof value !== 'string' || !value) continue
+      if (
+        field.type === 'reference' &&
+        !(
+          field.collection &&
+          references.has(`${field.collection}\u0000${value}`)
+        )
+      )
         errors.push({
           path: `${prefix}${field.key}`,
           message: m.server_referenced_entry_not_found(),
         })
-    }
-    if (field.type === 'image') {
-      const found = (
-        await connection
-          .select({ id: asset.id })
-          .from(asset)
-          .where(
-            and(eq(asset.id, value), eq(asset.organizationId, organizationId)),
-          )
-          .limit(1)
-      ).at(0)
-      if (!found)
+      if (field.type === 'image' && !ownedIds.has(value))
         errors.push({
           path: `${prefix}${field.key}`,
           message: m.server_asset_not_found_in_organization(),

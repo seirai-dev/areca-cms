@@ -9,6 +9,7 @@ import { MfaRequiredError } from '#/lib/security-errors'
 import {
   SESSION_MEMO_KEY,
   forgetForRequest,
+  isReadOnlyRequest,
   memoizeForRequest,
 } from '#/server/http/request-scope.server'
 import { requireAdminLocalMfa } from '#/server/security/local-mfa'
@@ -25,11 +26,17 @@ const roleRank: Record<MembershipRole, number> = {
 /**
  * The session for these request headers. Loaded at most once per request: the
  * guards of one request ask for it several times, and each load is a Better
- * Auth lookup plus database reads (no cookie cache is configured).
+ * Auth lookup plus database reads (plus the cookie cache (`SESSION_COOKIE_CACHE_SECONDS`) when it has expired).
  */
 export function loadSession(headers: Headers) {
   return memoizeForRequest(SESSION_MEMO_KEY, () =>
-    auth.api.getSession({ headers }),
+    auth.api.getSession({
+      headers,
+      // The cookie cache (`SESSION_COOKIE_CACHE_SECONDS`) serves reads only.
+      // A write always checks the database, so a revoked session or a blocked
+      // person can never change anything, even while their cookie is cached.
+      query: isReadOnlyRequest() ? undefined : { disableCookieCache: true },
+    }),
   )
 }
 
@@ -109,23 +116,23 @@ export function hasRole(actual: MembershipRole, required: MembershipRole) {
   return roleRank[actual] >= roleRank[required]
 }
 
-type OrgMembership = {
+export type OrgMembership = {
   session: Awaited<ReturnType<typeof requireUser>>
   /** Null for an agency admin, who is not a member and holds every role. */
   member: { role: MembershipRole } | null
 }
 
+const forbidden = () => new Response('Forbidden', { status: 403 })
+
 /** Signed-in user and their membership of the organization, with no role check. */
 async function loadOrgMembership(orgId: string): Promise<OrgMembership> {
   const session = await requireUser()
   if (session.user.isAgencyAdmin) {
-    assertAdminMfa(session.user)
-    await requireAdminLocalMfa(session)
-    return { session, member: null }
+    return resolveOrgMembership(session, null, forbidden)
   }
 
   const rows = await db
-    .select()
+    .select({ role: membership.role })
     .from(membership)
     .where(
       and(
@@ -134,13 +141,27 @@ async function loadOrgMembership(orgId: string): Promise<OrgMembership> {
       ),
     )
     .limit(1)
-  const member = rows.at(0)
+  return resolveOrgMembership(session, rows.at(0) ?? null, forbidden)
+}
 
-  if (!member) {
-    throw new Response('Forbidden', { status: 403 })
+/**
+ * The membership decision for a membership row the caller already read (for
+ * example joined into the site or entry lookup, see `access.ts`). Agency
+ * admins need two-factor and a local factor proof and hold every role; anyone
+ * else needs the row, otherwise `notFound()` is thrown.
+ */
+export async function resolveOrgMembership(
+  session: Awaited<ReturnType<typeof requireUser>>,
+  member: { role: MembershipRole } | null | undefined,
+  notFound: () => unknown,
+): Promise<OrgMembership> {
+  if (session.user.isAgencyAdmin) {
+    assertAdminMfa(session.user)
+    await requireAdminLocalMfa(session)
+    return { session, member: null }
   }
-
-  return { session, member }
+  if (!member) throw notFound()
+  return { session, member: { role: member.role } }
 }
 
 /** The 403 for a member whose role is below the one required. */

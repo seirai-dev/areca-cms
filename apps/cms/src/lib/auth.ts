@@ -254,6 +254,19 @@ const authBase = betterAuth({
       ? []
       : ['http://localhost:3000', 'http://127.0.0.1:3000']),
   ],
+  session: {
+    // The signed session lives in a cookie for up to a minute, so reads skip
+    // the session and user lookups. Trade-off: signing out elsewhere, a
+    // deleted session or a block can take up to this long to stop reads from a
+    // browser that already holds the cookie. Writes always check the database
+    // (`loadSession`), and Better Auth's own endpoints (sign-out, profile and
+    // two-factor changes) rewrite the cookie at once.
+    cookieCache: {
+      enabled: env.SESSION_COOKIE_CACHE_SECONDS > 0,
+      maxAge: env.SESSION_COOKIE_CACHE_SECONDS,
+      strategy: 'compact',
+    },
+  },
   emailAndPassword: {
     enabled: emailPasswordEnabled,
     resetPasswordTokenExpiresIn: 60 * 60,

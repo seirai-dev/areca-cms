@@ -38,12 +38,12 @@ import {
 
 import { referencePickerUiStatus } from './reference-picker-status'
 
-const PAGE = 50
+const PAGE = 25
 
 /**
  * Reference field (brief §3.5): a searchable picker of entries in the target
  * collection, server-side search so large collections stay usable. Shows the
- * chosen entry's title even when it is not in the current page. Pages of 50
+ * chosen entry's title even when it is not in the current page. Pages of 25
  * with Load more; only Ready/Live and snapshot-eligible scheduled targets.
  */
 export function ReferencePicker({

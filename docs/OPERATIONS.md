@@ -373,6 +373,34 @@ Two things stay per process. The rate-limit counters during a Redis outage
 reports its own loops. Set `WORKER_ENABLED=false` on replicas that should only
 serve pages.
 
+## Separate worker process
+
+On a small host, run the publishing loops in their own container so they do
+not share the web process's event loop and connection pool:
+
+- **Web** (has the domain): `WORKER_ENABLED=false`.
+- **Worker** (same image, same environment, no domain): `WORKER_ENABLED=true`,
+  a small pool such as `DB_POOL_MAX=4`, and a CPU limit so a large build cannot
+  starve the web process.
+
+Both containers run migrations at startup under the migration lock, so either
+may start first. The worker container still serves HTTP on its port (its own
+health checks use it); nothing routes traffic to it. Keep exactly one worker
+container: jobs are claimed safely by several, but one is enough and keeps the
+heartbeat in one place. Readiness on the web process skips the worker check
+(`worker.enabled: false`); check the worker container's `/api/health/ready`
+or its logs for the loops. Publishing, scheduled publishing, mail and cleanup
+stop while the worker container is down.
+
+## Request ids
+
+Every response carries `X-Request-Id`. An id sent by the proxy in the same
+header is kept, otherwise the server makes one. Every log line written while
+handling the request carries it as `requestId`, and responses with status 500
+or above are logged as `request failed` with method, path, status and
+duration. A 502 that never reaches the server (a proxy-side failure) has no
+app log line; look in the proxy's access log for that time and path.
+
 ## Worker and scheduler
 
 Publication behavior follows each site's deployment mode. **Production**

@@ -12,7 +12,7 @@ import { authClient } from '#/lib/auth-client'
 import { readLocale, writeLocale } from '#/lib/content-locale'
 import { isValidSlug } from '#/lib/slug'
 import type { LocaleCtx } from '#/lib/content-locale'
-import { queryKeys } from '#/lib/content/query-keys'
+import { OVERVIEW_ENTRIES, queryKeys } from '#/lib/content/query-keys'
 import {
   errorMessage,
   fieldErrorsFromUnknown,
@@ -463,6 +463,10 @@ export function useEntryEditor({
           queryKey: ['entries', siteId, collectionKey],
           refetchType,
         }),
+        queryClient.invalidateQueries({
+          queryKey: ['entries', siteId, OVERVIEW_ENTRIES],
+          refetchType,
+        }),
         id
           ? queryClient.invalidateQueries({
               queryKey: queryKeys.revisions(id),
@@ -874,6 +878,9 @@ export function useEntryEditor({
       await Promise.all([
         queryClient.invalidateQueries({
           queryKey: ['entries', siteId, collectionKey],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ['entries', siteId, OVERVIEW_ENTRIES],
         }),
         queryClient.invalidateQueries({
           queryKey: queryKeys.entryCounts(siteId),

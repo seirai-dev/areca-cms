@@ -1,3 +1,6 @@
+/** Third key segment of the overview lists; collection keys never contain a space. */
+export const OVERVIEW_ENTRIES = ' overview'
+
 export const queryKeys = {
   collections: (siteId: string) => ['collections', siteId] as const,
   /** Entries per collection of one site (sidebar and mobile bar). */
@@ -13,6 +16,13 @@ export const queryKeys = {
       offset?: number
     },
   ) => ['entries', siteId, collectionKey, filters ?? {}] as const,
+  /**
+   * The overview's site-wide lists. Under `['entries', siteId]`, so anything
+   * that invalidates a site's entries refreshes them; a save invalidates them
+   * by this key (`OVERVIEW_ENTRIES`).
+   */
+  recentEntries: (siteId: string, list: 'recent' | 'drafts-by-others') =>
+    ['entries', siteId, OVERVIEW_ENTRIES, list] as const,
   inboundReferences: (entryId: string) =>
     ['inbound-references', entryId] as const,
   entry: (id: string) => ['entry', id] as const,

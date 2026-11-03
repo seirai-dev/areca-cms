@@ -40,6 +40,7 @@ import {
   deleteEntry,
   countEntriesByCollection,
   listEntrySummaries,
+  listSiteEntrySummaries,
   listRevisions,
   publishEntry,
   restoreRevision,
@@ -181,14 +182,39 @@ export const listEntriesFn = createServerFn({ method: 'GET', ...entryFn })
     }),
   )
   .handler(async ({ data }) => {
-    await requireSiteAccess(data.siteId)
+    const { site } = await requireSiteAccess(data.siteId)
     return listEntrySummaries(data.siteId, data.collectionKey, {
+      languages: site.languages,
       status: data.status,
       referenceTargets: data.referenceTargets,
       search: data.search,
       missingLanguage: data.missingLanguage,
       limit: data.limit,
       offset: data.offset,
+    })
+  })
+
+/**
+ * The overview's lists in one request each: the newest entries across the
+ * site's collections, or (owners) drafts last saved by someone else. Same
+ * collections as the sidebar.
+ */
+export const listRecentEntriesFn = createServerFn({ method: 'GET', ...entryFn })
+  .validator(
+    z.object({
+      siteId: z.string().min(1).max(ID_MAX_LENGTH),
+      draftsByOthers: z.boolean().optional(),
+      limit: z.number().int().min(1).max(20),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const { session, site } = await requireSiteAccess(data.siteId)
+    return listSiteEntrySummaries(data.siteId, {
+      enabledOnly: !session.user.isAgencyAdmin,
+      languages: site.languages,
+      status: data.draftsByOthers ? 'draft' : undefined,
+      excludeUpdatedBy: data.draftsByOthers ? session.user.id : undefined,
+      limit: data.limit,
     })
   })
 
@@ -219,17 +245,10 @@ export const listInboundReferencesFn = createServerFn({
 export const getEntryFn = createServerFn({ method: 'GET', ...entryFn })
   .validator(z.object({ id: z.string().min(1).max(ID_MAX_LENGTH) }))
   .handler(async ({ data }) => {
-    const { entry } = await requireEntryAccess(data.id)
-    const names = await userNames([entry.createdBy, entry.updatedBy])
-    return {
-      ...entry,
-      createdByName: entry.createdBy
-        ? (names.get(entry.createdBy) ?? null)
-        : null,
-      updatedByName: entry.updatedBy
-        ? (names.get(entry.updatedBy) ?? null)
-        : null,
-    }
+    const { entry, createdByName, updatedByName } = await requireEntryAccess(
+      data.id,
+    )
+    return { ...entry, createdByName, updatedByName }
   })
 
 export const createEntryFn = createServerFn({ method: 'POST', ...entryFn })
@@ -259,12 +278,17 @@ export const updateDraftFn = createServerFn({ method: 'POST', ...entryFn })
     }),
   )
   .handler(async ({ data }) => {
-    const { session } = await requireEntryAccess(data.id)
+    const { session, entry, collection, site } = await requireEntryAccess(
+      data.id,
+    )
+    // The guard already read the entry, collection and site; the save reuses
+    // them. The version check in the UPDATE still catches a concurrent save.
     return updateDraft(
       data.id,
       data.data,
       session.user.id,
       data.expectedVersion,
+      { entry, collection, site },
     )
   })
 

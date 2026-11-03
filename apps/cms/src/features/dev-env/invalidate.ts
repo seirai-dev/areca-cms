@@ -1,7 +1,7 @@
 import type { QueryClient, QueryKey } from '@tanstack/react-query'
 
 import { adminQueryKeys } from '#/lib/admin/helpers'
-import { queryKeys } from '#/lib/content/query-keys'
+import { OVERVIEW_ENTRIES, queryKeys } from '#/lib/content/query-keys'
 import { ME_QUERY_KEY } from '#/lib/me-query'
 import { globalsQueryKey } from '#/features/globals/use-globals'
 
@@ -139,6 +139,7 @@ export function bulkQueryKeys({
 }): QueryKey[] {
   return [
     ['entries', siteId, collectionKey],
+    ['entries', siteId, OVERVIEW_ENTRIES],
     queryKeys.entryCounts(siteId),
     ...entryQueryKeys(entryIds),
     adminQueryKeys.devSync(siteId),

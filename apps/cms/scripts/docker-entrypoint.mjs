@@ -105,9 +105,25 @@ try {
   process.exit(1)
 }
 
+// Idle keep-alive sockets must outlive the reverse proxy's, or the proxy can
+// reuse a socket the server is closing and answer 502. Node closes idle
+// sockets after 5s; Traefik keeps them for 90s. Nitro creates the server
+// without options, so a preload sets the timeouts on every HTTP server.
+const keepAliveMs = Number(process.env.HTTP_KEEP_ALIVE_TIMEOUT_MS) || 120_000
+const keepAlivePreload = `data:text/javascript,${encodeURIComponent(`
+import http from 'node:http'
+const create = http.createServer
+http.createServer = function (...args) {
+  const server = create.apply(this, args)
+  server.keepAliveTimeout = ${keepAliveMs}
+  server.headersTimeout = ${keepAliveMs + 1_000}
+  return server
+}
+`)}`
+
 const child = spawn(
   process.execPath,
-  [join(appDir, '.output/server/index.mjs')],
+  ['--import', keepAlivePreload, join(appDir, '.output/server/index.mjs')],
   {
     cwd: appDir,
     env: process.env,

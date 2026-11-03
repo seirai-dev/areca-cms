@@ -1,10 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router'
 import '@tanstack/react-start'
 
-import { runReadinessChecks } from '#/server/ops/health'
+import { cachedReadinessChecks } from '#/server/ops/health'
 
 export async function getReadiness() {
-  const report = await runReadinessChecks()
+  const report = await cachedReadinessChecks()
   return Response.json(report, {
     status: report.ok ? 200 : 503,
     headers: { 'Cache-Control': 'no-store' },

@@ -560,6 +560,14 @@ export const ROWS: Row[] = [
     prepare: (w) => ({ data: { siteId: w.X.site.id } }),
   },
   {
+    name: 'listRecentEntriesFn',
+    note: 'Overview lists across the site. Non-admins see only entries of enabled collections, the same set as the sidebar.',
+    hidden: true,
+    fn: contentFns.listRecentEntriesFn,
+    policy: 'org-editor',
+    prepare: (w) => ({ data: { siteId: w.X.site.id, limit: 8 } }),
+  },
+  {
     name: 'getEntryFn',
     hidden: true,
     fn: contentFns.getEntryFn,

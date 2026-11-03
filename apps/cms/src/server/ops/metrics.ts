@@ -9,7 +9,7 @@ import { env } from '#/env'
 import { createLogger } from '#/server/log'
 import type { BuildJobStatus, PublicationStatus } from '#/lib/types'
 
-import { runReadinessChecks } from './health'
+import { cachedReadinessChecks } from './health'
 import type { CheckName, ReadinessReport } from './health'
 import {
   LOOP_INTERVAL_SECONDS,
@@ -305,7 +305,7 @@ export async function collectMetrics(
     db.execute<{ value: string }>(
       sql`select value from ops_counter where name = 'publication_failures'`,
     ),
-    readiness ?? runReadinessChecks(),
+    readiness ?? cachedReadinessChecks(),
     collectBacklog(),
   ])
   const jobsByStatus: Record<string, number> = {}

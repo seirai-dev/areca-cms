@@ -113,8 +113,32 @@ describe.skipIf(!hasDb)('requireEntryAccess', () => {
     const getSession = vi.spyOn(auth.api, 'getSession')
 
     await requireEntryAccess(entryId, 'owner')
+    await requireEntryAccess(entryId, 'owner')
 
-    expect(getSession.mock.calls.length).toBeGreaterThan(1)
+    expect(getSession).toHaveBeenCalledTimes(2)
+  })
+
+  it('trusts the session cookie cache for reads only', async () => {
+    const { entryId, ownerHeaders } = await setUp()
+    headersHolder.current = ownerHeaders
+    const getSession = vi.spyOn(auth.api, 'getSession')
+
+    await withRequestScope(() => requireEntryAccess(entryId), {
+      method: 'GET',
+    })
+    await withRequestScope(() => requireEntryAccess(entryId), {
+      method: 'POST',
+    })
+    await requireEntryAccess(entryId)
+
+    const queries = getSession.mock.calls.map(
+      ([options]) => (options as { query?: unknown }).query,
+    )
+    expect(queries).toEqual([
+      undefined,
+      { disableCookieCache: true },
+      { disableCookieCache: true },
+    ])
   })
 
   it('answers an editor asking for an owner-only entry with 403, as before', async () => {

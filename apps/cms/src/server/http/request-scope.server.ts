@@ -16,8 +16,35 @@ const scopes = new AsyncLocalStorage<Map<string, Promise<unknown>>>()
 /** Memo key for the Better Auth session of the request being handled. */
 export const SESSION_MEMO_KEY = 'better-auth:session'
 
-export function withRequestScope<T>(run: () => T): T {
-  return scopes.run(new Map(), run)
+type RequestInfo = { id?: string; method?: string }
+
+/** Request facts per scope, kept beside the memo so `forgetForRequest` cannot drop them. */
+const requestInfo = new WeakMap<object, RequestInfo>()
+
+export function withRequestScope<T>(run: () => T, info: RequestInfo = {}): T {
+  const memo = new Map<string, Promise<unknown>>()
+  requestInfo.set(memo, info)
+  return scopes.run(memo, run)
+}
+
+function currentInfo(): RequestInfo | undefined {
+  const memo = scopes.getStore()
+  return memo ? requestInfo.get(memo) : undefined
+}
+
+/** The id of the request being handled (`X-Request-Id`), for log lines. */
+export function currentRequestId(): string | undefined {
+  return currentInfo()?.id
+}
+
+/**
+ * True while handling a GET or HEAD request. Reads may trust the session
+ * cookie cache; anything that writes reads the session from the database.
+ * Outside a request scope this is false, so the session is read fresh.
+ */
+export function isReadOnlyRequest(): boolean {
+  const method = currentInfo()?.method
+  return method === 'GET' || method === 'HEAD'
 }
 
 /**
