@@ -170,6 +170,9 @@ export const ssoProvider = pgTable('sso_provider', {
   providerId: text('provider_id').notNull().unique(),
   organizationId: text('organization_id'),
   domain: text('domain').notNull(),
+  // Added by the plugin's domain verification, which trusts emails on the
+  // configured Microsoft domain (see `auth-providers.ts`).
+  domainVerified: boolean('domain_verified').notNull().default(false),
 })
 
 export const organization = pgTable('organization', {
