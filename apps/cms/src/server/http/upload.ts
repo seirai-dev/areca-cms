@@ -8,14 +8,14 @@ export class UploadTooLargeError extends AppError {
 }
 
 /**
- * Buffer a request up to a strict cap before invoking the platform multipart
- * parser. This keeps chunked uploads bounded as well as rejecting an oversized
- * Content-Length without reading the body.
+ * Read a request body up to a strict cap. An oversized Content-Length is
+ * refused without reading, and a chunked body is cut off as soon as it passes
+ * the cap.
  */
-export async function parseLimitedFormData(
+export async function readLimitedBody(
   request: Request,
   maxBodyBytes: number,
-): Promise<FormData> {
+): Promise<Uint8Array<ArrayBuffer>> {
   const declaredLength = request.headers.get('content-length')
   if (declaredLength) {
     const length = Number(declaredLength)
@@ -25,7 +25,7 @@ export async function parseLimitedFormData(
     if (length > maxBodyBytes) throw new UploadTooLargeError()
   }
 
-  if (!request.body) return request.formData()
+  if (!request.body) return new Uint8Array(new ArrayBuffer(0))
 
   const reader = request.body.getReader()
   const chunks: Uint8Array[] = []
@@ -54,7 +54,23 @@ export async function parseLimitedFormData(
     body.set(chunk, offset)
     offset += chunk.byteLength
   }
+  return body
+}
 
+/**
+ * Buffer a request up to a strict cap before invoking the platform multipart
+ * parser. This keeps chunked uploads bounded as well as rejecting an oversized
+ * Content-Length without reading the body.
+ */
+export async function parseLimitedFormData(
+  request: Request,
+  maxBodyBytes: number,
+): Promise<FormData> {
+  if (!request.body) {
+    await readLimitedBody(request, maxBodyBytes)
+    return request.formData()
+  }
+  const body = await readLimitedBody(request, maxBodyBytes)
   return new Request(request.url, {
     method: request.method,
     headers: request.headers,

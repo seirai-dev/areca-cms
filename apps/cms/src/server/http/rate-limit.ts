@@ -33,6 +33,13 @@ const MCP_RULE = { limit: 120, windowSeconds: 60 } as const
 // Per client IP, across all bearer tokens. Random fake tokens each get a fresh
 // per-token bucket, so this is what throttles a flood of invalid keys.
 const MCP_IP_RULE = { limit: 600, windowSeconds: 60 } as const
+// Upload links (/api/upload/<token>). A session takes at most 20 files, so the
+// per-link budget only stops a runaway client; the per-IP budget throttles a
+// flood of made-up links. The user upload budget does not apply: the link is
+// the limit.
+const UPLOAD_LINK_RULE = { limit: 120, windowSeconds: 60 } as const
+const UPLOAD_LINK_IP_RULE = { limit: 600, windowSeconds: 60 } as const
+const UPLOAD_LINK_PREFIX = '/api/upload/'
 // Throttles bearer-token guessing against /api/metrics; a scraper needs ~4/min.
 const METRICS_RULE = { limit: 60, windowSeconds: 60 } as const
 // Anonymous client registration (RFC 7591) is open so AI apps can connect. A
@@ -259,6 +266,40 @@ async function enforceLivePreview(
  * still apply. The catch below only handles unexpected errors, and lets the
  * request through so one bug does not block every request.
  */
+/** Budgets for upload links: per link (hashed, never the raw token) and per IP. */
+async function enforceUploadLink(
+  request: Request,
+  path: string,
+  dependencies: RequestRateLimitDependencies,
+): Promise<Response | null> {
+  const now = dependencies.now?.() ?? Date.now()
+  try {
+    const ip = getClientIp(request, dependencies.trustProxy)
+    if (ip !== 'unknown') {
+      const ipAllowed = await consumeRateLimit(
+        dependencies.store,
+        'upload-link-ip',
+        `ip:${ip}`,
+        UPLOAD_LINK_IP_RULE,
+        now,
+      )
+      if (!ipAllowed) return tooManyRequests(UPLOAD_LINK_IP_RULE, now)
+    }
+    const token = path.slice(UPLOAD_LINK_PREFIX.length).split('/')[0] ?? ''
+    const allowed = await consumeRateLimit(
+      dependencies.store,
+      'upload-link',
+      `link:${fingerprint(token)}`,
+      UPLOAD_LINK_RULE,
+      now,
+    )
+    return allowed ? null : tooManyRequests(UPLOAD_LINK_RULE, now)
+  } catch (error) {
+    dependencies.logError?.('Rate limiting unavailable; request allowed', error)
+    return null
+  }
+}
+
 export async function enforceRequestRateLimit(
   request: Request,
   dependencies: RequestRateLimitDependencies,
@@ -350,6 +391,10 @@ export async function enforceRequestRateLimit(
       )
       return null
     }
+  }
+
+  if (path.startsWith(UPLOAD_LINK_PREFIX)) {
+    return enforceUploadLink(request, path, dependencies)
   }
 
   const isSiteApi = SITE_TOKEN_PATHS.has(path)

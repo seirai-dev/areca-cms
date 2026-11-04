@@ -1,0 +1,100 @@
+---
+title: Developer setup with Areca skills
+description: Prepare a client and site, install the four Areca skills, connect your agent, and finish the website setup.
+---
+
+Use this guide when a coding agent will help connect a website to Areca. The skills teach the agent Areca's workflows; the MCP connector lets it work in your CMS; the site SDK connects your website to content. Installing the skills alone does not install the SDK, create a client or site, generate tokens, or deploy your website.
+
+
+For both installation routes, update commands and agent discovery troubleshooting, see [Install and update skills](/docs/sdk/installing-and-updating-skills).
+
+## Before installing
+
+### Prepare the CMS and your account
+
+You need a running CMS that your agent can reach. For a new installation, complete [first-run setup](/docs/self-hosting/first-run) first. Hosted chat apps need public HTTPS; see [AI apps need public HTTPS](/docs/self-hosting/production#ai-apps-need-public-https).
+
+Sign in with an agency admin account and finish two-factor enrollment. An agency admin must create the client and site. MCP-first schema setup also needs an agency admin connection. Editors can work on drafts; owners have additional review permissions. See [roles and permissions](/docs/security/roles-and-permissions).
+
+### Create the client and site yourself
+
+1. Open **Agency**, choose **New client**, and save its name and slug. Reuse an existing client when appropriate.
+2. Open the client's **Sites** tab and choose **New site**.
+3. Enter the site name, keep or choose the **Site key**, and record it. This must match `siteKey` in the website's `areca.config.ts`.
+4. Set the required **Production URL**. For local setup you can use your website's address, such as `http://localhost:3001`; replace it with the real address before production.
+5. Create the site and save the site token immediately in a password manager. It is shown once.
+6. For code-first schema management only, get a schema-write token from **Settings › Developer** using **Rotate schema token**.
+
+If a token is lost, rotate it in **Settings › Developer** and update every environment that uses it. The old token stops working immediately. See [create the site](/docs/guides/create-the-site).
+
+### Prepare the website repository
+
+Open the actual website repository in your coding agent. Have Node.js 22.18 or newer available for loading TypeScript config files natively, plus the project's package manager. You can start with a new website or an existing one; tell the agent which pages it should connect and which design to preserve.
+
+Keep these server-side values in the website's gitignored `.env.local`, or enter them through `areca init` in your terminal when prompted:
+
+```dotenv
+ARECA_CMS_URL=https://cms.example.com
+ARECA_SITE_TOKEN=
+# Only for code-first manifest pushes:
+ARECA_SCHEMA_TOKEN=
+```
+
+Fill the token values yourself. Do not paste tokens into agent chat or use a `VITE_`, `NEXT_PUBLIC_` or `PUBLIC_` prefix. SDK tokens and MCP authorization are separate: signing the agent in does not configure the website's site token. See [SDK environment variables](/docs/sdk/installation#environment-variables).
+
+## Install the skills and connector
+
+Run this from the website repository:
+
+```bash
+npx @areca-cms/skills
+```
+
+Choose your coding agents, select the skills, and choose **This project** to share the instruction folders through Git, or **Me, in every project** for a personal installation.
+
+When prompted for MCP, paste the exact connector URL from the site's **Connect AI** page:
+
+```text
+https://cms.example.com/api/mcp/<site-slug>
+```
+
+The site slug in this URL and the SDK site key are different identifiers; copy each from the CMS rather than guessing. An agency admin who needs access across clients can use the [agency connector](/docs/cms/agency-connector), `https://cms.example.com/api/agency/mcp`, instead.
+
+For an explicit installation targeting Codex and Claude Code:
+
+```bash
+npx @areca-cms/skills add -a codex,claude-code --mcp-url https://cms.example.com/api/mcp/acme-site -y
+```
+
+The installer writes URL-based configuration, with no secret. Some apps need you to copy the printed configuration into their settings. Chat apps receive skill ZIP files to upload and need their connector configured separately. See [Agent skills](/docs/sdk/agent-skills) for supported tools, export commands and alternative installation methods.
+
+### Sign in and verify access
+
+Open your agent's MCP settings and authenticate the Areca server in the browser. Approve the permissions you intend it to have. Going live needs the appropriate role and connection permission; enable **Allow going live** only if you want the agent to do that. OAuth is preferred. A personal AI key is an alternative for apps without OAuth; store it in the app's secret store, never in committed connector configuration.
+
+Reload the agent session if the tools do not appear. Ask it to call `get_site_info` and report the site, environment, role and restrictions. On the agency connector, specify which site to inspect. Check that it is the intended site before making changes. See [Connect AI](/docs/cms/connect-ai).
+
+## Choose and use a skill
+
+| Skill | What it does | Example request |
+| --- | --- | --- |
+| `areca-quickstart` | Interviews you about the project, proposes content types and languages, sets up the SDK and pages, and verifies a first release. On rerun, handles additions and changes. | “Run /areca-quickstart to connect this website. Preserve the existing design.” |
+| `areca-sdk` | Guides SDK configuration, schema sync, typed reads, rich text, SEO, preview routes, health routes and release builds. | “Use areca-sdk to render the news collection with typed content and SEO.” |
+| `areca-mcp` | Guides CMS tool use, field formats, permissions, draft/ready/live workflow, images and content changes. | “Use areca-mcp to draft a news entry and leave it for review.” |
+| `areca-visual-editing` | Adds frame permissions, preview updates, click-to-edit markers and section pages, then checks the CMS visual editor settings. | “Use areca-visual-editing to make the preview page editable from the CMS.” |
+
+Agents usually load matching skills automatically. Name the skill explicitly if needed; `/areca-quickstart` is the setup entry point in agents that support slash invocation. Skills are instructions, not background services.
+
+During quickstart, review the content model and choose its source of truth. **MCP-first** uses an agency admin connection to manage the schema in the CMS and pulls it into `areca.config.ts`. **Code-first** manages it in `areca.config.ts` and pushes with `ARECA_SCHEMA_TOKEN`. Keep using the chosen workflow: a later code-first push can undo CMS schema edits. The agent can install `@areca-cms/site-sdk`, run `areca init`, add scripts and wire framework routes after this setup is agreed.
+
+For a new site, use a demo release to verify the integration. The agent asks before publishing and before deleting sample content. A development environment reads ready content directly and has no go-live step. For an existing production site, work in its [development environment](/docs/cms/development-environments) and review the push to production. See [Quickstart with an AI agent](/docs/sdk/agent-quickstart) for the detailed workflow.
+
+## After setup
+
+1. Run the generated content command, typecheck and build. Check a real rendered page, images and SEO; check preview and visual editing if you requested them. Normal sites need a first release before `areca pull` can read content; demo releases are not public.
+2. Review the diff. Commit the config, scripts, routes, generated `areca.gen.ts` and project skill folders. Keep `.env.local` and generated content JSON out of Git.
+3. Ask the agent to explain the ongoing commands. MCP-first projects use `content:sync` to pull schema and content. Code-first projects use `sync-manifest` after config changes and `content:pull` for content. Check the actual scripts added to your project.
+4. Review sample entries and placeholder section copy. Archive or replace them before the real release.
+5. For production, configure the client's deployment provider and the site's deployment settings, real production URL, build environment and health route. Supply website tokens through the hosting provider's server-side secret settings. Review and approve the production release. See [deployment targets](/docs/self-hosting/deployment-targets) and [Go-live builds](/docs/sdk/go-live-builds).
+
+There is no separate skill activation step after installation. Run `npx @areca-cms/skills` again to update the installed instructions, and reload your agent when needed. On a new machine, install dependencies, restore the website secrets securely, and pull content before building.

@@ -12,6 +12,7 @@ import {
 import type { Field, SiteLanguages } from '#/lib/types'
 
 import { credentialPhrase } from '../guard'
+import { IMAGE_UPLOAD_SHORT } from '../image-guide'
 import { mcpResourceUrl } from '../oauth-resource'
 import type { ToolCollector } from '../tool-kit'
 import type { McpSiteContext } from '../site-context'
@@ -104,7 +105,7 @@ function writingGuide(
   return [
     'Workflow: 1) get_collection_schema for the collection you need. 2) create_entry with fields and seo (rich text as Markdown). 3) get_preview_url to check it. 4) update_entry to revise (pass the version from get_entry as expectedVersion).',
     'Site content (globals) is not a collection: read a section with get_global and change it with update_global (pass expectedVersion from get_global). Its id works with mark_ready and the other workflow tools.',
-    'Images: upload_asset_from_url with a public image URL, then use the returned assetId in image fields, seo.ogImage, or ![alt](asset:<assetId>) in Markdown. Always give alt text.',
+    IMAGE_UPLOAD_SHORT,
     'Drafts are safe. ' + approval + release,
     STATUS_GUIDE,
     DATES_NOTE,

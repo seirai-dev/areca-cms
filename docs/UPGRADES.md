@@ -70,8 +70,8 @@ time unless the release notes say the migration is backward compatible.
   backfills). Take a coordinated backup as described in
   [RECOVERY.md](../docker/RECOVERY.md#coordinated-full-instance-backup) and keep it
   until the upgrade is accepted.
-- **Pin the image.** Production must not follow `latest`. Set `CMS_IMAGE` to the
-  commit tag (`ghcr.io/<owner>/areca-cms:sha-<full-commit-sha>`) or, for
+- **Pin the image.** Production must not follow `latest`. Set `CMS_IMAGE` to a
+  version tag (`ghcr.io/<owner>/areca-cms:v0.1.0`) or, for
   registry-enforced immutability, a digest (`...areca-cms@sha256:<digest>`).
   Record the tag/digest you ran before and after each upgrade; it is your
   rollback target. The third-party images in `docker/compose.yml` are pinned to

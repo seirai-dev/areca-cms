@@ -18,7 +18,8 @@ permissions:
   contents: read
   packages: write
 
-# Serialize releases so an older run cannot overwrite a newer latest tag.
+# Serialize builds so an older run cannot overwrite a newer edge tag. The
+# latest and version tags are set by cms-release.yml.
 concurrency:
   group: cms-docker-release-${{ github.ref }}
   cancel-in-progress: false
@@ -65,7 +66,7 @@ jobs:
           push: true
           tags: |
             ${{ steps.image.outputs.name }}:sha-${{ github.sha }}-amd64
-            ${{ github.ref == 'refs/heads/main' && format('{0}:latest-amd64', steps.image.outputs.name) || '' }}
+            ${{ github.ref == 'refs/heads/main' && format('{0}:edge-amd64', steps.image.outputs.name) || '' }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -96,7 +97,7 @@ jobs:
         run: |
           tags=(--tag "$IMAGE:sha-$COMMIT")
           if [[ "$REF" == refs/heads/main ]]; then
-            tags+=(--tag "$IMAGE:latest")
+            tags+=(--tag "$IMAGE:edge")
           fi
           docker buildx imagetools create "${tags[@]}" \
             "$IMAGE@$AMD64_DIGEST" "$IMAGE@$ARM64_DIGEST"

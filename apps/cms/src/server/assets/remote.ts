@@ -258,7 +258,7 @@ function withMimeExtension(name: string, mimeType: string | null): string {
   return `${name}.${info.preferred}`
 }
 
-function cleanFilename(
+export function cleanFilename(
   raw: string | null | undefined,
   mimeType: string | null,
 ): string | undefined {

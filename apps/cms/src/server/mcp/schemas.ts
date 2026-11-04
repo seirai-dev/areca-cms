@@ -86,7 +86,7 @@ export const seoInputSchema = z
       .max(ID_MAX_LENGTH)
       .optional()
       .describe(
-        'Asset id of the social share image, ideally 1200x630. Get it from upload_asset_from_url or list_assets.',
+        'Asset id of the social share image, ideally 1200x630. Get it from list_assets, upload_asset_from_url or get_asset_upload.',
       ),
     twitterCard: z
       .enum([...TWITTER_CARDS, ''])

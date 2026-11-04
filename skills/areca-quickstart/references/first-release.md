@@ -39,7 +39,7 @@ For each collection:
 - Fill every required field with realistic content. Keep it short, but complete.
 - Use the company name and details from the interview where they fit.
 - Fill the full SEO object. Follow the rules in the `areca-mcp` skill (title 50 to 60 characters, description 140 to 160, focus keyphrase, a 2 to 3 sentence summary, 3 to 5 key takeaways, FAQ only when the body answers questions).
-- Images: do not guess image links. Use an image only when the user gives you a direct link, through `upload_asset_from_url` with alt text. Otherwise leave image fields empty.
+- Images: do not guess image links. Use `upload_asset_from_url` (with alt text) when the user gives you a direct link. When they have the image as a file or a chat attachment, use `create_asset_upload` (curl the files, or give them the `pageUrl`), then `get_asset_upload`. Otherwise leave image fields empty.
 - Rich text is Markdown, not HTML.
 
 On a multilingual site:

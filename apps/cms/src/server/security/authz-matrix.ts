@@ -52,6 +52,7 @@ import * as pausedJobFns from '#/server/fn/paused-jobs'
 import * as publishingFns from '#/server/fn/publishing'
 import * as securityFns from '#/server/fn/security'
 import * as setupFns from '#/server/fn/setup'
+import * as uploadSessionFns from '#/server/fn/upload-session'
 import { publishEntry, updateDraft } from '#/server/content/entries'
 import { sampleRichText } from '#/server/content/test-utils'
 import { forkDevEnvironment } from '#/server/dev-env/fork'
@@ -1402,6 +1403,13 @@ export const ROWS: Row[] = [
     prepare: () => ({ data: { token: 'unknown-token' } }),
   },
   {
+    name: 'getUploadSessionFn',
+    fn: uploadSessionFns.getUploadSessionFn,
+    policy: 'public',
+    note: 'Bearer-token gated (unguessable upload link from create_asset_upload); an unknown token returns null and reveals nothing.',
+    prepare: () => ({ data: { token: 'areca_up_unknown-token' } }),
+  },
+  {
     name: 'acceptInvitationFn',
     fn: meFns.acceptInvitationFn,
     policy: 'user',
@@ -2066,4 +2074,5 @@ export const ALL_FN_MODULES = {
   security: securityFns,
   setup: setupFns,
   translate: translateFns,
+  'upload-session': uploadSessionFns,
 }

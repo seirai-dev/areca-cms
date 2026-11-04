@@ -5,6 +5,7 @@
   "root": true,
   "pages": [
     "index",
+    "skills-setup",
     "create-the-site",
     "start-the-project",
     "describe-your-content",

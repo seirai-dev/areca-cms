@@ -138,8 +138,10 @@ Tools are registered per request for the caller's role, so a tool the caller can
 | Entries | `list_revisions` | everyone | `id` |
 | Entries | `get_preview_url` | everyone | `id`, `locale?` (languages sites; about 1 hour; needs a production URL) |
 | Library | `list_assets` | everyone | `search?`, `limit?`, `offset?` |
-| Library | `get_asset` | everyone | `id` (includes `usageCount`) |
+| Library | `get_asset` | everyone | `id` (includes `usageCount` and a preview image) |
 | Library | `upload_asset_from_url` | everyone | `url`, `altText?`, `filename?` |
+| Library | `create_asset_upload` | everyone | `purpose?` |
+| Library | `get_asset_upload` | everyone | `uploadId`, `finish?` (returns preview images) |
 | Library | `update_asset_alt` | everyone | `id`, `altText` (empty clears), `locale?` (languages sites: alt text for that language) |
 | Library | `delete_asset` | owner | `id` (refused while in use) |
 | Publishing | `get_release_status` | everyone | none |
@@ -259,7 +261,7 @@ Call `get_collection_schema` for the exact format of each field. Summary:
 | `text` | Plain text, up to 1,000 characters |
 | `textarea` | Plain text, up to 50,000 characters, no Markdown |
 | `richtext` | Markdown (see below). Raw HTML is dropped. |
-| `image` | Asset id from `list_assets` or `upload_asset_from_url` |
+| `image` | Asset id from `list_assets`, `upload_asset_from_url` or `get_asset_upload` |
 | `reference` | Entry id from `list_entries` in the referenced collection |
 | `date` | `YYYY-MM-DD` |
 | `datetime` | ISO 8601 with offset, e.g. `2026-10-10T09:00:00+02:00` |
@@ -291,7 +293,25 @@ Failures come back as `Could not import the file: …` with one of these message
 
 Each import is recorded in the activity log as `asset.upload` ("uploaded … to the Library").
 
-There is no base64 or multipart upload.
+There is no base64 upload. For files without a public URL, use an [upload link](#upload-links-local-files-and-chat-attachments).
+
+## Upload links (local files and chat attachments)
+
+An AI client cannot send a file's bytes in a tool call: arguments are JSON, the request body is capped at 1 MiB, and an image attached to a chat reaches the model as something to look at, not as a file it can forward. Upload links cover every case that has no public URL.
+
+1. `create_asset_upload({ purpose? })` opens a link and returns `uploadId`, `pageUrl`, `uploadUrl` and `expiresAt`. `purpose` (up to 200 characters) is shown on the page.
+2. The files arrive in one of two ways:
+   - **From a shell** (Claude Code, Codex, Cursor and similar): `curl -sS -T photo.jpg "<uploadUrl>/"`, once per file, or `curl -sS -T "{a.jpg,b.png}" "<uploadUrl>/"` for several. curl appends the file name, which becomes the stored name. Each response is `201` with the file's `assetId`. The raw bytes are the body; a `PUT` to `<uploadUrl>` with an `X-Filename` header or `?filename=` also works.
+   - **In the browser**: the user opens `pageUrl` and drops, pastes or picks files (camera and photo library on phones). The files wait in a tray, where each can be viewed full size or removed. Upload sends them, and the link closes once every file is saved. If some fail, the link stays open so they can be retried or removed.
+3. `get_asset_upload({ uploadId, finish? })` returns the state (`open`, `finished` or `expired`) and every file, with a preview image of each (JPEG, up to 1024 px on the long side) as an MCP image block after the JSON. After curl uploads, `finish: true` is required: it closes the link at once.
+
+Limits: up to 20 files per link, 20 MB each, the same types and checks as other uploads (JPEG, PNG, WebP, GIF or PDF, judged by the bytes). A link takes new files for 20 minutes after it is created; an upload already under way may complete. The link's token (`areca_up_…`) is its only credential and is stored as a SHA-256 hash. Uploads belong to the person who opened the link and to the site's AI connection, so `list_assets` shows them. A link stops working if that person loses access to the client. Only that person can read the link with `get_asset_upload`. Upload links have their own rate limits (120 requests a minute per link, 600 per client address); the per-user upload limit does not apply.
+
+HTTP errors from `uploadUrl` are JSON `{ "error", "message" }`: `404 not_found`, `410 expired` or `finished`, `409 full`, `413 too_large`, `400 invalid_file`.
+
+Every file is recorded in the activity log as `asset.upload`, with `via: "upload-link"`.
+
+`get_asset` also returns a preview image. `list_assets` stays text only.
 
 ## Errors
 

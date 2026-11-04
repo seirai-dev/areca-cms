@@ -10,6 +10,9 @@ name: Release packages
 #
 # npm authenticates through trusted publishing (OIDC), configured on npmjs.com
 # for this workflow file. Renaming the file breaks publishing.
+#
+# Package releases are created with --latest=false so the repository's
+# "Latest" release is always the CMS (cms-release.yml).
 on:
   push:
     branches: [main]
@@ -134,7 +137,7 @@ jobs:
           SHA: ${{ steps.status.outputs.sha }}
         run: |
           node scripts/release/release.mjs notes "$PACKAGE" --notes-file "$RUNNER_TEMP/notes.md"
-          gh release create "$TAG" --target "$SHA" --title "$NAME v$VERSION" --notes-file "$RUNNER_TEMP/notes.md"
+          gh release create "$TAG" --target "$SHA" --title "$NAME v$VERSION" --notes-file "$RUNNER_TEMP/notes.md" --latest=false
 
       # Already on npm but untagged, with no changelog entry: the first run,
       # which baselines the tag.
@@ -241,4 +244,5 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --target "$(jq -r .sha "$meta")" \
             --title "$(jq -r '.name + " v" + .version' "$meta")" \
-            --notes-file "$RUNNER_TEMP/release/notes.md"
+            --notes-file "$RUNNER_TEMP/release/notes.md" \
+            --latest=false

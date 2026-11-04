@@ -7,7 +7,7 @@
 | `text` | Plain text, up to 1,000 chars | same |
 | `textarea` | Plain text with line breaks, up to 50,000 chars, no Markdown | same |
 | `richtext` | Markdown string (see below): at most 200,000 text chars, 20,000 nodes, depth 32 | Markdown |
-| `image` | asset id from `list_assets` / `upload_asset_from_url` | `{ assetId, url, alt }` or `null` |
+| `image` | asset id from `list_assets` / `upload_asset_from_url` / `get_asset_upload` | `{ assetId, url, alt }` or `null` |
 | `reference` | entry id from `list_entries` of the referenced collection | `{ entryId }` or `null` |
 | `date` | `YYYY-MM-DD` | same |
 | `datetime` | ISO 8601 with offset, e.g. `2026-10-10T09:00:00+02:00` | same |
@@ -58,6 +58,8 @@ Unknown SEO keys are refused. There is no SEO-generation tool, so you write thes
 ## Uploads
 
 `upload_asset_from_url` accepts JPEG, PNG, WebP, GIF and PDF (detected from the bytes) up to 20 MB. URLs must be public `http`/`https` on ports 80, 443, 8080 or 8443, with no credentials. Private and loopback addresses are refused, and there is a 15 s timeout with at most 3 redirects. Use a direct file link, not an HTML page.
+
+For files without a public URL (local files, chat attachments), use an upload link: `create_asset_upload` returns `uploadUrl` and `pageUrl`. With a shell, `curl -sS -T <file> "<uploadUrl>/"` per file (each response has the `assetId`), then `get_asset_upload({ uploadId, finish: true })`; `finish: true` is required. Without a shell, give the user `pageUrl`; the page closes the link itself when they press Upload. A link takes up to 20 files for 20 minutes. `get_asset_upload` returns every file with a preview image.
 
 ## Errors
 

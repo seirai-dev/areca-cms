@@ -60,6 +60,23 @@ describe('request rate limiting', () => {
     expect(store.keys.every((key) => key.includes(':upload:'))).toBe(true)
   })
 
+  it('gives upload links their own budget, not the user upload or mutation budgets', async () => {
+    const store = countingStore()
+    const deps = dependencies(store, null)
+    const token = 'areca_up_secret-token'
+    const request = new Request(`https://cms.test/api/upload/${token}/a.jpg`, {
+      method: 'PUT',
+    })
+
+    for (let i = 0; i < 120; i += 1) {
+      expect(await enforceRequestRateLimit(request, deps)).toBeNull()
+    }
+    expect((await enforceRequestRateLimit(request, deps))?.status).toBe(429)
+    expect(store.keys.every((key) => key.includes(':upload-link:'))).toBe(true)
+    expect(store.keys.some((key) => key.includes(token))).toBe(false)
+    expect(deps.resolveUserId).not.toHaveBeenCalled()
+  })
+
   it('limits the bearer-authenticated site API to 300 per token', async () => {
     const store = countingStore()
     const deps = dependencies(store)

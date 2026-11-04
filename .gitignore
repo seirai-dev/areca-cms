@@ -1,4 +1,6 @@
 node_modules
+# Local agent worktrees must not be committed as submodules.
+.claude/worktrees/
 .DS_Store
 dist
 dist-ssr
@@ -25,3 +27,7 @@ test-results
 qa-screenshots
 # Downloaded demo images (pnpm db:demo)
 apps/cms/.cache/
+
+# Landing video: raw recordings and render masters are regenerated (see apps/landing/video/README.md)
+apps/landing/video/public/clips/
+apps/landing/video/out/

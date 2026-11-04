@@ -222,8 +222,10 @@ Site content sections (globals) are single sets of values, such as company detai
 | Tool | Access | Inputs | What it does |
 | --- | --- | --- | --- |
 | `list_assets` | Everyone | `search`, `limit` (1 to 100, default 20), `offset` | Lists images and PDFs in the client's Library, with `assetId`, filename, alt text and URL. |
-| `get_asset` | Everyone | `id` (required) | Returns one asset with size, alt text and `usageCount`. |
+| `get_asset` | Everyone | `id` (required) | Returns one asset with size, alt text, `usageCount` and a preview image. |
 | `upload_asset_from_url` | Everyone | `url` (required), `altText`, `filename` | Imports a public image or PDF and returns its `assetId`. See [uploads from a URL](#uploads-from-a-url). |
+| `create_asset_upload` | Everyone | `purpose` | Opens an upload link for local files and chat attachments. See [upload links](#upload-links). |
+| `get_asset_upload` | Everyone | `uploadId` (required), `finish` | Returns the files sent to an upload link, with previews. `finish: true` closes the link. |
 | `update_asset_alt` | Everyone | `id` (required), `altText` (required; empty clears it), `locale` (languages sites) | Sets the alt text of an asset, for the main language or for `locale`. |
 | `delete_asset` | Owner | `id` (required) | Deletes an asset. Refused while an entry, revision or published snapshot uses it; the error says how many. |
 
@@ -314,7 +316,7 @@ Get the exact format for each field from `get_collection_schema`. The formats ar
 | `text` | Plain text, up to 1,000 characters | Same |
 | `textarea` | Plain text with line breaks, up to 50,000 characters. No Markdown. | Same |
 | `richtext` | A Markdown string. See [rich text](#rich-text). | Markdown |
-| `image` | An asset id, such as `"3f2c…"`, from `list_assets` or `upload_asset_from_url` | `{assetId, url, alt}`, or `null` |
+| `image` | An asset id, such as `"3f2c…"`, from `list_assets`, `upload_asset_from_url` or `get_asset_upload` | `{assetId, url, alt}`, or `null` |
 | `reference` | The id of an entry in the referenced collection, from `list_entries` | `{entryId}`, or `null` |
 | `date` | `YYYY-MM-DD` | Same |
 | `datetime` | ISO 8601 with an offset, such as `2026-10-10T09:00:00+02:00` | Same |
@@ -426,6 +428,25 @@ When a download fails, the error begins `Could not import the file:` and then sa
 | `The server at … failed (HTTP 5xx …)` | The host is down. Try later or use another link. |
 
 The import is recorded in the activity log as an upload ("uploaded … to the Library"). Always pass `altText`, which describes the image in one sentence.
+
+## Upload links
+
+Most images an AI works with have no public URL: a file on your computer, or a photo you attached to the chat. An AI app can't pass those bytes through a tool call, so Areca gives it an **upload link** instead. You never need to host an image somewhere first.
+
+1. The AI calls `create_asset_upload`. It can pass a `purpose`, such as "Photos for the spring fundraiser post", which the page shows.
+2. The files arrive one of two ways:
+   - **Apps with a shell** (Claude Code, Codex, Cursor) send the files themselves: `curl -sS -T photo.jpg "<uploadUrl>/"`, once per file, or `curl -sS -T "{a.jpg,b.png}" "<uploadUrl>/"`. Afterwards they call `get_asset_upload` with `finish: true`, which closes the link.
+   - **Chat apps** (claude.ai, ChatGPT, mobile apps) give you the `pageUrl`. Open it, drop or paste the images (or pick them from your camera roll), check them in the tray, and press **Upload**. The link closes once everything is in. Then tell the AI you're done.
+3. The AI calls `get_asset_upload`. It gets each file's `assetId` and a preview of each image, so it can see what you sent, decide where each image goes, and write alt text with `update_asset_alt`.
+
+| Limit | Value |
+| --- | --- |
+| Files per link | 20 |
+| Size per file | 20 MB |
+| Types | JPEG, PNG, WebP, GIF, PDF. HEIC and SVG are refused; iPhones convert photos to JPEG when you pick them in the browser. |
+| Lifetime | 20 minutes from when the AI created it, or until it is finished |
+
+The link works without signing in, so treat it like a short-lived password. It stops working once it is used or expires, and also if the person whose AI connection created it loses access to the client. Uploaded files appear in the Library and in `list_assets`, like any other upload.
 
 ## Activity and audit
 

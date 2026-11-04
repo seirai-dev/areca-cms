@@ -22,6 +22,7 @@ import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as ApiMetricsRouteImport } from './routes/api/metrics'
 import { Route as InviteTokenRouteImport } from './routes/invite/$token'
 import { Route as OauthConsentRouteImport } from './routes/oauth/consent'
+import { Route as UploadTokenRouteImport } from './routes/upload/$token'
 import { Route as AppAccountIndexRouteImport } from './routes/_app/account/index'
 import { Route as AppAccountSessionsRouteImport } from './routes/_app/account/sessions'
 import { Route as AppAdminIndexRouteImport } from './routes/_app/admin/index'
@@ -44,6 +45,7 @@ import { Route as ApiMcpSiteSlugRouteImport } from './routes/api/mcp/$siteSlug'
 import { Route as ApiNotificationsUnsubscribeRouteImport } from './routes/api/notifications.unsubscribe'
 import { Route as ApiSitesManifestRouteImport } from './routes/api/sites/manifest'
 import { Route as ApiSitesPreviewRouteImport } from './routes/api/sites/preview'
+import { Route as ApiUploadTokenRouteImport } from './routes/api/upload/$token'
 import { Route as AppAgencyClientsIndexRouteImport } from './routes/_app/agency/clients/index'
 import { Route as AppAgencyClientsOrgIdRouteImport } from './routes/_app/agency/clients/$orgId'
 import { Route as AppAgencyPeopleIndexRouteImport } from './routes/_app/agency/people/index'
@@ -62,6 +64,7 @@ import { Route as AppSitesSiteIdSettingsRouteImport } from './routes/_app/sites/
 import { Route as AppSitesSiteIdTeamRouteImport } from './routes/_app/sites/$siteId/team'
 import { Route as ApiAdminBrandingUploadRouteImport } from './routes/api/admin/branding/upload'
 import { Route as ApiSitesSnapshotCurrentRouteImport } from './routes/api/sites/snapshot/current'
+import { Route as ApiUploadTokenFilenameRouteImport } from './routes/api/upload/$token/$filename'
 import { Route as AppSitesSiteIdCCollectionKeyRouteImport } from './routes/_app/sites/$siteId/c/$collectionKey'
 import { Route as AppSitesSiteIdGlobalsGlobalKeyRouteImport } from './routes/_app/sites/$siteId/globals/$globalKey'
 import { Route as ApiAssetsFilePrefixFilenameRouteImport } from './routes/api/assets/file/$prefix/$filename'
@@ -131,6 +134,11 @@ const InviteTokenRoute = InviteTokenRouteImport.update({
 const OauthConsentRoute = OauthConsentRouteImport.update({
   id: '/oauth/consent',
   path: '/oauth/consent',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const UploadTokenRoute = UploadTokenRouteImport.update({
+  id: '/upload/$token',
+  path: '/upload/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppAccountIndexRoute = AppAccountIndexRouteImport.update({
@@ -244,6 +252,11 @@ const ApiSitesPreviewRoute = ApiSitesPreviewRouteImport.update({
   path: '/api/sites/preview',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiUploadTokenRoute = ApiUploadTokenRouteImport.update({
+  id: '/api/upload/$token',
+  path: '/api/upload/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppAgencyClientsIndexRoute = AppAgencyClientsIndexRouteImport.update({
   id: '/clients/',
   path: '/clients/',
@@ -334,6 +347,11 @@ const ApiSitesSnapshotCurrentRoute = ApiSitesSnapshotCurrentRouteImport.update({
   path: '/api/sites/snapshot/current',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiUploadTokenFilenameRoute = ApiUploadTokenFilenameRouteImport.update({
+  id: '/$filename',
+  path: '/$filename',
+  getParentRoute: () => ApiUploadTokenRoute,
+} as any)
 const AppSitesSiteIdCCollectionKeyRoute =
   AppSitesSiteIdCCollectionKeyRouteImport.update({
     id: '/c/$collectionKey',
@@ -384,6 +402,7 @@ export interface FileRoutesByFullPath {
   '/api/metrics': typeof ApiMetricsRoute
   '/invite/$token': typeof InviteTokenRoute
   '/oauth/consent': typeof OauthConsentRoute
+  '/upload/$token': typeof UploadTokenRoute
   '/account/sessions': typeof AppAccountSessionsRoute
   '/admin/$': typeof AppAdminSplatRoute
   '/agency/activity': typeof AppAgencyActivityRoute
@@ -401,6 +420,7 @@ export interface FileRoutesByFullPath {
   '/api/notifications/unsubscribe': typeof ApiNotificationsUnsubscribeRoute
   '/api/sites/manifest': typeof ApiSitesManifestRoute
   '/api/sites/preview': typeof ApiSitesPreviewRoute
+  '/api/upload/$token': typeof ApiUploadTokenRouteWithChildren
   '/account/': typeof AppAccountIndexRoute
   '/admin/': typeof AppAdminIndexRoute
   '/agency/': typeof AppAgencyIndexRoute
@@ -421,6 +441,7 @@ export interface FileRoutesByFullPath {
   '/sites/$siteId/team': typeof AppSitesSiteIdTeamRoute
   '/api/admin/branding/upload': typeof ApiAdminBrandingUploadRoute
   '/api/sites/snapshot/current': typeof ApiSitesSnapshotCurrentRoute
+  '/api/upload/$token/$filename': typeof ApiUploadTokenFilenameRoute
   '/agency/clients/': typeof AppAgencyClientsIndexRoute
   '/agency/people/': typeof AppAgencyPeopleIndexRoute
   '/sites/$siteId/': typeof AppSitesSiteIdIndexRoute
@@ -441,6 +462,7 @@ export interface FileRoutesByTo {
   '/api/metrics': typeof ApiMetricsRoute
   '/invite/$token': typeof InviteTokenRoute
   '/oauth/consent': typeof OauthConsentRoute
+  '/upload/$token': typeof UploadTokenRoute
   '/': typeof AppIndexRoute
   '/account/sessions': typeof AppAccountSessionsRoute
   '/admin/$': typeof AppAdminSplatRoute
@@ -458,6 +480,7 @@ export interface FileRoutesByTo {
   '/api/notifications/unsubscribe': typeof ApiNotificationsUnsubscribeRoute
   '/api/sites/manifest': typeof ApiSitesManifestRoute
   '/api/sites/preview': typeof ApiSitesPreviewRoute
+  '/api/upload/$token': typeof ApiUploadTokenRouteWithChildren
   '/account': typeof AppAccountIndexRoute
   '/admin': typeof AppAdminIndexRoute
   '/agency': typeof AppAgencyIndexRoute
@@ -478,6 +501,7 @@ export interface FileRoutesByTo {
   '/sites/$siteId/team': typeof AppSitesSiteIdTeamRoute
   '/api/admin/branding/upload': typeof ApiAdminBrandingUploadRoute
   '/api/sites/snapshot/current': typeof ApiSitesSnapshotCurrentRoute
+  '/api/upload/$token/$filename': typeof ApiUploadTokenFilenameRoute
   '/agency/clients': typeof AppAgencyClientsIndexRoute
   '/agency/people': typeof AppAgencyPeopleIndexRoute
   '/sites/$siteId': typeof AppSitesSiteIdIndexRoute
@@ -501,6 +525,7 @@ export interface FileRoutesById {
   '/api/metrics': typeof ApiMetricsRoute
   '/invite/$token': typeof InviteTokenRoute
   '/oauth/consent': typeof OauthConsentRoute
+  '/upload/$token': typeof UploadTokenRoute
   '/_app/': typeof AppIndexRoute
   '/_app/account/sessions': typeof AppAccountSessionsRoute
   '/_app/admin/$': typeof AppAdminSplatRoute
@@ -519,6 +544,7 @@ export interface FileRoutesById {
   '/api/notifications/unsubscribe': typeof ApiNotificationsUnsubscribeRoute
   '/api/sites/manifest': typeof ApiSitesManifestRoute
   '/api/sites/preview': typeof ApiSitesPreviewRoute
+  '/api/upload/$token': typeof ApiUploadTokenRouteWithChildren
   '/_app/account/': typeof AppAccountIndexRoute
   '/_app/admin/': typeof AppAdminIndexRoute
   '/_app/agency/': typeof AppAgencyIndexRoute
@@ -539,6 +565,7 @@ export interface FileRoutesById {
   '/_app/sites/$siteId/team': typeof AppSitesSiteIdTeamRoute
   '/api/admin/branding/upload': typeof ApiAdminBrandingUploadRoute
   '/api/sites/snapshot/current': typeof ApiSitesSnapshotCurrentRoute
+  '/api/upload/$token/$filename': typeof ApiUploadTokenFilenameRoute
   '/_app/agency/clients/': typeof AppAgencyClientsIndexRoute
   '/_app/agency/people/': typeof AppAgencyPeopleIndexRoute
   '/_app/sites/$siteId/': typeof AppSitesSiteIdIndexRoute
@@ -564,6 +591,7 @@ export interface FileRouteTypes {
     | '/api/metrics'
     | '/invite/$token'
     | '/oauth/consent'
+    | '/upload/$token'
     | '/account/sessions'
     | '/admin/$'
     | '/agency/activity'
@@ -581,6 +609,7 @@ export interface FileRouteTypes {
     | '/api/notifications/unsubscribe'
     | '/api/sites/manifest'
     | '/api/sites/preview'
+    | '/api/upload/$token'
     | '/account/'
     | '/admin/'
     | '/agency/'
@@ -601,6 +630,7 @@ export interface FileRouteTypes {
     | '/sites/$siteId/team'
     | '/api/admin/branding/upload'
     | '/api/sites/snapshot/current'
+    | '/api/upload/$token/$filename'
     | '/agency/clients/'
     | '/agency/people/'
     | '/sites/$siteId/'
@@ -621,6 +651,7 @@ export interface FileRouteTypes {
     | '/api/metrics'
     | '/invite/$token'
     | '/oauth/consent'
+    | '/upload/$token'
     | '/'
     | '/account/sessions'
     | '/admin/$'
@@ -638,6 +669,7 @@ export interface FileRouteTypes {
     | '/api/notifications/unsubscribe'
     | '/api/sites/manifest'
     | '/api/sites/preview'
+    | '/api/upload/$token'
     | '/account'
     | '/admin'
     | '/agency'
@@ -658,6 +690,7 @@ export interface FileRouteTypes {
     | '/sites/$siteId/team'
     | '/api/admin/branding/upload'
     | '/api/sites/snapshot/current'
+    | '/api/upload/$token/$filename'
     | '/agency/clients'
     | '/agency/people'
     | '/sites/$siteId'
@@ -680,6 +713,7 @@ export interface FileRouteTypes {
     | '/api/metrics'
     | '/invite/$token'
     | '/oauth/consent'
+    | '/upload/$token'
     | '/_app/'
     | '/_app/account/sessions'
     | '/_app/admin/$'
@@ -698,6 +732,7 @@ export interface FileRouteTypes {
     | '/api/notifications/unsubscribe'
     | '/api/sites/manifest'
     | '/api/sites/preview'
+    | '/api/upload/$token'
     | '/_app/account/'
     | '/_app/admin/'
     | '/_app/agency/'
@@ -718,6 +753,7 @@ export interface FileRouteTypes {
     | '/_app/sites/$siteId/team'
     | '/api/admin/branding/upload'
     | '/api/sites/snapshot/current'
+    | '/api/upload/$token/$filename'
     | '/_app/agency/clients/'
     | '/_app/agency/people/'
     | '/_app/sites/$siteId/'
@@ -740,6 +776,7 @@ export interface RootRouteChildren {
   ApiMetricsRoute: typeof ApiMetricsRoute
   InviteTokenRoute: typeof InviteTokenRoute
   OauthConsentRoute: typeof OauthConsentRoute
+  UploadTokenRoute: typeof UploadTokenRoute
   ApiAgencyMcpRoute: typeof ApiAgencyMcpRoute
   ApiAssetsUploadRoute: typeof ApiAssetsUploadRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
@@ -748,6 +785,7 @@ export interface RootRouteChildren {
   ApiNotificationsUnsubscribeRoute: typeof ApiNotificationsUnsubscribeRoute
   ApiSitesManifestRoute: typeof ApiSitesManifestRoute
   ApiSitesPreviewRoute: typeof ApiSitesPreviewRoute
+  ApiUploadTokenRoute: typeof ApiUploadTokenRouteWithChildren
   ApiMcpIndexRoute: typeof ApiMcpIndexRoute
   ApiAdminBrandingUploadRoute: typeof ApiAdminBrandingUploadRoute
   ApiSitesSnapshotCurrentRoute: typeof ApiSitesSnapshotCurrentRoute
@@ -845,6 +883,13 @@ declare module '@tanstack/react-router' {
       path: '/oauth/consent'
       fullPath: '/oauth/consent'
       preLoaderRoute: typeof OauthConsentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/upload/$token': {
+      id: '/upload/$token'
+      path: '/upload/$token'
+      fullPath: '/upload/$token'
+      preLoaderRoute: typeof UploadTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/account/': {
@@ -1001,6 +1046,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSitesPreviewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/upload/$token': {
+      id: '/api/upload/$token'
+      path: '/api/upload/$token'
+      fullPath: '/api/upload/$token'
+      preLoaderRoute: typeof ApiUploadTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_app/agency/clients/': {
       id: '/_app/agency/clients/'
       path: '/clients'
@@ -1126,6 +1178,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/sites/snapshot/current'
       preLoaderRoute: typeof ApiSitesSnapshotCurrentRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/api/upload/$token/$filename': {
+      id: '/api/upload/$token/$filename'
+      path: '/$filename'
+      fullPath: '/api/upload/$token/$filename'
+      preLoaderRoute: typeof ApiUploadTokenFilenameRouteImport
+      parentRoute: typeof ApiUploadTokenRoute
     }
     '/_app/sites/$siteId/c/$collectionKey': {
       id: '/_app/sites/$siteId/c/$collectionKey'
@@ -1309,6 +1368,18 @@ const ApiHealthRouteWithChildren = ApiHealthRoute._addFileChildren(
   ApiHealthRouteChildren,
 )
 
+interface ApiUploadTokenRouteChildren {
+  ApiUploadTokenFilenameRoute: typeof ApiUploadTokenFilenameRoute
+}
+
+const ApiUploadTokenRouteChildren: ApiUploadTokenRouteChildren = {
+  ApiUploadTokenFilenameRoute: ApiUploadTokenFilenameRoute,
+}
+
+const ApiUploadTokenRouteWithChildren = ApiUploadTokenRoute._addFileChildren(
+  ApiUploadTokenRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   ForgotPasswordRoute: ForgotPasswordRoute,
@@ -1320,6 +1391,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiMetricsRoute: ApiMetricsRoute,
   InviteTokenRoute: InviteTokenRoute,
   OauthConsentRoute: OauthConsentRoute,
+  UploadTokenRoute: UploadTokenRoute,
   ApiAgencyMcpRoute: ApiAgencyMcpRoute,
   ApiAssetsUploadRoute: ApiAssetsUploadRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
@@ -1328,6 +1400,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiNotificationsUnsubscribeRoute: ApiNotificationsUnsubscribeRoute,
   ApiSitesManifestRoute: ApiSitesManifestRoute,
   ApiSitesPreviewRoute: ApiSitesPreviewRoute,
+  ApiUploadTokenRoute: ApiUploadTokenRouteWithChildren,
   ApiMcpIndexRoute: ApiMcpIndexRoute,
   ApiAdminBrandingUploadRoute: ApiAdminBrandingUploadRoute,
   ApiSitesSnapshotCurrentRoute: ApiSitesSnapshotCurrentRoute,
