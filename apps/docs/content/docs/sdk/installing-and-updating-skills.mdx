@@ -1,0 +1,128 @@
+---
+title: Install and update skills
+description: Install Areca skills with the Areca installer or skills.sh, update existing copies, add newly released skills, and refresh your agent session.
+---
+
+Areca skills are instruction folders copied into your agent's skill directories. They do not update automatically when you update the site SDK or restart the CMS. After updating the files, reload your agent so it can discover them.
+
+You can install with either the **Areca installer** or the **skills.sh CLI**. Choose one manager for a given installation and keep using it for updates. The Areca installer can also configure the MCP connector; `skills add` installs the instructions, so you configure MCP separately.
+
+For the client, site, tokens and account setup that comes first, see [Developer setup with Areca skills](/docs/guides/skills-setup). For what each of the four skills does, see [Agent skills](/docs/sdk/agent-skills).
+
+## Install with the Areca package
+
+From the website repository, run:
+
+```bash
+npx @areca-cms/skills@latest
+```
+
+Select your agents, the skills to install, and the scope:
+
+- **This project:** installs into this repository. Commit the skill folders so teammates receive the same instructions.
+- **Me, in every project:** installs into your user directories. Repeat on each machine you use.
+
+Optionally provide the connector URL from the site's **Connect AI** page. Complete browser authentication in the agent afterward. See [Connect AI](/docs/cms/connect-ai).
+
+### Update an existing Areca-package installation
+
+Run the latest installer again, in the same website repository, and select the **same agents and scope**. Select every skill you want, including any newly released skills:
+
+```bash
+npx @areca-cms/skills@latest
+```
+
+The installer replaces the selected `areca-*` folders with copies bundled in the latest published package. It has no separate `update` command. Save any local customizations elsewhere before updating: edits inside the selected folders are overwritten.
+
+For example, install or refresh all bundled skills for Codex and Claude Code in the current project:
+
+```bash
+npx @areca-cms/skills@latest add -a codex,claude-code -y
+```
+
+For a global Codex installation instead:
+
+```bash
+npx @areca-cms/skills@latest add -a codex --global -y
+```
+
+Without `-s`, these noninteractive examples select all bundled skills. If you previously installed only `areca-sdk`, rerunning with `-s areca-sdk` will refresh that skill alone; it will not add `areca-quickstart`, `areca-mcp` or `areca-visual-editing`.
+
+`@latest` explicitly requests the current published installer. The package contains a bundled copy of the skills; repository changes become available through this route after a package release. `npx @areca-cms/skills@latest list` shows the skills bundled in that release and supported agent directories; it is not an inventory of your installed copies.
+
+## Install with skills.sh
+
+The [skills CLI](https://github.com/vercel-labs/skills) installs directly from the Areca GitHub repository. Use a Node.js version supported by the current CLI; its README currently requires Node.js 22.20 or later.
+
+From the website repository, run:
+
+```bash
+npx skills@latest add seirai-dev/areca-cms
+```
+
+Choose the Areca skills and agents in the prompts. Project installation is the default; add `-g` for a global installation. To explicitly select the four Areca skills and Codex:
+
+```bash
+npx skills@latest add seirai-dev/areca-cms --skill areca-sdk --skill areca-mcp --skill areca-quickstart --skill areca-visual-editing -a codex
+```
+
+This installs instruction files. Add the site's MCP connector separately using [Connect AI](/docs/cms/connect-ai), then authenticate. Installing `areca-mcp` does not itself give the agent CMS access.
+
+### Check and update skills.sh installations
+
+Run these commands from the project where you installed the skills:
+
+```bash
+# Inspect project installations
+npx skills@latest list
+
+# Inspect global installations
+npx skills@latest list -g
+
+# Check for available updates
+npx skills@latest check
+
+# Update installed skills (choose scope when prompted)
+npx skills@latest update
+```
+
+`update` refreshes skills already tracked by the CLI. It can update skills from other sources too. To limit the update to an Areca skill, name it:
+
+```bash
+npx skills@latest update areca-sdk
+```
+
+For explicit project or global scope, use `update -p` or `update -g`. See the upstream [command reference](https://github.com/vercel-labs/skills/blob/main/docs/commands.md) for current options.
+
+**To add a newly released skill, run `add` again.** Do not rely on updating existing skills to discover and install additional skill names. Rerun the interactive repository install and select the new skill, or request it explicitly:
+
+```bash
+npx skills@latest add seirai-dev/areca-cms --skill areca-visual-editing -a codex
+```
+
+Keep the same scope: append `-g` if your existing installation is global. Review and commit project skill and CLI tracking-file changes together.
+
+## Make the updated skills visible to your agent
+
+1. Finish the installation or update and check that it targeted the agent you actually use. Some agents share `.agents/skills`; others use their own directory. The installer output shows the destination.
+2. Check scope and location. A project installation belongs in the website repository you open in the agent. Updating a different repository or a global copy will not necessarily replace the copy the current session uses.
+3. Reload the agent window or start a new session in that repository. Agents may discover skills only when a session starts; an existing conversation may still have old instructions loaded.
+4. Ask the agent to use a skill by name, for example: “Use the areca-visual-editing skill to inspect this project's preview setup.” Slash-command availability depends on the agent; a missing slash command alone does not prove the files are missing.
+5. If the skill is found but CMS tools are missing, check MCP configuration and authentication separately. Ask the agent to call `get_site_info` on the intended site.
+
+| Symptom | Check |
+| --- | --- |
+| Existing skills updated, but a new skill is absent | Rerun `add` or the Areca installer and select the new skill explicitly. |
+| The agent still follows old instructions | Start a fresh session; inspect both project and global copies for duplicates. |
+| `skills update` does not recognize an Areca-package installation | Use the Areca installer again. Its copied folders are not a skills.sh-managed installation. |
+| GitHub has newer instructions than the Areca package | The package needs a release containing those changes. Use one installation route consistently; avoid overlaying managers in the same folders. |
+| A teammate does not see project skills | Commit the installed folders and tracking changes, have them pull the branch, then restart their agent. |
+| A chat app still uses an old uploaded skill | Export fresh ZIPs and replace the uploaded skills in that app; changing local folders does not update uploads. |
+
+For chat app uploads, regenerate the archives with:
+
+```bash
+npx @areca-cms/skills@latest export --out ./areca-skills
+```
+
+Upload the refreshed ZIPs using the app's skill settings. Preserve your own project guidance outside installed skill folders so future updates can replace the upstream files cleanly.
