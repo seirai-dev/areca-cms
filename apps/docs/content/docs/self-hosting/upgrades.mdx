@@ -13,18 +13,23 @@ There is no down migration. The only way back from a bad upgrade is the backup y
 
 The CMS image is published to `ghcr.io/seirai-dev/areca-cms`. Set the image in the `CMS_IMAGE` variable in `docker/.env`. The Compose file defaults to `latest` if the variable is not set.
 
+Releases follow `vX.Y.Z` versions. Each one is listed, with its changes, on the [GitHub Releases](https://github.com/seirai-dev/areca-cms/releases) page. Every tag below holds both architectures (amd64 and arm64) unless it says otherwise, and Docker pulls the right one for your host.
+
 | Tag | Contents | Use it for |
 | --- | --- | --- |
-| `latest` | Both architectures, built from `main` | Trying the demo only. |
-| `latest-amd64`, `latest-arm64` | One architecture, built from `main` | Trying the demo only. |
-| `sha-<full-commit-sha>` | Both architectures for one commit | Production. |
-| `sha-<full-commit-sha>-amd64`, `sha-<full-commit-sha>-arm64` | One architecture for one commit | Production, on a single-architecture host. |
+| `vX.Y.Z`, such as `v0.1.0` | One release. It never changes. | Production. |
+| `vX.Y`, such as `v0.1` | The newest patch release of `X.Y`. Moves when a patch is released. | Getting fixes on `docker compose pull`, if you accept updates without reading the notes first. |
+| `latest` | The newest release. | Trying Areca. |
+| `edge` | The newest build from `main`, not released yet. `edge-amd64` and `edge-arm64` hold one architecture each. | Testing unreleased changes only. |
+| `sha-<full-commit-sha>` | The build of one commit. `-amd64` and `-arm64` variants hold one architecture each. | Running a specific commit. |
 
-For production, pin the image to a `sha-` tag, or to a digest such as `ghcr.io/seirai-dev/areca-cms@sha256:<digest>`. A digest cannot change under you, so it is the most predictable choice. Record the tag or digest before and after each upgrade, because that is the value you roll back to.
+For production, pin a version tag, or a digest such as `ghcr.io/seirai-dev/areca-cms@sha256:<digest>`. A digest cannot change under you even in theory, so it is the most predictable choice. Record the tag or digest before and after each upgrade, because that is the value you roll back to.
 
 ```sh title="docker/.env"
-CMS_IMAGE=ghcr.io/seirai-dev/areca-cms:sha-<full-commit-sha>
+CMS_IMAGE=ghcr.io/seirai-dev/areca-cms:v0.1.0
 ```
+
+While the version is below `1.0.0`, a minor release (`v0.1` to `v0.2`) can contain breaking changes. Read the release notes before moving to a new minor version.
 
 The PostgreSQL, Redis, RustFS and Mailpit images in the Compose file are also pinned to fixed versions. Change them as separate, deliberate upgrades. A PostgreSQL major version change is not an image swap. It needs a dump and restore, and the project does not provide a script for it.
 
@@ -75,7 +80,7 @@ Test the upgrade on a restored copy before you touch production. Then follow the
 <Steps>
 <Step>
 
-**Choose the target and check it.** Note the current image tag or digest. Choose the `sha-` tag or digest of the release you want, and confirm that its CI run passed. CI runs type checks, unit tests and secret scans.
+**Choose the target and check it.** Note the current image tag or digest. Choose the `vX.Y.Z` tag of the release you want, and read the release notes of every version between yours and the target. Releases are only made from builds that passed CI (type checks, unit tests, integration tests and secret scans).
 
 </Step>
 <Step>

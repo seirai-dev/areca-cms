@@ -99,16 +99,20 @@ In GitHub's **Actions** tab:
 
 Tags under `ghcr.io/seirai-dev/areca-cms`:
 
-| Tag                                                          | Content                                      |
-| ------------------------------------------------------------ | -------------------------------------------- |
-| `latest`                                                     | Both architectures, updated only from `main` |
-| `latest-amd64`, `latest-arm64`                               | Architecture-specific images from `main`   |
-| `sha-<full-commit-sha>`                                      | Both architectures for that commit           |
-| `sha-<full-commit-sha>-amd64`, `sha-<full-commit-sha>-arm64` | A specific commit and architecture           |
+| Tag                                                          | Content                                                  | Set by          |
+| ------------------------------------------------------------ | -------------------------------------------------------- | --------------- |
+| `vX.Y.Z`                                                     | One release, both architectures; never moves             | CMS release     |
+| `vX.Y`                                                       | Newest patch release of `X.Y`                            | CMS release     |
+| `latest`                                                     | Newest release                                           | CMS release     |
+| `edge`                                                       | Both architectures, newest build from `main`             | Docker workflow |
+| `edge-amd64`, `edge-arm64`                                   | Architecture-specific images from `main`                 | Docker workflow |
+| `sha-<full-commit-sha>`                                      | Both architectures for that commit                       | Docker workflow |
+| `sha-<full-commit-sha>-amd64`, `sha-<full-commit-sha>-arm64` | A specific commit and architecture                       | Docker workflow |
 
-Manual runs on other branches publish only commit tags. Commit tags provide a
-stable reference to source; use an image digest when you need registry-enforced
-immutability. No additional registry secret is needed: workflows use
+Manual runs on other branches publish only commit tags. The **CMS release**
+workflow adds version tags to an image `main` already built, without rebuilding
+it; see [../RELEASING.md](../RELEASING.md). Use an image digest when you need
+registry-enforced immutability. No additional registry secret is needed: workflows use
 `GITHUB_TOKEN` with `packages: write` and link the package to the repository using
 the OCI source label.
 
@@ -117,7 +121,7 @@ settings → Change visibility → Public** to allow visitors to pull without lo
 [GitHub defaults new container packages to private](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
 
 `latest` is for trying the demo. For anything that matters, set `CMS_IMAGE` to a
-`sha-<full-commit-sha>` tag or an image digest so restarts never pick up a new
+version tag such as `v0.1.0`, or an image digest, so restarts never pick up a new
 release unannounced. The third-party images in `compose.yml` use explicit version
 tags. See [../docs/UPGRADES.md](../docs/UPGRADES.md) for the upgrade and rollback
 procedure.

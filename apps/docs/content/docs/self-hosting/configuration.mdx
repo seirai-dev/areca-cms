@@ -237,7 +237,7 @@ These values are read by `compose.yml` itself, not by the CMS. Set them in `dock
 
 | Variable | Expected value | Required | Default | Meaning |
 | --- | --- | --- | --- | --- |
-| `CMS_IMAGE` | Container image reference (tag or digest) | No | `ghcr.io/seirai-dev/areca-cms:latest` | The CMS image to run. Pin it to a commit tag or digest in production. See [image tags](/docs/self-hosting/upgrades#choose-an-image-tag). |
+| `CMS_IMAGE` | Container image reference (tag or digest) | No | `ghcr.io/seirai-dev/areca-cms:latest` | The CMS image to run. Pin it to a version tag (such as `v0.1.0`) or a digest in production. See [image tags](/docs/self-hosting/upgrades#choose-an-image-tag). |
 | `CMS_PORT` | Integer port, 1–65535 | No | `3000` | The host port that the CMS is published on, bound to `127.0.0.1`. |
 | `CMS_URL` | URL | No | `http://localhost:3000` | The public CMS address. It sets both `APP_URL` and `BETTER_AUTH_URL`. Set it to your HTTPS domain in production. |
 | `POSTGRES_PASSWORD` | Database password string; use random URL-safe text with stock Compose | Yes | None | Password for the `areca` database user. |

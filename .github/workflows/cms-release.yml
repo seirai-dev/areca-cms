@@ -1,0 +1,174 @@
+name: CMS release
+
+# Gives an image that main already built a version: vX.Y.Z, plus vX.Y and
+# latest when it is the newest in those ranges. Nothing is rebuilt, so the
+# release is the exact image that passed CI for that commit. Also tags the
+# commit vX.Y.Z and creates a GitHub Release. See RELEASING.md.
+#
+# Start it either way:
+# - Run it from the Actions tab (or `gh workflow run cms-release.yml`) with a
+#   bump or an exact version, and optionally an older commit.
+# - Push a tag: `git tag v0.1.0 <commit> && git push origin v0.1.0`.
+#
+# Safe to re-run: steps that already happened are checked, not repeated.
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: What to bump from the highest existing version. Ignored when a version is given.
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+      version:
+        description: Exact version instead of a bump, such as v0.1.0. Needed for the first release, and to tag an older build.
+        type: string
+        required: false
+      commit:
+        description: Commit on main whose image to release. Blank means the newest main commit that built an image.
+        type: string
+        required: false
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: cms-release
+  cancel-in-progress: false
+
+env:
+  # Keep in step with ci.yml.
+  NODE_VERSION: 24.22.1
+
+jobs:
+  release:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 10
+    steps:
+      - uses: useblacksmith/checkout@v1
+        with:
+          # All history and tags: versions are read from the vX.Y.Z tags.
+          fetch-depth: 0
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Fetch main and tags
+        run: git fetch --force --tags origin "+refs/heads/main:refs/remotes/origin/main"
+
+      - name: Pick the version and commit
+        id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          PUSHED_TAG: ${{ github.ref_name }}
+          INPUT_BUMP: ${{ inputs.bump }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_COMMIT: ${{ inputs.commit }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = push ]; then
+            node scripts/release/cms.mjs plan --version "$PUSHED_TAG"
+            commit=$(git rev-parse "refs/tags/$PUSHED_TAG^{commit}")
+          else
+            node scripts/release/cms.mjs plan --version "$INPUT_VERSION" --bump "$INPUT_BUMP"
+            if [ -n "$INPUT_COMMIT" ]; then
+              commit=$(git rev-parse --verify --quiet "$INPUT_COMMIT^{commit}") \
+                || { echo "::error::$INPUT_COMMIT is not a commit in this repository"; exit 1; }
+            else
+              commit=$(node scripts/release/cms.mjs default-commit | jq -r .commit)
+            fi
+          fi
+          if ! git merge-base --is-ancestor "$commit" origin/main; then
+            echo "::error::$commit is not on main. Only builds from main can be released."
+            exit 1
+          fi
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+
+      - name: Check the git tag
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          VERSION: ${{ steps.plan.outputs.version }}
+          COMMIT: ${{ steps.plan.outputs.commit }}
+        run: |
+          # An existing tag is only fine on a re-run for the same commit.
+          if existing=$(git rev-parse --verify --quiet "refs/tags/$VERSION^{commit}"); then
+            if [ "$existing" != "$COMMIT" ]; then
+              echo "::error::$VERSION already exists on $existing. Versions are never moved; pick another."
+              exit 1
+            fi
+          fi
+
+      - name: Image name
+        id: image
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: echo "name=ghcr.io/${REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+      - name: Setup Blacksmith Builder
+        uses: useblacksmith/setup-docker-builder@v1
+      - uses: docker/login-action@v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag the image
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          VERSION: ${{ steps.plan.outputs.version }}
+          MOVED: ${{ steps.plan.outputs.moved }}
+          COMMIT: ${{ steps.plan.outputs.commit }}
+        run: |
+          set -euo pipefail
+          digest() {
+            docker buildx imagetools inspect "$1" --format '{{json .Manifest}}' 2>/dev/null | jq -r .digest
+          }
+          source=$(digest "$IMAGE:sha-$COMMIT") || source=""
+          if [ -z "$source" ]; then
+            echo "::error::There is no $IMAGE:sha-$COMMIT image. Its build may still be running or have failed (check the CMS Docker workflow), or the commit never built an image. Wait for it, or pass another commit."
+            exit 1
+          fi
+          # A version tag never changes once published.
+          if current=$(digest "$IMAGE:$VERSION") && [ -n "$current" ] && [ "$current" != "$source" ]; then
+            echo "::error::$IMAGE:$VERSION already points at another image ($current)."
+            exit 1
+          fi
+          tags=(--tag "$IMAGE:$VERSION")
+          for tag in $MOVED; do tags+=(--tag "$IMAGE:$tag"); done
+          docker buildx imagetools create "${tags[@]}" "$IMAGE@$source"
+          echo "Tagged $IMAGE@$source as: $VERSION $MOVED"
+
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE: ${{ steps.image.outputs.name }}
+          VERSION: ${{ steps.plan.outputs.version }}
+          COMMIT: ${{ steps.plan.outputs.commit }}
+          LATEST: ${{ steps.plan.outputs.latest }}
+        run: |
+          set -euo pipefail
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            echo "Release $VERSION already exists."
+            exit 0
+          fi
+          node scripts/release/cms.mjs notes --version "$VERSION" --commit "$COMMIT" --image "$IMAGE" \
+            --notes-file "$RUNNER_TEMP/notes.md"
+          # Creates the git tag too when it does not exist yet. A tag made with
+          # GITHUB_TOKEN does not start this workflow again.
+          gh release create "$VERSION" --target "$COMMIT" --title "Areca CMS $VERSION" \
+            --notes-file "$RUNNER_TEMP/notes.md" --latest="$LATEST"
+
+      - name: Summary
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          VERSION: ${{ steps.plan.outputs.version }}
+          MOVED: ${{ steps.plan.outputs.moved }}
+          COMMIT: ${{ steps.plan.outputs.commit }}
+        run: |
+          {
+            echo "### Released $IMAGE:$VERSION"
+            echo
+            echo "Commit: \`$COMMIT\`"
+            echo
+            echo "Also moved: ${MOVED:-nothing (an older version than the newest in its range)}"
+          } >> "$GITHUB_STEP_SUMMARY"
