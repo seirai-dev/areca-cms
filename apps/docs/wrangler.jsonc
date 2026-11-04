@@ -1,0 +1,15 @@
+// Cloudflare Worker that serves the prerendered docs (dist/client).
+// There is no Worker script: every request is a static asset.
+// Deploy from the repository root: pnpm run cf:deploy:docs
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "areca-docs",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist/client",
+    "html_handling": "auto-trailing-slash",
+    // Serves 404.html, which cf:build:docs copies from the prerendered /404 page.
+    "not_found_handling": "404-page"
+  },
+  "routes": [{ "pattern": "docs.arecacms.com", "custom_domain": true }]
+}

@@ -1,0 +1,17 @@
+# Response headers on Cloudflare (read by Workers static assets, not served).
+# Mirrors nginx.conf, which the Docker image still uses.
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
+
+# Hashed build assets never change.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Static search index (no file extension).
+/api/search
+  Content-Type: application/json
+
+/*.md
+  Content-Type: text/markdown; charset=utf-8
