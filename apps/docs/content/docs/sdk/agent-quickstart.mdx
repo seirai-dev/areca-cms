@@ -7,6 +7,8 @@ The `areca-quickstart` skill lets an AI coding agent set up Areca for you. The a
 
 This guide is for developers who start a new client website. It explains what to prepare, what the agent asks, what it changes, and how to keep the site up to date.
 
+For client creation, tokens and the complete installation checklist, start with [Developer setup with Areca skills](/docs/guides/skills-setup).
+
 Prefer to do each step yourself? Follow [Installation and setup](/docs/sdk/installation) instead.
 
 ## Before you start
@@ -14,7 +16,7 @@ Prefer to do each step yourself? Follow [Installation and setup](/docs/sdk/insta
 You need these things first.
 
 - **A site in the CMS.** The agent cannot create sites or tokens. Create the client and site in the CMS under **Agency › Clients › New site**. Use `http://localhost:3001` as the **Production URL** for now. You can change it later.
-- **Three values from the CMS.** When you create the site, save the **site token** and the **schema-write token**. The CMS shows each one only once. If you lose one, rotate it under **Settings › Developer**.
+- **Website credentials.** Save the **site token** when you create the site. For code-first manifest pushes only, obtain a **schema-write token** separately in **Settings › Developer**. The CMS shows each one only once. If you lose one, rotate it under **Settings › Developer**.
 - **Connect AI.** The agent uses the site's MCP server to create the content model. Connect your AI app first. See [Connect AI](/docs/cms/connect-ai). If you cannot connect, the agent uses the code-first path instead. See [How the content model is created](#how-the-content-model-is-created).
 - **Node.js 22.18 or newer.** The CLI loads `areca.config.ts` directly. On an older Node version, the agent runs the CLI through `tsx`.
 - **A website project.** Use a project with a `package.json` at its root. The agent works with TanStack Start, Next.js, Astro and other frameworks. If you have no project yet, create one first.
@@ -111,7 +113,7 @@ The agent installs `@areca-cms/site-sdk` and runs `areca init` for you. See [Ins
 
 A release needs content to show. So the agent makes a first release before it finishes.
 
-1. It switches the site to **Demo** mode. When it is connected as an agency admin, it does this itself with the `set_publishing_mode` tool. That is refused if the site was ever live in production. Then switch it by hand under **Settings › Deployment**.
+1. For a new site, it asks to use **Demo** mode. When it is connected as an agency admin, it does this itself with the `set_publishing_mode` tool. That is refused if the site was ever live in production. For a site that has already been live, use a development environment rather than switching it to Demo.
 2. It creates a few entries with a `[Sample]` prefix, so you can find and delete them later.
 3. It marks the entries ready.
 4. It asks you before it goes live.

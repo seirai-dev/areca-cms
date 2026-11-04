@@ -8,8 +8,25 @@ The CMS reads its settings from environment variables. In the Docker deployment,
 Three rules apply to every table:
 
 - **The Compose file passes only the variables it lists** to the CMS container. A variable that is not in the `cms` service's `environment` list has no effect, even when it is set in `.env`. Where a row says that the stock Compose file does not pass a variable, you must add it to the list before it takes effect. See [only listed variables reach the container](/docs/self-hosting/production#only-listed-variables-reach-the-container).
-- **A blank value counts as unset.** `KEY=` in `.env` uses the default, or fails the required check if there is no default.
+- **A blank value counts as unset in the validated CMS settings.** `KEY=` in `.env` uses the default, or fails the required check if there is no default.
 - **Changes apply after a restart.** Run `docker compose up -d --wait` to recreate the container with the new values.
+
+## Where values are loaded
+
+For source development, use `apps/cms/.env.local`. The CMS loads `.env.local` then `.env` relative to its working directory; existing process variables win, then the first file wins. Plain dotenv does not expand `${OTHER_VARIABLE}` or run shell commands in values. Quote values containing `#` so they are not parsed as comments. Keep real env files out of Git.
+
+For Docker, copy `docker/.env.example` to `docker/.env` and use `docker/compose.yml`. Compose interpolates this file; it does not forward its entire contents. For example, to enable a setting absent from the service's environment list, add it explicitly:
+
+```yaml title="docker/compose.yml (cms service excerpt)"
+services:
+  cms:
+    environment:
+      RATE_LIMIT_TRUST_PROXY: ${RATE_LIMIT_TRUST_PROXY:-false}
+```
+
+Merge that entry into the existing mapping. Recreate the container after changes. `VITE_` settings are browser-exposed build inputs; never use that prefix for a secret. All CMS variables below are server-side unless marked otherwise. Website SDK settings belong in the website project, not the CMS container.
+
+Every environment value starts as text. In the tables, **boolean** means the literal `true` or `false`, lowercase; **integer** means a decimal whole number without units; **URL** means an absolute URL including its scheme. A **provider credential** comes from that service: do not replace it with a locally generated encryption key. **Base64 key** means a fresh, independent `openssl rand -base64 32` value, not a password or API token.
 
 ## Required secrets
 
@@ -17,10 +34,10 @@ Four values must be set before the CMS starts. The CMS checks them at startup, a
 
 | Variable | Why it is required |
 | --- | --- |
-| `BETTER_AUTH_SECRET` | Signs sign-in sessions. |
+| `BETTER_AUTH_SECRET` | Nonempty random secret string; generate with `openssl rand -hex 32`. Signs sign-in sessions. |
 | `DOKPLOY_CREDENTIALS_ENCRYPTION_KEY` | Encrypts saved Dokploy API keys. The CMS requires it even if you have not connected Dokploy yet. |
 | `POSTGRES_PASSWORD` | Password for the database user. Compose only. |
-| `S3_SECRET_KEY` | Secret key for the storage service. Compose only. |
+| `S3_SECRET_KEY` | Secret key for the storage service. Required by both Compose and the CMS. |
 
 `CLOUDFLARE_CREDENTIALS_ENCRYPTION_KEY` is optional. Set it if you connect Cloudflare. Without it the CMS still starts, but the Cloudflare card shows "Encryption key not set" and saving a Cloudflare token is disabled. See [Cloudflare](#cloudflare).
 
@@ -50,62 +67,68 @@ In production (`NODE_ENV=production`), the CMS refuses to start unless these che
 
 ## Core
 
-| Variable | Required | Default | Meaning |
-| --- | --- | --- | --- |
-| `APP_URL` | Yes | Compose: `${CMS_URL}`, default `http://localhost:3000` | The public CMS address, used in invitation links, uploaded file URLs and each site's AI connector URL (`/api/mcp/<site>`). Browsers and the build hosts (Dokploy, or Cloudflare builds) must be able to reach it. Do not use `localhost` in production. |
-| `BETTER_AUTH_URL` | Yes | Compose: `${CMS_URL}`, default `http://localhost:3000` | The public CMS address used for sign-in callbacks. It must match the address people use to open the CMS, including the scheme. It is also the OAuth issuer (`<BETTER_AUTH_URL>/api/auth`) that AI apps sign in with, so use the public HTTPS address and the same origin as `APP_URL`. |
-| `SERVER_URL` | No | Unset | Accepted by the configuration check, but the CMS does not read it at runtime. Leave it unset. |
-| `PORT` | No | `3000` (set by the image) | The port the server listens on inside the container. Compose maps the host port `CMS_PORT` to it. |
-| `HOST` | No | `0.0.0.0` (set by the image) | The address the server listens on inside the container. |
-| `VITE_APP_TITLE` | No | Unset | A browser title setting. The current source does not read it, so setting it has no effect. Change the name shown in the interface under **Agency** > **Branding**. The Compose file does not pass it. |
+| Variable | Expected value | Required | Default | Meaning |
+| --- | --- | --- | --- | --- |
+| `APP_URL` | URL | Yes | Compose: `${CMS_URL}`, default `http://localhost:3000` | The public CMS address, used in invitation links, uploaded file URLs and each site's AI connector URL (`/api/mcp/<site>`). Browsers and the build hosts (Dokploy, or Cloudflare builds) must be able to reach it. Do not use `localhost` in production. |
+| `BETTER_AUTH_URL` | URL | Yes | Compose: `${CMS_URL}`, default `http://localhost:3000` | The public CMS address used for sign-in callbacks. It must match the address people use to open the CMS, including the scheme. It is also the OAuth issuer (`<BETTER_AUTH_URL>/api/auth`) that AI apps sign in with, so use the public HTTPS address and the same origin as `APP_URL`. |
+| `SERVER_URL` | URL | No | Unset | Accepted by the configuration check, but the CMS does not read it at runtime. Leave it unset. |
+| `PORT` | Integer port, 1–65535 | No | `3000` (set by the image) | The port the server listens on inside the container. Compose maps the host port `CMS_PORT` to it. |
+| `HOST` | Bind address, e.g. `0.0.0.0` | No | `0.0.0.0` (set by the image) | The address the server listens on inside the container. |
+| `VITE_APP_TITLE` | Plain string; browser-exposed build input, currently unused | No | Unset | A browser title setting. The current source does not read it, so setting it has no effect. Change the name shown in the interface under **Agency** > **Branding**. The Compose file does not pass it. |
 
 The image also sets `NODE_ENV=production`. The legacy Dokploy fallback below is ignored when this value is `production`. See [dev-only switches](#dev-only-switches).
 
 ## Database
 
-| Variable | Required | Default | Meaning |
-| --- | --- | --- | --- |
-| `DATABASE_URL` | Yes | Compose: built from `POSTGRES_PASSWORD` | PostgreSQL connection URL, in the form `postgres://user:password@host:5432/database`. The Compose file points it at the `postgres` service. |
-| `DB_CONNECT_TIMEOUT_MS` | No | `5000` | How long a request waits to get a database connection. `0` disables the limit. |
-| `DB_STATEMENT_TIMEOUT_MS` | No | `15000` | The longest any single query may run. `0` disables the limit. |
-| `DB_IDLE_IN_TX_TIMEOUT_MS` | No | `30000` | Closes a transaction that sits idle while holding a lock, so it cannot block other work. `0` disables the limit. |
+| Variable | Expected value | Required | Default | Meaning |
+| --- | --- | --- | --- | --- |
+| `DATABASE_URL` | PostgreSQL URL; percent-encode reserved characters in credentials | Yes | Compose: built from `POSTGRES_PASSWORD` | PostgreSQL connection URL, in the form `postgres://user:password@host:5432/database`. The Compose file points it at the `postgres` service. |
+| `DB_CONNECT_TIMEOUT_MS` | Integer milliseconds, ≥0 | No | `5000` | How long a request waits to get a database connection. `0` disables the limit. |
+| `DB_STATEMENT_TIMEOUT_MS` | Integer milliseconds, ≥0 | No | `15000` | The longest any single query may run. `0` disables the limit. |
+| `DB_IDLE_IN_TX_TIMEOUT_MS` | Integer milliseconds, ≥0 | No | `30000` | Closes a transaction that sits idle while holding a lock, so it cannot block other work. `0` disables the limit. |
+
+| `DB_POOL_MAX` | Integer, ≥1 | No | `10` | Main pool connections per CMS process. Additional MCP grant and factor-lock pools can open up to four connections each. |
 
 Migrations run at container start, and they are not subject to these limits. See [upgrades](/docs/self-hosting/upgrades).
 
+
 ## Redis
 
-| Variable | Required | Default | Meaning |
-| --- | --- | --- | --- |
-| `REDIS_URL` | Yes in production | `redis://localhost:6379` outside production (Compose: `redis://redis:6379`) | Redis connection URL. Redis holds the shared counters for [rate limits](/docs/security/rate-limits). The CMS refuses to start in production without it. If Redis is down, each instance keeps counting in memory with the same budgets, and the readiness check reports Redis as degraded without failing. |
+| Variable | Expected value | Required | Default | Meaning |
+| --- | --- | --- | --- | --- |
+| `REDIS_URL` | Redis URL (`redis://` or `rediss://`) | Yes in production | `redis://localhost:6379` outside production (Compose: `redis://redis:6379`) | Redis connection URL. Redis holds the shared counters for [rate limits](/docs/security/rate-limits). The CMS refuses to start in production without it. If Redis is down, each instance keeps counting in memory with the same budgets, and the readiness check reports Redis as degraded without failing. |
 
 ## Auth and sign-in
 
-| Variable | Required | Default | Meaning |
-| --- | --- | --- | --- |
-| `AUTH_EMAIL_PASSWORD_ENABLED` | No | `true` | Set to `false` to remove the email and password form and reject password sign-in. The first account created at `/setup` still gets a password, so the instance cannot be locked out. The stock Compose file does not pass it. |
-| `SETUP_TOKEN` | No | Generated, printed in the log | The token the setup page asks for. It must be at least 16 characters. If you leave it unset, the CMS generates one and prints it in its log while no user exists. See [first-run setup](/docs/self-hosting/first-run#the-setup-token). |
-| `ADMIN_MFA_REQUIRED` | No | `true` | Requires agency admins to turn on two-factor authentication before they can use admin features. Set it to `false` only for a throwaway development or test stack. The stock Compose file does not pass it. |
-| `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | No | Unset | Turns on GitHub sign-in when both values are set. Register the callback `<BETTER_AUTH_URL>/api/auth/callback/github` with GitHub. The stock Compose file does not pass them. |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | No | Unset | Turns on Google sign-in when both values are set. Callback: `<BETTER_AUTH_URL>/api/auth/callback/google`. The stock Compose file does not pass them. |
-| `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` | No | Unset | Turns on Discord sign-in when both values are set. Callback: `<BETTER_AUTH_URL>/api/auth/callback/discord`. The stock Compose file does not pass them. |
-| `MICROSOFT_SSO_CLIENT_ID`, `MICROSOFT_SSO_CLIENT_SECRET`, `MICROSOFT_SSO_TENANT_ID` | No | Unset | Turns on Microsoft Entra ID sign-in (OpenID Connect). All three are needed. `MICROSOFT_SSO_TENANT_ID` must be a specific directory (tenant) ID. The multi-tenant `common` value is not supported. Callback: `<BETTER_AUTH_URL>/api/auth/sso/callback/microsoft`. The stock Compose file does not pass them. |
-| `MICROSOFT_SSO_DOMAIN` | No | Unset | Your organization's email domain. When set, signing in with an address on that domain is routed to Microsoft. The stock Compose file does not pass it. |
+| Variable | Expected value | Required | Default | Meaning |
+| --- | --- | --- | --- | --- |
+| `AUTH_EMAIL_PASSWORD_ENABLED` | Boolean | No | `true` | Set to `false` to remove the email and password form and reject password sign-in. The first account created at `/setup` still gets a password, so the instance cannot be locked out. The stock Compose file does not pass it. |
+| `SETUP_TOKEN` | Random secret string, at least 16 characters; `openssl rand -hex 32` recommended | No | Generated, printed in the log | The token the setup page asks for. It must be at least 16 characters. If you leave it unset, the CMS generates one and prints it in its log while no user exists. See [first-run setup](/docs/self-hosting/first-run#the-setup-token). |
+| `ADMIN_MFA_REQUIRED` | Boolean | No | `true` | Requires agency admins to turn on two-factor authentication before they can use admin features. Set it to `false` only for a throwaway development or test stack. The stock Compose file does not pass it. |
+| `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | Provider-issued application ID string; Provider-issued secret string | No | Unset | Turns on GitHub sign-in when both values are set. Register the callback `<BETTER_AUTH_URL>/api/auth/callback/github` with GitHub. The stock Compose file does not pass them. |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Provider-issued application ID string; Provider-issued secret string | No | Unset | Turns on Google sign-in when both values are set. Callback: `<BETTER_AUTH_URL>/api/auth/callback/google`. The stock Compose file does not pass them. |
+| `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` | Provider-issued application ID string; Provider-issued secret string | No | Unset | Turns on Discord sign-in when both values are set. Callback: `<BETTER_AUTH_URL>/api/auth/callback/discord`. The stock Compose file does not pass them. |
+| `MICROSOFT_SSO_CLIENT_ID`, `MICROSOFT_SSO_CLIENT_SECRET`, `MICROSOFT_SSO_TENANT_ID` | Provider-issued application ID string; Provider-issued secret string; Concrete directory ID (normally UUID); not `common` | No | Unset | Turns on Microsoft Entra ID sign-in (OpenID Connect). All three are needed. `MICROSOFT_SSO_TENANT_ID` must be a specific directory (tenant) ID. The multi-tenant `common` value is not supported. Callback: `<BETTER_AUTH_URL>/api/auth/sso/callback/microsoft`. The stock Compose file does not pass them. |
+| `MICROSOFT_SSO_DOMAIN` | Email domain string, e.g. `example.com` | No | Unset | Your organization's email domain. When set, signing in with an address on that domain is routed to Microsoft. The stock Compose file does not pass it. |
+
+| `SESSION_COOKIE_CACHE_SECONDS` | Integer seconds, 0–300 | No | `60` | Signed session cache for reads. Writes always check the database. `0` checks every request; session revocations may take up to this interval to affect cached reads. |
 
 A sign-in method appears on the sign-in page only when it is configured. Sign-in is invite-only: a provider sign-in succeeds only when the email address already has an account or a pending invitation. For how the methods work together, see [authentication](/docs/self-hosting/authentication).
+
 
 ## Storage
 
 Uploaded files and branding images are stored in an S3-compatible bucket. The bucket is created at startup if it does not exist.
 
-| Variable | Required | Default | Meaning |
-| --- | --- | --- | --- |
-| `S3_ENDPOINT` | Yes | Compose: `http://rustfs:9000` | URL of the S3-compatible API. |
-| `S3_REGION` | Yes | Compose: `us-east-1` | The bucket's region. Use the region your storage service gives you. |
-| `S3_BUCKET` | Yes | Compose: `areca` | A private bucket, dedicated to Areca or shared with a separate `S3_PREFIX`. |
-| `S3_ACCESS_KEY` | Yes | Compose: `${S3_ACCESS_KEY:-areca-demo}` | Access key with access to the bucket. |
-| `S3_SECRET_KEY` | Yes | Compose: required from `.env` | Secret key for the access key. |
-| `S3_PREFIX` | No | Unset (bucket root) | Installation path such as `areca` or `sites/production`. Exactly empty also uses root; surrounding slashes are normalized. Invalid nonempty paths fail before storage operations, without root fallback. |
-| `S3_FORCE_PATH_STYLE` | No | `false` | Set to `true` for path-style addressing, which MinIO and RustFS need. Compose sets it to `true`. Keep the default `false` for virtual-hosted endpoints. |
+| Variable | Expected value | Required | Default | Meaning |
+| --- | --- | --- | --- | --- |
+| `S3_ENDPOINT` | URL | Yes | Compose: `http://rustfs:9000` | URL of the S3-compatible API. |
+| `S3_REGION` | Region string, e.g. `us-east-1` | Yes | Compose: `us-east-1` | The bucket's region. Use the region your storage service gives you. |
+| `S3_BUCKET` | Bucket name string | Yes | Compose: `areca` | A private bucket, dedicated to Areca or shared with a separate `S3_PREFIX`. |
+| `S3_ACCESS_KEY` | Storage access ID string | Yes | Compose: `${S3_ACCESS_KEY:-areca-demo}` | Access key with access to the bucket. |
+| `S3_SECRET_KEY` | Storage secret credential string | Yes | Compose: required from `.env` | Secret key for the access key. |
+| `S3_PREFIX` | Relative slash-separated path, e.g. `sites/production` | No | Unset (bucket root) | Installation path such as `areca` or `sites/production`. Exactly empty also uses root; surrounding slashes are normalized. Invalid nonempty paths fail before storage operations, without root fallback. |
+| `S3_FORCE_PATH_STYLE` | Boolean | No | `false` | Set to `true` for path-style addressing, which MinIO and RustFS need. Compose sets it to `true`. Keep the default `false` for virtual-hosted endpoints. |
 
 See [storage prefixes and migration](/docs/self-hosting/storage-and-email#use-a-shared-bucket) for validation, reset scope, permissions and moving existing objects. Use the same prefix for every CMS process and maintenance script. Database keys, bundle keys and public URLs do not change.
 
@@ -115,18 +138,18 @@ The CMS sends email through an SMTP server. It sends invitations, password reset
 
 You can set the mail server in two places: in these variables, or in **Agency** > **Mail** after you sign in. Settings saved in **Agency** > **Mail** replace these variables entirely. Turn on **Use environment settings** in that tab to send with these variables again. See [agency mail](/docs/cms/agency-mail).
 
-The CMS starts without any SMTP settings. Until you set a server in one of the two places, mail is off. Invitations still work, and you can share a link with **Regenerate link** on the pending invitation.
+Environment mail needs `SMTP_HOST`, `SMTP_PORT` and `SMTP_FROM` together; omitting any of them disables that source. The CMS starts without any SMTP settings. Until you set a server in one of the two places, mail is off. Invitations still work, and you can share a link with **Regenerate link** on the pending invitation.
 
-| Variable | Required | Default | Meaning |
-| --- | --- | --- | --- |
-| `SMTP_HOST` | No | Compose: `mailpit` | Hostname of your mail server. Compose points it at the Mailpit test inbox, which does not deliver mail. |
-| `SMTP_PORT` | No | Compose: `1025` | Port of your mail server. Use `465` with `tls`, or `587` with `starttls`. |
-| `SMTP_FROM` | No | Compose: `cms@areca.local` | The sender address. Use an address on a domain you have verified with your provider. Sending needs a From address, set here or in **Agency** > **Mail**. |
-| `SMTP_USER` | No | Unset | Username for SMTP sign-in. Leave it unset if your server does not need one. |
-| `SMTP_PASSWORD` | No | Unset | Password for SMTP sign-in. It is kept in the environment file, so protect that file. |
-| `SMTP_SECURE` | No | `starttls`, or `none` for a localhost or private-network host | How the connection is secured. `starttls` is required on the connection (usually port `587`). `tls` uses TLS from the start (usually port `465`). `none` sends without encryption, and is allowed only for localhost and private-network hosts such as Mailpit. |
-| `SMTP_REPLY_TO` | No | Unset | The reply-to address on outgoing email. |
-| `SECRETS_ENCRYPTION_KEY` | No | Unset | Base64-encoded 32-byte key that encrypts the SMTP password saved in **Agency** > **Mail**. It also encrypts the reset token kept in the email queue. If it is unset, the CMS uses `AI_SETTINGS_ENCRYPTION_KEY`. Without either key, you cannot save a password in **Agency** > **Mail**, and reset emails are not retried. If you change the key, enter the SMTP password again. |
+| Variable | Expected value | Required | Default | Meaning |
+| --- | --- | --- | --- | --- |
+| `SMTP_HOST` | Hostname or IP, without scheme or port | No | Compose: `mailpit` | Hostname of your mail server. Compose points it at the Mailpit test inbox, which does not deliver mail. |
+| `SMTP_PORT` | Integer port, 1–65535 | No | Compose: `1025` | Port of your mail server. Use `465` with `tls`, or `587` with `starttls`. |
+| `SMTP_FROM` | Mailbox string, e.g. `cms@example.com` | No | Compose: `cms@areca.local` | The sender address. Use an address on a domain you have verified with your provider. Sending needs a From address, set here or in **Agency** > **Mail**. |
+| `SMTP_USER` | SMTP username string | No | Unset | Username for SMTP sign-in. Leave it unset if your server does not need one. |
+| `SMTP_PASSWORD` | SMTP password or provider app password string | No | Unset | Password for SMTP sign-in. It is kept in the environment file, so protect that file. |
+| `SMTP_SECURE` | Enum: `starttls`, `tls`, `none` | No | `starttls`, or `none` for a localhost or private-network host | How the connection is secured. `starttls` is required on the connection (usually port `587`). `tls` uses TLS from the start (usually port `465`). `none` sends without encryption, and is allowed only for localhost and private-network hosts such as Mailpit. |
+| `SMTP_REPLY_TO` | Mailbox string, e.g. `cms@example.com` | No | Unset | The reply-to address on outgoing email. |
+| `SECRETS_ENCRYPTION_KEY` | Base64 key (32 bytes) | No | Unset | Base64-encoded 32-byte key that encrypts the SMTP password saved in **Agency** > **Mail**. It also encrypts the reset token kept in the email queue. If it is unset, the CMS uses `AI_SETTINGS_ENCRYPTION_KEY`. Without either key, you cannot save a password in **Agency** > **Mail**, and reset emails are not retried. If you change the key, enter the SMTP password again. |
 
 The CMS always checks the mail server's certificate. Each connection, greeting and socket has a 15-second timeout.
 
@@ -138,79 +161,139 @@ Use a mail server on your private network, or a transactional email provider, an
 
 Each client saves its own Dokploy and Cloudflare credentials in the CMS, after an agency admin enters them. The Dokploy variables below are for development and for the legacy setup. In production, leave them unset.
 
-| Variable | Required | Default | Meaning |
-| --- | --- | --- | --- |
-| `DOKPLOY_CREDENTIALS_ENCRYPTION_KEY` | Yes | Compose: required from `.env` | Base64-encoded 32-byte key that encrypts each organization's Dokploy API key in the database. See [required secrets](#required-secrets). |
-| `DOKPLOY_URL` | No | Unset | A single, server-wide Dokploy URL. Used only when `DOKPLOY_DEV_FALLBACK_ENABLED` is `true` and no organization has saved credentials. The stock Compose file does not pass it. |
-| `DOKPLOY_API_KEY` | No | Unset | The API key for `DOKPLOY_URL`. Same conditions. The stock Compose file does not pass it. |
-| `DOKPLOY_DEV_FALLBACK_ENABLED` | No | `false` | Allows the server-wide `DOKPLOY_URL` and `DOKPLOY_API_KEY` pair. Ignored in the production image. The stock Compose file does not pass it. |
+| Variable | Expected value | Required | Default | Meaning |
+| --- | --- | --- | --- | --- |
+| `DOKPLOY_CREDENTIALS_ENCRYPTION_KEY` | Base64 key (32 bytes) | Yes | Compose: required from `.env` | Base64-encoded 32-byte key that encrypts each organization's Dokploy API key in the database. See [required secrets](#required-secrets). |
+| `DOKPLOY_URL` | URL | No | Unset | A single, server-wide Dokploy URL. Used only when `DOKPLOY_DEV_FALLBACK_ENABLED` is `true` and no organization has saved credentials. The stock Compose file does not pass it. |
+| `DOKPLOY_API_KEY` | Provider-issued secret string | No | Unset | The API key for `DOKPLOY_URL`. Same conditions. The stock Compose file does not pass it. |
+| `DOKPLOY_DEV_FALLBACK_ENABLED` | Boolean | No | `false` | Allows the server-wide `DOKPLOY_URL` and `DOKPLOY_API_KEY` pair. Ignored in the production image. The stock Compose file does not pass it. |
 
 ### Dev-only switches
 
 These switches relax security checks so a local or LAN test setup can reach Dokploy over plain HTTP or private addresses. Keep them unset on any instance that other people use. The Compose file does not pass them.
 
-| Variable | Required | Default | Meaning |
-| --- | --- | --- | --- |
-| `DOKPLOY_ALLOW_INSECURE_HTTP` | No | Unset | Allows `http://` Dokploy API URLs. Production requires `https://`. |
-| `ALLOW_PRIVATE_HEALTH_CHECKS` | No | Unset | Allows health-check URLs on private or local addresses. |
+| Variable | Expected value | Required | Default | Meaning |
+| --- | --- | --- | --- | --- |
+| `DOKPLOY_ALLOW_INSECURE_HTTP` | Boolean | No | Unset | Allows `http://` Dokploy API URLs. Keep unset in production; this switch is not automatically disabled there. |
+| `ALLOW_PRIVATE_HEALTH_CHECKS` | Boolean | No | Unset | Allows health-check URLs on private or local addresses, including in production if explicitly enabled. Keep unset in production. |
 
 ### Cloudflare
 
 Cloudflare API tokens are saved per client, on the **Deployment** tab of the client, the same way as Dokploy keys. The token is encrypted with the key below. For the token steps, see [deployment targets](/docs/self-hosting/deployment-targets#cloudflare).
 
-| Variable | Required | Default | Meaning |
-| --- | --- | --- | --- |
-| `CLOUDFLARE_CREDENTIALS_ENCRYPTION_KEY` | No | Compose: optional, from `.env` | Base64-encoded 32-byte key that encrypts each client's Cloudflare API token in the database. Generate it with `openssl rand -base64 32`. Without it, the Cloudflare card shows "Encryption key not set" and saving is disabled. Keep it the same on every CMS instance, and back it up with the database. |
-| `CLOUDFLARE_API_BASE_URL` | No | Unset | Development and testing only. Points Areca at a fake Cloudflare API. Ignored in production, where Areca always calls `https://api.cloudflare.com/client/v4`. |
+| Variable | Expected value | Required | Default | Meaning |
+| --- | --- | --- | --- | --- |
+| `CLOUDFLARE_CREDENTIALS_ENCRYPTION_KEY` | Base64 key (32 bytes) | No | Compose: optional, from `.env` | Base64-encoded 32-byte key that encrypts each client's Cloudflare API token in the database. Generate it with `openssl rand -base64 32`. Without it, the Cloudflare card shows "Encryption key not set" and saving is disabled. Keep it the same on every CMS instance, and back it up with the database. |
+| `CLOUDFLARE_API_BASE_URL` | URL | No | Unset | Development and testing only. Points Areca at a fake Cloudflare API. Ignored in production, where Areca always calls `https://api.cloudflare.com/client/v4`. |
 
 ## Publishing worker
 
 The worker runs inside the CMS container. It builds and deploys releases, and it publishes scheduled entries when their time comes. See [publishing pipeline](/docs/self-hosting/publishing-pipeline).
 
-| Variable | Required | Default | Meaning |
-| --- | --- | --- | --- |
-| `WORKER_ENABLED` | No | `true` | Set to `false` to pause publishing and scheduled publishing in this container, for example during maintenance. The stock Compose file does not pass it. |
-| `WORKER_CONCURRENCY` | No | `2` | The most build jobs this container runs at the same time, from `1` to `16`. Each job is one release build. The stock Compose file does not pass it. |
-| `WORKER_DRAIN_TIMEOUT_MS` | No | `8000` | On shutdown, how long to wait for running jobs to finish. Keep it below the container's stop timeout, which is 10 seconds by default. The stock Compose file does not pass it. |
+| Variable | Expected value | Required | Default | Meaning |
+| --- | --- | --- | --- | --- |
+| `WORKER_ENABLED` | Boolean | No | `true` | Set to `false` to pause publishing and scheduled publishing in this container, for example during maintenance. The stock Compose file does not pass it. |
+| `WORKER_CONCURRENCY` | Integer, 1–16 | No | `2` | The most build jobs this container runs at the same time, from `1` to `16`. Each job is one release build. The stock Compose file does not pass it. |
+| `WORKER_DRAIN_TIMEOUT_MS` | Integer milliseconds, ≥0 | No | `8000` | On shutdown, how long to wait for running jobs to finish. Keep it below the container's stop timeout, which is 10 seconds by default. The stock Compose file does not pass it. |
 
 ## AI settings
 
-| Variable | Required | Default | Meaning |
-| --- | --- | --- | --- |
-| `AI_SETTINGS_ENCRYPTION_KEY` | No | Unset | Base64-encoded 32-byte key that encrypts the OpenRouter API key saved on **Agency** > **AI**. Until it is set, AI SEO suggestions stay unavailable. If you change it, enter the OpenRouter key again. The Compose file passes it from `.env`. See [AI settings](/docs/cms/ai-settings). |
+| Variable | Expected value | Required | Default | Meaning |
+| --- | --- | --- | --- | --- |
+| `AI_SETTINGS_ENCRYPTION_KEY` | Base64 key (32 bytes) | No | Unset | Base64-encoded 32-byte key that encrypts the OpenRouter API key saved on **Agency** > **AI**. Until it is set, AI SEO suggestions stay unavailable. If you change it, enter the OpenRouter key again. The Compose file passes it from `.env`. See [AI settings](/docs/cms/ai-settings). |
 
 ## Security and limits
 
-| Variable | Required | Default | Meaning |
-| --- | --- | --- | --- |
-| `RATE_LIMIT_TRUST_PROXY` | No | `false` | When `true`, the CMS reads the client address from the forwarding headers (`X-Forwarded-For`, then `X-Real-IP` or `CF-Connecting-IP`). Turn it on only behind a reverse proxy that replaces those headers with the real client address. When it is `false`, all anonymous requests share one rate-limit bucket. The stock Compose file does not pass it. See [rate limits](/docs/security/rate-limits). |
-| `ADMIN_MFA_REQUIRED` | No | `true` | Also listed under [auth and sign-in](#auth-and-sign-in). Keep it `true` on any instance that other people use. |
-| `CSP_REPORT_ONLY` | No | `false` | The Content-Security-Policy is enforced by default. `true` sends it as `Content-Security-Policy-Report-Only`: browsers log what would be blocked, and nothing is blocked. Use it to test a change before enforcing it. See [operations](/docs/self-hosting/operations#content-security-policy). |
+| Variable | Expected value | Required | Default | Meaning |
+| --- | --- | --- | --- | --- |
+| `RATE_LIMIT_TRUST_PROXY` | Boolean | No | `false` | When `true`, the CMS reads the client address from the forwarding headers (`X-Forwarded-For`, then `X-Real-IP` or `CF-Connecting-IP`). Turn it on only behind a reverse proxy that replaces those headers with the real client address. When it is `false`, all anonymous requests share one rate-limit bucket. The stock Compose file does not pass it. See [rate limits](/docs/security/rate-limits). |
+| `ADMIN_MFA_REQUIRED` | Boolean | No | `true` | Also listed under [auth and sign-in](#auth-and-sign-in). Keep it `true` on any instance that other people use. |
+| `CSP_REPORT_ONLY` | Boolean | No | `false` | The Content-Security-Policy is enforced by default. `true` sends it as `Content-Security-Policy-Report-Only`: browsers log what would be blocked, and nothing is blocked. Use it to test a change before enforcing it. See [operations](/docs/self-hosting/operations#content-security-policy). |
 
 The limits themselves, such as requests per minute and upload limits, are described in [rate limits](/docs/security/rate-limits).
 
 ## Observability
 
-| Variable | Required | Default | Meaning |
-| --- | --- | --- | --- |
-| `METRICS_TOKEN` | No | Unset | Bearer token of at least 16 characters for `GET /api/metrics`. When unset, the endpoint returns `404`. Generate it with `openssl rand -hex 32`. The Compose file passes it from `.env`. See [operations](/docs/self-hosting/operations). |
-| `LOG_LEVEL` | No | `info` | How much to log: `debug`, `info`, `warn`, `error` or `silent`. The CMS reads it directly, not through the validated configuration. An unrecognized value silently falls back to `info`. The Compose file does not pass it. |
-| `STARTUP_DEADLINE_SECONDS` | No | `60` | Total time the container may wait for PostgreSQL, the migration lock and S3 when it starts. When the time is up, it logs why and exits with code 1. A migration that has started is not interrupted. See [startup](/docs/self-hosting/operations#startup). |
-| `READINESS_TIMEOUT_MS` | No | `3000` | Time limit for each dependency check on `GET /api/health/ready`. The minimum is `100`. |
-| `READINESS_MAX_QUEUE_AGE_SECONDS` | No | `900` | Readiness fails when the oldest queued build has waited longer than this. |
-| `READINESS_MAX_TICK_AGE_SECONDS` | No | `300` | Readiness fails when the worker or scheduler has not ticked for this long, or when a build lease has expired and not been recovered. |
+| Variable | Expected value | Required | Default | Meaning |
+| --- | --- | --- | --- | --- |
+| `METRICS_TOKEN` | Random secret string, at least 16 characters; `openssl rand -hex 32` recommended | No | Unset | Bearer token of at least 16 characters for `GET /api/metrics`. When unset, the endpoint returns `404`. Generate it with `openssl rand -hex 32`. The Compose file passes it from `.env`. See [operations](/docs/self-hosting/operations). |
+| `LOG_LEVEL` | Enum: `debug`, `info`, `warn`, `error`, `silent` | No | `info` | How much to log: `debug`, `info`, `warn`, `error` or `silent`. The CMS reads it directly, not through the validated configuration. An unrecognized value silently falls back to `info`. The Compose file does not pass it. |
+| `STARTUP_DEADLINE_SECONDS` | Positive finite number of seconds; fractions accepted | No | `60` | Total time the container may wait for PostgreSQL, the migration lock and S3 when it starts. When the time is up, it logs why and exits with code 1. A migration that has started is not interrupted. See [startup](/docs/self-hosting/operations#startup). |
+| `READINESS_TIMEOUT_MS` | Integer milliseconds, ≥100 | No | `3000` | Time limit for each dependency check on `GET /api/health/ready`. The minimum is `100`. |
+| `READINESS_MAX_QUEUE_AGE_SECONDS` | Integer seconds, ≥1 | No | `900` | Readiness fails when the oldest queued build has waited longer than this. |
+| `READINESS_MAX_TICK_AGE_SECONDS` | Integer seconds, ≥1 | No | `300` | Readiness fails when the worker or scheduler has not ticked for this long, or when a build lease has expired and not been recovered. |
+
+## Runtime and build controls
+
+| Variable | Expected value | Required | Default | Meaning |
+| --- | --- | --- | --- | --- |
+| `NODE_ENV` | Runtime mode string | No | Image: `production` | Enables production secret checks and disables the legacy Dokploy fallback and Cloudflare test override. Keep `production` in deployed instances. |
+| `HTTP_KEEP_ALIVE_TIMEOUT_MS` | Positive number of milliseconds | No | `120000` | Container entrypoint sets the HTTP keep-alive timeout. Keep above the proxy's idle timeout (Traefik commonly uses 90 seconds). Zero or a nonnumeric value uses the default. |
+| `SKIP_ENV_VALIDATION` | Literal `true` to skip | No | Unset | Build/tool escape hatch. The `build` npm lifecycle also skips general env validation. Never enable for a running production server. Storage-prefix validation still runs. |
 
 ## Docker Compose settings
 
 These values are read by `compose.yml` itself, not by the CMS. Set them in `docker/.env`.
 
-| Variable | Required | Default | Meaning |
+| Variable | Expected value | Required | Default | Meaning |
+| --- | --- | --- | --- | --- |
+| `CMS_IMAGE` | Container image reference (tag or digest) | No | `ghcr.io/seirai-dev/areca-cms:latest` | The CMS image to run. Pin it to a commit tag or digest in production. See [image tags](/docs/self-hosting/upgrades#choose-an-image-tag). |
+| `CMS_PORT` | Integer port, 1–65535 | No | `3000` | The host port that the CMS is published on, bound to `127.0.0.1`. |
+| `CMS_URL` | URL | No | `http://localhost:3000` | The public CMS address. It sets both `APP_URL` and `BETTER_AUTH_URL`. Set it to your HTTPS domain in production. |
+| `POSTGRES_PASSWORD` | Database password string; use random URL-safe text with stock Compose | Yes | None | Password for the `areca` database user. |
+| `S3_ACCESS_KEY`, `S3_SECRET_KEY` | Storage access ID string; Storage secret credential string | Yes, for the secret key | `areca-demo` for the access key | Credentials for the bundled storage service. They are also passed to the CMS. |
+
+## Website SDK variables
+
+These belong in the consuming website's server/build environment. The CLI loads `.env.local` then `.env`; direct SDK calls read the process environment, so your framework or entrypoint must load it. See [SDK installation](/docs/sdk/installation).
+
+| Variable | Expected value | Required | Default / effect |
 | --- | --- | --- | --- |
-| `CMS_IMAGE` | No | `ghcr.io/seirai-dev/areca-cms:latest` | The CMS image to run. Pin it to a commit tag or digest in production. See [image tags](/docs/self-hosting/upgrades#choose-an-image-tag). |
-| `CMS_PORT` | No | `3000` | The host port that the CMS is published on, bound to `127.0.0.1`. |
-| `CMS_URL` | No | `http://localhost:3000` | The public CMS address. It sets both `APP_URL` and `BETTER_AUTH_URL`. Set it to your HTTPS domain in production. |
-| `POSTGRES_PASSWORD` | Yes | None | Password for the `areca` database user. |
-| `S3_ACCESS_KEY`, `S3_SECRET_KEY` | Yes, for the secret key | `areca-demo` for the access key | Credentials for the bundled storage service. They are also passed to the CMS. |
+| `ARECA_CMS_URL` | Absolute CMS URL | Yes, unless supplied as SDK option | CMS origin for content and schema requests. |
+| `ARECA_SITE_TOKEN` | Opaque CMS-issued secret | Yes for content reads, unless supplied as SDK option | Copy the site token from the CMS; do not generate it with OpenSSL. |
+| `ARECA_SCHEMA_TOKEN` | Opaque CMS-issued schema-write secret | Only for manifest pushes | No fallback to the site token. |
+| `ARECA_SITE_KEY` | Site key string | No | Manifest-pull fallback when config does not supply `siteKey`. |
+| `ARECA_SNAPSHOT_ID` | Publication ID string | No | Pins a content pull to a release; blank or `0` means no pin. |
+| `ARECA_CONTENT_DIR` | Filesystem directory path | No | Overrides the generated typed client's content directory; otherwise uses its generated output directory. |
+
+`ARECA_MCP_KEY` is a convention used in MCP client examples, not a CMS configuration variable. It holds a CMS-issued personal AI key only when the client configuration references it. OAuth needs no such env value. Never expose SDK tokens in browser-prefixed variables.
+
+## Maintenance and test tools
+
+These configure repository tools, not production CMS behavior. All are optional for ordinary self-hosting. Set them only when running the corresponding tool; use isolated databases and buckets for tests.
+
+| Variable | Expected value | Tool and default / requirement |
+| --- | --- | --- |
+| `ARECA_WRITES_STOPPED` | Literal `1` | Required acknowledgement for authoring transfer that every writer has stopped; it does not acquire a lock. |
+| `ARECA_BENCHMARK` | Literal `1` | Required benchmark acknowledgement; the database must also pass the benchmark's isolation guard. |
+| `E2E_PORT` | Integer port | Isolated E2E server; `3100`. |
+| `E2E_DATABASE_URL` | PostgreSQL URL | Isolated E2E; otherwise derives an `areca_e2e` database from `DATABASE_URL`. |
+| `E2E_S3_BUCKET` | Bucket name string | Isolated E2E; `areca-e2e`. |
+| `E2E_S3_PREFIX` | Storage prefix path | Isolated E2E; empty by default, intentionally ignores inherited `S3_PREFIX`. |
+| `E2E_REDIS_URL` | Redis URL | Isolated E2E; `redis://localhost:6379/1`. |
+| `PLAYWRIGHT_BASE_URL` | Absolute URL | Browser tests; `http://localhost:3000`. |
+| `PW_CHROMIUM_PATH` | Executable path | Optional custom Chromium binary. |
+| `PW_WORKERS` | Positive integer | Playwright workers; `3`. |
+| `PW_EXTERNAL_SERVER` | Literal `true` | Uses an already running server instead of starting one. |
+| `CLOUDFLARE_STUB_PORT` | Integer port | Test Cloudflare stub; `4607`. |
+| `VITE_FREEZE` | Literal `true` | Disables development watchers/HMR for stable tests. |
+| `MAILPIT_URL` | Absolute HTTP URL | Mailpit API address for email tests. |
+| `CI` | CI environment flag | Test reporting/retry behavior; normally supplied by CI. |
+
+The legacy `scripts/dokploy-setup.ts` provisioning helper also reads the following. These are inputs to that script, not settings for deployments configured through the CMS:
+
+| Variable | Expected value | Required / default |
+| --- | --- | --- |
+| `DOKPLOY_URL`, `CMS_URL`, `GIT_URL` | Absolute API, CMS and repository URLs | Required. |
+| `DOKPLOY_API_KEY`, `SITE_TOKEN` | Provider API secret and CMS-issued site token | Required. |
+| `DOKPLOY_ENVIRONMENT_ID`, `SSH_KEY_ID` | Provider resource ID strings | Required. |
+| `APP_NAME` | Application name string | `acme-demo-site`. |
+| `GIT_BRANCH` | Branch name string | `main`. |
+| `GIT_BUILD_PATH` | Repository path | `/`. |
+| `DOCKERFILE` | Repository file path | `examples/demo-site/Dockerfile`. |
+| `DOCKER_CONTEXT` | Build context path | `.`. |
+| `PUBLISHED_PORT`, `TARGET_PORT` | Integer ports | `3101`, `3000`. |
+| `AUTO_DEPLOY` | Boolean-like string | `false`; this script accepts `1`, `true`, `yes`, `on` as enabled, unlike validated CMS booleans. |
 
 ## Related
 
