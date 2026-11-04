@@ -309,6 +309,13 @@
       "when": 1793782737996,
       "tag": "0043_asset_upload_session",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1793800388448,
+      "tag": "0044_sso_provider_domain_verified",
+      "breakpoints": true
     }
   ]
 }

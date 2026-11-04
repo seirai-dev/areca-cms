@@ -48,6 +48,10 @@ const microsoftCredentials = env.MICROSOFT_SSO_TENANT_ID
   ? credentials(env.MICROSOFT_SSO_CLIENT_ID, env.MICROSOFT_SSO_CLIENT_SECRET)
   : undefined
 
+/** Lowercased, without a leading `@`, so it compares against email domains. */
+const microsoftSsoDomain =
+  env.MICROSOFT_SSO_DOMAIN?.trim().toLowerCase().replace(/^@/, '') || null
+
 const microsoftIssuer = `https://login.microsoftonline.com/${env.MICROSOFT_SSO_TENANT_ID}/v2.0`
 
 /**
@@ -58,7 +62,7 @@ const microsoftIssuer = `https://login.microsoftonline.com/${env.MICROSOFT_SSO_T
 export const microsoftSso = microsoftCredentials
   ? {
       providerId: MICROSOFT_SSO_PROVIDER_ID,
-      domain: env.MICROSOFT_SSO_DOMAIN ?? '',
+      domain: microsoftSsoDomain ?? '',
       oidcConfig: {
         issuer: microsoftIssuer,
         discoveryEndpoint: `${microsoftIssuer}/.well-known/openid-configuration`,
@@ -76,6 +80,27 @@ export const microsoftSso = microsoftCredentials
       },
     }
   : null
+
+/**
+ * Entra ID never sends an `email_verified` claim, so Microsoft emails count as
+ * verified only on `MICROSOFT_SSO_DOMAIN`, a domain the tenant owns. Without
+ * that, an existing account cannot be linked ("account not linked") and an
+ * invited person cannot register. Unset domain: nothing is trusted.
+ */
+export const microsoftSsoTrustsDomain = Boolean(
+  microsoftSso && microsoftSsoDomain,
+)
+
+/** True when a Microsoft SSO callback vouches for this address. */
+export function microsoftSsoVouchesFor(
+  path: string | undefined,
+  email: string,
+) {
+  if (!microsoftSsoTrustsDomain || !path?.startsWith('/sso/callback')) {
+    return false
+  }
+  return email.trim().toLowerCase().split('@')[1] === microsoftSsoDomain
+}
 
 /**
  * The SSO plugin refuses to fetch OIDC metadata from an origin that is not

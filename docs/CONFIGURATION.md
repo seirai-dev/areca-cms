@@ -120,8 +120,10 @@ enabled by setting both credentials for a provider:
 | Microsoft Entra ID | `MICROSOFT_SSO_CLIENT_ID`, `MICROSOFT_SSO_CLIENT_SECRET`, `MICROSOFT_SSO_TENANT_ID` | `<BETTER_AUTH_URL>/api/auth/sso/callback/microsoft` |
 
 Entra requires a concrete directory/tenant ID; `common` is not supported. Its
-optional `MICROSOFT_SSO_DOMAIN` helps route a matching email domain to the
-provider. Restart the CMS after changing these settings. Sign-in remains
+`MICROSOFT_SSO_DOMAIN` must be an email domain the tenant owns: Entra sends no
+verified-email claim, so only addresses on that domain can link to an existing
+account or accept an invitation (otherwise sign-in fails with
+`error=account not linked`). It also routes that domain to the provider. Restart the CMS after changing these settings. Sign-in remains
 invite-only. Agency administrators must enroll in TOTP by default;
 `ADMIN_MFA_REQUIRED=false` is only for isolated development or end-to-end test
 stacks.

@@ -74,7 +74,7 @@ Set these variables:
 
 - `MICROSOFT_SSO_CLIENT_ID` and `MICROSOFT_SSO_CLIENT_SECRET`, from an app registration in Entra ID.
 - `MICROSOFT_SSO_TENANT_ID`, the directory (tenant) ID of the Entra ID tenant whose users should sign in. A concrete ID is required. The shared `common` endpoint is not supported.
-- `MICROSOFT_SSO_DOMAIN` (optional), an email domain such as `agency.example`. When it is set, entering an address on that domain routes the sign-in to Microsoft.
+- `MICROSOFT_SSO_DOMAIN`, an email domain your tenant owns, such as `agency.example`. Entra ID does not say whether an email is verified, so Areca only trusts Microsoft addresses on this domain. Without it, Microsoft sign-in cannot link to an existing account (the sign-in page shows "Could not sign in" and the URL has `error=account not linked`), and invited people cannot accept their invitation with Microsoft. It also routes sign-ins for that domain to Microsoft.
 
 In the app registration, add the callback URL from the table above as a web redirect URI.
 

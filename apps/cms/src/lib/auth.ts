@@ -70,6 +70,8 @@ import {
   emailPasswordEnabled,
   microsoftSso,
   microsoftSsoTrustedOrigins,
+  microsoftSsoTrustsDomain,
+  microsoftSsoVouchesFor,
   socialProviders,
 } from './auth-providers.ts'
 
@@ -359,7 +361,9 @@ const authBase = betterAuth({
         before: async (created, ctx) => {
           await assertEmailMayRegister(created.email, {
             passwordSignup: ctx?.path === '/sign-up/email',
-            emailVerified: created.emailVerified,
+            emailVerified:
+              created.emailVerified ||
+              microsoftSsoVouchesFor(ctx?.path, created.email),
             invitationToken: ctx?.body?.invitationToken,
           })
         },
@@ -579,6 +583,13 @@ const authBase = betterAuth({
             // verified-email claim is what lets an SSO sign-in link to an
             // existing account.
             trustEmailVerified: true,
+            // Entra ID sends no `email_verified` claim. Domain verification
+            // marks the env provider as verified, so emails on
+            // MICROSOFT_SSO_DOMAIN can link to an existing account. Its
+            // management endpoints stay closed (SSO_MANAGEMENT_PATHS).
+            ...(microsoftSsoTrustsDomain
+              ? { domainVerification: { enabled: true } }
+              : {}),
             defaultSSO: [microsoftSso],
           }),
         ]
