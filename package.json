@@ -13,13 +13,21 @@
     "db:studio": "pnpm --filter @areca/cms db:studio",
     "db:reset": "pnpm --filter @areca/cms db:reset",
     "db:demo": "pnpm --filter @areca/cms db:demo",
-    "docs:screenshots": "pnpm --filter @areca/cms docs:screenshots"
+    "docs:screenshots": "pnpm --filter @areca/cms docs:screenshots",
+    "cf:build:landing": "pnpm --filter @areca/landing build",
+    "cf:deploy:landing": "wrangler deploy --config apps/landing/wrangler.jsonc",
+    "cf:preview:landing": "wrangler versions upload --config apps/landing/wrangler.jsonc",
+    "cf:build:docs": "pnpm --filter @areca/docs build && cp apps/docs/dist/client/404/index.html apps/docs/dist/client/404.html",
+    "cf:deploy:docs": "wrangler deploy --config apps/docs/wrangler.jsonc",
+    "cf:preview:docs": "wrangler versions upload --config apps/docs/wrangler.jsonc"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
     "eslint": "^10.10.0",
     "prettier": "^3.9.6",
     "typescript": "^6.0.3",
-    "vitest": "^5.0.1"
-  }
+    "vitest": "^5.0.1",
+    "wrangler": "^4.156.2"
+  },
+  "packageManager": "pnpm@12.8.1"
 }

@@ -11,6 +11,7 @@ allowBuilds:
   better-sqlite3: true
   unrs-resolver: true
   sharp: true
+  workerd: true
   '@openrouter/sdk': false
 
 minimumReleaseAgeExclude:

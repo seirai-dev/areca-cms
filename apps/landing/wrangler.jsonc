@@ -1,0 +1,14 @@
+// Cloudflare Worker that serves the prerendered landing page (dist/client).
+// There is no Worker script: every request is a static asset.
+// Deploy from the repository root: pnpm run cf:deploy:landing
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "areca-landing",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist/client",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  },
+  "routes": [{ "pattern": "arecacms.com", "custom_domain": true }]
+}
