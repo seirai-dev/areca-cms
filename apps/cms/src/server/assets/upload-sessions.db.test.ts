@@ -103,13 +103,11 @@ describe.skipIf(!hasDb)('upload links over MCP', () => {
   beforeAll(async () => {
     ctx = await createTestSite()
     other = await createTestSite()
-    await db
-      .insert(membership)
-      .values({
-        userId: ctx.actor.id,
-        organizationId: ctx.org.id,
-        role: 'owner',
-      })
+    await db.insert(membership).values({
+      userId: ctx.actor.id,
+      organizationId: ctx.org.id,
+      role: 'owner',
+    })
     editorId = crypto.randomUUID()
     await db.insert(user).values({
       id: editorId,
