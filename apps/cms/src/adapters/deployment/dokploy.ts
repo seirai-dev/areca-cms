@@ -215,28 +215,45 @@ export function createDokployAdapter(
   ) {
     const app = await getApplication(applicationId)
     const snapshotId = context.publicationId
-    const legacySiteToken = readEnvLine(app.buildArgs, 'ARECA_SITE_TOKEN')
-    const buildArgs = upsertEnvLine(
-      removeEnvLine(app.buildArgs, 'ARECA_SITE_TOKEN'),
-      'ARECA_SNAPSHOT_ID',
-      snapshotId,
-    )
-    const buildSecrets = legacySiteToken
-      ? upsertEnvLine(app.buildSecrets, 'ARECA_SITE_TOKEN', legacySiteToken)
-      : (app.buildSecrets ?? '')
+    // Only Dockerfile builds read build args. Railpack, Nixpacks and the
+    // buildpack builders only pass the app's environment into the build, so
+    // the pin goes there. An unknown build type gets both.
+    const toBuildArgs = !app.buildType || app.buildType === 'dockerfile'
+    const toEnv = app.buildType !== 'dockerfile'
+    let buildArgs = app.buildArgs ?? ''
+    let buildSecrets = app.buildSecrets ?? ''
+    let env = app.env ?? ''
+    if (toBuildArgs) {
+      // Dockerfile builds read the site token as a BuildKit secret.
+      const legacySiteToken = readEnvLine(buildArgs, 'ARECA_SITE_TOKEN')
+      buildArgs = upsertEnvLine(
+        removeEnvLine(buildArgs, 'ARECA_SITE_TOKEN'),
+        'ARECA_SNAPSHOT_ID',
+        snapshotId,
+      )
+      if (legacySiteToken) {
+        buildSecrets = upsertEnvLine(
+          buildSecrets,
+          'ARECA_SITE_TOKEN',
+          legacySiteToken,
+        )
+      }
+    }
+    if (toEnv) env = upsertEnvLine(env, 'ARECA_SNAPSHOT_ID', snapshotId)
     await retrySafe(() =>
       request('/api/application.saveEnvironment', {
         method: 'POST',
         body: JSON.stringify({
           applicationId,
-          env: app.env ?? '',
+          env,
           buildArgs,
           buildSecrets,
           createEnvFile: app.createEnvFile ?? false,
         }),
       }),
     )
-    log(`build arg ARECA_SNAPSHOT_ID=${snapshotId}`)
+    if (toBuildArgs) log(`build arg ARECA_SNAPSHOT_ID=${snapshotId}`)
+    if (toEnv) log(`environment variable ARECA_SNAPSHOT_ID=${snapshotId}`)
   }
 
   return {
@@ -405,6 +422,8 @@ interface DokployDeployment {
 
 interface DokployApplication {
   applicationStatus?: string
+  /** 'dockerfile' | 'railpack' | 'nixpacks' | 'heroku_buildpacks' | ... */
+  buildType?: string | null
   deployments?: DokployDeployment[]
   env?: string | null
   buildArgs?: string | null

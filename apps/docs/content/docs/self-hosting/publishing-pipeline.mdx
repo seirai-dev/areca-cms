@@ -27,7 +27,7 @@ Each release creates a **publication** (the release record) and a **build job** 
 </Step>
 <Step>
 
-**Dispatch.** The worker records in the database that it is about to contact the deployment provider. For Dokploy, it sets `ARECA_SNAPSHOT_ID` as a build argument to the publication ID and sends one deploy request, and the deployment is tagged `areca:<jobId>`. For Cloudflare, it writes `ARECA_SNAPSHOT_ID` as a build variable on the project, then starts one build. See [how the snapshot reaches the build](/docs/self-hosting/deployment-targets#how-the-snapshot-reaches-the-build) and [how the snapshot reaches a Cloudflare build](/docs/self-hosting/deployment-targets#how-the-snapshot-reaches-a-cloudflare-build).
+**Dispatch.** The worker records in the database that it is about to contact the deployment provider. For Dokploy, it sets `ARECA_SNAPSHOT_ID` to the publication ID (as a build argument for Dockerfile builds, or as an environment variable for Railpack and Nixpacks builds) and sends one deploy request, and the deployment is tagged `areca:<jobId>`. For Cloudflare, it writes `ARECA_SNAPSHOT_ID` as a build variable on the project, then starts one build. See [how the snapshot reaches the build](/docs/self-hosting/deployment-targets#how-the-snapshot-reaches-the-build) and [how the snapshot reaches a Cloudflare build](/docs/self-hosting/deployment-targets#how-the-snapshot-reaches-a-cloudflare-build).
 
 </Step>
 <Step>
@@ -138,7 +138,7 @@ Start with the job log. In **Go live**, open the release and select **View log**
 - Wait up to 15 minutes. If the wait runs out, the release becomes uncertain, and you reconcile it.
 
 **The job fails with `Health check failed`.**
-- Open the health check URL in a browser or with `curl`. It must return JSON with the new publication ID. If it returns the old ID, the new build is not serving. Check that `ARECA_SNAPSHOT_ID` is set (as a build argument in Dokploy, or as a build variable in Cloudflare), and that a Dokploy Dockerfile declares it after the SDK build.
+- Open the health check URL in a browser or with `curl`. It must return JSON with the new publication ID. If it returns the old ID, the new build is not serving. Check that `ARECA_SNAPSHOT_ID` is set (as a build argument for a Dokploy Dockerfile build, an environment variable for a Dokploy Railpack or Nixpacks build, or a build variable in Cloudflare), and that a Dokploy Dockerfile declares it after the SDK build.
 - If the URL uses a LAN address, check the two switches in [HTTPS and private addresses](/docs/self-hosting/deployment-targets#https-and-private-addresses).
 - For Dokploy, check that the host publishing port maps to the container's port and that the update order is stop-first.
 - For Cloudflare, check that the build command runs `areca pull` before the build, and that the health route is served by the build. See [Cloudflare builds](/docs/sdk/go-live-builds#cloudflare-builds).

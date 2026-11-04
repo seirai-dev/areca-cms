@@ -65,3 +65,4 @@ Optional seed data creates `admin@areca.local`, `owner@acme.local`, and `editor@
 Use [configuration](docs/CONFIGURATION.md), [operations](docs/OPERATIONS.md), [recovery](docs/RECOVERY.md), and [upgrades](docs/UPGRADES.md) for deployed instances. [Troubleshooting](docs/TROUBLESHOOTING.md) connects common failures to the appropriate guide.
 
 Browser tests clear their configured database and upload bucket. Use the provided isolated test stack when retaining local data; details are in [development](docs/DEVELOPMENT.md). The [original project proposal](PROJECT.md) remains available as historical context.
+
