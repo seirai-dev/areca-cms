@@ -127,13 +127,46 @@ export class ToolCatalog {
   }
 }
 
+/** An image sent to the model next to a tool's JSON, base64 encoded. */
+export type ToolImage = { data: string; mimeType: string }
+
+/**
+ * A tool result with images: the JSON goes first as text, then each image as
+ * an MCP image block, so the model can look at what it is working with.
+ */
+export class ResultWithImages {
+  constructor(
+    readonly data: unknown,
+    readonly images: readonly ToolImage[],
+  ) {}
+
+  /** The same images with different JSON (used to add the agency site echo). */
+  withData(data: unknown): ResultWithImages {
+    return new ResultWithImages(data, this.images)
+  }
+}
+
+function resultText(result: unknown): string {
+  return typeof result === 'string'
+    ? result
+    : JSON.stringify(result ?? null, null, 2)
+}
+
 /** A tool result: a string is sent as is, anything else as pretty JSON. */
 export function toCallResult(result: unknown): CallToolResult {
-  const text =
-    typeof result === 'string'
-      ? result
-      : JSON.stringify(result ?? null, null, 2)
-  return { content: [{ type: 'text', text }] }
+  if (result instanceof ResultWithImages) {
+    return {
+      content: [
+        { type: 'text', text: resultText(result.data) },
+        ...result.images.map((image) => ({
+          type: 'image' as const,
+          data: image.data,
+          mimeType: image.mimeType,
+        })),
+      ],
+    }
+  }
+  return { content: [{ type: 'text', text: resultText(result) }] }
 }
 
 /** Runs one per-site tool call: access check, audit labelling, and error mapping. */

@@ -132,7 +132,7 @@ function convertValue(
       throw new ValidationError([
         {
           path: `fields.${field.key}`,
-          message: `image asset ${missing[0]} was not found in this organization. Upload it with upload_asset_from_url or list_assets first.`,
+          message: `image asset ${missing[0]} was not found in this organization. Upload it with upload_asset_from_url or create_asset_upload, or find it with list_assets, first.`,
         },
       ])
     }

@@ -104,7 +104,7 @@ export async function assetLookupFor(
     throw new ValidationError([
       {
         path: 'fields',
-        message: `Asset ${missing} is not available to this site. Use list_assets or upload_asset_from_url.`,
+        message: `Asset ${missing} is not available to this site. Use list_assets, upload_asset_from_url or create_asset_upload.`,
       },
     ])
   return lookup
@@ -695,7 +695,7 @@ export function assertSiteImages(
         {
           path: field.key,
           message:
-            'This image is not available to this site. Use list_assets or upload_asset_from_url.',
+            'This image is not available to this site. Use list_assets, upload_asset_from_url or create_asset_upload.',
         },
       ])
     }

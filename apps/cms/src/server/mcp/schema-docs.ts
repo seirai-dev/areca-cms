@@ -16,7 +16,7 @@ const TYPE_FORMAT: Record<FieldType, string> = {
     'Markdown string. Section headings start with ## (### and #### for subsections; other levels are clamped), paragraphs separated by a blank line, **bold**, *italic*, [links](https://...), bullet and numbered lists, > blockquotes, tables, and images as ![alt text](asset:<assetId>). Raw HTML is dropped. Images from a full https URL also work but prefer uploaded assets. ' +
     CODE_FORMAT,
   image:
-    'Asset id string from list_assets or upload_asset_from_url. Alt text comes from the asset (set it with update_asset_alt).',
+    'Asset id string from list_assets, upload_asset_from_url or get_asset_upload. Alt text comes from the asset (set it with update_asset_alt).',
   date: 'Calendar date as YYYY-MM-DD, e.g. 2026-10-10. Content only: a date field does not schedule the entry.',
   datetime:
     'ISO 8601 date and time with an offset, e.g. 2026-10-10T09:00:00+02:00 or 2026-10-10T07:00:00Z. Content only: it does not schedule the entry.',

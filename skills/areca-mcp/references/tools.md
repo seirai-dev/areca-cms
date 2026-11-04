@@ -63,8 +63,10 @@ Single sections such as company info or the home page. Editors and owners see en
 | Tool | Access | Inputs | Returns |
 | --- | --- | --- | --- |
 | `list_assets` | all | `search?`, `limit?` (1-100), `offset?` | assetId, filename, mimeType, width, height, alt, url |
-| `get_asset` | all | `id*` | Asset + `usageCount` |
+| `get_asset` | all | `id*` | Asset + `usageCount`, plus a preview image |
 | `upload_asset_from_url` | all | `url*` (direct http(s) file link), `altText?`, `filename?` | Asset with `assetId` + `howToUse` |
+| `create_asset_upload` | all | `purpose?` | `uploadId`, `pageUrl`, `uploadUrl`, `expiresAt` (20 files, 20 minutes) |
+| `get_asset_upload` | all | `uploadId*`, `finish?` | `state`, `files[]` with assetIds, plus one preview image per image |
 | `update_asset_alt` | all | `id*`, `altText*` (`""` clears), `locale?` (languages sites: alt text for that language) | Asset |
 | `delete_asset` | owner | `id*` | Refused while the asset is in use |
 

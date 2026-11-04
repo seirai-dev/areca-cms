@@ -11,7 +11,7 @@ import { requireAccess } from './guard'
 import type { AgencyPrincipal, McpActor } from './keys'
 import { loadSiteContext } from './site-context'
 import type { McpSiteContext } from './site-context'
-import { toCallResult } from './tool-kit'
+import { ResultWithImages, toCallResult } from './tool-kit'
 import type { SiteEnvironment, ToolEntry } from './tool-kit'
 
 /** The argument every agency site tool takes, and how the model is told about it. */
@@ -125,6 +125,9 @@ function productionOnlyRefusal(name: string): string {
  * results are wrapped as `{ site, result }`.
  */
 export function withSiteEcho(result: unknown, echo: SiteEcho): unknown {
+  if (result instanceof ResultWithImages) {
+    return result.withData(withSiteEcho(result.data, echo))
+  }
   if (typeof result === 'object' && result !== null && !Array.isArray(result)) {
     const existing: object =
       'site' in result &&

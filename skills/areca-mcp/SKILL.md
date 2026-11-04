@@ -80,7 +80,12 @@ Full tool inputs are in [references/tools.md](references/tools.md#development-en
 
 - **Rich text = Markdown**, never HTML (HTML tags show up as literal text). Use `##`, `###` and `####` headings, lists, links, tables and `>` quotes. Images go in as `![alt](asset:<assetId>)`.
 - **Code = backticks or fences.** Put inline code (function names, file paths, CLI flags) in backticks. Put code, commands, file contents and config in a fenced block with a language, such as a fence named `ts` or `shell`. Never paste code as plain paragraphs. Language ids: `ts`, `tsx`, `js`, `jsx`, `html`, `css`, `json`, `shell`, `python`, `php`, `sql`, `yaml`, `markdown`, `go`, `rust`, `diff`, and `plaintext` for plain text. Any other language is saved without colours, and the result lists a warning.
-- **Images:** call `upload_asset_from_url({ url, altText })` with a *direct* file link (JPEG, PNG, WebP, GIF or PDF, up to 20 MB), then use the returned `assetId` in image fields, `seo.ogImage` and Markdown. Always include alt text. If an upload fails, don't try other URLs. Ask the user for a working link, or continue without the image.
+- **Images:** pick the path by where the image is (JPEG, PNG, WebP, GIF or PDF, up to 20 MB each):
+  - A public *direct* file link: `upload_asset_from_url({ url, altText })`.
+  - A local file you can read from a shell: `create_asset_upload`, then `curl -sS -T <file> "<uploadUrl>/"` per file, then `get_asset_upload({ uploadId, finish: true })`. `finish: true` is required; it closes the link.
+  - Anything else, such as images the user attached to the chat: `create_asset_upload`, give the user the `pageUrl`, and call `get_asset_upload` when they say they are done.
+  - Never ask the user to host an image or share storage credentials.
+  - `get_asset_upload` and `get_asset` return previews: look at them, decide which image goes where, and set alt text with `update_asset_alt`. Then use each `assetId` in image fields, `seo.ogImage` and Markdown. If a URL upload fails, don't try other URLs: ask for a working link, offer an upload link, or continue without the image.
 - **Field values:** `image` and `reference` take ids, `date` is `YYYY-MM-DD`, `datetime` is ISO 8601 with an offset, `select` must match an option exactly, and `slug` is lowercase with dashes and unique. Date fields are content only and never schedule an entry.
 - **Clearing:** use `""` for a field or SEO text, `[]` for SEO lists and `false` for `noindex`/`nofollow`. Avoid `null` (`seo` rejects it). A key you leave out keeps its value.
 - **SEO on every new entry:** `seo.title` (50-60 chars), `seo.description` (140-160), `focusKeyphrase`, `summary` (2-3 sentences) and 3-5 `keyTakeaways`. Add `faq` only when the body really answers those questions.

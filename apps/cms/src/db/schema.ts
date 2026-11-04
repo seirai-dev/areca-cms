@@ -532,6 +532,61 @@ export const asset = pgTable(
   ],
 )
 
+/**
+ * A one-time upload link an AI connection hands out, so a person (browser
+ * page) or the AI itself (curl) can send files without a public URL. Only the
+ * SHA-256 of the link's token is kept.
+ */
+export const assetUploadSession = pgTable(
+  'asset_upload_session',
+  {
+    id: id(),
+    tokenHash: text('token_hash').notNull().unique(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    siteId: text('site_id')
+      .notNull()
+      .references(() => site.id, { onDelete: 'cascade' }),
+    /** The person whose AI connection opened the session; uploads are theirs. */
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    /** What the AI asked for, shown on the upload page. */
+    purpose: text('purpose'),
+    maxFiles: integer('max_files').notNull(),
+    /** Slots taken by finished and in-flight uploads; caps the session at maxFiles. */
+    reservedCount: integer('reserved_count').notNull().default(0),
+    expiresAt: timestamptz('expires_at').notNull(),
+    finishedAt: timestamptz('finished_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('asset_upload_session_site_id_idx').on(t.siteId),
+    check(
+      'asset_upload_session_reserved_check',
+      sql`${t.reservedCount} >= 0 and ${t.reservedCount} <= ${t.maxFiles}`,
+    ),
+  ],
+)
+
+/** The assets uploaded through one session, in upload order. */
+export const assetUploadSessionFile = pgTable(
+  'asset_upload_session_file',
+  {
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => assetUploadSession.id, { onDelete: 'cascade' }),
+    assetId: text('asset_id')
+      .notNull()
+      .references(() => asset.id, { onDelete: 'cascade' }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('asset_upload_session_file_unique').on(t.sessionId, t.assetId),
+  ],
+)
+
 export const publication = pgTable(
   'publication',
   {

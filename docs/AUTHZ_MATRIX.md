@@ -227,7 +227,7 @@ listings, direct calls, cross-site ids, go-live and the agency schema tools.
 
 | Access | Who may call it | Tools |
 | --- | --- | --- |
-| everyone | any site member (editor, owner, agency admin) | `get_site_info`, `get_collection_schema`, `list_entries`, `get_entry`, `create_entry`, `update_entry`, `list_revisions`, `get_preview_url`, `list_assets`, `get_asset`, `upload_asset_from_url`, `update_asset_alt`, `get_release_status`, `list_publications`, `get_build_job`, `get_global`, `update_global`, `discard_global_draft` |
+| everyone | any site member (editor, owner, agency admin) | `get_site_info`, `get_collection_schema`, `list_entries`, `get_entry`, `create_entry`, `update_entry`, `list_revisions`, `get_preview_url`, `list_assets`, `get_asset`, `upload_asset_from_url`, `create_asset_upload`, `get_asset_upload`, `update_asset_alt`, `get_release_status`, `list_publications`, `get_build_job`, `get_global`, `update_global`, `discard_global_draft` |
 | owner | owner or agency admin | `mark_ready`, `unpublish_entry`, `archive_entry`, `cancel_schedule`, `delete_entry`, `restore_revision`, `delete_asset` |
 | go-live | a key with `allowGoLive` (the key flag and a non-editor live role) | `go_live`, `rollback`, `cancel_build`, `schedule_entry` |
 | agency | agency admin only | `upsert_collection`, `delete_collection`, `upsert_global`, `delete_global`, `set_site_languages`, `set_publishing_mode`, `create_dev_environment` (production connector), `refresh_from_production`, `push_to_production`, `copy_entry_to_production` (development connector) |
