@@ -130,6 +130,7 @@ describe('createDokployAdapter', () => {
           return json({
             applicationId: 'app-1',
             applicationStatus: 'running',
+            buildType: 'dockerfile',
             env: 'PORT=3000',
             buildArgs:
               'ARECA_CMS_URL=http://cms.test\nARECA_SITE_TOKEN=legacy-secret',
@@ -174,13 +175,81 @@ describe('createDokployAdapter', () => {
       ...identity,
     })
     const saved = JSON.parse(String(calls[1]?.init?.body)) as {
+      env: string
       buildArgs: string
       buildSecrets: string
     }
+    expect(saved.env).toBe('PORT=3000')
     expect(saved.buildArgs).toContain('ARECA_SNAPSHOT_ID=pub-1')
     expect(saved.buildArgs).not.toContain('ARECA_SITE_TOKEN')
     expect(saved.buildSecrets).toBe('ARECA_SITE_TOKEN=legacy-secret')
     expect(logs.length).toBeGreaterThan(0)
+  })
+
+  async function savedEnvironmentFor(app: Record<string, unknown>) {
+    let saved: Record<string, unknown> | undefined
+    const logs: string[] = []
+    const adapter = createDokployAdapter({
+      baseUrl: 'http://dokploy.test',
+      apiKey: 'k',
+      ...localTestOptions,
+      fetch: fakeFetch((url, init) => {
+        if (url.endsWith('/api/application.deploy')) return json(true)
+        if (url.endsWith('/api/application.saveEnvironment')) {
+          saved = JSON.parse(String(init?.body)) as Record<string, unknown>
+          return json(true)
+        }
+        return json({
+          applicationId: 'app-1',
+          applicationStatus: 'running',
+          ...app,
+          deployments: [
+            {
+              deploymentId: 'new',
+              createdAt: '2026-01-02T00:00:00.000Z',
+              ...identity,
+            },
+          ],
+        })
+      }),
+    })
+    await adapter.deploy(target, (line) => logs.push(line), context)
+    return { saved: saved as Record<string, string>, logs }
+  }
+
+  it('pins the snapshot in the environment for Railpack builds', async () => {
+    const { saved, logs } = await savedEnvironmentFor({
+      buildType: 'railpack',
+      env: 'ARECA_SITE_TOKEN=secret\nARECA_SNAPSHOT_ID=old-pub',
+      buildArgs: 'ARECA_CMS_URL=http://cms.test',
+      buildSecrets: '',
+    })
+    expect(saved.env).toBe('ARECA_SITE_TOKEN=secret\nARECA_SNAPSHOT_ID=pub-1')
+    expect(saved.buildArgs).toBe('ARECA_CMS_URL=http://cms.test')
+    expect(saved.buildSecrets).toBe('')
+    expect(logs).toContain('environment variable ARECA_SNAPSHOT_ID=pub-1')
+    expect(logs).not.toContain('build arg ARECA_SNAPSHOT_ID=pub-1')
+  })
+
+  it('pins the snapshot in the environment for Nixpacks builds', async () => {
+    const { saved } = await savedEnvironmentFor({
+      buildType: 'nixpacks',
+      env: null,
+      buildArgs: null,
+    })
+    expect(saved.env).toBe('ARECA_SNAPSHOT_ID=pub-1')
+    expect(saved.buildArgs).toBe('')
+  })
+
+  it('pins the snapshot in both places when the build type is unknown', async () => {
+    const { saved } = await savedEnvironmentFor({
+      env: 'PORT=3000',
+      buildArgs: 'ARECA_CMS_URL=http://cms.test',
+    })
+    expect(saved.env).toBe('PORT=3000\nARECA_SNAPSHOT_ID=pub-1')
+    expect(saved.buildArgs).toBe(
+      'ARECA_CMS_URL=http://cms.test\nARECA_SNAPSHOT_ID=pub-1',
+    )
   })
 
   it('treats an empty application.deploy body as success', async () => {

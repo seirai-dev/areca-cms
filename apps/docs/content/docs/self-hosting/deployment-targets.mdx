@@ -83,13 +83,21 @@ The legacy process-wide `DOKPLOY_URL` and `DOKPLOY_API_KEY` pair is for local de
 
 ### How the snapshot reaches the build
 
-Every Go live request creates a publication with an immutable snapshot. Before it asks Dokploy to deploy, Areca writes the publication ID into the application's build arguments:
+Every Go live request creates a publication with an immutable snapshot. Before it asks Dokploy to deploy, Areca writes the publication ID as `ARECA_SNAPSHOT_ID`. Where it writes it depends on the application's build type, because only Dockerfile builds read Dokploy's build arguments:
+
+- **Dockerfile**: Areca writes it into the build arguments.
+- **Railpack, Nixpacks and buildpacks**: Areca writes it into the application's environment variables, which Dokploy passes to these builders. The variable is also present in the running container.
+- **Unknown build type**: Areca writes it into both.
+
+Areca overwrites the value on every Go live, so do not set `ARECA_SNAPSHOT_ID` yourself. For a Dockerfile build, the application's build settings are:
 
 - `ARECA_SNAPSHOT_ID` is a Docker build argument, set to the publication ID for the release being built.
 - `ARECA_CMS_URL` is also a build argument. It is the address the build uses to reach the CMS.
 - `ARECA_SITE_TOKEN` is passed as a BuildKit secret, not as a build argument or an image environment variable. The Dockerfile mounts it only for the step that pulls content, so it is not stored in an image layer.
 
 The Dockerfile must declare `ARG ARECA_SNAPSHOT_ID` immediately before the step that runs `areca pull`, after the SDK is built. A Docker build caches each step, and changing the argument invalidates only the layers after it. If the argument is declared too early, Docker reuses the cached content pull from an earlier release, and the new container serves old content. The health check then fails, and the release is not marked live.
+
+For Railpack, Nixpacks and buildpack builds, put `ARECA_CMS_URL` and `ARECA_SITE_TOKEN` in the application's environment variables. These builders ignore build arguments and build secrets. Unlike a BuildKit secret, the token is then also available in the running container.
 
 Areca also tags each Dokploy deployment with `areca:<jobId>` as its title, and writes the publication ID and snapshot hash into its description. You need these values to find a deployment when you reconcile an uncertain release. Applications built from a Git provider do not keep these values: Dokploy stores the commit message and `Commit: <sha>` instead, so Areca falls back to the single deployment created after the dispatch.
 
