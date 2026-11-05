@@ -21,29 +21,29 @@ pnpm dev                                      # http://localhost:3000
 
 `pnpm db:demo` erases the local database and bucket first, and refuses to run against anything that isn't local. It creates five fictional clients (Harbor & Pine, Northwind Cycling, Lumen Dental, Fieldnote Architects and Kestrel Outdoor). Sign in with:
 
-| Account | Password | Role |
-| --- | --- | --- |
-| `admin@areca.local` | `password123` | Agency admin. Needs a two-factor code; the demo authenticator secret is in [docs/DEVELOPMENT.md](../../docs/DEVELOPMENT.md#demo-data). |
-| `ruth@harborandpine.example` | `password123` | Owner of Harbor & Pine |
-| `tom@harborandpine.example` | `password123` | Editor at Harbor & Pine |
+| Account                      | Password      | Role                                                                                                                                   |
+| ---------------------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `admin@areca.local`          | `password123` | Agency admin. Needs a two-factor code; the demo authenticator secret is in [docs/DEVELOPMENT.md](../../docs/DEVELOPMENT.md#demo-data). |
+| `ruth@harborandpine.example` | `password123` | Owner of Harbor & Pine                                                                                                                 |
+| `tom@harborandpine.example`  | `password123` | Editor at Harbor & Pine                                                                                                                |
 
 Sent emails land in Mailpit at <http://localhost:8025>.
 
 ## How the code is organised
 
-| Path | What's there |
-| --- | --- |
-| `src/routes/` | File-based routes: the screens, and the HTTP API under `routes/api/` (site API, MCP, auth, uploads) |
-| `src/features/` | The screens and their components, one folder per area (`editor`, `golive`, `library`, `agency`, `visual`...) |
-| `src/components/` | Shared UI building blocks |
-| `src/server/` | Server-only code: content and publishing, auth and permissions (`security/`), MCP tools, mail, AI, deployments |
-| `src/server/fn/` | Server functions the screens call. They check permissions and call into the rest of `src/server/` |
-| `src/adapters/` | Deployment (Dokploy, Cloudflare) and storage (S3) adapters |
-| `src/db/schema.ts` | The database schema. Migrations are in `drizzle/` |
-| `messages/` | Interface text in English, Dutch and Turkish |
-| `scripts/` | Seeding, demo data, resets, recovery and maintenance scripts |
-| `e2e/` | Playwright browser tests, including the docs screenshot capture |
-| `benchmarks/` | The load-test suite and its results |
+| Path               | What's there                                                                                                   |
+| ------------------ | -------------------------------------------------------------------------------------------------------------- |
+| `src/routes/`      | File-based routes: the screens, and the HTTP API under `routes/api/` (site API, MCP, auth, uploads)            |
+| `src/features/`    | The screens and their components, one folder per area (`editor`, `golive`, `library`, `agency`, `visual`...)   |
+| `src/components/`  | Shared UI building blocks                                                                                      |
+| `src/server/`      | Server-only code: content and publishing, auth and permissions (`security/`), MCP tools, mail, AI, deployments |
+| `src/server/fn/`   | Server functions the screens call. They check permissions and call into the rest of `src/server/`              |
+| `src/adapters/`    | Deployment (Dokploy, Cloudflare) and storage (S3) adapters                                                     |
+| `src/db/schema.ts` | The database schema. Migrations are in `drizzle/`                                                              |
+| `messages/`        | Interface text in English, Dutch and Turkish                                                                   |
+| `scripts/`         | Seeding, demo data, resets, recovery and maintenance scripts                                                   |
+| `e2e/`             | Playwright browser tests, including the docs screenshot capture                                                |
+| `benchmarks/`      | The load-test suite and its results                                                                            |
 
 [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) explains how the pieces fit together, and [docs/DESIGN.md](../../docs/DESIGN.md) covers the design system.
 
