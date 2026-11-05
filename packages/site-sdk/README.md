@@ -1,11 +1,16 @@
 # `@areca-cms/site-sdk`
 
+[![npm](https://img.shields.io/npm/v/@areca-cms/site-sdk)](https://www.npmjs.com/package/@areca-cms/site-sdk)
+[![MIT license](https://img.shields.io/npm/l/@areca-cms/site-sdk)](https://github.com/seirai-dev/areca-cms/blob/main/LICENSE)
+
+Part of [Areca CMS](https://arecacms.com), the open-source CMS for agencies. [Documentation](https://docs.arecacms.com/docs/sdk) · [GitHub](https://github.com/seirai-dev/areca-cms) · [Example site](https://github.com/seirai-dev/areca-cms/tree/main/examples/demo-site)
+
 Connect a Node.js website to an existing Areca CMS site. The SDK publishes the
 site's content schema, downloads the current published snapshot, and fetches
 draft entries for preview. It does not create a CMS site or generate frontend
 routes.
 
-For a step-by-step integration guide, see the repository's
+For a step-by-step integration guide, see the
 [SDK guide](https://docs.arecacms.com/docs/sdk). Using an AI coding agent? Run
 `npx @areca-cms/skills` to teach it this SDK and the Areca MCP server.
 

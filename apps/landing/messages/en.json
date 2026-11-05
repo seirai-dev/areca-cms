@@ -1,8 +1,8 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
 
-  "meta_title": "Areca: the open-source, self-hosted CMS for agencies",
-  "meta_description": "Areca is an MIT-licensed CMS for agency-run websites. Clients write and approve, you ship. Releases are frozen snapshots your site pulls at build time, so published pages never call the CMS.",
+  "meta_title": "Areca CMS: the open-source, self-hosted CMS for agencies",
+  "meta_description": "Areca CMS is an MIT-licensed CMS for agency-run websites. Clients write and approve, you ship. Releases are frozen snapshots your site pulls at build time, so published pages never call the CMS.",
 
   "skip_to_content": "Skip to content",
   "nav_label": "Main",
@@ -16,12 +16,12 @@
   "nav_menu_close": "Close menu",
   "theme_to_light": "Switch to light mode",
   "theme_to_dark": "Switch to dark mode",
-  "logo_label": "Areca home",
+  "logo_label": "Areca CMS home",
   "code_copy": "Copy code",
   "code_copied": "Copied",
 
   "hero_title": "Your website, in your hands.",
-  "hero_lead": "Areca is the open-source CMS for agencies. Your clients write and approve. You ship. Every release is a frozen snapshot your site pulls at build time, so published pages never call home.",
+  "hero_lead": "Areca CMS is the open-source CMS for agencies. Your clients write and approve. You ship. Every release is a frozen snapshot your site pulls at build time, so published pages never call home.",
   "hero_cta_docs": "Read the docs",
   "hero_cta_github": "View on GitHub",
   "hero_note": "Free and MIT licensed. Runs on your own server.",
@@ -29,7 +29,7 @@
   "hero_watch": "Watch the tour",
   "hero_watch_length": "80 seconds",
 
-  "video_dialog_title": "Areca product tour",
+  "video_dialog_title": "Areca CMS product tour",
   "video_close": "Close video",
   "video_caption": "Recorded on the real CMS and the Northbound Coffee demo site.",
 

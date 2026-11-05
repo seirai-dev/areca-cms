@@ -1,6 +1,6 @@
-# Areca Docs
+# Areca CMS docs
 
-The public documentation site for Areca: the CMS, the site SDK, self-hosting and security.
+The public documentation site for Areca CMS, at [docs.arecacms.com](https://docs.arecacms.com): the CMS, the site SDK, self-hosting and security.
 
 It is a standalone app (Fumadocs on TanStack Start) that shares no code with the CMS or SDK. It builds to plain static files, so the live site is read-only: there is no admin, login or database. Pages are Markdown files in this repository, and only people who can push to the repo can change them.
 
@@ -141,3 +141,13 @@ docker run -p 8080:8080 areca-docs
 ```
 
 Point your docs subdomain (e.g. `docs.example.com`) at the container or host. The site needs no environment variables and makes no calls to the CMS.
+
+### docs.arecacms.com
+
+The official site runs on Cloudflare Workers with static assets, configured in [`wrangler.jsonc`](wrangler.jsonc). Maintainers deploy it from the repository root:
+
+```bash
+pnpm cf:build:docs     # build, and copy the 404 page to where Cloudflare looks for it
+pnpm cf:preview:docs   # upload a preview version without making it live
+pnpm cf:deploy:docs    # publish to docs.arecacms.com
+```

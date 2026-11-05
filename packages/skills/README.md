@@ -1,5 +1,10 @@
 # `@areca-cms/skills`
 
+[![npm](https://img.shields.io/npm/v/@areca-cms/skills)](https://www.npmjs.com/package/@areca-cms/skills)
+[![MIT license](https://img.shields.io/npm/l/@areca-cms/skills)](https://github.com/seirai-dev/areca-cms/blob/main/LICENSE)
+
+Part of [Areca CMS](https://arecacms.com), the open-source CMS for agencies. [Documentation](https://docs.arecacms.com/docs/sdk/agent-skills) · [GitHub](https://github.com/seirai-dev/areca-cms)
+
 Agent skills that teach AI coding agents and chat apps how to work with Areca CMS:
 
 | Skill | Teaches |
@@ -56,4 +61,4 @@ MCP config is written to the project file for Claude Code (`.mcp.json`), Cursor,
 
 The skill source lives in the repository root under `skills/`. The build copies it into this package. `pnpm test` checks the skills against the agentskills.io spec, and also checks that every SDK export, CLI command, env var and MCP tool in the monorepo is documented, and that no removed tool still is.
 
-Releases are automated; see [Releasing packages](../../docs/DEVELOPMENT.md#releasing-packages). The release PR bumps `version` here, in `.claude-plugin/plugin.json` and in each `SKILL.md` `metadata.version` together (the tests enforce that they match). Commits under `packages/skills/`, `skills/` and `.claude-plugin/` count towards a skills release.
+Releases are automated; see [Releasing packages](https://github.com/seirai-dev/areca-cms/blob/main/docs/DEVELOPMENT.md#releasing-packages). The release PR bumps `version` here, in `.claude-plugin/plugin.json` and in each `SKILL.md` `metadata.version` together (the tests enforce that they match). Commits under `packages/skills/`, `skills/` and `.claude-plugin/` count towards a skills release.

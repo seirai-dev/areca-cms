@@ -1,4 +1,4 @@
-# Working on Areca
+# Working on Areca CMS
 
 Areca is a pnpm workspace with the CMS, site SDK, and demo website. Use [onboarding](https://docs.arecacms.com/docs/quickstart) for the initial database, storage, environment, and account setup. Use [architecture](ARCHITECTURE.md) to find the right part of the source.
 
@@ -127,6 +127,6 @@ The workflow needs no npm token. It needs the following:
 
 ## Documentation maintenance
 
-Update the guide for the affected audience and link it from [the documentation index](README.md). Keep code examples small but usable; identify required variables and prerequisites. Describe current behavior separately from planned work. Keep historical proposal documents labeled as such.
+User-facing documentation lives in the docs site, `apps/docs/content` (see [its README](../apps/docs/README.md)). Update it in the same pull request as the behaviour it describes. The files in this folder are for contributors; link new ones from [the index](README.md). Keep code examples small but usable, and name the required variables and prerequisites.
 
-For a screenshot, wait until loading placeholders disappear, capture the actual interface, and avoid revealing tokens, recovery codes, or private content. Store images under `docs/screenshots` and record context in [screenshot notes](screenshots/README.md). Capturing an existing screen should not require publishing, deleting, or resetting user data.
+For a screenshot, wait until loading placeholders disappear, capture the actual interface, and avoid revealing tokens, recovery codes, or private content. Docs-site screenshots live in `apps/docs/public/screenshots/` and are captured with `pnpm docs:screenshots` against `pnpm db:demo` data (see [Demo data](#demo-data)). Capturing an existing screen should not require publishing, deleting, or resetting user data.

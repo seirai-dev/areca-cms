@@ -7,9 +7,13 @@
     "cms",
     "content",
     "sdk",
-    "static-site"
+    "static-site",
+    "headless-cms",
+    "typescript",
+    "tanstack",
+    "cli"
   ],
-  "homepage": "https://github.com/seirai-dev/areca-cms/tree/main/packages/site-sdk#readme",
+  "homepage": "https://docs.arecacms.com/docs/sdk",
   "bugs": {
     "url": "https://github.com/seirai-dev/areca-cms/issues"
   },

@@ -1,4 +1,4 @@
-# Areca landing page
+# Areca CMS landing page
 
 The marketing site for [arecacms.com](https://arecacms.com). A TanStack Start app that prerenders to static files, with no runtime server and no third-party requests.
 
@@ -33,3 +33,7 @@ Dark is the default. A small inline script in `<head>` applies the stored choice
 ## Refreshing screenshots and the video
 
 See [`video/README.md`](video/README.md).
+
+## Deploying
+
+The site is static, so any static host works. The official site at [arecacms.com](https://arecacms.com) runs on Cloudflare Workers with static assets, configured in [`wrangler.jsonc`](wrangler.jsonc). Maintainers deploy it from the repository root with `pnpm cf:build:landing`, then `pnpm cf:preview:landing` for a preview version or `pnpm cf:deploy:landing` to publish.

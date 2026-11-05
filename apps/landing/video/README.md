@@ -55,4 +55,6 @@ The scripts change real content. Check the entry IDs and the branding values in 
 
 Music can be added later as an `<Audio>` track in `src/Tour.tsx`.
 
-Remotion is free for individuals and companies with up to three employees. Larger companies need a [company license](https://www.remotion.pro/license).
+## License note
+
+The video is built with Remotion, which has its own license and is **not** covered by this repository's MIT license. Remotion is free for individuals and companies with up to three employees; larger companies need a [company license](https://www.remotion.pro/license). Only maintainers re-render the video. You don't need Remotion to work on the landing page, the CMS or anything else in this repository, and the rendered files in `../public/video/` are part of the project like any other asset.

@@ -1,4 +1,4 @@
-# Areca demo website
+# Areca CMS demo website (Northbound Coffee)
 
 This TanStack Start website shows one way to use `@areca-cms/site-sdk`. It
 downloads the current published snapshot during development/build, renders
@@ -38,9 +38,10 @@ fails with a publish-first message.
 
 ## Connect or update the schema
 
-The schema is in [`areca.config.ts`](./areca.config.ts). It defines `articles`
-with title, slug, excerpt, rich-text body, hero image, publication date, and
-category. To send schema changes, also set `ARECA_SCHEMA_TOKEN` in `.env.local`
+The schema is in [`areca.config.ts`](./areca.config.ts). It defines three
+collections (`articles` for the journal, `coffees` for the shop and `authors`
+for the team) and the site content sections described below, in English and
+Dutch. To send schema changes, also set `ARECA_SCHEMA_TOKEN` in `.env.local`
 and run:
 
 ```bash

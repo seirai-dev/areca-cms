@@ -1,6 +1,6 @@
 import { createGetUrl } from 'fumadocs-core/source'
 
-export const appName = 'Areca Docs'
+export const appName = 'Areca CMS Docs'
 export const docsRoute = '/docs'
 
 // Set `editLinks` to true once the repository is public. Readers then get an
