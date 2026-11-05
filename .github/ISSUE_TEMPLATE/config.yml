@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://docs.arecacms.com
+    about: Setup guides, the CMS walkthrough, the SDK reference and troubleshooting.
+  - name: Report a security problem
+    url: https://github.com/seirai-dev/areca-cms/security/advisories/new
+    about: Report vulnerabilities privately, never in a public issue.

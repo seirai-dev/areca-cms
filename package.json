@@ -1,6 +1,7 @@
 {
   "name": "areca",
   "private": true,
+  "license": "MIT",
   "scripts": {
     "dev": "pnpm --filter @areca/cms dev",
     "build": "pnpm -r build",
@@ -29,5 +30,8 @@
     "vitest": "^5.0.1",
     "wrangler": "^4.156.2"
   },
-  "packageManager": "pnpm@12.8.1"
+  "packageManager": "pnpm@12.8.1",
+  "engines": {
+    "node": ">=24"
+  }
 }
