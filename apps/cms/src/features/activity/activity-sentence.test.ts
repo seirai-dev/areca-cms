@@ -78,7 +78,7 @@ describe('activityText for people actions', () => {
           organizationName: 'Kade Bakery',
           meta: {
             userName: 'Tom Peeters',
-            email: 'tom@harbourdental.nl',
+            email: 'tom@harbourdental.example',
             role: 'editor',
             direct: true,
           },

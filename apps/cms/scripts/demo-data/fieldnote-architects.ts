@@ -23,10 +23,10 @@ const journalFields: Field[] = [
 export const fieldnoteArchitects: DemoClient = {
   slug: 'fieldnote-architects',
   name: 'Fieldnote Architects',
-  domain: 'fieldnote.studio',
-  owner: { name: 'Jonas Reid', email: 'jonas@fieldnote.studio' },
-  editor: { name: 'Ines Caldera', email: 'ines@fieldnote.studio' },
-  site: { name: 'fieldnote.studio', slug: 'fieldnote' },
+  domain: 'fieldnote.example',
+  owner: { name: 'Jonas Reid', email: 'jonas@fieldnote.example' },
+  editor: { name: 'Ines Caldera', email: 'ines@fieldnote.example' },
+  site: { name: 'fieldnote.example', slug: 'fieldnote' },
   images: [
     {
       key: 'harbourLofts',
@@ -205,7 +205,7 @@ export const fieldnoteArchitects: DemoClient = {
       name: 'Fieldnote Architects',
       tagline:
         'A small studio for buildings that are kept, repaired and reused.',
-      email: 'studio@fieldnote.studio',
+      email: 'studio@fieldnote.example',
       address: '3 Foundry Yard, Lowhaven LH1 2AB',
     },
   },

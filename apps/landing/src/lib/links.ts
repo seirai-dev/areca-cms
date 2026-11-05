@@ -3,5 +3,5 @@ export const links = {
   site: 'https://arecacms.com',
   docs: 'https://docs.arecacms.com',
   github: 'https://github.com/seirai-dev/areca-cms',
-  demo: 'https://areca-demo.emirkaan-web.eu',
+  demo: 'https://demo.arecacms.com',
 } as const

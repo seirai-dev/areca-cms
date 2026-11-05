@@ -1,5 +1,5 @@
 /**
- * Capacity benchmark for the "small agency" target (see docs/CAPACITY.md).
+ * Capacity benchmark for the "small agency" target (see https://docs.arecacms.com/docs/self-hosting/capacity).
  *
  * It SEEDS a synthetic dataset directly via Drizzle and measures the hot paths:
  * release snapshot build, editor entry list/search, asset library listing,

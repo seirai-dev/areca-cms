@@ -1,6 +1,6 @@
 # Email and notifications
 
-Status: agreed 21 Oct 2026. This is the contract every PR implements.
+Status: implemented. This is the design note written before the feature was built; the code and the [docs site](https://docs.arecacms.com) are the source of truth where they differ.
 
 ## What it is
 
@@ -18,7 +18,6 @@ notification centre can be added later on top of the same rows.
 | Topic | Decision |
 |---|---|
 | Account emails | Invitation, password reset, email verification, password changed, two-factor turned on/off, removed from org / role changed. **Always on**, not in preferences. |
-| Delivery | Postgres outbox + retry worker. 3 attempts over ~15 min (1 min, 5 min, 10 min), then `failed`. User-triggered sends (invite, resend, reset, test) also try **immediately** in the request so the user sees the result. |
 | SMTP source | Mail tab settings replace `.env` SMTP **entirely** (no field merge). Switch "Use environment settings" returns to env. UI shows "Sending with: Mail settings / Environment". |
 | SMTP security | Encryption: `starttls` (required, e.g. 587), `tls` (implicit, e.g. 465), `none` (only for localhost / private network hosts). Certificates always verified. Auth user + password optional. Connection, greeting and socket timeouts 15 s. |
 | Password storage | AES-256-GCM via `server/security/secret-encryption.ts`, context `mail-settings:smtp-password`. Key `SECRETS_ENCRYPTION_KEY`, falling back to `AI_SETTINGS_ENCRYPTION_KEY`. Without a key the password field is disabled with an explanation. Password never returned to the browser (`passwordSet: boolean`). |
@@ -36,7 +35,6 @@ notification centre can be added later on top of the same rows.
 | Password reset | "Forgot password?" on login. Same response whether or not the account exists. Link valid 1 h, single use, revokes all sessions on success. 2FA still required at next sign-in. 3 requests / hour per email and per IP. SSO-only users get "You sign in with Microsoft/Google" instead of a link. Agency admins: **Send reset link** on a person in Agency → People. |
 | Errors | Nodemailer/SMTP errors map to plain sentences (see below). Shown as toasts for user-triggered sends, per row in Recent emails and on invites, and a banner for agency admins after 3 consecutive failures. Logged as structured `mail` component entries, redacted. |
 | Retention | Notification and delivery rows kept 30 days; no email bodies stored. |
-| Delivery plan | Stacked PRs: (1) mail foundation, (2) account emails, (3) notifications. |
 
 ## Events
 
@@ -277,20 +275,3 @@ Postmark, Amazon SES, Mailgun, Gmail/Workspace), SPF/DKIM/DMARC, what each
 role receives. `apps/docs/content/docs/cms/`: notifications page (users,
 owners), Agency → Mail page, password reset. `docs/CONFIGURATION.md`,
 `docs/INTEGRATIONS.md`, `apps/cms/.env.example`.
-
-## PRs
-
-1. **Mail foundation** (`feature/mail-foundation` from `main`): env
-   changes, `mail_settings`, `email_outbox`, `server/mail/*`, outbox loop,
-   errors + logging, branded layout, invites moved onto the outbox, Agency
-   → Mail tab (server + Recent emails), banners for not-set-up/failing,
-   docs for setup.
-2. **Account emails** (`feature/account-emails` on 1): `user.locale`,
-   password reset (+ admin Send reset link), verification + banner, security
-   notices (password changed, 2FA on/off, removed/role changed), Account →
-   Email language.
-3. **Notifications** (`feature/notifications` on 2): `notification_rule`,
-   `notification_preference`, `notification`, events + `notify()` wired
-   into worker/scheduler/invites, unsubscribe, preference UI in Account,
-   Site settings, Agency → Mail defaults and Agency → Clients → {org},
-   docs.

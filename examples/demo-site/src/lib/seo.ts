@@ -11,7 +11,7 @@ export const TITLE_TEMPLATE = `%s · ${SITE_NAME}`
  * The demo's production origin. Hreflang alternates are absolute URLs, so they
  * need it on pages without a CMS canonical URL. A canonical URL's origin wins.
  */
-export const SITE_URL = 'https://areca-demo.emirkaan-web.eu'
+export const SITE_URL = 'https://demo.arecacms.com'
 
 const siteOptions = { titleTemplate: TITLE_TEMPLATE, siteName: SITE_NAME }
 

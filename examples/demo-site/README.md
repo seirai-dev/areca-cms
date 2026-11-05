@@ -223,5 +223,5 @@ fetch content from the CMS for visitor requests.
 ## Learn more
 
 - [SDK setup and examples](../../packages/site-sdk/README.md)
-- [Content schema guide](../../docs/CONTENT_SCHEMA.md)
-- [Site API contract](../../docs/API.md)
+- [Content schema guide](https://docs.arecacms.com/docs/sdk/defining-content)
+- [Site API contract](https://docs.arecacms.com/docs/sdk/http-api)

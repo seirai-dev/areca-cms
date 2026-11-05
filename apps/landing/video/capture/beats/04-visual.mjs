@@ -1,7 +1,8 @@
 // Visual editor: live preview beside the fields, click a preview element to
 // jump to its field, type and watch the preview update before saving.
 import { session, SITE } from '../harness.mjs'
-const ENTRY = `${SITE}/c/coffees/15e9aebd-1499-4697-a2e6-17356875b8a5`
+import { env } from '../env.mjs'
+const ENTRY = `${SITE}/c/${env('CAPTURE_ENTRY_PATH')}`
 const r = await session('04-visual')
 const { page } = r
 await r.goto(ENTRY)

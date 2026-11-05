@@ -2,10 +2,11 @@
 // Usage: node login.mjs <passwordFile> <totpPathFile> <stateOut>
 import { chromium } from '@playwright/test'
 import { readFileSync, existsSync } from 'node:fs'
+import { CMS, env } from './env.mjs'
 
 const [passwordFile, totpPathFile, stateOut] = process.argv.slice(2)
-const BASE = process.env.CMS_URL ?? 'https://areca.emirkaan-web.eu'
-const EMAIL = 'ozveremirkaan@gmail.com'
+const BASE = CMS()
+const EMAIL = env('CAPTURE_EMAIL')
 
 const browser = await chromium.launch()
 const page = await browser.newPage()

@@ -140,7 +140,7 @@ log to 256 Ki characters, retaining the tail with one truncation marker.
 
 Use job, publication and site IDs to correlate Go-live details, build logs and
 audit records. Existing readiness checks, metrics and suggested alerts cover
-failed/stuck jobs and scheduler failures; see [operations](OPERATIONS.md).
+failed/stuck jobs and scheduler failures; see [operations](https://docs.arecacms.com/docs/self-hosting/operations).
 Configuring the monitoring system to evaluate those alerts is an operator task.
 
 ## Credential rotation
@@ -172,7 +172,7 @@ The encryption key has no automated re-encryption tool. To rotate
 If rotation must be abandoned, restore the pre-rotation database and its matching
 key together. Merely changing the environment key back does not decrypt rows
 already replaced under the new key. Never rotate the encryption key as part of an
-ordinary upgrade or restore. See [deployment](DEPLOYMENT.md) and
+ordinary upgrade or restore. See [deployment](https://docs.arecacms.com/docs/self-hosting/production) and
 [recovery](../docker/RECOVERY.md) for the existing secret and backup procedures.
 
 ## Verification

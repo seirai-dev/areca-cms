@@ -5,7 +5,7 @@ description: Let editors open a draft post on your website before it goes live, 
 
 A **preview** shows a draft on the real website, before anyone goes live. Editors use it to check how a post looks. This step is optional. Your site works without it.
 
-Here is how it works. In the CMS, an editor selects **Preview**. The CMS opens a link on your production address, such as `https://harborandpine.com/__preview/posts/our-sourdough-starter?token=...`. Your website then asks the CMS for that draft, using a short-lived token. Each link works for one hour and for one post only.
+Here is how it works. In the CMS, an editor selects **Preview**. The CMS opens a link on your production address, such as `https://harborandpine.example/__preview/posts/our-sourdough-starter?token=...`. Your website then asks the CMS for that draft, using a short-lived token. Each link works for one hour and for one post only.
 
 <Callout title="Preview needs a reachable website">
 The preview link opens your site at its production address. So a preview only works once the site is deployed (step 9), or on a computer that answers at that address. For this guide, try the preview after step 9.

@@ -1,12 +1,14 @@
 // The public site, after Go live: the new coffee is on the shop page.
-import { session } from '../harness.mjs'
-const SITE_URL = 'https://areca-demo.emirkaan-web.eu'
+import { session, CMS } from '../harness.mjs'
+import { env } from '../env.mjs'
+const SITE_URL = env('CAPTURE_LIVE_SITE_URL')
+const cmsHost = new URL(CMS).host
 const r = await session('09-livesite')
 const { page } = r
 // Track requests to the CMS host while browsing the published site.
 const cmsCalls = []
 page.on('request', (req) => {
-  if (req.url().includes('areca.emirkaan-web.eu')) cmsCalls.push(req.url())
+  if (new URL(req.url()).host === cmsHost) cmsCalls.push(req.url())
 })
 await r.goto(`${SITE_URL}/coffees`)
 await r.move({ x: 760, y: 300 }, 10)

@@ -45,7 +45,7 @@ there is no root fallback. Bundles retain logical relative keys, so importing
 between different prefixes needs no bundle key rewrite. Invalid nonempty prefix
 configuration fails before storage operations. For moving an existing
 installation and rollback after new writes, see
-[storage configuration](../docs/CONFIGURATION.md#storage-prefix).
+[storage configuration](https://docs.arecacms.com/docs/self-hosting/configuration).
 
 Version 1 includes the organization, sites and manifests, collections, draft/approved/scheduled data, complete entry revisions, asset metadata **and bytes with SHA-256 checksums**, membership roles, invitations, publications, build jobs, audit history, retained deleted-content archives and encrypted deployment credentials with their encryption key. User references are captured by email; authentication accounts, passwords and other organizations are deliberately outside the organization boundary. Provision matching destination users first. Import maps historical actors and permissions to those users, rejects missing/ambiguous identities, validates bundle/version/database columns/organization relationships/asset integrity, and relies on database constraints to reject ID/slug conflicts. Use the exporter database schema version; migrate destination before importing.
 

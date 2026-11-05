@@ -1,6 +1,6 @@
 # Dokploy API notes (test server v0.29.12)
 
-Verified against `http://192.168.0.141:3000` with `x-api-key`.
+Verified against a local test server with `x-api-key`.
 `GET /api/project.all` works. No applications exist yet.
 `GET /api/openapi.json` is 404 (auth or not). `/swagger` redirects to `/` without a web session.
 `GET /api/settings.getDokployVersion` → `"v0.29.12"`.

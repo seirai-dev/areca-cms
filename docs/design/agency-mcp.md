@@ -1,6 +1,6 @@
 # Agency MCP connector
 
-Status: agreed with the product owner on 27 Oct 2026. Not built yet. Delivered as two stacked PRs on top of the development-environments stack (see Rollout).
+Status: implemented. This is the design note written before the feature was built; the code and the [docs site](https://docs.arecacms.com) are the source of truth where they differ.
 
 ## Problem
 
@@ -74,7 +74,7 @@ Migration `0038_agency_mcp`:
 
 ## OAuth (step 2) decisions
 
-Built in step 2 of `feat/agency-mcp-1-server`. Where the build is more specific than the contract above:
+Where the build is more specific than the contract above:
 
 - **Resource.** `${APP_URL}/api/agency/mcp`. Its row in `oauth_resource` is named "Areca agency", created on the first authorization request (`ensureMcpResource`). Protected-resource metadata at `/.well-known/oauth-protected-resource/api/agency/mcp` is served `no-store` and names the agency resource only. The agency 401 challenge carries that `resource_metadata`.
 - **Authorization.** Exactly one resource per request, either a site resource or the agency resource. A token works only at the resource it names: a site token on the agency address and an agency token on a site address both get a 401 (for an agency admin); for anyone who is not an agency admin, the agency address answers the same 404 as an unknown address.
@@ -84,8 +84,3 @@ Built in step 2 of `feat/agency-mcp-1-server`. Where the build is more specific 
 - **Consent screen.** Until the agency consent UI lands (step 2 UI), `/oauth/consent` answers an agency request with a plain refusal and a way back. Site requests are unchanged.
 - **Connections.** An agency app is listed and revoked by its owner only (`listAgencyMcpConnectionsFn`, `revokeAgencyMcpConnectionFn`). Losing the agency admin role revokes them with the agency keys (Decision 12).
 - **Consent reference.** An agency connection's id, or `agency:pending` when there is no usable connection (never a connection id, so the plugin asks again).
-
-## Rollout
-
-1. **`feat/agency-mcp-1-server`** — migration 0038, credentials scope, connector + OAuth + discovery, tool parity and generation, navigation tools, central access function, audit, revocation, tests.
-2. **`feat/agency-mcp-2-ui`** — Agency › Connect AI page, consent screen variant, docs and skills, e2e and screenshots.

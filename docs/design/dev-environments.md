@@ -1,6 +1,6 @@
 # Development environments
 
-Status: agreed with the product owner on 26 Oct 2026 (second review the same day). Not built yet. This is the contract the later PRs implement. Delivered as four stacked PRs (see Rollout).
+Status: implemented. This is the design note written before the feature was built; the code and the [docs site](https://docs.arecacms.com) are the source of truth where they differ.
 
 ## Problem and workflow
 
@@ -414,12 +414,3 @@ Each new server function is added to `apps/cms/src/server/security/authz-matrix.
 - **MCP tests**: tool lists for admin vs others and dev vs production; dry run writes nothing; refusals; drift test.
 - **Playwright**: create dev env; edit a field and an entry in dev; push with one conflict skipped and one applied; go live after push queues a build; bulk archive on a normal site; client user does not see the dev env. Push screen at 390 px.
 - Screenshots of the push screen and the Development tab before the UI PRs.
-
-## Rollout
-
-Four stacked PRs. PR 1 is `feat/developer-environment`; later branches stack on it.
-
-1. **`feat/developer-environment`** — this doc, migration 0036, `content_version` bumps, visibility helper and all visibility filters, fork / reset / delete, live pull, dev guards (mode, deployment, schedule, publication, slug), dev preview URL, Settings › Development tab, switcher nesting, dev banner, hidden Go live, audit sentences, DB and authz tests.
-2. **`feat/developer-environment-2-push`** — plan, push, Needs attention, reference mapping, baselines, go live after push, push screen, push history list, "production changed" notice, tests.
-3. **`feat/developer-environment-3-copy-bulk`** — copy to production, its editor action, bulk entry action and the bulk bar Archive, tests.
-4. **`feat/developer-environment-4-mcp-docs`** — MCP tools and hiding, `get_site_info` fields, server instructions, docs, skills, drift test.

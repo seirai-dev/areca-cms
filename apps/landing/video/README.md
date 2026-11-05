@@ -1,6 +1,19 @@
 # Landing page video and screenshots
 
-The product tour is edited in [Remotion](https://www.remotion.dev) from real recordings of the CMS. Nothing in it is mocked: the clips are Playwright sessions against the production CMS and the Northbound Coffee demo site.
+The product tour is edited in [Remotion](https://www.remotion.dev) from real recordings of the CMS. Nothing in it is mocked: the clips are Playwright sessions against a running CMS seeded with demo data.
+
+## 0. Point the scripts at a CMS
+
+The scripts read everything about the install from environment variables, so no real host or account is stored in the repository:
+
+| Variable | Used by | Example |
+| --- | --- | --- |
+| `CMS_URL` | all scripts | `http://localhost:3000` |
+| `CAPTURE_EMAIL` | `login.mjs` | `ruth@harborandpine.example` |
+| `CAPTURE_SITE_ID` | all scripts | the site's ID from its URL (`/sites/<id>`) |
+| `CAPTURE_ENTRY_PATH` | `shots.mjs`, beats 04–07 | `coffees/<entryId>` |
+| `CAPTURE_OTHER_SITE` | beat 01 | the display name of a second site to switch to |
+| `CAPTURE_LIVE_SITE_URL` | beat 09 | the published website, e.g. `https://demo.arecacms.com` |
 
 ## 1. Sign in once
 

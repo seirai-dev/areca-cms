@@ -1,6 +1,6 @@
 # Visual editor
 
-Status: agreed with the product owner on 29 Oct 2026 (three grilling rounds). Delivered as four stacked PRs (see Rollout).
+Status: implemented. This is the design note written before the feature was built; the code and the [docs site](https://docs.arecacms.com) are the source of truth where they differ.
 
 ## Problem
 
@@ -106,11 +106,3 @@ Test-first where possible.
 - Unit: column ratio clamp, width presets and fit scale, Tier detection reducer, protocol message guards, origin checks, `previewBaseUrl`, CSP `frame-src`.
 - Integration: `updateSite` accepts and clears `previewUrl` (agency only); live payload equals `/api/sites/preview` output for the same saved data; owner verification hides deleted, archived and foreign-site entries.
 - e2e (Playwright), with the site origin served by `page.route` fixtures: toggle and remembered mode at 1280, 1440, 1920; hidden at 1024 and 390; Tier 1 reload after autosave; width presets; full screen enter and exit (button and Esc); shortcuts; ⌘K command; later Tier 2 live typing, Tier 3 click-to-field both ways, full screen click exit, cross-owner popover, browse-away bar. A full click-around walkthrough with screenshots.
-
-## Rollout
-
-1. **PR 1:** this spec, Preview URL setting, CSP `frame-src`, Visual mode layout with Tier 0/1 (iframe, toolbar, widths, reload on save, full screen, shortcuts, ⌘K, New dot).
-2. **PR 2:** SDK bridge (`/visual`, `/visual-react`), live payload function, Tier 2 live updates, Northbound wiring.
-3. **PR 3:** Tier 3: markers, select / browse, both-way highlight, full-screen click exit + Back pill, hidden-field reveal, cross-owner verification + popover, editable areas, browse-away bar.
-4. **PR 4:** section content (globals) visual mode, SDK and CMS docs with screenshots, `areca-sdk` skill, polish.
-   *As built:* a section previews on its `previewPath` (`?arecaPreview=`); the live endpoint and bridge carry `{ kind: 'global' }` results, which a site renders with `content.previewGlobals(result)`. Visual mode is a focus screen everywhere: site content (normally a page with the sidebar) hides the sidebar in Visual mode too, without remounting the editor. A section with no `previewPath` can never preview, so `?view=visual` is dropped there and it opens in Write mode (the "Open" popover for Company info lands there). Review fixes: Select only blocks marked elements and is off when nothing is clickable; the away bar also covers full loads of bridge-less pages; Esc is forwarded from the page; Tablet and Mobile scale to fit.

@@ -3,10 +3,11 @@
 import { chromium } from '@playwright/test'
 import sharp from 'sharp'
 import { mkdirSync } from 'node:fs'
+import { CMS as cmsUrl, SITE as siteUrl, env } from './env.mjs'
 
-const CMS = 'https://areca.emirkaan-web.eu'
-const SITE = `${CMS}/sites/ba7a872f-56e6-4519-9ac1-06344f56102a`
-const ENTRY = `${SITE}/c/coffees/15e9aebd-1499-4697-a2e6-17356875b8a5`
+const CMS = cmsUrl()
+const SITE = siteUrl()
+const ENTRY = `${SITE}/c/${env('CAPTURE_ENTRY_PATH')}`
 const OUT = new URL('../../public/shots/', import.meta.url).pathname
 const TMP = '/tmp/areca-landing/shots'
 mkdirSync(OUT, { recursive: true })

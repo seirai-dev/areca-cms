@@ -25,10 +25,10 @@ const newsFields: Field[] = [
 export const northwindCycling: DemoClient = {
   slug: 'northwind-cycling',
   name: 'Northwind Cycling Club',
-  domain: 'northwindcc.org',
-  owner: { name: 'Sam Whitfield', email: 'sam@northwindcc.org' },
-  editor: { name: 'Dana Kowalczyk', email: 'dana@northwindcc.org' },
-  site: { name: 'northwindcc.org', slug: 'northwindcc' },
+  domain: 'northwindcc.example',
+  owner: { name: 'Sam Whitfield', email: 'sam@northwindcc.example' },
+  editor: { name: 'Dana Kowalczyk', email: 'dana@northwindcc.example' },
+  site: { name: 'northwindcc.example', slug: 'northwindcc' },
   images: [
     {
       key: 'coastLoop',
@@ -209,7 +209,7 @@ export const northwindCycling: DemoClient = {
     values: {
       name: 'Northwind Cycling Club',
       tagline: 'Amateur road riding since 1987, every pace welcome.',
-      email: 'hello@northwindcc.org',
+      email: 'hello@northwindcc.example',
       meetingPlace: 'Clubhouse, 3 Mill Road, Lowhaven',
     },
   },

@@ -2,7 +2,7 @@
 
 Areca is a build-time CMS for agency-managed websites. Editors write drafts; owners approve them with **Mark as ready**, then **Go live** creates a content snapshot and deploys the website. The website pulls that snapshot during its build using `@areca-cms/site-sdk`.
 
-**[Start with the documentation](docs/README.md)** for setup, CMS walkthroughs, SDK examples, and operations.
+**[Start with the documentation](https://docs.arecacms.com)** for setup, CMS walkthroughs, SDK examples, and operations.
 
 ![Areca content editor with SEO controls](docs/screenshots/current-editor-seo.png)
 
@@ -10,16 +10,16 @@ Areca is a build-time CMS for agency-managed websites. Editors write drafts; own
 
 | Your task | Guide |
 | --- | --- |
-| Install the CMS locally and create the first admin | [Onboarding](docs/ONBOARDING.md) |
+| Install the CMS locally and create the first admin | [Onboarding](https://docs.arecacms.com/docs/quickstart) |
 | Install the published CMS image with Docker | [Docker installation](docker/README.md) |
-| Write, preview, schedule, and publish content | [CMS guide](docs/CMS_GUIDE.md) |
-| Manage clients, sites, people, branding, and AI | [Agency admin guide](docs/ADMIN_GUIDE.md) |
-| Connect a website using the SDK | [SDK guide](docs/SDK.md) |
+| Write, preview, schedule, and publish content | [CMS guide](https://docs.arecacms.com/docs/cms) |
+| Manage clients, sites, people, branding, and AI | [Agency admin guide](https://docs.arecacms.com/docs/cms/clients-and-sites) |
+| Connect a website using the SDK | [SDK guide](https://docs.arecacms.com/docs/sdk) |
 | Teach AI agents the SDK, the MCP server and the quickstart (`npx @areca-cms/skills`) | [Agent skills](packages/skills/README.md) |
-| Set up a new website with an AI agent (`/areca-quickstart`) | [SDK guide](docs/SDK.md#set-up-with-an-ai-agent) |
-| Define content types | [Content schemas](docs/CONTENT_SCHEMA.md) |
-| Configure SEO and AI suggestions | [SEO guide](docs/SEO.md) |
-| Deploy and verify a customer website | [Deployment](docs/DEPLOYMENT.md) |
+| Set up a new website with an AI agent (`/areca-quickstart`) | [SDK guide](https://docs.arecacms.com/docs/sdk) |
+| Define content types | [Content schemas](https://docs.arecacms.com/docs/sdk/defining-content) |
+| Configure SEO and AI suggestions | [SEO guide](https://docs.arecacms.com/docs/sdk/seo) |
+| Deploy and verify a customer website | [Deployment](https://docs.arecacms.com/docs/self-hosting/production) |
 
 ## How publishing works
 
@@ -32,7 +32,7 @@ Draft edits stay separate from approved and live versions. Scheduled content use
 
 **Production** mode requires a deployment target and a health response containing the expected publication ID. **Demo** mode supports local content pulls without a production deployment; its publications are labeled Demo and do not count as live.
 
-Normal website pages read built content rather than query the CMS. Draft preview fetches from the CMS. Uploaded media URLs remain publicly accessible through the CMS, including files attached to drafts; see [media privacy](docs/DEPLOYMENT.md#media-privacy).
+Normal website pages read built content rather than query the CMS. Draft preview fetches from the CMS. Uploaded media URLs remain publicly accessible through the CMS, including files attached to drafts; see [media privacy](https://docs.arecacms.com/docs/self-hosting/production).
 
 ## Workspaces and roles
 
@@ -56,13 +56,13 @@ The interface supports light/dark appearance and English, Dutch, and Turkish. In
 | `docker` | Production Compose installation and recovery tooling |
 | `docs` | User, developer, integration, and operations guides |
 
-Local development uses Node 24 and pnpm 12; see [development](docs/DEVELOPMENT.md) and [onboarding](docs/ONBOARDING.md) for commands, secrets, and migrations. The CMS runs on port 3000 and the demo site on port 3001.
+Local development uses Node 24 and pnpm 12; see [development](docs/DEVELOPMENT.md) and [onboarding](https://docs.arecacms.com/docs/quickstart) for commands, secrets, and migrations. The CMS runs on port 3000 and the demo site on port 3001.
 
 Optional seed data creates `admin@areca.local`, `owner@acme.local`, and `editor@acme.local` with password `password123`. Use these only on a local demo; admin MFA enrollment or verification can still be required. A new empty instance uses `/setup` with a first-run setup token.
 
 ## Operate and maintain
 
-Use [configuration](docs/CONFIGURATION.md), [operations](docs/OPERATIONS.md), [recovery](docs/RECOVERY.md), and [upgrades](docs/UPGRADES.md) for deployed instances. [Troubleshooting](docs/TROUBLESHOOTING.md) connects common failures to the appropriate guide.
+Use [configuration](https://docs.arecacms.com/docs/self-hosting/configuration), [operations](https://docs.arecacms.com/docs/self-hosting/operations), [recovery](https://docs.arecacms.com/docs/self-hosting/backup-and-recovery), and [upgrades](https://docs.arecacms.com/docs/self-hosting/upgrades) for deployed instances. [Troubleshooting](https://docs.arecacms.com/docs/troubleshooting) connects common failures to the appropriate guide.
 
-Browser tests clear their configured database and upload bucket. Use the provided isolated test stack when retaining local data; details are in [development](docs/DEVELOPMENT.md). The [original project proposal](PROJECT.md) remains available as historical context.
+Browser tests clear their configured database and upload bucket. Use the provided isolated test stack when retaining local data; details are in [development](docs/DEVELOPMENT.md).
 

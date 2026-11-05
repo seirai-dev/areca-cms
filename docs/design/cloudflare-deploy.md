@@ -1,6 +1,6 @@
 # Cloudflare deployment adapter
 
-Status: agreed with the product owner on 2 Nov 2026. Delivered as four stacked PRs (see Rollout). Each PR waits for review before the next starts.
+Status: implemented. This is the design note written before the feature was built; the code and the [docs site](https://docs.arecacms.com) are the source of truth where they differ.
 
 ## Problem
 
@@ -68,12 +68,3 @@ Base URL `https://api.cloudflare.com/client/v4`. Auth `Authorization: Bearer <to
 15. **Logs.** The job log gets a link to the Cloudflare dashboard page for the deployment/build. On failure the last ~100 log lines are fetched and appended.
 16. **Removing credentials.** Blocked only while a deployment is pending. The confirm dialog shows how many sites deploy with Cloudflare ("their next go-live will fail until you reconnect"). Sites keep their target. A go-live then fails with "Cloudflare credentials are not configured for this client".
 17. **Copy** in en, nl and tr, including the guide.
-
-## Rollout (stacked PRs)
-
-1. **Credentials + guide + verify** (`feat/cloudflare-deploy-adapter` → `main`): schema + migration, env var, `cloudflare-credentials.ts` server module, Cloudflare API client (verify + list functions only), server fns, Cloudflare card in `ClientDeployment`, setup slide-over, copy. Tests: API client unit tests (mocked fetch), credential db tests (encryption, no token in DTO, step-up, removal guard), e2e of the card.
-2. **Adapter + publish wiring**: `adapters/deployment/cloudflare.ts` implementing `DeploymentAdapter` (deploy, reconcile, waitForCompletion, logs), target union + schema, resource key, worker dispatch by provider, live verification + `cloudflare-api-notes.md`. Tests: adapter unit tests, worker db tests.
-3. **Site Deployment tab UI**: provider switch, shared combobox, trigger select, health URL prefill, removal warning count. Tests: unit + e2e with a fake Cloudflare server.
-4. **Docs site**: `deployment-targets.mdx` Cloudflare section + guide, site-settings/deployments pages.
-
-Every PR: tests, e2e UI test, run the app and click through, screenshots, then PR.

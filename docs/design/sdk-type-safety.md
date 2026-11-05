@@ -1,8 +1,6 @@
 # SDK end-to-end type safety — spec
 
-Status: agreed with the maintainer on 2026-10-14. This file is the contract for
-the implementation. Names and signatures below are binding; anything not
-specified is the implementer's call, as long as it matches the surrounding code.
+Status: implemented. This is the design note written before the feature was built; the code and the [docs site](https://docs.arecacms.com) are the source of truth where they differ.
 
 Goal: "the TanStack experience". After `areca pull`, every collection key,
 field key, field value, select option, reference target and route is typed and
