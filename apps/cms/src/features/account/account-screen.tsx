@@ -8,6 +8,7 @@ import { ArrowLeft, WarningCircle } from '@phosphor-icons/react'
 import { buttonVariants } from '#/components/ui/button'
 import { PageHeader } from '#/components/ui/page-header'
 import { m } from '#/paraglide/messages'
+import type { ReauthProvider } from '#/lib/reauth-provider'
 import type { Me } from '#/server/fn/me'
 
 import { AccountNav } from './account-nav'
@@ -27,11 +28,14 @@ import { TwoFactorSection } from './two-factor-section'
 export function AccountScreen({
   me,
   hasPassword,
+  reauth,
   deletion,
 }: {
   me: Me
   /** Accounts with a password see the change-password section. */
   hasPassword: boolean
+  /** Provider a passwordless account signs in again with, if any. */
+  reauth: ReauthProvider | null
   /** Null while an agency admin still has to enrol in two-factor. */
   deletion: MyAccountDeletion | null
 }) {
@@ -130,6 +134,8 @@ export function AccountScreen({
       <TwoFactorSection
         enabled={me.user.twoFactorEnabled}
         required={me.mfaEnrolmentRequired}
+        hasPassword={hasPassword}
+        reauth={reauth}
       />
 
       {deletion ? (

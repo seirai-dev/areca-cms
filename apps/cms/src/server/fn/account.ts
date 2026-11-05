@@ -6,7 +6,8 @@ import { z } from '#/lib/zod'
 import { db } from '#/db'
 import { account, user, verification } from '#/db/schema'
 import { auth } from '#/lib/auth'
-import { emailPasswordEnabled } from '#/lib/auth-providers'
+import { emailPasswordEnabled, enabledAuthMethods } from '#/lib/auth-providers'
+import { reauthProviderFor } from '#/lib/reauth-provider'
 import {
   forgetSession,
   requireAccountUser,
@@ -245,6 +246,32 @@ export const getMyAccountFn = createServerFn({
       soleOwnerOf: blockers.soleOwnerClients,
       lastAdmin: blockers.lastAdmin,
     },
+  }
+})
+
+/**
+ * How the caller signs in, for the two-factor section: whether they have a
+ * password to confirm, and otherwise which provider to sign in again with
+ * when the server asks for a fresh session. Not behind the admin MFA gate:
+ * an agency admin without two-factor needs this to enrol.
+ */
+export const getMySignInMethodFn = createServerFn({
+  method: 'GET',
+  ...accountFn,
+}).handler(async () => {
+  const session = await requireUser()
+  const rows = await db
+    .select({ providerId: account.providerId, password: account.password })
+    .from(account)
+    .where(eq(account.userId, session.user.id))
+  return {
+    hasPassword: rows.some(
+      (row) => row.providerId === 'credential' && Boolean(row.password),
+    ),
+    reauth: reauthProviderFor(
+      rows.map((row) => row.providerId),
+      enabledAuthMethods(),
+    ),
   }
 })
 

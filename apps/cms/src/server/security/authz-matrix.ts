@@ -1899,6 +1899,13 @@ export const ROWS: Row[] = [
     prepare: () => ({ data: undefined }),
   },
   {
+    name: 'getMySignInMethodFn',
+    fn: accountFns.getMySignInMethodFn,
+    policy: 'user',
+    note: 'Own password flag and linked sign-in provider only. Open to admins without two-factor so they can enrol.',
+    prepare: () => ({ data: undefined }),
+  },
+  {
     name: 'updateMyNameFn',
     fn: accountFns.updateMyNameFn,
     policy: 'user',

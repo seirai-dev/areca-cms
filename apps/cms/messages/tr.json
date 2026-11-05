@@ -88,7 +88,7 @@
   "account_two_factor_new_codes_title": "Yeni yedek kodlarınız",
   "account_two_factor_off": "İki adımlı doğrulama kapalı.",
   "account_two_factor_on": "İki adımlı doğrulama açık.",
-  "account_two_factor_password_help": "Devam etmek için parolanızı doğrulayın. Yalnızca bir sağlayıcıyla oturum açıyorsanız boş bırakın.",
+  "account_two_factor_password_help": "Devam etmek için parolanızı doğrulayın.",
   "account_two_factor_regenerate": "Yeni yedek kodlar",
   "account_two_factor_saved": "Kaydettim",
   "account_two_factor_scan": "Bu kodu bir kimlik doğrulama uygulamasıyla tarayın veya gizli anahtarı elle girin. Ardından uygulamanın gösterdiği 6 haneli kodu yazın.",
@@ -2820,5 +2820,8 @@
   "upload_viewer_prev": "Önceki",
   "upload_viewer_next": "Sonraki",
   "upload_viewer_counter": "{index} / {total}",
-  "upload_error_generic": "Yükleme başarısız. Bağlantınızı kontrol edip yeniden deneyin."
+  "upload_error_generic": "Yükleme başarısız. Bağlantınızı kontrol edip yeniden deneyin.",
+  "account_two_factor_reauth_title": "Devam etmek için yeniden oturum açın",
+  "account_two_factor_reauth_body": "Güvenliğiniz için iki adımlı doğrulamayı değiştirmek yakın zamanda oturum açmış olmanızı gerektirir. Yeniden oturum açın, hemen buraya geri döneceksiniz.",
+  "account_two_factor_reauth_sign_in": "Yeniden oturum aç"
 }

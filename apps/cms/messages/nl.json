@@ -88,7 +88,7 @@
   "account_two_factor_new_codes_title": "Je nieuwe back-upcodes",
   "account_two_factor_off": "Tweestapsverificatie is uitgeschakeld.",
   "account_two_factor_on": "Tweestapsverificatie is ingeschakeld.",
-  "account_two_factor_password_help": "Bevestig je wachtwoord om door te gaan. Laat dit leeg als je alleen via een inlogprovider inlogt.",
+  "account_two_factor_password_help": "Bevestig je wachtwoord om door te gaan.",
   "account_two_factor_regenerate": "Nieuwe back-upcodes",
   "account_two_factor_saved": "Ik heb ze bewaard",
   "account_two_factor_scan": "Scan deze code met een authenticator-app of voer de geheime sleutel handmatig in. Typ daarna de 6-cijferige code die de app toont.",
@@ -2820,5 +2820,8 @@
   "upload_viewer_prev": "Vorige",
   "upload_viewer_next": "Volgende",
   "upload_viewer_counter": "{index} van {total}",
-  "upload_error_generic": "Uploaden mislukt. Controleer je verbinding en probeer opnieuw."
+  "upload_error_generic": "Uploaden mislukt. Controleer je verbinding en probeer opnieuw.",
+  "account_two_factor_reauth_title": "Log opnieuw in om door te gaan",
+  "account_two_factor_reauth_body": "Voor je veiligheid moet je recent ingelogd zijn om tweestapsverificatie te wijzigen. Log opnieuw in en je komt meteen hier terug.",
+  "account_two_factor_reauth_sign_in": "Opnieuw inloggen"
 }
