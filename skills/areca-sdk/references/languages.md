@@ -34,6 +34,7 @@ export default defineSiteContent({
 - `requiredLanguages` on a collection or global lists the languages (other than main) that must be complete before an entry is marked ready. Every key must be in `languages.all`.
 - `translatable` on a field overrides the default. Text, textarea, richtext and url are per language by default; every other type is shared across languages.
 - `i18n.paraglide` is the Paraglide runtime path. When it is set, `areca pull` wires its `getLocale` into the generated content object.
+- `i18n.localizePath(path, locale)` maps the address of a link to another entry in one language. Set it when the site's URLs differ from the default (see below).
 - `languages` and the per-language settings are sent with the schema by `manifest push`. `i18n` and `assets` stay local.
 - `manifest pull` lists language changes before it writes. Removing a language, or changing `main`, needs confirmation (`--yes` without a TTY). Adding one only appears in the diff. Ask the user before confirming: a removed language stops being served.
 - `areca pull` warns when `project.inlang/settings.json` disagrees with `languages`.
@@ -151,6 +152,28 @@ export const head = ({ entry }) =>
 - Relative alternate paths are made absolute from the site origin when the entry has a canonical URL.
 - For pages that aren't entries, build the same alternates from the path in each language.
 - Set the document's `lang` attribute to the page's language.
+
+## Links to entries and `localizePath`
+
+Editors link rich text to other entries. The CMS writes each link with the target's address in the language of the text: the language's route and slug, and `#section` when the link names one. It does not add the language prefix. `areca pull` adds it, with the default rule:
+
+- the main language keeps its paths: `/journal/<slug>`;
+- every other language gets `/<locale>` in front: `/nl/journaal/<slug>`; `/` becomes `/nl`.
+
+Set `i18n.localizePath` when the site's URLs follow another scheme, for example a prefix that is not the locale code, or no prefix for one language:
+
+```ts
+i18n: {
+  paraglide: "./src/paraglide/runtime.js",
+  // path has no `#section`; return the path the site serves in that language.
+  localizePath: (path, locale) => (locale === "nl" ? `/nederlands${path}` : path),
+},
+```
+
+- The function is called for every language, the main one too. Return the path unchanged for a language that needs no change.
+- Use the default when the site already serves `/<locale>/<route>`. Do not write the prefix into the route patterns: the routes have no prefix.
+- `areca pull` changes only the links the CMS marked as entry links. Other links in the text are not touched.
+- Snapshots from older CMS versions have no entry links, so nothing changes for them.
 
 ## Preview in a language
 

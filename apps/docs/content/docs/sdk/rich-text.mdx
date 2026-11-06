@@ -184,6 +184,18 @@ export function ArticleBody({ body }: { body: RichTextValue | null | undefined }
 
 Import only the languages you use. The package root imports every grammar, which makes the bundle much larger. Keep the CSS from the previous step, because the classes are the same.
 
+## Links to entries and sections
+
+A link to another entry is a normal link in the rich text. The CMS has already written its address in the language of the text, so the link works without any code of your own. The SDK adds one marker to each such link so that `areca pull` can localize it (see [Links to entries](/docs/sdk/multilingual#links-to-entries)):
+
+- `document`: the link node has an `entryId` property;
+- `html`: the anchor has `data-areca-entry="<entry id>"`;
+- `markdown`: the link is a labelled reference, `[text][areca-entry-1]`, and the address is in the definition `[areca-entry-1]: /path`.
+
+Links to a section (`/journal/<slug>#faq`) use the heading ids of the target. The ids are the ones `@tanstack/markdown` gives the same headings, so the link lands on the heading when the target renders `document` with the SDK helpers. Headings inside lists and quotes count too. A link opens in the same tab. Only external links open in a new one.
+
+When a section no longer exists, the CMS publishes the link to the page itself and lists it on the Go live panel. Your site does not need to check for it.
+
 ## Safety
 
 - **Editors choose from a fixed set of formatting.** The body can hold headings, lists, block quotes, code blocks, tables, images, bold, italic and links. It cannot hold arbitrary HTML, so there is no `<script>` tag to pass through.
