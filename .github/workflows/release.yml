@@ -204,7 +204,8 @@ jobs:
     name: Publish ${{ matrix.package }}
     needs: release
     if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    # npm provenance only accepts GitHub-hosted runners, so no Blacksmith here.
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: write
