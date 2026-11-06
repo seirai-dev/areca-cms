@@ -44,6 +44,17 @@ import {
 import type { AssetLookup } from '#/server/assets'
 import { snapshotAssets } from '#/server/assets/published-assets'
 import { convertRichText, validateRichText } from '#/server/richtext'
+import {
+  entryLinkTargets,
+  resolveEntryLinks,
+  richTextHeadingIds,
+} from '#/server/richtext/entry-links'
+import type {
+  EntryLinkIssue,
+  EntryLinkResolution,
+  EntryLinkTarget,
+} from '#/server/richtext/entry-links'
+import { entryTitle } from '#/lib/content/utils'
 
 import { getCollection, listCollections } from './collections.ts'
 import { getGlobalEntry, listGlobals } from './globals.ts'
@@ -53,6 +64,12 @@ import {
   languageBlockers,
   localeCtxFor,
 } from './locale-validation.ts'
+import {
+  entryLinkPath,
+  loadLinkTargets,
+  mapRichTextValues,
+} from './entry-links.ts'
+import type { LinkTargetRow } from './entry-links.ts'
 import { buildEntrySeo } from './seo.ts'
 import { buildSnapshotSchema } from './snapshot-schema.ts'
 import { pickDeclaredFields, validateEntryData } from './validation.ts'
@@ -81,6 +98,40 @@ export type SnapshotOptions = {
   allowNeverReadySections?: boolean
 }
 
+/**
+ * A link that will not work on the live site, or points at a section that is
+ * gone. It never blocks a release: the link is published as plain text
+ * (`not-live`, `missing`) or to the page (`missing-section`).
+ */
+export type LinkWarning = {
+  sourceEntryId: string
+  sourceTitle: string
+  /** The source's collection key, or the section key for a site content section. */
+  sourceCollectionKey: string
+  /** True when the source is a site content section (it has no collection page). */
+  sourceGlobal: boolean
+  /** Language of the text. Null on a single-language site. */
+  locale: string | null
+  field: string
+  targetEntryId: string
+  targetTitle: string
+  anchor: string | null
+  reason: 'not-live' | 'missing' | 'missing-section'
+}
+
+/** Resolves the entry links of one rich text view, and collects their problems. */
+export type LinkResolver = {
+  resolve: (
+    target: EntryLinkTarget,
+    locale: string | null,
+  ) => Promise<EntryLinkResolution>
+  report: (
+    field: string,
+    locale: string | null,
+    issues: EntryLinkIssue[],
+  ) => void
+}
+
 export async function buildSnapshot(
   siteId: string,
   connection: Pick<typeof db, 'select'> = db,
@@ -91,6 +142,7 @@ export async function buildSnapshot(
       snapshot: Snapshot
       hash: string
       entryVersions: { entryId: string; scheduledVersion: string }[]
+      linkWarnings: LinkWarning[]
     }
   | { ok: false; errors: string[] }
 > {
@@ -354,6 +406,22 @@ export async function buildSnapshot(
     connection,
   )
 
+  // Entry links: every target any language view points at, looked up once.
+  // Targets that are not in the release are read here too, to tell apart a
+  // draft from an entry that does not exist.
+  const linkTargetIds = new Set<string>()
+  for (const item of everything) {
+    for (const scope of scopesOf(item)) {
+      for (const field of item.fields) {
+        if (field.type !== 'richtext') continue
+        for (const target of entryLinkTargets(scope[field.key])) {
+          linkTargetIds.add(target.entryId)
+        }
+      }
+    }
+  }
+  const linkTargets = await loadLinkTargets(connection, siteId, linkTargetIds)
+
   for (const item of everything) {
     for (const scope of scopesOf(item)) {
       for (const field of item.fields) {
@@ -410,6 +478,138 @@ export async function buildSnapshot(
   if (errors.length > 0) {
     // Language views share their shared fields, so one problem can repeat.
     return { ok: false, errors: languages ? [...new Set(errors)] : errors }
+  }
+
+  const linkWarnings = new Map<string, LinkWarning>()
+  const headingCache = new Map<string, Set<string>>()
+  /**
+   * The view a target shows in `locale`: its translation when that language
+   * ships, else the main language (the fallback chain). `language` is the
+   * language the view is in.
+   */
+  function linkTargetView(item: IncludedEntry, locale: string | null) {
+    const main = languages?.main ?? null
+    const ctx = languages ? localeCtxFor(languages, item.fields) : null
+    const wantsTranslation = Boolean(ctx && locale && locale !== main)
+    if (
+      !ctx ||
+      !locale ||
+      !wantsTranslation ||
+      !shippedLocales(item.data, ctx).includes(locale)
+    ) {
+      return {
+        view: item.data,
+        route: item.routePattern,
+        slug: item.slug,
+        language: main,
+      }
+    }
+    const view = readLocale(item.data, locale, ctx)
+    const localSlug = view[SLUG_KEY]
+    return {
+      view,
+      route: item.localizedRoutes?.[locale] ?? item.routePattern,
+      slug:
+        typeof localSlug === 'string' && localSlug !== ''
+          ? localSlug
+          : item.slug,
+      language: locale,
+    }
+  }
+  function headingIdsOf(
+    item: IncludedEntry,
+    language: string | null,
+  ): Set<string> {
+    const key = `${item.row.id}|${language ?? ''}`
+    const cached = headingCache.get(key)
+    if (cached) return cached
+    const shown =
+      languages && language && language !== languages.main
+        ? readLocale(item.data, language, localeCtxFor(languages, item.fields))
+        : item.data
+    const ids = new Set<string>()
+    for (const field of item.fields) {
+      if (field.type !== 'richtext') continue
+      for (const id of richTextHeadingIds(shown[field.key])) ids.add(id)
+    }
+    headingCache.set(key, ids)
+    return ids
+  }
+  /** Resolves a link to the release: a live entry's path in that language, or why it cannot work. */
+  async function resolveSnapshotLink(
+    target: EntryLinkTarget,
+    locale: string | null,
+  ): Promise<EntryLinkResolution> {
+    const live = includedById.get(target.entryId)
+    if (live && live.routePattern !== '') {
+      const placed = linkTargetView(live, locale)
+      const targetTitle = entryTitle(placed.view, live.fields, placed.slug)
+      if (!target.anchor) {
+        return {
+          href: entryLinkPath(placed.route, placed.slug, null),
+          targetTitle,
+        }
+      }
+      if (headingIdsOf(live, placed.language).has(target.anchor)) {
+        return {
+          href: entryLinkPath(placed.route, placed.slug, target.anchor),
+          targetTitle,
+        }
+      }
+      return {
+        href: entryLinkPath(placed.route, placed.slug, null),
+        reason: 'missing-section',
+        targetTitle,
+      }
+    }
+    const row = linkTargets.get(target.entryId)
+    if (!row || row.collectionKind === 'global' || row.routePattern === '') {
+      return { href: null, reason: 'missing', targetTitle: '' }
+    }
+    return {
+      href: null,
+      reason: 'not-live',
+      targetTitle: entryTitle(row.draftData, row.fields, row.slug),
+    }
+  }
+  /** The resolver for the text of one entry or section. */
+  function linksFrom(source: {
+    id: string
+    title: string
+    collectionKey: string
+    global: boolean
+  }): LinkResolver {
+    return {
+      resolve: (target, locale) => resolveSnapshotLink(target, locale),
+      report(field, locale, issues) {
+        for (const issue of issues) {
+          const sourceEntryId = source.id
+          const warning: LinkWarning = {
+            sourceEntryId,
+            sourceTitle: source.title,
+            sourceCollectionKey: source.collectionKey,
+            sourceGlobal: source.global,
+            locale,
+            field,
+            targetEntryId: issue.entryId,
+            targetTitle: issue.targetTitle,
+            anchor: issue.anchor,
+            reason: issue.reason,
+          }
+          linkWarnings.set(
+            [
+              sourceEntryId,
+              locale ?? '',
+              field,
+              issue.entryId,
+              issue.anchor ?? '',
+              issue.reason,
+            ].join('|'),
+            warning,
+          )
+        }
+      },
+    }
   }
 
   const collections: Record<string, SnapshotEntry[]> = {}
@@ -537,6 +737,12 @@ export async function buildSnapshot(
       organizationId: siteRow.organizationId,
       strict: true,
       locale: locale ?? undefined,
+      links: linksFrom({
+        id: item.row.id,
+        title: entryTitle(shown, item.fields, slug),
+        collectionKey: item.collectionKey,
+        global: false,
+      }),
     })
     const ogImageId = readEntrySeo(shown).ogImage
     const routePattern =
@@ -578,6 +784,12 @@ export async function buildSnapshot(
           organizationId: siteRow.organizationId,
           strict: true,
           locale: locale ?? undefined,
+          links: linksFrom({
+            id: item.row.id,
+            title: section.label,
+            collectionKey: section.key,
+            global: true,
+          }),
         })
       : {}
     const seo = section.seoEnabled
@@ -597,10 +809,68 @@ export async function buildSnapshot(
     return { data, ...(seo ? { seo } : {}) }
   }
 
-  return { ok: true, snapshot, hash, entryVersions }
+  return {
+    ok: true,
+    snapshot,
+    hash,
+    entryVersions,
+    linkWarnings: [...linkWarnings.values()],
+  }
 }
 
 export type PreviewLocaleStatus = { complete: boolean; missing: string[] }
+
+/**
+ * Draft previews: an entry link goes to the target's current draft path in the
+ * language of the text, live or not, so clicking through the preview works.
+ * A target that no longer exists becomes plain text.
+ */
+function draftLinkResolver(
+  targets: Map<string, LinkTargetRow>,
+  languages: SiteLanguages | null,
+): LinkResolver {
+  return {
+    async resolve(target, locale) {
+      const row = targets.get(target.entryId)
+      if (!row || row.collectionKind === 'global' || row.routePattern === '') {
+        return { href: null, reason: 'missing', targetTitle: '' }
+      }
+      const isTranslation = Boolean(
+        languages && locale && locale !== languages.main,
+      )
+      const ctx = languages ? localeCtxFor(languages, row.fields) : null
+      const view =
+        isTranslation && ctx
+          ? readLocale(row.draftData, locale!, ctx)
+          : row.draftData
+      const localSlug = isTranslation ? view[SLUG_KEY] : undefined
+      const slug =
+        typeof localSlug === 'string' && localSlug !== '' ? localSlug : row.slug
+      const route =
+        (isTranslation ? row.localizedRoutes?.[locale!] : undefined) ??
+        row.routePattern
+      return {
+        href: entryLinkPath(route, slug, target.anchor),
+        targetTitle: entryTitle(view, row.fields, slug),
+      }
+    },
+    report() {},
+  }
+}
+
+/** The entries a draft's entry links point at, in any language slot. */
+async function draftLinkTargets(
+  siteId: string,
+  fields: Field[],
+  draft: EntryData,
+): Promise<Map<string, LinkTargetRow>> {
+  const ids = new Set<string>()
+  await mapRichTextValues(draft, fields, (json) => {
+    for (const target of entryLinkTargets(json)) ids.add(target.entryId)
+    return json
+  })
+  return loadLinkTargets(db, siteId, ids)
+}
 
 /**
  * Draft preview of an entry. `locales` has the snapshot shape (shipped
@@ -682,6 +952,10 @@ export async function buildPreviewGlobalFromDraft(input: {
   const row = input.entryRow
   if (!global.enabled) return null
   const languages = existingSite.languages ?? null
+  const links = draftLinkResolver(
+    await draftLinkTargets(existingSite.id, global.fields, draftData),
+    languages,
+  )
 
   const expanded = await expandAcrossLanguages(
     languages,
@@ -694,6 +968,7 @@ export async function buildPreviewGlobalFromDraft(input: {
         organizationId: existingSite.organizationId,
         strict: false,
         locale: loc ?? undefined,
+        links,
       })
       const seo = global.seoEnabled
         ? buildEntrySeo({
@@ -780,6 +1055,10 @@ export async function buildPreviewEntryFromDraft(input: {
   const existingSite = input.site
   const row = input.entryRow
   const languages = existingSite.languages ?? null
+  const links = draftLinkResolver(
+    await draftLinkTargets(existingSite.id, col.fields, draftData),
+    languages,
+  )
 
   const expanded = await expandAcrossLanguages(
     languages,
@@ -799,6 +1078,7 @@ export async function buildPreviewEntryFromDraft(input: {
         organizationId: existingSite.organizationId,
         strict: false,
         locale: loc ?? undefined,
+        links,
       })
       const ogImageId = readEntrySeo(shown).ogImage
       const ogImage: ImageValue | null = ogImageId
@@ -933,6 +1213,8 @@ async function convertFields(
     strict: boolean
     /** Language of the view: image alt text follows it. */
     locale?: string
+    /** Entry links in rich text resolve through this. Absent: links are kept as stored. */
+    links?: LinkResolver
   },
 ): Promise<Record<string, unknown>> {
   const out: Record<string, unknown> = withoutSeo(
@@ -964,9 +1246,19 @@ async function convertFields(
         out[field.key] = value
         continue
       }
+      // Entry links take the path of their target in this language. A link
+      // that cannot work becomes plain text (see resolveEntryLinks).
+      let source = value
+      if (options.links) {
+        const linked = await resolveEntryLinks(value, (target) =>
+          options.links!.resolve(target, options.locale ?? null),
+        )
+        options.links.report(field.key, options.locale ?? null, linked.issues)
+        source = linked.json
+      }
       try {
-        if (options.strict || validateRichText(value).length === 0) {
-          out[field.key] = convertRichText(value)
+        if (options.strict || validateRichText(source).length === 0) {
+          out[field.key] = convertRichText(source)
         }
       } catch {
         // best-effort preview keeps the original value

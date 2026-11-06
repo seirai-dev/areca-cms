@@ -12,6 +12,7 @@ import type {
   SnapshotEntry,
 } from '#/lib/types'
 import { buildSnapshot } from '#/server/content/snapshot'
+import type { LinkWarning } from '#/server/content/snapshot'
 
 /**
  * Approved-candidate vs live (or demo) snapshot.
@@ -62,6 +63,8 @@ export type ApprovedReleaseDiff = {
   languages: LanguageReleaseChange | null
   liveEntryIds: string[]
   liveSlugsByEntryId: Record<string, string>
+  /** Links that will not work after go live. Warnings only: they never block. */
+  linkWarnings: LinkWarning[]
 }
 
 export type PendingReleaseChange = {
@@ -418,6 +421,7 @@ export async function diffApprovedRelease(
     languages,
     liveEntryIds: [...liveIndex.keys()],
     liveSlugsByEntryId,
+    linkWarnings: built.ok ? built.linkWarnings : [],
   }
 }
 
@@ -434,6 +438,7 @@ function titleOf(
 export type PendingRelease = {
   changes: PendingReleaseChange[]
   languages: LanguageReleaseChange | null
+  linkWarnings: LinkWarning[]
 }
 
 /** Entry and section changes plus the language change, from one diff. */
@@ -528,7 +533,7 @@ export async function listPendingRelease(
     return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
   })
 
-  return { changes, languages: diff.languages }
+  return { changes, languages: diff.languages, linkWarnings: diff.linkWarnings }
 }
 
 export async function listPendingReleaseChanges(

@@ -7,6 +7,7 @@ import type { EntryData, EntryStatus } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 
 import { NotFoundError } from './errors.ts'
+import { listInboundLinks } from './entry-link-index.ts'
 
 export type InboundReference = {
   id: string
@@ -125,6 +126,20 @@ export async function listInboundReferences(
         status: row.status,
       })
     }
+  }
+
+  // Rich text links, from the link index. Warn only, like references.
+  for (const link of await listInboundLinks(entryId)) {
+    if (seen.has(link.id)) continue
+    if (!viewerIsAgency && link.disabledSection) continue
+    seen.add(link.id)
+    found.push({
+      id: link.id,
+      title: link.title,
+      slug: link.slug,
+      collectionKey: link.collectionKey,
+      status: link.status,
+    })
   }
 
   found.sort(
