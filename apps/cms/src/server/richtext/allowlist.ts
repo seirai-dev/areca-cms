@@ -92,3 +92,28 @@ export function isDisallowedAttrKey(key: string): boolean {
   const lower = key.toLowerCase()
   return lower === 'style' || lower.startsWith('on')
 }
+
+/** Entry ids are UUIDs (`crypto.randomUUID()`). Looser than a strict UUID so tests can use short ids. */
+const ENTRY_ID = /^[0-9A-Za-z-]{8,64}$/
+/** Collection keys follow the identifier rule (`isSafeIdentifier`). */
+const COLLECTION_KEY = /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/
+/**
+ * A section id: what `headingIds` produces for a heading (lowercase letters,
+ * digits and hyphens), in a looser form so ids made by other slug rules pass.
+ */
+const ANCHOR_ID = /^[A-Za-z0-9][A-Za-z0-9._~:-]{0,199}$/
+
+export function isEntryLinkId(value: unknown): value is string {
+  return typeof value === 'string' && ENTRY_ID.test(value)
+}
+
+export function isEntryLinkCollection(value: unknown): value is string {
+  return typeof value === 'string' && COLLECTION_KEY.test(value)
+}
+
+export function isEntryLinkAnchor(value: unknown): value is string {
+  return typeof value === 'string' && ANCHOR_ID.test(value)
+}
+
+/** The mark attributes that only an entry link carries. */
+export const ENTRY_LINK_ATTRS = ['entryId', 'collection', 'anchor'] as const

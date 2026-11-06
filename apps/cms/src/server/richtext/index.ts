@@ -13,6 +13,16 @@ const RELATIVE_ASSET_SRC = /^\/(api\/)?assets\//
 
 export { parseRichTextDocument, renderRichTextHtml } from './document'
 export { richTextExtensions } from './extensions'
+export {
+  entryLinkTargets,
+  resolveEntryLinks,
+  richTextHeadingIds,
+} from './entry-links'
+export type {
+  EntryLinkIssue,
+  EntryLinkResolution,
+  EntryLinkTarget,
+} from './entry-links'
 export { richTextPlainText } from './markdown'
 export {
   markdownToRichText,
@@ -68,7 +78,7 @@ export function convertRichText(json: unknown): {
   const rewritten = structuredClone(json) as JSONContent
   rewriteRelativeAssetSrcs(rewritten)
 
-  const markdown = serializeMarkdown(rewritten)
+  const markdown = serializeMarkdown(rewritten, { entryLinkMarkers: true })
   const document = richTextDocumentFromJson(rewritten)
   const html = renderRichTextHtml(document)
 

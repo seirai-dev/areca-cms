@@ -54,6 +54,18 @@ function codeSpan(text: string): string {
   return `${fence}${pad}${text}${pad}${fence}`
 }
 
+/**
+ * Set while one `serializeMarkdown` call runs (it is synchronous). With markers
+ * on, an entry link is a reference link whose label is `areca-entry-N`, and its
+ * destination sits in a definition at the end. The SDK localizes destinations
+ * by those labels; the text reads the same and nothing extra renders.
+ */
+let entryLinks: {
+  markers: boolean
+  count: number
+  definitions: string[]
+} | null = null
+
 function wrapMarks(text: string, marks: Mark[] | undefined): string {
   if (!marks?.length) return text
   let out = text
@@ -65,6 +77,12 @@ function wrapMarks(text: string, marks: Mark[] | undefined): string {
   const link = marks.find((mark) => mark.type === 'link')
   if (link) {
     const href = typeof link.attrs?.href === 'string' ? link.attrs.href : ''
+    if (entryLinks?.markers && typeof link.attrs?.entryId === 'string') {
+      entryLinks.count += 1
+      const label = `areca-entry-${entryLinks.count}`
+      entryLinks.definitions.push(`[${label}]: ${destination(href)}`)
+      return `[${out}][${label}]`
+    }
     out = `[${out}](${destination(href)})`
   }
   return out
@@ -212,8 +230,25 @@ function serializeBlock(node: PMNode, indent = 0): string {
   }
 }
 
-export function serializeMarkdown(json: unknown): string {
-  return serializeBlock(asNode(json)).trim()
+export function serializeMarkdown(
+  json: unknown,
+  options: { entryLinkMarkers?: boolean } = {},
+): string {
+  const previous = entryLinks
+  entryLinks = {
+    markers: options.entryLinkMarkers === true,
+    count: 0,
+    definitions: [],
+  }
+  try {
+    const body = serializeBlock(asNode(json)).trim()
+    const { definitions } = entryLinks
+    return definitions.length > 0
+      ? `${body}\n\n${definitions.join('\n')}`
+      : body
+  } finally {
+    entryLinks = previous
+  }
 }
 
 const BLOCK_JOIN = new Set([

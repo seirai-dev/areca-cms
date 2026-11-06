@@ -29,6 +29,23 @@ export const richTextExtensions: Extensions = [
   // The base Link supplies target and rel as attribute defaults, so they are
   // stripped here for internal hrefs. The parent renderHTML is not used.
   Link.extend({
+    addAttributes() {
+      // Entry links keep their target, so an edit and save does not lose them.
+      // They are rendered as data attributes; the published HTML uses its own
+      // marker (`data-areca-entry`, see document.ts).
+      const entryAttribute = (name: string, key: string) => ({
+        default: null,
+        parseHTML: (element: HTMLElement) => element.getAttribute(name),
+        renderHTML: (attributes: Record<string, unknown>) =>
+          attributes[key] ? { [name]: String(attributes[key]) } : {},
+      })
+      return {
+        ...this.parent?.(),
+        entryId: entryAttribute('data-entry-id', 'entryId'),
+        collection: entryAttribute('data-collection', 'collection'),
+        anchor: entryAttribute('data-anchor', 'anchor'),
+      }
+    },
     renderHTML({ HTMLAttributes }) {
       const { rel: _rel, target: _target, ...rest } = HTMLAttributes
       // Keep the base Link's safety net: a disallowed href renders empty.

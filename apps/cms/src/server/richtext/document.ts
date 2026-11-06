@@ -23,6 +23,22 @@ function escapeAttribute(value: string): string {
 }
 
 /**
+ * Renders entry links with a marker, `data-areca-entry`, so the SDK can find
+ * them and localize the path. The link itself is a plain same-tab link.
+ */
+export const entryLinkExtension: MarkdownExtension = {
+  name: 'areca-entry-links',
+  renderHtml(node, context) {
+    const entryId = (node as { entryId?: unknown }).entryId
+    if (node.type !== 'link' || typeof entryId !== 'string') return undefined
+    const children = node.children
+      .map((child) => context.renderInline(child))
+      .join('')
+    return `<a href="${escapeAttribute(node.href)}" data-areca-entry="${escapeAttribute(entryId)}">${children}</a>`
+  },
+}
+
+/**
  * Renders `http(s)` links to other sites in a new tab. Site paths, anchors and
  * `mailto:` links fall through to TanStack's default output, which has no
  * target. Matches the SDK's default link component.
@@ -59,6 +75,6 @@ export function parseRichTextDocument(markdown: string): MarkdownDocument {
 export function renderRichTextHtml(document: MarkdownDocument): string {
   return renderHtml(document, {
     highlighter: highlightCode,
-    extensions: [externalLinkExtension],
+    extensions: [entryLinkExtension, externalLinkExtension],
   }).replace(/<\/img>/g, '')
 }
