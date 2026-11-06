@@ -19,7 +19,7 @@ using a shared or public instance. Keep `DOKPLOY_CREDENTIALS_ENCRYPTION_KEY`
 stable and backed up with PostgreSQL; it is required even if you do not use
 Dokploy yet. If you enable AI settings, also generate and retain
 `AI_SETTINGS_ENCRYPTION_KEY`. To deploy sites to Cloudflare, do the same with
-`CLOUDFLARE_CREDENTIALS_ENCRYPTION_KEY`. See [CMS configuration](../docs/CONFIGURATION.md).
+`CLOUDFLARE_CREDENTIALS_ENCRYPTION_KEY`. See [CMS configuration](https://docs.arecacms.com/docs/self-hosting/configuration).
 
 Open <http://localhost:3000/setup> to create the first administrator. The setup
 form asks for a setup token: set `SETUP_TOKEN` (16+ characters) in `.env`, or
@@ -34,7 +34,7 @@ The example binds the CMS, RustFS console, and Mailpit UI to localhost and keeps
 database, Redis, and the S3 API ports internal. For a different CMS port, update
 both `CMS_PORT` and `CMS_URL`. For public hosting, configure a reverse proxy,
 public `CMS_URL`, real SMTP, and unique service credentials; consult
-[deployment](../docs/DEPLOYMENT.md). Agency administrators need TOTP by default.
+[deployment](https://docs.arecacms.com/docs/self-hosting/production). Agency administrators need TOTP by default.
 For first-run setup, the CMS generates a one-time setup token and prints it to
 the CMS log unless `SETUP_TOKEN` is set. Do not commit `.env`.
 
@@ -57,7 +57,7 @@ under that prefix plus `/`; reset removes the entire subtree, including manually
 placed files, while root mode empties the entire bucket. Keep the same prefix on
 CMS and maintenance scripts. Database/bundle keys and public URLs stay unchanged.
 The prefix does not restrict credentials or change bucket-level readiness checks.
-See [configuration](../docs/CONFIGURATION.md#storage-prefix) for validation and
+See [configuration](https://docs.arecacms.com/docs/self-hosting/configuration) for validation and
 manual migration/rollback; changing the variable does not move existing files.
 Physical RustFS recovery still captures the whole store; see [recovery](RECOVERY.md).
 
@@ -123,7 +123,7 @@ settings → Change visibility → Public** to allow visitors to pull without lo
 `latest` is for trying the demo. For anything that matters, set `CMS_IMAGE` to a
 version tag such as `v0.1.0`, or an image digest, so restarts never pick up a new
 release unannounced. The third-party images in `compose.yml` use explicit version
-tags. See [../docs/UPGRADES.md](../docs/UPGRADES.md) for the upgrade and rollback
+tags. See [upgrades](https://docs.arecacms.com/docs/self-hosting/upgrades) for the upgrade and rollback
 procedure.
 
 Backup, isolated restore and versioned organization transfer: [RECOVERY.md](RECOVERY.md).

@@ -1,6 +1,6 @@
-# Working on Areca
+# Working on Areca CMS
 
-Areca is a pnpm workspace with the CMS, site SDK, and demo website. Use [onboarding](ONBOARDING.md) for the initial database, storage, environment, and account setup. Use [architecture](ARCHITECTURE.md) to find the right part of the source.
+Areca is a pnpm workspace with the CMS, site SDK, and demo website. Use [onboarding](https://docs.arecacms.com/docs/quickstart) for the initial database, storage, environment, and account setup. Use [architecture](ARCHITECTURE.md) to find the right part of the source.
 
 ## Local workflow
 
@@ -86,7 +86,7 @@ CI checks SDK/CMS/demo types and tests, recovery and CMS scripts, a CMS build, c
 
 Drizzle's source schema lives in `apps/cms/src/db/schema.ts`; committed migrations live in `apps/cms/drizzle`. Use `pnpm db:generate` to produce a migration and `pnpm db:migrate` to apply migrations in development. Review generated SQL. Avoid `db:push` as a production upgrade workflow because it bypasses the reviewed migration sequence.
 
-Use [upgrades](UPGRADES.md) for production migration, staging validation, backups, and rollback. `db:reset` erases application data and every object under `S3_PREFIX` plus `/` (including manually placed objects), or the entire bucket when unset/empty; it is a deliberate local reset tool rather than a setup prerequisite.
+Use [upgrades](https://docs.arecacms.com/docs/self-hosting/upgrades) for production migration, staging validation, backups, and rollback. `db:reset` erases application data and every object under `S3_PREFIX` plus `/` (including manually placed objects), or the entire bucket when unset/empty; it is a deliberate local reset tool rather than a setup prerequisite.
 
 ## Demo data
 
@@ -103,7 +103,7 @@ otpauth://totp/Areca%20CMS:admin%40areca.local?secret=MFZGKY3BFVSGK3LPFV2G65DQFV
 ```
 
 The secret is public and for local demos only. `pnpm db:demo` stores it encrypted with `BETTER_AUTH_SECRET`, and it has no backup codes. Do not reuse it anywhere else.
-- `ruth@harborandpine.com` / `password123`: owner of Harbor & Pine (the other clients follow the same pattern, with an owner and an editor named in `apps/cms/scripts/demo-data/`)
+- `ruth@harborandpine.example` / `password123`: owner of Harbor & Pine (the other clients follow the same pattern, with an owner and an editor named in `apps/cms/scripts/demo-data/`)
 
 To refresh the documentation screenshots in `apps/docs/public/screenshots/`, run `pnpm db:demo`, then `pnpm docs:screenshots` (the CMS must already be running at the `APP_URL` origin, or set `PLAYWRIGHT_BASE_URL`), then `pnpm db:demo` again, because the capture changes state at the end (a go live, a throwaway client and site, and a pending two-factor enrolment). The spec is `apps/cms/e2e/docs/docs-screenshots.spec.ts`; it is excluded from the `chromium` and `qa` projects.
 
@@ -127,6 +127,6 @@ The workflow needs no npm token. It needs the following:
 
 ## Documentation maintenance
 
-Update the guide for the affected audience and link it from [the documentation index](README.md). Keep code examples small but usable; identify required variables and prerequisites. Describe current behavior separately from planned work. Keep historical proposal documents labeled as such.
+User-facing documentation lives in the docs site, `apps/docs/content` (see [its README](../apps/docs/README.md)). Update it in the same pull request as the behaviour it describes. The files in this folder are for contributors; link new ones from [the index](README.md). Keep code examples small but usable, and name the required variables and prerequisites.
 
-For a screenshot, wait until loading placeholders disappear, capture the actual interface, and avoid revealing tokens, recovery codes, or private content. Store images under `docs/screenshots` and record context in [screenshot notes](screenshots/README.md). Capturing an existing screen should not require publishing, deleting, or resetting user data.
+For a screenshot, wait until loading placeholders disappear, capture the actual interface, and avoid revealing tokens, recovery codes, or private content. Docs-site screenshots live in `apps/docs/public/screenshots/` and are captured with `pnpm docs:screenshots` against `pnpm db:demo` data (see [Demo data](#demo-data)). Capturing an existing screen should not require publishing, deleting, or resetting user data.

@@ -10,6 +10,8 @@ import type {
   CoffeesEntry,
 } from '../generated/content/areca.gen.ts'
 import { entryAlternates } from './i18n.ts'
+import { LOCALES } from './locale-routes.ts'
+import { publishedDataMiddleware } from './static-export.ts'
 import {
   aboutData,
   companyFrom,
@@ -19,6 +21,7 @@ import {
   readGlobals,
   setNoStoreHeaders,
   toPreviewLoad,
+  withLocale,
 } from './page-data.server.ts'
 import {
   articlesByAuthor,
@@ -32,7 +35,12 @@ import {
 } from './content.ts'
 
 const loose = { strict: { output: false } as const }
-const slugInput = z.object({ slug: z.string().min(1) })
+/**
+ * Every published content function takes the page's language: it decides what
+ * the function returns, and in the static build it keys the saved result.
+ */
+const localeInput = z.object({ locale: z.enum(LOCALES) })
+const slugInput = localeInput.extend({ slug: z.string().min(1) })
 
 
 /**
@@ -42,13 +50,14 @@ const slugInput = z.object({ slug: z.string().min(1) })
 export const sitePreviewSearch = z.object({
   arecaPreview: z.string().optional().catch(undefined),
 })
-const previewInput = z.object({ arecaPreview: z.string().optional() })
+const previewInput = localeInput.extend({ arecaPreview: z.string().optional() })
 
 
 /** Company details for the header and footer on every page. */
-export const loadCompanyInfo = createServerFn({ method: 'GET', ...loose }).handler(
-  () => ({ company: companyFrom(content.globals) }),
-)
+export const loadCompanyInfo = createServerFn({ method: 'GET', ...loose })
+  .middleware(publishedDataMiddleware)
+  .validator(localeInput)
+  .handler(({ data }) => withLocale(data.locale, () => ({ company: companyFrom(content.globals) })))
 
 /**
  * Lets the CMS frame a draft page for the visual editor: sends the visual editing
@@ -76,18 +85,24 @@ const liveGlobalInput = z.looseObject({
 
 /** Home: hero copy, the featured coffee, the newest journal entries and the first coffees in the shop order. */
 export const loadHome = createServerFn({ method: 'GET', ...loose })
+  .middleware(publishedDataMiddleware)
   .validator(previewInput)
-  .handler(async ({ data }) => {
-    const cmsOrigin = data.arecaPreview ? frameForVisualEditing() : null
-    return { ...homeData(await readGlobals(data.arecaPreview, 'homePage')), cmsOrigin }
-  })
+  .handler(({ data }) =>
+    withLocale(data.locale, async () => {
+      const cmsOrigin = data.arecaPreview ? frameForVisualEditing() : null
+      return { ...homeData(await readGlobals(data.arecaPreview, 'homePage')), cmsOrigin }
+    }),
+  )
 
 export const loadAbout = createServerFn({ method: 'GET', ...loose })
+  .middleware(publishedDataMiddleware)
   .validator(previewInput)
-  .handler(async ({ data }) => {
-    const cmsOrigin = data.arecaPreview ? frameForVisualEditing() : null
-    return { ...aboutData(await readGlobals(data.arecaPreview, 'aboutPage')), cmsOrigin }
-  })
+  .handler(({ data }) =>
+    withLocale(data.locale, async () => {
+      const cmsOrigin = data.arecaPreview ? frameForVisualEditing() : null
+      return { ...aboutData(await readGlobals(data.arecaPreview, 'aboutPage')), cmsOrigin }
+    }),
+  )
 
 /** The home page with an unsaved draft from the visual editor. Nothing is saved. */
 export const loadLiveHome = createServerFn({ method: 'POST', ...loose })
@@ -105,54 +120,66 @@ export const loadLiveAbout = createServerFn({ method: 'POST', ...loose })
     return liveAboutData(data as unknown as PreviewResult)
   })
 
-export const loadCoffees = createServerFn({ method: 'GET', ...loose }).handler(
-  () => getCoffees(),
-)
+export const loadCoffees = createServerFn({ method: 'GET', ...loose })
+  .middleware(publishedDataMiddleware)
+  .validator(localeInput)
+  .handler(({ data }) => withLocale(data.locale, () => getCoffees()))
 
 export const loadCoffee = createServerFn({ method: 'GET', ...loose })
+  .middleware(publishedDataMiddleware)
   .validator(slugInput)
-  .handler(({ data }) => {
-    const coffee = getCoffee(data.slug)
-    if (!coffee) return null
-    return {
-      coffee,
-      articles: articlesFeaturingCoffee(coffee.id),
-      alternates: entryAlternates(coffee.alternates),
-    }
-  })
+  .handler(({ data }) =>
+    withLocale(data.locale, () => {
+      const coffee = getCoffee(data.slug)
+      if (!coffee) return null
+      return {
+        coffee,
+        articles: articlesFeaturingCoffee(coffee.id),
+        alternates: entryAlternates(coffee.alternates),
+      }
+    }),
+  )
 
-export const loadJournal = createServerFn({ method: 'GET', ...loose }).handler(
-  () => getArticles(),
-)
+export const loadJournal = createServerFn({ method: 'GET', ...loose })
+  .middleware(publishedDataMiddleware)
+  .validator(localeInput)
+  .handler(({ data }) => withLocale(data.locale, () => getArticles()))
 
 export const loadArticle = createServerFn({ method: 'GET', ...loose })
+  .middleware(publishedDataMiddleware)
   .validator(slugInput)
-  .handler(({ data }) => {
-    const article = getArticle(data.slug)
-    if (!article) return null
-    return {
-      article,
-      author: content.resolve(article.data.author),
-      coffee: content.resolve(article.data.featuredCoffee),
-      alternates: entryAlternates(article.alternates),
-    }
-  })
+  .handler(({ data }) =>
+    withLocale(data.locale, () => {
+      const article = getArticle(data.slug)
+      if (!article) return null
+      return {
+        article,
+        author: content.resolve(article.data.author),
+        coffee: content.resolve(article.data.featuredCoffee),
+        alternates: entryAlternates(article.alternates),
+      }
+    }),
+  )
 
-export const loadTeam = createServerFn({ method: 'GET', ...loose }).handler(
-  () => getAuthors(),
-)
+export const loadTeam = createServerFn({ method: 'GET', ...loose })
+  .middleware(publishedDataMiddleware)
+  .validator(localeInput)
+  .handler(({ data }) => withLocale(data.locale, () => getAuthors()))
 
 export const loadAuthor = createServerFn({ method: 'GET', ...loose })
+  .middleware(publishedDataMiddleware)
   .validator(slugInput)
-  .handler(({ data }) => {
-    const author = getAuthor(data.slug)
-    if (!author) return null
-    return {
-      author,
-      articles: articlesByAuthor(author.id),
-      alternates: entryAlternates(author.alternates),
-    }
-  })
+  .handler(({ data }) =>
+    withLocale(data.locale, () => {
+      const author = getAuthor(data.slug)
+      if (!author) return null
+      return {
+        author,
+        articles: articlesByAuthor(author.id),
+        alternates: entryAlternates(author.alternates),
+      }
+    }),
+  )
 
 export type PreviewData =
   | { collection: 'articles'; entry: ArticlesEntry; author: AuthorsEntry | null; coffee: CoffeesEntry | null }

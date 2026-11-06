@@ -6,7 +6,7 @@ import { AuthorCard } from '../components/author-card.tsx'
 import { CoffeeCard } from '../components/coffee-card.tsx'
 import { CmsImage, PreviewBanner } from '../components/cms-image.tsx'
 import { buttonGhostOnImage, buttonOnImage, Eyebrow, SectionHeading } from '../components/ui.tsx'
-import { pageAlternates } from '../lib/i18n.ts'
+import { currentLocale, pageAlternates } from '../lib/i18n.ts'
 import { loadHome, loadLiveHome, loadTeam, sitePreviewSearch } from '../lib/queries.ts'
 import { noindexHead, sectionHead, SITE_NAME } from '../lib/seo.ts'
 import { useField } from '../lib/visual-markers.tsx'
@@ -15,8 +15,8 @@ export const Route = createFileRoute('/')({
   validateSearch: (search) => sitePreviewSearch.parse(search),
   loaderDeps: ({ search }) => ({ arecaPreview: search.arecaPreview }),
   loader: async ({ deps }) => ({
-    ...(await loadHome({ data: { arecaPreview: deps.arecaPreview } })),
-    authors: await loadTeam(),
+    ...(await loadHome({ data: { locale: currentLocale(), arecaPreview: deps.arecaPreview } })),
+    authors: await loadTeam({ data: { locale: currentLocale() } }),
   }),
   head: ({ loaderData }) => {
     const head = sectionHead(

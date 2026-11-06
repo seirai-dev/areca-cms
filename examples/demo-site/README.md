@@ -1,4 +1,4 @@
-# Areca demo website
+# Areca CMS demo website (Northbound Coffee)
 
 This TanStack Start website shows one way to use `@areca-cms/site-sdk`. It
 downloads the current published snapshot during development/build, renders
@@ -38,9 +38,10 @@ fails with a publish-first message.
 
 ## Connect or update the schema
 
-The schema is in [`areca.config.ts`](./areca.config.ts). It defines `articles`
-with title, slug, excerpt, rich-text body, hero image, publication date, and
-category. To send schema changes, also set `ARECA_SCHEMA_TOKEN` in `.env.local`
+The schema is in [`areca.config.ts`](./areca.config.ts). It defines three
+collections (`articles` for the journal, `coffees` for the shop and `authors`
+for the team) and the site content sections described below, in English and
+Dutch. To send schema changes, also set `ARECA_SCHEMA_TOKEN` in `.env.local`
 and run:
 
 ```bash
@@ -220,8 +221,44 @@ The container copies the generated snapshot and server output into a Node 24
 runtime image. At runtime, the site serves the built snapshot; it does not
 fetch content from the CMS for visitor requests.
 
+## Static build (Cloudflare)
+
+The site can also be built as plain static files, with no server:
+
+```bash
+pnpm run cf:build:demo   # from the repository root
+```
+
+This builds the SDK, then runs `build:static`, which prerenders every page in
+every language into `.output/public`. It also saves the data each page loads
+during in-app navigation as JSON files (`/__tsr/staticServerFnCache/`), so the
+browser never calls a server function. Unknown paths get `404.html`, or
+`nl/404.html` under `/nl`.
+
+The static build has no drafts and no visual editor: `/__preview` pages,
+`?arecaPreview=` links and `/api/health` need the Node build (`build` or the
+Docker image). Content changes need a new build.
+
+[`wrangler.jsonc`](wrangler.jsonc) serves `.output/public` as Cloudflare Workers
+static assets, with no Worker script. To deploy from the Cloudflare dashboard
+(Workers & Pages → Create → Import a repository):
+
+| Setting | Value |
+| --- | --- |
+| Project name | `areca-demo` (must match `name` in `wrangler.jsonc`) |
+| Build command | `pnpm run cf:build:demo` |
+| Deploy command | `npx wrangler deploy --config examples/demo-site/wrangler.jsonc` |
+| Non-production branch deploy command | `npx wrangler versions upload --config examples/demo-site/wrangler.jsonc` |
+| Path (root directory) | `/` |
+| Build variables | `ARECA_CMS_URL`, and `ARECA_SITE_TOKEN` as a secret |
+
+The build variables let `prebuild` pull published content. To deploy the
+fixture content instead, use
+`pnpm --filter @areca/demo-site content:fixture && pnpm run cf:build:demo` as
+the build command and leave the variables out.
+
 ## Learn more
 
 - [SDK setup and examples](../../packages/site-sdk/README.md)
-- [Content schema guide](../../docs/CONTENT_SCHEMA.md)
-- [Site API contract](../../docs/API.md)
+- [Content schema guide](https://docs.arecacms.com/docs/sdk/defining-content)
+- [Site API contract](https://docs.arecacms.com/docs/sdk/http-api)

@@ -1,6 +1,6 @@
 # Site content (globals)
 
-Status: agreed 14 Oct 2026. This is the contract every package implements.
+Status: implemented. This is the design note written before the feature was built; the code and the [docs site](https://docs.arecacms.com) are the source of truth where they differ.
 
 ## What it is
 

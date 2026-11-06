@@ -1,6 +1,6 @@
 # Account management
 
-Status: agreed with the product owner on 23 Oct 2026. Branch `feat/account-management`, delivered as three stacked PRs.
+Status: implemented. This is the design note written before the feature was built; the code and the [docs site](https://docs.arecacms.com) are the source of truth where they differ.
 
 ## Goals
 
@@ -118,7 +118,7 @@ Layout uses the existing settings pattern (title column left, controls right, st
 ← People
 (avatar) Jane Doe   jane@acme.com                [⋯]
 Last active 2h ago · 2FA on · Agency admin [switch]
-[Blocked band when blocked: "Blocked 3 days ago by Emir" + Unblock]
+[Blocked band when blocked: "Blocked 3 days ago by Sam" + Unblock]
 ───────────────────────────────────────────────
 Clients      | access table: client · Owner|Editor · remove
              | + Add to clients… (searchable multi-select)
@@ -154,9 +154,3 @@ All copy in en, nl, tr via `scripts/i18n-add.mjs`.
 
 - PR 1 DB tests (`*.db.test.ts`): block blocks session creation and MCP auth; unblock restores; last active admin protections incl. concurrent case; delete keeps content with null authors; oauthClient survives; self-delete refused for sole owner; client access batch incl. last-owner error; reset 2FA; emails queued; audit rows.
 - PR 2/3 unit tests for UI helpers (staged diff summary, filters) and Playwright specs: block → blocked user cannot sign in → unblock; admin delete; access table add/change/remove; invite to several clients; bulk block; self rename, password change, self delete; mobile viewport (390) for the per-user page.
-
-## PRs
-
-1. Backend: migration, block/delete/access/security fns, MCP suspension, emails, audit, Cmd+K search fn, DB tests.
-2. Agency UI: people list upgrades, per-user page, bulk bar, invite sheet, Cmd+K people, author "Deleted user" labels, e2e.
-3. Account self-service (name, password, delete), docs (`apps/docs`), e2e.

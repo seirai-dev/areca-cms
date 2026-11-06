@@ -6,9 +6,10 @@ import { chromium } from '@playwright/test'
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { join } from 'node:path'
+import { CMS as cmsUrl, SITE as siteUrl } from './env.mjs'
 
-export const CMS = process.env.CMS_URL ?? 'https://areca.emirkaan-web.eu'
-export const SITE = `${CMS}/sites/ba7a872f-56e6-4519-9ac1-06344f56102a`
+export const CMS = cmsUrl()
+export const SITE = siteUrl()
 const STATE = process.env.ARECA_STATE ?? '/tmp/areca-landing/auth.json'
 const OUT = new URL('../public/clips/', import.meta.url).pathname
 const FRAMES = '/tmp/areca-landing/frames'

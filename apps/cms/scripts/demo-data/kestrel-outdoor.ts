@@ -20,10 +20,10 @@ const guideFields: Field[] = [
 export const kestrelOutdoor: DemoClient = {
   slug: 'kestrel-outdoor',
   name: 'Kestrel Outdoor Gear',
-  domain: 'kestreloutdoor.com',
-  owner: { name: 'Ben Hartley', email: 'ben@kestreloutdoor.com' },
-  editor: { name: 'Leah Osei', email: 'leah@kestreloutdoor.com' },
-  site: { name: 'kestreloutdoor.com', slug: 'kestrel-outdoor' },
+  domain: 'kestreloutdoor.example',
+  owner: { name: 'Ben Hartley', email: 'ben@kestreloutdoor.example' },
+  editor: { name: 'Leah Osei', email: 'leah@kestreloutdoor.example' },
+  site: { name: 'kestreloutdoor.example', slug: 'kestrel-outdoor' },
   images: [
     {
       key: 'alpineTent',

@@ -1,8 +1,9 @@
 # Code in rich text
 
-Blog posts need inline code and fenced code blocks with a language. This spec
-records the decisions from the 1 Nov 2026 grilling session and splits the
-work into three stacked PRs.
+Blog posts need inline code and fenced code blocks with a language. This note
+records the design decisions behind the feature.
+
+Status: implemented. This is the design note written before the feature was built; the code and the [docs site](https://docs.arecacms.com) are the source of truth where they differ.
 
 ## Starting point
 
@@ -95,50 +96,3 @@ work into three stacked PRs.
     (exports from `@tanstack/highlight/theme` and `@tanstack/highlight/themes/*`)
     or custom CSS for the `th-*` classes; sites rendering `document` themselves
     use `createTanStackMarkdownHighlighter`.
-
-## PR stack
-
-Branch base: `feat/code-blocks-rich-editor` (off `main`).
-
-### PR 1 — Content format (`feat/code-blocks-format`)
-
-- `pnpm add @tanstack/highlight` in `apps/cms`.
-- `src/lib/highlight.ts`: shared highlighter with the 17 languages, the
-  language list (id + label), and `normalizeCodeLanguage(raw)` returning a
-  supported id, `undefined` for plain text, or the raw string when unknown.
-- `server/richtext/extensions.ts`: enable `code` (excludes bold/italic, allows
-  link); `allowlist.ts`: add `code` mark.
-- `from-markdown.ts`: `inlineCode` → text with `code` mark (plus link when
-  nested); fence language normalised.
-- `markdown.ts` / `from-json.ts`: inline code serialised with a backtick run
-  that cannot close inside the text; links around code survive.
-- `document.ts`: highlighted `html` via the TanStack Markdown adapter.
-- `server/ai/translate.ts`: protect code with placeholders and restore.
-- Validation warning for unknown code languages where MCP writes are converted
-  (`server/mcp/entry-format.ts`), surfaced in the existing warnings list.
-- Tests: round-trip and fidelity tests, highlighted html snapshot, translation
-  placeholder test, alias normalisation.
-
-### PR 2 — Editor (`feat/code-blocks-editor`)
-
-- Inline code: format bar button, bubble button, ⌘E, tooltip/menu labels via
-  paraglide messages (all locales the app ships).
-- Code block extension (extend StarterKit's `codeBlock`): language attr parse
-  from `language-*` class with normalisation, ```` ```lang ```` input rule,
-  Tab/Shift+Tab, highlight decoration plugin, React node view or overlay for the
-  language button + searchable list (reuse existing popover / command
-  primitives).
-- Styles in `styles.css` for code block surface, language button and token
-  colours, light and dark.
-- e2e: inline code via ⌘E, set language, code survives save and reload.
-- Screenshots shown to the user before opening the PR.
-
-### PR 3 — Agents and docs (`feat/code-blocks-agents-docs`)
-
-- `server/mcp/server.ts`, `server/mcp/agency-server.ts`,
-  `server/mcp/schemas.ts`, `server/mcp/tools/*`: rich text format text with
-  inline code and a ```` ```ts ```` example, the id list, and the "code goes in
-  fences" rule; keep agency/site parity tests passing.
-- `skills/areca-mcp/references/content.md` (+ SKILL.md if needed),
-  `skills/areca-sdk`: format and highlight recipe; drift tests updated.
-- `apps/docs/content/docs/sdk/rich-text.mdx`: highlighting recipe.

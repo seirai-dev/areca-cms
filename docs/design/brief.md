@@ -1,6 +1,6 @@
 # Areca CMS — design brief (full UI/UX redo, 2026)
 
-Status: **Implemented on `feat/full-ui-redo`.** This was the binding specification for the rebuild of `apps/cms`; the few places where the build differs are listed under [Deviations from this brief](#deviations-from-this-brief) at the end. The living design-system guide is [`docs/DESIGN.md`](../DESIGN.md). Backend behaviour (server functions, permissions, DB) did **not** change; this was a presentation and interaction rebuild.
+Status: implemented. This is the design note written before the feature was built; the code and the [docs site](https://docs.arecacms.com) are the source of truth where they differ. Where the build differs from this brief is listed under [Deviations from this brief](#deviations-from-this-brief). The living design-system guide is [`docs/DESIGN.md`](../DESIGN.md).
 
 ---
 

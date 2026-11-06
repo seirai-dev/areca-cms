@@ -27,7 +27,7 @@ export const Route = createFileRoute('/docs/$')({
   },
   head: ({ loaderData }) => {
     if (!loaderData) return {}
-    const title = `${loaderData.title} · Areca Docs`
+    const title = `${loaderData.title} · Areca CMS Docs`
     const meta: Array<Record<string, string>> = [
       { title },
       { property: 'og:title', content: title },

@@ -19,10 +19,10 @@ const serviceFields: Field[] = [
 export const lumenDental: DemoClient = {
   slug: 'lumen-dental',
   name: 'Lumen Dental Studio',
-  domain: 'lumendentalstudio.com',
-  owner: { name: 'Dr. Niels Bakker', email: 'niels@lumendentalstudio.com' },
-  editor: { name: 'Sofie Janssen', email: 'sofie@lumendentalstudio.com' },
-  site: { name: 'lumendentalstudio.com', slug: 'lumen-dental' },
+  domain: 'lumendentalstudio.example',
+  owner: { name: 'Dr. Niels Bakker', email: 'niels@lumendentalstudio.example' },
+  editor: { name: 'Sofie Janssen', email: 'sofie@lumendentalstudio.example' },
+  site: { name: 'lumendentalstudio.example', slug: 'lumen-dental' },
   languages: { main: 'en', all: ['en', 'nl'] },
   images: [
     {

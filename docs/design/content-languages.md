@@ -1,7 +1,6 @@
 # Content languages (multilingual content)
 
-Status: agreed 15 Oct 2026. This is the contract every package implements.
-Supersedes `docs/DECISIONS.md` "Single language content".
+Status: implemented. This is the design note written before the feature was built; the code and the [docs site](https://docs.arecacms.com) are the source of truth where they differ.
 
 ## What it is
 
@@ -44,7 +43,6 @@ snapshot field, SDK type or MCP parameter changes for it.
 | SDK | Locale resolver wired once (Paraglide first-class via codegen; any library via a function), per-call `{ locale }` and scoped `content.in(locale)` overrides. |
 | MCP | Every content tool takes `locale`; site info reports languages; schema tools accept the new settings. |
 | Demo + docs | examples/demo-site becomes NL + EN with Paraglide, localized routes and a switcher. Docs: CMS Languages, SDK i18n (Paraglide + recipes for i18next, next-intl, vue-i18n, Lingui), MCP locale params. |
-| Delivery | Stacked PRs: (1) core model, (2) editor UI, (3) MCP + AI translate, (4) SDK, demo, docs. |
 
 ## Storage (CMS)
 

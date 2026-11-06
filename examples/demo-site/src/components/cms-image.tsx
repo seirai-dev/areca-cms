@@ -45,6 +45,15 @@ export function PreviewBanner({ incomplete = false }: { incomplete?: boolean }) 
   )
 }
 
+/** The page for a path the site does not have. */
+export function NotFoundMessage() {
+  return (
+    <PageMessage eyebrow={m.error_404_eyebrow()} title={m.error_404_title()}>
+      {m.error_404_body()}
+    </PageMessage>
+  )
+}
+
 export function PageMessage({
   title,
   eyebrow,

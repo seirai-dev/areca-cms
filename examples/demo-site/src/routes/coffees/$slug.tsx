@@ -4,10 +4,11 @@ import { CoffeeView } from '../../components/coffee-view.tsx'
 import { PageMessage } from '../../components/cms-image.tsx'
 import { loadCoffee } from '../../lib/queries.ts'
 import { entryHead, pageHead } from '../../lib/seo.ts'
+import { currentLocale } from '../../lib/i18n.ts'
 
 export const Route = createFileRoute('/coffees/$slug')({
   loader: async ({ params }) => {
-    const data = await loadCoffee({ data: { slug: params.slug } })
+    const data = await loadCoffee({ data: { locale: currentLocale(), slug: params.slug } })
     if (!data) throw notFound()
     return data
   },

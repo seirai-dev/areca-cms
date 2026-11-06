@@ -2,12 +2,12 @@ import { createFileRoute } from '@tanstack/react-router'
 import { m } from '#/paraglide/messages'
 import { ArticleCard } from '../../components/article-card.tsx'
 import { Eyebrow } from '../../components/ui.tsx'
-import { pageAlternates } from '../../lib/i18n.ts'
+import { currentLocale, pageAlternates } from '../../lib/i18n.ts'
 import { loadJournal } from '../../lib/queries.ts'
 import { pageHead } from '../../lib/seo.ts'
 
 export const Route = createFileRoute('/journal/')({
-  loader: async () => ({ articles: await loadJournal() }),
+  loader: async () => ({ articles: await loadJournal({ data: { locale: currentLocale() } }) }),
   head: () => pageHead({ title: m.journal_title(), description: m.meta_journal_description() }, pageAlternates('/journal')),
   component: JournalIndex,
 })

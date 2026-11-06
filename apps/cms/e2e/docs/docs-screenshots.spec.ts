@@ -37,9 +37,9 @@ const SHOTS = fileURLToPath(
 )
 
 const ADMIN = 'admin@areca.local'
-const HARBOR_OWNER = 'ruth@harborandpine.com'
-const NORTHWIND_OWNER = 'sam@northwindcc.org'
-const LUMEN_OWNER = 'niels@lumendentalstudio.com'
+const HARBOR_OWNER = 'ruth@harborandpine.example'
+const NORTHWIND_OWNER = 'sam@northwindcc.example'
+const LUMEN_OWNER = 'niels@lumendentalstudio.example'
 
 /** Demo admin's authenticator secret (scripts/demo-seed.ts, docs/DEVELOPMENT.md). */
 const ADMIN_TOTP_BASE32 = 'MFZGKY3BFVSGK3LPFV2G65DQFVZWKY3SMV2A'
@@ -640,7 +640,7 @@ test.describe('documentation screenshots', () => {
       await admin.getByTestId('site-slug').fill('harbor-and-pine')
       await admin
         .getByTestId('site-production-url')
-        .fill('https://harborandpine.com')
+        .fill('https://harborandpine.example')
       await shot(admin, 'guide-create-site.png')
       await closeWithEscape(admin)
     })
@@ -662,7 +662,7 @@ test.describe('documentation screenshots', () => {
       await admin.getByTestId('site-name').fill('Harbor & Pine')
       await admin
         .getByTestId('site-production-url')
-        .fill('https://harborandpine.com')
+        .fill('https://harborandpine.example')
       await admin.getByTestId('create-site').click()
       await expect(admin.getByTestId('site-token-value').first()).toBeVisible({
         timeout: 30_000,

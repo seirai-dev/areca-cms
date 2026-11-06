@@ -4,10 +4,11 @@ import { AuthorView } from '../../components/author-view.tsx'
 import { PageMessage } from '../../components/cms-image.tsx'
 import { loadAuthor } from '../../lib/queries.ts'
 import { entryHead, pageHead } from '../../lib/seo.ts'
+import { currentLocale } from '../../lib/i18n.ts'
 
 export const Route = createFileRoute('/team/$slug')({
   loader: async ({ params }) => {
-    const data = await loadAuthor({ data: { slug: params.slug } })
+    const data = await loadAuthor({ data: { locale: currentLocale(), slug: params.slug } })
     if (!data) throw notFound()
     return data
   },

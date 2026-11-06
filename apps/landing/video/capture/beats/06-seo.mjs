@@ -1,6 +1,7 @@
 // Generate SEO and answer-engine fields with AI, review, apply.
 import { session, SITE } from '../harness.mjs'
-const ENTRY = `${SITE}/c/coffees/15e9aebd-1499-4697-a2e6-17356875b8a5`
+import { env } from '../env.mjs'
+const ENTRY = `${SITE}/c/${env('CAPTURE_ENTRY_PATH')}`
 const r = await session('06-seo')
 const { page } = r
 await r.goto(ENTRY)

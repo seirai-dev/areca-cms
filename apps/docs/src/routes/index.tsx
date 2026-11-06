@@ -65,7 +65,7 @@ function Home() {
     <HomeLayout {...baseOptions()}>
       <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-6 py-16 md:py-24">
         <p className="mb-3 text-sm font-medium text-fd-primary">
-          Areca documentation
+          Areca CMS documentation
         </p>
         <h1 className="max-w-2xl text-4xl font-semibold tracking-tight md:text-5xl">
           The CMS for agency-managed websites.

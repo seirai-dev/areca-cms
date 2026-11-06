@@ -1,10 +1,10 @@
-# Areca CMS — Architecture decisions (read before working)
+# Areca CMS design decisions
 
 Areca is a **build-time CMS**: editors author content in the CMS, publishing creates an immutable
 content snapshot, and a build job either deploys the customer's site in Production mode or records
 a clearly labeled Demo publication without production deployment. Production site builds fetch the
 pinned snapshot **at build time** and prerender it. Visitors normally do not call the CMS for content.
-Full background: `PROJECT.md`. This file lists the concrete decisions taken for the implementation.
+This file lists the product and architecture decisions behind the code, and the things Areca CMS deliberately does not do. Read it before proposing a large change: a pull request that goes against one of these needs a good reason.
 
 ## Principles
 

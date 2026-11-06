@@ -1,6 +1,7 @@
-# PR 2 — Account emails: implementation contract
+# Account emails: implementation contract
 
-Branch `feature/account-emails` (stacked on `feature/mail-foundation`).
+Status: implemented. This is the design note written before the feature was built; the code and the [docs site](https://docs.arecacms.com) are the source of truth where they differ.
+
 Parent spec: `docs/design/email-notifications.md`. This file pins the names
 and shapes so server, UI and docs work can run in parallel.
 

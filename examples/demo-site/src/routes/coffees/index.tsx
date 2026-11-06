@@ -2,12 +2,12 @@ import { createFileRoute } from '@tanstack/react-router'
 import { m } from '#/paraglide/messages'
 import { CoffeeCard } from '../../components/coffee-card.tsx'
 import { Eyebrow } from '../../components/ui.tsx'
-import { pageAlternates } from '../../lib/i18n.ts'
+import { currentLocale, pageAlternates } from '../../lib/i18n.ts'
 import { loadCoffees } from '../../lib/queries.ts'
 import { pageHead } from '../../lib/seo.ts'
 
 export const Route = createFileRoute('/coffees/')({
-  loader: () => loadCoffees(),
+  loader: () => loadCoffees({ data: { locale: currentLocale() } }),
   head: () =>
     pageHead(
       { title: m.coffees_title(), description: m.meta_coffees_description() },

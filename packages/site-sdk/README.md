@@ -1,12 +1,17 @@
 # `@areca-cms/site-sdk`
 
+[![npm](https://img.shields.io/npm/v/@areca-cms/site-sdk)](https://www.npmjs.com/package/@areca-cms/site-sdk)
+[![MIT license](https://img.shields.io/npm/l/@areca-cms/site-sdk)](https://github.com/seirai-dev/areca-cms/blob/main/LICENSE)
+
+Part of [Areca CMS](https://arecacms.com), the open-source CMS for agencies. [Documentation](https://docs.arecacms.com/docs/sdk) · [GitHub](https://github.com/seirai-dev/areca-cms) · [Example site](https://github.com/seirai-dev/areca-cms/tree/main/examples/demo-site)
+
 Connect a Node.js website to an existing Areca CMS site. The SDK publishes the
 site's content schema, downloads the current published snapshot, and fetches
 draft entries for preview. It does not create a CMS site or generate frontend
 routes.
 
-For a step-by-step integration guide, see the repository's
-[SDK guide](../../docs/SDK.md). Using an AI coding agent? Run
+For a step-by-step integration guide, see the
+[SDK guide](https://docs.arecacms.com/docs/sdk). Using an AI coding agent? Run
 `npx @areca-cms/skills` to teach it this SDK and the Areca MCP server.
 
 Requires Node.js 22.6 or newer. Node 24 LTS is recommended for direct import of
@@ -301,9 +306,9 @@ HTML. For custom rendering, pass a `components` map to `Markdown`. The SDK uses
 ## SEO metadata
 
 For the editor and agency workflow that produces these metadata fields, see
-the repository's [SEO guide](../../docs/SEO.md). For CMS roles and release
-steps, see the [editor guide](../../docs/CMS_GUIDE.md) and
-[agency admin guide](../../docs/ADMIN_GUIDE.md).
+the repository's [SEO guide](https://docs.arecacms.com/docs/sdk/seo). For CMS roles and release
+steps, see the [editor guide](https://docs.arecacms.com/docs/cms) and
+[agency admin guide](https://docs.arecacms.com/docs/cms/clients-and-sites).
 
 Newer snapshots include a resolved `entry.seo` object. Older snapshots may not,
 so accept `undefined`. `seoHead()` produces TanStack Router head data, including
@@ -465,7 +470,7 @@ object uses those names. Site content keys follow the same rules. Field types
 are `text`, `textarea`, `richtext`, `image`, `date`, `datetime`, `select`,
 `reference`, `slug`, `boolean`, `number`, and `url`. `select` uses `options`,
 `reference` uses `collection`, and date ordering can use `after` to refer to
-another date/datetime field. See [the content schema guide](../../docs/CONTENT_SCHEMA.md)
+another date/datetime field. See [the content schema guide](https://docs.arecacms.com/docs/sdk/defining-content)
 for complete field details and examples.
 
 ## Public exports

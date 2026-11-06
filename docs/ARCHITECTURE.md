@@ -2,7 +2,7 @@
 
 Areca separates authoring from website delivery. The CMS stores drafts, approvals, media, and publishing history. The website uses the SDK to pull an immutable content snapshot during its build, then serves that built content to visitors.
 
-For setup instructions, use [onboarding](ONBOARDING.md). For website code, use the [SDK guide](SDK.md).
+For setup instructions, use [onboarding](https://docs.arecacms.com/docs/quickstart). For website code, use the [SDK guide](https://docs.arecacms.com/docs/sdk).
 
 ## Organizations, sites, and access
 
@@ -16,7 +16,7 @@ The media library is scoped to the organization. Sites belonging to the same cli
 
 A collection describes its fields and route, such as Articles at `/blog/$slug`. Developers declare collections in `areca.config.ts` and push that manifest to the CMS. Agency admins can also manage content types in the CMS. Owners and editors fill in those fields.
 
-Pushing a manifest changes the CMS schema; it does not build page components. Your website still implements its routes and rendering. A schema change may make older content invalid, so review entries before the next release. See [content schemas](CONTENT_SCHEMA.md).
+Pushing a manifest changes the CMS schema; it does not build page components. Your website still implements its routes and rendering. A schema change may make older content invalid, so review entries before the next release. See [content schemas](https://docs.arecacms.com/docs/sdk/defining-content).
 
 ## Site content (globals)
 
@@ -59,7 +59,7 @@ Sites default to **Production** mode, which requires a deployment target and a p
 
 The worker and scheduler run inside the CMS server when `WORKER_ENABLED` is enabled. Work is stored in PostgreSQL. Database claims, leases, and heartbeats coordinate jobs across processes; only one active or uncertain deployment is allowed per site and per shared Dokploy application. Global concurrency is configurable.
 
-A lost deployment response may leave the dispatch outcome uncertain. The worker reconciles it rather than blindly dispatching again. See [integration reliability](INTEGRATIONS.md) and [operations](OPERATIONS.md) before resolving such a job manually.
+A lost deployment response may leave the dispatch outcome uncertain. The worker reconciles it rather than blindly dispatching again. See [integration reliability](INTEGRATIONS.md) and [operations](https://docs.arecacms.com/docs/self-hosting/operations) before resolving such a job manually.
 
 ### Releases and rollback
 
@@ -77,7 +77,7 @@ A snapshot also carries enabled site content sections as `globals`, keyed by raw
 
 `areca pull` writes one JSON file per collection, `_globals.json` for site content (when there are sections), and `manifest.json` with publication ID, hash, creation time, and counts. Read these files at build time or import them through your framework. Keep the SDK token on the build/server side.
 
-Snapshot metadata is immutable. Assets are still external resources: retained publications protect referenced media from cleanup, and public asset delivery depends on the CMS/storage deployment. See [asset retention](ASSET_RETENTION.md).
+Snapshot metadata is immutable. Assets are still external resources: retained publications protect referenced media from cleanup, and public asset delivery depends on the CMS/storage deployment. See [asset retention](https://docs.arecacms.com/docs/self-hosting/asset-retention).
 
 ## Preview
 
@@ -91,11 +91,11 @@ Anyone holding a valid preview link can view that draft until it expires. Avoid 
 
 SEO/GEO settings are saved with each entry's draft and follow the same approval and release workflow. The CMS resolves defaults, sharing metadata, and structured data into `entry.seo`; the website emits them using SDK helpers. Summaries, FAQs, and key takeaways also need visible website rendering where appropriate.
 
-AI SEO generation is optional. Agency admins configure an encrypted OpenRouter key and models; a site's additional prompt guides suggestions. Generation proposes edits for review and does not publish them. See [SEO and AI](SEO.md).
+AI SEO generation is optional. Agency admins configure an encrypted OpenRouter key and models; a site's additional prompt guides suggestions. Generation proposes edits for review and does not publish them. See [SEO and AI](https://docs.arecacms.com/docs/sdk/seo).
 
 ## AI apps (MCP)
 
-Each site has a connector URL at `/api/mcp/<site-slug>`. An AI app connects to it by signing the user in through OAuth 2.1 (the CMS is the authorization server, built on `@better-auth/oauth-provider`), and the user approves the app for that site on a consent screen. Each request re-checks the access token, the app's connection to the site, and the user's live role on that site, then runs the same kind of checks as the CMS screens. Personal keys for scripts use the same checks through `/api/mcp`. Agency admins have one more connector, `/api/agency/mcp`, which reaches every client and site: each tool takes a `site` argument, the tools are generated from the same per-site list, and the agency address answers non-admins as if it did not exist. Discovery documents are served from the origin root. Tools are registered only for the roles that may use them. Writes go through the same services as the UI, so drafts, publishing and activity behave identically. Tool results report errors in plain language for the model. See [MCP.md](MCP.md).
+Each site has a connector URL at `/api/mcp/<site-slug>`. An AI app connects to it by signing the user in through OAuth 2.1 (the CMS is the authorization server, built on `@better-auth/oauth-provider`), and the user approves the app for that site on a consent screen. Each request re-checks the access token, the app's connection to the site, and the user's live role on that site, then runs the same kind of checks as the CMS screens. Personal keys for scripts use the same checks through `/api/mcp`. Agency admins have one more connector, `/api/agency/mcp`, which reaches every client and site: each tool takes a `site` argument, the tools are generated from the same per-site list, and the agency address answers non-admins as if it did not exist. Discovery documents are served from the origin root. Tools are registered only for the roles that may use them. Writes go through the same services as the UI, so drafts, publishing and activity behave identically. Tool results report errors in plain language for the model. See [Connect AI](https://docs.arecacms.com/docs/cms/connect-ai).
 
 ## Repository map
 

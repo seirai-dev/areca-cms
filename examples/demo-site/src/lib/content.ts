@@ -90,7 +90,7 @@ export function tastingNotes(coffee: CoffeesEntry): string[] {
 export function listPrerenderPages(): string[] {
   const pages = new Set<string>()
   for (const locale of LOCALES) {
-    for (const path of ['/', '/coffees', '/journal', '/team', '/about']) {
+    for (const path of ['/', '/coffees', '/journal', '/team', '/about', '/404']) {
       pages.add(localizedPath(path, locale))
     }
   }

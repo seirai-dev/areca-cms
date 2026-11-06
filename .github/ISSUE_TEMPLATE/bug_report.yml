@@ -1,0 +1,57 @@
+name: Bug report
+description: Something in the CMS, the SDK, the skills or the docs doesn't work as described.
+labels: ['bug', 'needs triage']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this. Please check [the troubleshooting page](https://docs.arecacms.com/docs/troubleshooting) and the existing issues first.
+        **Security problems don't belong here:** see [SECURITY.md](https://github.com/seirai-dev/areca-cms/blob/main/SECURITY.md).
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where does it happen?
+      options:
+        - CMS (editor, publishing, settings)
+        - Site SDK or the areca CLI
+        - MCP connector or agent skills
+        - Self-hosting (Docker, deployment, upgrades)
+        - Documentation
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead. Screenshots help.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a site and go to ...
+        2. Click ...
+        3. See ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The CMS image tag (e.g. `v0.1.3` or `edge`), the `@areca-cms/site-sdk` version, or the commit you run.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: How you run it (Docker Compose, Dokploy, local dev), the browser, and the Node version for SDK problems.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or error messages
+      description: Remove tokens, passwords and personal data before pasting.
+      render: shell

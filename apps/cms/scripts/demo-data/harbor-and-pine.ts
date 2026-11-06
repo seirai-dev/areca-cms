@@ -37,11 +37,11 @@ const companyFields: Field[] = [
 export const harborAndPine: DemoClient = {
   slug: 'harbor-and-pine',
   name: 'Harbor & Pine Bakery',
-  domain: 'harborandpine.com',
-  owner: { name: 'Ruth Okafor', email: 'ruth@harborandpine.com' },
-  editor: { name: 'Tom Brandt', email: 'tom@harborandpine.com' },
-  pendingInvite: { email: 'jamie@harborandpine.com', role: 'editor' },
-  site: { name: 'harborandpine.com', slug: 'harborandpine' },
+  domain: 'harborandpine.example',
+  owner: { name: 'Ruth Okafor', email: 'ruth@harborandpine.example' },
+  editor: { name: 'Tom Brandt', email: 'tom@harborandpine.example' },
+  pendingInvite: { email: 'jamie@harborandpine.example', role: 'editor' },
+  site: { name: 'harborandpine.example', slug: 'harborandpine' },
   images: [
     {
       key: 'starter',

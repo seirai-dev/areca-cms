@@ -1,6 +1,7 @@
-# PR 3 — Notifications: implementation contract
+# Notifications: implementation contract
 
-Branch `feature/notifications` (stacked on `feature/account-emails`).
+Status: implemented. This is the design note written before the feature was built; the code and the [docs site](https://docs.arecacms.com) are the source of truth where they differ.
+
 Parent spec: `docs/design/email-notifications.md` (events, resolution order,
 storage). This file pins names and shapes so server, UI and docs work can run
 in parallel. Where this file and the spec differ, this file wins.
