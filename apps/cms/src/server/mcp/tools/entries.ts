@@ -388,10 +388,15 @@ export function registerEntryTools(registry: ToolCollector): void {
       const col = await loadCollectionInSite(actor, input.collection)
       const limit = input.limit ?? 20
       const offset = input.offset ?? 0
-      const target = resolveLocale(
-        await loadSiteLanguages(actor.siteId),
-        input.missingLanguage,
-      )
+      // Only filter when the caller asks for a language. resolveLocale falls
+      // back to the main language, which would hide every complete entry.
+      const target =
+        input.missingLanguage === undefined
+          ? null
+          : resolveLocale(
+              await loadSiteLanguages(actor.siteId),
+              input.missingLanguage,
+            )
       const [result, release] = await Promise.all([
         listEntries(actor.siteId, col.key, {
           status: input.status ? storedStatus(input.status) : undefined,

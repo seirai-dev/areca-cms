@@ -1,4 +1,4 @@
-import { and, eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray, sql } from 'drizzle-orm'
 import {
   Client,
   StreamableHTTPClientTransport,
@@ -369,6 +369,41 @@ describe.skipIf(!hasDb)('MCP with content languages', () => {
       )
       expect(ids).not.toContain(complete.id)
       expect(ids.length).toBeGreaterThan(0)
+    })
+
+    it('lists every entry when list_entries has no missingLanguage', async () => {
+      // Complete in the main language, so a main-language "missing" filter
+      // would hide it. Without missingLanguage nothing may be filtered out.
+      const complete = await createVacancy(owner, 'Opperman', 'opperman')
+      const listed = await call(owner, 'list_entries', {
+        collection: 'vacancies',
+        limit: 100,
+      })
+      expect(listed.isError).toBe(false)
+      const ids = (listed.data?.items as { id: string }[]).map(
+        (item) => item.id,
+      )
+      expect(ids).toContain(complete.id)
+
+      const [{ count }] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(entry)
+        .innerJoin(collection, eq(entry.collectionId, collection.id))
+        .where(
+          and(
+            eq(entry.siteId, world.ctx.site.id),
+            eq(collection.key, 'vacancies'),
+          ),
+        )
+      expect(listed.data?.total).toBe(count)
+
+      const searched = await call(owner, 'list_entries', {
+        collection: 'vacancies',
+        search: 'opperman',
+      })
+      expect(
+        (searched.data?.items as { id: string }[]).map((item) => item.id),
+      ).toContain(complete.id)
     })
 
     it('rejects a locale for list_entries that the site does not have', async () => {
