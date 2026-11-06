@@ -10,6 +10,7 @@ import { membership, site, user } from '#/db/schema'
 import {
   cleanupTestSite,
   createTestCollection,
+  createTestGlobal,
   createTestSite,
 } from '#/server/content/test-utils'
 
@@ -132,5 +133,111 @@ describe.skipIf(!hasDb)('MCP rich text links', () => {
     const fetched = await call(client, 'get_entry', { id })
     expect(fetched.isError).toBe(false)
     expect(fetched.text).toContain('(/coffees/ethiopia#origin)')
+  })
+})
+
+const DROPPED_LINK =
+  'Removed the link to "//evil.com": links must be https://, mailto:, a site path like /page or an anchor like #section.'
+
+describe.skipIf(!hasDb)('MCP rich text link warnings on updates', () => {
+  let ctx: Awaited<ReturnType<typeof createTestSite>>
+  let client: Client
+  let entryId: string
+
+  beforeAll(async () => {
+    ctx = await createTestSite({
+      languages: { main: 'nl', all: ['nl', 'en'] },
+    })
+    await createTestCollection(ctx.site.id, {
+      key: 'coffees',
+      routePattern: '/coffees/$slug',
+      fields,
+    })
+    await createTestGlobal(ctx.site.id, {
+      key: 'home',
+      fields: [{ key: 'intro', label: 'Intro', type: 'richtext' }],
+    })
+    await db.insert(membership).values({
+      userId: ctx.actor.id,
+      organizationId: ctx.org.id,
+      role: 'owner',
+    })
+    const created = await createMcpKey({
+      userId: ctx.actor.id,
+      siteId: ctx.site.id,
+      organizationId: ctx.org.id,
+      name: 'owner key',
+      expiresInDays: 90,
+      allowGoLive: false,
+      role: 'owner',
+    })
+    client = await connect(created.token)
+    const entry = await call(client, 'create_entry', {
+      collection: 'coffees',
+      fields: { title: 'Sidamo', slug: 'sidamo', body: 'Een kopje.' },
+    })
+    expect(entry.isError).toBe(false)
+    entryId = String(entry.data?.id)
+  })
+
+  afterAll(async () => {
+    await db.delete(site).where(eq(site.id, ctx.site.id))
+    await cleanupTestSite(ctx)
+    await db.delete(user).where(inArray(user.id, [ctx.actor.id]))
+  })
+
+  it('returns the dropped-link warning from update_entry', async () => {
+    const updated = await call(client, 'update_entry', {
+      id: entryId,
+      fields: { body: 'Lees [de notities](//evil.com) eerst.' },
+    })
+    expect(updated.isError).toBe(false)
+    expect(updated.data?.warnings).toEqual([DROPPED_LINK])
+    expect(updated.text).toContain('de notities')
+  })
+
+  it('returns the dropped-link warning from a localized update_entry', async () => {
+    const updated = await call(client, 'update_entry', {
+      id: entryId,
+      locale: 'en',
+      fields: { body: 'Read [the notes](//evil.com) first.' },
+    })
+    expect(updated.isError).toBe(false)
+    expect(updated.data?.warnings).toEqual([DROPPED_LINK])
+    expect(updated.text).toContain('the notes')
+  })
+
+  it('returns the dropped-link warning from update_global', async () => {
+    const updated = await call(client, 'update_global', {
+      global: 'home',
+      fields: { intro: 'Lees [de notities](//evil.com) eerst.' },
+    })
+    expect(updated.isError).toBe(false)
+    expect(updated.data?.warnings).toEqual([DROPPED_LINK])
+    expect(updated.text).toContain('de notities')
+  })
+
+  it('returns the dropped-link warning from a localized update_global', async () => {
+    const updated = await call(client, 'update_global', {
+      global: 'home',
+      locale: 'en',
+      fields: { intro: 'Read [the notes](//evil.com) first.' },
+    })
+    expect(updated.isError).toBe(false)
+    expect(updated.data?.warnings).toEqual([DROPPED_LINK])
+    expect(updated.text).toContain('the notes')
+  })
+
+  it('stays silent when the links are allowed', async () => {
+    const updated = await call(client, 'update_global', {
+      global: 'home',
+      locale: 'en',
+      fields: {
+        intro:
+          'See [the FAQ](/coffees/sidamo#faq) and [us](https://example.com).',
+      },
+    })
+    expect(updated.isError).toBe(false)
+    expect(updated.data?.warnings).toBeUndefined()
   })
 })
