@@ -31,10 +31,12 @@ export const richTextExtensions: Extensions = [
   Link.extend({
     renderHTML({ HTMLAttributes }) {
       const { rel: _rel, target: _target, ...rest } = HTMLAttributes
-      const href = typeof rest.href === 'string' ? rest.href : ''
+      // Keep the base Link's safety net: a disallowed href renders empty.
+      const raw = typeof rest.href === 'string' ? rest.href : ''
+      const href = isAllowedLinkHref(raw) ? raw : ''
       const attributes = isInternalHref(href)
-        ? rest
-        : { ...rest, rel: 'noopener noreferrer', target: '_blank' }
+        ? { ...rest, href }
+        : { ...rest, href, rel: 'noopener noreferrer', target: '_blank' }
       return ['a', mergeAttributes(attributes), 0]
     },
   }).configure({
