@@ -2,6 +2,12 @@
 
 All notable changes to `@areca-cms/skills`.
 
+## 0.9.0 (2026-11-06)
+
+### Features
+
+- **mcp:** upload links for local files and chat attachments (a94fb0d)
+
 ## 0.8.0 (2026-10-30)
 
 ### Features
