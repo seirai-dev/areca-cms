@@ -89,9 +89,9 @@ jobs:
     steps:
       - uses: useblacksmith/checkout@v1
         if: ${{ !github.event.pull_request.head.repo.fork }}
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         if: ${{ github.event.pull_request.head.repo.fork }}
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
       - run: npm install --global "pnpm@${PNPM_VERSION}"
@@ -202,9 +202,9 @@ jobs:
     steps:
       - uses: useblacksmith/checkout@v1
         if: ${{ !github.event.pull_request.head.repo.fork }}
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         if: ${{ github.event.pull_request.head.repo.fork }}
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
       - run: npm install --global "pnpm@${PNPM_VERSION}"
@@ -319,9 +319,9 @@ jobs:
     steps:
       - uses: useblacksmith/checkout@v1
         if: ${{ !github.event.pull_request.head.repo.fork }}
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         if: ${{ github.event.pull_request.head.repo.fork }}
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
       - run: npm install --global "pnpm@${PNPM_VERSION}"
@@ -416,13 +416,13 @@ jobs:
           # The secret scan reads the full git history.
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         if: ${{ github.event.pull_request.head.repo.fork }}
         with:
           # The secret scan reads the full git history.
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
       - run: npm install --global "pnpm@${PNPM_VERSION}"
