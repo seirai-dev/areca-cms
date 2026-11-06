@@ -113,6 +113,21 @@ const representativeDoc = {
   ],
 }
 
+/**
+ * Runs the link parse rule on an `<a href>` element, as the editor does when
+ * text is pasted. jsdom is not installed, so the element is a stub with only
+ * the `href` attribute, which is all the rule reads.
+ */
+function parsePastedLink(href: string): unknown {
+  const schema = getSchema(richTextExtensions)
+  const rule = schema.marks.link.spec.parseDOM?.[0]
+  const element = {
+    getAttribute: (name: string) => (name === 'href' ? href : null),
+  } as unknown as HTMLElement
+  const getAttrs = rule?.getAttrs as ((node: unknown) => unknown) | undefined
+  return getAttrs ? getAttrs(element) : false
+}
+
 describe('rich text extensions', () => {
   it('renders external links in a new tab and site paths and anchors in the same tab', () => {
     const schema = getSchema(richTextExtensions)
@@ -133,6 +148,27 @@ describe('rich text extensions', () => {
       expect(attrs).toMatchObject({ href })
       expect(attrs).not.toHaveProperty('target')
       expect(attrs).not.toHaveProperty('rel')
+    }
+  })
+
+  it('keeps a pasted site path link and drops javascript: and protocol-relative links', () => {
+    // The editor parses pasted <a href> with the schema's parse rule. A rule
+    // that returns false leaves the text without a link.
+    expect(parsePastedLink('/ok')).toMatchObject({ href: '/ok' })
+    expect(parsePastedLink('javascript:alert(1)')).toBe(false)
+    expect(parsePastedLink('//evil.com')).toBe(false)
+    expect(parsePastedLink('/\u0085evil')).toBe(false)
+  })
+
+  it('renders a stored disallowed href with an empty href', () => {
+    const link = getSchema(richTextExtensions).marks.link
+    for (const href of ['javascript:alert(1)', '//evil.com', '/\u0080x']) {
+      const spec = link.spec.toDOM?.(link.create({ href }), true) as [
+        string,
+        Record<string, unknown>,
+        number,
+      ]
+      expect(spec[1].href).toBe('')
     }
   })
 
@@ -183,6 +219,38 @@ describe('validateRichText', () => {
       expect(validateRichText(linkDoc(href))).toContain(
         'Link href uses a disallowed protocol',
       )
+    }
+  })
+
+  it('rejects control, zero-width and bidi characters in link hrefs', () => {
+    const linkDoc = (href: string) => ({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'text',
+              text: 'x',
+              marks: [{ type: 'link', attrs: { href } }],
+            },
+          ],
+        },
+      ],
+    })
+    for (const href of [
+      '/\u0085evil',
+      '/\u0080evil',
+      '/\u009fevil',
+      '/a​b',
+      '/a‍b',
+      'https://x.com/a‮b',
+      'https://x.com/a⁦b',
+    ]) {
+      expect(validateRichText(linkDoc(href))).toContain(
+        'Link href uses a disallowed protocol',
+      )
+      expect(() => convertRichText(linkDoc(href))).toThrow(ValidationError)
     }
   })
 
@@ -343,6 +411,74 @@ describe('convertRichText', () => {
     expect(result.html).toContain('href="#faq"')
     // The published html never adds a target: the site decides how to open links.
     expect(result.html).not.toContain('target=')
+  })
+
+  it('opens only external links in a new tab in the published html', () => {
+    const link = (text: string, href: string) => ({
+      type: 'text',
+      text,
+      marks: [{ type: 'link', attrs: { href } }],
+    })
+    const result = convertRichText({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            link('External', 'https://example.com/guide'),
+            { type: 'text', text: ' ' },
+            link('Coffees', '/coffees/ethiopia#origin'),
+            { type: 'text', text: ' ' },
+            link('FAQ', '#faq'),
+            { type: 'text', text: ' ' },
+            link('Mail', 'mailto:hello@example.com'),
+          ],
+        },
+      ],
+    })
+    expect(result.html).toContain(
+      '<a href="https://example.com/guide" target="_blank" rel="noopener noreferrer">External</a>',
+    )
+    expect(result.html).toContain(
+      '<a href="/coffees/ethiopia#origin">Coffees</a>',
+    )
+    expect(result.html).toContain('<a href="#faq">FAQ</a>')
+    expect(result.html).toContain('<a href="mailto:hello@example.com">Mail</a>')
+    // Only the one external link gets a target.
+    expect(result.html.match(/target="_blank"/g)).toHaveLength(1)
+    // The Markdown export is unchanged by how the html is rendered.
+    expect(result.markdown).toBe(
+      '[External](https://example.com/guide) [Coffees](/coffees/ethiopia#origin) [FAQ](#faq) [Mail](mailto:hello@example.com)',
+    )
+  })
+
+  it('escapes an external href and keeps the new-tab attributes', () => {
+    const result = convertRichText({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'text',
+              text: 'Site',
+              marks: [
+                {
+                  type: 'link',
+                  attrs: { href: 'https://example.com/?a=1&b="2"' },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    })
+    expect(result.html).toContain(
+      'href="https://example.com/?a=1&amp;b=&quot;2&quot;"',
+    )
+    expect(result.html).toContain(
+      'target="_blank" rel="noopener noreferrer">Site</a>',
+    )
   })
 
   it('converts a representative doc to html and markdown', () => {
