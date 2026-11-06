@@ -28,6 +28,16 @@ export type MarkdownToRichTextOptions = {
    * the image.
    */
   resolveAssetSrc?: (assetId: string) => string | null
+  /**
+   * Called with a message for each link that was dropped. The text of a
+   * dropped link is kept as plain text.
+   */
+  onWarning?: (message: string) => void
+}
+
+/** Warning for a Markdown link whose href is not allowed (see isAllowedLinkHref). */
+export function droppedLinkWarning(href: string): string {
+  return `Removed the link to "${href}": links must be https://, mailto:, a site path like /page or an anchor like #section.`
 }
 
 type Mark =
@@ -385,12 +395,18 @@ export function markdownToRichText(
   const document = parseMarkdown(markdown, {
     frontmatter: false,
     // The default transform blanks every non-http(s) scheme, which would
-    // erase `asset:` references before they can be resolved. Only image
-    // sources are exempt; links keep the default (javascript: etc. blanked).
-    urlTransform: (url, kind, defaultUrl) =>
-      kind === 'image' && url.trim().startsWith(ASSET_SRC_PREFIX)
-        ? url.trim()
-        : defaultUrl,
+    // erase `asset:` references before they can be resolved. Images keep the
+    // `asset:` form; links use our own check instead of the default.
+    urlTransform: (url, kind, defaultUrl) => {
+      if (kind === 'image') {
+        return url.trim().startsWith(ASSET_SRC_PREFIX) ? url.trim() : defaultUrl
+      }
+      // Returning null drops the link and keeps its text. Checked on the raw
+      // href: the default sanitizer would silently strip spaces from it.
+      if (isAllowedLinkHref(url)) return url
+      options.onWarning?.(droppedLinkWarning(url))
+      return null
+    },
   })
   return {
     type: 'doc',

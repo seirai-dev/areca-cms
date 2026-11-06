@@ -1,3 +1,4 @@
+import { getSchema } from '@tiptap/core'
 import { ValidationError } from '#/server/content/errors'
 import { describe, expect, it } from 'vitest'
 
@@ -113,6 +114,28 @@ const representativeDoc = {
 }
 
 describe('rich text extensions', () => {
+  it('renders external links in a new tab and site paths and anchors in the same tab', () => {
+    const schema = getSchema(richTextExtensions)
+    const link = schema.marks.link
+    const attrsFor = (href: string) => {
+      const spec = link.spec.toDOM?.(link.create({ href }), true)
+      return (spec as [string, Record<string, unknown>, number])[1]
+    }
+    for (const href of ['https://example.com', 'mailto:a@b.co']) {
+      expect(attrsFor(href)).toMatchObject({
+        href,
+        target: '_blank',
+        rel: 'noopener noreferrer',
+      })
+    }
+    for (const href of ['/coffees/x#faq', '#faq']) {
+      const attrs = attrsFor(href)
+      expect(attrs).toMatchObject({ href })
+      expect(attrs).not.toHaveProperty('target')
+      expect(attrs).not.toHaveProperty('rel')
+    }
+  })
+
   it('enables user-controlled image resizing', () => {
     const image = richTextExtensions.find(
       (extension) => extension.name === 'image',
@@ -130,6 +153,37 @@ describe('validateRichText', () => {
   it('accepts a valid document', () => {
     expect(validateRichText(representativeDoc)).toEqual([])
     expect(validateRichText(emptyRichText())).toEqual([])
+  })
+
+  it('accepts site path and anchor links, and rejects protocol-relative and backslash links', () => {
+    const linkDoc = (href: string) => ({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'text',
+              text: 'x',
+              marks: [{ type: 'link', attrs: { href } }],
+            },
+          ],
+        },
+      ],
+    })
+    for (const href of [
+      '/coffees/x',
+      '/coffees/x#faq',
+      '/search?q=a',
+      '#faq',
+    ]) {
+      expect(validateRichText(linkDoc(href))).toEqual([])
+    }
+    for (const href of ['//evil.com', '/\\evil.com', '#', '/a b']) {
+      expect(validateRichText(linkDoc(href))).toContain(
+        'Link href uses a disallowed protocol',
+      )
+    }
   })
 
   it('rejects a non-object and a non-doc root', () => {
@@ -263,6 +317,34 @@ describe('validateRichText', () => {
 })
 
 describe('convertRichText', () => {
+  it('publishes site path and anchor links without a target', () => {
+    const result = convertRichText({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'text',
+              text: 'Coffees',
+              marks: [{ type: 'link', attrs: { href: '/coffees' } }],
+            },
+            { type: 'text', text: ' and ' },
+            {
+              type: 'text',
+              text: 'FAQ',
+              marks: [{ type: 'link', attrs: { href: '#faq' } }],
+            },
+          ],
+        },
+      ],
+    })
+    expect(result.html).toContain('href="/coffees"')
+    expect(result.html).toContain('href="#faq"')
+    // The published html never adds a target: the site decides how to open links.
+    expect(result.html).not.toContain('target=')
+  })
+
   it('converts a representative doc to html and markdown', () => {
     const result = convertRichText(representativeDoc)
 

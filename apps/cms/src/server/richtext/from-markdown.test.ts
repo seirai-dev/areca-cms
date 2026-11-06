@@ -214,6 +214,55 @@ describe('markdownToRichText: links', () => {
   })
 })
 
+describe('markdownToRichText: relative links', () => {
+  it('keeps site paths and anchors as link marks', () => {
+    const [paragraph] = doc('[coffees](/coffees/x) and [faq](#faq)').content
+    expect(paragraph.content?.[0]).toEqual({
+      type: 'text',
+      text: 'coffees',
+      marks: [{ type: 'link', attrs: { href: '/coffees/x' } }],
+    })
+    expect(paragraph.content?.[2]).toEqual({
+      type: 'text',
+      text: 'faq',
+      marks: [{ type: 'link', attrs: { href: '#faq' } }],
+    })
+  })
+
+  it('drops a bad link, keeps its text and warns with the href', () => {
+    const warnings: string[] = []
+    const json = markdownToRichText('[click](//evil.com) now', {
+      onWarning: (message) => warnings.push(message),
+    })
+    expect(validateRichText(json)).toEqual([])
+    const [paragraph] = (json as { content: Node[] }).content
+    expect(paragraph.content).toEqual([{ type: 'text', text: 'click now' }])
+    expect(warnings).toEqual([
+      'Removed the link to "//evil.com": links must be https://, mailto:, a site path like /page or an anchor like #section.',
+    ])
+  })
+
+  it('warns once per dropped link and stays silent for allowed links', () => {
+    const warnings: string[] = []
+    markdownToRichText(
+      '[a](javascript:alert(1)) [b](https://example.com) [c](javascript:alert(1)) [d](/ok)',
+      { onWarning: (message) => warnings.push(message) },
+    )
+    expect(warnings).toHaveLength(2)
+    expect(warnings[0]).toContain('"javascript:alert(1)"')
+    expect(warnings.some((message) => message.includes('"/ok"'))).toBe(false)
+  })
+
+  it('drops links with a backslash or a space in the href', () => {
+    const warnings: string[] = []
+    const json = markdownToRichText('[x](</a b>) [y](/\\evil.com)', {
+      onWarning: (message) => warnings.push(message),
+    })
+    expect(JSON.stringify(json)).not.toContain('"link"')
+    expect(warnings).toHaveLength(2)
+  })
+})
+
 describe('markdownToRichText: images', () => {
   it('resolves asset: references through resolveAssetSrc', () => {
     const result = doc(`![Hero](asset:${ASSET_ID})`, { resolveAssetSrc })
