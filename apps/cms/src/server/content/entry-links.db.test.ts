@@ -5,6 +5,7 @@ import { db } from '#/db'
 import { entryLink } from '#/db/schema'
 
 import {
+  archiveEntry,
   createEntry,
   deleteEntry,
   publishEntry,
@@ -539,6 +540,28 @@ describe.skipIf(!hasDb)('entry links: link index and delete warning', () => {
       expect(
         (await listInboundReferences(target.id, true)).map((row) => row.id),
       ).not.toContain(created.id)
+
+      // Archiving keeps the rows: the entry and its content still exist.
+      const archived = await createEntry({
+        siteId: ctx.site.id,
+        collectionKey: 'articles',
+        data: {
+          title: 'Bron archief',
+          slug: 'bron-index-archief',
+          body: body('Inleiding', {
+            text: 'Lees',
+            link: { entryId: target.id, collection: 'articles' },
+          }),
+        },
+        actorId: ctx.actor.id,
+      })
+      await archiveEntry(archived.id, ctx.actor.id)
+      expect(
+        await db
+          .select()
+          .from(entryLink)
+          .where(eq(entryLink.sourceEntryId, archived.id)),
+      ).toHaveLength(1)
 
       // Adding it again, then deleting the target drops the rows through the foreign key.
       const again = await createEntry({
