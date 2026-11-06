@@ -235,9 +235,15 @@ during in-app navigation as JSON files (`/__tsr/staticServerFnCache/`), so the
 browser never calls a server function. Unknown paths get `404.html`, or
 `nl/404.html` under `/nl`.
 
-The static build has no drafts and no visual editor: `/__preview` pages,
-`?arecaPreview=` links and `/api/health` need the Node build (`build` or the
-Docker image). Content changes need a new build.
+The static build has no drafts and no visual editor: `/__preview` pages and
+`?arecaPreview=` links need the Node build (`build` or the Docker image).
+Content changes need a new build.
+
+`/api/health` is a static file in this build: `scripts/write-static-health.ts`
+writes `.output/public/api/health` with the publication ID of the pulled
+content, the same body as the Node route. `public/_headers` serves it as JSON
+with `Cache-Control: no-store`, so the CMS health check after a release sees
+the new publication. Use `https://<domain>/api/health` as the health-check URL.
 
 [`wrangler.jsonc`](wrangler.jsonc) serves `.output/public` as Cloudflare Workers
 static assets, with no Worker script. To deploy from the Cloudflare dashboard
