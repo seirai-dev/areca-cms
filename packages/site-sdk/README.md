@@ -301,7 +301,7 @@ remain standard Markdown image nodes.
 `richTextMarkdown(value)` returns the Markdown source. `richTextHtml(value)`
 returns the CMS-rendered static HTML string; only render trusted CMS content as
 HTML. For custom rendering, pass a `components` map to `Markdown`. The SDK uses
-`@tanstack/markdown` 1.0.0; keep the renderer version aligned with the CMS and SDK.
+`@tanstack/markdown` 1.2.0; keep the renderer version aligned with the CMS and SDK.
 
 ## SEO metadata
 

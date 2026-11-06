@@ -29,26 +29,26 @@
     "@fontsource-variable/fraunces": "^5.3.0",
     "@fontsource-variable/inter": "^5.3.0",
     "@inlang/paraglide-js": "^2.25.2",
-    "@tailwindcss/vite": "^4.3.3",
-    "@tanstack/markdown": "1.0.0",
-    "@tanstack/react-router": "1.170.41",
-    "@tanstack/react-start": "1.168.60",
-    "@tanstack/start-static-server-functions": "1.167.39",
+    "@tailwindcss/vite": "^4.3.4",
+    "@tanstack/markdown": "1.2.0",
+    "@tanstack/react-router": "1.170.46",
+    "@tanstack/react-start": "1.169.4",
+    "@tanstack/start-static-server-functions": "1.167.44",
     "nitro": "3.0.260903-beta",
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0",
-    "tailwindcss": "^4.3.3",
-    "zod": "^4.6.6"
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "tailwindcss": "^4.3.4",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@tanstack/router-cli": "^1.167.36",
+    "@tanstack/router-cli": "^1.167.46",
     "@types/node": "^22.20.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "@vitejs/plugin-react": "^6.1.1",
-    "tsx": "^4.23.13",
+    "@vitejs/plugin-react": "^6.2.1",
+    "tsx": "^4.23.15",
     "typescript": "^6.0.3",
-    "vite": "^8.3.0",
-    "vitest": "^5.0.1"
+    "vite": "^8.3.5",
+    "vitest": "^5.1.0"
   }
 }
