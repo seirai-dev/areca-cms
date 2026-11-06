@@ -8,7 +8,7 @@ import {
   useRouterState,
 } from '@tanstack/react-router'
 import { m } from '#/paraglide/messages'
-import { PageMessage } from '../components/cms-image.tsx'
+import { NotFoundMessage } from '../components/cms-image.tsx'
 import { SiteFooter, SiteHeader } from '../components/site-chrome.tsx'
 import { currentLocale } from '../lib/i18n.ts'
 import { loadCompanyInfo } from '../lib/queries.ts'
@@ -17,7 +17,7 @@ import { VisualMarkers } from '../lib/visual-markers.tsx'
 import appCss from '../styles.css?url'
 
 export const Route = createRootRoute({
-  loader: () => loadCompanyInfo(),
+  loader: () => loadCompanyInfo({ data: { locale: currentLocale() } }),
   // Site-wide defaults come from the company info section; pages override them.
   head: ({ loaderData }) => {
     const name = loaderData?.company.name ?? SITE_NAME
@@ -40,7 +40,7 @@ export const Route = createRootRoute({
     }
   },
   component: RootLayout,
-  notFoundComponent: NotFound,
+  notFoundComponent: NotFoundMessage,
   shellComponent: RootDocument,
 })
 
@@ -67,14 +67,6 @@ function RootLayout() {
       </main>
       <SiteFooter company={company} />
     </VisualMarkers>
-  )
-}
-
-function NotFound() {
-  return (
-    <PageMessage eyebrow={m.error_404_eyebrow()} title={m.error_404_title()}>
-      {m.error_404_body()}
-    </PageMessage>
   )
 }
 

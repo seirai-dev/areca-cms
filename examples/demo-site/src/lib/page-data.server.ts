@@ -7,6 +7,7 @@
 import { setResponseHeader } from '@tanstack/react-start/server'
 import { previewHeaders } from '@areca-cms/site-sdk'
 import type { PreviewEntry, PreviewResult } from '@areca-cms/site-sdk'
+import { getServerAsyncLocalStorage } from '#/paraglide/runtime'
 import { content } from '../generated/content/areca.gen.ts'
 import { SITE_DESCRIPTION, SITE_NAME } from './seo.ts'
 import {
@@ -15,7 +16,19 @@ import {
   getArticles,
   getCoffees,
 } from './content.ts'
+import type { Locale } from './locale-routes.ts'
 import type { PreviewData, PreviewLoad } from './queries.ts'
+
+/**
+ * Runs `read` with `locale` as the request's language, so content reads in it
+ * return that language. Server function requests from the browser have no
+ * language prefix in their URL, so the caller passes the page's language.
+ */
+export function withLocale<T>(locale: Locale, read: () => T): T {
+  const storage = getServerAsyncLocalStorage()
+  if (!storage) throw new Error('withLocale needs the Paraglide middleware (see src/server.ts)')
+  return storage.run({ ...storage.getStore(), locale }, read)
+}
 
 /**
  * Site content sections as a publication may lack them: a section with no

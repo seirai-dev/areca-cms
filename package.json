@@ -20,7 +20,10 @@
     "cf:preview:landing": "wrangler versions upload --config apps/landing/wrangler.jsonc",
     "cf:build:docs": "pnpm --filter @areca/docs build && cp apps/docs/dist/client/404/index.html apps/docs/dist/client/404.html",
     "cf:deploy:docs": "wrangler deploy --config apps/docs/wrangler.jsonc",
-    "cf:preview:docs": "wrangler versions upload --config apps/docs/wrangler.jsonc"
+    "cf:preview:docs": "wrangler versions upload --config apps/docs/wrangler.jsonc",
+    "cf:build:demo": "pnpm --filter @areca-cms/site-sdk build && pnpm --filter @areca/demo-site build:static",
+    "cf:deploy:demo": "wrangler deploy --config examples/demo-site/wrangler.jsonc",
+    "cf:preview:demo": "wrangler versions upload --config examples/demo-site/wrangler.jsonc"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

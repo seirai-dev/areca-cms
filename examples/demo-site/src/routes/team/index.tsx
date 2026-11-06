@@ -2,12 +2,12 @@ import { createFileRoute } from '@tanstack/react-router'
 import { m } from '#/paraglide/messages'
 import { AuthorCard } from '../../components/author-card.tsx'
 import { Eyebrow } from '../../components/ui.tsx'
-import { pageAlternates } from '../../lib/i18n.ts'
+import { currentLocale, pageAlternates } from '../../lib/i18n.ts'
 import { loadTeam } from '../../lib/queries.ts'
 import { pageHead } from '../../lib/seo.ts'
 
 export const Route = createFileRoute('/team/')({
-  loader: () => loadTeam(),
+  loader: () => loadTeam({ data: { locale: currentLocale() } }),
   head: () =>
     pageHead(
       { title: m.team_title(), description: m.meta_team_description() },

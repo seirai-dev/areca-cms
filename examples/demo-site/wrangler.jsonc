@@ -1,0 +1,17 @@
+// Cloudflare Worker that serves the static build of the demo site (.output/public).
+// There is no Worker script: every request is a static asset, and the data for
+// in-app navigation is prerendered JSON. Drafts and the visual editor need the
+// Node build (Dockerfile) instead.
+// Build from the repository root: pnpm run cf:build:demo
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "areca-demo",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./.output/public",
+    // Pages are written as /coffees/index.html and linked as /coffees.
+    "html_handling": "drop-trailing-slash",
+    // Serves the nearest 404.html: nl/404.html under /nl, else 404.html.
+    "not_found_handling": "404-page"
+  }
+}

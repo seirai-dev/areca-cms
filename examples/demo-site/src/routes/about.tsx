@@ -4,7 +4,7 @@ import { useLivePreview } from '@areca-cms/site-sdk/visual-react'
 import { ArticleBody } from '../components/article-body.tsx'
 import { CmsImage, PreviewBanner } from '../components/cms-image.tsx'
 import { Eyebrow } from '../components/ui.tsx'
-import { pageAlternates } from '../lib/i18n.ts'
+import { currentLocale, pageAlternates } from '../lib/i18n.ts'
 import { loadAbout, loadLiveAbout, sitePreviewSearch } from '../lib/queries.ts'
 import { noindexHead, sectionHead } from '../lib/seo.ts'
 import { useField } from '../lib/visual-markers.tsx'
@@ -12,7 +12,7 @@ import { useField } from '../lib/visual-markers.tsx'
 export const Route = createFileRoute('/about')({
   validateSearch: (search) => sitePreviewSearch.parse(search),
   loaderDeps: ({ search }) => ({ arecaPreview: search.arecaPreview }),
-  loader: ({ deps }) => loadAbout({ data: { arecaPreview: deps.arecaPreview } }),
+  loader: ({ deps }) => loadAbout({ data: { locale: currentLocale(), arecaPreview: deps.arecaPreview } }),
   head: ({ loaderData }) => {
     const head = sectionHead(
       loaderData?.about.$seo,
