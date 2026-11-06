@@ -225,11 +225,11 @@ importers:
         specifier: ^4.3.4
         version: 4.3.4(vite@8.3.5(@types/node@22.20.2)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
       '@tanstack/ai':
-        specifier: ^0.65.1
-        version: 0.65.1(zod@4.6.7)
+        specifier: ^1.0.1
+        version: 1.1.0(zod@4.6.7)
       '@tanstack/ai-openrouter':
-        specifier: ^0.21.1
-        version: 0.21.1(@tanstack/ai@0.65.1(zod@4.6.7))
+        specifier: ^1.0.1
+        version: 1.1.0(@tanstack/ai@1.1.0(zod@4.6.7))
       '@tanstack/highlight':
         specifier: ^1.2.11
         version: 1.2.11
@@ -992,6 +992,9 @@ packages:
 
   '@cacheable/utils@2.5.0':
     resolution: {integrity: sha512-buipgOVDkkPXNR5+xBpDw7Zk2n1EvU7qBJCNUcL7rhQ//kfpOXPAvQ511Os0vpLYJ1pZnvudNytkQt2hst3wqA==}
+
+  '@cfworker/json-schema@4.1.6':
+    resolution: {integrity: sha512-YzVGTHXf4bzlyAL5KAvHYCdNbbt6zM5cYkAgxqxQPDQM6aZ4ShIIN5yJ+6q7YeonnevxT8k/LmD2tJi/jOiKkg==}
 
   '@clack/core@1.5.1':
     resolution: {integrity: sha512-iHTrHA8MtVuLl2TfZySmcKv1qO2PoyC9Z7pfSDozEuV5vtY3/wcOPKJXlqJ5Oq2Cx5DDGQGAMVx6HZfRRoVEbQ==}
@@ -3895,19 +3898,19 @@ packages:
     peerDependencies:
       vite: '>=8.3.3'
 
-  '@tanstack/ai-event-client@0.13.1':
-    resolution: {integrity: sha512-lCPcshu6Sd4tFNeMSr+HXgdqCGupYU2cpJZVUent4GkFx41dXzrBaKkwOgkji6olDBT99OBagWCce1NZ15XeJA==}
+  '@tanstack/ai-event-client@1.0.1':
+    resolution: {integrity: sha512-IURnn4oRKJbtbAuC3GcXRcuKHi8DrPmwuACqaTq6ApSGlyJyHhq0NTksKEmzql2Z12+njFjsKSXG9c7UbSHTxg==}
 
-  '@tanstack/ai-openrouter@0.21.1':
-    resolution: {integrity: sha512-/+II/Q5/YlMqRcZ5J5F9fhy4n3fSS0R7CFEgzA8SnEdW6YRtDifo/G0n+OWXFBHyPOYrrU62Jka+YRhE6AUqlQ==}
+  '@tanstack/ai-openrouter@1.1.0':
+    resolution: {integrity: sha512-mfI9c7iZR9qRPpJBPpRgilLM8ZdqrF6ZBGek5IFTLndPc7yNXb9Nk0afnWaAdRVz2ab8L0YjunYc8hs93O9FCQ==}
     peerDependencies:
-      '@tanstack/ai': ^0.65.1
+      '@tanstack/ai': ^1.1.0
 
-  '@tanstack/ai-utils@0.4.1':
-    resolution: {integrity: sha512-B3PGn2WYiRtivZCt7MUN2iXeoK9fwZhgdbrPIz5hPqVR8r8sNDZMmMqtiOkp7sxzPvVlCBItFVHw7QpZ9g6e9w==}
+  '@tanstack/ai-utils@1.0.1':
+    resolution: {integrity: sha512-NIoMOCB+fVIYbaSOhZWkEgwM8yhZFDtFSzicIxsE3SiDKFVPgPR+kLAqTr0uU/KnXQcsZuHn5GVNxDj9bHAdWg==}
 
-  '@tanstack/ai@0.65.1':
-    resolution: {integrity: sha512-odtyX1+LiLG8DHXpgWh4DVYNJD6G6l/ii3WKTu6JXJDCKf2LQ8ieQOANzoEiE7lciJXPsr1G0PvnFFVK3QJDnQ==}
+  '@tanstack/ai@1.1.0':
+    resolution: {integrity: sha512-mtG1tEiXUpFXwN4nDszjw2vSHR+UgdsKCtd0XSloZcqdnZcxwAPMiVgzZ3HsaqG1PotvRBn+awVS8HvhrWhglg==}
     engines: {node: '>=18'}
     peerDependencies:
       '@opentelemetry/api': '>=1.9.0'
@@ -7892,6 +7895,8 @@ snapshots:
       hashery: 1.5.1
       keyv: 5.6.0
 
+  '@cfworker/json-schema@4.1.6': {}
+
   '@clack/core@1.5.1':
     dependencies:
       fast-wrap-ansi: 0.2.2
@@ -10505,24 +10510,25 @@ snapshots:
       tailwindcss: 4.3.4
       vite: 8.3.5(@types/node@26.6.4)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)
 
-  '@tanstack/ai-event-client@0.13.1':
+  '@tanstack/ai-event-client@1.0.1':
     dependencies:
       '@tanstack/devtools-event-client': 0.4.4
 
-  '@tanstack/ai-openrouter@0.21.1(@tanstack/ai@0.65.1(zod@4.6.7))':
+  '@tanstack/ai-openrouter@1.1.0(@tanstack/ai@1.1.0(zod@4.6.7))':
     dependencies:
       '@openrouter/sdk': 0.13.20
-      '@tanstack/ai': 0.65.1(zod@4.6.7)
-      '@tanstack/ai-utils': 0.4.1
+      '@tanstack/ai': 1.1.0(zod@4.6.7)
+      '@tanstack/ai-utils': 1.0.1
 
-  '@tanstack/ai-utils@0.4.1': {}
+  '@tanstack/ai-utils@1.0.1': {}
 
-  '@tanstack/ai@0.65.1(zod@4.6.7)':
+  '@tanstack/ai@1.1.0(zod@4.6.7)':
     dependencies:
       '@ag-ui/core': 1.0.0(zod@4.6.7)
+      '@cfworker/json-schema': 4.1.6
       '@standard-schema/spec': 1.1.0
-      '@tanstack/ai-event-client': 0.13.1
-      '@tanstack/ai-utils': 0.4.1
+      '@tanstack/ai-event-client': 1.0.1
+      '@tanstack/ai-utils': 1.0.1
       fast-json-patch: 3.1.1
       partial-json: 0.1.7
     transitivePeerDependencies:

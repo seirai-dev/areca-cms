@@ -353,6 +353,8 @@ export async function generateSeoSuggestion(input: {
   try {
     const raw = await chat({
       adapter,
+      // One-shot request: a fresh thread per call.
+      threadId: crypto.randomUUID(),
       systemPrompts: [
         input.config.systemPrompt,
         ...(input.sitePrompt?.trim()
