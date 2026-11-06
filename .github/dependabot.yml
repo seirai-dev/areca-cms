@@ -18,6 +18,10 @@ updates:
       # compiler API the site-sdk tests use. Lift this once both support it.
       - dependency-name: typescript
         update-types: ['version-update:semver-major']
+      # Node types follow the Node runtime (24, see engines and the
+      # Dockerfile). Bump this major by hand when Node is upgraded.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
   - package-ecosystem: github-actions
     directory: /
     schedule:
