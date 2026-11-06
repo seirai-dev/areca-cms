@@ -292,11 +292,14 @@ export function ArticleBody({ body }: { body: RichTextValue }) {
 Use the optional `rich-text-react` adapter for React rendering. Explicitly resized
 editor images use safe `img` component nodes carrying numeric width/height; the
 adapter removes TanStack's generated empty children from these void elements.
-Pass your own map as `richTextComponents(myComponents)` to keep custom image
-rendering. Keep `max-width: 100%` while respecting supplied dimensions; forcing
-`width: 100%` overrides the author's chosen size. The CLI and core SDK do not
-import React. Static HTML already contains the chosen dimensions. Plain images
-remain standard Markdown image nodes.
+External `http(s)` links open in a new tab with `rel="noopener noreferrer"`;
+site paths, anchors and `mailto:` links do not. Pass your own map as
+`richTextComponents(myComponents)` to keep custom image rendering. A custom `a`
+still receives those two props for external links. Keep `max-width: 100%` while
+respecting supplied dimensions; forcing `width: 100%` overrides the author's
+chosen size. The CLI and core SDK do not import React. Static HTML already
+contains the chosen dimensions. Plain images remain standard Markdown image
+nodes.
 
 `richTextMarkdown(value)` returns the Markdown source. `richTextHtml(value)`
 returns the CMS-rendered static HTML string; only render trusted CMS content as
