@@ -46,6 +46,13 @@ describe('rich text code guidance', () => {
         expect(instructions).toContain('Never paste code as plain paragraphs.')
       })
 
+      it('tell AI apps to link to site pages with paths and sections with anchors', () => {
+        const instructions = text()
+        expect(instructions).toContain('site paths like /coffees/slug')
+        expect(instructions).toContain('#anchor')
+        expect(instructions).toContain('Never write a full URL of this site.')
+      })
+
       it('list every fence language id and the unknown-language warning', () => {
         const instructions = text()
         expect(instructions).toContain(
@@ -63,6 +70,8 @@ describe('rich text code guidance', () => {
     const format = describeField(body).format
     expect(format).toContain(CODE_FORMAT)
     expect(format).toContain('Inline code goes in backticks')
+    expect(format).toContain('[a page](/coffees/slug)')
+    expect(format).toContain('[a section](#anchor)')
     for (const id of LANGUAGE_IDS) expect(format).toContain(id)
   })
 

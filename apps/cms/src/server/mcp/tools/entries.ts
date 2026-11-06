@@ -54,6 +54,7 @@ import {
   storedStatus,
   summarizeEntry,
   codeLanguageWarnings,
+  linkWarnings,
   toStoredFields,
 } from '../entry-format'
 import type { McpActor } from '../keys'
@@ -511,6 +512,7 @@ export function registerEntryTools(registry: ToolCollector): void {
         }),
         [
           ...codeLanguageWarnings(col.fields, inputs),
+          ...linkWarnings(col.fields, inputs),
           ...created.importWarnings,
         ],
         target,
@@ -593,6 +595,7 @@ export function registerEntryTools(registry: ToolCollector): void {
         }),
         [
           ...codeLanguageWarnings(col.fields, inputs),
+          ...linkWarnings(col.fields, inputs),
           ...updated.importWarnings,
         ],
         target,
