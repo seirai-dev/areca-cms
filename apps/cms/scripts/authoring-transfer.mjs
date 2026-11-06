@@ -19,6 +19,7 @@ export const tables = [
   'collection',
   'entry',
   'entry_revision',
+  'entry_link',
   'asset',
   'membership',
   'invitation',
@@ -196,9 +197,13 @@ async function main() {
         const condition =
           table === 'organization'
             ? 'id = $1'
-            : ['collection', 'entry', 'publication', 'build_job'].includes(
-                  table,
-                )
+            : [
+                  'collection',
+                  'entry',
+                  'entry_link',
+                  'publication',
+                  'build_job',
+                ].includes(table)
               ? 'site_id IN (SELECT id FROM site WHERE organization_id = $1)'
               : table === 'entry_revision'
                 ? 'entry_id IN (SELECT e.id FROM entry e JOIN site s ON e.site_id = s.id WHERE s.organization_id = $1)'
