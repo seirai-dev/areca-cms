@@ -488,33 +488,7 @@ export async function buildSnapshot(
    * language the view is in.
    */
   function linkTargetView(item: IncludedEntry, locale: string | null) {
-    const main = languages?.main ?? null
-    const ctx = languages ? localeCtxFor(languages, item.fields) : null
-    const wantsTranslation = Boolean(ctx && locale && locale !== main)
-    if (
-      !ctx ||
-      !locale ||
-      !wantsTranslation ||
-      !shippedLocales(item.data, ctx).includes(locale)
-    ) {
-      return {
-        view: item.data,
-        route: item.routePattern,
-        slug: item.slug,
-        language: main,
-      }
-    }
-    const view = readLocale(item.data, locale, ctx)
-    const localSlug = view[SLUG_KEY]
-    return {
-      view,
-      route: item.localizedRoutes?.[locale] ?? item.routePattern,
-      slug:
-        typeof localSlug === 'string' && localSlug !== ''
-          ? localSlug
-          : item.slug,
-      language: locale,
-    }
+    return placeLinkTarget(item, languages, locale)
   }
   function headingIdsOf(
     item: IncludedEntry,
@@ -835,23 +809,14 @@ function draftLinkResolver(
       if (!row || row.collectionKind === 'global' || row.routePattern === '') {
         return { href: null, reason: 'missing', targetTitle: '' }
       }
-      const isTranslation = Boolean(
-        languages && locale && locale !== languages.main,
+      const placed = placeLinkTarget(
+        { ...row, data: row.draftData },
+        languages,
+        locale,
       )
-      const ctx = languages ? localeCtxFor(languages, row.fields) : null
-      const view =
-        isTranslation && ctx
-          ? readLocale(row.draftData, locale!, ctx)
-          : row.draftData
-      const localSlug = isTranslation ? view[SLUG_KEY] : undefined
-      const slug =
-        typeof localSlug === 'string' && localSlug !== '' ? localSlug : row.slug
-      const route =
-        (isTranslation ? row.localizedRoutes?.[locale!] : undefined) ??
-        row.routePattern
       return {
-        href: entryLinkPath(route, slug, target.anchor),
-        targetTitle: entryTitle(view, row.fields, slug),
+        href: entryLinkPath(placed.route, placed.slug, target.anchor),
+        targetTitle: entryTitle(placed.view, row.fields, placed.slug),
       }
     },
     report() {},
@@ -1148,6 +1113,59 @@ function shippedLocales(data: EntryData, ctx: LocaleCtx): string[] {
   return servedLocales(data, ctx).filter(
     (locale) => locale === ctx.main || localeStatus(data, locale, ctx).started,
   )
+}
+
+/**
+ * Where a link to an entry points in `locale`: the language the target's path
+ * is taken from, with that language's view, route and slug. The language is
+ * `locale` when its translation ships in `data` (the release rule), else the
+ * main language. Go live and draft previews both place links with this, so a
+ * link resolves the same way in both. `language` is null on a single-language
+ * site.
+ */
+function placeLinkTarget(
+  target: {
+    data: EntryData
+    fields: Field[]
+    slug: string
+    routePattern: string
+    localizedRoutes?: Record<string, string> | null
+  },
+  languages: SiteLanguages | null,
+  locale: string | null,
+): {
+  view: EntryData
+  route: string
+  slug: string
+  language: string | null
+} {
+  const main = languages?.main ?? null
+  const ctx = languages ? localeCtxFor(languages, target.fields) : null
+  const wantsTranslation = Boolean(ctx && locale && locale !== main)
+  if (
+    !ctx ||
+    !locale ||
+    !wantsTranslation ||
+    !shippedLocales(target.data, ctx).includes(locale)
+  ) {
+    return {
+      view: target.data,
+      route: target.routePattern,
+      slug: target.slug,
+      language: main,
+    }
+  }
+  const view = readLocale(target.data, locale, ctx)
+  const localSlug = view[SLUG_KEY]
+  return {
+    view,
+    route: target.localizedRoutes?.[locale] ?? target.routePattern,
+    slug:
+      typeof localSlug === 'string' && localSlug !== ''
+        ? localSlug
+        : target.slug,
+    language: locale,
+  }
 }
 
 /**
