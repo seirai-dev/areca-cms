@@ -10,7 +10,10 @@ const config = defineConfig({
   resolve: { tsconfigPaths: true },
   server: { port: 3001 },
   plugins: [
-    nitro({ rollupConfig: { external: [/^@sentry\//] } }),
+    // Pinned: Nitro would pick `cloudflare-module` on Cloudflare's build machines,
+    // and prerendering then runs in workerd, which cannot read the content
+    // snapshot from disk. The static build only uses the prerendered output.
+    nitro({ preset: 'node-server', rollupConfig: { external: [/^@sentry\//] } }),
     // Locale comes from the URL prefix only (`/nl/...`), so prerendered pages
     // never depend on a cookie or the browser's language.
     paraglideVitePlugin({
