@@ -26,6 +26,12 @@ import {
 
 export type { ResolvedAssets } from './assets.js'
 import { camelCollectionKeys, camelizeSnapshot } from './camel-case.js'
+import {
+  defaultLocalizePath,
+  localizeCollectionEntryLinks,
+  localizeGlobalEntryLinks,
+} from './entry-links.js'
+import type { LocalizePath } from './entry-links.js'
 import { generateContentTypes, paraglideSpecifier } from './generate-types.js'
 import { assertSafeIdentifier } from './identifiers.js'
 import { createArecaClient, type ArecaClient } from './client.js'
@@ -63,6 +69,8 @@ export type PullContentOptions = {
    * When set, `areca.gen.ts` passes its `getLocale` to `createContent`.
    */
   paraglide?: string
+  /** `i18n.localizePath` from the config. Default: `defaultLocalizePath`. */
+  localizePath?: LocalizePath
 }
 
 export type PullContentResult = Snapshot & {
@@ -148,6 +156,13 @@ export async function pullContent(
       total: snapshot.assets.length,
       downloaded: media.downloaded,
     }
+  }
+  // Entry links point at each language's path. Localized on every pull, with
+  // or without media: a site with languages always has them.
+  if (snapshot.languages) {
+    const localize = options.localizePath ?? defaultLocalizePath(snapshot.languages.main)
+    collections = localizeCollectionEntryLinks(collections, snapshot.languages, localize)
+    globals = localizeGlobalEntryLinks(globals, snapshot.languages, localize)
   }
   // Created only once the publication is valid, so a rejected pull leaves no trace.
   mkdirSync(options.outDir, { recursive: true })
