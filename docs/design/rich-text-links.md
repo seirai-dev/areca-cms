@@ -89,12 +89,25 @@ Status: planned (5 stacked PRs). The code and the [docs site](https://docs.areca
     site path or a full URL on the site's production domain that matches an
     entry route is stored as an entry link (with `anchor` from `#…`). Paths that
     match nothing stay plain relative links.
-13. **Editor popover.** Two tabs. *Page on this site*: search all entries of
-    routed collections by title, with status badges (Draft, Ready, Live), then an
-    optional *Section* dropdown listing the target's headings in the language
-    being edited, or a custom anchor. *Web address*: a URL field that accepts
-    `https://`, `mailto:`, `/path` and `#anchor`. An existing entry link opens on
-    the first tab. A typed path that matches an entry shows "Linked to …".
+13. **Editor popover: one smart field.** No tabs. One input with suggestions
+    under it:
+    - Matching entries of all routed collections (title, collection, status
+      badge Draft / Ready / Live), searched by title and slug in the language
+      being edited. `/…` searches by address, `#…` lists the headings of the
+      entry being edited, and a pasted URL on the site's own domain matches its
+      entry.
+    - When nothing matches, one row "Custom link: …" (with `https://` added when
+      needed). The custom row is always the last option.
+    - Preselection: input that looks like an address (contains a dot, a scheme,
+      `mailto:`, starts with `/` or `#`) preselects the custom link; plain words
+      preselect the best matching entry. Enter takes the preselected row; arrow
+      keys and the mouse pick any row.
+    - After picking an entry, an optional *Section* field lists that entry's
+      headings in the language being edited (or a custom anchor). Typing
+      `ethiopia#` jumps straight to the sections of the best match.
+    - An empty field shows the 5 most recently edited entries.
+    - An existing link opens as a chip (entry title and badge, or the custom
+      URL); typing replaces it, Remove removes it.
 14. **Dead links in the editor.** Links whose target is archived or deleted, or
     whose section no longer exists, get a red dashed underline and a hint.
 15. **Markdown and MCP.** Import accepts `[text](entry:<id>)`,
