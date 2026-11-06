@@ -9,14 +9,20 @@
  */
 import { I18N_KEY } from '#/lib/content-locale'
 import type { EntryData, Field } from '#/lib/types'
+import { remapEntryLinks } from '#/server/richtext/entry-links'
 
-/** A reference that was cleared because its target cannot exist in production. */
+/**
+ * A reference or an entry link that was cleared because its target cannot
+ * exist in production. A cleared link keeps its text (it is plain text now).
+ */
 export type ReferenceWarning = {
   field: string
   /** The language slot, when the reference sat in one. */
   locale?: string
   /** The dev entry id the reference pointed at. */
   devTargetId: string
+  /** `link`: a rich text entry link. Default `reference`. */
+  kind?: 'reference' | 'link'
 }
 
 /** Dev entry id to production entry id, or undefined when there is none. */
@@ -84,10 +90,34 @@ function remapScope(
   }
 }
 
+/** Rich text entry links in one slot: re-pointed, or cleared to plain text. */
+function remapRichTextScope(
+  scope: Record<string, unknown>,
+  keys: string[],
+  lookup: ReferenceLookup,
+  locale: string | undefined,
+  cleared: ReferenceWarning[],
+) {
+  for (const key of keys) {
+    const value = scope[key]
+    if (!isPlainObject(value)) continue
+    const mapped = remapEntryLinks(value, lookup)
+    scope[key] = mapped.json
+    for (const devTargetId of mapped.cleared) {
+      cleared.push({
+        field: key,
+        ...(locale !== undefined ? { locale } : {}),
+        devTargetId,
+        kind: 'link',
+      })
+    }
+  }
+}
+
 /**
- * Entry data with every reference re-pointed through `lookup`. Returns a new
- * object; `data` is not mutated. Only `reference` fields are touched, in the
- * base and in every language slot.
+ * Entry data with every reference and entry link re-pointed through `lookup`.
+ * Returns a new object; `data` is not mutated. Reference fields and rich text
+ * fields are touched, in the base and in every language slot.
  */
 export function remapReferences(
   data: EntryData,
@@ -97,11 +127,15 @@ export function remapReferences(
   const keys = fields
     .filter((field) => field.type === 'reference')
     .map((field) => field.key)
+  const richKeys = fields
+    .filter((field) => field.type === 'richtext')
+    .map((field) => field.key)
   const cleared: ReferenceWarning[] = []
-  if (keys.length === 0) return { data, cleared }
+  if (keys.length === 0 && richKeys.length === 0) return { data, cleared }
 
   const next: EntryData = { ...data }
   remapScope(next, keys, lookup, undefined, cleared)
+  remapRichTextScope(next, richKeys, lookup, undefined, cleared)
 
   const translations = data[I18N_KEY]
   if (isPlainObject(translations)) {
@@ -113,6 +147,7 @@ export function remapReferences(
       }
       const copy: Record<string, unknown> = { ...slot }
       remapScope(copy, keys, lookup, locale, cleared)
+      remapRichTextScope(copy, richKeys, lookup, locale, cleared)
       nextTranslations[locale] = copy
     }
     next[I18N_KEY] = nextTranslations

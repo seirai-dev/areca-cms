@@ -9,6 +9,7 @@ import type { EntryData, SiteLanguages } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
 import { NotFoundError, ValidationError } from '#/server/content/errors'
+import { rebuildEntryLinkIndex } from '#/server/content/entry-link-index'
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
@@ -202,6 +203,8 @@ export async function applySiteLanguages(
     .update(site)
     .set({ languages: next, updatedAt: new Date() })
     .where(eq(site.id, siteId))
+  // Languages move content between slots, so the link index is rebuilt for the site.
+  await rebuildEntryLinkIndex(tx, siteId)
   await audit(
     {
       organizationId: current.organizationId,

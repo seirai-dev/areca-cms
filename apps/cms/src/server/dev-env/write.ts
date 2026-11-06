@@ -91,7 +91,7 @@ export async function slugTaken(
 
 /** Duplicate-free key for a reference, so one reported in draft and ready shows once. */
 export function referenceKey(item: ReferenceWarning) {
-  return `${item.field}|${item.locale ?? ''}|${item.devTargetId}`
+  return `${item.kind ?? 'reference'}|${item.field}|${item.locale ?? ''}|${item.devTargetId}`
 }
 
 /**
@@ -107,13 +107,22 @@ export function referenceWarningList(
     const key = referenceKey(reference)
     if (seen.has(key)) continue
     seen.add(key)
+    const params = {
+      field: reference.field,
+      ...(reference.locale !== undefined ? { locale: reference.locale } : {}),
+      devTargetId: reference.devTargetId,
+    }
+    if (reference.kind === 'link') {
+      out.push({
+        code: 'link-cleared',
+        params,
+        message: `Link cleared: "${reference.field}" linked to an entry that is not in production. The text stays, without the link.`,
+      })
+      continue
+    }
     out.push({
       code: 'reference-cleared',
-      params: {
-        field: reference.field,
-        ...(reference.locale !== undefined ? { locale: reference.locale } : {}),
-        devTargetId: reference.devTargetId,
-      },
+      params,
       message: `Reference cleared: "${reference.field}" pointed at an entry that is not in production.`,
     })
   }

@@ -53,6 +53,8 @@ import { findSlugCollisions } from './slug-collisions'
 import type { SlugOwner } from './slug-collisions'
 import { loadPlanContext } from './load-plan'
 import { remapReferences } from './references'
+import { rebuildEntryLinkIndex } from '#/server/content/entry-link-index'
+
 import {
   lockDevEnvironment,
   lockProductionRow,
@@ -319,6 +321,9 @@ async function runPush(
     },
     tx,
   )
+
+  // Pushed content changes the production entries: rebuild their link index.
+  await rebuildEntryLinkIndex(tx, productionSite.id)
 
   return {
     counts,

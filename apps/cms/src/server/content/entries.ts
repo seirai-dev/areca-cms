@@ -29,6 +29,8 @@ import { importExternalImages } from '#/server/assets/external-images'
 import { assetAttachLock } from '#/server/assets/usage'
 
 import { archiveDeletedContent } from './deletion-archive'
+import { syncEntryLinkIndex } from './entry-link-index.ts'
+import { prepareEntryLinks } from './entry-links.ts'
 import { getCollection } from './collections.ts'
 import { ConflictError, NotFoundError, ValidationError } from './errors.ts'
 import { notCompleteInLocale } from './missing-language.ts'
@@ -490,7 +492,15 @@ export async function createEntry(input: {
   })
   if (slugErrors.length) throw new ValidationError(slugErrors)
   const images = await importEntryImages(ctx, validated.data, input.actorId)
-  const parsed = { ...validated, data: images.data }
+  const parsed = {
+    ...validated,
+    data: await prepareEntryLinks(
+      db,
+      ctx.site.id,
+      ctx.collection.fields,
+      images.data,
+    ),
+  }
 
   const slug = resolveSlug(parsed.data, ctx.collection.fields)
   if (!slug || !SLUG_PATTERN.test(slug)) {
@@ -535,6 +545,7 @@ export async function createEntry(input: {
       throw new Error(m.server_failed_to_create_entry())
     }
 
+    await syncEntryLinkIndex(tx, created.id)
     await writeRevision(created.id, parsed.data, input.actorId, 'create', tx)
     await audit(
       {
@@ -586,7 +597,15 @@ export async function updateDraft(
     assertSectionSeo(ctx.collection, validated.data)
   }
   const images = await importEntryImages(ctx, validated.data, actorId)
-  const parsed = { ...validated, data: images.data }
+  const parsed = {
+    ...validated,
+    data: await prepareEntryLinks(
+      db,
+      ctx.site.id,
+      ctx.collection.fields,
+      images.data,
+    ),
+  }
 
   const nextSlug = resolveSlug(parsed.data, ctx.collection.fields)
   if (nextSlug && nextSlug !== ctx.entry.slug) {
@@ -642,6 +661,7 @@ export async function updateDraft(
       )
     }
 
+    await syncEntryLinkIndex(tx, id)
     await writeRevision(id, parsed.data, actorId, 'update', tx)
     await audit(
       {
@@ -753,7 +773,12 @@ export async function restoreRevision(
       revision.data,
       ctx.entry.draftData,
     )
-    const restoredData = prepared.data
+    const restoredData = await prepareEntryLinks(
+      tx,
+      ctx.site.id,
+      ctx.collection.fields,
+      prepared.data,
+    )
     await lockSlugClaims(
       tx,
       ctx.collection.id,
@@ -833,6 +858,7 @@ export async function restoreRevision(
       )
     }
 
+    await syncEntryLinkIndex(tx, entryId)
     await writeRevision(entryId, restoredData, actorId, 'restore', tx)
     await audit(
       {
@@ -1024,6 +1050,7 @@ export async function publishEntry(
       throw new ConflictError(APPROVAL_CONFLICT_MESSAGE)
     }
 
+    await syncEntryLinkIndex(tx, id)
     await writeRevision(id, draftData, actorId, 'publish', tx)
     await audit(
       {
@@ -1077,6 +1104,7 @@ export async function unpublishEntry(id: string, actorId: string) {
     throw new NotFoundError(m.server_entry_not_found())
   }
 
+  await syncEntryLinkIndex(db, id)
   await writeRevision(id, ctx.entry.draftData, actorId, 'unpublish')
   await audit(
     {
@@ -1206,6 +1234,7 @@ export async function scheduleEntry(
       throw new ConflictError(APPROVAL_CONFLICT_MESSAGE)
     }
 
+    await syncEntryLinkIndex(tx, id)
     await writeRevision(id, draftData, actorId, 'schedule', tx)
     await audit(
       {
@@ -1262,6 +1291,7 @@ export async function cancelSchedule(id: string, actorId: string) {
     throw new NotFoundError(m.server_entry_not_found())
   }
 
+  await syncEntryLinkIndex(db, id)
   await writeRevision(id, ctx.entry.draftData, actorId, 'cancel_schedule')
   await audit(
     {

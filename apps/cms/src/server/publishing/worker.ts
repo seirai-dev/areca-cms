@@ -48,6 +48,7 @@ import {
   recordSchedulerFailure,
   clearSchedulerFailure,
 } from './scheduler.ts'
+import { syncEntryLinkIndex } from '#/server/content/entry-link-index'
 
 // Legacy active/uncertain rows may predate resource keys. Resolve their frozen
 // target (or prior site target) so new releases cannot bypass their quarantine.
@@ -577,6 +578,7 @@ export async function processJob(
               eq(entry.status, 'scheduled'),
             ),
           )
+        await syncEntryLinkIndex(tx, selected.entryId)
       }
     })
 

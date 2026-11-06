@@ -7,6 +7,7 @@ import type { Field } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 
 import { ValidationError } from './errors.ts'
+import { syncEntryLinkIndex } from './entry-link-index.ts'
 
 /**
  * Field keys are the only identity a field has: a schema save sends the whole
@@ -227,5 +228,6 @@ export async function purgeFieldContent(
           : row.scheduledData,
       })
       .where(eq(entry.id, row.id))
+    await syncEntryLinkIndex(tx, row.id)
   }
 }

@@ -449,6 +449,45 @@ export const entryRevision = pgTable(
 )
 
 /**
+ * Rich text links from one entry to another entry, one row per link: the
+ * source's language and field, the target and the section. Kept in step with
+ * the entries' content (server/content/entry-link-index.ts). Delete warnings
+ * and "linked from" read it; the cascades drop rows with either entry.
+ */
+export const entryLink = pgTable(
+  'entry_link',
+  {
+    id: id(),
+    siteId: text('site_id')
+      .notNull()
+      .references(() => site.id, { onDelete: 'cascade' }),
+    sourceEntryId: text('source_entry_id')
+      .notNull()
+      .references(() => entry.id, { onDelete: 'cascade' }),
+    /** Language of the text. '' on a single-language site. */
+    locale: text('locale').notNull().default(''),
+    fieldKey: text('field_key').notNull(),
+    targetEntryId: text('target_entry_id')
+      .notNull()
+      .references(() => entry.id, { onDelete: 'cascade' }),
+    /** The section id, or '' for a link to the page itself. */
+    anchor: text('anchor').notNull().default(''),
+  },
+  (t) => [
+    unique('entry_link_unique').on(
+      t.sourceEntryId,
+      t.locale,
+      t.fieldKey,
+      t.targetEntryId,
+      t.anchor,
+    ),
+    // Inbound lookups (delete warning, linked from) read by target.
+    index('entry_link_target_idx').on(t.targetEntryId),
+    index('entry_link_source_idx').on(t.sourceEntryId),
+  ],
+)
+
+/**
  * Log of fork, reset, push and copy actions between a production site and its
  * development environment. Listed on the production site.
  */
