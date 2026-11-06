@@ -573,6 +573,8 @@ export async function translateContent(input: {
   try {
     const raw = (await chat({
       adapter,
+      // One-shot request: a fresh thread per call.
+      threadId: crypto.randomUUID(),
       systemPrompts: [
         TRANSLATE_SYSTEM_PROMPT,
         ...(input.sitePrompt?.trim()
