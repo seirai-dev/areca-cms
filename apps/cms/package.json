@@ -100,7 +100,7 @@
     "@tanstack/devtools-vite": "0.8.6",
     "@tanstack/eslint-config": "0.4.0",
     "@tanstack/router-cli": "^1.167.46",
-    "@types/node": "^24.13.4",
+    "@types/node": "^24.19.2",
     "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.23.1",
     "@types/react": "^19.3.0",
