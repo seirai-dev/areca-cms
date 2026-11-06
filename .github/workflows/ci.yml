@@ -260,7 +260,7 @@ jobs:
     # Playwright version. Bump the tag with @playwright/test; the version check
     # step fails the job if the two drift.
     container:
-      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      image: mcr.microsoft.com/playwright:v1.64.1-noble
     services:
       postgres:
         image: pgvector/pgvector:pg17
@@ -292,7 +292,7 @@ jobs:
       # by their service names. The CMS runs in the same container on
       # localhost:3000. Better Auth cookies are bound to BETTER_AUTH_URL, so the
       # browser uses localhost too.
-      PLAYWRIGHT_IMAGE_VERSION: "1.63.0"
+      PLAYWRIGHT_IMAGE_VERSION: "1.64.1"
       # The image sets this too; set it so the browsers are found either way.
       PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
       DATABASE_URL: postgres://ci:ci@postgres:5432/areca_smoke
