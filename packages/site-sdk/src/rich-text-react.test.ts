@@ -81,4 +81,97 @@ describe('rich-text React adapter', () => {
     expect(html).toContain('alt="Plain"')
     expect(html).not.toContain('width=')
   })
+  it('opens external links in a new tab and keeps site paths, anchors and mailto in place', () => {
+    const links: MarkdownDocument = {
+      type: 'root',
+      children: [
+        {
+          type: 'paragraph',
+          children: [
+            {
+              type: 'link',
+              href: 'https://example.com/guide',
+              children: [{ type: 'text', value: 'External' }],
+            },
+            { type: 'text', value: ' ' },
+            {
+              type: 'link',
+              href: 'http://example.org',
+              children: [{ type: 'text', value: 'Plain http' }],
+            },
+            { type: 'text', value: ' ' },
+            {
+              type: 'link',
+              href: '/coffees/ethiopia#origin',
+              children: [{ type: 'text', value: 'Internal' }],
+            },
+            { type: 'text', value: ' ' },
+            {
+              type: 'link',
+              href: '#faq',
+              children: [{ type: 'text', value: 'Anchor' }],
+            },
+            { type: 'text', value: ' ' },
+            {
+              type: 'link',
+              href: 'mailto:hello@example.com',
+              children: [{ type: 'text', value: 'Mail' }],
+            },
+          ],
+        },
+      ],
+    }
+    const html = renderToStaticMarkup(
+      createElement(Markdown, {
+        components: richTextComponents(),
+        children: links,
+      }),
+    )
+    expect(html).toContain(
+      '<a href="https://example.com/guide" target="_blank" rel="noopener noreferrer">External</a>',
+    )
+    expect(html).toContain(
+      '<a href="http://example.org" target="_blank" rel="noopener noreferrer">Plain http</a>',
+    )
+    expect(html).toContain('<a href="/coffees/ethiopia#origin">Internal</a>')
+    expect(html).toContain('<a href="#faq">Anchor</a>')
+    expect(html).toContain('<a href="mailto:hello@example.com">Mail</a>')
+  })
+
+  it('passes target and rel to a custom link component for external links only', () => {
+    const components = richTextComponents({
+      a(props) {
+        return createElement('a', { ...props, className: 'site-link' })
+      },
+    })
+    const links: MarkdownDocument = {
+      type: 'root',
+      children: [
+        {
+          type: 'paragraph',
+          children: [
+            {
+              type: 'link',
+              href: 'https://example.com',
+              children: [{ type: 'text', value: 'Site' }],
+            },
+            { type: 'text', value: ' ' },
+            {
+              type: 'link',
+              href: '/coffees',
+              children: [{ type: 'text', value: 'Page' }],
+            },
+          ],
+        },
+      ],
+    }
+    const html = renderToStaticMarkup(
+      createElement(Markdown, { components, children: links }),
+    )
+    expect(html).toContain('href="https://example.com"')
+    expect(html).toContain('target="_blank" rel="noopener noreferrer"')
+    expect(html).toContain('class="site-link"')
+    expect(html).toContain('href="/coffees" class="site-link">Page</a>')
+    expect(html.match(/target=/g)).toHaveLength(1)
+  })
 })
