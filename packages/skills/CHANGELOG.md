@@ -2,6 +2,10 @@
 
 All notable changes to `@areca-cms/skills`.
 
+## 0.9.1 (2026-11-06)
+
+No user-facing changes.
+
 ## 0.9.0 (2026-11-06)
 
 ### Features
