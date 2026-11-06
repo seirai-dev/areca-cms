@@ -263,6 +263,57 @@ describe('markdownToRichText: relative links', () => {
   })
 })
 
+describe('markdownToRichText: control, zero-width and bidi characters in links', () => {
+  // Each href embeds one character that a browser would strip or reorder.
+  const cases: Array<[string, string]> = [
+    ['C1 U+0080', '\u0080'],
+    ['C1 U+0085 (NEL)', '\u0085'],
+    ['C1 U+009F', '\u009f'],
+    ['zero-width space U+200B', '\u200b'],
+    ['zero-width joiner U+200D', '\u200d'],
+    ['bidi override U+202E', '\u202e'],
+    ['bidi isolate U+2066', '\u2066'],
+  ]
+
+  it.each(cases)(
+    'drops a site path with %s, keeps its text and warns',
+    (_label, char) => {
+      const warnings: string[] = []
+      const json = markdownToRichText(`[click](/a${char}evil) now`, {
+        onWarning: (message) => warnings.push(message),
+      })
+      expect(validateRichText(json)).toEqual([])
+      expect(JSON.stringify(json)).not.toContain('"link"')
+      const [paragraph] = (json as { content: Node[] }).content
+      expect(paragraph.content).toEqual([{ type: 'text', text: 'click now' }])
+      expect(warnings).toHaveLength(1)
+      expect(warnings[0]).toMatch(/^Removed the link to "\/a/)
+    },
+  )
+
+  // The parser does not read a destination containing these as a link at all,
+  // so the brackets stay as literal text. No link mark is stored either way.
+  it.each([
+    ['line separator U+2028', '\u2028'],
+    ['byte-order mark U+FEFF', '\ufeff'],
+  ])('never stores a link with %s', (_label, char) => {
+    const json = markdownToRichText(`[click](/a${char}evil) now`)
+    expect(validateRichText(json)).toEqual([])
+    expect(JSON.stringify(json)).not.toContain('"link"')
+  })
+
+  it.each(cases)('drops an https link with %s and warns', (_label, char) => {
+    const warnings: string[] = []
+    const json = markdownToRichText(`[click](https://x.com/a${char}b)`, {
+      onWarning: (message) => warnings.push(message),
+    })
+    expect(validateRichText(json)).toEqual([])
+    expect(JSON.stringify(json)).not.toContain('"link"')
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]).toMatch(/^Removed the link to "https:\/\/x\.com/)
+  })
+})
+
 describe('markdownToRichText: images', () => {
   it('resolves asset: references through resolveAssetSrc', () => {
     const result = doc(`![Hero](asset:${ASSET_ID})`, { resolveAssetSrc })

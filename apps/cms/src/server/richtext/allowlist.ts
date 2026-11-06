@@ -20,15 +20,17 @@ export const ALLOWED_NODE_TYPES = new Set([
 export const ALLOWED_MARK_TYPES = new Set(['bold', 'italic', 'link', 'code'])
 
 /**
- * Whitespace (including tabs and newlines) and control characters are never
- * valid in a link: browsers strip them, which is how `java\tscript:` tricks work.
+ * Characters that never belong in a link: every Unicode control character
+ * (C0, DEL and C1), whitespace, zero-width characters, line and paragraph
+ * separators, the byte-order mark and bidirectional formatting characters.
+ * Browsers strip some of them and reorder others, which is how
+ * `java\tscript:` tricks work.
  */
+const UNSAFE_LINK_CHARACTER =
+  /[\p{Cc}\s\u200B-\u200F\u202A-\u202E\u2028\u2029\u2066-\u2069\uFEFF]/u
+
 function hasWhitespaceOrControl(value: string): boolean {
-  for (const char of value) {
-    const code = char.codePointAt(0) ?? 0
-    if (code <= 0x20 || code === 0x7f || /\s/.test(char)) return true
-  }
-  return false
+  return UNSAFE_LINK_CHARACTER.test(value)
 }
 
 /**
@@ -66,6 +68,14 @@ export function isInternalHref(href: string): boolean {
   return (
     (href.startsWith('/') || href.startsWith('#')) && isAllowedLinkHref(href)
   )
+}
+
+/**
+ * True for `http(s)` links to another site. These open in a new tab with
+ * `rel="noopener noreferrer"`. `mailto:` links and internal links do not.
+ */
+export function isExternalHref(href: string): boolean {
+  return /^https?:/i.test(href) && isAllowedLinkHref(href)
 }
 
 export function isAllowedImageSrc(src: string): boolean {
