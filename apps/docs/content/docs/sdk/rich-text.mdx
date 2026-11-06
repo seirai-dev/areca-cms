@@ -185,7 +185,7 @@ Import only the languages you use. The package root imports every grammar, which
 
 - **Editors choose from a fixed set of formatting.** The body can hold headings, lists, block quotes, code blocks, tables, images, bold, italic and links. It cannot hold arbitrary HTML, so there is no `<script>` tag to pass through.
 - **Only render `document`, `markdown` or `html`.** Never render the `json` property. It is the editor's internal format and is not meant for the page.
-- **Check link targets if you need stricter rules.** The SDK does not rewrite or filter link addresses in rich text. Links can be `http`, `https` or `mailto`, and your `a` component receives the `href` as written. If you only accept `https` or relative links, enforce that in your component.
+- **Check link targets if you need stricter rules.** The SDK does not rewrite or filter link addresses in rich text. Links can be `http`, `https` or `mailto`, a page of the site such as `/coffees/slug`, or a section such as `#faq`. Your `a` component receives the `href` as written, and the SDK does not add a `target`. Open external links in a new tab in your component, and keep page and section links in the same tab. If you only accept `https` or relative links, enforce that in your component.
 - **Keep the renderer version in step with the SDK.** A renderer at a different version may not understand the document tree. Upgrade the SDK and the renderer together.
 
 ## Related
