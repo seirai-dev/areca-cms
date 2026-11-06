@@ -64,7 +64,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
 
@@ -158,7 +158,7 @@ jobs:
       # An App token, so CI runs on the release PR (GITHUB_TOKEN events don't trigger workflows).
       - if: steps.prepare.outputs.next != '' && steps.mode.outputs.mode == 'prepare'
         id: app
-        uses: actions/create-github-app-token@v3.2.0
+        uses: actions/create-github-app-token@v3.3.0
         with:
           client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
@@ -228,7 +228,7 @@ jobs:
           if [ -f "$RUNNER_TEMP/release/release.json" ]; then echo "found=true" >> "$GITHUB_OUTPUT"; fi
       # Trusted publishing needs npm 11.5.1+; Node 24.22.1 ships npm 11.19.1.
       - if: steps.artifact.outputs.found == 'true'
-        uses: actions/setup-node@v7.0.0
+        uses: actions/setup-node@v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
       - if: steps.artifact.outputs.found == 'true'

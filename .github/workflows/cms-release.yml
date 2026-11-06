@@ -51,7 +51,7 @@ jobs:
         with:
           # All history and tags: versions are read from the vX.Y.Z tags.
           fetch-depth: 0
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
       - name: Fetch main and tags
@@ -106,7 +106,7 @@ jobs:
         run: echo "name=ghcr.io/${REPOSITORY,,}" >> "$GITHUB_OUTPUT"
       - name: Setup Blacksmith Builder
         uses: useblacksmith/setup-docker-builder@v1
-      - uses: docker/login-action@v4.6.0
+      - uses: docker/login-action@v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
