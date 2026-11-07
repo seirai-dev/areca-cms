@@ -429,6 +429,50 @@ describe.skipIf(!hasDb)('link targets: search', () => {
     }
   })
 
+  it('keeps a path with a query string a plain link; a fragment alone can still be an entry link', async () => {
+    const { ctx, about } = await setup('query')
+    try {
+      const plain: [string, string][] = [
+        [
+          'http://localhost:3999/info/over-ons-query?variant=decaf',
+          '/info/over-ons-query?variant=decaf',
+        ],
+        [
+          '/info/over-ons-query?variant=decaf',
+          '/info/over-ons-query?variant=decaf',
+        ],
+        [
+          'http://localhost:3999/info/over-ons-query?variant=decaf#wie',
+          '/info/over-ons-query?variant=decaf#wie',
+        ],
+      ]
+      for (const [query, ownPath] of plain) {
+        const found = await searchLinkTargets(ctx.site.id, {
+          query,
+          locale: 'nl',
+          limit: 8,
+          enabledOnly: true,
+        })
+        expect(found.resolved, query).toBeNull()
+        expect(found.entries, query).toEqual([])
+        expect(found.ownPath, query).toBe(ownPath)
+      }
+
+      const fragment = await searchLinkTargets(ctx.site.id, {
+        query: 'http://localhost:3999/info/over-ons-query#wie',
+        locale: 'nl',
+        limit: 8,
+        enabledOnly: true,
+      })
+      expect(fragment.resolved).toEqual({
+        entry: expect.objectContaining({ entryId: about.id }),
+        anchor: 'wie',
+      })
+    } finally {
+      await cleanupTestSite(ctx)
+    }
+  })
+
   it('never returns another site’s entries', async () => {
     const { ctx, coffee } = await setup('iso')
     const other = await createTestSite({ languages })

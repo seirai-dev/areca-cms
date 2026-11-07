@@ -82,6 +82,8 @@ type ParsedQuery =
       anchor: string | null
       ownPath: string | null
     }
+  /** A site path with a query string: a plain link, never an entry. */
+  | { kind: 'plain'; ownPath: string }
   | { kind: 'external' }
 
 function escapeLike(value: string) {
@@ -112,34 +114,37 @@ function siteHosts(row: { productionUrl: string; previewUrl: string | null }) {
 
 /**
  * What the query asks for. A path starts with one `/`; an https URL on the
- * site's own host is a path too; any other URL is not an entry. Everything
- * else is words to search for.
+ * site's own host is read as the same path (with its query and fragment).
+ * Entry links store no query string, so a path with a query is a plain link
+ * to that path (`plain`, with the path as typed, query included). Any other
+ * URL is not an entry. Everything else is words to search for.
  */
 export function parseLinkQuery(query: string, hosts: Set<string>): ParsedQuery {
   const text = query.trim()
+  let sitePath: string | null = null
   if (text.startsWith('/') && !text.startsWith('//')) {
-    const hash = text.indexOf('#')
-    const path = hash === -1 ? text : text.slice(0, hash)
-    const anchor = hash === -1 ? null : text.slice(hash + 1) || null
-    return { kind: 'path', path, anchor, ownPath: null }
-  }
-  if (/^https?:\/\//i.test(text)) {
+    sitePath = text
+  } else if (/^https?:\/\//i.test(text)) {
     let url: URL | null = null
     try {
       url = new URL(text)
     } catch {
       url = null
     }
-    if (url && hosts.has(url.host.toLowerCase())) {
-      const anchor = url.hash ? url.hash.slice(1) || null : null
-      return {
-        kind: 'path',
-        path: url.pathname,
-        anchor,
-        ownPath: `${url.pathname}${url.search}${url.hash}`,
-      }
+    if (!url || !hosts.has(url.host.toLowerCase())) return { kind: 'external' }
+    sitePath = `${url.pathname}${url.search}${url.hash}`
+  }
+  if (sitePath !== null) {
+    const hash = sitePath.indexOf('#')
+    const path = hash === -1 ? sitePath : sitePath.slice(0, hash)
+    if (path.includes('?')) return { kind: 'plain', ownPath: sitePath }
+    const anchor = hash === -1 ? null : sitePath.slice(hash + 1) || null
+    return {
+      kind: 'path',
+      path,
+      anchor,
+      ownPath: /^https?:\/\//i.test(text) ? sitePath : null,
     }
-    return { kind: 'external' }
   }
   if (/^[a-z][a-z0-9+.-]*:/i.test(text) || text.startsWith('//')) {
     return { kind: 'external' }
@@ -500,6 +505,7 @@ export async function searchLinkTargets(
   const parsed = parseLinkQuery(input.query, siteHosts(siteRow))
 
   if (parsed.kind === 'external') return empty
+  if (parsed.kind === 'plain') return { ...empty, ownPath: parsed.ownPath }
 
   if (parsed.kind === 'words') {
     // Each collection answers with its own best matches; the merged list keeps
