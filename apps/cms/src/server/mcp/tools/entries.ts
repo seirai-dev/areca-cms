@@ -21,6 +21,7 @@ import {
   listRevisions,
   updateDraft,
 } from '#/server/content/entries'
+import { attachSectionLinkers } from '#/server/content/section-link-updates'
 import { pickDeclaredFields } from '#/server/content/validation'
 import { ValidationError } from '#/server/content/errors'
 import { loadSiteLanguages } from '#/server/content/locale-validation'
@@ -56,6 +57,7 @@ import {
   summarizeEntry,
   codeLanguageWarnings,
   linkWarnings,
+  sectionLinkWarnings,
   toStoredFields,
 } from '../entry-format'
 import type { McpActor } from '../keys'
@@ -612,11 +614,20 @@ export function registerEntryTools(registry: ToolCollector): void {
         if (seo) data[SEO_KEY] = seo
         else delete data[SEO_KEY]
       }
+      // An MCP write is always explicit: it reports the sections it removed or
+      // renamed that links point to (decision 22).
       const updated = await updateDraft(
         entry.id,
         data,
         actor.userId,
         input.expectedVersion ?? entry.draftVersion,
+        undefined,
+        { explicit: true },
+      )
+      const sectionChanges = await attachSectionLinkers(
+        entry.id,
+        updated.sectionChanges,
+        { isOwner: actor.role === 'owner', isAgencyAdmin: false },
       )
       return withWriteNotes(
         await formatStoredEntry(actor, entry.id, {
@@ -627,6 +638,7 @@ export function registerEntryTools(registry: ToolCollector): void {
         [
           ...codeLanguageWarnings(col.fields, inputs),
           ...linkWarnings(col.fields, inputs, links),
+          ...sectionLinkWarnings(sectionChanges),
           ...updated.importWarnings,
         ],
         target,

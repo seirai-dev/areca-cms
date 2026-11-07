@@ -5,6 +5,7 @@ import { isEditedSinceReady } from '#/features/golive/entry-live-state'
 import { isTranslatable } from '#/lib/content-locale'
 import { CODE_LANGUAGES, isSupportedCodeLanguage } from '#/lib/highlight'
 import type { EntryData, EntryStatus, Field, SiteLanguages } from '#/lib/types'
+import type { SectionChangeWithLinks } from '#/server/content/section-link-updates'
 
 import {
   describeField,
@@ -182,6 +183,27 @@ export function linkWarnings(
     })
   }
   return [...messages]
+}
+
+/**
+ * One warning per section that links point to and a save removed or renamed
+ * (docs/design/rich-text-links.md, decision 22). The links are not rewritten
+ * over MCP: the warning names the entries so the caller can update them.
+ */
+export function sectionLinkWarnings(
+  changes: SectionChangeWithLinks[],
+): string[] {
+  return changes.map((change) => {
+    const count = change.linkers.length
+    const list = change.linkers
+      .map(
+        (linker) =>
+          `${linker.title} (${linker.id}${linker.locale ? `, ${linker.locale}` : ''})`,
+      )
+      .join(', ')
+    const verb = count === 1 ? 'link points' : 'links point'
+    return `${count} ${verb} to the section '${change.from}' that no longer exists: ${list}. Update them with update_entry.`
+  })
 }
 
 /**
