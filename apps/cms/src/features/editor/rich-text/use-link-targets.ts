@@ -7,6 +7,8 @@ import {
   searchLinkTargetsFn,
 } from '#/server/fn/link-targets'
 
+import { checkInBatches } from './link-check-batches'
+
 /**
  * The server data behind the rich text link field: entries to link to, the
  * sections of an entry, and whether the links in a text still work. Cached with
@@ -91,17 +93,20 @@ export function useLinkChecks({
   const key = linkPairsKey(pairs)
   return useQuery({
     queryKey: queryKeys.linkChecks(siteId, locale, key),
+    // A text can hold more links than one request may check: they go in batches.
     queryFn: () =>
-      checkLinkTargetsFn({
-        data: {
-          siteId,
-          locale,
-          links: pairs.map((pair) => ({
-            entryId: pair.entryId,
-            anchor: pair.anchor,
-          })),
-        },
-      }),
+      checkInBatches(pairs, (batch) =>
+        checkLinkTargetsFn({
+          data: {
+            siteId,
+            locale,
+            links: batch.map((pair) => ({
+              entryId: pair.entryId,
+              anchor: pair.anchor,
+            })),
+          },
+        }),
+      ),
     enabled: pairs.length > 0,
     // Checked again when the editor opens or saves: targets change in other tabs too.
     staleTime: 0,
