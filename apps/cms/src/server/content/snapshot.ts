@@ -66,6 +66,7 @@ import {
 } from './locale-validation.ts'
 import {
   entryLinkPath,
+  linkTargetSiteIds,
   loadLinkTargets,
   mapRichTextValues,
 } from './entry-links.ts'
@@ -420,7 +421,11 @@ export async function buildSnapshot(
       }
     }
   }
-  const linkTargets = await loadLinkTargets(connection, siteId, linkTargetIds)
+  const linkTargets = await loadLinkTargets(
+    connection,
+    await linkTargetSiteIds(connection, siteId),
+    linkTargetIds,
+  )
 
   for (const item of everything) {
     for (const scope of scopesOf(item)) {
@@ -838,7 +843,7 @@ async function draftLinkTargets(
     for (const target of entryLinkTargets(json)) ids.add(target.entryId)
     return json
   })
-  return loadLinkTargets(db, siteId, ids)
+  return loadLinkTargets(db, await linkTargetSiteIds(db, siteId), ids)
 }
 
 /**

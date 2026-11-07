@@ -1,8 +1,9 @@
 import { inArray, and, eq } from 'drizzle-orm'
 
 import type { db } from '#/db'
-import { collection, entry } from '#/db/schema'
+import { collection, entry, site } from '#/db/schema'
 import { I18N_KEY } from '#/lib/content-locale'
+import { isDevSite } from '#/lib/site-environment'
 import type { EntryData, EntryStatus, Field } from '#/lib/types'
 import { isAllowedLinkHref } from '#/server/richtext/allowlist'
 import {
@@ -39,13 +40,54 @@ export type LinkTargetRow = {
   scheduledData: EntryData | null
 }
 
-/** Target rows for the given ids, from the site. Missing ids are absent from the map. */
-export async function loadLinkTargets(
+/**
+ * The sites a link in `siteId` may point at: the site itself, and for a
+ * development environment its production site (the one it was forked from, in
+ * the same organization). A link to production keeps the production id, which
+ * is why a push passes it through (docs/design/dev-environments.md).
+ */
+export async function linkTargetSiteIds(
   connection: Connection,
   siteId: string,
+): Promise<string[]> {
+  const row = (
+    await connection
+      .select({
+        environment: site.environment,
+        organizationId: site.organizationId,
+        parentSiteId: site.parentSiteId,
+      })
+      .from(site)
+      .where(eq(site.id, siteId))
+      .limit(1)
+  ).at(0)
+  if (!row || !isDevSite(row) || !row.parentSiteId) return [siteId]
+  const production = (
+    await connection
+      .select({ id: site.id })
+      .from(site)
+      .where(
+        and(
+          eq(site.id, row.parentSiteId),
+          eq(site.organizationId, row.organizationId),
+        ),
+      )
+      .limit(1)
+  ).at(0)
+  return production ? [siteId, production.id] : [siteId]
+}
+
+/**
+ * Target rows for the given ids, from the sites (see `linkTargetSiteIds`).
+ * Missing ids are absent from the map.
+ */
+export async function loadLinkTargets(
+  connection: Connection,
+  siteIds: string | string[],
   ids: Iterable<string>,
 ): Promise<Map<string, LinkTargetRow>> {
   const list = [...new Set(ids)]
+  const sites = typeof siteIds === 'string' ? [siteIds] : siteIds
   const out = new Map<string, LinkTargetRow>()
   if (list.length === 0) return out
   const rows = await connection
@@ -65,7 +107,7 @@ export async function loadLinkTargets(
     })
     .from(entry)
     .innerJoin(collection, eq(entry.collectionId, collection.id))
-    .where(and(eq(entry.siteId, siteId), inArray(entry.id, list)))
+    .where(and(inArray(entry.siteId, sites), inArray(entry.id, list)))
   for (const row of rows) out.set(row.id, row)
   return out
 }
@@ -146,7 +188,8 @@ export async function prepareEntryLinks(
   })
   if (ids.size === 0) return data
 
-  const targets = await loadLinkTargets(connection, siteId, ids)
+  const siteIds = await linkTargetSiteIds(connection, siteId)
+  const targets = await loadLinkTargets(connection, siteIds, ids)
   const errors: { path: string; message: string }[] = []
   for (const id of ids) {
     const target = targets.get(id)

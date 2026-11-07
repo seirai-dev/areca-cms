@@ -9,7 +9,7 @@ import type { EntryData, EntryStatus, Field, SiteLanguages } from '#/lib/types'
 import { entryLinkTargets } from '#/server/richtext/entry-links'
 
 import { localeCtxFor } from './locale-validation.ts'
-import { mapRichTextValues } from './entry-links.ts'
+import { linkTargetSiteIds, mapRichTextValues } from './entry-links.ts'
 
 /**
  * The entry link index (docs/design/rich-text-links.md, decision 18): one row
@@ -77,18 +77,22 @@ function chunksOf<T>(items: T[]): T[][] {
   return out
 }
 
-/** The ids among `ids` that are entries of the site. The foreign key needs them to exist. */
+/**
+ * The ids among `ids` that are entries a link in the site may point at (see
+ * `linkTargetSiteIds`). The foreign key needs them to exist.
+ */
 async function existingTargets(
   connection: Connection,
   siteId: string,
   ids: string[],
 ): Promise<Set<string>> {
+  const sites = await linkTargetSiteIds(connection, siteId)
   const found = new Set<string>()
   for (const chunk of chunksOf(ids)) {
     const rows = await connection
       .select({ id: entry.id })
       .from(entry)
-      .where(and(eq(entry.siteId, siteId), inArray(entry.id, chunk)))
+      .where(and(inArray(entry.siteId, sites), inArray(entry.id, chunk)))
     for (const row of rows) found.add(row.id)
   }
   return found
@@ -243,6 +247,16 @@ export type InboundLink = {
 export async function listInboundLinks(
   targetEntryId: string,
 ): Promise<InboundLink[]> {
+  const target = (
+    await db
+      .select({ siteId: entry.siteId })
+      .from(entry)
+      .where(eq(entry.id, targetEntryId))
+      .limit(1)
+  ).at(0)
+  if (!target) return []
+  // Only links in the target's own site: a development environment's links to
+  // a production entry are not links to it from production.
   const rows = await db
     .select({
       id: entry.id,
@@ -257,7 +271,12 @@ export async function listInboundLinks(
     .from(entryLink)
     .innerJoin(entry, eq(entryLink.sourceEntryId, entry.id))
     .innerJoin(collection, eq(entry.collectionId, collection.id))
-    .where(eq(entryLink.targetEntryId, targetEntryId))
+    .where(
+      and(
+        eq(entryLink.targetEntryId, targetEntryId),
+        eq(entryLink.siteId, target.siteId),
+      ),
+    )
   const seen = new Set<string>()
   const found: InboundLink[] = []
   for (const row of rows) {
