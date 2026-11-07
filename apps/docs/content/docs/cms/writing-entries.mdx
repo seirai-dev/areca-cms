@@ -84,13 +84,30 @@ A rich text field has a formatting toolbar and a **/** menu.
 - **Insert:** Image, Table and Divider. Table tools let you add or delete rows and columns, or the whole table.
 - **Undo** and **Redo**.
 
-To start a block, type **/** on an empty line and choose from the menu. To add a link, select the text and choose **Link**. Type a web address such as `https://example.com`, or `mailto:` for email. To link to another page of this site, type its path, such as `/coffees`. To link to a section of the page, type `#` and the section name, such as `#faq`. Links to other sites open in a new tab on the live site. Links to pages and sections of this site open in the same tab.
+To start a block, type **/** on an empty line and choose from the menu. To add a link, see [Links in rich text](#links-in-rich-text) below.
 
 ![The / menu open on an empty line of a rich text body, listing the blocks that can be inserted](/screenshots/rich-text-slash-menu.png)
 
 Images pasted from another website are copied into the Library when the entry saves, and the text then uses the Library copy. That way the live site only serves files from your Library, and the website can bundle them with `areca pull`. The same address is copied once, so pasting it again reuses the file. If a copy fails, for example because the other site refuses the download or the file is not a JPEG, PNG, WebP, GIF or PDF, the image keeps its original address and the editor shows a warning. The copy is tried again when you mark the entry ready.
 
 Use the **Preview formatting** option in the **More actions** menu to see how the text will look on the website.
+
+### Links in rich text
+
+Select the text and choose **Link**. Then type what the link should go to. The field suggests matches as you type. Use the arrow keys to choose a suggestion, and press **Enter** to take the highlighted one.
+
+- **A page of this site.** Type its title or its address, such as `coffee`, and pick the page from the list. Each page shows its status: **Draft**, **Ready**, **Live** or **Scheduled**. A link to a page keeps working when the page's address changes.
+- **A section of a page.** Pick the page, then choose the section under **Section**. You can also type the page name and a `#`, such as `coffee#`, to see the sections of the best match. To link to a section of the page you are writing, type `#` and pick a section.
+- **A path on this site.** Type a path, such as `/coffees`. If a page of this site has that address, the link goes to that page. If not, the link goes to the path as you typed it.
+- **A web address.** Type `https://example.com`, or `mailto:` and an email address. A domain such as `example.com` becomes `https://example.com`.
+
+An empty field lists the five pages you edited most recently. Links to other sites open in a new tab on the live site. Links to pages and sections of this site open in the same tab.
+
+A link to a page that is not live yet works once both pages are live. If the page is not live when you go live, the link is published as plain text, and the Go live panel lists it so you can check it.
+
+To change a link, select it and choose **Link**. The field shows the page, or the address, as a chip. Type to replace it. Choose **Remove** to delete the link, or **Done** to close the field.
+
+**A link that no longer works** has a red dashed underline. This happens when the page it points to is archived or deleted, or when the section it points to no longer exists. Hover over the link to see why: **This page no longer exists** or **This section no longer exists**. The text stays where it is. Fix the link or remove it. The underline is shown only in the editor. The text and the link are stored as they are.
 
 ## Details
 

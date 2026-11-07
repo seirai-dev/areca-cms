@@ -900,6 +900,15 @@ html.dark,
   caret-color: var(--color-accent);
 }
 
+/* An entry link whose page or section no longer exists (decision 14). */
+.ProseMirror .rich-text-link-dead {
+  text-decoration-line: underline;
+  text-decoration-style: dashed;
+  text-decoration-color: var(--color-border-error);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+
 .ProseMirror .tableWrapper {
   margin-block: 1.25rem;
   overflow-x: auto;

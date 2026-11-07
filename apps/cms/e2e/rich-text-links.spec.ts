@@ -38,6 +38,11 @@ async function linkNewParagraph(page: Page, text: string, url: string) {
   const input = page.locator('#rich-text-link-url')
   await expect(input).toBeVisible()
   await input.fill(url)
+  // Enter takes the selected row. A path waits for its answer first, so wait
+  // until the custom link is selected (docs/design/rich-text-links.md, 13).
+  await expect(
+    page.locator('[role="option"][aria-selected="true"]'),
+  ).toHaveCount(1)
   await input.press('Enter')
   await expect(input).toBeHidden()
   await expect(editor.locator('a', { hasText: text })).toHaveCount(1)

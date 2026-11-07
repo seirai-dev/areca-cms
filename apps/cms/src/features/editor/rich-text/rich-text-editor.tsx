@@ -13,7 +13,6 @@ import {
   ColumnsPlusRight,
   Image,
   Link as LinkIcon,
-  LinkBreak,
   ListBullets,
   ListNumbers,
   Minus,
@@ -43,8 +42,6 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from '#/components/ui/dropdown-menu'
-import { Input } from '#/components/ui/input'
-import { Label } from '#/components/ui/label'
 import { Popover, PopoverAnchor, PopoverContent } from '#/components/ui/popover'
 import {
   Tooltip,
@@ -53,16 +50,32 @@ import {
 } from '#/components/ui/tooltip'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
-import { isAllowedLinkHref } from '#/server/richtext/allowlist'
+import { entryLinkTargets } from '#/server/richtext/entry-links'
 import { richTextExtensions } from '#/server/richtext/extensions'
 
 import { MediaPickerDialog } from '../media-picker'
 import type { MediaAsset } from '../media-picker'
 
 import { editorExtensions } from './code-block-extension'
+import {
+  deadEntryLinks,
+  deadLinkKey,
+  setDeadLinks,
+} from './dead-link-extension'
+import type { DeadLinkState } from './dead-link-extension'
+import { LinkPicker } from './link-picker'
+import type { LinkContext, LinkSession } from './link-picker'
+import { useLinkChecks } from './use-link-targets'
+import type { LinkPair } from './use-link-targets'
 
-/** The shared server list with the editor's code block (see code-block-extension). */
-const EDITOR_EXTENSIONS = editorExtensions(richTextExtensions)
+/**
+ * The shared server list with the editor's code block (see code-block-extension),
+ * plus the marking of dead entry links (dead-link-extension).
+ */
+const EDITOR_EXTENSIONS = [
+  ...editorExtensions(richTextExtensions),
+  deadEntryLinks,
+]
 
 function useMod() {
   const [mod, setMod] = React.useState('Ctrl+')
@@ -196,6 +209,7 @@ export function RichTextEditor({
   value,
   onChange,
   organizationId,
+  linkContext,
   previewing = false,
   preview,
   invalid,
@@ -206,6 +220,8 @@ export function RichTextEditor({
   value: unknown
   onChange: (value: unknown) => void
   organizationId: string
+  /** The site, entry and language the entry links of this text belong to. */
+  linkContext: LinkContext
   /** Show `preview` instead of the editable body; the editor stays mounted. */
   previewing?: boolean
   preview?: React.ReactNode
@@ -219,8 +235,22 @@ export function RichTextEditor({
   const [openMenus, setOpenMenus] = React.useState(0)
   const [pickerOpen, setPickerOpen] = React.useState(false)
   const [linkOpen, setLinkOpen] = React.useState(false)
-  const [linkHref, setLinkHref] = React.useState('')
-  const [linkError, setLinkError] = React.useState<string | null>(null)
+  const [linkSession, setLinkSession] = React.useState<LinkSession | null>(null)
+  // The entry links in this text, once each, and whether they still work.
+  const linkPairs = React.useMemo(() => {
+    const seen = new Map<string, LinkPair>()
+    for (const target of entryLinkTargets(value)) {
+      const key = deadLinkKey(target.entryId, target.anchor)
+      if (!seen.has(key)) seen.set(key, target)
+    }
+    return [...seen.values()]
+  }, [value])
+  const linkChecks = useLinkChecks({
+    siteId: linkContext.siteId,
+    locale: linkContext.locale,
+    pairs: linkPairs,
+  })
+  const refetchLinkChecks = linkChecks.refetch
   const [slash, setSlash] = React.useState<SlashState | null>(null)
   const [slashIndex, setSlashIndex] = React.useState(0)
   const slashQueryRef = React.useRef<string | null>(null)
@@ -296,6 +326,18 @@ export function RichTextEditor({
     if (JSON.stringify(editor.getJSON()) === JSON.stringify(incoming)) return
     editor.commands.setContent(incoming, { emitUpdate: false })
   }, [editor, value])
+
+  // Entry links that no longer work get a dead-link mark (a decoration only).
+  React.useEffect(() => {
+    if (!editor) return
+    const dead = new Map<string, DeadLinkState>()
+    for (const check of linkChecks.data ?? []) {
+      if (check.state !== 'ok') {
+        dead.set(deadLinkKey(check.entryId, check.anchor), check.state)
+      }
+    }
+    editor.view.dispatch(setDeadLinks(editor.state.tr, dead))
+  }, [editor, linkChecks.data])
 
   // Slash menu: `/query` typed at the start of an empty paragraph.
   React.useEffect(() => {
@@ -377,10 +419,26 @@ export function RichTextEditor({
 
   const openLinkEditor = React.useCallback(() => {
     if (!editor) return
-    setLinkHref((editor.getAttributes('link').href as string | undefined) ?? '')
-    setLinkError(null)
+    const { from, to } = editor.state.selection
+    const attrs = editor.getAttributes('link') as Record<string, unknown>
+    const href = typeof attrs.href === 'string' ? attrs.href : ''
+    const current = href
+      ? {
+          href,
+          entryId: typeof attrs.entryId === 'string' ? attrs.entryId : null,
+          anchor:
+            typeof attrs.anchor === 'string' && attrs.anchor !== ''
+              ? attrs.anchor
+              : null,
+          collection:
+            typeof attrs.collection === 'string' ? attrs.collection : null,
+        }
+      : null
+    setLinkSession({ from, to, current })
     setLinkOpen(true)
-  }, [editor])
+    // The chip shows what the server says now (a target may have been archived).
+    if (linkPairs.length > 0) void refetchLinkChecks()
+  }, [editor, linkPairs.length, refetchLinkChecks])
 
   const insertCommands: Command[] = React.useMemo(
     () => [
@@ -486,47 +544,6 @@ export function RichTextEditor({
       return true
     }
     return false
-  }
-
-  function applyLink(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!editor) return
-    let href = linkHref.trim()
-    if (!href) {
-      editor.chain().focus().extendMarkRange('link').unsetLink().run()
-      setLinkOpen(false)
-      return
-    }
-    // A bare domain gets https://. Site paths (/page) and anchors (#section)
-    // are stored as typed.
-    if (!/^[a-z]+:/i.test(href) && !/^[/#?.]/.test(href)) {
-      href = `https://${href}`
-    }
-    if (!isAllowedLinkHref(href)) {
-      setLinkError(m.editor_link_invalid())
-      return
-    }
-    const { from, to, empty } = editor.state.selection
-    if (empty && !editor.isActive('link')) {
-      editor
-        .chain()
-        .focus()
-        .insertContent({
-          type: 'text',
-          text: href,
-          marks: [{ type: 'link', attrs: { href } }],
-        })
-        .run()
-    } else {
-      editor
-        .chain()
-        .focus()
-        .setTextSelection({ from, to })
-        .extendMarkRange('link')
-        .setLink({ href })
-        .run()
-    }
-    setLinkOpen(false)
   }
 
   if (!editor) {
@@ -672,59 +689,31 @@ export function RichTextEditor({
             </PopoverAnchor>
             <PopoverContent
               align="start"
-              className="w-80"
+              // Keeps the field 16px from the screen edges on a phone.
+              collisionPadding={16}
+              className="w-[min(24rem,calc(100vw-2rem))] p-3"
               onOpenAutoFocus={(event) => {
+                // Radix's own focus would go to the first control; this one
+                // picks the field, or Change when the existing link is a chip.
                 event.preventDefault()
-                document.getElementById('rich-text-link-url')?.focus()
+                const target =
+                  document.getElementById('rich-text-link-change') ??
+                  document.getElementById('rich-text-link-url')
+                target?.focus()
               }}
             >
-              <form className="grid gap-3" onSubmit={applyLink}>
-                <div className="grid gap-1.5">
-                  <Label htmlFor="rich-text-link-url">
-                    {m.editor_link_url()}
-                  </Label>
-                  <Input
-                    id="rich-text-link-url"
-                    placeholder="https://example.com, /page or #section"
-                    value={linkHref}
-                    onChange={(event) => {
-                      setLinkHref(event.target.value)
-                      setLinkError(null)
-                    }}
-                    aria-invalid={linkError ? true : undefined}
-                  />
-                  {linkError ? (
-                    <p className="text-callout text-text-error" role="alert">
-                      {linkError}
-                    </p>
-                  ) : (
-                    <p className="text-caption font-normal text-text-muted">
-                      {m.editor_link_opens_new_tab()}
-                    </p>
-                  )}
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  {state.link ? (
-                    <Button
-                      type="button"
-                      variant="quiet"
-                      size="sm"
-                      onClick={() => {
-                        chain().extendMarkRange('link').unsetLink().run()
-                        setLinkOpen(false)
-                      }}
-                    >
-                      <LinkBreak />
-                      {m.editor_remove()}
-                    </Button>
-                  ) : (
-                    <span />
-                  )}
-                  <Button type="submit" size="sm">
-                    {state.link ? m.editor_update() : m.editor_add_link()}
-                  </Button>
-                </div>
-              </form>
+              {linkSession ? (
+                <LinkPicker
+                  editor={editor}
+                  context={linkContext}
+                  session={linkSession}
+                  checks={linkChecks.data}
+                  onDone={() => {
+                    setLinkOpen(false)
+                    editor.commands.focus()
+                  }}
+                />
+              ) : null}
             </PopoverContent>
           </Popover>
           <BarDivider />

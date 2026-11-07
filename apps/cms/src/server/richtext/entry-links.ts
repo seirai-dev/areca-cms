@@ -1,5 +1,6 @@
 import type { JSONContent } from '@tiptap/core'
 
+import { createHeadingIds } from './heading-ids'
 import { richTextDocumentFromJson } from './from-json'
 
 /**
@@ -219,6 +220,35 @@ export function relinkEntryLinks(
     if (Array.isArray(node.content)) stack.push(...(node.content as Node[]))
   }
   return copy
+}
+
+/**
+ * Headings in one rich text value, in document order, with the text and level
+ * a section picker shows. `id` is the id `richTextHeadingIds` gives the same
+ * heading: both use the heading slug and count repeats the same way.
+ * Pure, so the editor can list the headings of its live document too.
+ */
+export function richTextHeadings(
+  json: unknown,
+): { id: string; text: string; level: number }[] {
+  if (!json || typeof json !== 'object') return []
+  const headingIdFor = createHeadingIds()
+  const out: { id: string; text: string; level: number }[] = []
+  const visit = (node: JSONContent) => {
+    if (node.type === 'heading') {
+      const text = (node.content ?? [])
+        .map((child) => child.text ?? '')
+        .join('')
+      out.push({
+        id: headingIdFor(text),
+        text,
+        level: Number(node.attrs?.level ?? 2),
+      })
+    }
+    for (const child of node.content ?? []) visit(child)
+  }
+  visit(json)
+  return out
 }
 
 /** Heading ids in one rich text value, as the published `document` has them, at any depth. */

@@ -95,9 +95,12 @@ Status: planned (5 stacked PRs). The code and the [docs site](https://docs.areca
       badge Draft / Ready / Live), searched by title and slug in the language
       being edited. `/…` searches by address, `#…` lists the headings of the
       entry being edited, and a pasted URL on the site's own domain matches its
-      entry.
+      entry. The title and slug of a language are its `readLocale` view (the
+      base values for the base language, else its translation), the same for
+      the row and for the search.
     - When nothing matches, one row "Custom link: …" (with `https://` added when
-      needed). The custom row is always the last option.
+      needed). Plain words show it only when no entry matches; an address, a
+      path or a URL always keeps it last.
     - Preselection: input that looks like an address (contains a dot, a scheme,
       `mailto:`, starts with `/` or `#`) preselects the custom link; plain words
       preselect the best matching entry. Enter takes the preselected row; arrow

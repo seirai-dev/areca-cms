@@ -537,6 +537,12 @@ function GlobalEditorView({
                 errors={editor.fieldErrors}
                 onChange={onLocaleChange}
                 organizationId={site.organizationId}
+                linkContext={{
+                  siteId,
+                  entryId: null,
+                  locale: ctx && active ? active : null,
+                  devSite,
+                }}
                 previewing={false}
                 titleRef={titleRef}
               />
