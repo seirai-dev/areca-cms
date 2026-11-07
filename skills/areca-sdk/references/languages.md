@@ -174,6 +174,7 @@ i18n: {
 - Use the default when the site already serves `/<locale>/<route>`. Do not write the prefix into the route patterns: the routes have no prefix.
 - `areca pull` changes only the links the CMS marked as entry links. Other links in the text are not touched.
 - Snapshots from older CMS versions have no entry links, so nothing changes for them.
+- Draft previews need the same function. `areca.gen.ts` does not import the config (it is build-only code and cannot hold the function), so the generated `content` uses the default rule. When the site sets `localizePath`, put the function in its own module, import it in `areca.config.ts`, and create the content object in the site's own module: `createContent({ schema, globalSchema, dir, localizePath })`, with `schema` and `globalSchema` from `areca.gen.ts` and the same `dir` (and `locale` when the generated file passes one). Use that `content` in the preview routes.
 
 ## Preview in a language
 

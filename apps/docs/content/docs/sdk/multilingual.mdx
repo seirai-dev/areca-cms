@@ -287,6 +287,43 @@ A link to an entry that is not live in the release is published as plain text, a
 
 Snapshots from older CMS versions have no entry links, so `i18n.localizePath` changes nothing for them.
 
+Draft previews need the same function. `areca.gen.ts` cannot contain it: the generated file does not import `areca.config.ts`, because the config is build-only code. So the generated `content` object uses the default rule, and a site with its own `localizePath` creates the content object itself, with the same `localizePath`. Put the function in a small module that both `areca.config.ts` and the content module import:
+
+```ts
+// src/lib/localize-path.ts
+export function localizePath(path: string, locale: string): string {
+  return locale === 'nl' ? `/nederlands${path}` : path
+}
+```
+
+```ts
+// areca.config.ts
+import { localizePath } from './src/lib/localize-path'
+
+export default defineSiteContent({
+  siteKey: 'acme',
+  languages: { main: 'en', all: ['en', 'nl'] },
+  i18n: { localizePath },
+  collections: { /* ... */ },
+})
+```
+
+```ts
+// src/lib/content.ts
+import { createContent } from '@areca-cms/site-sdk/content'
+import { globalSchema, schema } from './generated/content/areca.gen' // the file areca pull writes
+import { localizePath } from './localize-path'
+
+export const content = createContent({
+  schema,
+  globalSchema,
+  dir: process.env.ARECA_CONTENT_DIR ?? './content', // the same dir as in areca.gen.ts
+  localizePath,
+})
+```
+
+Use this `content` in the preview routes. Pass the same `dir` and, with Paraglide, the same `locale` option as the generated file.
+
 ## Preview in a language
 
 The CMS opens preview links with `&locale=<code>` for the language being edited. Pass it to the preview call:
