@@ -21,6 +21,8 @@ import { richTextHeadings } from '#/server/richtext/entry-links'
 
 import { buildLinkRows, parseLinkInput, stepRow } from './link-options'
 import type { LinkRow, LinkSearchData } from './link-options'
+import { entryLinkAttrs, plainLinkAttrs, setLinkMark } from './link-mark'
+import type { LinkMarkAttrs } from './link-mark'
 import { useLinkHeadings, useLinkSearch } from './use-link-targets'
 
 /** Whose link the field edits: the site, the entry being edited and its language. */
@@ -185,36 +187,18 @@ export function LinkPicker({
   // Commands here do not focus the editor. Focusing it moves focus out of the
   // popover, which closes the popover; the callers focus the editor when they
   // are done (see onDone).
-  function applyMark(attrs: EditorLinkAttrs, text: string) {
-    if (range.from === range.to && !editor.isActive('link')) {
-      editor
-        .chain()
-        .insertContent({ type: 'text', text, marks: [{ type: 'link', attrs }] })
-        .run()
-      const end = editor.state.selection.from
-      setRange({ from: end - text.length, to: end })
-      return
-    }
-    editor
-      .chain()
-      .setTextSelection(range)
-      .extendMarkRange('link')
-      .setLink(attrs)
-      .run()
+  function applyMark(attrs: LinkMarkAttrs, text: string) {
+    const inserted = setLinkMark(editor, range, attrs, text)
+    if (inserted) setRange(inserted)
   }
 
   function applyPlain(href: string) {
-    applyMark({ href }, href)
+    applyMark(plainLinkAttrs(href), href)
   }
 
   function applyEntry(entry: LinkTargetOption, anchor: string | null) {
     const href = `${entry.path}${anchor ? `#${anchor}` : ''}`
-    const attrs: EditorLinkAttrs = {
-      href,
-      entryId: entry.entryId,
-      collection: entry.collection,
-      anchor,
-    }
+    const attrs = entryLinkAttrs(href, entry.entryId, entry.collection, anchor)
     applyMark(attrs, entry.title)
     setCurrent({
       href,
@@ -622,12 +606,4 @@ export function LinkPicker({
       </div>
     </div>
   )
-}
-
-/** The mark attributes of a link: a plain link, or an entry link. */
-type EditorLinkAttrs = {
-  href: string
-  entryId?: string
-  collection?: string | null
-  anchor?: string | null
 }
