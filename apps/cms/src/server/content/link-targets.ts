@@ -1,9 +1,15 @@
 import { and, desc, eq, ilike, ne, or, sql } from 'drizzle-orm'
+import type { SQL } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { collection, entry, site } from '#/db/schema'
 import { firstTextField } from '#/lib/content/utils'
-import { readLocale, SLUG_KEY } from '#/lib/content-locale'
+import {
+  I18N_KEY,
+  LOCALE_KEY,
+  readLocale,
+  SLUG_KEY,
+} from '#/lib/content-locale'
 import { previewOrigin } from '#/lib/preview-url'
 import type { EntryData, EntryStatus, Field, SiteLanguages } from '#/lib/types'
 import { richTextHeadings } from '#/server/richtext/entry-links'
@@ -261,16 +267,145 @@ async function candidateRows(
   return rows
 }
 
-/** How well a title or slug matches the query: lower is better, null is no match. */
-function rankOf(option: LinkTargetOption, needle: string): number | null {
-  const title = option.title.toLowerCase()
-  const slug = option.slug.toLowerCase()
-  if (title.startsWith(needle)) return 0
-  if (slug.startsWith(needle)) return 1
-  if (title.split(/\s+/).some((word) => word.startsWith(needle))) return 2
-  if (title.includes(needle)) return 3
-  if (slug.includes(needle)) return 4
-  return null
+/** A routed collection a search reads: one query each. */
+type RoutedCollection = {
+  id: string
+  key: string
+  label: string
+  routePattern: string
+  localizedRoutes: Record<string, string> | null
+  fields: Field[]
+}
+
+async function routedCollections(
+  siteId: string,
+  enabledOnly: boolean,
+): Promise<RoutedCollection[]> {
+  return db
+    .select({
+      id: collection.id,
+      key: collection.key,
+      label: collection.label,
+      routePattern: collection.routePattern,
+      localizedRoutes: collection.localizedRoutes,
+      fields: collection.fields,
+    })
+    .from(collection)
+    .where(
+      and(
+        eq(collection.siteId, siteId),
+        eq(collection.kind, 'collection'),
+        ne(collection.routePattern, ''),
+        enabledOnly ? eq(collection.enabled, true) : undefined,
+      ),
+    )
+}
+
+/**
+ * A text of the entry as the editor's option shows it (`optionOf`): the
+ * language's value, else the base language's. In SQL, so the search can match
+ * and rank on it before the limit.
+ */
+function localizedTextSql(key: string, ctx: Ctx): SQL<string | null> {
+  const data = entry.draftData
+  const base = ctx.languages?.main ?? null
+  if (!ctx.locale || !ctx.languages) return sql`(${data} ->> ${key})`
+  const locale = ctx.locale
+  return sql`(CASE WHEN coalesce(${data} ->> ${LOCALE_KEY}, ${base}) = ${locale}
+    THEN ${data} ->> ${key}
+    ELSE coalesce(nullif(${data} #>> ARRAY[${I18N_KEY}, ${locale}, ${key}]::text[], ''), ${data} ->> ${key}) END)`
+}
+
+/** The slug as the editor's option shows it (`optionOf`), in SQL. */
+function localizedSlugSql(ctx: Ctx): SQL<string | null> {
+  const data = entry.draftData
+  const base = ctx.languages?.main ?? null
+  if (!ctx.locale || !ctx.languages) {
+    return sql`coalesce(nullif(${data} ->> ${SLUG_KEY}, ''), ${entry.slug})`
+  }
+  const locale = ctx.locale
+  return sql`(CASE WHEN coalesce(${data} ->> ${LOCALE_KEY}, ${base}) = ${locale}
+    THEN coalesce(nullif(${data} ->> ${SLUG_KEY}, ''), ${entry.slug})
+    ELSE coalesce(nullif(${data} #>> ARRAY[${I18N_KEY}, ${locale}, ${SLUG_KEY}]::text[], ''), ${entry.slug}) END)`
+}
+
+/**
+ * The entries of one collection whose title or slug contains `term` (lower
+ * case), best matches first, then the newest. Ranks: an exact title or slug,
+ * a title or slug that starts with the term, a title word that starts with it,
+ * then a title or slug that contains it. Without a term: the newest entries.
+ */
+async function searchCollectionByWords(
+  siteId: string,
+  target: RoutedCollection,
+  ctx: Ctx,
+  term: string,
+  limit: number,
+) {
+  const titleKey = firstTextField(target.fields)?.key
+  const title = titleKey
+    ? localizedTextSql(titleKey, ctx)
+    : sql<string | null>`NULL::text`
+  const slug = localizedSlugSql(ctx)
+  const contains = `%${escapeLike(term)}%`
+  const matches = term
+    ? or(
+        sql`lower(${title}) LIKE ${contains}`,
+        sql`lower(${slug}) LIKE ${contains}`,
+      )
+    : undefined
+  const rank = term
+    ? sql<number>`(CASE
+        WHEN lower(${title}) = ${term} OR lower(${slug}) = ${term} THEN 0
+        WHEN lower(${title}) LIKE ${`${escapeLike(term)}%`} THEN 1
+        WHEN lower(${slug}) LIKE ${`${escapeLike(term)}%`} THEN 2
+        WHEN lower(${title}) LIKE ${`% ${escapeLike(term)}%`} THEN 3
+        ELSE 4 END)`
+    : sql<number>`0::int`
+  const rows = await db
+    .select({
+      id: entry.id,
+      siteId: entry.siteId,
+      slug: entry.slug,
+      status: entry.status,
+      publishedSlug: entry.publishedSlug,
+      draftData: entry.draftData,
+      publishedData: entry.publishedData,
+      scheduledData: entry.scheduledData,
+      updatedAt: entry.updatedAt,
+      rank,
+    })
+    .from(entry)
+    .where(
+      and(
+        eq(entry.siteId, siteId),
+        eq(entry.collectionId, target.id),
+        ne(entry.status, 'archived'),
+        matches,
+      ),
+    )
+    .orderBy(rank, desc(entry.updatedAt), entry.slug)
+    .limit(limit)
+  return rows.map(
+    ({
+      updatedAt,
+      rank: hitRank,
+      ...row
+    }): LinkTargetRow & {
+      updatedAt: Date
+      rank: number
+    } => ({
+      ...row,
+      collectionKey: target.key,
+      collectionLabel: target.label,
+      collectionKind: 'collection',
+      routePattern: target.routePattern,
+      localizedRoutes: target.localizedRoutes,
+      fields: target.fields,
+      updatedAt,
+      rank: hitRank,
+    }),
+  )
 }
 
 /**
@@ -308,24 +443,24 @@ export async function searchLinkTargets(
   if (parsed.kind === 'external') return empty
 
   if (parsed.kind === 'words') {
+    // Each collection answers with its own best matches; the merged list keeps
+    // the best of them, so a long collection cannot push a match out.
     const needle = parsed.text.toLowerCase()
-    const rows = await candidateRows(siteId, {
-      enabledOnly: input.enabledOnly,
-      term: parsed.text || null,
-      limit: needle ? CANDIDATE_LIMIT : input.limit,
-    })
-    const options = rows.map((row) => optionOf(row, ctx))
-    if (!needle) return { ...empty, entries: options.slice(0, input.limit) }
-    const ranked = options
-      .map((option) => ({ option, rank: rankOf(option, needle) }))
-      .filter(
-        (hit): hit is { option: LinkTargetOption; rank: number } =>
-          hit.rank !== null,
+    const hits = (
+      await Promise.all(
+        (await routedCollections(siteId, input.enabledOnly)).map((target) =>
+          searchCollectionByWords(siteId, target, ctx, needle, input.limit),
+        ),
       )
-      .sort((a, b) => a.rank - b.rank)
+    )
+      .flat()
+      .sort(
+        (a, b) =>
+          a.rank - b.rank || b.updatedAt.getTime() - a.updatedAt.getTime(),
+      )
     return {
       ...empty,
-      entries: ranked.slice(0, input.limit).map((hit) => hit.option),
+      entries: hits.slice(0, input.limit).map((hit) => optionOf(hit, ctx)),
     }
   }
 

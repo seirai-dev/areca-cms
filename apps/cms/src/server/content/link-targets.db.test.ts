@@ -292,6 +292,58 @@ describe.skipIf(!hasDb)('link targets: search', () => {
     }
   })
 
+  it('finds an older title that matches ahead of newer entries that only mention the word in the body', async () => {
+    const { ctx } = await setup('ranking')
+    try {
+      const [articles] = await db
+        .select({ id: collection.id })
+        .from(collection)
+        .where(
+          and(
+            eq(collection.siteId, ctx.site.id),
+            eq(collection.key, 'articles'),
+          ),
+        )
+      const now = Date.now()
+      // 320 newer articles mention coffee in the body only.
+      await db.insert(entry).values(
+        Array.from({ length: 320 }, (_, index) => ({
+          siteId: ctx.site.id,
+          collectionId: articles.id,
+          slug: `bonen-${index}-ranking`,
+          status: 'draft' as const,
+          draftData: {
+            title: `Bonen ${index}`,
+            body: doc(['Coffee beans from the archive']),
+          },
+          updatedAt: new Date(now + index * 1000),
+        })),
+      )
+      // One older article is titled "Coffee".
+      await db.insert(entry).values({
+        siteId: ctx.site.id,
+        collectionId: articles.id,
+        slug: `coffee-title-ranking`,
+        status: 'draft',
+        draftData: { title: 'Coffee', body: doc(['Oud']) },
+        updatedAt: new Date(now - 86_400_000),
+      })
+
+      const found = await searchLinkTargets(ctx.site.id, {
+        query: 'coffee',
+        locale: 'nl',
+        limit: 8,
+        enabledOnly: true,
+      })
+      expect(found.entries[0]).toMatchObject({
+        title: 'Coffee',
+        slug: 'coffee-title-ranking',
+      })
+    } finally {
+      await cleanupTestSite(ctx)
+    }
+  })
+
   it('never returns another site’s entries', async () => {
     const { ctx, coffee } = await setup('iso')
     const other = await createTestSite({ languages })
