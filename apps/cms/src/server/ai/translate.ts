@@ -23,6 +23,8 @@ import {
   markdownToRichText,
   richTextToMarkdown,
 } from '#/server/richtext/from-markdown'
+import type { MarkdownLinkTarget } from '#/server/richtext/from-markdown'
+import { ENTRY_HREF_PREFIX } from '#/server/richtext/markdown'
 
 import { AiGenerationError } from './seo-generate.ts'
 import type { AiRuntimeConfig } from './settings.ts'
@@ -62,8 +64,18 @@ const SEO_TEXT_MAX: Record<SeoTextKey, number> = {
 /** One value to translate, keyed the way the request and the answer name it. */
 export type TranslationItem =
   | { key: string; kind: 'text'; source: string; max: number }
-  /** `source` has code replaced by placeholders; `code` holds the originals. */
-  | { key: string; kind: 'richtext'; source: string; code?: string[] }
+  /**
+   * `source` has code replaced by placeholders; `code` holds the originals.
+   * `links` are the entry links of the source, keyed by their `entry:` form:
+   * the only entry links the translation may keep.
+   */
+  | {
+      key: string
+      kind: 'richtext'
+      source: string
+      code?: string[]
+      links?: ReadonlyMap<string, MarkdownLinkTarget>
+    }
   | { key: `seo.${SeoTextKey}`; kind: 'seoText'; source: string; max: number }
   | { key: 'seo.keyTakeaways'; kind: 'seoList'; source: string[] }
   | {
@@ -81,6 +93,8 @@ export type TranslationResult = {
   seo?: Partial<EntrySeo>
   /** Eligible keys that were not translated, and why not is left to the caller. */
   skipped: string[]
+  /** Things dropped from a translated value, such as an entry link the model invented. */
+  warnings: string[]
   model: string
   usage: { promptTokens?: number; completionTokens?: number; cost?: number }
 }
@@ -149,11 +163,18 @@ export function planTranslation(input: {
       : hasText(target[field.key])
     if (!decide(field.key, sourceHas, targetFilled)) continue
     if (isRich) {
-      const { source: markdown, code } = richTextSourcePlaceholders(
-        value,
-        assets,
-      )
-      items.push({ key: field.key, kind: 'richtext', source: markdown, code })
+      const {
+        source: markdown,
+        code,
+        links,
+      } = richTextSourcePlaceholders(value, assets)
+      items.push({
+        key: field.key,
+        kind: 'richtext',
+        source: markdown,
+        code,
+        links,
+      })
     } else {
       items.push({
         key: field.key,
@@ -265,6 +286,7 @@ export const TRANSLATE_SYSTEM_PROMPT = `You translate website content for a cont
 Rules:
 - Translate faithfully. Keep the meaning, every fact, number, date and price. Do not add or drop information.
 - Keep the formatting. Markdown fields keep their headings, lists, emphasis and line breaks exactly. Image references such as ![alt](asset:<id>) keep the same id, and link targets (the part in brackets after the link text) stay unchanged. Translate only the human text.
+- Links to entries of the site are written entry:<id> or entry:<id>#section. Keep each such destination exactly as written, and translate only the link text.
 - Keep URLs, email addresses, brand and product names, and placeholders such as {name} or {{count}} exactly as they are.
 - Write in the natural tone and terminology of the target language, for a website visitor. Do not translate word for word.
 - Return every key you were given, with the same structure. A list stays a list of the same length and order.
@@ -392,16 +414,58 @@ export function restoreCode(markdown: string, code: string[]): string | null {
 }
 
 /**
+ * The entry links of a source document, keyed by the `entry:<id>[#section]`
+ * form the Markdown writes for them. A translation keeps a link only when its
+ * destination is one of these, with the entry, collection and section of the
+ * source: a destination the model invents is dropped (fromTranslatedMarkdown).
+ */
+export function sourceEntryLinks(
+  value: unknown,
+): Map<string, MarkdownLinkTarget> {
+  const links = new Map<string, MarkdownLinkTarget>()
+  const visit = (node: unknown) => {
+    if (!node || typeof node !== 'object') return
+    const { marks, content } = node as {
+      marks?: { type?: string; attrs?: Record<string, unknown> }[]
+      content?: unknown[]
+    }
+    for (const mark of marks ?? []) {
+      const attrs = mark.attrs ?? {}
+      if (mark.type !== 'link' || typeof attrs.entryId !== 'string') continue
+      const anchor =
+        typeof attrs.anchor === 'string' && attrs.anchor !== ''
+          ? attrs.anchor
+          : null
+      links.set(
+        `${ENTRY_HREF_PREFIX}${attrs.entryId}${anchor ? `#${anchor}` : ''}`,
+        {
+          entryId: attrs.entryId,
+          collection: String(attrs.collection ?? ''),
+          anchor,
+          href: String(attrs.href ?? ''),
+        },
+      )
+    }
+    for (const child of content ?? []) visit(child)
+  }
+  visit(value)
+  return links
+}
+
+/**
  * Model markdown back to a stored rich text document. Returns null when the
  * result would lose an image the source had, uses an asset the organisation
  * does not have, or does not keep every code placeholder, so the field is
- * skipped rather than saved broken.
+ * skipped rather than saved broken. An `entry:` destination that is not one
+ * of `links` is dropped, the text kept, and `warnings` says so.
  */
 export function fromTranslatedMarkdown(
   markdown: string,
   sourceMarkdown: string,
   assets: TranslationAssets,
   code: string[] = [],
+  links: ReadonlyMap<string, MarkdownLinkTarget> = new Map(),
+  warnings: string[] = [],
 ): unknown | null {
   const sourceIds = new Set(ASSET_IDS(sourceMarkdown))
   const outIds = ASSET_IDS(markdown)
@@ -415,6 +479,8 @@ export function fromTranslatedMarkdown(
       const row = assets.byId.get(id)
       return row ? ASSET_FILE_PREFIX + row.storageKey : null
     },
+    linkTargets: links,
+    onWarning: (message) => warnings.push(message),
   })
 }
 
@@ -425,15 +491,18 @@ export function fromTranslatedMarkdown(
 export function richTextSourcePlaceholders(
   value: unknown,
   assets: TranslationAssets,
-): { source: string; code: string[] } {
-  // Entry links keep their stored path here: the model sees the links it
-  // always saw, and the output converts back to plain links as before.
-  const protectedMarkdown = protectCode(
-    richTextToMarkdown(value, { entryLinkForm: 'hrefs' }),
-  )
+): {
+  source: string
+  code: string[]
+  links: Map<string, MarkdownLinkTarget>
+} {
+  // Entry links are sent as `entry:<id>#section`, the form the model keeps:
+  // fromTranslatedMarkdown turns them back into entry links of the source.
+  const protectedMarkdown = protectCode(richTextToMarkdown(value))
   return {
     source: toAssetMarkdown(protectedMarkdown.markdown, assets),
     code: protectedMarkdown.code,
+    links: sourceEntryLinks(value),
   }
 }
 
@@ -446,6 +515,7 @@ export function normalizeTranslation(
   const values: Record<string, unknown> = {}
   const seo: Partial<EntrySeo> = {}
   const skipped: string[] = []
+  const warnings: string[] = []
   const text = (value: unknown, max: number) =>
     typeof value === 'string' ? value.trim().slice(0, max) : ''
 
@@ -458,7 +528,14 @@ export function normalizeTranslation(
     } else if (item.kind === 'richtext') {
       const next =
         typeof raw === 'string'
-          ? fromTranslatedMarkdown(raw.trim(), item.source, assets, item.code)
+          ? fromTranslatedMarkdown(
+              raw.trim(),
+              item.source,
+              assets,
+              item.code,
+              item.links,
+              warnings,
+            )
           : null
       if (next) values[item.key] = next
       else skipped.push(item.key)
@@ -501,6 +578,7 @@ export function normalizeTranslation(
     values,
     ...(Object.keys(seo).length > 0 ? { seo } : {}),
     skipped,
+    warnings,
   }
 }
 
@@ -563,7 +641,13 @@ export async function translateContent(input: {
   const items = plan.items
   const model = input.config.model
   if (items.length === 0) {
-    return { values: {}, skipped: plan.skipped, model, usage: {} }
+    return {
+      values: {},
+      skipped: plan.skipped,
+      warnings: [],
+      model,
+      usage: {},
+    }
   }
 
   const adapter = createOpenRouterText(

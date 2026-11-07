@@ -186,5 +186,6 @@ export const translateContentFn = createServerFn({
       values: result.values,
       ...(result.seo ? { seo: result.seo } : {}),
       skipped: result.skipped,
+      warnings: result.warnings,
     }
   })
