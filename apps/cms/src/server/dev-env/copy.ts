@@ -23,7 +23,7 @@ import { m } from '#/paraglide/messages'
 import { lockProductionSite } from './lock'
 import { deepEqual } from './plan'
 import { remapReferences } from './references'
-import { rebuildEntryLinkIndex } from '#/server/content/entry-link-index'
+import { syncEntryLinkIndexes } from '#/server/content/entry-link-index'
 
 import type { ReferenceWarning } from './references'
 import { findSlugCollisions } from './slug-collisions'
@@ -413,8 +413,8 @@ async function runCopy(
     tx,
   )
 
-  // The copy wrote a production entry: its link index is rebuilt for the site.
-  await rebuildEntryLinkIndex(tx, prod.id)
+  // The copy wrote one production entry: only its link rows are rewritten.
+  await syncEntryLinkIndexes(tx, [productionId])
 
   return { productionId, created, warnings, clearedReferences }
 }

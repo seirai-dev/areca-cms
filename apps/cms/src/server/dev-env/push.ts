@@ -53,7 +53,10 @@ import { findSlugCollisions } from './slug-collisions'
 import type { SlugOwner } from './slug-collisions'
 import { loadPlanContext } from './load-plan'
 import { remapReferences } from './references'
-import { rebuildEntryLinkIndex } from '#/server/content/entry-link-index'
+import {
+  rebuildEntryLinkIndex,
+  syncEntryLinkIndexes,
+} from '#/server/content/entry-link-index'
 
 import {
   lockDevEnvironment,
@@ -322,8 +325,16 @@ async function runPush(
     tx,
   )
 
-  // Pushed content changes the production entries: rebuild their link index.
-  await rebuildEntryLinkIndex(tx, productionSite.id)
+  // The link index follows the entries this push wrote. A schema or language
+  // change can reshape any entry's rows, so it rebuilds the site instead.
+  if (schemaItems.length > 0 || languagesItem) {
+    await rebuildEntryLinkIndex(tx, productionSite.id)
+  } else {
+    const written = [...state.written.values()].filter(
+      (id): id is string => id !== null,
+    )
+    await syncEntryLinkIndexes(tx, written)
+  }
 
   return {
     counts,

@@ -1,4 +1,5 @@
 import { and, eq, inArray } from 'drizzle-orm'
+import type { SQL } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { collection, entry, entryLink, site } from '#/db/schema'
@@ -15,8 +16,9 @@ import { mapRichTextValues } from './entry-links.ts'
  * per entry link in the entry's draft, published and scheduled content, with
  * the language and field it sits in. It answers "what links to this entry"
  * without reading every document. Rows follow the content: each write that
- * changes an entry's data calls `syncEntryLinkIndex`. Deleting either entry
- * drops its rows through the foreign keys.
+ * changes an entry's data syncs that entry inside the same transaction, and
+ * a schema or language change rebuilds the site. Deleting either entry drops
+ * its rows through the foreign keys.
  */
 
 /**
@@ -25,6 +27,9 @@ import { mapRichTextValues } from './entry-links.ts'
  */
 export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 type Connection = Pick<typeof db, 'select'>
+
+/** Ids and rows per query or insert, to stay under the driver's bind-parameter limit. */
+const CHUNK = 1000
 
 export type EntryLinkRow = {
   locale: string
@@ -64,132 +69,161 @@ export async function linkRowsOf(
   return [...seen.values()]
 }
 
-/** Keeps only rows whose target is an entry of the same site (the foreign key needs it). */
+function chunksOf<T>(items: T[]): T[][] {
+  const out: T[][] = []
+  for (let start = 0; start < items.length; start += CHUNK) {
+    out.push(items.slice(start, start + CHUNK))
+  }
+  return out
+}
+
+/** The ids among `ids` that are entries of the site. The foreign key needs them to exist. */
 async function existingTargets(
   connection: Connection,
   siteId: string,
   ids: string[],
 ): Promise<Set<string>> {
-  if (ids.length === 0) return new Set()
-  const rows = await connection
-    .select({ id: entry.id })
-    .from(entry)
-    .where(and(eq(entry.siteId, siteId), inArray(entry.id, ids)))
-  return new Set(rows.map((row) => row.id))
-}
-
-/**
- * Rewrites one entry's rows from its current content. Call it inside the
- * transaction that changed the entry. The entry row is locked first, so a
- * concurrent save waits for this transaction and the content read here is the
- * latest committed one.
- */
-export async function syncEntryLinkIndex(tx: Tx, entryId: string) {
-  const row = (
-    await tx
-      .select({
-        siteId: entry.siteId,
-        draftData: entry.draftData,
-        publishedData: entry.publishedData,
-        scheduledData: entry.scheduledData,
-        fields: collection.fields,
-        languages: site.languages,
-      })
+  const found = new Set<string>()
+  for (const chunk of chunksOf(ids)) {
+    const rows = await connection
+      .select({ id: entry.id })
       .from(entry)
-      .innerJoin(collection, eq(entry.collectionId, collection.id))
-      .innerJoin(site, eq(entry.siteId, site.id))
-      .where(eq(entry.id, entryId))
-      .limit(1)
-      .for('update', { of: entry })
-  ).at(0)
-  if (!row) return
-
-  const rows = await linkRowsOf(
-    [row.draftData, row.publishedData, row.scheduledData],
-    row.fields,
-    row.languages ?? null,
-  )
-  const targets = await existingTargets(tx, row.siteId, [
-    ...new Set(rows.map((item) => item.targetEntryId)),
-  ])
-  await tx.delete(entryLink).where(eq(entryLink.sourceEntryId, entryId))
-  const values = rows
-    .filter((item) => targets.has(item.targetEntryId))
-    .map((item) => ({
-      siteId: row.siteId,
-      sourceEntryId: entryId,
-      locale: item.locale,
-      fieldKey: item.fieldKey,
-      targetEntryId: item.targetEntryId,
-      anchor: item.anchor,
-    }))
-  if (values.length > 0) {
-    await tx.insert(entryLink).values(values).onConflictDoNothing()
+      .where(and(eq(entry.siteId, siteId), inArray(entry.id, chunk)))
+    for (const row of rows) found.add(row.id)
   }
+  return found
+}
+
+/** One source entry's rows, ready to insert. */
+type SourceRows = {
+  siteId: string
+  sourceEntryId: string
+  rows: EntryLinkRow[]
 }
 
 /**
- * Rebuilds the whole index of one site from its entries. The migration cannot
- * do this in SQL (it reads each field's type from the collection), so it is
- * run after a schema change or a language change that moves content between
- * slots (`scripts/rebuild-entry-link-index.ts`).
+ * Inserts the rows of many sources: one target lookup per site and one insert
+ * per chunk, whatever the number of sources. Rows whose target is not an entry
+ * of the site are left out. Returns the number of rows written.
  */
-export async function rebuildEntryLinkIndex(
-  connection: Tx,
-  siteId: string,
+async function insertSourceRows(
+  tx: Tx,
+  sources: SourceRows[],
 ): Promise<number> {
-  const siteRow = (
-    await connection
-      .select({ languages: site.languages })
-      .from(site)
-      .where(eq(site.id, siteId))
-      .limit(1)
-  ).at(0)
-  if (!siteRow) return 0
+  const bySite = new Map<string, SourceRows[]>()
+  for (const source of sources) {
+    const group = bySite.get(source.siteId) ?? []
+    group.push(source)
+    bySite.set(source.siteId, group)
+  }
+  let written = 0
+  for (const [siteId, group] of bySite) {
+    const targets = await existingTargets(tx, siteId, [
+      ...new Set(
+        group.flatMap((source) => source.rows.map((row) => row.targetEntryId)),
+      ),
+    ])
+    const values = group.flatMap((source) =>
+      source.rows
+        .filter((row) => targets.has(row.targetEntryId))
+        .map((row) => ({
+          siteId,
+          sourceEntryId: source.sourceEntryId,
+          locale: row.locale,
+          fieldKey: row.fieldKey,
+          targetEntryId: row.targetEntryId,
+          anchor: row.anchor,
+        })),
+    )
+    for (const chunk of chunksOf(values)) {
+      await tx.insert(entryLink).values(chunk).onConflictDoNothing()
+    }
+    written += values.length
+  }
+  return written
+}
 
-  // Locks every entry of the site first (the same row lock a save takes), so
-  // no save can change content between this read and the rewrite.
-  const entries = await connection
+/**
+ * The entries matching `where`, each with its content, locked in id order (the
+ * row lock a save takes), so no save can change them until the transaction ends.
+ */
+async function lockedEntryRows(tx: Tx, where: SQL | undefined) {
+  return tx
     .select({
       id: entry.id,
+      siteId: entry.siteId,
       draftData: entry.draftData,
       publishedData: entry.publishedData,
       scheduledData: entry.scheduledData,
       fields: collection.fields,
+      languages: site.languages,
     })
     .from(entry)
     .innerJoin(collection, eq(entry.collectionId, collection.id))
-    .where(eq(entry.siteId, siteId))
+    .innerJoin(site, eq(entry.siteId, site.id))
+    .where(where)
     .orderBy(entry.id)
     .for('update', { of: entry })
-  await connection.delete(entryLink).where(eq(entryLink.siteId, siteId))
+}
 
-  let written = 0
-  for (const item of entries) {
-    const rows = await linkRowsOf(
-      [item.draftData, item.publishedData, item.scheduledData],
-      item.fields,
-      siteRow.languages ?? null,
-    )
-    const targets = await existingTargets(connection, siteId, [
-      ...new Set(rows.map((row) => row.targetEntryId)),
-    ])
-    const values = rows
-      .filter((row) => targets.has(row.targetEntryId))
-      .map((row) => ({
-        siteId,
-        sourceEntryId: item.id,
-        locale: row.locale,
-        fieldKey: row.fieldKey,
-        targetEntryId: row.targetEntryId,
-        anchor: row.anchor,
-      }))
-    if (values.length > 0) {
-      await connection.insert(entryLink).values(values).onConflictDoNothing()
-      written += values.length
-    }
+async function sourceRowsOf(
+  row: Awaited<ReturnType<typeof lockedEntryRows>>[number],
+): Promise<SourceRows> {
+  return {
+    siteId: row.siteId,
+    sourceEntryId: row.id,
+    rows: await linkRowsOf(
+      [row.draftData, row.publishedData, row.scheduledData],
+      row.fields,
+      row.languages ?? null,
+    ),
   }
-  return written
+}
+
+/**
+ * Rewrites the rows of the given entries from their current content, in one
+ * transaction with the writes that changed them. The entry rows are locked
+ * first, so a concurrent save waits and the content read here is the latest.
+ * Other entries' rows are not touched.
+ */
+export async function syncEntryLinkIndexes(tx: Tx, entryIds: string[]) {
+  const ids = [...new Set(entryIds)]
+  for (const chunk of chunksOf(ids)) {
+    const rows = await lockedEntryRows(tx, inArray(entry.id, chunk))
+    if (rows.length === 0) continue
+    await tx.delete(entryLink).where(
+      inArray(
+        entryLink.sourceEntryId,
+        rows.map((row) => row.id),
+      ),
+    )
+    const sources: SourceRows[] = []
+    for (const row of rows) sources.push(await sourceRowsOf(row))
+    await insertSourceRows(tx, sources)
+  }
+}
+
+/** Rewrites one entry's rows from its current content. See `syncEntryLinkIndexes`. */
+export async function syncEntryLinkIndex(tx: Tx, entryId: string) {
+  await syncEntryLinkIndexes(tx, [entryId])
+}
+
+/**
+ * Rebuilds the whole index of one site from its entries. Needed after a schema
+ * or language change, which can reshape any entry's rows. The migration cannot
+ * do this in SQL (it reads each field's type from the collection), so it is
+ * run after such a change, and by `scripts/rebuild-entry-link-index.ts`.
+ * Locks every entry of the site first, so no save can run during the rebuild.
+ */
+export async function rebuildEntryLinkIndex(
+  tx: Tx,
+  siteId: string,
+): Promise<number> {
+  const rows = await lockedEntryRows(tx, eq(entry.siteId, siteId))
+  await tx.delete(entryLink).where(eq(entryLink.siteId, siteId))
+  const sources: SourceRows[] = []
+  for (const row of rows) sources.push(await sourceRowsOf(row))
+  return insertSourceRows(tx, sources)
 }
 
 export type InboundLink = {
