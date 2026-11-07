@@ -281,40 +281,55 @@ export async function applySectionLinkUpdates(input: {
   viewer: SectionViewer
   updates: SectionLinkUpdate[]
 }): Promise<{ updated: { id: string; title: string }[] }> {
-  const target = (await readSources(db, [input.targetId], false)).at(0)
-  if (!target) throw new NotFoundError(m.server_entry_not_found())
-
-  const headings = await sectionSnapshotsOf(
-    target.draftData,
-    target.fields,
-    target.languages,
-  )
-  const updates = new Map<string, string>()
+  // The site of an entry never changes, so it is read before the lock; the
+  // target itself is read under the lock, below.
+  const head = (
+    await db
+      .select({ siteId: entry.siteId })
+      .from(entry)
+      .where(eq(entry.id, input.targetId))
+      .limit(1)
+  ).at(0)
+  if (!head) throw new NotFoundError(m.server_entry_not_found())
   for (const update of input.updates) {
     if (!/^[a-z0-9-]+$/.test(update.from)) {
       throw new ValidationError([
         { path: '', message: m.server_section_link_heading_missing() },
       ])
     }
-    const present = new Set<string>()
-    for (const [key, list] of Object.entries(headings)) {
-      if (localeOf(key) !== update.locale) continue
-      for (const heading of list) present.add(heading.id)
-    }
-    if (update.to !== '' && !present.has(update.to)) {
-      throw new ValidationError([
-        { path: '', message: m.server_section_link_heading_missing() },
-      ])
-    }
-    if (update.to !== update.from) {
-      updates.set(updateKey(update.locale, update.from), update.to)
-    }
   }
-  if (updates.size === 0) return { updated: [] }
-  const froms = [...new Set(input.updates.map((update) => update.from))]
 
   return db.transaction(async (tx) => {
-    await lockSiteLinkIndex(tx, target.siteId)
+    // The lock comes first. A save that held it committed before this read, and
+    // one that waits for it writes after this transaction, so the destination
+    // headings checked here are the ones the links are rewritten to.
+    await lockSiteLinkIndex(tx, head.siteId)
+    const target = (await readSources(tx, [input.targetId], true)).at(0)
+    if (!target) throw new NotFoundError(m.server_entry_not_found())
+    const headings = await sectionSnapshotsOf(
+      target.draftData,
+      target.fields,
+      target.languages,
+    )
+    const updates = new Map<string, string>()
+    for (const update of input.updates) {
+      const present = new Set<string>()
+      for (const [key, list] of Object.entries(headings)) {
+        if (localeOf(key) !== update.locale) continue
+        for (const heading of list) present.add(heading.id)
+      }
+      if (update.to !== '' && !present.has(update.to)) {
+        throw new ValidationError([
+          { path: '', message: m.server_section_link_heading_missing() },
+        ])
+      }
+      if (update.to !== update.from) {
+        updates.set(updateKey(update.locale, update.from), update.to)
+      }
+    }
+    if (updates.size === 0) return { updated: [] }
+    const froms = [...new Set(input.updates.map((update) => update.from))]
+
     const linking = await tx
       .select({ sourceEntryId: entryLink.sourceEntryId })
       .from(entryLink)

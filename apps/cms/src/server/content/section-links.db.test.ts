@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
 import { db } from '#/db'
@@ -493,6 +493,25 @@ describe.skipIf(!hasDb)('section links: "Linked from"', () => {
   })
 })
 
+/**
+ * Waits until a transaction is queued behind the link-index lock of a site, so
+ * a save or an update that starts now has to wait for the lock holder.
+ */
+async function waitForLinkLockWaiter(siteId: string) {
+  for (let attempt = 0; attempt < 500; attempt += 1) {
+    const rows = await db.execute<{ waiting: number }>(sql`
+      select count(*)::int as waiting
+      from pg_locks
+      where locktype = 'advisory'
+        and not granted
+        and ((classid::bigint << 32) | objid::bigint)
+          = hashtextextended(${`site-link-index:${siteId}`}, 0)`)
+    if (rows.rows[0]?.waiting) return
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+  throw new Error('No transaction waited for the link-index lock')
+}
+
 describe.skipIf(!hasDb)('section links: the bulk update', () => {
   /** Target renamed from Origin; a draft source and an approved source link to it. */
   async function renamedWithLinks(suffix: string) {
@@ -837,41 +856,106 @@ describe.skipIf(!hasDb)('section links: the bulk update', () => {
     }
   })
 
-  it('runs next to saves of the same entries without a deadlock', async () => {
+  it('validates the destination heading under the link-index lock, and refuses to point links at a heading the target lost while it waited', async () => {
+    const { ctx, target, draftSource, readySource } =
+      await renamedWithLinks('waits')
+    try {
+      // A save in progress on this site: it holds the link-index lock, and
+      // commits the target without the destination heading before it lets go.
+      let holding!: () => void
+      const holds = new Promise<void>((resolve) => {
+        holding = resolve
+      })
+      let release!: () => void
+      const released = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      const saving = db.transaction(async (tx) => {
+        await lockSiteLinkIndex(tx, ctx.site.id)
+        holding()
+        await released
+        await tx
+          .update(entry)
+          .set({
+            draftData: page(['Intro']),
+            draftVersion: sql`${entry.draftVersion} + 1`,
+          })
+          .where(eq(entry.id, target.id))
+      })
+      await holds
+
+      const bulk = applySectionLinkUpdates({
+        targetId: target.id,
+        actorId: ctx.actor.id,
+        viewer: OWNER,
+        updates: [{ locale: '', from: 'origin', to: 'where-it-grows' }],
+      }).then(
+        () => 'updated' as const,
+        (error: unknown) => error,
+      )
+      await waitForLinkLockWaiter(ctx.site.id)
+      release()
+      await saving
+      const outcome = await bulk
+
+      // The heading is gone when the update gets the lock: a clean refusal,
+      // and no link is rewritten to it.
+      expect(outcome).toBeInstanceOf(ValidationError)
+      const draft = await getEntry(draftSource.id)
+      expect(marksOf(draft!.draftData.body)[0].anchor).toBe('origin')
+      const ready = await getEntry(readySource.id)
+      expect(marksOf(ready!.draftData.body)[0].anchor).toBe('origin')
+    } finally {
+      await cleanupTestSite(ctx)
+    }
+  })
+
+  it('runs next to a save on the same site and completes both', async () => {
     const { ctx, target, draftSource, readySource } =
       await renamedWithLinks('locks')
+    const other = await createEntry({
+      siteId: ctx.site.id,
+      collectionKey: 'articles',
+      data: {
+        title: 'Losse pagina',
+        slug: 'losse-locks',
+        body: page(['Intro']),
+      },
+      actorId: ctx.actor.id,
+    })
     try {
       for (let round = 0; round < 3; round += 1) {
-        const results = await Promise.allSettled([
+        const [bulk, saved] = await Promise.all([
           applySectionLinkUpdates({
             targetId: target.id,
             actorId: ctx.actor.id,
             viewer: OWNER,
             updates: [{ locale: '', from: 'origin', to: 'where-it-grows' }],
           }),
-          save(draftSource.id, ctx.actor.id, {
-            title: 'Concept',
-            slug: `concept-locks`,
+          save(other.id, ctx.actor.id, {
+            title: 'Losse pagina',
+            slug: 'losse-locks',
+            // Only a paragraph changes, so the headings stay as they are.
             body: page(
               ['Intro'],
-              [linked('Lees meer', target.id, 'where-it-grows')],
-            ),
-          }),
-          save(readySource.id, ctx.actor.id, {
-            title: 'Klaar',
-            slug: `klaar-locks`,
-            body: page(
-              ['Intro'],
-              [linked('Lees meer', target.id, 'where-it-grows')],
+              [
+                {
+                  type: 'paragraph',
+                  content: [{ type: 'text', text: `Ronde ${round}` }],
+                },
+              ],
             ),
           }),
         ])
-        for (const result of results) {
-          if (result.status === 'rejected') {
-            expect(String(result.reason)).not.toMatch(/40P01|deadlock/i)
-          }
+        if (round === 0) {
+          expect(bulk.updated.map((row) => row.id).sort()).toEqual(
+            [draftSource.id, readySource.id].sort(),
+          )
         }
+        expect(saved.sectionChanges).toEqual([])
       }
+      const draft = await getEntry(draftSource.id)
+      expect(marksOf(draft!.draftData.body)[0].anchor).toBe('where-it-grows')
     } finally {
       await cleanupTestSite(ctx)
     }
