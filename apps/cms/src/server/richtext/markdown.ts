@@ -64,7 +64,16 @@ let entryLinks: {
   markers: boolean
   count: number
   definitions: string[]
+  links: EntryLinkMarker[]
 } | null = null
+
+/**
+ * One entry link's definition, in the order the definitions are written. The
+ * snapshot publishes this list, so the SDK localizes exactly these definitions
+ * and never a line of code that looks like one. `locale` is the language the
+ * target's path is in.
+ */
+export type EntryLinkMarker = { label: string; locale?: string }
 
 function wrapMarks(text: string, marks: Mark[] | undefined): string {
   if (!marks?.length) return text
@@ -81,6 +90,11 @@ function wrapMarks(text: string, marks: Mark[] | undefined): string {
       entryLinks.count += 1
       const label = `areca-entry-${entryLinks.count}`
       entryLinks.definitions.push(`[${label}]: ${destination(href)}`)
+      const locale = link.attrs.locale
+      entryLinks.links.push({
+        label,
+        ...(typeof locale === 'string' && locale !== '' ? { locale } : {}),
+      })
       return `[${out}][${label}]`
     }
     out = `[${out}](${destination(href)})`
@@ -230,25 +244,41 @@ function serializeBlock(node: PMNode, indent = 0): string {
   }
 }
 
+function serialize(
+  json: unknown,
+  markers: boolean,
+): { markdown: string; entryLinks: EntryLinkMarker[] } {
+  const previous = entryLinks
+  entryLinks = { markers, count: 0, definitions: [], links: [] }
+  try {
+    const body = serializeBlock(asNode(json)).trim()
+    const { definitions, links } = entryLinks
+    return {
+      markdown:
+        definitions.length > 0 ? `${body}\n\n${definitions.join('\n')}` : body,
+      entryLinks: links,
+    }
+  } finally {
+    entryLinks = previous
+  }
+}
+
 export function serializeMarkdown(
   json: unknown,
   options: { entryLinkMarkers?: boolean } = {},
 ): string {
-  const previous = entryLinks
-  entryLinks = {
-    markers: options.entryLinkMarkers === true,
-    count: 0,
-    definitions: [],
-  }
-  try {
-    const body = serializeBlock(asNode(json)).trim()
-    const { definitions } = entryLinks
-    return definitions.length > 0
-      ? `${body}\n\n${definitions.join('\n')}`
-      : body
-  } finally {
-    entryLinks = previous
-  }
+  return serialize(json, options.entryLinkMarkers === true).markdown
+}
+
+/**
+ * The published Markdown of a rich text value, with its entry link markers:
+ * one per entry link, in definition order (see `EntryLinkMarker`).
+ */
+export function serializeMarkdownWithEntryLinks(json: unknown): {
+  markdown: string
+  entryLinks: EntryLinkMarker[]
+} {
+  return serialize(json, true)
 }
 
 const BLOCK_JOIN = new Set([

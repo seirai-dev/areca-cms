@@ -257,7 +257,7 @@ describe.skipIf(!hasDb)('entry links: snapshot resolution', () => {
         json: unknown
       }
       expect(nl.html).toContain(
-        `<a href="/blog/vragen-snap-main#veelgestelde-vragen" data-areca-entry="${target.id}">`,
+        `<a href="/blog/vragen-snap-main#veelgestelde-vragen" data-areca-entry="${target.id}" data-areca-locale="nl">`,
       )
       expect(nl.markdown).toContain(
         '[areca-entry-1]: /blog/vragen-snap-main#veelgestelde-vragen',
@@ -269,7 +269,7 @@ describe.skipIf(!hasDb)('entry links: snapshot resolution', () => {
       // English: the English route and slug. The section is not in English, so the link goes to the page.
       const en = item.locales!.en.data.body as { html: string }
       expect(en.html).toContain(
-        `<a href="/news/questions-snap-main" data-areca-entry="${target.id}">`,
+        `<a href="/news/questions-snap-main" data-areca-entry="${target.id}" data-areca-locale="en">`,
       )
 
       const mine: LinkWarning[] = built.linkWarnings.filter(

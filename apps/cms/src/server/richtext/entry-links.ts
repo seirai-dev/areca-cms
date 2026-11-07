@@ -24,6 +24,11 @@ export type EntryLinkResolution = {
   targetTitle: string
   /** Set when the stored collection key should change (the save check). */
   collection?: string
+  /**
+   * The language the target's path is in. Set by the snapshot: the link mark
+   * keeps it, so the SDK localizes the path with that language.
+   */
+  locale?: string | null
 }
 
 /** One problem with one link, as the resolver reported it. */
@@ -125,6 +130,7 @@ export async function resolveEntryLinks(
             ...(result.collection !== undefined
               ? { collection: result.collection }
               : {}),
+            ...(result.locale ? { locale: result.locale } : {}),
           },
         })
       }

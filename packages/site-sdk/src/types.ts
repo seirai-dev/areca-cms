@@ -144,6 +144,12 @@ export type RichTextValue = {
   markdown: string
   document: MarkdownDocument
   html: string
+  /**
+   * One entry per entry link, in the order the CMS wrote their definitions at
+   * the end of `markdown`. `locale` is the language the link's path is in.
+   * Absent when the text has no entry links, and in snapshots from before it.
+   */
+  entryLinks?: { label: string; locale?: string }[]
 }
 
 export type ImageValue = {

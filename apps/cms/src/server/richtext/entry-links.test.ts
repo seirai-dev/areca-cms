@@ -331,4 +331,27 @@ describe('markdown, html and document output', () => {
     expect(markdown).toContain('[areca-entry-1]: /nl/vragen#faq')
     expect(JSON.stringify(document)).toContain(`"entryId":"${ENTRY_ID}"`)
   })
+
+  it('marks each entry link with the language its path is in, in every format', () => {
+    const { html, document, markdown, entryLinks, json } = convertRichText(
+      linkDoc({
+        href: '/journal/example',
+        entryId: ENTRY_ID,
+        anchor: null,
+        locale: 'en',
+      }),
+    )
+    expect(html).toContain(
+      `<a href="/journal/example" data-areca-entry="${ENTRY_ID}" data-areca-locale="en">`,
+    )
+    expect(JSON.stringify(document)).toContain('"locale":"en"')
+    expect(JSON.stringify(json)).toContain('"locale":"en"')
+    expect(markdown.endsWith('[areca-entry-1]: /journal/example')).toBe(true)
+    expect(entryLinks).toEqual([{ label: 'areca-entry-1', locale: 'en' }])
+  })
+
+  it('lists no markers for a text without entry links', () => {
+    const converted = convertRichText(linkDoc({ href: 'https://example.com' }))
+    expect(converted).not.toHaveProperty('entryLinks')
+  })
 })

@@ -70,6 +70,10 @@ export function richTextDocumentFromJson(json: JSONContent): MarkdownDocument {
           ...(typeof link.attrs?.entryId === 'string'
             ? { entryId: link.attrs.entryId }
             : {}),
+          // The language the target's path is in (set by the snapshot).
+          ...(typeof link.attrs?.locale === 'string'
+            ? { locale: link.attrs.locale }
+            : {}),
           children: [value],
         }
       return [value]

@@ -522,18 +522,21 @@ export async function buildSnapshot(
         return {
           href: entryLinkPath(placed.route, placed.slug, null),
           targetTitle,
+          locale: placed.language,
         }
       }
       if (headingIdsOf(live, placed.language).has(target.anchor)) {
         return {
           href: entryLinkPath(placed.route, placed.slug, target.anchor),
           targetTitle,
+          locale: placed.language,
         }
       }
       return {
         href: entryLinkPath(placed.route, placed.slug, null),
         reason: 'missing-section',
         targetTitle,
+        locale: placed.language,
       }
     }
     const row = linkTargets.get(target.entryId)
@@ -817,6 +820,7 @@ function draftLinkResolver(
       return {
         href: entryLinkPath(placed.route, placed.slug, target.anchor),
         targetTitle: entryTitle(placed.view, row.fields, placed.slug),
+        locale: placed.language,
       }
     },
     report() {},

@@ -33,7 +33,8 @@ export function defaultLocalizePath(main: string): LocalizePath {
   }
 }
 
-const HTML_ENTRY_LINK = /<a href="([^"]*)" data-areca-entry="([^"]*)">/g
+const HTML_ENTRY_LINK =
+  /<a href="([^"]*)" data-areca-entry="([^"]*)"(?: data-areca-locale="([^"]*)")?>/g
 const MARKDOWN_ENTRY_DEFINITION = /^(\[areca-entry-\d+\]: )(\S+)$/gm
 
 const HTML_UNESCAPES: Record<string, string> = {
@@ -100,7 +101,11 @@ function localizeJson(
         ...mark,
         attrs: {
           ...attrs,
-          href: localizeHref(String(attrs.href), locale, localize),
+          href: localizeHref(
+            String(attrs.href),
+            linkLocale(attrs.locale, locale),
+            localize,
+          ),
         },
       }
     })
@@ -139,9 +144,53 @@ function localizeDocument(
     typeof copy.entryId === 'string' &&
     typeof copy.href === 'string'
   ) {
-    copy.href = localizeHref(copy.href, locale, localize)
+    copy.href = localizeHref(
+      copy.href,
+      linkLocale(copy.locale, locale),
+      localize,
+    )
   }
   return copy
+}
+
+/**
+ * The language a link's path is in: the one the CMS marked on the link, or the
+ * language of the text for a snapshot from before the markers.
+ */
+function linkLocale(marked: unknown, textLocale: string): string {
+  return typeof marked === 'string' && marked !== '' ? marked : textLocale
+}
+
+/** One definition the CMS lists in `entryLinks`, in the order it writes them. */
+type MarkdownEntryLink = { label: string; locale?: string }
+
+/**
+ * Localizes the definitions a snapshot lists, which the CMS writes at the end
+ * of the Markdown, one per line, in list order. Nothing else is touched: code
+ * that looks like a definition stays as it is. A Markdown that does not match
+ * its list is left unchanged.
+ */
+function localizeMarkdownLinks(
+  markdown: string,
+  links: MarkdownEntryLink[],
+  textLocale: string,
+  localize: LocalizePath,
+): string {
+  if (links.length === 0) return markdown
+  const lines = markdown.split('\n')
+  const first = lines.length - links.length
+  if (first < 0) return markdown
+  const next = [...lines]
+  for (const [index, link] of links.entries()) {
+    const match = /^\[([^\]]+)\]: (\S+)$/.exec(lines[first + index] ?? '')
+    if (!match || match[1] !== link.label) return markdown
+    next[first + index] = `[${link.label}]: ${localizeHref(
+      match[2]!,
+      linkLocale(link.locale, textLocale),
+      localize,
+    )}`
+  }
+  return next.join('\n')
 }
 
 function isRichTextValue(value: unknown): value is {
@@ -168,6 +217,7 @@ function localizeRichText<
     markdown: string
     html: string
     document: unknown
+    entryLinks?: MarkdownEntryLink[]
   },
 >(value: T, locale: string, localize: LocalizePath): T {
   return {
@@ -176,16 +226,30 @@ function localizeRichText<
     document: localizeDocument(value.document, locale, localize),
     html: value.html.replace(
       HTML_ENTRY_LINK,
-      (_match, href: string, entryId: string) => {
-        const next = localizeHref(unescapeHtml(href), locale, localize)
-        return `<a href="${escapeHtml(next)}" data-areca-entry="${entryId}">`
+      (_match, href: string, entryId: string, marked?: string) => {
+        const next = localizeHref(
+          unescapeHtml(href),
+          linkLocale(marked, locale),
+          localize,
+        )
+        const language =
+          marked === undefined ? '' : ` data-areca-locale="${marked}"`
+        return `<a href="${escapeHtml(next)}" data-areca-entry="${entryId}"${language}>`
       },
     ),
-    markdown: value.markdown.replace(
-      MARKDOWN_ENTRY_DEFINITION,
-      (_match, prefix: string, destination: string) =>
-        `${prefix}${localizeHref(destination, locale, localize)}`,
-    ),
+    markdown:
+      value.entryLinks !== undefined
+        ? localizeMarkdownLinks(
+            value.markdown,
+            value.entryLinks,
+            locale,
+            localize,
+          )
+        : value.markdown.replace(
+            MARKDOWN_ENTRY_DEFINITION,
+            (_match, prefix: string, destination: string) =>
+              `${prefix}${localizeHref(destination, locale, localize)}`,
+          ),
   }
 }
 

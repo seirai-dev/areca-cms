@@ -194,6 +194,102 @@ describe('localizeEntryLinks', () => {
   })
 })
 
+/**
+ * A rich text value the CMS writes for one link whose target was resolved in
+ * `locale`: the path and every marker carry that language.
+ */
+function resolvedRichText(
+  href: string,
+  entryId: string,
+  locale: string,
+): RichTextValue {
+  return {
+    json: {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'text',
+              text: 'Lees meer',
+              marks: [
+                {
+                  type: 'link',
+                  attrs: {
+                    href,
+                    entryId,
+                    collection: 'events',
+                    anchor: null,
+                    locale,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    markdown: `[Lees meer][areca-entry-1]\n\n[areca-entry-1]: ${href}`,
+    html: `<p><a href="${href}" data-areca-entry="${entryId}" data-areca-locale="${locale}">Lees meer</a></p>`,
+    document: {
+      type: 'root',
+      children: [
+        {
+          type: 'paragraph',
+          children: [
+            {
+              type: 'link',
+              href,
+              entryId,
+              locale,
+              children: [{ type: 'text', value: 'Lees meer' }],
+            },
+          ],
+        },
+      ],
+    },
+    entryLinks: [{ label: 'areca-entry-1', locale }],
+  } as unknown as RichTextValue
+}
+
+describe('localizeEntryLinks: the language the CMS resolved the link in', () => {
+  it('localizes a Dutch text linking to an English-only entry without the Dutch prefix', () => {
+    // The CMS resolved the link to the English path, so the marker says en.
+    const entry = entryWith(
+      resolvedRichText('/journal/example', 'event-1', 'en'),
+    )
+    const localized = localizeEntryLinks(
+      entry,
+      languages,
+      defaultLocalizePath('en'),
+    )
+    const nl = localized.locales!.nl!.data.body as RichTextValue
+    expect(nl.html).toContain(
+      '<a href="/journal/example" data-areca-entry="event-1" data-areca-locale="en">',
+    )
+    expect(nl.markdown).toContain('[areca-entry-1]: /journal/example')
+    expect(JSON.stringify(nl.json)).toContain('"href":"/journal/example"')
+    expect(nl.html).not.toContain('/nl/journal/')
+  })
+
+  it('localizes a Dutch text linking to a Dutch-translated entry with the Dutch prefix', () => {
+    const entry = entryWith(
+      resolvedRichText('/journaal/open-dag', 'event-1', 'nl'),
+    )
+    const localized = localizeEntryLinks(
+      entry,
+      languages,
+      defaultLocalizePath('en'),
+    )
+    const en = localized.locales!.en!.data.body as RichTextValue
+    // The English text shows the same Dutch target with its own prefix rule.
+    expect(en.html).toContain(
+      '<a href="/nl/journaal/open-dag" data-areca-entry="event-1" data-areca-locale="nl">',
+    )
+  })
+})
+
 const directories: string[] = []
 afterEach(() => {
   directories
