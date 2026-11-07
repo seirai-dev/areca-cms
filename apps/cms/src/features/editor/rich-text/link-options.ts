@@ -263,7 +263,8 @@ export function buildLinkRows(input: LinkRowsInput): LinkRows {
   if (mode.kind === 'sections') {
     // `word#…`: the best entry, then its sections. Never a custom link.
     const rows: LinkRow[] = []
-    if (sectionEntry) {
+    // A failed search offers no sections, even ones cached from an earlier answer.
+    if (sectionEntry && !failed) {
       rows.push(entryRow(sectionEntry.entry, null, false))
       for (const heading of sectionEntry.headings) {
         if (!sectionMatches(heading, mode.filter)) continue

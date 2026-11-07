@@ -391,6 +391,18 @@ describe('a search that failed', () => {
     expect(enabled).toEqual([])
     expect(preselected).toBeNull()
   })
+
+  it('offers no entry or heading rows from a cached section answer when the refetch failed', () => {
+    // The last good answer for `coffee#` is still cached in the picker and
+    // its headings are still held; the failed refetch must not offer them.
+    const { rows, enabled, preselected } = rowsFor('coffee#', {
+      failed: true,
+      sectionEntry: { entry: ethiopia, headings },
+    })
+    expect(rows).toEqual([])
+    expect(enabled).toEqual([])
+    expect(preselected).toBeNull()
+  })
 })
 
 describe('stepRow', () => {

@@ -157,13 +157,16 @@ export function LinkPicker({
       : searching && search.isError && serverMode.text === mode.text
 
   // `word#…`: the sections of the best matching entry.
+  // Not when the search failed: a cached answer's entry and headings are stale.
   const sectionTop =
-    serverMode.kind === 'sections' ? search.data?.entries[0] : undefined
+    serverMode.kind === 'sections' && !searchFailed
+      ? search.data?.entries[0]
+      : undefined
   const sectionHeadings = useLinkHeadings({
     siteId,
     entryId: sectionTop?.entryId,
     locale,
-    enabled: serverMode.kind === 'sections',
+    enabled: serverMode.kind === 'sections' && !searchFailed,
   })
   const sectionEntry = React.useMemo(
     () =>
