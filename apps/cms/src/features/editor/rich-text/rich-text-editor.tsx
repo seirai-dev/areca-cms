@@ -689,6 +689,8 @@ export function RichTextEditor({
             </PopoverAnchor>
             <PopoverContent
               align="start"
+              // Keeps the field 16px from the screen edges on a phone.
+              collisionPadding={16}
               className="w-[min(24rem,calc(100vw-2rem))] p-3"
               onOpenAutoFocus={(event) => {
                 event.preventDefault()
