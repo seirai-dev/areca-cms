@@ -246,6 +246,62 @@ describe.skipIf(!hasDb)(
       }
     })
 
+    it('starts a baseline on creation, so the first explicit save after a rename reports it', async () => {
+      const { ctx, target } = await setup('created')
+      try {
+        const stored = await getEntry(target.id)
+        expect(stored!.headingBaseline).not.toBeNull()
+        const renamed = await save(target.id, ctx.actor.id, {
+          title: 'Ethiopia',
+          slug: 'ethiopia-created',
+          body: page(['Where it grows', 'Intro']),
+        })
+        expect(renamed.sectionChanges).toEqual([
+          expect.objectContaining({ from: 'origin', to: 'where-it-grows' }),
+        ])
+      } finally {
+        await cleanupTestSite(ctx)
+      }
+    })
+
+    it('keeps a rename made by an autosave for the next explicit save, on an entry with no baseline yet', async () => {
+      const { ctx, target } = await setup('legacy')
+      try {
+        // An entry saved before baselines existed: none is stored.
+        await db
+          .update(entry)
+          .set({ headingBaseline: null })
+          .where(eq(entry.id, target.id))
+        // The first thing the editor does is an autosave of the rename.
+        const autosaved = await save(
+          target.id,
+          ctx.actor.id,
+          {
+            title: 'Ethiopia',
+            slug: 'ethiopia-legacy',
+            body: page(['Where it grows', 'Intro']),
+          },
+          false,
+        )
+        expect(autosaved.sectionChanges).toEqual([])
+        // The explicit save (Save, ⌘S) with the same content still reports it.
+        const explicit = await save(target.id, ctx.actor.id, {
+          title: 'Ethiopia',
+          slug: 'ethiopia-legacy',
+          body: page(['Where it grows', 'Intro']),
+        })
+        expect(explicit.sectionChanges).toEqual([
+          expect.objectContaining({
+            from: 'origin',
+            fromText: 'Origin',
+            to: 'where-it-grows',
+          }),
+        ])
+      } finally {
+        await cleanupTestSite(ctx)
+      }
+    })
+
     it('names the entries that link to the changed heading, with whether this caller may update them', async () => {
       const { ctx, target } = await setup('linkers')
       try {
