@@ -6,6 +6,7 @@ import { collection, entry, site } from '#/db/schema'
 import { firstTextField } from '#/lib/content/utils'
 import {
   I18N_KEY,
+  isTranslatable,
   LOCALE_KEY,
   readLocale,
   SLUG_KEY,
@@ -160,20 +161,43 @@ function titleIn(data: EntryData, fields: Field[]): string | null {
 type Ctx = { languages: SiteLanguages | null; locale: string | null }
 
 /**
- * The option for one entry in the editor's language. The title and slug are
- * the translation's when it has them, else the main language's. The path
- * follows the release rule (`placeLinkTarget`), so it is where the link goes.
+ * The title and slug an entry shows in the link field, in `ctx.locale`. This is
+ * the one locale rule of the field; `viewValueSql`, `localizedTitleSql` and
+ * `localizedSlugSql` mirror it in SQL, so the search and the row agree.
+ * - The language's view is `readLocale`: the base values when the language is
+ *   the base one (`$locale`, else the main language), else its translation.
+ *   Without languages or a locale, the base values are the view.
+ * - The title is the view's title when it is not blank, else the base title.
+ *   A title field that is not translatable is always the base value.
+ * - The slug is the view's `$slug` when it is not empty, else the entry's slug.
+ */
+function labelsOf(
+  row: Pick<LinkTargetRow, 'draftData' | 'fields' | 'slug'>,
+  ctx: Ctx,
+): { title: string; slug: string } {
+  const { languages, locale } = ctx
+  const lctx = languages ? localeCtxFor(languages, row.fields) : null
+  const view =
+    lctx && locale ? readLocale(row.draftData, locale, lctx) : row.draftData
+  const localSlug = view[SLUG_KEY]
+  return {
+    title:
+      titleIn(view, row.fields) ??
+      titleIn(row.draftData, row.fields) ??
+      row.slug,
+    slug:
+      typeof localSlug === 'string' && localSlug !== '' ? localSlug : row.slug,
+  }
+}
+
+/**
+ * The option for one entry in the editor's language: the title and slug from
+ * `labelsOf`. The path follows the release rule (`placeLinkTarget`), so it is
+ * where the link goes.
  */
 function optionOf(row: LinkTargetRow, ctx: Ctx): LinkTargetOption {
   const { languages, locale } = ctx
-  const lctx = languages ? localeCtxFor(languages, row.fields) : null
-  const wanted =
-    lctx && locale && languages && locale !== languages.main
-      ? readLocale(row.draftData, locale, lctx)
-      : row.draftData
-  const localSlug = wanted[SLUG_KEY]
-  const slug =
-    typeof localSlug === 'string' && localSlug !== '' ? localSlug : row.slug
+  const { title, slug } = labelsOf(row, ctx)
   const placed = placeLinkTarget(
     {
       data: row.draftData,
@@ -189,10 +213,7 @@ function optionOf(row: LinkTargetRow, ctx: Ctx): LinkTargetOption {
     entryId: row.id,
     collection: row.collectionKey,
     collectionLabel: row.collectionLabel,
-    title:
-      titleIn(wanted, row.fields) ??
-      titleIn(row.draftData, row.fields) ??
-      row.slug,
+    title,
     slug,
     mainSlug: row.slug,
     publishedSlug: row.publishedSlug,
@@ -258,31 +279,39 @@ async function routedCollections(
 }
 
 /**
- * A text of the entry as the editor's option shows it (`optionOf`): the
- * language's value, else the base language's. In SQL, so the search can match
- * and rank on it before the limit.
+ * The value `key` has in the language `ctx.locale`, as `readLocale` reads it
+ * (see `labelsOf`): the base value when the language is the base one, else its
+ * translation. Null when the language has no value.
  */
-function localizedTextSql(key: string, ctx: Ctx): SQL<string | null> {
+function viewValueSql(key: string, ctx: Ctx): SQL<string | null> {
   const data = entry.draftData
-  const base = ctx.languages?.main ?? null
-  if (!ctx.locale || !ctx.languages) return sql`(${data} ->> ${key})`
-  const locale = ctx.locale
-  return sql`(CASE WHEN coalesce(${data} ->> ${LOCALE_KEY}, ${base}) = ${locale}
+  const { languages, locale } = ctx
+  if (!locale || !languages) return sql`(${data} ->> ${key})`
+  const base = sql`coalesce(nullif(${data} ->> ${LOCALE_KEY}, ''), ${languages.main})`
+  return sql`(CASE WHEN ${base} = ${locale}
     THEN ${data} ->> ${key}
-    ELSE coalesce(nullif(${data} #>> ARRAY[${I18N_KEY}, ${locale}, ${key}]::text[], ''), ${data} ->> ${key}) END)`
+    ELSE ${data} #>> ARRAY[${I18N_KEY}, ${locale}, ${key}]::text[] END)`
 }
 
-/** The slug as the editor's option shows it (`optionOf`), in SQL. */
+/**
+ * The title an entry shows (`labelsOf`), in SQL: the language's title when it
+ * is not blank, else the base title. A title field that is not translatable is
+ * always the base title.
+ */
+function localizedTitleSql(
+  key: string,
+  translatable: boolean,
+  ctx: Ctx,
+): SQL<string | null> {
+  const base = sql<string | null>`(${entry.draftData} ->> ${key})`
+  if (!translatable) return base
+  const view = viewValueSql(key, ctx)
+  return sql`(CASE WHEN ${view} ~ '[^[:space:]]' THEN ${view} ELSE ${base} END)`
+}
+
+/** The slug an entry shows (`labelsOf`), in SQL. */
 function localizedSlugSql(ctx: Ctx): SQL<string | null> {
-  const data = entry.draftData
-  const base = ctx.languages?.main ?? null
-  if (!ctx.locale || !ctx.languages) {
-    return sql`coalesce(nullif(${data} ->> ${SLUG_KEY}, ''), ${entry.slug})`
-  }
-  const locale = ctx.locale
-  return sql`(CASE WHEN coalesce(${data} ->> ${LOCALE_KEY}, ${base}) = ${locale}
-    THEN coalesce(nullif(${data} ->> ${SLUG_KEY}, ''), ${entry.slug})
-    ELSE coalesce(nullif(${data} #>> ARRAY[${I18N_KEY}, ${locale}, ${SLUG_KEY}]::text[], ''), ${entry.slug}) END)`
+  return sql`coalesce(nullif(${viewValueSql(SLUG_KEY, ctx)}, ''), ${entry.slug})`
 }
 
 /** The entry columns a search reads. */
@@ -427,9 +456,9 @@ async function searchCollectionByWords(
   term: string,
   limit: number,
 ) {
-  const titleKey = firstTextField(target.fields)?.key
-  const title = titleKey
-    ? localizedTextSql(titleKey, ctx)
+  const titleField = firstTextField(target.fields)
+  const title = titleField
+    ? localizedTitleSql(titleField.key, isTranslatable(titleField), ctx)
     : sql<string | null>`NULL::text`
   const slug = localizedSlugSql(ctx)
   const contains = `%${escapeLike(term)}%`

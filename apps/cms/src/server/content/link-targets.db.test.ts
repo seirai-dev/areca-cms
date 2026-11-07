@@ -492,6 +492,84 @@ describe.skipIf(!hasDb)('link targets: search', () => {
     }
   })
 
+  it('shows and searches the same title after the main language changed', async () => {
+    // The site was Dutch; English is the main language now. The entry still
+    // has Dutch base values (`$locale: nl`) and an English translation.
+    const ctx = await createTestSite({
+      languages: { main: 'en', all: ['en', 'nl'] },
+    })
+    try {
+      await createTestCollection(ctx.site.id, {
+        key: 'articles',
+        routePattern: '/blog/$slug',
+      })
+      const [articles] = await db
+        .select({ id: collection.id })
+        .from(collection)
+        .where(
+          and(
+            eq(collection.siteId, ctx.site.id),
+            eq(collection.key, 'articles'),
+          ),
+        )
+      const [row] = await db
+        .insert(entry)
+        .values({
+          siteId: ctx.site.id,
+          collectionId: articles.id,
+          slug: 'koffie-langwissel',
+          status: 'draft',
+          draftData: {
+            title: 'Koffie uit Ethiopië',
+            body: doc(['Herkomst']),
+            $locale: 'nl',
+            $i18n: {
+              en: {
+                title: 'Coffee from Ethiopia',
+                $slug: 'coffee-ethiopia-langwissel',
+              },
+            },
+          },
+        })
+        .returning({ id: entry.id })
+
+      const shown = await searchLinkTargets(ctx.site.id, {
+        query: 'coffee',
+        locale: 'en',
+        limit: 8,
+        enabledOnly: true,
+      })
+      expect(shown.entries).toEqual([
+        expect.objectContaining({
+          entryId: row.id,
+          title: 'Coffee from Ethiopia',
+          slug: 'coffee-ethiopia-langwissel',
+        }),
+      ])
+      // Searching the title the row shows finds the same entry.
+      const byShownTitle = await searchLinkTargets(ctx.site.id, {
+        query: 'Coffee from Ethiopia',
+        locale: 'en',
+        limit: 8,
+        enabledOnly: true,
+      })
+      expect(byShownTitle.entries.map((hit) => hit.entryId)).toEqual([row.id])
+      // The Dutch base values are what Dutch shows.
+      const dutch = await searchLinkTargets(ctx.site.id, {
+        query: 'koffie',
+        locale: 'nl',
+        limit: 8,
+        enabledOnly: true,
+      })
+      expect(dutch.entries[0]).toMatchObject({
+        title: 'Koffie uit Ethiopië',
+        slug: 'koffie-langwissel',
+      })
+    } finally {
+      await cleanupTestSite(ctx)
+    }
+  })
+
   it('keeps a path with a query string a plain link; a fragment alone can still be an entry link', async () => {
     const { ctx, about } = await setup('query')
     try {
