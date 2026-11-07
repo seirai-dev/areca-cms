@@ -277,6 +277,69 @@ test('an empty field lists the recent pages; an existing link opens as a chip', 
   await page.keyboard.press('Escape')
 })
 
+/** The id a client uses to call a server function, read from its module (as the stubs do). */
+async function serverFnId(page: Page, file: string, name: string) {
+  const source = await (await page.request.get(file)).text()
+  for (const match of source.matchAll(/createClientRpc\("([^"]+)"\)/g)) {
+    const decoded = JSON.parse(
+      Buffer.from(match[1], 'base64url').toString(),
+    ) as { export: string }
+    if (decoded.export.split('_createServerFn')[0] === name) return match[1]
+  }
+  throw new Error(`no server function ${name} in ${file}`)
+}
+
+test('a failed search says so and lists no pages; a typed address still links; Retry loads the pages', async ({
+  page,
+}) => {
+  test.setTimeout(240_000)
+  await login(page, OWNER)
+  await openEntry(page, sourceId)
+
+  // Only this test's searches fail: the server function answers with an error.
+  const search = await serverFnId(
+    page,
+    '/src/server/fn/link-targets.ts',
+    'searchLinkTargetsFn',
+  )
+  await page.route(`**/_serverFn/${search}**`, (route) =>
+    route.fulfill({ status: 500, contentType: 'text/plain', body: 'failed' }),
+  )
+
+  await newSelectedParagraph(page, 'Failed search')
+  const input = await openLinkField(page)
+  await input.fill('ethiopia')
+  // The client retries before it gives up, so the message takes a moment.
+  const failed = page.getByTestId('link-search-error')
+  await expect(failed).toContainText('Could not load pages', {
+    timeout: 30_000,
+  })
+  await expect(
+    page.locator('[data-testid^="link-suggestion-entry-"]'),
+  ).toHaveCount(0)
+  await expect(page.getByTestId('link-suggestion-custom')).toHaveCount(0)
+
+  // An address is still a link: its custom row is there and can be chosen.
+  await input.fill('https://example.com/failed-search')
+  const custom = page.getByTestId('link-suggestion-custom')
+  await expect(custom).toBeVisible()
+  await expect(custom).not.toHaveAttribute('aria-disabled', 'true')
+  await expect(page.getByTestId('link-search-error')).toBeHidden()
+  await input.fill('ethiopia')
+  await expect(page.getByTestId('link-search-error')).toBeVisible({
+    timeout: 30_000,
+  })
+
+  // Retry asks again; once the server answers, the pages are listed.
+  await page.unroute(`**/_serverFn/${search}**`)
+  await page.getByTestId('link-search-retry').click()
+  await expect(
+    page.getByTestId(`link-suggestion-entry-${targetId}`),
+  ).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByTestId('link-search-error')).toBeHidden()
+  await page.keyboard.press('Escape')
+})
+
 test('a link to an archived page is marked as dead, with a tooltip', async ({
   page,
 }) => {

@@ -1366,6 +1366,8 @@
   "editor_link_links_to": "Verwijst naar {title}",
   "editor_link_opens_new_tab": "Links naar andere sites openen in een nieuw tabblad. /pagina's en #secties openen in dit tabblad.",
   "editor_link_recent": "Recente pagina's",
+  "editor_link_retry": "Opnieuw proberen",
+  "editor_link_search_failed": "Kon de pagina's niet laden",
   "editor_link_search_placeholder": "Zoek pagina's of plak een link",
   "editor_link_section": "Sectie",
   "editor_link_section_custom": "Andere sectie…",

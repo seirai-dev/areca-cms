@@ -150,6 +150,11 @@ export function LinkPicker({
       : searching
         ? (search.data ?? null)
         : null
+  // The search for the text typed now failed (not one for an older text).
+  const searchFailed =
+    mode.kind === 'empty'
+      ? recent.isError
+      : searching && search.isError && serverMode.text === mode.text
 
   // `word#…`: the sections of the best matching entry.
   const sectionTop =
@@ -181,8 +186,9 @@ export function LinkPicker({
         search: searchData,
         sectionEntry,
         pageHeadings,
+        failed: searchFailed,
       }),
-    [mode, searchData, sectionEntry, pageHeadings],
+    [mode, searchData, sectionEntry, pageHeadings, searchFailed],
   )
   const activeId =
     picked !== null && enabled.includes(picked) ? picked : preselected
@@ -624,6 +630,26 @@ export function LinkPicker({
           )
         })}
       </ul>
+      {searchFailed && !showChip ? (
+        <div
+          role="alert"
+          className="flex min-w-0 items-center justify-between gap-2 text-callout text-text-error"
+          data-testid="link-search-error"
+        >
+          <span>{m.editor_link_search_failed()}</span>
+          <Button
+            type="button"
+            variant="quiet"
+            size="sm"
+            data-testid="link-search-retry"
+            onClick={() => {
+              void (mode.kind === 'empty' ? recent : search).refetch()
+            }}
+          >
+            {m.editor_link_retry()}
+          </Button>
+        </div>
+      ) : null}
       {loading && !showChip ? (
         <p
           className="text-caption font-normal text-text-muted"

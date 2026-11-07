@@ -1366,6 +1366,8 @@
   "editor_link_links_to": "Links to {title}",
   "editor_link_opens_new_tab": "Links to other sites open in a new tab. /pages and #sections open in this tab.",
   "editor_link_recent": "Recent pages",
+  "editor_link_retry": "Retry",
+  "editor_link_search_failed": "Could not load pages",
   "editor_link_search_placeholder": "Search pages or paste a link",
   "editor_link_section": "Section",
   "editor_link_section_custom": "Other section…",

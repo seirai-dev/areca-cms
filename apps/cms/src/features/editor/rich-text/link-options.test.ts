@@ -44,6 +44,7 @@ function rowsFor(
     search?: SearchInput
     sectionEntry?: { entry: LinkTargetOption; headings: LinkHeading[] }
     pageHeadings?: LinkHeading[]
+    failed?: boolean
   } = {},
 ) {
   const mode = parseLinkInput(raw)
@@ -52,6 +53,7 @@ function rowsFor(
     search: extra.search ? { query: mode.text, ...extra.search } : null,
     sectionEntry: extra.sectionEntry ?? null,
     pageHeadings: extra.pageHeadings ?? [],
+    failed: extra.failed,
   })
 }
 
@@ -340,6 +342,54 @@ describe('answers that belong to another text', () => {
     expect(pending).toBe(false)
     expect(enabled).toEqual(['entry-e-1'])
     expect(preselected).toBe('entry-e-1')
+  })
+})
+
+describe('a search that failed', () => {
+  it('still offers the custom link for a typed address', () => {
+    const { rows, enabled, preselected, pending } = rowsFor('example.com', {
+      failed: true,
+    })
+    expect(pending).toBe(false)
+    expect(ids(rows)).toEqual(['custom'])
+    expect(enabled).toEqual(['custom'])
+    expect(preselected).toBe('custom')
+  })
+
+  it('still offers the custom link for a typed path', () => {
+    const { rows, enabled, preselected } = rowsFor('/blog/ethiopia', {
+      failed: true,
+    })
+    expect(rows).toEqual([
+      { kind: 'custom', id: 'custom', href: '/blog/ethiopia' },
+    ])
+    expect(enabled).toEqual(['custom'])
+    expect(preselected).toBe('custom')
+  })
+
+  it('offers nothing for plain words', () => {
+    const { rows, enabled, preselected } = rowsFor('koffie', { failed: true })
+    expect(rows).toEqual([])
+    expect(enabled).toEqual([])
+    expect(preselected).toBeNull()
+  })
+
+  it('never shows the pages of an earlier answer', () => {
+    const { rows, enabled } = rowsFor('ethiopia', {
+      failed: true,
+      search: { entries: [ethiopia], resolved: null, ownPath: null },
+    })
+    expect(ids(rows)).toEqual([])
+    expect(enabled).toEqual([])
+  })
+
+  it('lists no sections for word#', () => {
+    const { rows, enabled, preselected } = rowsFor('ethiopia#', {
+      failed: true,
+    })
+    expect(rows).toEqual([])
+    expect(enabled).toEqual([])
+    expect(preselected).toBeNull()
   })
 })
 

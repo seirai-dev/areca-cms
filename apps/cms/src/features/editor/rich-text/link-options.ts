@@ -129,6 +129,11 @@ export type LinkRowsInput = {
   sectionEntry: { entry: LinkTargetOption; headings: LinkHeading[] } | null
   /** `anchor` mode: the headings of the page being edited (live document). */
   pageHeadings: LinkHeading[]
+  /**
+   * The search for the typed text failed. No pages are listed, and an answer
+   * still held is not used. An address, path or URL keeps its custom link.
+   */
+  failed?: boolean
 }
 
 export type LinkRows = {
@@ -221,11 +226,15 @@ function settle(
  * the input looks like decides the preselection (decision 13).
  */
 export function buildLinkRows(input: LinkRowsInput): LinkRows {
-  const { mode, search, sectionEntry, pageHeadings } = input
+  const { mode, sectionEntry, pageHeadings } = input
+  const failed = input.failed === true && mode.kind !== 'anchor'
+  // A failed search has no answer: nothing it held is listed or used.
+  const search = failed ? null : input.search
   // The answer is for the text it was asked with. Until the answer for the
   // typed text arrives, its rows stay on screen but cannot be chosen, and its
   // own-domain path is not used for the custom link.
-  const pending = mode.kind !== 'anchor' && search?.query !== mode.text
+  const pending =
+    mode.kind !== 'anchor' && !failed && search?.query !== mode.text
   const ownPath = pending ? null : (search?.ownPath ?? null)
 
   if (mode.kind === 'empty') {
@@ -261,10 +270,9 @@ export function buildLinkRows(input: LinkRowsInput): LinkRows {
         rows.push(headingRow(heading, sectionEntry.entry))
       }
     }
-    rows.push({ kind: 'hint', id: HINT_ROW_ID })
-    const preselected = (rows.find((row) => row.kind === 'heading') ?? rows[0])
-      .id
-    return settle(rows, preselected, pending, mode)
+    if (!failed) rows.push({ kind: 'hint', id: HINT_ROW_ID })
+    const first = rows.find((row) => row.kind === 'heading') ?? rows.at(0)
+    return settle(rows, first?.id ?? null, pending, mode)
   }
 
   // Paths and addresses: a typed path or own-domain URL that is an entry's
@@ -279,11 +287,12 @@ export function buildLinkRows(input: LinkRowsInput): LinkRows {
     rows.push(entryRow(entry, null, false))
   }
   // Plain words get their custom link (or the hint) only when no entry matches,
-  // and only once the answer is in: until then nothing says what they are.
-  // An address, a path or a URL always keeps its custom link last.
+  // and only once the answer is in: until then nothing says what they are, and
+  // a failed search never says so. An address, a path or a URL always keeps its
+  // custom link last.
   const href = customLinkHref(mode, ownPath)
   const wordsOnly = mode.kind === 'words'
-  if (!wordsOnly || (!pending && rows.length === 0)) {
+  if (!wordsOnly || (!pending && !failed && rows.length === 0)) {
     if (href !== null) rows.push({ kind: 'custom', id: CUSTOM_ROW_ID, href })
     else rows.push({ kind: 'hint', id: HINT_ROW_ID })
   }

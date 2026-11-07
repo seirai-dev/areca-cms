@@ -1366,6 +1366,8 @@
   "editor_link_links_to": "{title} sayfasına bağlanır",
   "editor_link_opens_new_tab": "Diğer sitelere giden bağlantılar yeni sekmede açılır. /sayfa ve #bölüm bağlantıları bu sekmede açılır.",
   "editor_link_recent": "Son sayfalar",
+  "editor_link_retry": "Yeniden dene",
+  "editor_link_search_failed": "Sayfalar yüklenemedi",
   "editor_link_search_placeholder": "Sayfa ara veya bir bağlantı yapıştır",
   "editor_link_section": "Bölüm",
   "editor_link_section_custom": "Başka bölüm…",
