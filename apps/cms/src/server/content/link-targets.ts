@@ -12,7 +12,15 @@ import {
 } from '#/lib/content-locale'
 import { previewOrigin } from '#/lib/preview-url'
 import type { EntryData, EntryStatus, Field, SiteLanguages } from '#/lib/types'
+import {
+  isAllowedLinkHref,
+  isEntryLinkAnchor,
+  isEntryLinkId,
+} from '#/server/richtext/allowlist'
 import { richTextHeadings } from '#/server/richtext/entry-links'
+import { markdownLinkHrefs } from '#/server/richtext/from-markdown'
+import type { MarkdownLinkTarget } from '#/server/richtext/from-markdown'
+import { ENTRY_HREF_PREFIX } from '#/server/richtext/markdown'
 
 import {
   entryLinkPath,
@@ -94,7 +102,10 @@ function safeDecode(value: string) {
 }
 
 /** The hosts an own-domain link may use: the production and the preview address. */
-function siteHosts(row: { productionUrl: string; previewUrl: string | null }) {
+export function siteHosts(row: {
+  productionUrl: string
+  previewUrl: string | null
+}) {
   const hosts = new Set<string>()
   for (const origin of [row.productionUrl, previewOrigin(row)]) {
     if (!origin) continue
@@ -641,4 +652,144 @@ export async function checkLinkTargets(
       target,
     }
   })
+}
+
+/**
+ * The entries the links of some Markdown texts point at, for an import. A link
+ * is `entry:<id>[#anchor]` (an entry of this site, or of the production site of
+ * a development environment), or a site path or own-domain URL that is the path
+ * of an entry of this site (its section from `#…`). Paths with a query stay
+ * plain links, as in the editor. Every href is resolved in one batch: two
+ * queries whatever the number of links.
+ *
+ * The result is keyed by the href as the Markdown writes it, and the target's
+ * path is in `locale` (the language of the text, null for the main one). An
+ * href that is not in the result keeps its own rules (see markdownToRichText):
+ * an `entry:` href is dropped with a warning, a path stays a plain link.
+ * docs/design/rich-text-links.md, decisions 12 and 15.
+ */
+export async function resolveMarkdownLinkTargets(
+  siteId: string,
+  locale: string | null,
+  markdowns: string[],
+): Promise<Map<string, MarkdownLinkTarget>> {
+  const out = new Map<string, MarkdownLinkTarget>()
+  const hrefs = new Set<string>()
+  for (const markdown of markdowns) {
+    for (const href of markdownLinkHrefs(markdown)) hrefs.add(href)
+  }
+  if (hrefs.size === 0) return out
+  const siteRow = (
+    await db
+      .select({
+        languages: site.languages,
+        productionUrl: site.productionUrl,
+        previewUrl: site.previewUrl,
+      })
+      .from(site)
+      .where(eq(site.id, siteId))
+      .limit(1)
+  ).at(0)
+  if (!siteRow) return out
+  const ctx: Ctx = { languages: siteRow.languages, locale }
+  const hosts = siteHosts(siteRow)
+
+  // What each href asks for: an entry id, or a path of this site.
+  const byId = new Map<string, { id: string; anchor: string | null }>()
+  const byPath = new Map<string, { path: string; anchor: string | null }>()
+  for (const href of hrefs) {
+    if (href.startsWith(ENTRY_HREF_PREFIX)) {
+      const [id, ...section] = href.slice(ENTRY_HREF_PREFIX.length).split('#')
+      const anchor = section.length > 0 ? section.join('#') : null
+      if (isEntryLinkId(id) && (anchor === null || isEntryLinkAnchor(anchor))) {
+        byId.set(href, { id, anchor })
+      }
+      continue
+    }
+    const parsed = parseLinkQuery(href, hosts)
+    if (parsed.kind !== 'path') continue
+    if (parsed.anchor !== null && !isEntryLinkAnchor(parsed.anchor)) continue
+    byPath.set(href, {
+      path: safeDecode(parsed.path).toLowerCase(),
+      anchor: parsed.anchor,
+    })
+  }
+
+  if (byId.size > 0) {
+    const rows = await loadLinkTargets(
+      db,
+      await linkTargetSiteIds(db, siteId),
+      [...byId.values()].map((ref) => ref.id),
+    )
+    for (const [href, ref] of byId) {
+      const row = rows.get(ref.id)
+      if (!row || row.collectionKind === 'global' || row.routePattern === '') {
+        continue
+      }
+      const target = markdownTargetOf(row, ctx, ref.anchor)
+      if (target) out.set(href, target)
+    }
+  }
+
+  if (byPath.size > 0) {
+    const wanted = [...new Set([...byPath.values()].map((ref) => ref.path))]
+    // Only this site's paths: a link is to a page of this site.
+    const pathMatch = or(
+      ...pathExprsSql(siteRow.languages).map(
+        (path) =>
+          sql`lower(${path}) IN (${sql.join(
+            wanted.map((value) => sql`${value}`),
+            sql`, `,
+          )})`,
+      ),
+    )
+    const rows = await db
+      .select(searchColumns)
+      .from(entry)
+      .innerJoin(collection, eq(entry.collectionId, collection.id))
+      .where(routedWhere(siteId, false, pathMatch))
+      .orderBy(desc(entry.updatedAt), entry.slug, entry.id)
+    // A row can match on a language that does not ship: `pathsOf` decides.
+    const matched = new Map<string, LinkTargetRow>()
+    for (const row of rows) {
+      for (const path of pathsOf(row, ctx)) {
+        const key = safeDecode(path).toLowerCase()
+        if (!matched.has(key)) matched.set(key, row)
+      }
+    }
+    for (const [href, ref] of byPath) {
+      const row = matched.get(ref.path)
+      if (!row) continue
+      const target = markdownTargetOf(row, ctx, ref.anchor)
+      if (target) out.set(href, target)
+    }
+  }
+  return out
+}
+
+/** The link target of one entry: its path in the text's language, with the section. */
+function markdownTargetOf(
+  row: LinkTargetRow,
+  ctx: Ctx,
+  anchor: string | null,
+): MarkdownLinkTarget | null {
+  const placed = placeLinkTarget(
+    {
+      data: row.draftData,
+      fields: row.fields,
+      slug: row.slug,
+      routePattern: row.routePattern,
+      localizedRoutes: row.localizedRoutes,
+    },
+    ctx.languages,
+    ctx.locale,
+  )
+  const href = entryLinkPath(placed.route, placed.slug, anchor)
+  if (!isAllowedLinkHref(href)) return null
+  return {
+    entryId: row.id,
+    collection: row.collectionKey,
+    anchor,
+    href,
+  }
 }

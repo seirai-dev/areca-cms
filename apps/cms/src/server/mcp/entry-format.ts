@@ -17,6 +17,10 @@ import {
   markdownToRichText,
   richTextToMarkdown,
 } from '#/server/richtext/from-markdown'
+import type { MarkdownLinkTarget } from '#/server/richtext/from-markdown'
+
+/** The entries that Markdown links in a write point at (see resolveMarkdownLinkTargets). */
+export type LinkLookup = ReadonlyMap<string, MarkdownLinkTarget>
 
 /**
  * Conversion between the shapes agents read and write and the shapes the CMS
@@ -87,6 +91,7 @@ export function toStoredFields(
   fields: Field[],
   input: Record<string, unknown>,
   assets: AssetLookup,
+  links: LinkLookup = new Map(),
 ): EntryData {
   const declared = new Map(fields.map((field) => [field.key, field]))
   const unknown = Object.keys(input).filter((key) => !declared.has(key))
@@ -107,7 +112,7 @@ export function toStoredFields(
   for (const [key, value] of Object.entries(input)) {
     const field = declared.get(key)
     if (!field) continue
-    out[key] = convertValue(field, value, assets)
+    out[key] = convertValue(field, value, assets, links)
   }
   return out
 }
@@ -123,6 +128,7 @@ function convertValue(
   field: Field,
   value: unknown,
   assets: AssetLookup,
+  links: LinkLookup,
 ): unknown {
   if (value === null || value === undefined) return null
   if (value === '' && !KEEPS_EMPTY_STRING.has(field.type)) return null
@@ -141,6 +147,7 @@ function convertValue(
         const row = assets.byId.get(id)
         return row ? ASSET_FILE_PREFIX + row.storageKey : null
       },
+      linkTargets: links,
     })
   }
   if (field.type === 'image') {
@@ -156,16 +163,21 @@ function convertValue(
   return value
 }
 
-/** One warning per Markdown link that was dropped because its href is not allowed. */
+/**
+ * One warning per Markdown link that was dropped: an href that is not allowed,
+ * or an `entry:` link to an id that is not an entry of this site.
+ */
 export function linkWarnings(
   fields: Field[],
   input: Record<string, unknown>,
+  links: LinkLookup = new Map(),
 ): string[] {
   const messages = new Set<string>()
   for (const field of fields) {
     const value = input[field.key]
     if (field.type !== 'richtext' || typeof value !== 'string') continue
     markdownToRichText(value, {
+      linkTargets: links,
       onWarning: (message) => messages.add(message),
     })
   }

@@ -24,6 +24,7 @@ import {
 import { pickDeclaredFields } from '#/server/content/validation'
 import { ValidationError } from '#/server/content/errors'
 import { loadSiteLanguages } from '#/server/content/locale-validation'
+import { resolveMarkdownLinkTargets } from '#/server/content/link-targets'
 import { McpNotFoundError } from '../errors'
 import {
   signPreviewToken,
@@ -41,7 +42,7 @@ import {
 } from '../locales'
 import type { LocaleTarget } from '../locales'
 
-import type { AssetLookup } from '../entry-format'
+import type { AssetLookup, LinkLookup } from '../entry-format'
 import {
   AGENT_STATUSES,
   collectAssetIds,
@@ -109,6 +110,24 @@ export async function assetLookupFor(
       },
     ])
   return lookup
+}
+
+/**
+ * The entries the Markdown links of a write point at, resolved in one batch
+ * for all its rich text fields. `locale` is the language written: the link
+ * paths are in it. docs/design/rich-text-links.md, decision 12.
+ */
+export async function richTextLinksFor(
+  actor: McpActor,
+  fields: Field[],
+  inputs: Record<string, unknown>,
+  locale: string | null,
+): Promise<LinkLookup> {
+  const markdowns = fields.flatMap((field) => {
+    const value = inputs[field.key]
+    return field.type === 'richtext' && typeof value === 'string' ? [value] : []
+  })
+  return resolveMarkdownLinkTargets(actor.siteId, locale, markdowns)
 }
 
 /** Lookup for read paths: every image id stored on the given entry data. */
@@ -422,7 +441,7 @@ export function registerEntryTools(registry: ToolCollector): void {
     name: 'get_entry',
     title: 'Get entry',
     description:
-      "Returns one entry: status (draft, ready, scheduled or archived), live (on the production site now; demo previews do not count), pendingRelease (approved changes waiting for the next go live), approvedAt, fields (rich text as Markdown, images as {assetId,url,alt}, references as {entryId}), seo, and version (pass it to update_entry as expectedVersion). On a site with languages, locale returns that language's values (slug and seo included); without it you get the main language plus translations, the completeness of each other language and its missing fields. Set includePublished to also get liveFields, the version visitors see now. Read-only.",
+      "Returns one entry: status (draft, ready, scheduled or archived), live (on the production site now; demo previews do not count), pendingRelease (approved changes waiting for the next go live), approvedAt, fields (rich text as Markdown, with links to entries as [text](entry:<id>), images as {assetId,url,alt}, references as {entryId}), seo, and version (pass it to update_entry as expectedVersion). On a site with languages, locale returns that language's values (slug and seo included); without it you get the main language plus translations, the completeness of each other language and its missing fields. Set includePublished to also get liveFields, the version visitors see now. Read-only.",
     inputSchema: z.object({
       id: idSchema('entry'),
       includePublished: z
@@ -470,7 +489,13 @@ export function registerEntryTools(registry: ToolCollector): void {
       const inputs = withSlugInput(col.fields, input.fields ?? {}, input.slug)
       const seo = seoPatch(input.seo)
       const assets = await assetLookupFor(actor, col.fields, inputs, seo)
-      const converted = toStoredFields(col.fields, inputs, assets)
+      const links = await richTextLinksFor(
+        actor,
+        col.fields,
+        inputs,
+        target?.locale ?? null,
+      )
+      const converted = toStoredFields(col.fields, inputs, assets, links)
       assertSiteImages(col.fields, converted, assets)
       let data = converted
       let shared: string[] = []
@@ -512,7 +537,7 @@ export function registerEntryTools(registry: ToolCollector): void {
         }),
         [
           ...codeLanguageWarnings(col.fields, inputs),
-          ...linkWarnings(col.fields, inputs),
+          ...linkWarnings(col.fields, inputs, links),
           ...created.importWarnings,
         ],
         target,
@@ -556,7 +581,13 @@ export function registerEntryTools(registry: ToolCollector): void {
       const inputs = withSlugInput(col.fields, input.fields ?? {}, input.slug)
       const patch = seoPatch(input.seo)
       const assets = await assetLookupFor(actor, col.fields, inputs, patch)
-      const converted = toStoredFields(col.fields, inputs, assets)
+      const links = await richTextLinksFor(
+        actor,
+        col.fields,
+        inputs,
+        target?.locale ?? null,
+      )
+      const converted = toStoredFields(col.fields, inputs, assets, links)
       assertSiteImages(col.fields, converted, assets)
       let data: EntryData
       let shared: string[] = []
@@ -595,7 +626,7 @@ export function registerEntryTools(registry: ToolCollector): void {
         }),
         [
           ...codeLanguageWarnings(col.fields, inputs),
-          ...linkWarnings(col.fields, inputs),
+          ...linkWarnings(col.fields, inputs, links),
           ...updated.importWarnings,
         ],
         target,

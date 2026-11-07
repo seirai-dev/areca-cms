@@ -38,6 +38,7 @@ import {
   expectedVersion,
   formatStoredEntry,
   localeInput,
+  richTextLinksFor,
   withImportWarnings,
 } from './entries'
 import { loadGlobalInSite } from '../scope'
@@ -127,7 +128,13 @@ export function registerGlobalTools(registry: ToolCollector): void {
       const inputs = input.fields ?? {}
       const patch = seoPatchFromInput(input.seo)
       const assets = await assetLookupFor(actor, global.fields, inputs, patch)
-      const converted = toStoredFields(global.fields, inputs, assets)
+      const links = await richTextLinksFor(
+        actor,
+        global.fields,
+        inputs,
+        target?.locale ?? null,
+      )
+      const converted = toStoredFields(global.fields, inputs, assets, links)
       assertSiteImages(global.fields, converted, assets)
       let data: EntryData
       let shared: string[] = []
@@ -169,7 +176,7 @@ export function registerGlobalTools(registry: ToolCollector): void {
           }),
           [
             ...codeLanguageWarnings(global.fields, inputs),
-            ...linkWarnings(global.fields, inputs),
+            ...linkWarnings(global.fields, inputs, links),
             ...updated.importWarnings,
           ],
         ),

@@ -62,6 +62,8 @@ async function call(
 describe.skipIf(!hasDb)('MCP rich text links', () => {
   let ctx: Awaited<ReturnType<typeof createTestSite>>
   let client: Client
+  /** The id of the Ethiopia entry, created by the dropped-link test. */
+  let ethiopiaId = ''
 
   beforeAll(async () => {
     ctx = await createTestSite({ languages: null })
@@ -116,9 +118,10 @@ describe.skipIf(!hasDb)('MCP rich text links', () => {
       'Removed the link to "//evil.com": links must be https://, mailto:, a site path like /page or an anchor like #section.',
     ])
     expect(created.text).toContain('the origin notes')
+    ethiopiaId = String(created.data?.id)
   })
 
-  it('keeps a site path link with an anchor through a get_entry round trip', async () => {
+  it('turns a site path with an anchor into an entry link, which get_entry writes as entry:<id>#anchor', async () => {
     const created = await call(client, 'create_entry', {
       collection: 'coffees',
       fields: {
@@ -132,7 +135,7 @@ describe.skipIf(!hasDb)('MCP rich text links', () => {
     const id = String(created.data?.id)
     const fetched = await call(client, 'get_entry', { id })
     expect(fetched.isError).toBe(false)
-    expect(fetched.text).toContain('(/coffees/ethiopia#origin)')
+    expect(fetched.text).toContain(`(entry:${ethiopiaId}#origin)`)
   })
 })
 
