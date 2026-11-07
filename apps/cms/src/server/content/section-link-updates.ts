@@ -92,9 +92,13 @@ type SourceRow = {
   environment: string
 }
 
-async function readSources(ids: string[], lock: boolean): Promise<SourceRow[]> {
+async function readSources(
+  connection: Pick<typeof db, 'select'>,
+  ids: string[],
+  lock: boolean,
+): Promise<SourceRow[]> {
   if (ids.length === 0) return []
-  const base = db
+  const base = connection
     .select({
       id: entry.id,
       siteId: entry.siteId,
@@ -175,6 +179,7 @@ export async function attachSectionLinkers(
   const sources = new Map(
     (
       await readSources(
+        db,
         [...new Set(rows.map((row) => row.sourceEntryId))],
         false,
       )
@@ -272,7 +277,7 @@ export async function applySectionLinkUpdates(input: {
   updated: { id: string; title: string }[]
   skipped: { id: string; title: string }[]
 }> {
-  const target = (await readSources([input.targetId], false)).at(0)
+  const target = (await readSources(db, [input.targetId], false)).at(0)
   if (!target) throw new NotFoundError(m.server_entry_not_found())
 
   const headings = await sectionSnapshotsOf(
@@ -316,7 +321,9 @@ export async function applySectionLinkUpdates(input: {
           inArray(entryLink.anchor, froms),
         ),
       )
+    // Locked and read in the transaction, so the rows stay as read until it ends.
     const sources = await readSources(
+      tx,
       [...new Set(linking.map((row) => row.sourceEntryId))],
       true,
     )
