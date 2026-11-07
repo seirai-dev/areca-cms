@@ -174,6 +174,8 @@ test('part of a title finds the page with its status; Enter links to the entry, 
   await expect(input).toBeHidden()
   await expect(page.getByTestId('link-suggestions')).toBeHidden()
   const section = page.getByTestId('link-section-select')
+  // Picked: the keyboard goes to the section, the next thing to fill in.
+  await expect(section).toBeFocused()
   await expect(section.locator('option', { hasText: 'Origin' })).toHaveCount(1)
   await section.selectOption({ label: 'Origin' })
   await page.getByTestId('rich-text-link-done').click()
@@ -265,6 +267,8 @@ test('an empty field lists the recent pages; an existing link opens as a chip', 
   await expect(page.getByTestId('link-chip')).toContainText(targetTitle)
   await expect(page.getByTestId('link-section-select')).toHaveValue('origin')
   await expect(page.locator('#rich-text-link-url')).toBeHidden()
+  // An existing link opens as a chip: Change has the focus, not the field.
+  await expect(page.getByTestId('link-change')).toBeFocused()
 
   // Change reopens the search, with the field focused.
   await page.getByTestId('link-change').click()

@@ -115,6 +115,10 @@ export function LinkPicker({
   // An existing link opens collapsed to its chip; Change reopens the search.
   const [changing, setChanging] = React.useState(false)
   const inputRef = React.useRef<HTMLInputElement>(null)
+  // Where the keyboard goes once an entry is picked and the field collapses.
+  const sectionRef = React.useRef<HTMLSelectElement>(null)
+  const changeRef = React.useRef<HTMLButtonElement>(null)
+  const focusAfterPick = React.useRef(false)
   React.useEffect(() => {
     if (changing) inputRef.current?.focus()
   }, [changing])
@@ -230,6 +234,7 @@ export function LinkPicker({
     applyEntry(row.entry, row.anchor)
     setInput('')
     setPicked(null)
+    focusAfterPick.current = true
     setChanging(false)
   }
 
@@ -257,6 +262,13 @@ export function LinkPicker({
   const currentTarget = currentCheck?.target ?? null
   const currentGone = currentCheck?.state === 'gone'
   const showChip = current !== null && !changing
+  // The input unmounts when the chip shows: the keyboard moves to the section
+  // field, else to Change, so it never falls back to the body.
+  React.useEffect(() => {
+    if (!showChip || !focusAfterPick.current) return
+    focusAfterPick.current = false
+    ;(sectionRef.current ?? changeRef.current)?.focus()
+  }, [showChip])
   const sections = useLinkHeadings({
     siteId,
     entryId: current?.entryId,
@@ -400,6 +412,8 @@ export function LinkPicker({
               ) : null}
             </button>
             <Button
+              ref={changeRef}
+              id="rich-text-link-change"
               type="button"
               variant="quiet"
               size="sm"
@@ -424,6 +438,7 @@ export function LinkPicker({
                 {m.editor_link_section()}
               </Label>
               <select
+                ref={sectionRef}
                 id="rich-text-link-section"
                 data-testid="link-section-select"
                 className={cn(fieldClasses, 'h-9')}

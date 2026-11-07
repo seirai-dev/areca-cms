@@ -693,8 +693,13 @@ export function RichTextEditor({
               collisionPadding={16}
               className="w-[min(24rem,calc(100vw-2rem))] p-3"
               onOpenAutoFocus={(event) => {
+                // Radix's own focus would go to the first control; this one
+                // picks the field, or Change when the existing link is a chip.
                 event.preventDefault()
-                document.getElementById('rich-text-link-url')?.focus()
+                const target =
+                  document.getElementById('rich-text-link-change') ??
+                  document.getElementById('rich-text-link-url')
+                target?.focus()
               }}
             >
               {linkSession ? (
