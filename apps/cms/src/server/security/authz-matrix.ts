@@ -42,6 +42,7 @@ import * as authMethodFns from '#/server/fn/auth-methods'
 import * as brandingFns from '#/server/fn/branding'
 import * as devEnvFns from '#/server/fn/dev-env'
 import * as contentFns from '#/server/fn/content'
+import * as linkTargetFns from '#/server/fn/link-targets'
 import * as homeFns from '#/server/fn/home'
 import * as mcpKeyFns from '#/server/fn/mcp-keys'
 import * as mcpOauthFns from '#/server/fn/mcp-oauth'
@@ -567,6 +568,38 @@ export const ROWS: Row[] = [
     fn: contentFns.listRecentEntriesFn,
     policy: 'org-editor',
     prepare: (w) => ({ data: { siteId: w.X.site.id, limit: 8 } }),
+  },
+  {
+    name: 'searchLinkTargetsFn',
+    note: 'Entries a rich text link can point at. Non-admins see only enabled collections, as the sidebar does.',
+    hidden: true,
+    fn: linkTargetFns.searchLinkTargetsFn,
+    policy: 'org-editor',
+    prepare: (w) => ({
+      data: { siteId: w.X.site.id, query: 'a', locale: null, limit: 5 },
+    }),
+  },
+  {
+    name: 'linkTargetHeadingsFn',
+    hidden: true,
+    fn: linkTargetFns.linkTargetHeadingsFn,
+    policy: 'org-editor',
+    prepare: (w) => ({
+      data: { siteId: w.X.site.id, entryId: w.X.entry.id, locale: null },
+    }),
+  },
+  {
+    name: 'checkLinkTargetsFn',
+    hidden: true,
+    fn: linkTargetFns.checkLinkTargetsFn,
+    policy: 'org-editor',
+    prepare: (w) => ({
+      data: {
+        siteId: w.X.site.id,
+        locale: null,
+        links: [{ entryId: w.X.entry.id, anchor: null }],
+      },
+    }),
   },
   {
     name: 'getEntryFn',
@@ -2070,6 +2103,7 @@ export const ALL_FN_MODULES = {
   'auth-methods': authMethodFns,
   branding: brandingFns,
   content: contentFns,
+  'link-targets': linkTargetFns,
   home: homeFns,
   'mcp-keys': mcpKeyFns,
   'mcp-oauth': mcpOauthFns,
