@@ -347,12 +347,17 @@ Do not send `null`. The input schema does not accept it for SEO keys.
 Write rich text as Markdown, never as HTML. Areca converts it to the stored format.
 
 - Use `##` for section headings, and `###` or `####` for subsections. Other heading levels are adjusted to these.
-- Separate paragraphs with a blank line. Use `**bold**`, `*italic*` and links. Link to other sites with `[text](https://…)`, to a page of this site with its path, such as `[coffees](/coffees/slug)`, and to a section with `[FAQ](#faq)`. Do not write full URLs of this site.
+- Separate paragraphs with a blank line. Use `**bold**`, `*italic*` and links.
+- Link to another page of this site with `[text](entry:<id>)`, where the id comes from `list_entries` or `get_entry`. To a section of that page, add the heading's slug: `[FAQ](entry:<id>#faq)`. The link follows the entry, so it keeps working when its slug changes, and it is written in the language of the text.
+- A site path such as `[coffees](/coffees/slug)`, or a full URL of this site, is turned into an entry link when a page matches it. A path that matches no page stays a plain link. A path with a query string, such as `/search?q=x`, stays a plain link. A same-page section such as `[FAQ](#faq)` also stays as written.
+- Link to other sites with `[text](https://…)`. Do not write full URLs of this site.
+- A link to a page that is not live yet is plain text on the site until the page goes live. The Go live panel lists it.
+- An `entry:` id that is not an entry of this site, or has no page, is dropped: the text stays and the result's `warnings` names the id.
 - Use bullet and numbered lists, `>` blockquotes and tables.
 - Put images in the text as `![alt text](asset:<assetId>)`. The asset id must belong to the client's Library, or the write is refused.
 - Raw HTML is dropped. An image written with a full `https` URL is copied into the Library when the entry is saved, and the text then points at the copy. If a copy fails, the image keeps its URL and the result has a `warnings` list that names it. Uploaded assets are still preferred, because you control their alt text.
 
-When an entry is read back, its images appear as `asset:<assetId>` in the Markdown, so the same text can be sent again.
+When an entry is read back, its images appear as `asset:<assetId>` in the Markdown, and its links to entries as `[text](entry:<id>)` or `[text](entry:<id>#section)`, so the same text can be sent again without changing its links.
 
 ## SEO object
 

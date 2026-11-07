@@ -307,10 +307,27 @@ describe('markdown, html and document output', () => {
       entryId: ENTRY_ID,
       anchor: 'faq',
     })
-    expect(serializeMarkdown(json)).toBe('[Lees meer](/nl/vragen#faq)')
+    expect(serializeMarkdown(json, { entryLinkForm: 'hrefs' })).toBe(
+      '[Lees meer](/nl/vragen#faq)',
+    )
     expect(serializeMarkdown(json, { entryLinkMarkers: true })).toBe(
       '[Lees meer][areca-entry-1]\n\n[areca-entry-1]: /nl/vragen#faq',
     )
+  })
+
+  it('writes entry links as entry:<id> and entry:<id>#anchor by default', () => {
+    const json = linkDoc({
+      href: '/nl/vragen#faq',
+      entryId: ENTRY_ID,
+      anchor: 'faq',
+    })
+    expect(serializeMarkdown(json)).toBe(`[Lees meer](entry:${ENTRY_ID}#faq)`)
+    const whole = linkDoc({
+      href: '/nl/vragen',
+      entryId: ENTRY_ID,
+      anchor: null,
+    })
+    expect(serializeMarkdown(whole)).toBe(`[Lees meer](entry:${ENTRY_ID})`)
   })
 
   it('keeps plain links as they were, with markers on', () => {

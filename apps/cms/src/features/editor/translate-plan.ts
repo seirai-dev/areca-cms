@@ -125,6 +125,8 @@ export async function afterSave(
 export type TranslateResult = {
   values: Record<string, unknown>
   seo?: Partial<EntrySeo>
+  /** Things the translation dropped, such as a link to an entry the model invented. */
+  warnings?: string[]
 }
 
 /**

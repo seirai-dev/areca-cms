@@ -8,6 +8,7 @@ import { archiveEntry, createEntry, publishEntry } from './entries.ts'
 import {
   checkLinkTargets,
   linkTargetHeadings,
+  resolveMarkdownLinkTargets,
   searchLinkTargets,
 } from './link-targets.ts'
 import {
@@ -1005,3 +1006,180 @@ describe.skipIf(!hasDb)('link targets: headings and checks', () => {
     }
   })
 })
+
+describe.skipIf(!hasDb)('resolveMarkdownLinkTargets: queries', () => {
+  it('makes the same queries whatever the number of links of each kind', async () => {
+    const ctx = await createTestSite({ languages })
+    try {
+      await createTestCollection(ctx.site.id, {
+        key: 'pages',
+        routePattern: '/pages/$slug',
+      })
+      const page = await createEntry({
+        siteId: ctx.site.id,
+        collectionKey: 'pages',
+        data: { title: 'Contact', slug: 'contact', body: doc([]) },
+        actorId: ctx.actor.id,
+      })
+      const countQueries = async (markdown: string) => {
+        const spy = vi.spyOn(db, 'select')
+        try {
+          await resolveMarkdownLinkTargets(ctx.site.id, null, [markdown])
+          return spy.mock.calls.length
+        } finally {
+          spy.mockRestore()
+        }
+      }
+      const oneId = await countQueries(`[a](entry:${page.id})`)
+      const manyIds = await countQueries(
+        `[a](entry:${page.id}) [b](entry:${page.id}#x) [c](entry:${page.id})`,
+      )
+      const onePath = await countQueries('[a](/pages/contact)')
+      const manyPaths = await countQueries(
+        '[a](/pages/contact) [b](/pages/other) [c](/pages/more)',
+      )
+      const mixed = await countQueries(
+        `[a](entry:${page.id}) [b](/pages/contact)`,
+      )
+      expect(manyIds).toBe(oneId)
+      expect(manyPaths).toBe(onePath)
+      // The site, its link target sites and the entries by id; the site and the entries by path.
+      expect(oneId).toBe(3)
+      expect(onePath).toBe(2)
+      expect(mixed).toBe(4)
+    } finally {
+      await cleanupTestSite(ctx)
+    }
+  })
+})
+
+describe.skipIf(!hasDb)(
+  'resolveMarkdownLinkTargets: a path in the language of the text',
+  () => {
+    const trilingual = { main: 'nl', all: ['nl', 'en', 'de'] }
+
+    it('links a path to the entry whose path in that language matches, not to a newer entry in another language', async () => {
+      const ctx = await createTestSite({ languages: trilingual })
+      try {
+        await createTestCollection(ctx.site.id, {
+          key: 'pages',
+          routePattern: '/pages/$slug',
+        })
+        // Slugs are unique per collection, so the other entry lives in a second
+        // collection with the same route.
+        await createTestCollection(ctx.site.id, {
+          key: 'stories',
+          routePattern: '/pages/$slug',
+        })
+        // Dutch path /pages/contact.
+        const contact = await createEntry({
+          siteId: ctx.site.id,
+          collectionKey: 'pages',
+          data: { title: 'Contact', slug: 'contact', body: doc([]) },
+          actorId: ctx.actor.id,
+        })
+        // Dutch path /pages/anders, German path /pages/contact. Edited after `contact`.
+        const anders = await createEntry({
+          siteId: ctx.site.id,
+          collectionKey: 'stories',
+          data: {
+            title: 'Anders',
+            slug: 'anders',
+            body: doc([]),
+            $i18n: {
+              de: {
+                title: 'Kontakt',
+                $slug: 'contact',
+                body: doc(['Kontakt']),
+              },
+            },
+          },
+          actorId: ctx.actor.id,
+        })
+        await db
+          .update(entry)
+          .set({ updatedAt: new Date('2020-01-01') })
+          .where(eq(entry.id, contact.id))
+        expect(anders.id).not.toBe(contact.id)
+
+        const targets = await resolveMarkdownLinkTargets(ctx.site.id, 'nl', [
+          '[Contact](/pages/contact)',
+        ])
+        expect(targets.get('/pages/contact')).toMatchObject({
+          entryId: contact.id,
+          collection: 'pages',
+          href: '/pages/contact',
+        })
+      } finally {
+        await cleanupTestSite(ctx)
+      }
+    })
+
+    it('keeps a path plain and says so when more than one entry matches in the language of the text', async () => {
+      const ctx = await createTestSite({ languages: trilingual })
+      try {
+        await createTestCollection(ctx.site.id, {
+          key: 'pages',
+          routePattern: '/pages/$slug',
+        })
+        await createTestCollection(ctx.site.id, {
+          key: 'stories',
+          routePattern: '/pages/$slug',
+        })
+        await createEntry({
+          siteId: ctx.site.id,
+          collectionKey: 'pages',
+          data: { title: 'Dup', slug: 'dup', body: doc([]) },
+          actorId: ctx.actor.id,
+        })
+        await createEntry({
+          siteId: ctx.site.id,
+          collectionKey: 'stories',
+          data: { title: 'Dup', slug: 'dup', body: doc([]) },
+          actorId: ctx.actor.id,
+        })
+
+        const targets = await resolveMarkdownLinkTargets(ctx.site.id, 'nl', [
+          '[x](/pages/dup)',
+        ])
+        expect(targets.get('/pages/dup')).toEqual({ ambiguous: true })
+      } finally {
+        await cleanupTestSite(ctx)
+      }
+    })
+
+    it('keeps a path plain when more than one entry matches only in another language', async () => {
+      const ctx = await createTestSite({ languages: trilingual })
+      try {
+        await createTestCollection(ctx.site.id, {
+          key: 'pages',
+          routePattern: '/pages/$slug',
+        })
+        await createTestCollection(ctx.site.id, {
+          key: 'stories',
+          routePattern: '/pages/$slug',
+        })
+        for (const key of ['pages', 'stories']) {
+          await createEntry({
+            siteId: ctx.site.id,
+            collectionKey: key,
+            data: {
+              title: key,
+              slug: `${key}-main`,
+              body: doc([]),
+              $i18n: { de: { title: key, $slug: 'dup', body: doc(['Dup']) } },
+            },
+            actorId: ctx.actor.id,
+          })
+        }
+
+        const targets = await resolveMarkdownLinkTargets(ctx.site.id, 'nl', [
+          '[x](/pages/dup)',
+        ])
+        expect(targets.get('/pages/dup')).toEqual({ ambiguous: true })
+      } finally {
+        await cleanupTestSite(ctx)
+      }
+    })
+  },
+)

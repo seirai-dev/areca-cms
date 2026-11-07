@@ -476,3 +476,101 @@ describe('translateContent', () => {
     expect((error as Error).message).not.toContain('Backend ontwikkelaar')
   })
 })
+
+describe('entry links in translation', () => {
+  const ETHIOPIA = '7f1c2a40-1111-4b2c-9d3e-0a1b2c3d4e5f'
+  const OTHER = '0b9e8d7c-2222-4a1b-8c3d-5e6f7a8b9c0d'
+  const linkAttrs = {
+    href: '/blog/ethiopia#herkomst',
+    entryId: ETHIOPIA,
+    collection: 'articles',
+    anchor: 'herkomst',
+  }
+  const linkedBody = {
+    type: 'doc',
+    content: [
+      {
+        type: 'paragraph',
+        content: [
+          { type: 'text', text: 'Lees ' },
+          {
+            type: 'text',
+            text: 'de herkomst',
+            marks: [{ type: 'link', attrs: linkAttrs }],
+          },
+          { type: 'text', text: ' eerst.' },
+        ],
+      },
+    ],
+  }
+  const linkedFields: Field[] = [
+    { key: 'title', label: 'Title', type: 'text' },
+    { key: 'body', label: 'Body', type: 'richtext' },
+  ]
+  const translate = (answer: Record<string, unknown>) => {
+    mocks.chat.mockResolvedValueOnce(answer)
+    return translateContent({
+      config,
+      sitePrompt: null,
+      siteName: 'Acme',
+      fromName: 'Dutch',
+      toName: 'English',
+      fields: linkedFields,
+      source: { title: 'Kenya', body: linkedBody },
+      target: {},
+      seoEnabled: false,
+      assets,
+    })
+  }
+
+  it('sends the entry link as entry:<id>#section and keeps the id, collection and section', async () => {
+    const result = await translate({
+      title: 'Kenya',
+      body: `Read [the origin](entry:${ETHIOPIA}#herkomst) first.`,
+    })
+    const request = lastChat().messages[0]?.content[0]?.content ?? ''
+    expect(request).toContain(`(entry:${ETHIOPIA}#herkomst)`)
+    expect(request).not.toContain('/blog/ethiopia')
+    expect(linkMarks(result.values.body)).toEqual([
+      { text: 'the origin', attrs: linkAttrs },
+    ])
+    expect(result.warnings).toEqual([])
+  })
+
+  it('drops an entry link the translation invents, keeps its text and warns', async () => {
+    const result = await translate({
+      title: 'Kenya',
+      body: `Read [the origin](entry:${ETHIOPIA}#herkomst) and [elsewhere](entry:${OTHER}).`,
+    })
+    expect(linkMarks(result.values.body).map((link) => link.attrs)).toEqual([
+      linkAttrs,
+    ])
+    expect(JSON.stringify(result.values.body)).toContain('elsewhere')
+    expect(result.warnings).toEqual([expect.stringContaining(OTHER)])
+  })
+
+  it('tells the model to keep entry destinations exactly as written', () => {
+    expect(TRANSLATE_SYSTEM_PROMPT).toContain('entry:<id>#section')
+  })
+})
+
+/** The link marks of a stored rich text document, with the text they cover. */
+function linkMarks(
+  json: unknown,
+): { text?: string; attrs: Record<string, unknown> }[] {
+  const out: { text?: string; attrs: Record<string, unknown> }[] = []
+  const visit = (node: unknown) => {
+    if (!node || typeof node !== 'object') return
+    const { text, marks, content } = node as {
+      text?: string
+      marks?: { type: string; attrs?: Record<string, unknown> }[]
+      content?: unknown[]
+    }
+    for (const mark of marks ?? []) {
+      if (mark.type === 'link') out.push({ text, attrs: mark.attrs ?? {} })
+    }
+    for (const child of content ?? []) visit(child)
+  }
+  visit(json)
+  return out
+}

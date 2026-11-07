@@ -85,7 +85,7 @@ export function languageSummary(languages: SiteLanguages) {
 }
 
 const LINKS_GUIDE =
-  'Links: to a page of this site, use its site path from get_site_info, such as /coffees/slug, built from the collection route and the entry slug. To a section of a page, add #anchor, such as /coffees/slug#origin. Never write a full URL of this site. Other sites use full https:// links.'
+  'Links: to another page of this site, write [text](entry:<id>) with the entry id from list_entries or get_entry. The link follows the entry, so it keeps working when its slug changes. To a section of that page, add #anchor, the heading text in lower case with dashes: entry:<id>#origin. A site path such as /coffees/slug, or a full URL of this site, becomes an entry link when a page matches it. A path that matches no page stays a plain link. Never write a full URL of this site. Other sites use full https:// links. A linked page that is not live yet is plain text on the site until it goes live; go_live warns about it.'
 
 const LANGUAGES_GUIDE = [
   'Languages: this site publishes in several languages. The main language is the fallback. To write a translation, call update_entry (or update_global) once per language with locale set to that language: fields, seo and slug apply to that language. Shared fields (translatable false) change in every language, and the response lists them in sharedFieldsUpdated.',

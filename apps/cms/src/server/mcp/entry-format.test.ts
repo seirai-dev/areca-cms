@@ -11,6 +11,7 @@ import {
   formatEntry,
   formatSnapshotFields,
   linkAssetRefs,
+  linkWarnings,
   markdownAssetIds,
   mergeSeo,
   seoPatchFromInput,
@@ -160,6 +161,23 @@ describe('asset references', () => {
     expect(linkAssetRefs(md, lookup())).toBe(
       `Look ![cap](asset:${ASSET_ID}) and ![x](https://example.com/a.png)`,
     )
+  })
+})
+
+describe('linkWarnings', () => {
+  it('warns about a path that more than one entry answers to, and keeps the link plain', () => {
+    const richFields: Field[] = [
+      { key: 'body', label: 'Body', type: 'richtext' },
+    ]
+    expect(
+      linkWarnings(
+        richFields,
+        { body: 'Zie [contact](/pages/contact).' },
+        new Map([['/pages/contact', { ambiguous: true }]]),
+      ),
+    ).toEqual([
+      'The link to /pages/contact matches more than one page; use entry:<id>.',
+    ])
   })
 })
 

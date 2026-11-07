@@ -112,6 +112,7 @@ export function useAiTranslation({
       }
       applyPatch(patch)
       flashFields(applied.map(fieldAttributeFor))
+      if (result.warnings.length) toast.message(result.warnings.join(' '))
       toast.success(
         applied.length === 1
           ? m.editor_translate_done_one({ language: fromName })
