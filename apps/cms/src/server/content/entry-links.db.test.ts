@@ -612,7 +612,9 @@ describe.skipIf(!hasDb)('entry links: link index and delete warning', () => {
         actorId: ctx.actor.id,
       })
       await db.delete(entryLink).where(eq(entryLink.siteId, ctx.site.id))
-      const written = await rebuildEntryLinkIndex(db, ctx.site.id)
+      const written = await db.transaction((tx) =>
+        rebuildEntryLinkIndex(tx, ctx.site.id),
+      )
       expect(written).toBe(1)
       const rows = await db
         .select()

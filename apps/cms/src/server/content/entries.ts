@@ -1078,48 +1078,50 @@ export async function unpublishEntry(id: string, actorId: string) {
   const ctx = await loadEntryContext(id)
   assertCollectionEntry(ctx.collection)
   const now = new Date()
-  const updated = (
-    await db
-      .update(entry)
-      .set({
-        contentVersion: sql`${entry.contentVersion} + 1`,
-        status: 'draft',
-        publishedData: null,
-        publishedSlug: null,
-        publishedAt: null,
-        scheduledData: null,
-        scheduledSlug: null,
-        scheduledVersion: null,
-        scheduledAt: null,
-        scheduleTimezone: null,
-        scheduledBy: null,
-        updatedBy: actorId,
-        updatedAt: now,
-      })
-      .where(eq(entry.id, id))
-      .returning()
-  ).at(0)
+  return db.transaction(async (tx) => {
+    const updated = (
+      await tx
+        .update(entry)
+        .set({
+          contentVersion: sql`${entry.contentVersion} + 1`,
+          status: 'draft',
+          publishedData: null,
+          publishedSlug: null,
+          publishedAt: null,
+          scheduledData: null,
+          scheduledSlug: null,
+          scheduledVersion: null,
+          scheduledAt: null,
+          scheduleTimezone: null,
+          scheduledBy: null,
+          updatedBy: actorId,
+          updatedAt: now,
+        })
+        .where(eq(entry.id, id))
+        .returning()
+    ).at(0)
 
-  if (!updated) {
-    throw new NotFoundError(m.server_entry_not_found())
-  }
+    if (!updated) {
+      throw new NotFoundError(m.server_entry_not_found())
+    }
 
-  await syncEntryLinkIndex(db, id)
-  await writeRevision(id, ctx.entry.draftData, actorId, 'unpublish')
-  await audit(
-    {
-      organizationId: ctx.site.organizationId,
-      siteId: ctx.site.id,
-      actorId,
-      action: 'entry.unpublish',
-      targetType: 'entry',
-      targetId: id,
-    },
-    db,
-    ctx.site,
-  )
+    await syncEntryLinkIndex(tx, id)
+    await writeRevision(id, ctx.entry.draftData, actorId, 'unpublish', tx)
+    await audit(
+      {
+        organizationId: ctx.site.organizationId,
+        siteId: ctx.site.id,
+        actorId,
+        action: 'entry.unpublish',
+        targetType: 'entry',
+        targetId: id,
+      },
+      tx,
+      ctx.site,
+    )
 
-  return { ...updated, collectionKey: ctx.collection.key }
+    return { ...updated, collectionKey: ctx.collection.key }
+  })
 }
 
 export async function archiveEntry(id: string, actorId: string) {
@@ -1268,45 +1270,47 @@ export async function cancelSchedule(id: string, actorId: string) {
         ? 'published'
         : 'draft'
       : ctx.entry.status
-  const updated = (
-    await db
-      .update(entry)
-      .set({
-        contentVersion: sql`${entry.contentVersion} + 1`,
-        status: nextStatus,
-        scheduledData: null,
-        scheduledSlug: null,
-        scheduledVersion: null,
-        scheduledAt: null,
-        scheduleTimezone: null,
-        scheduledBy: null,
-        updatedBy: actorId,
-        updatedAt: now,
-      })
-      .where(eq(entry.id, id))
-      .returning()
-  ).at(0)
+  return db.transaction(async (tx) => {
+    const updated = (
+      await tx
+        .update(entry)
+        .set({
+          contentVersion: sql`${entry.contentVersion} + 1`,
+          status: nextStatus,
+          scheduledData: null,
+          scheduledSlug: null,
+          scheduledVersion: null,
+          scheduledAt: null,
+          scheduleTimezone: null,
+          scheduledBy: null,
+          updatedBy: actorId,
+          updatedAt: now,
+        })
+        .where(eq(entry.id, id))
+        .returning()
+    ).at(0)
 
-  if (!updated) {
-    throw new NotFoundError(m.server_entry_not_found())
-  }
+    if (!updated) {
+      throw new NotFoundError(m.server_entry_not_found())
+    }
 
-  await syncEntryLinkIndex(db, id)
-  await writeRevision(id, ctx.entry.draftData, actorId, 'cancel_schedule')
-  await audit(
-    {
-      organizationId: ctx.site.organizationId,
-      siteId: ctx.site.id,
-      actorId,
-      action: 'entry.cancel_schedule',
-      targetType: 'entry',
-      targetId: id,
-    },
-    db,
-    ctx.site,
-  )
+    await syncEntryLinkIndex(tx, id)
+    await writeRevision(id, ctx.entry.draftData, actorId, 'cancel_schedule', tx)
+    await audit(
+      {
+        organizationId: ctx.site.organizationId,
+        siteId: ctx.site.id,
+        actorId,
+        action: 'entry.cancel_schedule',
+        targetType: 'entry',
+        targetId: id,
+      },
+      tx,
+      ctx.site,
+    )
 
-  return { ...updated, collectionKey: ctx.collection.key }
+    return { ...updated, collectionKey: ctx.collection.key }
+  })
 }
 
 export async function deleteEntry(id: string, actorId: string) {

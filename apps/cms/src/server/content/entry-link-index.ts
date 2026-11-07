@@ -19,8 +19,11 @@ import { mapRichTextValues } from './entry-links.ts'
  * drops its rows through the foreign keys.
  */
 
-/** The db or a transaction: the index is written from either. */
-type Writer = Pick<typeof db, 'select' | 'insert' | 'delete'>
+/**
+ * A transaction. The index is written only inside the transaction that changes
+ * the content it is computed from, so a failure cannot leave the two apart.
+ */
+export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 type Connection = Pick<typeof db, 'select'>
 
 export type EntryLinkRow = {
@@ -77,9 +80,11 @@ async function existingTargets(
 
 /**
  * Rewrites one entry's rows from its current content. Call it inside the
- * transaction that changed the entry.
+ * transaction that changed the entry. The entry row is locked first, so a
+ * concurrent save waits for this transaction and the content read here is the
+ * latest committed one.
  */
-export async function syncEntryLinkIndex(tx: Writer, entryId: string) {
+export async function syncEntryLinkIndex(tx: Tx, entryId: string) {
   const row = (
     await tx
       .select({
@@ -95,6 +100,7 @@ export async function syncEntryLinkIndex(tx: Writer, entryId: string) {
       .innerJoin(site, eq(entry.siteId, site.id))
       .where(eq(entry.id, entryId))
       .limit(1)
+      .for('update', { of: entry })
   ).at(0)
   if (!row) return
 
@@ -129,7 +135,7 @@ export async function syncEntryLinkIndex(tx: Writer, entryId: string) {
  * slots (`scripts/rebuild-entry-link-index.ts`).
  */
 export async function rebuildEntryLinkIndex(
-  connection: Writer,
+  connection: Tx,
   siteId: string,
 ): Promise<number> {
   const siteRow = (
@@ -140,8 +146,9 @@ export async function rebuildEntryLinkIndex(
       .limit(1)
   ).at(0)
   if (!siteRow) return 0
-  await connection.delete(entryLink).where(eq(entryLink.siteId, siteId))
 
+  // Locks every entry of the site first (the same row lock a save takes), so
+  // no save can change content between this read and the rewrite.
   const entries = await connection
     .select({
       id: entry.id,
@@ -153,6 +160,9 @@ export async function rebuildEntryLinkIndex(
     .from(entry)
     .innerJoin(collection, eq(entry.collectionId, collection.id))
     .where(eq(entry.siteId, siteId))
+    .orderBy(entry.id)
+    .for('update', { of: entry })
+  await connection.delete(entryLink).where(eq(entryLink.siteId, siteId))
 
   let written = 0
   for (const item of entries) {
