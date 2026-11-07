@@ -11,6 +11,7 @@ import { m } from '#/paraglide/messages'
 import { MainReference } from './main-reference'
 import { SharedMarker, translateProps, useLocaleFields } from './locale-fields'
 import type { LocaleFields } from './locale-fields'
+import type { LinkContext } from './rich-text/link-picker'
 import { RichTextEditor } from './rich-text/rich-text-editor'
 import { RichTextPreview } from './rich-text/rich-text-preview'
 
@@ -66,6 +67,7 @@ export function EditorCanvas({
   errors,
   onChange,
   organizationId,
+  linkContext,
   previewing,
   titleRef,
   transitionName,
@@ -77,6 +79,8 @@ export function EditorCanvas({
   errors: FieldErrorMap
   onChange: (key: string, value: unknown) => void
   organizationId: string
+  /** Whose entry links the rich text fields offer and check. */
+  linkContext: LinkContext
   previewing: boolean
   titleRef: React.RefObject<HTMLTextAreaElement | null>
   transitionName?: string
@@ -202,6 +206,7 @@ export function EditorCanvas({
                   value={data[field.key]}
                   onChange={(value) => onChange(field.key, value)}
                   organizationId={organizationId}
+                  linkContext={linkContext}
                   invalid={Boolean(errors[field.key])}
                   previewing={previewing}
                   compact={compact}

@@ -24,6 +24,12 @@ describe('EditorCanvas', () => {
         errors: { title: 'Title is required' },
         onChange: () => {},
         organizationId: 'org-1',
+        linkContext: {
+          siteId: 'site-1',
+          entryId: null,
+          locale: null,
+          devSite: false,
+        },
         previewing: false,
         titleRef: createRef<HTMLTextAreaElement>(),
       }),

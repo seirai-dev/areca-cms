@@ -475,6 +475,13 @@ export function useEntryEditor({
           : null,
         invalidateDevSync(queryClient, siteId),
         invalidateGoLiveKeys(queryClient, siteId, refetchType),
+        // Dead entry links are checked again after every save, autosaves
+        // included. Only queries in use refetch, so entries without entry
+        // links make no request.
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.linkTargets(siteId),
+          refetchType: 'active',
+        }),
       ])
     },
     [queryClient, siteId, collectionKey],

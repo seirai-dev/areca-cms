@@ -26,6 +26,21 @@ export const queryKeys = {
   inboundReferences: (entryId: string) =>
     ['inbound-references', entryId] as const,
   entry: (id: string) => ['entry', id] as const,
+  /**
+   * Rich text link targets: the link field's search, headings and checks. All
+   * under `['link-targets', siteId]`, so a save can refresh them together.
+   */
+  linkTargets: (siteId: string) => ['link-targets', siteId] as const,
+  linkSearch: (
+    siteId: string,
+    locale: string | null,
+    query: string,
+    limit: number,
+  ) => ['link-targets', siteId, 'search', locale ?? '', query, limit] as const,
+  linkHeadings: (siteId: string, entryId: string, locale: string | null) =>
+    ['link-targets', siteId, 'headings', entryId, locale ?? ''] as const,
+  linkChecks: (siteId: string, locale: string | null, links: string) =>
+    ['link-targets', siteId, 'checks', locale ?? '', links] as const,
   revisions: (entryId: string) => ['revisions', entryId] as const,
   assets: (organizationId: string, search?: string, offset = 0) =>
     ['assets', organizationId, search ?? '', offset] as const,

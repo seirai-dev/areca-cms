@@ -664,6 +664,12 @@ function EntryEditorView({
       errors={editor.fieldErrors}
       onChange={onLocaleChange}
       organizationId={site.organizationId}
+      linkContext={{
+        siteId,
+        entryId: editor.entryId ?? null,
+        locale: ctx ? active : null,
+        devSite: isDev,
+      }}
       previewing={previewing}
       titleRef={titleRef}
       transitionName={
