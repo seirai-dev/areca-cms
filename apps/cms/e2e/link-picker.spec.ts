@@ -159,9 +159,14 @@ test('part of a title finds the page with its status; Enter links to the entry, 
   await expect(row).toContainText(targetTitle)
   await expect(row).toContainText('Ready')
   await expect(row).toHaveAttribute('aria-selected', 'true')
+  // Plain words that match an entry offer no custom link.
+  await expect(page.getByTestId('link-suggestion-custom')).toHaveCount(0)
 
   await input.press('Enter')
   await expect(page.getByTestId('link-chip')).toContainText(targetTitle)
+  // Picked: the field collapses to the chip, the section and Remove/Done.
+  await expect(input).toBeHidden()
+  await expect(page.getByTestId('link-suggestions')).toBeHidden()
   const section = page.getByTestId('link-section-select')
   await expect(section.locator('option', { hasText: 'Origin' })).toHaveCount(1)
   await section.selectOption({ label: 'Origin' })
@@ -253,6 +258,12 @@ test('an empty field lists the recent pages; an existing link opens as a chip', 
   await page.getByTestId('rich-text-link').click()
   await expect(page.getByTestId('link-chip')).toContainText(targetTitle)
   await expect(page.getByTestId('link-section-select')).toHaveValue('origin')
+  await expect(page.locator('#rich-text-link-url')).toBeHidden()
+
+  // Change reopens the search, with the field focused.
+  await page.getByTestId('link-change').click()
+  await expect(page.locator('#rich-text-link-url')).toBeFocused()
+  await expect(page.getByTestId('link-chip')).toBeHidden()
   await page.keyboard.press('Escape')
 })
 

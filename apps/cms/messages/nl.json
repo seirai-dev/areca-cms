@@ -1356,6 +1356,7 @@
   "editor_leave_unsaved_failed": "Je laatste wijzigingen konden niet worden opgeslagen. Als je nu weggaat, verlies je ze.",
   "editor_leave_unsaved_new": "Dit item heeft nog geen titel en is daarom niet opgeslagen. Als je nu weggaat, gaat je tekst verloren.",
   "editor_leave_unsaved_title": "Sluiten zonder je laatste wijzigingen op te slaan?",
+  "editor_link_change": "Wijzigen",
   "editor_link_copied": "Link gekopieerd",
   "editor_link_custom": "Eigen link: {href}",
   "editor_link_dead_page": "Deze pagina bestaat niet meer",

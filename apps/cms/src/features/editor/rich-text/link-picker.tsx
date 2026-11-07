@@ -112,6 +112,12 @@ export function LinkPicker({
     from: session.from,
     to: session.to,
   })
+  // An existing link opens collapsed to its chip; Change reopens the search.
+  const [changing, setChanging] = React.useState(false)
+  const inputRef = React.useRef<HTMLInputElement>(null)
+  React.useEffect(() => {
+    if (changing) inputRef.current?.focus()
+  }, [changing])
   const debounced = useDebouncedValue(input, 180)
   const mode = React.useMemo(() => parseLinkInput(input), [input])
   const serverMode = React.useMemo(() => parseLinkInput(debounced), [debounced])
@@ -224,6 +230,7 @@ export function LinkPicker({
     applyEntry(row.entry, row.anchor)
     setInput('')
     setPicked(null)
+    setChanging(false)
   }
 
   function removeLink() {
@@ -249,7 +256,7 @@ export function LinkPicker({
     : undefined
   const currentTarget = currentCheck?.target ?? null
   const currentGone = currentCheck?.state === 'gone'
-  const showChip = input === '' && current !== null
+  const showChip = current !== null && !changing
   const sections = useLinkHeadings({
     siteId,
     entryId: current?.entryId,
@@ -361,28 +368,46 @@ export function LinkPicker({
 
   return (
     <div className="grid gap-3" data-testid="link-picker">
-      {current !== null && input === '' ? (
+      {showChip ? (
         <div className="grid gap-2">
           <div
             className="flex min-w-0 items-center gap-2 rounded-[10px] border border-border-default bg-background-subtle px-2.5 py-2"
             data-testid="link-chip"
           >
-            {current.entryId ? (
-              <FileText className="size-4 shrink-0 text-icon-accent" />
-            ) : (
-              <LinkSimple className="size-4 shrink-0 text-icon-muted" />
-            )}
-            <span className="grid min-w-0 flex-1 gap-0.5">
-              <span className="truncate text-callout font-medium text-text-primary">
-                {current.entryId
-                  ? (currentTarget?.title ?? current.href)
-                  : current.href}
+            <button
+              type="button"
+              className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left"
+              data-testid="link-chip-info"
+              onClick={() => setChanging(true)}
+            >
+              {current.entryId ? (
+                <FileText className="size-4 shrink-0 text-icon-accent" />
+              ) : (
+                <LinkSimple className="size-4 shrink-0 text-icon-muted" />
+              )}
+              <span className="grid min-w-0 flex-1 gap-0.5">
+                <span className="truncate text-callout font-medium text-text-primary">
+                  {current.entryId
+                    ? (currentTarget?.title ?? current.href)
+                    : current.href}
+                </span>
+                <span className="truncate font-mono text-caption text-text-muted">
+                  {current.href}
+                </span>
               </span>
-              <span className="truncate font-mono text-caption text-text-muted">
-                {current.href}
-              </span>
-            </span>
-            {uiStatus ? <EntryStatusPill status={uiStatus} size="sm" /> : null}
+              {uiStatus ? (
+                <EntryStatusPill status={uiStatus} size="sm" />
+              ) : null}
+            </button>
+            <Button
+              type="button"
+              variant="quiet"
+              size="sm"
+              data-testid="link-change"
+              onClick={() => setChanging(true)}
+            >
+              {m.editor_link_change()}
+            </Button>
           </div>
           {currentGone ? (
             <p
@@ -451,37 +476,40 @@ export function LinkPicker({
         </div>
       ) : null}
 
-      <div className="grid gap-1.5">
-        <Label htmlFor="rich-text-link-url">{m.editor_link_url()}</Label>
-        <Input
-          id="rich-text-link-url"
-          role="combobox"
-          aria-expanded={rows.length > 0}
-          aria-controls={listboxId}
-          aria-autocomplete="list"
-          aria-activedescendant={
-            activeId ? optionId(listboxId, activeId) : undefined
-          }
-          autoComplete="off"
-          placeholder={m.editor_link_search_placeholder()}
-          value={input}
-          onChange={(event) => {
-            setInput(event.target.value)
-            setPicked(null)
-          }}
-          onKeyDown={onKeyDown}
-          data-testid="rich-text-link-input"
-        />
-        <p className="text-caption font-normal text-text-muted">
-          {m.editor_link_opens_new_tab()}
-        </p>
-      </div>
+      {showChip ? null : (
+        <div className="grid gap-1.5">
+          <Label htmlFor="rich-text-link-url">{m.editor_link_url()}</Label>
+          <Input
+            ref={inputRef}
+            id="rich-text-link-url"
+            role="combobox"
+            aria-expanded={rows.length > 0}
+            aria-controls={listboxId}
+            aria-autocomplete="list"
+            aria-activedescendant={
+              activeId ? optionId(listboxId, activeId) : undefined
+            }
+            autoComplete="off"
+            placeholder={m.editor_link_search_placeholder()}
+            value={input}
+            onChange={(event) => {
+              setInput(event.target.value)
+              setPicked(null)
+            }}
+            onKeyDown={onKeyDown}
+            data-testid="rich-text-link-input"
+          />
+          <p className="text-caption font-normal text-text-muted">
+            {m.editor_link_opens_new_tab()}
+          </p>
+        </div>
+      )}
 
-      {mode.kind === 'empty' && rows.length > 0 ? (
+      {showChip || mode.kind !== 'empty' || rows.length === 0 ? null : (
         <p className="text-caption font-medium text-text-muted">
           {m.editor_link_recent()}
         </p>
-      ) : null}
+      )}
 
       <ul
         id={listboxId}
@@ -490,7 +518,7 @@ export function LinkPicker({
         data-testid="link-suggestions"
         className={cn(
           'grid max-h-72 gap-0.5 overflow-y-auto',
-          rows.length === 0 && 'hidden',
+          (rows.length === 0 || showChip) && 'hidden',
         )}
       >
         {rows.map((row) => {
@@ -576,7 +604,7 @@ export function LinkPicker({
           )
         })}
       </ul>
-      {loading ? (
+      {loading && !showChip ? (
         <p
           className="text-caption font-normal text-text-muted"
           aria-live="polite"

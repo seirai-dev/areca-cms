@@ -1356,6 +1356,7 @@
   "editor_leave_unsaved_failed": "Your latest changes couldn't be saved. If you leave now, they are lost.",
   "editor_leave_unsaved_new": "This entry has no title yet, so it hasn't been saved. If you leave now, what you wrote is lost.",
   "editor_leave_unsaved_title": "Leave without saving your latest changes?",
+  "editor_link_change": "Change",
   "editor_link_copied": "Link copied",
   "editor_link_custom": "Custom link: {href}",
   "editor_link_dead_page": "This page no longer exists",

@@ -1356,6 +1356,7 @@
   "editor_leave_unsaved_failed": "Son değişiklikleriniz kaydedilemedi. Şimdi ayrılırsanız kaybolur.",
   "editor_leave_unsaved_new": "Bu içerik öğesinin henüz başlığı yok, bu nedenle kaydedilmedi. Şimdi ayrılırsanız yazdıklarınız kaybolur.",
   "editor_leave_unsaved_title": "Son değişiklikleri kaydetmeden ayrılsın mı?",
+  "editor_link_change": "Değiştir",
   "editor_link_copied": "Bağlantı kopyalandı",
   "editor_link_custom": "Özel bağlantı: {href}",
   "editor_link_dead_page": "Bu sayfa artık yok",
