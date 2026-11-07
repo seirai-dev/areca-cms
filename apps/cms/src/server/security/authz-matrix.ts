@@ -782,6 +782,20 @@ export const ROWS: Row[] = [
     }),
   },
   {
+    name: 'listLinkedFromFn',
+    hidden: true,
+    fn: contentFns.listLinkedFromFn,
+    policy: 'org-editor',
+    prepare: (w) => ({ data: { id: w.X.entry.id } }),
+  },
+  {
+    name: 'applySectionLinkUpdatesFn',
+    hidden: true,
+    fn: contentFns.applySectionLinkUpdatesFn,
+    policy: 'org-editor',
+    prepare: (w) => ({ data: { id: w.X.entry.id, updates: [] } }),
+  },
+  {
     name: 'upsertCollectionFn',
     fn: contentFns.upsertCollectionFn,
     policy: 'agency',

@@ -28,6 +28,7 @@ import type {
   MembershipRole,
   PublicationStatus,
   SchemaSnapshot,
+  SectionSnapshots,
   SiteEnvironment,
   SiteLanguages,
   SiteManifest,
@@ -373,6 +374,12 @@ export const entry = pgTable(
     ).$type<EntryOriginBaseline | null>(),
     /** Dev environments only: production `content_version` at the last fork or push. */
     originContentVersion: integer('origin_content_version'),
+    /**
+     * Headings of the rich text at the last explicit save, so a heading renamed
+     * by autosaves is still found by the next explicit save
+     * (docs/design/rich-text-links.md, decision 21). Null: the previous draft.
+     */
+    headingBaseline: jsonb('heading_baseline').$type<SectionSnapshots | null>(),
     scheduledData: jsonb('scheduled_data').$type<EntryData | null>(),
     scheduledSlug: text('scheduled_slug'),
     scheduledVersion: text('scheduled_version'),

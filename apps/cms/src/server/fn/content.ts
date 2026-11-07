@@ -60,6 +60,11 @@ import {
   requireGlobalAccess,
   requireSiteAccess,
 } from '#/server/content/access'
+import {
+  attachSectionLinkers,
+  applySectionLinkUpdates,
+} from '#/server/content/section-link-updates'
+import { linkedFromEntry } from '#/server/content/linked-from'
 import { AppError } from '#/server/http/app-error'
 import { pageLimitSchema, pageOffsetSchema } from '#/server/pagination'
 import {
@@ -275,22 +280,89 @@ export const updateDraftFn = createServerFn({ method: 'POST', ...entryFn })
       id: z.string().min(1).max(ID_MAX_LENGTH),
       data: entryDataSchema,
       expectedVersion: z.number().int().positive(),
+      /** Set by Save, ⌘S and Mark ready; autosaves leave it out. */
+      explicit: z.boolean().optional(),
     }),
   )
   .handler(async ({ data }) => {
-    const { session, entry, collection, site } = await requireEntryAccess(
-      data.id,
-    )
+    const access = await requireEntryAccess(data.id)
+    const { session, entry, collection, site } = access
     // The guard already read the entry, collection and site; the save reuses
     // them. The version check in the UPDATE still catches a concurrent save.
-    return updateDraft(
+    const saved = await updateDraft(
       data.id,
       data.data,
       session.user.id,
       data.expectedVersion,
       { entry, collection, site },
+      { explicit: data.explicit === true },
     )
+    return {
+      ...saved,
+      sectionChanges: await attachSectionLinkers(
+        data.id,
+        saved.sectionChanges,
+        sectionViewer(access),
+      ),
+    }
   })
+
+/**
+ * The entries and site sections that link to this entry, per language
+ * (docs/design/rich-text-links.md, decision 20).
+ */
+export const listLinkedFromFn = createServerFn({ method: 'GET', ...entryFn })
+  .validator(z.object({ id: z.string().min(1).max(ID_MAX_LENGTH) }))
+  .handler(async ({ data }) => {
+    const { session } = await requireEntryAccess(data.id)
+    return linkedFromEntry(data.id, {
+      isAgencyAdmin: session.user.isAgencyAdmin,
+    })
+  })
+
+/**
+ * Points links to changed sections at their new sections (decision 21). The
+ * caller must be able to edit this entry; the linking entries it may not edit
+ * are reported as skipped.
+ */
+export const applySectionLinkUpdatesFn = createServerFn({
+  method: 'POST',
+  ...entryFn,
+})
+  .validator(
+    z.object({
+      id: z.string().min(1).max(ID_MAX_LENGTH),
+      updates: z
+        .array(
+          z.object({
+            locale: z.string().max(32),
+            from: z.string().min(1).max(200),
+            to: z.string().max(200),
+          }),
+        )
+        .max(100),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const access = await requireEntryAccess(data.id)
+    return applySectionLinkUpdates({
+      targetId: data.id,
+      actorId: access.session.user.id,
+      viewer: sectionViewer(access),
+      updates: data.updates,
+    })
+  })
+
+/** What the caller may do with the entries of this site (see `mayEditSection`). */
+function sectionViewer(access: {
+  member: { role: 'owner' | 'editor' } | null
+  session: { user: { isAgencyAdmin: boolean } }
+}) {
+  return {
+    isOwner: access.member === null || access.member.role === 'owner',
+    isAgencyAdmin: access.session.user.isAgencyAdmin,
+  }
+}
 
 export const publishEntryFn = createServerFn({ method: 'POST', ...entryFn })
   .validator(
