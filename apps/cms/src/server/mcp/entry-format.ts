@@ -17,10 +17,10 @@ import {
   markdownToRichText,
   richTextToMarkdown,
 } from '#/server/richtext/from-markdown'
-import type { MarkdownLinkTarget } from '#/server/richtext/from-markdown'
+import type { MarkdownLinkResolution } from '#/server/richtext/from-markdown'
 
 /** The entries that Markdown links in a write point at (see resolveMarkdownLinkTargets). */
-export type LinkLookup = ReadonlyMap<string, MarkdownLinkTarget>
+export type LinkLookup = ReadonlyMap<string, MarkdownLinkResolution>
 
 /**
  * Conversion between the shapes agents read and write and the shapes the CMS

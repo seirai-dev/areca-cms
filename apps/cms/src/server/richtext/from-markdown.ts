@@ -39,7 +39,7 @@ export type MarkdownToRichTextOptions = {
    * before conversion (see resolveMarkdownLinkTargets), so this stays
    * synchronous. A link with no entry here keeps the rules of its href.
    */
-  linkTargets?: ReadonlyMap<string, MarkdownLinkTarget>
+  linkTargets?: ReadonlyMap<string, MarkdownLinkResolution>
   /** Called with the href of every link, as written, before any check. */
   onLink?: (href: string) => void
 }
@@ -51,6 +51,20 @@ export type MarkdownLinkTarget = {
   anchor: string | null
   /** The entry's path in the language of the text, with the section. */
   href: string
+}
+
+/**
+ * A path that more than one entry answers to, as the resolver reports it. The
+ * link stays a plain link and gets a warning (see ambiguousLinkWarning).
+ */
+export type MarkdownLinkAmbiguous = { ambiguous: true }
+
+/** What the resolver found for one href: an entry, or an ambiguous path. */
+export type MarkdownLinkResolution = MarkdownLinkTarget | MarkdownLinkAmbiguous
+
+/** Warning for a path that more than one entry answers to. */
+export function ambiguousLinkWarning(href: string): string {
+  return `The link to ${href} matches more than one page; use entry:<id>.`
 }
 
 /** Warning for a Markdown link whose href is not allowed (see isAllowedLinkHref). */
@@ -101,19 +115,20 @@ type Piece = { kind: 'inline'; node: PMNode } | { kind: 'block'; node: PMNode }
 
 type Converter = {
   resolveAssetSrc: (assetId: string) => string | null
-  linkTargets: ReadonlyMap<string, MarkdownLinkTarget>
+  linkTargets: ReadonlyMap<string, MarkdownLinkResolution>
   warn: (message: string) => void
 }
 
 /**
  * The link mark for one Markdown link, or null when the link is dropped (its
  * text is kept, and the warning says why). An entry in `linkTargets` becomes
- * an entry link. An `entry:` href that no entry matches is dropped. Any other
- * href keeps the rules of isAllowedLinkHref.
+ * an entry link. A path that is ambiguous there stays a plain link, with a
+ * warning. An `entry:` href that no entry matches is dropped. Any other href
+ * keeps the rules of isAllowedLinkHref.
  */
 function linkMarkFor(href: string, ctx: Converter): Mark | null {
   const target = ctx.linkTargets.get(href)
-  if (target) {
+  if (target && 'entryId' in target) {
     return {
       type: 'link',
       attrs: {
@@ -128,6 +143,7 @@ function linkMarkFor(href: string, ctx: Converter): Mark | null {
     ctx.warn(unknownEntryLinkWarning(href))
     return null
   }
+  if (target) ctx.warn(ambiguousLinkWarning(href))
   if (isAllowedLinkHref(href)) return { type: 'link', attrs: { href } }
   ctx.warn(droppedLinkWarning(href))
   return null

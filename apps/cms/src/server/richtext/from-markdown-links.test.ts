@@ -136,6 +136,18 @@ describe('entry links in Markdown import', () => {
     expect(warnings).toEqual([])
   })
 
+  it('keeps a path that more than one entry answers to as a plain link, with a warning', () => {
+    const warnings: string[] = []
+    const [link] = linkMarks('[contact](/coffees/dup)', {
+      linkTargets: new Map([['/coffees/dup', { ambiguous: true }]]),
+      onWarning: (message) => warnings.push(message),
+    })
+    expect(link.attrs).toEqual({ href: '/coffees/dup' })
+    expect(warnings).toEqual([
+      'The link to /coffees/dup matches more than one page; use entry:<id>.',
+    ])
+  })
+
   it('keeps a path with a query string as a plain link, even when it is in the map', () => {
     // The resolver never maps a query: it stays plain (decision 12, as in the editor).
     const [link] = linkMarks('[search](/coffees?q=ethiopia)', {

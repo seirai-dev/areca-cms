@@ -19,7 +19,10 @@ import {
 } from '#/server/richtext/allowlist'
 import { richTextHeadings } from '#/server/richtext/entry-links'
 import { markdownLinkHrefs } from '#/server/richtext/from-markdown'
-import type { MarkdownLinkTarget } from '#/server/richtext/from-markdown'
+import type {
+  MarkdownLinkResolution,
+  MarkdownLinkTarget,
+} from '#/server/richtext/from-markdown'
 import { ENTRY_HREF_PREFIX } from '#/server/richtext/markdown'
 
 import {
@@ -231,10 +234,17 @@ function optionOf(row: LinkTargetRow, ctx: Ctx): LinkTargetOption {
 
 /** Every path an entry answers to: one per language it ships in, plus the main one. */
 function pathsOf(row: LinkTargetRow, ctx: Ctx): string[] {
+  return [...new Set(pathsByCode(row, ctx).map((item) => item.path))]
+}
+
+/** The path an entry has in each language code of the site, with that code (null on a single-language site). */
+function pathsByCode(
+  row: LinkTargetRow,
+  ctx: Ctx,
+): { code: string | null; path: string }[] {
   const languages = ctx.languages
   const codes = languages ? [languages.main, ...languages.all] : [null]
-  const paths = new Set<string>()
-  for (const code of codes) {
+  return codes.map((code) => {
     const placed = placeLinkTarget(
       {
         data: row.draftData,
@@ -246,9 +256,8 @@ function pathsOf(row: LinkTargetRow, ctx: Ctx): string[] {
       languages,
       code,
     )
-    paths.add(entryLinkPath(placed.route, placed.slug, null))
-  }
-  return [...paths]
+    return { code, path: entryLinkPath(placed.route, placed.slug, null) }
+  })
 }
 
 /** Every language code an entry's slug may be stored under. */
@@ -669,14 +678,24 @@ export async function checkLinkTargets(
  * path is in `locale` (the language of the text, null for the main one). An
  * href that is not in the result keeps its own rules (see markdownToRichText):
  * an `entry:` href is dropped with a warning, a path stays a plain link.
- * docs/design/rich-text-links.md, decisions 12 and 15.
+ *
+ * A path is matched in three tiers, and the first tier with a match decides:
+ * 1. the entries whose path in the language of the text is the path;
+ * 2. the entries whose main-language path is the path;
+ * 3. the entries whose path in another language is the path.
+ * A language an entry does not ship places it on its main path (placeLinkTarget),
+ * so such an entry matches on that path too. An entry matches a path at its
+ * best tier. When more than one entry is in the deciding tier, the path is
+ * ambiguous: the result says so, the link stays plain and the write warns. Which
+ * entry was edited last does not decide. docs/design/rich-text-links.md,
+ * decisions 12 and 15.
  */
 export async function resolveMarkdownLinkTargets(
   siteId: string,
   locale: string | null,
   markdowns: string[],
-): Promise<Map<string, MarkdownLinkTarget>> {
-  const out = new Map<string, MarkdownLinkTarget>()
+): Promise<Map<string, MarkdownLinkResolution>> {
+  const out = new Map<string, MarkdownLinkResolution>()
   const hrefs = new Set<string>()
   for (const markdown of markdowns) {
     for (const href of markdownLinkHrefs(markdown)) hrefs.add(href)
@@ -751,20 +770,42 @@ export async function resolveMarkdownLinkTargets(
       .from(entry)
       .innerJoin(collection, eq(entry.collectionId, collection.id))
       .where(routedWhere(siteId, false, pathMatch))
-      .orderBy(desc(entry.updatedAt), entry.slug, entry.id)
-    // A row can match on a language that does not ship: `pathsOf` decides.
-    const matched = new Map<string, LinkTargetRow>()
+      .orderBy(entry.slug, entry.id)
+    // The tier of each entry for each path: 0 in the language of the text,
+    // 1 in the main language, 2 in another. A row can match on a language
+    // that does not ship: `pathsByCode` places it on the main path then.
+    const wantedKeys = new Set(wanted)
+    const writeCode = ctx.locale ?? siteRow.languages?.main ?? null
+    const mainCode = siteRow.languages?.main ?? null
+    const answers = new Map<
+      string,
+      Map<string, { row: LinkTargetRow; tier: number }>
+    >()
     for (const row of rows) {
-      for (const path of pathsOf(row, ctx)) {
+      for (const { code, path } of pathsByCode(row, ctx)) {
         const key = safeDecode(path).toLowerCase()
-        if (!matched.has(key)) matched.set(key, row)
+        if (!wantedKeys.has(key)) continue
+        const tier = code === writeCode ? 0 : code === mainCode ? 1 : 2
+        const entries = answers.get(key) ?? new Map()
+        answers.set(key, entries)
+        const best = entries.get(row.id)
+        if (!best || tier < best.tier) entries.set(row.id, { row, tier })
       }
     }
     for (const [href, ref] of byPath) {
-      const row = matched.get(ref.path)
-      if (!row) continue
-      const target = markdownTargetOf(row, ctx, ref.anchor)
-      if (target) out.set(href, target)
+      const entries = answers.get(ref.path)
+      if (!entries) continue
+      for (const tier of [0, 1, 2]) {
+        const hits = [...entries.values()].filter((hit) => hit.tier === tier)
+        if (hits.length === 0) continue
+        if (hits.length > 1) {
+          out.set(href, { ambiguous: true })
+          break
+        }
+        const target = markdownTargetOf(hits[0].row, ctx, ref.anchor)
+        if (target) out.set(href, target)
+        break
+      }
     }
   }
   return out
