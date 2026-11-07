@@ -13,7 +13,7 @@ const TYPE_FORMAT: Record<FieldType, string> = {
   textarea:
     'Plain text, several lines allowed, up to 50000 characters. No Markdown.',
   richtext:
-    'Markdown string. Section headings start with ## (### and #### for subsections; other levels are clamped), paragraphs separated by a blank line, **bold**, *italic*, [links](https://...), bullet and numbered lists, > blockquotes, tables, and images as ![alt text](asset:<assetId>). Link to pages of this site with site paths like [a page](/coffees/slug) and to a section with [a section](#anchor); never write a full URL of this site. Raw HTML is dropped. Images from a full https URL also work but prefer uploaded assets. ' +
+    'Markdown string. Section headings start with ## (### and #### for subsections; other levels are clamped), paragraphs separated by a blank line, **bold**, *italic*, [links](https://...), bullet and numbered lists, > blockquotes, tables, and images as ![alt text](asset:<assetId>). Link to another page of this site with [a page](entry:<id>), the id from list_entries or get_entry, and to a section of it with [a section](entry:<id>#anchor). A site path such as [a page](/coffees/slug) also works. Never write a full URL of this site. Raw HTML is dropped. Images from a full https URL also work but prefer uploaded assets. ' +
     CODE_FORMAT,
   image:
     'Asset id string from list_assets, upload_asset_from_url or get_asset_upload. Alt text comes from the asset (set it with update_asset_alt).',
