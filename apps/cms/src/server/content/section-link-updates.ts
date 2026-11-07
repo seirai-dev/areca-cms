@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto'
+
 import { and, eq, inArray, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
@@ -263,9 +265,10 @@ async function remapData(
  * in the approved and scheduled versions, in one transaction. The rules
  * (docs/design/rich-text-links.md, decision 21):
  *
- * - an owner's update changes the draft, the approved version and the schedule;
- *   the status and the approval time stay, so the link fix does not change what
- *   is ready;
+ * - an owner's update changes the draft, the approved version and the schedule
+ *   (which gets a new scheduled version, so a build of the old one cannot
+ *   promote it); the status and the approval time stay, so the link fix does
+ *   not change what is ready;
  * - an editor's update changes the draft only (see `needsApproval`);
  * - each updated entry gets a revision ("Section link updated") and its link
  *   index rows, and its draft version moves on so an open editor reloads.
@@ -359,7 +362,11 @@ export async function applySectionLinkUpdates(input: {
         .set({
           draftData: draft.data,
           ...(published?.changed ? { publishedData: published.data } : {}),
-          ...(scheduled?.changed ? { scheduledData: scheduled.data } : {}),
+          // A new schedule version: a build requested before this update
+          // no longer matches the schedule, so it cannot promote the new data.
+          ...(scheduled?.changed
+            ? { scheduledData: scheduled.data, scheduledVersion: randomUUID() }
+            : {}),
           draftVersion: sql`${entry.draftVersion} + 1`,
           contentVersion: sql`${entry.contentVersion} + 1`,
           updatedBy: input.actorId,

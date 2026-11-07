@@ -2,7 +2,18 @@ import { and, eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
 import { db } from '#/db'
-import { entry, entryLink, entryRevision, publication } from '#/db/schema'
+import {
+  buildJob,
+  entry,
+  entryLink,
+  entryRevision,
+  publication,
+  site,
+} from '#/db/schema'
+import { createMockDeploymentAdapter } from '#/adapters/deployment/mock'
+import { saveDokployCredentials } from '#/server/admin/dokploy-credentials'
+import { requestPublication } from '#/server/publishing/publications'
+import { processJob } from '#/server/publishing/worker'
 import { isEditedSinceReady } from '#/lib/content/edited-since-ready'
 import { I18N_KEY } from '#/lib/content-locale'
 
@@ -131,6 +142,33 @@ async function save(
   return updateDraft(id, data, actorId, current!.draftVersion, undefined, {
     explicit,
   })
+}
+
+/** A Dokploy target, so a publication can be requested for the site. */
+async function configureDeployment(ctx: {
+  org: { id: string }
+  site: { id: string }
+  actor: { id: string }
+}) {
+  const fakeFetch: typeof fetch = async () =>
+    Response.json({ items: [], total: 0 })
+  await saveDokployCredentials({
+    organizationId: ctx.org.id,
+    url: 'https://shared-dokploy.example.com',
+    apiKey: 'test-key',
+    actorId: ctx.actor.id,
+    fetch: fakeFetch,
+  })
+  await db
+    .update(site)
+    .set({
+      deploymentTarget: {
+        provider: 'dokploy',
+        applicationId: 'shared-app',
+        healthCheckUrl: 'http://localhost:3999',
+      },
+    })
+    .where(eq(site.id, ctx.site.id))
 }
 
 async function sourceWithLink(
@@ -539,7 +577,7 @@ describe.skipIf(!hasDb)('section links: the bulk update', () => {
     }
   })
 
-  it('updates a scheduled version and keeps its scheduled version id', async () => {
+  it('gives a scheduled version a new id when an owner updates its links, and keeps the schedule', async () => {
     const { ctx, target } = await renamedWithLinks('scheduled')
     try {
       const scheduled = await sourceWithLink(
@@ -566,9 +604,93 @@ describe.skipIf(!hasDb)('section links: the bulk update', () => {
       })
       const after = await getEntry(scheduled.id)
       expect(after!.status).toBe('scheduled')
-      expect(after!.scheduledVersion).toBe(before!.scheduledVersion)
+      // A build of the old version must not promote the new data (see the
+      // in-flight test below), so the version moves with the data.
+      expect(after!.scheduledVersion).toBeTruthy()
+      expect(after!.scheduledVersion).not.toBe(before!.scheduledVersion)
       expect(after!.scheduledAt?.toISOString()).toBe(
         before!.scheduledAt?.toISOString(),
+      )
+      expect(marksOf(after!.scheduledData!.body)[0].anchor).toBe(
+        'where-it-grows',
+      )
+    } finally {
+      await cleanupTestSite(ctx)
+    }
+  })
+
+  it('leaves a build that was requested before the update unable to promote the changed schedule', async () => {
+    const { ctx, target } = await setup('inflight')
+    try {
+      await configureDeployment(ctx)
+      await publishEntry(target.id, ctx.actor.id)
+      const scheduled = await sourceWithLink(
+        ctx,
+        'Gepland',
+        'gepland-inflight',
+        target.id,
+        'origin',
+      )
+      await scheduleEntry(
+        scheduled.id,
+        new Date(Date.now() + 3 * 86_400_000).toISOString(),
+        'UTC',
+        ctx.actor.id,
+      )
+      // Due now, so the next build carries this schedule.
+      await db
+        .update(entry)
+        .set({ scheduledAt: new Date(Date.now() - 60_000) })
+        .where(eq(entry.id, scheduled.id))
+      const requested = await requestPublication({
+        siteId: ctx.site.id,
+        actorId: ctx.actor.id,
+      })
+      if (!requested.ok) throw new Error(requested.errors.join('; '))
+      const job = requested.job
+      if (!job) throw new Error('Expected the request job')
+      const versionInBuild = (await getEntry(scheduled.id))!.scheduledVersion
+
+      // The target heading is renamed while the build waits, and an owner
+      // updates the links of the scheduled entry.
+      const renamed = await save(target.id, ctx.actor.id, {
+        title: 'Ethiopia',
+        slug: 'ethiopia-inflight',
+        body: page(['Where it grows', 'Intro']),
+      })
+      await applySectionLinkUpdates({
+        targetId: target.id,
+        actorId: ctx.actor.id,
+        viewer: OWNER,
+        updates: [
+          {
+            locale: '',
+            from: renamed.sectionChanges[0].from,
+            to: 'where-it-grows',
+          },
+        ],
+      })
+      const changed = await getEntry(scheduled.id)
+      expect(changed!.scheduledVersion).not.toBe(versionInBuild)
+
+      await processJob(job, {
+        adapter: createMockDeploymentAdapter(),
+        audit: async () => {},
+      })
+
+      // The build went through, and its version no longer matches: nothing is
+      // promoted, and the schedule stays for the next build.
+      const [built] = await db
+        .select({ status: buildJob.status })
+        .from(buildJob)
+        .where(eq(buildJob.id, job.id))
+      expect(built.status).toBe('succeeded')
+      const after = await getEntry(scheduled.id)
+      expect(after!.status).toBe('scheduled')
+      expect(after!.publishedData).toBeNull()
+      expect(after!.scheduledVersion).toBe(changed!.scheduledVersion)
+      expect(after!.scheduledAt?.toISOString()).toBe(
+        changed!.scheduledAt?.toISOString(),
       )
       expect(marksOf(after!.scheduledData!.body)[0].anchor).toBe(
         'where-it-grows',
