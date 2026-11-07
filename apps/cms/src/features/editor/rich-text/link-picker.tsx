@@ -583,7 +583,12 @@ export function LinkPicker({
                 <LinkSimple className="size-4 shrink-0 text-icon-muted" />
               )}
               <span className="grid min-w-0 flex-1 gap-0.5">
-                <span className="truncate text-callout font-medium text-text-primary">
+                <span
+                  className={cn(
+                    'text-callout font-medium text-text-primary',
+                    isHint ? 'font-normal text-text-muted' : 'truncate',
+                  )}
+                >
                   {label.title}
                 </span>
                 {label.detail ? (

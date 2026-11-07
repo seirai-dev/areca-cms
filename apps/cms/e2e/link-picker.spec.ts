@@ -125,6 +125,12 @@ test('a typed web address offers only the custom link; Enter makes it an https l
     page.locator('[data-testid^="link-suggestion-entry-"]'),
   ).toHaveCount(0)
 
+  await input.fill('coffee beans')
+  await expect(page.getByTestId('link-suggestion-hint')).toContainText(
+    'Not a link yet. Pick a page, or type a web address',
+  )
+  await expect(page.getByTestId('link-suggestion-custom')).toHaveCount(0)
+
   await input.fill('google.com')
   await expect(page.getByTestId('link-suggestion-custom')).toHaveAttribute(
     'aria-selected',
