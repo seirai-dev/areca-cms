@@ -29,15 +29,21 @@ export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 type Connection = Pick<typeof db, 'select'>
 
 /**
- * Serializes the link-index writers of one site. Lock order for every
+ * Serializes the link-index writers of one site. The rule for every
  * transaction that writes `entry_link` rows, or takes the site row lock and
  * then changes entries (it can wait on a row that an index insert needs):
  *
- *   1. this lock (`lockSiteLinkIndex`), first: before any row write or row lock;
- *   2. the organization's asset lock (`assets/usage.ts`): shared for saves,
- *      exclusive for dev-env push, copy, reset and delete;
- *   3. the site row (`FOR NO KEY UPDATE`, see `setSiteLanguages`);
- *   4. entry rows, in id order (`lockedEntryRows`).
+ *   1. take this lock (`lockSiteLinkIndex`) first, before any row write or
+ *      row lock. This is the rule that prevents the cycles below.
+ *   2. After it, each path keeps its existing order for the other locks.
+ *      Ordinary saves take the organization's asset lock (`assets/usage.ts`)
+ *      and then rows; dev-env push and copy lock the organization, dev and
+ *      production site rows first and the asset lock last; revision restore
+ *      and language changes lock the site row (`FOR NO KEY UPDATE`).
+ *   3. Entry rows are locked in id order (`lockedEntryRows`).
+ *
+ * The exception is a dev-env fork: it takes this lock just before rebuilding
+ * the index of the new site, which no other transaction can see yet.
  *
  * Why: an index insert needs KEY SHARE on its source entry, target entry and
  * site rows (foreign keys). Two saves that each change their slug hold their
