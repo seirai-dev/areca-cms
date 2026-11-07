@@ -41,6 +41,15 @@ import type { GlobalInput } from '#/server/content/globals'
 import { AppError } from '#/server/http/app-error'
 import { requestPublication } from '#/server/publishing/publications'
 
+import {
+  entryLinkPath,
+  loadLinkTargets,
+  mapRichTextValues,
+} from '#/server/content/entry-links'
+import {
+  entryLinkTargets,
+  relinkEntryLinks,
+} from '#/server/richtext/entry-links'
 import { lockProductionSite } from './lock'
 import {
   buildPlan,
@@ -272,6 +281,8 @@ async function runPush(
     created,
     lookup,
   )
+  // Every target has its final slug now: the links the push wrote follow it.
+  await relinkWrittenEntries(state, productionCollections, candidates)
   await resolveReadyCandidates(tx, productionSite, candidates, state.warnings)
 
   await writeBaselines(state, entryItems, devById, candidates)
@@ -946,6 +957,97 @@ async function pushEntriesPassTwo(
     }
   }
   return candidates
+}
+
+/**
+ * Recomputes the stored path of every entry link in the production entries this
+ * push wrote, from the production state after all of its writes. A link keeps
+ * the target's slug as it was when the dev entry was saved, so without this a
+ * renamed target would leave a stale path in production. Its ready version,
+ * which the next step validates, follows the draft.
+ */
+async function relinkWrittenEntries(
+  state: PushState,
+  productionCollections: ProductionCollection[],
+  candidates: ReadyCandidate[],
+) {
+  const { tx, production } = state
+  const ids = [
+    ...new Set(
+      [...state.written.values()].filter((id): id is string => id !== null),
+    ),
+  ]
+  if (ids.length === 0) return
+  const rows = await tx
+    .select({
+      id: entry.id,
+      collectionId: entry.collectionId,
+      draftData: entry.draftData,
+      publishedData: entry.publishedData,
+    })
+    .from(entry)
+    .where(inArray(entry.id, ids))
+
+  const targetIds = new Set<string>()
+  const collectionsOf = new Map<string, ProductionCollection>()
+  for (const row of rows) {
+    const col = productionCollections.find((c) => c.id === row.collectionId)
+    if (!col) continue
+    collectionsOf.set(row.id, col)
+    for (const data of [row.draftData, row.publishedData]) {
+      if (!data) continue
+      await mapRichTextValues(data, col.fields, (json) => {
+        for (const target of entryLinkTargets(json))
+          targetIds.add(target.entryId)
+        return json
+      })
+    }
+  }
+  if (targetIds.size === 0) return
+
+  const targets = await loadLinkTargets(tx, production.id, targetIds)
+  for (const row of rows) {
+    const col = collectionsOf.get(row.id)
+    if (!col) continue
+    const resolve = (target: { entryId: string; anchor: string | null }) => {
+      const found = targets.get(target.entryId)
+      if (
+        !found ||
+        found.collectionKind === 'global' ||
+        found.routePattern === ''
+      ) {
+        return undefined
+      }
+      return {
+        href: entryLinkPath(found.routePattern, found.slug, target.anchor),
+        collection: found.collectionKey,
+      }
+    }
+    const relinkData = (data: EntryData) =>
+      mapRichTextValues(data, col.fields, (json) =>
+        relinkEntryLinks(json, resolve),
+      )
+    const draftData = await relinkData(row.draftData)
+    const publishedData = row.publishedData
+      ? await relinkData(row.publishedData)
+      : null
+    const candidate = candidates.find(
+      (item) => item.entryId === row.id && item.active,
+    )
+    if (candidate && publishedData) candidate.ready = publishedData
+    const changed =
+      stableStringify(draftData) !== stableStringify(row.draftData) ||
+      (publishedData !== null &&
+        stableStringify(publishedData) !== stableStringify(row.publishedData))
+    if (!changed) continue
+    await tx
+      .update(entry)
+      .set({
+        draftData,
+        ...(publishedData ? { publishedData } : {}),
+      })
+      .where(eq(entry.id, row.id))
+  }
 }
 
 /**

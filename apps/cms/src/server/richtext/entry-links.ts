@@ -181,6 +181,46 @@ export function remapEntryLinks(
   return { json: copy, cleared }
 }
 
+/**
+ * Recomputes the stored `href` and `collection` of entry links from their
+ * targets. `resolve` returns the new values, or undefined to keep a link as it
+ * is. Synchronous; returns a copy.
+ */
+export function relinkEntryLinks(
+  json: unknown,
+  resolve: (
+    target: EntryLinkTarget,
+  ) => { href: string; collection: string } | undefined,
+): JSONContent {
+  const copy = structuredClone(json) as JSONContent
+  const stack: Node[] = [copy]
+  while (stack.length > 0) {
+    const node = stack.pop()!
+    if (node.marks) {
+      node.marks = node.marks.map((mark) => {
+        if (mark.type !== 'link' || typeof mark.attrs?.entryId !== 'string') {
+          return mark
+        }
+        const next = resolve({
+          entryId: mark.attrs.entryId,
+          anchor: anchorOf(mark),
+        })
+        if (!next) return mark
+        return {
+          ...mark,
+          attrs: {
+            ...mark.attrs,
+            href: next.href,
+            collection: next.collection,
+          },
+        }
+      })
+    }
+    if (Array.isArray(node.content)) stack.push(...(node.content as Node[]))
+  }
+  return copy
+}
+
 /** Heading ids in one rich text value, as the published `document` has them, at any depth. */
 export function richTextHeadingIds(json: unknown): string[] {
   if (!json || typeof json !== 'object') return []
