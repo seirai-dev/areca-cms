@@ -1,4 +1,4 @@
-import { and, desc, eq, ilike, ne, or, sql } from 'drizzle-orm'
+import { and, desc, eq, ne, or, sql } from 'drizzle-orm'
 import type { SQL } from 'drizzle-orm'
 
 import { db } from '#/db'
@@ -31,8 +31,10 @@ import { loadSiteLanguages, localeCtxFor } from './locale-validation.ts'
  * decisions 12 to 14.
  */
 
-/** Most candidate rows a search reads before it ranks them. */
-const CANDIDATE_LIMIT = 300
+/** Rows a path search reads per collection: the path check then drops some. */
+const PATH_CANDIDATE_FACTOR = 4
+/** Rows an exact-path lookup reads per collection (one entry is the address). */
+const EXACT_LIMIT = 10
 
 /** One entry a link can point at, as the editor lists it. */
 export type LinkTargetOption = {
@@ -218,55 +220,6 @@ function pathsOf(row: LinkTargetRow, ctx: Ctx): string[] {
   return [...paths]
 }
 
-/**
- * Routed entries of the site that are not archived, newest first. A search
- * term is matched on the stored text as a first filter; the caller ranks the
- * rows by the title and slug in the editor's language.
- */
-async function candidateRows(
-  siteId: string,
-  options: { enabledOnly: boolean; term: string | null; limit: number },
-): Promise<LinkTargetRow[]> {
-  const pattern = options.term ? `%${escapeLike(options.term)}%` : null
-  const rows = await db
-    .select({
-      id: entry.id,
-      siteId: entry.siteId,
-      slug: entry.slug,
-      status: entry.status,
-      publishedSlug: entry.publishedSlug,
-      draftData: entry.draftData,
-      publishedData: entry.publishedData,
-      scheduledData: entry.scheduledData,
-      collectionKey: collection.key,
-      collectionLabel: collection.label,
-      collectionKind: collection.kind,
-      routePattern: collection.routePattern,
-      localizedRoutes: collection.localizedRoutes,
-      fields: collection.fields,
-    })
-    .from(entry)
-    .innerJoin(collection, eq(entry.collectionId, collection.id))
-    .where(
-      and(
-        eq(entry.siteId, siteId),
-        eq(collection.kind, 'collection'),
-        ne(collection.routePattern, ''),
-        ne(entry.status, 'archived'),
-        options.enabledOnly ? eq(collection.enabled, true) : undefined,
-        pattern
-          ? or(
-              ilike(entry.slug, pattern),
-              ilike(sql`${entry.draftData}::text`, pattern),
-            )
-          : undefined,
-      ),
-    )
-    .orderBy(desc(entry.updatedAt), entry.slug)
-    .limit(options.limit)
-  return rows
-}
-
 /** A routed collection a search reads: one query each. */
 type RoutedCollection = {
   id: string
@@ -329,6 +282,142 @@ function localizedSlugSql(ctx: Ctx): SQL<string | null> {
     ELSE coalesce(nullif(${data} #>> ARRAY[${I18N_KEY}, ${locale}, ${SLUG_KEY}]::text[], ''), ${entry.slug}) END)`
 }
 
+/** The entry columns a search reads. */
+const entryColumns = {
+  id: entry.id,
+  siteId: entry.siteId,
+  slug: entry.slug,
+  status: entry.status,
+  publishedSlug: entry.publishedSlug,
+  draftData: entry.draftData,
+  publishedData: entry.publishedData,
+  scheduledData: entry.scheduledData,
+  updatedAt: entry.updatedAt,
+}
+
+type EntryRow = {
+  id: string
+  siteId: string
+  slug: string
+  status: EntryStatus
+  publishedSlug: string | null
+  draftData: EntryData
+  publishedData: EntryData | null
+  scheduledData: EntryData | null
+  updatedAt: Date
+}
+
+type CollectionCols = Pick<
+  LinkTargetRow,
+  | 'collectionKey'
+  | 'collectionLabel'
+  | 'collectionKind'
+  | 'routePattern'
+  | 'localizedRoutes'
+  | 'fields'
+>
+
+/** A searched entry with its collection's columns; `rank` when the search ranks. */
+type SearchedRow = EntryRow & CollectionCols & { rank?: number }
+
+function rowOf<T extends EntryRow>(
+  target: RoutedCollection,
+  row: T,
+): T & CollectionCols {
+  return {
+    ...row,
+    collectionKey: target.key,
+    collectionLabel: target.label,
+    collectionKind: 'collection',
+    routePattern: target.routePattern,
+    localizedRoutes: target.localizedRoutes,
+    fields: target.fields,
+  }
+}
+
+/** Every language code an entry's slug may be stored under. */
+function codesOf(languages: SiteLanguages | null): string[] {
+  return languages ? [...new Set([languages.main, ...languages.all])] : []
+}
+
+/** The routes of a collection: its main route and the localized ones. */
+function routesOf(target: RoutedCollection): string[] {
+  return [
+    ...new Set([
+      target.routePattern,
+      ...Object.values(target.localizedRoutes ?? {}),
+    ]),
+  ]
+}
+
+/**
+ * SQL that keeps the entries of `target` whose path can start with `wanted`
+ * (or equal it, when `exact`). A route is `<static part>$slug`: when its static
+ * part starts with the typed path, every entry qualifies; when the typed path
+ * goes past the static part, the slug must continue it, in any language. The
+ * body is never read. `true` means the collection cannot be narrowed (a route
+ * that is not `…$slug`), so the path check decides; `null` means no entry can
+ * match.
+ */
+function pathFilterSql(
+  target: RoutedCollection,
+  wanted: string,
+  exact: boolean,
+  languages: SiteLanguages | null,
+): SQL | true | null {
+  const conditions: SQL[] = []
+  for (const route of routesOf(target)) {
+    const parts = route.split('$slug')
+    if (parts.length !== 2 || parts[1] !== '') return true
+    const staticPart = parts[0].toLowerCase()
+    if (!exact && staticPart.startsWith(wanted)) return true
+    if (!wanted.startsWith(staticPart)) continue
+    const rest = wanted.slice(staticPart.length)
+    if (rest === '') continue
+    const pattern = exact ? escapeLike(rest) : `${escapeLike(rest)}%`
+    const slugs: SQL[] = [
+      sql`${entry.slug} ILIKE ${pattern}`,
+      ...codesOf(languages).map(
+        (code) =>
+          sql`${entry.draftData} #>> ARRAY[${I18N_KEY}, ${code}, ${SLUG_KEY}]::text[] ILIKE ${pattern}`,
+      ),
+    ]
+    conditions.push(sql`(${sql.join(slugs, sql` OR `)})`)
+  }
+  if (conditions.length === 0) return null
+  return sql`(${sql.join(conditions, sql` OR `)})`
+}
+
+/**
+ * The entries of one collection whose path may start with `wanted` (equal to
+ * it when `exact`), newest first. The caller checks the full paths.
+ */
+async function searchCollectionByPath(
+  siteId: string,
+  target: RoutedCollection,
+  wanted: string,
+  exact: boolean,
+  languages: SiteLanguages | null,
+  limit: number,
+): Promise<SearchedRow[]> {
+  const narrowed = pathFilterSql(target, wanted, exact, languages)
+  if (narrowed === null) return []
+  const rows = await db
+    .select(entryColumns)
+    .from(entry)
+    .where(
+      and(
+        eq(entry.siteId, siteId),
+        eq(entry.collectionId, target.id),
+        ne(entry.status, 'archived'),
+        narrowed === true ? undefined : narrowed,
+      ),
+    )
+    .orderBy(desc(entry.updatedAt), entry.slug)
+    .limit(limit)
+  return rows.map((row) => rowOf(target, row))
+}
+
 /**
  * The entries of one collection whose title or slug contains `term` (lower
  * case), best matches first, then the newest. Ranks: an exact title or slug,
@@ -363,18 +452,7 @@ async function searchCollectionByWords(
         ELSE 4 END)`
     : sql<number>`0::int`
   const rows = await db
-    .select({
-      id: entry.id,
-      siteId: entry.siteId,
-      slug: entry.slug,
-      status: entry.status,
-      publishedSlug: entry.publishedSlug,
-      draftData: entry.draftData,
-      publishedData: entry.publishedData,
-      scheduledData: entry.scheduledData,
-      updatedAt: entry.updatedAt,
-      rank,
-    })
+    .select({ ...entryColumns, rank })
     .from(entry)
     .where(
       and(
@@ -386,26 +464,7 @@ async function searchCollectionByWords(
     )
     .orderBy(rank, desc(entry.updatedAt), entry.slug)
     .limit(limit)
-  return rows.map(
-    ({
-      updatedAt,
-      rank: hitRank,
-      ...row
-    }): LinkTargetRow & {
-      updatedAt: Date
-      rank: number
-    } => ({
-      ...row,
-      collectionKey: target.key,
-      collectionLabel: target.label,
-      collectionKind: 'collection',
-      routePattern: target.routePattern,
-      localizedRoutes: target.localizedRoutes,
-      fields: target.fields,
-      updatedAt,
-      rank: hitRank,
-    }),
-  )
+  return rows.map((row) => rowOf(target, row))
 }
 
 /**
@@ -464,31 +523,65 @@ export async function searchLinkTargets(
     }
   }
 
-  // A path: the entry at exactly this path, and the entries it starts.
+  // A path: the entry at exactly this path, and the entries whose path starts
+  // with it. Each collection is narrowed in SQL by its routes and slugs; the
+  // full paths of the rows found are then checked.
   const wanted = safeDecode(parsed.path).toLowerCase()
-  const lastSegment = parsed.path.slice(parsed.path.lastIndexOf('/') + 1)
-  const term = lastSegment ? safeDecode(lastSegment) : null
-  const rows = await candidateRows(siteId, {
-    enabledOnly: input.enabledOnly,
-    term,
-    limit: CANDIDATE_LIMIT,
-  })
-  let resolved: LinkTargetSearch['resolved'] = null
-  const entries: LinkTargetOption[] = []
-  for (const row of rows) {
-    const paths = pathsOf(row, ctx).map((path) =>
-      safeDecode(path).toLowerCase(),
+  const targets = await routedCollections(siteId, input.enabledOnly)
+  const languages = siteRow.languages
+  const newestFirst = (a: SearchedRow, b: SearchedRow) =>
+    b.updatedAt.getTime() - a.updatedAt.getTime()
+  const exactRows = (
+    await Promise.all(
+      targets.map((target) =>
+        searchCollectionByPath(
+          siteId,
+          target,
+          wanted,
+          true,
+          languages,
+          EXACT_LIMIT,
+        ),
+      ),
     )
-    if (!resolved && paths.includes(wanted)) {
+  )
+    .flat()
+    .sort(newestFirst)
+  let resolved: LinkTargetSearch['resolved'] = null
+  for (const row of exactRows) {
+    const exact = pathsOf(row, ctx).some(
+      (path) => safeDecode(path).toLowerCase() === wanted,
+    )
+    if (exact) {
       resolved = { entry: optionOf(row, ctx), anchor: parsed.anchor }
-      continue
+      break
     }
-    if (
-      entries.length < input.limit &&
-      paths.some((path) => path.startsWith(wanted))
-    ) {
-      entries.push(optionOf(row, ctx))
-    }
+  }
+
+  const prefixRows = (
+    await Promise.all(
+      targets.map((target) =>
+        searchCollectionByPath(
+          siteId,
+          target,
+          wanted,
+          false,
+          languages,
+          input.limit * PATH_CANDIDATE_FACTOR,
+        ),
+      ),
+    )
+  )
+    .flat()
+    .sort(newestFirst)
+  const entries: LinkTargetOption[] = []
+  for (const row of prefixRows) {
+    if (entries.length >= input.limit) break
+    if (resolved && row.id === resolved.entry.entryId) continue
+    const starts = pathsOf(row, ctx).some((path) =>
+      safeDecode(path).toLowerCase().startsWith(wanted),
+    )
+    if (starts) entries.push(optionOf(row, ctx))
   }
   return { entries, resolved, ownPath: parsed.ownPath }
 }

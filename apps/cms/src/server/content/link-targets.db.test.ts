@@ -344,6 +344,91 @@ describe.skipIf(!hasDb)('link targets: search', () => {
     }
   })
 
+  it('matches a typed path on the route first, then on the slug, whatever the body says', async () => {
+    const { ctx, coffee, about } = await setup('pathroute')
+    try {
+      // Mentions the blog in its body only: it lives under /info, not /blog.
+      await createEntry({
+        siteId: ctx.site.id,
+        collectionKey: 'pages',
+        data: {
+          title: 'Contact',
+          slug: 'contact-pathroute',
+          body: doc(['Lees onze blog over koffie']),
+        },
+        actorId: ctx.actor.id,
+      })
+      for (const query of ['/blo', '/blog/', '/blog/koffie']) {
+        const found = await searchLinkTargets(ctx.site.id, {
+          query,
+          locale: 'nl',
+          limit: 8,
+          enabledOnly: true,
+        })
+        expect(found.entries.map((hit) => hit.entryId)).toEqual([coffee.id])
+      }
+      const pages = await searchLinkTargets(ctx.site.id, {
+        query: '/info/over',
+        locale: 'nl',
+        limit: 8,
+        enabledOnly: true,
+      })
+      expect(pages.entries.map((hit) => hit.entryId)).toEqual([about.id])
+    } finally {
+      await cleanupTestSite(ctx)
+    }
+  })
+
+  it('matches a path in the route of a language, and its slug in that language', async () => {
+    const ctx = await createTestSite({
+      languages: { main: 'en', all: ['en', 'nl'] },
+    })
+    try {
+      await createTestCollection(ctx.site.id, {
+        key: 'articles',
+        routePattern: '/blog/$slug',
+        localizedRoutes: { nl: '/journaal/$slug' },
+      })
+      const article = await createEntry({
+        siteId: ctx.site.id,
+        collectionKey: 'articles',
+        data: {
+          title: 'Coffee from Ethiopia',
+          slug: 'coffee-ethiopia-journal',
+          body: doc(['Origin']),
+          $i18n: {
+            nl: {
+              title: 'Koffie uit Ethiopië',
+              $slug: 'koffie-ethiopie-journal',
+              body: doc(['Herkomst']),
+            },
+          },
+        },
+        actorId: ctx.actor.id,
+      })
+      await publishEntry(article.id, ctx.actor.id)
+
+      for (const query of ['/journaal', '/journaal/koff']) {
+        const found = await searchLinkTargets(ctx.site.id, {
+          query,
+          locale: 'en',
+          limit: 8,
+          enabledOnly: true,
+        })
+        expect(found.entries.map((hit) => hit.entryId)).toEqual([article.id])
+      }
+      const exact = await searchLinkTargets(ctx.site.id, {
+        query: '/journaal/koffie-ethiopie-journal',
+        locale: 'en',
+        limit: 8,
+        enabledOnly: true,
+      })
+      expect(exact.resolved?.entry.entryId).toBe(article.id)
+    } finally {
+      await cleanupTestSite(ctx)
+    }
+  })
+
   it('never returns another site’s entries', async () => {
     const { ctx, coffee } = await setup('iso')
     const other = await createTestSite({ languages })
