@@ -417,18 +417,35 @@ async function searchWordRows(
 }
 
 /**
- * The entries of every routed collection with a path that starts with `wanted`,
- * in one query. The paths are matched in SQL before the limit, in lower case.
- * Entries whose path is exactly `wanted` come first, then the newest. The
- * caller checks the paths of the rows it gets.
+ * Candidates a path search reads per page. The SQL matches the paths of every
+ * language, but only the translations that ship count (`pathsOf`), so a page
+ * can hold candidates that do not count; the search reads on page by page.
+ */
+const PATH_PAGE_SIZE = 50
+
+/**
+ * The most candidate pages one path search reads: 500 rows at most, which
+ * bounds the cost of one keystroke. Past it the search stops, so a valid entry
+ * can be missed when more than 500 newer candidates do not count (incomplete
+ * translations, or paths that only match the SQL prefix). Raise it only with
+ * a measured need.
+ */
+const PATH_MAX_PAGES = 10
+
+/**
+ * One page of the entries of every routed collection with a path that starts
+ * with `wanted`, in one query. The paths are matched in SQL in lower case.
+ * Entries whose path is exactly `wanted` come first, then the newest, then by
+ * id so that pages do not overlap. `rank` is 0 for an exact match. The caller
+ * checks the paths of the rows it gets and asks for the next page.
  */
 async function searchPathRows(
   siteId: string,
   enabledOnly: boolean,
   languages: SiteLanguages | null,
   wanted: string,
-  limit: number,
-): Promise<LinkTargetRow[]> {
+  offset: number,
+): Promise<(LinkTargetRow & { rank: number })[]> {
   const paths = pathExprsSql(languages)
   const prefix = sql.join(
     paths.map((path) => sql`lower(${path}) LIKE ${`${escapeLike(wanted)}%`}`),
@@ -443,8 +460,9 @@ async function searchPathRows(
     .from(entry)
     .innerJoin(collection, eq(entry.collectionId, collection.id))
     .where(routedWhere(siteId, enabledOnly, sql`(${prefix})`))
-    .orderBy(exact, desc(entry.updatedAt), entry.slug)
-    .limit(limit)
+    .orderBy(exact, desc(entry.updatedAt), entry.slug, entry.id)
+    .limit(PATH_PAGE_SIZE)
+    .offset(offset)
 }
 
 /**
@@ -454,6 +472,7 @@ async function searchPathRows(
  * - `/…` or an own-domain URL: entries whose path starts with it, and the
  *   entry at exactly that path (`resolved`), with its section.
  * Two queries whatever the number of collections: the site, then the entries.
+ * A path search reads the entries a page at a time, up to PATH_MAX_PAGES.
  */
 export async function searchLinkTargets(
   siteId: string,
@@ -495,29 +514,40 @@ export async function searchLinkTargets(
   }
 
   // A path: the entry at exactly this path, and the entries whose path starts
-  // with it. One more row than the list shows: the exact entry is left out.
+  // with it. The exact entry is left out of the list. The candidates come a
+  // page at a time: a page can hold paths that do not count (a translation
+  // that does not ship), so the search reads on until it has `limit` entries
+  // and the exact entry, or the candidates or the page cap run out.
   const wanted = safeDecode(parsed.path).toLowerCase()
-  const rows = await searchPathRows(
-    siteId,
-    input.enabledOnly,
-    siteRow.languages,
-    wanted,
-    input.limit + 1,
-  )
   let resolved: LinkTargetSearch['resolved'] = null
   const entries: LinkTargetOption[] = []
-  for (const row of rows) {
-    const paths = pathsOf(row, ctx).map((path) =>
-      safeDecode(path).toLowerCase(),
+  // Exact matches come first, so once a page has a non-exact row, no later
+  // page can have an exact one.
+  let pastExact = false
+  for (let page = 0; page < PATH_MAX_PAGES; page++) {
+    const rows = await searchPathRows(
+      siteId,
+      input.enabledOnly,
+      siteRow.languages,
+      wanted,
+      page * PATH_PAGE_SIZE,
     )
-    if (!resolved && paths.includes(wanted)) {
-      resolved = { entry: optionOf(row, ctx), anchor: parsed.anchor }
-      continue
+    for (const row of rows) {
+      if (row.rank !== 0) pastExact = true
+      const paths = pathsOf(row, ctx).map((path) =>
+        safeDecode(path).toLowerCase(),
+      )
+      if (!resolved && paths.includes(wanted)) {
+        resolved = { entry: optionOf(row, ctx), anchor: parsed.anchor }
+        continue
+      }
+      if (entries.length >= input.limit) continue
+      if (paths.some((path) => path.startsWith(wanted))) {
+        entries.push(optionOf(row, ctx))
+      }
     }
-    if (entries.length >= input.limit) break
-    if (paths.some((path) => path.startsWith(wanted))) {
-      entries.push(optionOf(row, ctx))
-    }
+    if (rows.length < PATH_PAGE_SIZE) break
+    if (entries.length >= input.limit && (resolved || pastExact)) break
   }
   return { entries, resolved, ownPath: parsed.ownPath }
 }

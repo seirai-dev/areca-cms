@@ -492,6 +492,153 @@ describe.skipIf(!hasDb)('link targets: search', () => {
     }
   })
 
+  it('skips newer translations that do not ship, so an older valid path is still found', async () => {
+    const ctx = await createTestSite({ languages })
+    try {
+      await createTestCollection(ctx.site.id, {
+        key: 'articles',
+        routePattern: '/blog/$slug',
+        localizedRoutes: { en: '/news/$slug' },
+      })
+      const [articles] = await db
+        .select({ id: collection.id })
+        .from(collection)
+        .where(
+          and(
+            eq(collection.siteId, ctx.site.id),
+            eq(collection.key, 'articles'),
+          ),
+        )
+      const now = Date.now()
+      // Nine newer articles whose English translation is incomplete (no body,
+      // a required field): it does not ship, so none of them answers to
+      // /news/cof. Their paths all match the SQL prefix, so they used to fill
+      // the whole result limit.
+      await db.insert(entry).values(
+        Array.from({ length: 9 }, (_, index) => ({
+          siteId: ctx.site.id,
+          collectionId: articles.id,
+          slug: `incompleet-${index}`,
+          status: 'draft' as const,
+          draftData: {
+            title: `Incompleet ${index}`,
+            $i18n: {
+              en: {
+                title: `Incomplete ${index}`,
+                $slug: `coffee-incomplete-${index}`,
+              },
+            },
+          },
+          updatedAt: new Date(now + index * 1000),
+        })),
+      )
+      // An older article whose English translation is complete: it answers
+      // to /news/coffee-older.
+      const older = await db
+        .insert(entry)
+        .values({
+          siteId: ctx.site.id,
+          collectionId: articles.id,
+          slug: 'koffie-older',
+          status: 'draft',
+          draftData: {
+            title: 'Koffie oud',
+            body: doc(['Oud']),
+            $i18n: {
+              en: {
+                title: 'Coffee older',
+                $slug: 'coffee-older',
+                body: doc(['Older']),
+              },
+            },
+          },
+          updatedAt: new Date(now - 86_400_000),
+        })
+        .returning({ id: entry.id })
+
+      const found = await searchLinkTargets(ctx.site.id, {
+        query: '/news/cof',
+        locale: 'en',
+        limit: 5,
+        enabledOnly: true,
+      })
+      expect(found.entries.map((hit) => hit.entryId)).toEqual([older[0].id])
+    } finally {
+      await cleanupTestSite(ctx)
+    }
+  })
+
+  it('reads past the first page of candidates to find an older valid path', async () => {
+    const ctx = await createTestSite({ languages })
+    try {
+      await createTestCollection(ctx.site.id, {
+        key: 'articles',
+        routePattern: '/blog/$slug',
+        localizedRoutes: { en: '/news/$slug' },
+      })
+      const [articles] = await db
+        .select({ id: collection.id })
+        .from(collection)
+        .where(
+          and(
+            eq(collection.siteId, ctx.site.id),
+            eq(collection.key, 'articles'),
+          ),
+        )
+      const now = Date.now()
+      // 60 newer incomplete translations: more than one candidate page.
+      await db.insert(entry).values(
+        Array.from({ length: 60 }, (_, index) => ({
+          siteId: ctx.site.id,
+          collectionId: articles.id,
+          slug: `onvolledig-${index}`,
+          status: 'draft' as const,
+          draftData: {
+            title: `Onvolledig ${index}`,
+            $i18n: {
+              en: {
+                title: `Incomplete ${index}`,
+                $slug: `coffee-partial-${index}`,
+              },
+            },
+          },
+          updatedAt: new Date(now + index * 1000),
+        })),
+      )
+      const older = await db
+        .insert(entry)
+        .values({
+          siteId: ctx.site.id,
+          collectionId: articles.id,
+          slug: 'koffie-second-page',
+          status: 'draft',
+          draftData: {
+            title: 'Koffie tweede pagina',
+            body: doc(['Oud']),
+            $i18n: {
+              en: {
+                title: 'Coffee second page',
+                $slug: 'coffee-second-page',
+                body: doc(['Second']),
+              },
+            },
+          },
+          updatedAt: new Date(now - 86_400_000),
+        })
+        .returning({ id: entry.id })
+
+      const found = await searchLinkTargets(ctx.site.id, {
+        query: '/news/cof',
+        locale: 'en',
+        limit: 5,
+        enabledOnly: true,
+      })
+      expect(found.entries.map((hit) => hit.entryId)).toEqual([older[0].id])
+    } finally {
+      await cleanupTestSite(ctx)
+    }
+  })
+
   it('shows and searches the same title after the main language changed', async () => {
     // The site was Dutch; English is the main language now. The entry still
     // has Dutch base values (`$locale: nl`) and an English translation.
