@@ -31,6 +31,7 @@ import { assetAttachLock } from '#/server/assets/usage'
 import { archiveDeletedContent } from './deletion-archive'
 import { lockSiteLinkIndex, syncEntryLinkIndex } from './entry-link-index.ts'
 import { prepareEntryLinks } from './entry-links.ts'
+import { sectionChangesOf, sectionSnapshotsOf } from './section-changes.ts'
 import { getCollection } from './collections.ts'
 import { ConflictError, NotFoundError, ValidationError } from './errors.ts'
 import { notCompleteInLocale } from './missing-language.ts'
@@ -501,6 +502,11 @@ export async function createEntry(input: {
       images.data,
     ),
   }
+  const headingBaseline = await sectionSnapshotsOf(
+    parsed.data,
+    ctx.collection.fields,
+    ctx.site.languages,
+  )
 
   const slug = resolveSlug(parsed.data, ctx.collection.fields)
   if (!slug || !SLUG_PATTERN.test(slug)) {
@@ -534,6 +540,7 @@ export async function createEntry(input: {
           slug,
           status: 'draft',
           draftData: parsed.data,
+          headingBaseline,
           createdBy: input.actorId,
           updatedBy: input.actorId,
           createdAt: now,
@@ -578,6 +585,12 @@ export async function updateDraft(
   expectedVersion: number,
   /** Rows the caller's access check already read for this entry. */
   preloaded?: EntryContext,
+  /**
+   * An explicit save (Save, ⌘S, Mark ready, an MCP write) rather than an
+   * autosave. Only these take the heading snapshot and report section changes
+   * (docs/design/rich-text-links.md, decision 21).
+   */
+  options: { explicit?: boolean } = {},
 ) {
   const ctx = preloaded ?? (await loadEntryContext(id))
   const validated = validateEntryData(
@@ -618,6 +631,29 @@ export async function updateDraft(
     await assertSlugAvailable(ctx.collection.id, nextSlug, id)
   }
 
+  const sections = options.explicit
+    ? await sectionChangesOf({
+        previousData: ctx.entry.draftData,
+        baseline: ctx.entry.headingBaseline ?? null,
+        nextData: parsed.data,
+        fields: ctx.collection.fields,
+        languages: ctx.site.languages,
+      })
+    : null
+  // The baseline is the headings at the last explicit save. An explicit save
+  // stores the new headings. An entry with no baseline yet (saved before they
+  // were kept) stores the headings it had before this save, so an autosave
+  // that renames a heading cannot hide the rename from the next explicit save.
+  const storedBaseline = sections
+    ? sections.next
+    : ctx.entry.headingBaseline == null
+      ? await sectionSnapshotsOf(
+          ctx.entry.draftData,
+          ctx.collection.fields,
+          ctx.site.languages,
+        )
+      : null
+
   return db.transaction(async (tx) => {
     await lockSiteLinkIndex(tx, ctx.site.id)
     await assetAttachLock(tx, ctx.site.organizationId)
@@ -649,6 +685,7 @@ export async function updateDraft(
           contentVersion: sql`${entry.contentVersion} + 1`,
           draftVersion: sql`${entry.draftVersion} + 1`,
           draftData: parsed.data,
+          ...(storedBaseline ? { headingBaseline: storedBaseline } : {}),
           slug: nextSlug ?? ctx.entry.slug,
           updatedBy: actorId,
           updatedAt: now,
@@ -683,6 +720,8 @@ export async function updateDraft(
       collectionKey: ctx.collection.key,
       importedImages: images.imported,
       importWarnings: images.warnings,
+      /** Headings a link may point at that this save removed or renamed. */
+      sectionChanges: sections?.changes ?? [],
     }
   })
 }
@@ -1362,7 +1401,7 @@ export const AUTOSAVE_COALESCE_MS = 10 * 60 * 1000
  * data. Every other write (approval, schedule, publish, restore, another
  * person's change) adds its own revision, so milestones are never merged.
  */
-async function writeRevision(
+export async function writeRevision(
   entryId: string,
   data: EntryData,
   actorId: string,

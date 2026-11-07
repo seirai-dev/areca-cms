@@ -1,0 +1,963 @@
+import { and, eq, sql } from 'drizzle-orm'
+import { describe, expect, it } from 'vitest'
+
+import { db } from '#/db'
+import {
+  buildJob,
+  entry,
+  entryLink,
+  entryRevision,
+  publication,
+  site,
+} from '#/db/schema'
+import { createMockDeploymentAdapter } from '#/adapters/deployment/mock'
+import { saveDokployCredentials } from '#/server/admin/dokploy-credentials'
+import { requestPublication } from '#/server/publishing/publications'
+import { processJob } from '#/server/publishing/worker'
+import { isEditedSinceReady } from '#/lib/content/edited-since-ready'
+import { I18N_KEY } from '#/lib/content-locale'
+
+import {
+  createEntry,
+  getEntry,
+  publishEntry,
+  scheduleEntry,
+  updateDraft,
+} from './entries.ts'
+import { syncEntryLinkIndex, lockSiteLinkIndex } from './entry-link-index.ts'
+import { ValidationError } from './errors.ts'
+import { linkedFromEntry } from './linked-from.ts'
+import {
+  applySectionLinkUpdates,
+  attachSectionLinkers,
+} from './section-link-updates.ts'
+import {
+  cleanupTestSite,
+  createSiteInOrganization,
+  createTestCollection,
+  createTestGlobal,
+  createTestSite,
+} from './test-utils.ts'
+import type { SectionChange } from '#/server/richtext/section-diff'
+
+const hasDb = Boolean(process.env.DATABASE_URL)
+const EDITOR = { isOwner: false, isAgencyAdmin: false }
+const OWNER = { isOwner: true, isAgencyAdmin: false }
+
+/** A page: level-2 headings, then paragraphs (each may link to an entry). */
+function page(headings: string[], paragraphs: unknown[] = []) {
+  return {
+    type: 'doc',
+    content: [
+      ...headings.map((text) => ({
+        type: 'heading',
+        attrs: { level: 2 },
+        content: [{ type: 'text', text }],
+      })),
+      ...paragraphs,
+    ],
+  }
+}
+
+/** A paragraph whose text links to an entry at a section (or the page, with null). */
+function linked(
+  text: string,
+  entryId: string,
+  anchor: string | null,
+  href = '/blog/target',
+) {
+  return {
+    type: 'paragraph',
+    content: [
+      {
+        type: 'text',
+        text,
+        marks: [
+          {
+            type: 'link',
+            attrs: { href, entryId, collection: 'articles', anchor },
+          },
+        ],
+      },
+    ],
+  }
+}
+
+/** The link marks of one rich text value, in document order. */
+function marksOf(
+  json: unknown,
+): { entryId?: string; anchor?: string | null; href?: string }[] {
+  const out: { entryId?: string; anchor?: string | null; href?: string }[] = []
+  const stack: unknown[] = [json]
+  while (stack.length > 0) {
+    const node = stack.pop() as {
+      marks?: { type: string; attrs?: Record<string, unknown> }[]
+      content?: unknown[]
+    } | null
+    if (!node || typeof node !== 'object') continue
+    for (const mark of node.marks ?? []) {
+      if (mark.type === 'link') {
+        out.push({
+          entryId: mark.attrs?.entryId as string | undefined,
+          anchor: (mark.attrs?.anchor as string | null | undefined) ?? null,
+          href: mark.attrs?.href as string | undefined,
+        })
+      }
+    }
+    if (Array.isArray(node.content)) stack.push(...[...node.content].reverse())
+  }
+  return out
+}
+
+async function setup(
+  suffix: string,
+  languages: { main: string; all: string[] } | null = null,
+) {
+  const ctx = await createTestSite({ languages })
+  await createTestCollection(ctx.site.id, {
+    key: 'articles',
+    routePattern: '/blog/$slug',
+  })
+  const target = await createEntry({
+    siteId: ctx.site.id,
+    collectionKey: 'articles',
+    data: {
+      title: 'Ethiopia',
+      slug: `ethiopia-${suffix}`,
+      body: page(['Origin', 'Intro']),
+    },
+    actorId: ctx.actor.id,
+  })
+  return { ctx, target }
+}
+
+/** Saves the whole entry data through `updateDraft`, as an editor or an MCP call does. */
+async function save(
+  id: string,
+  actorId: string,
+  data: Record<string, unknown>,
+  explicit = true,
+) {
+  const current = await getEntry(id)
+  return updateDraft(id, data, actorId, current!.draftVersion, undefined, {
+    explicit,
+  })
+}
+
+/** A Dokploy target, so a publication can be requested for the site. */
+async function configureDeployment(ctx: {
+  org: { id: string }
+  site: { id: string }
+  actor: { id: string }
+}) {
+  const fakeFetch: typeof fetch = async () =>
+    Response.json({ items: [], total: 0 })
+  await saveDokployCredentials({
+    organizationId: ctx.org.id,
+    url: 'https://shared-dokploy.example.com',
+    apiKey: 'test-key',
+    actorId: ctx.actor.id,
+    fetch: fakeFetch,
+  })
+  await db
+    .update(site)
+    .set({
+      deploymentTarget: {
+        provider: 'dokploy',
+        applicationId: 'shared-app',
+        healthCheckUrl: 'http://localhost:3999',
+      },
+    })
+    .where(eq(site.id, ctx.site.id))
+}
+
+async function sourceWithLink(
+  ctx: { site: { id: string }; actor: { id: string } },
+  title: string,
+  slug: string,
+  targetId: string,
+  anchor: string | null,
+) {
+  const source = await createEntry({
+    siteId: ctx.site.id,
+    collectionKey: 'articles',
+    data: {
+      title,
+      slug,
+      body: page(['Intro'], [linked('Lees meer', targetId, anchor)]),
+    },
+    actorId: ctx.actor.id,
+  })
+  return source
+}
+
+describe.skipIf(!hasDb)(
+  'section links: the save and the heading snapshot',
+  () => {
+    it('reports a renamed heading on an explicit save only, against the last explicit save', async () => {
+      const { ctx, target } = await setup('snap')
+      try {
+        // The first explicit save records the headings: nothing has changed yet.
+        const first = await save(target.id, ctx.actor.id, {
+          title: 'Ethiopia',
+          slug: 'ethiopia-snap',
+          body: page(['Origin', 'Intro']),
+        })
+        expect(first.sectionChanges).toEqual([])
+
+        // An autosave renames the heading: no report, and the baseline stays.
+        const autosaved = await save(
+          target.id,
+          ctx.actor.id,
+          {
+            title: 'Ethiopia',
+            slug: 'ethiopia-snap',
+            body: page(['Where it grows', 'Intro']),
+          },
+          false,
+        )
+        expect(autosaved.sectionChanges).toEqual([])
+
+        // The explicit save after it still sees the rename.
+        const explicit = await save(target.id, ctx.actor.id, {
+          title: 'Ethiopia',
+          slug: 'ethiopia-snap',
+          body: page(['Where it grows', 'Intro']),
+        })
+        expect(explicit.sectionChanges).toEqual([
+          expect.objectContaining({
+            locale: '',
+            from: 'origin',
+            fromText: 'Origin',
+            to: 'where-it-grows',
+            toText: 'Where it grows',
+          }),
+        ])
+
+        // Once reported, the next explicit save reports nothing.
+        const again = await save(target.id, ctx.actor.id, {
+          title: 'Ethiopia',
+          slug: 'ethiopia-snap',
+          body: page(['Where it grows', 'Intro']),
+        })
+        expect(again.sectionChanges).toEqual([])
+      } finally {
+        await cleanupTestSite(ctx)
+      }
+    })
+
+    it('starts a baseline on creation, so the first explicit save after a rename reports it', async () => {
+      const { ctx, target } = await setup('created')
+      try {
+        const stored = await getEntry(target.id)
+        expect(stored!.headingBaseline).not.toBeNull()
+        const renamed = await save(target.id, ctx.actor.id, {
+          title: 'Ethiopia',
+          slug: 'ethiopia-created',
+          body: page(['Where it grows', 'Intro']),
+        })
+        expect(renamed.sectionChanges).toEqual([
+          expect.objectContaining({ from: 'origin', to: 'where-it-grows' }),
+        ])
+      } finally {
+        await cleanupTestSite(ctx)
+      }
+    })
+
+    it('keeps a rename made by an autosave for the next explicit save, on an entry with no baseline yet', async () => {
+      const { ctx, target } = await setup('legacy')
+      try {
+        // An entry saved before baselines existed: none is stored.
+        await db
+          .update(entry)
+          .set({ headingBaseline: null })
+          .where(eq(entry.id, target.id))
+        // The first thing the editor does is an autosave of the rename.
+        const autosaved = await save(
+          target.id,
+          ctx.actor.id,
+          {
+            title: 'Ethiopia',
+            slug: 'ethiopia-legacy',
+            body: page(['Where it grows', 'Intro']),
+          },
+          false,
+        )
+        expect(autosaved.sectionChanges).toEqual([])
+        // The explicit save (Save, ⌘S) with the same content still reports it.
+        const explicit = await save(target.id, ctx.actor.id, {
+          title: 'Ethiopia',
+          slug: 'ethiopia-legacy',
+          body: page(['Where it grows', 'Intro']),
+        })
+        expect(explicit.sectionChanges).toEqual([
+          expect.objectContaining({
+            from: 'origin',
+            fromText: 'Origin',
+            to: 'where-it-grows',
+          }),
+        ])
+      } finally {
+        await cleanupTestSite(ctx)
+      }
+    })
+
+    it('names the entries that link to the changed heading, with whether this caller may update them', async () => {
+      const { ctx, target } = await setup('linkers')
+      try {
+        const draft = await sourceWithLink(
+          ctx,
+          'Bron',
+          'bron-linkers',
+          target.id,
+          'origin',
+        )
+        await publishEntry(draft.id, ctx.actor.id)
+        const renamed = await save(target.id, ctx.actor.id, {
+          title: 'Ethiopia',
+          slug: 'ethiopia-linkers',
+          body: page(['Where it grows', 'Intro']),
+        })
+        const changes = await attachSectionLinkers(
+          target.id,
+          renamed.sectionChanges,
+          EDITOR,
+        )
+        expect(changes).toHaveLength(1)
+        expect(changes[0].linkers).toEqual([
+          expect.objectContaining({
+            id: draft.id,
+            title: 'Bron',
+            status: 'published',
+            locale: '',
+            // An editor's change to an approved entry goes back to draft for an owner.
+            needsApproval: true,
+          }),
+        ])
+        const asOwner = await attachSectionLinkers(
+          target.id,
+          renamed.sectionChanges,
+          OWNER,
+        )
+        expect(asOwner[0].linkers[0].needsApproval).toBe(false)
+      } finally {
+        await cleanupTestSite(ctx)
+      }
+    })
+  },
+)
+
+describe.skipIf(!hasDb)('section links: "Linked from"', () => {
+  it('lists the linking entries per language, with the section each link goes to', async () => {
+    const { ctx, target } = await setup('linked', {
+      main: 'en',
+      all: ['en', 'nl'],
+    })
+    try {
+      const withSection = await createEntry({
+        siteId: ctx.site.id,
+        collectionKey: 'articles',
+        data: {
+          title: 'Source',
+          slug: 'source-linked',
+          body: page(['Intro'], [linked('Read', target.id, 'origin')]),
+          [I18N_KEY]: {
+            nl: {
+              title: 'Bron',
+              body: page(['Inleiding'], [linked('Lees', target.id, null)]),
+            },
+          },
+        },
+        actorId: ctx.actor.id,
+      })
+      await publishEntry(withSection.id, ctx.actor.id)
+      // A translation of the target with its own heading, linked from the source.
+      await save(target.id, ctx.actor.id, {
+        title: 'Ethiopia',
+        slug: 'ethiopia-linked',
+        body: page(['Origin', 'Intro']),
+        [I18N_KEY]: {
+          nl: {
+            title: 'Ethiopië',
+            body: page(['Oorsprong']),
+          },
+        },
+      })
+      const groups = await linkedFromEntry(target.id, { isAgencyAdmin: false })
+      expect(groups.map((group) => group.locale)).toEqual(['en', 'nl'])
+      expect(groups[0].sources).toEqual([
+        expect.objectContaining({
+          id: withSection.id,
+          title: 'Source',
+          status: 'published',
+          collectionKey: 'articles',
+          sections: [{ anchor: 'origin', text: 'Origin' }],
+        }),
+      ])
+      // The Dutch link goes to the whole page; the Dutch page has no "origin".
+      expect(groups[1].sources).toEqual([
+        expect.objectContaining({
+          id: withSection.id,
+          title: 'Bron',
+          sections: [{ anchor: '', text: null }],
+        }),
+      ])
+    } finally {
+      await cleanupTestSite(ctx)
+    }
+  })
+
+  it('reports a section that no longer exists with no text', async () => {
+    const { ctx, target } = await setup('gone')
+    try {
+      await sourceWithLink(ctx, 'Bron', 'bron-gone', target.id, 'origin')
+      await save(target.id, ctx.actor.id, {
+        title: 'Ethiopia',
+        slug: 'ethiopia-gone',
+        body: page(['Intro']),
+      })
+      const [group] = await linkedFromEntry(target.id, { isAgencyAdmin: false })
+      expect(group.sources[0].sections).toEqual([
+        { anchor: 'origin', text: null },
+      ])
+    } finally {
+      await cleanupTestSite(ctx)
+    }
+  })
+
+  it('leaves out a switched-off section unless the viewer is an agency admin', async () => {
+    const { ctx, target } = await setup('hidden')
+    try {
+      const global = await createTestGlobal(ctx.site.id, {
+        key: 'home',
+        enabled: false,
+        fields: [{ key: 'intro', label: 'Intro', type: 'richtext' }],
+      })
+      await db
+        .update(entry)
+        .set({
+          draftData: {
+            intro: page(['Hi'], [linked('Start', target.id, null)]),
+          },
+        })
+        .where(eq(entry.id, global.entry.id))
+      await db.transaction(async (tx) => {
+        await lockSiteLinkIndex(tx, ctx.site.id)
+        await syncEntryLinkIndex(tx, global.entry.id)
+      })
+      expect(
+        await linkedFromEntry(target.id, { isAgencyAdmin: false }),
+      ).toEqual([])
+      const asAgency = await linkedFromEntry(target.id, { isAgencyAdmin: true })
+      expect(asAgency[0].sources).toEqual([
+        expect.objectContaining({
+          id: global.entry.id,
+          kind: 'global',
+          collectionKey: 'home',
+        }),
+      ])
+    } finally {
+      await cleanupTestSite(ctx)
+    }
+  })
+
+  it('never lists a link from another site, even one stored for this entry', async () => {
+    const { ctx, target } = await setup('cross')
+    try {
+      const sibling = await createSiteInOrganization(ctx.org.id)
+      await createTestCollection(sibling.id, {
+        key: 'articles',
+        routePattern: '/blog/$slug',
+      })
+      const elsewhere = await createEntry({
+        siteId: sibling.id,
+        collectionKey: 'articles',
+        data: { title: 'Elders', slug: 'elders-cross', body: page(['Intro']) },
+        actorId: ctx.actor.id,
+      })
+      // Written straight to the index, as a wrong write would leave it.
+      await db.insert(entryLink).values({
+        siteId: sibling.id,
+        sourceEntryId: elsewhere.id,
+        locale: '',
+        fieldKey: 'body',
+        targetEntryId: target.id,
+        anchor: 'origin',
+      })
+      expect(await linkedFromEntry(target.id, { isAgencyAdmin: true })).toEqual(
+        [],
+      )
+    } finally {
+      await cleanupTestSite(ctx)
+    }
+  })
+})
+
+/**
+ * Waits until a transaction is queued behind the link-index lock of a site, so
+ * a save or an update that starts now has to wait for the lock holder.
+ */
+async function waitForLinkLockWaiter(siteId: string) {
+  for (let attempt = 0; attempt < 500; attempt += 1) {
+    const rows = await db.execute<{ waiting: number }>(sql`
+      select count(*)::int as waiting
+      from pg_locks
+      where locktype = 'advisory'
+        and not granted
+        and ((classid::bigint << 32) | objid::bigint)
+          = hashtextextended(${`site-link-index:${siteId}`}, 0)`)
+    if (rows.rows[0]?.waiting) return
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+  throw new Error('No transaction waited for the link-index lock')
+}
+
+describe.skipIf(!hasDb)('section links: the bulk update', () => {
+  /** Target renamed from Origin; a draft source and an approved source link to it. */
+  async function renamedWithLinks(suffix: string) {
+    const { ctx, target } = await setup(suffix)
+    const draftSource = await sourceWithLink(
+      ctx,
+      'Concept',
+      `concept-${suffix}`,
+      target.id,
+      'origin',
+    )
+    const readySource = await sourceWithLink(
+      ctx,
+      'Klaar',
+      `klaar-${suffix}`,
+      target.id,
+      'origin',
+    )
+    await publishEntry(readySource.id, ctx.actor.id)
+    const renamed = await save(target.id, ctx.actor.id, {
+      title: 'Ethiopia',
+      slug: `ethiopia-${suffix}`,
+      body: page(['Where it grows', 'Intro']),
+    })
+    const change: SectionChange = renamed.sectionChanges[0]
+    expect(change.to).toBe('where-it-grows')
+    return { ctx, target, draftSource, readySource, change }
+  }
+
+  it('updates the draft of a ready entry for an editor, leaves the approved version alone, and asks for approval again', async () => {
+    const { ctx, target, draftSource, readySource } =
+      await renamedWithLinks('editor')
+    try {
+      const before = await getEntry(readySource.id)
+      expect(isEditedSinceReady(before!)).toBe(false)
+      const result = await applySectionLinkUpdates({
+        targetId: target.id,
+        actorId: ctx.actor.id,
+        viewer: EDITOR,
+        updates: [{ locale: '', from: 'origin', to: 'where-it-grows' }],
+      })
+      expect(result.updated.map((row) => row.id).sort()).toEqual(
+        [draftSource.id, readySource.id].sort(),
+      )
+
+      const draft = await getEntry(draftSource.id)
+      expect(marksOf(draft!.draftData.body)).toEqual([
+        expect.objectContaining({
+          entryId: target.id,
+          anchor: 'where-it-grows',
+          href: '/blog/ethiopia-editor#where-it-grows',
+        }),
+      ])
+      // The new link is in the draft only: the approved version (what goes
+      // live) keeps the old link, and the entry reads as edited since ready
+      // until an owner approves it.
+      const after = await getEntry(readySource.id)
+      expect(after!.publishedData).toEqual(before!.publishedData)
+      expect(after!.publishedAt?.toISOString()).toBe(
+        before!.publishedAt?.toISOString(),
+      )
+      expect(after!.status).toBe('published')
+      expect(marksOf(after!.draftData.body)[0].anchor).toBe('where-it-grows')
+      expect(isEditedSinceReady(after!)).toBe(true)
+      expect(after!.draftVersion).toBeGreaterThan(before!.draftVersion)
+    } finally {
+      await cleanupTestSite(ctx)
+    }
+  })
+
+  it('updates the draft of a scheduled entry for an editor and leaves the schedule alone', async () => {
+    const { ctx, target } = await renamedWithLinks('editor-scheduled')
+    try {
+      const scheduled = await sourceWithLink(
+        ctx,
+        'Gepland',
+        'gepland-editor-scheduled',
+        target.id,
+        'origin',
+      )
+      await publishEntry(scheduled.id, ctx.actor.id)
+      await scheduleEntry(
+        scheduled.id,
+        new Date(Date.now() + 3 * 86_400_000).toISOString(),
+        'UTC',
+        ctx.actor.id,
+      )
+      const before = await getEntry(scheduled.id)
+      await applySectionLinkUpdates({
+        targetId: target.id,
+        actorId: ctx.actor.id,
+        viewer: EDITOR,
+        updates: [{ locale: '', from: 'origin', to: 'where-it-grows' }],
+      })
+      const after = await getEntry(scheduled.id)
+      expect(after!.status).toBe('scheduled')
+      expect(after!.scheduledVersion).toBe(before!.scheduledVersion)
+      expect(after!.scheduledAt?.toISOString()).toBe(
+        before!.scheduledAt?.toISOString(),
+      )
+      expect(marksOf(after!.scheduledData!.body)[0].anchor).toBe('origin')
+      expect(marksOf(after!.draftData.body)[0].anchor).toBe('where-it-grows')
+    } finally {
+      await cleanupTestSite(ctx)
+    }
+  })
+
+  it('updates an approved version for an owner, keeping status, approval time and the edited-since-ready state', async () => {
+    const { ctx, target, readySource } = await renamedWithLinks('owner')
+    try {
+      const before = await getEntry(readySource.id)
+      expect(isEditedSinceReady(before!)).toBe(false)
+      const result = await applySectionLinkUpdates({
+        targetId: target.id,
+        actorId: ctx.actor.id,
+        viewer: OWNER,
+        updates: [{ locale: '', from: 'origin', to: 'where-it-grows' }],
+      })
+      expect(result.updated.map((row) => row.id)).toContain(readySource.id)
+
+      const after = await getEntry(readySource.id)
+      expect(after!.status).toBe('published')
+      expect(after!.publishedAt?.toISOString()).toBe(
+        before!.publishedAt?.toISOString(),
+      )
+      expect(marksOf(after!.publishedData!.body)).toEqual([
+        expect.objectContaining({
+          anchor: 'where-it-grows',
+          href: '/blog/ethiopia-owner#where-it-grows',
+        }),
+      ])
+      expect(marksOf(after!.draftData.body)[0].anchor).toBe('where-it-grows')
+      // Both copies moved together, so nothing reads as edited.
+      expect(isEditedSinceReady(after!)).toBe(false)
+      expect(after!.draftVersion).toBeGreaterThan(before!.draftVersion)
+    } finally {
+      await cleanupTestSite(ctx)
+    }
+  })
+
+  it('gives a scheduled version a new id when an owner updates its links, and keeps the schedule', async () => {
+    const { ctx, target } = await renamedWithLinks('scheduled')
+    try {
+      const scheduled = await sourceWithLink(
+        ctx,
+        'Gepland',
+        'gepland-scheduled',
+        target.id,
+        'origin',
+      )
+      await publishEntry(scheduled.id, ctx.actor.id)
+      await scheduleEntry(
+        scheduled.id,
+        new Date(Date.now() + 3 * 86_400_000).toISOString(),
+        'UTC',
+        ctx.actor.id,
+      )
+      const before = await getEntry(scheduled.id)
+      expect(before!.status).toBe('scheduled')
+      await applySectionLinkUpdates({
+        targetId: target.id,
+        actorId: ctx.actor.id,
+        viewer: OWNER,
+        updates: [{ locale: '', from: 'origin', to: 'where-it-grows' }],
+      })
+      const after = await getEntry(scheduled.id)
+      expect(after!.status).toBe('scheduled')
+      // A build of the old version must not promote the new data (see the
+      // in-flight test below), so the version moves with the data.
+      expect(after!.scheduledVersion).toBeTruthy()
+      expect(after!.scheduledVersion).not.toBe(before!.scheduledVersion)
+      expect(after!.scheduledAt?.toISOString()).toBe(
+        before!.scheduledAt?.toISOString(),
+      )
+      expect(marksOf(after!.scheduledData!.body)[0].anchor).toBe(
+        'where-it-grows',
+      )
+    } finally {
+      await cleanupTestSite(ctx)
+    }
+  })
+
+  it('leaves a build that was requested before the update unable to promote the changed schedule', async () => {
+    const { ctx, target } = await setup('inflight')
+    try {
+      await configureDeployment(ctx)
+      await publishEntry(target.id, ctx.actor.id)
+      const scheduled = await sourceWithLink(
+        ctx,
+        'Gepland',
+        'gepland-inflight',
+        target.id,
+        'origin',
+      )
+      await scheduleEntry(
+        scheduled.id,
+        new Date(Date.now() + 3 * 86_400_000).toISOString(),
+        'UTC',
+        ctx.actor.id,
+      )
+      // Due now, so the next build carries this schedule.
+      await db
+        .update(entry)
+        .set({ scheduledAt: new Date(Date.now() - 60_000) })
+        .where(eq(entry.id, scheduled.id))
+      const requested = await requestPublication({
+        siteId: ctx.site.id,
+        actorId: ctx.actor.id,
+      })
+      if (!requested.ok) throw new Error(requested.errors.join('; '))
+      const job = requested.job
+      if (!job) throw new Error('Expected the request job')
+      const versionInBuild = (await getEntry(scheduled.id))!.scheduledVersion
+
+      // The target heading is renamed while the build waits, and an owner
+      // updates the links of the scheduled entry.
+      const renamed = await save(target.id, ctx.actor.id, {
+        title: 'Ethiopia',
+        slug: 'ethiopia-inflight',
+        body: page(['Where it grows', 'Intro']),
+      })
+      await applySectionLinkUpdates({
+        targetId: target.id,
+        actorId: ctx.actor.id,
+        viewer: OWNER,
+        updates: [
+          {
+            locale: '',
+            from: renamed.sectionChanges[0].from,
+            to: 'where-it-grows',
+          },
+        ],
+      })
+      const changed = await getEntry(scheduled.id)
+      expect(changed!.scheduledVersion).not.toBe(versionInBuild)
+
+      await processJob(job, {
+        adapter: createMockDeploymentAdapter(),
+        audit: async () => {},
+      })
+
+      // The build went through, and its version no longer matches: nothing is
+      // promoted, and the schedule stays for the next build.
+      const [built] = await db
+        .select({ status: buildJob.status })
+        .from(buildJob)
+        .where(eq(buildJob.id, job.id))
+      expect(built.status).toBe('succeeded')
+      const after = await getEntry(scheduled.id)
+      expect(after!.status).toBe('scheduled')
+      expect(after!.publishedData).toBeNull()
+      expect(after!.scheduledVersion).toBe(changed!.scheduledVersion)
+      expect(after!.scheduledAt?.toISOString()).toBe(
+        changed!.scheduledAt?.toISOString(),
+      )
+      expect(marksOf(after!.scheduledData!.body)[0].anchor).toBe(
+        'where-it-grows',
+      )
+    } finally {
+      await cleanupTestSite(ctx)
+    }
+  })
+
+  it('moves the index rows, records a revision, and changes no publication', async () => {
+    const { ctx, target, draftSource, readySource } =
+      await renamedWithLinks('rows')
+    try {
+      const publicationsBefore = await db
+        .select({ id: publication.id })
+        .from(publication)
+        .where(eq(publication.siteId, ctx.site.id))
+      await applySectionLinkUpdates({
+        targetId: target.id,
+        actorId: ctx.actor.id,
+        viewer: OWNER,
+        updates: [{ locale: '', from: 'origin', to: 'where-it-grows' }],
+      })
+      const rows = await db
+        .select({ source: entryLink.sourceEntryId, anchor: entryLink.anchor })
+        .from(entryLink)
+        .where(eq(entryLink.targetEntryId, target.id))
+      expect(rows.sort((a, b) => a.source.localeCompare(b.source))).toEqual(
+        [draftSource.id, readySource.id]
+          .sort((a, b) => a.localeCompare(b))
+          .map((source) => ({ source, anchor: 'where-it-grows' })),
+      )
+      const revisions = await db
+        .select({ createdBy: entryRevision.createdBy })
+        .from(entryRevision)
+        .where(
+          and(
+            eq(entryRevision.entryId, draftSource.id),
+            eq(entryRevision.note, 'section-links'),
+          ),
+        )
+      expect(revisions).toEqual([{ createdBy: ctx.actor.id }])
+      const publicationsAfter = await db
+        .select({ id: publication.id })
+        .from(publication)
+        .where(eq(publication.siteId, ctx.site.id))
+      expect(publicationsAfter).toEqual(publicationsBefore)
+    } finally {
+      await cleanupTestSite(ctx)
+    }
+  })
+
+  it('removes a link to the section when the new section is the page', async () => {
+    const { ctx, target, draftSource } = await renamedWithLinks('page')
+    try {
+      await applySectionLinkUpdates({
+        targetId: target.id,
+        actorId: ctx.actor.id,
+        viewer: OWNER,
+        updates: [{ locale: '', from: 'origin', to: '' }],
+      })
+      const draft = await getEntry(draftSource.id)
+      expect(marksOf(draft!.draftData.body)).toEqual([
+        expect.objectContaining({
+          entryId: target.id,
+          anchor: null,
+          href: '/blog/ethiopia-page',
+        }),
+      ])
+    } finally {
+      await cleanupTestSite(ctx)
+    }
+  })
+
+  it('refuses a section the target does not have', async () => {
+    const { ctx, target } = await renamedWithLinks('invalid')
+    try {
+      await expect(
+        applySectionLinkUpdates({
+          targetId: target.id,
+          actorId: ctx.actor.id,
+          viewer: OWNER,
+          updates: [{ locale: '', from: 'origin', to: 'nowhere' }],
+        }),
+      ).rejects.toBeInstanceOf(ValidationError)
+    } finally {
+      await cleanupTestSite(ctx)
+    }
+  })
+
+  it('validates the destination heading under the link-index lock, and refuses to point links at a heading the target lost while it waited', async () => {
+    const { ctx, target, draftSource, readySource } =
+      await renamedWithLinks('waits')
+    try {
+      // A save in progress on this site: it holds the link-index lock, and
+      // commits the target without the destination heading before it lets go.
+      let holding!: () => void
+      const holds = new Promise<void>((resolve) => {
+        holding = resolve
+      })
+      let release!: () => void
+      const released = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      const saving = db.transaction(async (tx) => {
+        await lockSiteLinkIndex(tx, ctx.site.id)
+        holding()
+        await released
+        await tx
+          .update(entry)
+          .set({
+            draftData: page(['Intro']),
+            draftVersion: sql`${entry.draftVersion} + 1`,
+          })
+          .where(eq(entry.id, target.id))
+      })
+      await holds
+
+      const bulk = applySectionLinkUpdates({
+        targetId: target.id,
+        actorId: ctx.actor.id,
+        viewer: OWNER,
+        updates: [{ locale: '', from: 'origin', to: 'where-it-grows' }],
+      }).then(
+        () => 'updated' as const,
+        (error: unknown) => error,
+      )
+      await waitForLinkLockWaiter(ctx.site.id)
+      release()
+      await saving
+      const outcome = await bulk
+
+      // The heading is gone when the update gets the lock: a clean refusal,
+      // and no link is rewritten to it.
+      expect(outcome).toBeInstanceOf(ValidationError)
+      const draft = await getEntry(draftSource.id)
+      expect(marksOf(draft!.draftData.body)[0].anchor).toBe('origin')
+      const ready = await getEntry(readySource.id)
+      expect(marksOf(ready!.draftData.body)[0].anchor).toBe('origin')
+    } finally {
+      await cleanupTestSite(ctx)
+    }
+  })
+
+  it('runs next to a save on the same site and completes both', async () => {
+    const { ctx, target, draftSource, readySource } =
+      await renamedWithLinks('locks')
+    const other = await createEntry({
+      siteId: ctx.site.id,
+      collectionKey: 'articles',
+      data: {
+        title: 'Losse pagina',
+        slug: 'losse-locks',
+        body: page(['Intro']),
+      },
+      actorId: ctx.actor.id,
+    })
+    try {
+      for (let round = 0; round < 3; round += 1) {
+        const [bulk, saved] = await Promise.all([
+          applySectionLinkUpdates({
+            targetId: target.id,
+            actorId: ctx.actor.id,
+            viewer: OWNER,
+            updates: [{ locale: '', from: 'origin', to: 'where-it-grows' }],
+          }),
+          save(other.id, ctx.actor.id, {
+            title: 'Losse pagina',
+            slug: 'losse-locks',
+            // Only a paragraph changes, so the headings stay as they are.
+            body: page(
+              ['Intro'],
+              [
+                {
+                  type: 'paragraph',
+                  content: [{ type: 'text', text: `Ronde ${round}` }],
+                },
+              ],
+            ),
+          }),
+        ])
+        if (round === 0) {
+          expect(bulk.updated.map((row) => row.id).sort()).toEqual(
+            [draftSource.id, readySource.id].sort(),
+          )
+        }
+        expect(saved.sectionChanges).toEqual([])
+      }
+      const draft = await getEntry(draftSource.id)
+      expect(marksOf(draft!.draftData.body)[0].anchor).toBe('where-it-grows')
+    } finally {
+      await cleanupTestSite(ctx)
+    }
+  })
+})

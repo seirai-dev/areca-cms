@@ -32,6 +32,8 @@ import type { EntryData, EntryStatus, Field } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 import type { LocaleBlocker } from './language-state'
 import { autosaveDelay, scheduledPollInterval } from './editor-timing'
+import { isExplicitTrigger } from './save-intent'
+import type { SaveTrigger } from './save-intent'
 import {
   archiveEntryFn,
   cancelScheduleFn,
@@ -42,12 +44,17 @@ import {
   getGlobalPreviewUrlFn,
   getPreviewUrlFn,
   publishEntryFn,
+  applySectionLinkUpdatesFn,
   restoreRevisionFn,
   scheduleEntryFn,
   unpublishEntryFn,
   updateDraftFn,
   updateGlobalDraftFn,
 } from '#/server/fn/content'
+import type {
+  SectionChangeWithLinks,
+  SectionLinkUpdate,
+} from '#/server/content/section-link-updates'
 
 /** Navigation waits at most this long for a pending save. */
 const LEAVE_WAIT = 3000
@@ -76,6 +83,10 @@ type ImageImportResult = {
   importedImages?: number
   importWarnings?: string[]
 }
+
+/** A save's response: the entry, plus the headings links point to that it changed. */
+type SaveResult = EntryRecord &
+  ImageImportResult & { sectionChanges?: SectionChangeWithLinks[] }
 
 export type RevisionRecord = {
   id: string
@@ -422,6 +433,21 @@ export function useEntryEditor({
   const pendingRef = React.useRef(false)
   /** The running save was asked for (⌘S, Save, an action), not a timer. */
   const explicitRef = React.useRef(false)
+  /**
+   * The last save that went through was not explicit, or none has gone through
+   * on this page yet: an explicit save must still run, because a background save
+   * before this page left the baseline behind the draft.
+   */
+  const unexplicitSaveRef = React.useRef(true)
+  const explicitSaveDue = () => explicitRef.current && unexplicitSaveRef.current
+  /** Headings that links point to and the last explicit save changed (decision 21). */
+  const [sectionChanges, setSectionChanges] = React.useState<
+    SectionChangeWithLinks[]
+  >([])
+  // A different entry is a different set of changes.
+  React.useEffect(() => {
+    setSectionChanges([])
+  }, [routeEntryId])
   const leavingRef = React.useRef(false)
   const bypassRef = React.useRef(false)
   const fieldsRef = React.useRef(fields)
@@ -504,6 +530,7 @@ export function useEntryEditor({
       }
     }
     setStatus('saving')
+    const explicit = explicitRef.current
     try {
       const payload = payloadFromData(snapshot)
       const saved = (
@@ -522,19 +549,31 @@ export function useEntryEditor({
                   id,
                   data: payload,
                   expectedVersion: versionRef.current,
+                  explicit,
                 },
               })
             : await createEntryFn({
                 data: { siteId, collectionKey, data: payload },
               })
-      ) as EntryRecord & ImageImportResult
+      ) as SaveResult
       versionRef.current = saved.draftVersion
+      unexplicitSaveRef.current = !explicit
+      if (explicit) {
+        setSectionChanges(saved.sectionChanges ?? [])
+        // The headings may have moved, so "Linked from" reads the section again.
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.linkedFrom(saved.id),
+        })
+      }
       const serverData = initialEntryData(fieldsRef.current, saved.draftData)
       serverJsonRef.current = JSON.stringify(serverData)
       const settled = JSON.stringify(dataRef.current) === submitted
-      if ((saved.importedImages ?? 0) > 0 && settled) {
-        // The server swapped external images for library copies: show them.
-        // With newer local edits the next save receives the same swap.
+      // The server may store a different copy of the draft: it swaps external
+      // images for library copies and rewrites entry links. Show that copy, so
+      // Mark ready compares what the editor shows with what was saved. With
+      // newer local edits the next save receives the same changes.
+      const normalised = serverJsonRef.current !== submitted
+      if ((normalised || (saved.importedImages ?? 0) > 0) && settled) {
         setData(serverData)
         setBaseline(serverJsonRef.current)
       } else {
@@ -634,10 +673,10 @@ export function useEntryEditor({
       try {
         do {
           pendingRef.current = false
-          if (!isDirtyNow()) break
+          if (!isDirtyNow() && !explicitSaveDue()) break
           outcome = await saveOnce()
           if (outcome !== 'saved') break
-        } while (requested() && isDirtyNow())
+        } while (requested() && (isDirtyNow() || explicitSaveDue()))
       } finally {
         runningRef.current = null
         explicitRef.current = false
@@ -648,16 +687,23 @@ export function useEntryEditor({
     return loop
   }, [isDirtyNow, saveOnce])
 
-  /** Save now (⌘S, Save, before actions and navigation). */
-  const flush = React.useCallback((): Promise<Outcome> => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current)
-      timerRef.current = null
-    }
-    firstChangeAtRef.current = null
-    explicitRef.current = true
-    return run()
-  }, [run])
+  /**
+   * Saves now. Only the triggers `isExplicitTrigger` names (Save, ⌘S, Mark
+   * ready) are explicit; a background save never advances the heading baseline
+   * or opens the section link dialog (decision 21).
+   */
+  const flush = React.useCallback(
+    (trigger: SaveTrigger = 'background'): Promise<Outcome> => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
+        timerRef.current = null
+      }
+      firstChangeAtRef.current = null
+      if (isExplicitTrigger(trigger)) explicitRef.current = true
+      return run()
+    },
+    [run],
+  )
 
   const runRef = React.useRef(run)
   runRef.current = run
@@ -687,10 +733,11 @@ export function useEntryEditor({
   // Blur of the window or a hidden tab saves at once.
   React.useEffect(() => {
     const onHide = () => {
-      if (document.visibilityState === 'hidden' && isDirtyNow()) void flush()
+      if (document.visibilityState === 'hidden' && isDirtyNow())
+        void flush('background')
     }
     const onBlur = () => {
-      if (isDirtyNow()) void flush()
+      if (isDirtyNow()) void flush('background')
     }
     document.addEventListener('visibilitychange', onHide)
     window.addEventListener('blur', onBlur)
@@ -708,7 +755,10 @@ export function useEntryEditor({
       if (!isDirtyNow() && !runningRef.current) return false
       leavingRef.current = true
       try {
-        const outcome = await Promise.race([flush(), sleep(LEAVE_WAIT)])
+        const outcome = await Promise.race([
+          flush('background'),
+          sleep(LEAVE_WAIT),
+        ])
         return shouldKeepEditorOpen(outcome, isDirtyNow())
       } finally {
         leavingRef.current = false
@@ -734,8 +784,8 @@ export function useEntryEditor({
   )
 
   /** Flush before an action; false (with a toast) when it could not save. */
-  async function ensureSaved() {
-    const outcome = await flush()
+  async function ensureSaved(trigger: SaveTrigger = 'action') {
+    const outcome = await flush(trigger)
     if (outcome === 'saved' && entryIdRef.current) return entryIdRef.current
     toast.error(
       outcome === 'blocked'
@@ -781,9 +831,36 @@ export function useEntryEditor({
     }
   }
 
+  /** Points links at the sections a save changed (decision 21). */
+  const applySectionChangesMutation = useMutation({
+    mutationFn: async (updates: SectionLinkUpdate[]) => {
+      const id = entryIdRef.current
+      if (!id) return null
+      return applySectionLinkUpdatesFn({ data: { id, updates } })
+    },
+    onSuccess: async (result) => {
+      if (!result) return
+      setSectionChanges([])
+      const id = entryIdRef.current
+      if (!id) return
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.linkedFrom(id),
+      })
+      // The entry itself may be one of the updated links (a link to its own section).
+      if (result.updated.some((updated) => updated.id === id)) {
+        await invalidateEntry(id)
+      }
+      void invalidateLists(id)
+      toast.success(m.editor_section_links_done())
+    },
+    onError: () => {
+      toast.error(m.editor_section_links_failed())
+    },
+  })
+
   const markReadyMutation = useMutation({
     mutationFn: async (options: { quiet?: boolean } = {}) => {
-      const id = await ensureSaved()
+      const id = await ensureSaved('mark-ready')
       if (!id) return null
       warnImageImports(
         await publishEntryFn({
@@ -1023,6 +1100,11 @@ export function useEntryEditor({
   }
 
   return {
+    sectionChanges,
+    dismissSectionChanges: () => setSectionChanges([]),
+    applySectionChanges: (updates: SectionLinkUpdate[]) =>
+      applySectionChangesMutation.mutateAsync(updates),
+    applyingSectionChanges: applySectionChangesMutation.isPending,
     conflict,
     approvalConflict,
     recoveredDraft,
@@ -1058,7 +1140,8 @@ export function useEntryEditor({
     dirty,
     status,
     lastSavedAt,
-    save: flush,
+    save: () => flush('save'),
+    persist: () => flush('background'),
     markable,
     busy,
     markReady: () => markReadyMutation.mutate({}),

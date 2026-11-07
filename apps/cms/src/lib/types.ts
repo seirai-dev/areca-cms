@@ -303,6 +303,17 @@ export type EntryData = Record<string, unknown>
 /** `development` sites are forks of a production site (docs/design/dev-environments.md). */
 export type SiteEnvironment = 'production' | 'development'
 
+/** A heading of a rich text value: its section id and its text. */
+export type HeadingSnapshot = { id: string; text: string }
+
+/**
+ * The headings of an entry's rich text values at its last explicit save, per
+ * language and field: keys are `${locale}|${fieldKey}` ('' locale on a
+ * single-language site). Stored in `entry.heading_baseline`
+ * (docs/design/rich-text-links.md, decision 21).
+ */
+export type SectionSnapshots = Record<string, HeadingSnapshot[]>
+
 /** Dev-side content of an entry at its last fork or push (`entry.origin_baseline`). */
 export type EntryOriginBaseline = {
   slug: string

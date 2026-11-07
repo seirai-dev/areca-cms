@@ -183,6 +183,53 @@ export function remapEntryLinks(
 }
 
 /**
+ * Re-points the section of entry links to `targetId` (decision 21). `lookup`
+ * gives the new section id for an old one: '' for the page itself, undefined to
+ * keep the link. The mark's `anchor` and the fragment of its `href` change
+ * together; the mark keeps its entry and collection. Returns a copy, and
+ * whether anything changed. Synchronous.
+ */
+export function remapSectionLinks(
+  json: unknown,
+  targetId: string,
+  lookup: (anchor: string) => string | undefined,
+): { json: JSONContent; changed: boolean } {
+  const copy = structuredClone(json) as JSONContent
+  let changed = false
+  const stack: Node[] = [copy]
+  while (stack.length > 0) {
+    const node = stack.pop()!
+    if (node.marks) {
+      node.marks = node.marks.map((mark) => {
+        if (
+          mark.type !== 'link' ||
+          mark.attrs?.entryId !== targetId ||
+          typeof mark.attrs.href !== 'string'
+        ) {
+          return mark
+        }
+        const current = anchorOf(mark)
+        if (current === null) return mark
+        const next = lookup(current)
+        if (next === undefined || next === current) return mark
+        changed = true
+        const page = String(mark.attrs.href).split('#')[0]
+        return {
+          ...mark,
+          attrs: {
+            ...mark.attrs,
+            anchor: next === '' ? null : next,
+            href: next === '' ? page : `${page}#${next}`,
+          },
+        }
+      })
+    }
+    if (Array.isArray(node.content)) stack.push(...(node.content as Node[]))
+  }
+  return { json: copy, changed }
+}
+
+/**
  * Recomputes the stored `href` and `collection` of entry links from their
  * targets. `resolve` returns the new values, or undefined to keep a link as it
  * is. Synchronous; returns a copy.

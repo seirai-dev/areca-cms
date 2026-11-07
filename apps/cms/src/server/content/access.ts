@@ -71,7 +71,7 @@ async function decideSiteAccess(
   // Before the role check: a dev env is NotFound for an editor as for an owner.
   await assertSiteVisibleTo(access.session, found, notFound)
   assertMembershipRole(access, role)
-  return { session: access.session, site: found }
+  return { session: access.session, site: found, member: access.member }
 }
 
 /**

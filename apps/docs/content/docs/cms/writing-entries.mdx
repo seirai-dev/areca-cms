@@ -109,6 +109,21 @@ To change a link, select it and choose **Link**. The field shows the page, or th
 
 **A link that no longer works** has a red dashed underline. This happens when the page it points to is archived or deleted, or when the section it points to no longer exists. Hover over the link to see why: **This page no longer exists** or **This section no longer exists**. The text stays where it is. Fix the link or remove it. The underline is shown only in the editor. The text and the link are stored as they are.
 
+### Renaming a heading
+
+Links to a section point at its heading, so renaming or removing a heading can break them. When you save an entry and a heading that other pages link to has changed, the editor opens a dialog. It says how many links point to the section, for example **2 links point to the section 'Origin'**, and lists the pages those links are on, with each page's status.
+
+- **A renamed heading.** Choose **Update all links** to point the links at the new heading, or **Keep as is** to leave them as they are.
+- **A removed heading.** Choose where the links should go: another section of the page, **The page itself**, or **Keep as is**.
+
+Updating the links changes the draft of each page. If you are an owner, the approved version and the schedule change too, and each page keeps its status, so the corrected link goes live with the next Go live.
+
+If you are an editor, only the draft changes. A page that is Ready or scheduled then needs an owner to approve it again. Those pages are listed under **These go back to draft for an owner to approve**. A Ready page shows **Edited since ready** until an owner marks it ready again, and until then the live site and the schedule keep the old link. Closing the dialog changes nothing else.
+
+### Linked from
+
+The **Linked from** section of the **Details** panel lists the pages and site content sections whose text links to this entry. Each row shows the status of the page, and the section each link goes to, or **Whole page**. Choose a row to open that page. On a site with several languages the list is grouped by language.
+
 ## Details
 
 The **Details** panel holds everything around the main content. Open it with the **Details** button in the top bar, or press **⌘.** on a Mac or **Ctrl+.** elsewhere. The panel is one scrollable page with these sections:
@@ -117,6 +132,7 @@ The **Details** panel holds everything around the main content. Open it with the
 - **Fields** shows the structured fields, such as dates, choices, images and links.
 - **SEO & discovery** holds the search and social settings. See [SEO and AI suggestions](/docs/cms/seo-and-ai).
 - **Status** shows the current status, any schedule, dates, the author and the entry ID.
+- **Linked from** lists the pages that link to this entry, and the section each link goes to. See [Links in rich text](#links-in-rich-text).
 - **History** lists earlier saves and changes. See [History and activity](/docs/cms/history-and-activity).
 
 ## Slugs
