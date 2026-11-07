@@ -217,5 +217,26 @@ test('an editor who updates the links to a Ready page sends the linking page bac
     'data-status',
     'published',
   )
-  await expect(page.getByTestId('edited-since-ready')).toBeVisible()
+  await expect(
+    page.getByTestId('entry-status').getByTestId('edited-since-ready'),
+  ).toBeVisible()
+})
+
+test('a save on the way out does not use up the warning of the next explicit save', async ({
+  page,
+}) => {
+  test.setTimeout(300_000)
+  await login(page, OWNER)
+  await openEntry(page, targetId)
+  await renameHeading(page, 'Terroir', 'Estate')
+  // Leave for the collection (a background save) and come back.
+  await backToCollection(page)
+  await openEntry(page, targetId)
+
+  await page.keyboard.press('ControlOrMeta+s')
+  const dialog = page.getByTestId('section-link-dialog')
+  await expect(dialog).toBeVisible()
+  await expect(dialog).toContainText("1 link points to the section 'Terroir'.")
+  await dialog.getByRole('button', { name: 'Keep as is' }).click()
+  await expect(dialog).toBeHidden()
 })

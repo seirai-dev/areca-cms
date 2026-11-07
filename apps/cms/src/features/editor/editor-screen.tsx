@@ -789,7 +789,7 @@ function EntryEditorView({
     onOpenOwner: (owner) => {
       void (async () => {
         // Save first, so nothing typed here is left behind.
-        await editor.save().catch(() => null)
+        await editor.persist().catch(() => null)
         if (owner.kind === 'entry') {
           await navigate({
             to: '/sites/$siteId/c/$collectionKey/$entryId',

@@ -32,6 +32,8 @@ import type { EntryData, EntryStatus, Field } from '#/lib/types'
 import { m } from '#/paraglide/messages'
 import type { LocaleBlocker } from './language-state'
 import { autosaveDelay, scheduledPollInterval } from './editor-timing'
+import { isExplicitTrigger } from './save-intent'
+import type { SaveTrigger } from './save-intent'
 import {
   archiveEntryFn,
   cancelScheduleFn,
@@ -431,8 +433,12 @@ export function useEntryEditor({
   const pendingRef = React.useRef(false)
   /** The running save was asked for (⌘S, Save, an action), not a timer. */
   const explicitRef = React.useRef(false)
-  /** The last save that went through was an autosave: an explicit save must still run. */
-  const unexplicitSaveRef = React.useRef(false)
+  /**
+   * The last save that went through was not explicit, or none has gone through
+   * on this page yet: an explicit save must still run, because a background save
+   * before this page left the baseline behind the draft.
+   */
+  const unexplicitSaveRef = React.useRef(true)
   const explicitSaveDue = () => explicitRef.current && unexplicitSaveRef.current
   /** Headings that links point to and the last explicit save changed (decision 21). */
   const [sectionChanges, setSectionChanges] = React.useState<
@@ -678,16 +684,23 @@ export function useEntryEditor({
     return loop
   }, [isDirtyNow, saveOnce])
 
-  /** Save now (⌘S, Save, before actions and navigation). */
-  const flush = React.useCallback((): Promise<Outcome> => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current)
-      timerRef.current = null
-    }
-    firstChangeAtRef.current = null
-    explicitRef.current = true
-    return run()
-  }, [run])
+  /**
+   * Saves now. Only the triggers `isExplicitTrigger` names (Save, ⌘S, Mark
+   * ready) are explicit; a background save never advances the heading baseline
+   * or opens the section link dialog (decision 21).
+   */
+  const flush = React.useCallback(
+    (trigger: SaveTrigger = 'background'): Promise<Outcome> => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
+        timerRef.current = null
+      }
+      firstChangeAtRef.current = null
+      if (isExplicitTrigger(trigger)) explicitRef.current = true
+      return run()
+    },
+    [run],
+  )
 
   const runRef = React.useRef(run)
   runRef.current = run
@@ -717,10 +730,11 @@ export function useEntryEditor({
   // Blur of the window or a hidden tab saves at once.
   React.useEffect(() => {
     const onHide = () => {
-      if (document.visibilityState === 'hidden' && isDirtyNow()) void flush()
+      if (document.visibilityState === 'hidden' && isDirtyNow())
+        void flush('background')
     }
     const onBlur = () => {
-      if (isDirtyNow()) void flush()
+      if (isDirtyNow()) void flush('background')
     }
     document.addEventListener('visibilitychange', onHide)
     window.addEventListener('blur', onBlur)
@@ -738,7 +752,10 @@ export function useEntryEditor({
       if (!isDirtyNow() && !runningRef.current) return false
       leavingRef.current = true
       try {
-        const outcome = await Promise.race([flush(), sleep(LEAVE_WAIT)])
+        const outcome = await Promise.race([
+          flush('background'),
+          sleep(LEAVE_WAIT),
+        ])
         return shouldKeepEditorOpen(outcome, isDirtyNow())
       } finally {
         leavingRef.current = false
@@ -764,8 +781,8 @@ export function useEntryEditor({
   )
 
   /** Flush before an action; false (with a toast) when it could not save. */
-  async function ensureSaved() {
-    const outcome = await flush()
+  async function ensureSaved(trigger: SaveTrigger = 'action') {
+    const outcome = await flush(trigger)
     if (outcome === 'saved' && entryIdRef.current) return entryIdRef.current
     toast.error(
       outcome === 'blocked'
@@ -840,7 +857,7 @@ export function useEntryEditor({
 
   const markReadyMutation = useMutation({
     mutationFn: async (options: { quiet?: boolean } = {}) => {
-      const id = await ensureSaved()
+      const id = await ensureSaved('mark-ready')
       if (!id) return null
       warnImageImports(
         await publishEntryFn({
@@ -1120,7 +1137,8 @@ export function useEntryEditor({
     dirty,
     status,
     lastSavedAt,
-    save: flush,
+    save: () => flush('save'),
+    persist: () => flush('background'),
     markable,
     busy,
     markReady: () => markReadyMutation.mutate({}),
