@@ -42,8 +42,11 @@ export type SectionLinker = {
   updatedAt: Date
   /** The language of the link. */
   locale: string
-  /** True when this caller may update the link (see `mayEditSection`). */
-  editable: boolean
+  /**
+   * True when this caller's update sends the entry back to draft for an owner
+   * to approve (see `needsApproval`).
+   */
+  needsApproval: boolean
 }
 
 /** A changed heading and the entries that link to it. */
@@ -60,16 +63,18 @@ function updateKey(locale: string, from: string) {
 }
 
 /**
- * The approved and scheduled versions of an entry are what the next Go live
- * ships. Changing them is an owner's decision, as publishing is, so an editor
- * may update the links of drafts only.
+ * An owner's update is the mechanical fix: the draft, the approved version and
+ * the schedule all point at the new section, and the status stays. An editor's
+ * update changes the draft only. A ready or scheduled entry then reads as edited
+ * since ready and needs an owner to approve it again, so the approved version
+ * and the schedule ship unchanged until then (decision 21).
  */
-export function mayEditSection(
+export function needsApproval(
   source: { status: EntryStatus },
   viewer: SectionViewer,
 ): boolean {
-  if (viewer.isOwner) return true
-  return source.status !== 'published' && source.status !== 'scheduled'
+  if (viewer.isOwner) return false
+  return source.status === 'published' || source.status === 'scheduled'
 }
 
 type SourceRow = {
@@ -216,7 +221,7 @@ export async function attachSectionLinkers(
         }),
         updatedAt: source.updatedAt,
         locale: change.locale,
-        editable: mayEditSection(source, viewer),
+        needsApproval: needsApproval(source, viewer),
       })
     }
     if (linkers.size === 0) continue
@@ -258,11 +263,10 @@ async function remapData(
  * in the approved and scheduled versions, in one transaction. The rules
  * (docs/design/rich-text-links.md, decision 21):
  *
- * - only entries `mayEditSection` allows change; the others are listed in
- *   `skipped` and left alone;
- * - the status, the approval time and the scheduled version stay as they are,
- *   so the link fix does not change what is ready and nothing goes live until
- *   the next go live;
+ * - an owner's update changes the draft, the approved version and the schedule;
+ *   the status and the approval time stay, so the link fix does not change what
+ *   is ready;
+ * - an editor's update changes the draft only (see `needsApproval`);
  * - each updated entry gets a revision ("Section link updated") and its link
  *   index rows, and its draft version moves on so an open editor reloads.
  *
@@ -273,10 +277,7 @@ export async function applySectionLinkUpdates(input: {
   actorId: string
   viewer: SectionViewer
   updates: SectionLinkUpdate[]
-}): Promise<{
-  updated: { id: string; title: string }[]
-  skipped: { id: string; title: string }[]
-}> {
+}): Promise<{ updated: { id: string; title: string }[] }> {
   const target = (await readSources(db, [input.targetId], false)).at(0)
   if (!target) throw new NotFoundError(m.server_entry_not_found())
 
@@ -306,7 +307,7 @@ export async function applySectionLinkUpdates(input: {
       updates.set(updateKey(update.locale, update.from), update.to)
     }
   }
-  if (updates.size === 0) return { updated: [], skipped: [] }
+  if (updates.size === 0) return { updated: [] }
   const froms = [...new Set(input.updates.map((update) => update.from))]
 
   return db.transaction(async (tx) => {
@@ -329,7 +330,7 @@ export async function applySectionLinkUpdates(input: {
     )
 
     const updated: { id: string; title: string }[] = []
-    const skipped: { id: string; title: string }[] = []
+    const owner = input.viewer.isOwner
     for (const source of sources) {
       if (!visibleTo(source, input.viewer)) continue
       const draft = await remapData(
@@ -338,28 +339,19 @@ export async function applySectionLinkUpdates(input: {
         input.targetId,
         updates,
       )
-      const published = await remapData(
-        source.publishedData,
-        source,
-        input.targetId,
-        updates,
-      )
-      const scheduled = await remapData(
-        source.scheduledData,
-        source,
-        input.targetId,
-        updates,
-      )
+      // An editor's change reaches the draft only (see `needsApproval`).
+      const published = owner
+        ? await remapData(source.publishedData, source, input.targetId, updates)
+        : null
+      const scheduled = owner
+        ? await remapData(source.scheduledData, source, input.targetId, updates)
+        : null
       const changed =
         draft?.changed === true ||
         published?.changed === true ||
         scheduled?.changed === true
       if (!changed || !draft) continue
       const title = entryTitle(draft.data, source.fields, source.slug)
-      if (!mayEditSection(source, input.viewer)) {
-        skipped.push({ id: source.id, title })
-        continue
-      }
 
       const now = new Date()
       await tx
@@ -396,6 +388,6 @@ export async function applySectionLinkUpdates(input: {
       )
       updated.push({ id: source.id, title })
     }
-    return { updated, skipped }
+    return { updated }
   })
 }

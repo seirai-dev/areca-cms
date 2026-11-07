@@ -138,9 +138,13 @@ Status: planned (5 stacked PRs). The code and the [docs site](https://docs.areca
     point to, a dialog lists those links (entry, language, status) with *Update
     all links* or *Keep as is*. A heading at the same position with new text is a
     rename; a removed heading lets the editor pick another section or the page.
-    Only entries the user may edit are updated; the rest are listed for an
-    owner. Updated entries keep their status (the change is mechanical) and
-    their history records "Section link updated by …".
+    An owner's update is mechanical: the draft, the approved version and the
+    schedule all point at the new section, and each entry keeps its status and
+    approval time. An editor's update changes the draft only. A ready or
+    scheduled entry then needs an owner to approve it again: it reads as edited
+    since ready, its approved version and schedule keep the old link until then,
+    and the dialog says "These go back to draft for an owner to approve". Every
+    update goes into the entry's history as "Section link updated by …".
 22. **MCP rename.** `update_entry` returns a warning naming the entries whose
     links point to a section that no longer exists, so the AI can update them.
 

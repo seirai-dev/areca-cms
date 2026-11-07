@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 
 import {
+  EDITOR,
   OWNER,
   backToCollection,
   createIsolatedAcmeSite,
@@ -40,6 +41,17 @@ async function openEntry(page: Page, id: string) {
   await page.goto(`/sites/${siteId}/c/articles/${id}`)
   await hydrated(page, titleInput(page))
   await expect(richText(page)).toBeVisible()
+}
+
+/** Renames the heading `from` in the open entry, one character at a time. */
+async function renameHeading(page: Page, from: string, to: string) {
+  await richText(page).locator('h2', { hasText: from }).click()
+  await page.keyboard.press('End')
+  for (const _character of from) {
+    await page.keyboard.press('Backspace')
+  }
+  await page.keyboard.type(to)
+  await expect(richText(page).locator('h2', { hasText: to })).toBeVisible()
 }
 
 test('creates a target with an Origin section, marked ready', async ({
@@ -174,4 +186,36 @@ test('Linked from on the target lists the source and the section it links to', a
   await expect(source).toContainText('Ready')
   await source.getByRole('link', { name: sourceTitle }).click()
   await expect(page).toHaveURL(new RegExp(`/c/articles/${sourceId}$`))
+})
+
+test('an editor who updates the links to a Ready page sends the linking page back to draft', async ({
+  page,
+}) => {
+  test.setTimeout(300_000)
+  await login(page, EDITOR)
+  await openEntry(page, targetId)
+  await renameHeading(page, 'Where it grows', 'Terroir')
+  await page.keyboard.press('ControlOrMeta+s')
+
+  const dialog = page.getByTestId('section-link-dialog')
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByTestId('section-link-linker')).toContainText(
+    sourceTitle,
+  )
+  await expect(dialog.getByTestId('section-link-needs-approval')).toHaveText(
+    'These go back to draft for an owner to approve.',
+  )
+  await dialog.getByTestId('section-link-update-all').click()
+  await expect(dialog).toBeHidden()
+  await expect(page.getByText('Links updated.')).toBeVisible()
+
+  await openEntry(page, sourceId)
+  const link = richText(page).locator('a', { hasText: sourceText })
+  await expect(link).toHaveAttribute('data-anchor', 'terroir')
+  // Still Ready in the approved version, but the draft needs an owner's approval.
+  await expect(page.getByTestId('entry-status')).toHaveAttribute(
+    'data-status',
+    'published',
+  )
+  await expect(page.getByTestId('edited-since-ready')).toBeVisible()
 })

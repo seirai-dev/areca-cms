@@ -1597,7 +1597,7 @@
   "editor_section_links_keep": "Olduğu gibi bırak",
   "editor_section_links_page": "Sayfanın kendisi",
   "editor_section_links_update_all": "Tüm bağlantıları güncelle",
-  "editor_section_links_owner_only": "Bunları bir sahip güncelleyebilir",
+  "editor_section_links_needs_approval": "Bunlar taslağa geri döner. Bir sahibin yeniden onaylaması gerekir.",
   "editor_section_links_done": "Bağlantılar güncellendi.",
   "editor_section_links_failed": "Bağlantılar güncellenemedi.",
   "editor_history_section_links": "Bölüm bağlantısı güncellendi",

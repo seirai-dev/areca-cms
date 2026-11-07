@@ -23,7 +23,9 @@ import type {
  * The follow-up of a save that removed or renamed a heading links point to
  * (docs/design/rich-text-links.md, decision 21). Renames are updated together
  * with one button. For a removed heading the editor picks where its links go.
- * The save has already happened; closing the dialog changes nothing else.
+ * An editor's update of a ready or scheduled entry goes back to draft for an
+ * owner to approve, and the dialog says so. The save has already happened;
+ * closing the dialog changes nothing else.
  */
 
 /** Choice for a removed heading: keep the links, point them at the page, or at another heading. */
@@ -79,8 +81,9 @@ export function SectionLinkDialog({
 
         <div className="grid gap-5">
           {changes.map((change) => {
-            const editable = change.linkers.filter((linker) => linker.editable)
-            const owned = change.linkers.filter((linker) => !linker.editable)
+            const needsApproval = change.linkers.some(
+              (linker) => linker.needsApproval,
+            )
             return (
               <section
                 key={keyOf(change)}
@@ -149,7 +152,7 @@ export function SectionLinkDialog({
                 ) : null}
 
                 <ul className="grid gap-2" data-testid="section-link-linkers">
-                  {editable.map((linker) => (
+                  {change.linkers.map((linker) => (
                     <LinkerRow
                       key={`${linker.id}|${linker.locale}`}
                       linker={linker}
@@ -159,25 +162,13 @@ export function SectionLinkDialog({
                   ))}
                 </ul>
 
-                {owned.length > 0 ? (
-                  <div className="grid gap-2">
-                    <p className="text-caption text-text-muted">
-                      {m.editor_section_links_owner_only()}
-                    </p>
-                    <ul
-                      className="grid gap-2"
-                      data-testid="section-link-owner-only"
-                    >
-                      {owned.map((linker) => (
-                        <LinkerRow
-                          key={`${linker.id}|${linker.locale}`}
-                          linker={linker}
-                          live={live}
-                          devSite={devSite}
-                        />
-                      ))}
-                    </ul>
-                  </div>
+                {needsApproval ? (
+                  <p
+                    className="text-caption text-text-muted"
+                    data-testid="section-link-needs-approval"
+                  >
+                    {m.editor_section_links_needs_approval()}
+                  </p>
                 ) : null}
               </section>
             )

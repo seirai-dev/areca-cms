@@ -1597,7 +1597,7 @@
   "editor_section_links_keep": "Laten zoals het is",
   "editor_section_links_page": "De pagina zelf",
   "editor_section_links_update_all": "Alle links bijwerken",
-  "editor_section_links_owner_only": "Een eigenaar kan deze bijwerken",
+  "editor_section_links_needs_approval": "Deze gaan terug naar concept. Een eigenaar moet ze opnieuw goedkeuren.",
   "editor_section_links_done": "Links bijgewerkt.",
   "editor_section_links_failed": "De links konden niet worden bijgewerkt.",
   "editor_history_section_links": "Sectielink bijgewerkt",

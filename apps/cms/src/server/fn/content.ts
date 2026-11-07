@@ -353,7 +353,7 @@ export const applySectionLinkUpdatesFn = createServerFn({
     })
   })
 
-/** What the caller may do with the entries of this site (see `mayEditSection`). */
+/** What the caller may do with the entries of this site (see `needsApproval`). */
 function sectionViewer(access: {
   member: { role: 'owner' | 'editor' } | null
   session: { user: { isAgencyAdmin: boolean } }

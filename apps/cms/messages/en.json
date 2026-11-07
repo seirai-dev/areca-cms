@@ -1597,7 +1597,7 @@
   "editor_section_links_keep": "Keep as is",
   "editor_section_links_page": "The page itself",
   "editor_section_links_update_all": "Update all links",
-  "editor_section_links_owner_only": "An owner can update these",
+  "editor_section_links_needs_approval": "These go back to draft for an owner to approve.",
   "editor_section_links_done": "Links updated.",
   "editor_section_links_failed": "The links could not be updated.",
   "editor_history_section_links": "Section link updated",

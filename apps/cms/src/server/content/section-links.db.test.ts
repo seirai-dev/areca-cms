@@ -236,8 +236,8 @@ describe.skipIf(!hasDb)(
             title: 'Bron',
             status: 'published',
             locale: '',
-            // An approved entry is an owner's to change.
-            editable: false,
+            // An editor's change to an approved entry goes back to draft for an owner.
+            needsApproval: true,
           }),
         ])
         const asOwner = await attachSectionLinkers(
@@ -245,7 +245,7 @@ describe.skipIf(!hasDb)(
           renamed.sectionChanges,
           OWNER,
         )
-        expect(asOwner[0].linkers[0].editable).toBe(true)
+        expect(asOwner[0].linkers[0].needsApproval).toBe(false)
       } finally {
         await cleanupTestSite(ctx)
       }
@@ -428,19 +428,21 @@ describe.skipIf(!hasDb)('section links: the bulk update', () => {
     return { ctx, target, draftSource, readySource, change }
   }
 
-  it('updates the drafts the caller may edit, and skips the approved entries of an editor', async () => {
+  it('updates the draft of a ready entry for an editor, leaves the approved version alone, and asks for approval again', async () => {
     const { ctx, target, draftSource, readySource } =
       await renamedWithLinks('editor')
     try {
       const before = await getEntry(readySource.id)
+      expect(isEditedSinceReady(before!)).toBe(false)
       const result = await applySectionLinkUpdates({
         targetId: target.id,
         actorId: ctx.actor.id,
         viewer: EDITOR,
         updates: [{ locale: '', from: 'origin', to: 'where-it-grows' }],
       })
-      expect(result.updated.map((row) => row.id)).toEqual([draftSource.id])
-      expect(result.skipped.map((row) => row.id)).toEqual([readySource.id])
+      expect(result.updated.map((row) => row.id).sort()).toEqual(
+        [draftSource.id, readySource.id].sort(),
+      )
 
       const draft = await getEntry(draftSource.id)
       expect(marksOf(draft!.draftData.body)).toEqual([
@@ -450,11 +452,55 @@ describe.skipIf(!hasDb)('section links: the bulk update', () => {
           href: '/blog/ethiopia-editor#where-it-grows',
         }),
       ])
-      // The approved entry is untouched: same data, status and approval time.
+      // The new link is in the draft only: the approved version (what goes
+      // live) keeps the old link, and the entry reads as edited since ready
+      // until an owner approves it.
       const after = await getEntry(readySource.id)
       expect(after!.publishedData).toEqual(before!.publishedData)
-      expect(after!.draftVersion).toBe(before!.draftVersion)
+      expect(after!.publishedAt?.toISOString()).toBe(
+        before!.publishedAt?.toISOString(),
+      )
       expect(after!.status).toBe('published')
+      expect(marksOf(after!.draftData.body)[0].anchor).toBe('where-it-grows')
+      expect(isEditedSinceReady(after!)).toBe(true)
+      expect(after!.draftVersion).toBeGreaterThan(before!.draftVersion)
+    } finally {
+      await cleanupTestSite(ctx)
+    }
+  })
+
+  it('updates the draft of a scheduled entry for an editor and leaves the schedule alone', async () => {
+    const { ctx, target } = await renamedWithLinks('editor-scheduled')
+    try {
+      const scheduled = await sourceWithLink(
+        ctx,
+        'Gepland',
+        'gepland-editor-scheduled',
+        target.id,
+        'origin',
+      )
+      await publishEntry(scheduled.id, ctx.actor.id)
+      await scheduleEntry(
+        scheduled.id,
+        new Date(Date.now() + 3 * 86_400_000).toISOString(),
+        'UTC',
+        ctx.actor.id,
+      )
+      const before = await getEntry(scheduled.id)
+      await applySectionLinkUpdates({
+        targetId: target.id,
+        actorId: ctx.actor.id,
+        viewer: EDITOR,
+        updates: [{ locale: '', from: 'origin', to: 'where-it-grows' }],
+      })
+      const after = await getEntry(scheduled.id)
+      expect(after!.status).toBe('scheduled')
+      expect(after!.scheduledVersion).toBe(before!.scheduledVersion)
+      expect(after!.scheduledAt?.toISOString()).toBe(
+        before!.scheduledAt?.toISOString(),
+      )
+      expect(marksOf(after!.scheduledData!.body)[0].anchor).toBe('origin')
+      expect(marksOf(after!.draftData.body)[0].anchor).toBe('where-it-grows')
     } finally {
       await cleanupTestSite(ctx)
     }
