@@ -2,6 +2,20 @@
 
 All notable changes to `@areca-cms/site-sdk`.
 
+## 0.11.0 (2026-11-07)
+
+### Features
+
+- **site-sdk:** localize entry links with i18n.localizePath (a52c42e)
+- **site-sdk:** open external rich text links in a new tab (a117afa)
+
+### Bug fixes
+
+- **site-sdk:** stop importing the site config into areca.gen.ts (0079730)
+- **site-sdk:** localize entry links in draft previews as pull does (4857550)
+- **site-sdk:** rewrite only the Markdown definitions the CMS lists (1c19702)
+- **site-sdk:** localize entry links with the language the CMS resolved them in (67a3f80)
+
 ## 0.10.2 (2026-11-06)
 
 No user-facing changes.
