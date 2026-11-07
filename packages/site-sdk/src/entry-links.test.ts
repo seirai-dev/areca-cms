@@ -49,6 +49,7 @@ function richText(
     },
     markdown: `[Lees meer][areca-entry-1] en [over](/about)\n\n[areca-entry-1]: ${href}`,
     html: `<p><a href="${href}" data-areca-entry="${entryId}">Lees meer</a> en <a href="/about">over</a></p>`,
+    entryLinks: [{ label: 'areca-entry-1' }],
     document: {
       type: 'root',
       children: [
@@ -252,6 +253,68 @@ function resolvedRichText(
     entryLinks: [{ label: 'areca-entry-1', locale }],
   } as unknown as RichTextValue
 }
+
+describe('localizeEntryLinks: Markdown definitions', () => {
+  const code = [
+    '```md',
+    '[areca-entry-1]: /journaal/open-dag',
+    '```',
+    '',
+    'Use `[areca-entry-1]: /journaal/open-dag` as a definition.',
+    '',
+  ].join('\n')
+
+  it('leaves Markdown without a list of entry links exactly as it was', () => {
+    // A snapshot with no `entryLinks`: the literal text is code, not a definition.
+    const value = {
+      ...richText('/journaal/open-dag', 'event-1'),
+      markdown: `${code}[Lees meer][areca-entry-1]\n\n[areca-entry-1]: /journaal/open-dag`,
+    } as RichTextValue
+    delete value.entryLinks
+    const localized = localizeEntryLinks(
+      entryWith(value),
+      languages,
+      defaultLocalizePath('en'),
+    )
+    expect((localized.locales!.nl!.data.body as RichTextValue).markdown).toBe(
+      value.markdown,
+    )
+  })
+
+  it('localizes the listed definitions and never the code that looks like one', () => {
+    const value = {
+      ...richText('/journaal/open-dag', 'event-1'),
+      markdown: `${code}[Lees meer][areca-entry-1]\n\n[areca-entry-1]: /journaal/open-dag`,
+      entryLinks: [{ label: 'areca-entry-1', locale: 'nl' }],
+    } as RichTextValue
+    const localized = localizeEntryLinks(
+      entryWith(value),
+      languages,
+      defaultLocalizePath('en'),
+    )
+    const nl = localized.locales!.nl!.data.body as RichTextValue
+    expect(nl.markdown).toBe(
+      `${code}[Lees meer][areca-entry-1]\n\n[areca-entry-1]: /nl/journaal/open-dag`,
+    )
+  })
+
+  it('leaves the Markdown alone when it does not match its list', () => {
+    const value = {
+      ...richText('/journaal/open-dag', 'event-1'),
+      markdown:
+        '[Lees meer][areca-entry-1]\n\n[areca-entry-2]: /journaal/open-dag',
+      entryLinks: [{ label: 'areca-entry-1' }],
+    } as RichTextValue
+    const localized = localizeEntryLinks(
+      entryWith(value),
+      languages,
+      defaultLocalizePath('en'),
+    )
+    expect((localized.locales!.nl!.data.body as RichTextValue).markdown).toBe(
+      value.markdown,
+    )
+  })
+})
 
 describe('localizeEntryLinks: the language the CMS resolved the link in', () => {
   it('localizes a Dutch text linking to an English-only entry without the Dutch prefix', () => {

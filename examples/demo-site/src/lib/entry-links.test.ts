@@ -21,6 +21,7 @@ afterEach(() => {
     .forEach((directory) => rmSync(directory, { recursive: true, force: true }))
 })
 
+/** The value the CMS writes for a link to a Dutch-translated entry: every marker names `nl`. */
 function richTextWithLink(href: string, entryId: string): RichTextValue {
   return {
     json: {
@@ -40,6 +41,7 @@ function richTextWithLink(href: string, entryId: string): RichTextValue {
                     entryId,
                     collection: 'articles',
                     anchor: null,
+                    locale: 'nl',
                   },
                 },
               ],
@@ -49,7 +51,7 @@ function richTextWithLink(href: string, entryId: string): RichTextValue {
       ],
     },
     markdown: `[Lees het artikel][areca-entry-1]\n\n[areca-entry-1]: ${href}`,
-    html: `<p><a href="${href}" data-areca-entry="${entryId}">Lees het artikel</a></p>`,
+    html: `<p><a href="${href}" data-areca-entry="${entryId}" data-areca-locale="nl">Lees het artikel</a></p>`,
     document: {
       type: 'root',
       children: [
@@ -60,12 +62,14 @@ function richTextWithLink(href: string, entryId: string): RichTextValue {
               type: 'link',
               href,
               entryId,
+              locale: 'nl',
               children: [{ type: 'text', value: 'Lees het artikel' }],
             },
           ],
         },
       ],
     },
+    entryLinks: [{ label: 'areca-entry-1', locale: 'nl' }],
   } as unknown as RichTextValue
 }
 

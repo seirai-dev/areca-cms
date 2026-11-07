@@ -13,7 +13,9 @@ import type {
  * - `document`: the link node has `entryId`;
  * - `html`: the anchor has `data-areca-entry`;
  * - `markdown`: the link is a reference (`[text][areca-entry-1]`) whose
- *   definition (`[areca-entry-1]: /path`) holds the destination.
+ *   definition (`[areca-entry-1]: /path`) holds the destination. The value's
+ *   `entryLinks` lists those definitions in order; only they are rewritten, so
+ *   code that looks like a definition is never touched.
  *
  * `localizePath` changes the destination of those links only, never other
  * links. Snapshots from older CMS versions have no markers and are unchanged.
@@ -35,7 +37,6 @@ export function defaultLocalizePath(main: string): LocalizePath {
 
 const HTML_ENTRY_LINK =
   /<a href="([^"]*)" data-areca-entry="([^"]*)"(?: data-areca-locale="([^"]*)")?>/g
-const MARKDOWN_ENTRY_DEFINITION = /^(\[areca-entry-\d+\]: )(\S+)$/gm
 
 const HTML_UNESCAPES: Record<string, string> = {
   '&amp;': '&',
@@ -238,17 +239,13 @@ function localizeRichText<
       },
     ),
     markdown:
-      value.entryLinks !== undefined
-        ? localizeMarkdownLinks(
+      value.entryLinks === undefined
+        ? value.markdown
+        : localizeMarkdownLinks(
             value.markdown,
             value.entryLinks,
             locale,
             localize,
-          )
-        : value.markdown.replace(
-            MARKDOWN_ENTRY_DEFINITION,
-            (_match, prefix: string, destination: string) =>
-              `${prefix}${localizeHref(destination, locale, localize)}`,
           ),
   }
 }
