@@ -82,6 +82,12 @@ function noteMeta(note: string): {
         icon: <ArrowCounterClockwise weight="bold" />,
         tone: 'success',
       }
+    case 'section-links':
+      return {
+        title: () => m.editor_history_section_links(),
+        icon: <PencilSimple weight="bold" />,
+        tone: 'neutral',
+      }
     default:
       return {
         title: () => m.editor_history_edited(),

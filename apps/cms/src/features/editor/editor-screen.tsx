@@ -52,6 +52,7 @@ import { useAiTranslation } from './use-ai-translation'
 
 import { DetailsPanel } from './details-panel'
 import type { LanguageRow } from './details-panel'
+import { SectionLinkDialog } from './section-link-dialog'
 import { EditorCanvas } from './editor-canvas'
 import { EditorTopBar } from './editor-top-bar'
 import type { PrimaryState } from './editor-top-bar'
@@ -1064,6 +1065,20 @@ function EntryEditorView({
                 await editor.restore(restoreId).catch(() => undefined)
             }}
           />
+
+          {editor.sectionChanges.length > 0 ? (
+            <SectionLinkDialog
+              changes={editor.sectionChanges}
+              live={live}
+              devSite={isDev}
+              multilingual={Boolean(lang.languages)}
+              pending={editor.applyingSectionChanges}
+              onApply={(updates) => {
+                void editor.applySectionChanges(updates).catch(() => undefined)
+              }}
+              onClose={editor.dismissSectionChanges}
+            />
+          ) : null}
 
           <AlertDialog open={editor.blocker.status === 'blocked'}>
             <AlertDialogContent>

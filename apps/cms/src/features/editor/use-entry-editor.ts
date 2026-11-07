@@ -42,12 +42,17 @@ import {
   getGlobalPreviewUrlFn,
   getPreviewUrlFn,
   publishEntryFn,
+  applySectionLinkUpdatesFn,
   restoreRevisionFn,
   scheduleEntryFn,
   unpublishEntryFn,
   updateDraftFn,
   updateGlobalDraftFn,
 } from '#/server/fn/content'
+import type {
+  SectionChangeWithLinks,
+  SectionLinkUpdate,
+} from '#/server/content/section-link-updates'
 
 /** Navigation waits at most this long for a pending save. */
 const LEAVE_WAIT = 3000
@@ -76,6 +81,10 @@ type ImageImportResult = {
   importedImages?: number
   importWarnings?: string[]
 }
+
+/** A save's response: the entry, plus the headings links point to that it changed. */
+type SaveResult = EntryRecord &
+  ImageImportResult & { sectionChanges?: SectionChangeWithLinks[] }
 
 export type RevisionRecord = {
   id: string
@@ -422,6 +431,17 @@ export function useEntryEditor({
   const pendingRef = React.useRef(false)
   /** The running save was asked for (⌘S, Save, an action), not a timer. */
   const explicitRef = React.useRef(false)
+  /** The last save that went through was an autosave: an explicit save must still run. */
+  const unexplicitSaveRef = React.useRef(false)
+  const explicitSaveDue = () => explicitRef.current && unexplicitSaveRef.current
+  /** Headings that links point to and the last explicit save changed (decision 21). */
+  const [sectionChanges, setSectionChanges] = React.useState<
+    SectionChangeWithLinks[]
+  >([])
+  // A different entry is a different set of changes.
+  React.useEffect(() => {
+    setSectionChanges([])
+  }, [routeEntryId])
   const leavingRef = React.useRef(false)
   const bypassRef = React.useRef(false)
   const fieldsRef = React.useRef(fields)
@@ -504,6 +524,7 @@ export function useEntryEditor({
       }
     }
     setStatus('saving')
+    const explicit = explicitRef.current
     try {
       const payload = payloadFromData(snapshot)
       const saved = (
@@ -522,13 +543,22 @@ export function useEntryEditor({
                   id,
                   data: payload,
                   expectedVersion: versionRef.current,
+                  explicit,
                 },
               })
             : await createEntryFn({
                 data: { siteId, collectionKey, data: payload },
               })
-      ) as EntryRecord & ImageImportResult
+      ) as SaveResult
       versionRef.current = saved.draftVersion
+      unexplicitSaveRef.current = !explicit
+      if (explicit) {
+        setSectionChanges(saved.sectionChanges ?? [])
+        // The headings may have moved, so "Linked from" reads the section again.
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.linkedFrom(saved.id),
+        })
+      }
       const serverData = initialEntryData(fieldsRef.current, saved.draftData)
       serverJsonRef.current = JSON.stringify(serverData)
       const settled = JSON.stringify(dataRef.current) === submitted
@@ -634,10 +664,10 @@ export function useEntryEditor({
       try {
         do {
           pendingRef.current = false
-          if (!isDirtyNow()) break
+          if (!isDirtyNow() && !explicitSaveDue()) break
           outcome = await saveOnce()
           if (outcome !== 'saved') break
-        } while (requested() && isDirtyNow())
+        } while (requested() && (isDirtyNow() || explicitSaveDue()))
       } finally {
         runningRef.current = null
         explicitRef.current = false
@@ -780,6 +810,33 @@ export function useEntryEditor({
       failed(error)
     }
   }
+
+  /** Points links at the sections a save changed (decision 21). */
+  const applySectionChangesMutation = useMutation({
+    mutationFn: async (updates: SectionLinkUpdate[]) => {
+      const id = entryIdRef.current
+      if (!id) return null
+      return applySectionLinkUpdatesFn({ data: { id, updates } })
+    },
+    onSuccess: async (result) => {
+      if (!result) return
+      setSectionChanges([])
+      const id = entryIdRef.current
+      if (!id) return
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.linkedFrom(id),
+      })
+      // The entry itself may be one of the updated links (a link to its own section).
+      if (result.updated.some((updated) => updated.id === id)) {
+        await invalidateEntry(id)
+      }
+      void invalidateLists(id)
+      toast.success(m.editor_section_links_done())
+    },
+    onError: () => {
+      toast.error(m.editor_section_links_failed())
+    },
+  })
 
   const markReadyMutation = useMutation({
     mutationFn: async (options: { quiet?: boolean } = {}) => {
@@ -1023,6 +1080,11 @@ export function useEntryEditor({
   }
 
   return {
+    sectionChanges,
+    dismissSectionChanges: () => setSectionChanges([]),
+    applySectionChanges: (updates: SectionLinkUpdate[]) =>
+      applySectionChangesMutation.mutateAsync(updates),
+    applyingSectionChanges: applySectionChangesMutation.isPending,
     conflict,
     approvalConflict,
     recoveredDraft,

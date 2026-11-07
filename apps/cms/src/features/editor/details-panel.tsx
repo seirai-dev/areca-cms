@@ -18,6 +18,7 @@ import { getLocale } from '#/paraglide/runtime'
 
 import { FieldControl } from './fields/field-control'
 import { EntryHistory } from './history'
+import { LinkedFrom } from './linked-from'
 import { LanguageRing } from './language-ring'
 import { languageStateKey } from './language-state'
 import type { LocaleSummary } from './language-state'
@@ -177,6 +178,17 @@ export function DetailsPanel({
           onSelectLanguage={onSelectLanguage}
         />
       </Section>
+
+      {entryId ? (
+        <Section title={m.editor_linked_from()} testId="details-linked-from">
+          <LinkedFrom
+            siteId={siteId}
+            entryId={entryId}
+            live={live}
+            devSite={devSite}
+          />
+        </Section>
+      ) : null}
 
       <Section title={m.editor_details_history()} testId="details-history">
         {isNew ? (

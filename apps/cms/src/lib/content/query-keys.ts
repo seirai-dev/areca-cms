@@ -25,6 +25,7 @@ export const queryKeys = {
     ['entries', siteId, OVERVIEW_ENTRIES, list] as const,
   inboundReferences: (entryId: string) =>
     ['inbound-references', entryId] as const,
+  linkedFrom: (entryId: string) => ['linked-from', entryId] as const,
   entry: (id: string) => ['entry', id] as const,
   /**
    * Rich text link targets: the link field's search, headings and checks. All
