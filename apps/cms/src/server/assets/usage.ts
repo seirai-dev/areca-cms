@@ -24,7 +24,8 @@ export type AssetTransaction = Parameters<
  * validate existence, and nothing derives state from the set of references.
  * Take the lock before validating asset existence or writing references; take
  * it before any entry row write, so lock order matches the dev-environment
- * ordering comments.
+ * ordering comments. A transaction that writes link-index rows takes the site's
+ * link-index lock before this one (`lockSiteLinkIndex`, entry-link-index.ts).
  */
 const assetLockKey = (organizationId: string) =>
   sql`hashtextextended(${`assets:${organizationId}`}, 0)`

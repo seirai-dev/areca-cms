@@ -23,6 +23,12 @@ import { m } from '#/paraglide/messages'
 import { lockProductionSite } from './lock'
 import { deepEqual } from './plan'
 import { remapReferences } from './references'
+import {
+  lockSiteLinkIndex,
+  syncEntryLinkIndexes,
+} from '#/server/content/entry-link-index'
+import { relinkProductionEntries } from './relink'
+
 import type { ReferenceWarning } from './references'
 import { findSlugCollisions } from './slug-collisions'
 import type { SlugOwner } from './slug-collisions'
@@ -90,7 +96,7 @@ export async function copyEntryToProduction(
   // Anything that is not a dev env is NotFound, as for every dev action.
   const dev = await readDevEnvironment(source.siteId)
   return db.transaction((tx) =>
-    runCopy(tx, actor, input, dev.id, dev.organizationId),
+    runCopy(tx, actor, input, dev.id, dev.organizationId, dev.parentSiteId),
   )
 }
 
@@ -100,10 +106,14 @@ async function runCopy(
   input: CopyInput,
   devSiteId: string,
   organizationId: string,
+  /** The production site the copy writes. Fixed for a dev env, so read before the transaction. */
+  productionSiteId: string,
 ): Promise<CopyResult> {
   const markReady = input.markReady ?? false
   const overwrite = input.overwrite ?? false
 
+  // Link-index lock first, before any row lock (see `lockSiteLinkIndex`).
+  await lockSiteLinkIndex(tx, productionSiteId)
   await lockOrganizationForMutation(tx, organizationId, {
     mode: 'no-key-update',
   })
@@ -297,6 +307,33 @@ async function runCopy(
   const clearedAll: ReferenceWarning[] = [...draft.cleared]
   const warnings: DevEnvWarning[] = []
 
+  const now = new Date()
+  const updated = (
+    await tx
+      .update(entry)
+      .set({
+        slug: source.slug,
+        draftData: draft.data,
+        draftVersion: sql`${entry.draftVersion} + 1`,
+        contentVersion: sql`${entry.contentVersion} + 1`,
+        updatedBy: actor.id,
+        updatedAt: now,
+      })
+      .where(eq(entry.id, productionId))
+      .returning({ contentVersion: entry.contentVersion })
+  ).at(0)
+  if (!updated) throw new Error('Failed to write the production entry.')
+
+  // The links the copy wrote keep the dev path of their target. Recompute them
+  // from production's state after the write above, so a copied slug is final.
+  // The ready version below is validated from the recomputed draft.
+  const relinkedProduction = (
+    await relinkProductionEntries(tx, prod.id, [productionId])
+  ).at(0)
+  if (!relinkedProduction) {
+    throw new Error('Failed to write the production entry.')
+  }
+
   // markReady makes the copied draft the production ready version.
   let readyStored: EntryData | null = null
   let readySlug: string | null = null
@@ -304,7 +341,7 @@ async function runCopy(
     const checked = await readyProblems(tx, prod, {
       fields,
       requiredLanguages: prodCollection.requiredLanguages,
-      ready: draft.data,
+      ready: relinkedProduction.draftData,
     })
     if (checked.messages.length > 0) {
       const details = checked.messages.join('; ')
@@ -318,6 +355,17 @@ async function runCopy(
       readySlug = source.slug
     }
   }
+  if (readyStored && readySlug) {
+    await tx
+      .update(entry)
+      .set({
+        status: 'published',
+        publishedData: readyStored,
+        publishedSlug: readySlug,
+        publishedAt: now,
+      })
+      .where(eq(entry.id, productionId))
+  }
 
   const seen = new Set<string>()
   const clearedReferences = clearedAll.filter((reference) => {
@@ -327,31 +375,6 @@ async function runCopy(
     return true
   })
   warnings.push(...referenceWarningList(clearedReferences, new Set()))
-
-  const now = new Date()
-  const updated = (
-    await tx
-      .update(entry)
-      .set({
-        slug: source.slug,
-        draftData: draft.data,
-        draftVersion: sql`${entry.draftVersion} + 1`,
-        contentVersion: sql`${entry.contentVersion} + 1`,
-        updatedBy: actor.id,
-        updatedAt: now,
-        ...(readyStored && readySlug
-          ? {
-              status: 'published' as const,
-              publishedData: readyStored,
-              publishedSlug: readySlug,
-              publishedAt: now,
-            }
-          : {}),
-      })
-      .where(eq(entry.id, productionId))
-      .returning({ contentVersion: entry.contentVersion })
-  ).at(0)
-  if (!updated) throw new Error('Failed to write the production entry.')
 
   // The dev entry now matches what production holds: it is linked, and its
   // baseline and production version are recorded (Decision 11).
@@ -410,6 +433,9 @@ async function runCopy(
     },
     tx,
   )
+
+  // The copy wrote one production entry: only its link rows are rewritten.
+  await syncEntryLinkIndexes(tx, [productionId])
 
   return { productionId, created, warnings, clearedReferences }
 }

@@ -75,6 +75,7 @@ export async function run(
         ...(parsed.typesPath ? { types: resolve(cwd, parsed.typesPath) } : {}),
         ...(assets ? { assets } : {}),
         ...(config?.i18n?.paraglide ? { paraglide: resolve(cwd, config.i18n.paraglide) } : {}),
+        ...(config?.i18n?.localizePath ? { localizePath: config.i18n.localizePath } : {}),
       })
       // Print camelCase keys, the names used in the pulled files and in code.
       const camelKeys = camelCollectionKeys(Object.keys(snapshot.collections))

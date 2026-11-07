@@ -41,6 +41,15 @@ export function warningText(warning: DevEnvWarning): string {
         : m.dev_push_warning_reference_cleared({
             field: warning.params.field,
           })
+    case 'link-cleared':
+      return warning.params.locale !== undefined
+        ? m.dev_push_warning_link_cleared_locale({
+            field: warning.params.field,
+            locale: warning.params.locale,
+          })
+        : m.dev_push_warning_link_cleared({
+            field: warning.params.field,
+          })
     case 'ready-not-pushed':
       return m.dev_push_warning_ready_not_pushed({
         details: warning.params.details,

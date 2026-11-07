@@ -164,7 +164,7 @@ Do these in order. Show the user each file you will change before you change it 
    - `prebuild`: `areca pull` (plus the Paraglide compile first when Paraglide is used). A build without content fails until the first release exists. That is expected.
    - `predev` (optional): only after the first release. A failing `predev` stops the dev server.
    - Do not change `dev` again. `init` already wraps it in `areca run --` when needed.
-2. **Languages** (only if the plan has them). Set `languages` in `areca.config.ts` through MCP or by code. Set up Paraglide only if the user agreed to it. Install it only after approval. For TanStack Start the Paraglide recipe in [references/frameworks.md](references/frameworks.md) was verified end to end; follow it. Other i18n libraries: pass the locale yourself with `content.in(locale)`.
+2. **Languages** (only if the plan has them). Set `languages` in `areca.config.ts` through MCP or by code. Set up Paraglide only if the user agreed to it. Install it only after approval. For TanStack Start the Paraglide recipe in [references/frameworks.md](references/frameworks.md) was verified end to end; follow it. Other i18n libraries: pass the locale yourself with `content.in(locale)`. If a language's URLs do not follow `/<locale>/<route>` (for example `/nederlands/...`), set `i18n.localizePath` in `areca.config.ts` so the links between entries match the site's URLs. The default is in the `areca-sdk` skill (`references/languages.md`).
 3. **Framework wiring**: read the section for the detected framework in [references/frameworks.md](references/frameworks.md). Add:
    - a server-only content module (the code imports `content` from `areca.gen.ts`),
    - list and detail pages for each collection in batch D,

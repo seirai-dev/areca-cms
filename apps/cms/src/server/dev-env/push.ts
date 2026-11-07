@@ -42,6 +42,7 @@ import { AppError } from '#/server/http/app-error'
 import { requestPublication } from '#/server/publishing/publications'
 
 import { lockProductionSite } from './lock'
+import { relinkProductionEntries } from './relink'
 import {
   buildPlan,
   removedFieldKeysOf,
@@ -53,6 +54,12 @@ import { findSlugCollisions } from './slug-collisions'
 import type { SlugOwner } from './slug-collisions'
 import { loadPlanContext } from './load-plan'
 import { remapReferences } from './references'
+import {
+  lockSiteLinkIndex,
+  rebuildEntryLinkIndex,
+  syncEntryLinkIndexes,
+} from '#/server/content/entry-link-index'
+
 import {
   lockDevEnvironment,
   lockProductionRow,
@@ -137,7 +144,7 @@ export async function pushDevEnvironment(
 ): Promise<PushResult> {
   const probe = await readDevEnvironment(input.devSiteId)
   const committed = await db.transaction((tx) =>
-    runPush(tx, actor, input, probe.organizationId),
+    runPush(tx, actor, input, probe.organizationId, probe.parentSiteId),
   )
   const publication = input.goLive
     ? await goLiveAfterPush(committed.productionSiteId, actor.id)
@@ -163,7 +170,11 @@ async function runPush(
   actor: DevEnvActor,
   input: PushInput,
   organizationId: string,
+  /** The production site the push writes. Fixed for a dev env, so read before the transaction. */
+  productionSiteId: string,
 ): Promise<CommittedPush> {
+  // Link-index lock first, before any row lock (see `lockSiteLinkIndex`).
+  await lockSiteLinkIndex(tx, productionSiteId)
   await lockOrganizationForMutation(tx, organizationId, {
     mode: 'no-key-update',
   })
@@ -267,6 +278,8 @@ async function runPush(
     created,
     lookup,
   )
+  // Every target has its final slug now: the links the push wrote follow it.
+  await relinkWrittenEntries(state, candidates)
   await resolveReadyCandidates(tx, productionSite, candidates, state.warnings)
 
   await writeBaselines(state, entryItems, devById, candidates)
@@ -319,6 +332,17 @@ async function runPush(
     },
     tx,
   )
+
+  // The link index follows the entries this push wrote. A schema or language
+  // change can reshape any entry's rows, so it rebuilds the site instead.
+  if (schemaItems.length > 0 || languagesItem) {
+    await rebuildEntryLinkIndex(tx, productionSite.id)
+  } else {
+    const written = [...state.written.values()].filter(
+      (id): id is string => id !== null,
+    )
+    await syncEntryLinkIndexes(tx, written)
+  }
 
   return {
     counts,
@@ -930,6 +954,33 @@ async function pushEntriesPassTwo(
     }
   }
   return candidates
+}
+
+/**
+ * The production entries this push wrote get their link paths recomputed from
+ * the production state after all of its writes (see `relinkProductionEntries`).
+ * A ready version that the next step validates follows the draft.
+ */
+async function relinkWrittenEntries(
+  state: PushState,
+  candidates: ReadyCandidate[],
+) {
+  const ids = [
+    ...new Set(
+      [...state.written.values()].filter((id): id is string => id !== null),
+    ),
+  ]
+  const relinked = await relinkProductionEntries(
+    state.tx,
+    state.production.id,
+    ids,
+  )
+  for (const row of relinked) {
+    const candidate = candidates.find(
+      (item) => item.entryId === row.id && item.active,
+    )
+    if (candidate && row.publishedData) candidate.ready = row.publishedData
+  }
 }
 
 /**

@@ -10,6 +10,7 @@ import { m } from '#/paraglide/messages'
 import { audit } from '#/server/audit'
 
 import { archiveDeletedContent } from './deletion-archive'
+import { lockSiteLinkIndex, syncEntryLinkIndex } from './entry-link-index.ts'
 import {
   assertKindsUnchanged,
   assertPreviewPath,
@@ -322,7 +323,7 @@ export async function writeGlobalUpsert(
   // Ready and scheduled data are stripped when the snapshot is built.
   if (previous?.seoEnabled && !seoEnabled) {
     const [draft] = await tx
-      .select({ draftData: entry.draftData })
+      .select({ id: entry.id, draftData: entry.draftData })
       .from(entry)
       .where(
         and(eq(entry.collectionId, row.id), eq(entry.slug, GLOBAL_ENTRY_SLUG)),
@@ -339,6 +340,7 @@ export async function writeGlobalUpsert(
       .where(
         and(eq(entry.collectionId, row.id), eq(entry.slug, GLOBAL_ENTRY_SLUG)),
       )
+    await syncEntryLinkIndex(tx, draft.id)
   }
 }
 
@@ -358,6 +360,7 @@ export async function upsertGlobal(
   const now = new Date()
 
   await db.transaction(async (tx) => {
+    await lockSiteLinkIndex(tx, siteId)
     await tx
       .select({ id: site.id })
       .from(site)
@@ -460,6 +463,7 @@ export async function deleteGlobal(
   }
 
   await db.transaction(async (tx) => {
+    await lockSiteLinkIndex(tx, siteId)
     await tx
       .select({ id: site.id })
       .from(site)
@@ -531,6 +535,7 @@ export async function discardGlobalDraft(
   const organizationId = await siteOrganizationId(siteId)
 
   return db.transaction(async (tx) => {
+    await lockSiteLinkIndex(tx, siteId)
     await tx
       .select({ id: site.id })
       .from(site)
@@ -579,6 +584,7 @@ export async function discardGlobalDraft(
       )
     }
 
+    await syncEntryLinkIndex(tx, current.id)
     await tx.insert(entryRevision).values({
       entryId: current.id,
       data: ready,

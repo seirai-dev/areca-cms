@@ -19,6 +19,7 @@ export const tables = [
   'collection',
   'entry',
   'entry_revision',
+  'entry_link',
   'asset',
   'membership',
   'invitation',
@@ -196,9 +197,13 @@ async function main() {
         const condition =
           table === 'organization'
             ? 'id = $1'
-            : ['collection', 'entry', 'publication', 'build_job'].includes(
-                  table,
-                )
+            : [
+                  'collection',
+                  'entry',
+                  'entry_link',
+                  'publication',
+                  'build_job',
+                ].includes(table)
               ? 'site_id IN (SELECT id FROM site WHERE organization_id = $1)'
               : table === 'entry_revision'
                 ? 'entry_id IN (SELECT e.id FROM entry e JOIN site s ON e.site_id = s.id WHERE s.organization_id = $1)'
@@ -278,6 +283,13 @@ async function main() {
           )
         userMap.set(user.id, existing[0].id)
       }
+      // Link-index locks of the imported sites first, then the asset lock: the
+      // order of `lockSiteLinkIndex` in server/content/entry-link-index.ts.
+      for (const row of bundle.rows.site)
+        await client.query(
+          'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+          ['site-link-index:' + row.id],
+        )
       await client.query(
         'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
         ['assets:' + bundle.rows.organization[0].id],

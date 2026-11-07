@@ -96,6 +96,15 @@ export type SiteContentConfig = {
  */
 export type I18nConfig = {
   paraglide?: string
+  /**
+   * The path an entry link goes to in one language. Called for each entry
+   * link in the rich text of each language, with the path without any
+   * `#section` and the language code; return the path the site serves it at.
+   * Default: the main language keeps its paths and every other language gets
+   * `/<locale>` in front (`/` becomes `/<locale>`). Set it when the site's URL
+   * scheme differs, for example a language segment that is not the locale code.
+   */
+  localizePath?: (path: string, locale: string) => string
 }
 
 /**
@@ -135,6 +144,12 @@ export type RichTextValue = {
   markdown: string
   document: MarkdownDocument
   html: string
+  /**
+   * One entry per entry link, in the order the CMS wrote their definitions at
+   * the end of `markdown`. `locale` is the language the link's path is in.
+   * Absent when the text has no entry links, and in snapshots from before it.
+   */
+  entryLinks?: { label: string; locale?: string }[]
 }
 
 export type ImageValue = {

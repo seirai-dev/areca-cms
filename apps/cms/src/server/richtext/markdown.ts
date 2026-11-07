@@ -54,6 +54,27 @@ function codeSpan(text: string): string {
   return `${fence}${pad}${text}${pad}${fence}`
 }
 
+/**
+ * Set while one `serializeMarkdown` call runs (it is synchronous). With markers
+ * on, an entry link is a reference link whose label is `areca-entry-N`, and its
+ * destination sits in a definition at the end. The SDK localizes destinations
+ * by those labels; the text reads the same and nothing extra renders.
+ */
+let entryLinks: {
+  markers: boolean
+  count: number
+  definitions: string[]
+  links: EntryLinkMarker[]
+} | null = null
+
+/**
+ * One entry link's definition, in the order the definitions are written. The
+ * snapshot publishes this list, so the SDK localizes exactly these definitions
+ * and never a line of code that looks like one. `locale` is the language the
+ * target's path is in.
+ */
+export type EntryLinkMarker = { label: string; locale?: string }
+
 function wrapMarks(text: string, marks: Mark[] | undefined): string {
   if (!marks?.length) return text
   let out = text
@@ -65,6 +86,17 @@ function wrapMarks(text: string, marks: Mark[] | undefined): string {
   const link = marks.find((mark) => mark.type === 'link')
   if (link) {
     const href = typeof link.attrs?.href === 'string' ? link.attrs.href : ''
+    if (entryLinks?.markers && typeof link.attrs?.entryId === 'string') {
+      entryLinks.count += 1
+      const label = `areca-entry-${entryLinks.count}`
+      entryLinks.definitions.push(`[${label}]: ${destination(href)}`)
+      const locale = link.attrs.locale
+      entryLinks.links.push({
+        label,
+        ...(typeof locale === 'string' && locale !== '' ? { locale } : {}),
+      })
+      return `[${out}][${label}]`
+    }
     out = `[${out}](${destination(href)})`
   }
   return out
@@ -212,8 +244,41 @@ function serializeBlock(node: PMNode, indent = 0): string {
   }
 }
 
-export function serializeMarkdown(json: unknown): string {
-  return serializeBlock(asNode(json)).trim()
+function serialize(
+  json: unknown,
+  markers: boolean,
+): { markdown: string; entryLinks: EntryLinkMarker[] } {
+  const previous = entryLinks
+  entryLinks = { markers, count: 0, definitions: [], links: [] }
+  try {
+    const body = serializeBlock(asNode(json)).trim()
+    const { definitions, links } = entryLinks
+    return {
+      markdown:
+        definitions.length > 0 ? `${body}\n\n${definitions.join('\n')}` : body,
+      entryLinks: links,
+    }
+  } finally {
+    entryLinks = previous
+  }
+}
+
+export function serializeMarkdown(
+  json: unknown,
+  options: { entryLinkMarkers?: boolean } = {},
+): string {
+  return serialize(json, options.entryLinkMarkers === true).markdown
+}
+
+/**
+ * The published Markdown of a rich text value, with its entry link markers:
+ * one per entry link, in definition order (see `EntryLinkMarker`).
+ */
+export function serializeMarkdownWithEntryLinks(json: unknown): {
+  markdown: string
+  entryLinks: EntryLinkMarker[]
+} {
+  return serialize(json, true)
 }
 
 const BLOCK_JOIN = new Set([

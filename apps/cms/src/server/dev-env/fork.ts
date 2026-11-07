@@ -19,6 +19,11 @@ import { isDevSite } from '#/server/security/site-visibility'
 
 import { schemaSnapshot } from './schema-snapshot'
 import { remapReferences } from './references'
+import {
+  lockSiteLinkIndex,
+  rebuildEntryLinkIndex,
+} from '#/server/content/entry-link-index'
+
 import { lockProductionSite } from './lock'
 import { DEV_SLUG_ATTEMPTS, devSlugCandidates, pickDevSlug } from './slug'
 import { lockProductionRow } from './rows'
@@ -300,6 +305,13 @@ export async function forkDevEnvironment(
       },
       tx,
     )
+
+    // The dev environment's entries are new rows: the link index is rebuilt for it.
+    // Its site row was inserted by this transaction and no other transaction
+    // can see it, so the link-index lock is not contended here; it is taken
+    // before the rebuild, the first write to the new site's index.
+    await lockSiteLinkIndex(tx, dev.id)
+    await rebuildEntryLinkIndex(tx, dev.id)
 
     return {
       id: dev.id,

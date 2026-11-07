@@ -76,6 +76,12 @@ export type DevEnvWarning =
       message: string
     }
   | {
+      /** A rich text link to an entry that is not in production; the text stays. */
+      code: 'link-cleared'
+      params: { field: string; locale?: string; devTargetId: string }
+      message: string
+    }
+  | {
       /** A push kept production's previous ready version. */
       code: 'ready-not-pushed'
       params: { details: string }

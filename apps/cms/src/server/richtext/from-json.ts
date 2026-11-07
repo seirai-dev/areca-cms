@@ -7,23 +7,15 @@ import type {
   TableCellNode,
 } from '@tanstack/markdown'
 
+import { createHeadingIds } from './heading-ids'
+
 /** Convert validated editor nodes directly; Markdown syntax never interprets literal text. */
 export function richTextDocumentFromJson(json: JSONContent): MarkdownDocument {
-  const seenIds = new Set<string>()
+  const headingIdFor = createHeadingIds()
   function headingId(node: JSONContent): string {
-    const text = (node.content ?? []).map((child) => child.text ?? '').join('')
-    const base =
-      text
-        .toLowerCase()
-        .normalize('NFKD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '') || 'section'
-    let id = base
-    let suffix = 1
-    while (seenIds.has(id)) id = `${base}-${++suffix}`
-    seenIds.add(id)
-    return id
+    return headingIdFor(
+      (node.content ?? []).map((child) => child.text ?? '').join(''),
+    )
   }
   function inline(nodes: JSONContent[] = []): InlineNode[] {
     return nodes.flatMap((node): InlineNode[] => {
@@ -74,6 +66,14 @@ export function richTextDocumentFromJson(json: JSONContent): MarkdownDocument {
         value = {
           type: 'link',
           href: String(link.attrs?.href ?? ''),
+          // Entry links keep the id, so sites and the SDK can find them.
+          ...(typeof link.attrs?.entryId === 'string'
+            ? { entryId: link.attrs.entryId }
+            : {}),
+          // The language the target's path is in (set by the snapshot).
+          ...(typeof link.attrs?.locale === 'string'
+            ? { locale: link.attrs.locale }
+            : {}),
           children: [value],
         }
       return [value]

@@ -10,6 +10,10 @@ import type { DevEnvCounts } from './fork'
 import { lockProductionSite } from './lock'
 import { deleteDevContent } from './delete'
 import {
+  lockSiteLinkIndex,
+  rebuildEntryLinkIndex,
+} from '#/server/content/entry-link-index'
+import {
   lockDevEnvironment,
   lockProductionRow,
   readDevEnvironment,
@@ -29,6 +33,9 @@ export async function refreshDevEnvironment(
 ): Promise<RefreshResult> {
   const probe = await readDevEnvironment(devSiteId)
   return db.transaction(async (tx) => {
+    // Link-index lock first: this reset deletes and rewrites the dev env's entries
+    // and their link rows (see `lockSiteLinkIndex`).
+    await lockSiteLinkIndex(tx, devSiteId)
     await lockOrganizationForMutation(tx, probe.organizationId, {
       mode: 'no-key-update',
     })
@@ -47,6 +54,8 @@ export async function refreshDevEnvironment(
     ).length
     await deleteDevContent(tx, dev.id)
     const counts = await copyProductionIntoDev(tx, prod, dev, actor.id)
+    // The dev environment's entries were rewritten: rebuild its link index.
+    await rebuildEntryLinkIndex(tx, dev.id)
     await tx.insert(environmentPush).values({
       devSiteId: dev.id,
       productionSiteId: prod.id,

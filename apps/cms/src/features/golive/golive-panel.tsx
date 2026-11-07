@@ -86,7 +86,11 @@ import {
 } from './use-go-live'
 import { canGoLive, goLiveReason } from './go-live-gate'
 import { usePendingEntries } from './use-pending-entries'
-import type { PendingEntry, PendingLanguages } from './use-pending-entries'
+import type {
+  PendingEntry,
+  PendingLanguages,
+  PendingLinkWarning,
+} from './use-pending-entries'
 import { useReleaseStatus } from './use-release-status'
 import type { ReleaseStatus } from './use-release-status'
 
@@ -502,28 +506,142 @@ function WhatsChanging({
       </div>
     )
   }
+  const warnings = (
+    <>
+      {pending.linkWarnings.length > 0 ? (
+        <LinkWarningList siteId={siteId} warnings={pending.linkWarnings} />
+      ) : null}
+    </>
+  )
   if (pending.entries.length === 0 && !pending.languages) {
     return (
-      <p className="rounded-[12px] border border-dashed border-border-strong px-4 py-4 text-center text-callout text-text-secondary">
-        {demo
-          ? m.golive_demo_nothing_to_publish()
-          : m.golive_nothing_changing()}
-      </p>
+      <div className="grid gap-3">
+        {warnings}
+        {pending.linkWarnings.length === 0 ? (
+          <p className="rounded-[12px] border border-dashed border-border-strong px-4 py-4 text-center text-callout text-text-secondary">
+            {demo
+              ? m.golive_demo_nothing_to_publish()
+              : m.golive_nothing_changing()}
+          </p>
+        ) : null}
+      </div>
     )
   }
   return (
-    <ul className="-mx-2 grid" data-testid="golive-changes">
-      {pending.languages ? (
-        <li key="languages">
-          <LanguageRow languages={pending.languages} />
-        </li>
-      ) : null}
-      {pending.entries.map((entry) => (
-        <li key={`${entry.kind}-${entry.id}`}>
-          <PendingRow siteId={siteId} entry={entry} />
-        </li>
-      ))}
-    </ul>
+    <div className="grid gap-3">
+      {warnings}
+      <ul className="-mx-2 grid" data-testid="golive-changes">
+        {pending.languages ? (
+          <li key="languages">
+            <LanguageRow languages={pending.languages} />
+          </li>
+        ) : null}
+        {pending.entries.map((entry) => (
+          <li key={`${entry.kind}-${entry.id}`}>
+            <PendingRow siteId={siteId} entry={entry} />
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+/**
+ * Links that will not work after go live. They never block the release: the
+ * text is published, the link is not. Each row opens the entry that holds it.
+ */
+function LinkWarningList({
+  siteId,
+  warnings,
+}: {
+  siteId: string
+  warnings: PendingLinkWarning[]
+}) {
+  const count = warnings.length
+  return (
+    <section
+      className="rounded-[12px] border border-border-strong px-3 py-3"
+      data-testid="golive-link-warnings"
+    >
+      <div className="flex items-start gap-2">
+        <WarningCircle className="mt-0.5 size-4 shrink-0 text-icon-warning" />
+        <div className="grid min-w-0 gap-0.5">
+          <p className="text-[14px] leading-5 font-medium text-text-primary">
+            {count === 1
+              ? m.golive_links_title_one()
+              : m.golive_links_title_many({ count })}
+          </p>
+          <p className="text-[12px] leading-4 text-text-muted">
+            {m.golive_links_hint()}
+          </p>
+        </div>
+      </div>
+      <ul className="mt-2 -mx-2 grid">
+        {warnings.map((warning) => (
+          <li
+            key={`${warning.sourceEntryId}-${warning.locale ?? ''}-${warning.field}-${warning.targetEntryId}-${warning.anchor ?? ''}-${warning.reason}`}
+          >
+            <LinkWarningRow siteId={siteId} warning={warning} />
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+function LinkWarningRow({
+  siteId,
+  warning,
+}: {
+  siteId: string
+  warning: PendingLinkWarning
+}) {
+  const reason =
+    warning.reason === 'missing-section'
+      ? m.golive_link_reason_section({
+          target: warning.targetTitle,
+          anchor: warning.anchor ?? '',
+        })
+      : warning.reason === 'missing'
+        ? m.golive_link_reason_missing()
+        : m.golive_link_reason_not_live({ target: warning.targetTitle })
+  const language = warning.locale ? uiLanguageName(warning.locale) : null
+  const body = (
+    <span className="grid min-w-0 flex-1">
+      <span className="truncate text-[14px] leading-5 font-medium text-text-primary">
+        {warning.sourceTitle}
+      </span>
+      <span className="truncate text-[12px] leading-4 text-text-muted">
+        {language ? `${language} · ` : ''}
+        {reason}
+      </span>
+    </span>
+  )
+  const className =
+    'group/row flex min-h-11 items-center gap-3 rounded-[10px] px-2 py-1.5 outline-none transition-colors hover:bg-surface-state-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-border-focus'
+  if (warning.sourceGlobal) {
+    return (
+      <Link
+        to="/sites/$siteId/globals/$globalKey"
+        params={{ siteId, globalKey: warning.sourceCollectionKey }}
+        className={className}
+      >
+        {body}
+      </Link>
+    )
+  }
+  return (
+    <Link
+      to="/sites/$siteId/c/$collectionKey/$entryId"
+      params={{
+        siteId,
+        collectionKey: warning.sourceCollectionKey,
+        entryId: warning.sourceEntryId,
+      }}
+      className={className}
+    >
+      {body}
+    </Link>
   )
 }
 

@@ -174,6 +174,8 @@ import { richTextDocument } from "@areca-cms/site-sdk";
 
 `RichTextValue` = `{ document, markdown, html, json }`. Outside React, use `richTextHtml(value)`, which is trusted CMS HTML, or `richTextMarkdown(value)`. Keep `img { max-width: 100% }` and don't force `width: 100%`, because editors set image sizes.
 
+Render with `richTextDocument` (or `richTextComponents` inside React), not with your own Markdown parser or a regex over `markdown`. Section links (`/journal/x#faq`) only land when the heading ids come from the same `document`: the SDK helpers keep them. Entry links are already the right path in each language. When the site's URLs need another scheme, set `i18n.localizePath` in `areca.config.ts` (see [references/languages.md](references/languages.md)); do not rewrite hrefs in components.
+
 **Code blocks.** `html` already marks code: inline code is a plain `<code>`, and each code block is `<pre class="tm-code" data-lang="ts">` with `<span class="th-token th-keyword">` tokens. The SDK adds no colours, so the site supplies the theme. Add `@tanstack/highlight` (`pnpm add @tanstack/highlight`, not an SDK dependency), then build the CSS once:
 
 ```ts

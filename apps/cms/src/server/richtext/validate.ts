@@ -9,9 +9,13 @@ import {
 import {
   ALLOWED_MARK_TYPES,
   ALLOWED_NODE_TYPES,
+  ENTRY_LINK_ATTRS,
   isAllowedImageSrc,
   isAllowedLinkHref,
   isDisallowedAttrKey,
+  isEntryLinkAnchor,
+  isEntryLinkCollection,
+  isEntryLinkId,
 } from './allowlist'
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -54,6 +58,26 @@ function checkMark(mark: unknown, errors: string[]): void {
     if (typeof href !== 'string' || !isAllowedLinkHref(href)) {
       errors.push('Link href uses a disallowed protocol')
     }
+    checkEntryLinkAttrs(attrs, errors)
+  } else if (attrs && ENTRY_LINK_ATTRS.some((key) => attrs[key] != null)) {
+    errors.push('Only links can point at an entry')
+  }
+}
+
+/** Entry link attributes: an entry id, its collection and an optional section id. */
+function checkEntryLinkAttrs(
+  attrs: Record<string, unknown> | undefined,
+  errors: string[],
+): void {
+  if (!attrs) return
+  if (attrs.entryId != null && !isEntryLinkId(attrs.entryId)) {
+    errors.push('Link entry id is not valid')
+  }
+  if (attrs.collection != null && !isEntryLinkCollection(attrs.collection)) {
+    errors.push('Link collection is not valid')
+  }
+  if (attrs.anchor != null && !isEntryLinkAnchor(attrs.anchor)) {
+    errors.push('Link section id is not valid')
   }
 }
 

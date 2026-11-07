@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 
 import { listPendingReleaseChangesFn } from '#/server/fn/publishing'
+import type { LinkWarning } from '#/server/content/snapshot'
 
 /** Site languages the next go live changes. Null when they are unchanged. */
 export type PendingLanguages = {
@@ -8,6 +9,9 @@ export type PendingLanguages = {
   removed: string[]
   mainChanged: { from: string; to: string } | null
 }
+
+/** A link that will not work after go live (server/content/snapshot.ts). */
+export type PendingLinkWarning = LinkWarning
 
 export type PendingEntry = {
   id: string
@@ -57,6 +61,7 @@ export function usePendingEntries({
   return {
     entries,
     languages,
+    linkWarnings: query.data?.linkWarnings ?? [],
     ready: changing,
     /** Entries that change plus the language change, as the badge counts them. */
     changeCount: changing.length + (languages ? 1 : 0),

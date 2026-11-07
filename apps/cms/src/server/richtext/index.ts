@@ -5,14 +5,25 @@ import { env } from '#/env'
 import { ValidationError } from '#/server/content/errors'
 
 import { renderRichTextHtml } from './document'
-import { serializeMarkdown } from './markdown'
+import { serializeMarkdownWithEntryLinks } from './markdown'
 import { richTextDocumentFromJson } from './from-json'
+import type { EntryLinkMarker } from './markdown'
 import { validateRichText } from './validate'
 
 const RELATIVE_ASSET_SRC = /^\/(api\/)?assets\//
 
 export { parseRichTextDocument, renderRichTextHtml } from './document'
 export { richTextExtensions } from './extensions'
+export {
+  entryLinkTargets,
+  resolveEntryLinks,
+  richTextHeadingIds,
+} from './entry-links'
+export type {
+  EntryLinkIssue,
+  EntryLinkResolution,
+  EntryLinkTarget,
+} from './entry-links'
 export { richTextPlainText } from './markdown'
 export {
   markdownToRichText,
@@ -57,6 +68,8 @@ export function convertRichText(json: unknown): {
   markdown: string
   document: MarkdownDocument
   html: string
+  /** One marker per entry link in `markdown`, when the text has any. */
+  entryLinks?: EntryLinkMarker[]
 } {
   const errors = validateRichText(json)
   if (errors.length > 0) {
@@ -68,7 +81,7 @@ export function convertRichText(json: unknown): {
   const rewritten = structuredClone(json) as JSONContent
   rewriteRelativeAssetSrcs(rewritten)
 
-  const markdown = serializeMarkdown(rewritten)
+  const { markdown, entryLinks } = serializeMarkdownWithEntryLinks(rewritten)
   const document = richTextDocumentFromJson(rewritten)
   const html = renderRichTextHtml(document)
 
@@ -77,5 +90,6 @@ export function convertRichText(json: unknown): {
     markdown,
     document,
     html,
+    ...(entryLinks.length > 0 ? { entryLinks } : {}),
   }
 }

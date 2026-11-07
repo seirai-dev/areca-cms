@@ -30,6 +30,12 @@ Open **Go live** from the site sidebar or from the Overview. The publishing indi
 - **Go live**, the button that starts a release.
 - **Releases**, the history of recent releases.
 
+## Links that will not work
+
+Some rich text links can break at go live. A link to an entry that is not ready or live, or to an entry that was deleted, is published as plain text: the words stay, the link does not. A link to a section that was removed still goes to the page. Go live never stops for these. Instead, the panel lists them under **N links will not work after go live**, with the entry that holds the link, its language and the reason. Open the entry from the list, fix the link or mark the target ready, and the warning clears at the next check.
+
+A link to a draft is allowed. If the target is marked ready in the same release, the link works.
+
 ## Demo and production mode
 
 Each site runs in one of two publishing modes, set by an agency admin on **Settings › Deployment**. **Production** deploys the site and counts a release as live only after its health check passes. **Demo** creates a release without deploying it, and the release never counts as live. On a Demo site the button reads **Publish demo release** instead of **Go live**. Use Demo only for previews and testing. See [Deployments](/docs/cms/deployments) for how to set up each mode.

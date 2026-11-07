@@ -46,6 +46,7 @@ export default defineSiteContent({
 - The type of `href()` follows the language. Without `in()` it is the union of every language's route, here `` `/journal/${string}` | `/journaal/${string}` ``. After `content.in('nl')` it is the Dutch route alone, `` `/journaal/${string}` ``. A collection with no `routes` has the same route in every language.
 - `translatable` overrides the default for a field. Text, long text, rich text and URL are translated by default; the other types are shared.
 - `i18n.paraglide` is the Paraglide runtime. When it is set, `areca pull` makes `content` read the current language from Paraglide.
+- `i18n.localizePath` sets the address of a link to another entry in each language. The default is in [Links to entries](#links-to-entries).
 
 `areca pull` warns when `project.inlang/settings.json` disagrees with `languages`.
 
@@ -255,6 +256,73 @@ content.matchLocale(request.headers.get('accept-language')) // 'en' when nothing
 ```
 
 Use it to redirect a first visit to the right language, or as the resolver for a server route. The pure function `matchLocale(input, languages)` from `@areca-cms/site-sdk` takes the languages explicitly.
+
+## Links to entries
+
+An editor can link a piece of rich text to another entry. The CMS stores the target and writes the target's address in each language, so a Dutch page links to the Dutch address of the target. The address follows the language's route and slug, with the section (`#faq`) if the link names one.
+
+The CMS writes the address without any language prefix, the same as `content.href()`. `areca pull` then adds the prefix. The default:
+
+- the main language keeps its paths: `/journal/<slug>`;
+- every other language gets `/<locale>` in front: `/nl/journaal/<slug>`, and `/` becomes `/nl`.
+
+If the site's URLs differ from that, set `i18n.localizePath`. It gets the path (without the `#section`) and the language, and returns the path the site serves:
+
+```ts
+// areca.config.ts
+export default defineSiteContent({
+  siteKey: 'acme',
+  languages: { main: 'en', all: ['en', 'nl'] },
+  i18n: {
+    localizePath: (path, locale) =>
+      locale === 'nl' ? `/nederlands${path}` : path,
+  },
+  collections: { /* ... */ },
+})
+```
+
+Set it for every language you need. The function is called for the main language too, so return the path unchanged for it when it should stay as it is. `areca pull` applies the function to every entry link in the rich text of each language, in the `json`, `document`, `html` and `markdown` forms of the value. It changes no other link.
+
+A link to an entry that is not live in the release is published as plain text, and the CMS lists it under *links that will not work* on the Go live panel. A link to a section that was removed goes to the page itself, and the same list shows it.
+
+Snapshots from older CMS versions have no entry links, so `i18n.localizePath` changes nothing for them.
+
+Draft previews need the same function. `areca.gen.ts` cannot contain it: the generated file does not import `areca.config.ts`, because the config is build-only code. So the generated `content` object uses the default rule, and a site with its own `localizePath` creates the content object itself, with the same `localizePath`. Put the function in a small module that both `areca.config.ts` and the content module import:
+
+```ts
+// src/lib/localize-path.ts
+export function localizePath(path: string, locale: string): string {
+  return locale === 'nl' ? `/nederlands${path}` : path
+}
+```
+
+```ts
+// areca.config.ts
+import { localizePath } from './src/lib/localize-path'
+
+export default defineSiteContent({
+  siteKey: 'acme',
+  languages: { main: 'en', all: ['en', 'nl'] },
+  i18n: { localizePath },
+  collections: { /* ... */ },
+})
+```
+
+```ts
+// src/lib/content.ts
+import { createContent } from '@areca-cms/site-sdk/content'
+import { globalSchema, schema } from './generated/content/areca.gen' // the file areca pull writes
+import { localizePath } from './localize-path'
+
+export const content = createContent({
+  schema,
+  globalSchema,
+  dir: process.env.ARECA_CONTENT_DIR ?? './content', // the same dir as in areca.gen.ts
+  localizePath,
+})
+```
+
+Use this `content` in the preview routes. Pass the same `dir` and, with Paraglide, the same `locale` option as the generated file.
 
 ## Preview in a language
 

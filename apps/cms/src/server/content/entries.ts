@@ -29,6 +29,8 @@ import { importExternalImages } from '#/server/assets/external-images'
 import { assetAttachLock } from '#/server/assets/usage'
 
 import { archiveDeletedContent } from './deletion-archive'
+import { lockSiteLinkIndex, syncEntryLinkIndex } from './entry-link-index.ts'
+import { prepareEntryLinks } from './entry-links.ts'
 import { getCollection } from './collections.ts'
 import { ConflictError, NotFoundError, ValidationError } from './errors.ts'
 import { notCompleteInLocale } from './missing-language.ts'
@@ -490,7 +492,15 @@ export async function createEntry(input: {
   })
   if (slugErrors.length) throw new ValidationError(slugErrors)
   const images = await importEntryImages(ctx, validated.data, input.actorId)
-  const parsed = { ...validated, data: images.data }
+  const parsed = {
+    ...validated,
+    data: await prepareEntryLinks(
+      db,
+      ctx.site.id,
+      ctx.collection.fields,
+      images.data,
+    ),
+  }
 
   const slug = resolveSlug(parsed.data, ctx.collection.fields)
   if (!slug || !SLUG_PATTERN.test(slug)) {
@@ -502,6 +512,7 @@ export async function createEntry(input: {
   await assertSlugAvailable(ctx.collection.id, slug)
 
   return db.transaction(async (tx) => {
+    await lockSiteLinkIndex(tx, ctx.site.id)
     await assetAttachLock(tx, ctx.site.organizationId)
     await lockSlugClaims(tx, ctx.collection.id, claimedSlugs(slug, parsed.data))
     await assertUrlsAvailable(tx, ctx.collection.id, parsed.data, slug)
@@ -535,6 +546,7 @@ export async function createEntry(input: {
       throw new Error(m.server_failed_to_create_entry())
     }
 
+    await syncEntryLinkIndex(tx, created.id)
     await writeRevision(created.id, parsed.data, input.actorId, 'create', tx)
     await audit(
       {
@@ -586,7 +598,15 @@ export async function updateDraft(
     assertSectionSeo(ctx.collection, validated.data)
   }
   const images = await importEntryImages(ctx, validated.data, actorId)
-  const parsed = { ...validated, data: images.data }
+  const parsed = {
+    ...validated,
+    data: await prepareEntryLinks(
+      db,
+      ctx.site.id,
+      ctx.collection.fields,
+      images.data,
+    ),
+  }
 
   const nextSlug = resolveSlug(parsed.data, ctx.collection.fields)
   if (nextSlug && nextSlug !== ctx.entry.slug) {
@@ -599,6 +619,7 @@ export async function updateDraft(
   }
 
   return db.transaction(async (tx) => {
+    await lockSiteLinkIndex(tx, ctx.site.id)
     await assetAttachLock(tx, ctx.site.organizationId)
     await lockSlugClaims(
       tx,
@@ -642,6 +663,7 @@ export async function updateDraft(
       )
     }
 
+    await syncEntryLinkIndex(tx, id)
     await writeRevision(id, parsed.data, actorId, 'update', tx)
     await audit(
       {
@@ -741,11 +763,12 @@ export async function restoreRevision(
   }
 
   return db.transaction(async (tx) => {
+    await lockSiteLinkIndex(tx, initial.site.id)
     await tx
       .select({ id: site.id })
       .from(site)
       .where(eq(site.id, initial.site.id))
-      .for('update')
+      .for('no key update')
     const ctx = await loadEntryContext(entryId, tx)
     await assetAttachLock(tx, ctx.site.organizationId)
     const prepared = prepareRevisionRestore(
@@ -753,7 +776,12 @@ export async function restoreRevision(
       revision.data,
       ctx.entry.draftData,
     )
-    const restoredData = prepared.data
+    const restoredData = await prepareEntryLinks(
+      tx,
+      ctx.site.id,
+      ctx.collection.fields,
+      prepared.data,
+    )
     await lockSlugClaims(
       tx,
       ctx.collection.id,
@@ -833,6 +861,7 @@ export async function restoreRevision(
       )
     }
 
+    await syncEntryLinkIndex(tx, entryId)
     await writeRevision(entryId, restoredData, actorId, 'restore', tx)
     await audit(
       {
@@ -985,6 +1014,7 @@ export async function publishEntry(
   }
 
   return db.transaction(async (tx) => {
+    await lockSiteLinkIndex(tx, ctx.site.id)
     await assetAttachLock(tx, ctx.site.organizationId)
     const ownershipErrors = await validateContentOwnership(
       ctx.site.id,
@@ -1024,6 +1054,7 @@ export async function publishEntry(
       throw new ConflictError(APPROVAL_CONFLICT_MESSAGE)
     }
 
+    await syncEntryLinkIndex(tx, id)
     await writeRevision(id, draftData, actorId, 'publish', tx)
     await audit(
       {
@@ -1051,47 +1082,51 @@ export async function unpublishEntry(id: string, actorId: string) {
   const ctx = await loadEntryContext(id)
   assertCollectionEntry(ctx.collection)
   const now = new Date()
-  const updated = (
-    await db
-      .update(entry)
-      .set({
-        contentVersion: sql`${entry.contentVersion} + 1`,
-        status: 'draft',
-        publishedData: null,
-        publishedSlug: null,
-        publishedAt: null,
-        scheduledData: null,
-        scheduledSlug: null,
-        scheduledVersion: null,
-        scheduledAt: null,
-        scheduleTimezone: null,
-        scheduledBy: null,
-        updatedBy: actorId,
-        updatedAt: now,
-      })
-      .where(eq(entry.id, id))
-      .returning()
-  ).at(0)
+  return db.transaction(async (tx) => {
+    await lockSiteLinkIndex(tx, ctx.site.id)
+    const updated = (
+      await tx
+        .update(entry)
+        .set({
+          contentVersion: sql`${entry.contentVersion} + 1`,
+          status: 'draft',
+          publishedData: null,
+          publishedSlug: null,
+          publishedAt: null,
+          scheduledData: null,
+          scheduledSlug: null,
+          scheduledVersion: null,
+          scheduledAt: null,
+          scheduleTimezone: null,
+          scheduledBy: null,
+          updatedBy: actorId,
+          updatedAt: now,
+        })
+        .where(eq(entry.id, id))
+        .returning()
+    ).at(0)
 
-  if (!updated) {
-    throw new NotFoundError(m.server_entry_not_found())
-  }
+    if (!updated) {
+      throw new NotFoundError(m.server_entry_not_found())
+    }
 
-  await writeRevision(id, ctx.entry.draftData, actorId, 'unpublish')
-  await audit(
-    {
-      organizationId: ctx.site.organizationId,
-      siteId: ctx.site.id,
-      actorId,
-      action: 'entry.unpublish',
-      targetType: 'entry',
-      targetId: id,
-    },
-    db,
-    ctx.site,
-  )
+    await syncEntryLinkIndex(tx, id)
+    await writeRevision(id, ctx.entry.draftData, actorId, 'unpublish', tx)
+    await audit(
+      {
+        organizationId: ctx.site.organizationId,
+        siteId: ctx.site.id,
+        actorId,
+        action: 'entry.unpublish',
+        targetType: 'entry',
+        targetId: id,
+      },
+      tx,
+      ctx.site,
+    )
 
-  return { ...updated, collectionKey: ctx.collection.key }
+    return { ...updated, collectionKey: ctx.collection.key }
+  })
 }
 
 export async function archiveEntry(id: string, actorId: string) {
@@ -1169,6 +1204,7 @@ export async function scheduleEntry(
   const draftData = normalizeEntryData(ctx, images.data)
 
   return db.transaction(async (tx) => {
+    await lockSiteLinkIndex(tx, ctx.site.id)
     await assetAttachLock(tx, ctx.site.organizationId)
     const ownershipErrors = await validateContentOwnership(
       ctx.site.id,
@@ -1206,6 +1242,7 @@ export async function scheduleEntry(
       throw new ConflictError(APPROVAL_CONFLICT_MESSAGE)
     }
 
+    await syncEntryLinkIndex(tx, id)
     await writeRevision(id, draftData, actorId, 'schedule', tx)
     await audit(
       {
@@ -1239,44 +1276,48 @@ export async function cancelSchedule(id: string, actorId: string) {
         ? 'published'
         : 'draft'
       : ctx.entry.status
-  const updated = (
-    await db
-      .update(entry)
-      .set({
-        contentVersion: sql`${entry.contentVersion} + 1`,
-        status: nextStatus,
-        scheduledData: null,
-        scheduledSlug: null,
-        scheduledVersion: null,
-        scheduledAt: null,
-        scheduleTimezone: null,
-        scheduledBy: null,
-        updatedBy: actorId,
-        updatedAt: now,
-      })
-      .where(eq(entry.id, id))
-      .returning()
-  ).at(0)
+  return db.transaction(async (tx) => {
+    await lockSiteLinkIndex(tx, ctx.site.id)
+    const updated = (
+      await tx
+        .update(entry)
+        .set({
+          contentVersion: sql`${entry.contentVersion} + 1`,
+          status: nextStatus,
+          scheduledData: null,
+          scheduledSlug: null,
+          scheduledVersion: null,
+          scheduledAt: null,
+          scheduleTimezone: null,
+          scheduledBy: null,
+          updatedBy: actorId,
+          updatedAt: now,
+        })
+        .where(eq(entry.id, id))
+        .returning()
+    ).at(0)
 
-  if (!updated) {
-    throw new NotFoundError(m.server_entry_not_found())
-  }
+    if (!updated) {
+      throw new NotFoundError(m.server_entry_not_found())
+    }
 
-  await writeRevision(id, ctx.entry.draftData, actorId, 'cancel_schedule')
-  await audit(
-    {
-      organizationId: ctx.site.organizationId,
-      siteId: ctx.site.id,
-      actorId,
-      action: 'entry.cancel_schedule',
-      targetType: 'entry',
-      targetId: id,
-    },
-    db,
-    ctx.site,
-  )
+    await syncEntryLinkIndex(tx, id)
+    await writeRevision(id, ctx.entry.draftData, actorId, 'cancel_schedule', tx)
+    await audit(
+      {
+        organizationId: ctx.site.organizationId,
+        siteId: ctx.site.id,
+        actorId,
+        action: 'entry.cancel_schedule',
+        targetType: 'entry',
+        targetId: id,
+      },
+      tx,
+      ctx.site,
+    )
 
-  return { ...updated, collectionKey: ctx.collection.key }
+    return { ...updated, collectionKey: ctx.collection.key }
+  })
 }
 
 export async function deleteEntry(id: string, actorId: string) {
@@ -1289,6 +1330,7 @@ export async function deleteEntry(id: string, actorId: string) {
     return
   }
   return db.transaction(async (tx) => {
+    await lockSiteLinkIndex(tx, ctx.site.id)
     await archiveDeletedContent(tx, ctx.site.organizationId, 'entry', id)
     await audit(
       {

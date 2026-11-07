@@ -119,3 +119,72 @@ describe('referenceLookup', () => {
     expect(resolve('gone')).toBeUndefined()
   })
 })
+
+describe('remapReferences with entry links in rich text', () => {
+  const richFields: Field[] = [{ key: 'body', label: 'Body', type: 'richtext' }]
+  const link = (entryId: string) => ({
+    type: 'doc',
+    content: [
+      {
+        type: 'paragraph',
+        content: [
+          {
+            type: 'text',
+            text: 'Lees',
+            marks: [
+              {
+                type: 'link',
+                attrs: {
+                  href: '/blog/x',
+                  entryId,
+                  collection: 'articles',
+                  anchor: 'faq',
+                },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  })
+
+  it('re-points links in the base and in every language slot', () => {
+    const result = remapReferences(
+      {
+        body: link('d1'),
+        $i18n: { en: { body: link('d1') } },
+      },
+      richFields,
+      lookup,
+    )
+    const base = result.data.body as {
+      content: { content: { marks: { attrs: { entryId: string } }[] }[] }[]
+    }
+    const en = (
+      result.data.$i18n as Record<string, Record<string, typeof base>>
+    ).en.body
+    expect(base.content[0].content[0].marks[0].attrs.entryId).toBe('p1')
+    expect(en.content[0].content[0].marks[0].attrs.entryId).toBe('p1')
+    expect(result.cleared).toEqual([])
+  })
+
+  it('clears a link with no production target to plain text and reports it per language', () => {
+    const result = remapReferences(
+      {
+        body: link('dev-only'),
+        $i18n: { en: { body: link('dev-only') } },
+      },
+      richFields,
+      lookup,
+    )
+    const base = result.data.body as {
+      content: { content: { text: string; marks?: unknown[] }[] }[]
+    }
+    expect(base.content[0].content[0].text).toBe('Lees')
+    expect(base.content[0].content[0].marks).toBeUndefined()
+    expect(result.cleared).toEqual([
+      { field: 'body', devTargetId: 'dev-only', kind: 'link' },
+      { field: 'body', locale: 'en', devTargetId: 'dev-only', kind: 'link' },
+    ])
+  })
+})
