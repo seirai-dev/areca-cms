@@ -26,13 +26,14 @@ export type SectionChange = {
 }
 
 /**
- * Compares the headings before and after a save, per rich text value. An old
- * heading whose id is still there (anywhere, so a move is not a change) is
- * kept. Any other old heading is a rename when the heading at the same position
- * is new, and a removal otherwise. Ids are unique within a value (the id
- * generator numbers repeats), so an id names one heading. A value's change is
- * kept once per language and id: two fields that share a heading id are one
- * section for the links, which carry no field.
+ * Compares the headings before and after a save, per rich text value. A section
+ * is kept when its id is still there anywhere in the language, in any field, so
+ * a move between fields is not a change and two fields that share an id do not
+ * break each other's links. Any other old heading is a rename when the heading
+ * at the same position in its own field is new, and a removal otherwise. Ids
+ * are unique within a value (the id generator numbers repeats), so an id names
+ * one heading. A change is kept once per language and id: two fields that share
+ * a heading id are one section for the links, which carry no field.
  */
 export function diffSectionSnapshots(
   before: SectionSnapshots,
@@ -40,14 +41,21 @@ export function diffSectionSnapshots(
 ): SectionChange[] {
   const changes: SectionChange[] = []
   const seen = new Set<string>()
+  const keptByLocale = new Map<string, Set<string>>()
+  for (const key of Object.keys(after)) {
+    const locale = localeOf(key)
+    const kept = keptByLocale.get(locale) ?? new Set<string>()
+    for (const heading of after[key] ?? []) kept.add(heading.id)
+    keptByLocale.set(locale, kept)
+  }
   for (const key of Object.keys(before)) {
     const previous = before[key] ?? []
     const next = after[key] ?? []
     const locale = localeOf(key)
+    const kept = keptByLocale.get(locale) ?? new Set<string>()
     const previousIds = new Set(previous.map((heading) => heading.id))
-    const nextIds = new Set(next.map((heading) => heading.id))
     previous.forEach((heading, index) => {
-      if (nextIds.has(heading.id)) return
+      if (kept.has(heading.id)) return
       const seenKey = `${locale}|${heading.id}`
       if (seen.has(seenKey)) return
       seen.add(seenKey)

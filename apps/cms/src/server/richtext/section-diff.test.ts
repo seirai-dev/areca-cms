@@ -127,6 +127,53 @@ describe('diffSectionSnapshots', () => {
     expect(diffSectionSnapshots(before, after)).toHaveLength(1)
   })
 
+  it('does not report a section broken while another field of the language still has its id', () => {
+    // Two fields share the id "origin". Only the body's heading is renamed; the
+    // summary keeps "origin", so the links to it still have a section.
+    const before: SectionSnapshots = {
+      [sectionKey('nl', 'body')]: [h('origin', 'Origin')],
+      [sectionKey('nl', 'summary')]: [h('origin', 'Origin')],
+    }
+    const after: SectionSnapshots = {
+      [sectionKey('nl', 'body')]: [h('herkomst', 'Herkomst')],
+      [sectionKey('nl', 'summary')]: [h('origin', 'Origin')],
+    }
+    expect(diffSectionSnapshots(before, after)).toEqual([])
+  })
+
+  it('treats a heading moved from one field to another as unchanged', () => {
+    const before: SectionSnapshots = {
+      [sectionKey('nl', 'body')]: [h('intro', 'Intro'), h('origin', 'Origin')],
+      [sectionKey('nl', 'summary')]: [],
+    }
+    const after: SectionSnapshots = {
+      [sectionKey('nl', 'body')]: [h('intro', 'Intro')],
+      [sectionKey('nl', 'summary')]: [h('origin', 'Origin')],
+    }
+    expect(diffSectionSnapshots(before, after)).toEqual([])
+  })
+
+  it('still infers a rename by position inside a field when another field keeps other ids', () => {
+    const before: SectionSnapshots = {
+      [sectionKey('nl', 'body')]: [h('intro', 'Intro'), h('origin', 'Origin')],
+      [sectionKey('nl', 'summary')]: [h('lead', 'Lead')],
+    }
+    const after: SectionSnapshots = {
+      [sectionKey('nl', 'body')]: [
+        h('intro', 'Intro'),
+        h('herkomst', 'Herkomst'),
+      ],
+      [sectionKey('nl', 'summary')]: [h('lead', 'Lead')],
+    }
+    expect(diffSectionSnapshots(before, after)).toEqual([
+      expect.objectContaining({
+        locale: 'nl',
+        from: 'origin',
+        to: 'herkomst',
+      }),
+    ])
+  })
+
   it('reads the headings of a real document the way the editor and the links do', () => {
     const doc = {
       type: 'doc',
