@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { db } from '#/db'
 import { collection, entry } from '#/db/schema'
@@ -565,6 +565,117 @@ describe.skipIf(!hasDb)('link targets: search', () => {
         title: 'Koffie uit Ethiopië',
         slug: 'koffie-langwissel',
       })
+    } finally {
+      await cleanupTestSite(ctx)
+    }
+  })
+
+  it('makes the same number of queries whatever the number of routed collections', async () => {
+    const ctx = await createTestSite({ languages })
+    try {
+      await createTestCollection(ctx.site.id, {
+        key: 'articles',
+        routePattern: '/blog/$slug',
+      })
+      await createEntry({
+        siteId: ctx.site.id,
+        collectionKey: 'articles',
+        data: { title: 'Koffie count', slug: 'koffie-count', body: doc([]) },
+        actorId: ctx.actor.id,
+      })
+      const countQueries = async (query: string) => {
+        const spy = vi.spyOn(db, 'select')
+        try {
+          await searchLinkTargets(ctx.site.id, {
+            query,
+            locale: 'nl',
+            limit: 8,
+            enabledOnly: true,
+          })
+          return spy.mock.calls.length
+        } finally {
+          spy.mockRestore()
+        }
+      }
+      const words = await countQueries('koffie')
+      const path = await countQueries('/blog/koffie')
+      for (let index = 0; index < 5; index++) {
+        await createTestCollection(ctx.site.id, {
+          key: `extra${index}`,
+          routePattern: `/extra${index}/$slug`,
+        })
+      }
+      expect(await countQueries('koffie')).toBe(words)
+      expect(await countQueries('/blog/koffie')).toBe(path)
+      // The site, then one query for the entries of all collections.
+      expect(words).toBe(2)
+      expect(path).toBe(2)
+    } finally {
+      await cleanupTestSite(ctx)
+    }
+  })
+
+  it('matches % and _ in a search literally', async () => {
+    const ctx = await createTestSite({ languages })
+    try {
+      await createTestCollection(ctx.site.id, {
+        key: 'articles',
+        routePattern: '/blog/$slug',
+      })
+      for (const [title, slug] of [
+        ['50% Arabica', 'arabica-procent-wild'],
+        ['50 Arabica', 'arabica-spatie-wild'],
+        ['bean_one', 'bean-een-wild'],
+        ['beanXone', 'beanxone-wild'],
+      ]) {
+        await createEntry({
+          siteId: ctx.site.id,
+          collectionKey: 'articles',
+          data: { title, slug, body: doc([]) },
+          actorId: ctx.actor.id,
+        })
+      }
+      const titles = async (query: string) =>
+        (
+          await searchLinkTargets(ctx.site.id, {
+            query,
+            locale: 'nl',
+            limit: 8,
+            enabledOnly: true,
+          })
+        ).entries.map((hit) => hit.title)
+      expect(await titles('50%')).toEqual(['50% Arabica'])
+      expect(await titles('bean_one')).toEqual(['bean_one'])
+      expect(await titles('bean_')).toEqual(['bean_one'])
+    } finally {
+      await cleanupTestSite(ctx)
+    }
+  })
+
+  it('finds a title with quotes, which jsonb stores escaped', async () => {
+    const ctx = await createTestSite({ languages })
+    try {
+      await createTestCollection(ctx.site.id, {
+        key: 'articles',
+        routePattern: '/blog/$slug',
+      })
+      const quoted = await createEntry({
+        siteId: ctx.site.id,
+        collectionKey: 'articles',
+        data: {
+          title: 'Het "beste" bonen',
+          slug: 'beste-bonen-quoted',
+          body: doc([]),
+        },
+        actorId: ctx.actor.id,
+      })
+      const found = await searchLinkTargets(ctx.site.id, {
+        query: 'het "beste',
+        locale: 'nl',
+        limit: 8,
+        enabledOnly: true,
+      })
+      expect(found.entries.map((hit) => hit.entryId)).toEqual([quoted.id])
     } finally {
       await cleanupTestSite(ctx)
     }

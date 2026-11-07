@@ -6,7 +6,6 @@ import { collection, entry, site } from '#/db/schema'
 import { firstTextField } from '#/lib/content/utils'
 import {
   I18N_KEY,
-  isTranslatable,
   LOCALE_KEY,
   readLocale,
   SLUG_KEY,
@@ -31,9 +30,6 @@ import { loadSiteLanguages, localeCtxFor } from './locale-validation.ts'
  * Read-only; the callers check access first. docs/design/rich-text-links.md,
  * decisions 12 to 14.
  */
-
-/** Rows an exact-path lookup reads per collection (one entry is the address). */
-const EXACT_LIMIT = 10
 
 /** One entry a link can point at, as the editor lists it. */
 export type LinkTargetOption = {
@@ -244,38 +240,28 @@ function pathsOf(row: LinkTargetRow, ctx: Ctx): string[] {
   return [...paths]
 }
 
-/** A routed collection a search reads: one query each. */
-type RoutedCollection = {
-  id: string
-  key: string
-  label: string
-  routePattern: string
-  localizedRoutes: Record<string, string> | null
-  fields: Field[]
+/** Every language code an entry's slug may be stored under. */
+function codesOf(languages: SiteLanguages | null): string[] {
+  return languages ? [...new Set([languages.main, ...languages.all])] : []
 }
 
-async function routedCollections(
-  siteId: string,
-  enabledOnly: boolean,
-): Promise<RoutedCollection[]> {
-  return db
-    .select({
-      id: collection.id,
-      key: collection.key,
-      label: collection.label,
-      routePattern: collection.routePattern,
-      localizedRoutes: collection.localizedRoutes,
-      fields: collection.fields,
-    })
-    .from(collection)
-    .where(
-      and(
-        eq(collection.siteId, siteId),
-        eq(collection.kind, 'collection'),
-        ne(collection.routePattern, ''),
-        enabledOnly ? eq(collection.enabled, true) : undefined,
-      ),
-    )
+/** The placeholder a route puts where the slug goes. */
+const SLUG_TOKEN = '$slug'
+
+/**
+ * The key of the collection's first text field, in SQL: `firstTextField`, the
+ * field that gives the title. Null when the collection has no text field.
+ */
+function titleKeySql(): SQL<string | null> {
+  return sql`(SELECT f.field ->> 'key' FROM jsonb_array_elements(${collection.fields}) WITH ORDINALITY AS f(field, ord) WHERE f.field ->> 'type' = 'text' ORDER BY f.ord LIMIT 1)`
+}
+
+/**
+ * Whether that title field is translatable, as `isTranslatable` says: its own
+ * switch, else on for text fields.
+ */
+function titleTranslatableSql(): SQL<boolean> {
+  return sql`COALESCE((SELECT (f.field ->> 'translatable')::boolean FROM jsonb_array_elements(${collection.fields}) WITH ORDINALITY AS f(field, ord) WHERE f.field ->> 'type' = 'text' ORDER BY f.ord LIMIT 1), true)`
 }
 
 /**
@@ -283,7 +269,10 @@ async function routedCollections(
  * (see `labelsOf`): the base value when the language is the base one, else its
  * translation. Null when the language has no value.
  */
-function viewValueSql(key: string, ctx: Ctx): SQL<string | null> {
+function viewValueSql(
+  key: SQL<string | null> | string,
+  ctx: Ctx,
+): SQL<string | null> {
   const data = entry.draftData
   const { languages, locale } = ctx
   if (!locale || !languages) return sql`(${data} ->> ${key})`
@@ -295,18 +284,15 @@ function viewValueSql(key: string, ctx: Ctx): SQL<string | null> {
 
 /**
  * The title an entry shows (`labelsOf`), in SQL: the language's title when it
- * is not blank, else the base title. A title field that is not translatable is
- * always the base title.
+ * is translatable and not blank, else the base title.
  */
-function localizedTitleSql(
-  key: string,
-  translatable: boolean,
-  ctx: Ctx,
-): SQL<string | null> {
+function localizedTitleSql(ctx: Ctx): SQL<string | null> {
+  const key = titleKeySql()
   const base = sql<string | null>`(${entry.draftData} ->> ${key})`
-  if (!translatable) return base
   const view = viewValueSql(key, ctx)
-  return sql`(CASE WHEN ${view} ~ '[^[:space:]]' THEN ${view} ELSE ${base} END)`
+  return sql<
+    string | null
+  >`(CASE WHEN ${titleTranslatableSql()} AND ${view} ~ '[^[:space:]]' THEN ${view} ELSE ${base} END)`
 }
 
 /** The slug an entry shows (`labelsOf`), in SQL. */
@@ -314,8 +300,38 @@ function localizedSlugSql(ctx: Ctx): SQL<string | null> {
   return sql`coalesce(nullif(${viewValueSql(SLUG_KEY, ctx)}, ''), ${entry.slug})`
 }
 
-/** The entry columns a search reads. */
-const entryColumns = {
+/**
+ * The paths an entry may answer to, in SQL: the main route with the main slug,
+ * and for each other language its route (`localizedRoutes`, else the main
+ * route) with its own slug (else the main slug), as `placeLinkTarget` places a
+ * language that ships. A language that does not ship places on the main path,
+ * which is listed already, so these cover every path `pathsOf` can return. The
+ * caller still checks the paths of each row in TypeScript.
+ */
+function pathExprsSql(languages: SiteLanguages | null): SQL[] {
+  const main = languages?.main ?? null
+  const exprs: SQL[] = [
+    sql`replace(${collection.routePattern}, ${SLUG_TOKEN}, ${entry.slug})`,
+  ]
+  for (const code of codesOf(languages)) {
+    if (code === main) continue
+    const route = sql`coalesce(${collection.localizedRoutes} ->> ${code}, ${collection.routePattern})`
+    const slug = sql`coalesce(nullif(${viewValueSql(SLUG_KEY, { languages, locale: code })}, ''), ${entry.slug})`
+    exprs.push(sql`replace(${route}, ${SLUG_TOKEN}, ${slug})`)
+  }
+  return exprs
+}
+
+/**
+ * A term as JSON writes it inside a string. jsonb stores `"` and `\` escaped,
+ * so the text search of `draft_data` needs the escaped form.
+ */
+function jsonText(term: string): string {
+  return JSON.stringify(term).slice(1, -1)
+}
+
+/** The columns a search reads: an entry and its collection, as `LinkTargetRow`. */
+const searchColumns = {
   id: entry.id,
   siteId: entry.siteId,
   slug: entry.slug,
@@ -324,148 +340,63 @@ const entryColumns = {
   draftData: entry.draftData,
   publishedData: entry.publishedData,
   scheduledData: entry.scheduledData,
-  updatedAt: entry.updatedAt,
-}
-
-type EntryRow = {
-  id: string
-  siteId: string
-  slug: string
-  status: EntryStatus
-  publishedSlug: string | null
-  draftData: EntryData
-  publishedData: EntryData | null
-  scheduledData: EntryData | null
-  updatedAt: Date
-}
-
-type CollectionCols = Pick<
-  LinkTargetRow,
-  | 'collectionKey'
-  | 'collectionLabel'
-  | 'collectionKind'
-  | 'routePattern'
-  | 'localizedRoutes'
-  | 'fields'
->
-
-/** A searched entry with its collection's columns; `rank` when the search ranks. */
-type SearchedRow = EntryRow & CollectionCols & { rank?: number }
-
-function rowOf<T extends EntryRow>(
-  target: RoutedCollection,
-  row: T,
-): T & CollectionCols {
-  return {
-    ...row,
-    collectionKey: target.key,
-    collectionLabel: target.label,
-    collectionKind: 'collection',
-    routePattern: target.routePattern,
-    localizedRoutes: target.localizedRoutes,
-    fields: target.fields,
-  }
-}
-
-/** Every language code an entry's slug may be stored under. */
-function codesOf(languages: SiteLanguages | null): string[] {
-  return languages ? [...new Set([languages.main, ...languages.all])] : []
-}
-
-/** The placeholder a route puts where the slug goes. */
-const SLUG_TOKEN = '$slug'
-
-/**
- * The paths an entry of `target` may answer to, as SQL. The main path is the
- * main route with the main slug. Each other language has its route
- * (`localizedRoutes`, else the main route) and its own slug (else the main
- * slug), read the way `readLocale` reads it. That is the path `placeLinkTarget`
- * gives a language that ships; a language that does not ship places on the
- * main path, which is listed already. So these cover every path `pathsOf` can
- * return. The caller still checks the paths of each row in TypeScript.
- */
-function pathExprsSql(
-  target: RoutedCollection,
-  languages: SiteLanguages | null,
-): SQL[] {
-  const main = languages?.main ?? null
-  const exprs: SQL[] = [
-    sql`replace(${target.routePattern}, ${SLUG_TOKEN}, ${entry.slug})`,
-  ]
-  for (const code of codesOf(languages)) {
-    if (code === main) continue
-    const route = target.localizedRoutes?.[code] ?? target.routePattern
-    const ownSlug = sql`CASE WHEN coalesce(nullif(${entry.draftData} ->> ${LOCALE_KEY}, ''), ${main}) = ${code}
-      THEN ${entry.draftData} ->> ${SLUG_KEY}
-      ELSE ${entry.draftData} #>> ARRAY[${I18N_KEY}, ${code}, ${SLUG_KEY}]::text[] END`
-    exprs.push(
-      sql`replace(${route}, ${SLUG_TOKEN}, coalesce(nullif(${ownSlug}, ''), ${entry.slug}))`,
-    )
-  }
-  return exprs
+  collectionKey: collection.key,
+  collectionLabel: collection.label,
+  collectionKind: collection.kind,
+  routePattern: collection.routePattern,
+  localizedRoutes: collection.localizedRoutes,
+  fields: collection.fields,
 }
 
 /**
- * The entries of one collection with a path that starts with `wanted` (equal
- * to it when `exact`), newest first. The match happens in SQL, before the
- * limit, so entries whose path does not match cannot take a slot. Paths are
- * compared lower case, as `searchLinkTargets` does.
+ * The conditions every search shares: entries of the site's routed collections
+ * (the enabled ones for a non-admin), not archived, plus `extra`.
  */
-async function searchCollectionByPath(
+function routedWhere(
   siteId: string,
-  target: RoutedCollection,
-  wanted: string,
-  exact: boolean,
-  languages: SiteLanguages | null,
-  limit: number,
-): Promise<SearchedRow[]> {
-  const pattern = exact ? wanted : `${escapeLike(wanted)}%`
-  const matches = or(
-    ...pathExprsSql(target, languages).map((path) =>
-      exact
-        ? sql`lower(${path}) = ${pattern}`
-        : sql`lower(${path}) LIKE ${pattern}`,
-    ),
+  enabledOnly: boolean,
+  ...extra: (SQL | undefined)[]
+) {
+  return and(
+    eq(entry.siteId, siteId),
+    eq(collection.siteId, siteId),
+    eq(collection.kind, 'collection'),
+    ne(collection.routePattern, ''),
+    enabledOnly ? eq(collection.enabled, true) : undefined,
+    ne(entry.status, 'archived'),
+    ...extra,
   )
-  const rows = await db
-    .select(entryColumns)
-    .from(entry)
-    .where(
-      and(
-        eq(entry.siteId, siteId),
-        eq(entry.collectionId, target.id),
-        ne(entry.status, 'archived'),
-        matches,
-      ),
-    )
-    .orderBy(desc(entry.updatedAt), entry.slug)
-    .limit(limit)
-  return rows.map((row) => rowOf(target, row))
 }
 
 /**
- * The entries of one collection whose title or slug contains `term` (lower
- * case), best matches first, then the newest. Ranks: an exact title or slug,
- * a title or slug that starts with the term, a title word that starts with it,
- * then a title or slug that contains it. Without a term: the newest entries.
+ * The entries whose title or slug contains `term` (lower case), across every
+ * routed collection in one query: best matches first, then the newest. Ranks:
+ * an exact title or slug, a title or slug that starts with the term, a title
+ * word that starts with it, then a title or slug that contains it. Without a
+ * term: the newest entries. The text of `draft_data` is only a prefilter (the
+ * localized title and slug decide the match); the trigram indexes on `slug`
+ * and `draft_data::text` serve it.
  */
-async function searchCollectionByWords(
+async function searchWordRows(
   siteId: string,
-  target: RoutedCollection,
+  enabledOnly: boolean,
   ctx: Ctx,
   term: string,
   limit: number,
-) {
-  const titleField = firstTextField(target.fields)
-  const title = titleField
-    ? localizedTitleSql(titleField.key, isTranslatable(titleField), ctx)
-    : sql<string | null>`NULL::text`
+): Promise<LinkTargetRow[]> {
+  const title = localizedTitleSql(ctx)
   const slug = localizedSlugSql(ctx)
   const contains = `%${escapeLike(term)}%`
   const matches = term
     ? or(
         sql`lower(${title}) LIKE ${contains}`,
         sql`lower(${slug}) LIKE ${contains}`,
+      )
+    : undefined
+  const candidates = term
+    ? or(
+        sql`${entry.slug} ILIKE ${contains}`,
+        sql`${entry.draftData}::text ILIKE ${`%${escapeLike(jsonText(term))}%`}`,
       )
     : undefined
   const rank = term
@@ -476,20 +407,44 @@ async function searchCollectionByWords(
         WHEN lower(${title}) LIKE ${`% ${escapeLike(term)}%`} THEN 3
         ELSE 4 END)`
     : sql<number>`0::int`
-  const rows = await db
-    .select({ ...entryColumns, rank })
+  return db
+    .select({ ...searchColumns, rank })
     .from(entry)
-    .where(
-      and(
-        eq(entry.siteId, siteId),
-        eq(entry.collectionId, target.id),
-        ne(entry.status, 'archived'),
-        matches,
-      ),
-    )
+    .innerJoin(collection, eq(entry.collectionId, collection.id))
+    .where(routedWhere(siteId, enabledOnly, candidates, matches))
     .orderBy(rank, desc(entry.updatedAt), entry.slug)
     .limit(limit)
-  return rows.map((row) => rowOf(target, row))
+}
+
+/**
+ * The entries of every routed collection with a path that starts with `wanted`,
+ * in one query. The paths are matched in SQL before the limit, in lower case.
+ * Entries whose path is exactly `wanted` come first, then the newest. The
+ * caller checks the paths of the rows it gets.
+ */
+async function searchPathRows(
+  siteId: string,
+  enabledOnly: boolean,
+  languages: SiteLanguages | null,
+  wanted: string,
+  limit: number,
+): Promise<LinkTargetRow[]> {
+  const paths = pathExprsSql(languages)
+  const prefix = sql.join(
+    paths.map((path) => sql`lower(${path}) LIKE ${`${escapeLike(wanted)}%`}`),
+    sql` OR `,
+  )
+  const exact = sql<number>`(CASE WHEN ${sql.join(
+    paths.map((path) => sql`lower(${path}) = ${wanted}`),
+    sql` OR `,
+  )} THEN 0 ELSE 1 END)`
+  return db
+    .select({ ...searchColumns, rank: exact })
+    .from(entry)
+    .innerJoin(collection, eq(entry.collectionId, collection.id))
+    .where(routedWhere(siteId, enabledOnly, sql`(${prefix})`))
+    .orderBy(exact, desc(entry.updatedAt), entry.slug)
+    .limit(limit)
 }
 
 /**
@@ -498,6 +453,7 @@ async function searchCollectionByWords(
  * - words: entries whose title or slug matches, in the editor's language;
  * - `/…` or an own-domain URL: entries whose path starts with it, and the
  *   entry at exactly that path (`resolved`), with its section.
+ * Two queries whatever the number of collections: the site, then the entries.
  */
 export async function searchLinkTargets(
   siteId: string,
@@ -528,87 +484,40 @@ export async function searchLinkTargets(
   if (parsed.kind === 'plain') return { ...empty, ownPath: parsed.ownPath }
 
   if (parsed.kind === 'words') {
-    // Each collection answers with its own best matches; the merged list keeps
-    // the best of them, so a long collection cannot push a match out.
-    const needle = parsed.text.toLowerCase()
-    const hits = (
-      await Promise.all(
-        (await routedCollections(siteId, input.enabledOnly)).map((target) =>
-          searchCollectionByWords(siteId, target, ctx, needle, input.limit),
-        ),
-      )
+    const rows = await searchWordRows(
+      siteId,
+      input.enabledOnly,
+      ctx,
+      parsed.text.toLowerCase(),
+      input.limit,
     )
-      .flat()
-      .sort(
-        (a, b) =>
-          a.rank - b.rank || b.updatedAt.getTime() - a.updatedAt.getTime(),
-      )
-    return {
-      ...empty,
-      entries: hits.slice(0, input.limit).map((hit) => optionOf(hit, ctx)),
-    }
+    return { ...empty, entries: rows.map((row) => optionOf(row, ctx)) }
   }
 
   // A path: the entry at exactly this path, and the entries whose path starts
-  // with it. Each collection is filtered in SQL on its paths; the paths of the
-  // rows found are then checked again.
+  // with it. One more row than the list shows: the exact entry is left out.
   const wanted = safeDecode(parsed.path).toLowerCase()
-  const targets = await routedCollections(siteId, input.enabledOnly)
-  const languages = siteRow.languages
-  const newestFirst = (a: SearchedRow, b: SearchedRow) =>
-    b.updatedAt.getTime() - a.updatedAt.getTime()
-  const exactRows = (
-    await Promise.all(
-      targets.map((target) =>
-        searchCollectionByPath(
-          siteId,
-          target,
-          wanted,
-          true,
-          languages,
-          EXACT_LIMIT,
-        ),
-      ),
-    )
+  const rows = await searchPathRows(
+    siteId,
+    input.enabledOnly,
+    siteRow.languages,
+    wanted,
+    input.limit + 1,
   )
-    .flat()
-    .sort(newestFirst)
   let resolved: LinkTargetSearch['resolved'] = null
-  for (const row of exactRows) {
-    const exact = pathsOf(row, ctx).some(
-      (path) => safeDecode(path).toLowerCase() === wanted,
-    )
-    if (exact) {
-      resolved = { entry: optionOf(row, ctx), anchor: parsed.anchor }
-      break
-    }
-  }
-
-  // One more row per collection than the list shows: the exact entry is left out.
-  const prefixRows = (
-    await Promise.all(
-      targets.map((target) =>
-        searchCollectionByPath(
-          siteId,
-          target,
-          wanted,
-          false,
-          languages,
-          input.limit + 1,
-        ),
-      ),
-    )
-  )
-    .flat()
-    .sort(newestFirst)
   const entries: LinkTargetOption[] = []
-  for (const row of prefixRows) {
-    if (entries.length >= input.limit) break
-    if (resolved && row.id === resolved.entry.entryId) continue
-    const starts = pathsOf(row, ctx).some((path) =>
-      safeDecode(path).toLowerCase().startsWith(wanted),
+  for (const row of rows) {
+    const paths = pathsOf(row, ctx).map((path) =>
+      safeDecode(path).toLowerCase(),
     )
-    if (starts) entries.push(optionOf(row, ctx))
+    if (!resolved && paths.includes(wanted)) {
+      resolved = { entry: optionOf(row, ctx), anchor: parsed.anchor }
+      continue
+    }
+    if (entries.length >= input.limit) break
+    if (paths.some((path) => path.startsWith(wanted))) {
+      entries.push(optionOf(row, ctx))
+    }
   }
   return { entries, resolved, ownPath: parsed.ownPath }
 }
