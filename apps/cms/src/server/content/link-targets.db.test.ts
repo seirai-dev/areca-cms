@@ -429,6 +429,69 @@ describe.skipIf(!hasDb)('link targets: search', () => {
     }
   })
 
+  it('finds a path among the candidates even when newer entries in another language share its prefix', async () => {
+    const ctx = await createTestSite({ languages })
+    try {
+      await createTestCollection(ctx.site.id, {
+        key: 'articles',
+        routePattern: '/blog/$slug',
+        localizedRoutes: { en: '/news/$slug' },
+      })
+      const [articles] = await db
+        .select({ id: collection.id })
+        .from(collection)
+        .where(
+          and(
+            eq(collection.siteId, ctx.site.id),
+            eq(collection.key, 'articles'),
+          ),
+        )
+      const now = Date.now()
+      // 32 newer articles whose English slugs start with "coffee": under
+      // /news/, never under /blog/cof.
+      await db.insert(entry).values(
+        Array.from({ length: 32 }, (_, index) => ({
+          siteId: ctx.site.id,
+          collectionId: articles.id,
+          slug: `bonen-${index}-candidates`,
+          status: 'draft' as const,
+          draftData: {
+            title: `Bonen ${index}`,
+            $i18n: {
+              en: {
+                title: `Coffee beans ${index}`,
+                $slug: `coffee-beans-${index}-candidates`,
+              },
+            },
+          },
+          updatedAt: new Date(now + index * 1000),
+        })),
+      )
+      // The older article is under /blog/coffee… in the main language.
+      const older = await db
+        .insert(entry)
+        .values({
+          siteId: ctx.site.id,
+          collectionId: articles.id,
+          slug: 'coffee-beans-older-candidates',
+          status: 'draft',
+          draftData: { title: 'Koffiebonen', body: doc(['Oud']) },
+          updatedAt: new Date(now - 86_400_000),
+        })
+        .returning({ id: entry.id })
+
+      const found = await searchLinkTargets(ctx.site.id, {
+        query: '/blog/cof',
+        locale: 'nl',
+        limit: 5,
+        enabledOnly: true,
+      })
+      expect(found.entries.map((hit) => hit.entryId)).toEqual([older[0].id])
+    } finally {
+      await cleanupTestSite(ctx)
+    }
+  })
+
   it('keeps a path with a query string a plain link; a fragment alone can still be an entry link', async () => {
     const { ctx, about } = await setup('query')
     try {

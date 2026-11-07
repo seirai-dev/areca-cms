@@ -31,8 +31,6 @@ import { loadSiteLanguages, localeCtxFor } from './locale-validation.ts'
  * decisions 12 to 14.
  */
 
-/** Rows a path search reads per collection: the path check then drops some. */
-const PATH_CANDIDATE_FACTOR = 4
 /** Rows an exact-path lookup reads per collection (one entry is the address). */
 const EXACT_LIMIT = 10
 
@@ -345,57 +343,44 @@ function codesOf(languages: SiteLanguages | null): string[] {
   return languages ? [...new Set([languages.main, ...languages.all])] : []
 }
 
-/** The routes of a collection: its main route and the localized ones. */
-function routesOf(target: RoutedCollection): string[] {
-  return [
-    ...new Set([
-      target.routePattern,
-      ...Object.values(target.localizedRoutes ?? {}),
-    ]),
-  ]
-}
+/** The placeholder a route puts where the slug goes. */
+const SLUG_TOKEN = '$slug'
 
 /**
- * SQL that keeps the entries of `target` whose path can start with `wanted`
- * (or equal it, when `exact`). A route is `<static part>$slug`: when its static
- * part starts with the typed path, every entry qualifies; when the typed path
- * goes past the static part, the slug must continue it, in any language. The
- * body is never read. `true` means the collection cannot be narrowed (a route
- * that is not `…$slug`), so the path check decides; `null` means no entry can
- * match.
+ * The paths an entry of `target` may answer to, as SQL. The main path is the
+ * main route with the main slug. Each other language has its route
+ * (`localizedRoutes`, else the main route) and its own slug (else the main
+ * slug), read the way `readLocale` reads it. That is the path `placeLinkTarget`
+ * gives a language that ships; a language that does not ship places on the
+ * main path, which is listed already. So these cover every path `pathsOf` can
+ * return. The caller still checks the paths of each row in TypeScript.
  */
-function pathFilterSql(
+function pathExprsSql(
   target: RoutedCollection,
-  wanted: string,
-  exact: boolean,
   languages: SiteLanguages | null,
-): SQL | true | null {
-  const conditions: SQL[] = []
-  for (const route of routesOf(target)) {
-    const parts = route.split('$slug')
-    if (parts.length !== 2 || parts[1] !== '') return true
-    const staticPart = parts[0].toLowerCase()
-    if (!exact && staticPart.startsWith(wanted)) return true
-    if (!wanted.startsWith(staticPart)) continue
-    const rest = wanted.slice(staticPart.length)
-    if (rest === '') continue
-    const pattern = exact ? escapeLike(rest) : `${escapeLike(rest)}%`
-    const slugs: SQL[] = [
-      sql`${entry.slug} ILIKE ${pattern}`,
-      ...codesOf(languages).map(
-        (code) =>
-          sql`${entry.draftData} #>> ARRAY[${I18N_KEY}, ${code}, ${SLUG_KEY}]::text[] ILIKE ${pattern}`,
-      ),
-    ]
-    conditions.push(sql`(${sql.join(slugs, sql` OR `)})`)
+): SQL[] {
+  const main = languages?.main ?? null
+  const exprs: SQL[] = [
+    sql`replace(${target.routePattern}, ${SLUG_TOKEN}, ${entry.slug})`,
+  ]
+  for (const code of codesOf(languages)) {
+    if (code === main) continue
+    const route = target.localizedRoutes?.[code] ?? target.routePattern
+    const ownSlug = sql`CASE WHEN coalesce(nullif(${entry.draftData} ->> ${LOCALE_KEY}, ''), ${main}) = ${code}
+      THEN ${entry.draftData} ->> ${SLUG_KEY}
+      ELSE ${entry.draftData} #>> ARRAY[${I18N_KEY}, ${code}, ${SLUG_KEY}]::text[] END`
+    exprs.push(
+      sql`replace(${route}, ${SLUG_TOKEN}, coalesce(nullif(${ownSlug}, ''), ${entry.slug}))`,
+    )
   }
-  if (conditions.length === 0) return null
-  return sql`(${sql.join(conditions, sql` OR `)})`
+  return exprs
 }
 
 /**
- * The entries of one collection whose path may start with `wanted` (equal to
- * it when `exact`), newest first. The caller checks the full paths.
+ * The entries of one collection with a path that starts with `wanted` (equal
+ * to it when `exact`), newest first. The match happens in SQL, before the
+ * limit, so entries whose path does not match cannot take a slot. Paths are
+ * compared lower case, as `searchLinkTargets` does.
  */
 async function searchCollectionByPath(
   siteId: string,
@@ -405,8 +390,14 @@ async function searchCollectionByPath(
   languages: SiteLanguages | null,
   limit: number,
 ): Promise<SearchedRow[]> {
-  const narrowed = pathFilterSql(target, wanted, exact, languages)
-  if (narrowed === null) return []
+  const pattern = exact ? wanted : `${escapeLike(wanted)}%`
+  const matches = or(
+    ...pathExprsSql(target, languages).map((path) =>
+      exact
+        ? sql`lower(${path}) = ${pattern}`
+        : sql`lower(${path}) LIKE ${pattern}`,
+    ),
+  )
   const rows = await db
     .select(entryColumns)
     .from(entry)
@@ -415,7 +406,7 @@ async function searchCollectionByPath(
         eq(entry.siteId, siteId),
         eq(entry.collectionId, target.id),
         ne(entry.status, 'archived'),
-        narrowed === true ? undefined : narrowed,
+        matches,
       ),
     )
     .orderBy(desc(entry.updatedAt), entry.slug)
@@ -530,8 +521,8 @@ export async function searchLinkTargets(
   }
 
   // A path: the entry at exactly this path, and the entries whose path starts
-  // with it. Each collection is narrowed in SQL by its routes and slugs; the
-  // full paths of the rows found are then checked.
+  // with it. Each collection is filtered in SQL on its paths; the paths of the
+  // rows found are then checked again.
   const wanted = safeDecode(parsed.path).toLowerCase()
   const targets = await routedCollections(siteId, input.enabledOnly)
   const languages = siteRow.languages
@@ -564,6 +555,7 @@ export async function searchLinkTargets(
     }
   }
 
+  // One more row per collection than the list shows: the exact entry is left out.
   const prefixRows = (
     await Promise.all(
       targets.map((target) =>
@@ -573,7 +565,7 @@ export async function searchLinkTargets(
           wanted,
           false,
           languages,
-          input.limit * PATH_CANDIDATE_FACTOR,
+          input.limit + 1,
         ),
       ),
     )
