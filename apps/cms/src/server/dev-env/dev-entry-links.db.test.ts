@@ -15,6 +15,7 @@ import { listInboundLinks } from '#/server/content/entry-link-index'
 import { buildPreviewEntry } from '#/server/content/snapshot'
 import {
   cleanupTestSite,
+  createSiteInOrganization,
   createTestCollection,
   createTestSite,
   withTestSite,
@@ -191,6 +192,69 @@ describe.skipIf(!hasDb)(
         } finally {
           await cleanupTestSite(other)
         }
+      })
+    })
+
+    it('refuses a link from a dev environment to an entry of a sibling site in the same organization', async () => {
+      await withTestSite(async (ctx) => {
+        const actorId = ctx.actor.id
+        await seedWithDraftTarget(ctx)
+        // Same organization, but not this environment's production site.
+        const sibling = await createSiteInOrganization(ctx.org.id)
+        await createTestCollection(sibling.id, {
+          key: 'articles',
+          fields: articleFields,
+          routePattern: '/blog/$slug',
+        })
+        const foreign = await createEntry({
+          siteId: sibling.id,
+          collectionKey: 'articles',
+          data: { title: 'Ander', slug: 'ander', body: body('Kop') },
+          actorId,
+        })
+        await publishEntry(foreign.id, actorId)
+
+        const devId = (await forkDevEnvironment({ id: actorId }, ctx.site.id))
+          .id
+        const devBron = await entryIdOf(devId, 'bron')
+        const current = await getEntry(devBron)
+        await expect(
+          updateDraft(
+            devBron,
+            { title: 'Bron v2', slug: 'bron', body: body('Lees', foreign.id) },
+            actorId,
+            current!.draftVersion,
+          ),
+        ).rejects.toThrow(ValidationError)
+      })
+    })
+
+    it('refuses a link from a production site to an entry of its development environment', async () => {
+      await withTestSite(async (ctx) => {
+        const actorId = ctx.actor.id
+        const { bron } = await seedWithDraftTarget(ctx)
+        const devId = (await forkDevEnvironment({ id: actorId }, ctx.site.id))
+          .id
+        // An entry that exists only in the development environment.
+        const devOnly = await createEntry({
+          siteId: devId,
+          collectionKey: 'articles',
+          data: { title: 'Alleen dev', slug: 'alleen-dev', body: body('Kop') },
+          actorId,
+        })
+        const current = await getEntry(bron)
+        await expect(
+          updateDraft(
+            bron,
+            { title: 'Bron v3', slug: 'bron', body: body('Lees', devOnly.id) },
+            actorId,
+            current!.draftVersion,
+          ),
+        ).rejects.toThrow(ValidationError)
+        // The refused save left production's draft as it was.
+        const after = await getEntry(bron)
+        expect(after!.draftVersion).toBe(current!.draftVersion)
+        expect(after!.draftData).toMatchObject({ title: 'Bron' })
       })
     })
 

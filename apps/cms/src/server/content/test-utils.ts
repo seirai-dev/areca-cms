@@ -182,6 +182,33 @@ export async function createTestGlobal(
   })
 }
 
+/**
+ * A second production site in an existing organization, for tests that need
+ * two sites of one organization (a site that is not another's dev environment).
+ */
+export async function createSiteInOrganization(organizationId: string) {
+  const suffix = crypto.randomUUID()
+  const rawToken = randomBytes(32).toString('hex')
+  const createdSite = (
+    await db
+      .insert(site)
+      .values({
+        organizationId,
+        name: `Sibling Site ${suffix}`,
+        slug: `sibling-site-${suffix}`,
+        tokenHash: createHash('sha256').update(rawToken).digest('hex'),
+        schemaTokenHash: createHash('sha256')
+          .update(randomBytes(32).toString('hex'))
+          .digest('hex'),
+        productionUrl: 'http://localhost:3998',
+        previewSecret: randomBytes(32).toString('hex'),
+      })
+      .returning()
+  ).at(0)
+  if (!createdSite) throw new Error('Failed to create sibling site')
+  return createdSite
+}
+
 export async function cleanupTestSite(input: {
   org: { id: string }
   actor: { id: string }
