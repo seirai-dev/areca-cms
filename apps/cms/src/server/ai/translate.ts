@@ -426,7 +426,11 @@ export function richTextSourcePlaceholders(
   value: unknown,
   assets: TranslationAssets,
 ): { source: string; code: string[] } {
-  const protectedMarkdown = protectCode(richTextToMarkdown(value))
+  // Entry links keep their stored path here: the model sees the links it
+  // always saw, and the output converts back to plain links as before.
+  const protectedMarkdown = protectCode(
+    richTextToMarkdown(value, { entryLinkForm: 'hrefs' }),
+  )
   return {
     source: toAssetMarkdown(protectedMarkdown.markdown, assets),
     code: protectedMarkdown.code,

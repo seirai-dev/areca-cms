@@ -62,10 +62,21 @@ function codeSpan(text: string): string {
  */
 let entryLinks: {
   markers: boolean
+  form: EntryLinkForm
   count: number
   definitions: string[]
   links: EntryLinkMarker[]
 } | null = null
+
+/** The Markdown destination prefix of an entry link: `entry:<id>` or `entry:<id>#anchor`. */
+export const ENTRY_HREF_PREFIX = 'entry:'
+
+/**
+ * How an entry link is written outside the snapshot: `ids` (the default) as
+ * `entry:<id>[#anchor]`, which agents read and write; `hrefs` as the stored
+ * path, for the editor preview and for translation, which keep the stored form.
+ */
+export type EntryLinkForm = 'ids' | 'hrefs'
 
 /**
  * One entry link's definition, in the order the definitions are written. The
@@ -86,16 +97,24 @@ function wrapMarks(text: string, marks: Mark[] | undefined): string {
   const link = marks.find((mark) => mark.type === 'link')
   if (link) {
     const href = typeof link.attrs?.href === 'string' ? link.attrs.href : ''
-    if (entryLinks?.markers && typeof link.attrs?.entryId === 'string') {
+    const entryId = link.attrs?.entryId
+    if (entryLinks?.markers && typeof entryId === 'string') {
       entryLinks.count += 1
       const label = `areca-entry-${entryLinks.count}`
       entryLinks.definitions.push(`[${label}]: ${destination(href)}`)
-      const locale = link.attrs.locale
+      const locale = link.attrs?.locale
       entryLinks.links.push({
         label,
         ...(typeof locale === 'string' && locale !== '' ? { locale } : {}),
       })
       return `[${out}][${label}]`
+    }
+    if (entryLinks?.form === 'ids' && typeof entryId === 'string') {
+      // The form agents read and write: the id, with the section if any.
+      const anchor = link.attrs?.anchor
+      const section =
+        typeof anchor === 'string' && anchor !== '' ? `#${anchor}` : ''
+      return `[${out}](${destination(`${ENTRY_HREF_PREFIX}${entryId}${section}`)})`
     }
     out = `[${out}](${destination(href)})`
   }
@@ -247,9 +266,10 @@ function serializeBlock(node: PMNode, indent = 0): string {
 function serialize(
   json: unknown,
   markers: boolean,
+  form: EntryLinkForm = 'ids',
 ): { markdown: string; entryLinks: EntryLinkMarker[] } {
   const previous = entryLinks
-  entryLinks = { markers, count: 0, definitions: [], links: [] }
+  entryLinks = { markers, form, count: 0, definitions: [], links: [] }
   try {
     const body = serializeBlock(asNode(json)).trim()
     const { definitions, links } = entryLinks
@@ -263,11 +283,20 @@ function serialize(
   }
 }
 
+/**
+ * The Markdown of a stored rich text value. Entry links are written `entry:<id>`
+ * unless `entryLinkForm` is 'hrefs' (see EntryLinkForm). `entryLinkMarkers`
+ * writes reference-style markers instead (the snapshot does not use this).
+ */
 export function serializeMarkdown(
   json: unknown,
-  options: { entryLinkMarkers?: boolean } = {},
+  options: { entryLinkMarkers?: boolean; entryLinkForm?: EntryLinkForm } = {},
 ): string {
-  return serialize(json, options.entryLinkMarkers === true).markdown
+  return serialize(
+    json,
+    options.entryLinkMarkers === true,
+    options.entryLinkForm ?? 'ids',
+  ).markdown
 }
 
 /**

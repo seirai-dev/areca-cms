@@ -32,7 +32,10 @@ const previewComponents = {
 
 export function RichTextPreview({ value }: { value: unknown }) {
   const markdown = useMemo(
-    () => (value && typeof value === 'object' ? serializeMarkdown(value) : ''),
+    () =>
+      value && typeof value === 'object'
+        ? serializeMarkdown(value, { entryLinkForm: 'hrefs' })
+        : '',
     [value],
   )
 

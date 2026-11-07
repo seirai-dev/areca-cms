@@ -12,7 +12,7 @@ import { ID_MAX_LENGTH } from '#/lib/content-limits'
 import { normalizeCodeLanguage } from '#/lib/highlight'
 
 import { isAllowedImageSrc, isAllowedLinkHref } from './allowlist'
-import { serializeMarkdown } from './markdown'
+import { ENTRY_HREF_PREFIX, serializeMarkdown } from './markdown'
 
 /**
  * A TipTap (ProseMirror) JSON document as stored in the CMS. The validator in
@@ -33,6 +33,24 @@ export type MarkdownToRichTextOptions = {
    * dropped link is kept as plain text.
    */
   onWarning?: (message: string) => void
+  /**
+   * The entry each link resolved to, keyed by the href as the Markdown writes
+   * it (`entry:<id>`, a site path or an own-domain URL). Found in one batch
+   * before conversion (see resolveMarkdownLinkTargets), so this stays
+   * synchronous. A link with no entry here keeps the rules of its href.
+   */
+  linkTargets?: ReadonlyMap<string, MarkdownLinkTarget>
+  /** Called with the href of every link, as written, before any check. */
+  onLink?: (href: string) => void
+}
+
+/** A link to an entry, as the converter stores it (the link mark's attributes). */
+export type MarkdownLinkTarget = {
+  entryId: string
+  collection: string
+  anchor: string | null
+  /** The entry's path in the language of the text, with the section. */
+  href: string
 }
 
 /** Warning for a Markdown link whose href is not allowed (see isAllowedLinkHref). */
@@ -40,11 +58,35 @@ export function droppedLinkWarning(href: string): string {
   return `Removed the link to "${href}": links must be https://, mailto:, a site path like /page or an anchor like #section.`
 }
 
+/** Warning for an `entry:` link whose id is not an entry of this site (or has no page). */
+export function unknownEntryLinkWarning(href: string): string {
+  const id = href.slice(ENTRY_HREF_PREFIX.length).split('#')[0]
+  return `Removed the link to entry "${id}": no entry of this site has that id, or it has no page. The text is kept.`
+}
+
+/**
+ * The distinct link hrefs a Markdown text writes, as written. Code is not a
+ * link. Feed them to resolveMarkdownLinkTargets.
+ */
+export function markdownLinkHrefs(markdown: string): string[] {
+  const hrefs = new Set<string>()
+  markdownToRichText(markdown, { onLink: (href) => hrefs.add(href) })
+  return [...hrefs]
+}
+
 type Mark =
   | { type: 'bold' }
   | { type: 'italic' }
   | { type: 'code' }
-  | { type: 'link'; attrs: { href: string } }
+  | {
+      type: 'link'
+      attrs: {
+        href: string
+        entryId?: string
+        collection?: string
+        anchor?: string | null
+      }
+    }
 
 type PMNode = {
   type: string
@@ -59,6 +101,36 @@ type Piece = { kind: 'inline'; node: PMNode } | { kind: 'block'; node: PMNode }
 
 type Converter = {
   resolveAssetSrc: (assetId: string) => string | null
+  linkTargets: ReadonlyMap<string, MarkdownLinkTarget>
+  warn: (message: string) => void
+}
+
+/**
+ * The link mark for one Markdown link, or null when the link is dropped (its
+ * text is kept, and the warning says why). An entry in `linkTargets` becomes
+ * an entry link. An `entry:` href that no entry matches is dropped. Any other
+ * href keeps the rules of isAllowedLinkHref.
+ */
+function linkMarkFor(href: string, ctx: Converter): Mark | null {
+  const target = ctx.linkTargets.get(href)
+  if (target) {
+    return {
+      type: 'link',
+      attrs: {
+        href: target.href,
+        entryId: target.entryId,
+        collection: target.collection,
+        anchor: target.anchor,
+      },
+    }
+  }
+  if (href.startsWith(ENTRY_HREF_PREFIX)) {
+    ctx.warn(unknownEntryLinkWarning(href))
+    return null
+  }
+  if (isAllowedLinkHref(href)) return { type: 'link', attrs: { href } }
+  ctx.warn(droppedLinkWarning(href))
+  return null
 }
 
 const ASSET_SRC_PREFIX = 'asset:'
@@ -165,16 +237,16 @@ function inlinePieces(
           out,
         )
         break
-      case 'link':
+      case 'link': {
+        const mark = linkMarkFor(node.href, ctx)
         inlinePieces(
           node.children,
-          isAllowedLinkHref(node.href)
-            ? withMark(marks, { type: 'link', attrs: { href: node.href } })
-            : marks,
+          mark ? withMark(marks, mark) : marks,
           ctx,
           out,
         )
         break
+      }
       case 'strike':
       case 'inlineComponent':
         inlinePieces(node.children, marks, ctx, out)
@@ -391,21 +463,22 @@ export function markdownToRichText(
   if (markdown.trim().length === 0) return emptyDoc()
   const ctx: Converter = {
     resolveAssetSrc: options.resolveAssetSrc ?? (() => null),
+    linkTargets: options.linkTargets ?? new Map(),
+    warn: (message) => options.onWarning?.(message),
   }
   const document = parseMarkdown(markdown, {
     frontmatter: false,
     // The default transform blanks every non-http(s) scheme, which would
     // erase `asset:` references before they can be resolved. Images keep the
-    // `asset:` form; links use our own check instead of the default.
+    // `asset:` form. Links keep their href as written: linkMarkFor decides
+    // what each one becomes, on the raw href (the default sanitizer would
+    // silently strip spaces from it).
     urlTransform: (url, kind, defaultUrl) => {
       if (kind === 'image') {
         return url.trim().startsWith(ASSET_SRC_PREFIX) ? url.trim() : defaultUrl
       }
-      // Returning null drops the link and keeps its text. Checked on the raw
-      // href: the default sanitizer would silently strip spaces from it.
-      if (isAllowedLinkHref(url)) return url
-      options.onWarning?.(droppedLinkWarning(url))
-      return null
+      options.onLink?.(url)
+      return url
     },
   })
   return {
@@ -414,9 +487,15 @@ export function markdownToRichText(
   }
 }
 
-/** Serializes a stored TipTap document back to Markdown for reading. */
-export function richTextToMarkdown(doc: unknown): string {
-  return serializeMarkdown(doc)
+/**
+ * Serializes a stored TipTap document back to Markdown for reading. Entry
+ * links are written `entry:<id>` (see serializeMarkdown for the other form).
+ */
+export function richTextToMarkdown(
+  doc: unknown,
+  options?: Parameters<typeof serializeMarkdown>[1],
+): string {
+  return serializeMarkdown(doc, options)
 }
 
 /**
