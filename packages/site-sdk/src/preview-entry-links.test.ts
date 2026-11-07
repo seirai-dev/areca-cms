@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { createArecaClient } from './client.js'
 import { createContent } from './content.js'
-import { configSpecifier, generateContentTypes } from './generate-types.js'
+import { generateContentTypes } from './generate-types.js'
 import { pullContent } from './pull.js'
 import type { PreviewResult, RichTextValue, Snapshot } from './types.js'
 
@@ -197,24 +197,41 @@ describe('previewFrom: entry links are localized as pull localizes them', () => 
   })
 })
 
-describe('configSpecifier and the generated content module', () => {
-  it('imports the config relative to the generated file, without its extension', () => {
-    expect(configSpecifier('/app/src/generated/content/areca.gen.ts', '/app/areca.config.ts')).toBe(
-      '../../../areca.config',
-    )
-    expect(configSpecifier('/app/areca.gen.ts', '/app/areca.config.ts')).toBe('./areca.config')
-  })
-
-  it('passes the config localizePath to createContent only when the config import is given', () => {
-    const withConfig = generateContentTypes({
+describe('the generated content module does not import the site config', () => {
+  it('leaves the config out, whether or not the site sets localizePath', async () => {
+    // The config is build-only code, and its path is not portable across
+    // module systems, so areca.gen.ts never imports it. Previews take the
+    // localizePath option of createContent instead (see the README of the SDK).
+    const generated = generateContentTypes({
       schema: {},
       dir: './content',
-      localizeConfigImport: '../../../areca.config',
+      languages: LANGUAGES,
     })
-    expect(withConfig).toContain("import siteConfig from '../../../areca.config'")
-    expect(withConfig).toContain('localizePath: siteConfig.i18n?.localizePath,')
+    expect(generated).not.toMatch(/^import .*areca\.config/m)
+    expect(generated).not.toContain('localizePath')
+    expect(generated).toContain('export const content = createContent({')
+    expect(generated).toContain("  dir: process.env.ARECA_CONTENT_DIR ?? './content',")
 
-    const without = generateContentTypes({ schema: {}, dir: './content' })
-    expect(without).not.toContain('siteConfig')
+    const outDir = directory()
+    fakeCms()
+    served.snapshot = {
+      publicationId: 'pub-1',
+      siteKey: 'site',
+      createdAt: '2026-03-01T00:00:00.000Z',
+      hash: 'h1',
+      languages: LANGUAGES,
+      schema: {},
+      collections: {},
+      globals: {},
+    }
+    const typesPath = join(outDir, 'areca.gen.ts')
+    await pullContent({
+      outDir,
+      client: createArecaClient({ cmsUrl: 'https://cms.test', siteToken: 'site-token' }),
+      localizePath: (path, locale) => (locale === 'en' ? path : `/${locale}${path}`),
+    })
+    const written = readFileSync(typesPath, 'utf8')
+    expect(written).not.toMatch(/areca\.config/)
+    expect(written).not.toContain('localizePath')
   })
 })

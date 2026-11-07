@@ -32,7 +32,7 @@ import {
   localizeGlobalEntryLinks,
 } from './entry-links.js'
 import type { LocalizePath } from './entry-links.js'
-import { configSpecifier, generateContentTypes, paraglideSpecifier } from './generate-types.js'
+import { generateContentTypes, paraglideSpecifier } from './generate-types.js'
 import { assertSafeIdentifier } from './identifiers.js'
 import { createArecaClient, type ArecaClient } from './client.js'
 import type { CollectionKey, Entry } from './schema-types.js'
@@ -71,12 +71,6 @@ export type PullContentOptions = {
   paraglide?: string
   /** `i18n.localizePath` from the config. Default: `defaultLocalizePath`. */
   localizePath?: LocalizePath
-  /**
-   * Absolute path of the config module `localizePath` comes from. With it, the
-   * generated file passes the same function to `createContent`, so previews
-   * localize entry links too. Without it, previews use the default.
-   */
-  localizeConfig?: string
 }
 
 export type PullContentResult = Snapshot & {
@@ -250,9 +244,6 @@ export async function pullContent(
       languages: snapshot.languages ?? null,
       ...(options.paraglide !== undefined
         ? { paraglideImport: paraglideSpecifier(typesPath, options.paraglide) }
-        : {}),
-      ...(options.localizePath !== undefined && options.localizeConfig !== undefined
-        ? { localizeConfigImport: configSpecifier(typesPath, options.localizeConfig) }
         : {}),
     }),
   )
