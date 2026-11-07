@@ -568,9 +568,12 @@ export function useEntryEditor({
       const serverData = initialEntryData(fieldsRef.current, saved.draftData)
       serverJsonRef.current = JSON.stringify(serverData)
       const settled = JSON.stringify(dataRef.current) === submitted
-      if ((saved.importedImages ?? 0) > 0 && settled) {
-        // The server swapped external images for library copies: show them.
-        // With newer local edits the next save receives the same swap.
+      // The server may store a different copy of the draft: it swaps external
+      // images for library copies and rewrites entry links. Show that copy, so
+      // Mark ready compares what the editor shows with what was saved. With
+      // newer local edits the next save receives the same changes.
+      const normalised = serverJsonRef.current !== submitted
+      if ((normalised || (saved.importedImages ?? 0) > 0) && settled) {
         setData(serverData)
         setBaseline(serverJsonRef.current)
       } else {
