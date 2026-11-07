@@ -24,6 +24,13 @@ export type GenerateContentTypesOptions = {
    * (e.g. `../paraglide/runtime.js`). Its `getLocale` becomes the content locale.
    */
   paraglideImport?: string
+  /**
+   * Module specifier of the site config module, relative to the generated file.
+   * Its `i18n.localizePath` is passed to `createContent`, so previews localize
+   * entry links as pull does. Set only when the config defines `localizePath`:
+   * a function cannot be written into the file.
+   */
+  localizeConfigImport?: string
 }
 
 /**
@@ -81,6 +88,9 @@ export function generateContentTypes(options: GenerateContentTypesOptions): stri
     ...(options.paraglideImport !== undefined
       ? [`import { getLocale } from ${quote(options.paraglideImport)}`]
       : []),
+    ...(options.localizeConfigImport !== undefined
+      ? [`import siteConfig from ${quote(options.localizeConfigImport)}`]
+      : []),
     '',
     ...schemaLines,
     '',
@@ -99,6 +109,9 @@ export function generateContentTypes(options: GenerateContentTypesOptions): stri
     '  schema,',
     '  globalSchema,',
     ...(options.paraglideImport !== undefined ? ['  locale: getLocale,'] : []),
+    ...(options.localizeConfigImport !== undefined
+      ? ['  localizePath: siteConfig.i18n?.localizePath,']
+      : []),
     `  dir: process.env.ARECA_CONTENT_DIR ?? ${quote(options.dir)},`,
     '})',
     '',
@@ -113,6 +126,16 @@ export function paraglideSpecifier(generatedFile: string, target: string): strin
   const relativePath = relative(dirname(resolve(generatedFile)), resolve(target)).split('\\').join('/')
   const withJs = relativePath.replace(/\.(?:ts|mts|cts|tsx|js|mjs|cjs)$/, '') + '.js'
   return withJs.startsWith('.') ? withJs : `./${withJs}`
+}
+
+/**
+ * Module specifier of the site config module, relative to the generated file
+ * and without its extension. `target` is an absolute path to the config.
+ */
+export function configSpecifier(generatedFile: string, target: string): string {
+  const relativePath = relative(dirname(resolve(generatedFile)), resolve(target)).split('\\').join('/')
+  const bare = relativePath.replace(/\.(?:ts|mts|cts|tsx|js|mjs|cjs)$/, '')
+  return bare.startsWith('.') ? bare : `./${bare}`
 }
 
 /** `languages` and the `Locale` union. Main first, then the site order. */

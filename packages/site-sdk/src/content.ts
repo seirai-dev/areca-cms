@@ -1,6 +1,7 @@
 import { resolve } from 'node:path'
 import { camelizeData, camelizeEntry, toCamelKey } from './camel-case.js'
 import { createArecaClient, type ArecaClient } from './client.js'
+import { defaultLocalizePath, localizeEntryLinks, type LocalizePath } from './entry-links.js'
 import { isReservedCollectionKey } from './identifiers.js'
 import { chooseLocale, matchLocale } from './locale.js'
 import { getPreviewEntry } from './preview.js'
@@ -98,9 +99,20 @@ export function createContent<
   globalSchema?: G
   dir: string
   locale?: string | (() => string | undefined)
+  /**
+   * `i18n.localizePath` of the site config: the path an entry link goes to in
+   * one language. Default: `defaultLocalizePath` of the main language. Drafts
+   * from `preview` and `previewFrom` are localized with it, as `areca pull`
+   * localizes published content.
+   */
+  localizePath?: LocalizePath | undefined
 }): Content<S, G> {
   const schema = options.schema as unknown as Record<string, LooseCollection>
   const globalSchema = (options.globalSchema ?? {}) as unknown as Record<string, LooseGlobal>
+  /** The entry link paths rule of a site with these languages. */
+  function localizerFor(languages: SiteLanguages): LocalizePath {
+    return options.localizePath ?? defaultLocalizePath(languages.main)
+  }
   for (const name of Object.keys(schema)) {
     if (isReservedCollectionKey(name)) {
       throw new Error(
@@ -453,13 +465,18 @@ export function createContent<
       // The draft is served in the language asked for: per call, then the scope, then the
       // language the CMS says the draft is in, then the resolver or the main language.
       const languages = languagesOf()
+      // Entry links get the path of their language, as pull gives them (see `localizePath`).
+      const linked =
+        languages === null
+          ? camelized
+          : localizeEntryLinks(camelized, languages, localizerFor(languages))
       const draftLocale =
         languages !== null && typeof result.entry.locale === 'string' && result.entry.locale !== ''
           ? result.entry.locale
           : undefined
       const requested =
         previewOptions?.locale ?? scope ?? draftLocale ?? requestedLocale(undefined, undefined)
-      const entry = localizeRow(collection, camelized, requested, true, languages)!
+      const entry = localizeRow(collection, linked, requested, true, languages)!
       if (issues.length === 0) {
         return {
           collection,
@@ -529,10 +546,20 @@ export function createContent<
         type: field.type,
       }))
       const draftData = camelizeData(result.entry.data, fields)
+      const languages = languagesOf()
+      // Entry links get the path of their language, as pull gives them (see `localizePath`).
+      const linkedData =
+        languages === null
+          ? draftData
+          : localizeEntryLinks(
+              { data: draftData, locale: result.entry.locale ?? languages.main },
+              languages,
+              localizerFor(languages),
+            ).data
       const draftLocale = result.entry.locale ?? requested ?? NO_LANGUAGE
       const values = {
         ...published,
-        [camel]: sectionValue(definition, { data: draftData, seo: result.entry.seo }, draftLocale, false),
+        [camel]: sectionValue(definition, { data: linkedData, seo: result.entry.seo }, draftLocale, false),
       }
       return {
         globals: values as unknown as Globals<G>,
